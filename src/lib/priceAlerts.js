@@ -352,3 +352,134 @@ export function runPriceAlerts({ favorites, coins, format, now = Date.now() } = 
   }
   return alerts.length;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOP-MOVER ALERTS — «برای ۳ ارز اول که بیش از ۵ درصد افت یا سود کرد
+   نوتیفیکیشن بفرستد»
+   ───────────────────────────────────────────────────────────────────────────
+   Independent of favourites: walk the market list IN RANK ORDER and pick the
+   first three coins whose 24-hour change is beyond ±5%. The number announced
+   is the feed's own `change24h` — a fact the exchange already published —
+   never a difference between two of our sightings, so none of the baseline
+   guards above are needed here; the only guard is provenance (an offline
+   snapshot's 24h change is a seeded number, not a market).
+
+   Once per coin per cooldown, and re-announced early only when the move has
+   grown by a further 5 points or flipped sign — otherwise a coin sitting at
+   +6% all day would fire on every poll.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const MOVERS_STORE_KEY = 'fbt-top-mover-alert-v1';
+
+/** How many coins to announce, and the move that qualifies. */
+export const TOP_MOVERS_COUNT = 3;
+export const TOP_MOVERS_THRESHOLD_PCT = 5;
+/** Re-announce the same coin no sooner than this… */
+export const TOP_MOVERS_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+/** …unless the move grew by this many points (or flipped sign) since then. */
+export const TOP_MOVERS_ESCALATE_PCT = 5;
+
+function readMoversStore() {
+  try {
+    const raw = localStorage.getItem(MOVERS_STORE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMoversStore(data) {
+  try {
+    localStorage.setItem(MOVERS_STORE_KEY, JSON.stringify(data));
+  } catch { /* per-session at worst */ }
+}
+
+/**
+ * Decide which of the top-ranked big movers deserve an alert right now.
+ * Pure — the sending lives in runTopMoverAlerts — so it is testable.
+ *
+ * @param {object} p
+ * @param {Array} p.coins                market rows (need id, price, change24h, rank)
+ * @param {object} [p.store]             { [id]: { at, pct } } — last announcement per coin
+ * @param {number} [p.now]
+ * @returns {{alerts: Array, store: object, movers: Array}}
+ */
+export function evaluateTopMovers({
+  coins = [],
+  store = readMoversStore(),
+  now = Date.now(),
+  count = TOP_MOVERS_COUNT,
+  threshold = TOP_MOVERS_THRESHOLD_PCT,
+  cooldownMs = TOP_MOVERS_COOLDOWN_MS,
+  escalatePct = TOP_MOVERS_ESCALATE_PCT
+} = {}) {
+  const ranked = (Array.isArray(coins) ? coins : [])
+    .filter((c) => c && provenanceOf(c) !== 'offline')
+    .filter((c) => Number.isFinite(Number(c.price)) && Number(c.price) > 0)
+    .filter((c) => Number.isFinite(Number(c.change24h)) && Math.abs(Number(c.change24h)) >= threshold)
+    .sort((a, b) => (Number(a.rank) || 1e9) - (Number(b.rank) || 1e9));
+
+  const movers = ranked.slice(0, Math.max(0, count)).map((c) => ({
+    id: c.id,
+    symbol: String(c.symbol || c.id).toUpperCase(),
+    name: c.name || c.id,
+    price: Number(c.price),
+    changePct: Number(c.change24h),
+    rank: Number(c.rank) || null
+  }));
+
+  const next = { ...store };
+  const alerts = [];
+  for (const m of movers) {
+    const prev = next[m.id];
+    const fresh = prev && Number.isFinite(prev.at) && now - prev.at < cooldownMs;
+    if (fresh) {
+      const flipped = Number.isFinite(prev.pct) && Math.sign(prev.pct) !== Math.sign(m.changePct);
+      const grew = Number.isFinite(prev.pct) && Math.abs(m.changePct) - Math.abs(prev.pct) >= escalatePct;
+      if (!flipped && !grew) continue;
+    }
+    alerts.push(m);
+    next[m.id] = { at: now, pct: m.changePct };
+  }
+
+  /* Forget records older than two cooldowns so the store cannot grow without bound. */
+  for (const [id, rec] of Object.entries(next)) {
+    if (!Number.isFinite(rec?.at) || now - rec.at > cooldownMs * 2) delete next[id];
+  }
+
+  return { alerts, store: next, movers };
+}
+
+/**
+ * Announce the top-ranked coins that moved beyond ±5% in 24h.
+ * Shares the `priceAlerts` switch with the favourites alerts: it is the same
+ * promise («tell me when something moves sharply»), just not gated on a star.
+ *
+ * @param {(a: object) => {title: string, body: string}} format  i18n in the caller
+ * @returns {number} how many alerts were sent
+ */
+export function runTopMoverAlerts({ coins, format, now = Date.now() } = {}) {
+  let settings;
+  try {
+    settings = getNotifySettings();
+  } catch {
+    return 0;
+  }
+  if (!settings?.priceAlerts) return 0;
+  if (!coins?.length) return 0;
+
+  const { alerts, store } = evaluateTopMovers({ coins, now });
+  writeMoversStore(store);
+
+  for (const a of alerts) {
+    const { title, body } = format?.(a) ?? {};
+    if (!title) continue;
+    showLocalNotification(title, {
+      body,
+      tag: `fbt-mover-${a.id}`,
+      data: { url: `/coin/${a.id}` }
+    });
+  }
+  return alerts.length;
+}

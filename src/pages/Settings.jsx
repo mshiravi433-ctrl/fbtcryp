@@ -204,7 +204,7 @@ const DEADLINES = [5, 10, 20, 30, 60];
 const AUTOLOCKS = [0, 1, 5, 15, 60];
 /* The five switches a user can meaningfully turn on or off, in one order, so
    the tile's "n/5" chip counts the same things the popup shows. */
-const NOTIFY_KEYS = ['sound', 'vibrate', 'tradeAlerts', 'dailyPromo', 'news'];
+const NOTIFY_KEYS = ['sound', 'vibrate', 'tradeAlerts', 'priceAlerts', 'dailyPromo', 'news'];
 
 /**
  * A settings row.
@@ -1068,7 +1068,7 @@ export default function Settings() {
 
   const bodyNotify = (
     <>
-      <Field label={t('settings.hub.alerts')} hint={`${notifyOn}/5`} note={t('settings.hub.alertsNote')}>
+      <Field label={t('settings.hub.alerts')} hint={`${notifyOn}/${NOTIFY_KEYS.length}`} note={t('settings.hub.alertsNote')}>
         <OptionGrid
           cols={2}
           ariaLabel={t('settings.hub.alerts')}
@@ -1087,6 +1087,10 @@ export default function Settings() {
             { value: 'sound', label: t('notify.sound'), sub: t('notify.soundSub'), icon: IconVolume, on: Boolean(notif.sound) },
             { value: 'vibrate', label: t('notify.vibrate'), sub: t('notify.vibrateSub'), icon: IconVibrate, on: Boolean(notif.vibrate) },
             { value: 'tradeAlerts', label: t('notify.tradeAlerts'), sub: t('notify.tradeAlertsSub'), icon: IconBell, on: Boolean(notif.tradeAlerts) },
+            /* Favourite-coin + top-mover alerts (lib/priceAlerts.js). It had a
+               default in notify.js and a consumer on the Market screen, but
+               no switch here — the user could not turn it off. */
+            { value: 'priceAlerts', label: t('notify.priceAlerts'), sub: t('settings.priceAlertsHint'), icon: IconTrend, on: Boolean(notif.priceAlerts) },
             { value: 'dailyPromo', label: t('notify.daily'), sub: pmode === 'server' ? t('notify.dailySub') : t('notify.dailySubLocal'), icon: IconSparkle, on: Boolean(notif.dailyPromo) },
             { value: 'news', label: t('notify.news'), sub: t('notify.newsSub'), icon: IconNews, on: Boolean(notif.news) }
           ]}

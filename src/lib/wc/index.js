@@ -208,6 +208,7 @@ export {
 } from './verify.js';
 
 export {
+  RETURN_GRACE_MS,
   SIGN_ERRORS,
   SIGN_METHODS,
   classifySignError,

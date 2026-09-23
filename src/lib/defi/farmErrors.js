@@ -65,6 +65,7 @@ const ERROR_KEY_MAP = {
   WALLET_CHAIN_UNAPPROVED: 'farm.errors.walletChain',
   WALLET_CHAIN_NOT_APPROVED: 'farm.errors.walletChain',
   WALLET_NO_RESPONSE: 'farm.errors.walletNoResponse',
+  WALLET_RETURNED_UNSIGNED: 'farm.errors.walletReturnedUnsigned',
   TRANSACTION_DROPPED: 'farm.errors.dropped',
   INDEXER_DELAY: 'farm.errors.indexer'
 };

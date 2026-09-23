@@ -77,7 +77,18 @@ const BRIDGE_CODES = new Set([
   'BAD_TOKEN',
   'BAD_ORIGIN_ADDRESS',
   'DESTINATION_ADDRESS_REQUIRED',
-  'CROSSCHAIN_NOT_CONFIGURED'
+  'CROSSCHAIN_NOT_CONFIGURED',
+  /* The signing boundary's vocabulary (lib/wc/signing.js): facts about the
+     wallet session, never guesses about the network. */
+  'WALLET_RETURNED_UNSIGNED',
+  'WALLET_NO_RESPONSE',
+  'WALLET_SESSION_GONE',
+  'WALLET_RELAY_DOWN',
+  'WALLET_METHOD_UNAPPROVED',
+  'WALLET_CHAIN_UNAPPROVED',
+  'WALLET_CHAIN_NOT_APPROVED',
+  'WALLET_NO_ACCOUNT',
+  'CANCELLED'
 ]);
 
 const CODE_RE = /^[A-Z][A-Z0-9_]{2,40}$/;

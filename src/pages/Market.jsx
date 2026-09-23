@@ -15,7 +15,7 @@ import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
 import { MARKET_CATEGORIES, getCategory } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
-import { runPriceAlerts } from '../lib/priceAlerts';
+import { runPriceAlerts, runTopMoverAlerts } from '../lib/priceAlerts';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
@@ -76,6 +76,29 @@ export default function Market() {
    * The wording is built here because it has to be translated; the library
    * decides WHETHER to alert and never what it says.
    */
+  /*
+   * ─── TOP-MOVER ALERTS ───────────────────────────────────────────────────
+   * «برای ۳ ارز اول که بیش از ۵ درصد افت یا سود کرد نوتیفیکیشن بفرستد». Not
+   * gated on favourites: the first three coins BY RANK whose 24h change is
+   * beyond ±5% are announced, with the feed's own number, once per cooldown.
+   */
+  useEffect(() => {
+    if (!coins?.length) return;
+    runTopMoverAlerts({
+      coins,
+      format: (a) => ({
+        title: t(a.changePct >= 0 ? 'notify.mover.titleUp' : 'notify.mover.titleDown', {
+          symbol: a.symbol, pct: Math.abs(a.changePct).toFixed(1)
+        }),
+        body: t(a.changePct >= 0 ? 'notify.mover.up' : 'notify.mover.down', {
+          name: a.name, symbol: a.symbol, pct: Math.abs(a.changePct).toFixed(1),
+          price: a.price >= 1 ? a.price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : a.price.toPrecision(4),
+          rank: a.rank ?? '—'
+        })
+      })
+    });
+  }, [coins, t]);
+
   useEffect(() => {
     if (!coins?.length || !favorites?.length) return;
     runPriceAlerts({

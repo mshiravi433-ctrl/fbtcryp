@@ -13,6 +13,7 @@ import { LabIcon } from './LabIcons';
 import PredictionCard from './PredictionCard';
 import PaperTrade from './PaperTrade';
 import InvestmentSim from './InvestmentSim';
+import AppGuide from './AppGuide';
 
 /**
  * The registry for this tab: which simulator each card opens.
@@ -25,7 +26,11 @@ import InvestmentSim from './InvestmentSim';
 export const CARDS = [
   { id: 'predict', icon: 'flask', accent: 'violet', Component: PredictionCard },
   { id: 'paper', icon: 'trend', accent: 'cyan', Component: PaperTrade },
-  { id: 'invest', icon: 'wallet', accent: 'mint', Component: InvestmentSim }
+  { id: 'invest', icon: 'wallet', accent: 'mint', Component: InvestmentSim },
+  /* «راهنمای برنامه»: every area of the app, wallet-connect to finish, one
+     illustrated step at a time. It sits in Practice because it is the
+     "do" tier's map — the thing you read right before you try it. */
+  { id: 'guide', icon: 'book', accent: 'amber', Component: AppGuide }
 ];
 
 export default function PracticeGroup({ activeChild, onSelectChild }) {

@@ -1057,7 +1057,8 @@
         "region": "Which features are on or limited where you are right now",
         "about": "About the app, support, terms and legal documents"
       }
-    }
+    },
+    "priceAlertsHint": "We notify you when one of your starred coins, or one of the top 3 market coins, moves more than 5%."
   },
   "activation": {
     "loading": "Loading activation status...",
@@ -2521,7 +2522,8 @@
       "feedExpired": "Yield data went stale and is being refetched.",
       "feedBadShape": "The yield service returned unreadable data.",
       "feedOffline": "The yield service is unreachable. Check your connection.",
-      "feedHttp": "The yield service answered with an error ({{code}})."
+      "feedHttp": "The yield service answered with an error ({{code}}).",
+      "walletReturnedUnsigned": "You returned from the wallet without signing. Nothing was sent — try again if you want to continue."
     },
     "chainLabels": {
       "Ethereum": "Ethereum",
@@ -4583,7 +4585,14 @@
       "title": "{{symbol}} moved",
       "up": "{{symbol}} is up {{pct}}% since you last checked — now ${{price}}",
       "down": "{{symbol}} is down {{pct}}% since you last checked — now ${{price}}"
-    }
+    },
+    "mover": {
+      "titleUp": "{{symbol}} is up {{pct}}% today",
+      "titleDown": "{{symbol}} is down {{pct}}% today",
+      "up": "{{name}} (rank {{rank}}) rose {{pct}}% in the last 24h — now ${{price}}. Tap to see the chart.",
+      "down": "{{name}} (rank {{rank}}) fell {{pct}}% in the last 24h — now ${{price}}. Tap to see the chart."
+    },
+    "priceAlerts": "Price alerts"
   },
   "welcome": {
     "title": "Choose your language",
@@ -5790,7 +5799,16 @@
       "CROSSCHAIN_NOT_CONFIGURED": "The cross-chain service is not configured on this deployment.",
       "GENERIC": "Something went wrong ({{code}}). Nothing was sent.",
       "UNSAFE_BRIDGE_REQUEST": "The bridge request has invalid or conflicting contract details. Nothing was signed. Refresh the quote; if it repeats, stop and contact support.",
-      "BRIDGE_ACCOUNT_CHANGED": "Your wallet account changed. Reconnect the intended account and get a fresh quote."
+      "BRIDGE_ACCOUNT_CHANGED": "Your wallet account changed. Reconnect the intended account and get a fresh quote.",
+      "CANCELLED": "You cancelled the wait. Nothing was sent.",
+      "WALLET_RETURNED_UNSIGNED": "You returned from the wallet without signing. Nothing was sent — tap Transfer again if you want to continue.",
+      "WALLET_NO_RESPONSE": "The wallet did not answer. If no signature screen appeared, open the wallet app yourself and try again. Nothing was sent.",
+      "WALLET_SESSION_GONE": "The wallet connection is gone. Reconnect and try again.",
+      "WALLET_RELAY_DOWN": "The link to the wallet is down. Check your connection and try again.",
+      "WALLET_METHOD_UNAPPROVED": "This wallet did not allow this kind of signature. Reconnect and approve transaction signing when connecting.",
+      "WALLET_CHAIN_UNAPPROVED": "The current connection does not cover this network. Connect the wallet on the source network.",
+      "WALLET_CHAIN_NOT_APPROVED": "The wallet has not approved the source network. Switch networks in the wallet and try again.",
+      "WALLET_NO_ACCOUNT": "No account for this network is connected. Reconnect the wallet."
     },
     "optionsTitle": "Bridge options",
     "slippageNote": "Slippage tolerance is {{pct}}%, taken from your Settings so it matches the swap screen. Raise it only if quotes keep failing — a bridge takes minutes and cannot be cheaply retried, so a loose tolerance costs more here than it does on a swap.",
@@ -5854,7 +5872,9 @@
       "continue": "Continue to wallet",
       "bscTokenNote": "On BNB Chain, USDT at 0x55d398…97955 is the Binance-pegged token contract listed by BscScan as Binance-Peg BSC-USD, not the bridge deposit address. A familiar token address does not prove the spender or transaction is safe.",
       "explorer": "View token on BscScan"
-    }
+    },
+    "waitingHint": "The request is in your wallet. If you came back without signing, or no signature screen appeared, cancel the wait here — nothing will be sent.",
+    "cancelWaiting": "Cancel waiting"
   },
   "autopilot": {
     "title": "Autopilot",
@@ -8605,6 +8625,12 @@
         "VERIFY_UNREADABLE": "Verification could not read the chain state.",
         "CONFIG_LOADING": "Waiting for the live config…"
       }
+    },
+    "hero": {
+      "eyebrow": "Non-custodial launchpad",
+      "beat1": "Create token",
+      "beat2": "Launch pool",
+      "beat3": "Go live"
     }
   },
   "wealth": {
@@ -10333,7 +10359,19 @@
       "KAMINO_SDK_RECOVERED": "The Kamino module loaded after a retry. If something fails, reload the app.",
       "RPC_UNAVAILABLE": "That node answered with something we could not use.",
       "RELAY_METHOD_UNAVAILABLE": "The app’s own relay does not forward this request — this is a gap in this app version, not a node or network failure. Nothing was sent; update the app and try again.",
-      "WALLET_NOT_FOUND": "No Solana wallet app was found on this device to open this request."
+      "WALLET_NOT_FOUND": "No Solana wallet app was found on this device to open this request.",
+      "CONFIRMED": "The transaction is already confirmed.",
+      "NO_RPC": "No network node is reachable. Check your connection or set your own RPC in Settings.",
+      "PROGRAM_ID": "The protocol's program id does not match what we expect. We stopped for safety.",
+      "TRANSACTION_ERROR": "The network rejected the transaction. Nothing changed.",
+      "ADAPTER_MODULE_UNAVAILABLE": "This protocol's module did not load in this build. Refresh the page.",
+      "ASSET_NOT_SUPPORTED": "This asset is not supported in this market.",
+      "BAD_KIND": "The request type was invalid. Refresh and try again.",
+      "CLIENT_REQUIRED": "The network connection is not ready. Wait a moment and try again.",
+      "NOT_INDEXED": "The indexer has not recorded this position yet; we will check again shortly.",
+      "NO_POOL_REGISTERED": "No pool is registered for this network.",
+      "PROVIDER_REQUIRED": "The network connection is unavailable. Check your connection.",
+      "WALLET_REQUIRED": "A connected wallet is required for this."
     },
     "rateUnknown": "live rate unavailable right now",
     "alerts": {
@@ -10532,7 +10570,29 @@
     "wallet": {
       "title": "The wallet did not open for signing",
       "switch": "Switch or reconnect the wallet and try again. If it repeats, the wallet's own report below names the reason."
-    }
+    },
+    "alertBody": {
+      "HEALTH_FACTOR_LOW": "Health factor is {{value}}. Consider adding collateral or repaying debt.",
+      "HEALTH_FACTOR_DROP": "Health factor fell from {{from}} to {{to}}.",
+      "LTV_HIGH": "Loan-to-value is {{value}}%.",
+      "LIQUIDATION_DISTANCE": "Liquidation distance is {{value}}%.",
+      "COLLATERAL_DROP": "The value of your collateral fell since the last check.",
+      "BORROW_APY_CHANGE": "Borrow APY moved from {{from}}% to {{to}}%.",
+      "SUPPLY_APY_CHANGE": "Supply APY moved from {{from}}% to {{to}}%.",
+      "ORACLE_ANOMALY": "The price feed is abnormal. High-risk new transactions are paused.",
+      "TRANSACTION_FAILED": "The {{action}} transaction did not complete.",
+      "POSITION_CHANGED": "Your position changed outside this session and has been refreshed."
+    },
+    "failStep": {
+      "refresh": "market read",
+      "market": "market read",
+      "position": "position read",
+      "balance": "balance read",
+      "oracle": "oracle read",
+      "simulate": "simulation",
+      "execute": "execution"
+    },
+    "simRevertRaw": "raw revert text"
   },
   "sm": {
     "title": "Smart Money",
@@ -10971,6 +11031,10 @@
       "glossary": {
         "title": "Glossary",
         "sub": "Crypto terms explained"
+      },
+      "guide": {
+        "title": "App guide",
+        "sub": "Every area, from wallet connect to finish — step by step, with pictures"
       }
     },
     "screens": {
@@ -11254,6 +11318,10 @@
             "def": "Everything you hold, and the share of each asset."
           }
         }
+      },
+      "guide": {
+        "title": "App guide",
+        "sub": "Swap, Bridge, Loan, Guard, Stocks and Futures — each one start to finish"
       }
     },
     "levelNames": {
@@ -11748,6 +11816,408 @@
       "whatIf": "What-if",
       "xpAmount": "+{{n}} XP",
       "notice": "The leaderboard is a virtual score. There is no prize, no payout, no ranking that affects anything outside Lab. The XP is meant to track practice, not to gamify trading."
+    },
+    "guide": {
+      "open": "Open",
+      "note": "This guide only shows the path; it is not investment advice. Read every transaction in your wallet before signing — the app never sees your private key.",
+      "areas": {
+        "swap": {
+          "title": "Swap",
+          "sub": "Exchange one token for another on the same network, with no middleman and no deposit.",
+          "sections": {
+            "flow": {
+              "title": "Full flow",
+              "sub": "",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Tap “Connect wallet” at the top. MetaMask, Trust, OKX or any WalletConnect wallet; on mobile you jump to the wallet app and come back after approving. Your shortened address at the top means you are in."
+                },
+                "network": {
+                  "title": "Pick the network",
+                  "body": "A swap happens on the network your wallet is on. If the page and the wallet disagree, the app shows a “Switch network” button and the wallet asks you to confirm."
+                },
+                "pair": {
+                  "title": "Pair and amount",
+                  "body": "Choose the “You pay” and “You receive” tokens from the list or paste a contract address. Type an amount or tap “Max”; your balance and the dollar value show underneath."
+                },
+                "quote": {
+                  "title": "Read the quote",
+                  "body": "Wait a few seconds while the best route across DEXes is found. Check the rate, price impact, network fee and “Minimum received” — that last one is what you get in the worst case."
+                },
+                "guard": {
+                  "title": "Slippage and MEV guard",
+                  "body": "Use the gear to set slippage (0.5% is enough for large tokens). The MEV guard lives here too; when it is on, the order goes through a private route so bots cannot jump ahead of you."
+                },
+                "sign": {
+                  "title": "Confirm and sign",
+                  "body": "Tap “Swap”. For non-native tokens you sign an “Approve” first, then the swap itself. The wallet opens; read the amount and contract address, then confirm."
+                },
+                "done": {
+                  "title": "Done",
+                  "body": "Status updates live: pending → confirmed. You get an explorer link and the new token lands in your wallet. If you did not confirm or came back from the wallet, the app stops waiting and you can try again."
+                }
+              }
+            }
+          }
+        },
+        "bridge": {
+          "title": "Bridge",
+          "sub": "Move an asset from one network to another — say USDC from Ethereum to Base or Solana.",
+          "sections": {
+            "flow": {
+              "title": "Full flow",
+              "sub": "",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Same as Swap. Solana routes connect a Solana wallet (Phantom and friends) separately; the app asks for whichever it needs."
+                },
+                "chains": {
+                  "title": "Source and destination",
+                  "body": "Under “From” pick the network the asset is on now, under “To” the destination. Only routes supported by verified bridges are listed."
+                },
+                "asset": {
+                  "title": "Asset and amount",
+                  "body": "Enter the token and amount. The recipient defaults to your own address; if you change it, read it twice — there is no undo on a bridge."
+                },
+                "route": {
+                  "title": "Read the route and estimate",
+                  "body": "Several bridges are compared: amount received, fee and an “estimated time” (seconds to minutes). If you have no gas on the destination, look for the “send some gas too” option."
+                },
+                "sign": {
+                  "title": "Sign in the wallet",
+                  "body": "Tap “Bridge”. Usually one Approve and one main transaction. The wallet opens; confirm and return to the app. If you come back without signing, the app closes the wait after a few seconds and says “not signed”."
+                },
+                "wait": {
+                  "title": "Wait for delivery",
+                  "body": "Once the source confirms, the progress bar shows “in transit”. You can close the page; the transaction card with explorer links for both sides stays in “History”."
+                },
+                "done": {
+                  "title": "Arrived",
+                  "body": "The asset is on the destination network. Switch your wallet's network to see the balance. If the token is not visible, tap “Add token” on the same card."
+                }
+              }
+            }
+          }
+        },
+        "loan": {
+          "title": "Loan",
+          "sub": "Post collateral, borrow another asset and repay whenever you like — all on on-chain lending contracts.",
+          "sections": {
+            "flow": {
+              "title": "Full flow",
+              "sub": "",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "On connect, the app reads your current positions across every supported market: what collateral you have and what you have borrowed."
+                },
+                "market": {
+                  "title": "Market and network",
+                  "body": "Pick the protocol (e.g. Aave, or Kamino on Solana) and the network. Supply and borrow rates per asset are live; the numbers come from the contract itself."
+                },
+                "collateral": {
+                  "title": "Post collateral",
+                  "body": "Enter the collateral asset and amount. “Max borrowable” and “loan-to-value (LTV)” update instantly. Borrow below the cap to keep a safety margin."
+                },
+                "health": {
+                  "title": "Understand the health factor",
+                  "body": "Health must stay above 1; below 1 means liquidation. Before signing, the app shows the “liquidation price” and warns in red if it is close."
+                },
+                "sign": {
+                  "title": "Sign",
+                  "body": "“Supply” and then “Borrow” are one transaction each. The wallet opens; read the amounts and confirm. If something fails, the error shows in your language with its code."
+                },
+                "manage": {
+                  "title": "Manage the position",
+                  "body": "In the “Positions” tab you can add collateral, repay part, or turn on the health alert so you get a notification when you are near danger."
+                },
+                "repay": {
+                  "title": "Repay and withdraw",
+                  "body": "Tap “Repay”, enter the amount (or all) and sign. Once the debt is zero, free the collateral with “Withdraw”. Interest paid is summarised right there."
+                }
+              }
+            }
+          }
+        },
+        "guard": {
+          "title": "Guard",
+          "sub": "Two layers of protection: insurance for contracts and deposits, and the MEV guard that keeps bots off your swaps.",
+          "sections": {
+            "insurance": {
+              "title": "Protection / Insurance",
+              "sub": "Buy cover, watch its status and file a claim if something goes wrong.",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Open “Protection / Insurance” from the “More” menu and connect so your existing covers are read for this address."
+                },
+                "dashboard": {
+                  "title": "Read the dashboard",
+                  "body": "The first view shows what is covered, until when, and your wallet's risk score. Yellow cards mean an uncovered asset."
+                },
+                "marketplace": {
+                  "title": "Cover marketplace",
+                  "body": "In “Marketplace” compare providers, cover type (smart contract, stablecoin depeg, exchange) and the yearly premium. Tap one to read the full terms."
+                },
+                "buy": {
+                  "title": "Quote and sign",
+                  "body": "Choose the amount and duration; the exact premium is computed. Tap “Buy cover” and sign in the wallet. Cover starts when the transaction confirms."
+                },
+                "coverage": {
+                  "title": "My cover",
+                  "body": "The “Coverage” tab lists every policy with its end date and covered amount. You can renew or turn on an expiry reminder."
+                },
+                "claim": {
+                  "title": "File a claim",
+                  "body": "If an incident happens, fill the form under “Claims”: transaction, description, evidence. Review status is tracked right there and payment goes to the same wallet."
+                }
+              }
+            },
+            "mev": {
+              "title": "MEV guard",
+              "sub": "Lives on the Swap page; it keeps your order unseen so bots cannot trade before and after it.",
+              "steps": {
+                "where": {
+                  "title": "Where is it?",
+                  "body": "On the Swap page, under the quote box, is the “MEV protection” card. With every new quote it shows how exposed that order is to a sandwich attack."
+                },
+                "level": {
+                  "title": "Read the risk level",
+                  "body": "Green means a small order in a deep market; yellow and red mean the order is large relative to liquidity and worth attacking. The “price impact” number tells you why."
+                },
+                "minOut": {
+                  "title": "Minimum received",
+                  "body": "The guard locks “minimum received” from your slippage. Less slippage leaves bots less room — but raises the chance the transaction fails in a volatile market."
+                },
+                "private": {
+                  "title": "Private route",
+                  "body": "If the network supports it, turn on “Private send”: the transaction goes to a private relay instead of the public queue and stays unseen until it is included. If no relay is available, the app says so."
+                },
+                "result": {
+                  "title": "Result",
+                  "body": "After the swap, the card shows what was “expected” versus what you “actually” received. A difference near zero means the guard did its job."
+                }
+              }
+            }
+          }
+        },
+        "stocks": {
+          "title": "Stocks",
+          "sub": "Real-world assets on chain: tokenised equities, RWA tokens, Global Horizon (Ostium) and the derivatives floor.",
+          "sections": {
+            "equity": {
+              "title": "Tokenised stocks",
+              "sub": "Tokens backed one-to-one by real shares (Apple, Tesla, …) that trade around the clock.",
+              "steps": {
+                "browse": {
+                  "title": "Browse the list",
+                  "body": "The “Tokenised stocks” tab lists each ticker with live price, 24h change and the token issuer. Tap a ticker for the chart and issuer details."
+                },
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "To buy, the wallet must be on the issuer's network (most are on Solana or Arbitrum). The app asks to switch when needed."
+                },
+                "pick": {
+                  "title": "Ticker and amount",
+                  "body": "Enter the amount in dollars or in tokens. The estimated execution price and fee appear underneath."
+                },
+                "quote": {
+                  "title": "Read the quote",
+                  "body": "A purchase is really a swap: your stablecoin → the stock token. Check rate, slippage and minimum received just like in Swap."
+                },
+                "sign": {
+                  "title": "Sign",
+                  "body": "Tap “Buy” and confirm in the wallet. Network confirmation usually takes a few seconds."
+                },
+                "hold": {
+                  "title": "Hold and sell",
+                  "body": "The token shows in your wallet and in “Portfolio”. Selling is the same path in reverse. Note: the token tracks the share; it is not a vote or a direct dividend unless the issuer says so."
+                }
+              }
+            },
+            "rwa": {
+              "title": "RWA tokens",
+              "sub": "Treasuries, fixed-income funds and gold, tokenised on chain.",
+              "steps": {
+                "browse": {
+                  "title": "Browse the list",
+                  "body": "Each token shows its “yearly yield”, the kind of backing asset and the issuer. Sort by yield or volume."
+                },
+                "read": {
+                  "title": "Read the terms",
+                  "body": "Tap a token: who custodies the asset, whether there are country restrictions, and how redemption works. Some tokens require KYC — the app flags it."
+                },
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Connect on the token's network. The stablecoin you buy with has to be on that same network."
+                },
+                "quote": {
+                  "title": "Read the quote",
+                  "body": "Enter an amount; price, fee and the estimated yearly yield in dollars are shown."
+                },
+                "sign": {
+                  "title": "Sign",
+                  "body": "“Buy” and confirm in the wallet. For restricted tokens you may be sent to the issuer's page."
+                },
+                "hold": {
+                  "title": "Earn the yield",
+                  "body": "Yield either accrues in the token price or is paid periodically — the token card says which. Track its growth in “Portfolio”."
+                }
+              }
+            },
+            "ostium": {
+              "title": "Global Horizon",
+              "sub": "Leveraged trading on indices, forex and commodities (Ostium on Arbitrum).",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "An EVM wallet is required. The app asks for Arbitrum automatically because Ostium only lives there."
+                },
+                "network": {
+                  "title": "Prepare collateral",
+                  "body": "Collateral is USDC on Arbitrum. If you have none, get it right here with “Bridge” or “Swap”."
+                },
+                "market": {
+                  "title": "Pick a market",
+                  "body": "Gold, oil, S&P 500, forex pairs… each market shows its trading hours, spread and funding fee."
+                },
+                "size": {
+                  "title": "Size and leverage",
+                  "body": "Choose direction (long/short), collateral and leverage. Liquidation price and opening fee compute instantly; set your stop-loss right here."
+                },
+                "sign": {
+                  "title": "Sign",
+                  "body": "“Open position” and confirm in the wallet. The first time there is also an Approve for USDC."
+                },
+                "manage": {
+                  "title": "Manage the position",
+                  "body": "Live PnL, editing take-profit/stop-loss, adding collateral and closing — all in the “Positions” tab. Closing is one signature and USDC returns to your wallet."
+                }
+              }
+            },
+            "derivatives": {
+              "title": "Derivatives floor",
+              "sub": "On-chain options and structured products — for hedging or earning yield.",
+              "steps": {
+                "browse": {
+                  "title": "See the products",
+                  "body": "The “Derivatives floor” tab groups products by kind (call/put option, yield vault) and underlying asset."
+                },
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Connect on the product's network. Most vaults are on Arbitrum or Solana."
+                },
+                "contract": {
+                  "title": "Read the contract",
+                  "body": "Strike, expiry, premium and “maximum loss”. The app draws the payoff chart at expiry for you."
+                },
+                "risk": {
+                  "title": "Weigh the risk",
+                  "body": "The risk card says in which scenario you lose. If anything is unclear, review “Lab → Lessons” before signing."
+                },
+                "sign": {
+                  "title": "Sign",
+                  "body": "Enter the amount, tap “Enter” and confirm in the wallet."
+                },
+                "manage": {
+                  "title": "Until expiry",
+                  "body": "The position shows in “Portfolio” with its live value. At expiry it settles automatically or you “exercise/withdraw” with one signature — the product card says which."
+                }
+              }
+            }
+          }
+        },
+        "perp": {
+          "title": "Futures",
+          "sub": "Perpetual contracts with leverage — one overview tab for learning and two venues for trading.",
+          "sections": {
+            "overview": {
+              "title": "Overview",
+              "sub": "Read this tab before any trade; no money moves here.",
+              "steps": {
+                "index": {
+                  "title": "Index and mark",
+                  "body": "For each coin you see the “index price” (exchange average) and the “mark price” (the liquidation reference). If data is offline, the card says so explicitly."
+                },
+                "funding": {
+                  "title": "Funding rate",
+                  "body": "Exchanged every 8 hours between longs and shorts. Positive means longs pay. The history chart shows which side is crowded."
+                },
+                "liq": {
+                  "title": "Liquidation calculator",
+                  "body": "Enter leverage and direction to see what percentage move against you wipes the position. At 10x, 10% is enough."
+                },
+                "next": {
+                  "title": "Where next?",
+                  "body": "If you are ready, open the “dYdX Orbit” tab (order book) or “On-chain” (on-chain protocols). Practise first with “Paper trading” in the Lab."
+                }
+              }
+            },
+            "dydx": {
+              "title": "dYdX Orbit",
+              "sub": "dYdX's professional order book with low fees; collateral is deposited to the dYdX chain.",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Connect an EVM wallet; the first time you sign a message (not a transaction) to derive your dYdX trading key. That signature is free."
+                },
+                "deposit": {
+                  "title": "Deposit USDC",
+                  "body": "“Deposit” USDC from any supported network; the app bridges it for you. A few minutes later it shows in “Trading balance”."
+                },
+                "market": {
+                  "title": "Pick a market",
+                  "body": "BTC-USD, ETH-USD and dozens more with chart, order book and recent trades."
+                },
+                "order": {
+                  "title": "Build the order",
+                  "body": "Type (market/limit), direction, size and leverage. Before sending, check liquidation price, fee and “required margin” in the summary."
+                },
+                "sign": {
+                  "title": "Send",
+                  "body": "Orders are signed with the trading key; the wallet does not open for each order. Confirmation in under a second."
+                },
+                "manage": {
+                  "title": "Manage and withdraw",
+                  "body": "Set take-profit/stop-loss or close in “Positions”. To exit, tap “Withdraw” to return USDC to the network you choose."
+                }
+              }
+            },
+            "onchain": {
+              "title": "On-chain",
+              "sub": "Fully on-chain perpetuals (GMX, Hyperliquid and the like); every order is a wallet transaction.",
+              "steps": {
+                "connect": {
+                  "title": "Connect your wallet",
+                  "body": "Connect an EVM wallet. No account is created; your address is your account."
+                },
+                "network": {
+                  "title": "Network and collateral",
+                  "body": "Each venue lives on its own network (Arbitrum, Hyperliquid L1…). The app asks for the network and tells you which token is collateral."
+                },
+                "venue": {
+                  "title": "Pick a venue",
+                  "body": "Each protocol card puts depth, fees and maximum leverage side by side. Pick one to open its markets."
+                },
+                "position": {
+                  "title": "Build the position",
+                  "body": "Direction, size, leverage and stop-loss. Liquidation price and funding fee are in the summary before you sign."
+                },
+                "sign": {
+                  "title": "Sign",
+                  "body": "Approve the collateral (first time) then the open transaction. The wallet opens; confirm and wait for network confirmation."
+                },
+                "close": {
+                  "title": "Close",
+                  "body": "From “Positions”, tap “Close” and sign. PnL settles and collateral returns to your wallet. History stays with an explorer link."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "buySell": {

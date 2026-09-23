@@ -153,12 +153,36 @@ const BRIDGE_THROWN = [
     outfile,
     logLevel: 'silent'
   });
-  const { evaluatePriceAlerts } = await import(`file://${outfile}`);
+  const { evaluatePriceAlerts, evaluateTopMovers } = await import(`file://${outfile}`);
   rmSync(dir, { recursive: true, force: true });
 
   const now = 1_700_000_000_000;
   const LIVE = (price) => ({ id: 'bitcoin', symbol: 'btc', price, dataProvenance: 'live' });
   const OFF = (price) => ({ id: 'bitcoin', symbol: 'btc', price, dataProvenance: 'offline', offline: true });
+
+  /* ── top movers: «۳ ارز اول که بیش از ۵٪ افت یا سود کرد» ───────────── */
+  const M = (id, rank, change24h, extra = {}) => ({ id, symbol: id.slice(0, 3), name: id, rank, price: 10, change24h, dataProvenance: 'live', ...extra });
+  const market = [
+    M('bitcoin', 1, 1.2), M('ethereum', 2, -6.4), M('tether', 3, 0.01), M('solana', 4, 9.9),
+    M('xrp', 5, 5.0), M('dogecoin', 6, 12), M('cardano', 7, -7, { dataProvenance: 'offline', offline: true }), M('tron', 8, -8)
+  ];
+  const tm1 = evaluateTopMovers({ coins: market, store: {}, now });
+  row('top movers: first three BY RANK beyond ±5% (exactly 5.0 qualifies), offline rows skipped',
+    tm1.alerts.map((a) => a.id).join(',') === 'ethereum,solana,xrp'
+    && tm1.movers.length === 3 && !tm1.movers.some((m) => m.id === 'cardano'));
+  const tm2 = evaluateTopMovers({ coins: market, store: tm1.store, now: now + 60_000 });
+  row('top movers: the same move is not re-announced on the next poll', tm2.alerts.length === 0);
+  const grown = market.map((c) => (c.id === 'solana' ? { ...c, change24h: 15.2 } : c));
+  const tm3 = evaluateTopMovers({ coins: grown, store: tm1.store, now: now + 120_000 });
+  row('top movers: a move that grew by ≥5 points is re-announced early',
+    tm3.alerts.length === 1 && tm3.alerts[0].id === 'solana' && tm3.alerts[0].changePct === 15.2);
+  const flipped = market.map((c) => (c.id === 'ethereum' ? { ...c, change24h: 6.1 } : c));
+  const tm4 = evaluateTopMovers({ coins: flipped, store: tm1.store, now: now + 180_000 });
+  row('top movers: a flipped sign is re-announced early', tm4.alerts.length === 1 && tm4.alerts[0].id === 'ethereum');
+  const tm5 = evaluateTopMovers({ coins: market, store: tm1.store, now: now + 13 * 3600_000 });
+  row('top movers: after the cooldown the same movers may be announced again', tm5.alerts.length === 3);
+  row('top movers: an all-offline market announces nothing',
+    evaluateTopMovers({ coins: market.map((c) => ({ ...c, dataProvenance: 'offline' })), store: {}, now }).alerts.length === 0);
 
   /* offline rows never record a baseline, never alert */
   const offOnly = evaluatePriceAlerts({ favorites: ['bitcoin'], coins: [OFF(67450)], store: {}, now });

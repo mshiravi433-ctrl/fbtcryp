@@ -80,7 +80,15 @@ export const SIGN_ERRORS = Object.freeze({
   CHAIN_UNAPPROVED: 'WALLET_CHAIN_UNAPPROVED',
   CHAIN_NOT_APPROVED: 'WALLET_CHAIN_NOT_APPROVED',
   NO_RESPONSE: 'WALLET_NO_RESPONSE',
-  NO_ACCOUNT: 'WALLET_NO_ACCOUNT'
+  NO_ACCOUNT: 'WALLET_NO_ACCOUNT',
+  /**
+   * The user went to the wallet and CAME BACK without approving or rejecting
+   * (Back button, swipe-away, closed the wallet). Nothing will ever settle
+   * that request from the wallet's side, so the app must stop waiting and
+   * say so — the report: «وقتی میزنی که امضا کنی و برگردی بدون انجام کار …
+   * هنوز منتظر می‌ماند بدون اینکه بفهمد لغو شده».
+   */
+  RETURNED_UNSIGNED: 'WALLET_RETURNED_UNSIGNED'
 });
 
 /**
@@ -219,6 +227,7 @@ export function classifySignError(error) {
   if (error?.code === 4001 || /user rejected|user denied|rejected by user|request rejected/i.test(msg)) {
     return null;
   }
+  if (msg === SIGN_ERRORS.RETURNED_UNSIGNED) return SIGN_ERRORS.RETURNED_UNSIGNED;
   if (
     msg === SIGN_ERRORS.NO_RESPONSE ||
     /no matching key|session topic doesn't exist|session not found|no session/i.test(msg) ||
@@ -284,13 +293,57 @@ export async function reopenRelay(eip, { withTimeout: race = null } = {}) {
   }
 }
 
-/** Stop the signing clock while this document is not on screen. */
-function watchHiddenPause(bound, doc) {
+/**
+ * How long a request may stay unanswered AFTER the user has come back from
+ * the wallet.
+ *
+ * ─── THE BUG THIS CLOSES ───────────────────────────────────────────────────
+ * «در صفحه پل وقتی می‌زنی که امضا کنی و برمی‌گردی بدون انجام کار، هنوز منتظر
+ * می‌ماند بدون اینکه بفهمد لغو شده.» A WalletConnect wallet that is dismissed
+ * with the Back button never publishes a rejection — from the relay's point
+ * of view the request is simply still open. The page hid (the wallet came to
+ * the front), the pausable clock stopped, the user came back, the clock
+ * resumed with almost its whole three-minute budget intact, and the button
+ * read «در کیف پول تأیید کن…» for three more minutes over a wallet nobody was
+ * in.
+ *
+ * The return itself is the signal. A wallet that approved publishes the
+ * response within a few seconds of the app regaining focus (the relay
+ * round-trip); one that was left without an answer never will. So once the
+ * document is visible again after having been hidden for a signing request,
+ * the remaining budget collapses to this grace window, and the failure it
+ * ends with names what happened: RETURNED_UNSIGNED, not NO_RESPONSE.
+ *
+ * 12 seconds is generous for a relay round-trip on a slow mobile network and
+ * short enough that the user is not staring at a spinner after pressing Back.
+ */
+export const RETURN_GRACE_MS = 12_000;
+
+/**
+ * Stop the signing clock while this document is not on screen, and collapse
+ * the wait when the user comes back from the wallet without an answer.
+ *
+ * `wentAway` records that the wallet had the screen at least once for this
+ * request: a request that never left this document (a desktop QR session,
+ * a wallet in a side panel) is NOT shortened on an unrelated tab switch —
+ * only the hide→show pair that a mobile app-switch produces is treated as
+ * a return from the wallet.
+ */
+function watchHiddenPause(bound, doc, { returnGraceMs = RETURN_GRACE_MS, onReturn = null } = {}) {
   if (!doc || typeof doc.addEventListener !== 'function') return () => {};
+  let wentAway = false;
   const onVisibility = () => {
     try {
-      if (doc.visibilityState === 'hidden') bound.pause();
-      else bound.resume();
+      if (doc.visibilityState === 'hidden') {
+        wentAway = true;
+        bound.pause();
+      } else {
+        bound.resume();
+        if (wentAway && Number.isFinite(returnGraceMs) && returnGraceMs >= 0) {
+          bound.shorten?.(returnGraceMs, SIGN_ERRORS.RETURNED_UNSIGNED);
+          try { onReturn?.(); } catch { /* a trace is not load-bearing */ }
+        }
+      }
     } catch { /* a clock that cannot be paused is still a clock */ }
   };
   if (doc.visibilityState === 'hidden') onVisibility();
@@ -310,6 +363,8 @@ function watchHiddenPause(bound, doc) {
  * @param {object} [options]
  * @param {number} [options.timeoutMs]            visible budget for one signature
  * @param {number} [options.hardCapMs]            never wait past this, hidden or not
+ * @param {number} [options.returnGraceMs]        how long to keep waiting once the
+ *        user has come BACK from the wallet without an answer (see RETURN_GRACE_MS)
  * @param {(info:{method:string, chainId:number|null, address:string|null}) => void} [options.onSignatureRequest]
  *        Fired the moment a request is published — on mobile that is when the
  *        wallet app is brought back to the front, so the prompt is on screen
@@ -322,6 +377,7 @@ export function guardEip1193(eip, options = {}) {
   const {
     timeoutMs = TIMEOUT.signInWallet,
     hardCapMs = TIMEOUT.signHardCap,
+    returnGraceMs = RETURN_GRACE_MS,
     onSignatureRequest = null,
     onTrace = null,
     doc = typeof document !== 'undefined' ? document : null
@@ -408,7 +464,10 @@ export function guardEip1193(eip, options = {}) {
     }
 
     const bound = pauseBound(timeoutMs, SIGN_ERRORS.NO_RESPONSE, { hardCapMs });
-    const stopWatching = watchHiddenPause(bound, doc);
+    const stopWatching = watchHiddenPause(bound, doc, {
+      returnGraceMs,
+      onReturn: () => trace('sign_returned_waiting', { method, graceMs: returnGraceMs })
+    });
     try {
       const pending = Promise.resolve(eip.request(args, ...rest));
       /* The request is on its way: this is the moment to bring the wallet app

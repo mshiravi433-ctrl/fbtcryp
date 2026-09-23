@@ -1352,6 +1352,33 @@
   line-height: 1;
 }
 
+/* The real network logo (inline SVG from lib/assetIconData) inside the ring.
+   The SVG paints its own brand background, so the tile's gradient becomes a
+   halo behind a slightly inset, rounded logo — the «modern» read the chain
+   grid was asked for, without an image request. */
+.launch-mark.has-logo {
+  background:
+    radial-gradient(120% 120% at 28% 22%, rgba(255, 255, 255, 0.35), transparent 46%),
+    linear-gradient(145deg, color-mix(in srgb, var(--mark-color, #00e5ff) 70%, #000), rgba(0, 0, 0, 0.6));
+}
+
+.launch-mark-logo {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 6px 14px -6px rgba(0, 0, 0, 0.6);
+}
+
+.launch-mark-logo svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .launch-mark.dim { filter: saturate(0.55); opacity: 0.75; }
 .launch-mark.ghost { opacity: 0.9; }
 
@@ -2268,4 +2295,284 @@
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 8px currentColor;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HERO v2 (2026-09-23) — «FBT لانچ … را مدرن‌تر کن و زیباتر»
+   Same glass box, three upgrades: a gradient-inked title with an eyebrow,
+   a deeper aurora with a faint perspective grid and drifting stars, and a
+   footer strip that walks the sentence (token → pool → live) and shows the
+   launchable networks by their REAL logos. Every animation is decorative
+   and switched off under prefers-reduced-motion / the native shell.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.launch-hero-v2 {
+  border-radius: 24px;
+  padding: calc(var(--sp-4) + 2px) var(--sp-4) var(--sp-4);
+  background:
+    radial-gradient(130% 110% at 6% -30%, rgba(0, 229, 255, 0.20), transparent 56%),
+    radial-gradient(100% 100% at 100% -10%, rgba(255, 209, 102, 0.16), transparent 58%),
+    radial-gradient(80% 60% at 60% 120%, rgba(168, 85, 247, 0.16), transparent 60%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  box-shadow:
+    0 24px 60px -30px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+.launch-hero-v2::after { opacity: 0.34; }
+
+/* A perspective grid receding into the header — the "launchpad floor". */
+.launch-hero-grid {
+  position: absolute;
+  inset: auto -20% -40% -20%;
+  height: 70%;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(0, 229, 255, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.10) 1px, transparent 1px);
+  background-size: 28px 28px;
+  transform: perspective(360px) rotateX(58deg);
+  transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 85%);
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 85%);
+  opacity: 0.7;
+}
+
+/* Sparse stars, drifting very slowly. */
+.launch-hero-stars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 22%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 28% 68%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 46% 18%, rgba(255, 209, 102, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 63% 44%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1.3px 1.3px at 78% 14%, rgba(0, 229, 255, 0.6), transparent 60%),
+    radial-gradient(1px 1px at 88% 58%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.1px 1.1px at 70% 80%, rgba(168, 85, 247, 0.55), transparent 60%);
+  animation: launchStars 26s linear infinite;
+  opacity: 0.9;
+}
+
+@keyframes launchStars {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-14px, 8px, 0); }
+}
+
+.launch-hero-v2 .launch-rocket {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  overflow: visible;
+  border-color: rgba(0, 229, 255, 0.36);
+  background:
+    linear-gradient(150deg, rgba(0, 229, 255, 0.22), rgba(168, 85, 247, 0.12) 55%, rgba(255, 209, 102, 0.12));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 14px 30px -16px var(--rgb-1);
+}
+
+/* A thin conic ring that rotates around the rocket tile. */
+.launch-rocket-orbit {
+  position: absolute;
+  inset: -5px;
+  border-radius: 22px;
+  padding: 1px;
+  background: conic-gradient(from 0deg, transparent 0 62%, var(--rgb-1) 78%, var(--rgb-5) 88%, transparent 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.85;
+  animation: launchOrbit 5.5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes launchOrbit {
+  to { transform: rotate(360deg); }
+}
+
+/* The exhaust: a soft gold flame under the tile. */
+.launch-rocket-trail {
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  width: 16px;
+  height: 22px;
+  transform: translateX(-50%);
+  border-radius: 50% 50% 60% 60%;
+  background: radial-gradient(ellipse at 50% 20%, rgba(255, 209, 102, 0.9), rgba(255, 120, 60, 0.45) 55%, transparent 75%);
+  filter: blur(4px);
+  opacity: 0.7;
+  animation: launchTrail 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes launchTrail {
+  0%, 100% { transform: translateX(-50%) scaleY(0.85); opacity: 0.55; }
+  50%      { transform: translateX(-50%) scaleY(1.15); opacity: 0.85; }
+}
+
+.launch-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rgb-1);
+  margin-bottom: 4px;
+}
+
+.launch-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.18), 0 0 12px var(--rgb-1);
+}
+
+.launch-hero-v2 .launch-title h1 {
+  font-size: clamp(22px, 5.6vw, 28px);
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+.launch-h1-grad {
+  background: linear-gradient(92deg, #fff 0%, var(--rgb-1) 48%, var(--rgb-5) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 22px rgba(0, 229, 255, 0.18));
+}
+
+.launch-hero-v2 .launch-title p {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  max-width: 40ch;
+  margin-top: 6px;
+}
+
+/* ── footer strip ─────────────────────────────────────────────────────── */
+
+.launch-hero-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.launch-hero-flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.launch-hero-beat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+[dir='rtl'] .launch-hero-beat { padding: 5px 6px 5px 10px; }
+
+.launch-hero-beat-ico {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #00110a;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-5));
+}
+
+.launch-hero-beat:nth-child(3) .launch-hero-beat-ico { background: linear-gradient(140deg, #a855f7, var(--rgb-1)); color: #fff; }
+.launch-hero-beat:nth-child(5) .launch-hero-beat-ico { background: linear-gradient(140deg, var(--rgb-5), #ff7a3c); }
+
+.launch-hero-arrow {
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+[dir='rtl'] .launch-hero-arrow { transform: scaleX(-1); }
+
+.launch-hero-nets {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.launch-hero-net {
+  position: relative;
+  display: inline-grid;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-panel-solid, #0b0f19);
+  transition: transform 0.18s ease;
+}
+
+.launch-hero-net + .launch-hero-net { margin-inline-start: -7px; }
+
+.launch-hero-nets:hover .launch-hero-net { transform: translateX(0); }
+.launch-hero-net:hover { transform: translateY(-3px) scale(1.06); z-index: 30 !important; }
+
+/* light theme */
+:root[data-theme='light'] .launch-hero-v2 {
+  background:
+    radial-gradient(130% 110% at 6% -30%, rgba(0, 140, 190, 0.14), transparent 56%),
+    radial-gradient(100% 100% at 100% -10%, rgba(214, 158, 20, 0.12), transparent 58%),
+    radial-gradient(80% 60% at 60% 120%, rgba(124, 58, 237, 0.10), transparent 60%),
+    rgba(255, 255, 255, 0.9);
+}
+:root[data-theme='light'] .launch-hero-grid { opacity: 0.35; }
+:root[data-theme='light'] .launch-hero-stars { opacity: 0.35; }
+:root[data-theme='light'] .launch-h1-grad {
+  background: linear-gradient(92deg, #0d1020 0%, #0b6e86 55%, #8a6200 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: none;
+}
+:root[data-theme='light'] .launch-eyebrow { color: #0b6e86; }
+:root[data-theme='light'] .launch-eyebrow-dot { background: #0b6e86; box-shadow: 0 0 0 3px rgba(11, 110, 134, 0.16); }
+:root[data-theme='light'] .launch-hero-foot { border-top-color: rgba(13, 16, 32, 0.08); }
+:root[data-theme='light'] .launch-hero-beat { background: rgba(13, 16, 32, 0.04); border-color: rgba(13, 16, 32, 0.10); }
+:root[data-theme='light'] .launch-hero-net { box-shadow: 0 0 0 2px #fff; }
+
+/* still: reduced motion + the native shell */
+@media (prefers-reduced-motion: reduce) {
+  .launch-hero-stars,
+  .launch-rocket-orbit,
+  .launch-rocket-trail { animation: none; }
+}
+:root[data-native='true'] .launch-hero-stars,
+:root[data-native='true'] .launch-rocket-orbit,
+:root[data-native='true'] .launch-rocket-trail { animation: none; }
+:root[data-native='true'] .launch-rocket-trail,
+:root[data-native='true'] .launch-hero-grid { filter: none; }
+
+@media (max-width: 380px) {
+  .launch-hero-foot { flex-direction: column; align-items: flex-start; }
 }
