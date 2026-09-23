@@ -9865,8 +9865,70 @@ export default function run() {
       /import\('@solana-mobile\/wallet-standard-mobile'\)/.test(sw));
     t('...and MWA can sign and send after connecting, not merely expose an address',
       /solana:signAndSendTransaction/.test(sw) && /mwaAccount/.test(sw));
+    /*
+     * ─── THE PRE-FLIGHT, AND THE TWO SENTENCES IT USED TO GET WRONG ─────────
+     * Reported 2026-09-23: the wallet connects, but signing/buying with SOL
+     * «در بیشتر اوقات می‌زنه موجودی کیف پول کم یا RPC را چک کنید».
+     *
+     * Both sentences came from this guard. It moved into
+     * lib/solana/swapPreflight.js so the verdict is assertable without a
+     * browser, and its two rules changed:
+     *   · a PROVABLY short wallet is still refused before the prompt (the
+     *     property this assertion was written for);
+     *   · an UNREADABLE balance no longer kills the swap — it is announced, and
+     *     the wallet/chain simulation gets the final word (nothing is spent on
+     *     a transaction that would fail);
+     *   · an amount converted with a GUESSED scale is never compared against a
+     *     real balance, which is what made a 6-decimal token read as 1000×
+     *     larger than it is and every verdict «insufficient».
+     */
+    const solPreflight = code(read('src/lib/solana/swapPreflight.js'));
+    const solChainReads = code(read('src/lib/solana/chainReads.js'));
+    const solBalanceSource = code(read('src/lib/solana/balanceSource.js'));
     t('...and an empty wallet is refused before the signing prompt',
-      /getSolanaSwapBalances/.test(solPage) && /INSUFFICIENT_BALANCE/.test(solPage));
+      /getSolanaSwapBalances/.test(solPage) &&
+      /solanaSwapPreflight\(/.test(solPage) &&
+      /INSUFFICIENT_BALANCE/.test(solPreflight) &&
+      /INSUFFICIENT_GAS/.test(solPreflight));
+    t('...but an unreadable balance is announced instead of killing the swap',
+      !/throw new Error\('BALANCE_UNAVAILABLE'\)/.test(solPage) &&
+      /balanceCode/.test(solPage) &&
+      /notice: balanceCode/.test(solPreflight));
+    t('...and a guessed token scale never decides the verdict',
+      /amountScaleVerified/.test(solPreflight) &&
+      /decimalsVerified: false/.test(solPage) &&
+      /getSolanaTokenInfo/.test(solPage));
+    /*
+     * The read itself: every candidate node in order, a verified zero before it
+     * is believed (token-2022), and our own backend as the second door for a
+     * device that cannot reach a single node — the door the quote already
+     * proves is open.
+     */
+    t('the balance read walks every node instead of trusting one',
+      /readSwapBalancesAcross/.test(solBalanceSource) &&
+      /solanaRpcCandidates/.test(solBalanceSource) &&
+      /for \(const url of candidates\)/.test(solChainReads));
+    t('...names the failure the user can act on (blocked vs throttled vs timeout)',
+      /RPC_BLOCKED/.test(solChainReads) && /RPC_RATE_LIMITED/.test(solChainReads) &&
+      /RPC_TIMEOUT/.test(solChainReads));
+    t('...verifies a zero balance against the mint before believing it',
+      /TOKEN_2022_PROGRAM/.test(solChainReads) &&
+      /parseMintAccount/.test(solChainReads));
+    t('...and skips the read whose answer cannot change the verdict',
+      /outputAccountCheckNeeded/.test(solChainReads) &&
+      /outputAssumed/.test(solChainReads));
+    t('...with our own backend as the second door',
+      /\/solana\/balances/.test(solBalanceSource) &&
+      /via: 'server'/.test(solBalanceSource));
+    t('...which the server really serves',
+      /app\.get\('\/api\/solana\/balances'/.test(code(read('server/app.js'))) &&
+      /app\.get\('\/api\/solana\/token-info'/.test(code(read('server/app.js'))) &&
+      /export async function readSolanaBalances/.test(code(read('server/solanaChainReads.js'))));
+    t('the two doors cancel each other once one answers',
+      /firstOk\(\[direct, server\], cancel\)/.test(solBalanceSource) &&
+      /signal\?\.aborted/.test(solBalanceSource));
+    t('a mint’s scale is read once and remembered',
+      /mintCache/.test(solBalanceSource) && /clearSolanaTokenInfoCache/.test(solBalanceSource));
     /* The swap no longer owns a connection flow: it reads the shared wallet
        state and follows the connection made on the Wallet page. */
     t('the swap follows the wallet-page connection',

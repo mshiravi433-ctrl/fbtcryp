@@ -105,6 +105,7 @@ import {
 import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
+import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
@@ -5645,6 +5646,74 @@ app.get('/api/solana/order', async (req, res) => {
 app.post('/api/solana/execute', async (req, res) => {
   const r = await solanaExecute(req.body);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * SOLANA CHAIN READS, PROXIED — the second door for a blocked first one.
+ *
+ * The swap screen must know what a wallet holds before it asks for a
+ * signature, and that read goes to public RPC nodes from the USER'S device.
+ * On the networks this app is used on those hosts are regularly 403, 429 or
+ * unreachable, so the screen answered «موجودی سولانای این کیف پول قابل تأیید
+ * نیست … وقتی RPC در دسترس شد دوباره تلاش کن» most of the time (reported
+ * 2026-09-23 as «برای امضا و خرید با سولانا در بیشتر اوقات می‌زنه موجودی کیف
+ * پول کم یا RPC را چک کنید»).
+ *
+ * A device that can price a swap through the route above can also read a
+ * balance through us, whatever it cannot reach directly. The client tries the
+ * nodes first and asks here only when they have not answered; see
+ * server/solanaChainReads.js for the operational warning about SOLANA_RPC_URL
+ * (every proxied read leaves from our one IP).
+ *
+ * Read-only public chain state for an address the caller supplies — the same
+ * thing a block explorer serves. Nothing is signed, stored or keyed here, and
+ * balances are NOT cached (1.5 s of in-flight de-duplication only): a number a
+ * user is about to sign against must be a fresh read.
+ */
+app.get('/api/solana/balances', async (req, res) => {
+  try {
+    const out = await readSolanaBalances({
+      owner: req.query.owner,
+      inputMint: req.query.inputMint,
+      outputMint: req.query.outputMint,
+      rawAmount: req.query.rawAmount
+    });
+    if (!out.ok) {
+      const status = out.code === 'BAD_OWNER' || out.code === 'BAD_MINT' ? 400 : 502;
+      res.set('cache-control', 'no-store');
+      return res.status(status).json(out);
+    }
+    res.set('cache-control', 'no-store');
+    return res.json(out);
+  } catch (err) {
+    res.set('cache-control', 'no-store');
+    return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
+});
+
+/*
+ * A mint's scale (decimals) plus a human symbol.
+ *
+ * The client used to GUESS 9 decimals for any pasted mint. That guess converts
+ * the amount the user types into base units, so a 6-decimal token made every
+ * amount 1000× too big: the balance line showed a number 1000× too small and
+ * the pre-flight said «insufficient» to a funded wallet. Decimals are immutable
+ * for the life of a mint, so this one is cached hard — a day in the browser,
+ * a week at the edge, and for the life of the process here.
+ */
+app.get('/api/solana/token-info', async (req, res) => {
+  try {
+    const out = await readSolanaTokenInfo({ mint: req.query.mint });
+    if (!out.ok) {
+      const status = out.code === 'BAD_MINT' ? 400 : 502;
+      res.set('cache-control', 'no-store');
+      return res.status(status).json(out);
+    }
+    res.set('cache-control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
 });
 
 /*
