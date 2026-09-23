@@ -610,6 +610,30 @@
       "ladder": "Yeni kademeli emir",
       "twap": "Yeni TWAP",
       "rebalance": "Yeni dengeleme"
+    },
+    "solana": {
+      "title": "Solana emri",
+      "body": "Bu bir fiyat izlemesi değildir. Çifti ve miktarı kaydeder, sonra Solana takasını bu değerlerle açar. Siz imzalamadan hiçbir şey hareket etmez.",
+      "network": "Ağ",
+      "evm": "EVM",
+      "solana": "Solana",
+      "evmHint": "EVM emirleri yukarıdaki kartlardır. Bir Solana bakiyesini harcayamazlar.",
+      "from": "Ödenen",
+      "to": "Alınan",
+      "amount": "Miktar",
+      "create": "Solana takasını aç",
+      "notice": "Kaydedildi. Solana takası bu çiftle açılır. Orada imzalayana kadar hiçbir şey hareket etmez.",
+      "empty": "Henüz kayıtlı bir Solana aktarımı yok.",
+      "open": "Aç",
+      "remove": "Kaldır",
+      "pick": "Token seç",
+      "search": "Ad, sembol veya mint",
+      "saved": "Kayıtlı aktarımlar",
+      "err": {
+        "BAD_AMOUNT": "Sıfırdan büyük bir miktar girin.",
+        "SAME_TOKEN": "İki farklı token seçin.",
+        "BAD_MINT": "Bu adres bir Solana mint’i değil."
+      }
     }
   },
   "bridge": {
@@ -2349,5 +2373,28 @@
     "executionBlocked": "Cüzdan’da sırada — imzan hâlâ gerekli.",
     "executionFailed": "Gerçekleşmedi. İşlem tamamlanmadı.",
     "connectWallet": "Cüzdanı bağla"
+  },
+  "solana": {
+    "wallet": {
+      "send": "Gönder",
+      "receive": "Al",
+      "bridge": "Köprü",
+      "swap": "Takas",
+      "actions": "İşlemler",
+      "holdings": "Varlıklar",
+      "partial": "Bazı bakiyeler okunamadı. Yalnızca yanıt veren kısım gösterilir.",
+      "empty": "Bu adreste token bakiyesi bulunamadı.",
+      "splNote": "Bu ekrandaki gönderim yalnızca yerel SOL taşır. Diğer tokenlar takas ekranından gider.",
+      "sendTitle": "SOL gönder",
+      "sendOnly": "Bu yalnızca yerel SOL gönderir. SPL tokenlarını taşımaz.",
+      "recipient": "Alıcı adresi",
+      "amount": "Miktar",
+      "sendCta": "SOL gönder",
+      "receiveTitle": "Al",
+      "receiveHint": "Bu adrese yalnızca SOL ve Solana tokenları gönderin. 0x ile başlayan bir Ethereum adresi buraya ulaşmaz.",
+      "copied": "Kopyalandı",
+      "copy": "Adresi kopyala",
+      "badAddress": "Bu bir Solana adresi değil."
+    }
   }
 }

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import InfoBox from './InfoBox';
 import SolanaConnectSheet from './SolanaConnectSheet';
+import SolanaWalletHome from './SolanaWalletHome';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import {
@@ -184,36 +185,20 @@ export default function SolanaWalletTab() {
 
   return (
     <div className="stack" style={{ gap: 12 }}>
-      {/* ─── connection card ─────────────────────────────────────────── */}
-      <section className="card card-rgb">
-        <div className="sheen" />
-        <div className="row-between">
-          <div>
-            <div className="faint">{t('solana.title')}</div>
-            <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>
-              {address ? shortAddress(address) : t('solana.notConnected')}
-            </div>
-          </div>
-          {address ? (
-            <button className="btn btn-ghost btn-sm" onClick={disconnect}>
-              {t('wallet.disconnect')}
-            </button>
-          ) : (
-            <button className="btn btn-primary btn-sm" onClick={connect} data-testid="solana-connect">
-              {t('wallet.connect')}
-            </button>
-          )}
-        </div>
+      {/* A failed balance read stays null and renders as —, never a guessed 0. */}
+      <SolanaWalletHome
+        address={address}
+        walletName={walletName}
+        balance={balance}
+        balanceLoading={balanceLoading}
+        balanceFailed={Boolean(address) && !balanceLoading && balance == null}
+        onConnect={connect}
+        onDisconnect={disconnect}
+        haptic={haptic}
+      />
 
-        {address && (
-          <div className="row-between" style={{ marginTop: 9 }}>
-            <span className="faint">{t('solana.balance')}</span>
-            <span className="mono faint" style={{ fontSize: 12.5 }}>
-              {balanceLoading ? t('common.loading') : `${balance ?? '0'} SOL`}
-            </span>
-          </div>
-        )}
-
+      {(!address || walletErr) && (
+      <section className="card">
         {!address && !hasWallet && !mwaReady && (
           <p className="notice" style={{ marginTop: 11 }}>
             {canInject ? t('solana.noWallet') : t('solana.openInWallet')}
@@ -259,6 +244,7 @@ export default function SolanaWalletTab() {
           </p>
         )}
       </section>
+      )}
 
       {/* ─── a signature that arrived as a page load ─────────────────── */}
       {signNotice && (
@@ -296,10 +282,10 @@ export default function SolanaWalletTab() {
           </button>
         </section>
       )}
-      {/* ─── which wallet is connected right now ───────────────────────── */}
-      <section className="card">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('solana.twoWalletsTitle')}</p>
-        <p className="muted" style={{ fontSize: 12.3, marginBottom: 11, lineHeight: 1.8 }}>
+      {/* One expandable comparison. The explainer below keeps its own box. */}
+      <details id="solana-wallet-which" className="card sol-wal-both">
+        <summary className="sol-wal-both-sum">{t('solana.twoWalletsTitle')}</summary>
+        <p className="muted" style={{ fontSize: 12.3, margin: '8px 0 11px', lineHeight: 1.8 }}>
           {t('solana.twoWalletsBody')}
         </p>
         <div className="stack" style={{ gap: 9 }}>
@@ -323,7 +309,7 @@ export default function SolanaWalletTab() {
           </div>
         </div>
         <p className="prose-sm" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
-      </section>
+      </details>
 
       {/* ─── the three connection paths ─────────────────────────────────── */}
       <InfoBox title={t('solana.whichTitle')} tone="info" id="solana-wallet-which">

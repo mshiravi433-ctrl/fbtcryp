@@ -610,6 +610,30 @@
       "ladder": "Nouvel ordre échelonné",
       "twap": "Nouveau TWAP",
       "rebalance": "Nouveau rééquilibrage"
+    },
+    "solana": {
+      "title": "Ordre Solana",
+      "body": "Ceci ne surveille pas un prix. Il enregistre la paire et le montant, puis ouvre l’échange Solana avec ces valeurs. Rien ne bouge tant que vous ne signez pas.",
+      "network": "Réseau",
+      "evm": "EVM",
+      "solana": "Solana",
+      "evmHint": "Les ordres EVM utilisent les cartes ci-dessus. Ils ne peuvent pas dépenser un solde Solana.",
+      "from": "Vous payez",
+      "to": "Vous recevez",
+      "amount": "Montant",
+      "create": "Ouvrir l’échange Solana",
+      "notice": "Enregistré. L’échange Solana s’ouvre avec cette paire. Rien ne bouge tant que vous ne signez pas là-bas.",
+      "empty": "Aucun passage Solana enregistré pour l’instant.",
+      "open": "Ouvrir",
+      "remove": "Retirer",
+      "pick": "Choisir un jeton",
+      "search": "Nom, symbole ou mint",
+      "saved": "Passages enregistrés",
+      "err": {
+        "BAD_AMOUNT": "Saisissez un montant supérieur à zéro.",
+        "SAME_TOKEN": "Choisissez deux jetons différents.",
+        "BAD_MINT": "Cette adresse n’est pas un mint Solana."
+      }
     }
   },
   "bridge": {
@@ -2349,5 +2373,28 @@
     "executionBlocked": "C’est en file d’attente dans Portefeuille — votre signature est encore nécessaire.",
     "executionFailed": "Cela n’a pas abouti. La transaction n’a pas été terminée.",
     "connectWallet": "Connecter le portefeuille"
+  },
+  "solana": {
+    "wallet": {
+      "send": "Envoyer",
+      "receive": "Recevoir",
+      "bridge": "Pont",
+      "swap": "Échanger",
+      "actions": "Actions",
+      "holdings": "Avoirs",
+      "partial": "Certains soldes n’ont pas pu être lus. Seule la partie qui a répondu est affichée.",
+      "empty": "Aucun solde de jeton n’a été trouvé sur cette adresse.",
+      "splNote": "Envoyer ici ne déplace que le SOL natif. Les autres jetons passent par l’échange.",
+      "sendTitle": "Envoyer du SOL",
+      "sendOnly": "Ceci envoie uniquement du SOL natif. Les jetons SPL ne bougent pas.",
+      "recipient": "Adresse du destinataire",
+      "amount": "Montant",
+      "sendCta": "Envoyer le SOL",
+      "receiveTitle": "Recevoir",
+      "receiveHint": "Envoyez uniquement du SOL et des jetons Solana à cette adresse. Une adresse Ethereum commençant par 0x n’arrivera pas ici.",
+      "copied": "Copié",
+      "copy": "Copier l’adresse",
+      "badAddress": "Ce n’est pas une adresse Solana."
+    }
   }
 }
