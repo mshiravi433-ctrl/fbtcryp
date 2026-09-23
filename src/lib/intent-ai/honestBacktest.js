@@ -18,6 +18,7 @@
 
 import { classifyFailure } from './failureModes.js';
 import { normalizeSeries } from './liveMarketRegime.js';
+import { toMs } from './pointInTime.js';
 
 export const BACKTEST_SCHEMA = 'fbt.honest-backtest.v1';
 export const BACKTEST_LABEL = 'SIMULATION';
@@ -76,12 +77,20 @@ export function runHonestBacktest({
   startCapitalUsd = 1000,
   feeBps = 30,
   slippagePct = 0.3,
-  now = Date.now()
+  now = Date.now(),
+  /* Point-in-time cutoff (TradingAgents-style data integrity): a replay "as
+     of" a date may not see a single bar stamped after it. Per-bar look-ahead
+     is already impossible below; this closes the other leak — a series that
+     was fetched TODAY and silently extends past the replay date. */
+  asOf = null
 } = {}) {
   const src = typeof source === 'string' && source.trim() ? source.trim().slice(0, 60) : null;
   if (!src) return unavailable('NO_DATA_SOURCE');
   if (typeof decide !== 'function') return unavailable('NO_STRATEGY');
-  const points = normalizeSeries(series);
+  const allPoints = normalizeSeries(series);
+  const cutoffMs = toMs(asOf);
+  const points = cutoffMs == null ? allPoints : allPoints.filter((row) => toMs(row.t) != null && toMs(row.t) <= cutoffMs);
+  const droppedAfterAsOf = allPoints.length - points.length;
   if (points.length < MIN_BACKTEST_POINTS) return unavailable('NOT_ENOUGH_HISTORY');
 
   const capital0 = num(startCapitalUsd);
@@ -170,6 +179,9 @@ export function runHonestBacktest({
     equityCurve: equity,
     decisions,
     lookAheadFree: true,
+    pointInTime: cutoffMs == null
+      ? { historical: false, asOf: null, droppedAfterAsOf: 0 }
+      : { historical: true, asOf: new Date(cutoffMs).toISOString(), droppedAfterAsOf },
     disclosures: Object.freeze([
       'intentAI.backtest.disclosure.simulation',
       'intentAI.backtest.disclosure.costs',
