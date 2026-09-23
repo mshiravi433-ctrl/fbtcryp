@@ -189,3 +189,111 @@ describe('Sonic is a market the page can read — the freeze is the protocol’s
     expect(lendingAssetsFor(SONIC).length).toBe(3);
   });
 });
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THE SAME DISTINCTION, ONE LEVEL DOWN: the error taxonomy.
+
+   The card says which actions are open. The error layer has to agree, because
+   three more places meet the same state:
+
+     · Aave's Pool reverts with code 28 / RESERVE_FROZEN when a frozen reserve
+       refuses an action, and `mapAaveError` had no entry for it — so the on-chain
+       refusal of a FROZEN reserve was reported as MARKET_PAUSED, i.e. as «the
+       whole market is down», which tells the user to wait when the truth is that
+       their repay is fine and their supply is not;
+     · a wallet or a provider message that merely says «reserve frozen» was
+       bucketed with «paused» for the same reason;
+     · MARKET_FROZEN was not a member of the client taxonomy at all, so anything
+       that produced it degraded to UNKNOWN — and UNKNOWN is documented in
+       errors.js as the bucket for «a state we did not model», which is exactly
+       the sentence a frozen market must not be.
+
+   These assertions are the ones that keep the card, the plan and the error
+   sentence telling the user the same story.
+   ════════════════════════════════════════════════════════════════════════════ */
+describe('the frozen state reaches the error taxonomy intact', () => {
+  it('MARKET_FROZEN is a modelled state, not an UNKNOWN', async () => {
+    const { LENDING_ERRORS, isRetryable } = await import('../src/lib/lending-engine/errors.js');
+    const frozen = LENDING_ERRORS.MARKET_FROZEN;
+    expect(frozen, 'MARKET_FROZEN must be a member of the taxonomy').toBeTruthy();
+    /* Protocol truth, not a transport failure: nothing to retry, nothing to fix
+       by switching an RPC. The key IS the code — the table carries behaviour. */
+    expect(frozen.retryable).toBe(false);
+    expect(frozen.kind).toBe('protocol');
+    expect(isRetryable('MARKET_FROZEN')).toBe(false);
+    /* A member of the taxonomy is what keeps mapRawError from degrading a freeze
+       into the «a state we did not model» bucket. */
+    expect(Object.keys(LENDING_ERRORS)).toContain('MARKET_FROZEN');
+    expect(LENDING_ERRORS.MARKET_FROZEN).not.toBe(LENDING_ERRORS.UNKNOWN);
+    /* And the ERROR_KINDS derivation must have survived the new member. */
+    const { ERROR_KINDS } = await import('../src/lib/lending-engine/errors.js');
+    expect(ERROR_KINDS).toContain('protocol');
+  });
+
+  it('frozen and paused are said differently, in the user’s language', async () => {
+    const { describeError } = await import('../src/lib/lending-engine/errors.js');
+    const frozenFa = describeError('MARKET_FROZEN', 'fa');
+    const pausedFa = describeError('MARKET_PAUSED', 'fa');
+    const frozenEn = describeError('MARKET_FROZEN', 'en');
+    expect(frozenFa).toBeTruthy();
+    expect(frozenFa).not.toBe(pausedFa);
+    /* A Persian sentence, not a fallback English one — this is the string that
+       lands under a Sonic card. */
+    expect(/[\u0600-\u06FF]/.test(frozenFa)).toBe(true);
+    expect(frozenFa).not.toBe(frozenEn);
+    /* Neither sentence may leak the enum at the user. */
+    expect(frozenFa).not.toContain('MARKET_FROZEN');
+    expect(frozenEn).not.toContain('MARKET_FROZEN');
+    /* And the frozen sentence must say what still works — that is the whole
+       point of distinguishing it from paused. */
+    expect(frozenEn.toLowerCase()).toMatch(/repay|withdraw/);
+  });
+
+  it('a «reserve frozen» message is no longer reported as a paused market', async () => {
+    const { mapRawError } = await import('../src/lib/lending-engine/errors.js');
+    const frozenFrom = (message) => mapRawError(message)?.code;
+    expect(frozenFrom('execution reverted: RESERVE_FROZEN')).toBe('MARKET_FROZEN');
+    expect(frozenFrom('reverted with custom error ReservesErrors(28) // reserve frozen')).toBe('MARKET_FROZEN');
+    expect(frozenFrom('The reserve is frozen and cannot accept new deposits')).toBe('MARKET_FROZEN');
+    /* Paused keeps its own bucket — the two must not collapse back together. */
+    expect(frozenFrom('execution reverted: MARKET_PAUSED')).toBe('MARKET_PAUSED');
+    expect(frozenFrom('The market is paused by the protocol')).toBe('MARKET_PAUSED');
+    /* And a frozen reserve still refuses BOTH new directions: that is the state. */
+    expect(frozenFrom('execution reverted: RESERVE_FROZEN')).not.toBe('INSUFFICIENT_LIQUIDITY');
+  });
+
+  it('Aave’s own frozen revert (code 28) maps to MARKET_FROZEN, not MARKET_PAUSED', async () => {
+    const { explainAaveRevert, AAVE_REVERT_NUMERIC, AAVE_REVERT_SELECTORS } = await import('../src/lib/lending.js');
+    /* Both tables — the numeric one a legacy node reports, the selector one a
+       v3.4+ custom error carries. */
+    expect(AAVE_REVERT_NUMERIC[28]).toBe('MARKET_FROZEN');
+    expect(AAVE_REVERT_SELECTORS['0x6d305815']).toBe('MARKET_FROZEN');
+    expect(explainAaveRevert({ data: '0x6d305815' })).toMatchObject({ code: 'MARKET_FROZEN', known: true });
+    expect(explainAaveRevert('execution reverted with code 28')).toMatchObject({ code: 'MARKET_FROZEN', known: true });
+    /* The neighbour still means what it always meant, and is a different code. */
+    expect(AAVE_REVERT_NUMERIC[29]).toBe('MARKET_PAUSED');
+    expect(explainAaveRevert({ data: '0xd37f5f1c' })).toMatchObject({ code: 'MARKET_PAUSED', known: true });
+    expect(explainAaveRevert('execution reverted with code 29')).toMatchObject({ code: 'MARKET_PAUSED', known: true });
+    /* An unrecognised revert stays UNKNOWN rather than being given a
+       plausible-sounding cause — the rule the tables are documented by. */
+    expect(explainAaveRevert('execution reverted: something nobody documented')).toMatchObject({ code: null, known: false });
+  });
+
+  it('the banner a frozen market raises offers a way to the open actions', () => {
+    /* MarketHaltedNotice cannot be mounted here (it needs the page’s provider
+       tree), so the wiring is pinned at the source: a frozen/paused market is
+       announced at the top, and for a FROZEN market the notice must hand the
+       user to the positions tab, because that is where repay and withdraw — the
+       two actions a frozen reserve still allows — actually live. */
+    const loan = read('src/pages/Loan.jsx');
+    const notice = loan.slice(loan.indexOf('function MarketHaltedNotice'), loan.indexOf('/* ── the market card'));
+    expect(notice).toContain('onGoToPositions');
+    expect(notice).toContain('kind !== \'paused\'');
+    expect(notice).toContain('loan.tabPositions');
+    /* The page hands the notice the live tab and the switch, and only raises it
+       for a market whose reserves were actually read — a paused market stops
+       everything, so the notice itself is what withholds the button there. */
+    expect(loan).toContain('kind={marketHaltedKind}');
+    expect(loan).toContain('onGoToPositions={() => { haptic?.(\'select\'); setTab(\'positions\'); }}');
+  });
+});

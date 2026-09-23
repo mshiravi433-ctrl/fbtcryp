@@ -147,24 +147,54 @@ curl -s 'http://127.0.0.1:8791/api/solana/balances?owner=AMU6…&inputMint=So111
 #     "hosts":[{"host":"…","reason":"UNREACHABLE"}, …]}                                HTTP 502
 ```
 
+(Captured before the merge with `main`; the walked list is now `main`'s seven public hosts — plus
+`SOLANA_RPC_URL` first when it is set — and each of them is reported by name in the same shape.)
+
 On the device: **Wallet health → Chain read**. `via: rpc` means your network reached a node directly;
 `via: server` means the backend answered for you; a failure row names every node that refused.
 
-### Audit deltas (same machine, same flags, base = `9bc6815`)
+### Audit deltas (same machine, same flags, after merging `origin/main` = `f63e2dc`)
 
-| | base `9bc6815` | this branch |
+| | `origin/main` | this branch |
 |---|---|---|
 | `test/wiring.mjs` assertions | 2699 | **2709** (+11 for this fix, −1 replaced) |
-| wiring failures | 14 | **14** — the *identical* list, all pre-existing |
-| first-paint bundle (`VITE_ENABLE_SPECULATION=false`) | 1517 KB | **1536 KB** (+19 KB) |
-| `vite build` | ✓ | ✓ 42.8 s |
+| wiring failures | 14 | **14** — the *identical* names, all pre-existing |
+| first-paint bundle (`vite build`) | 1559 KB | **1580 KB** (+21 KB) |
+| `vite build` | ✓ 40.9 s | ✓ 39.2 s |
+| Solana/loan/panel suites | — | **221/221** over 11 files |
 
-The bundle ratchet (`< 1360 KB`) already fails at the base commit — pre-existing drift, **not**
-introduced here; this feature's own cost is the +19 KB of read layer, preflight and locale strings.
-The 14 unrelated failures (`swap.platformFeeLabel`, `intentOS.proof.hide`, unrouted `brain/financial/*`
-and `v1/ai/os`, WC metadata, `lending.js` aToken addresses, RwaRow button mix, `loan.fbtFeeNone`
-0.70% copy, About light theme, SegIndicator id, environments route) are listed in the audit output
-and left untouched on purpose.
+The bundle ratchet (`< 1360 KB`) already fails on `main` — pre-existing drift, **not** introduced
+here; this feature's own cost is the +21 KB of read layer, preflight and locale strings. The 14
+unrelated failures (`intentOS.proof.hide`, unrouted `brain/financial/*` and `v1/ai/os`, WC metadata,
+`lending.js` aToken addresses, built-in `logoURI`, `loan.fbtFeeNone` 0.70% copy, About light theme,
+SegIndicator id, environments route) are listed by the audit and left untouched on purpose.
+
+### How this sits next to the read-only RPC relay that landed the same day
+
+`main` gained `POST /api/solana/rpc` (`server/solanaRpcRelay.js`) — a generic, allowlisted,
+**read-only** relay that speaks plain JSON-RPC so `new Connection(relayUrl)` works, used by the loan
+tab's Kamino reads. Same diagnosis ("a 403 is a decision about the CALLER's IP, and the one origin a
+browser demonstrably reaches is our own"), different shape, and the two compose:
+
+- **All three methods this read layer puts on the wire** — `getAccountInfo`, `getBalance`,
+  `getParsedTokenAccountsByOwner` — are in the relay's allowlist (the last one through its
+  `RELAY_METHOD_ALIASES`), so nothing here can be stranded by it.
+- Door A inherits `main`'s improved candidate list (7 public hosts), its per-host cooldowns, the new
+  `UNUSABLE` class and the persisted "publics are blocked" hint — `solanaRpcCall` is unchanged in
+  signature, so this branch needed no adaptation.
+- The swap read still goes to the **purpose-built** endpoints rather than the generic relay, because
+  for a phone on a throttled path one request that returns the whole verified read (`fbt.solana-balances.v1`,
+  exact-string lamports, mint-verified zeros, server-side cache) beats three relayed hops — and the
+  two doors cancel each other, so the losing path costs nothing.
+- Both are read-only by construction: neither broadcasts, and `getSolanaRpcUrl()` (the endpoint a
+  signature is sent to) never returns a relay URL — §30 holds on both paths.
+
+### The service worker shell
+
+Every client-side change in this repo is worthless to an installed PWA until the shell cache name
+moves, so `public/sw.js` goes **`fbt-shell-v24` → `fbt-shell-v25`** with a `v24 -> v25:` paragraph
+naming the four client-side fixes above. Without it, a device that already opened the app keeps
+running the old bytes and the report reads as "the fix did not go live".
 
 ## Deploy notes
 

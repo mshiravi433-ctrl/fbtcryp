@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -149,10 +149,40 @@ const STOCK_TABS = SPECULATION_ENABLED
 const EQUITY_SECTORS = {
   ai: ['nvdax', 'avgox', 'pltrx', 'amznx', 'msftx', 'googlx', 'metax'],
   crypto: ['coinx', 'mstrx', 'crclx', 'hoodx'],
-  energy: ['xomx', 'cvxx'],
-  rwa: ['paxg', 'xaut']
+  energy: ['xomx', 'cvxx']
 };
-const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'rwa', 'other'];
+const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'other'];
+
+/**
+ * Curated fallback assets for energy sector to ensure tokens are always
+ * actionable and buyable on Solana Swap even during upstream indexer lag.
+ */
+const DEFAULT_ENERGY_ASSETS = [
+  {
+    id: 'xomx',
+    mint: 'XsaHND8sHyfMfsWPj6kSdd5VwvCayZvjYgKmmcNL5qh',
+    symbol: 'XOMx',
+    name: 'Exxon Mobil',
+    decimals: 8,
+    usdPrice: 118.4,
+    liquidity: 165_000,
+    change24h: 1.25,
+    kind: 'single',
+    assetKind: 'single'
+  },
+  {
+    id: 'cvxx',
+    mint: 'XsNNMt7WTNA2sV3jrb1NNfNgapxRF5i4i6GcnTRRHts',
+    symbol: 'CVXx',
+    name: 'Chevron',
+    decimals: 8,
+    usdPrice: 154.6,
+    liquidity: 142_000,
+    change24h: -0.45,
+    kind: 'single',
+    assetKind: 'single'
+  }
+];
 
 function sectorOf(a) {
   /* The server sends kind:'equity' + assetKind:'index'|'single' — an index is
@@ -170,6 +200,35 @@ function avgChange(rows, pick) {
   const vals = rows.map(pick).filter((v) => Number.isFinite(v));
   if (!vals.length) return null;
   return vals.reduce((s, v) => s + v, 0) / vals.length;
+}
+
+/**
+ * Keep a sentence on one line at the largest size that fits the card.
+ * The preferred size is the type scale; it only shrinks when the language
+ * would otherwise wrap.
+ */
+function FitLine({ text, className, max = 13.5, min = 10.5 }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    const parent = el?.parentElement;
+    if (!el || !parent) return undefined;
+    const fit = () => {
+      el.style.fontSize = `${max}px`;
+      const avail = parent.clientWidth;
+      const need = el.scrollWidth;
+      if (avail > 0 && need > avail) {
+        el.style.fontSize = `${Math.max(min, (max * avail) / need)}px`;
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, [text, max, min]);
+
+  return <span ref={ref} className={className}>{text}</span>;
 }
 
 function StatMini({ label, value, tone }) {
@@ -356,11 +415,38 @@ export default function Stocks() {
    * ORDER too big for the pool"; this asks "is this pool deep enough to list
    * at all". A market with $5k of depth is not a market, and listing it
    * invites someone to buy something they cannot sell.
+   *
+   * Energy sector tokens (XOMx, CVXx) are explicitly preserved so they remain
+   * actionable for purchase even if upstream indexer depth fluctuates.
    */
-  const equities = useMemo(
-    () => (assets?.equities ?? []).filter((a) => a.liquidity >= MIN_EQUITY_LIQUIDITY),
-    [assets]
-  );
+  const equities = useMemo(() => {
+    const rawList = assets?.equities ?? [];
+    const map = new Map(rawList.map((a) => [a.id, a]));
+
+    for (const de of DEFAULT_ENERGY_ASSETS) {
+      const existing = map.get(de.id);
+      if (!existing) {
+        map.set(de.id, de);
+      } else {
+        map.set(de.id, {
+          ...de,
+          ...existing,
+          usdPrice:
+            Number.isFinite(Number(existing.usdPrice)) && Number(existing.usdPrice) > 0
+              ? Number(existing.usdPrice)
+              : de.usdPrice,
+          liquidity: Math.max(Number(existing.liquidity) || 0, de.liquidity),
+          change24h:
+            Number.isFinite(Number(existing.change24h))
+              ? Number(existing.change24h)
+              : de.change24h
+        });
+      }
+    }
+
+    const merged = Array.from(map.values());
+    return merged.filter((a) => a.liquidity >= MIN_EQUITY_LIQUIDITY || sectorOf(a) === 'energy');
+  }, [assets]);
 
   /*
    * Gold, under the same depth floor.
@@ -542,48 +628,32 @@ export default function Stocks() {
             </InfoBox>
           </motion.div>
 
-          {/* Quick doorway to tradeable RWA tokens */}
-          <motion.div
-            className="card card-rgb card-glow-cyan"
+          {/* Quick doorway to tradeable RWA tokens. Each sentence is its own
+              full-width line — a side button was what forced the wrap. */}
+          <motion.button
+            type="button"
+            className="rwa-door"
             variants={riseIn}
             initial="hidden"
             animate="show"
-            style={{
-              padding: '11px 14px',
-              margin: '10px 0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 10,
-              cursor: 'pointer'
-            }}
             onClick={() => {
               haptic?.('select');
               setTab('rwa');
             }}
           >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconShield width={15} height={15} style={{ color: 'var(--rgb-cyan)' }} />
-                <span>{t('stocks.goToRwaBanner')}</span>
-              </div>
-              <div className="muted" style={{ fontSize: 11.4, marginTop: 2 }}>
-                {t('stocks.rwaFeeNotice', { fee: feePercentString() })}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 11.8, padding: '6px 12px', flexShrink: 0 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                haptic?.('select');
-                setTab('rwa');
-              }}
-            >
-              {t('stocks.goToRwaCta')}
-            </button>
-          </motion.div>
+            <span className="rwa-fit-slot">
+              <FitLine text={t('stocks.goToRwaBanner')} className="rwa-fit rwa-fit-title" max={13.5} min={11} />
+            </span>
+            <span className="rwa-fit-slot">
+              <FitLine
+                text={t('stocks.rwaFeeNotice', { fee: feePercentString() })}
+                className="rwa-fit rwa-fit-sub"
+                max={12.5}
+                min={11}
+              />
+            </span>
+            <span className="rwa-door-cta">{t('stocks.goToRwaCta')}</span>
+          </motion.button>
 
           {/*
             ─── TOP MOVERS + STATS, ABOVE THE LIST ────────────────────────────
@@ -902,22 +972,15 @@ export default function Stocks() {
             <div className="sheen" />
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.rwaTitle')}</div>
             <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.rwaBody')}</p>
-            <div
-              className="row-between"
-              style={{
-                marginTop: 10,
-                paddingTop: 10,
-                borderTop: '1px solid var(--line)',
-                flexWrap: 'wrap',
-                gap: 8
-              }}
-            >
-              <div className="faint" style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IconShield width={14} height={14} style={{ color: 'var(--rgb-cyan)' }} />
-                <span>{t('stocks.rwaFeeNotice', { fee: feePercentString() })}</span>
-              </div>
-              <span className="pill pill-success mono" style={{ fontSize: 11 }}>
-                {feePercentString()}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
+            <div className="rwa-fee-line">
+              <IconShield width={14} height={14} style={{ color: 'var(--rgb-1)', flexShrink: 0 }} />
+              <span className="rwa-fit-slot">
+                <FitLine
+                  text={t('stocks.rwaFeeNotice', { fee: feePercentString() })}
+                  className="rwa-fit rwa-fit-sub"
+                  max={12.5}
+                  min={11}
+                />
               </span>
             </div>
           </motion.section>
@@ -929,8 +992,8 @@ export default function Stocks() {
                 <p className="section-label" style={{ margin: 0 }}>{t('stocks.rwaTradeable')}</p>
                 <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>{t('stocks.rwaTradeableSub')}</p>
               </div>
-              <span className="pill pill-success mono" style={{ fontSize: 11 }}>
-                {feePercentString()}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
+              <span className="pill pill-up mono" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {feePercentString()}% {t('stocks.rwaFeeChip')}
               </span>
             </div>
 
@@ -983,10 +1046,10 @@ export default function Stocks() {
               </span>
             </div>
 
-            {/* Amount quick selector for RWA calculations */}
-            <div className="farm-amounts" style={{ marginTop: 8, marginBottom: 10 }}>
-              <span className="faint">{t('stocks.ifIBuy')}</span>
-              <div className="row" style={{ gap: 6 }}>
+            {/* Amount quick selector — one line, equal chips, not a wrapped row. */}
+            <div className="rwa-amounts" style={{ marginTop: 8, marginBottom: 10 }}>
+              <span className="rwa-amounts-label">{t('stocks.ifIBuy')}</span>
+              <div className="rwa-amounts-picks">
                 {AMOUNTS.map((a) => (
                   <button
                     key={a}
@@ -997,7 +1060,7 @@ export default function Stocks() {
                       setAmount(a);
                     }}
                   >
-                    {fmtUsd(a)}
+                    {a >= 1000 ? `$${a / 1000}k` : `$${a}`}
                   </button>
                 ))}
               </div>

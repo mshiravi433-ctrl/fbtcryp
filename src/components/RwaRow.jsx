@@ -2,57 +2,55 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { feePercentString, FEE_BPS } from '../lib/feeBps';
-import CoinLogo from './CoinLogo';
+import { canonicalizeRwa, rwaCounterSymbol } from '../lib/rwaTokens';
+import TokenIcon from '../lib/tokenIcon';
 import { IconSwap } from './Icons';
 
 /**
- * RwaRow — Displays one tradeable Real-World Asset (RWA) token with live pricing,
- * category badges, underlying backing details, calculated token yield/quantity for
- * the selected amount, and direct non-custodial swap actions with our 0.70% platform fee.
+ * One tradeable RWA.
+ *
+ * The buy control names the asset you pay WITH (USDT / USDG), stays on one
+ * line, and shares the row with Details via `.btn-row` — `.btn` is width 100%,
+ * so a bare flex:1 neighbour collapses and wraps the label.
  */
-export default function RwaRow({ token, amountUsd = 1000, onBuy, onSelect }) {
+export default function RwaRow({ token: raw, amountUsd = 1000, onBuy, onSelect }) {
   const { t } = useTranslation();
+  const token = canonicalizeRwa(raw);
+  if (!token) return null;
+
   const up = (token.change24h ?? 0) >= 0;
   const feePct = feePercentString(token.feeBps || FEE_BPS);
   const feeDecimal = (token.feeBps || FEE_BPS) / 10000;
-
   const price = Number(token.price);
+  const pay = rwaCounterSymbol(token);
   const units = Number.isFinite(price) && price > 0 && amountUsd > 0
     ? (Number(amountUsd) * (1 - feeDecimal)) / price
     : null;
+  const chainLabel = t(`stocks.rwaChain.${token.chainId}`, { defaultValue: token.chainName || '—' });
 
   return (
-    <motion.div
-      className="eq-row"
+    <motion.article
+      className="rwa-card"
       variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } }}
-      style={{ cursor: 'pointer' }}
       onClick={() => onSelect?.(token)}
     >
-      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
-        <div className="row" style={{ gap: 10, minWidth: 0 }}>
-          <CoinLogo
-            coin={token.coingeckoId ? { id: token.coingeckoId, symbol: token.symbol } : undefined}
-            ticker={token.symbol}
-            px={36}
-          />
-          <div style={{ minWidth: 0 }}>
-            <div className="eq-name" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span>{token.name}</span>
-            </div>
-            <div className="set-row-sub mono" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>{token.symbol}</span>
-              <span className="faint">·</span>
-              <span className="faint">{token.chainName}</span>
-            </div>
+      <div className="rwa-card-head">
+        <span className="rwa-logo" aria-hidden="true">
+          <TokenIcon token={token} chainId={token.chainId} size={40} />
+        </span>
+        <div className="rwa-card-id">
+          <div className="rwa-card-name">{token.name}</div>
+          <div className="rwa-card-sym mono">
+            <span>{token.symbol}</span>
+            <span className="faint">·</span>
+            <span className="faint">{chainLabel}</span>
           </div>
         </div>
-        <div style={{ textAlign: 'end', flexShrink: 0 }}>
+        <div className="rwa-card-px">
           <div className="mono eq-price">
-            {token.price != null && Number.isFinite(Number(token.price))
-              ? `$${fmtPrice(token.price)}`
-              : '—'}
+            {Number.isFinite(price) ? `$${fmtPrice(price)}` : '—'}
           </div>
-          <div className={`mono ${up ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
+          <div className={`mono ${up ? 'up' : 'down'}`}>
             {token.change24h != null && Number.isFinite(Number(token.change24h))
               ? fmtPct(token.change24h, 1)
               : '—'}
@@ -60,65 +58,47 @@ export default function RwaRow({ token, amountUsd = 1000, onBuy, onSelect }) {
         </div>
       </div>
 
-      <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
-        <span className="pill pill-neutral">
-          {t(`stocks.rwaCategory.${token.category}`, token.category)}
-        </span>
-        <span className="pill pill-neutral">
-          {token.chainName}
-        </span>
-        {token.backing && (
-          <span className="pill pill-neutral faint" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {token.backing}
-          </span>
-        )}
-        <span className="pill pill-success mono" style={{ fontSize: 10.5 }}>
-          {feePct}% {t('swap.platformFeeLabel', 'کارمزد FBT')}
-        </span>
+      <div className="rwa-chips">
+        <span className="pill pill-neutral">{t(`stocks.rwaCategory.${token.category}`, token.category)}</span>
+        <span className="pill pill-neutral">{chainLabel}</span>
+        <span className="pill pill-up mono">{feePct}% {t('stocks.rwaFeeChip')}</span>
       </div>
 
-      {token.description && (
-        <p className="faint" style={{ fontSize: 11.4, margin: '8px 0 0', lineHeight: 1.6 }}>
-          {token.description}
-        </p>
-      )}
+      {token.backing && <p className="rwa-card-backing">{token.backing}</p>}
 
-      {/* Calculated token units for the user-selected amount */}
       {units != null && (
-        <div className="farm-calc" style={{ marginTop: 9 }}>
-          <span className="faint">{t('stocks.wouldGet', { amount: fmtUsd(amountUsd) })}</span>
-          <span className="mono farm-calc-num">
+        <div className="rwa-calc">
+          <span className="rwa-calc-label">{t('stocks.wouldGet', { amount: fmtUsd(amountUsd) })}</span>
+          <span className="mono rwa-calc-num">
             {units < 0.01 ? units.toFixed(4) : units.toFixed(2)}
             <span className="faint"> {token.symbol}</span>
           </span>
         </div>
       )}
 
-      <div className="row" style={{ gap: 8, marginTop: 11 }}>
+      <div className="btn-row rwa-actions">
         <button
           type="button"
-          className="btn btn-ghost eq-buy"
-          style={{ flex: 1 }}
+          className="btn btn-primary"
           onClick={(e) => {
             e.stopPropagation();
             onBuy?.(token, amountUsd);
           }}
         >
           <IconSwap width={15} height={15} />
-          <span>{t('stocks.buyWith', { sym: token.symbol })}</span>
+          <span>{t('stocks.rwaBuyWith', { sym: pay })}</span>
         </button>
         <button
           type="button"
-          className="btn btn-ghost"
-          style={{ padding: '0 12px', fontSize: 12 }}
+          className="btn btn-ghost btn-row-minor"
           onClick={(e) => {
             e.stopPropagation();
             onSelect?.(token);
           }}
         >
-          {t('stocks.rwaDetailsCta', 'مشخصات')}
+          {t('stocks.rwaDetailsCta')}
         </button>
       </div>
-    </motion.div>
+    </motion.article>
   );
 }

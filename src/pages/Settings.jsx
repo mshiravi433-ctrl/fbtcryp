@@ -354,7 +354,15 @@ function SolanaNetProbe({ cluster, custom, onChange }) {
     setResult(null);
     try {
       const { probeSolanaRpc } = await import('../lib/solanaRpc');
-      const r = await probeSolanaRpc({ cluster, custom });
+      /* `relay: true` — the question this button answers is «can this app read
+         Solana right now», not «is the public list healthy from here». On a
+         network path where every public node refuses a browser (403 is a
+         decision about the CALLER's IP/provider/region, so no retry fixes it),
+         the app's own relay is the door that still opens, and a probe that
+         cannot see it would report a dead network over a working page. The
+         relay is read-only and is never remembered as the broadcast endpoint,
+         so including it here cannot leak into a transaction path. */
+      const r = await probeSolanaRpc({ cluster, custom, relay: true });
       setResult(r);
       onChange?.(r);
     } catch {
@@ -378,7 +386,10 @@ function SolanaNetProbe({ cluster, custom, onChange }) {
       {result && (
         <p className="set-netprobe-out" role="status">
           {result.ok
-            ? t('settings.solRpcOk', { host: host(result.url), ms: Math.max(1, Math.round(result.ms || 0)) })
+            /* Our own relay is named as a relay, never as a hostname: printing
+               this app's domain in a list of Solana nodes reads as «the app
+               refused you» instead of «the app reached Solana for you». */
+            ? t('settings.solRpcOk', { host: result.relay ? t('loan.rpc.relayHost') : host(result.url), ms: Math.max(1, Math.round(result.ms || 0)) })
             : (
               <>
                 <b>{t('settings.solRpcFailTitle')}</b>
@@ -388,7 +399,7 @@ function SolanaNetProbe({ cluster, custom, onChange }) {
             )}
           {result.attempts?.length > 1 && (
             <span className="set-netprobe-tried">
-              {t('settings.solRpcTried')} {result.attempts.map((a) => `${host(a.url)}${a.ok ? ' ✓' : ` ✗ ${a.reason || ''}`}`).join(' · ')}
+              {t('settings.solRpcTried')} {result.attempts.map((a) => `${a.relay ? t('loan.rpc.relayHost') : host(a.url)}${a.ok ? ' ✓' : ` ✗ ${a.reason || ''}`}`).join(' · ')}
             </span>
           )}
         </p>

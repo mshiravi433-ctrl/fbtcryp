@@ -3197,7 +3197,7 @@
     },
     "rwaTitle": "Real-world assets on-chain",
     "rwaBody": "RWA protocols bring treasury bills, credit and commodities onto the blockchain. Their governance tokens trade like any other crypto asset and you can swap them here.",
-    "rwaFeeNotice": "Direct self-custody execution with our standard {{fee}}% platform fee",
+    "rwaFeeNotice": "Self-custody settlement · {{fee}}% platform fee",
     "rwaTradeable": "Tradeable Real-World Assets",
     "rwaTradeableSub": "Treasuries, Yield, Gold, Robinhood Stock Tokens & Institutional Credit",
     "rwaPlatformFee": "Platform Fee {{fee}}%",
@@ -3206,7 +3206,7 @@
     "rwaHowItWorksTitle": "How RWA Token Backing & Safety Work",
     "rwaHowItWorksP1": "Tokenized real-world assets are categorized into direct-custody assets (1:1 backed by physical vaults or registered trusts like Paxos and Ondo) and over-collateralized on-chain debt positions powered by Chainlink price feeds.",
     "rwaHowItWorksP2": "All trades on FBT Swap execute non-custodially from your own wallet. The platform fee is a flat {{fee}}% and no user funds are ever held by the interface.",
-    "goToRwaBanner": "Explore and trade RWA tokens (Gold, Treasuries & Robinhood Chain)",
+    "goToRwaBanner": "Buy RWA · gold, treasuries, Robinhood stocks",
     "goToRwaCta": "Open RWA",
     "rwaCategory": {
       "all": "All",
@@ -3223,9 +3223,39 @@
     "rwaContract": "Smart Contract Address",
     "rwaCopyAddress": "Copy",
     "rwaCopied": "Copied",
+    "rwaShareText": "{{name}} ({{symbol}}) — {{address}}",
+    "rwaExplorer": "View on explorer",
+    "rwaFeeChip": "Fee",
+    "rwaBuyWith": "Buy with {{sym}}",
+    "rwaSpecType": "Asset type",
+    "rwaSpecChain": "Network",
+    "rwaSpecStandard": "Standard",
+    "rwaSpecFee": "Platform fee",
+    "rwaChain": {
+      "1": "Ethereum",
+      "4663": "Robinhood Chain"
+    },
+    "rwaBackingType": {
+      "direct_custody": "Direct custody",
+      "physical_vault": "Physical vault",
+      "stock_token": "Tokenized stock",
+      "protocol_token": "Protocol token"
+    },
+    "rwaRiskScan": "Contract scan",
+    "rwaRiskStructural": "Structural read",
+    "rwaRiskRetry": "Scan again",
+    "rwaRiskScannerGap": "The on-chain scanner does not cover this network. The read below is structural, not a safety stamp.",
+    "rwaFlag": {
+      "notAShare": "This token is not a registered share. The claim is on the issuer, not the shareholder register.",
+      "issuerFreeze": "The issuer can pause transfers or freeze a balance.",
+      "custodian": "Redemption depends on the named custodian and backing, not on the contract alone.",
+      "governanceNotAsset": "This is the protocol's governance token, not the treasury bill or the collateral itself.",
+      "scannerGap": "The public contract scanner has no data for this network.",
+      "permissionless": "Transfers on this network do not require an issuer allowlist."
+    },
     "rwaNonCustodialHeader": "Direct Non-Custodial Trading",
     "rwaNonCustodialBody": "Trades execute without custodial intermediaries via liquidity pools; tokens are delivered directly to your self-custody wallet.",
-    "rwaQuickBuy": "Instant Buy {{sym}} ({{fee}}% fee)",
+    "rwaQuickBuy": "Buy {{sym}} with {{pay}} · {{fee}}%",
     "rwaViewChart": "View Coin Analysis & Chart",
     "sparkline7d": "7-day Price Trend",
     "rwaTokens": "RWA sector tokens",
@@ -10207,6 +10237,7 @@
       "KAMINO_SDK_MIME": "The Kamino module was served with the wrong content type (the server answered with a page, not the module) — reload the app.",
       "KAMINO_SDK_RECOVERED": "The Kamino module loaded after a retry. If something fails, reload the app.",
       "RPC_UNAVAILABLE": "That node answered with something we could not use.",
+      "RELAY_METHOD_UNAVAILABLE": "The app’s own relay does not forward this request — this is a gap in this app version, not a node or network failure. Nothing was sent; update the app and try again.",
       "WALLET_NOT_FOUND": "No Solana wallet app was found on this device to open this request."
     },
     "rateUnknown": "live rate unavailable right now",
@@ -10400,7 +10431,8 @@
     "rpc": {
       "title": "We could not reach the network",
       "body": "Every public RPC node we tried failed. This is what each one answered:",
-      "useOwn": "Public nodes come and go. Add your own RPC in Settings → Networks so this page stops depending on them."
+      "useOwn": "Public nodes come and go. Add your own RPC in Settings → Networks so this page stops depending on them.",
+      "relayHost": "the app's own relay"
     },
     "wallet": {
       "title": "The wallet did not open for signing",

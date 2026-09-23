@@ -94,7 +94,14 @@ function RpcIncident({ hosts, t }) {
       <ul style={{ margin: '0 0 7px', paddingInlineStart: 16, display: 'grid', gap: 3 }}>
         {hosts.map((row) => (
           <li key={`${row.host}-${row.reason}`} style={{ fontSize: 11, lineHeight: 1.65, color: 'var(--text-2)' }}>
-            <span dir="ltr" style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', direction: 'ltr', unicodeBidi: 'isolate' }}>{row.host}</span>
+            {/* A hostname is evidence about a PUBLIC node. The relay row is the
+                same fact reached through our own server, and printing our domain
+                in a monospace LTR witness slot would read as «the app refused
+                you» — so it gets a translated label instead, in the page's own
+                direction and type. */}
+            {row.relay
+              ? <span>{t('loan.rpc.relayHost')}</span>
+              : <span dir="ltr" style={{ fontFamily: 'var(--font-mono)', fontStyle: 'normal', direction: 'ltr', unicodeBidi: 'isolate' }}>{row.host}</span>}
             {' — '}
             <span style={{ color: '#fbbf24' }}>{loanErrorText(t, row.reason)}</span>
           </li>

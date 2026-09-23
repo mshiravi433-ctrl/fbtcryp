@@ -106,6 +106,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
+import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
@@ -836,6 +837,70 @@ app.get('/api/telegram/webhook-status', async (req, res) => {
     data: { ...base, telegramReachable: info !== null, webhook: info },
     meta: { schema: 'fbt.telegram-webhook-status.v1', scope: 'full' }
   });
+});
+
+/* --------------------- Solana RPC relay (read-only) ----------------------- */
+/*
+ * The loan page's Solana half reads Kamino KLend from the browser, and on the
+ * network path reported on 2026-09-23 EVERY public node refused a web page:
+ * two with HTTP 403 («your IP or provider is blocked»), one with a 200 whose
+ * body the SDK could not use, one with a 429. A refusal is a decision about the
+ * CALLER, so no client-side cleverness fixes it — but the app's own origin is
+ * the one host that browser has already proved it can reach, because it loaded
+ * the page from it. These two routes are that hop: same-origin for the web app,
+ * an https origin for the packaged APK, and from there a datacentre IP that the
+ * public nodes do serve.
+ *
+ * The relay is READ-ONLY by construction (server/solanaRpcRelay.js owns the
+ * method allowlist): no `sendTransaction`, so it cannot broadcast for anybody,
+ * and no upstream URL parameter, so it is not an open proxy. §30 is untouched —
+ * the wallet signs and sends its own transaction.
+ *
+ * MOUNTED BEFORE THE /api RATE LIMITER DELIBERATELY, for the same reason the
+ * Telegram webhook is: the budget below is sized for cached market data, where
+ * a request costs a map lookup. One Kamino market load is a dozen RPC calls,
+ * and a page that polls would spend the shared 120/min on reads alone — then
+ * every OTHER /api route would start answering 429 to that user, which is a
+ * worse outage than the one this relay exists to prevent. The relay carries its
+ * own weighted budget instead (SOLANA_RELAY_BUDGET, and a tighter one for heavy
+ * methods), enforced per IP inside relaySolanaRpc.
+ */
+app.get('/api/solana/rpc/status', (req, res) => {
+  res.set('cache-control', 'no-store');
+  return res.json(relayStatus());
+});
+
+app.post('/api/solana/rpc', async (req, res) => {
+  res.set('cache-control', 'no-store');
+  let out;
+  try {
+    out = await relaySolanaRpc({
+      body: req.body,
+      /* The cluster is a query parameter because a JSON-RPC body has nowhere
+         to put it, and @solana/web3.js keeps the query string of the endpoint
+         URL it is given — so `Connection('…/api/solana/rpc?cluster=devnet')`
+         works without the SDK knowing a relay exists. */
+      cluster: String(req.query.cluster || 'mainnet-beta'),
+      ip: req.ip
+    });
+  } catch (cause) {
+    /* An unexpected throw must not become an HTML 500 page: the client parses
+       this route as JSON-RPC and reads a non-JSON answer as «node unusable». */
+    return res.status(502).json({
+      jsonrpc: '2.0',
+      id: req.body?.id ?? null,
+      error: { code: -32603, message: `the relay failed: ${String(cause?.message || cause).slice(0, 160)}` }
+    });
+  }
+  const meta = out.meta || {};
+  /* Diagnostics a screenshot can carry: which upstream answered, whether the
+     shared cache served it, and how long the hop took. The upstream is already
+     redacted of any credential by the relay. */
+  if (meta.upstream) res.set('x-fbt-relay-upstream', String(meta.upstream).slice(0, 120));
+  if (meta.cache) res.set('x-fbt-relay-cache', String(meta.cache));
+  if (Number.isFinite(meta.ms)) res.set('x-fbt-relay-ms', String(Math.round(meta.ms)));
+  if (meta.retryAfterMs) res.set('retry-after', String(Math.ceil(meta.retryAfterMs / 1000)));
+  return res.status(out.status).json(out.body);
 });
 
 /* ------------------------------ rate limiting ----------------------------- */

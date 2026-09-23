@@ -94,7 +94,11 @@ const GROUPS = [
           ]
         : []),
       { to: '/stocks', key: 'nav.stocks', Icon: IconBuilding, hue: 'var(--rgb-5)' },
-      { to: '/etf', key: 'nav.etf', Icon: IconBriefcase, hue: 'var(--rgb-8)' },
+      /*
+       * ─── ETF & GOLD REMOVED FROM MENU ──────────────────────────────────
+       * روی درخواست: «صفحه etf و طلا را حذف کن و از منو بخش بازار هم ببر
+       * خیلی مبتدی و به درد نخوره تا بعدا درستش کنیم»
+       */
       /*
        * Spend crypto on real things. Sits in `markets` rather than `more`
        * because it is a destination people arrive wanting, not a setting they

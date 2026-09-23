@@ -31,6 +31,8 @@
  * is worth refusing outright rather than failing obscurely.
  */
 
+import { apiBase } from './apiBase.js';
+
 /** Per-request ceiling. A public node that has not answered in 9s is not
     going to; the next candidate is cheaper than waiting. */
 const RPC_TIMEOUT_MS = 9000;
@@ -41,22 +43,47 @@ const CHOICE_TTL_MS = 5 * 60 * 1000;
 /**
  * Public, key-less, CORS-enabled clusters endpoints.
  *
- * ORDER MATTERS, and this list changed on 2026-09-23. The Foundation endpoint
- * used to be FIRST "because it is the one every wallet and explorer agrees
- * on" — which is true of wallets and false of browsers: `api.mainnet-beta`.
- * `solana.com` answers a web page with HTTP 429 when it is busy and with a
- * flat HTTP 403 ("access forbidden", region/provider block) when it does not
- * like the caller at all, and it is the host that produced the loan page's
- * «RPC_RATE_LIMITED» report. The community endpoints after it are exactly the
- * nodes that exist to serve browsers, so the Foundation node stays on the list
- * as the LAST resort — kept, not deleted: it is still the canonical node, and
- * a network where the others are blocked is a real network.
+ * ORDER MATTERS, and this list changed twice on 2026-09-23.
+ *
+ * First change: the Foundation endpoint used to be FIRST "because it is the one
+ * every wallet and explorer agrees on" — which is true of wallets and false of
+ * browsers: `api.mainnet-beta.solana.com` answers a web page with HTTP 429 when
+ * it is busy and with a flat HTTP 403 ("access forbidden", region/provider
+ * block) when it does not like the caller at all, and it is the host that
+ * produced the loan page's «RPC_RATE_LIMITED» report.
+ *
+ * Second change: the four hosts below were then ALL of them refused by one real
+ * user's network path — publicnode and the Foundation node with 403, drpc with
+ * a 200 whose body the SDK could not use, onfinality with a 429 — and a list
+ * where every entry can refuse a browser is not a failover list, it is four
+ * ways to fail. Independent probes of ~50 keyless endpoints from deployed
+ * workers (2026-09) found which ones still answer, and the three that did are
+ * here now: Solana Tracker's public endpoint (keyless, documented for
+ * @solana/web3.js), MagicBlock's public mainnet, and LeoRPC's shared FREE key —
+ * the last one kept near the back, because a key somebody else published can be
+ * revoked and it is a last resort, not a plan.
+ *
+ * `api.mainnet.solana.com` is the host the Solana Foundation's own RPC
+ * documentation lists for mainnet today; `api.mainnet-beta.solana.com` is the
+ * long-standing alias every wallet still uses. Both stay, both at the end: the
+ * canonical node is kept rather than deleted, because a network where the
+ * community nodes are blocked is a real network.
+ *
+ * AND NONE OF THIS IS THE WHOLE ANSWER. A 403 is a decision about the CALLER —
+ * their IP, their provider, their region — so no ordering of public hosts makes
+ * a blocked network path work. The app's own relay (below, and
+ * server/solanaRpcRelay.js) is the candidate that is reachable whenever the app
+ * itself is, which is why reads may opt into it.
  */
 export const SOLANA_CLUSTER_RPCS = Object.freeze({
   'mainnet-beta': Object.freeze([
     'https://solana-rpc.publicnode.com',
+    'https://rpc.solanatracker.io/public',
+    'https://rpc.magicblock.app/mainnet',
     'https://solana.drpc.org',
     'https://solana.api.onfinality.io/public',
+    'https://solana.leorpc.com/?api_key=FREE',
+    'https://api.mainnet.solana.com',
     'https://api.mainnet-beta.solana.com'
   ]),
   devnet: Object.freeze([
@@ -93,15 +120,198 @@ export async function readSolanaNetworkSettings() {
   }
 }
 
+/* ── THE APP'S OWN RELAY ─────────────────────────────────────────────────────
+ *
+ * A public node that answers HTTP 403 has made a decision about the CALLER: the
+ * phone's IP, its provider, its region. No ordering, retry or cooldown in this
+ * file changes that decision — the 2026-09-23 report is four hosts and four
+ * refusals, and the honest reading is «this network path cannot reach the public
+ * Solana nodes», not «pick a better public node».
+ *
+ * The app's own backend can. So `POST /api/solana/rpc` (server/solanaRpcRelay.js)
+ * forwards an ALLOWLIST of read-only JSON-RPC methods from a datacentre IP that
+ * those nodes do serve, and speaks plain JSON-RPC 2.0 — which means
+ * `new Connection(relayUrl)` from @solana/web3.js works against it with no
+ * adapter, no special casing in the SDK path and no second client.
+ *
+ * Two properties are load-bearing and both are enforced by the server:
+ *   · it is NOT an open proxy (there is no url parameter — the upstream list
+ *     lives there), and
+ *   · it never broadcasts (`sendTransaction` is not relayed), so §30 still holds:
+ *     the wallet signs AND sends its own transaction.
+ *
+ * That second point decides where the relay may appear. It is a candidate for
+ * READS, and `getSolanaRpcUrl()` — the endpoint a broadcast is sent to — never
+ * returns it.
+ */
+
+/** The relay's path under the app's own API base. */
+export const SOLANA_RELAY_PATH = '/solana/rpc';
+
+/**
+ * The absolute URL of this app's Solana relay for one cluster, or null when
+ * there is no origin to build one from (a Node test with no window, an SSR
+ * render). Resolved through apiBase() rather than open-coded, because inside
+ * the packaged APK a relative '/api' points at the phone's own asset server and
+ * is a guaranteed 404 — the exact bug apiBase exists for.
+ */
+/**
+ * The pure half of the relay URL, exported so the two rules below can be tested
+ * without bending a browser's `location` (which jsdom makes unforgeable).
+ *
+ * @param {{ base?: string|null, origin?: string|null, cluster?: string }} input
+ * @returns {string|null} an absolute URL, or null when there is no honest one
+ */
+export function relayUrlFrom({ base = null, origin = null, cluster = 'mainnet-beta' } = {}) {
+  try {
+    const c = normalizeSolanaCluster(cluster);
+    const resolved = String(base ?? '').replace(/\/+$/, '');
+    if (!resolved) return null;
+    const path = `${resolved}${SOLANA_RELAY_PATH}?cluster=${c}`;
+    /* An absolute base (VITE_API_BASE, or apiBase()'s answer inside the packaged
+       app) is already a URL the phone can reach. */
+    if (/^https?:\/\//i.test(path)) return path;
+    const o = String(origin ?? '').replace(/\/+$/, '');
+    /* Only a real http(s) origin can host the relay. Inside the WebView the page
+       origin is https://localhost — the phone's OWN asset server, which serves
+       the bundle and has no /api at all — and apiBase() already refuses to hand
+       back a relative base there. Belt and braces on purpose: a relative path
+       plus a localhost origin is not a relay, and inventing one would send every
+       Solana read to the phone itself and report the network as dead. */
+    if (!/^https?:\/\//i.test(o) || /^https:\/\/localhost$/i.test(o)) return null;
+    return `${o}${path}`;
+  } catch {
+    return null;
+  }
+}
+
+export function solanaRelayUrl({ cluster = 'mainnet-beta', base = null } = {}) {
+  let resolvedBase = base;
+  if (resolvedBase == null) {
+    try { resolvedBase = apiBase(); } catch { resolvedBase = null; }
+  }
+  const origin = typeof window !== 'undefined' ? String(window.location?.origin || '') : '';
+  return relayUrlFrom({ base: resolvedBase, origin, cluster });
+}
+
+/** Is this candidate the app's own relay? (It is never cooled, never broadcast
+    through, and never remembered as a general-purpose endpoint.) */
+export function isSolanaRelayUrl(url) {
+  const u = String(url || '');
+  return u.includes(SOLANA_RELAY_PATH);
+}
+
+/* ── «the public nodes are blocked from here» ──────────────────────────────
+ *
+ * The cooldown map below already knows this within a session: when every public
+ * host is cooling as BLOCKED — or as UNUSABLE, meaning it ANSWERED with something
+ * this app could not read (a WAF page served as a 200, a body that is not
+ * JSON-RPC) — the relay should be tried FIRST, not last, because walking four
+ * hosts that have each already said no costs the user seconds and teaches us
+ * nothing new.
+ *
+ * The 2026-09-23 report is why UNUSABLE counts: that network path answered with
+ * a MIX — three 403s, one 429, one connection error, two 200s whose bodies the
+ * SDK could not use — and the old rule (every host BLOCKED) therefore learned
+ * nothing, so all nine candidates were walked again on the next load. A host
+ * that answers with something unusable is not a host this path can use.
+ *
+ * Across sessions that knowledge was lost, so every app start repeated the same
+ * refusals before reaching the relay — a slow, guaranteed-failing preamble on
+ * the exact page the user opened. One localStorage line, written only when a
+ * whole public list has just proved useless and cleared the moment any public
+ * node answers, keeps the next start honest. Six hours, because a block is a
+ * property of a network path and network paths change (the user switches from
+ * Wi-Fi to mobile data, the provider unblocks the host).
+ *
+ * A THROTTLE still does not qualify (429): waiting genuinely fixes throttling,
+ * and routing a healthy network through our server for six hours because a free
+ * node was busy for a minute would be a worse trade than a retry — see the test
+ * that pins it. A network-level failure does not qualify either: an unreachable
+ * host may be a dead Wi-Fi, and the remedy there is a retry, not a hop through
+ * our server.
+ */
+const PUBLIC_BLOCKED_KEY = 'fbt.solana.rpc.publicsBlocked.v1';
+const PUBLIC_BLOCKED_TTL_MS = 6 * 60 * 60 * 1000;
+
+const readBlockedHint = () => {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(PUBLIC_BLOCKED_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!(Number(parsed.at) > 0) || Date.now() - Number(parsed.at) > PUBLIC_BLOCKED_TTL_MS) return null;
+    return parsed;
+  } catch { return null; }
+};
+
+/**
+ * Remember that this cluster's public nodes refused us — every one of them.
+ * Called from the read paths that walk the whole list, never from a single
+ * host's failure (one refusal is a fact about one host, and the cooldown map
+ * already handles that).
+ */
+export function noteSolanaPublicsBlocked(cluster = 'mainnet-beta') {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.setItem(PUBLIC_BLOCKED_KEY, JSON.stringify({ at: Date.now(), cluster: normalizeSolanaCluster(cluster) }));
+    return true;
+  } catch { return false; }
+}
+
+/** Forget the hint — a public node answered, or the user switched network. */
+export function clearSolanaPublicsBlocked() {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.removeItem(PUBLIC_BLOCKED_KEY);
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Should the relay be tried before the public nodes right now?
+ *
+ * True when the persisted hint says this cluster's publics proved useless
+ * recently, OR when every public candidate is cooling as BLOCKED or UNUSABLE in
+ * this session. A throttle (429) alone does NOT qualify: waiting genuinely fixes
+ * throttling, and a relay hop costs us upstream quota that a retry would not.
+ *
+ * The `UNUSABLE` half is what the second 2026-09-23 report added. Its network
+ * path produced a MIX of refusals and unusable answers, and the old rule —
+ * every host BLOCKED — was therefore false, so the relay sat at the BACK of a
+ * nine-candidate list on a path where only the relay could ever answer.
+ */
+export function solanaPublicsBlocked(cluster = 'mainnet-beta') {
+  const c = normalizeSolanaCluster(cluster);
+  const hint = readBlockedHint();
+  if (hint && hint.cluster === c) return true;
+  pruneCooling();
+  const publics = SOLANA_CLUSTER_RPCS[c] || SOLANA_CLUSTER_RPCS['mainnet-beta'];
+  if (!publics.length) return false;
+  const noHelp = (url) => {
+    const reason = cooling.get(url)?.reason;
+    return reason === 'BLOCKED' || reason === 'UNUSABLE';
+  };
+  return publics.every(noHelp);
+}
+
 /**
  * The ordered candidate list for a cluster: the user's own RPC first (never
  * cooled — it is a deliberate choice), then the public list with any host that
  * recently refused or throttled us moved to the BACK.
  *
+ * `relay` opts the app's own read-only relay in (see above): `true` resolves it
+ * for this cluster, a string pins one (tests), and the default `null` leaves the
+ * list exactly as it was — public nodes only. Its POSITION is decided by
+ * `solanaPublicsBlocked`: first when the public nodes are known to be refusing
+ * this network path, otherwise after the warm ones and before the cooled ones,
+ * so a healthy network never spends a hop on our server.
+ *
  * The order is stable for hosts in the same state, so two reads in a row do not
  * shuffle the list under each other.
  */
-export function solanaRpcCandidates({ cluster = 'mainnet-beta', custom = '' } = {}) {
+export function solanaRpcCandidates({ cluster = 'mainnet-beta', custom = '', relay = null } = {}) {
   const c = normalizeSolanaCluster(cluster);
   const customUrl = /^https:\/\//i.test(String(custom || '')) ? String(custom).trim() : '';
   pruneCooling();
@@ -109,8 +319,18 @@ export function solanaRpcCandidates({ cluster = 'mainnet-beta', custom = '' } = 
     .filter((url) => url !== customUrl);
   const warm = publicList.filter((url) => !cooling.has(url));
   const cold = publicList.filter((url) => cooling.has(url));
-  const list = customUrl ? [customUrl, ...warm, ...cold] : [...warm, ...cold];
-  return [...new Set(list)];
+  const relayUrl = relay === true
+    ? solanaRelayUrl({ cluster: c })
+    : (typeof relay === 'string' && /^https?:\/\//i.test(relay) ? relay : null);
+  const relayFirst = Boolean(relayUrl) && solanaPublicsBlocked(c);
+  const list = [
+    ...(customUrl ? [customUrl] : []),
+    ...(relayFirst ? [relayUrl] : []),
+    ...warm,
+    ...(relayUrl && !relayFirst ? [relayUrl] : []),
+    ...cold
+  ];
+  return [...new Set(list.filter(Boolean))];
 }
 
 /**
@@ -145,15 +365,34 @@ export async function solanaRpcCall(url, method, params = [], { timeoutMs = RPC_
       const refusal = res.status === 401 || res.status === 403 || res.status === 451;
       const reason = res.status === 429 ? 'RATE_LIMITED' : refusal ? 'BLOCKED' : `HTTP_${res.status}`;
       /* The one place every RPC failure passes through — so it is the one place
-         that has to remember the host refused us. */
-      noteSolanaRpcFailure(url, reason, { status: res.status });
+         that has to remember the host refused us.
+         EXCEPT the relay: it is our own origin and the last resort, and cooling
+         it would push the one candidate that is reachable whenever the app is
+         behind hosts that have already said no. Its own failure is still
+         reported to the caller, with the upstream's status intact. */
+      if (!isSolanaRelayUrl(url)) noteSolanaRpcFailure(url, reason, { status: res.status });
       return { ok: false, ms, url, reason, detail: `HTTP ${res.status}` };
     }
     const body = await res.json().catch(() => null);
-    if (!body) return { ok: false, ms, url, reason: 'BAD_RESPONSE' };
+    if (!body) {
+      /* A 200 that is not JSON-RPC: a WAF or captive-portal page, a proxy that
+         rewrote the body, a node that served something else entirely. The host
+         answered and the answer cannot be used — the same class of fact the
+         2026-09-23 report called «آن گره پاسخ داد، ولی پاسخی که نتوانستیم
+         استفاده کنیم». It is remembered (short of a refusal, longer than a
+         throttle) so the next read does not pay for it again, and the relay —
+         our own origin, which the page already proved it can reach — moves
+         ahead of it. */
+      if (!isSolanaRelayUrl(url)) noteSolanaRpcFailure(url, 'UNUSABLE');
+      return { ok: false, ms, url, reason: 'BAD_RESPONSE' };
+    }
     if (body.error) return { ok: false, ms, url, reason: 'RPC_ERROR', detail: String(body.error?.message || '').slice(0, 160) };
     /* It answered — whatever it did before is history. */
     clearSolanaRpcCooldown(url);
+    /* And if a PUBLIC node answered, the «publics are blocked from here» hint is
+       stale: the network path changed, or the block lifted. Dropping it puts the
+       free nodes back in front of our own relay, where they belong. */
+    if (!isSolanaRelayUrl(url)) clearSolanaPublicsBlocked();
     return { ok: true, ms, url, result: body.result };
   } catch (e) {
     const ms = Date.now() - started;
@@ -195,6 +434,18 @@ const cooling = new Map();
 /** A throttle clears quickly; a refusal does not. */
 const COOLDOWN_RATE_LIMIT_MS = 3 * 60 * 1000;
 const COOLDOWN_REFUSAL_MS = 30 * 60 * 1000;
+/**
+ * «It answered, and the answer was not usable» — a WAF page served as a 200, a
+ * body that is not JSON-RPC, a 200 the SDK could not decode. This is its own
+ * duration on purpose: shorter than a REFUSAL (a refusal is a standing decision
+ * about this caller, an unusable answer may be one node's bad moment), longer
+ * than a throttle (re-asking in three minutes rarely changes a body).
+ *
+ * The 2026-09-23 report had two of these, and before this they were the hosts
+ * that stayed «warm»: every refresh asked them first, they wasted a full round
+ * trip each, and the app learned nothing between reads.
+ */
+const COOLDOWN_UNUSABLE_MS = 10 * 60 * 1000;
 
 const pruneCooling = (now = Date.now()) => {
   for (const [url, row] of cooling) if (row.until <= now) cooling.delete(url);
@@ -207,7 +458,7 @@ const pruneCooling = (now = Date.now()) => {
  * the lending reads, the balance reads — teaches the same map.
  *
  * @param {string} url
- * @param {string} reason RATE_LIMITED | BLOCKED | HTTP_xxx
+ * @param {string} reason RATE_LIMITED | BLOCKED | UNUSABLE | HTTP_xxx
  * @param {{status?:number|null}} [meta]
  * @returns {number|null} the moment the cooldown ends, or null when nothing was recorded
  */
@@ -216,10 +467,18 @@ export function noteSolanaRpcFailure(url, reason, { status = null } = {}) {
   if (!u) return null;
   const refused = reason === 'BLOCKED' || status === 401 || status === 403 || status === 451;
   const throttled = reason === 'RATE_LIMITED' || status === 429;
-  if (!refused && !throttled) return null;
-  const ms = refused ? COOLDOWN_REFUSAL_MS : COOLDOWN_RATE_LIMIT_MS;
+  /* A host that ANSWERED with something this app could not read is not warm
+     either — see COOLDOWN_UNUSABLE_MS. It is recorded as its own reason, never
+     as a refusal: the two have different remedies and different durations. */
+  const unusable = reason === 'UNUSABLE';
+  if (!refused && !throttled && !unusable) return null;
+  const ms = refused ? COOLDOWN_REFUSAL_MS : unusable ? COOLDOWN_UNUSABLE_MS : COOLDOWN_RATE_LIMIT_MS;
   const until = Date.now() + ms;
-  cooling.set(u, { until, reason: refused ? 'BLOCKED' : 'RATE_LIMITED', status: status ?? null });
+  cooling.set(u, {
+    until,
+    reason: refused ? 'BLOCKED' : unusable ? 'UNUSABLE' : 'RATE_LIMITED',
+    status: status ?? null
+  });
   return until;
 }
 
@@ -253,18 +512,26 @@ export function resetSolanaRpcChoice() {
  * connection is four requests where one would do, and the first one usually
  * answers in well under a second.
  */
-export async function probeSolanaRpc({ cluster, custom, timeoutMs = RPC_TIMEOUT_MS, signal } = {}) {
+export async function probeSolanaRpc({ cluster, custom, timeoutMs = RPC_TIMEOUT_MS, signal, relay = false } = {}) {
   const settings = cluster ? { cluster: normalizeSolanaCluster(cluster), custom: custom || '' } : await readSolanaNetworkSettings();
-  const candidates = solanaRpcCandidates(settings);
+  /* `relay` is opt-in and defaults OFF: the winner of this probe is remembered
+     as the cluster's endpoint, and a remembered endpoint is what a BROADCAST is
+     sent through (lib/solanaWallet.js → sendTransaction). The relay is read-only
+     by construction, so it must never become that endpoint. Settings asks for it
+     explicitly, because «can this app read Solana at all» is a different
+     question from «which node should my wallet's transaction go to». */
+  const candidates = solanaRpcCandidates({ ...settings, relay });
   const attempts = [];
   for (const url of candidates) {
     if (signal?.aborted) break;
     const r = await solanaRpcCall(url, 'getHealth', [], { timeoutMs, signal });
-    attempts.push({ url, ok: r.ok, ms: r.ms, reason: r.ok ? null : r.reason, detail: r.detail || null });
+    attempts.push({ url, ok: r.ok, ms: r.ms, reason: r.ok ? null : r.reason, detail: r.detail || null, relay: isSolanaRelayUrl(url) });
     if (r.ok) {
-      const key = keyOf(settings.cluster, settings.custom);
-      chosen.set(key, { url, at: Date.now(), ms: r.ms });
-      return { ok: true, url, cluster: settings.cluster, ms: r.ms, attempts };
+      if (!isSolanaRelayUrl(url)) {
+        const key = keyOf(settings.cluster, settings.custom);
+        chosen.set(key, { url, at: Date.now(), ms: r.ms });
+      }
+      return { ok: true, url, cluster: settings.cluster, ms: r.ms, relay: isSolanaRelayUrl(url), attempts };
     }
   }
   /* Nothing answered. Report the MOST INFORMATIVE reason, not the last one:
@@ -281,6 +548,16 @@ export async function probeSolanaRpc({ cluster, custom, timeoutMs = RPC_TIMEOUT_
   const rateLimited = attempts.some((a) => a.reason === 'RATE_LIMITED');
   const unreachable = attempts.every(dead);
   const timedOut = !unreachable && attempts.every((a) => a.reason === 'TIMEOUT' || a.reason === 'RATE_LIMITED');
+  /* Every PUBLIC host either refused (403/401/451) or answered with something
+     unusable (BAD_RESPONSE): that is a fact about this network path, not about
+     one node, so the next start begins with the relay instead of repeating a
+     known-useless list first. A list that merely timed out is NOT written — an
+     unreachable host may be a dead Wi-Fi, and the remedy there is a retry, not a
+     hop through our server. A THROTTLE is not written either: see the note on
+     PUBLIC_BLOCKED_KEY. */
+  const noHelp = (a) => isBlocked(a) || a.reason === 'BAD_RESPONSE';
+  const publicAttempts = attempts.filter((a) => !a.relay);
+  if (publicAttempts.length > 0 && publicAttempts.every(noHelp)) noteSolanaPublicsBlocked(settings.cluster);
   return {
     ok: false,
     url: null,
@@ -291,18 +568,29 @@ export async function probeSolanaRpc({ cluster, custom, timeoutMs = RPC_TIMEOUT_
   };
 }
 
-/** The endpoint to use right now — the remembered winner, or a fresh probe. */
+/**
+ * The endpoint to use right now — the remembered winner, or a fresh probe.
+ *
+ * NEVER the relay. This URL is what a signed transaction is broadcast through,
+ * and the relay does not forward sendTransaction (deliberately: the wallet signs
+ * AND sends, §30). Reads that may use the relay ask for the candidate list
+ * directly — `solanaRpcCandidates({ relay: true })`.
+ */
 export async function getSolanaRpcUrl({ cluster, custom, force = false } = {}) {
   const settings = cluster ? { cluster: normalizeSolanaCluster(cluster), custom: custom || '' } : await readSolanaNetworkSettings();
   const key = keyOf(settings.cluster, settings.custom);
   const hit = chosen.get(key);
-  if (!force && hit && Date.now() - hit.at < CHOICE_TTL_MS) return hit.url;
+  /* Defensive: a relay URL can only reach `chosen` from a caller that probed with
+     `relay: true` and ignored the guard in probeSolanaRpc. Believing it would
+     send somebody's broadcast to an endpoint that refuses to broadcast. */
+  if (!force && hit && Date.now() - hit.at < CHOICE_TTL_MS && !isSolanaRelayUrl(hit.url)) return hit.url;
   /* A custom RPC is a deliberate choice: use it even if it does not answer a
      health probe, because the user may be pointing at a node that serves their
      own methods only. The public list is the fallback, not the override. */
   if (/^https:\/\//i.test(settings.custom)) return settings.custom;
   const probe = await probeSolanaRpc(settings);
-  return probe.ok ? probe.url : (SOLANA_CLUSTER_RPCS[settings.cluster]?.[0] || 'https://api.mainnet-beta.solana.com');
+  if (probe.ok && !isSolanaRelayUrl(probe.url)) return probe.url;
+  return SOLANA_CLUSTER_RPCS[settings.cluster]?.[0] || 'https://api.mainnet-beta.solana.com';
 }
 
 /** A `Connection` for the user's cluster, built on the endpoint above. */

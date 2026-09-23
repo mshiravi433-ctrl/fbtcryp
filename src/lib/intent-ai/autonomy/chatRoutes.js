@@ -99,7 +99,7 @@ function buildSearch(params) {
 export const ROUTED_PATHS = Object.freeze([
   '/', '/coin/:id', '/compare', '/trade', '/swap', '/bridge', '/invest', '/predict',
   '/earn', '/wallet', '/settings', '/about', '/contact', '/legal/:doc', '/perp',
-  '/farm', '/signals', '/stocks', '/etf', '/ostium', '/dydx', '/derivatives', '/shop',
+  '/farm', '/signals', '/stocks', '/ostium', '/dydx', '/derivatives', '/shop',
   '/help', '/docs', '/audit', '/security', '/developers', '/ecosystem', '/business',
   '/p2p', '/leaderboard', '/news', '/explore', '/discover', '/nft', '/orders',
   '/lab', '/explore-hub', '/learn', '/rewards', '/solana', '/buy',

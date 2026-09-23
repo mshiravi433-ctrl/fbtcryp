@@ -1277,7 +1277,8 @@
       "KAMINO_SDK_MIME": "Kamino modülü yanlış içerik türüyle sunuldu (sunucu modül yerine bir sayfa döndürdü) — uygulamayı yeniden yükle.",
       "KAMINO_SDK_RECOVERED": "Kamino modülü yeniden denemeden sonra yüklendi. Bir şey başarısız olursa uygulamayı yeniden yükle.",
       "WALLET_NOT_FOUND": "Bu cihazda bu isteği açacak bir Solana cüzdan uygulaması bulunamadı — uygulamayı kurun ya da açın ve yeniden deneyin.",
-      "RPC_UNAVAILABLE": "O düğüm kullanabileceğimiz bir yanıt vermedi."
+      "RPC_UNAVAILABLE": "O düğüm kullanabileceğimiz bir yanıt vermedi.",
+      "RELAY_METHOD_UNAVAILABLE": "Uygulamanın kendi rölesi bu isteği iletmiyor — bu, düğüm veya ağ arızası değil, bu uygulama sürümündeki bir eksik. Hiçbir şey gönderilmedi; uygulamayı güncelleyip tekrar dene."
     },
     "ratesUpdated": "Oranlar lending sözleşmelerinden (Morpho/Aave) okunur — otomatik olarak yenilenir.",
     "connectWallet": "Cüzdanı bağla",
@@ -1402,7 +1403,8 @@
     "rpc": {
       "title": "Piyasa verileri okunamadı",
       "body": "Şu Solana düğümlerini denedik; her birinin yanıtı aşağıda.",
-      "useOwn": "Ayarlar → Ağlar bölümünden kendi RPC adresinizi ekleyin; uygulama herkese açık düğümlere bağımlı kalmasın."
+      "useOwn": "Ayarlar → Ağlar bölümünden kendi RPC adresinizi ekleyin; uygulama herkese açık düğümlere bağımlı kalmasın.",
+      "relayHost": "uygulamanın kendi aktarıcısı"
     },
     "wallet": {
       "title": "Cüzdan açılmadı",

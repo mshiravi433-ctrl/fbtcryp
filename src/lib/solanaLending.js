@@ -55,7 +55,17 @@ async function lendingRpcCandidates(rpcUrl) {
   try {
     const { solanaRpcCandidates, readSolanaNetworkSettings } = await import('./solanaRpc.js');
     const settings = await readSolanaNetworkSettings();
-    const list = solanaRpcCandidates(settings).filter(Boolean);
+    /* `relay: true` — the lending READS are the one path that opts into the
+       app's own relay (server/solanaRpcRelay.js), and the reason is measured,
+       not theoretical: on 2026-09-23 a real user's network path was refused by
+       EVERY public candidate (two 403s, one 429, one 200 whose body the SDK
+       could not use), so the Kamino market could not be read at all and the page
+       correctly refused to send any transaction. A 403 is a decision about the
+       caller's IP/provider/region — no client-side ordering fixes it — while our
+       own origin is reachable by definition (the page loaded from it) and its
+       upstream calls come from a datacentre the public nodes do serve.
+       The relay stays OUT of every broadcast path: it forwards reads only. */
+    const list = solanaRpcCandidates({ ...settings, relay: true }).filter(Boolean);
     return list.length ? [...new Set(list)] : [SOLANA_LENDING_RPC];
   } catch {
     return [SOLANA_LENDING_RPC];
@@ -66,6 +76,18 @@ const shortHost = (url) => {
   try { return new URL(url).hostname; } catch { return String(url || '?').slice(0, 40); }
 };
 
+/**
+ * Is this candidate the app's OWN relay rather than a public node?
+ *
+ * Mirrors SOLANA_RELAY_PATH in src/lib/solanaRpc.js (kept as a literal here
+ * because this module deliberately holds no static import of the RPC layer).
+ * The distinction is a labelling one, and it matters: without it the incident
+ * panel lists our own domain among «the public nodes that refused you», which
+ * reads as the app refusing the user. The row is the same fact — a Solana node
+ * said no — but it arrived through a different door, and the user is told which.
+ */
+const isRelayUrl = (url) => String(url || '').includes('/solana/rpc');
+
 /** A fetch-level failure: no HTTP status at all, the request never came back. */
 /* A failure that says «I could not reach the network» — no status code, no
    node words, just the transport. Every spelling that reaches us is here:
@@ -73,6 +95,20 @@ const shortHost = (url) => {
    deliberately NOT a catch-all: `econnreset` is a dead network path, while
    «the account did not decode» is a node that ANSWERED. */
 const NETWORK_FAILURE_RE = /\bfetch\b|networkerror|network error|failed to fetch|err_connection|err_name|err_internet|err_network|enotfound|econn|etimedout|socket|timeout|timed out|unreachable|connection (?:refused|reset|closed)|offline|abort/i;
+
+/**
+ * Our own relay saying «I do not forward this method».
+ *
+ * The relay's allowlist refusal is the one failure in this file that is a fact
+ * about THE APP rather than about the network: its remedy is an app update, and
+ * its sentence must not send the user to Settings → Networks. The relay marks
+ * the answer machine-readably too (`error.data.stage === 'allowlist'`), but the
+ * Kamino SDK wraps the JSON-RPC error in its own message (and web3.js wraps
+ * that again for `getAccountInfo`/`getLatestBlockhash`), so the wording is what
+ * survives to this classifier. Both the phrase and the `-32601` code are
+ * checked — see lendingRpcFailure.
+ */
+const RELAY_METHOD_REFUSAL_RE = /is not relayed|not relayed|forward(?:s|ed) an allowlist|read-only and forwards/i;
 
 /**
  * Name ONE node's refusal from the node's own words.
@@ -157,13 +193,31 @@ export function lendingRpcFailure(attempts) {
   const parts = list.map((a) => {
     const text = `${a.code || ''} ${a.error || ''}`.trim();
     const cls = classifyNodeFailure(text);
+    /* OUR OWN RELAY REFUSING A METHOD IS NOT A NODE FAILURE (2026-09-23, second
+       report). The relay answers an unrelayed method with JSON-RPC `-32601` and
+       the words «… is not relayed: this endpoint is read-only and forwards an
+       allowlist» — a 200 that no classifier in this file could name, so the row
+       read «آن گره پاسخ داد، ولی پاسخی که نتوانستیم استفاده کنیم» («the node
+       answered, but we could not use the response») and every reader of that
+       sentence went looking for a better RPC. The bug was in the app: the
+       relay's allowlist carried the JS-level name `getMultipleAccountsInfo`
+       instead of the wire method `getMultipleAccounts`, so the Kamino reserve
+       batch — the SECOND call of every market load — was refused by the very
+       door that exists to serve it.
+       It gets its own reason now, because its remedy is different from every
+       other row: nothing on the network can fix it, only a newer app. */
+    const relayRefusedMethod = isRelayUrl(a.url)
+      && (Number(a.code) === -32601 || RELAY_METHOD_REFUSAL_RE.test(text));
     return {
       url: shortHost(a.url),
       rawUrl: a.url,
       text,
       cls,
+      relayRefusedMethod,
       /* What the row MEANS, in the vocabulary the UI has sentences for. */
-      reason: cls || (NETWORK_FAILURE_RE.test(text) ? 'RPC_ERROR' : 'RPC_UNAVAILABLE')
+      reason: relayRefusedMethod
+        ? 'RELAY_METHOD_UNAVAILABLE'
+        : cls || (NETWORK_FAILURE_RE.test(text) ? 'RPC_ERROR' : 'RPC_UNAVAILABLE')
     };
   });
   const summary = parts
@@ -176,14 +230,15 @@ export function lendingRpcFailure(attempts) {
   const code = blocked ? 'RPC_BLOCKED'
     : rateLimited ? 'RPC_RATE_LIMITED'
       : allUnreachable ? 'RPC_ERROR'
-        : 'KAMINO_MARKET_UNAVAILABLE';
+        : parts.length > 0 && parts.every((p) => p.relayRefusedMethod) ? 'RELAY_METHOD_UNAVAILABLE'
+          : 'KAMINO_MARKET_UNAVAILABLE';
   const error = new Error(code);
   error.code = code;
   error.detail = summary || 'all Solana RPC candidates failed';
   error.attempts = list;
   /* Per-host list for the panel: it renders «host → localized reason» from
      this, instead of the raw English transport text. */
-  error.hosts = parts.map((p) => ({ host: p.url, reason: p.reason }));
+  error.hosts = parts.map((p) => ({ host: p.url, reason: p.reason, relay: isRelayUrl(p.rawUrl) }));
   /* And teach the RPC layer, so the next read does not start with the host that
      just refused us (see noteSolanaRpcFailure in solanaRpc.js). */
   noteRefusedCandidates(parts);
@@ -199,10 +254,35 @@ export function lendingRpcFailure(attempts) {
  * the RPC layer out entirely.
  */
 function noteRefusedCandidates(parts) {
-  const refusals = (parts || []).filter((p) => p.rawUrl && (p.cls === 'RPC_BLOCKED' || p.cls === 'RPC_RATE_LIMITED'));
-  if (!refusals.length) return;
-  import('./solanaRpc.js').then(({ noteSolanaRpcFailure }) => {
-    for (const p of refusals) noteSolanaRpcFailure(p.rawUrl, p.cls === 'RPC_BLOCKED' ? 'BLOCKED' : 'RATE_LIMITED');
+  /* A host that REFUSED us, throttled us, or answered with something unusable
+     is not a host the next read should start with. What is deliberately absent:
+     a network-level failure (RPC_ERROR) — an unreachable host may be a dead
+     Wi-Fi, and forgetting it after a retry is the honest behaviour. */
+  const notes = (parts || []).filter((p) => p.rawUrl && (
+    p.cls === 'RPC_BLOCKED' || p.cls === 'RPC_RATE_LIMITED' || p.reason === 'RPC_UNAVAILABLE'
+  ));
+  if (!notes.length) return;
+  import('./solanaRpc.js').then(({ noteSolanaRpcFailure, noteSolanaPublicsBlocked, isSolanaRelayUrl }) => {
+    for (const p of notes) {
+      if (isSolanaRelayUrl(p.rawUrl)) continue;   // our own origin is never cooled
+      /* RPC_UNAVAILABLE is «it answered and the answer was not usable» — the
+         200-that-is-not-JSON-RPC class the report named. RPC_ERROR is not in
+         this list on purpose (see above). */
+      const reason = p.cls === 'RPC_BLOCKED' ? 'BLOCKED'
+        : p.cls === 'RPC_RATE_LIMITED' ? 'RATE_LIMITED'
+          : 'UNUSABLE';
+      noteSolanaRpcFailure(p.rawUrl, reason);
+    }
+    /* NO PUBLIC NODE COULD SERVE THIS READ — refused, or answered with something
+       unusable. That is a property of this network path, so it is remembered
+       across sessions: the next start begins with the relay instead of paying a
+       known-useless list again. A throttle alone does NOT qualify (waiting fixes
+       throttling), and neither does a network-level failure (a dead Wi-Fi is not
+       a verdict on a node). A single success anywhere clears the hint again —
+       see solanaRpcCall. */
+    const publics = (parts || []).filter((p) => p.rawUrl && !isSolanaRelayUrl(p.rawUrl));
+    const noHelp = (p) => p.cls === 'RPC_BLOCKED' || p.reason === 'RPC_UNAVAILABLE';
+    if (publics.length > 0 && publics.every(noHelp)) noteSolanaPublicsBlocked();
   }).catch(() => { /* the next read simply starts in the configured order */ });
 }
 
