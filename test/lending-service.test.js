@@ -161,13 +161,49 @@ describe('§9/§10/§11/§20 — the pre-flight blocks what the protocol would r
     expect(codes(d.blocked)).toContain('SUPPLY_CAP_EXCEEDED');
   });
 
-  it('blocks a paused reserve and a frozen reserve', () => {
-    for (const status of ['paused', 'frozen']) {
-      const m = market({ reserves: { [USDT.id]: reserve({ status }) } });
-      const d = S.evaluateAction({ market: m, action: 'supply', asset: USDT, amount: '1', amountWei: units(1) });
-      expect(d.ok, status).toBe(false);
-      expect(codes(d.blocked), status).toContain('MARKET_PAUSED');
+  it('blocks a paused reserve outright, and a frozen one for NEW positions', () => {
+    /* 2026-09-23 — frozen ≠ paused. Aave's frozen state closes new supply and
+       new borrow while repay/withdraw stay open (it is how the 2026 wind-down
+       of Sonic and the other chains asks positions to unwind). The old rule
+       answered both states with MARKET_PAUSED and blocked all four actions,
+       which made a frozen market — a Sonic user's market — unreachable in the
+       one situation the rule was written for. */
+    for (const action of ['supply', 'borrow']) {
+      const frozen = market({ reserves: { [USDT.id]: reserve({ status: 'frozen' }) } });
+      const d = S.evaluateAction({ market: frozen, action, asset: USDT, amount: '1', amountWei: units(1) });
+      expect(d.ok, action).toBe(false);
+      expect(codes(d.blocked), action).toContain('MARKET_FROZEN');
+      expect(codes(d.blocked), action).not.toContain('MARKET_PAUSED');
     }
+
+    const paused = market({ reserves: { [USDT.id]: reserve({ status: 'paused' }) } });
+    const blocked = S.evaluateAction({ market: paused, action: 'supply', asset: USDT, amount: '1', amountWei: units(1) });
+    expect(blocked.ok).toBe(false);
+    expect(codes(blocked.blocked)).toContain('MARKET_PAUSED');
+  });
+
+  it('still allows repay and withdraw on a frozen reserve, and says why', () => {
+    const frozen = market({ reserves: { [USDT.id]: reserve({ status: 'frozen' }) } });
+    const repay = S.evaluateAction({
+      market: frozen, action: 'repay', asset: USDT, amount: '1', amountWei: units(1), debtWei: units(10)
+    });
+    expect(repay.ok).toBe(true);
+    expect(codes(repay.warnings)).toContain('MARKET_FROZEN');
+    expect(repay.blocked).toHaveLength(0);
+
+    const withdraw = S.evaluateAction({
+      market: frozen, action: 'withdraw', asset: USDT, amount: '1', amountWei: units(1), suppliedWei: units(10)
+    });
+    expect(withdraw.ok).toBe(true);
+    expect(codes(withdraw.warnings)).toContain('MARKET_FROZEN');
+
+    /* ...and the pause state still blocks them: it stops every action. */
+    const paused = market({ reserves: { [USDT.id]: reserve({ status: 'paused' }) } });
+    const blockedRepay = S.evaluateAction({
+      market: paused, action: 'repay', asset: USDT, amount: '1', amountWei: units(1), debtWei: units(10)
+    });
+    expect(blockedRepay.ok).toBe(false);
+    expect(codes(blockedRepay.blocked)).toContain('MARKET_PAUSED');
   });
 
   it('blocks a borrow above the wallet\'s own borrowing power (§12)', () => {
@@ -370,13 +406,18 @@ describe('§12/§14 — maximum borrow names its binding constraint', () => {
     expect(max.reason).toBe('ACCOUNT_UNAVAILABLE');
   });
 
-  it('refuses on a market the protocol has stopped', () => {
-    for (const status of ['paused', 'frozen']) {
-      const m = market({ reserves: { [USDT.id]: reserve({ status }) } });
-      const max = S.getMaxBorrow({ market: m, asset: USDT });
-      expect(max.ok, status).toBe(false);
-      expect(max.reason, status).toBe('MARKET_PAUSED');
-    }
+  it('refuses on a market the protocol has stopped, and names WHICH state', () => {
+    const paused = market({ reserves: { [USDT.id]: reserve({ status: 'paused' }) } });
+    const maxPaused = S.getMaxBorrow({ market: paused, asset: USDT });
+    expect(maxPaused.ok).toBe(false);
+    expect(maxPaused.reason).toBe('MARKET_PAUSED');
+
+    /* A frozen reserve cannot be borrowed against either — but it is a
+       different protocol state, so it gets a different sentence. */
+    const frozen = market({ reserves: { [USDT.id]: reserve({ status: 'frozen' }) } });
+    const maxFrozen = S.getMaxBorrow({ market: frozen, asset: USDT });
+    expect(maxFrozen.ok).toBe(false);
+    expect(maxFrozen.reason).toBe('MARKET_FROZEN');
   });
 
   it('refuses when the protocol has not enabled borrowing on the reserve', () => {

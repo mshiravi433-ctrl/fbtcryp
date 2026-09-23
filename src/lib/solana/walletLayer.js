@@ -451,9 +451,17 @@ export async function signAndSendSolanaTransaction(base64Tx, { versioned = true,
   if (caps.transport === 'deeplink') {
     const { deeplinkSignAndSendTransaction } = await import('./deeplink.js');
     const res = await deeplinkSignAndSendTransaction(base64Tx);
-    return res?.ok
-      ? { ok: true, signature: res.signature, encoding: 'base58' }
-      : { ok: false, code: res?.code ?? SOLANA_WALLET_ERRORS.SIGN_FAILED };
+    if (res?.ok) return { ok: true, signature: res.signature, encoding: 'base58' };
+    /* `id` and `warnings` must survive this hop. The caller that gets IN_WALLET
+       is looking at a REQUEST, not a failure: the signature it is about to
+       receive arrives in a different document, and the request id is the only
+       handle that document has on it (see SolanaLendingPanel).` */
+    return {
+      ok: false,
+      code: res?.code ?? SOLANA_WALLET_ERRORS.SIGN_FAILED,
+      ...(res?.id ? { id: res.id } : {}),
+      ...(res?.warnings?.length ? { warnings: res.warnings } : {})
+    };
   }
   try {
     const { signAndSendSolana } = await import('../solanaWallet.js');

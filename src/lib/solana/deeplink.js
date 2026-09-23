@@ -445,6 +445,20 @@ function publishResult(result) {
 }
 
 /**
+ * The answer to ONE request, if it has arrived. Not consumed.
+ *
+ * `consumeDeeplinkResult()` answers «what was the last thing that happened»,
+ * which is all a sheet needs when it is the only thing on screen. A page that
+ * handed over a signature and then had its document replaced by the wallet's
+ * return needs the precise question instead: «has MY request id been
+ * answered?» — without it the only way to ask is to await, and awaiting an id
+ * nobody ever answers leaves a poll running for the life of the PENDING_TTL.
+ */
+export function deeplinkResultFor(id) {
+  return readResult(id);
+}
+
+/**
  * The last completed answer, read once and then forgotten.
  *
  * This is what lets the WALLET PAGE show the success state: the wallet

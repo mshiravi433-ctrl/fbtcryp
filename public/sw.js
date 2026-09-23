@@ -167,8 +167,31 @@
  * An install still holding the v20 shell therefore keeps reproducing the old
  * error byte for byte, whatever the server says. The vendor file carries its
  * own cache-buster (?v=3), but the CODE that calls it, and the wallet
- * hand-off, only change when this shell is renamed. */
-const SHELL = 'fbt-shell-v21';
+ * hand-off, only change when this shell is renamed.
+ *
+ * v21 -> v22: the 2026-09-23 loan-page round («اتصال با سرور مشکل داره»,
+ * «سه‌جا با استرینگ هست», «گاهی اصلا امضا نمی‌کند», «در شبکه سونیک اصلا فریز و
+ * قابل وام نیست توکن‌ها»). Every one of the four fixes lives in this shell:
+ *   1. the market read named the wrong cause — a 403 from one node plus a 429
+ *      from another was reported as «rate limited»; the class is now
+ *      status-first, per host, and a node that refused us goes to the BACK of
+ *      the candidate list for a while instead of being asked first again;
+ *   2. a Solana transaction is now converted to the FORMAT the wallet accepts
+ *      (legacy ⇄ v0) instead of being refused before the wallet app opens —
+ *      the Android Mobile Wallet Adapter advertises v0 only while the vendored
+ *      Kamino SDK v5 builds legacy, and the refusal reached the screen as
+ *      «nothing happened»;
+ *   3. a frozen reserve is no longer treated as paused: repay and withdraw
+ *      stay open (that is how a wound-down Sonic position is closed), the card
+ *      stays selectable, and the state is stated in the user's language;
+ *   4. every error and toast on the loan surface resolves through one door
+ *      (src/lib/loanErrors.js) to a translated sentence — an unknown code now
+ *      arrives inside a translated generic that keeps the code for support,
+ *      instead of putting the machine string on the screen.
+ * An install pinned to v21 keeps running the old code byte for byte until its
+ * shell is evicted, so the rename is not cosmetic — without it the fixes never
+ * appear on a device that already opened the app. */
+const SHELL = 'fbt-shell-v22';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

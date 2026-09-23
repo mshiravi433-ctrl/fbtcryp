@@ -1135,7 +1135,8 @@
       "supply": "Depositar",
       "borrow": "Pedir prestado",
       "repay": "Pagar",
-      "withdraw": "Retirar"
+      "withdraw": "Retirar",
+      "approve": "Aprobación"
     },
     "done": {
       "collateral": "Marca de colateral actualizada",
@@ -1245,7 +1246,38 @@
       "KAMINO_SDK_FAILED": "El módulo Kamino no pudo iniciarse. Actualiza la app e inténtalo de nuevo.",
       "KAMINO_SDK_TRUNCATED": "El módulo Kamino se descargó solo en parte: se cortó la conexión. Inténtalo de nuevo con una conexión más estable.",
       "KAMINO_SDK_INIT_FAILED": "El módulo Kamino se descargó pero falló al iniciarse. Actualiza la app y, si se repite, envía este mensaje a soporte.",
-      "KAMINO_TX_BUILD_EMPTY": "Kamino no devolvió ninguna transacción para esta acción: no se envió nada ni se cobró comisión."
+      "KAMINO_TX_BUILD_EMPTY": "Kamino no devolvió ninguna transacción para esta acción: no se envió nada ni se cobró comisión.",
+      "RPC_BLOCKED": "Uno o más nodos de Solana rechazaron la petición (403: un bloqueo del proveedor o de la red, no un límite de velocidad). Inténtalo otra vez, o pon tu propio RPC en Ajustes → Redes.",
+      "BAD_PAYLOAD": "El proveedor respondió con algo inutilizable. Inténtalo de nuevo en un momento.",
+      "BAD_RESPONSE": "El nodo respondió con algo que no eran datos. Inténtalo de nuevo en un momento.",
+      "BAD_WALLET": "Esta cartera no puede usarse para esta acción.",
+      "BFF_UNAVAILABLE": "El servidor de la app no responde. No se envió nada: inténtalo de nuevo en un momento.",
+      "CONNECT_FAILED": "La conexión de la cartera no se completó.",
+      "GAS_LIMIT_UNAVAILABLE": "No se pudo estimar la comisión de red, así que no se envió ninguna transacción.",
+      "IN_WALLET": "La petición se entregó a tu app de cartera. Apruébala allí; al volver, el resultado estará aquí.",
+      "NO_ACCOUNT": "No hay ninguna cuenta disponible en esta cartera.",
+      "NO_ADDRESSES_PROVIDER": "El pool no reveló su proveedor de direcciones, así que no se pudo leer su oráculo.",
+      "NO_FETCH": "Este navegador no puede hacer la petición de red.",
+      "NO_SESSION": "La sesión de la cartera ha terminado. Conéctala otra vez.",
+      "NO_WALLET": "No se encontró ninguna cartera de Solana en este dispositivo.",
+      "REJECTED": "Rechazaste la petición en tu cartera. No se envió nada.",
+      "SIGN_FAILED": "La cartera no firmó. No se envió nada.",
+      "SEND_FAILED": "La cartera no envió la transacción. No se gastó nada.",
+      "BAD_TRANSACTION": "No se pudo leer la transacción antes de firmar, así que no se envió nada.",
+      "UNSUPPORTED_TRANSACTION": "Esta cartera no acepta este formato de transacción. La app prueba el otro formato automáticamente; no se envió nada.",
+      "TRANSACTION_FAILED": "La cadena rechazó la transacción: solo se gastó la comisión de red.",
+      "TRANSACTION_NOT_FOUND": "La transacción aún no se ve en los nodos que probamos. Revisa el explorador antes de reintentar.",
+      "UNSUPPORTED": "Esta cartera no puede realizar esta acción.",
+      "UNKNOWN_WITH_CODE": "La acción no se completó ({{code}}). Como mucho se gastó la comisión de red; si se repite, envía este código a soporte.",
+      "SOLANA_TX_FAILED": "La transacción de Solana no se completó en la cadena: no se gastó nada.",
+      "MARKET_FROZEN": "El protocolo ha congelado esta reserva: los nuevos depósitos y préstamos están cerrados. Pagar y retirar siguen funcionando, y esa es la vía para cerrar una posición abierta.",
+      "TIMEOUT": "La cartera no respondió a tiempo, así que no se envió nada. Abre la app de la cartera e inténtalo otra vez.",
+      "KAMINO_TX_BUILD_FAILED": "Kamino no pudo construir esta transacción, así que no se firmó ni se envió nada. Inténtalo otra vez en un momento.",
+      "NO_SIGNATURE": "La cartera respondió sin firma, así que no se envió nada.",
+      "KAMINO_SDK_MIME": "El módulo de Kamino se sirvió con un tipo de contenido incorrecto (el servidor devolvió una página en vez del módulo): recarga la app.",
+      "KAMINO_SDK_RECOVERED": "El módulo de Kamino cargó tras reintentar. Si algo falla, recarga la app.",
+      "WALLET_NOT_FOUND": "No se encontró ninguna cartera de Solana en este dispositivo para abrir esta solicitud; instálala o ábrela y vuelve a intentarlo.",
+      "RPC_UNAVAILABLE": "Ese nodo respondió con algo que no pudimos usar."
     },
     "ratesUpdated": "Las tasas se leen de los contratos de lending (Morpho/Aave) — se actualizan automáticamente.",
     "connectWallet": "Conectar cartera",
@@ -1351,7 +1383,30 @@
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
       "viewTransaction": "View transaction",
-      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key.",
+      "pendingTitle": "La petición está en tu cartera",
+      "pendingBody": "Entregamos la firma a tu app de cartera. Apruébala allí: al volver reclamamos la respuesta, la confirmamos en la cadena y actualizamos tu posición. Salir de esta pantalla no pierde nada.",
+      "pendingReopen": "Abrir la cartera otra vez",
+      "pendingCheck": "Comprobar el resultado"
+    },
+    "marketHalted": {
+      "title": "El protocolo ha cerrado este mercado",
+      "body": "Todas las reservas listadas aquí están congeladas por el propio protocolo: los nuevos depósitos y préstamos están cerrados y estos activos no valen como garantía nueva. Los pagos y los retiros siguen funcionando, y las posiciones abiertas siguen abiertas.",
+      "frozen": "Congelado por el protocolo",
+      "paused": "Pausado por el protocolo",
+      "mixed": "En parte congelado / pausado por el protocolo",
+      "otherMarkets": "Para depositar o pedir prestado, elige otro mercado en la barra de arriba.",
+      "repayHint": "Si tienes una posición aquí: paga primero y luego retira. Ambos siguen permitidos."
+    },
+    "reserveFrozenHint": "Congelado — solo pagar y retirar",
+    "rpc": {
+      "title": "No se pudieron leer los datos del mercado",
+      "body": "Probamos estos nodos de Solana; la respuesta de cada uno está abajo.",
+      "useOwn": "Añade tu propio RPC en Ajustes → Redes para que la aplicación deje de depender de nodos públicos."
+    },
+    "wallet": {
+      "title": "La cartera no se abrió",
+      "switch": "Desbloquea la cartera, comprueba que esté en Solana mainnet y vuelve a intentarlo. No se envió nada ni se cobró comisión."
     }
   },
   "intentAI": {

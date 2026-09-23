@@ -1135,7 +1135,8 @@
       "supply": "Yatır",
       "borrow": "Borç al",
       "repay": "Geri öde",
-      "withdraw": "Çek"
+      "withdraw": "Çek",
+      "approve": "Onay"
     },
     "done": {
       "collateral": "Teminat bayrağı güncellendi",
@@ -1245,7 +1246,38 @@
       "KAMINO_SDK_FAILED": "Kamino modülü başlatılamadı. Uygulamayı güncelleyip tekrar deneyin.",
       "KAMINO_SDK_TRUNCATED": "Kamino modülü yalnızca kısmen indirildi — bağlantı kesildi. Daha stabil bir bağlantıyla tekrar deneyin.",
       "KAMINO_SDK_INIT_FAILED": "Kamino modülü indirildi ancak başlatılamadı. Uygulamayı güncelleyin; tekrarlarsa bu mesajı desteğe gönderin.",
-      "KAMINO_TX_BUILD_EMPTY": "Kamino bu işlem için işlem döndürmedi — hiçbir şey gönderilmedi ve ücret alınmadı."
+      "KAMINO_TX_BUILD_EMPTY": "Kamino bu işlem için işlem döndürmedi — hiçbir şey gönderilmedi ve ücret alınmadı.",
+      "RPC_BLOCKED": "Bir veya daha fazla Solana düğümü isteği reddetti (403 — sağlayıcı/ağ engeli, hız sınırı değil). Tekrar dene ya da Ayarlar → Ağlar bölümüne kendi RPC’ni gir.",
+      "BAD_PAYLOAD": "Sağlayıcının yanıtı kullanılabilir değildi. Birazdan tekrar dene.",
+      "BAD_RESPONSE": "Düğüm veri yerine başka bir şey döndürdü. Birazdan tekrar dene.",
+      "BAD_WALLET": "Bu cüzdan bu işlem için kullanılamaz.",
+      "BFF_UNAVAILABLE": "Uygulamanın kendi sunucusu yanıt vermiyor. Hiçbir şey gönderilmedi — birazdan tekrar dene.",
+      "CONNECT_FAILED": "Cüzdan bağlantısı tamamlanmadı.",
+      "GAS_LIMIT_UNAVAILABLE": "Ağ ücreti tahmin edilemedi, bu yüzden hiçbir işlem gönderilmedi.",
+      "IN_WALLET": "İstek cüzdan uygulamana iletildi. Orada onayla — döndüğünde sonuç burada olacak.",
+      "NO_ACCOUNT": "Bu cüzdanda kullanılabilir bir hesap yok.",
+      "NO_ADDRESSES_PROVIDER": "Havuz adres sağlayıcısını açıklamadı, bu yüzden oracle’ı okunamadı.",
+      "NO_FETCH": "Bu tarayıcı ağ isteğini yapamıyor.",
+      "NO_SESSION": "Cüzdan oturumu bitti. Yeniden bağlan.",
+      "NO_WALLET": "Bu cihazda Solana cüzdanı bulunamadı.",
+      "REJECTED": "İsteği cüzdanında reddettin. Hiçbir şey gönderilmedi.",
+      "SIGN_FAILED": "Cüzdan imzalamadı. Hiçbir şey gönderilmedi.",
+      "SEND_FAILED": "Cüzdan işlemi göndermedi. Hiçbir şey harcanmadı.",
+      "BAD_TRANSACTION": "İşlem imzalanmadan önce okunamadı, bu yüzden hiçbir şey gönderilmedi.",
+      "UNSUPPORTED_TRANSACTION": "Bu cüzdan bu işlem biçimini kabul etmiyor. Uygulama diğer biçimi kendisi dener — hiçbir şey gönderilmedi.",
+      "TRANSACTION_FAILED": "Zincir işlemi reddetti — yalnızca ağ ücreti harcandı.",
+      "TRANSACTION_NOT_FOUND": "İşlem denediğimiz düğümlerde henüz görünmüyor. Tekrar denemeden önce explorer’a bak.",
+      "UNSUPPORTED": "Bu cüzdan bu işlemi yapamaz.",
+      "UNKNOWN_WITH_CODE": "İşlem tamamlanmadı ({{code}}). En fazla ağ ücreti harcanmıştır; tekrarlarsa bu kodu desteğe gönder.",
+      "SOLANA_TX_FAILED": "Solana işlemi zincirde başarılı olmadı — hiçbir şey harcanmadı.",
+      "MARKET_FROZEN": "Protokol bu rezervi dondurdu: yeni mevduat ve yeni kredi kapalı. Geri ödeme ve çekim hâlâ çalışıyor; açık bir pozisyonu kapatmanın yolu da bu.",
+      "TIMEOUT": "Cüzdan zamanında yanıt vermedi, bu yüzden hiçbir şey gönderilmedi. Cüzdan uygulamasını açıp tekrar dene.",
+      "KAMINO_TX_BUILD_FAILED": "Kamino bu işlemi oluşturamadı, bu yüzden hiçbir şey imzalanmadı ve gönderilmedi. Birazdan tekrar dene.",
+      "NO_SIGNATURE": "Cüzdan imza olmadan yanıt verdi, bu yüzden hiçbir şey gönderilmedi.",
+      "KAMINO_SDK_MIME": "Kamino modülü yanlış içerik türüyle sunuldu (sunucu modül yerine bir sayfa döndürdü) — uygulamayı yeniden yükle.",
+      "KAMINO_SDK_RECOVERED": "Kamino modülü yeniden denemeden sonra yüklendi. Bir şey başarısız olursa uygulamayı yeniden yükle.",
+      "WALLET_NOT_FOUND": "Bu cihazda bu isteği açacak bir Solana cüzdan uygulaması bulunamadı — uygulamayı kurun ya da açın ve yeniden deneyin.",
+      "RPC_UNAVAILABLE": "O düğüm kullanabileceğimiz bir yanıt vermedi."
     },
     "ratesUpdated": "Oranlar lending sözleşmelerinden (Morpho/Aave) okunur — otomatik olarak yenilenir.",
     "connectWallet": "Cüzdanı bağla",
@@ -1351,7 +1383,30 @@
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
       "viewTransaction": "View transaction",
-      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key.",
+      "pendingTitle": "İstek cüzdanında",
+      "pendingBody": "İmzayı cüzdan uygulamana ilettik. Orada onayla — döndüğünde yanıtı biz alır, zincirde doğrular ve pozisyonunu güncelleriz. Bu ekrandan ayrılmak hiçbir şeyi kaybettirmez.",
+      "pendingReopen": "Cüzdanı yeniden aç",
+      "pendingCheck": "Sonucu kontrol et"
+    },
+    "marketHalted": {
+      "title": "Bu piyasa protokol tarafından kapatıldı",
+      "body": "Buradaki tüm rezervler protokolün kendisi tarafından donduruldu: yeni mevduat ve yeni kredi kapalı, bu varlıklar yeni teminat olarak sayılmıyor. Geri ödeme ve çekim hâlâ çalışıyor, açık pozisyonlar açık kalıyor.",
+      "frozen": "Protokol dondurdu",
+      "paused": "Protokol durdurdu",
+      "mixed": "Kısmen donduruldu / durduruldu",
+      "otherMarkets": "Mevduat veya kredi için yukarıdaki şeritten başka bir piyasa seç.",
+      "repayHint": "Burada pozisyonun varsa: önce geri öde, sonra çek. İkisi de hâlâ serbest."
+    },
+    "reserveFrozenHint": "Donduruldu — yalnızca geri ödeme ve çekim",
+    "rpc": {
+      "title": "Piyasa verileri okunamadı",
+      "body": "Şu Solana düğümlerini denedik; her birinin yanıtı aşağıda.",
+      "useOwn": "Ayarlar → Ağlar bölümünden kendi RPC adresinizi ekleyin; uygulama herkese açık düğümlere bağımlı kalmasın."
+    },
+    "wallet": {
+      "title": "Cüzdan açılmadı",
+      "switch": "Cüzdanın kilidini açın, Solana mainnet ağında olduğundan emin olun ve yeniden deneyin. Hiçbir şey gönderilmedi, ücret alınmadı."
     }
   },
   "intentAI": {

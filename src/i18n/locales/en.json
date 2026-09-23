@@ -10053,7 +10053,8 @@
       "borrow": "Borrow",
       "repay": "Repay",
       "withdraw": "Withdraw",
-      "collateral": "Change collateral"
+      "collateral": "Change collateral",
+      "approve": "Approval"
     },
     "done": {
       "supply": "Supplied. The pool now holds your deposit and it is earning from this block on.",
@@ -10164,7 +10165,37 @@
       "KAMINO_SDK_FAILED": "The Kamino module failed to start. Please update the app and try again.",
       "KAMINO_SDK_TRUNCATED": "The Kamino module downloaded only part of the way — the connection was cut off. Try again on a steadier link.",
       "KAMINO_SDK_INIT_FAILED": "The Kamino module was downloaded but failed to start. Please update the app, and if it repeats, send this message to support.",
-      "KAMINO_TX_BUILD_EMPTY": "Kamino did not return a transaction for this action — nothing was sent and no fee was charged."
+      "KAMINO_TX_BUILD_EMPTY": "Kamino did not return a transaction for this action — nothing was sent and no fee was charged.",
+      "RPC_BLOCKED": "One or more Solana nodes refused the request (403 — a provider or network block, not a rate limit). Try again, or enter your own RPC in Settings → Networks.",
+      "BAD_PAYLOAD": "The provider answered with something unusable. Try again in a moment.",
+      "BAD_RESPONSE": "The node answered with something that was not data. Try again in a moment.",
+      "BAD_WALLET": "This wallet cannot be used for this action.",
+      "BFF_UNAVAILABLE": "The app’s own server is not answering. Nothing was sent — try again in a moment.",
+      "CONNECT_FAILED": "The wallet connection did not complete.",
+      "GAS_LIMIT_UNAVAILABLE": "The network fee could not be estimated, so no transaction was sent.",
+      "IN_WALLET": "The request was handed to your wallet app. Approve it there — the result will be here when you come back.",
+      "NO_ACCOUNT": "No account is available from this wallet.",
+      "NO_ADDRESSES_PROVIDER": "The pool did not reveal its addresses provider, so its oracle could not be read.",
+      "NO_FETCH": "This browser cannot make the network request.",
+      "NO_SESSION": "The wallet session has ended. Connect again.",
+      "NO_WALLET": "No Solana wallet was found on this device.",
+      "REJECTED": "You rejected the request in your wallet. Nothing was sent.",
+      "SIGN_FAILED": "The wallet did not sign. Nothing was sent.",
+      "SEND_FAILED": "The wallet did not send the transaction. Nothing was spent.",
+      "BAD_TRANSACTION": "The transaction could not be read before signing, so nothing was sent.",
+      "UNSUPPORTED_TRANSACTION": "This wallet does not accept this transaction format. The app tries the other format automatically — nothing was sent.",
+      "TRANSACTION_FAILED": "The chain rejected the transaction — only the network fee was spent.",
+      "TRANSACTION_NOT_FOUND": "The transaction is not visible on the nodes we tried yet. Check the explorer before retrying.",
+      "UNSUPPORTED": "This wallet cannot perform this action.",
+      "UNKNOWN_WITH_CODE": "The action did not go through ({{code}}). Only the network fee could have been spent; if it repeats, send this code to support.",
+      "MARKET_FROZEN": "The protocol has frozen this reserve: new deposits and new borrows are closed on it. Repaying and withdrawing still work, and those are the way to close an open position.",
+      "TIMEOUT": "The wallet did not answer in time, so nothing was sent. Open the wallet app and try again.",
+      "KAMINO_TX_BUILD_FAILED": "Kamino could not build this transaction, so nothing was signed and nothing was sent. Try again in a moment.",
+      "NO_SIGNATURE": "The wallet answered without a signature, so nothing was sent.",
+      "KAMINO_SDK_MIME": "The Kamino module was served with the wrong content type (the server answered with a page, not the module) — reload the app.",
+      "KAMINO_SDK_RECOVERED": "The Kamino module loaded after a retry. If something fails, reload the app.",
+      "RPC_UNAVAILABLE": "That node answered with something we could not use.",
+      "WALLET_NOT_FOUND": "No Solana wallet app was found on this device to open this request."
     },
     "rateUnknown": "live rate unavailable right now",
     "alerts": {
@@ -10338,7 +10369,30 @@
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
       "viewTransaction": "View transaction",
-      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key.",
+      "pendingTitle": "The request is in your wallet",
+      "pendingBody": "We handed the signature to your wallet app. Approve it there — when you come back we claim the answer ourselves, confirm it on-chain and update your position. Nothing is lost by leaving this screen.",
+      "pendingReopen": "Open the wallet again",
+      "pendingCheck": "Check the result"
+    },
+    "marketHalted": {
+      "title": "This market is closed by the protocol",
+      "body": "Every reserve listed here is frozen by the protocol itself: new deposits and new borrows are closed, and these assets cannot be used as fresh collateral. Repayments and withdrawals still work, and open positions stay open.",
+      "frozen": "Frozen by the protocol",
+      "paused": "Paused by the protocol",
+      "mixed": "Partly frozen / paused by the protocol",
+      "otherMarkets": "To supply or borrow, pick another market on the rail above.",
+      "repayHint": "If you have a position here: repay first, then withdraw. Both are still allowed."
+    },
+    "reserveFrozenHint": "Frozen — repay and withdraw only",
+    "rpc": {
+      "title": "We could not reach the network",
+      "body": "Every public RPC node we tried failed. This is what each one answered:",
+      "useOwn": "Public nodes come and go. Add your own RPC in Settings → Networks so this page stops depending on them."
+    },
+    "wallet": {
+      "title": "The wallet did not open for signing",
+      "switch": "Switch or reconnect the wallet and try again. If it repeats, the wallet's own report below names the reason."
     }
   },
   "sm": {

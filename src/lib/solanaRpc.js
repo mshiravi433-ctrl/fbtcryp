@@ -19,10 +19,10 @@
  *     then the public ones), probed with a real `getHealth` call;
  *   · the winner is remembered for the session, keyed by cluster + custom URL,
  *     so a screen that reads five accounts does not probe five times;
- *   · failures are NAMED (RATE_LIMITED / TIMEOUT / BLOCKED / HTTP_xxx) instead
- *     of collapsing into one string, because "the node is throttling us" and
- *     "the network is censored" have different remedies and only one of them
- *     is fixed by retrying;
+ *   · failures are NAMED (429 → RATE_LIMITED, 401/403/451 → BLOCKED, TIMEOUT,
+ *     UNREACHABLE, HTTP_xxx) instead of collapsing into one string, because
+ *     "the node is throttling us" and "this provider refuses us" have
+ *     different remedies and only one of them is fixed by retrying;
  *   · `probeSolanaRpc()` is exported so Settings can offer a TEST button — a
  *     network selector that cannot be verified is a selector nobody trusts.
  *
@@ -41,16 +41,23 @@ const CHOICE_TTL_MS = 5 * 60 * 1000;
 /**
  * Public, key-less, CORS-enabled clusters endpoints.
  *
- * Order matters: the Foundation endpoint first because it is the one every
- * wallet and explorer agrees on, then community nodes that exist precisely
- * because the first one rate-limits browsers.
+ * ORDER MATTERS, and this list changed on 2026-09-23. The Foundation endpoint
+ * used to be FIRST "because it is the one every wallet and explorer agrees
+ * on" — which is true of wallets and false of browsers: `api.mainnet-beta`.
+ * `solana.com` answers a web page with HTTP 429 when it is busy and with a
+ * flat HTTP 403 ("access forbidden", region/provider block) when it does not
+ * like the caller at all, and it is the host that produced the loan page's
+ * «RPC_RATE_LIMITED» report. The community endpoints after it are exactly the
+ * nodes that exist to serve browsers, so the Foundation node stays on the list
+ * as the LAST resort — kept, not deleted: it is still the canonical node, and
+ * a network where the others are blocked is a real network.
  */
 export const SOLANA_CLUSTER_RPCS = Object.freeze({
   'mainnet-beta': Object.freeze([
-    'https://api.mainnet-beta.solana.com',
     'https://solana-rpc.publicnode.com',
     'https://solana.drpc.org',
-    'https://solana.api.onfinality.io/public'
+    'https://solana.api.onfinality.io/public',
+    'https://api.mainnet-beta.solana.com'
   ]),
   devnet: Object.freeze([
     'https://api.devnet.solana.com',
@@ -86,15 +93,24 @@ export async function readSolanaNetworkSettings() {
   }
 }
 
-/** The ordered candidate list for a cluster, custom RPC first. */
+/**
+ * The ordered candidate list for a cluster: the user's own RPC first (never
+ * cooled — it is a deliberate choice), then the public list with any host that
+ * recently refused or throttled us moved to the BACK.
+ *
+ * The order is stable for hosts in the same state, so two reads in a row do not
+ * shuffle the list under each other.
+ */
 export function solanaRpcCandidates({ cluster = 'mainnet-beta', custom = '' } = {}) {
   const c = normalizeSolanaCluster(cluster);
-  const list = [];
-  if (/^https:\/\//i.test(String(custom || ''))) list.push(String(custom).trim());
-  for (const url of SOLANA_CLUSTER_RPCS[c] || SOLANA_CLUSTER_RPCS['mainnet-beta']) {
-    if (!list.includes(url)) list.push(url);
-  }
-  return list;
+  const customUrl = /^https:\/\//i.test(String(custom || '')) ? String(custom).trim() : '';
+  pruneCooling();
+  const publicList = (SOLANA_CLUSTER_RPCS[c] || SOLANA_CLUSTER_RPCS['mainnet-beta'])
+    .filter((url) => url !== customUrl);
+  const warm = publicList.filter((url) => !cooling.has(url));
+  const cold = publicList.filter((url) => cooling.has(url));
+  const list = customUrl ? [customUrl, ...warm, ...cold] : [...warm, ...cold];
+  return [...new Set(list)];
 }
 
 /**
@@ -120,11 +136,24 @@ export async function solanaRpcCall(url, method, params = [], { timeoutMs = RPC_
     });
     const ms = Date.now() - started;
     if (!res.ok) {
-      return { ok: false, ms, url, reason: res.status === 429 ? 'RATE_LIMITED' : `HTTP_${res.status}` };
+      /* 429 is throttling: waiting fixes it. 401/403/451 are REFUSALS — the
+         host has decided not to serve this caller (region block, WAF, provider
+         policy) and no amount of retrying changes it; only another node does.
+         Collapsing the two into one reason is how a 403 came to be reported to
+         a user as «the node is rate limiting us», which is a different fact
+         with a different remedy. */
+      const refusal = res.status === 401 || res.status === 403 || res.status === 451;
+      const reason = res.status === 429 ? 'RATE_LIMITED' : refusal ? 'BLOCKED' : `HTTP_${res.status}`;
+      /* The one place every RPC failure passes through — so it is the one place
+         that has to remember the host refused us. */
+      noteSolanaRpcFailure(url, reason, { status: res.status });
+      return { ok: false, ms, url, reason, detail: `HTTP ${res.status}` };
     }
     const body = await res.json().catch(() => null);
     if (!body) return { ok: false, ms, url, reason: 'BAD_RESPONSE' };
     if (body.error) return { ok: false, ms, url, reason: 'RPC_ERROR', detail: String(body.error?.message || '').slice(0, 160) };
+    /* It answered — whatever it did before is history. */
+    clearSolanaRpcCooldown(url);
     return { ok: true, ms, url, result: body.result };
   } catch (e) {
     const ms = Date.now() - started;
@@ -143,6 +172,74 @@ export async function solanaRpcCall(url, method, params = [], { timeoutMs = RPC_
 const chosen = new Map();
 
 const keyOf = (cluster, custom) => `${normalizeSolanaCluster(cluster)}|${custom || ''}`;
+
+/**
+ * Hosts that just refused or throttled us: url → { until, reason, status }.
+ *
+ * WHY A COOLDOWN AND NOT JUST A REORDER (2026-09-23)
+ * --------------------------------------------------
+ * The loan page read the market once per refresh, and every refresh began with
+ * the FIRST candidate. `api.mainnet-beta.solana.com` answers a browser with
+ * HTTP 403 from some networks and 429 when it is busy, so a user in that
+ * situation paid a failing round trip on every single read, then read the
+ * failure of the first host as the reason nothing worked. A host that just
+ * refused us is by far the least likely one to answer in the next few minutes;
+ * it moves to the back of the queue for a while, and comes back on its own.
+ *
+ * Nothing is ever removed from the list — a cooled host is still tried when
+ * everything else fails, and the user's own RPC is never cooled at all (a
+ * deliberate choice stays a choice, and it is the caller's to change).
+ */
+const cooling = new Map();
+
+/** A throttle clears quickly; a refusal does not. */
+const COOLDOWN_RATE_LIMIT_MS = 3 * 60 * 1000;
+const COOLDOWN_REFUSAL_MS = 30 * 60 * 1000;
+
+const pruneCooling = (now = Date.now()) => {
+  for (const [url, row] of cooling) if (row.until <= now) cooling.delete(url);
+};
+
+/**
+ * Record that a host just failed in a way that says «not right now».
+ *
+ * Called from `solanaRpcCall` for every failure, so every caller — the probe,
+ * the lending reads, the balance reads — teaches the same map.
+ *
+ * @param {string} url
+ * @param {string} reason RATE_LIMITED | BLOCKED | HTTP_xxx
+ * @param {{status?:number|null}} [meta]
+ * @returns {number|null} the moment the cooldown ends, or null when nothing was recorded
+ */
+export function noteSolanaRpcFailure(url, reason, { status = null } = {}) {
+  const u = String(url || '').trim();
+  if (!u) return null;
+  const refused = reason === 'BLOCKED' || status === 401 || status === 403 || status === 451;
+  const throttled = reason === 'RATE_LIMITED' || status === 429;
+  if (!refused && !throttled) return null;
+  const ms = refused ? COOLDOWN_REFUSAL_MS : COOLDOWN_RATE_LIMIT_MS;
+  const until = Date.now() + ms;
+  cooling.set(u, { until, reason: refused ? 'BLOCKED' : 'RATE_LIMITED', status: status ?? null });
+  return until;
+}
+
+/** Is this host cooling right now? */
+export function solanaRpcCooling(url) {
+  pruneCooling();
+  return cooling.get(String(url || '').trim()) || null;
+}
+
+/** Everything currently cooling — diagnostics, and the Settings screen. */
+export function solanaRpcCooldowns() {
+  pruneCooling();
+  return [...cooling.entries()].map(([url, row]) => ({ url, ...row }));
+}
+
+/** Forget one host's cooldown (a successful call does this by itself). */
+export function clearSolanaRpcCooldown(url = null) {
+  if (url) cooling.delete(String(url).trim());
+  else cooling.clear();
+}
 
 /** Drop the remembered choice (Settings changed, or a caller hit a wall). */
 export function resetSolanaRpcChoice() {
@@ -172,16 +269,25 @@ export async function probeSolanaRpc({ cluster, custom, timeoutMs = RPC_TIMEOUT_
   }
   /* Nothing answered. Report the MOST INFORMATIVE reason, not the last one:
      four timeouts and one 429 should read as throttling, because that is the
-     one a retry can fix. */
+     one a retry can fix.
+     A BLOCKED attempt (401/403/451) counts as UNREACHABLE here on purpose: the
+     existing vocabulary and its translations already say the honest thing
+     («no Solana node is reachable from this network path — access to these
+     services is most likely blocked»), and the per-host detail below still
+     carries the exact status. Reporting a refusal as RATE_LIMITED was the bug;
+     reporting it as "we cannot get through from here" is the truth. */
+  const isBlocked = (a) => a.reason === 'BLOCKED';
+  const dead = (a) => isBlocked(a) || a.reason === 'UNREACHABLE';
   const rateLimited = attempts.some((a) => a.reason === 'RATE_LIMITED');
-  const unreachable = attempts.every((a) => a.reason === 'UNREACHABLE');
+  const unreachable = attempts.every(dead);
   const timedOut = !unreachable && attempts.every((a) => a.reason === 'TIMEOUT' || a.reason === 'RATE_LIMITED');
   return {
     ok: false,
     url: null,
     cluster: settings.cluster,
     attempts,
-    reason: rateLimited ? 'RATE_LIMITED' : unreachable ? 'UNREACHABLE' : timedOut ? 'TIMEOUT' : 'UNAVAILABLE'
+    blocked: attempts.some(isBlocked),
+    reason: rateLimited && !unreachable ? 'RATE_LIMITED' : unreachable ? 'UNREACHABLE' : timedOut ? 'TIMEOUT' : 'UNAVAILABLE'
   };
 }
 

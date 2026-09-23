@@ -162,6 +162,7 @@ export { publicAppUrl } from './nativeShell.js';
  * deeplink session is a third source of an address, and route signing to it.
  */
 import { clearDeeplinkSession, deeplinkSession, deeplinkSessionAddress } from './solana/deeplink.js';
+import { convertTransactionVersion, detectTransactionVersion, payloadForWallet } from './solana/txVersion.js';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -711,13 +712,21 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
     const feature = mwa.features?.['solana:signAndSendTransaction'];
     const account = mwaAccount ?? mwa.accounts?.find((a) => a.address === mwaAddress);
     if (!feature?.signAndSendTransaction || !account) throw new Error('CANNOT_SIGN');
-    const supported = feature.supportedTransactionVersions ?? [];
-    const wantedVersion = versioned ? 0 : 'legacy';
-    if (supported.length && !supported.includes(wantedVersion)) throw new Error('UNSUPPORTED_TRANSACTION');
+    /* ── the version the WALLET accepts, not the one we built ────────────────
+       Android MWA wallets advertise `supportedTransactionVersions: [0]` — v0
+       only — while the vendored Kamino SDK builds LEGACY transactions. The old
+       code compared the two and threw UNSUPPORTED_TRANSACTION *before opening
+       the wallet*, which the screen could only report as «it did not sign».
+       The message envelope is convertible (src/lib/solana/txVersion.js): the
+       instructions, accounts, fee payer and blockhash are preserved, so the
+       transaction the wallet is asked to sign is the SAME transaction, in the
+       format it accepts. */
+    const builtAs = versioned ? 0 : 'legacy';
+    const { payload } = await payloadForWallet(base64Tx, feature.supportedTransactionVersions, builtAs);
     try {
       const results = await feature.signAndSendTransaction({
         account,
-        transaction: base64ToBytes(base64Tx),
+        transaction: payload,
         chain: 'solana:mainnet',
         options: { commitment: 'confirmed', skipPreflight: false, maxRetries: 3 }
       });
@@ -750,35 +759,70 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
 
   const { Transaction, VersionedTransaction } = await import('@solana/web3.js');
 
-  let tx;
-  try {
-    const bytes = base64ToBytes(base64Tx);
-    tx = versioned ? VersionedTransaction.deserialize(bytes) : Transaction.from(bytes);
-  } catch {
-    throw new Error('BAD_TRANSACTION');
-  }
+  /*
+   * WHAT THE WALLET IS ASKED TO SIGN.
+   *
+   * Two things can be wrong before the wallet ever sees a request, and both
+   * used to end as «it did not sign»: the caller's `versioned` flag may not
+   * match the bytes (or the bytes may not match either envelope), and the
+   * wallet may refuse the format it was handed. So the transaction is read with
+   * the envelope it actually has, and a wallet that answers with a
+   * FORMAT-looking failure is given the other envelope once. A rejection is
+   * never retried, and a chain failure (simulation) is never retried as a
+   * different format — those are answers, not misunderstandings.
+   */
+  const deserialize = (payload) => (detectTransactionVersion(payload) === 'legacy'
+    ? Transaction.from(base64ToBytes(payload))
+    : VersionedTransaction.deserialize(base64ToBytes(payload)));
 
+  const attempts = [base64Tx];
+  const otherTarget = detectTransactionVersion(base64Tx) === 'legacy' ? 0 : 'legacy';
   try {
-    if (typeof provider.signAndSendTransaction === 'function') {
-      const res = await provider.signAndSendTransaction(tx);
-      // Phantom returns { signature }, some wallets return the string directly.
-      const sig = typeof res === 'string' ? res : res?.signature;
-      if (!sig) throw new Error('NO_SIGNATURE');
-      return sig;
+    attempts.push(await convertTransactionVersion(base64Tx, otherTarget));
+  } catch { /* no faithful conversion exists — one attempt is the honest plan */ }
+
+  const mapProviderError = (err) => {
+    if (err?.code === 4001 || /reject|denied|cancel/i.test(String(err?.message))) return new Error('REJECTED');
+    if (err?.message === 'CANNOT_SIGN' || err?.message === 'NO_SIGNATURE') return err;
+    if (err?.message === 'UNSUPPORTED_TRANSACTION' || err?.message === 'BAD_TRANSACTION') return err;
+    if (/insufficient|simulation failed|0x1/i.test(String(err?.message))) return new Error('INSUFFICIENT_BALANCE');
+    return new Error('SEND_FAILED');
+  };
+  const looksLikeFormatProblem = (err) => {
+    const text = String(err?.message || err || '');
+    if (/reject|denied|cancel|insufficient|simulation/i.test(text)) return false;
+    return /unsupported|not supported|invalid|deserial|version|verif/i.test(text);
+  };
+
+  let lastFormatError = null;
+  for (const payload of attempts) {
+    let tx;
+    try {
+      tx = deserialize(payload);
+    } catch (err) {
+      lastFormatError = mapProviderError(err);
+      continue;
     }
-    if (typeof provider.signTransaction === 'function') {
-      const signed = await provider.signTransaction(tx);
-      return await sendRawSolana(bytesToBase64(signed.serialize()));
+    try {
+      if (typeof provider.signAndSendTransaction === 'function') {
+        const res = await provider.signAndSendTransaction(tx);
+        // Phantom returns { signature }, some wallets return the string directly.
+        const sig = typeof res === 'string' ? res : res?.signature;
+        if (!sig) throw new Error('NO_SIGNATURE');
+        return sig;
+      }
+      if (typeof provider.signTransaction === 'function') {
+        const signed = await provider.signTransaction(tx);
+        return await sendRawSolana(bytesToBase64(signed.serialize()));
+      }
+      throw new Error('CANNOT_SIGN');
+    } catch (err) {
+      const mapped = mapProviderError(err);
+      if (mapped.message !== 'SEND_FAILED' || !looksLikeFormatProblem(err)) throw mapped;
+      lastFormatError = mapped;
     }
-    throw new Error('CANNOT_SIGN');
-  } catch (err) {
-    if (err?.code === 4001 || /reject|denied|cancel/i.test(String(err?.message))) {
-      throw new Error('REJECTED');
-    }
-    if (err?.message === 'CANNOT_SIGN' || err?.message === 'NO_SIGNATURE') throw err;
-    if (/insufficient|simulation failed|0x1/i.test(String(err?.message))) throw new Error('INSUFFICIENT_BALANCE');
-    throw new Error('SEND_FAILED');
   }
+  throw lastFormatError || new Error('SEND_FAILED');
 }
 
 /**

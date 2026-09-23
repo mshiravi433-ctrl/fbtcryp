@@ -1135,7 +1135,8 @@
       "supply": "Setor",
       "borrow": "Pinjam",
       "repay": "Bayar",
-      "withdraw": "Tarik"
+      "withdraw": "Tarik",
+      "approve": "Persetujuan"
     },
     "done": {
       "collateral": "Tanda kolateral diperbarui",
@@ -1245,7 +1246,38 @@
       "KAMINO_SDK_FAILED": "Modul Kamino gagal dijalankan. Perbarui aplikasi dan coba lagi.",
       "KAMINO_SDK_TRUNCATED": "Modul Kamino hanya terunduh sebagian — koneksi terputus. Coba lagi dengan koneksi yang lebih stabil.",
       "KAMINO_SDK_INIT_FAILED": "Modul Kamino terunduh tetapi gagal dijalankan. Perbarui aplikasi, dan jika berulang kirim pesan ini ke dukungan.",
-      "KAMINO_TX_BUILD_EMPTY": "Kamino tidak mengembalikan transaksi untuk tindakan ini — tidak ada yang dikirim dan tidak ada biaya."
+      "KAMINO_TX_BUILD_EMPTY": "Kamino tidak mengembalikan transaksi untuk tindakan ini — tidak ada yang dikirim dan tidak ada biaya.",
+      "RPC_BLOCKED": "Satu atau beberapa node Solana menolak permintaan (403 — blokir dari penyedia atau jaringan, bukan batas laju). Coba lagi, atau isi RPC sendiri di Pengaturan → Jaringan.",
+      "BAD_PAYLOAD": "Jawaban penyedia tidak bisa dipakai. Coba lagi sebentar.",
+      "BAD_RESPONSE": "Node menjawab dengan sesuatu yang bukan data. Coba lagi sebentar.",
+      "BAD_WALLET": "Dompet ini tidak bisa dipakai untuk tindakan ini.",
+      "BFF_UNAVAILABLE": "Server aplikasi tidak menjawab. Tidak ada yang dikirim — coba lagi sebentar.",
+      "CONNECT_FAILED": "Koneksi dompet tidak selesai.",
+      "GAS_LIMIT_UNAVAILABLE": "Biaya jaringan tidak bisa diperkirakan, jadi tidak ada transaksi yang dikirim.",
+      "IN_WALLET": "Permintaan diteruskan ke aplikasi dompetmu. Setujui di sana — hasilnya menunggu di sini saat kamu kembali.",
+      "NO_ACCOUNT": "Tidak ada akun yang tersedia dari dompet ini.",
+      "NO_ADDRESSES_PROVIDER": "Pool tidak mengungkap penyedia alamatnya, jadi oracle-nya tidak bisa dibaca.",
+      "NO_FETCH": "Peramban ini tidak bisa mengirim permintaan jaringan.",
+      "NO_SESSION": "Sesi dompet sudah berakhir. Sambungkan lagi.",
+      "NO_WALLET": "Tidak ada dompet Solana di perangkat ini.",
+      "REJECTED": "Kamu menolak permintaan di dompetmu. Tidak ada yang dikirim.",
+      "SIGN_FAILED": "Dompet tidak menandatangani. Tidak ada yang dikirim.",
+      "SEND_FAILED": "Dompet tidak mengirim transaksi. Tidak ada yang terpakai.",
+      "BAD_TRANSACTION": "Transaksi tidak bisa dibaca sebelum ditandatangani, jadi tidak ada yang dikirim.",
+      "UNSUPPORTED_TRANSACTION": "Dompet ini tidak menerima format transaksi ini. Aplikasi otomatis mencoba format lainnya — tidak ada yang dikirim.",
+      "TRANSACTION_FAILED": "Rantai menolak transaksi — hanya biaya jaringan yang terpakai.",
+      "TRANSACTION_NOT_FOUND": "Transaksi belum terlihat di node yang kami coba. Periksa explorer sebelum mengulang.",
+      "UNSUPPORTED": "Dompet ini tidak bisa melakukan tindakan ini.",
+      "UNKNOWN_WITH_CODE": "Tindakan tidak berhasil ({{code}}). Paling banyak hanya biaya jaringan terpakai; jika berulang, kirim kode ini ke dukungan.",
+      "SOLANA_TX_FAILED": "Transaksi Solana tidak berhasil di rantai — tidak ada yang terpakai.",
+      "MARKET_FROZEN": "Protokol membekukan cadangan ini: setoran baru dan pinjaman baru ditutup. Pelunasan dan penarikan masih berjalan, dan itulah jalan menutup posisi yang terbuka.",
+      "TIMEOUT": "Dompet tidak menjawab tepat waktu, jadi tidak ada yang dikirim. Buka aplikasi dompet dan coba lagi.",
+      "KAMINO_TX_BUILD_FAILED": "Kamino tidak bisa membangun transaksi ini, jadi tidak ada yang ditandatangani atau dikirim. Coba lagi sebentar.",
+      "NO_SIGNATURE": "Dompet menjawab tanpa tanda tangan, jadi tidak ada yang dikirim.",
+      "KAMINO_SDK_MIME": "Modul Kamino disajikan dengan content-type yang salah (server mengirim halaman, bukan modul) — muat ulang aplikasi.",
+      "KAMINO_SDK_RECOVERED": "Modul Kamino termuat setelah diulang. Kalau ada yang gagal, muat ulang aplikasi.",
+      "WALLET_NOT_FOUND": "Tidak ada aplikasi dompet Solana di perangkat ini untuk membuka permintaan ini — pasang atau buka aplikasinya lalu coba lagi.",
+      "RPC_UNAVAILABLE": "Node itu menjawab dengan sesuatu yang tidak dapat kami gunakan."
     },
     "ratesUpdated": "Suku bunga dibaca dari kontrak lending (Morpho/Aave) — diperbarui otomatis.",
     "connectWallet": "Hubungkan dompet",
@@ -1351,7 +1383,30 @@
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
       "viewTransaction": "View transaction",
-      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key.",
+      "pendingTitle": "Permintaannya ada di dompetmu",
+      "pendingBody": "Kami sudah menyerahkan tanda tangan ke aplikasi dompetmu. Setujui di sana — saat kamu kembali, kami sendiri yang mengambil jawabannya, memastikannya di rantai, dan memperbarui posisimu. Meninggalkan layar ini tidak menghilangkan apa pun.",
+      "pendingReopen": "Buka dompet lagi",
+      "pendingCheck": "Periksa hasilnya"
+    },
+    "marketHalted": {
+      "title": "Pasar ini ditutup oleh protokol",
+      "body": "Semua cadangan di sini dibekukan oleh protokol itu sendiri: setoran baru dan pinjaman baru ditutup, dan aset ini tidak bisa dipakai sebagai jaminan baru. Pelunasan dan penarikan masih berjalan, dan posisi yang terbuka tetap terbuka.",
+      "frozen": "Dibekukan protokol",
+      "paused": "Dihentikan protokol",
+      "mixed": "Sebagian dibekukan / dihentikan protokol",
+      "otherMarkets": "Untuk menyetor atau meminjam, pilih pasar lain di bar di atas.",
+      "repayHint": "Kalau ada posisi di sini: lunasi dulu, baru tarik. Keduanya masih diizinkan."
+    },
+    "reserveFrozenHint": "Dibekukan — hanya pelunasan dan penarikan",
+    "rpc": {
+      "title": "Data pasar tidak dapat dibaca",
+      "body": "Kami mencoba node Solana berikut; jawaban masing-masing ada di bawah.",
+      "useOwn": "Tambahkan RPC Anda sendiri di Pengaturan → Jaringan agar aplikasi tidak lagi bergantung pada node publik."
+    },
+    "wallet": {
+      "title": "Dompet tidak terbuka",
+      "switch": "Buka kunci dompet, pastikan berada di Solana mainnet, lalu coba lagi. Tidak ada yang dikirim dan tidak ada biaya."
     }
   },
   "intentAI": {

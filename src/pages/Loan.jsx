@@ -53,6 +53,7 @@ import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
 import { useTelegram } from '../context/TelegramContext';
 import { SOLANA_LENDING_CHAIN_ID } from '../lib/lending.js';
+import { loanErrorText } from '../lib/loanErrors';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import { apiBase } from '../lib/apiBase';
 import {
@@ -495,7 +496,7 @@ function RiskMeter({ projection, account, t }) {
       )}
       {projection && !projection.ok && (
         <p data-testid="loan-risk-unavailable" style={{ fontSize: 10.5, lineHeight: 1.6, color: '#fbbf24', margin: '7px 0 0' }}>
-          {t('loan.riskUnavailable', { reason: t(`loan.error.${projection.reason}`, { defaultValue: projection.reason }) })}
+          {t('loan.riskUnavailable', { reason: loanErrorText(t, projection.reason) })}
         </p>
       )}
       {/* §41 — never a guarantee. */}
@@ -559,7 +560,10 @@ function ReasonList({ items, tone, t, testId, lang }) {
           style={{ fontSize: 11, lineHeight: 1.6, color, margin: 0 }}
         >
           <span style={{ fontWeight: 800 }}>{tone === 'danger' ? '✕ ' : '⚠ '}</span>
-          {t(`loan.error.${item.code}`, { defaultValue: item.code })}
+          {/* A code renders as a SENTENCE, never as itself: the old
+              `defaultValue: item.code` is what printed «BORROWING_DISABLED»
+              under a Persian heading («سه‌جا با استرینگ هست به جای زبان درست»). */}
+          {loanErrorText(t, item.code)}
           {showDetailInline && item.detail ? <span style={{ color: 'var(--text-2)' }}> — {item.detail}</span> : null}
         </p>
       ))}
@@ -627,6 +631,52 @@ function UnavailableBanner({ failures, onRetry, t }) {
   );
 }
 
+/**
+ * A market the PROTOCOL has closed.
+ *
+ * Aave's 2026 wind-down (Sonic, Scroll, zkSync, Metis, Soneium, Aptos — ARFC
+ * 2026-07-30) freezes every reserve of a market, cuts the caps to 1 and lifts
+ * the reserve factor to 99%. Read from the reserve bitmap, that is a wall of
+ * reserves whose status is `frozen`, and the page used to answer it with
+ * greyed-out cards and a one-word label — which is how «در شبکه سونیک اصلا
+ * فریز و قابل وام نیست توکن‌ها» was reported.
+ *
+ * The facts, stated once and in the user's language: the protocol closed this
+ * market to NEW supply and NEW borrow, repay and withdraw still work, open
+ * positions stay open, and another market is one tap away on the rail above.
+ * Nothing here invents a state: it is rendered only when every listed reserve
+ * really is frozen/paused, and it never bypasses the engine's own gating.
+ */
+function MarketHaltedNotice({ kind, t }) {
+  const tone = kind === 'paused' ? '#f87171' : '#fbbf24';
+  const title = kind === 'paused' ? t('loan.marketHalted.paused')
+    : kind === 'mixed' ? t('loan.marketHalted.mixed')
+      : t('loan.marketHalted.frozen');
+  return (
+    <div
+      data-testid="loan-market-halted"
+      data-kind={kind}
+      style={{
+        borderRadius: 14, padding: '12px 14px', marginBottom: 12,
+        background: `${tone}10`, border: `1px solid ${tone}33`,
+      }}
+    >
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: tone, marginBottom: 3 }}>
+        {t('loan.marketHalted.title')} · {title}
+      </div>
+      <p style={{ fontSize: 11.5, lineHeight: 1.75, color: 'var(--text-2)', margin: '0 0 6px' }}>
+        {t('loan.marketHalted.body')}
+      </p>
+      <p style={{ fontSize: 11.5, lineHeight: 1.75, color: 'var(--text-2)', margin: 0 }}>
+        {t('loan.marketHalted.repayHint')}
+      </p>
+      <p style={{ fontSize: 11, lineHeight: 1.7, color: 'var(--text-3)', margin: '6px 0 0' }}>
+        {t('loan.marketHalted.otherMarkets')}
+      </p>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ASSET CARD
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -637,10 +687,19 @@ function AssetCard({ asset, selected, onClick, reserve, loading, side, t, price 
      leaves `listed` null — unknown rates, but the asset stays usable. */
   const unavailable = reserve?.listed === false;
   const rateUnknown = reserve != null && reserve.listed == null;
-  /* §29 — a reserve the protocol has paused or frozen is shown but cannot be
-     acted on. Offering it as live ends in a revert the user pays gas for. */
-  const halted = reserve?.status === 'paused' || reserve?.status === 'frozen';
-  const blocked = unavailable || halted;
+  /* §29 — frozen and paused are NOT the same thing to a user who already has
+     a position, and treating them alike was a dead end (2026‑09‑23 report:
+     «در شبکه سونیک اصلا فریز و قابل وام نیست توکن‌ها»).
+     Aave's FROZEN reserve closes NEW supply and NEW borrow, while repay and
+     withdraw stay open — that is exactly how the 2026 wind-down of Sonic and
+     the other chains asks positions to unwind. Disabling the card made the
+     market unreachable, so a frozen reserve could not even be selected to
+     repay against.
+     Aave's PAUSED reserve stops every action, so there the card IS inert. */
+  const frozen = reserve?.status === 'frozen';
+  const paused = reserve?.status === 'paused';
+  const halted = frozen || paused;
+  const blocked = unavailable || paused;
   return (
     <motion.button
       type="button"
@@ -669,10 +728,26 @@ function AssetCard({ asset, selected, onClick, reserve, loading, side, t, price 
       <AssetAvatar asset={asset} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.3 }}>{asset.symbol}</div>
+        <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.3 }}>
+          {asset.symbol}
+          {frozen && (
+            <span
+              data-testid="loan-asset-frozen-badge"
+              style={{
+                marginInlineStart: 6, verticalAlign: 'middle',
+                fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 99,
+                background: 'rgba(251,191,36,0.16)', color: '#fbbf24',
+                border: '1px solid rgba(251,191,36,0.32)',
+              }}
+            >
+              {t('loan.reserveStatus.frozen')}
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
           {unavailable ? t('loan.reserveUnavailable')
-            : halted ? t(`loan.reserveStatus.${reserve.status}`)
+            : frozen ? t('loan.reserveFrozenHint')
+              : paused ? t(`loan.reserveStatus.${reserve.status}`)
               : rateUnknown ? t('loan.rateUnknown')
                 /* §21 — the price shown next to a market is the PROTOCOL's
                    oracle price, and it is labelled unavailable rather than
@@ -986,7 +1061,7 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
                 padding: '9px 11px', borderRadius: 11,
                 background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)',
               }}>
-                {t('loan.riskUnavailable', { reason: t(`loan.error.${exec.risk.reason}`, { defaultValue: exec.risk.reason }) })}
+                {t('loan.riskUnavailable', { reason: loanErrorText(t, exec.risk.reason) })}
               </p>
             )}
 
@@ -1096,7 +1171,7 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
                   fontSize: 12, lineHeight: 1.7, color: '#f8a8a8',
                 }}
               >
-                {t(`loan.error.${exec?.code || 'UNKNOWN'}`, { defaultValue: exec?.message || t('loan.error.UNKNOWN') })}
+                {loanErrorText(t, exec?.code || 'UNKNOWN')}
               </div>
             )}
 
@@ -1789,14 +1864,14 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
                     )}
                     {maxBorrow && !maxBorrow.ok && (
                       <span data-testid="loan-max-borrow-unavailable" style={{ display: 'block', marginTop: 4, fontSize: 11, lineHeight: 1.6, color: 'var(--text-3)' }}>
-                        {t('loan.maxBorrowUnavailable', { reason: t(`loan.error.${maxBorrow.reason}`, { defaultValue: maxBorrow.reason }) })}
+                        {t('loan.maxBorrowUnavailable', { reason: loanErrorText(t, maxBorrow.reason) })}
                       </span>
                     )}
                   </>
                 ) : (
                   <p data-testid="loan-borrow-unavailable" style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: 0 }}>
                     {t('loan.powerUnavailable')}
-                    {maxBorrow?.reason ? ` ${t(`loan.error.${maxBorrow.reason}`, { defaultValue: '' })}`.trim() : ''}
+                    {maxBorrow?.reason ? ` ${loanErrorText(t, maxBorrow.reason)}`.trim() : ''}
                   </p>
                 )}
               </div>
@@ -2245,7 +2320,7 @@ function HistoryList({ history, market, t }) {
                       </span>
                       {entry.code && (
                         <span style={{ display: 'block', fontSize: 9.5, color: tone }}>
-                          {t(`loan.error.${entry.code}`, { defaultValue: entry.code })}
+                          {loanErrorText(t, entry.code)}
                         </span>
                       )}
                     </span>
@@ -3226,6 +3301,17 @@ export default function Loan() {
      silently disables every button on the page. */
   market.chainId = chain;
 
+  /* Is this whole market closed by the protocol? Answered from the reserves
+     that were actually read — a reserve whose read failed (`listed` null) is
+     not counted either way, so an unread market never renders as «closed». */
+  const listedReserves = Object.values(reserves || {}).filter((r) => r && r.listed !== false);
+  const haltedReserves = listedReserves.filter((r) => r.status === 'frozen' || r.status === 'paused');
+  const marketHaltedKind = listedReserves.length > 0 && haltedReserves.length === listedReserves.length
+    ? (haltedReserves.every((r) => r.status === 'frozen') ? 'frozen'
+      : haltedReserves.every((r) => r.status === 'paused') ? 'paused'
+        : 'mixed')
+    : null;
+
   const TABS = [
     { id: 'supply',    label: t('loan.tabSupply'),    icon: <IconTrend  width={14} height={14} /> },
     { id: 'borrow',    label: t('loan.tabBorrow'),    icon: <IconPools  width={14} height={14} /> },
@@ -3316,7 +3402,7 @@ export default function Loan() {
             <button type="button" className="icon-btn" aria-label={t('common.close', { defaultValue: 'Close' })} onClick={() => setCollateralRefusal(null)}>✕</button>
           </div>
           <p style={{ fontSize: 11.5, lineHeight: 1.7, color: 'var(--text-2)', margin: '4px 0 0' }}>
-            {t(`loan.error.${collateralRefusal.code}`, { defaultValue: collateralRefusal.reason })}
+            {loanErrorText(t, collateralRefusal.code)}
             {collateralRefusal.healthFactorAfter != null && (
               <span style={{ display: 'block', fontFamily: 'var(--font-mono)', marginTop: 3 }}>
                 {t('loan.healthFactorAfter')}: {collateralRefusal.healthFactorAfter.toFixed(2)} · {t('loan.liquidationPoint')}: 1.00
@@ -3389,6 +3475,12 @@ export default function Loan() {
 
       {/* ── Market picker ──────────────────────────────────────────────── */}
       <ChainRail chain={chain} onPick={(id) => { haptic?.('select'); setChain(id); }} t={t} />
+
+      {/* §29 — the protocol has closed this market to new positions. Said once,
+          with what still works, instead of leaving it to a wall of grey cards. */}
+      {chain !== SOLANA_LENDING_CHAIN_ID && marketHaltedKind && !loading && (
+        <MarketHaltedNotice kind={marketHaltedKind} t={t} />
+      )}
 
       {chain === SOLANA_LENDING_CHAIN_ID && (
         <SolanaLendingPanel t={t} tab={tab} setTab={setTab} preset={preset} />

@@ -1135,7 +1135,8 @@
       "supply": "存入",
       "borrow": "借入",
       "repay": "还款",
-      "withdraw": "提取"
+      "withdraw": "提取",
+      "approve": "授权"
     },
     "done": {
       "collateral": "抵押品开关已更新",
@@ -1245,7 +1246,38 @@
       "KAMINO_SDK_FAILED": "Kamino 模块启动失败。请更新应用后重试。",
       "KAMINO_SDK_TRUNCATED": "Kamino 模块只下载了一部分——连接被中断。请在更稳定的网络下重试。",
       "KAMINO_SDK_INIT_FAILED": "Kamino 模块已下载但启动失败。请更新应用；若反复出现，请把这条消息发给客服。",
-      "KAMINO_TX_BUILD_EMPTY": "Kamino 未返回该操作的交易——没有发送任何内容，也没有扣除手续费。"
+      "KAMINO_TX_BUILD_EMPTY": "Kamino 未返回该操作的交易——没有发送任何内容，也没有扣除手续费。",
+      "RPC_BLOCKED": "一个或多个 Solana 节点拒绝了请求（403——来自提供方或网络的封锁，而非限速）。请重试，或在“设置 → 网络”中填入自己的 RPC。",
+      "BAD_PAYLOAD": "提供方的返回无法使用。请稍后再试。",
+      "BAD_RESPONSE": "节点返回的不是数据。请稍后再试。",
+      "BAD_WALLET": "此钱包不能用于该操作。",
+      "BFF_UNAVAILABLE": "应用自己的服务器没有响应。没有发送任何内容——请稍后再试。",
+      "CONNECT_FAILED": "钱包连接没有完成。",
+      "GAS_LIMIT_UNAVAILABLE": "无法估算网络手续费，因此没有发送交易。",
+      "IN_WALLET": "请求已交给你的钱包应用。请在那里确认——回来时结果会在这里。",
+      "NO_ACCOUNT": "此钱包没有可用账户。",
+      "NO_ADDRESSES_PROVIDER": "资金池没有公开其地址提供方，因此无法读取它的预言机。",
+      "NO_FETCH": "此浏览器无法发起网络请求。",
+      "NO_SESSION": "钱包会话已结束。请重新连接。",
+      "NO_WALLET": "此设备上未找到 Solana 钱包。",
+      "REJECTED": "你在钱包里拒绝了请求。没有发送任何内容。",
+      "SIGN_FAILED": "钱包没有签名。没有发送任何内容。",
+      "SEND_FAILED": "钱包没有发送交易。没有花费任何内容。",
+      "BAD_TRANSACTION": "签名前无法读取该交易，因此没有发送任何内容。",
+      "UNSUPPORTED_TRANSACTION": "此钱包不接受这种交易格式。应用会自动尝试另一种格式——没有发送任何内容。",
+      "TRANSACTION_FAILED": "链上拒绝了该交易——只花费了网络手续费。",
+      "TRANSACTION_NOT_FOUND": "我们试过的节点上还看不到这笔交易。重试前请先在区块浏览器上核实。",
+      "UNSUPPORTED": "此钱包无法执行该操作。",
+      "UNKNOWN_WITH_CODE": "操作未完成（{{code}}）。最多只损失网络手续费；若反复出现，请把这个代码发给客服。",
+      "SOLANA_TX_FAILED": "Solana 交易未在链上成功——没有花费任何内容。",
+      "MARKET_FROZEN": "协议已冻结该储备：新的存款和借款已关闭。还款和提现仍然可用，这正是了结已有仓位的途径。",
+      "TIMEOUT": "钱包没有及时响应，因此没有发送任何内容。请打开钱包应用后重试。",
+      "KAMINO_TX_BUILD_FAILED": "Kamino 无法构建这笔交易，因此没有任何内容被签名或发送。请稍后再试。",
+      "NO_SIGNATURE": "钱包回复中没有签名，因此没有发送任何内容。",
+      "KAMINO_SDK_MIME": "Kamino 模块的内容类型不正确（服务器返回的是页面而不是模块）——请重新加载应用。",
+      "KAMINO_SDK_RECOVERED": "重试后 Kamino 模块已加载。若出现问题，请重新加载应用。",
+      "WALLET_NOT_FOUND": "此设备上未找到可打开此请求的 Solana 钱包应用——请安装或打开钱包应用后重试。",
+      "RPC_UNAVAILABLE": "该节点返回了我们无法使用的内容。"
     },
     "ratesUpdated": "利率从借贷合约（Morpho/Aave）读取 —— 自动刷新。",
     "connectWallet": "连接钱包",
@@ -1351,7 +1383,30 @@
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
       "viewTransaction": "View transaction",
-      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key."
+      "securityNote": "Transactions are built from the live Kamino market and signed by your connected Solana wallet. FBT never receives your private key.",
+      "pendingTitle": "请求在你的钱包里",
+      "pendingBody": "我们已把签名请求交给你的钱包应用。请在那里确认——你回来时我们会自己取回结果，在链上确认并更新你的仓位。离开此页面不会丢失任何进度。",
+      "pendingReopen": "再次打开钱包",
+      "pendingCheck": "查看结果"
+    },
+    "marketHalted": {
+      "title": "该市场已被协议关闭",
+      "body": "这里列出的所有储备都已被协议本身冻结：新的存款和新的借款都已关闭，这些资产也不能作为新的抵押。还款和提现仍然可用，已有的仓位保持开放。",
+      "frozen": "已被协议冻结",
+      "paused": "已被协议暂停",
+      "mixed": "部分被冻结 / 暂停",
+      "otherMarkets": "要存款或借款，请在上方的市场栏里选择另一个市场。",
+      "repayHint": "如果这里有仓位：先还款，再提现。两者都仍然允许。"
+    },
+    "reserveFrozenHint": "已冻结——仅可还款和提现",
+    "rpc": {
+      "title": "无法读取市场数据",
+      "body": "我们尝试了以下 Solana 节点；各自的结果如下。",
+      "useOwn": "在“设置 → 网络”中添加你自己的 RPC，应用就不再依赖公共节点。"
+    },
+    "wallet": {
+      "title": "钱包未打开",
+      "switch": "请解锁钱包，确认已切换到 Solana 主网，然后重试。没有任何内容被发送，也未收取费用。"
     }
   },
   "intentAI": {
