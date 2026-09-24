@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -22,6 +22,26 @@ import {
   startSession
 } from '../lib/smartWallet';
 import { useTelegram } from '../context/TelegramContext';
+import {
+  IconCeiling,
+  IconChain,
+  IconIntentOS,
+  IconPrivate,
+  IconProof,
+  IconSession,
+  IconSlippage
+} from '../components/SmartWalletIcons';
+import '../styles/smart-wallet-icons.css';
+
+const SESSION_MINUTES = 30;
+const SESSION_BONUS_USD = 500;
+
+const fmtClock = (ms) => {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
 
 /**
  * Smart Wallet — prettier, more modern layout.
@@ -36,7 +56,18 @@ export default function SmartWallet({ embedded = false, onBack }) {
   const [tick, setTick] = useState(0);
   const policy = useMemo(() => loadPolicy(), [tick]);
   const spend = useMemo(() => loadSpend(), [tick]);
-  const session = activeSession(policy);
+  /*
+   * Active-session fix: `session` used to be computed once per render with
+   * the render-time clock and nothing ever re-rendered the page, so the
+   * countdown froze and an expired session kept showing as «active» (with
+   * the End button) until you touched another control. A 1-second clock now
+   * drives the countdown while a session is open, the expired record is
+   * cleaned out of storage, and edits from another tab (storage event) or
+   * a swap/send that recorded spend are picked up when the tab regains focus.
+   */
+  const [now, setNow] = useState(() => Date.now());
+  const session = activeSession(policy, now);
+  const [sessionErr, setSessionErr] = useState(null);
   const [guardian, setGuardian] = useState('');
   const [allow, setAllow] = useState('');
   const [err, setErr] = useState(null);
@@ -61,9 +92,65 @@ export default function SmartWallet({ embedded = false, onBack }) {
     ? Math.min(Number(intentMem.maxPerIntentUsd) || 0, Number(policy.perTxLimitUsd) || 0)
     : Number(intentMem.maxPerIntentUsd) || 0;
 
-  const refresh = () => setTick((n) => n + 1);
-  const remaining = Math.max(0, policy.dailyLimitUsd - spend.usd);
-  const spentPct = Math.min(100, (spend.usd / Math.max(1, policy.dailyLimitUsd)) * 100);
+  const refresh = () => { setNow(Date.now()); setTick((n) => n + 1); };
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [session?.expiresAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* once the window closes, drop the stale record so every reader agrees */
+  useEffect(() => {
+    if (policy.session && !session) {
+      endSession();
+      setTick((n) => n + 1);
+    }
+  }, [policy.session, session]);
+
+  useEffect(() => {
+    const sync = (e) => {
+      if (e && e.type === 'storage' && e.key && !String(e.key).startsWith('fbt-smart-wallet')) return;
+      setNow(Date.now());
+      setTick((n) => n + 1);
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') sync(); };
+    window.addEventListener('storage', sync);
+    window.addEventListener('focus', sync);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', sync);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
+  /* the cap checkPolicy() really enforces right now — includes the session bonus */
+  const sessionBonus = session ? Number(session.bonusUsd) || 0 : 0;
+  const effectiveDaily = policy.dailyLimitUsd + sessionBonus;
+  const remaining = Math.max(0, effectiveDaily - spend.usd);
+  const spentPct = Math.min(100, (spend.usd / Math.max(1, effectiveDaily)) * 100);
+  const sessionLeftMs = session ? Math.max(0, session.expiresAt - now) : 0;
+  const sessionTotalMs = session ? Math.max(1, session.expiresAt - (session.startedAt || session.expiresAt - SESSION_MINUTES * 60_000)) : 1;
+  const sessionPct = session ? sessionLeftMs / sessionTotalMs : 0;
+
+  const onStartSession = () => {
+    const r = startSession({ minutes: SESSION_MINUTES, bonusUsd: SESSION_BONUS_USD });
+    if (r?.error) {
+      setSessionErr(r.error);
+      haptic?.('error');
+      return;
+    }
+    setSessionErr(null);
+    haptic?.('success');
+    refresh();
+  };
+  const onEndSession = () => {
+    endSession();
+    setSessionErr(null);
+    haptic?.('select');
+    refresh();
+  };
 
   const goBack = () => (onBack ? onBack() : navigate(-1));
 
@@ -129,7 +216,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
               {t('smart.today')}
             </span>
             <span className="faint" style={{ fontSize: 11 }}>
-              ${spend.usd.toFixed(2)} / ${policy.dailyLimitUsd}
+              ${spend.usd.toFixed(2)} / ${effectiveDaily}{sessionBonus > 0 ? ` (+${sessionBonus})` : ''}
             </span>
           </div>
           <div style={{ height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
@@ -154,8 +241,9 @@ export default function SmartWallet({ embedded = false, onBack }) {
               {t('smart.remaining', { n: remaining.toFixed(0) })}
             </span>
             {session && (
-              <span className="pill pill-up" style={{ fontSize: 10 }}>
-                ⏱ {Math.max(0, Math.round(((session.expiresAt - Date.now()) / 60000)))}m
+              <span className="pill pill-up" style={{ fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span className="sw-session-dot" />
+                <span style={{ direction: 'ltr', fontVariantNumeric: 'tabular-nums' }}>{fmtClock(sessionLeftMs)}</span>
               </span>
             )}
           </div>
@@ -216,35 +304,71 @@ export default function SmartWallet({ embedded = false, onBack }) {
         variants={riseIn}
         initial="hidden"
         animate="show"
+        data-testid="smart-wallet-session"
         style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
       >
-        <div className="row-between" style={{ marginBottom: 8 }}>
-          <div style={{ fontWeight: 800, fontSize: 13 }}>{t('smart.sessionTitle')}</div>
-          <span style={{ width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center',
-            background: 'linear-gradient(135deg,rgba(0,229,255,0.18),rgba(124,77,255,0.18))' }}>⏱</span>
+        <div className="row-between" style={{ marginBottom: 8, gap: 10 }}>
+          <div className="row" style={{ gap: 10 }}>
+            <IconSession size={38} active={Boolean(session)} pct={sessionPct} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13 }}>{t('smart.sessionTitle')}</div>
+              <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>
+                {session
+                  ? t('smart.sessionActive', { defaultValue: 'نشست فعال' })
+                  : t('smart.sessionIdle', { defaultValue: 'غیرفعال' })}
+              </div>
+            </div>
+          </div>
+          {session && (
+            <span className="pill pill-up" style={{ fontSize: 10.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span className="sw-session-dot" />
+              {t('smart.sessionLive', { defaultValue: 'فعال' })}
+            </span>
+          )}
         </div>
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75, margin: 0 }}>{t('smart.sessionBody')}</p>
+        {!policy.enabled && (
+          <p className="notice" style={{ marginTop: 10, fontSize: 11.5 }}>
+            {t('smart.sessionPolicyOff', { defaultValue: 'اعمال سقف‌ها خاموش است؛ تا روشنش نکنید نشست تأثیری روی امضا ندارد.' })}
+          </p>
+        )}
         {session ? (
           <>
-            <p className="mono" style={{ marginTop: 10, fontSize: 12 }}>
-              {t('smart.sessionUntil', { t: new Date(session.expiresAt).toLocaleTimeString() })}
-            </p>
-            <button className="btn btn-ghost" style={{ marginTop: 6 }} onClick={() => { endSession(); refresh(); }}>
+            <div className="sw-session-live">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="faint" style={{ fontSize: 10.5, fontWeight: 700 }}>
+                  {t('smart.sessionLeft', { defaultValue: 'زمان باقی‌مانده' })}
+                </div>
+                <span className="sw-session-clock" aria-live="off">{fmtClock(sessionLeftMs)}</span>
+                <p className="mono faint" style={{ margin: '2px 0 0', fontSize: 11 }}>
+                  {t('smart.sessionUntil', { t: new Date(session.expiresAt).toLocaleTimeString() })}
+                </p>
+              </div>
+              <div style={{ textAlign: 'end' }}>
+                <div className="faint" style={{ fontSize: 10.5, fontWeight: 700 }}>
+                  {t('smart.sessionCap', { defaultValue: 'سقف امروز' })}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 15, direction: 'ltr' }}>${effectiveDaily}</div>
+                <div style={{ fontSize: 10.5, color: '#3AE8B0', fontWeight: 800, direction: 'ltr' }}>+${sessionBonus}</div>
+              </div>
+            </div>
+            <button className="btn btn-ghost" style={{ marginTop: 10, width: '100%' }} onClick={onEndSession}>
               {t('smart.endSession')}
             </button>
           </>
         ) : (
           <button
             className="btn btn-primary"
-            style={{ marginTop: 12, borderRadius: 14, minHeight: 44 }}
-            onClick={() => {
-              startSession({ minutes: 30, bonusUsd: 500 });
-              haptic?.('success');
-              refresh();
-            }}
+            style={{ marginTop: 12, borderRadius: 14, minHeight: 44, width: '100%' }}
+            onClick={onStartSession}
           >
             {t('smart.startSession')}
           </button>
+        )}
+        {sessionErr && (
+          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            {t(`smart.err.${sessionErr}`, { defaultValue: sessionErr })}
+          </p>
         )}
       </motion.section>
 
@@ -351,20 +475,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
       >
         <div className="row-between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
           <div className="row" style={{ gap: 10 }}>
-            <span
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 12,
-                display: 'grid',
-                placeItems: 'center',
-                background: 'linear-gradient(135deg, rgba(0,229,255,0.22), rgba(124,77,255,0.25))',
-                border: '1px solid rgba(0,229,255,0.3)',
-                fontSize: 16
-              }}
-            >
-              ⚡
-            </span>
+            <IconIntentOS size={40} />
             <div>
               <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--text-1)' }}>
                 {t('smart.rulesTitle', { defaultValue: 'قوانین شرطی Intent OS' })}
@@ -404,8 +515,8 @@ export default function SmartWallet({ embedded = false, onBack }) {
               gap: 6
             }}
           >
-            <div className="row" style={{ gap: 6 }}>
-              <span style={{ fontSize: 13 }}>⛓</span>
+            <div className="row" style={{ gap: 8 }}>
+              <IconChain size={28} />
               <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
                 {t('smart.ruleChain', { defaultValue: 'زنجیره ترجیحی' })}
               </span>
@@ -443,8 +554,8 @@ export default function SmartWallet({ embedded = false, onBack }) {
               gap: 6
             }}
           >
-            <div className="row" style={{ gap: 6 }}>
-              <span style={{ fontSize: 13 }}>📊</span>
+            <div className="row" style={{ gap: 8 }}>
+              <IconSlippage size={28} />
               <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
                 {t('smart.ruleSlippage', { defaultValue: 'حداکثر لغزش مجاز (٪)' })}
               </span>
@@ -485,8 +596,8 @@ export default function SmartWallet({ embedded = false, onBack }) {
               gap: 6
             }}
           >
-            <div className="row" style={{ gap: 6 }}>
-              <span style={{ fontSize: 13 }}>🛡</span>
+            <div className="row" style={{ gap: 8 }}>
+              <IconCeiling size={28} />
               <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
                 {t('smart.rulePerIntent', { defaultValue: 'سقف هر اینتنت (دلار)' })}
               </span>
@@ -526,8 +637,8 @@ export default function SmartWallet({ embedded = false, onBack }) {
               gap: 6
             }}
           >
-            <div className="row" style={{ gap: 6 }}>
-              <span style={{ fontSize: 13 }}>🔒</span>
+            <div className="row" style={{ gap: 8 }}>
+              <IconPrivate size={28} />
               <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
                 {t('smart.rulePrivateAbove', { defaultValue: 'مسیر خصوصی بالای (دلار)' })}
               </span>
@@ -570,7 +681,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
           }}
         >
           <div className="row" style={{ gap: 10, flex: 1 }}>
-            <span style={{ fontSize: 16 }}>🧾</span>
+            <IconProof size={34} />
             <div>
               <strong style={{ fontSize: 12.5, color: 'var(--text-1)' }}>
                 {t('smart.ruleProof', { defaultValue: 'الزام به رسید و اثبات اجرای آنچین' })}
