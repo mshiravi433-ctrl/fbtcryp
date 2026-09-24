@@ -325,53 +325,52 @@ export default function SmartWallet({ embedded = false, onBack }) {
         badge={rulesSaved ? t('smart.rulesSaved', { defaultValue: 'saved' }) : t('smart.rulesBadge', { defaultValue: 'local' })}
         badgeTone={rulesSaved ? 'good' : 'neutral'}
       >
-        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-          <label className="field-label" style={{ flex: '1 1 140px', marginTop: 0 }}>
-            {t('smart.ruleChain', { defaultValue: 'Preferred chain' })}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginTop: '12px' }}>
+          <label className="field-label" style={{ margin: 0, padding: '12px', background: 'var(--card-bg-2)', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: 600 }}>{t('smart.ruleChain', { defaultValue: 'Preferred chain' })}</span>
             <select
               value={intentMem.preferredChainId}
               onChange={(e) => patchRules({ preferredChainId: Number(e.target.value) })}
-              style={{ marginTop: 4 }}
+              style={{ width: '100%', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 8px', color: 'var(--text-1)' }}
             >
               {EVM_CHAIN_ORDER.map((id) => (
                 <option key={id} value={id}>{EVM_CHAINS[id]?.name || id}</option>
               ))}
             </select>
           </label>
-          <label className="field-label" style={{ flex: '1 1 110px', marginTop: 0 }}>
-            {t('smart.ruleSlippage', { defaultValue: 'Max slippage %' })}
+          <label className="field-label" style={{ margin: 0, padding: '12px', background: 'var(--card-bg-2)', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: 600 }}>{t('smart.ruleSlippage', { defaultValue: 'Max slippage %' })}</span>
             <input
               type="number" step="0.05" min="0.05" max="5"
               value={intentMem.maxSlippagePct}
               onChange={(e) => patchRules({ maxSlippagePct: e.target.value })}
-              style={{ marginTop: 4 }}
+              style={{ width: '100%', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 8px', color: 'var(--text-1)' }}
             />
           </label>
-          <label className="field-label" style={{ flex: '1 1 130px', marginTop: 0 }}>
-            {t('smart.rulePerIntent', { defaultValue: 'Per-intent ceiling (USD)' })}
+          <label className="field-label" style={{ margin: 0, padding: '12px', background: 'var(--card-bg-2)', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: 600 }}>{t('smart.rulePerIntent', { defaultValue: 'Per-intent ceiling (USD)' })}</span>
             <input
               type="number" min="1" inputMode="decimal"
               value={intentMem.maxPerIntentUsd}
               onChange={(e) => patchRules({ maxPerIntentUsd: e.target.value })}
-              style={{ marginTop: 4 }}
+              style={{ width: '100%', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 8px', color: 'var(--text-1)' }}
             />
           </label>
-          <label className="field-label" style={{ flex: '1 1 130px', marginTop: 0 }}>
-            {t('smart.rulePrivateAbove', { defaultValue: 'Route privately above (USD)' })}
+          <label className="field-label" style={{ margin: 0, padding: '12px', background: 'var(--card-bg-2)', borderRadius: '14px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-2)', fontWeight: 600 }}>{t('smart.rulePrivateAbove', { defaultValue: 'Route privately above (USD)' })}</span>
             <input
               type="number" min="0" inputMode="decimal"
               value={intentMem.privateAboveUsd}
               onChange={(e) => patchRules({ privateAboveUsd: e.target.value })}
-              style={{ marginTop: 4 }}
+              style={{ width: '100%', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 8px', color: 'var(--text-1)' }}
             />
           </label>
         </div>
 
-        <div className="row-between" style={{ marginTop: 12, gap: 10 }}>
-          <span>
-            <strong style={{ fontSize: 12.5 }}>{t('smart.ruleProof', { defaultValue: 'Require an execution proof' })}</strong>
-            <br />
-            <span className="faint" style={{ fontSize: 11 }}>{t('smart.ruleProofBody', { defaultValue: 'A compiled intent asks for a verifiable receipt before it is treated as settled; without it the plan is marked unproven, never assumed done.' })}</span>
+        <div className="row-between" style={{ marginTop: 12, padding: '14px', background: 'var(--card-bg-2)', borderRadius: '14px', border: '1px solid var(--border-color)', alignItems: 'center' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <strong style={{ fontSize: 13, color: 'var(--text-1)' }}>{t('smart.ruleProof', { defaultValue: 'Require an execution proof' })}</strong>
+            <span className="faint" style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-2)' }}>{t('smart.ruleProofBody', { defaultValue: 'A compiled intent asks for a verifiable receipt before it is treated as settled; without it the plan is marked unproven, never assumed done.' })}</span>
           </span>
           <Switch
             on={intentMem.requireExecutionProof}
@@ -380,7 +379,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
           />
         </div>
 
-        <p className="faint" style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.7 }}>
+        <p className="faint" style={{ marginTop: 14, fontSize: 11.5, lineHeight: 1.7, padding: '0 4px', color: 'var(--text-2)' }}>
           {t('smart.ruleEffective', {
             defaultValue: 'This ceiling warns Intent OS above {{intent}} for a single intent; the policy above hard-blocks a signature at {{policy}}. The number that actually stops anything is the stricter one: {{effective}}.',
             intent: `$${intentMem.maxPerIntentUsd}`,

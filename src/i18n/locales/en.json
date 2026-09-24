@@ -1811,6 +1811,10 @@
     "marketDataUnavailable": "Market data temporarily unavailable. No saved price is shown on a leverage screen."
   },
   "farm": {
+    "liveApy": "Live APY",
+    "tvl": "TVL",
+    "risk": "Risk",
+    "freshness": "Freshness",
     "title": "Farm",
     "subtitle": "Native yield, liquidity pools and strategies — without leaving FBT Swap.",
     "whatTitle": "How farming works",

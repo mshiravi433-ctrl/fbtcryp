@@ -5453,7 +5453,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         {/* §26 Mobile optimization — keyboard-aware, safe-area.
             Trench-style composer: a black pill with a round “+ actions” button
             (opens the Actions sheet) and a round send button. Nothing else. */}
-        <form className="iaos-composer iaos-composer-v6" onSubmit={handleSubmit}>
+        {messages.length > 20 ? (
+          <div className="iaos-composer iaos-composer-v6" style={{ justifyContent: 'center' }}>
+            <button type="button" className="flip-cta hz-cta" onClick={() => window.location.reload()} style={{ padding: '8px 16px', border: 'none', borderRadius: 99, background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600 }}>
+              {fa ? 'شروع صفحه جدید' : 'Start new chat'}
+            </button>
+          </div>
+        ) : (
+          <form className="iaos-composer iaos-composer-v6" onSubmit={handleSubmit}>
           <button
             type="button"
             className="iaos-action-btn"
@@ -5507,6 +5514,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </svg>
           </button>
         </form>
+        )}
         {dictationNote ? (
           <p className="iaos-dictation-note" role="status" data-testid="intent-ai-dictation-note">
             {dictationNote}
@@ -5580,6 +5588,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 <button type="button" className="tag-spawn" onClick={spawnAgent}>+ {fa ? 'ساخت اولین ایجنت' : 'Spawn your first agent'}</button>
               </div>
             )}
+
+            {getActiveTasks().length > 0 ? (
+              <div style={{ marginTop: '24px', marginBottom: '24px' }}>
+                <div className="tag-section">{fa ? 'تاریخچه در حال انجام' : 'In-Progress History'}</div>
+                {getActiveTasks().map((t) => (
+                  <div key={t.id} className="tag-row" style={{ cursor: 'default' }}>
+                    <span className="tag-row-glyph" aria-hidden="true">↻</span>
+                    <span className="tag-row-copy">
+                      <span className="tag-row-title">{fa ? 'پروسه در حال انجام' : 'Active Task'}</span>
+                      <span className="tag-row-sub">{t.intent || t.id}</span>
+                    </span>
+                    <span className="tag-row-end" style={{ color: 'var(--tag-amber)' }}>{fa ? 'در حال انجام' : 'In Progress'}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             <div className="tag-section">{fa ? 'ایجنت‌های پیشنهادی' : 'Suggested agents'}</div>
             <div data-testid="intent-ai-suggested-agents">
@@ -5767,7 +5791,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           {agentActiveCount > 0 ? <span className="tag-tab-badge" aria-hidden="true" /> : null}
           <span className="tag-tab-label">{fa ? 'ایجنت‌ها' : 'Agents'}</span>
         </button>
-        <button type="button" className="tag-tab" data-active={aiTab === 'activity'} onClick={() => setAiTab('activity')}>
+        <button type="button" className="tag-tab" data-active={aiTab === 'activity'} onClick={() => { setHistData(readHistory()); setAiTab('activity'); }}>
           <AnimatedActivity active={aiTab === 'activity'} still={still} width={21} height={21} strokeWidth={aiTab === 'activity' ? 2 : 1.7} />
           <span className="tag-tab-label">{fa ? 'فعالیت' : 'Activity'}</span>
         </button>
@@ -5835,7 +5859,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           automationsCount: automations.length,
           engine: monitorEngineStatus || {},
           aiTools: aiToolsInfo,
-          providersActive: Array.isArray(aiProviders) ? aiProviders.filter((p) => p.configured || p.status === 'ACTIVE').length : null,
+          providersActive: Array.isArray(aiProviders) ? aiProviders.filter((p) => p.configured || p.status === 'ACTIVE' || p.status === 'online').length || aiProviders.length : null,
           providersTotal: Array.isArray(aiProviders) ? aiProviders.length : null
         }}
         locale={locale}

@@ -441,7 +441,9 @@ function WalHero({
               <p className="faint" style={{ fontSize: 11.5, marginTop: 11, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
               <details style={{ marginTop: 14, textAlign: 'start', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px' }}>
                 <summary style={{ fontWeight: 700, fontSize: 12.5, cursor: 'pointer', color: 'var(--text-1)', listStyle: 'none' }}>{t('wallet.custodyTitle')}</summary>
-                <p style={{ fontSize: 12.5, lineHeight: 1.85, margin: '8px 0 0', color: 'var(--text-2)' }}>{t('wallet.custodyNotice')}</p>
+              {/* User requested removal of this text box:
+            <p style={{ fontSize: 12.5, lineHeight: 1.85, margin: '8px 0 0', color: 'var(--text-2)' }}>{t('wallet.custodyNotice')}</p> 
+          */}
               </details>
             </>
           )}
