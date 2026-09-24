@@ -25,7 +25,8 @@ import { feePercentString } from '../lib/feeBps';
  *    other SVGs using the same ids) can never steal each other's paint.
  */
 
-const AUTO_MS = 6500;
+// Slower autoplay (was 6.5s) — user asked for a calmer flip rhythm.
+const AUTO_MS = 12000;
 
 /* ─── Animated hero icons ─────────────────────────────────────────────── */
 
@@ -35,28 +36,28 @@ function IconRwaVault({ uid, size = 60 }) {
     <svg className="rhb-svg" width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id={g('ring')} x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#FFE9A8" />
-          <stop offset="0.5" stopColor="#FFB547" />
-          <stop offset="1" stopColor="#FF6A3D" />
+          <stop stopColor="#F3E8FF" />
+          <stop offset="0.5" stopColor="#C084FC" />
+          <stop offset="1" stopColor="#7C3AED" />
         </linearGradient>
         <linearGradient id={g('bar')} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#FFF3C4" />
-          <stop offset="0.45" stopColor="#FFC84A" />
-          <stop offset="1" stopColor="#E08A00" />
+          <stop offset="0" stopColor="#FAF5FF" />
+          <stop offset="0.45" stopColor="#D8B4FE" />
+          <stop offset="1" stopColor="#9333EA" />
         </linearGradient>
         <linearGradient id={g('shine')} x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#fff" stopOpacity="0" />
           <stop offset="0.5" stopColor="#fff" stopOpacity="0.85" />
           <stop offset="1" stopColor="#fff" stopOpacity="0" />
-          <animateTransform attributeName="gradientTransform" type="translate" values="-1 0; 1.2 0; 1.2 0" keyTimes="0;0.55;1" dur="3.2s" repeatCount="indefinite" />
+          <animateTransform attributeName="gradientTransform" type="translate" values="-1 0; 1.2 0; 1.2 0" keyTimes="0;0.55;1" dur="5s" repeatCount="indefinite" />
         </linearGradient>
         <radialGradient id={g('core')} cx="0.5" cy="0.45" r="0.6">
           <stop stopColor="#3A1D5C" />
           <stop offset="1" stopColor="#140A26" />
         </radialGradient>
         <radialGradient id={g('glow')} cx="0.5" cy="0.5" r="0.5">
-          <stop stopColor="#FFB547" stopOpacity="0.45" />
-          <stop offset="1" stopColor="#FFB547" stopOpacity="0" />
+          <stop stopColor="#A855F7" stopOpacity="0.5" />
+          <stop offset="1" stopColor="#A855F7" stopOpacity="0" />
         </radialGradient>
       </defs>
 
@@ -79,12 +80,12 @@ function IconRwaVault({ uid, size = 60 }) {
       </g>
       {/* orbiting token */}
       <g className="rhb-orbit">
-        <circle cx="32" cy="8" r="3.2" fill="#FFD66B" stroke="#1A0F2E" strokeWidth="0.8" />
+        <circle cx="32" cy="8" r="3.2" fill="#E9D5FF" stroke="#1A0F2E" strokeWidth="0.8" />
         <path d="M30.8 8h2.4" stroke="#1A0F2E" strokeWidth="0.9" strokeLinecap="round" />
       </g>
       {/* sparkles */}
-      <path className="rhb-twinkle" d="M52 12l1.1 2.5 2.5 1.1-2.5 1.1L52 19.2l-1.1-2.5-2.5-1.1 2.5-1.1z" fill="#FFF1C1" />
-      <path className="rhb-twinkle d2" d="M11 48l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z" fill="#FF9F6B" />
+      <path className="rhb-twinkle" d="M52 12l1.1 2.5 2.5 1.1-2.5 1.1L52 19.2l-1.1-2.5-2.5-1.1 2.5-1.1z" fill="#F5E8FF" />
+      <path className="rhb-twinkle d2" d="M11 48l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z" fill="#F0ABFC" />
     </svg>
   );
 }
@@ -123,10 +124,10 @@ function IconHorizonGlobe({ uid, size = 60 }) {
       <g clipPath={`url(#${g('clip')})`} stroke={`url(#${g('ring')})`} strokeWidth="0.9" opacity="0.75">
         {/* rolling meridians */}
         <ellipse cx="32" cy="32" rx="4" ry="16">
-          <animate attributeName="rx" values="16;0.5;16" dur="6s" repeatCount="indefinite" />
+          <animate attributeName="rx" values="16;0.5;16" dur="9s" repeatCount="indefinite" />
         </ellipse>
         <ellipse cx="32" cy="32" rx="10" ry="16">
-          <animate attributeName="rx" values="8;16;0.5;8" dur="6s" repeatCount="indefinite" />
+          <animate attributeName="rx" values="8;16;0.5;8" dur="9s" repeatCount="indefinite" />
         </ellipse>
         <path d="M16 32h32M18 24h28M18 40h28" />
       </g>
@@ -134,7 +135,7 @@ function IconHorizonGlobe({ uid, size = 60 }) {
       <path d={orbit} stroke={`url(#${g('ring')})`} strokeWidth="1" strokeDasharray="3 3" opacity="0.6" transform="rotate(-18 32 32)" />
       <g transform="rotate(-18 32 32)">
         <circle r="2.6" fill="#E4FF6B" stroke="#061220" strokeWidth="0.8">
-          <animateMotion dur="5s" repeatCount="indefinite" path={orbit} />
+          <animateMotion dur="8s" repeatCount="indefinite" path={orbit} />
         </circle>
       </g>
       {/* self-drawing chart */}
@@ -377,9 +378,9 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, haptic, isR
     sub: isEn ? 'Tokenized gold, US Treasuries & Robinhood stocks' : 'طلا، اوراق خزانه آمریکا و سهام رابین‌هود به‌صورت توکن',
     subIcon: Glyph.gold,
     chips: [
-      { label: isEn ? 'Gold' : 'طلا', icon: Glyph.gold, color: '#FFC84A' },
-      { label: isEn ? 'Treasury' : 'خزانه', icon: Glyph.treasury, color: '#FF8A5B' },
-      { label: isEn ? 'Robinhood' : 'رابین‌هود', icon: Glyph.stocks, color: '#C9A7FF' }
+      { label: isEn ? 'Gold' : 'طلا', icon: Glyph.gold, color: '#D8B4FE' },
+      { label: isEn ? 'Treasury' : 'خزانه', icon: Glyph.treasury, color: '#F0ABFC' },
+      { label: isEn ? 'Robinhood' : 'رابین‌هود', icon: Glyph.stocks, color: '#A5B4FC' }
     ],
     feats: [
       { label: isEn ? 'Self-custody' : 'کیف شخصی', icon: Glyph.shield },

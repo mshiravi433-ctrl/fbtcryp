@@ -3630,6 +3630,19 @@ a.wallet-option,
 }
 
 /*
+ * «پنلی که وقتی میری مرحله بعد میاد جلو خیلی چسبیده به دکمه‌ها»
+ * From step 2 on, the progress panel moves from the Welcome header into the
+ * onboarding footer — and it kept the header's `margin: 10px auto 0`, i.e. a
+ * top margin and NO bottom margin, so the bar sat flush on Back / Next. In the
+ * footer it gets breathing room below it instead, the footer a touch more
+ * padding, and the scroll area a bottom inset so the last card of a step
+ * (connect wallet / terms checkbox) never butts against the footer edge.
+ */
+.onb-foot { padding-top: 14px; }
+.onb-foot .launch-progress { margin: 0 auto 16px; }
+.onb-scroll { padding-bottom: 24px; }
+
+/*
  * BOTH footer buttons are identical in size. They used to be sized by their
  * own label, and "قبلی" vs "ادامه" are different widths, so Back rendered
  * noticeably larger than Next in Persian. flex:1 + a shared min-height makes

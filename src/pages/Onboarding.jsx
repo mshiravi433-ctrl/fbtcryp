@@ -12,12 +12,17 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconLanguages,
-  IconShield,
-  IconSwap,
-  IconTrend,
-  IconWallet,
   IconCheck
 } from '../components/Icons';
+import {
+  OnbTile,
+  GlyphTrade,
+  GlyphSwap,
+  GlyphShield,
+  GlyphWallet,
+  GlyphTerms
+} from '../components/OnboardingIcons';
+import '../styles/onboarding-icons.css';
 
 /**
  * Five-step welcome: three feature slides, wallet connect, and terms.
@@ -44,9 +49,9 @@ import {
  */
 
 const SLIDES = [
-  { key: 'trade', Icon: IconTrend, hues: ['#00e5ff', '#7c4dff'] },
-  { key: 'swap', Icon: IconSwap, hues: ['#7c4dff', '#ff2d95'] },
-  { key: 'custody', Icon: IconShield, hues: ['#00ff9d', '#00e5ff'] }
+  { key: 'trade', Icon: GlyphTrade, hues: ['#00e5ff', '#7c4dff'] },
+  { key: 'swap', Icon: GlyphSwap, hues: ['#7c4dff', '#ff2d95'] },
+  { key: 'custody', Icon: GlyphShield, hues: ['#00d68f', '#00b8e6'] }
 ];
 
 /*
@@ -92,19 +97,13 @@ function Art({ Icon, hues, index }) {
         initial={{ scale: 0.4, opacity: 0, y: 18 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 220, damping: 18 }}
-        style={{
-          position: 'relative',
-          width: 92,
-          height: 92,
-          borderRadius: 28,
-          display: 'grid',
-          placeItems: 'center',
-          background: `linear-gradient(140deg, ${hues[0]}, ${hues[1]})`,
-          boxShadow: `0 18px 50px -18px ${hues[0]}`,
-          color: '#000'
-        }}
+        style={{ position: 'relative' }}
       >
-        <Icon width={44} height={44} strokeWidth={1.6} />
+        {/* Modern duotone glyph on a theme-aware glass tile
+            (OnboardingIcons.jsx + styles/onboarding-icons.css). */}
+        <OnbTile hues={hues} size={100} radius={30}>
+          <Icon a={hues[0]} b={hues[1]} size={60} />
+        </OnbTile>
       </motion.div>
     </div>
   );
@@ -231,7 +230,7 @@ export default function Onboarding({ onDone }) {
           {/* ---------------- wallet connect ---------------- */}
           {isWallet && (
             <div style={{ padding: '10px 22px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <Art Icon={IconWallet} hues={['#00e5ff', '#00ff9d']} index={index} />
+              <Art Icon={GlyphWallet} hues={['#00b8e6', '#00d68f']} index={index} />
               <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
                 {t('onboarding.wallet.title')}
               </h1>
@@ -277,7 +276,7 @@ export default function Onboarding({ onDone }) {
           {/* ---------------- terms gate ---------------- */}
           {isTerms && (
             <div style={{ padding: '10px 22px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <Art Icon={IconShield} hues={['#7c4dff', '#ff2d95']} index={index} />
+              <Art Icon={GlyphTerms} hues={['#7c4dff', '#ff2d95']} index={index} />
               <h1 className="h1" style={{ fontSize: 23, textAlign: 'center', marginBottom: 8 }}>
                 {t('onboarding.terms.title')}
               </h1>
