@@ -52,6 +52,16 @@
                 <data android:scheme="@string/custom_url_scheme" />
             </intent-filter>
 
+            <!-- App Links: Solana wallets (Phantom, Solflare) return to https://fbtswap.ir/?sol=1...
+                 Matching origin prevents "Redirect link origin does not match app origin" error. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="fbtswap.ir" />
+                <data android:scheme="https" android:host="www.fbtswap.ir" />
+            </intent-filter>
+
         </activity>
 
         <provider

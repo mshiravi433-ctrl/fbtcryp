@@ -328,12 +328,22 @@ public class MainActivity extends BridgeActivity {
    */
   private static final int MAX_DEEPLINK_LENGTH = 65536;
 
+  private boolean isAcceptedDeepLink(Uri data) {
+    if (data == null) return false;
+    String scheme = data.getScheme();
+    if (scheme == null) return false;
+    if (scheme.equalsIgnoreCase(deepLinkScheme())) return true;
+    if ("https".equalsIgnoreCase(scheme)) {
+      String host = data.getHost();
+      return "fbtswap.ir".equalsIgnoreCase(host) || "www.fbtswap.ir".equalsIgnoreCase(host);
+    }
+    return false;
+  }
+
   private void captureDeepLink(Intent intent) {
     if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
     Uri data = intent.getData();
-    if (data == null) return;
-    String scheme = data.getScheme();
-    if (scheme == null || !scheme.equalsIgnoreCase(deepLinkScheme())) return;
+    if (!isAcceptedDeepLink(data)) return;
     String url = data.toString();
     if (url.length() > MAX_DEEPLINK_LENGTH) return;
     deliverDeepLink(url);
