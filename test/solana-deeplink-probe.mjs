@@ -35,6 +35,7 @@ import {
   connectRequestUrl,
   isDeeplinkReturn,
   readDeeplinkReturn,
+  signRequestPayload,
   signRequestUrl,
   stripDeeplinkReturn
 } from '../src/lib/solana/deeplinkUri.js';
@@ -213,20 +214,53 @@ const ok = (name, condition) => {
     !/localhost/.test(phantom));
   ok('an unknown wallet builds nothing', connectRequestUrl({ walletId: 'nope', dappPublicKey: 'x', redirectLink: 'y' }) === null);
 
+  /*
+   * THE REQUEST IS SEALED. Every post-connect method carries exactly four
+   * parameters — dapp key, nonce, redirect, and an ENCRYPTED `payload` that
+   * holds the session token and the transaction. A plaintext `session=` or
+   * `transaction=` in the URL is a request no wallet has a method for
+   * (Phantom on Android answered it with -32603 «Unexpected error» before any
+   * approval screen), so the builder must be unable to produce one.
+   */
   const solflare = signRequestUrl({
     walletId: 'solflare',
     op: 'signAndSendTransaction',
     dappPublicKey: 'PUBKEY',
     nonce: 'NONCE',
-    session: 'SESSION',
     redirectLink: 'https://fbtswap.ir/?sol=1&rid=abc',
-    payload: 'TX'
+    payload: 'SEALED'
   });
+  const solflareParams = new URL(solflare).searchParams;
   ok('a signing request follows the same shape on another wallet',
     solflare.startsWith('https://solflare.com/ul/v1/signAndSendTransaction?')
-    && solflare.includes('session=SESSION') && solflare.includes('transaction=TX'));
+    && solflareParams.get('payload') === 'SEALED'
+    && solflareParams.get('nonce') === 'NONCE'
+    && solflareParams.get('dapp_encryption_public_key') === 'PUBKEY');
+  ok('the session token and the transaction never travel in the clear',
+    !solflareParams.has('session') && !solflareParams.has('transaction')
+    && [...solflareParams.keys()].sort().join(',') === 'dapp_encryption_public_key,nonce,payload,redirect_link');
+  ok('a request without a sealed payload is refused, not sent half-built',
+    signRequestUrl({ walletId: 'solflare', op: 'signTransaction', dappPublicKey: 'x', nonce: 'n', redirectLink: 'r', payload: '' }) === null);
+  ok('the plaintext inside the box is the documented shape',
+    JSON.stringify(JSON.parse(signRequestPayload('signTransaction', { session: 'S', payload: 'TX' }))) === '{"transaction":"TX","session":"S"}'
+    && JSON.parse(signRequestPayload('signMessage', { session: 'S', payload: 'MSG' })).display === 'utf8'
+    && JSON.stringify(JSON.parse(signRequestPayload('disconnect', { session: 'S' }))) === '{"session":"S"}'
+    && signRequestPayload('signTransaction', { session: '', payload: 'TX' }) === null);
   ok('an unknown operation builds nothing',
-    signRequestUrl({ walletId: 'phantom', op: 'drainEverything', dappPublicKey: 'x', nonce: 'n', session: 's', redirectLink: 'r', payload: 'p' }) === null);
+    signRequestUrl({ walletId: 'phantom', op: 'drainEverything', dappPublicKey: 'x', nonce: 'n', redirectLink: 'r', payload: 'p' }) === null
+    && signRequestPayload('drainEverything', { session: 's', payload: 'p' }) === null);
+
+  /* Each wallet names its key after itself: Solflare's approval used to be
+     unreadable (only phantom_/wallet_ were read), so a user who approved in
+     Solflare came back to a sheet still «waiting». */
+  const solflareReply = readDeeplinkReturn('ir.fbtswap.app://solconnect?rid=abc&solflare_encryption_public_key=SKEY&nonce=NNN&data=DDD');
+  ok('a Solflare answer is read under Solflare\'s own key name',
+    solflareReply.state === 'params' && solflareReply.params.walletEncryptionPublicKey === 'SKEY');
+  ok('and so is any wallet that follows the <name>_encryption_public_key convention',
+    readDeeplinkReturn('https://x/?rid=1&newwallet_encryption_public_key=K&nonce=N&data=D').params?.walletEncryptionPublicKey === 'K'
+    && readDeeplinkReturn('https://x/?rid=1&dapp_encryption_public_key=K&nonce=N&data=D').state === 'none');
+  ok('the Solflare key is stripped from the address bar with the rest',
+    !stripDeeplinkReturn('https://fbtswap.ir/?sol=1&rid=abc&solflare_encryption_public_key=SKEY&nonce=NNN&data=DDD#/wallet').includes('SKEY'));
 
   /* The concatenation bug that URLSearchParams cannot see: a wallet that
      appends with `?` instead of `&` to a link that already had a query. */
@@ -421,14 +455,31 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
 
   const params = requestParams(raw);
   ok('the signing request goes to signAndSendTransaction', params.path === '/ul/v1/signAndSendTransaction');
-  /* The wire form is base58 of the raw bytes — asserted by decoding it back,
-     not by re-encoding something else and hoping the lengths look plausible. */
-  const txOnTheWire = base58Decode(params.get('transaction'));
-  ok('the transaction travels base58 as the wallet expects',
+  /*
+   * THE WALLET OPENS THE BOX. The request carries no plaintext transaction:
+   * `payload` is base58 of box({transaction, session}, nonce, sharedSecret),
+   * and the only way to assert the transaction inside is to decrypt it with
+   * the wallet's own key — exactly what Phantom does on arrival. The wire
+   * form of the transaction inside is base58 of the raw bytes, asserted by
+   * decoding it back rather than re-encoding something and comparing lengths.
+   */
+  ok('the session token and the transaction are not in the URL',
+    params.get('session') === null && params.get('transaction') === null
+    && params.get('dapp_encryption_public_key') !== null
+    && params.get('nonce')?.length > 20
+    && params.get('payload') !== null);
+  const openedRequest = nacl.box.open.after(
+    base58Decode(params.get('payload')),
+    base58Decode(params.get('nonce')),
+    wallet.sharedWith(params.get('dapp_encryption_public_key'))
+  );
+  ok('the wallet can open the request with the session\'s shared key', openedRequest !== null);
+  const requestBody = JSON.parse(fromUtf8(openedRequest));
+  const txOnTheWire = base58Decode(requestBody.transaction);
+  ok('inside the box: the transaction (base58 of the raw bytes) and the session token',
     txOnTheWire?.length === 400
     && txOnTheWire[0] === 1
-    && params.get('nonce').length > 20
-    && params.get('session') === SESSION);
+    && requestBody.session === SESSION);
   ok('a single-signer transaction is not flagged as one Phantom cannot simulate',
     deeplink.deeplinkState().warnings?.length === 0
     || deeplink.deeplinkState().warnings === undefined);
@@ -664,6 +715,62 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
     native[0].route === 'native-intent' && native[0].packageName === 'com.solflare.mobile');
   ok('and a Custom Tab is only ever the fallback behind it',
     native[1].route === 'custom-tab');
+
+  /*
+   * THE BRIDGE'S ANSWER. The newer MainActivity reports WHICH door reached
+   * the wallet (`{"ok":true,"route":"https:phantom.app"}`) after trying the
+   * https URL, the alias host and the custom scheme package-scoped; an older
+   * APK only has the boolean `openWalletLink`. Both must be understood, and
+   * a refusal must fall through to the next route instead of being reported
+   * as a hand-off that happened.
+   */
+  const calls = [];
+  const apk = (bridge) => ({
+    navigator: { userAgent: UA_ANDROID_WEBVIEW },
+    Capacitor: { isNativePlatform: () => true },
+    FBTSolanaLink: bridge,
+    location: locationStub,
+    open: () => null
+  });
+  let res = deeplink.openRequestNow('https://phantom.com/ul/v1/connect?x=1', 'phantom', apk({
+    openWalletRequest: (url, pkg) => { calls.push(['request', url, pkg]); return '{"ok":true,"route":"https:phantom.app"}'; },
+    openWalletLink: () => { calls.push(['legacy']); return true; }
+  }));
+  ok('the APK bridge is asked with the URL and the package it belongs to',
+    res.ok === true && res.route === 'native-intent' && res.deferred === false
+    && calls.length === 1 && calls[0][0] === 'request' && calls[0][2] === 'app.phantom');
+  ok('and the door it took is kept for the diagnostics', deeplink.lastNativeHandoffRoute() === 'https:phantom.app');
+  res = deeplink.openRequestNow('https://phantom.com/ul/v1/connect?x=1', 'phantom', apk({
+    openWalletRequest: () => '{"ok":false,"route":"none","reason":"no_activity"}'
+  }));
+  ok('a bridge that reached no wallet is NOT reported as a hand-off — the tab route is next',
+    res.ok === true && res.deferred === true && res.route === 'custom-tab'
+    && deeplink.lastNativeHandoffRoute() === 'none:no_activity');
+  res = deeplink.openRequestNow('https://phantom.com/ul/v1/connect?x=1', 'phantom', apk({
+    openWalletLink: () => true
+  }));
+  ok('an older APK with only the boolean bridge still hands over',
+    res.ok === true && res.route === 'native-intent' && res.deferred === false);
+}
+
+/*
+ * THE WALLET'S OWN WORDS. A wallet that refuses a request it could not parse
+ * (Phantom: -32603 «Unexpected error») and a user who tapped «reject» (4001)
+ * used to look identical on our screen, and the message was dropped. The code
+ * stays named; the wallet's code and message ride along for the sheet and the
+ * diagnostics.
+ */
+{
+  const started = deeplink.startDeeplinkConnectSync('phantom');
+  const pending = deeplink.pendingDeeplinkRequest();
+  const answer = `${pending.url.match(/redirect_link=([^&]+)/)[1] ? decodeURIComponent(pending.url.match(/redirect_link=([^&]+)/)[1]) : ''}&errorCode=-32603&errorMessage=Unexpected%20error`;
+  const failed = await deeplink.completeDeeplinkReturn(answer);
+  ok('a non-4001 refusal is named WALLET_ERROR, not REJECTED',
+    started.ok === true && failed.ok === false && failed.code === 'WALLET_ERROR');
+  ok('and the wallet\'s own code and message travel with it',
+    failed.wallet?.code === '-32603' && failed.wallet?.message === 'Unexpected error'
+    && deeplink.deeplinkState().wallet?.code === '-32603'
+    && deeplink.consumeDeeplinkResult()?.wallet?.message === 'Unexpected error');
 }
 
 /*

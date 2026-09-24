@@ -18,6 +18,8 @@
  *   session.js   the WalletConnect v2 lifecycle
  *   lease.js     «this device has a wallet until <time>» — what a refresh reads
  *   signing.js   the signing boundary: preflight, bound, honest classification
+ *   requestHandoff.js  the APK's second hand-off: a proved relay socket and one
+ *                package-scoped launch per signing request, after the relay has it
  *   health.js    the diagnostic report
  *   diagnostics.js  the one verdict: eight named causes, one of them OK
  *
@@ -206,6 +208,16 @@ export {
   requestVerifyAttestation,
   warmVerifyEnclave
 } from './verify.js';
+
+export {
+  REQUEST_LINK_HOLD_MS,
+  armNativeRequestHandoff,
+  installSessionRequestGate,
+  openSessionRequestLink,
+  parseSessionRequestLink,
+  sessionRequestLink,
+  verifyRelayLive
+} from './requestHandoff.js';
 
 export {
   RETURN_GRACE_MS,

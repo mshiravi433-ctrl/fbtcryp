@@ -50,6 +50,7 @@ import {
   randomNonce,
   randomRequestId,
   readDeeplinkReturn,
+  signRequestPayload,
   signRequestUrl,
   stripDeeplinkReturn
 } from './deeplinkUri.js';
@@ -273,15 +274,44 @@ async function sharedKey(walletPublicKey, dappSecretKey) {
 }
 
 /**
- * Decrypt the wallet's answer.
+ * Seal a post-connect request the way the wallet will open it.
  *
- * ON THE WIRE THE REQUEST IS PLAIN and the ANSWER IS SEALED — that is the
- * shape Phantom's own reference implementation uses, and it is worth stating
- * because the reverse assumption looks just as reasonable: the transaction we
- * ASK about travels as base58 in the URL (over https), while the wallet's
- * reply — `{ signature }`, `{ transaction }`, `{ public_key, session }` — is
- * sealed with the shared key and the per-request nonce. Getting this backwards
- * produces a connection that "succeeds" and then cannot sign anything.
+ * ─── ONLY THE CONNECT REQUEST IS PLAIN ─────────────────────────────────────
+ * `connect` carries our public key in the clear because there is no shared
+ * secret yet. EVERY request after it — signTransaction,
+ * signAndSendTransaction, signMessage, disconnect — travels as
+ * `payload=<base58(box(JSON, nonce, sharedKey))>` next to the same `nonce`;
+ * the session token and the transaction are inside that box, never in the
+ * URL. This is what Phantom's, Solflare's and Backpack's reference
+ * implementations do (`nacl.box.after(Buffer.from(JSON.stringify(payload)),
+ * nonce, sharedSecret)`), and getting it backwards produces exactly the
+ * reported symptom: a connection that "succeeds" and a signing request the
+ * wallet refuses before showing anything — Phantom on Android answers a
+ * request with no `payload` with errorCode -32603 «Unexpected error».
+ *
+ * Synchronous when the crypto module is already here (it is, once a session
+ * exists: the connect answer was opened with it), so a signing hand-off can
+ * still fire in the same task as its caller.
+ */
+function sealRequest(n, json, nonceBase58, key) {
+  const nonce = base58Decode(nonceBase58);
+  if (!nonce || nonce.length !== 24 || !key) return null;
+  const sealed = n.box.after(utf8(json), nonce, key);
+  return sealed ? base58Encode(sealed) : null;
+}
+
+/** sharedKey(), for a caller that already holds the module. */
+function sharedKeySync(n, walletPublicKey, dappSecretKey) {
+  const pk = base58Decode(walletPublicKey);
+  const sk = base58Decode(dappSecretKey);
+  if (!pk || pk.length !== 32 || !sk || sk.length !== 32) return null;
+  return n.box.before(pk, sk);
+}
+
+/**
+ * Decrypt the wallet's answer: `{ signature }`, `{ transaction }`,
+ * `{ public_key, session }` — sealed with the shared key and the per-request
+ * nonce, the mirror of sealRequest above.
  */
 async function openBox(payloadBase58, nonceBase58, key) {
   const n = await nacl();
@@ -353,7 +383,8 @@ function emit(next) {
    * change that does not explicitly say «still stuck» clears it, so a recovery
    * card can never survive the answer it was waiting for.
    */
-  state = { ...state, ...next, stuck: next.stuck === true };
+  /* Same rule for the wallet's own error words: they describe ONE answer. */
+  state = { ...state, ...next, stuck: next.stuck === true, wallet: next.wallet ?? null };
   for (const fn of listeners) {
     try {
       fn(state);
@@ -665,13 +696,49 @@ function preloadBrowserModule() {
   return browserLoad;
 }
 
+/** The door the native bridge last reported taking (diagnostics only). */
+let lastNativeRoute = '';
+export function lastNativeHandoffRoute() {
+  return lastNativeRoute;
+}
+
+function parseBridgeAnswer(raw) {
+  if (raw === true) return { ok: true, route: 'bridge' };
+  if (raw === false) return { ok: false, route: 'none', reason: 'refused' };
+  if (typeof raw !== 'string' || !raw.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Fire one route, in this task. Returns false when it cannot be synchronous. */
 function runRouteSync(route, win) {
   switch (route.route) {
     case 'native-intent': {
       const bridge = win?.FBTSolanaLink;
-      if (!bridge?.openWalletLink) return false;
+      if (!bridge) return false;
       try {
+        /*
+         * The newer bridge answers with WHICH door the wallet took
+         * (`{"ok":true,"route":"https:phantom.app"}`): it tries the https
+         * URL as built, the wallet's alias host and the wallet's own custom
+         * scheme, each package-scoped, before an unscoped launch — the old
+         * single explicit try fell to the unscoped launch on the first
+         * ActivityNotFoundException, and Android gave the request to a
+         * browser. The route is kept for the diagnostics of the next report.
+         */
+        if (typeof bridge.openWalletRequest === 'function') {
+          const raw = bridge.openWalletRequest(route.url, route.packageName);
+          const answer = parseBridgeAnswer(raw);
+          if (answer) {
+            lastNativeRoute = answer.ok ? answer.route : `none:${answer.reason || 'unknown'}`;
+            return answer.ok === true;
+          }
+        }
+        if (typeof bridge.openWalletLink !== 'function') return false;
         /*
          * A boolean, not a promise. If a future build of the bridge returned a
          * promise, `=== true` would be false and the flow would fall through
@@ -679,7 +746,9 @@ function runRouteSync(route, win) {
          * exact bug this whole path was rewritten for. So an unreadable answer
          * is treated as "did not hand over".
          */
-        return bridge.openWalletLink(route.url, route.packageName) === true;
+        const ok = bridge.openWalletLink(route.url, route.packageName) === true;
+        lastNativeRoute = ok ? 'legacy-bridge' : 'none:legacy';
+        return ok;
       } catch {
         return false;
       }
@@ -999,12 +1068,25 @@ export async function completeDeeplinkReturn(rawUrl) {
 
   if (read.state === 'error') {
     const code = errorCodeOf(read.error?.code);
+    /*
+     * THE WALLET'S OWN WORDS TRAVEL WITH THE CODE. Everything that is not
+     * 4001 used to collapse into WALLET_ERROR and the message was dropped —
+     * so Phantom's `-32603 Unexpected error` (a request it could not parse)
+     * and a real rejection read the same on our screen, and the report said
+     * «رد میشود» about a request the user never saw. The sheet shows this
+     * line under the error, and the diagnostics keep it.
+     */
+    const wallet = {
+      code: String(read.error?.code ?? ''),
+      message: String(read.error?.message ?? '').slice(0, 200)
+    };
+    const failed = { ok: false, code, op: pending.op, walletId: pending.walletId, wallet };
     dropPending(pending.id);
-    saveResult(pending.id, { ok: false, code, op: pending.op, walletId: pending.walletId });
-    publishResult({ ok: false, code, op: pending.op, walletId: pending.walletId });
-    emit({ status: 'error', code, walletId: pending.walletId, requestId: pending.id });
-    settleAwaiter(pending.id, { ok: false, code });
-    return { ok: false, code };
+    saveResult(pending.id, failed);
+    publishResult(failed);
+    emit({ status: 'error', code, walletId: pending.walletId, requestId: pending.id, wallet });
+    settleAwaiter(pending.id, { ok: false, code, wallet });
+    return { ok: false, code, wallet };
   }
 
   const result =
@@ -1401,17 +1483,24 @@ async function signViaDeeplink(op, payloadBase58, rawTx = null) {
    * request (see lib/solana/signGuard.js).
    */
   const guard = rawTx ? inspectSolanaTransaction(rawTx) : null;
-  /* One nonce per request, shared with the wallet's encrypted answer — the
-     value is generated here and never reused (see deeplinkUri.randomNonce). */
+  /* One nonce per request, used for the sealed request AND expected on the
+     wallet's sealed answer — generated here and never reused. */
   const nonce = randomNonce();
+  /* The module is already loaded whenever a session exists (its answer was
+     opened with it); the await is only a safety net for a restored session. */
+  const n = naclReady() ?? await nacl();
+  const key = sharedKeySync(n, session.walletEncryptionPublicKey, session.dappSecretKey);
+  if (!key) return { ok: false, code: 'NO_SESSION' };
+  const plain = signRequestPayload(op, { session: session.session, payload: payloadBase58 });
+  const sealed = plain ? sealRequest(n, plain, nonce, key) : null;
+  if (!sealed) return { ok: false, code: 'BAD_TRANSACTION' };
   const url = signRequestUrl({
     walletId: session.walletId,
     op,
     dappPublicKey: session.dappPublicKey,
     nonce,
-    session: session.session,
     redirectLink: deeplinkRedirect(id),
-    payload: payloadBase58
+    payload: sealed
   });
   if (!url) return { ok: false, code: 'UNKNOWN_WALLET' };
 
@@ -1481,8 +1570,36 @@ async function signViaDeeplink(op, payloadBase58, rawTx = null) {
  * broadcasting is the pattern every security engine treats as normal, and the
  * one this project already committed to on the EVM side.
  */
-export async function deeplinkSignAndSendTransaction(base64Tx) {
-  return signViaDeeplink('signAndSendTransaction', base58Encode(base64ToBytes(base64Tx)), base64Tx);
+export async function deeplinkSignAndSendTransaction(base64Tx, { broadcast = null } = {}) {
+  const res = await signViaDeeplink('signAndSendTransaction', base58Encode(base64ToBytes(base64Tx)), base64Tx);
+  /*
+   * Phantom marks `signAndSendTransaction` deprecated in its deeplink docs
+   * and a build may one day answer it with «method not found» / «unsupported»
+   * rather than a prompt. That is not a rejection and not a network failure:
+   * the same request as `signTransaction` gets the user the SAME approval
+   * screen, and the caller (which owns the RPC) broadcasts the signed bytes.
+   * Only when the caller can broadcast, and never after a user's «no».
+   */
+  if (!res.ok && typeof broadcast === 'function' && looksUnsupported(res)) {
+    const signed = await signViaDeeplink('signTransaction', base58Encode(base64ToBytes(base64Tx)), base64Tx);
+    if (!signed.ok || !signed.transaction) return signed;
+    try {
+      const signature = await broadcast(signed.transaction);
+      return { ...signed, signature, broadcastBy: 'app' };
+    } catch (err) {
+      return { ok: false, code: 'SEND_FAILED', detail: String(err?.message ?? err).slice(0, 160) };
+    }
+  }
+  return res;
+}
+
+/** A wallet answer that says «I do not have this method», not «no». */
+function looksUnsupported(res) {
+  if (!res || res.ok || res.code === 'REJECTED') return false;
+  const code = String(res.wallet?.code ?? '');
+  const message = String(res.wallet?.message ?? '');
+  if (code === '-32601' || code === '-32603') return true;
+  return /not (?:found|supported)|unsupported|deprecated|unknown method|invalid method/i.test(message);
 }
 
 /** Wallet signs only; the caller (Jupiter) lands the transaction itself. */

@@ -48,6 +48,7 @@
 
 import { TIMEOUT } from './config.js';
 import { pauseBound } from './timing.js';
+import { verifyRelayLive } from './requestHandoff.js';
 
 /** Methods that ask the wallet to produce a signature (i.e. to prompt). */
 export const SIGN_METHODS = Object.freeze([
@@ -329,26 +330,55 @@ export const RETURN_GRACE_MS = 12_000;
  * only the hide→show pair that a mobile app-switch produces is treated as
  * a return from the wallet.
  */
-function watchHiddenPause(bound, doc, { returnGraceMs = RETURN_GRACE_MS, onReturn = null } = {}) {
+function watchHiddenPause(bound, doc, { returnGraceMs = RETURN_GRACE_MS, onReturn = null, onResume: onResumeOnly = null, win = null } = {}) {
   if (!doc || typeof doc.addEventListener !== 'function') return () => {};
   let wentAway = false;
+  let returned = false;
+  const cameBack = () => {
+    bound.resume();
+    if (wentAway && !returned && Number.isFinite(returnGraceMs) && returnGraceMs >= 0) {
+      returned = true;
+      bound.shorten?.(returnGraceMs, SIGN_ERRORS.RETURNED_UNSIGNED);
+      try { onReturn?.(); } catch { /* a trace is not load-bearing */ }
+    }
+  };
   const onVisibility = () => {
     try {
       if (doc.visibilityState === 'hidden') {
         wentAway = true;
+        returned = false;
         bound.pause();
       } else {
-        bound.resume();
-        if (wentAway && Number.isFinite(returnGraceMs) && returnGraceMs >= 0) {
-          bound.shorten?.(returnGraceMs, SIGN_ERRORS.RETURNED_UNSIGNED);
-          try { onReturn?.(); } catch { /* a trace is not load-bearing */ }
-        }
+        cameBack();
       }
     } catch { /* a clock that cannot be paused is still a clock */ }
   };
+  /*
+   * THE APK'S OWN RETURN SIGNAL. Inside the Android WebView `visibilityState`
+   * is not always updated when another activity (the wallet) covers us and
+   * hands the screen back — MainActivity.onResume dispatches `fbt:app-resume`
+   * for exactly that reason. It counts as a return only when we saw the hide;
+   * an app that never left is not shortened.
+   */
+  const onResume = () => {
+    try {
+      if (wentAway) cameBack();
+      else {
+        /* The WebView never said "hidden", yet Android says we were away:
+           do not shorten (nothing proves the wallet had the screen), but do
+           let the caller check the socket and fetch a waiting answer. */
+        try { onResumeOnly?.(); } catch { /* advisory */ }
+      }
+    } catch { /* same as above */ }
+  };
   if (doc.visibilityState === 'hidden') onVisibility();
   doc.addEventListener('visibilitychange', onVisibility);
-  return () => doc.removeEventListener('visibilitychange', onVisibility);
+  const host = win ?? (typeof window !== 'undefined' ? window : null);
+  if (host && typeof host.addEventListener === 'function') host.addEventListener('fbt:app-resume', onResume);
+  return () => {
+    doc.removeEventListener('visibilitychange', onVisibility);
+    if (host && typeof host.removeEventListener === 'function') host.removeEventListener('fbt:app-resume', onResume);
+  };
 }
 
 /**
@@ -370,7 +400,12 @@ function watchHiddenPause(bound, doc, { returnGraceMs = RETURN_GRACE_MS, onRetur
  *        wallet app is brought back to the front, so the prompt is on screen
  *        when the user arrives.
  * @param {(name:string, detail:object) => void} [options.onTrace]
+ * @param {boolean} [options.relayLiveness]  prove the relay socket with one
+ *        real RPC before each request and on each return from the wallet
+ *        (phones: the socket a backgrounded WebView keeps is often dead while
+ *        still reporting `connected`). See requestHandoff.js.
  * @param {Document} [options.doc]
+ * @param {Window} [options.win]
  */
 export function guardEip1193(eip, options = {}) {
   if (!eip || typeof eip.request !== 'function') return eip;
@@ -380,8 +415,38 @@ export function guardEip1193(eip, options = {}) {
     returnGraceMs = RETURN_GRACE_MS,
     onSignatureRequest = null,
     onTrace = null,
-    doc = typeof document !== 'undefined' ? document : null
+    relayLiveness = false,
+    doc = typeof document !== 'undefined' ? document : null,
+    win = typeof window !== 'undefined' ? window : null
   } = options;
+
+  /*
+   * ─── THE SOCKET IS PROVED, NOT ASSUMED ─────────────────────────────────
+   * `relayConnected()` reads a flag. Inside the Android app that flag stays
+   * `true` on a socket the OS silently killed while the wallet had the screen
+   * — the SDK has no browser-side ping — so the publish sat in a dead socket
+   * for ~10s while the wallet, already opened with the requestId, showed
+   * «connection not established». One real RPC (bounded) tells the truth,
+   * restarts the transport when it is dead, and on the way back from the
+   * wallet ALSO pulls the response the wallet may already have published.
+   * Advisory: whatever it finds, the request goes out afterwards.
+   */
+  const proveRelay = async (why) => {
+    if (!relayLiveness) return null;
+    try {
+      const res = await verifyRelayLive(relayOf(eip), { topics: [eip.session?.topic] });
+      trace(res.live ? 'sign_relay_live' : res.ok ? 'sign_relay_restarted' : 'sign_relay_dead', {
+        why,
+        ms: res.ms,
+        delivered: res.delivered,
+        ...(res.error ? { error: res.error } : {})
+      });
+      return res;
+    } catch (err) {
+      trace('sign_relay_probe_failed', { why, error: String(err?.message ?? err).slice(0, 80) });
+      return null;
+    }
+  };
 
   const trace = (name, detail) => {
     try {
@@ -463,10 +528,22 @@ export function guardEip1193(eip, options = {}) {
       throw signError(check.code, check.detail);
     }
 
+    /* The request is about to be published: make sure the socket it goes
+       out on is a socket, not a memory of one. */
+    await proveRelay('pre_sign');
+
     const bound = pauseBound(timeoutMs, SIGN_ERRORS.NO_RESPONSE, { hardCapMs });
     const stopWatching = watchHiddenPause(bound, doc, {
       returnGraceMs,
-      onReturn: () => trace('sign_returned_waiting', { method, graceMs: returnGraceMs })
+      win,
+      onReturn: () => {
+        trace('sign_returned_waiting', { method, graceMs: returnGraceMs });
+        /* Back from the wallet: fetch what it answered, over a socket that
+           may have died while we were away. A delivered response settles
+           `pending` below; a restart gives the grace window a live socket. */
+        void proveRelay('returned');
+      },
+      onResume: () => { void proveRelay('resumed'); }
     });
     try {
       const pending = Promise.resolve(eip.request(args, ...rest));

@@ -318,7 +318,15 @@ public class MainActivity extends BridgeActivity {
    * check is done here as well: this is a signing application, not a generic
    * URL forwarder, and whatever passes is handed to JavaScript.
    */
-  private static final int MAX_DEEPLINK_LENGTH = 4096;
+  /*
+   * 64 KB, not 4 KB. A wallet's ANSWER rides in this URL: a signed Solana
+   * transaction (base58 of up to 1232 bytes, encrypted, plus nonce) or a
+   * signAllTransactions reply with several of them. At 4 KB a connect reply
+   * fit and a signed transaction did not — the app was told nothing, and the
+   * user saw a signature they had approved in the wallet «never arrive».
+   * SolanaLink accepts requests of the same size for the same reason.
+   */
+  private static final int MAX_DEEPLINK_LENGTH = 65536;
 
   private void captureDeepLink(Intent intent) {
     if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
@@ -536,6 +544,55 @@ public class MainActivity extends BridgeActivity {
       return canOpen(protocolIntent) && launch(protocolIntent);
     }
 
+    /*
+     * The SECOND deep link of a session: `<scheme>://wc?requestId=…&sessionTopic=…`
+     * (a signing request the wallet looks up on the relay), or the bare
+     * `<scheme>://` that only brings the wallet to the front.
+     *
+     * The WebView used to deliver this as an implicit ACTION_VIEW with no
+     * package (Capacitor's launchIntent), racing a second bare-scheme intent
+     * from our own nudge — two launches, neither scoped to the wallet that owns
+     * the session, and both fired before the relay had the request. The JS
+     * side (src/lib/wc/requestHandoff.js) now waits for the relay's ack and
+     * calls this once; here the launch is explicit and the URL is checked
+     * against the package's own scheme, so JavaScript cannot aim it anywhere
+     * else. Returns false when the wallet is not installed or refuses the
+     * intent, so the caller can fall back to the browser route.
+     */
+    private static final Pattern SESSION_REQUEST_QUERY = Pattern.compile(
+      "^requestId=\\d{1,32}&sessionTopic=[0-9a-fA-F]{64}$"
+    );
+
+    @JavascriptInterface
+    public boolean openSessionLink(final String url, final String packageName) {
+      if (url == null || url.length() > 1024) return false;
+      final String walletScheme = schemeForPackage(packageName);
+      if (walletScheme == null) return false;
+      Uri uri;
+      try {
+        uri = Uri.parse(url);
+      } catch (Exception e) {
+        return false;
+      }
+      if (uri.getScheme() == null || !walletScheme.equalsIgnoreCase(uri.getScheme())) return false;
+      String host = uri.getHost();
+      String path = uri.getPath();
+      String query = uri.getEncodedQuery();
+      boolean bare = (host == null || host.isEmpty()) && (path == null || path.isEmpty()) && query == null;
+      boolean request = ("wc".equalsIgnoreCase(host) || "/wc".equalsIgnoreCase(path))
+        && query != null && SESSION_REQUEST_QUERY.matcher(query).matches();
+      if (!bare && !request) return false;
+
+      final Intent intent = walletIntent(uri, packageName);
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      try {
+        activity.startActivity(intent);
+        return true;
+      } catch (Exception e) {
+        return false;
+      }
+    }
+
     private Intent walletIntent(Uri uri, String packageName) {
       Intent intent = new Intent(Intent.ACTION_VIEW, uri);
       intent.setPackage(packageName);
@@ -600,23 +657,108 @@ public class MainActivity extends BridgeActivity {
 
     @JavascriptInterface
     public boolean openWalletLink(final String url, final String packageName) {
-      if (url == null || url.length() > MAX_REQUEST_LENGTH) return false;
-      if (packageName == null || !packageName.equals(packageForHost(hostOf(url)))) return false;
+      return openWalletRequest(url, packageName).startsWith("{\"ok\":true");
+    }
+
+    /*
+     * ─── EVERY DOOR THE WALLET DECLARES, IN ORDER, EXPLICITLY ────────────────
+     * An explicit intent (setPackage) only resolves when the wallet's manifest
+     * declares an intent-filter for THAT scheme+host — and the wallets moved:
+     * Phantom's documentation and its Android intent-filter history name
+     * `phantom.app`, its verified assetlinks now live on `phantom.com`, and
+     * every one of the three also registers a custom scheme
+     * (`phantom://v1/…`, `solflare://ul/v1/…`, `backpack://ul/v1/…`). One
+     * host guessed wrong threw ActivityNotFoundException, the old code fell
+     * to an UNSCOPED ACTION_VIEW, and Android handed the request to a browser
+     * or a chooser: the wallet either never opened or opened with nothing to
+     * approve — «رد میشود». So each candidate is tried package-scoped and the
+     * exception is the signal to try the next; the unscoped launch is LAST
+     * and reported as such, so the web layer knows the wallet itself was not
+     * proven to have received the request.
+     *
+     * Returns a small JSON string (`{"ok":true,"route":"…"}`) rather than a
+     * boolean so the route that worked is in the diagnostics of the next report.
+     */
+    @JavascriptInterface
+    public String openWalletRequest(final String url, final String packageName) {
+      if (url == null || url.length() > MAX_REQUEST_LENGTH) return fail("too_long");
+      String host = hostOf(url);
+      if (packageName == null || !packageName.equals(packageForHost(host))) return fail("host_package_mismatch");
 
       Uri uri;
       try {
         uri = Uri.parse(url);
       } catch (Exception e) {
-        return false;
+        return fail("unparseable");
       }
-      if (!isWalletRequest(uri)) return false;
+      if (!isWalletRequest(uri)) return fail("not_a_wallet_request");
 
-      /* Package-scoped first: this is the delivery that reaches the wallet's
-         own handler rather than a browser or a chooser. */
-      if (launch(uri, packageName)) return true;
-      /* Not installed under that package, or a build that filters it: the URL
-         is still host-scoped and validated above, so let Android route it. */
-      return launch(uri, null);
+      /* 1. The https URL exactly as built. */
+      if (launch(uri, packageName)) return ok("https:" + host);
+
+      /* 2. The same request on the wallet's other declared host. */
+      for (String alias : aliasHosts(host)) {
+        Uri aliased = uri.buildUpon().authority(alias).build();
+        if (launch(aliased, packageName)) return ok("https:" + alias);
+      }
+
+      /* 3. The wallet's own custom scheme. */
+      Uri custom = customSchemeUri(uri, packageName);
+      if (custom != null && launch(custom, packageName)) return ok("scheme:" + custom.getScheme());
+
+      /* 4. Unscoped: the wallet is not installed under that package, or a
+         build we do not know filters all of the above. The URL is still
+         host-scoped and validated, so let Android route it — and say so. */
+      if (launch(uri, null)) return ok("system");
+      return fail("no_activity");
+    }
+
+    private static String ok(String route) {
+      return "{\"ok\":true,\"route\":\"" + route + "\"}";
+    }
+
+    private static String fail(String reason) {
+      return "{\"ok\":false,\"route\":\"none\",\"reason\":\"" + reason + "\"}";
+    }
+
+    /** The other host(s) the same wallet declares for the same paths. */
+    private static String[] aliasHosts(String host) {
+      String h = host == null ? "" : host.toLowerCase(java.util.Locale.ROOT);
+      if ("phantom.com".equals(h)) return new String[] { "phantom.app" };
+      if ("phantom.app".equals(h)) return new String[] { "phantom.com" };
+      return new String[0];
+    }
+
+    /**
+     * `https://phantom.com/ul/v1/connect?…` → `phantom://v1/connect?…`
+     * `https://solflare.com/ul/v1/connect?…` → `solflare://ul/v1/connect?…`
+     * `https://backpack.app/ul/v1/connect?…` → `backpack://ul/v1/connect?…`
+     * The query is carried over byte for byte (it is already URL-encoded).
+     */
+    private static Uri customSchemeUri(Uri https, String packageName) {
+      String path = https.getEncodedPath();
+      String query = https.getEncodedQuery();
+      if (path == null || !path.startsWith("/ul/")) return null;
+      String scheme;
+      String rest;
+      if ("app.phantom".equals(packageName)) {
+        scheme = "phantom";
+        rest = path.substring("/ul/".length());
+      } else if ("com.solflare.mobile".equals(packageName)) {
+        scheme = "solflare";
+        rest = path.substring(1);
+      } else if ("app.backpack.mobile".equals(packageName)) {
+        scheme = "backpack";
+        rest = path.substring(1);
+      } else {
+        return null;
+      }
+      String text = scheme + "://" + rest + (query == null ? "" : "?" + query);
+      try {
+        return Uri.parse(text);
+      } catch (Exception e) {
+        return null;
+      }
     }
 
     private static String hostOf(String url) {

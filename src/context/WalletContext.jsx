@@ -10,6 +10,7 @@ import { bindRewardsIdentity } from '../lib/rewards/rewardsReporter';
 import { notifyWalletState, registerEvmWalletSource } from '../lib/walletState';
 import {
   WC_PROJECT_ID,
+  armNativeRequestHandoff,
   bringWalletToFront,
   clearWalletLease,
   createWcSession,
@@ -659,6 +660,21 @@ export function WalletProvider({ children }) {
     try {
       if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
       if (!/Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || ''))) return;
+      /*
+       * INSIDE THE APK THE NUDGE IS THE GATE'S JOB. A bare-scheme launch
+       * fired here raced the SDK's own requestId link (two intents, neither
+       * package-scoped) and reached the wallet BEFORE the relay had the
+       * request — the «connection not established» screen. The gate armed
+       * in attachExternalProvider opens ONE link, to the exact request, the
+       * moment `session_request_sent` says the relay has it. See
+       * src/lib/wc/requestHandoff.js.
+       */
+      if (window.Capacitor?.isNativePlatform?.()) {
+        try {
+          wcEventDetail('sign_wallet_nudge_deferred', { m: String(method || '') });
+        } catch { /* the trace ring is not load-bearing */ }
+        return;
+      }
       const wallet = rememberedMobileWallet();
       if (!wallet) return;
       const now = Date.now();
@@ -758,9 +774,29 @@ export function WalletProvider({ children }) {
          * failures are already local and legible, and a local vault signs
          * without ever leaving the page.
          */
+        const onPhone = typeof navigator !== 'undefined'
+          && /Android|iPhone|iPad|iPod/i.test(String(navigator.userAgent || ''));
+        if (nextMode === 'wc') {
+          /* APK only (a no-op elsewhere): hold the SDK's requestId link until
+             the relay has the request, then open it package-scoped. */
+          try {
+            const gate = armNativeRequestHandoff(eip, {
+              trace: (name, detail) => {
+                try {
+                  wcEventDetail(name, detail);
+                } catch { /* never load-bearing */ }
+              }
+            });
+            if (gate) wcEvent('sign_request_gate_armed');
+          } catch { /* fail-open: the SDK's own redirect still runs */ }
+        }
         const guarded = nextMode === 'wc'
           ? guardEip1193(eip, {
               onSignatureRequest: nudgeWalletApp,
+              /* A phone's socket is proved before each request and on each
+                 return from the wallet — the APK's dead-but-"connected"
+                 socket is the reported «اتصال برقرار نیست» at signing. */
+              relayLiveness: onPhone,
               onTrace: (name, detail) => {
                 try {
                   wcEventDetail(name, detail);
