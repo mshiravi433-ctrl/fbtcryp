@@ -54,7 +54,7 @@
     "test:lido-mainnet-fork": "node test/lido-mainnet-fork-probe.mjs",
     "test:buy-sell": "node test/buy-sell-probe.mjs && node test/buy-sell-ramp-flow-probe.mjs && npm run test:buy-sell-wizard",
     "test:buy-sell-wizard": "vite build --config test/vite.buysellwizard.mjs && node test/run-one-probe.mjs ./.out/buysellwizard/buy-sell-wizard-probe.js",
-    "test:shop-revenue": "node test/shop-revenue-probe.mjs",
+    "test:shop-revenue": "node test/shop-revenue-probe.mjs && vitest run test/shop-howto-language.test.jsx",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
     "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
     "test:upgrade4": "node test/intent-ai/phase204-upgrade4-intent-intelligence-probe.mjs",

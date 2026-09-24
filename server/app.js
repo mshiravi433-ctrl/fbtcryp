@@ -5184,8 +5184,16 @@ app.get('/api/shop/countries', (_req, res) => shopRoute(res, shopCountries()));
 app.get('/api/shop/catalogue', (req, res) =>
   shopRoute(res, getShopCatalogue(req.query.country, req)));
 
+/*
+ * `lang` is forwarded so the redemption note and the how-to come back in the
+ * shopper's language when Cryptorefills has it — see server/shop.js for the
+ * probe-and-fall-back that keeps the English prose when they do not.
+ */
 app.get('/api/shop/products', (req, res) =>
-  shopRoute(res, getShopProducts({ country: req.query.country, family: req.query.family }, req)));
+  shopRoute(res, getShopProducts(
+    { country: req.query.country, family: req.query.family, lang: req.query.lang },
+    req
+  )));
 
 /**
  * PERPETUAL FUNDING RATES — the Perp screen's data.

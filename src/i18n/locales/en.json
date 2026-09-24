@@ -6414,6 +6414,15 @@
       "explore": "Explore now"
     },
     "howTo": "How to redeem",
+    "providerNote": "The provider's own wording",
+    "providerHowTo": "{{brand}}'s official instructions",
+    "redeemSteps": {
+      "s1": "Pick the amount. The USDC figure next to it is exactly what you pay.",
+      "s2": "Tap “Buy {{brand}} with crypto”. The checkout opens on Cryptorefills — our partner and the seller of record, not us.",
+      "s3": "Pay in crypto from your own wallet. The code is emailed to you, usually within a few minutes.",
+      "s4": "Redeem that code in the {{brand}} app or on their website.",
+      "s5": "The card is issued for {{country}} — check it matches the country you will spend it in."
+    },
     "heroTitle": "Spend crypto in {{country}}",
     "heroSub": "Gift cards, PayPal and Visa top-ups, mobile credit. Paid in stablecoins, delivered by email in minutes.",
     "quickAll": "Full catalogue",

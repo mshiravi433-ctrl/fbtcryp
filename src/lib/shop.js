@@ -28,6 +28,19 @@ import { apiBase } from './apiBase.js';
  */
 const API_BASE = apiBase();
 
+/**
+ * A bare two-letter language code, or an empty string.
+ *
+ * Deliberately strict and deliberately local: this value ends up inside a
+ * query string, and `slice(0, 2)` before the test is what guarantees that a
+ * language-shaped string from anywhere (a stored preference, a URL) cannot
+ * carry anything else into the request.
+ */
+function twoLetter(lang) {
+  const s = String(lang ?? '').trim().toLowerCase().slice(0, 2);
+  return /^[a-z]{2}$/.test(s) ? s : '';
+}
+
 async function get(path, { timeout = 14000 } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -63,18 +76,33 @@ export async function fetchShopCatalogue(country) {
   };
 }
 
-/** Denominations for one brand. */
-export async function fetchShopProducts(country, family) {
+/**
+ * Denominations for one brand.
+ *
+ * ─── AND THE LANGUAGE OF THE PROSE THAT COMES WITH THEM ─────────────────────
+ * `lang` is the language the shopper is reading the app in. The provider
+ * localises their own redemption note and how-to, but not in every language —
+ * server/shop.js asks in ours and falls back to English when they have
+ * nothing — so `contentLocale` reports what actually came back. It is the only
+ * field a client can trust here: assuming the request language was honoured
+ * prints English under a Persian heading, which is the reported bug.
+ */
+export async function fetchShopProducts(country, family, { lang } = {}) {
   const cc = String(country ?? '').trim().toUpperCase();
   const fam = String(family ?? '').trim();
   if (!/^[A-Z]{2}$/.test(cc) || !fam) return { rows: [], live: false };
-  const d = await get(`/shop/products?country=${cc}&family=${encodeURIComponent(fam)}`);
+  /* `fa-IR`, `fa_IR` and `fa` are all Persian. i18next hands us whichever of
+     those its resolution produced, and the API wants the bare language. */
+  const lc = twoLetter(lang);
+  const d = await get(`/shop/products?country=${cc}&family=${encodeURIComponent(fam)}${lc ? `&lang=${lc}` : ''}`);
   return {
     rows: Array.isArray(d?.rows) ? d.rows : [],
     brand: d?.brand ?? null,
     logo: d?.logo ?? null,
     note: d?.note ?? null,
     howTo: d?.howTo ?? null,
+    /* Their own `locale`, never the one we asked for. */
+    contentLocale: typeof d?.contentLocale === 'string' ? d.contentLocale.toLowerCase().slice(0, 2) : null,
     outOfStock: d?.outOfStock === true,
     /* Cheapest margin in this brand. Strictly a number or null: a `?? null`
        on its own would let a non-numeric value through into a sentence. */

@@ -150,6 +150,133 @@ const byId = (rows, id) => rows.find((r) => r.id === id);
   assert.equal(out.bestSpreadPct, 3, '...but the best deal is the 3% card, not the 20% one');
 }
 
+/* ─────────── 1b. the language of the note and the redemption steps ──────
+ *
+ * Reported: «داخل فروشگاه وقتی روی کارتی میزنی و چطور کار میکند حتی وقتی زبان
+ * مثلا فارسی باشد باز هم انگلیسی هست درست کن».
+ *
+ * The claim under test is NOT "we translate the provider". It is narrower and
+ * checkable: we ask in the shopper's language, we report what came back, and
+ * when they have nothing we keep their English prose rather than losing it.
+ *
+ * The `fa` case is the one that matters, and it was verified live against the
+ * real API before this was written: `lang=fa` does not fail, it returns the
+ * whole catalogue with `rich_description: null` — which would have silently
+ * deleted the region-lock warning from every Persian shopper's screen. Hence
+ * the probe-then-fall-back below, and hence these assertions.
+ */
+const RICH = {
+  en: { markup: 'html', locale: 'en', note: 'Steam gift cards are region-locked.', how_to_redeem: 'Go to the Steam Redeem page.' },
+  es: { markup: 'html', locale: 'es', note: 'Las tarjetas están bloqueadas por región.', how_to_redeem: 'Vaya a la página Steam Redeem.' }
+};
+
+/** One call through the real mapper, recording every upstream URL. */
+async function productsInLang(lang) {
+  const seen = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    const l = /[?&]lang=([a-z]{2})/.exec(String(url))?.[1] ?? 'en';
+    return {
+      ok: true,
+      json: async () => [{
+        brand: 'Steam',
+        family: 'Steam',
+        logo_url: null,
+        rich_description: RICH[l] ?? null,
+        products: [{ product_id: 'a', localized_denomination: '$50', denomination: '50', coin_amount: '53.86' }]
+      }]
+    };
+  };
+  try {
+    const out = await fetchShopProducts({ country: 'US', family: 'Steam', coin: 'USDC', lang }, { headers: {} });
+    return { out, seen };
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+/* A language they DO cover: asked once, in that language, and reported as it. */
+{
+  const { out, seen } = await productsInLang('es-MX');
+  assert.equal(seen.length, 1, 'a covered language costs one upstream call');
+  assert.ok(seen[0].includes('lang=es'), 'the region subtag is stripped, the language is forwarded');
+  assert.equal(out.contentLocale, 'es');
+  assert.equal(out.note, RICH.es.note);
+  assert.equal(out.howTo, RICH.es.how_to_redeem);
+}
+
+/* A language they do NOT cover: the English prose must survive the fallback,
+   and `contentLocale` must tell the truth about which text this is. */
+{
+  const { out, seen } = await productsInLang('fa');
+  assert.equal(seen.length, 2, 'the unanswered language is probed, then retried in English');
+  assert.ok(seen[0].includes('lang=fa') && seen[1].includes('lang=en'));
+  assert.equal(out.contentLocale, 'en', 'the answer is what we report, not the request');
+  assert.equal(out.note, RICH.en.note, 'the region-lock warning is NOT lost in the fallback');
+  assert.equal(out.howTo, RICH.en.how_to_redeem);
+  assert.equal(out.rows.length, 1, 'and the prices are unaffected by any of it');
+}
+
+/* Learned once, not re-learned per request: a dead language is remembered for
+   the life of the server instance, so Persian shoppers pay the probe once. */
+{
+  const { seen } = await productsInLang('fa');
+  assert.equal(seen.length, 1, 'the second fa request goes straight to English');
+  assert.ok(seen[0].includes('lang=en'));
+}
+
+/*
+ * A BROKEN PROBE MUST NOT BREAK THE REQUEST — and must not be remembered as
+ * "this language does not exist" either. A timeout on the Italian call is
+ * their bad afternoon, not a fact about Italian; the English answer below it
+ * is the whole point of having a fallback.
+ */
+{
+  const seen = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    if (String(url).includes('lang=de')) throw new Error('ETIMEDOUT');
+    return {
+      ok: true,
+      json: async () => [{
+        brand: 'Steam',
+        family: 'Steam',
+        logo_url: null,
+        rich_description: RICH.en,
+        products: [{ product_id: 'a', localized_denomination: '$50', denomination: '50', coin_amount: '53.86' }]
+      }]
+    };
+  };
+  try {
+    const out = await fetchShopProducts({ country: 'US', family: 'Steam', lang: 'de' }, { headers: {} });
+    assert.equal(out.contentLocale, 'en');
+    assert.equal(out.note, RICH.en.note, 'the English note still arrives');
+    assert.equal(seen.length, 2, 'the probe failed and English was asked for');
+  } finally {
+    globalThis.fetch = real;
+  }
+
+  /* …and because nothing was learned, the NEXT request probes again rather
+     than skipping a language that might work perfectly well. */
+  const again = await productsInLang('de');
+  assert.equal(again.seen.length, 2, 'a failed probe is retried, not remembered as dead');
+  assert.equal(again.out.contentLocale, 'en');
+}
+
+/* Nothing that is not two letters ever reaches their query string. */
+{
+  const { seen } = await productsInLang('; rm -rf /#');
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0].includes('lang=en'), 'a malformed language falls back instead of being interpolated');
+}
+{
+  const { seen } = await productsInLang(undefined);
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0].includes('lang=en'), 'no language at all keeps the previous behaviour');
+}
+
 /* ─────────────── 2. the client passes the figure through ──────────────── */
 const client = await import('../src/lib/shop.js');
 
@@ -175,6 +302,34 @@ const client = await import('../src/lib/shop.js');
   try {
     const d = await client.fetchShopProducts('US', 'Steam');
     assert.equal(d.bestSpreadPct, null);
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+/*
+ * The client half: the language travels with the request, and the server's
+ * answer about which language came back is surfaced rather than assumed.
+ * A client that defaulted `contentLocale` to the requested language would put
+ * English prose under a Persian heading with full confidence.
+ */
+{
+  const real = globalThis.fetch;
+  let url = '';
+  globalThis.fetch = async (u) => {
+    url = String(u);
+    return {
+      ok: true,
+      json: async () => ({ rows: [], howTo: 'Go to the Steam Redeem page.', contentLocale: 'en' })
+    };
+  };
+  try {
+    const d = await client.fetchShopProducts('US', 'Steam', { lang: 'fa-IR' });
+    assert.ok(url.includes('lang=fa'), 'the shop asks in the shopper\'s language');
+    assert.equal(d.contentLocale, 'en', 'and trusts what came back, not what it asked for');
+
+    await client.fetchShopProducts('US', 'Steam');
+    assert.ok(!/lang=/.test(url), 'omitting the language keeps the old request shape');
   } finally {
     globalThis.fetch = real;
   }

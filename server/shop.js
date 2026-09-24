@@ -442,14 +442,66 @@ function spreadOverFace(p, coin) {
 }
 
 /**
+ * ─── THE REDEMPTION TEXT WAS ALWAYS ENGLISH, IN EVERY LANGUAGE ──────────────
+ * Reported: «داخل فروشگاه وقتی روی کارتی میزنی و چطور کار میکند حتی وقتی زبان
+ * مثلا فارسی باشد باز هم انگلیسی هست درست کن».
+ *
+ * The cause was one hard-coded string: `&lang=en`. Their API IS localised —
+ * `rich_description.locale` comes back as whatever was asked for, when they
+ * have it — so we were asking an English question and printing the answer
+ * under a Persian heading.
+ *
+ * ─── WHY THIS PROBES INSTEAD OF TRUSTING A LANGUAGE LIST ────────────────────
+ * Their coverage is partial and it fails SILENTLY. Verified live:
+ *
+ *   lang=es  →  rich_description.locale "es", Spanish note + Spanish steps
+ *   lang=ar  →  rich_description.locale "ar", Arabic note + Arabic steps
+ *   lang=fa  →  rich_description: null
+ *
+ * `null` is the dangerous answer, not the missing one: the redemption steps,
+ * the how-to AND the region-lock warning all disappear together. Bluntly
+ * forwarding the shopper's language without a fallback would have replaced a
+ * Persian shopper's English warning with NO warning — a worse bug than the
+ * one being fixed.
+ *
+ * So: ask in their language, and if the answer carries no prose, ask again in
+ * English and remember that this language is not covered. The list of dead
+ * languages is LEARNED per process rather than hand-maintained, so the day
+ * they add Persian this picks it up on its own.
+ */
+const NO_RICH_CONTENT = new Set();
+
+/** Two letters we are willing to forward to the provider, or 'en'. */
+function providerLocale(lang) {
+  const s = String(lang ?? '').trim().toLowerCase().slice(0, 2);
+  return /^[a-z]{2}$/.test(s) ? s : 'en';
+}
+
+/**
+ * Real prose in this response, or an empty shell.
+ *
+ * Their "we do not speak that language" answer is not an error and not an
+ * empty array — it is the full catalogue with `rich_description: null`. This
+ * is the test for that, and it deliberately looks at all three prose fields:
+ * a locale that has a note but no steps still deserves to be used.
+ */
+function hasRichContent(first) {
+  const rich = first?.rich_description;
+  return Boolean(rich && (rich.how_to_redeem || rich.note || rich.description));
+}
+
+/**
  * Buyable denominations for one brand, priced in a stablecoin.
  *
  * `coin_amount` is what the buyer actually pays — it already includes the
  * spread — so it is shown next to the face value rather than instead of it.
  * Hiding it would be the dishonest choice: a $50 Steam card costs $53.86 in
  * USDC and the buyer should see that before they leave.
+ *
+ * `lang` is the shopper's UI language. It decides the language of the note and
+ * the redemption steps; the prices are unaffected.
  */
-export async function fetchShopProducts({ country, family, coin = 'USDC' }, req) {
+export async function fetchShopProducts({ country, family, coin = 'USDC', lang }, req) {
   const cc = cleanCountry(country);
   const fam = cleanText(family, 80);
   if (!cc || !fam) return { rows: [], at: Date.now() };
@@ -458,10 +510,35 @@ export async function fetchShopProducts({ country, family, coin = 'USDC' }, req)
     ? String(coin).toUpperCase()
     : 'USDC';
 
-  const data = await getJson(
-    `${API}/v5/products/country/${cc}?family_name=${encodeURIComponent(fam)}&coin=${safeCoin}&lang=en`,
-    userHeaders(req)
-  );
+  const productsUrl = (locale) =>
+    `${API}/v5/products/country/${cc}?family_name=${encodeURIComponent(fam)}&coin=${safeCoin}&lang=${locale}`;
+
+  const wanted = providerLocale(lang);
+  let data = null;
+
+  /*
+   * The probe happens at most once per language per server instance: after a
+   * language answers without prose it is remembered as dead and every later
+   * request goes straight to English.
+   *
+   * A probe that FAILS is a different thing from a probe that answers in
+   * English, and the two are treated differently on purpose: a timeout or a
+   * 5xx must not brand a language as unsupported for the life of the instance,
+   * so nothing is remembered and the next shopper's request tries again. The
+   * English call below is the safety net in both cases — this branch must
+   * never be the reason a request fails.
+   */
+  if (wanted !== 'en' && !NO_RICH_CONTENT.has(wanted)) {
+    try {
+      const probe = await getJson(productsUrl(wanted), userHeaders(req));
+      if (hasRichContent(Array.isArray(probe) ? probe[0] : null)) data = probe;
+      else NO_RICH_CONTENT.add(wanted);
+    } catch {
+      /* Their end is having a bad moment. Ask in English and carry on. */
+    }
+  }
+
+  if (!data) data = await getJson(productsUrl('en'), userHeaders(req));
 
   const first = Array.isArray(data) ? data[0] : null;
   if (!first) return { rows: [], at: Date.now() };
@@ -537,6 +614,15 @@ export async function fetchShopProducts({ country, family, coin = 'USDC' }, req)
      */
     note: htmlToText(rich.note, 600) || null,
     howTo: htmlToText(rich.how_to_redeem, 900) || null,
+    /*
+     * ─── WHICH LANGUAGE THAT PROSE IS ACTUALLY IN ───────────────────────────
+     * Their own `locale` field, not the one we asked for. It is the only
+     * honest answer to "did we get Persian?": on the fallback path we asked
+     * for `fa` and received `en`, and a client that assumed the request
+     * language would then print English instructions under a Persian heading
+     * with full confidence — the exact bug this change exists to fix.
+     */
+    contentLocale: cleanText(rich.locale, 8) || 'en',
     rows,
     at: Date.now()
   };
@@ -546,5 +632,8 @@ export function getShopProducts(args, req) {
   const cc = cleanCountry(args?.country);
   const fam = cleanText(args?.family, 80);
   if (!cc || !fam) return Promise.resolve({ value: { rows: [], at: Date.now() } });
-  return withCache(`shop-prod-${cc}-${fam}`, 10 * 60_000, () => fetchShopProducts(args, req));
+  /* The language is part of the key: one cache entry shared across languages
+     would hand an Arabic shopper the English note, or vice versa. */
+  const locale = providerLocale(args?.lang);
+  return withCache(`shop-prod-${cc}-${fam}-${locale}`, 10 * 60_000, () => fetchShopProducts(args, req));
 }

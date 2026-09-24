@@ -37,6 +37,11 @@ import {
 import { IconBed, IconCard, IconMoney, IconPlane, IconShare, IconSim, IconTopUp } from '../components/ShopIcons';
 import { openUrl } from '../lib/browser';
 import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
+import { LANGUAGES } from '../i18n/languages';
+/* The English source is the yardstick for "is this string translated?". It is
+   already in the entry bundle (it is i18next's fallback locale), so importing
+   it costs nothing and avoids reaching into i18next internals. */
+import en from '../i18n/locales/en.json';
 import { PROMO_IMAGES, PROMO_SLIDES } from '../lib/shopImages';
 
 /**
@@ -103,6 +108,25 @@ function catLabel(t, id) {
 }
 
 /**
+ * The language a provider's note is written in, named the way the rest of the
+ * app names languages — the endonym first (`English`, `العربية`), set in its
+ * own direction so an RTL name renders correctly inside an LTR sentence.
+ *
+ * It exists so the English block can say WHY it is English. A Persian shopper
+ * who is handed four lines of English with no explanation reads it as the app
+ * being half-finished; the same four lines under «متن اصلی ارائهدهنده
+ * (English)» read as what they are, the issuer's own wording kept verbatim
+ * because the terms of a prepaid card are not something to paraphrase.
+ */
+function langLabel(code) {
+  const meta = LANGUAGES.find((l) => l.code === code);
+  if (!meta) return String(code ?? '').toUpperCase();
+  return (
+    <span lang={meta.code} dir={meta.dir}>{meta.endonym}</span>
+  );
+}
+
+/**
  * The restrictions, as a folded list rather than one long paragraph.
  *
  * collapsible. Five separate facts read far better than one block: the
@@ -123,7 +147,7 @@ function LimitsBox() {
 }
 
 export default function Shop() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg, user } = useTelegram();
 
@@ -220,18 +244,26 @@ export default function Shop() {
     };
   }, [country]);
 
+  /*
+   * The shopper's language goes WITH the request, because the provider writes
+   * the redemption note and the how-to themselves and localises them when they
+   * can. See the note on `contentLocale` in lib/shop.js for why the answer,
+   * not the request, is what the screen trusts.
+   */
+  const uiLang = String(i18n?.resolvedLanguage || i18n?.language || 'en').toLowerCase().slice(0, 2);
+
   useEffect(() => {
     if (!openBrand || !country) return undefined;
     let alive = true;
     setProducts(null);
     setProductsLoading(true);
-    fetchShopProducts(country, openBrand.family)
+    fetchShopProducts(country, openBrand.family, { lang: uiLang })
       .then((d) => alive && setProducts(d))
       .finally(() => alive && setProductsLoading(false));
     return () => {
       alive = false;
     };
-  }, [openBrand, country]);
+  }, [openBrand, country, uiLang]);
 
   /*
    * Open the brand a shared link named, once the catalogue it belongs to has
@@ -328,6 +360,45 @@ export default function Shop() {
 
   const countryName = countries.find((c) => c.code === country)?.name ?? country;
 
+  /*
+   * ─── THE PROSE IN THE SHEET, AND WHOSE LANGUAGE IT IS IN ──────────────────
+   * Reported: «حتی وقتی زبان مثلا فارسی باشد باز هم انگلیسی هست» — tapping a
+   * card showed «چطور استفاده کنم» in Persian over four lines of English.
+   *
+   * Two sources of prose arrive with a brand, and both are the provider's:
+   *   `note`  — the redemption traps (region lock, no refunds). Quoted, never
+   *             paraphrased: these are the issuer's terms about money.
+   *   `howTo` — the redemption steps.
+   *
+   * The server asks Cryptorefills for both in the shopper's language and hands
+   * back `contentLocale`, what it ACTUALLY got. When that is not the language
+   * on screen — Persian today, because they do not cover it — the sheet stops
+   * pretending: the steps are OUR OWN localised checklist of the same flow
+   * (choose, buy on their checkout, pay, redeem), and the provider's original
+   * wording is kept underneath, labelled with the language it is in.
+   *
+   * Nothing is machine-translated and nothing is dropped. The alternative —
+   * an English block under a Persian title — is what was reported; silently
+   * deleting the issuer's region-lock warning would be worse.
+   */
+  const proseLocale = products?.contentLocale ?? null;
+  const proseLocalized = Boolean(proseLocale && proseLocale === uiLang);
+
+  /*
+   * Do we actually HAVE those steps in the language on screen?
+   *
+   * Comparing the rendered string with the English source is the honest test:
+   * a locale that still carries the English sentence has not been translated,
+   * and printing it would just be the provider's English a second time — a
+   * longer sheet, same problem. English and the ten languages without their
+   * own steps therefore show the provider's wording alone, labelled.
+   */
+  const ownStepsTranslated = t('shop.redeemSteps.s1') !== en?.shop?.redeemSteps?.s1;
+  /* `products` is still null on the frame between the tap and the response —
+     the sheet's prose blocks sit OUTSIDE the loading branch below, which is why
+     they are all written with `products?.`. */
+  const showOwnSteps = Boolean(products) && !proseLocalized && ownStepsTranslated;
+
   const header = (
     <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
       <div className="row" style={{ gap: 10 }}>
@@ -422,15 +493,77 @@ export default function Shop() {
         Redemption steps are collapsed by default because they matter after
         you buy; the warning note is not, because it changes whether you buy
         at all.
+
+        Both boxes are now language-aware. When the provider answered in the
+        shopper's language their words are shown as they always were; when
+        they did not, the steps box opens with our OWN localised walk-through
+        and their wording sits under it with the language it is in spelled
+        out. See `proseLocale` above for why the request language is not
+        trusted and the answer is.
       */}
       {products?.note && (
-        <p className="notice" style={{ marginTop: 12, whiteSpace: 'pre-line' }}>{products.note}</p>
+        <div style={{ marginTop: 12 }}>
+          {!proseLocalized && (
+            <p className="faint" style={{ fontSize: 11, margin: '0 0 5px' }}>
+              {t('shop.providerNote')}
+              {/* The language name only when we KNOW it: a bracket with nothing
+                  inside it would read as a rendering fault. */}
+              {proseLocale && <> ({langLabel(proseLocale)})</>}
+            </p>
+          )}
+          {/*
+            `dir="ltr"` on the provider's own English. In an RTL page the
+            bidi algorithm otherwise reorders the Latin punctuation and pulls
+            a trailing "(VPN)." to the wrong end of the sentence — a small
+            thing that makes a warning about losing money look like noise.
+          */}
+          <p
+            className="notice"
+            style={{ margin: 0, whiteSpace: 'pre-line' }}
+            dir={proseLocalized ? undefined : 'ltr'}
+          >
+            {products.note}
+          </p>
+        </div>
       )}
 
-      {products?.howTo && (
+      {(products?.howTo || showOwnSteps) && (
         <div style={{ marginTop: 10 }}>
           <InfoBox title={t('shop.howTo')} tone="info" id="shop-howto">
-            <p style={{ whiteSpace: 'pre-line' }}>{products.howTo}</p>
+            {showOwnSteps && (
+              /*
+                Our own walk-through, in the shopper's language. Five steps, all
+                of them things the flow really does: the amount and the USDC
+                figure, the hand-off to Cryptorefills, paying from the
+                shopper's own wallet, the code by email, and where it is
+                redeemed. Nothing here is a translation of their text.
+              */
+              <ol className="shop-steps">
+                {['s1', 's2', 's3', 's4', 's5'].map((k) => (
+                  <li key={k}>
+                    {t(`shop.redeemSteps.${k}`, { brand: openBrand?.name ?? '', country: countryName })}
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {/* The issuer's own wording, always kept, labelled whenever it is
+                not in the language the shopper is reading. */}
+            {!proseLocalized && products?.howTo && (
+              <p className="faint" style={{ fontSize: 11, margin: showOwnSteps ? '12px 0 5px' : '0 0 5px' }}>
+                {t('shop.providerHowTo', { brand: openBrand?.name ?? '' })}
+                {proseLocale && <> ({langLabel(proseLocale)})</>}
+              </p>
+            )}
+            {products?.howTo && (
+              <p
+                className={proseLocalized ? undefined : 'faint'}
+                style={{ whiteSpace: 'pre-line', fontSize: proseLocalized ? undefined : 12 }}
+                dir={proseLocalized ? undefined : 'ltr'}
+              >
+                {products.howTo}
+              </p>
+            )}
           </InfoBox>
         </div>
       )}
