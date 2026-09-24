@@ -46,10 +46,13 @@ import {
   deeplinkInstallUrl,
   deeplinkWallet,
   bytesToBase64,
+  encodeReturnBlob,
   isDeeplinkReturn,
   randomNonce,
   randomRequestId,
   readDeeplinkReturn,
+  readReturnBlob,
+  readUrlParam,
   signRequestPayload,
   signRequestUrl,
   stripDeeplinkReturn
@@ -456,6 +459,133 @@ export function pendingDeeplinkRequest() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* the return blob — completing an answer the wallet brought to ANOTHER        */
+/* browser                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * ─── THE iOS ROUND TRIP, HANDLED ────────────────────────────────────────────
+ *
+ * «در ایفون وقتی میزنی روی اتصال کیف پول سولنا و امضا میکنی و تایید، به جای
+ * برگشت به مثلا مرورگر کروم که رفته، میره به مرورگر دیگر روی ایفون».
+ *
+ * What happens, per the wallet's own documentation: the HTTPS redirect opens
+ * in the phone's DEFAULT browser. Started from Chrome, defaulted to Safari,
+ * the answer arrives in a document whose localStorage never held the pending
+ * request — and the old code had exactly two answers for that: a trampoline
+ * to the ANDROID APK's custom scheme (a dead end on iPhone), or NO_PENDING
+ * over a signature the user actually gave.
+ *
+ * Now the redirect itself carries the state (`fbt=` on the URL — built where
+ * the request is built, read here), and this section rebuilds a minimal
+ * pending row from it so the completion below runs exactly as if the request
+ * had been fired from this browser. The saved session/signature then works
+ * in the browser the user is standing in, and the return target from the
+ * blob puts them back on the screen they were on.
+ *
+ * A blob is only accepted when every check passes — a URL is input:
+ *   · v1, with an age inside the same 15-minute window the pending rows use
+ *     (a few minutes of clock skew forward are tolerated, nothing older);
+ *   · naming a wallet this app actually talks to;
+ *   · naming an operation this app can complete;
+ *   · matching the request id the URL itself carries;
+ *   · never consumed before (a replayed URL must not complete twice).
+ */
+const BLOB_USED_KEY = 'fbt:solana:blob-used:v1';
+
+/* The rebuilt pending row carries the id as `id` and the stamp as
+   `createdAt`; the raw blob carries `rid` and `t`. The marker must key off
+   both shapes, or a consumed blob would be spendable once more. */
+const blobKeyOf = (rec) => `${rec.rid ?? rec.id}:${rec.t ?? rec.createdAt}`;
+
+function blobAlreadyUsed(blob) {
+  const rec = readJson(BLOB_USED_KEY) ?? {};
+  return rec[blobKeyOf(blob)] === true;
+}
+
+function markBlobUsed(blob) {
+  const rec = readJson(BLOB_USED_KEY) ?? {};
+  rec[blobKeyOf(blob)] = true;
+  const keys = Object.keys(rec);
+  if (keys.length > 24) for (const k of keys.slice(0, keys.length - 24)) delete rec[k];
+  writeJson(BLOB_USED_KEY, rec);
+}
+
+/** The pending row a return blob stands in for — or null when any check fails. */
+function pendingFromBlob(rawUrl, requestId) {
+  const text = readUrlParam(rawUrl, 'fbt');
+  const blob = text ? readReturnBlob(text) : null;
+  if (!blob) return null;
+
+  const now = Date.now();
+  const t = Number(blob.t);
+  if (!Number.isFinite(t)) return null;
+  if (t > now + 5 * 60_000) return null; // from the future beyond any real skew
+  if (now - t > PENDING_TTL_MS) return null; // the same window the rows use
+  if (!blob.rid || (requestId && blob.rid !== requestId)) return null;
+  if (!deeplinkWallet(blob.w)) return null; // a wallet this app never names
+  if (blobAlreadyUsed(blob)) return null; // one blob, one completion
+
+  if (blob.op === 'connect') {
+    if (!blob.pk || !blob.sk) return null;
+    return {
+      id: blob.rid,
+      op: 'connect',
+      walletId: blob.w,
+      dappPublicKey: blob.pk,
+      dappSecretKey: blob.sk,
+      returnTo: blob.rt || '',
+      createdAt: t,
+      rescued: true
+    };
+  }
+  if (blob.op === 'signTransaction' || blob.op === 'signAndSendTransaction' || blob.op === 'signMessage') {
+    if (!blob.pk || !blob.sk || !blob.wek) return null;
+    return {
+      id: blob.rid,
+      op: blob.op,
+      walletId: blob.w,
+      dappPublicKey: blob.pk,
+      dappSecretKey: blob.sk,
+      walletEncryptionPublicKey: blob.wek,
+      returnTo: blob.rt || '',
+      createdAt: t,
+      rescued: true
+    };
+  }
+  return null;
+}
+
+/** The blob a connect request should ship with its redirect. */
+function connectBlob({ id, pair, walletId, returnTo }) {
+  return encodeReturnBlob({
+    v: 1,
+    op: 'connect',
+    rid: id,
+    w: walletId,
+    pk: pair.publicKey,
+    sk: pair.secretKey,
+    t: Date.now(),
+    rt: returnTo || null
+  });
+}
+
+/** The blob a signing request should ship with its redirect. */
+function signBlob({ id, op, session, returnTo }) {
+  return encodeReturnBlob({
+    v: 1,
+    op,
+    rid: id,
+    w: session.walletId,
+    pk: session.dappPublicKey,
+    sk: session.dappSecretKey,
+    wek: session.walletEncryptionPublicKey,
+    t: Date.now(),
+    rt: returnTo || null
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* results — how an answer survives the reload the wallet causes               */
 /* -------------------------------------------------------------------------- */
 
@@ -534,8 +664,17 @@ export function consumeDeeplinkResult() {
  *      request and trampolines to `ir.fbtswap.app://solconnect?...`, bringing
  *      the APK back to the front to complete the connection.
  */
-export function deeplinkRedirect(requestId) {
-  return publicAppUrl(`/?${RETURN_MARKER}&rid=${encodeURIComponent(requestId)}`);
+/**
+ * `blob` is the return blob (see the `fbt` parameter, deeplinkUri.js): the
+ * state the answer needs, riding the redirect so the completion works in
+ * whichever browser the wallet opens it in. The base64url alphabet is
+ * URL-safe, so no further encoding is needed — and none may be added: the
+ * wallet appends its own parameters to this exact string.
+ */
+export function deeplinkRedirect(requestId, blob = null) {
+  const base = publicAppUrl(`/?${RETURN_MARKER}&rid=${encodeURIComponent(requestId)}`);
+  if (blob) return `${base}&fbt=${blob}`;
+  return base;
 }
 
 function currentReturnTo() {
@@ -593,6 +732,22 @@ function intentCapableView(view) {
  *
  * Pure — takes the view — so the table is assertable in Node.
  */
+/**
+ * The route that would deliver a request to this wallet in the CURRENT view —
+ * the first door of `deeplinkOpenRoutes`, as a name (`native-intent`,
+ * `intent`, `universal`, …). The sheet asks it to decide whether the waiting
+ * card must say the iOS default-browser note: `universal` is the one route
+ * whose answer comes back in the phone's default browser.
+ */
+export function deeplinkRouteFor(walletId) {
+  try {
+    const list = deeplinkOpenRoutes({ walletId, url: publicAppUrl('/') });
+    return list?.[0]?.route ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function deeplinkOpenRoutes({ walletId, url, view }) {
   const win = view ?? (typeof window !== 'undefined' ? window : null);
   const wallet = deeplinkWallet(walletId);
@@ -1116,7 +1271,8 @@ export async function completeDeeplinkReturn(rawUrl) {
   if (read.state === 'none') return { ok: false, code: 'NOT_A_RETURN' };
 
   const requestId = read.params?.requestId ?? null;
-  const pending = findPending(requestId);
+  let pending = findPending(requestId);
+
   if (!pending) {
     /*
      * The same answer arriving twice (native push plus inbox — see
@@ -1128,7 +1284,24 @@ export async function completeDeeplinkReturn(rawUrl) {
     if (session?.address) return { ok: true, already: true, address: session.address, walletId: session.walletId };
 
     /*
-     * Trampoline for native app returns:
+     * THE iOS RESCUE. No pending row in THIS browser's storage: the wallet
+     * answered in the phone's default browser, which is not the browser the
+     * request was fired from (started in Chrome, answered in Safari). The
+     * redirect link carries the request's own state as `fbt=`, so the answer
+     * is completed right here, in this browser — connected in the place the
+     * user is actually standing in, instead of stranded in the wrong one
+     * with a «back to app» bar that goes nowhere.
+     *
+     * Deliberately before the trampoline: on a phone where BOTH the blob and
+     * the APK scheme exist (Android), the blob is the same round trip that
+     * would reach the APK — except completed where the user is looking.
+     */
+    pending = pendingFromBlob(rawUrl, requestId);
+  }
+
+  if (!pending) {
+    /*
+     * Trampoline for native app returns — ANDROID ONLY.
      * When connecting from the native Android app, the wallet redirects to
      * `https://fbtswap.ir/?sol=1&rid=...` so that the origin strictly matches `app_url`.
      * If Android hands that https redirect to Chrome instead of the APK, this web
@@ -1136,11 +1309,16 @@ export async function completeDeeplinkReturn(rawUrl) {
      * the APK's WebView storage).
      * Forward the return into the APK via its registered custom scheme
      * `ir.fbtswap.app://solconnect`, bringing the app to the foreground.
+     *
+     * NEVER on iPhone: `ir.fbtswap.app` is the ANDROID APK's scheme. There is
+     * no app on iOS that owns it, so the old `isMobile` gate fired a
+     * navigation into a void on exactly the phone the report is about — the
+     * dead end the user then saw as «به اپلیکیشن برگردید، میزنی نمیاد».
      */
     if (typeof window !== 'undefined' && !isNativeShell()) {
       const ua = String(window.navigator?.userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : '') || '');
-      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
-      if (isMobile && read.state !== 'none') {
+      const isAndroid = /Android/i.test(ua);
+      if (isAndroid && read.state !== 'none') {
         trampolineToNativeApp(rawUrl);
       }
     }
@@ -1180,20 +1358,34 @@ export async function completeDeeplinkReturn(rawUrl) {
       : await applySignAnswer(pending, read.params);
 
   dropPending(pending.id);
+  /*
+   * A rescue succeeds here, in the browser the user is standing in. Mark the
+   * blob consumed ONLY on success — a failed opening (impossible with our
+   * own keys, but a URL is input) must stay retryable rather than spent.
+   */
+  if (result.ok && pending.rescued) markBlobUsed(pending);
   /* `warnings` rides along with the stored answer: a signature that arrives as
      a page load is read by a document that never saw the request, and the
      reason Phantom showed a risk dialog is the one thing that document still
-     needs in order to explain itself. */
-  const stored = { ...result, walletId: pending.walletId, op: pending.op, warnings: pending.warnings ?? [] };
+     needs in order to explain itself. `rescued` is the same story one level
+     up: the document that shows the result never saw the REQUEST either, and
+     the host uses the flag to say so instead of playing it as routine. */
+  const stored = {
+    ...result,
+    walletId: pending.walletId,
+    op: pending.op,
+    rescued: pending.rescued === true,
+    warnings: pending.warnings ?? []
+  };
   saveResult(pending.id, stored);
   publishResult(stored);
 
   if (result.ok) {
     if (result.op === 'connect') {
-      emit({ status: 'connected', address: result.address, walletId: pending.walletId, requestId: pending.id, code: null });
+      emit({ status: 'connected', address: result.address, walletId: pending.walletId, requestId: pending.id, code: null, rescued: pending.rescued === true });
       emitWalletChange(result.address);
     } else {
-      emit({ status: 'signed', walletId: pending.walletId, requestId: pending.id, code: null });
+      emit({ status: 'signed', walletId: pending.walletId, requestId: pending.id, code: null, rescued: pending.rescued === true });
     }
   } else {
     emit({ status: 'error', code: result.code, walletId: pending.walletId, requestId: pending.id });
@@ -1213,7 +1405,10 @@ export async function completeDeeplinkReturn(rawUrl) {
       /* the connection is already stored; navigation is cosmetic */
     }
   }
-  return result;
+  /* `stored`, not `result`: the same answer, plus the `rescued` flag and the
+     wallet name the host's toast and diagnostics read from the returned
+     object. Every field `result` had is in `stored`. */
+  return stored;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1339,10 +1534,17 @@ export function startDeeplinkConnectSync(walletId, { returnTo } = {}) {
   if (!pair?.publicKey) return { ok: false, code: 'NOT_ARMED' };
 
   const id = randomRequestId();
+  const returnToHash = returnTo ?? currentReturnTo();
   const url = connectRequestUrl({
     walletId,
     dappPublicKey: pair.publicKey,
-    redirectLink: deeplinkRedirect(id),
+    /*
+     * The redirect carries the return blob (`fbt=`): on iOS the wallet opens
+     * the redirect in the phone's DEFAULT browser — often not the one that
+     * fired the request — and there the blob is what lets the answer
+     * complete (see pendingFromBlob).
+     */
+    redirectLink: deeplinkRedirect(id, connectBlob({ id, pair, walletId, returnTo: returnToHash })),
     appUrl: publicAppUrl('/'),
     cluster: 'mainnet-beta'
   });
@@ -1355,7 +1557,7 @@ export function startDeeplinkConnectSync(walletId, { returnTo } = {}) {
     url,
     dappPublicKey: pair.publicKey,
     dappSecretKey: pair.secretKey,
-    returnTo: returnTo ?? currentReturnTo(),
+    returnTo: returnToHash,
     createdAt: Date.now()
   });
 
@@ -1408,10 +1610,11 @@ export async function startDeeplinkConnect(walletId, { returnTo } = {}) {
        gesture, which is exactly the case `stuck` exists to recover from. */
     const pair = await newBoxKeyPair();
     const id = randomRequestId();
+    const returnToHash = returnTo ?? currentReturnTo();
     const url = connectRequestUrl({
       walletId,
       dappPublicKey: pair.publicKey,
-      redirectLink: deeplinkRedirect(id),
+      redirectLink: deeplinkRedirect(id, connectBlob({ id, pair, walletId, returnTo: returnToHash })),
       appUrl: publicAppUrl('/'),
       cluster: 'mainnet-beta'
     });
@@ -1423,7 +1626,7 @@ export async function startDeeplinkConnect(walletId, { returnTo } = {}) {
       url,
       dappPublicKey: pair.publicKey,
       dappSecretKey: pair.secretKey,
-      returnTo: returnTo ?? currentReturnTo(),
+      returnTo: returnToHash,
       createdAt: Date.now()
     });
     emit({ status: 'waiting', walletId, address: null, code: null, requestId: id });
@@ -1584,7 +1787,13 @@ async function signViaDeeplink(op, payloadBase58, rawTx = null) {
     op,
     dappPublicKey: session.dappPublicKey,
     nonce,
-    redirectLink: deeplinkRedirect(id),
+    /*
+     * The signing round trip navigates too (iOS: universal route,
+     * `navigatedAway`), so the redirect carries the session's own blob: a
+     * signature that comes back into the default browser can still be
+     * opened and stored where the user is standing.
+     */
+    redirectLink: deeplinkRedirect(id, signBlob({ id, op, session, returnTo: currentReturnTo() })),
     payload: sealed
   });
   if (!url) return { ok: false, code: 'UNKNOWN_WALLET' };

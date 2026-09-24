@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * «در کیف پول هوشمند قسمت Intent OS از آیکون جذاب‌تر استفاده کن و مطمئن شو
- * نشست فعال کار می‌کند» + the redesigned RWA / Global-Horizon flip banner.
+ * نشست فعال کار می‌کند» + the RWA / Global-Horizon banner.
  *
  * Pinned:
  *  - starting a session shows the live countdown and raises the enforced cap
@@ -10,8 +10,9 @@
  *    (it used to freeze and keep saying «active» forever),
  *  - ending a session clears it,
  *  - the Intent OS box no longer renders emoji icons,
- *  - the flip banner has NO tabs, switches faces from its icon-only button,
- *    auto-flips every 40s, and only shows Persian when the language is fa.
+ *  - the RWA/Horizon banner is a HORIZONTAL SWAP of two minimal slides (no
+ *    3D), auto-advances every 10s, and only shows Persian when the language
+ *    is fa.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -26,7 +27,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('../src/context/TelegramContext', () => ({ useTelegram: () => ({ haptic: () => {} }) }));
 
 import SmartWallet from '../src/pages/SmartWallet.jsx';
-import RwaHorizonFlipBanner from '../src/components/RwaHorizonFlipBanner.jsx';
+import RwaHorizonSwapBanners from '../src/components/RwaHorizonSwapBanners.jsx';
 import { checkPolicy, loadPolicy, recordSpend } from '../src/lib/smartWallet';
 
 beforeEach(() => {
@@ -81,93 +82,107 @@ describe('Smart wallet — active session', () => {
   });
 });
 
-describe('RWA / Horizon flip banner', () => {
+describe('RWA / Horizon swap banners', () => {
   /*
-   * v4 — «تب را حذف کن و داخل بنر بالا سمت چپ ایکون تعویض بزار بدون عنوان».
-   * The tab strip above the card is deleted, so these tests now drive the
-   * banner the way a user does: through the icon-only switch inside it.
+   * «اصلا فلیپ کارت نباشه یجور دوتا بنر به صورت سواپ افقی باشد … خیلی
+   * مینیمال و مدرن تر» — the 3D flip card is gone. These tests drive the new
+   * banner the way a user does: dots, swipes, and the slides themselves.
    */
-  it('has no tabs left, and the switch is an icon inside the banner', () => {
-    const { container } = render(<RwaHorizonFlipBanner isRTL lang="fa" />);
+  it('is two horizontal slides, no 3D geometry left anywhere', () => {
+    const { container } = render(<RwaHorizonSwapBanners isRTL lang="fa" />);
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
-    expect(container.querySelector('.rhb-tabs')).toBe(null);
-
-    const swap = container.querySelector('.rhb-swap');
-    expect(swap).toBeTruthy();
-    /* «بدون عنوان» — the button renders a glyph and a countdown ring, never a
-       word, and the accessibility name lives in aria-label where it belongs. */
-    expect(swap.textContent.trim()).toBe('');
-    expect(swap.querySelector('svg')).toBeTruthy();
-    expect(swap.querySelector('.rhb-swap-ring circle')).toBeTruthy();
-    expect(swap.getAttribute('aria-label')).toBeTruthy();
+    const root = container.querySelector('.rhs');
+    expect(root).toBeTruthy();
+    const slides = root.querySelectorAll('.rhs-slide');
+    expect(slides).toHaveLength(2);
+    /* the swap travels along one axis only */
+    expect(root.querySelector('.rhs-track')).toBeTruthy();
+    /* the iPhone bug had 3D geometry to happen in; there must be none now */
+    const html = container.innerHTML;
+    expect(html).not.toMatch(/preserve-3d|backface-visibility|perspective/);
+    /* two dot indicators, one active */
+    const dots = root.querySelectorAll('.rhs-dot');
+    expect(dots).toHaveLength(2);
+    expect(root.querySelectorAll('.rhs-dot.is-on')).toHaveLength(1);
   });
 
-  it('flips from the switch and routes each face', () => {
+  it('swaps from the dots and routes each slide', () => {
     const onGoRwa = vi.fn();
     const onGoHorizon = vi.fn();
     const { container } = render(
-      <RwaHorizonFlipBanner isRTL lang="fa" onGoRwa={onGoRwa} onGoHorizon={onGoHorizon} />
+      <RwaHorizonSwapBanners isRTL lang="fa" onGoRwa={onGoRwa} onGoHorizon={onGoHorizon} />
     );
-    const root = container.querySelector('.rhb');
-    expect(root.dataset.side).toBe('rwa');
+    const root = container.querySelector('.rhs');
+    const track = root.querySelector('.rhs-track');
+    expect(root.dataset.slide).toBe('rwa');
+    expect(track.style.transform).toBe('translateX(0%)');
 
-    fireEvent.click(container.querySelector('.rhb-swap'));
-    expect(root.dataset.side).toBe('hz');
-    expect(root.className).toContain('is-flipped');
+    fireEvent.click(root.querySelectorAll('.rhs-dot')[1]);
+    expect(root.dataset.slide).toBe('hz');
+    /* RTL: the next slide sits physically LEFT, so the track moves RIGHT */
+    expect(track.style.transform).toBe('translateX(50%)');
 
-    fireEvent.click(container.querySelector('.rhb-swap'));
-    expect(root.dataset.side).toBe('rwa');
+    fireEvent.click(root.querySelectorAll('.rhs-dot')[0]);
+    expect(root.dataset.slide).toBe('rwa');
+    expect(track.style.transform).toBe('translateX(0%)');
 
-    fireEvent.click(container.querySelector('.rhb-face--hz'));
+    fireEvent.click(root.querySelector('.rhs-slide--hz'));
     expect(onGoHorizon).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector('.rhb-face--rwa'));
+    fireEvent.click(root.querySelector('.rhs-slide--rwa'));
     expect(onGoRwa).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-flips every 40s and comes back on its own', () => {
-    const { container } = render(<RwaHorizonFlipBanner isRTL lang="fa" />);
-    const root = container.querySelector('.rhb');
-    /* «هر ۴۰ ثانیه خودش برگردد» — one second short of the new rhythm the card
-       must still be on its first face, then it flips by itself. */
-    act(() => { vi.advanceTimersByTime(39_000); });
-    expect(root.dataset.side).toBe('rwa');
-    act(() => { vi.advanceTimersByTime(1_100); });
-    expect(root.dataset.side).toBe('hz');
+  it('advances every 10s on its own, and comes back', () => {
+    const { container } = render(<RwaHorizonSwapBanners isRTL lang="fa" />);
+    const root = container.querySelector('.rhs');
+    act(() => { vi.advanceTimersByTime(9_900); });
+    expect(root.dataset.slide).toBe('rwa');
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(root.dataset.slide).toBe('hz');
     /* …and back again, with nobody touching it. */
-    act(() => { vi.advanceTimersByTime(40_100); });
-    expect(root.dataset.side).toBe('rwa');
-    act(() => { vi.advanceTimersByTime(40_100); });
-    expect(root.dataset.side).toBe('hz');
+    act(() => { vi.advanceTimersByTime(10_100); });
+    expect(root.dataset.slide).toBe('rwa');
   });
 
-  it('a tap does not pause the auto-flip (the old sticky-hover bug)', () => {
-    const { container } = render(<RwaHorizonFlipBanner isRTL lang="fa" />);
-    const root = container.querySelector('.rhb');
+  it('a tap does not pause the auto-advance (the old sticky-hover bug)', () => {
+    const { container } = render(<RwaHorizonSwapBanners isRTL lang="fa" />);
+    const root = container.querySelector('.rhs');
     /* A touch tap fires a synthetic mouseenter with no matching mouseleave.
-       The banner must keep flipping anyway, or the promise breaks on phones. */
+       The banner must keep advancing anyway, or the promise breaks on
+       phones. */
     fireEvent.mouseEnter(root);
-    act(() => { vi.advanceTimersByTime(40_100); });
-    expect(root.dataset.side).toBe('hz');
+    act(() => { vi.advanceTimersByTime(10_100); });
+    expect(root.dataset.slide).toBe('hz');
+  });
+
+  it('swipes the RTL way: a finger moving RIGHT advances', () => {
+    const { container } = render(<RwaHorizonSwapBanners isRTL lang="fa" />);
+    const root = container.querySelector('.rhs');
+    fireEvent.touchStart(root, { touches: [{ clientX: 100, clientY: 20 }] });
+    fireEvent.touchEnd(root, { changedTouches: [{ clientX: 160, clientY: 20 }] });
+    expect(root.dataset.slide).toBe('hz');
+    fireEvent.touchStart(root, { touches: [{ clientX: 160, clientY: 20 }] });
+    fireEvent.touchEnd(root, { changedTouches: [{ clientX: 100, clientY: 20 }] });
+    expect(root.dataset.slide).toBe('rwa');
   });
 
   /*
-   * ─── THE LANGUAGE BUG, PINNED ─────────────────────────────────────────────
-   * Reported: with a language that is neither Persian nor English the card was
-   * PERSIAN — «باید انگلیسی باشد». The branch used to be `!isRTL && !fa`, so
-   * Arabic and Urdu (RTL, not Persian) fell into the Persian copy. Only `fa`
-   * gets Persian now.
+   * ─── THE LANGUAGE RULE, PINNED ────────────────────────────────────────────
+   * Only `fa` gets Persian — Arabic, Urdu and the rest read English, the
+   * fallback this app uses everywhere else. (The flip card shipped the same
+   * rule after the «باید انگلیسی باشد» report; the swap keeps it.)
    */
   it('shows Persian only for Persian, and English for Arabic, Urdu and the rest', () => {
-    const fa = render(<RwaHorizonFlipBanner isRTL lang="fa" />);
-    expect(fa.container.querySelector('.rhb-eyebrow').textContent).toContain('دارایی');
+    const fa = render(<RwaHorizonSwapBanners isRTL lang="fa" />);
+    expect(fa.container.querySelector('.rhs-slide--rwa .rhs-title').textContent).toContain('دارایی');
     fa.unmount();
 
     for (const [lang, rtl] of [['ar', true], ['ur', true], ['tr', false], ['ru', false], ['en', false]]) {
-      const r = render(<RwaHorizonFlipBanner isRTL={rtl} lang={lang} />);
-      const eyebrow = r.container.querySelector('.rhb-eyebrow').textContent;
-      expect(eyebrow, `${lang} must read English`).toContain('Real World Assets');
-      /* and no Persian anywhere on the first face */
-      expect(r.container.querySelector('.rhb-face--rwa').textContent).not.toMatch(/[\u0600-\u06FF]/);
+      const r = render(<RwaHorizonSwapBanners isRTL={rtl} lang={lang} />);
+      const title = r.container.querySelector('.rhs-slide--rwa .rhs-title').textContent;
+      expect(title, `${lang} must read English`).toContain('Real-World Assets');
+      /* and no Persian anywhere on the first slide */
+      expect(r.container.querySelector('.rhs-slide--rwa').textContent).not.toMatch(/[\u0600-\u06FF]/);
       r.unmount();
     }
   });

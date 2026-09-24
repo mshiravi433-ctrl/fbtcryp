@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import { clearHardReloadFlag } from './lib/refresh.js';
-import { installDeeplinkReturnListeners } from './lib/solana/deeplink.js';
+import { installDeeplinkReturnListeners, subscribeDeeplink } from './lib/solana/deeplink.js';
+import { useAppStore } from './store/useAppStore.js';
 import { measureVerifyEnclave, warmVerifyEnclave } from './lib/wc/verify.js';
 import './i18n';
 import './index.css';
@@ -60,6 +61,26 @@ try {
  * It is a no-op on every page load that is not a wallet return.
  */
 installDeeplinkReturnListeners();
+
+/*
+ * The rescued round trip, announced.
+ *
+ * When an answer was completed from its RETURN BLOB — the wallet opened the
+ * redirect in the phone's default browser, and the connection landed there
+ * instead of in the browser the request was fired from — the user should not
+ * have to discover it themselves: the session restored in a browser they are
+ * not sure they were ever in deserves one sentence of confirmation.
+ *
+ * Subscribed before the first render for the same reason the return
+ * listener is installed above: the answer can complete in the same tick.
+ */
+try {
+  subscribeDeeplink((state) => {
+    if (state.status === 'connected' && state.rescued === true) {
+      try { useAppStore.getState().notify('solanaWalletConnected', 'success'); } catch { /* toasts are optional */ }
+    }
+  });
+} catch { /* the toast is the nicest part of the rescue, not the rescue itself */ }
 
 /*
  * Payment-gateway return hop.
