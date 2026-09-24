@@ -132,6 +132,26 @@ export default function DerivativesDashboard({ embedded = false }) {
   const [ticker, setTicker] = useState('BTC-USD');
   const [book, setBook] = useState(null);
 
+  /*
+   * ── THE COLUMN THIS PAGE IS ALLOWED ──────────────────────────────────────
+   * `.app-shell` is a fixed column (520 / 600 / 680 / 760px) sized for a
+   * single file of financial rows. This page is a BOARD: five measured columns
+   * per row, a depth chart, an order book — and inside that cap every one of
+   * them was squeezed («همه جدول‌ها و باکس‌ها فشرده‌اند … از دو طرف چپ و راست
+   * کمی صفحه را عریض‌تر کن»).
+   *
+   * So the hall asks the shell for ~48px more, from both edges at once, and
+   * gives it back on unmount: the rest of the app keeps the column its own rows
+   * were designed for. A body class is the mechanism the app already uses for a
+   * page-level shell change (`body.swap-input-focused` in Swap), because the
+   * shell is rendered by AppChrome, three levels above any page.
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    document.body.classList.add('hall-wide');
+    return () => { document.body.classList.remove('hall-wide'); };
+  }, []);
+
   /* ── the board ─────────────────────────────────────────────────────────── */
   useEffect(() => {
     let alive = true;

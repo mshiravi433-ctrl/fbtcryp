@@ -644,6 +644,11 @@
     "healthFlow": "Flow state"
   },
   "toast": {
+    "screenSavedAndCopied": "Screenshot saved — the link was copied too.",
+    "screenSaved": "Screenshot saved to your files.",
+    "screenLinkCopied": "This device cannot share an image — the link was copied.",
+    "screenLinkShared": "This device cannot capture the screen — the link was shared instead.",
+    "screenFailed": "The screenshot did not work on this device. Nothing was shared.",
     "insufficientBalance": "Not enough balance",
     "insufficientPosition": "Not enough of that asset",
     "buyFilled": "Buy order filled",
@@ -5389,6 +5394,7 @@
     },
     "serverDoor": "Second door — our own server ({{code}}): this path could not read either; try again in a moment.",
     "picker": {
+      "tokenOnlyNote": "Tokens only — mainnet",
       "titleFrom": "Swap from which token?",
       "titleTo": "Swap to which token?",
       "searchPlaceholder": "Search a name, symbol — or paste a mint address…",
@@ -5463,6 +5469,10 @@
     "iosBody": "To install: tap the Share button in Safari, then choose “Add to Home Screen”."
   },
   "share": {
+    "screen": "Share",
+    "screenBusy": "Preparing",
+    "screenAria": "Take a screenshot of this screen and share it",
+    "screenText": "FBT Swap — non-custodial swap, earn and markets",
     "title": "Share",
     "copy": "Copy link",
     "via": "Share via"
@@ -6626,6 +6636,9 @@
     "shortSub": "Short — expecting the price to fall"
   },
   "derivatives": {
+    "tradeCta": "Buy / Trade",
+    "earnCta": "Earn",
+    "relayNote": "Trading and earning both happen inside this app — no external link.",
     "title": "Derivatives Hall",
     "subtitle": "Live funding, basis & depth — everything in one board, at a glance.",
     "notice": "Live data only, not a signal. Basis compares perp to spot; arbitrage is not guaranteed and can widen in stress.",
@@ -7198,6 +7211,8 @@
       "localNotice": "These rules are stored on this device. They are policy for this app, not an on-chain account-abstraction contract and not permission for AI to move funds."
     },
     "proof": {
+      "view": "View execution proof",
+      "hide": "Hide proof",
       "title": "Proof-of-Execution receipts",
       "subtitle": "Constraints, observed solver responses, route selection and confirmed transaction in one canonical document.",
       "confirmed": "Confirmed",
@@ -10359,6 +10374,25 @@
       "KAMINO_SDK_RECOVERED": "The Kamino module loaded after a retry. If something fails, reload the app.",
       "RPC_UNAVAILABLE": "That node answered with something we could not use.",
       "RELAY_METHOD_UNAVAILABLE": "The app’s own relay does not forward this request — this is a gap in this app version, not a node or network failure. Nothing was sent; update the app and try again.",
+      "RELAY_UPSTREAM_UNAVAILABLE": "The app’s own relay asked the Solana nodes too, and none of them served this read. Nothing was sent. Try again shortly, or set your own RPC in Settings → Networks.",
+      "SERVER_UNAVAILABLE": "The app’s own server could not be reached, so the second door did not open. Nothing was sent.",
+      "SERVER_ENDPOINT_MISSING": "This deployment has no Solana server door yet — the app is newer than the server. Nothing was sent; try again after the next update.",
+      "SERVER_UPSTREAM_FAILED": "The app’s server reached the Solana nodes and none of them served this read. Nothing was sent; try again in a moment.",
+      "SERVER_THROTTLED": "Too many requests from this device — the app’s server paused you briefly. Nothing was sent; try again shortly.",
+      "SERVER_TIMEOUT": "The app’s server did not answer in time. Nothing was sent; try again.",
+      "SERVER_UNREACHABLE": "The app’s server could not be reached at all. Nothing was sent; check your connection and try again.",
+      "SERVER_DOOR_DISABLED": "The Solana server door is switched off on this deployment. Nothing was sent.",
+      "BUILD_THROTTLED": "Too many transaction builds from this device in one minute. Nothing was sent; try again shortly.",
+      "KAMINO_RESERVE_LIST_UNAVAILABLE": "No node gave the app’s server the list of Kamino reserves, so the market could not be assembled. Nothing was sent; try again in a moment.",
+      "SERVER_DOOR_UNAVAILABLE": "The app could not find its own server address, so the second door could not even be asked. Nothing was sent.",
+      "SERVER_BAD_RESPONSE": "The app’s server answered with something that is not JSON — a different build is behind this address. Nothing was sent.",
+      "CANCELLED": "The read was cancelled before it finished. Nothing was sent.",
+      "SIGNATURE_REQUIRED": "Looking up a transaction needs its signature, and none was given. Nothing was sent.",
+      "BAD_SIGNATURE": "The signature in the request is not a Solana transaction signature. Nothing was sent; try again.",
+      "SERIALIZATION_FAILED": "The app’s server built an answer it could not serialize. Nothing was sent; try again.",
+      "KAMINO_RESERVES_EMPTY": "The app’s server found the Kamino reserve addresses, but no node handed over their data. Nothing was sent; try again in a moment.",
+      "KAMINO_ORACLES_UNAVAILABLE": "Every Kamino reserve came back without a price, so no number on this page would have been honest. Nothing was sent; try again in a moment.",
+      "KAMINO_SDK_INCOMPLETE": "The Kamino library on the app’s server is missing a piece it needs. Nothing was sent — this is a deployment problem, not a network one.",
       "WALLET_NOT_FOUND": "No Solana wallet app was found on this device to open this request.",
       "CONFIRMED": "The transaction is already confirmed.",
       "NO_RPC": "No network node is reachable. Check your connection or set your own RPC in Settings.",
@@ -10541,6 +10575,7 @@
       "title": "Solana lending",
       "subtitle": "Supply and borrow through Kamino KLend. Your wallet signs every transaction.",
       "marketReserve": "Kamino reserve",
+      "serverDoor": "Read through the app’s own server — the public nodes refused this network path.",
       "loading": "Reading the Kamino market…",
       "unavailable": "The Solana RPC or Kamino market could not be read. No transaction is sent until live data is available.",
       "noPosition": "Connect your Solana wallet and supply collateral to see positions here.",
@@ -10565,7 +10600,10 @@
       "title": "We could not reach the network",
       "body": "Every public RPC node we tried failed. This is what each one answered:",
       "useOwn": "Public nodes come and go. Add your own RPC in Settings → Networks so this page stops depending on them.",
-      "relayHost": "the app's own relay"
+      "relayHost": "the app's own relay",
+      "serverHost": "the app’s own server",
+      "serverTried": "The app’s own server was asked too, and it could not read the market either.",
+        "showMore": "Show {{n}} more"
     },
     "wallet": {
       "title": "The wallet did not open for signing",

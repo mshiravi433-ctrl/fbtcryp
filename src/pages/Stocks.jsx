@@ -1187,9 +1187,20 @@ export default function Stocks() {
           </InfoBox>
         </>
       ) : (
+        /*
+         * `embedded` on both, and the reason is measured in millimetres: this
+         * page is already a `.page` (16px of side padding), and a hosted page
+         * that builds its own `.page` puts a second 16px inside it — so the
+         * derivatives board was rendering 32px in from each edge of a 390px
+         * phone, which is the «همه جدول‌ها و باکس‌ها فشرده‌اند» of the
+         * 2026-09-23 report. It is also the nested-`motion` case
+         * PageTransition's own comment warns about: two enter animations at
+         * once, and a transformed ancestor that becomes the containing block
+         * for every fixed descendant.
+         */
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
-          {tab === 'ostium' && LazyOstium && <LazyOstium />}
-          {tab === 'derivatives' && LazyDerivatives && <LazyDerivatives />}
+          {tab === 'ostium' && LazyOstium && <LazyOstium embedded />}
+          {tab === 'derivatives' && LazyDerivatives && <LazyDerivatives embedded />}
         </Suspense>
       )}
 

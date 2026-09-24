@@ -131,7 +131,7 @@ function PairInfoStrip({ market, t, i18n, onOpen }) {
   );
 }
 
-export default function Ostium() {
+export default function Ostium({ embedded = false }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();
@@ -452,7 +452,7 @@ export default function Ostium() {
         : t('ostium.review');
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <div className="derivatives-hall">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">

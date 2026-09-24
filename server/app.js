@@ -226,6 +226,7 @@ import { createFinancialIntelligence } from './fios/index.js';
 import { createBrainRouter } from './brain/index.js';
 import { installCentralOS, centralRouter } from './central/index.js';
 import { lendingRouter } from './lending.js';
+import { solanaLendingRouter } from './solanaLending.js';
 import { futuresRouter } from './futures/router.js';
 import { rewardsRouter } from './rewards/index.js';
 import { insuranceRouter } from './insurance/index.js';
@@ -6250,6 +6251,22 @@ app.use('/api', centralRouter);
  * (src/lib/lending-engine) are pure and dependency-free, so the same risk
  * bands, alert rules and circuit-breaker ladder run in the UI and here.
  */
+/* ── SOLANA LENDING (Kamino KLend) — the SECOND DOOR ──────────────────────────
+ * Mounted BEFORE the EVM lending BFF because it is the more specific path, and
+ * kept in its own module (server/solanaLending.js) for the reason spelled out
+ * there: on the network path reported 2026-09-23 the browser could not read the
+ * Kamino market at all — nine candidates, nine refusals — so the loan page's
+ * Solana tab could show nothing and, correctly, sign nothing. A 403 is a
+ * decision about the CALLER, and our own server is a caller those nodes serve.
+ *
+ * Same contract as every other build route in this app: it READS the chain and
+ * it returns UNSIGNED transactions. It never holds a key, never signs and never
+ * broadcasts — `sendTransaction` appears nowhere in that module, and the JSON-RPC
+ * relay next door refuses it too. §30 stands: the wallet signs and the wallet
+ * sends.
+ */
+app.use('/api/lending/solana', solanaLendingRouter());
+
 app.use('/api/lending', lendingRouter());
 
 /* ------------------------------ futures BFF -------------------------------- */
