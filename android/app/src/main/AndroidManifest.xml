@@ -30,6 +30,22 @@
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/brand_accent" />
 
+        <!--
+          Which channel a push lands on when the message itself does not name
+          one. Left unset, the Firebase SDK invents `fcm_default_channel` with
+          the SYSTEM sound — and a channel's sound can never be changed after
+          it exists, so every notification the app would ever send stayed stuck
+          with the device chime.
+
+          MainActivity.createNotificationChannels() registers this channel (and
+          `fbt_updates_v1`) on every launch, with res/raw/fbt_notification.wav
+          on both, so a message arriving before the app has ever been opened
+          still lands on a channel that already carries our tone.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="fbt_alerts_v1" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"

@@ -1,0 +1,138 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * PROXY ADVICE — «بسیاری از امکانات ما روی بستر خارج است؛ با پروکسی وارد شوید»
+ * ---------------------------------------------------------------------------
+ * The spacing here is the design, not decoration. The numbers that matter:
+ *
+ *   • 400px max width — a warning that spans a desktop monitor is unreadable,
+ *     because the eye has to travel back to the start of every line. Two or
+ *     three short lines per paragraph is the whole point.
+ *   • 22px card padding and a 14px gap between the blocks, so the icon, the
+ *     title, the two paragraphs and the button read as one object with air
+ *     around it rather than four things stacked.
+ *   • 1.9rem line-height on the body: Persian needs more leading than Latin —
+ *     its baseline sits high and its diacritics hang above it, so a Latin
+ *     line-height clips the dots of «ی» and «ژ» against the line above.
+ *   • everything is sized with logical properties (margin-inline, padding-
+ *     inline) so the card is a mirror image, not a broken layout, in RTL.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.proxyadv-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 20px);
+}
+
+.proxyadv-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 14, 0.66);
+  backdrop-filter: blur(5px);
+}
+
+.proxyadv-card {
+  position: relative;
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 22px 22px;
+  border-radius: 24px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-panel-solid);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+/* The mark is tinted AMBER (--rgb-5), the app's warning colour, not the brand
+   cyan: this is the one place on the welcome screen that is not a
+   celebration, and colour is the fastest way to say so before a word is
+   read. */
+.proxyadv-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 18px;
+  color: var(--rgb-5);
+  background: color-mix(in srgb, var(--rgb-5) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 34%, transparent);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--rgb-5) 18%, transparent);
+}
+
+.proxyadv-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.proxyadv-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: var(--text-2);
+}
+
+/* The second paragraph is a reassurance, not a second warning: what happens
+   if they ignore the advice. Smaller and quieter so the hierarchy is read
+   before it is understood. */
+.proxyadv-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.85;
+  color: var(--text-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  text-align: start;
+}
+
+.proxyadv-cta {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 2px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+@media (max-width: 380px) {
+  .proxyadv-card {
+    padding: 22px 18px 18px;
+    gap: 12px;
+  }
+  .proxyadv-mark { width: 50px; height: 50px; flex-basis: 50px; border-radius: 16px; }
+}
+
+/* ── LIGHT THEME ───────────────────────────────────────────────────────────
+ * The same rule as every other sheet in the app: on a light page the dark
+ * theme's translucent surfaces read as a grey smudge, so they become solid.
+ * The amber tint stays — it is a hue, not a shade, and it works on white.
+ * ───────────────────────────────────────────────────────────────────────── */
+:root[data-theme='light'] .proxyadv-card {
+  background: #fff;
+  border-color: rgba(13, 16, 32, 0.1);
+  box-shadow: 0 26px 60px rgba(13, 16, 32, 0.16), 0 2px 6px rgba(13, 16, 32, 0.06);
+}
+:root[data-theme='light'] .proxyadv-backdrop {
+  background: rgba(15, 23, 42, 0.42);
+}
+:root[data-theme='light'] .proxyadv-note {
+  background: rgba(13, 16, 32, 0.035);
+  border-color: rgba(13, 16, 32, 0.08);
+}
+:root[data-theme='light'] .proxyadv-mark {
+  color: #b26a00;
+  background: rgba(255, 179, 0, 0.12);
+  border-color: rgba(255, 179, 0, 0.34);
+  box-shadow: 0 8px 22px rgba(255, 179, 0, 0.18);
+}

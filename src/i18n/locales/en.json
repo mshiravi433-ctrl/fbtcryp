@@ -4604,7 +4604,13 @@
     "subtitle": "You can change this any time from Settings.",
     "continue": "Continue",
     "partial": "Core screens are translated; more specialised text still shows in English.",
-    "full": "Fully translated"
+    "full": "Fully translated",
+    "proxy": {
+      "title": "One thing before you start",
+      "body": "Most of what this app does \u2014 live prices, swaps, cross-chain bridges and the AI assistant \u2014 runs on servers outside your country. Turn on a proxy or VPN before you go on, so every part of it opens quickly and completely.",
+      "note": "Without one, some sections open slowly or not at all. That is the network, not the app \u2014 and it never puts your funds at risk.",
+      "cta": "Got it"
+    }
   },
   "profile": {
     "username": "Display name",
