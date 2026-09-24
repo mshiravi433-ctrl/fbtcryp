@@ -106,8 +106,8 @@ export const COPY = {
         accent: 'violet',
         tag: { en: 'Page 01 · Swap', fa: 'صفحهٔ ۰۱ · سواپ' },
         t: {
-          en: 'Swap on ten networks, quote before you sign',
-          fa: 'سواپ روی ده شبکه؛ اول قیمت، بعد امضا'
+          en: 'Swap on 17 networks, quote before you sign',
+          fa: 'سواپ روی ۱۷ شبکه؛ اول قیمت، بعد امضا'
         },
         d: {
           en: 'You say what you want. FBT asks the public aggregators for the best route across the decentralised exchanges on that network, shows the quote, the price impact and the fee, then hands the transaction to your wallet. Nobody else signs for you.',
@@ -268,7 +268,7 @@ export const COPY = {
     ctaPrimary: { en: 'Launch FBT Swap', fa: 'شروع سواپ' },
     ctaSecondary: { en: 'Explore the Ecosystem', fa: 'آشنایی با اکوسیستم' },
     chips: [
-      { en: '10+ Networks', fa: '+۱۰ شبکه' },
+      { en: '17 Networks', fa: '۱۷ شبکه' },
       { en: 'AI-Powered Intent OS', fa: 'اینتنت OS با هوش مصنوعی' },
       { en: 'Non-Custodial', fa: 'غیرامانی' },
       { en: 'Crypto • DeFi • RWA • Stocks • Yield', fa: 'کریپتو • دیفای • RWA • سهام • یلد' }
@@ -623,6 +623,23 @@ export const COPY = {
       en: 'Move through onchain markets without forcing you to think about blockchain complexity.',
       fa: 'در بازارهای روی‌زنجیره حرکت کن؛ بدون اینکه مجبور باشی به پیچیدگی بلاکچین فکر کنی.'
     },
+    /*
+     * SEVENTEEN, not ten.
+     *
+     * This list was written when the swap engine covered ten networks and was
+     * never extended as the registry grew — so the marketing page understated
+     * the product by seven chains. Understating is the safe direction, but it
+     * is still wrong, and every network name here is a term people search for:
+     * «سواپ موناد» is a query, and a page with no such word on it cannot
+     * answer it.
+     *
+     * The rule that keeps this list honest is `executionSources.js`, not
+     * optimism: `aggregatorSupports()` (Kyber, live-probed 2026-09-11/13),
+     * `openOceanSupports()` (which carries Mantle, Scroll and zkSync Era on
+     * its own) and Solana through its own route. A network is listed here
+     * because a swap on it can actually be quoted and signed — not because
+     * the chain id is in a dropdown.
+     */
     list: [
       { name: 'BNB Chain', color: '#f0b90b' },
       { name: 'Ethereum', color: '#627eea' },
@@ -633,6 +650,13 @@ export const COPY = {
       { name: 'Avalanche', color: '#e84142' },
       { name: 'Linea', color: '#61dfff' },
       { name: 'Sonic', color: '#19e1f5' },
+      { name: 'Berachain', color: '#ffb84d' },
+      { name: 'Unichain', color: '#ff007a' },
+      { name: 'Monad', color: '#8b5cf6' },
+      { name: 'Mantle', color: '#4ec9b0' },
+      { name: 'Scroll', color: '#ffd08a' },
+      { name: 'zkSync Era', color: '#8c8dfc' },
+      { name: 'Robinhood Chain', color: '#00c805' },
       { name: 'Solana', color: '#9945ff' }
     ]
   },
@@ -815,8 +839,8 @@ export const COPY = {
       {
         q: { en: 'What is FBT Swap?', fa: 'اف‌بی‌تی سواپ چیست؟' },
         a: {
-          en: 'FBT Swap is an AI-powered financial operating system for onchain markets: a non-custodial swap interface plus signals, Solana intelligence, smart money tracking, farms and portfolio tools — across 10 networks.',
-          fa: 'اف‌بی‌تی سواپ یک سیستم‌عامل مالی هوشمند برای بازارهای روی‌زنجیره است: رابط سواپ غیرامانی به‌همراه سیگنال، هوشمندی سولانا، ره‌گیری پول هوشمند، فارم و ابزارهای پورتفوی — روی ۱۰ شبکه.'
+          en: 'FBT Swap is an AI-powered financial operating system for onchain markets: a non-custodial swap interface plus signals, Solana intelligence, smart money tracking, farms and portfolio tools — across 17 networks.',
+          fa: 'اف‌بی‌تی سواپ یک سیستم‌عامل مالی هوشمند برای بازارهای روی‌زنجیره است: رابط سواپ غیرامانی به‌همراه سیگنال، هوشمندی سولانا، ره‌گیری پول هوشمند، فارم و ابزارهای پورتفوی — روی ۱۷ شبکه.'
         }
       },
       {
@@ -829,8 +853,8 @@ export const COPY = {
       {
         q: { en: 'Which networks are supported?', fa: 'کدام شبکه‌ها پشتیبانی می‌شوند؟' },
         a: {
-          en: 'BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. Always double-check the selected network before signing or sending.',
-          fa: 'بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک و سولانا. پیش از امضا یا ارسال، شبکهٔ انتخاب‌شده را حتماً دوباره بررسی کن.'
+          en: 'Seventeen: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Berachain, Unichain, Monad, Mantle, Scroll, zkSync Era, Robinhood Chain and Solana. Always double-check the selected network before signing or sending.',
+          fa: 'هفده شبکه: بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، براچین، یونی‌چین، موناد، منتل، اسکرول، زی‌کی‌سینک و زنجیرهٔ رابین‌هود و سولانا. پیش از امضا یا ارسال، شبکهٔ انتخاب‌شده را حتماً دوباره بررسی کن.'
         }
       },
       {

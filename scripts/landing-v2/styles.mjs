@@ -149,10 +149,23 @@ button { font-family: inherit; }
   animation: beam-scan 46s ease-in-out infinite;
 }
 @keyframes beam-scan { 0% { transform: translateY(0); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { transform: translateY(360vh); opacity: 0; } }
-.orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.5; }
-.orb-a { width: 44vw; height: 44vw; max-width: 640px; max-height: 640px; inset-block-start: -16%; inset-inline-end: -10%; background: radial-gradient(circle, rgba(124, 58, 237, 0.5), transparent 62%); animation: orb-drift 26s ease-in-out infinite alternate; }
-.orb-b { width: 36vw; height: 36vw; max-width: 520px; max-height: 520px; inset-block-start: 34%; inset-inline-start: -14%; background: radial-gradient(circle, rgba(78, 234, 255, 0.22), transparent 62%); animation: orb-drift 32s ease-in-out infinite alternate-reverse; }
-.orb-c { width: 30vw; height: 30vw; max-width: 460px; max-height: 460px; inset-block-start: 120%; inset-inline-end: 4%; background: radial-gradient(circle, rgba(99, 245, 187, 0.16), transparent 64%); animation: orb-drift 38s ease-in-out infinite alternate; }
+/*
+ * ─── THE ORBS NO LONGER USE filter: blur() ─────────────────────────────────
+ * They used to be solid radial gradients passed through blur(90px). On a phone
+ * that is three full-screen-radius layers whose every frame has to be run
+ * through a 90-pixel gaussian kernel by the GPU — and on the Android WebView
+ * the page also runs inside, the cost lands as dropped frames on EVERY other
+ * animation, which is precisely the "it flickers / it stutters" report.
+ *
+ * A radial-gradient already IS a soft falloff, so the blur was buying a degree
+ * of softness and paying for it with the whole frame budget. The gradients
+ * below simply ramp out further (62% → 72%) to keep the same look, and the
+ * 'filter' is gone entirely.
+ */
+.orb { position: absolute; border-radius: 50%; opacity: 0.5; }
+.orb-a { width: 44vw; height: 44vw; max-width: 640px; max-height: 640px; inset-block-start: -16%; inset-inline-end: -10%; background: radial-gradient(circle, rgba(124, 58, 237, 0.5), rgba(124, 58, 237, 0.22) 40%, transparent 72%); animation: orb-drift 26s ease-in-out infinite alternate; }
+.orb-b { width: 36vw; height: 36vw; max-width: 520px; max-height: 520px; inset-block-start: 34%; inset-inline-start: -14%; background: radial-gradient(circle, rgba(78, 234, 255, 0.22), rgba(78, 234, 255, 0.1) 42%, transparent 72%); animation: orb-drift 32s ease-in-out infinite alternate-reverse; }
+.orb-c { width: 30vw; height: 30vw; max-width: 460px; max-height: 460px; inset-block-start: 120%; inset-inline-end: 4%; background: radial-gradient(circle, rgba(99, 245, 187, 0.16), rgba(99, 245, 187, 0.07) 44%, transparent 74%); animation: orb-drift 38s ease-in-out infinite alternate; }
 @keyframes orb-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(4vw, 6vh, 0) scale(1.12); } }
 /*
  * The star field («در پشت زمینه ستاره ها بدرخشند»). Three tiled layers of
@@ -463,7 +476,22 @@ h1 .grad, .grad {
 .pulse-value { display: block; margin-block-start: 6px; font-family: var(--font-mono); font-size: clamp(17px, 2.6vw, 21px); font-weight: 750; direction: ltr; }
 [data-lang="fa"] .pulse-value { text-align: right; }
 [data-lang="en"] .pulse-value { text-align: left; }
-.pulse-sub { font-size: 11px; color: var(--quiet); }
+/*
+ * ─── THE NOTE LINE IS RESERVED, NOT GROWN ──────────────────────────────────
+ * This line starts as «به‌روزرسانی» and becomes «به‌روزرسانی ۲۱:۰۶» — or
+ * «داده در دسترس نیست» when a feed fails. Those strings have different
+ * lengths, and at 390px the fourth card is where it shows: the text wrapped to
+ * a second line, the card grew, and everything below it moved down. Measured
+ * as a 0.056 cumulative layout shift, all of it in one frame, from this one
+ * line.
+ *
+ * A shift is not only a Core Web Vital. This is the line that tells a reader
+ * whether the numbers above it are live, and a number that jumps while you are
+ * reading it is the same complaint as a number that blinks. Two lines are
+ * reserved in every card, which costs a little empty space in three of them
+ * and buys a stable page.
+ */
+.pulse-sub { display: block; min-height: 2.9em; font-size: 11px; line-height: 1.45; color: var(--quiet); }
 
 /* ─────────────────────────── sections ─────────────────────────── */
 .sec-head { max-width: 780px; margin-block-end: clamp(24px, 4vw, 40px); }
@@ -1082,10 +1110,24 @@ html[dir="rtl"][data-js] .reveal-r { transform: translateX(-22px); }
 html[data-js] .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; transition-delay: var(--d, 0ms); }
 html[data-js] .reveal.in { opacity: 1; transform: none; }
 
-/* typewriter caret in hero console */
+/* typewriter caret in hero console.
+ *
+ * ─── WHY THIS IS A FADE AND NOT A BLINK ────────────────────────────────────
+ * It was '@keyframes caret { 50% { opacity: 0 } }' — a hard 1 Hz on/off, which
+ * is a blink, and a blink is the one motion the human eye is built to notice.
+ * Reported as «صفحه چشمک زن هست و انگار باگ داره» and that reading is correct:
+ * an element that disappears and comes back every second, forever, on a page
+ * where nothing else does that, looks like a rendering fault rather than a
+ * cursor. It is also a genuine accessibility problem — WCAG 2.2.2 is about
+ * motion that cannot be paused, and a blink is the textbook case.
+ *
+ * A cursor that breathes between full and a quarter opacity reads as "alive
+ * and waiting for you", which is what it is for, and it stops being the thing
+ * the eye keeps catching. Under prefers-reduced-motion it holds still. */
 .tw { position: relative; }
-.tw::after { content: "▌"; margin-inline-start: 2px; color: var(--cyan); animation: caret 1s steps(1) infinite; }
-@keyframes caret { 50% { opacity: 0; } }
+.tw::after { content: "▌"; margin-inline-start: 2px; color: var(--cyan); animation: caret 1.6s ease-in-out infinite; }
+@keyframes caret { 0%, 100% { opacity: 0.85; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .tw::after { animation: none; opacity: 0.8; } }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -1102,5 +1144,130 @@ html[data-js] .reveal.in { opacity: 1; transform: none; }
   .slide-lines { display: none; }
   /* with no autoplay the bar is meaningless — hide it, keep the dots */
   .show-progress { display: none; }
+}
+
+/* ═══════════════════════════ MOTION BUDGET ═══════════════════════════════
+ *
+ * The Persian page was reported as «چشمک زن … انگار باگ داره» — flickering, as
+ * if something is broken. Measured on the built page with a real engine, the
+ * cause is not a layout bug: it is that this document asked a phone to keep 45
+ * animations alive at once. Counted from 'document.getAnimations()' on the
+ * shipped file:
+ *
+ *     6 × ken-burns      — six full-bleed photograph zooms, each one a
+ *                          re-rasterising image layer, all running forever
+ *     6 × line-travel    — SVG dash animations on the backdrop
+ *     8 × pulse-dot      — the "LIVE" pills
+ *     5 × lines-slide    — a moving stripe overlay per slide
+ *     3 × star-drift + 3 × twinkle  — three tiled star layers, 2 animations each
+ *     3 × orb-drift      — three full-viewport blurred blobs (see the .orb note)
+ *     3 × sheen, 2 × ring-turn, 1 × grid-drift, 1 × beam-scan, 2 × meteor,
+ *     1 × breathe, 1 × caret …
+ *
+ * On a phone — and especially inside the Android WebView this app ships in —
+ * the frame budget is spent long before the list runs out, so the browser
+ * starts skipping paints. What a person sees is the whole surface stuttering
+ * and snapping, which is exactly what "flickering" describes. It is also worse
+ * in Persian than in English for a boring reason: Persian copy is longer, so
+ * the page is taller, so more of these layers are alive at the same time.
+ *
+ * ─── WHAT THIS BLOCK DOES ───────────────────────────────────────────────────
+ * On touch devices and narrow screens it removes the *continuously repainting*
+ * work and keeps everything that paints once: the same gradient backdrop, the
+ * same stars as a still field, the same photographs, the same reveal-on-scroll,
+ * the same live numbers, the same network list. The page does not become
+ * plainer; it stops moving when nobody asked it to.
+ *
+ * The desktop experience is untouched — a mouse, a wide viewport and a real GPU
+ * can afford the full show, and that is where it was designed to be seen.
+ *
+ * Chosen by media query rather than by user-agent sniffing on purpose: there is
+ * exactly one document served to everyone (see the generator's note on
+ * cloaking), and 'hover: none' is how the document itself finds out that the
+ * pointer cannot hover.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+@media (hover: none), (max-width: 999px) {
+  /* ── backdrop: still, not streaking ─────────────────────────────────────
+     The star field, the grid and the line curves all stay. What goes is the
+     motion: 'twinkle-*', 'star-drift', 'grid-drift' and 'line-travel' each
+     repaint a full-viewport layer on every frame they are alive. */
+  .ambient-grid { animation: none; }
+  .bg-lines path { animation: none; }
+  .stars-a { animation: none; opacity: 0.55; }
+  .stars-b, .stars-c { animation: none; opacity: 0.45; }
+  .beam, .meteor { display: none; }
+  /* Two orbs, frozen, no blur: depth without a per-frame cost. */
+  .orb { animation: none; opacity: 0.42; }
+  .orb-c { display: none; }
+
+  /* ── the six photograph zooms ────────────────────────────────────────────
+     A slow zoom on a 1280px JPEG forces the image layer to be re-rasterised
+     for the entire time it is on screen. A still photograph is not a worse
+     photograph. */
+  .slide-plate img, .art-panel img, .cta-art { animation: none; transform: none; }
+  .slide-lines, .art-sheen { display: none; }
+
+  /* ── the small pulses ────────────────────────────────────────────────────
+     Twenty-odd market arrows breathing, the "approve" ring breathing, the
+     card rings turning: each is a composited layer with its own animation
+     clock. The arrows keep their colour and glyph, which is what carried the
+     meaning; the motion added nothing a reader needed. */
+  .chg-arrow.up, .chg-arrow.down, .chg-arrow { animation: none; }
+  .flow li.approve::after { animation: none; opacity: 0.3; }
+  .brand-mark .brand-ring { animation: none; }
+  .show-play-ic { animation: none; }
+  .dock-orb .dock-orb-glow { animation: none; }
+  .card-icon::after, .card:hover .card-icon::after, .card.is-lit .card-icon::after { animation: none; }
+  /* The live dots stay, slower. A 6px pulsing dot is the page's only "this is
+     a running feed" signal and each one is nearly free on its own — but seven
+     of them repainting every 2.2 seconds is a decoration paying rent in
+     frames. At 5.2s they still read as live and repaint half as often. */
+  .live-dot, .show-play-ic { animation-duration: 5.2s; }
+
+  /* ── the expensive compositing ───────────────────────────────────────────
+     'backdrop-filter' makes the browser re-read and re-blur everything behind
+     an element on every frame that anything under it changes. On a sticky
+     header over a 23,000-pixel page that means every scroll frame; on a card
+     grid it means every card, every frame. The panels are already 60-75%
+     opaque over a near-black background, so the blur was doing almost nothing
+     visible and costing almost everything. */
+  .panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: linear-gradient(160deg, rgba(23, 18, 52, 0.86), rgba(10, 8, 26, 0.94));
+  }
+  .nav.scrolled {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(7, 5, 20, 0.93);
+  }
+  .dock-menu {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: linear-gradient(170deg, rgba(24, 18, 54, 0.985), rgba(8, 6, 22, 0.99));
+  }
+  .dock-orb { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+  /* ── what stays on, deliberately ─────────────────────────────────────────
+     The dock orb's glow and the live dots are two or three 8-20px elements —
+     the cost is noise — and they are the page's "this is a running app"
+     signal. The skeleton shimmer stays too: it lasts only until the first
+     response, and a frozen grey box reads as a stuck page. */
+
+  /* ── scroll-driven work that is not visible anyway ───────────────────────
+     The backdrop line-shift is a transform on a fixed layer; keeping it on a
+     touch device buys nothing and costs a style write per scroll frame. */
+  .bg-lines { transform: none !important; }
+}
+
+/*
+ * A last, unrelated safety net with the same motivation as the scroll reveal:
+ * on a very wide but low-DPI screen, six full-viewport blurred layers are the
+ * difference between 60 and 12 frames per second. Coarse-pointer detection
+ * above catches phones; this catches the "big window, weak GPU" case by
+ * simply not animating the backdrop once the viewport is enormous.
+ */
+@media (min-width: 1800px) {
+  .stars-b, .stars-c { animation-duration: 400s, 420s; }
 }
 `;

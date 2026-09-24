@@ -6,7 +6,7 @@
  * Runs against dist/, so build first:
  *   npm run build && npm run test:landing
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { COPY } from './copy.mjs';
@@ -35,7 +35,7 @@ t('BreadcrumbList JSON-LD present', html.includes('"BreadcrumbList"'));
 t('WebSite JSON-LD present', html.includes('"WebSite"'));
 t('fee figure rendered from config (0.7%)', html.includes('>0.7%</span>') || html.includes('0.7%'));
 t('Persian fee figure rendered (۰٫۷٪)', html.includes('۰٫۷٪'));
-t('all 10 networks listed', ['BNB Chain', 'Ethereum', 'Polygon', 'Arbitrum', 'Base', 'Optimism', 'Avalanche', 'Linea', 'Sonic', 'Solana'].every((n) => (html.match(new RegExp(n, 'g')) || []).length >= 1));
+t('all 17 networks listed', ['BNB Chain', 'Ethereum', 'Polygon', 'Arbitrum', 'Base', 'Optimism', 'Avalanche', 'Linea', 'Sonic', 'Berachain', 'Unichain', 'Monad', 'Mantle', 'Scroll', 'zkSync Era', 'Robinhood Chain', 'Solana'].every((n) => (html.match(new RegExp(n, 'g')) || []).length >= 1));
 t('language switcher buttons exist', html.includes('data-setlang="en"') && html.includes('data-setlang="fa"'));
 
 /* ── v2.1: the header, the bottom dock, the tour ─────────────────────── */
@@ -271,6 +271,63 @@ const okFetch = () => (url) => {
     return g.length > 0;
   })());
   t('lottie: trim paths normalise to pathLength 100', !!d.querySelector('[data-lottie] path[pathLength="100"]'));
+}
+
+/* ── the guides and the hubs (scripts/gen-landing.mjs POSTS) ──────────────
+ * These pages are read by someone who has not decided anything yet, so the
+ * checks here are about the two ways such a page goes wrong: markup that
+ * describes content the page does not show, and a Persian page shipping an
+ * English string because a default was written in the wrong language.
+ */
+console.log('— guides —');
+{
+  const post = (slug) => readFileSync(join(process.cwd(), 'dist', slug, 'index.html'), 'utf8');
+  const en = post('how-crypto-swap-fees-work');
+  const fa = post('کارمزد-سواپ-ارز-دیجیتال');
+
+  t('a guide is a BlogPosting with a real date', /"@type":"BlogPosting"/.test(en) && /"datePublished":"\d{4}-\d{2}-\d{2}"/.test(en));
+  t('the guide names the company as author, not an invented byline', /"author":\{"@id":"https:\/\/fbtswap.ir\/#organization"\}/.test(en));
+  t('the guide declares the hub it belongs to', en.includes('#blog'));
+  t('the Persian guide is written in Persian, not translated defaults', /<html lang="fa" dir="rtl"/.test(fa) && fa.includes('کارمزد شبکه') && !fa.includes('Crypto assets are volatile'));
+  t('...and its risk notice is Persian too', fa.includes('هشدار ریسک'));
+  t('the fee is the one the app charges (0.70%)', /0\.70%/.test(en) && /۰٫۷٪/.test(fa));
+  t('...and it says the fee is shown before signing', /before the wallet is asked to sign|shown on the screen before/i.test(en));
+  t('the guide links to the page that does the thing it explains', /href="\/crypto-swap-without-kyc"/.test(en));
+  t('its hreflang pair is reciprocal', /hreflang="fa" href="[^"]*%DA%A9%D8%A7%D8%B1%D9%85%D8%B2%D8%AF/.test(en) && /hreflang="en" href="[^"]*how-crypto-swap-fees-work"/.test(fa));
+  t('how the fee is split is on the page, not only in the markup', /Three costs in one swap/.test(en));
+
+  const enHub = post('blog');
+  const faHub = post('وبلاگ');
+  t('the hub is a Blog', /"@type":"Blog"/.test(enHub));
+  t('the hub lists every guide it links to', (() => {
+    /* Count the collection members, not the key: one `blogPost` key with three
+       entries and one with a single entry look identical to a regex. */
+    const graph = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(enHub)[1]);
+    const blog = graph['@graph'].find((n) => n['@type'] === 'Blog');
+    return blog?.blogPost?.length === 3 && blog.blogPost.every((b) => b.datePublished && b.url);
+  })());
+  t('the hub is not an orphan: it links to each guide', ['how-crypto-swap-fees-work', 'custodial-vs-non-custodial-wallets', 'what-stays-private-without-kyc'].every((s) => enHub.includes(`/${s}`)));
+  /* Percent-encoded, because a bare non-ASCII path in an href is what a
+     browser encodes anyway — assertEquals on the encoded form is what the
+     crawler actually fetches. The hub must link its own language's guides. */
+  t('the Persian hub indexes the Persian guides',
+    faHub.includes(encodeURIComponent('کارمزد-سواپ-ارز-دیجیتال'))
+    && faHub.includes(encodeURIComponent('تفاوت-کیف-پول-امانی-و-غیرامانی'))
+    && !faHub.includes('how-crypto-swap-fees-work'));
+  t('no guide promises a return or a ranking', !/guaranteed|risk-free|will rise|سود تضمینی|بدون ریسک/i.test(en + fa));
+
+  const sitemap = readFileSync(join(process.cwd(), 'dist', 'sitemap.xml'), 'utf8');
+  t('the sitemap carries all six guides and both hubs', ['how-crypto-swap-fees-work', 'custodial-vs-non-custodial-wallets', 'what-stays-private-without-kyc', 'blog'].every((s) => sitemap.includes(s)));
+  /* One URL per generated directory, plus the app shell. Counted against the
+     build rather than hardcoded: a hardcoded number here would fail on every
+     future page and teach people to edit the test instead of reading it. */
+  t('the sitemap lists one URL per generated page, plus the app shell', (() => {
+    /* Landing directories, identified by having an index.html — the assets,
+       fonts and vendor directories are not pages. */
+    const dirs = readdirSync(join(process.cwd(), 'dist'), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && existsSync(join(process.cwd(), 'dist', e.name, 'index.html'))).length;
+    return (sitemap.match(/<loc>/g) || []).length === dirs + 1;
+  })());
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
