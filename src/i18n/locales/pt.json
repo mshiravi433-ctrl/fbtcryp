@@ -54,7 +54,18 @@
     "notAdvice": "Os dados de mercado são apenas informativos e não constituem aconselhamento financeiro. As criptomoedas são voláteis: pode perder tudo.",
     "offlineData": "Fluxo ao vivo indisponível — a mostrar cópia em cache. Os preços não são reais."
   },
+  "share": {
+    "screen": "Compartilhar",
+    "screenBusy": "Preparando",
+    "screenAria": "Tire uma captura desta tela e compartilhe",
+    "screenText": "FBT Swap — swap não custodial, rendimento e mercados"
+  },
   "toast": {
+    "screenSavedAndCopied": "Captura salva — o link também foi copiado.",
+    "screenSaved": "Captura salva nos seus arquivos.",
+    "screenLinkCopied": "Este dispositivo não consegue compartilhar uma imagem — o link foi copiado.",
+    "screenLinkShared": "Este dispositivo não consegue capturar a tela — o link foi compartilhado.",
+    "screenFailed": "A captura não funcionou neste dispositivo. Nada foi compartilhado.",
     "copied": "Copiado para a área de transferência",
     "insufficientBalance": "Saldo insuficiente",
     "insufficientPosition": "Não tem esse ativo suficiente",
@@ -1451,7 +1462,8 @@
       "useOwn": "Adicione seu próprio RPC em Ajustes → Redes para o aplicativo parar de depender de nós públicos.",
       "relayHost": "o relay do próprio app",
       "serverHost": "o servidor do próprio app",
-      "serverTried": "O servidor do próprio app também foi consultado e também não conseguiu ler o mercado."
+      "serverTried": "O servidor do próprio app também foi consultado e também não conseguiu ler o mercado.",
+        "showMore": "Mostrar mais {{n}}"
     },
     "wallet": {
       "title": "A carteira não abriu",

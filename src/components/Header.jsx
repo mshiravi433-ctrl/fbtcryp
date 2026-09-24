@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatedSettings, useStill } from './AnimatedIcon';
 import { IconBuilding, IconClock, IconTrend } from './Icons';
 import { coinImage } from '../lib/coinImage';
+import BrandMark from './BrandMark.jsx';
 import { usePoints } from '../hooks/usePoints';
 import { usePoll } from '../hooks/useMarket';
 import { getMarkets } from '../lib/api';
@@ -19,45 +20,10 @@ import { useSettingsStore } from '../store/useSettingsStore';
 const BRAND_MS = 2 * 60 * 1000;
 const SPOTLIGHT_MS = 60 * 1000;
 
-/**
- * The brand coin is drawn STATIC inside the slowly-spinning gradient tile.
- * It used to flip edge-on (a 0→360° Y-axis spin): every cycle the coin
- * vanished for the mirrored half of the flip, which read as broken ("the
- * logo disappears while rotating"). The tile keeps the motion; the coin
- * never leaves view. `transformBox: fill-box` pins the origin to the
- * drawing itself so no browser can rotate it around a view-box corner and
- * swing it sideways.
- */
-function BrandMark() {
-  return (
-    <div className="brand-mark">
-      <svg
-        width="17"
-        height="17"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        style={{ position: 'relative', zIndex: 2, transformBox: 'fill-box', transformOrigin: '50% 50%' }}
-      >
-        <defs>
-          <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#00e5ff" />
-            <stop offset="50%" stopColor="#7c4dff" />
-            <stop offset="100%" stopColor="#ff2d95" />
-          </linearGradient>
-        </defs>
-        <circle cx="12" cy="12" r="9.2" stroke="url(#brandGrad)" strokeWidth="2.1" />
-        <path d="M8.4 10.6a3.8 3.8 0 0 1 6.5-1.4" stroke="url(#brandGrad)" />
-        <path d="M15.6 13.4a3.8 3.8 0 0 1-6.5 1.4" stroke="url(#brandGrad)" />
-        <path d="M14.6 6.6v2.9h-2.9" stroke="url(#brandGrad)" />
-        <path d="M9.4 17.4v-2.9h2.9" stroke="url(#brandGrad)" />
-      </svg>
-    </div>
-  );
-}
+/* The brand coin lives in its own module now: the brand rail at the bottom of
+   every screen draws the SAME mark, and a logo copied into two files is a logo
+   that ends up subtly different in two places. Its own comment carries the
+   history (it used to flip edge-on and vanish mid-cycle). */
 
 function SpotlightMark({ spotlight }) {
   /* CoinGecko serves padded 250px "large" artwork; stretched into the 30px

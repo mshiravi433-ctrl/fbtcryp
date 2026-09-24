@@ -6,12 +6,18 @@
 .derivatives-hall {
   position: relative;
   isolation: isolate;
+  /* The bleed cancels the host `.page`'s 16px so the hall's own artwork
+     (aurora, glass edges) reaches the column edge, while `padding` decides
+     where the ROWS sit. Those two were both 16px, which meant the board was
+     exactly as wide as every other page — and this is the one page made of
+     five-figure columns. 10px keeps the rows off the bezel and gives the
+     table 12px it did not have: «همه جدول‌ها و باکس‌ها فشرده‌اند». */
   width: calc(100% + 32px);
   max-width: calc(100% + 32px);
   margin-left: -16px;
   margin-right: -16px;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: 10px;
+  padding-right: 10px;
   box-sizing: border-box;
   display: block;
   /* no overflow:hidden here — it was clipping the board’s glow and making boxes feel boxed-in */
@@ -25,6 +31,60 @@
     margin-right: 0;
     padding-left: 0;
     padding-right: 0;
+  }
+}
+
+/* ==========================================================================
+   A WIDER COLUMN FOR THE HALL — and only while the hall is on screen
+   --------------------------------------------------------------------------
+   Below 640px there is nothing to widen: `.app-shell` is already 100% of the
+   viewport and the hall bleeds to its edges, so the only lever is the padding
+   above. From 600px up the shell is a FIXED column (600 / 680 / 760px, see
+   `Shell & layout` in index.css) capped for single-column financial rows —
+   a cap that a board of five measured columns per row is the wrong page to
+   apply, so this page asks for ~48px more of it, from both edges at once.
+
+   The class is set by DerivativesDashboard on mount and removed on unmount
+   (the same body-class mechanism `body.swap-input-focused` already uses), so
+   the rest of the app keeps the column its rows were designed for.
+
+   `.bottom-nav` and the brand rail are both `position: fixed` and carry their
+   own max-width, so they are widened in the same breath — index.css spells out
+   why: a fixed bar that does not match the column above it floats detached from
+   it («نصفش میاد»). The centring resets those blocks make still apply; only the
+   width changes here.
+   ========================================================================== */
+/* Written as four NON-OVERLAPPING ranges that mirror index.css's own
+   breakpoints (base / 600 / 900 / 1400), each 48px wider than the column it
+   replaces: 520→568, 600→648, 680→728, 760→808. Ranges rather than
+   `min-width` alone because this sheet is a lazily-imported page stylesheet —
+   its position in the bundle relative to index.css is not ours to choose, and
+   with explicit ranges there is no tie for cascade order to break. */
+@media (max-width: 599px) {
+  body.hall-wide .app-shell {
+    max-width: 568px;
+  }
+}
+@media (min-width: 600px) and (max-width: 899px) {
+  body.hall-wide .app-shell,
+  body.hall-wide .bottom-nav,
+  body.hall-wide .brand-rail {
+    max-width: 648px;
+  }
+}
+@media (min-width: 900px) and (max-width: 1399px) {
+  body.hall-wide .app-shell,
+  body.hall-wide .bottom-nav,
+  body.hall-wide .brand-rail {
+    max-width: 728px;
+  }
+}
+@media (min-width: 1400px) {
+  body.hall-wide .app-shell,
+  body.hall-wide .bottom-nav,
+  body.hall-wide .brand-rail,
+  body.hall-wide .top-bar {
+    max-width: 808px;
   }
 }
 

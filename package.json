@@ -322,6 +322,7 @@
     "express": "^5.2.1",
     "firebase": "^11.10.0",
     "framer-motion": "^12.42.2",
+    "html-to-image": "^1.11.13",
     "i18next": "^23.14.0",
     "jsqr": "^1.4.0",
     "lightweight-charts": "^5.2.1",

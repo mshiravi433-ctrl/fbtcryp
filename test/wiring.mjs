@@ -12403,10 +12403,18 @@ export default function run() {
       /showSpotlight \? SPOTLIGHT_MS : BRAND_MS/.test(header));
     t('header market polling is slow and does not add a news network request',
       /3 \* 60 \* 1000/.test(header) && !/getNews/.test(header));
+    /* The coin is drawn in its own module now (components/BrandMark.jsx): the
+       brand rail at the bottom of every screen renders the SAME mark, and a logo
+       copied into two files is a logo that ends up subtly different in two
+       places. So `transformBox` — the line that keeps the spin from swinging the
+       coin sideways — is asserted where the drawing lives, and `rotateY` (the
+       edge-on flip that made it vanish) is still forbidden in both. */
+    const brandMark = read('src/components/BrandMark.jsx');
     t('the brand coin never flips edge-on; reduced-motion users get a fully static brand',
       /<BrandMark\s*\/>/.test(header) &&
       !/rotateY/.test(header) &&
-      /transformBox:\s*'fill-box'/.test(header) &&
+      !/rotateY/.test(brandMark) &&
+      /transformBox:\s*'fill-box'/.test(brandMark) &&
       /prefers-reduced-motion:\s*reduce[\s\S]*?header-brand-layer[\s\S]*?transition:\s*none/.test(css) &&
       /prefers-reduced-motion:\s*reduce[\s\S]*?brand-mark[\s\S]*?animation:\s*none/.test(css));
     t('insight images decode asynchronously and fail back to lightweight icons',

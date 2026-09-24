@@ -54,7 +54,18 @@
     "notAdvice": "Data pasar hanya bersifat informatif dan bukan nasihat keuangan. Kripto sangat fluktuatif — Anda bisa kehilangan semuanya.",
     "offlineData": "Umpan langsung tidak tersedia — menampilkan cadangan tersimpan. Harga tidak nyata."
   },
+  "share": {
+    "screen": "Bagikan",
+    "screenBusy": "Menyiapkan",
+    "screenAria": "Ambil tangkapan layar ini dan bagikan",
+    "screenText": "FBT Swap — swap non-kustodial, imbal hasil, dan pasar"
+  },
   "toast": {
+    "screenSavedAndCopied": "Tangkapan layar disimpan — tautannya juga disalin.",
+    "screenSaved": "Tangkapan layar disimpan ke file kamu.",
+    "screenLinkCopied": "Perangkat ini tidak bisa berbagi gambar — tautannya disalin.",
+    "screenLinkShared": "Perangkat ini tidak bisa menangkap layar — tautannya dibagikan sebagai gantinya.",
+    "screenFailed": "Tangkapan layar tidak berhasil di perangkat ini. Tidak ada yang dibagikan.",
     "copied": "Disalin ke papan klip",
     "insufficientBalance": "Saldo tidak cukup",
     "insufficientPosition": "Aset tersebut tidak cukup",
@@ -1451,7 +1462,8 @@
       "useOwn": "Tambahkan RPC Anda sendiri di Pengaturan → Jaringan agar aplikasi tidak lagi bergantung pada node publik.",
       "relayHost": "relay aplikasi sendiri",
       "serverHost": "server aplikasi sendiri",
-      "serverTried": "Server aplikasi sendiri juga ditanya, dan ia pun tidak bisa membaca pasar."
+      "serverTried": "Server aplikasi sendiri juga ditanya, dan ia pun tidak bisa membaca pasar.",
+        "showMore": "Tampilkan {{n}} lainnya"
     },
     "wallet": {
       "title": "Dompet tidak terbuka",

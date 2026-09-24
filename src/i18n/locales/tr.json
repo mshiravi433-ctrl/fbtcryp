@@ -54,7 +54,18 @@
     "notAdvice": "Piyasa verileri yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir. Kripto oynaktır — her şeyinizi kaybedebilirsiniz.",
     "offlineData": "Canlı akış yok — önbellek gösteriliyor. Fiyatlar gerçek değil."
   },
+  "share": {
+    "screen": "Paylaş",
+    "screenBusy": "Hazırlanıyor",
+    "screenAria": "Bu ekranın ekran görüntüsünü al ve paylaş",
+    "screenText": "FBT Swap — saklamasız takas, getiri ve piyasalar"
+  },
   "toast": {
+    "screenSavedAndCopied": "Ekran görüntüsü kaydedildi — bağlantı da kopyalandı.",
+    "screenSaved": "Ekran görüntüsü dosyalarına kaydedildi.",
+    "screenLinkCopied": "Bu cihaz bir görseli paylaşamıyor — bağlantı kopyalandı.",
+    "screenLinkShared": "Bu cihaz ekranı yakalayamıyor — bunun yerine bağlantı paylaşıldı.",
+    "screenFailed": "Bu cihazda ekran görüntüsü çalışmadı. Hiçbir şey paylaşılmadı.",
     "copied": "Panoya kopyalandı",
     "insufficientBalance": "Yetersiz bakiye",
     "insufficientPosition": "Bu varlıktan yeterli yok",
@@ -1451,7 +1462,8 @@
       "useOwn": "Ayarlar → Ağlar bölümünden kendi RPC adresinizi ekleyin; uygulama herkese açık düğümlere bağımlı kalmasın.",
       "relayHost": "uygulamanın kendi aktarıcısı",
       "serverHost": "uygulamanın kendi sunucusu",
-      "serverTried": "Uygulamanın kendi sunucusuna da soruldu, o da piyasayı okuyamadı."
+      "serverTried": "Uygulamanın kendi sunucusuna da soruldu, o da piyasayı okuyamadı.",
+        "showMore": "{{n}} tane daha göster"
     },
     "wallet": {
       "title": "Cüzdan açılmadı",

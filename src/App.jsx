@@ -8,6 +8,7 @@ import { CentralBrainProvider } from './context/CentralBrainContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
+import BrandRail from './components/BrandRail.jsx';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
@@ -330,6 +331,18 @@ function AppChrome() {
       <PullToRefresh>
         <AnimatedRoutes />
       </PullToRefresh>
+      {/*
+        The brand rail: the logo, the name and the canonical address, pinned
+        above the nav so that a screenshot taken by the OPERATING SYSTEM — of
+        whatever happens to be on screen — always states who made it. It also
+        carries the screenshot's own share button.
+
+        Rendered on `/pay/:code` too (a customer landing is exactly the picture
+        somebody sends to a friend), where it is `bare`: no nav to sit above, so
+        it takes the bottom edge. Not rendered on `/intent`, which ships its own
+        bottom tab bar — the same reason the app's nav is absent there.
+      */}
+      {pathname !== '/intent' && <BrandRail bare={headerless} />}
       {!headerless && <BottomNav />}
     </div>
   );

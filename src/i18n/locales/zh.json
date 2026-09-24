@@ -54,7 +54,18 @@
     "notAdvice": "市场数据仅供参考，不构成投资建议。加密资产波动剧烈，你可能损失全部本金。",
     "offlineData": "无法连接实时行情，显示的是缓存快照。价格并非实时。"
   },
+  "share": {
+    "screen": "分享",
+    "screenBusy": "准备中",
+    "screenAria": "截取此屏幕并分享",
+    "screenText": "FBT Swap — 非托管兑换、收益与市场"
+  },
   "toast": {
+    "screenSavedAndCopied": "截图已保存 —— 链接也已复制。",
+    "screenSaved": "截图已保存到你的文件。",
+    "screenLinkCopied": "此设备无法分享图片 —— 链接已复制。",
+    "screenLinkShared": "此设备无法截取屏幕 —— 已改为分享链接。",
+    "screenFailed": "此设备上截图失败。未分享任何内容。",
     "copied": "已复制到剪贴板",
     "insufficientBalance": "余额不足",
     "insufficientPosition": "该资产数量不足",
@@ -1452,7 +1463,8 @@
       "useOwn": "在“设置 → 网络”中添加你自己的 RPC，应用就不再依赖公共节点。",
       "relayHost": "应用自身的中继",
       "serverHost": "应用自身的服务器",
-      "serverTried": "也询问了应用自身的服务器，它同样无法读取市场。"
+      "serverTried": "也询问了应用自身的服务器，它同样无法读取市场。",
+        "showMore": "再显示 {{n}} 项"
     },
     "wallet": {
       "title": "钱包未打开",

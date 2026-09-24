@@ -1,0 +1,206 @@
+/* ==========================================================================
+   THE BRAND RAIL — the line every screenshot of this app carries
+   --------------------------------------------------------------------------
+   «وقتی در سایت و اپ اسکرین‌شات گرفته می‌شود، لوگو و نام سایت (یا آدرس سایت)
+   پایین صفحه باشد. باید مدرن باشد و سایت را درست معرفی کند.» (2026-09-23)
+
+   Fixed, not at the end of the content, for one reason: the screenshot is taken
+   by the OPERATING SYSTEM, of whatever is on screen at that moment. Branding
+   that lives after 40 cards is branding that is almost never in the picture.
+
+   Geometry is copied from `.bottom-nav` on purpose — same inset, same
+   max-widths, same centring switch at the same breakpoints — because a strip
+   that does not line up with the bar under it reads as a rendering bug. That
+   includes the `left/right/translate` reset at 600px and up: the base rule
+   centres with `translate(-50%)`, and leaving that in place while switching to
+   margin-based centring pushes the strip half its own width off screen (the
+   «نصفش میاد» that index.css already spells out for the nav).
+   ========================================================================== */
+
+:root {
+  /* The rail's own height, so the shell can reserve room for it below. */
+  --brand-rail-h: 28px;
+}
+
+.brand-rail {
+  position: fixed;
+  left: 50%;
+  translate: -50% 0;
+  /* Sits directly above the nav: `--nav-h` is the space the shell already
+     reserves for it, and the same variable is retuned in every breakpoint that
+     shrinks the nav (360px-wide phones, short landscape), so this stays put. */
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 5px);
+  width: calc(100% - 28px);
+  max-width: 440px;
+  height: var(--brand-rail-h);
+  /* Above page content, below the nav (40) and below any sheet — a rail that
+     floats over an open sheet would be in the way of the thing being read. */
+  z-index: 38;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-inline: 8px 9px;
+  border-radius: 11px;
+  box-sizing: border-box;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(13, 16, 28, 0.88), rgba(8, 10, 18, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  box-shadow: 0 12px 28px -20px rgba(0, 0, 0, 0.95);
+}
+
+/* The hairline: the brand's three stops, the same gradient the coin wears. This
+   is what makes the strip read as part of the app rather than as a stamp. */
+.brand-rail::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.8), rgba(124, 77, 255, 0.62) 46%, rgba(255, 45, 149, 0.78));
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+/* Headerless routes (`/pay/:code`) have no nav to sit above, so the rail takes
+   the bottom edge itself. `/intent` gets no rail at all: it ships its own
+   bottom tab bar and stacking two bars is what AppChrome already refuses to do. */
+.brand-rail--bare {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+}
+
+.brand-rail-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  /* Latin by content (a name, a host) and kept that way in an RTL layout: a
+     mirrored monospace domain is an address nobody can read back. */
+  direction: ltr;
+}
+
+.brand-rail-mark {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.brand-rail-name {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.brand-rail-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  flex: 0 0 3px;
+}
+
+.brand-rail-domain {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.brand-rail-share {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 21px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text-1);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.15), rgba(124, 77, 255, 0.17) 55%, rgba(255, 45, 149, 0.15));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: transform 0.12s ease, border-color 0.18s ease, filter 0.18s ease;
+}
+
+.brand-rail-share:hover { border-color: rgba(255, 255, 255, 0.2); filter: brightness(1.08); }
+.brand-rail-share:active { transform: scale(0.96); }
+.brand-rail-share:disabled { opacity: 0.62; cursor: progress; }
+.brand-rail-share:focus-visible { outline: 2px solid rgba(0, 229, 255, 0.55); outline-offset: 2px; }
+
+.brand-rail-share-label { white-space: nowrap; }
+
+.brand-rail-spinner {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border-radius: 50%;
+  border: 1.6px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #00e5ff;
+  animation: brand-rail-spin 0.7s linear infinite;
+}
+
+@keyframes brand-rail-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* The shell reserves the nav's height at the bottom; the rail lives in that
+   gap, so the reservation grows by the rail. `:not(--headerless)` because the
+   headerless shell deliberately owns its own bottom padding (and on `/intent`
+   there is no rail at all). */
+.app-shell:not(.app-shell--headerless) {
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + var(--brand-rail-h) + 18px);
+}
+
+/* ---- the nav's own centring switch, mirrored ---------------------------- */
+@media (min-width: 600px) {
+  .brand-rail {
+    left: auto;
+    right: auto;
+    translate: none;
+    inset-inline: 0;
+    margin-inline: auto;
+    max-width: 600px;
+  }
+}
+
+@media (min-width: 900px) {
+  .brand-rail { max-width: 680px; }
+}
+
+@media (min-width: 1400px) {
+  .brand-rail { max-width: 760px; }
+}
+
+/* ---- small phones: the host is the part that may be dropped --------------
+   The name stays (it is who made the screenshot) and the address is what
+   overflows first; at 340px there is no room for both plus a button. */
+@media (max-width: 340px) {
+  .brand-rail-domain,
+  .brand-rail-dot { display: none; }
+}
+
+/* ---- a phone on its side has no vertical space to spare ----------------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .brand-rail { height: 24px; }
+  .brand-rail-share { height: 19px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-rail-share { transition: none; }
+  .brand-rail-spinner { animation-duration: 1.4s; }
+}
