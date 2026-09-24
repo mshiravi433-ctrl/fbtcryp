@@ -69,6 +69,9 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
   const [phase, setPhase] = useState('choose');
   const [walletId, setWalletId] = useState(initialWallet);
   const [error, setError] = useState(null);
+  /* The wallet's own errorCode/errorMessage, when it sent one — shown under
+     the named failure so «رد میشود» can be told apart from «could not parse». */
+  const [walletSaid, setWalletSaid] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [requestId, setRequestId] = useState(null);
@@ -116,6 +119,7 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
       } else if (state.status === 'error') {
         setPhase('error');
         setError(state.code || 'WALLET_ERROR');
+        setWalletSaid(state.wallet?.message || state.wallet?.code ? state.wallet : null);
         setBusy(false);
         setStuck(false);
       }
@@ -139,6 +143,7 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
       setResult(latest);
       setPhase(latest.ok ? 'connected' : 'error');
       setError(latest.ok ? null : latest.code || 'WALLET_ERROR');
+      setWalletSaid(!latest.ok && (latest.wallet?.message || latest.wallet?.code) ? latest.wallet : null);
       if (latest.walletId) setWalletId(latest.walletId);
     } else if (pending) {
       setPhase('waiting');
@@ -539,11 +544,19 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
             <p className="notice notice-danger" data-testid="sol-connect-error">
               {t(`solana.connect.err.${error}`, t('solana.connect.err.WALLET_ERROR'))}
             </p>
+            {walletSaid && (
+              <p className="faint" style={{ fontSize: 11, lineHeight: 1.8 }} data-testid="sol-connect-wallet-said" dir="auto">
+                {t('solana.connect.walletSaid', {
+                  message: walletSaid.message || '—',
+                  code: walletSaid.code || '—'
+                })}
+              </p>
+            )}
             <div className="btn-row">
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => { setPhase('choose'); setError(null); }}
+                onClick={() => { setPhase('choose'); setError(null); setWalletSaid(null); }}
               >
                 {t('solana.connect.retry')}
               </button>

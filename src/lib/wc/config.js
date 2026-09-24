@@ -144,6 +144,14 @@ export const TIMEOUT = Object.freeze({
   signHardCap: 600_000,
   signRelayReopen: 6_000,
   /*
+   * `relayWakeProbe` bounds the ONE real RPC that proves a relay socket after
+   * the app comes back to the front (requestHandoff.js#verifyRelayLive). A
+   * live socket answers in well under a second on mobile data; a socket that
+   * takes longer than this is treated as dead and restarted — waiting longer
+   * only delays the restart the user is already waiting on.
+   */
+  relayWakeProbe: 3_000,
+  /*
    * The five email/embedded-wallet bounds that used to live here
    * (`emailOpen`, `emailModalOpen`, `emailRestore`, `emailCloseGrace`,
    * `emailLateGrace`) went with the surface they measured — the email/social

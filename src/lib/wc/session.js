@@ -28,6 +28,7 @@ import { chainFromSession } from './chain.js';
 import { applyWalletSurface, resetPairingState, setLivePairingUri } from './appkit.js';
 import { installWalletOpenBridge, onWalletHandoff, openWalletHandoff } from './handoff.js';
 import { measureRelay, clearRelayCache } from './relay.js';
+import { verifyRelayLive } from './requestHandoff.js';
 import { installVerifyBudgetExtension, measureVerifyEnclave, warmVerifyEnclave } from './verify.js';
 import { hasStoredSession, purgeConnectionKeys } from './storage.js';
 import {
@@ -84,6 +85,21 @@ export async function wakeWcTransport(instance) {
   const relayer = candidates.find((item, index) => candidates.indexOf(item) === index);
   if (!relayer || typeof relayer.transportOpen !== 'function') return false;
   try {
+    /*
+     * ─── «CONNECTED» IS A CLAIM, NOT A FACT, INSIDE THE APK ────────────────
+     * `transportOpen()` is a no-op when `relayer.connected` is true — and in
+     * the Android WebView that flag stays true on a socket the OS killed
+     * during the app switch (there is no browser-side ping). So the wake
+     * first asks the relay something real on the session's topics: a live
+     * socket answers (and delivers whatever the wallet already published), a
+     * dead one is restarted by the SDK's own restartTransport(). Only when
+     * the flag is honestly false is the plain transportOpen() the right call.
+     */
+    if (relayer.connected === true) {
+      const proof = await verifyRelayLive(relayer, { timeoutMs: TIMEOUT.relayWakeProbe });
+      wcEvent(proof.live ? 'pairing_relay_live' : proof.ok ? 'pairing_relay_restarted' : 'pairing_relay_dead');
+      if (proof.ok) return true;
+    }
     await withTimeout(
       Promise.resolve(relayer.transportOpen()),
       TIMEOUT.initLast,

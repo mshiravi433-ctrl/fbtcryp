@@ -410,6 +410,41 @@ export function connectRequestUrl({
   });
 }
 
+/** The endpoints a post-connect request may name. */
+const SIGN_ENDPOINTS = Object.freeze({
+  signAndSendTransaction: 'signAndSendTransaction',
+  signTransaction: 'signTransaction',
+  signMessage: 'signMessage',
+  disconnect: 'disconnect'
+});
+
+/**
+ * The JSON the wallet expects INSIDE the encrypted `payload` of a
+ * post-connect request — Phantom, Solflare and Backpack document the same
+ * shape:
+ *
+ *   signTransaction / signAndSendTransaction  { transaction, session }
+ *   signMessage                               { message, session, display }
+ *   disconnect                                { session }
+ *
+ * `transaction` and `message` are base58 strings; `session` is the token the
+ * connect answer carried. Returned as a string so the caller can seal exactly
+ * these bytes (deeplink.js#sealRequest) — and so a test can read them back
+ * after decrypting the way the wallet does.
+ *
+ * @returns {string|null} null for an op this protocol does not have
+ */
+export function signRequestPayload(op, { session, payload, display = 'utf8' } = {}) {
+  if (!SIGN_ENDPOINTS[op]) return null;
+  const token = String(session ?? '');
+  if (!token) return null;
+  if (op === 'disconnect') return JSON.stringify({ session: token });
+  const body = String(payload ?? '');
+  if (!body) return null;
+  if (op === 'signMessage') return JSON.stringify({ message: body, session: token, display });
+  return JSON.stringify({ transaction: body, session: token });
+}
+
 /**
  * A signing request.
  *
@@ -417,34 +452,41 @@ export function connectRequestUrl({
  * broadcasts — the shape the security engines expect from a dapp that is not
  * behaving like a drainer), `signTransaction` (sign only, for a route that
  * lands the trade itself, like Jupiter), or `signMessage`.
+ *
+ * ─── THE REQUEST IS SEALED, NOT PLAIN ──────────────────────────────────────
+ * Every post-connect method takes exactly four query parameters:
+ * `dapp_encryption_public_key`, `nonce`, `redirect_link` and `payload` —
+ * where `payload` is the base58 of `{ transaction|message, session }`
+ * ENCRYPTED with the shared secret and that nonce (signRequestPayload above,
+ * sealed by deeplink.js). This function used to put `session=` and
+ * `transaction=` in the URL as plaintext; no wallet has such a method, and
+ * Phantom on Android answered the malformed request with errorCode -32603
+ * «Unexpected error» before any approval screen — the «رد میشود» of the APK,
+ * where the deeplink path is the ONLY path (a browser on the same phone uses
+ * Mobile Wallet Adapter and never came here).
+ *
+ * `payload` here is therefore the SEALED base58 string. A plaintext session
+ * is refused rather than sent: `session` is deliberately not a parameter.
  */
 export function signRequestUrl({
   walletId,
   op,
   dappPublicKey,
   nonce,
-  session,
   redirectLink,
   payload
 }) {
   const wallet = deeplinkWallet(walletId);
   if (!wallet) return null;
-  const endpoint = {
-    signAndSendTransaction: 'signAndSendTransaction',
-    signTransaction: 'signTransaction',
-    signMessage: 'signMessage',
-    disconnect: 'disconnect'
-  }[op];
+  const endpoint = SIGN_ENDPOINTS[op];
   if (!endpoint) return null;
-  const params = {
+  if (!dappPublicKey || !nonce || !redirectLink || !payload) return null;
+  return requestUrl(wallet, endpoint, {
     dapp_encryption_public_key: dappPublicKey,
     nonce,
     redirect_link: redirectLink,
-    session
-  };
-  if (op === 'signAndSendTransaction' || op === 'signTransaction') params.transaction = payload;
-  if (op === 'signMessage') params.message = payload;
-  return requestUrl(wallet, endpoint, params);
+    payload
+  });
 }
 
 /** The query string of a URL, hash included — wallets append to either. */
@@ -516,7 +558,20 @@ export function readDeeplinkReturn(rawUrl) {
     };
   }
 
-  const walletKey = get('phantom_encryption_public_key') ?? get('wallet_encryption_public_key');
+  /*
+   * The wallet's encryption key arrives under the WALLET'S OWN NAME:
+   * `phantom_encryption_public_key` (Phantom), `solflare_encryption_public_key`
+   * (Solflare), `wallet_encryption_public_key` (Backpack). Reading only the
+   * first two left a Solflare approval unread — the user approved, came back,
+   * and the sheet kept «waiting» until it called the round trip stuck. Any
+   * `<name>_encryption_public_key` is the wallet's key; there is only one.
+   */
+  const walletKey = get('phantom_encryption_public_key')
+    ?? get('solflare_encryption_public_key')
+    ?? get('wallet_encryption_public_key')
+    ?? get('backpack_encryption_public_key')
+    ?? pairs.find(([k]) => /^[a-z0-9]+_encryption_public_key$/i.test(k) && k !== 'dapp_encryption_public_key')?.[1]
+    ?? null;
   const nonce = get('nonce');
   const data = get('data');
   if (!walletKey || !nonce || !data) return { state: 'none', error: null, params: null };
@@ -576,6 +631,9 @@ export function stripDeeplinkReturn(rawUrl) {
   const kept = query
     .split('&')
     .filter(Boolean)
-    .filter((pair) => !drop.has(decodeURIComponent(pair.split('=')[0] || '')));
+    .filter((pair) => {
+      const name = decodeURIComponent(pair.split('=')[0] || '');
+      return !drop.has(name) && !/^[a-z0-9]+_encryption_public_key$/i.test(name);
+    });
   return `${path}${kept.length ? `?${kept.join('&')}` : ''}${hash}`;
 }

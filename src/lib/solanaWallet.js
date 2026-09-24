@@ -795,7 +795,10 @@ export async function signAndSendSolana(base64Tx, versioned = true) {
    */
   if (!provider && !mwa && deeplinkSession()) {
     const { deeplinkSignAndSendTransaction } = await import('./solana/deeplink.js');
-    const res = await deeplinkSignAndSendTransaction(base64Tx);
+    /* `broadcast` is only reached when the wallet says it lacks
+       signAndSendTransaction (Phantom deprecated it): the wallet then signs
+       through signTransaction and the app lands the bytes on its own RPC. */
+    const res = await deeplinkSignAndSendTransaction(base64Tx, { broadcast: sendRawSolana });
     if (res.ok && res.signature) return res.signature;
     throw new Error(deeplinkSignError(res, 'SEND_FAILED'));
   }

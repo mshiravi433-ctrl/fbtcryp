@@ -5366,6 +5366,7 @@
       "done": "Continue",
       "retry": "Try again",
       "walletFallback": "your wallet",
+      "walletSaid": "The wallet said: {{message}} (code {{code}})",
       "err": {
         "REJECTED": "You declined the connection in the wallet. Nothing was connected.",
         "WALLET_ERROR": "The wallet refused the request. Open it once, then try again.",

@@ -770,6 +770,19 @@ console.log('▸ probing the WalletConnect stack (pairing, hand-off, relay, stor
   report('WalletConnect stack', await runWcStack());
 }
 
+/* 0b₁. The APK's SECOND hand-off: a signing request inside the Android app.
+   «تو سایت درست کار میکنه ولی تو اپ اندروید موقع امضا میگه اتصال برقرار نیست»
+   — the relay socket a backgrounded WebView keeps is dead while still
+   reporting `connected`, and the SDK opens the wallet with the requestId
+   before the relay has the request. Driven against a fake relayer and a fake
+   window: the bounded proof-of-socket, the gate that holds the link until the
+   ack, the package-scoped launch, and every fail-open path. */
+console.log('▸ probing the WalletConnect request hand-off (APK: proved socket, gated launch)…');
+{
+  const { run: runRequestHandoff } = await import('./wc-request-handoff-probe.mjs');
+  report('WalletConnect request hand-off', await runRequestHandoff());
+}
+
 /* 0b₃. The ONE verdict, and the Solana layer next to it.
    `src/lib/wc/diagnostics.js` answers the question the report has been asking
    since the first «Invalid domain»: WHICH of the eight things is wrong. The
