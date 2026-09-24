@@ -113,28 +113,132 @@
 }
 .net-select__chev.is-open { transform: rotate(180deg); color: var(--text-1); }
 
-/* ── the popover ────────────────────────────────────────────────────────── */
+/* ── the popup ──────────────────────────────────────────────────────────────
+ *
+ * «باید به صورت پاپ اپ شود وقتی روش میزنی» — this is a MODAL, not an inline
+ * dropdown. That changes three things:
+ *
+ *   1. It is portalled to `document.body` (see NetworkSelect.jsx), so nothing
+ *      here is positioned against the trigger any more;
+ *   2. it needs its own backdrop, and a stacking position above the app's
+ *      sheets (index.css puts those at 200/201, so this pair sits at 210/211 —
+ *      the network popup can be opened from inside a sheet);
+ *   3. on a phone it is a bottom sheet (thumb reach, and the natural direction
+ *      for something that "arrives"), while on a wide screen it centres like
+ *      every other dialog in the app.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.net-select__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  background: rgba(2, 4, 12, 0.58);
+  /* A blur the web view can afford: it is one composited layer, and it is what
+     makes the popup read as "in front of the page" rather than "painted on
+     it". Devices that cannot composite it just get the dim. */
+  backdrop-filter: blur(3px);
+  animation: net-select-fade 0.16s ease-out;
+}
+
+.net-select__layer {
+  position: fixed;
+  inset: 0;
+  z-index: 211;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* No `pointer-events: none` here: the layer covers the whole viewport and
+     the backdrop below it already owns the dismiss, so a transparent layer
+     that swallows taps would make the page look frozen after closing. */
+  pointer-events: none;
+}
 
 .net-select__pop {
-  position: absolute;
-  inset-inline-start: 0;
-  inset-inline-end: 0;
-  top: calc(100% + 8px);
-  z-index: 60;
-  padding: 6px;
-  border-radius: 18px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(78vh, 640px);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  border-radius: 24px 24px 0 0;
   border: 1px solid var(--line-strong);
   background: var(--bg-panel-solid);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 -18px 60px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.25);
   overflow: hidden;
-  animation: net-select-in 0.16s ease-out;
+  animation: net-select-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes net-select-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes net-select-in {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* The header: a title that says what is being chosen, and a close control that
+   is a real 36px target — a modal you can only escape by hunting for the right
+   pixel outside it is a trap on a phone. */
+.net-select__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 8px;
+  flex: 0 0 auto;
+}
+.net-select__head-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.net-select__x {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.12s ease;
+}
+.net-select__x:hover { background: var(--bg-panel); color: var(--text-1); }
+.net-select__x:active { transform: scale(0.94); }
+.net-select__x:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+/* The little bar that says "this sheet can be dragged" — drawn only on the
+   phone layout, where the popup actually is a sheet. */
+.net-select__grabber {
+  display: none;
+}
+
+@media (min-width: 720px) {
+  .net-select__layer {
+    align-items: center;
+    padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 20px);
+  }
+  .net-select__pop {
+    max-height: min(70vh, 640px);
+    border-radius: 22px;
+    padding: 6px;
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  .net-select__grabber { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .net-select__pop { animation: none; }
+  .net-select__pop,
+  .net-select__backdrop { animation: none; }
 }
 
 .net-select__search {
@@ -164,7 +268,12 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: min(52vh, 340px);
+  /* Inside the popup the list is the part that scrolls: the popup owns the
+     max-height, the list takes whatever is left. `min-height: 0` is what lets
+     a flex child actually shrink below its content height — without it the
+     list pushes the card past the viewport instead of scrolling inside it. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -302,6 +411,17 @@
   border-color: rgba(13, 16, 32, 0.12);
   box-shadow: 0 22px 50px rgba(13, 16, 32, 0.16), 0 2px 6px rgba(13, 16, 32, 0.08);
 }
+/* A light page dimmed by the dark theme's near-black turns the whole screen
+   grey; on light the scrim has to be a soft neutral or the popup looks like an
+   error state. */
+:root[data-theme='light'] .net-select__backdrop {
+  background: rgba(13, 16, 32, 0.34);
+}
+:root[data-theme='light'] .net-select__x {
+  background: rgba(13, 16, 32, 0.04);
+  border-color: rgba(13, 16, 32, 0.1);
+}
+:root[data-theme='light'] .net-select__x:hover { background: rgba(13, 16, 32, 0.08); }
 :root[data-theme='light'] .net-select__search {
   background: rgba(13, 16, 32, 0.04);
   border-color: rgba(13, 16, 32, 0.08);

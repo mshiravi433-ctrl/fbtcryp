@@ -72,12 +72,59 @@ describe('the network picker', () => {
   });
 
   it('gives every network its own artwork, offline', () => {
-    const { container } = render(<NetworkSelect {...baseProps} />);
+    render(<NetworkSelect {...baseProps} />);
     openList();
     /* `AssetIcon chain=` renders the vendored SVG inline — no request, no
-       broken image on a phone that cannot reach a CDN. */
-    const marks = container.querySelectorAll('.net-select__opt-mark svg');
+       broken image on a phone that cannot reach a CDN. The marks are looked
+       up on `document` because the popup is portalled out of the component's
+       own container (see the popup test below). */
+    const marks = document.querySelectorAll('.net-select__opt-mark svg');
     expect(marks.length).toBe(EVM_CHAIN_ORDER.length + 1);
+  });
+
+  it('opens as a POPUP in front of the page, not as a dropdown inside the hero card', () => {
+    const { container } = render(<NetworkSelect {...baseProps} />);
+    openList();
+    const popup = document.querySelector('.net-select__pop');
+    expect(popup).toBeTruthy();
+    /* Portalled to `document.body`: the wallet hero is `overflow: hidden` and
+       the page transition writes a `transform`, either of which would clip or
+       displace an inline dropdown. */
+    expect(popup.closest('.net-select')).toBeNull();
+    expect(container.querySelector('.net-select__pop')).toBeNull();
+    expect(popup.getAttribute('role')).toBe('dialog');
+    expect(popup.getAttribute('aria-modal')).toBe('true');
+    expect(document.querySelector('.net-select__backdrop')).toBeTruthy();
+  });
+
+  it('a tap on the backdrop closes without choosing anything', () => {
+    const onChange = vi.fn();
+    render(<NetworkSelect {...baseProps} onChange={onChange} />);
+    openList();
+    fireEvent.pointerDown(document.querySelector('.net-select__backdrop'));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('a tap INSIDE the popup is not treated as a tap outside it', () => {
+    const onChange = vi.fn();
+    render(<NetworkSelect {...baseProps} onChange={onChange} />);
+    const list = openList();
+    fireEvent.pointerDown(list);
+    /* The popup is a child of `document.body`, not of the trigger's subtree —
+       a naive "is it inside my ref?" check would close it here and swallow the
+       very tap that was meant to choose a network. */
+    expect(screen.queryByRole('listbox')).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('holds the page still behind it, and lets it go when it closes', () => {
+    render(<NetworkSelect {...baseProps} />);
+    const before = document.body.style.overflow;
+    openList();
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.body.style.overflow).toBe(before);
   });
 
   it('marks the chain the WALLET is on, which is not the same as the one being viewed', () => {

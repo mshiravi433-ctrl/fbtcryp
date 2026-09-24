@@ -14,7 +14,6 @@ import {
 import { solanaAddress, signAndSendSolana, getSolanaBalance } from '../lib/solanaWallet';
 import { useAppStore } from '../store/useAppStore';
 import { POINT_VALUES } from '../lib/ranks';
-import { IconPhone } from './Icons';
 import InfoBox from './InfoBox';
 import ModernSelect from './ModernSelect';
 import AssetIcon from './AssetIcon';
@@ -425,8 +424,18 @@ export default function SolanaBridgePanel() {
         </div>
 
         {!address ? (
+          /* ─── NO PHONE ICON ON THIS BUTTON ───────────────────────────────
+             «در بخش پل سولانا دکمه اتصال کیف پول سولانا یک ایکون تلفن داره
+             اون را ببر». The glyph was mobile-era shorthand for "it continues
+             on your phone" — which is exactly backwards here: this call to
+             action does NOT leave the page. It routes to the wallet tab
+             (`/wallet?tab=solana`) and the connect sheet opens in place, on
+             every screen size, desktop included. A handset next to «اتصال کیف
+             پول سولانا» promised a hand-off to another device that never
+             happens, which reads as a broken button rather than a next step.
+             The label alone is the honest instruction. */
           <button className="btn btn-primary" style={{ marginTop: 12, width: '100%' }} onClick={() => navigate('/wallet?tab=solana')}>
-            <IconPhone width={16} height={16} /> {t('bridge.solana.connectSolana')}
+            {t('bridge.solana.connectSolana')}
           </button>
         ) : (
           <button

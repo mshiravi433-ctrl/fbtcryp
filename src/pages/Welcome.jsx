@@ -1,6 +1,8 @@
+import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import LanguagePicker from '../components/LanguagePicker';
+import ProxyAdvicePopup from '../components/ProxyAdvicePopup';
 import UsernameField from '../components/UsernameField';
 import { IconChevronRight } from '../components/Icons';
 import { OnbTile, GlyphLanguages } from '../components/OnboardingIcons';
@@ -26,9 +28,21 @@ import LaunchProgress from '../components/LaunchProgress';
  *     them off screen — the exact bug the onboarding footer used to have.
  *   • The footer sits outside the scroll area and respects the safe-area
  *     inset, so Continue clears the gesture bar.
+ *
+ * PERSIAN CARRIES ONE EXTRA SENTENCE
+ *   Choosing فارسی opens the proxy advice («بسیاری از امکانات ما روی بستر
+ *   خارج است…»). It is the one language whose speakers are, as a group,
+ *   connecting through a filtered network, and the advice is worthless after
+ *   the first request has already failed. It is shown once per choice, is not
+ *   a gate, and changes nothing about the language that was just picked.
  */
 export default function Welcome({ onDone }) {
   const { t } = useTranslation();
+  const [adviceOpen, setAdviceOpen] = useState(false);
+
+  const onPickLanguage = useCallback((code) => {
+    if (code === 'fa') setAdviceOpen(true);
+  }, []);
 
   return (
     <div className="welcome-stage">
@@ -64,7 +78,7 @@ export default function Welcome({ onDone }) {
       </div>
 
       <div className="welcome-scroll">
-        <LanguagePicker />
+        <LanguagePicker onPick={onPickLanguage} />
 
         {/* Optional, and labelled as such. Nobody should feel gated behind a
             form field before they have seen the product. */}
@@ -84,6 +98,10 @@ export default function Welcome({ onDone }) {
           <IconChevronRight width={17} height={17} />
         </motion.button>
       </div>
+
+      {/* Portalled to document.body, so it is in front of the whole stage
+          rather than inside the animated column. */}
+      <ProxyAdvicePopup open={adviceOpen} onClose={() => setAdviceOpen(false)} />
     </div>
   );
 }

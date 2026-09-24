@@ -19,6 +19,11 @@
       "presentationOptions": ["badge", "sound", "alert"],
       "smallIcon": "ic_stat_notification",
       "iconColor": "#00E5FF"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_notification",
+      "iconColor": "#00E5FF",
+      "sound": "fbt_notification"
     }
   }
 }

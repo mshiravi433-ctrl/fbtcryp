@@ -4,4 +4,12 @@
     <string name="title_activity_main">FBT Swap</string>
     <string name="package_name">ir.fbtswap.app</string>
     <string name="custom_url_scheme">ir.fbtswap.app</string>
+
+    <!-- Notification channels (Android 8+). The user sees these names in
+         Settings → Apps → FBT Swap → Notifications, and can turn a channel
+         off without losing the other — which is exactly why there are two. -->
+    <string name="notification_channel_alerts">Price and order alerts</string>
+    <string name="notification_channel_alerts_desc">A price you asked to be told about, or an order that filled.</string>
+    <string name="notification_channel_updates">Daily summary</string>
+    <string name="notification_channel_updates_desc">One message a day at most — never a heads-up.</string>
 </resources>

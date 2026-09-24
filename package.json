@@ -284,6 +284,7 @@
     "test:insurance-contract": "node scripts/compile-fbt-insurance.mjs && node test/insurance/insurance-contract-probe.mjs",
     "test:phase210": "node test/intent-ai/phase210-financial-brain-probe.mjs",
     "test:farm:public": "vitest run --config test/vitest.public.config.mjs",
+    "test:welcome": "vitest run test/proxy-advice.test.jsx",
     "test:wallet-connection": "node test/walletconnect-stack-probe.mjs && node test/wallet-diagnostics-probe.mjs && vitest run test/wallet-health-panel.test.jsx test/wallet-session-lease.test.jsx test/network-select.test.jsx",
     "test:solana-connect": "node test/solana-deeplink-probe.mjs && node test/wallet-diagnostics-probe.mjs && vitest run test/solana-connect-sheet.test.jsx",
     "test:solana-swap": "vitest run test/solana-swap-chain-reads.test.js",

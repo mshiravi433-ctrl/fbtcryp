@@ -352,12 +352,18 @@ function WalHero({
             already know the short codes, and impossible to scan.
 
             `NetworkSelect` is the replacement: the selected network's real
-            logo and its full name on one 52px control, and a searchable
-            listbox behind it — «همه شبکه‌ها» pinned first, each row carrying
-            its own artwork, the count of assets the portfolio actually found
-            there, and a badge on the chain the wallet is connected to. The
-            icons are vendored SVG (src/lib/assetIconData.js), so it looks the
-            same on a phone that cannot reach a CDN, in dark and light.
+            logo and its full name on one 52px control, and — «باید به صورت
+            پاپ اپ شود وقتی روش میزنی» — a real POPUP behind it rather than an
+            inline dropdown: dimmed backdrop, a card that rises from the bottom
+            on a phone and centres itself on a wide screen, portalled to
+            `document.body` so the hero's `overflow: hidden` and the page
+            transition's `transform` can neither clip nor mis-place it. Inside
+            it: a searchable listbox, «همه شبکه‌ها» pinned first, each row
+            carrying its own artwork, the count of assets the portfolio
+            actually found there, and a badge on the chain the wallet is
+            connected to. The icons are vendored SVG
+            (src/lib/assetIconData.js), so it looks the same on a phone that
+            cannot reach a CDN, in dark and light.
 
             Behaviour kept from the chips: choosing a real network also asks
             the wallet to switch to it, and a refusal is still shown as a
@@ -374,6 +380,7 @@ function WalHero({
             assetsLabel={t('wallet.assetsUnit')}
             activeLabel={t('wallet.active.title')}
             searchLabel={t('wallet.netSearch')}
+            closeLabel={t('common.close')}
             testId="wallet-network-select"
           />
           {/*

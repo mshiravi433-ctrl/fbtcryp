@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+  The two notification channel names in Persian.
+
+  Only these two strings are translated here: `app_name` is a brand and stays
+  Latin in every locale, and the rest of this file's strings are never shown to
+  anybody. Anything missing from a values-fa file falls back to values/, which
+  is why a partial file is safe — and why this one is deliberately partial.
+-->
+<resources>
+    <string name="notification_channel_alerts">هشدار قیمت و سفارش</string>
+    <string name="notification_channel_alerts_desc">قیمتی که خواستی خبرت کنیم، یا سفارشی که انجام شد.</string>
+    <string name="notification_channel_updates">خلاصهٔ روزانه</string>
+    <string name="notification_channel_updates_desc">حداکثر یک پیام در روز — هرگز روی صفحه نمی‌آید.</string>
+</resources>

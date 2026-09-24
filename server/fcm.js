@@ -288,7 +288,23 @@ export async function fcmSendToToken(deviceToken, payload) {
                  the FCM default; brand cyan tints it. */
               icon: 'ic_stat_notification',
               color: payload.color || '#00E5FF',
-              sound: payload.sound === 'ready' ? 'default' : 'default'
+              /*
+               * OUR tone, and the channel that carries it.
+               *
+               * `sound` names res/raw/fbt_notification.wav (no extension —
+               * Android resolves the raw resource by base name). It used to be
+               * the literal string 'default' on both branches of a ternary,
+               * i.e. the device chime, so an FBT alert sounded like everyone
+               * else's.
+               *
+               * `channelId` matters just as much: on Android 8+ the CHANNEL
+               * owns the sound, and a message-level `sound` posted to a
+               * channel that does not carry it is dropped. MainActivity
+               * creates `fbt_alerts_v1` with this exact tone on it, so the two
+               * agree by construction rather than by luck.
+               */
+              sound: 'fbt_notification',
+              channelId: 'fbt_alerts_v1'
             }
           }
         }
@@ -345,7 +361,18 @@ export async function fcmBroadcast(build, { tag = 'fbt-daily' } = {}) {
                 data: { url: msg.url || '/', tag },
                 android: {
                   priority: 'normal',
-                  notification: { tag, icon: 'ic_stat_notification', color: '#00E5FF' }
+                  notification: {
+                    tag,
+                    icon: 'ic_stat_notification',
+                    color: '#00E5FF',
+                    /* Same tone, quieter channel: the daily digest posts to
+                       `fbt_updates_v1` (IMPORTANCE_DEFAULT), so it lands in
+                       the shade without interrupting whatever the user is
+                       doing — one promotional interruption is how a
+                       notification permission gets revoked. */
+                    sound: 'fbt_notification',
+                    channelId: 'fbt_updates_v1'
+                  }
                 }
               }
             })

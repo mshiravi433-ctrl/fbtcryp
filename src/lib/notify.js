@@ -315,7 +315,22 @@ async function presentNativeShade(title, options = {}) {
         body: options?.body ? String(options.body) : '',
         extra: options?.data || {},
         smallIcon: 'ic_stat_icon_config_sample',
-        iconColor: '#00e5ff'
+        iconColor: '#00e5ff',
+        /*
+         * OUR tone, not the device's.
+         *
+         * On Android 8+ a notification's sound comes from its CHANNEL, and a
+         * `sound` set on a notification posted to a silent channel is ignored
+         * outright — which is why both are named here. `channelId` matches the
+         * channel MainActivity.createNotificationChannels() registers with
+         * res/raw/fbt_notification.wav on it; `sound` is the same raw
+         * resource, and is what the plugin falls back to on the pre-Oreo path
+         * and when the channel has to be created by the plugin itself.
+         *
+         * No file extension: Android resolves the resource by base name.
+         */
+        channelId: 'fbt_alerts_v1',
+        sound: 'fbt_notification'
       }]
     });
     return true;

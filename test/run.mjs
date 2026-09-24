@@ -38,6 +38,13 @@ import './launch-solana-probe.mjs';
    Locks the round trip, the user-rejection path, the APK's native hand-over,
    the double delivery it guarantees, and the lease. No wallet, no network. */
 import './solana-deeplink-probe.mjs';
+/* The app's own notification tone («نوتیفیکیشن … یک آهنگ نوتیفیکیشن بزنه که
+   خاص باشد»): the PCM in res/raw, its byte-for-byte reproducibility, the two
+   channels created with it in MainActivity (alerts HIGH, so the notification
+   really does drop in from the top), the manifest default FCM resolves to, the
+   channel ids in server/fcm.js, and the local-notification path agreeing.
+   A chain with one missing link is silent, so all of it is asserted. */
+import './notification-sound-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the
@@ -55,8 +62,31 @@ import './futures-engine-probe.mjs';
 import './intent-ai/ci-brain-turns-probe.mjs';
 /* ETF + Gold (Alpha Vantage) — real provider with mocked fetch: normalise,
    rate-limit, stale-if-error, single-flight, secret non-leak, and the Central
-   Brain module health matrix. HTTP contract lives in test:etf-gold-api. */
-import './etf-gold-provider-probe.mjs';
+   Brain module health matrix. HTTP contract lives in test:etf-gold-api.
+
+   It runs as a CHILD process (like the FI OS probes above) for two reasons it
+   shares with them: it replaces globalThis.fetch for its whole duration, and
+   `npm test` imports every probe into ONE process, so a probe that swaps
+   fetch cannot be allowed to swap it for the probes that run after it. */
+let etfOk = false;
+try {
+  execFileSync(process.execPath, ['etf-gold-provider-probe.mjs'], {
+    stdio: 'pipe',
+    cwd: new URL('.', import.meta.url).pathname
+  });
+  etfOk = true;
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+  if (tail) console.log(tail);
+}
+/* Console-printed here rather than via report(): `report` is defined further
+   down, after the HTTP probes, and this runs at import time — forward-referencing
+   a `const` that is still in its temporal dead zone is an early ReferenceError
+   that would take the whole run down for a disconnected staging network that
+   has nothing to do with the code under test. */
+console.log(`── ETF + Gold provider (Alpha Vantage) ─────────────────────────────`);
+console.log(`  ${etfOk ? '✓' : '✗'} ETF + Gold provider — all assertions passed`);
+if (!etfOk) failed += 1;
 /* Operations Center restoration: real monitor engine, conditional orders,
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';
@@ -245,6 +275,9 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
   return dom;
 }
 
+/* Declared before the HTTP probes import: the ETF provider probe (injected
+   above, at import time) accounts for its own result and must be allowed to
+   add to the same failure counter. */
 let failed = 0;
 const report = (suite, rows) => {
   console.log(`\n── ${suite} ─────────────────────────────`);
