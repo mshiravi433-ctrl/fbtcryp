@@ -439,10 +439,6 @@ function WalHero({
               <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>{t('wallet.emptyBody')}</p>
               <button className="btn btn-primary" style={{ marginTop: 15, minHeight: 44, borderRadius: 14, padding: '0 24px' }} onClick={onConnect}>{t('wallet.connect')}</button>
               <p className="faint" style={{ fontSize: 11.5, marginTop: 11, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
-              <details style={{ marginTop: 14, textAlign: 'start', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px' }}>
-                <summary style={{ fontWeight: 700, fontSize: 12.5, cursor: 'pointer', color: 'var(--text-1)', listStyle: 'none' }}>{t('wallet.custodyTitle')}</summary>
-                <p style={{ fontSize: 12.5, lineHeight: 1.85, margin: '8px 0 0', color: 'var(--text-2)' }}>{t('wallet.custodyNotice')}</p>
-              </details>
             </>
           )}
         </div>
@@ -1041,14 +1037,6 @@ export default function Wallet() {
       {tab === 'solana' && (
         <div style={{ marginTop: 12 }}>
           <SolanaWalletTab />
-        </div>
-      )}
-
-      {connected && (
-        <div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 14 }}>
-          <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
-            <p style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('wallet.custodyNotice')}</p>
-          </InfoBox>
         </div>
       )}
 

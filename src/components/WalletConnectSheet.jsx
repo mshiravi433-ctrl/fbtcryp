@@ -674,14 +674,6 @@ export default function WalletConnectSheet({ open, onClose }) {
             <p className="notice" style={{ marginTop: 12 }}>{t('wallet.sessionGone')}</p>
           )}
 
-          {/* The custody promise and the one honest trade-off of the vault,
-              in the same shape, so neither reads as fine print. */}
-          <div className="wc-foot">
-            <IconShield width={14} height={14} aria-hidden="true" />
-            <span>{t('wallet.custodyNotice')}</span>
-          </div>
-          <p className="wc-foot wc-foot-risk">{t('wallet.localRisk')}</p>
-
           {/* Health hidden on request — «قسمت سلامت اتصال را مخفی کن» */}
           {null && <WalletHealthPanel projectId={wallet.wcProjectId} />}
         </>

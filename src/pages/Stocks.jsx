@@ -650,6 +650,7 @@ export default function Stocks() {
               t={t}
               haptic={haptic}
               isRTL={isRTL}
+              lang={i18n.resolvedLanguage || i18n.language}
               onGoRwa={() => setTab('rwa')}
               onGoHorizon={() => setTab('ostium')}
             />

@@ -157,7 +157,8 @@ export async function orchestrateIntent({ state, message, walletContext, portfol
       walletContext,
       portfolioContext,
       pendingExecution,
-      analysis
+      analysis,
+      locale: state.locale || 'fa'
     }
   });
 

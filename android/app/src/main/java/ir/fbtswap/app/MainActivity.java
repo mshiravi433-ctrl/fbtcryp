@@ -20,6 +20,7 @@ import org.json.JSONObject;
 
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 /*
@@ -464,6 +465,28 @@ public class MainActivity extends BridgeActivity {
           activity.getDelegate().setLocalNightMode(
             light ? AppCompatDelegate.MODE_NIGHT_NO : AppCompatDelegate.MODE_NIGHT_YES
           );
+        }
+      });
+    }
+
+    @JavascriptInterface
+    public void setFullscreen(final boolean fullscreen) {
+      activity.runOnUiThread(new Runnable() {
+        @Override
+        public void run() {
+          android.view.Window window = activity.getWindow();
+          if (window == null) return;
+          android.view.View decorView = window.getDecorView();
+          if (decorView == null) return;
+          WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, decorView);
+          if (controller != null) {
+            if (fullscreen) {
+              controller.hide(WindowInsetsCompat.Type.systemBars());
+              controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            } else {
+              controller.show(WindowInsetsCompat.Type.systemBars());
+            }
+          }
         }
       });
     }

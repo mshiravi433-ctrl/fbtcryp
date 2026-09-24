@@ -168,30 +168,46 @@ export default function SmartWallet({ embedded = false, onBack }) {
         variants={riseIn}
         initial="hidden"
         animate="show"
-        style={{ marginTop: 14, padding: 16, borderRadius: 18 }}
+        style={{
+          marginTop: 14,
+          padding: 18,
+          borderRadius: 20,
+          background: 'linear-gradient(168deg, rgba(20, 24, 42, 0.75), rgba(10, 14, 26, 0.85))',
+          border: '1px solid rgba(255, 255, 255, 0.08)'
+        }}
       >
-        <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 12 }}>{t('smart.daily')} & {t('smart.perTx')}</div>
-        <div className="row" style={{ gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <label className="field-label" style={{ marginTop: 0 }}>{t('smart.daily')}</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={policy.dailyLimitUsd}
-              onChange={(e) => { savePolicy({ dailyLimitUsd: e.target.value }); refresh(); }}
-            />
+        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12, color: 'var(--text-1)' }}>
+          {t('smart.daily')} & {t('smart.perTx')}
+        </div>
+        <div className="row" style={{ gap: 12 }}>
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.035)', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <label className="field-label" style={{ marginTop: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{t('smart.daily')}</label>
+            <div style={{ position: 'relative', marginTop: 6 }}>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={policy.dailyLimitUsd}
+                onChange={(e) => { savePolicy({ dailyLimitUsd: e.target.value }); refresh(); }}
+                style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 10, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--line)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700 }}
+              />
+              <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>$</span>
+            </div>
           </div>
-          <div style={{ flex: 1 }}>
-            <label className="field-label" style={{ marginTop: 0 }}>{t('smart.perTx')}</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={policy.perTxLimitUsd}
-              onChange={(e) => { savePolicy({ perTxLimitUsd: e.target.value }); refresh(); }}
-            />
+          <div style={{ flex: 1, background: 'rgba(255,255,255,0.035)', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <label className="field-label" style={{ marginTop: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{t('smart.perTx')}</label>
+            <div style={{ position: 'relative', marginTop: 6 }}>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={policy.perTxLimitUsd}
+                onChange={(e) => { savePolicy({ perTxLimitUsd: e.target.value }); refresh(); }}
+                style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 10, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--line)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700 }}
+              />
+              <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>$</span>
+            </div>
           </div>
         </div>
-        <p className="faint" style={{ marginTop: 10, fontSize: 11.5, lineHeight: 1.7 }}>{t('smart.example')}</p>
+        <p className="faint" style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.7 }}>{t('smart.example')}</p>
       </motion.section>
 
       {/* ── SESSION CARD ────────────────────────────────────── */}
@@ -317,83 +333,286 @@ export default function SmartWallet({ embedded = false, onBack }) {
       {err && <p className="notice notice-danger" style={{ marginTop: 12 }}>{t(`smart.err.${err}`, { defaultValue: err })}</p>}
 
       {/* ── INTENT OS RULES (moved off that screen) ─────────────────── */}
-      <DisclosureCard
-        testId="smart-wallet-intent-rules"
-        icon="⛁"
-        title={t('smart.rulesTitle', { defaultValue: 'Rules Intent OS follows' })}
-        subtitle={t('smart.rulesSub', { defaultValue: 'Chains, slippage, ceilings and proof requirements for Intent OS drafting and goal plans. Saved on this device and applied to the next intent you compile — nothing here signs or sends.' })}
-        badge={rulesSaved ? t('smart.rulesSaved', { defaultValue: 'saved' }) : t('smart.rulesBadge', { defaultValue: 'local' })}
-        badgeTone={rulesSaved ? 'good' : 'neutral'}
+      <motion.section
+        className="wallet-pie-card smart-intent-box"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        data-testid="smart-wallet-intent-rules"
+        style={{
+          marginTop: 14,
+          padding: 18,
+          borderRadius: 20,
+          background: 'linear-gradient(168deg, rgba(20, 24, 42, 0.75), rgba(10, 14, 26, 0.85))',
+          border: '1px solid rgba(0, 229, 255, 0.18)',
+          boxShadow: '0 12px 34px rgba(0, 0, 0, 0.35)',
+          position: 'relative'
+        }}
       >
-        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-          <label className="field-label" style={{ flex: '1 1 140px', marginTop: 0 }}>
-            {t('smart.ruleChain', { defaultValue: 'Preferred chain' })}
+        <div className="row-between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div className="row" style={{ gap: 10 }}>
+            <span
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 12,
+                display: 'grid',
+                placeItems: 'center',
+                background: 'linear-gradient(135deg, rgba(0,229,255,0.22), rgba(124,77,255,0.25))',
+                border: '1px solid rgba(0,229,255,0.3)',
+                fontSize: 16
+              }}
+            >
+              ⚡
+            </span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13.5, color: 'var(--text-1)' }}>
+                {t('smart.rulesTitle', { defaultValue: 'قوانین شرطی Intent OS' })}
+              </div>
+              <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>
+                {t('smart.rulesSub', { defaultValue: 'تنظیم شروط زنجیره، لغزش مجاز، سقف هر اینتنت و اثبات اجرا' })}
+              </div>
+            </div>
+          </div>
+          <span
+            className={`pill ${rulesSaved ? 'pill-up' : 'pill-neutral'}`}
+            style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 999 }}
+          >
+            {rulesSaved ? `✓ ${t('smart.rulesSaved', { defaultValue: 'ذخیره شد' })}` : t('smart.rulesBadge', { defaultValue: 'تنظیمات محلی' })}
+          </span>
+        </div>
+
+        {/* Micro-boxes grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: 10,
+            marginTop: 14
+          }}
+        >
+          {/* Micro-box 1: Preferred Chain */}
+          <div
+            className="smart-micro-box"
+            style={{
+              padding: '12px 14px',
+              borderRadius: 14,
+              background: 'rgba(255, 255, 255, 0.035)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6
+            }}
+          >
+            <div className="row" style={{ gap: 6 }}>
+              <span style={{ fontSize: 13 }}>⛓</span>
+              <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
+                {t('smart.ruleChain', { defaultValue: 'زنجیره ترجیحی' })}
+              </span>
+            </div>
             <select
               value={intentMem.preferredChainId}
               onChange={(e) => patchRules({ preferredChainId: Number(e.target.value) })}
-              style={{ marginTop: 4 }}
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: 10,
+                background: 'rgba(0, 0, 0, 0.3)',
+                border: '1px solid var(--line)',
+                color: 'var(--text-1)',
+                fontSize: 12.5,
+                fontWeight: 600
+              }}
             >
               {EVM_CHAIN_ORDER.map((id) => (
                 <option key={id} value={id}>{EVM_CHAINS[id]?.name || id}</option>
               ))}
             </select>
-          </label>
-          <label className="field-label" style={{ flex: '1 1 110px', marginTop: 0 }}>
-            {t('smart.ruleSlippage', { defaultValue: 'Max slippage %' })}
-            <input
-              type="number" step="0.05" min="0.05" max="5"
-              value={intentMem.maxSlippagePct}
-              onChange={(e) => patchRules({ maxSlippagePct: e.target.value })}
-              style={{ marginTop: 4 }}
-            />
-          </label>
-          <label className="field-label" style={{ flex: '1 1 130px', marginTop: 0 }}>
-            {t('smart.rulePerIntent', { defaultValue: 'Per-intent ceiling (USD)' })}
-            <input
-              type="number" min="1" inputMode="decimal"
-              value={intentMem.maxPerIntentUsd}
-              onChange={(e) => patchRules({ maxPerIntentUsd: e.target.value })}
-              style={{ marginTop: 4 }}
-            />
-          </label>
-          <label className="field-label" style={{ flex: '1 1 130px', marginTop: 0 }}>
-            {t('smart.rulePrivateAbove', { defaultValue: 'Route privately above (USD)' })}
-            <input
-              type="number" min="0" inputMode="decimal"
-              value={intentMem.privateAboveUsd}
-              onChange={(e) => patchRules({ privateAboveUsd: e.target.value })}
-              style={{ marginTop: 4 }}
-            />
-          </label>
+          </div>
+
+          {/* Micro-box 2: Max Slippage */}
+          <div
+            className="smart-micro-box"
+            style={{
+              padding: '12px 14px',
+              borderRadius: 14,
+              background: 'rgba(255, 255, 255, 0.035)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6
+            }}
+          >
+            <div className="row" style={{ gap: 6 }}>
+              <span style={{ fontSize: 13 }}>📊</span>
+              <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
+                {t('smart.ruleSlippage', { defaultValue: 'حداکثر لغزش مجاز (٪)' })}
+              </span>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                step="0.05"
+                min="0.05"
+                max="5"
+                value={intentMem.maxSlippagePct}
+                onChange={(e) => patchRules({ maxSlippagePct: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '8px 24px 8px 10px',
+                  borderRadius: 10,
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid var(--line)',
+                  color: 'var(--text-1)',
+                  fontSize: 12.5,
+                  fontWeight: 600
+                }}
+              />
+              <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>%</span>
+            </div>
+          </div>
+
+          {/* Micro-box 3: Per-intent ceiling */}
+          <div
+            className="smart-micro-box"
+            style={{
+              padding: '12px 14px',
+              borderRadius: 14,
+              background: 'rgba(255, 255, 255, 0.035)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6
+            }}
+          >
+            <div className="row" style={{ gap: 6 }}>
+              <span style={{ fontSize: 13 }}>🛡</span>
+              <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
+                {t('smart.rulePerIntent', { defaultValue: 'سقف هر اینتنت (دلار)' })}
+              </span>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                min="1"
+                inputMode="decimal"
+                value={intentMem.maxPerIntentUsd}
+                onChange={(e) => patchRules({ maxPerIntentUsd: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '8px 24px 8px 10px',
+                  borderRadius: 10,
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid var(--line)',
+                  color: 'var(--text-1)',
+                  fontSize: 12.5,
+                  fontWeight: 600
+                }}
+              />
+              <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>$</span>
+            </div>
+          </div>
+
+          {/* Micro-box 4: Route privately above */}
+          <div
+            className="smart-micro-box"
+            style={{
+              padding: '12px 14px',
+              borderRadius: 14,
+              background: 'rgba(255, 255, 255, 0.035)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6
+            }}
+          >
+            <div className="row" style={{ gap: 6 }}>
+              <span style={{ fontSize: 13 }}>🔒</span>
+              <span className="field-label" style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
+                {t('smart.rulePrivateAbove', { defaultValue: 'مسیر خصوصی بالای (دلار)' })}
+              </span>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number"
+                min="0"
+                inputMode="decimal"
+                value={intentMem.privateAboveUsd}
+                onChange={(e) => patchRules({ privateAboveUsd: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '8px 24px 8px 10px',
+                  borderRadius: 10,
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  border: '1px solid var(--line)',
+                  color: 'var(--text-1)',
+                  fontSize: 12.5,
+                  fontWeight: 600
+                }}
+              />
+              <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>$</span>
+            </div>
+          </div>
         </div>
 
-        <div className="row-between" style={{ marginTop: 12, gap: 10 }}>
-          <span>
-            <strong style={{ fontSize: 12.5 }}>{t('smart.ruleProof', { defaultValue: 'Require an execution proof' })}</strong>
-            <br />
-            <span className="faint" style={{ fontSize: 11 }}>{t('smart.ruleProofBody', { defaultValue: 'A compiled intent asks for a verifiable receipt before it is treated as settled; without it the plan is marked unproven, never assumed done.' })}</span>
-          </span>
+        {/* Micro-box 5: Execution Proof Switch */}
+        <div
+          style={{
+            marginTop: 12,
+            padding: '12px 14px',
+            borderRadius: 14,
+            background: 'rgba(255, 255, 255, 0.035)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12
+          }}
+        >
+          <div className="row" style={{ gap: 10, flex: 1 }}>
+            <span style={{ fontSize: 16 }}>🧾</span>
+            <div>
+              <strong style={{ fontSize: 12.5, color: 'var(--text-1)' }}>
+                {t('smart.ruleProof', { defaultValue: 'الزام به رسید و اثبات اجرای آنچین' })}
+              </strong>
+              <div className="faint" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.5 }}>
+                {t('smart.ruleProofBody', { defaultValue: 'اینتنت پیش از اینکه نهایی فرض شود، نیازمند رسید تأییدشدهٔ بلاکچین است.' })}
+              </div>
+            </div>
+          </div>
           <Switch
             on={intentMem.requireExecutionProof}
-            label={t('smart.ruleProof', { defaultValue: 'Require an execution proof' })}
+            label={t('smart.ruleProof', { defaultValue: 'اثبات اجرا' })}
             onChange={() => patchRules({ requireExecutionProof: !intentMem.requireExecutionProof })}
           />
         </div>
 
-        <p className="faint" style={{ marginTop: 12, fontSize: 11.5, lineHeight: 1.7 }}>
+        {/* Effective summary note */}
+        <div
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            borderRadius: 12,
+            background: 'rgba(0, 229, 255, 0.05)',
+            border: '1px solid rgba(0, 229, 255, 0.12)',
+            fontSize: 11.5,
+            lineHeight: 1.6,
+            color: 'var(--text-2)'
+          }}
+        >
           {t('smart.ruleEffective', {
-            defaultValue: 'This ceiling warns Intent OS above {{intent}} for a single intent; the policy above hard-blocks a signature at {{policy}}. The number that actually stops anything is the stricter one: {{effective}}.',
+            defaultValue: 'این سقف به Intent OS هشدار می‌دهد وقتی یک اینتنت از {{intent}} بیشتر شود؛ سیاستِ بالا امضا را در {{policy}} به‌طور قطعی متوقف می‌کند. عددی که واقعاً جلوگیری می‌کند سخت‌گیرانه‌ترِ این دو است: {{effective}}.',
             intent: `$${intentMem.maxPerIntentUsd}`,
-            policy: policy.enabled ? `$${policy.perTxLimitUsd}` : t('smart.rulePolicyOff', { defaultValue: 'policy off' }),
+            policy: policy.enabled ? `$${policy.perTxLimitUsd}` : (t('smart.rulePolicyOff') || 'غیرفعال'),
             effective: `$${effectivePerIntentUsd}`
           })}
           {' · '}
           {t('smart.ruleHardFloor', {
-            defaultValue: 'Any operation above {{n}} still needs your own confirmation, whichever way these values are set.',
+            defaultValue: 'هر عملیات بالای {{n}} همچنان تأیید مستقیم خودتان را لازم دارد.',
             n: `$${policy.requireConfirmAboveUsd}`
           })}
-        </p>
-      </DisclosureCard>
+        </div>
+      </motion.section>
 
       <InfoBox title={t('smart.gasTitle')} tone="info" id="smart-gas" >
         <p>{t('smart.gasBody')}</p>

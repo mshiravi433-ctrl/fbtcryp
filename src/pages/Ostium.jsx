@@ -548,11 +548,13 @@ export default function Ostium({ embedded = false }) {
                 const know = assetKnowledgeFor(m.from);
                 const isFa = /^fa\b/i.test(String(i18n.language || 'fa'));
                 const nm = (know[isFa ? 'fa' : 'en'] ?? know.en)?.name;
+                const catItem = CATEGORY_HELP.find((c) => c.id === m.uiCategory);
+                const catName = isFa ? (catItem?.fa ?? m.uiCategory) : (m.uiCategory || m.category || '');
                 return {
                   value: m.pairId,
                   label: m.name,
-                  /* «طلای جهانی · کالا» reads better than a bare category */
-                  sublabel: nm && nm !== m.from ? `${nm} · ${CATEGORY_HELP.find((c) => c.id === m.uiCategory)?.fa ?? m.uiCategory}` : (m.uiCategory || m.category || ''),
+                  /* Localized category sublabel: Gold · Commodities vs طلای جهانی · کالا */
+                  sublabel: nm && nm !== m.from ? `${nm} · ${catName}` : (catName || ''),
                   meta: m.mid != null ? `$${fmtPrice(m.mid)}` : undefined,
                   base: m.from,
                   quote: m.to,

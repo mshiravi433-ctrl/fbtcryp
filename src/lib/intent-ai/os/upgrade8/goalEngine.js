@@ -1,5 +1,5 @@
 import { INTENT_STATUS, createGoalRecord, createIntentRecord, nowMs } from './contracts.js';
-import { extractDurationMonths, extractRiskProfile, normalizeText } from './questionEngine.js';
+import { extractDurationDays, extractDurationMonths, extractAmountUsd, extractRiskProfile, normalizeText } from './questionEngine.js';
 
 const PORTFOLIO_KEYWORDS = ['portfolio', 'portfo', 'portfolio analysis', 'پرتفوی', 'سبد'];
 const EXECUTION_KEYWORDS = ['buy', 'sell', 'swap', 'bridge', 'borrow', 'lend', 'farm', 'stake', 'short', 'long', 'خرید', 'فروش', 'سواپ', 'بریج', 'وام'];
@@ -9,6 +9,13 @@ export function detectIntentType(message) {
   const normalized = normalizeText(message);
   if (PORTFOLIO_KEYWORDS.some((keyword) => normalized.includes(normalizeText(keyword)))) {
     if (normalized.includes('rebalance') || normalized.includes('بازچین') || normalized.includes('متعادل')) return 'PORTFOLIO_REBALANCE';
+    return 'PORTFOLIO_ANALYSIS';
+  }
+  // If user provides capital, timeframe, or risk (e.g. «۱۰۰۰ دلار برای ۲۰ روز با ریسک متوسط»)
+  if (
+    (normalized.includes('ریسک') || normalized.includes('risk') || normalized.includes('سود') || normalized.includes('سرمایه') || normalized.includes('برنامه')) &&
+    (normalized.match(/\d+\s*(?:دلار|usdt|usdc|usd|\$)/i) || normalized.match(/(?:روز|ماه|سال|day|month)/i))
+  ) {
     return 'PORTFOLIO_ANALYSIS';
   }
   if (EXECUTION_KEYWORDS.some((keyword) => normalized.includes(normalizeText(keyword)))) {
@@ -27,21 +34,28 @@ export function inferGoalFromMessage(message, context = {}) {
   const normalized = normalizeText(message);
   const intentType = context.intentType || detectIntentType(message);
   const horizonMonths = extractDurationMonths(message) || context.horizonMonths || null;
+  const horizonDays = extractDurationDays(message) || context.horizonDays || null;
+  const amountUsd = extractAmountUsd(message) || context.amountUsd || null;
   const riskProfile = extractRiskProfile(message) || context.riskProfile || null;
 
-  if (intentType === 'PORTFOLIO_ANALYSIS') {
+  if (intentType === 'PORTFOLIO_ANALYSIS' || intentType === 'PLAN_REQUEST') {
     return {
       type: 'portfolio-analysis',
-      title: horizonMonths
-        ? `Analyze portfolio for the next ${horizonMonths} months`
-        : 'Analyze current portfolio',
-      description: 'Review current holdings, concentration, scenarios and recommended actions.',
+      title: horizonDays
+        ? `Analyze portfolio plan for ${horizonDays} days (${amountUsd ? `$${amountUsd}` : 'capital'})`
+        : horizonMonths
+          ? `Analyze portfolio for the next ${horizonMonths} months`
+          : 'Analyze current portfolio',
+      description: 'Review holdings, allocation, scenario risk and recommended strategy.',
       horizonMonths,
+      horizonDays,
+      amountUsd,
       riskProfile,
       assumptions: [
-        horizonMonths ? `time horizon: ${horizonMonths} months` : 'time horizon pending',
+        horizonDays ? `time horizon: ${horizonDays} days` : horizonMonths ? `time horizon: ${horizonMonths} months` : 'time horizon pending',
+        amountUsd ? `capital: $${amountUsd}` : null,
         riskProfile ? `risk profile: ${riskProfile}` : 'risk profile pending'
-      ]
+      ].filter(Boolean)
     };
   }
 
@@ -105,7 +119,7 @@ export function createIntentAndGoal({ state, message, route = '/intent', timesta
 
   const requiredSlots = [];
   if (intentType === 'PORTFOLIO_ANALYSIS') {
-    if (!goalSeed.horizonMonths) requiredSlots.push('timeframe');
+    if (!goalSeed.horizonMonths && !goalSeed.horizonDays) requiredSlots.push('timeframe');
     if (!goalSeed.riskProfile) requiredSlots.push('riskProfile');
   }
 
@@ -119,12 +133,15 @@ export function createIntentAndGoal({ state, message, route = '/intent', timesta
     confidence: intentType === 'GENERAL' ? 0.55 : 0.88,
     requiredSlots,
     filledSlots: {
-      ...(goalSeed.horizonMonths ? { timeframe: goalSeed.horizonMonths } : {}),
-      ...(goalSeed.riskProfile ? { riskProfile: goalSeed.riskProfile } : {})
+      ...(goalSeed.horizonDays ? { timeframe: `${goalSeed.horizonDays} days`, horizonDays: goalSeed.horizonDays } : goalSeed.horizonMonths ? { timeframe: goalSeed.horizonMonths } : {}),
+      ...(goalSeed.riskProfile ? { riskProfile: goalSeed.riskProfile } : {}),
+      ...(goalSeed.amountUsd ? { amountUsd: goalSeed.amountUsd } : {})
     },
     routeContext: route,
     entities: {
       horizonMonths: goalSeed.horizonMonths,
+      horizonDays: goalSeed.horizonDays,
+      amountUsd: goalSeed.amountUsd,
       riskProfile: goalSeed.riskProfile
     },
     explanation: `Intent classified as ${intentType}`,
