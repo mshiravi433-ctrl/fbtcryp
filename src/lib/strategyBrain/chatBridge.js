@@ -324,7 +324,7 @@ export function pearson(a = [], b = []) {
  */
 export async function buildStrategyFromChat({
   text = '', entities = {}, context = {}, results = {}, wallet = null, portfolio = null,
-  only = null, budget = {}, now = Date.now()
+  only = null, budget = {}, now = Date.now(), locale = 'fa'
 } = {}) {
   const readers = createChatEcosystemReaders({ context, results, wallet, portfolio });
   const pf = portfolio || context.portfolio || results.portfolio || null;
@@ -337,7 +337,7 @@ export async function buildStrategyFromChat({
 
   const reader = createEcosystemReader({ readers, ...budget });
   const state = await reader.read({ only: only || Object.keys(readers).filter((id) => DOMAIN_IDS.includes(id)) });
-  const strategy = buildPortfolioStrategy({ goal: spec, state, now });
+  const strategy = localizeStrategy(buildPortfolioStrategy({ goal: spec, state, now }), locale);
   return { ok: strategy.ok, spec, state, strategy, code: strategy.code || null };
 }
 

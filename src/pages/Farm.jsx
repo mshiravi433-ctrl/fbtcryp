@@ -1154,7 +1154,12 @@ export default function Farm() {
         {yieldCenterOpen && (
           <div className="farm-yield-center-body">
             <p className="muted">{t('farm.scoreExplanation')}</p>
-            <div className="farm-yield-center-stats"><span>Live APY</span><span>TVL</span><span>Risk</span><span>Freshness</span></div>
+            <div className="farm-yield-center-stats">
+              <span>{t('farm.liveApy', { defaultValue: 'Live APY' })}</span>
+              <span>{t('farm.tvl', { defaultValue: 'TVL' })}</span>
+              <span>{t('farm.risk', { defaultValue: 'Risk' })}</span>
+              <span>{t('farm.freshness', { defaultValue: 'Freshness' })}</span>
+            </div>
           </div>
         )}
       </motion.section>

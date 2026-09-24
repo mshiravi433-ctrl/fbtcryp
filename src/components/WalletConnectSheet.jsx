@@ -676,10 +676,12 @@ export default function WalletConnectSheet({ open, onClose }) {
 
           {/* The custody promise and the one honest trade-off of the vault,
               in the same shape, so neither reads as fine print. */}
+          {/* User requested removal of this text box:
           <div className="wc-foot">
             <IconShield width={14} height={14} aria-hidden="true" />
             <span>{t('wallet.custodyNotice')}</span>
           </div>
+          */}
           <p className="wc-foot wc-foot-risk">{t('wallet.localRisk')}</p>
 
           {/* Health hidden on request — «قسمت سلامت اتصال را مخفی کن» */}

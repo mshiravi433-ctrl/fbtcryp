@@ -101,71 +101,26 @@ function FlipIndicator({ flipped }) {
 }
 
 export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, isRTL }) {
-  const [flipped, setFlipped] = useState(false);
-  const wrapRef = useRef(null);
-  const timerRef = useRef(null);
-
-  // auto flip every 5s
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setFlipped((v) => !v);
-    }, 5200);
-    return () => clearInterval(timerRef.current);
-  }, []);
-
-  const resetTimer = () => {
-    clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setFlipped((v) => !v), 5200);
-  };
-
-  const handleFlip = (e) => {
-    e?.stopPropagation?.();
-    haptic?.('select');
-    setFlipped((v) => !v);
-    resetTimer();
-  };
-
-  const handleGoRwa = (e) => {
-    e.stopPropagation();
-    haptic?.('select');
-    onGoRwa?.();
-  };
-
-  const handleGoHorizon = (e) => {
-    e.stopPropagation();
-    haptic?.('select');
-    onGoHorizon?.();
-  };
-
   const fee = feePercentString();
 
   return (
-    <div
-      ref={wrapRef}
-      className={`flip-banner-wrap ${flipped ? 'is-flipped' : ''}`}
-      onMouseEnter={() => {
-        // desktop hover preview — only if not already flipped to avoid jitter
-        if (window.innerWidth > 768 && !flipped) setFlipped(true);
-      }}
-      onMouseLeave={() => {
-        if (window.innerWidth > 768 && flipped) setFlipped(false);
-      }}
-    >
-      <div className="flip-banner-inner">
-        {/* FRONT — RWA */}
-        <div className="flip-face flip-face-rwa" onClick={handleGoRwa}>
-          <div className="flip-face-aurora" />
-          <div className="flip-face-sheen" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', margin: '2px 0 14px' }}>
+      
+      {/* RWA CARD */}
+      <div className="flip-face flip-face-rwa" onClick={onGoRwa} style={{ flex: 1, minHeight: 'auto', padding: '16px', flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer' }}>
+        <div className="flip-face-aurora" />
+        <div className="flip-face-sheen" />
+        
+        <div style={{ display: 'flex', width: '100%', gap: '14px', alignItems: 'flex-start' }}>
           <div className="flip-icon-tile rwa">
             <IconRwaModern size={46} />
           </div>
-          <div className="flip-content">
+          <div className="flip-content" style={{ flex: 1 }}>
             <div className="flip-eyebrow">
               <span className="flip-dot rwa" />
               {isRTL ? 'دارایی واقعی • RWA' : 'Real World Assets • RWA'}
-              <FlipIndicator flipped={flipped} />
             </div>
-            <div className="flip-title">
+            <div className="flip-title" style={{ whiteSpace: 'normal', display: 'block', overflow: 'visible' }}>
               {t?.('stocks.goToRwaBanner') || 'مشاهده و خرید RWA · طلا، خزانه، رابین‌هود'}
             </div>
             <div className="flip-sub">
@@ -176,38 +131,38 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, 
               {t?.('stocks.rwaFeeNotice', { fee }) || `تسویه مستقیم با کیف پول شخصی · کارمزد ${fee}٪`}
             </div>
             <div className="flip-chips">
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#FFD54F' }} /> طلا</span>
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#00E5FF' }} /> خزانه</span>
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#7C4DFF' }} /> رابین‌هود</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#FFD54F' }} /> {isRTL ? 'طلا' : 'Gold'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#00E5FF' }} /> {isRTL ? 'خزانه' : 'Treasury'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#7C4DFF' }} /> {isRTL ? 'رابین‌هود' : 'Robinhood'}</span>
             </div>
           </div>
-          <div className="flip-cta-col">
-            <span className="flip-cta rwa-cta">
-              {t?.('stocks.goToRwaCta') || 'ورود به RWA'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}>
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </span>
-            <button type="button" className="flip-switch-btn" onClick={handleFlip} aria-label="flip">
-              {isRTL ? 'افق جهانی' : 'Horizon'} ↻
-            </button>
-          </div>
         </div>
+        
+        <div className="flip-cta-col" style={{ width: '100%', marginTop: '12px', alignItems: 'center' }}>
+          <span className="flip-cta rwa-cta" style={{ width: '100%', justifyContent: 'center' }}>
+            {t?.('stocks.goToRwaCta') || 'ورود به RWA'}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}>
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </span>
+        </div>
+      </div>
 
-        {/* BACK — Horizon */}
-        <div className="flip-face flip-face-hz" onClick={handleGoHorizon}>
-          <div className="flip-face-aurora hz" />
-          <div className="flip-face-sheen" />
+      {/* HORIZON CARD */}
+      <div className="flip-face flip-face-hz" onClick={onGoHorizon} style={{ flex: 1, minHeight: 'auto', padding: '16px', flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer', transform: 'none' }}>
+        <div className="flip-face-aurora hz" />
+        <div className="flip-face-sheen" />
+        
+        <div style={{ display: 'flex', width: '100%', gap: '14px', alignItems: 'flex-start' }}>
           <div className="flip-icon-tile hz">
             <IconHorizonModern size={46} />
           </div>
-          <div className="flip-content">
+          <div className="flip-content" style={{ flex: 1 }}>
             <div className="flip-eyebrow">
               <span className="flip-dot hz" />
               {isRTL ? 'افق جهانی • بازارهای واقعی' : 'Global Horizon • Real Markets'}
-              <FlipIndicator flipped={flipped} />
             </div>
-            <div className="flip-title">
+            <div className="flip-title" style={{ whiteSpace: 'normal', display: 'block', overflow: 'visible' }}>
               {isRTL ? 'افق جهانی · فارکس، طلا، سهام، شاخص‌ها' : 'Global Horizon · Forex, Gold, Stocks, Indices'}
             </div>
             <div className="flip-sub">
@@ -223,19 +178,18 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, 
               <span className="flip-chip"><i className="fc-dot" style={{ background: '#A78BFA' }} /> {isRTL ? 'سهام' : 'Stocks'}</span>
             </div>
           </div>
-          <div className="flip-cta-col">
-            <span className="flip-cta hz-cta">
-              {isRTL ? 'ورود به افق جهانی' : 'Open Horizon'}
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}>
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </span>
-            <button type="button" className="flip-switch-btn" onClick={handleFlip} aria-label="flip">
-              RWA ↻
-            </button>
-          </div>
+        </div>
+        
+        <div className="flip-cta-col" style={{ width: '100%', marginTop: '12px', alignItems: 'center' }}>
+          <span className="flip-cta hz-cta" style={{ width: '100%', justifyContent: 'center' }}>
+            {isRTL ? 'ورود به افق جهانی' : 'Open Horizon'}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}>
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </span>
         </div>
       </div>
+
     </div>
   );
 }

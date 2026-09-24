@@ -88,7 +88,8 @@ export const PAGE_CATALOG = Object.freeze([
   { route: '/news', names: { fa: 'اخبار', en: 'News' }, keywords: ['اخبار', 'news'] },
   { route: '/nft', names: { fa: 'NFT', en: 'NFT' }, keywords: ['nft', 'ان اف تی'] },
   { route: '/shop', names: { fa: 'فروشگاه', en: 'Shop' }, keywords: ['فروشگاه', 'shop'] },
-  { route: '/explore', names: { fa: 'کاوش', en: 'Explore' }, keywords: ['کاوش', 'explore'] }
+  { route: '/explore', names: { fa: 'کاوش', en: 'Explore' }, keywords: ['کاوش', 'explore'] },
+  { route: '/launch', names: { fa: 'لانچ توکن', en: 'Launch Token' }, keywords: ['لانچ', 'لانچ پد', 'launch', 'توکن میخوام', 'ساخت توکن', 'میم کوین', 'لانچ توکن'] }
 ]);
 
 export function aliasToken(raw) {

@@ -736,6 +736,7 @@ const NAV_TARGETS = [
   { route: '/rewards', keywords: ['امتیاز', 'rewards', 'پاداش'], type: 'REWARDS' },
   { route: '/intent', keywords: ['اینتنت', 'intent os'], type: 'INTENT_OS' },
   { route: '/buy', keywords: ['خرید و فروش'], type: 'BUY' },
+  { route: '/launch', keywords: ['لانچ', 'لانچ پد', 'launch', 'توکن میخوام', 'ساخت توکن', 'میم کوین', 'لانچ توکن'], type: 'NAVIGATION' },
   /* No `/calm` route exists in the router (App.jsx) — the old entry sent the
      user to the catch-all, which silently renders Market, so «آرامش را باز
      کن» looked like a broken button. Calm is answered in the chat itself
