@@ -125,32 +125,37 @@ function build(theme) {
     return n;
   };
 
-  /* mirrors RwaHorizonFlipBanner.jsx — both faces, every text node */
-  const wrap = el('div', 'flip-banner-wrap');
-  const inner = el('div', 'flip-banner-inner', wrap);
+  /* mirrors RwaHorizonFlipBanner.jsx (v3 «Aurora Flip») — both faces, every text node */
+  const root = el('section', 'rhb');
+  root.setAttribute('dir', 'rtl');
+  const tabs = el('div', 'rhb-tabs', root);
+  el('span', 'rhb-tabs-pill', tabs);
+  el('button', 'rhb-tab on', tabs, 'RWA');
+  const idleTab = el('button', 'rhb-tab', tabs, 'افق جهانی');
+  const stage = el('div', 'rhb-stage', root);
+  const tilt = el('div', 'rhb-tilt', stage);
+  const inner = el('div', 'rhb-card', tilt);
   const face = (isHz) => {
-    const f = el('div', isHz ? 'flip-face flip-face-hz' : 'flip-face flip-face-rwa', inner);
-    el('div', 'flip-face-aurora' + (isHz ? ' hz' : ''), f);
-    el('div', 'flip-face-sheen', f);
-    el('div', 'flip-icon-tile ' + (isHz ? 'hz' : 'rwa'), f);
-    const content = el('div', 'flip-content', f);
-    const eyebrow = el('div', 'flip-eyebrow', content);
-    el('span', 'flip-dot ' + (isHz ? 'hz' : 'rwa'), eyebrow);
-    eyebrow.appendChild(d.createTextNode(isHz ? 'افق جهانی • بازارهای واقعی' : 'دارایی واقعی • RWA'));
-    el('span', 'flip-ind', eyebrow);
-    const title = el('div', 'flip-title', content,
-      isHz ? 'افق جهانی · فارکس، طلا، سهام، شاخص‌ها' : 'مشاهده و خرید RWA · طلا، خزانه، رابین‌هود');
-    const sub = el('div', 'flip-sub', content,
-      isHz ? 'معامله اهرمی با USDC · تسویه آنچین آربیتروم' : 'تسویه مستقیم با کیف پول شخصی · کارمزد 0.30٪');
-    const chips = el('div', 'flip-chips', content);
-    el('span', 'flip-chip', chips, 'طلا');
-    el('span', 'flip-chip', chips, 'خزانه');
-    el('span', 'flip-chip', chips, 'رابین‌هود');
-    const ctaCol = el('div', 'flip-cta-col', f);
-    const cta = el('span', 'flip-cta ' + (isHz ? 'hz-cta' : 'rwa-cta'), ctaCol,
-      isHz ? 'ورود به افق جهانی' : 'ورود به RWA');
-    const switchBtn = el('button', 'flip-switch-btn', ctaCol, isHz ? 'RWA ↻' : 'افق جهانی ↻');
-    return { face: f, eyebrow, title, sub, chip: chips.firstChild, cta, switchBtn };
+    const f = el('div', isHz ? 'rhb-face rhb-face--hz' : 'rhb-face rhb-face--rwa', inner);
+    el('div', 'rhb-rim', f);
+    el('div', 'rhb-bg', f);
+    el('span', 'rhb-sheen', f);
+    const body = el('div', 'rhb-body', f);
+    const head = el('div', 'rhb-head', body);
+    el('div', 'rhb-icon', head);
+    const ht = el('div', 'rhb-head-txt', head);
+    const eyebrow = el('span', 'rhb-eyebrow', ht, isHz ? 'افق جهانی' : 'دارایی‌های واقعی');
+    el('span', 'rhb-badge', ht, isHz ? 'بازار زنده' : 'RWA');
+    const title = el('h3', 'rhb-title', body, isHz ? 'بازارهای جهان،' : 'دارایی واقعی،');
+    const sub = el('p', 'rhb-sub', body,
+      isHz ? 'فارکس، طلا، سهام و شاخص‌ها — اهرمی، تسویه آنچین روی آربیتروم' : 'طلا، اوراق خزانه آمریکا و سهام رابین‌هود به‌صورت توکن');
+    const chips = el('div', 'rhb-chips', body);
+    const chip = el('span', 'rhb-chip', chips, 'طلا');
+    chip.style.setProperty('--c', '#FFC84A');
+    const foot = el('div', 'rhb-foot', body);
+    const feat = el('span', 'rhb-feat', el('div', 'rhb-feats', foot), 'Arbitrum');
+    const cta = el('span', 'rhb-cta', foot, isHz ? 'ورود به افق جهانی' : 'ورود به RWA');
+    return { face: f, eyebrow, title, sub, chip, cta, feat };
   };
   const rwa = face(false);
   const hz = face(true);
@@ -161,12 +166,12 @@ function build(theme) {
   const val = (node, prop) => {
     let v = cs(node, prop);
     for (let i = 0; i < 5 && v.includes('var('); i++) {
-      v = v.replace(/var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g, (_, n, fb) => tokens[n] || fb || '');
+      v = v.replace(/var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g, (_, n, fb) => tokens[n] || window.getComputedStyle(node).getPropertyValue(n).trim() || fb || '');
     }
     return v.trim();
   };
   const surface = (node) => effectiveSurface(cs, node, theme === 'light' ? '#f4f5fa' : '#000000');
-  return { window, val, surface, rwa, hz };
+  return { window, val, surface, rwa, hz, idleTab, tabs };
 }
 
 try {
@@ -179,11 +184,11 @@ try {
     const close = flipCss.indexOf('}', open);
     return flipCss.slice(open, close + 1);
   };
-  check('size: .flip-banner-inner is a grid (height driven by its faces, not a fixed min-height)',
-    /display:\s*grid/.test(rule('.flip-banner-inner')));
-  const faceRule = rule('.flip-face');
-  check('size: .flip-face stacks in one cell (grid-area: 1 / 1)', /grid-area:\s*1\s*\/\s*1/.test(faceRule));
-  check('size: .flip-face is in normal flow (position: relative, no absolute inset)',
+  check('size: .rhb-card is a grid (height driven by its faces, not a fixed min-height)',
+    /display:\s*grid/.test(rule('.rhb-card')));
+  const faceRule = rule('.rhb-face');
+  check('size: .rhb-face stacks in one cell (grid-area: 1 / 1)', /grid-area:\s*1\s*\/\s*1/.test(faceRule));
+  check('size: .rhb-face is in normal flow (position: relative, no absolute inset)',
     /position:\s*relative/.test(faceRule) && !/position:\s*absolute/.test(faceRule));
   check('size: the 3D flip is preserved (backface-visibility: hidden on the faces)',
     /backface-visibility:\s*hidden/.test(faceRule));
@@ -193,46 +198,44 @@ try {
   check('light: no rule targets the .light class the app never applies',
     !/\.light[\s,{]/.test(cssNoComments));
   check('light: rules target :root[data-theme=\'light\'] (the real theme hook)',
-    /:root\[data-theme='light'\]\s+\.flip-face/.test(cssNoComments));
+    /:root\[data-theme='light'\]\s+\.rhb-face/.test(cssNoComments));
+  check('3D: no backdrop-filter inside the flip card (Chrome flattens preserve-3d)',
+    !/backdrop-filter/.test(cssNoComments));
   check('light: the OS boot fallback (no attribute yet, OS prefers light) is covered too',
     /@media \(prefers-color-scheme: light\)/.test(cssNoComments) &&
-    /:root:not\(\[data-theme='dark'\]\):not\(\[data-theme='light'\]\)\s+\.flip-face/.test(cssNoComments));
+    /:root:not\(\[data-theme='dark'\]\):not\(\[data-theme='light'\]\)\s+\.rhb-/.test(cssNoComments));
 
-  /* ══ 3. LIGHT THEME — the glass is a light surface with dark text ═══════ */
-  const light = build('light');
-  for (const [label, side] of [['RWA', light.rwa], ['Horizon', light.hz]]) {
-    const surf = light.surface(side.face);
-    const surfRgb = toRgb(surf);
-    const isLight = surfRgb && surfRgb[0] > 190 && surfRgb[1] > 190 && surfRgb[2] > 190;
-    check(`light: ${label} face is a light glass surface (${surf})`, isLight);
-    const t = light.val(side.title, 'color');
-    const s = light.val(side.sub, 'color');
-    const e = light.val(side.eyebrow, 'color');
-    const c = light.val(side.chip, 'color');
-    const b = light.val(side.switchBtn, 'color');
-    check(`light: ${label} title clears WCAG AA on the glass (${ratio(t, surf)?.toFixed(2)})`, ratio(t, surf) >= 4.5);
-    check(`light: ${label} sub-line is legible (${ratio(s, surf)?.toFixed(2)})`, ratio(s, surf) >= 4.5);
-    check(`light: ${label} eyebrow is legible (${ratio(e, surf)?.toFixed(2)})`, ratio(e, surf) >= 3);
-    check(`light: ${label} chips are legible (${ratio(c, surf)?.toFixed(2)})`, ratio(c, surf) >= 3);
-    check(`light: ${label} switch button is legible (${ratio(b, surf)?.toFixed(2)})`, ratio(b, surf) >= 3);
-  }
-
-  /* ══ 4. DARK THEME — the original glass must still read ═════════════════ */
-  const dark = build('dark');
-  for (const [label, side] of [['RWA', dark.rwa], ['Horizon', dark.hz]]) {
-    const surf = dark.surface(side.face);
-    const surfLum = lum(toRgb(surf)) ?? 1;
-    check(`dark: ${label} face is a dark glass surface (${surf}, L=${surfLum.toFixed(3)})`, surfLum < 0.08);
-    const t = dark.val(side.title, 'color');
-    const s = dark.val(side.sub, 'color');
-    const e = dark.val(side.eyebrow, 'color');
-    const c = dark.val(side.chip, 'color');
-    const b = dark.val(side.switchBtn, 'color');
-    check(`dark: ${label} title clears WCAG AA on the glass (${ratio(t, surf)?.toFixed(2)})`, ratio(t, surf) >= 4.5);
-    check(`dark: ${label} sub-line is legible (${ratio(s, surf)?.toFixed(2)})`, ratio(s, surf) >= 4.5);
-    check(`dark: ${label} eyebrow is legible (${ratio(e, surf)?.toFixed(2)})`, ratio(e, surf) >= 3);
-    check(`dark: ${label} chips are legible (${ratio(c, surf)?.toFixed(2)})`, ratio(c, surf) >= 3);
-    check(`dark: ${label} switch button is legible (${ratio(b, surf)?.toFixed(2)})`, ratio(b, surf) >= 3);
+  /*
+   * ══ 3+4. BOTH THEMES — v3 «Aurora Flip» is a deliberately dark, vivid promo
+   * card in light AND dark mode (same as the wallet hero), so the original
+   * white-on-white failure is impossible by construction. What must hold in
+   * both themes: the face really IS dark, and every text node on it clears
+   * contrast on that surface. The tab strip sits on the page canvas and must
+   * read on it.
+   */
+  for (const theme of ['light', 'dark']) {
+    const B = build(theme);
+    for (const [label, side] of [['RWA', B.rwa], ['Horizon', B.hz]]) {
+      const surf = B.surface(side.face);
+      const surfLum = lum(toRgb(surf)) ?? 1;
+      check(`${theme}: ${label} face is a dark promo surface (${surf}, L=${surfLum.toFixed(3)})`, surfLum < 0.08);
+      const t = B.val(side.title, 'color');
+      const s2 = B.val(side.sub, 'color');
+      const e = B.val(side.eyebrow, 'color');
+      const c = B.val(side.chip, 'color');
+      const f = B.val(side.feat, 'color');
+      const sOn = over(s2, surf, alphaOf(s2));
+      const fOn = over(f, surf, alphaOf(f));
+      check(`${theme}: ${label} title clears WCAG AA (${ratio(t, surf)?.toFixed(2)})`, ratio(t, surf) >= 4.5);
+      check(`${theme}: ${label} sub-line clears WCAG AA (${ratio(sOn, surf)?.toFixed(2)})`, ratio(sOn, surf) >= 4.5);
+      check(`${theme}: ${label} eyebrow is legible (${ratio(e, surf)?.toFixed(2)})`, ratio(e, surf) >= 3);
+      check(`${theme}: ${label} chips are legible (${ratio(c, surf)?.toFixed(2)})`, ratio(c, surf) >= 3);
+      check(`${theme}: ${label} feature line is legible (${ratio(fOn, surf)?.toFixed(2)})`, ratio(fOn, surf) >= 3);
+    }
+    const page = theme === 'light' ? '#f4f5fa' : '#000000';
+    const tabBg = B.surface(B.tabs) || page;
+    const tabTxt = B.val(B.idleTab, 'color');
+    check(`${theme}: idle tab label reads on the page (${ratio(tabTxt, tabBg)?.toFixed(2)})`, ratio(tabTxt, tabBg) >= 3);
   }
 } catch (err) {
   results.push({ name: `probe threw: ${err && err.message}`, ok: false });
