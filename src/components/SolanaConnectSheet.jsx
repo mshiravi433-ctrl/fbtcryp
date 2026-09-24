@@ -44,6 +44,7 @@ import {
   cancelDeeplinkRequest,
   consumeDeeplinkResult,
   deeplinkInstallLink,
+  deeplinkRouteFor,
   deeplinkSession,
   deeplinkState,
   deeplinkWalletOptions,
@@ -75,6 +76,17 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [requestId, setRequestId] = useState(null);
+  /*
+   * WHICH channel carried the request. `universal` is the one that sends the
+   * browser to the wallet's URL (iOS and the like): the answer then comes
+   * back in the phone's DEFAULT browser, and the waiting card must say that
+   * out loud instead of implying «you come straight back here».
+   */
+  const [route, setRoute] = useState(null);
+  /* iPhone detection for the note above; the iPad web UA says iPhone too. */
+  const [isIOS] = useState(() =>
+    typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  );
   /*
    * «I tapped and nothing happened.» Set by the flow module when a hand-off was
    * fired, the grace period passed, and this page is still the visible one —
@@ -109,11 +121,13 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
         setWalletId((cur) => state.walletId ?? cur);
         setError(null);
         setStuck(state.stuck === true);
+        setRoute(state.route ?? null);
       } else if (state.status === 'connected') {
         setPhase('connected');
         setResult({ ok: true, address: state.address, walletId: state.walletId });
         setBusy(false);
         setStuck(false);
+        setRoute(null);
         haptic?.('success');
         onConnected?.(state.address);
       } else if (state.status === 'error') {
@@ -122,6 +136,7 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
         setWalletSaid(state.wallet?.message || state.wallet?.code ? state.wallet : null);
         setBusy(false);
         setStuck(false);
+        setRoute(null);
       }
     });
 
@@ -149,6 +164,7 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
       setPhase('waiting');
       setRequestId(pending.id);
       setWalletId(pending.walletId);
+      setRoute(deeplinkRouteFor(pending.walletId));
     } else if (deeplinkState().status === 'connected') {
       setPhase('connected');
       setResult({ ok: true, address: deeplinkSession()?.address ?? null });
@@ -219,12 +235,14 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
     setError(null);
     setStuck(false);
     setWalletId(id);
+    setRoute(deeplinkRouteFor(id));
     haptic?.('light');
 
     const started = startDeeplinkConnectSync(id);
     if (started.ok) {
       setRequestId(started.id);
       setPhase('waiting');
+      setRoute(started.route ?? deeplinkRouteFor(id));
       setBusy(false);
       return;
     }
@@ -243,6 +261,7 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
       } else {
         setRequestId(res.id);
         setPhase('waiting');
+        setRoute(res.route ?? deeplinkRouteFor(id));
       }
       setBusy(false);
     });
@@ -418,6 +437,34 @@ export default function SolanaConnectSheet({ open, onClose, initialWallet = null
                 </p>
               </div>
             </div>
+
+            {/*
+              * THE iOS RETURN PATH, SAID OUT LOUD.
+              *
+              * On iPhone the universal (HTTPS) hand-off answers in the
+              * phone's DEFAULT browser — not in the browser this sheet was
+              * opened from (started in Chrome, back in Safari is the report's
+              * exact case). The user is told now, before approving, that the
+              * connection completes in that other browser; and the return
+              * blob on the redirect (`fbt=`) makes it TRUE that the
+              * connection completes there — session and signature land in
+              * the browser the user returns to, instead of in a dead end.
+              */}
+            {isIOS && route === 'universal' && (
+              <div className="card card-tight" data-testid="sol-connect-ios-return" style={{ marginTop: 10 }}>
+                <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+                  <span className="wallet-badge" aria-hidden="true">
+                    <IconExternal width={15} height={15} />
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12.8 }}>{t('solana.connect.iosReturnTitle')}</div>
+                    <p className="faint" style={{ fontSize: 11, margin: '4px 0 0', lineHeight: 1.75 }}>
+                      {t('solana.connect.iosReturnBody', { name: walletLabel })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <ol className="p2p-steps">
               {WAITING_STEPS.map((step) => (

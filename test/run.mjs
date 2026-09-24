@@ -954,16 +954,17 @@ console.log('\n▸ measuring the trade + token-sheet surface in light and dark�
   report('trade + token sheet theme', tradeThemeRows);
 }
 
-/* The stocks page → «سهام توکنیزه» (equity) flip banner in light and dark.
-   The reported bug: a fixed-height card clipped its wrapped Persian text at
-   the top edge, and the light-theme rules targeted a `.light` class the app
-   never applies — white text over a near-white glass in the light theme.
-   Same discipline as the trade probe: real stylesheets into jsdom, the glass
-   composited as seen, WCAG contrast measured. */
-console.log('\n▸ measuring the stocks flip banner (equity tab) in light and dark…');
+/* The stocks page → «سهام توکنیزه» (equity) SWAP banner in light and dark.
+   The flip card it replaced painted its two faces over each other on iPhone
+   (3D geometry) and was reported as «خیلی بزرگه و شلوغه»; it is now two
+   minimal horizontal slides. The probe locks that in: no 3D geometry left,
+   one track + two 50% slides + two dots, the RTL shift mirrored, every
+   surface and text bound to an app token, and the token pairs themselves
+   clearing WCAG AA in dark AND light (with the light theme's deeper accents). */
+console.log('\n▸ measuring the stocks swap banner (equity tab) in light and dark…');
 {
-  const { default: flipBannerRows } = await import('./stocks-flip-banner-probe.mjs');
-  report('stocks flip banner theme', flipBannerRows);
+  const { default: swapBannerRows } = await import('./stocks-swap-banner-probe.mjs');
+  report('stocks swap banner theme', swapBannerRows);
 }
 
 /* App ↔ site parity. The website and the packaged Android app are one bundle

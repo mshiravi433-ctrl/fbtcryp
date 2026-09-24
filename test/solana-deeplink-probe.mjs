@@ -33,8 +33,11 @@ import {
   base58Decode,
   base58Encode,
   connectRequestUrl,
+  encodeReturnBlob,
   isDeeplinkReturn,
   readDeeplinkReturn,
+  readReturnBlob,
+  readUrlParam,
   signRequestPayload,
   signRequestUrl,
   stripDeeplinkReturn
@@ -159,6 +162,10 @@ const ok = (name, condition) => {
   step += 1;
   assert.ok(condition, `#${step} ${name}`);
 };
+
+/** A plain base64 (padded) string — the WRONG alphabet for a blob; the codec
+    must read its base64url form and refuse garbage. */
+const toBase64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 
 /* -------------------------------------------------------------------------- */
 /* 0. the wallet layer is actually wired to this session                       */
@@ -801,6 +808,126 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
     failed.wallet?.code === '-32603' && failed.wallet?.message === 'Unexpected error'
     && deeplink.deeplinkState().wallet?.code === '-32603'
     && deeplink.consumeDeeplinkResult()?.wallet?.message === 'Unexpected error');
+}
+
+/* -------------------------------------------------------------------------- */
+/* 8. the iOS rescue — the answer that comes back in ANOTHER browser          */
+/* -------------------------------------------------------------------------- */
+/*
+ * «در ایفون وقتی میزنی روی اتصال کیف پول سولنا و امضا میکنی و تایید، به جای
+ * برگشت به مثلا مرورگر کروم که رفته، میره به مرورگر دیگر روی ایفون».
+ *
+ * Per the wallet's own documentation the HTTPS redirect opens in the phone's
+ * DEFAULT browser: started from Chrome, the answer lands in Safari — a
+ * document whose storage never held the pending request. The redirect now
+ * carries the request's state as `fbt=<blob>`, and `completeDeeplinkReturn`
+ * must complete the answer HERE in that browser: session stored where the
+ * user is standing, no dead-end trampoline to the Android APK's scheme, and
+ * each blob spent exactly once.
+ */
+{
+  /* The blob codec: one alphabet, one version, and null for everything else. */
+  const sealed = encodeReturnBlob({ v: 1, op: 'connect', rid: 'abc', w: 'phantom', pk: 'P', sk: 'S', t: 123, rt: '#/wallet' });
+  ok('a blob round-trips through base64url without losing a byte',
+    typeof sealed === 'string' && !/[+/=]/.test(sealed) && readReturnBlob(sealed)?.rid === 'abc'
+    && readReturnBlob(sealed)?.rt === '#/wallet');
+  ok('and it reads nothing that is not a v1 blob',
+    readReturnBlob('garbage!!!') === null
+    && readReturnBlob(toBase64('{"v":2,"rid":"x"}')) === null
+    && readReturnBlob(toBase64('{"op":"connect"}')) === null
+    && readReturnBlob('') === null);
+  ok('one URL parameter reads the tolerant way',
+    readUrlParam('https://x/?sol=1&rid=a&fbt=Zm9v', 'fbt') === 'Zm9v'
+    && readUrlParam('https://x/?rid=a', 'fbt') === null);
+  ok('the legacy redirect form is unchanged when no blob is given',
+    deeplink.deeplinkRedirect('xyz') === 'https://fbtswap.ir/?sol=1&rid=xyz'
+    && !deeplink.deeplinkRedirect('xyz').includes('fbt='));
+  ok('and the stripped URL keeps no trace of a consumed blob',
+    !stripDeeplinkReturn('https://fbtswap.ir/?sol=1&rid=abc&fbt=Zm9v&nonce=N#/x').includes('fbt='));
+
+  /* THE ROUND TRIP ITSELF. Fire the request on the desktop; the pending row
+     lives in this document's storage. The wallet then opens the redirect in
+     the OTHER browser: its storage is empty, so the whole round trip must run
+     from the blob alone. */
+  deeplink.resetDeeplink();
+  const started = await deeplink.startDeeplinkConnect('phantom');
+  ok('the connect request now ships its redirect with a return blob',
+    started.ok === true);
+  const redirect = requestParams(opened.at(-1)).get('redirect_link');
+  ok('the blob is on the redirect link itself', redirect.includes('fbt='));
+  const blobText = redirect.match(/fbt=([\w\-]+)/)[1];
+  const blob = readReturnBlob(blobText);
+  ok('and it names the wallet, the operation, the request and the keys',
+    blob.v === 1 && blob.op === 'connect' && blob.w === 'phantom'
+    && blob.rid === requestParams(opened.at(-1)).get('redirect_link').match(/rid=([^&]+)/)[1]
+    && typeof blob.pk === 'string' && typeof blob.sk === 'string');
+
+  const dappKey = requestParams(opened.at(-1)).get('dapp_encryption_public_key');
+  const answer = answerUrl({
+    redirectLink: redirect,
+    wallet,
+    dappPublicKey: dappKey,
+    payload: { public_key: ADDRESS, session: SESSION }
+  });
+
+  /* A brand-new document: nothing in storage, the wallet's answer in the URL. */
+  storage.clear();
+  ok('the other browser really has no pending row', deeplink.pendingDeeplinkRequest() === null);
+
+  const rescued = await deeplink.completeDeeplinkReturn(answer);
+  ok('the answer completes in the browser it landed in',
+    rescued.ok === true && rescued.op === 'connect' && rescued.address === ADDRESS && rescued.rescued === true);
+  ok('the session lives where the user is standing now',
+    deeplink.deeplinkSession()?.address === ADDRESS && deeplink.deeplinkSession()?.walletId === 'phantom'
+    && deeplink.deeplinkSession()?.session === SESSION);
+  ok('the flow reports CONNECTED, not an error over a completed answer',
+    deeplink.deeplinkState().status === 'connected');
+
+  /* The blob is one-shot. The completion must have SPENT it — a replay of the
+     same URL with no session left (double-delivery would otherwise take the
+     harmless path) must be named, not completed twice. */
+  const spent = JSON.parse(storage.get('fbt:solana:blob-used:v1') ?? '{}');
+  ok('a completed rescue spends its blob exactly once', spent[`${blob.rid}:${blob.t}`] === true);
+  deeplink.clearDeeplinkSession();
+  const replay = await deeplink.completeDeeplinkReturn(answer);
+  ok('a replayed blob is named, not completed twice',
+    replay.ok === false && replay.code === 'NO_PENDING');
+
+  /* An iPhone that gets an orphan WITHOUT a blob: no Android scheme, no
+     trampoline, just the honest name for it. (The APK's scheme is Android's —
+     the dead end the report is about.) */
+  setUa(UA_IPHONE_SAFARI);
+  const beforeTramp = opened.length;
+  const iphoneOrphan = await deeplink.completeDeeplinkReturn(
+    'https://fbtswap.ir/?sol=1&rid=iphone-1&phantom_encryption_public_key=K&nonce=N&data=D'
+  );
+  ok('an iPhone orphan return is named NO_PENDING',
+    iphoneOrphan.ok === false && iphoneOrphan.code === 'NO_PENDING');
+  ok('and it never leaves the browser for the Android APK scheme',
+    opened.length === beforeTramp);
+  setUa(UA_DESKTOP);
+
+  /* A blob is a URL: every check has to hold, and a failure is the same
+     NO_PENDING as a plain orphan — never a crash, never a session. */
+  const freshAnswerBase = 'https://fbtswap.ir/?sol=1';
+  const signed = (obj, rid) => `${freshAnswerBase}&rid=${rid}&fbt=${encodeReturnBlob(obj)}`
+    + `&phantom_encryption_public_key=K&nonce=N&data=D`;
+  const staleBlob = { v: 1, op: 'connect', rid: 's1', w: 'phantom', pk: 'P', sk: 'S', t: Date.now() - 16 * 60_000, rt: null };
+  const foreignRid = { v: 1, op: 'connect', rid: 'other', w: 'phantom', pk: 'P', sk: 'S', t: Date.now(), rt: null };
+  const unknownWallet = { v: 1, op: 'connect', rid: 'u1', w: 'no-such-wallet', pk: 'P', sk: 'S', t: Date.now(), rt: null };
+  const missingKey = { v: 1, op: 'connect', rid: 'm1', w: 'phantom', pk: 'P', t: Date.now(), rt: null };
+  const badOp = { v: 1, op: 'reboot', rid: 'b1', w: 'phantom', pk: 'P', sk: 'S', t: Date.now(), rt: null };
+  for (const [label, url] of [
+    ['stale (older than the pending TTL)', signed(staleBlob, 's1')],
+    ['naming a request id that is not its own', signed(foreignRid, 'mine')],
+    ['naming a wallet this app never speaks', signed(unknownWallet, 'u1')],
+    ['missing the key material it needs', signed(missingKey, 'm1')],
+    ['naming an operation this app cannot complete', signed(badOp, 'b1')]
+  ]) {
+    const res = await deeplink.completeDeeplinkReturn(url);
+    ok(`an invalid blob is rejected as NO_PENDING — ${label}`,
+      res.ok === false && res.code === 'NO_PENDING' && deeplink.deeplinkSession() === null);
+  }
 }
 
 /*

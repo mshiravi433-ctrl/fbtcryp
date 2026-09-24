@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -13,7 +13,7 @@ import { useChart, useMarkets } from '../hooks/useMarket';
 import { getCategory } from '../lib/api';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
-import { IconSearch, IconShield } from '../components/Icons';
+import { IconSearch } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import RwaRow from '../components/RwaRow';
@@ -38,8 +38,8 @@ import { feePercentString } from '../lib/feeBps';
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 import { SPECULATION_ENABLED } from '../lib/features';
 import lazyRetry from '../lib/lazyRetry';
-import RwaHorizonFlipBanner from '../components/RwaHorizonFlipBanner';
-import '../styles/rwa-flip-banner.css';
+import RwaHorizonSwapBanners from '../components/RwaHorizonSwapBanners';
+import RwaSectionBanner from '../components/RwaSectionBanner';
 
 /*
  * These are tab routes, not imports. The Stocks page is already a lazy route,
@@ -211,35 +211,6 @@ function avgChange(rows, pick) {
   const vals = rows.map(pick).filter((v) => Number.isFinite(v));
   if (!vals.length) return null;
   return vals.reduce((s, v) => s + v, 0) / vals.length;
-}
-
-/**
- * Keep a sentence on one line at the largest size that fits the card.
- * The preferred size is the type scale; it only shrinks when the language
- * would otherwise wrap.
- */
-function FitLine({ text, className, max = 13.5, min = 10.5 }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    const parent = el?.parentElement;
-    if (!el || !parent) return undefined;
-    const fit = () => {
-      el.style.fontSize = `${max}px`;
-      const avail = parent.clientWidth;
-      const need = el.scrollWidth;
-      if (avail > 0 && need > avail) {
-        el.style.fontSize = `${Math.max(min, (max * avail) / need)}px`;
-      }
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(parent);
-    return () => ro.disconnect();
-  }, [text, max, min]);
-
-  return <span ref={ref} className={className}>{text}</span>;
 }
 
 function StatMini({ label, value, tone }) {
@@ -644,10 +615,12 @@ export default function Stocks() {
             </InfoBox>
           </motion.div>
 
-          {/* Modern flip banner — RWA + Horizon (افق جهانی) — requested: مدرن و فلیپ وار */}
+          {/* Two minimal banners that swap horizontally — RWA + Horizon (افق جهانی).
+              Replaced the 3D flip card: on iPhone the two faces painted over each
+              other while rotating, and the card was «خیلی بزرگه و شلوغه». No 3D
+              left for that to happen in. */}
           <motion.div variants={riseIn} initial="hidden" animate="show">
-            <RwaHorizonFlipBanner
-              t={t}
+            <RwaHorizonSwapBanners
               haptic={haptic}
               isRTL={isRTL}
               lang={i18n.resolvedLanguage || i18n.language}
@@ -969,22 +942,12 @@ export default function Stocks() {
         </>
       ) : tab === 'rwa' ? (
         <>
-          <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
-            <div className="sheen" />
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.rwaTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.rwaBody')}</p>
-            <div className="rwa-fee-line">
-              <IconShield width={14} height={14} style={{ color: 'var(--rgb-1)', flexShrink: 0 }} />
-              <span className="rwa-fit-slot">
-                <FitLine
-                  text={t('stocks.rwaFeeNotice', { fee: feePercentString() })}
-                  className="rwa-fit rwa-fit-sub"
-                  max={12.5}
-                  min={11}
-                />
-              </span>
-            </div>
-          </motion.section>
+          {/* The RWA header as a banner: animated SVG icon + the same copy + the
+              fee line — requested as «مثل بنر با ایکون svg و انیمیشن و مینیمال و
+              مدرن» instead of the plain text card. */}
+          <motion.div variants={riseIn} initial="hidden" animate="show">
+            <RwaSectionBanner />
+          </motion.div>
 
           {/* ─── TRADEABLE RWA TOKENS (WITH 0.70% PLATFORM FEE) ─── */}
           <section style={{ marginTop: 16 }}>

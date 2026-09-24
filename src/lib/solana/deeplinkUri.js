@@ -176,6 +176,98 @@ export function randomRequestId() {
   return base58Encode(bytes);
 }
 
+/*
+ * ─── THE RETURN BLOB — THE iOS «IT CAME BACK IN THE OTHER BROWSER» FIX ──────
+ *
+ * Reported: «در ایفون وقتی میزنی روی اتصال کیف پول سولنا و امضا میکنی و
+ * تایید، به جای برگشت به مثلا مرورگر کروم که رفته، میره به مرورگر دیگر روی
+ * ایفون و پایین میزنه به اپلیکیشن برگردید که میزنی نمیاد».
+ *
+ * The wallet's docs state the routing plainly: an HTTPS `redirect_link`
+ * «opens in the mobile browser» — the phone's DEFAULT browser. When the user
+ * started from Chrome and the default is Safari, the answer lands in a
+ * document that never saw the request: its localStorage has no pending row,
+ * the connection was lost, and the user is stranded in the wrong browser
+ * with a «Back to app» bar that has nowhere sensible to go.
+ *
+ * The fix rides the one channel the wallet already guarantees: the redirect
+ * URL itself. Every request now appends `fbt=<blob>` to its own redirect
+ * link — the request id, the wallet, the operation, the return target, and
+ * the dapp key material — so whichever browser the wallet opens can complete
+ * the answer EXACTLY as if the request had been fired from there.
+ *
+ * What the blob may contain, and why that is the right trade:
+ *
+ *   · the dapp key pair is FRESH PER REQUEST (takeArmedPair) and is session
+ *     material only — it authorises ASKING the wallet, never spending; every
+ *     signature still needs the user's approval inside the wallet;
+ *   · the pair travels over the same HTTPS the request and the answer
+ *     already travel over (it is in the `redirect_link` of a URL the wallet
+ *     holds for at most the round trip);
+ *   · the receiving document only accepts a blob it can validate (known
+ *     wallet, operation it has, request id match, and an age under the same
+ *     15-minute pending TTL), and each blob may be consumed once.
+ *
+ * Without it the iOS round trip is a dead end; with it, the worst case is
+ * the user continuing in the default browser — connected, signed, working.
+ */
+
+/** base64url: the URL-safe alphabet, no padding — a query parameter by right. */
+export function toBase64Url(text) {
+  const bytes = new TextEncoder().encode(String(text ?? ''));
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function fromBase64Url(text) {
+  let s = String(text ?? '').replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/** Seal one return blob. Null for anything that is not a plain object. */
+export function encodeReturnBlob(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  try {
+    return toBase64Url(JSON.stringify(obj));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Open a return blob. Returns null — never throws — for anything that is not
+ * a v1 blob this app wrote: the caller must treat that as «no blob», not as
+ * an error to show.
+ */
+export function readReturnBlob(text) {
+  const s = String(text ?? '');
+  if (!s || !/^[\w\-]+$/.test(s)) return null;
+  try {
+    const obj = JSON.parse(fromBase64Url(s));
+    if (!obj || typeof obj !== 'object' || obj.v !== 1) return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read one URL parameter by name, tolerant of the wallet's mangled `?`
+ * joins — the same parsing `readDeeplinkReturn` uses, for one key.
+ */
+export function readUrlParam(rawUrl, name) {
+  for (const [k, v] of queryPairs(rawUrl)) {
+    if (k === name) return v;
+  }
+  return null;
+}
+
 /**
  * The wallets whose mobile apps answer these deeplinks.
  *
@@ -622,7 +714,11 @@ export function stripDeeplinkReturn(rawUrl) {
     'rid',
     'sol',
     'walletId',
-    'wallet_id'
+    'wallet_id',
+    /* the return blob is consumed once; keeping it in the address bar would
+       re-offer it on every refresh and carry session material into a copied
+       link. */
+    'fbt'
   ]);
   const [beforeHash, ...hashParts] = raw.split('#');
   const hash = hashParts.length ? `#${hashParts.join('#')}` : '';
