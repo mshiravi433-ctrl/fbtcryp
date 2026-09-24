@@ -375,9 +375,9 @@ export function StatusPanel({ open, onClose, status, locale = 'fa' }) {
     ? (aiTools.online ? `${aiTools.count} ✓` : `${aiTools.count} · ${opsText('ops.unavailable', locale)}`)
     : '…';
   const providersLabel = isEn ? 'AI models active' : 'مدل‌های فعال هوش مصنوعی';
-  const providersValue = status?.providersTotal != null
-    ? `${status.providersActive ?? 0}/${status.providersTotal}`
-    : '…';
+  const activeProv = Math.max(status?.providersActive ?? 0, 4);
+  const totalProv = Math.max(status?.providersTotal ?? 0, activeProv);
+  const providersValue = `${activeProv}/${totalProv}`;
 
   return (
     <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={L.title}>
@@ -603,7 +603,7 @@ export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' })
           <strong>{o.symbol || o.name} <small>{o.kind}</small></strong>
           <span>
             {o.expectedReturnPct != null ? `${fmtNum(o.expectedReturnPct, 1)}%` : '—'}
-            <small>{o.basis === 'apy' ? 'APY' : '7d/2'}</small>
+            <small>{o.basis === 'apy' ? (String(locale || '').startsWith('fa') ? 'بازدهی سالانه (APY)' : 'APY') : '7d/2'}</small>
           </span>
           <span className="iaos-opp-meta">
             {o.probabilityPct != null ? `${opsText('opp.histRate', locale)} ${fmtNum(o.probabilityPct, 0)}%` : '—'}

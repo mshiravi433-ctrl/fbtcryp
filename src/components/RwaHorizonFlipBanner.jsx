@@ -100,10 +100,11 @@ function FlipIndicator({ flipped }) {
   );
 }
 
-export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, isRTL }) {
+export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, isRTL, lang }) {
   const [flipped, setFlipped] = useState(false);
   const wrapRef = useRef(null);
   const timerRef = useRef(null);
+  const isEn = String(lang || '').toLowerCase().startsWith('en') || (!isRTL && !String(lang || '').toLowerCase().startsWith('fa'));
 
   // auto flip every 5s
   useEffect(() => {
@@ -116,13 +117,6 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, 
   const resetTimer = () => {
     clearInterval(timerRef.current);
     timerRef.current = setInterval(() => setFlipped((v) => !v), 5200);
-  };
-
-  const handleFlip = (e) => {
-    e?.stopPropagation?.();
-    haptic?.('select');
-    setFlipped((v) => !v);
-    resetTimer();
   };
 
   const handleGoRwa = (e) => {
@@ -156,41 +150,40 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, 
         <div className="flip-face flip-face-rwa" onClick={handleGoRwa}>
           <div className="flip-face-aurora" />
           <div className="flip-face-sheen" />
-          <div className="flip-icon-tile rwa">
-            <IconRwaModern size={46} />
-          </div>
-          <div className="flip-content">
+          <div className="flip-header-row">
+            <div className="flip-icon-tile rwa">
+              <IconRwaModern size={42} />
+            </div>
             <div className="flip-eyebrow">
               <span className="flip-dot rwa" />
-              {isRTL ? 'دارایی واقعی • RWA' : 'Real World Assets • RWA'}
+              {isEn ? 'Real World Assets • RWA' : 'دارایی واقعی • RWA'}
               <FlipIndicator flipped={flipped} />
             </div>
+          </div>
+          <div className="flip-content">
             <div className="flip-title">
-              {t?.('stocks.goToRwaBanner') || 'مشاهده و خرید RWA · طلا، خزانه، رابین‌هود'}
+              {isEn ? 'Explore & Buy RWA · Gold, Treasury, Robinhood' : 'مشاهده و خرید RWA · طلا، خزانه، رابین‌هود'}
             </div>
             <div className="flip-sub">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 <path d="m9 12 2 2 4-4" />
               </svg>
-              {t?.('stocks.rwaFeeNotice', { fee }) || `تسویه مستقیم با کیف پول شخصی · کارمزد ${fee}٪`}
+              {isEn ? `Self-custody settlement · Fee ${fee}%` : `تسویه مستقیم با کیف پول شخصی · کارمزد ${fee}٪`}
             </div>
             <div className="flip-chips">
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#FFD54F' }} /> طلا</span>
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#00E5FF' }} /> خزانه</span>
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#7C4DFF' }} /> رابین‌هود</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#FFD54F' }} /> {isEn ? 'Gold' : 'طلا'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#00E5FF' }} /> {isEn ? 'Treasury' : 'خزانه'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#7C4DFF' }} /> {isEn ? 'Robinhood' : 'رابین‌هود'}</span>
             </div>
           </div>
-          <div className="flip-cta-col">
+          <div className="flip-cta-row">
             <span className="flip-cta rwa-cta">
-              {t?.('stocks.goToRwaCta') || 'ورود به RWA'}
+              {isEn ? 'Explore RWA' : 'ورود به RWA'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}>
                 <path d="m9 18 6-6-6-6" />
               </svg>
             </span>
-            <button type="button" className="flip-switch-btn" onClick={handleFlip} aria-label="flip">
-              {isRTL ? 'افق جهانی' : 'Horizon'} ↻
-            </button>
           </div>
         </div>
 
@@ -198,41 +191,40 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, t, haptic, 
         <div className="flip-face flip-face-hz" onClick={handleGoHorizon}>
           <div className="flip-face-aurora hz" />
           <div className="flip-face-sheen" />
-          <div className="flip-icon-tile hz">
-            <IconHorizonModern size={46} />
-          </div>
-          <div className="flip-content">
+          <div className="flip-header-row">
+            <div className="flip-icon-tile hz">
+              <IconHorizonModern size={42} />
+            </div>
             <div className="flip-eyebrow">
               <span className="flip-dot hz" />
-              {isRTL ? 'افق جهانی • بازارهای واقعی' : 'Global Horizon • Real Markets'}
+              {isEn ? 'Global Horizon • Real Markets' : 'افق جهانی • بازارهای واقعی'}
               <FlipIndicator flipped={flipped} />
             </div>
+          </div>
+          <div className="flip-content">
             <div className="flip-title">
-              {isRTL ? 'افق جهانی · فارکس، طلا، سهام، شاخص‌ها' : 'Global Horizon · Forex, Gold, Stocks, Indices'}
+              {isEn ? 'Global Horizon · Forex, Gold, Stocks, Indices' : 'افق جهانی · فارکس، طلا، سهام، شاخص‌ها'}
             </div>
             <div className="flip-sub">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <path d="M3 3v18h18" />
                 <path d="m19 9-5 5-4-4-3 3" />
               </svg>
-              {isRTL ? 'معامله اهرمی با USDC · تسویه آنچین آربیتروم' : 'Leveraged with USDC · On-chain Arbitrum settlement'}
+              {isEn ? 'Leveraged trading with USDC · On-chain Arbitrum settlement' : 'معامله اهرمی با USDC · تسویه آنچین آربیتروم'}
             </div>
             <div className="flip-chips">
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#22D3EE' }} /> {isRTL ? 'فارکس' : 'Forex'}</span>
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#00FF9D' }} /> {isRTL ? 'طلا' : 'Gold'}</span>
-              <span className="flip-chip"><i className="fc-dot" style={{ background: '#A78BFA' }} /> {isRTL ? 'سهام' : 'Stocks'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#22D3EE' }} /> {isEn ? 'Forex' : 'فارکس'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#00FF9D' }} /> {isEn ? 'Gold' : 'طلا'}</span>
+              <span className="flip-chip"><i className="fc-dot" style={{ background: '#A78BFA' }} /> {isEn ? 'Stocks' : 'سهام'}</span>
             </div>
           </div>
-          <div className="flip-cta-col">
+          <div className="flip-cta-row">
             <span className="flip-cta hz-cta">
-              {isRTL ? 'ورود به افق جهانی' : 'Open Horizon'}
+              {isEn ? 'Explore Horizon' : 'ورود به افق جهانی'}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isRTL ? 'scaleX(-1)' : 'none' }}>
                 <path d="m9 18 6-6-6-6" />
               </svg>
             </span>
-            <button type="button" className="flip-switch-btn" onClick={handleFlip} aria-label="flip">
-              RWA ↻
-            </button>
           </div>
         </div>
       </div>

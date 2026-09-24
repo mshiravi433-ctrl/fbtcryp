@@ -52,9 +52,36 @@ export function extractDurationMonths(text) {
   const yearMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(year|years|yr|yrs|سال)/i);
   if (yearMatch) return Math.max(1, Math.round(Number(yearMatch[1]) * 12));
 
+  const weekMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(week|weeks|wk|wks|هفته)/i);
+  if (weekMatch) return Math.max(1, Math.round(Number(weekMatch[1]) * 0.25));
+
+  const dayMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(day|days|d|روز|روزه)/i);
+  if (dayMatch) return Math.max(0.1, Number((Number(dayMatch[1]) / 30).toFixed(1)));
+
   if (normalized.includes('quarter') || normalized.includes('سه ماه') || normalized.includes('سه‌ماه')) return 3;
   if (normalized.includes('چهار ماه')) return 4;
   if (normalized.includes('half year') || normalized.includes('شش ماه')) return 6;
+  return null;
+}
+
+export function extractDurationDays(text) {
+  const normalized = normalizeText(text);
+  const dayMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(day|days|d|روز|روزه)/i);
+  if (dayMatch) return Math.round(Number(dayMatch[1]));
+  const weekMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(week|weeks|wk|wks|هفته)/i);
+  if (weekMatch) return Math.round(Number(weekMatch[1]) * 7);
+  const monthMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(month|months|mo|ماه)/i);
+  if (monthMatch) return Math.round(Number(monthMatch[1]) * 30);
+  const yearMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(year|years|yr|yrs|سال)/i);
+  if (yearMatch) return Math.round(Number(yearMatch[1]) * 365);
+  return null;
+}
+
+export function extractAmountUsd(text) {
+  const normalized = normalizeText(text);
+  const amountMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:دلار|usdt|usdc|usd|\$)/i)
+    || normalized.match(/(?:\$)\s*(\d+(?:\.\d+)?)/i);
+  if (amountMatch) return Number(amountMatch[1]);
   return null;
 }
 

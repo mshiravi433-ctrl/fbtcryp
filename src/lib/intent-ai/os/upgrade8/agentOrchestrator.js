@@ -83,29 +83,33 @@ async function runRiskAgent(context = {}) {
 
 async function runStrategyAgent(context = {}) {
   const horizonMonths = safeNumber(context.state?.collectedSlots?.timeframe || context.horizonMonths || context.goal?.horizonMonths, null);
+  const horizonDays = context.goal?.horizonDays || context.state?.collectedSlots?.horizonDays || null;
   const riskProfile = context.state?.collectedSlots?.riskProfile || context.riskProfile || context.goal?.riskProfile || 'medium';
+  const isFa = String(context.locale || context.lang || 'fa').startsWith('fa');
+
   const options = [
     {
       id: 'defensive-rebalance',
-      label: 'Defensive rebalance',
-      rationale: 'Reduce concentration and increase stability assets.',
+      label: isFa ? 'بازچینش تدافعی و کم‌ریسک' : 'Defensive rebalance',
+      rationale: isFa ? 'کاهش ریسک نوسان، تمرکز روی استیبل‌کوین‌ها و کسب بازدهی سالانه مطمئن (APY).' : 'Reduce concentration and increase stability assets.',
       suitability: riskProfile === 'low' ? 0.93 : 0.72
     },
     {
       id: 'balanced-rotation',
-      label: 'Balanced rotation',
-      rationale: 'Rotate part of concentrated positions into diversified core exposures.',
+      label: isFa ? 'چرخش متعادل و متنوع‌سازی' : 'Balanced rotation',
+      rationale: isFa ? 'تخصیص ۵۰٪ استیبل و دارایی امن، ۳۰٪ دارایی‌های اصلی و ۲۰٪ فرصت‌های رشدی.' : 'Rotate part of concentrated positions into diversified core exposures.',
       suitability: riskProfile === 'medium' ? 0.96 : 0.78
     },
     {
       id: 'opportunistic-tilt',
-      label: 'Opportunistic tilt',
-      rationale: 'Reserve a smaller tactical sleeve for catalysts and higher beta.',
+      label: isFa ? 'استراتژی پویا و رشد حداکثری' : 'Opportunistic tilt',
+      rationale: isFa ? 'حفظ هسته امن به همراه تخصیص به موقعیت‌های پرشتاب بازار و روندهای صعودی.' : 'Reserve a smaller tactical sleeve for catalysts and higher beta.',
       suitability: riskProfile === 'high' ? 0.94 : 0.61
     }
   ];
   return {
     horizonMonths,
+    horizonDays,
     riskProfile,
     options,
     preferredOption: options.slice().sort((a, b) => (b.suitability || 0) - (a.suitability || 0))[0],

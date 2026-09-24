@@ -76,6 +76,12 @@ export function parseShortAnswer(text) {
     return { type: 'duration', value: duration, confidence: 0.99, raw: text, normalized: `${duration.value} ${duration.unit}` };
   }
 
+  // Risk parsing — "ریسک متوسط", "متوسط", "کم", "زیاد", "medium", "low", "high"
+  const risk = parseRisk(t);
+  if (risk) {
+    return { type: 'risk', value: risk, confidence: 0.98, raw: text };
+  }
+
   // Percent — "۲۰ درصد" → 20%
   const percent = parsePercent(t);
   if (percent) {
@@ -129,6 +135,14 @@ export function parseDuration(text) {
     const n = parseInt(t, 10);
     if (n) return { value: n, unit: 'months', months: n, raw: text };
   }
+  return null;
+}
+
+export function parseRisk(text) {
+  const t = normalizeText(text);
+  if (/^(متوسط|ریسک متوسط|متعادل|medium|moderate)$/i.test(t) || /(ریسک.*متوسط|متوسط.*ریسک)/i.test(t)) return 'medium';
+  if (/^(کم|کم ریسک|کم‌ریسک|محافظه کار|محافظه‌کار|low|conservative)$/i.test(t) || /(ریسک.*کم|کم.*ریسک)/i.test(t)) return 'low';
+  if (/^(زیاد|بالا|پرریسک|پر ریسک|ریسک بالا|high|aggressive)$/i.test(t) || /(ریسک.*بالا|بالا.*ریسک)/i.test(t)) return 'high';
   return null;
 }
 
@@ -233,11 +247,21 @@ export class SlotFillingEngine {
       return { filled: true, slot: 'targetReturn', value: parsed.value, confidence: 0.99, parsed };
     }
 
+    // If expected is risk and we got risk or confirm
+    if ((expected === 'risk' || expected === 'riskProfile') && (parsed.type === 'risk' || parsed.type === 'confirm')) {
+      const val = parsed.type === 'risk' ? parsed.value : 'medium';
+      return { filled: true, slot: 'riskProfile', value: val, confidence: 0.98, parsed };
+    }
+
     // Generic: if we have a missing slot and parsed type matches any missing
     if (conversationState?.missingSlots?.length) {
       for (const missing of conversationState.missingSlots) {
         if (missing === 'timeframe' && parsed.type === 'duration') {
           return { filled: true, slot: 'timeframe', value: parsed.value, confidence: 0.99, parsed };
+        }
+        if (missing === 'riskProfile' && (parsed.type === 'risk' || parsed.type === 'confirm')) {
+          const val = parsed.type === 'risk' ? parsed.value : 'medium';
+          return { filled: true, slot: 'riskProfile', value: val, confidence: 0.98, parsed };
         }
         if (missing === 'targetReturn' && parsed.type === 'percent') {
           return { filled: true, slot: 'targetReturn', value: parsed.value, confidence: 0.99, parsed };

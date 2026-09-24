@@ -44,7 +44,13 @@ const PERSIAN_ROUTE_ALIASES = Object.freeze({
   'امتیاز': '/rewards',
   'آرامش': '/explore',
   'اینتنت': '/intent',
-  'پی تو پی': '/p2p'
+  'پی تو پی': '/p2p',
+  'لانچ': '/launch',
+  'لانچ توکن': '/launch',
+  'ساخت توکن': '/launch',
+  'توکن جدید': '/launch',
+  'عرضه توکن': '/launch',
+  'توکن لانچ': '/launch'
 });
 
 export function resolveRoute(input) {
@@ -89,7 +95,11 @@ export function resolveRoute(input) {
     'gold': '/stocks',
     'metals': '/stocks',
     'calm': '/explore',
-    'intent': '/intent'
+    'intent': '/intent',
+    'launch': '/launch',
+    'token launch': '/launch',
+    'create token': '/launch',
+    'launchpad': '/launch'
   };
   
   for (const [kw, route] of Object.entries(englishMap)) {
