@@ -79,7 +79,23 @@ const SLUGS = [
   'صرافی-غیرمتمرکز',
   'هشدار-قیمت-ارز-دیجیتال',
   'تحلیل-تکنیکال-ارز-دیجیتال',
-  'کیف-پول-غیرامانی'
+  'کیف-پول-غیرامانی',
+  /* The three intents — swap, crypto, investing — in both languages. */
+  'سواپ-ارز-دیجیتال',
+  'crypto-swap-without-kyc',
+  'سرمایه-گذاری-در-ارز-دیجیتال',
+  'crypto-investing-yield-and-lending',
+  'سواپ-سولانا',
+  'solana-token-swap',
+  /* The guides and the two hubs, written in their own language. */
+  'how-crypto-swap-fees-work',
+  'کارمزد-سواپ-ارز-دیجیتال',
+  'custodial-vs-non-custodial-wallets',
+  'تفاوت-کیف-پول-امانی-و-غیرامانی',
+  'what-stays-private-without-kyc',
+  'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند',
+  'blog',
+  'وبلاگ'
 ];
 
 const urlList = SLUGS.map((s) => (s ? `${ORIGIN}/${encodeURIComponent(s)}` : `${ORIGIN}/`));

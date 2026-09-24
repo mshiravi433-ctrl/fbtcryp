@@ -236,8 +236,11 @@ export const RUNTIME = /* js */ `
 
   function markUpdated() {
     var nodes = document.querySelectorAll('[data-updated]');
+    if (!nodes.length) return;
     var L = dict('states');
-    var stamp = L.updated + ' ' + timeNow();
+    /* FEEDS is written only by a feed that really answered; see the note at
+       its declaration and in loadAll(). */
+    var stamp = feedsVouch() ? L.updated + ' ' + timeNow() : L.unavailable;
     for (var i = 0; i < nodes.length; i++) nodes[i].textContent = stamp;
   }
 
@@ -620,12 +623,36 @@ export const RUNTIME = /* js */ `
   /* ------------------------------------------------ orchestration ------- */
 
   var RENDERERS = [renderPulse, renderHeroMarket, renderTokens, renderStocks, renderFarms, renderSolana, renderMarketDash, renderOpportunities, renderHeroYield, renderAiTape, renderSlideLive];
+
+  /*
+   * ─── WHY THE "UPDATED AT" STAMP IS NOW CONDITIONAL ────────────────────────
+   * markUpdated() writes «به‌روزرسانی ۲۰:۵۹» / "Updated 20:59" next to the
+   * market numbers, and it used to run unconditionally after every load
+   * attempt — including when every single feed had failed and every number on
+   * the page was still the honest em-dash.
+   *
+   * That is a small lie told in the one place this product cannot afford one,
+   * and it is exactly the kind of thing a search engine or an AI answer engine
+   * checks when it decides whether a live-data page can be trusted: a fresh
+   * timestamp over absent data is the signature of a page that invents itself.
+   * So the stamp is now a record of a fact — at least one feed answered — and
+   * when none answered, the note says that instead. It is also re-stamped when
+   * the visitor switches language, which is a renderer pass and not a fetch,
+   * so the language toggle keeps working without pretending the data moved.
+   */
+  var FEEDS = {};
+  /* The stamp sits beside the market numbers, so it is honest only when one of
+     the feeds that feeds those numbers answered. The Solana list is a feed,
+     but a successful Solana read says nothing about the pulse strip beside the
+     timestamp, so it does not get to vouch for it. */
+  function feedsVouch() { return FEEDS.global === true || FEEDS.markets === true; }
   function rerenderDynamic() {
     for (var i = 0; i < RENDERERS.length; i++) {
       try { RENDERERS[i](); } catch (e) {}
     }
     markUpdated();
   }
+
 
   /**
    * Failure states, per feed. A table keeps its skeleton replaced by a
@@ -670,8 +697,10 @@ export const RUNTIME = /* js */ `
 
   function loadAll(force) {
     var keys = ['global', 'markets', 'trending', 'yields', 'solana'];
+    FEEDS = {};
     return Promise.all(keys.map(function (k) {
       return load(k, force).then(function (ok) {
+        FEEDS[k] = !!ok;
         if (!ok) onFeedFail(k);
       });
     })).then(rerenderDynamic);
@@ -684,7 +713,10 @@ export const RUNTIME = /* js */ `
     var key = btn.getAttribute('data-retry');
     if (!URLS[key]) return;
     load(key, true).then(function (ok) {
-      if (ok) rerenderDynamic();
+      /* A retry that works is the same kind of fact as a first load that
+         worked — without this the stamp would stay on "Data unavailable"
+         after the table right below it had filled in. */
+      if (ok) { FEEDS[key] = true; rerenderDynamic(); }
     });
   });
 
@@ -837,6 +869,32 @@ function updateFlowMeter() {
     /* The reader may stand still: while anything is pending, re-check at a
        relaxed cadence so a starved observer is still caught. Self-terminating. */
     netTimer = setInterval(pass, 600);
+
+    /*
+     * ─── THE LAST SAFETY NET, AND WHY IT IS NOT PARANOIA ────────────────────
+     * Everything above assumes the page keeps running. If the inline script is
+     * interrupted — a WebView that suspends the tab mid-boot, an out-of-memory
+     * kill inside the APK, an extension that halts timers — then .reveal
+     * elements stay at opacity 0 with html[data-js] already set, and the
+     * visitor gets a page that looks empty between the sections that happened
+     * to load in time.
+     *
+     * That is the same failure mode as the "black page" this code already
+     * guards against, one level up: a CSS state that only JavaScript can undo.
+     * So after 2.5 seconds, anything still pending is lit regardless of
+     * position. A reader who has been staring at a blank band for 2.5 seconds
+     * has been failed; a reader who sees a section fade in slightly early has
+     * lost nothing. The visual cost of the two mistakes is not symmetric, so
+     * the cheaper one wins.
+     */
+    setTimeout(function () {
+      if (!pending.length) return;
+      for (var m = 0; m < pending.length; m++) revealNode(pending[m]);
+      pending = [];
+      window.removeEventListener('scroll', netScroll);
+      window.removeEventListener('resize', pass);
+      if (netTimer) { clearInterval(netTimer); netTimer = null; }
+    }, 2500);
   }
 
   /* Rotating sample intent in the hero console — clearly an illustration,
@@ -1129,13 +1187,18 @@ function updateFlowMeter() {
     var targets = document.querySelectorAll('.card, .net-card, .pulse-card, .stat-card, .say-card');
     var cur = null;
     var queued = false;
+    /* See the note on canHover further down: a touch screen cannot hover, so
+       the whole listener is skipped rather than fired-and-ignored on every
+       scroll frame. Re-declared here because this is its first use. */
+    var hoverable = true;
+    try { hoverable = window.matchMedia('(hover: hover)').matches; } catch (e) {}
     function spot(ev) {
       if (!cur) return;
       var r = cur.getBoundingClientRect();
       cur.style.setProperty('--mx', ((ev.clientX - r.left) / Math.max(1, r.width) * 100).toFixed(1) + '%');
       cur.style.setProperty('--my', ((ev.clientY - r.top) / Math.max(1, r.height) * 100).toFixed(1) + '%');
     }
-    document.addEventListener('pointermove', function (ev) {
+    if (hoverable) document.addEventListener('pointermove', function (ev) {
       var t = ev.target && ev.target.closest ? ev.target.closest('.card, .net-card, .pulse-card, .stat-card, .say-card') : null;
       if (t !== cur) {
         if (cur) { cur.classList.remove('is-lit'); cur.style.removeProperty('--mx'); cur.style.removeProperty('--my'); }
@@ -1147,8 +1210,17 @@ function updateFlowMeter() {
       requestAnimationFrame(function () { queued = false; spot(ev); });
     }, { passive: true });
 
-    /* Hero mockup and slide art drift a few pixels against the pointer. */
-    var par = document.querySelectorAll('[data-parallax]');
+    /*
+     * Pointer parallax only where there is a pointer.
+     *
+     * On a touch screen pointermove still fires — during a drag, and on some
+     * Android builds on a tap — and this handler writes two custom properties
+     * on every parallax node each time it does. On a scrolling phone that is a
+     * style recalculation competing with the scroll for the same frame, which
+     * is felt as the page catching and stuttering. A phone cannot hover, so
+     * there is nothing to be gained by listening for it.
+     */
+    var par = hoverable ? document.querySelectorAll('[data-parallax]') : [];
     if (par.length) {
       document.addEventListener('pointermove', function (ev) {
         var mx = ev.clientX / window.innerWidth - 0.5;
@@ -1162,7 +1234,7 @@ function updateFlowMeter() {
     }
 
     /* Scroll depth on the ambient lines: one transform per frame, on one node. */
-    var lines = $('#bg-lines');
+    var lines = hoverable ? $('#bg-lines') : null;
     if (lines) {
       var lock = false;
       window.addEventListener('scroll', function () {
