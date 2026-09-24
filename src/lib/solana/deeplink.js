@@ -518,13 +518,23 @@ export function consumeDeeplinkResult() {
  * and the record stored in localStorage already knows which screen to put the
  * user back on (`returnTo`).
  *
- * Inside the APK the WebView reports `https://localhost`, which is useless as
- * a redirect for an app that is already running: the custom scheme registered
- * in AndroidManifest (ir.fbtswap.app://) brings the user BACK INTO THIS APP,
- * where the pending request is still waiting.
+ * Both on the web and inside the native APK, the redirect link must share the
+ * exact origin of `app_url` (`https://fbtswap.ir`).
+ *
+ * Phantom (and Solana Pay origin verification) strictly compares the origin
+ * of `redirect_link` with the origin of `app_url`. If the APK sends a custom
+ * scheme like `ir.fbtswap.app://solconnect` while `app_url` is `https://fbtswap.ir`,
+ * the wallet immediately rejects the request with code -32000:
+ * «Redirect link origin does not match app origin».
+ *
+ * By using `https://fbtswap.ir/?sol=1&rid=...`, the origins match 100%.
+ * When the wallet returns:
+ *   1. If Android routes the App Link to the APK, MainActivity captures it.
+ *   2. If Android opens Chrome, the web document detects no local pending
+ *      request and trampolines to `ir.fbtswap.app://solconnect?...`, bringing
+ *      the APK back to the front to complete the connection.
  */
 export function deeplinkRedirect(requestId) {
-  if (isNativeShell()) return `ir.fbtswap.app://solconnect?rid=${encodeURIComponent(requestId)}`;
   return publicAppUrl(`/?${RETURN_MARKER}&rid=${encodeURIComponent(requestId)}`);
 }
 
@@ -1037,6 +1047,62 @@ async function applySignAnswer(pending, params) {
   return { ok: false, code: 'NO_SIGNATURE' };
 }
 
+function nativeAppReturnUrl(rawUrl) {
+  try {
+    let search = '';
+    let hash = '';
+    try {
+      const parsed = new URL(rawUrl, 'https://fbtswap.ir');
+      search = parsed.search || '';
+      hash = parsed.hash || '';
+    } catch {
+      const q = String(rawUrl).indexOf('?');
+      if (q >= 0) search = String(rawUrl).slice(q);
+    }
+    return `ir.fbtswap.app://solconnect${search}${hash}`;
+  } catch {
+    return 'ir.fbtswap.app://solconnect';
+  }
+}
+
+function mountNativeReturnFallback(nativeUrl) {
+  if (typeof document === 'undefined') return;
+  try {
+    const existing = document.getElementById('fbt-solconnect-fallback');
+    if (existing) return;
+    const el = document.createElement('div');
+    el.id = 'fbt-solconnect-fallback';
+    el.style.cssText =
+      'position:fixed;bottom:24px;left:20px;right:20px;z-index:999999;' +
+      'background:#181B20;border:1px solid #00E5FF;border-radius:16px;' +
+      'padding:16px 20px;box-shadow:0 10px 30px rgba(0,0,0,0.6);' +
+      'text-align:center;direction:rtl;font-family:sans-serif;color:#FFFFFF;';
+    el.innerHTML =
+      '<div style="font-size:15px;font-weight:600;margin-bottom:8px;color:#00E5FF;">اتصال کیف پول سولانا</div>' +
+      '<div style="font-size:13px;color:#94A3B8;margin-bottom:14px;">در حال انتقال اطلاعات به اپلیکیشن FBT Swap...</div>' +
+      '<a href="' + nativeUrl.replace(/"/g, '&quot;') + '" style="display:inline-block;width:100%;box-sizing:border-box;' +
+      'background:#00E5FF;color:#0B0E14;font-weight:700;padding:10px 16px;border-radius:10px;' +
+      'text-decoration:none;font-size:14px;">باز کردن در اپلیکیشن</a>';
+    document.body.appendChild(el);
+  } catch {
+    /* DOM not ready or restricted */
+  }
+}
+
+function trampolineToNativeApp(rawUrl) {
+  try {
+    const nativeTarget = nativeAppReturnUrl(rawUrl);
+    try {
+      window.location.replace(nativeTarget);
+    } catch {
+      window.location.href = nativeTarget;
+    }
+    mountNativeReturnFallback(nativeTarget);
+  } catch {
+    /* best effort */
+  }
+}
+
 /**
  * Turn a URL the wallet sent us back into a completed operation.
  *
@@ -1060,6 +1126,25 @@ export async function completeDeeplinkReturn(rawUrl) {
      */
     const session = read.state === 'params' ? deeplinkSession() : null;
     if (session?.address) return { ok: true, already: true, address: session.address, walletId: session.walletId };
+
+    /*
+     * Trampoline for native app returns:
+     * When connecting from the native Android app, the wallet redirects to
+     * `https://fbtswap.ir/?sol=1&rid=...` so that the origin strictly matches `app_url`.
+     * If Android hands that https redirect to Chrome instead of the APK, this web
+     * document has no pending request in its own storage (the pending request is in
+     * the APK's WebView storage).
+     * Forward the return into the APK via its registered custom scheme
+     * `ir.fbtswap.app://solconnect`, bringing the app to the foreground.
+     */
+    if (typeof window !== 'undefined' && !isNativeShell()) {
+      const ua = String(window.navigator?.userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : '') || '');
+      const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+      if (isMobile && read.state !== 'none') {
+        trampolineToNativeApp(rawUrl);
+      }
+    }
+
     /* Otherwise: the record expired, the user cleared storage, or the link was
        replayed. Say so rather than pretend something happened. */
     emit({ status: 'error', code: 'NO_PENDING', requestId });

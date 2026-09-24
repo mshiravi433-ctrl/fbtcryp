@@ -58,7 +58,8 @@ globalThis.localStorage = {
 const locationStub = {
   href: 'https://fbtswap.ir/#/wallet?tab=solana',
   hash: '#/wallet?tab=solana',
-  assign: (url) => opened.push(String(url))
+  assign: (url) => opened.push(String(url)),
+  replace: (url) => { locationStub.href = String(url); opened.push(String(url)); }
 };
 
 /*
@@ -213,6 +214,22 @@ const ok = (name, condition) => {
   ok('the dapp identity is never localhost',
     !/localhost/.test(phantom));
   ok('an unknown wallet builds nothing', connectRequestUrl({ walletId: 'nope', dappPublicKey: 'x', redirectLink: 'y' }) === null);
+
+  /*
+   * ORIGIN MATCHING — Phantom & Solana Pay reject connections with code -32000
+   * («Redirect link origin does not match app origin») if redirect_link and
+   * app_url differ in scheme or host.
+   */
+  const appOrigin = new URL(parsed.get('app_url')).origin;
+  const redirectOrigin = new URL(parsed.get('redirect_link')).origin;
+  ok('redirect_link origin strictly matches app_url origin (no error -32000)',
+    appOrigin === redirectOrigin && redirectOrigin === 'https://fbtswap.ir');
+
+  const nativeRedirect = deeplink.deeplinkRedirect('xyz');
+  ok('deeplinkRedirect generates canonical origin matching app_url',
+    new URL(nativeRedirect).origin === 'https://fbtswap.ir'
+    && nativeRedirect.includes('rid=xyz')
+    && nativeRedirect.includes('sol=1'));
 
   /*
    * THE REQUEST IS SEALED. Every post-connect method carries exactly four
@@ -632,6 +649,19 @@ function legacyTx(sizeBytes, requiredSignatures = 1) {
     'https://fbtswap.ir/?sol=1&rid=nothing&phantom_encryption_public_key=K&nonce=N&data=D'
   );
   ok('an answer to no request is named', orphan.ok === false && orphan.code === 'NO_PENDING');
+
+  /*
+   * Trampoline: On mobile Chrome, an orphan return (originating from the native APK)
+   * trampolines to ir.fbtswap.app://solconnect with the exact query preserved.
+   */
+  setUa(UA_ANDROID_CHROME);
+  const orphanMobile = await deeplink.completeDeeplinkReturn(
+    'https://fbtswap.ir/?sol=1&rid=req999&phantom_encryption_public_key=KEY999&nonce=NONCE999&data=DATA999'
+  );
+  ok('orphan mobile return attempts trampoline to APK custom scheme',
+    orphanMobile.ok === false && orphanMobile.code === 'NO_PENDING'
+    && opened.some((u) => u.startsWith('ir.fbtswap.app://solconnect') && u.includes('rid=req999') && u.includes('data=DATA999')));
+  setUa(UA_DESKTOP);
 }
 
 /* -------------------------------------------------------------------------- */

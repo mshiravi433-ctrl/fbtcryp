@@ -177,10 +177,10 @@ describe('connecting a Solana wallet on a phone', () => {
        answer is encrypted to it, which is why the answer can be trusted. */
     expect(url.searchParams.get('dapp_encryption_public_key')).toBeTruthy();
     expect(url.searchParams.get('app_url')).toMatch(/^https:\/\/fbtswap\.ir\/?$/);
-    /* THE RETURN PATH: our own scheme, back into this app. A redirect to a
-       web URL would have completed the connection in a browser instead. */
+    /* THE RETURN PATH: canonical origin matching app_url so Phantom never rejects
+       with "Redirect link origin does not match app origin". */
     const redirect = url.searchParams.get('redirect_link');
-    expect(redirect.startsWith('ir.fbtswap.app://solconnect?rid=')).toBe(true);
+    expect(redirect.startsWith('https://fbtswap.ir/?sol=1&rid=')).toBe(true);
   });
 
   it('shows WAITING while the wallet holds the approval', async () => {
