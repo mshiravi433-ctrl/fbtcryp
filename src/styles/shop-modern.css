@@ -299,6 +299,50 @@
   .shop-promo-title { font-size: 29px; }
 }
 
+/*
+ * ─── THE REDEMPTION STEPS ──────────────────────────────────────────────────
+ * Numbered because order matters: you cannot redeem a code you have not
+ * bought. Present only when the provider has nothing in the shopper's
+ * language — see Shop.jsx — and deliberately plain next to the tinted glass
+ * panels around them, because this is the part of the sheet people read.
+ *
+ * The marker is a real <ol> number, not a dot: `.shop-limits` above uses dots
+ * precisely because its five lines are unrelated facts, while these five are
+ * a sequence.
+ */
+.shop-steps {
+  margin: 0;
+  padding: 0 0 0 0;
+  list-style: none;
+  counter-reset: shopstep;
+  display: grid;
+  gap: 9px;
+}
+.shop-steps li {
+  position: relative;
+  padding-inline-start: 26px;
+  font-size: 12.4px;
+  line-height: 1.75;
+  color: var(--text-2);
+  counter-increment: shopstep;
+}
+.shop-steps li::before {
+  content: counter(shopstep);
+  position: absolute;
+  inset-inline-start: 0;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--rgb-1) 14%, transparent);
+  color: var(--rgb-1);
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .shop-tile:hover, .shop-tile:active { transform: none; }
 }

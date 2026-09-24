@@ -2,21 +2,33 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { feePercentString } from '../lib/feeBps';
 
 /*
- * RwaHorizonFlipBanner — v3 «Aurora Flip»
+ * RwaHorizonFlipBanner — v4 «Aurora Flip»
  *
  * Request: «بنر فلیپ کارتی برای افق جهانی و RWA خیلی مدرن‌تر، رنگ‌بندی بهتر،
- * استفاده از انیمیشن و SVG و خیلی جذاب‌تر».
+ * استفاده از انیمیشن و SVG و خیلی جذاب‌تر» — and then:
  *
- * What changed vs. v2:
- *  - Segmented switch above the card (RWA ⇄ افق جهانی) with a sliding pill and
- *    a live progress bar that shows when the next auto-flip happens.
+ *   «تب را حذف کن و داخل بنر بالا سمت چپ ایکون تعویض بزار بدون عنوان و اتوامات
+ *    هر ۴۰ ثانیه خودش برگردد فلیپ کارت»
+ *
+ * What changed vs. v3:
+ *  - THE SEGMENTED SWITCH IS GONE. The two tabs that sat above the card are
+ *    deleted, and the switch is now a single icon-only button INSIDE the
+ *    banner — no label, in the top-left corner of the card, exactly as asked.
+ *    The ring drawn around that icon is the countdown the old progress bar
+ *    carried: it fills over the full 40s, so the auto-flip is never a surprise.
+ *  - AUTO_MS is 40s (was 12s) — «هر ۴۰ ثانیه خودش برگردد».
+ *  - Copy is English for EVERY language except Persian. It used to key off
+ *    `isRTL`, so Arabic, Hebrew and Urdu readers (RTL, not fa) got Persian
+ *    copy — Persian text inside an Arabic app. See `isEn` below.
+ *
+ * What v3 brought:
  *  - Each face has its own palette: RWA = molten gold on deep plum/navy,
  *    Horizon = aqua/emerald on deep ocean-indigo. Rotating conic rim light.
  *  - Fully animated SVG: vault dial spins + gold bars shimmer (RWA), globe
  *    meridians roll + satellite orbits + chart draws itself (Horizon), an
  *    animated background sparkline, drifting particles and a grid mesh.
  *  - Pointer tilt/parallax on desktop, swipe to flip on mobile, keyboard
- *    accessible (tabs are real buttons, faces are buttons with aria-labels).
+ *    accessible (the swap button and the faces are real buttons).
  *  - Autoplay pauses on hover / focus / hidden tab and is disabled entirely
  *    for prefers-reduced-motion.
  *  - No backdrop-filter inside the 3D context (Chrome flattens preserve-3d
@@ -25,8 +37,27 @@ import { feePercentString } from '../lib/feeBps';
  *    other SVGs using the same ids) can never steal each other's paint.
  */
 
-// Slower autoplay (was 6.5s) — user asked for a calmer flip rhythm.
-const AUTO_MS = 12000;
+/*
+ * 40s between auto-flips — «هر ۴۰ ثانیه خودش برگردد». The ring around the
+ * swap button is driven by this same number (`animationDuration` is set from
+ * it) so the countdown can never drift out of step with the flip.
+ */
+const AUTO_MS = 40000;
+
+/**
+ * The swap glyph — two arrows trading places.
+ *
+ * Drawn rather than borrowed from an icon set: it is 16px, it has to read on
+ * both palettes, and it must not flip with the language. A "swap" icon that
+ * mirrors under RTL is the same mistake as a mirrored logo.
+ */
+function IconSwap() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 8.4h13.2M14 4.6l3.8 3.8-3.8 3.8M20 15.6H6.8M10 11.8 6.2 15.6 10 19.4" />
+    </svg>
+  );
+}
 
 /* ─── Animated hero icons ─────────────────────────────────────────────── */
 
@@ -288,11 +319,31 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, haptic, isR
   const [cycle, setCycle] = useState(0);
   const [reduced, setReduced] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [canHover, setCanHover] = useState(true);
   const tiltRef = useRef(null);
   const touchRef = useRef(null);
 
   const l = String(lang || '').toLowerCase();
-  const isEn = l.startsWith('en') || (!isRTL && !l.startsWith('fa'));
+  /*
+   * ─── ONLY PERSIAN GETS PERSIAN. EVERYTHING ELSE GETS ENGLISH ─────────────
+   * Reported: «وقتی روی زبانی به غیر فارسی و انگلیسی باشد فلیپ کارت فارسی هست
+   * در صورتی که باید انگلیسی باشد» — with the language set to Arabic or Urdu
+   * the card showed Persian copy.
+   *
+   * The cause was `isEn = ... || (!isRTL && !l.startsWith('fa'))`: it decided
+   * the language by asking whether the layout is RTL, so every RTL language
+   * other than `fa` — Arabic, Hebrew, Urdu — fell through to the Persian
+   * branch. RTL-ness says which way the text runs, never which language it is.
+   *
+   * The rule is now the one the owner stated: Persian if and only if the
+   * language is Persian. Every other language gets English, which is the
+   * fallback this app is already configured with everywhere else — an
+   * untranslated string appears in English, never as a raw key. Translating
+   * this card properly means twelve sets of these strings in the locale files;
+   * until somebody writes them, English is the honest answer and Persian is
+   * still exactly where it was.
+   */
+  const isEn = !l.startsWith('fa');
   const fee = feePercentString();
   const flipped = side === 'hz';
 
@@ -305,15 +356,32 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, haptic, isR
     mq?.addEventListener?.('change', onMq);
     const onVis = () => setHidden(document.visibilityState === 'hidden');
     document.addEventListener('visibilitychange', onVis);
+
+    /*
+     * Hover-to-pause only exists where there is a real hover.
+     *
+     * A touch tap fires a synthetic `mouseenter` that nothing ever follows
+     * with a `mouseleave` — the finger left no pointer behind — so on a phone
+     * the FIRST tap used to pause the banner permanently and the auto-flip
+     * everybody was promised would quietly never happen again. Guarding on
+     * `(hover: hover)` is the difference between the 40s rhythm working on
+     * mobile and not.
+     */
+    const hoverMq = window.matchMedia?.('(hover: hover)');
+    const onHover = () => setCanHover(Boolean(hoverMq?.matches));
+    onHover();
+    hoverMq?.addEventListener?.('change', onHover);
+
     return () => {
       mq?.removeEventListener?.('change', onMq);
+      hoverMq?.removeEventListener?.('change', onHover);
       document.removeEventListener('visibilitychange', onVis);
     };
   }, []);
 
   const autoplay = !paused && !reduced && !hidden;
 
-  /* autoplay — one timeout per cycle so the progress bar and the flip stay in sync */
+  /* autoplay — one timeout per cycle so the ring and the flip stay in sync */
   useEffect(() => {
     if (!autoplay) return undefined;
     const t = setTimeout(() => {
@@ -416,38 +484,12 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, haptic, isR
       className={`rhb ${flipped ? 'is-flipped' : ''} ${autoplay ? '' : 'is-paused'}`}
       data-side={side}
       dir={isRTL ? 'rtl' : 'ltr'}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => { setPaused(false); resetTilt(); }}
+      onMouseEnter={() => { if (canHover) setPaused(true); }}
+      onMouseLeave={() => { if (canHover) setPaused(false); resetTilt(); }}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
       aria-roledescription={isEn ? 'flip banner' : 'بنر چرخشی'}
     >
-      {/* segmented switch */}
-      <div className="rhb-tabs" role="tablist" aria-label={isEn ? 'Choose market' : 'انتخاب بازار'}>
-        <span className="rhb-tabs-pill" aria-hidden="true" />
-        {[
-          { key: 'rwa', label: 'RWA', icon: Glyph.gold },
-          { key: 'hz', label: isEn ? 'Global Horizon' : 'افق جهانی', icon: Glyph.index }
-        ].map((tb) => (
-          <button
-            key={tb.key}
-            type="button"
-            role="tab"
-            aria-selected={side === tb.key}
-            className={`rhb-tab ${side === tb.key ? 'on' : ''}`}
-            onClick={() => choose(tb.key)}
-          >
-            <span className="rhb-tab-ic">{tb.icon}</span>
-            {tb.label}
-            {side === tb.key && (
-              <span className="rhb-progress" aria-hidden="true">
-                <i key={`${cycle}-${autoplay}`} style={{ animationDuration: `${AUTO_MS}ms` }} />
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
       <div
         className="rhb-stage"
         onPointerMove={onMove}
@@ -461,6 +503,41 @@ export default function RwaHorizonFlipBanner({ onGoRwa, onGoHorizon, haptic, isR
           </div>
         </div>
       </div>
+
+      {/*
+        ─── THE SWITCH, INSIDE THE BANNER AND WITHOUT A TITLE ────────────────
+        «داخل بنر بالا سمت چپ ایکون تعویض بزار بدون عنوان».
+
+        It lives OUTSIDE the 3D stage on purpose. Inside it, the button would
+        be a child of a `preserve-3d` card whose back face is rotated 180°, and
+        whether it paints above or through the card then depends on the
+        browser's 3D hit-testing — the same class of bug that made the old
+        banner flicker on Android. Out here it is a plain absolutely
+        positioned button, always on top, always tappable, and it still reads
+        as "inside the card" because it sits over the card's own corner.
+
+        The ring is the old progress bar, redrawn around the icon: it empties
+        over AUTO_MS so the tap that is about to happen on its own is never a
+        surprise. `key={cycle}` restarts it after every flip, manual included.
+      */}
+      <button
+        type="button"
+        className="rhb-swap"
+        onClick={(e) => { e.stopPropagation(); choose(side === 'rwa' ? 'hz' : 'rwa'); }}
+        aria-label={isEn ? 'Switch to the other market' : 'تعویض به بازار دیگر'}
+      >
+        <span className="rhb-swap-ic"><IconSwap /></span>
+        <svg className="rhb-swap-ring" viewBox="0 0 40 40" aria-hidden="true">
+          <circle
+            key={cycle}
+            cx="20"
+            cy="20"
+            r="18.4"
+            pathLength="100"
+            style={{ animationDuration: `${AUTO_MS}ms` }}
+          />
+        </svg>
+      </button>
     </section>
   );
 }

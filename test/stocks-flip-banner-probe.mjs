@@ -125,13 +125,14 @@ function build(theme) {
     return n;
   };
 
-  /* mirrors RwaHorizonFlipBanner.jsx (v3 «Aurora Flip») — both faces, every text node */
+  /*
+   * Mirrors RwaHorizonFlipBanner.jsx (v4 «Aurora Flip») — both faces, every
+   * text node. v4 removed the tab strip above the card and put a single
+   * icon-only swap button inside the banner, so the mirror carries that
+   * button (its glyph and its countdown ring) instead.
+   */
   const root = el('section', 'rhb');
   root.setAttribute('dir', 'rtl');
-  const tabs = el('div', 'rhb-tabs', root);
-  el('span', 'rhb-tabs-pill', tabs);
-  el('button', 'rhb-tab on', tabs, 'RWA');
-  const idleTab = el('button', 'rhb-tab', tabs, 'افق جهانی');
   const stage = el('div', 'rhb-stage', root);
   const tilt = el('div', 'rhb-tilt', stage);
   const inner = el('div', 'rhb-card', tilt);
@@ -160,6 +161,12 @@ function build(theme) {
   const rwa = face(false);
   const hz = face(true);
 
+  /* The switch: icon-only button, countdown ring around it. */
+  const swap = el('button', 'rhb-swap', root);
+  el('span', 'rhb-swap-ic', swap);
+  const ring = el('svg', 'rhb-swap-ring', swap);
+  el('circle', '', ring);
+
   const cs = (node, prop) => window.getComputedStyle(node)[prop] || '';
   const tokens = {};
   for (const tk of TOKENS) tokens[tk] = window.getComputedStyle(d.body).getPropertyValue(tk).trim();
@@ -171,7 +178,7 @@ function build(theme) {
     return v.trim();
   };
   const surface = (node) => effectiveSurface(cs, node, theme === 'light' ? '#f4f5fa' : '#000000');
-  return { window, val, surface, rwa, hz, idleTab, tabs };
+  return { window, val, surface, rwa, hz, swap, ring };
 }
 
 try {
@@ -206,6 +213,51 @@ try {
     /:root:not\(\[data-theme='dark'\]\):not\(\[data-theme='light'\]\)\s+\.rhb-/.test(cssNoComments));
 
   /*
+   * ══ 2b. v4 — THE TAB STRIP IS GONE, THE SWITCH LIVES INSIDE THE CARD ═══
+   * «تب را حذف کن و داخل بنر بالا سمت چپ ایکون تعویض بزار بدون عنوان و اتوامات
+   *  هر ۴۰ ثانیه خودش برگردد فلیپ کارت».
+   *
+   * Deleting the markup alone is not enough: a leftover `.rhb-tabs` rule would
+   * keep rendering a stray strip if anything ever re-added the class, and the
+   * CSS is where the "top-left, inside the card" instruction actually lives.
+   */
+  check('v4: the tab strip is gone from the stylesheet',
+    !/\.rhb-tabs\b|\.rhb-tab\b|\.rhb-tab-ic\b/.test(cssNoComments));
+  check('v4: the old tab progress bar is gone too (the ring replaces it)',
+    !/\.rhb-progress\b/.test(cssNoComments));
+  check('v4: the swap button is positioned inside the card, not above it',
+    /position:\s*absolute/.test(rule('.rhb-swap')) && /inset-inline-end/.test(rule('.rhb-swap')));
+  check('v4: the swap button is a circle with no text of its own',
+    /border-radius:\s*50%/.test(rule('.rhb-swap')));
+  check('v4: the countdown ring is normalised with pathLength so its fill tracks AUTO_MS',
+    /stroke-dasharray:\s*100/.test(rule('.rhb-swap-ring circle')));
+
+  const bannerSrc = readFileSync('src/components/RwaHorizonFlipBanner.jsx', 'utf8');
+  check('v4: AUTO_MS is 40s — «هر ۴۰ ثانیه خودش برگردد»', /const AUTO_MS = 40000;/.test(bannerSrc));
+  check('v4: the ring is driven by the same constant as the flip',
+    /animationDuration: `\$\{AUTO_MS\}ms`/.test(bannerSrc));
+  check('v4: nothing renders a tablist or a tab role any more',
+    !/role="tab"/.test(bannerSrc) && !/tablist/.test(bannerSrc));
+  check('v4: the swap button is named for screen readers (aria-label, no visible text)',
+    /className="rhb-swap"[\s\S]{0,300}aria-label=/.test(bannerSrc));
+  check('v4: its glyph is an SVG, so nothing can render as a title',
+    /<span className="rhb-swap-ic"><IconSwap \/><\/span>/.test(bannerSrc));
+
+  /*
+   * ─── AND THE LANGUAGE RULE, WHICH IS THE OTHER HALF OF THE REPORT ────────
+   * «وقتی روی زبانی به غیر فارسی و انگلیسی باشد فلیپ کارت فارسی هست در صورتی
+   *  که باید انگلیسی باشد» — with Arabic or Urdu selected the card was Persian.
+   * The old expression branched on `isRTL`, which is true for Arabic, Hebrew
+   * and Urdu, so every RTL language that is not Persian fell into the Persian
+   * branch. Persian is now reachable ONLY through the language code.
+   */
+  const isEnLine = /const isEn = ([^;]+);/.exec(bannerSrc)?.[1] ?? '';
+  check('i18n: the copy branch keys off the language, not off isRTL',
+    isEnLine !== '' && !/isRTL/.test(isEnLine) && /startsWith\('fa'\)/.test(isEnLine));
+  check('i18n: Persian is the ONLY language that gets Persian copy',
+    /!l\.startsWith\('fa'\)/.test(isEnLine));
+
+  /*
    * ══ 3+4. BOTH THEMES — v3 «Aurora Flip» is a deliberately dark, vivid promo
    * card in light AND dark mode (same as the wallet hero), so the original
    * white-on-white failure is impossible by construction. What must hold in
@@ -232,10 +284,18 @@ try {
       check(`${theme}: ${label} chips are legible (${ratio(c, surf)?.toFixed(2)})`, ratio(c, surf) >= 3);
       check(`${theme}: ${label} feature line is legible (${ratio(fOn, surf)?.toFixed(2)})`, ratio(fOn, surf) >= 3);
     }
-    const page = theme === 'light' ? '#f4f5fa' : '#000000';
-    const tabBg = B.surface(B.tabs) || page;
-    const tabTxt = B.val(B.idleTab, 'color');
-    check(`${theme}: idle tab label reads on the page (${ratio(tabTxt, tabBg)?.toFixed(2)})`, ratio(tabTxt, tabBg) >= 3);
+    /*
+     * The swap button now sits ON the card rather than on the page, so it is
+     * measured against the dark promo surface it covers — the light-theme
+     * rules keep its glyph white-ish over a translucent white chip, and the
+     * only thing that matters is that the glyph clears contrast on the glass.
+     */
+    const surf = B.surface(B.rwa.face);
+    const swapCol = B.val(B.swap, 'color');
+    check(`${theme}: swap glyph reads on the card (${ratio(swapCol, surf)?.toFixed(2)})`, ratio(swapCol, surf) >= 3);
+    const swapBg = B.val(B.swap, 'background-color');
+    check(`${theme}: swap button has a real surface painted (${swapBg})`, toRgb(swapBg) !== null && alphaOf(swapBg) > 0);
+    check(`${theme}: swap button renders no text at all — «بدون عنوان»`, B.swap.textContent.trim() === '');
   }
 } catch (err) {
   results.push({ name: `probe threw: ${err && err.message}`, ok: false });

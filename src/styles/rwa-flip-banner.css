@@ -1,9 +1,13 @@
-/* RwaHorizonFlipBanner v3 — «Aurora Flip»
+/* RwaHorizonFlipBanner v4 — «Aurora Flip»
  *
  * Two faces stacked in one grid cell (card height = tallest face, nothing is
  * ever clipped), rotating conic rim, per-face palettes, animated SVG art.
  * Light theme follows the app's `:root[data-theme='light']` convention plus
  * the OS boot fallback used elsewhere (about-premium.css).
+ *
+ * v4: the segmented switch that sat ABOVE the card is gone. The switch is one
+ * icon-only button inside the card's top-left corner, and the countdown ring
+ * around it replaces the progress bar the tabs used to carry.
  *
  * NOTE: no backdrop-filter inside .rhb-card — Chrome/Android WebView flattens
  * preserve-3d when a descendant has one, which breaks backface-visibility.
@@ -23,86 +27,78 @@
   isolation: isolate;
 }
 
-/* ─── segmented switch ─────────────────────────────────────────────── */
-.rhb-tabs {
-  position: relative;
+/* ─── the switch: one icon, inside the card, no label ──────────────── */
+/*
+ * `inset-inline-end` is doing real work here and is not a typo for `left`.
+ * In an RTL banner — which is what the owner sees and what he asked for,
+ * «بالا سمت چپ» — the inline END is the physical LEFT, so the button lands in
+ * the top-left corner. In LTR the same declaration puts it top-right, which is
+ * the corner that is actually free: the 62px hero icon owns the top-left of
+ * every LTR face, and a button parked on top of it would look broken. One
+ * declaration, correct corner in both directions, nothing overlaps.
+ */
+.rhb-swap {
+  position: absolute;
+  top: 11px;
+  inset-inline-end: 12px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 10px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.rhb-tabs-pill {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  inset-inline-start: 4px;
-  width: calc(50% - 6px);
-  border-radius: 10px;
-  background: linear-gradient(135deg, #C4B5FD, #A855F7 55%, #7C3AED);
-  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  transition: transform 0.8s cubic-bezier(0.34, 1.25, 0.5, 1), background 0.8s, box-shadow 0.8s;
-  z-index: 0;
-}
-.rhb[data-side='hz'] .rhb-tabs-pill {
-  transform: translateX(calc(100% + 4px));
-  background: linear-gradient(135deg, #5EF6FF, #3AE8B0 55%, #8B7CFF);
-  box-shadow: 0 6px 18px rgba(58, 232, 176, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-.rhb[dir='rtl'][data-side='hz'] .rhb-tabs-pill { transform: translateX(calc(-100% - 4px)); }
-
-.rhb-tab {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(10, 6, 22, 0.34);
+  color: rgba(255, 255, 255, 0.94);
   cursor: pointer;
-  overflow: hidden;
-  transition: color 0.3s;
+  z-index: 7;
+  isolation: isolate;
   -webkit-tap-highlight-color: transparent;
+  transition: background 0.3s, transform 0.35s cubic-bezier(0.34, 1.3, 0.5, 1), border-color 0.3s;
 }
-.rhb-tab.on { color: #fff; text-shadow: 0 1px 2px rgba(40, 10, 80, 0.35); }
-.rhb[data-side='hz'] .rhb-tab.on { color: #04131C; text-shadow: none; }
-.rhb-tab:focus-visible { outline: 2px solid rgba(94, 246, 255, 0.7); outline-offset: 2px; }
-.rhb-tab-ic { display: inline-flex; opacity: 0.9; }
+.rhb-swap:hover { background: rgba(10, 6, 22, 0.55); border-color: rgba(255, 255, 255, 0.3); }
+.rhb-swap:active { transform: scale(0.92); }
+.rhb-swap:focus-visible { outline: 2px solid rgba(94, 246, 255, 0.75); outline-offset: 2px; }
 
-.rhb-progress {
+.rhb-swap-ic {
+  display: grid;
+  place-items: center;
+  transition: transform 0.5s cubic-bezier(0.34, 1.25, 0.5, 1);
+}
+.rhb-swap:hover .rhb-swap-ic { transform: rotate(180deg); }
+
+/*
+ * The countdown ring. `pathLength="100"` normalises the circle's circumference
+ * to 100 units, so the dash numbers below do not depend on the radius — change
+ * the size and the ring still fills exactly once per cycle.
+ *
+ * `animation-duration` is set inline from AUTO_MS in the component; the two can
+ * not drift apart.
+ */
+.rhb-swap-ring {
   position: absolute;
-  inset-inline: 10px;
-  bottom: 3px;
-  height: 2px;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.14);
-  overflow: hidden;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+  overflow: visible;
 }
-.rhb-progress i {
-  display: block;
-  height: 100%;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.8);
-  transform-origin: left center;
-  animation: rhbProgress linear forwards;
+.rhb[dir='rtl'] .rhb-swap-ring { transform: rotate(-90deg) scaleX(-1); }
+.rhb-swap-ring circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0.55;
+  animation-name: rhbRing;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
 }
-.rhb[data-side='hz'] .rhb-progress i { background: rgba(4, 19, 28, 0.55); }
-.rhb[dir='rtl'] .rhb-progress i { transform-origin: right center; }
-.rhb.is-paused .rhb-progress i { animation-play-state: paused; }
-@keyframes rhbProgress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.rhb.is-paused .rhb-swap-ring circle { animation-play-state: paused; }
+@keyframes rhbRing { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 
 /* ─── 3D stage ─────────────────────────────────────────────────────── */
 .rhb-stage { perspective: 1400px; }
@@ -494,26 +490,36 @@
 @keyframes rhbBlip { 0%, 50% { opacity: 0; transform: scale(0.2); } 62% { opacity: 1; transform: scale(1.5); } 75%, 90% { opacity: 1; transform: scale(1); } 100% { opacity: 0; } }
 
 /* ─── light theme ──────────────────────────────────────────────────── */
-:root[data-theme='light'] .rhb-tabs {
-  background: rgba(16, 20, 40, 0.05);
-  border-color: rgba(16, 20, 40, 0.08);
-}
 :root[data-theme='light'] .rhb-face {
   box-shadow: 0 20px 40px -18px rgba(139, 92, 246, 0.55), 0 8px 18px rgba(16, 20, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 :root[data-theme='light'] .rhb-face--hz {
   box-shadow: 0 20px 40px -18px rgba(58, 200, 176, 0.55), 0 8px 18px rgba(16, 20, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
+/*
+ * ─── THE BOOT WINDOW, AND WHY THE SWITCH IS NOT IN HERE ─────────────────────
+ * The app sets `data-theme` on <html> a frame or two after boot, so for that
+ * moment the OS preference is the only signal there is. The soft light-theme
+ * shadows are duplicated here for exactly that window.
+ *
+ * The swap button is deliberately absent from both light blocks: it sits ON
+ * the card, and the card is the same dark glass in every theme. A light-theme
+ * variant of it would mean the button had drifted off the card, which is why
+ * the probe asserts there is not one.
+ */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']):not([data-theme='light']) .rhb-tabs {
-    background: rgba(16, 20, 40, 0.05);
-    border-color: rgba(16, 20, 40, 0.08);
+  :root:not([data-theme='dark']):not([data-theme='light']) .rhb-face {
+    box-shadow: 0 20px 40px -18px rgba(139, 92, 246, 0.55), 0 8px 18px rgba(16, 20, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  :root:not([data-theme='dark']):not([data-theme='light']) .rhb-face--hz {
+    box-shadow: 0 20px 40px -18px rgba(58, 200, 176, 0.55), 0 8px 18px rgba(16, 20, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 }
 
 /* ─── responsive ───────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .rhb { --rhb-radius: 18px; }
+  .rhb-swap { top: 9px; inset-inline-end: 10px; width: 34px; height: 34px; }
   .rhb-face { min-height: 172px; }
   .rhb-body { padding: 14px 14px 14px; gap: 7px; }
   .rhb-icon { width: 54px; height: 54px; min-width: 54px; border-radius: 15px; }
@@ -536,5 +542,4 @@
   .rhb *::before,
   .rhb *::after { animation: none !important; }
   .rhb-spark-line, .rhb-draw { stroke-dashoffset: 0; }
-  .rhb-progress { display: none; }
 }
