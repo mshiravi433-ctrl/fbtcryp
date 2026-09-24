@@ -58,7 +58,11 @@
     "screen": "Bagikan",
     "screenBusy": "Menyiapkan",
     "screenAria": "Ambil tangkapan layar ini dan bagikan",
-    "screenText": "FBT Swap — swap non-kustodial, imbal hasil, dan pasar"
+    "screenText": "FBT Swap — swap non-kustodial, imbal hasil, dan pasar",
+    "shotTitle": "Anda mengambil tangkapan layar",
+    "shotBody": "Ingin membagikannya dengan watermark {{domain}}?",
+    "shotShare": "Bagikan dengan watermark",
+    "shotClose": "Tutup"
   },
   "toast": {
     "screenSavedAndCopied": "Tangkapan layar disimpan — tautannya juga disalin.",

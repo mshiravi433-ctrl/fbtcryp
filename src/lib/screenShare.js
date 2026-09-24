@@ -41,7 +41,7 @@ export const SCREENSHOT_IGNORE = 'data-screenshot-ignore';
  * anything that opted out with the attribute above — the share button itself,
  * so the picture does not advertise the thing that took it.
  */
-const EXCLUDED_FROM_CAPTURE = '[data-screenshot-ignore], .bottom-nav, .brand-rail, .ptr-indicator, .toast-host';
+const EXCLUDED_FROM_CAPTURE = '[data-screenshot-ignore], .bottom-nav, .screenshot-prompt, .ptr-indicator, .toast-host';
 
 /** Widest image we build. 1080 is what every chat app displays full-bleed. */
 const MAX_WIDTH = 1080;

@@ -878,6 +878,31 @@ export function preflightSolanaAction({ action, asset, amount, snapshot } = {}) 
 }
 
 /**
+ * The wallet's vanilla Kamino obligation — or `null` when it has none.
+ *
+ * klend-sdk's `getUserVanillaObligation` THROWS «Could not find vanilla
+ * obligation.» for a wallet that has simply never deposited. Every caller used
+ * to read that throw as a network failure, so a brand-new wallet (the common
+ * case) saw «RPC error · retry» and dashes in place of its (empty) position,
+ * and a borrow on it answered RPC_ERROR instead of «deposit collateral first».
+ * «No obligation yet» is an ANSWER from the chain, not a failed read: it is
+ * returned as `null` here, and only a real transport failure still throws.
+ */
+export async function readVanillaObligation(market, owner) {
+  try {
+    return (await market.getUserVanillaObligation(owner)) || null;
+  } catch (cause) {
+    if (isMissingObligationError(cause)) return null;
+    throw cause;
+  }
+}
+
+/** The SDK's own sentence for «this wallet has no obligation account». */
+export function isMissingObligationError(cause) {
+  return /could not find (?:vanilla )?obligation/i.test(String(cause?.message || cause || ''));
+}
+
+/**
  * Call one SDK/reserve accessor and swallow its throw: a single method that
  * reverts or throws reads as `null` — the same shape an absent field already
  * produces — instead of taking the whole market read down with it. (§28: a
@@ -1017,7 +1042,7 @@ export async function serializeKaminoMarket({
   let obligationUnknown = false;
   if (wallet) {
     try {
-      obligation = await market.getUserVanillaObligation(new PublicKey(wallet));
+      obligation = await readVanillaObligation(market, new PublicKey(wallet));
     } catch {
       obligation = null;
       obligationUnknown = true;
@@ -1183,7 +1208,7 @@ export async function readSolanaLendingMarketInBrowser({ wallet = null, rpcUrl =
  *   with `serverCode`/`serverTried` attached, so the panel can say both what the
  *   nodes did and whether our own server was even an option.
  */
-export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, allowServer = null } = {}) {
+export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, allowServer = null, fresh = false, walletReadGraceMs = WALLET_READ_GRACE_MS } = {}) {
   if (rpcUrl || allowServer === false) return readSolanaLendingMarketInBrowser({ wallet, rpcUrl });
 
   const { readSolanaLendingMarketViaServer } = await import('./solanaLendingServer.js');
@@ -1193,7 +1218,7 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, al
     (snapshot) => ({ ok: true, snapshot, via: 'browser' }),
     (cause) => ({ ok: false, via: 'browser', cause: cause instanceof Error ? cause : new Error(String(cause?.message || cause || 'PROTOCOL_UNAVAILABLE')) })
   );
-  const server = delay(delayMs).then(() => readSolanaLendingMarketViaServer({ wallet })).then(
+  const server = delay(delayMs).then(() => readSolanaLendingMarketViaServer({ wallet, fresh })).then(
     (answer) => (answer?.ok
       ? { ok: true, snapshot: answer.snapshot, via: 'server' }
       : { ok: false, via: 'server', code: answer?.code || 'SERVER_UNAVAILABLE', detail: answer?.detail || null, status: answer?.status ?? null }),
@@ -1201,7 +1226,18 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, al
   );
 
   const winner = await firstDoorOk([browser, server]);
-  if (winner?.ok) return { ...winner.snapshot, via: winner.via };
+  if (winner?.ok) {
+    /* The market arrived, but did the WALLET? A browser door that read the
+       reserves and then had its obligation/balance read refused would show a
+       connected user «—» and «could not read your position» — while our server,
+       already in flight, may be about to answer both. Give it a short grace and
+       take its snapshot when it knows more about this wallet. */
+    if (wallet && winner.via === 'browser' && walletReadIncomplete(winner.snapshot)) {
+      const late = await Promise.race([server, delay(walletReadGraceMs).then(() => null)]);
+      if (late?.ok && !walletReadIncomplete(late.snapshot)) return { ...late.snapshot, via: 'server' };
+    }
+    return { ...winner.snapshot, via: winner.via };
+  }
 
   /* Both doors shut. The BROWSER failure is the one reported — it is the one
      carrying per-host verdicts (`hosts`) that tell a user whether to retry or
@@ -1215,6 +1251,16 @@ export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, al
   failure.serverCode = serverResult?.code || null;
   failure.serverDetail = serverResult?.detail || null;
   throw failure;
+}
+
+/** How long a browser snapshot with an unread wallet waits for the server. */
+const WALLET_READ_GRACE_MS = 6000;
+
+/** True when a snapshot has the market but not the wallet's position/balances. */
+export function walletReadIncomplete(snapshot) {
+  const account = snapshot?.account;
+  if (!account) return false;
+  return Boolean(account.unknown || account.balancesUnknown);
 }
 
 /** A timer that never keeps the process alive, and never throws. */
@@ -1511,7 +1557,7 @@ export async function buildSolanaLendingTransactionsInBrowser({ action, asset, a
       let obligation = null;
       let obligationFailed = false;
       try {
-        obligation = await market.getUserVanillaObligation(owner);
+        obligation = await readVanillaObligation(market, owner);
       } catch {
         obligation = null;
         obligationFailed = true;

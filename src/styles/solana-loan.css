@@ -1,0 +1,104 @@
+/* ==========================================================================
+   SOLANA LOAN — the amount field and its action button
+   --------------------------------------------------------------------------
+   «باکس ورود مقدار در سولانا وام خیلی کوچیک و تخم‌مرغی هست» (2026-09-24)
+
+   The field used to share a flex row with the action button. `.btn` is
+   `width: 100%` globally, so the button claimed the whole line and the input
+   (flex: 1; min-width: 0) collapsed to its own padding — a tiny rounded pill.
+   The field now owns its row at a real height, with the asset beside the
+   number the way the EVM loan panel draws it, and the button sits under it.
+   ========================================================================== */
+
+.sol-loan-amount-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.11);
+  overflow: hidden;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  /* A number and a ticker read left-to-right in every locale. */
+  direction: ltr;
+}
+
+.sol-loan-amount-field:focus-within {
+  border-color: rgba(153, 69, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(153, 69, 255, 0.16);
+}
+
+/* Beats the global `input { … }` skin (its own border/background/padding
+   would draw a second box inside this one). */
+.sol-loan-amount-field .sol-loan-amount-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 54px;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 20px !important;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: left;
+  direction: ltr;
+}
+
+.sol-loan-amount-field .sol-loan-amount-input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.sol-loan-amount-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  align-self: stretch;
+  padding: 0 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-2);
+  white-space: nowrap;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sol-loan-action {
+  width: 100%;
+  min-height: 48px;
+}
+
+:root[data-theme='light'] .sol-loan-amount-field {
+  background: rgba(20, 32, 58, 0.03);
+  border-color: rgba(20, 32, 58, 0.16);
+}
+
+:root[data-theme='light'] .sol-loan-amount-asset {
+  border-left-color: rgba(20, 32, 58, 0.1);
+  background: rgba(20, 32, 58, 0.03);
+}
+
+/* ---- positions list ------------------------------------------------------ */
+
+.sol-loan-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: stretch;
+  text-align: center;
+}
+
+@media (max-width: 340px) {
+  .sol-loan-amount-field .sol-loan-amount-input { font-size: 18px !important; padding: 0 11px; }
+  .sol-loan-amount-asset { padding: 0 10px; }
+}

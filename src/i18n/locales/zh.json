@@ -58,7 +58,11 @@
     "screen": "分享",
     "screenBusy": "准备中",
     "screenAria": "截取此屏幕并分享",
-    "screenText": "FBT Swap — 非托管兑换、收益与市场"
+    "screenText": "FBT Swap — 非托管兑换、收益与市场",
+    "shotTitle": "你截取了屏幕",
+    "shotBody": "要带上 {{domain}} 水印分享吗？",
+    "shotShare": "带水印分享",
+    "shotClose": "关闭"
   },
   "toast": {
     "screenSavedAndCopied": "截图已保存 —— 链接也已复制。",

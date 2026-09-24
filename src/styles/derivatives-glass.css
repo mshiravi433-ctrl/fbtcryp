@@ -67,22 +67,19 @@
 }
 @media (min-width: 600px) and (max-width: 899px) {
   body.hall-wide .app-shell,
-  body.hall-wide .bottom-nav,
-  body.hall-wide .brand-rail {
+  body.hall-wide .bottom-nav {
     max-width: 648px;
   }
 }
 @media (min-width: 900px) and (max-width: 1399px) {
   body.hall-wide .app-shell,
-  body.hall-wide .bottom-nav,
-  body.hall-wide .brand-rail {
+  body.hall-wide .bottom-nav {
     max-width: 728px;
   }
 }
 @media (min-width: 1400px) {
   body.hall-wide .app-shell,
   body.hall-wide .bottom-nav,
-  body.hall-wide .brand-rail,
   body.hall-wide .top-bar {
     max-width: 808px;
   }

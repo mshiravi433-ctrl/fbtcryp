@@ -58,7 +58,11 @@
     "screen": "Partager",
     "screenBusy": "Préparation",
     "screenAria": "Fais une capture de cet écran et partage-la",
-    "screenText": "FBT Swap — swap non custodial, rendement et marchés"
+    "screenText": "FBT Swap — swap non custodial, rendement et marchés",
+    "shotTitle": "Vous avez pris une capture d’écran",
+    "shotBody": "Voulez-vous la partager avec le filigrane {{domain}} ?",
+    "shotShare": "Partager avec filigrane",
+    "shotClose": "Fermer"
   },
   "toast": {
     "screenSavedAndCopied": "Capture enregistrée — le lien a aussi été copié.",
