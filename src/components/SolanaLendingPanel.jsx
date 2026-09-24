@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSolanaWallet } from '../hooks/useSolanaWallet.js';
 import AssetIcon from './AssetIcon.jsx';
+import '../styles/solana-loan.css';
 import { loanErrorText } from '../lib/loanErrors.js';
 import { mapRawError } from '../lib/lending-engine/errors.js';
 import {
@@ -33,6 +34,22 @@ import {
  * it and refreshes the position — the same ending it has on the injected path.
  */
 const PENDING_KEY = 'fbtswap.loan.pendingSign';
+
+/**
+ * What a phone keyboard types into a decimal field, as a number the builder
+ * can read: Persian (۰-۹) and Arabic-Indic (٠-٩) digits become ASCII, the
+ * Persian decimal mark «٫» and a comma become «.», anything else is dropped,
+ * and only the first decimal point survives.
+ */
+export function normalizeAmountInput(raw) {
+  const ascii = String(raw ?? '')
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[٫,]/g, '.')
+    .replace(/[^0-9.]/g, '');
+  const dot = ascii.indexOf('.');
+  return dot === -1 ? ascii : `${ascii.slice(0, dot + 1)}${ascii.slice(dot + 1).replace(/\./g, '')}`;
+}
 
 function readPending() {
   try {
@@ -211,14 +228,18 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
   const [waiting, setWaiting] = useState(() => readPending());
   const claimingRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  /* `opts.fresh` after a transaction: skip the server's short snapshot cache so
+     the position shown is the one AFTER the deposit, not the one before it.
+     (Used as an onClick handler too — a click event is not `{ fresh: true }`.) */
+  const refresh = useCallback(async (opts) => {
+    const fresh = opts?.fresh === true;
     setLoading(true);
     setError(null);
     try {
       /* No rpcUrl here on purpose: the lending client resolves the app's
          probed Solana RPC layer (custom endpoint first, then the community
          nodes) instead of pinning the Foundation's most-throttled host. */
-      const next = await readSolanaLendingMarket({ wallet: wallet.address });
+      const next = await readSolanaLendingMarket({ wallet: wallet.address, fresh });
       if (!next.ok) {
         /* A not-ok ANSWER (rather than a thrown failure) must keep the same
            diagnostics a throw would carry: without `hosts` the panel can only
@@ -298,7 +319,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
       if (!confirmed.ok) { setActionError(String(confirmed.code || 'SOLANA_SEND_FAILED')); return true; }
       setLastSignature(answer.signature);
       setAmount('');
-      await refresh();
+      await refresh({ fresh: true });
       return true;
     } finally {
       claimingRef.current = false;
@@ -328,6 +349,10 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
   }, [claimPendingSignature]);
 
   const assets = snapshot?.assets || [];
+  const hasOpenPosition = assets.some((asset) => {
+    const row = snapshot?.positions?.[asset.id];
+    return Number(row?.supplied || 0) > 0 || Number(row?.borrowed || 0) > 0;
+  });
   const currentPosition = selected ? snapshot?.positions?.[selected.id] : null;
   const currentDecimals = Number(selected?.decimals || 0);
   const maxForTab = tab === 'borrow'
@@ -393,7 +418,7 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
       }
       setLastSignature(signature);
       setAmount('');
-      await refresh();
+      await refresh({ fresh: true });
     } catch (cause) {
       /* A CODE renders as a sentence; wallet/RPC PROSE («Transaction
          simulation failed: …») must not be pasted into the generic
@@ -580,10 +605,32 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
                   </button>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 7 }}>
-                <input data-testid="solana-loan-amount" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder="0.00" style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '11px 12px', background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.10)', color: 'var(--text-1)', fontFamily: 'var(--font-mono)' }} />
-                <button type="button" className="btn btn-primary" data-testid="solana-loan-action" disabled={Boolean(action)} onClick={() => runAction(tab === 'borrow' ? 'borrow' : 'supply')} style={{ minWidth: 112 }}>{action ? t('loan.running') : tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}</button>
+              {/* The amount field owns its row. It used to share a flex row with
+                  the action button — and `.btn` is `width: 100%` globally, so the
+                  button took the whole line and squeezed the input down to a
+                  tiny rounded pill («خیلی کوچیک و تخم‌مرغی»). */}
+              <div className="sol-loan-amount-field" data-testid="solana-loan-amount-field">
+                <input
+                  data-testid="solana-loan-amount"
+                  className="sol-loan-amount-input"
+                  value={amount}
+                  onChange={(event) => setAmount(normalizeAmountInput(event.target.value))}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.00"
+                  dir="ltr"
+                  aria-label={`${t('loan.amount')} · ${selected.symbol}`}
+                />
+                <span className="sol-loan-amount-asset">
+                  <AssetIcon symbol={selected.symbol} chain="solana" size={20} radius={7} alt={selected.symbol} />
+                  {selected.symbol}
+                </span>
               </div>
+              {!wallet.address ? (
+                <button type="button" className="btn btn-primary sol-loan-action" data-testid="solana-loan-action-connect" onClick={connect}>{t('loan.connectWallet')}</button>
+              ) : (
+                <button type="button" className="btn btn-primary sol-loan-action" data-testid="solana-loan-action" disabled={Boolean(action)} onClick={() => runAction(tab === 'borrow' ? 'borrow' : 'supply')}>{action ? t('loan.running') : tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}</button>
+              )}
               {tab !== 'borrow' && wallet.address && currentPosition?.walletBalance == null && (
                 <p data-testid="solana-loan-balance-unknown" style={{ color: '#fbbf24', fontSize: 10.5, margin: '8px 0 0' }}>{loanErrorText(t, 'BALANCE_UNKNOWN')}</p>
               )}
@@ -623,7 +670,16 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
                 {t('loan.retry')}
               </button>
             </div>
-          ) : (!wallet.address || !snapshot?.account?.ok ? <div style={{ ...card, padding: 17, color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.noPosition')}</div> : null)}
+          ) : !wallet.address ? (
+            /* Positions belong to a wallet: say so and offer the door, instead of
+               «no position» that reads as «you have nothing here». */
+            <div className="sol-loan-empty" data-testid="solana-loan-positions-connect" style={{ ...card, padding: 17 }}>
+              <div style={{ color: 'var(--text-2)', fontSize: 12, lineHeight: 1.7 }}>{t('loan.solana.noPosition')}</div>
+              <button type="button" className="btn btn-primary" onClick={connect}>{t('loan.connectWallet')}</button>
+            </div>
+          ) : !hasOpenPosition ? (
+            <div data-testid="solana-loan-positions-empty" style={{ ...card, padding: 17, color: 'var(--text-2)', fontSize: 12, lineHeight: 1.7 }}>{t('loan.solana.noPosition')}</div>
+          ) : null}
           {assets.map((asset) => {
             const position = snapshot.positions?.[asset.id];
             const supplied = Number(position?.supplied || 0);
@@ -633,8 +689,8 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
               <div key={asset.id} style={{ ...card, padding: 14 }}>
                 <div className="row-between" style={{ gap: 8 }}><strong>{asset.symbol}</strong><span style={{ color: '#a78bfa', fontSize: 10 }}>Kamino</span></div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginTop: 10 }}>
-                  <Metric label={t('loan.supplied')} value={fmt(supplied, 6)} />
-                  <Metric label={t('loan.borrowed')} value={fmt(borrowed, 6)} />
+                  <Metric label={t('loan.supplied')} value={fmt(supplied, 6)} sub={supplied > 0 && Number(position?.suppliedUsd) > 0 ? `$${fmt(position.suppliedUsd)}` : undefined} />
+                  <Metric label={t('loan.borrowed')} value={fmt(borrowed, 6)} sub={borrowed > 0 && Number(position?.borrowedUsd) > 0 ? `$${fmt(position.borrowedUsd)}` : undefined} />
                 </div>
                 <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
                   {supplied > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(asset); setAmount(String(supplied)); runAction('withdraw', { asset, value: String(supplied) }); }} style={{ flex: 1 }}>{t('loan.withdraw')}</button>}

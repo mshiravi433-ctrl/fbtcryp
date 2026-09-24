@@ -1,8 +1,15 @@
 package ir.fbtswap.app;
 
+import android.app.Activity;
 import android.content.Intent;
+import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.provider.MediaStore;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -158,6 +165,139 @@ public class MainActivity extends BridgeActivity {
         }
       }
     });
+  }
+
+  /*
+   * ─── «YOU TOOK A SCREENSHOT — SHARE IT WITH THE WATERMARK?» ───────────────
+   *
+   * The web layer shows a 30-second share offer after a screenshot
+   * (src/components/ScreenshotSharePrompt.jsx) and listens for
+   * `window` event `fbt:screenshot`. A page cannot see a power+volume capture;
+   * this activity can:
+   *
+   *   • Android 14+ (API 34): Activity.ScreenCaptureCallback — the OS itself
+   *     tells the visible activity it was captured. Needs only the normal
+   *     DETECT_SCREEN_CAPTURE permission (declared in the manifest).
+   *   • Older Android: a ContentObserver on MediaStore images while the app is
+   *     in the foreground. No storage permission is requested and the image is
+   *     never opened — only the fact that a new picture appeared while our
+   *     screen was on top, which in practice is the screenshot.
+   *
+   * Registered in onStart, removed in onStop: only a VISIBLE app listens.
+   * Both paths funnel through one debounce, since one capture can produce
+   * several MediaStore notifications.
+   */
+  private static final long SCREENSHOT_DEBOUNCE_MS = 2000L;
+  private long lastScreenshotSignal = 0L;
+  private Object screenCaptureWatch = null;      // ScreenCaptureWatch on API 34+
+  private ContentObserver screenshotObserver = null;
+
+  @Override
+  public void onStart() {
+    super.onStart();
+    startScreenshotWatch();
+  }
+
+  @Override
+  public void onStop() {
+    stopScreenshotWatch();
+    super.onStop();
+  }
+
+  private void startScreenshotWatch() {
+    try {
+      if (Build.VERSION.SDK_INT >= 34) {
+        if (screenCaptureWatch == null) screenCaptureWatch = new ScreenCaptureWatch(this);
+        ((ScreenCaptureWatch) screenCaptureWatch).register();
+        return;
+      }
+      if (screenshotObserver == null) {
+        screenshotObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+          @Override
+          public void onChange(boolean selfChange) {
+            onScreenshotSignal();
+          }
+
+          @Override
+          public void onChange(boolean selfChange, Uri uri) {
+            onScreenshotSignal();
+          }
+        };
+      }
+      getContentResolver().registerContentObserver(
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, screenshotObserver);
+    } catch (Exception e) {
+      /* A device that refuses either hook simply gets no prompt. */
+    }
+  }
+
+  private void stopScreenshotWatch() {
+    try {
+      if (Build.VERSION.SDK_INT >= 34 && screenCaptureWatch != null) {
+        ((ScreenCaptureWatch) screenCaptureWatch).unregister();
+      }
+      if (screenshotObserver != null) {
+        getContentResolver().unregisterContentObserver(screenshotObserver);
+      }
+    } catch (Exception e) {
+      /* Already unregistered. */
+    }
+  }
+
+  void onScreenshotSignal() {
+    long now = SystemClock.elapsedRealtime();
+    if (now - lastScreenshotSignal < SCREENSHOT_DEBOUNCE_MS) return;
+    lastScreenshotSignal = now;
+    Bridge bridge = getBridge();
+    WebView webView = bridge == null ? null : bridge.getWebView();
+    if (webView == null) return;
+    webView.post(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          webView.evaluateJavascript(
+            "window.dispatchEvent(new Event('fbt:screenshot'));",
+            null
+          );
+        } catch (Exception e) {
+          /* The page is still booting; a missed prompt is harmless. */
+        }
+      }
+    });
+  }
+
+  /*
+   * The API 34 half lives in its own class so that MainActivity never names
+   * Activity.ScreenCaptureCallback directly — older devices never load this
+   * class, and so never meet a type their framework does not have.
+   */
+  @androidx.annotation.RequiresApi(34)
+  private static final class ScreenCaptureWatch {
+    private final MainActivity activity;
+    private final Activity.ScreenCaptureCallback callback;
+    private boolean registered = false;
+
+    ScreenCaptureWatch(MainActivity activity) {
+      this.activity = activity;
+      this.callback = new Activity.ScreenCaptureCallback() {
+        @Override
+        public void onScreenCaptured() {
+          ScreenCaptureWatch.this.activity.onScreenshotSignal();
+        }
+      };
+    }
+
+    void register() {
+      if (registered) return;
+      activity.registerScreenCaptureCallback(activity.getMainExecutor(), callback);
+      registered = true;
+    }
+
+    void unregister() {
+      if (!registered) return;
+      activity.unregisterScreenCaptureCallback(callback);
+      registered = false;
+    }
   }
 
   /** The scheme the manifest registered for wallet returns. */

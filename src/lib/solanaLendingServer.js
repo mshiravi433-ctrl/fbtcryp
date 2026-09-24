@@ -144,9 +144,12 @@ async function serverJson(path, { method = 'GET', body = null, timeoutMs = SERVE
  *
  * @returns {{ok:true, snapshot:object}|{ok:false, code:string, detail?:string|null, status?:number}}
  */
-export async function readSolanaLendingMarketViaServer({ wallet = null, signal = null } = {}) {
+export async function readSolanaLendingMarketViaServer({ wallet = null, signal = null, fresh = false } = {}) {
   const params = new URLSearchParams();
   if (wallet) params.set('wallet', String(wallet));
+  /* After a transaction the server's 20-second snapshot cache would hand back
+     the position from BEFORE it — «I deposited and nothing changed». */
+  if (fresh) params.set('refresh', '1');
   const query = params.toString();
   const answer = await serverJson(`${SOLANA_LENDING_SERVER_PATHS.market}${query ? `?${query}` : ''}`, { signal });
   const body = answer.json;

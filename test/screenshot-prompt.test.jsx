@@ -1,32 +1,26 @@
 // @vitest-environment jsdom
 /**
- * THE BRAND RAIL AND THE SCREENSHOT IT SHARES.
+ * THE SCREENSHOT PROMPT AND THE PICTURE IT SHARES.
  *
- * The request (2026-09-23): «وقتی در سایت و اپ اسکرین‌شات گرفته می‌شود، لوگو و نام
- * سایت (یا آدرس سایت) پایین صفحه باشد. باید مدرن باشد و سایت را درست معرفی کند.
- * دکمهٔ اشتراک‌گذاری اسکرین‌شات هم اضافه کن.»
+ * History: 2026-09-23 added an always-on brand rail (logo + address + share
+ * button) above the nav. 2026-09-24 the owner asked for the opposite shape:
+ * «باکس بالای فوتر که دکمه اشتراک و آدرس سایت هست را پاک کن. وقتی کسی اسکرین
+ * گرفت یک بند برای ۳۰ ثانیه بیاد که بگه شما اسکرین گرفتید، می‌خواهید اشتراک
+ * بگذارید اسکرین‌شات را با واترمارک آدرس سایت — نه اینکه همیشه باشه.»
  *
- * What is pinned here, and why each of these is the thing that could quietly rot:
+ * What is pinned here:
  *
- *   1. THE ADDRESS IS DERIVED, NOT TYPED. It comes from `publicAppUrl()`, which
- *      refuses any origin that is not the canonical host — the defence that
- *      exists because a stale env var once made this app introduce itself as
- *      `lawpoetics.ir`. A brand rail that states the wrong address is worse than
- *      no rail, so the test compares the rail's words with the identity module
- *      rather than with a literal somebody wrote down.
- *   2. THE PICTURE EXCLUDES THE CHROME. The capture filter is applied to real
- *      elements: the bottom nav, the rail itself, a toast and anything carrying
- *      `data-screenshot-ignore` (the share button) are out; the page is in.
- *   3. EVERY RUNG TELLS THE TRUTH. Web Share with a file, the packaged app's
- *      sheet, save-and-copy, and the link-only fallback each report what actually
- *      happened — and a DISMISSED sheet is never an error toast.
- *   4. THE RAIL'S GEOMETRY IS THE NAV'S. Two fixed bars whose widths disagree
- *      look broken, and they are set in three different files, so the numbers are
- *      compared across the files instead of trusted.
- *   5. EVERY LANGUAGE CAN SAY IT — 9 new keys × 12 locales.
+ *   1. NOTHING IS ON SCREEN UNTIL A SCREENSHOT. No permanent bar, no reserved
+ *      bottom padding; the prompt renders null until `fbt:screenshot` (native
+ *      shell) or a screenshot key arrives, then leaves after 30 seconds.
+ *   2. THE ADDRESS IS DERIVED, NOT TYPED (`publicAppUrl()` → `brandDomain()`).
+ *   3. THE PICTURE EXCLUDES THE CHROME — nav, toasts, the prompt itself.
+ *   4. EVERY SHARE RUNG TELLS THE TRUTH, and a DISMISSED sheet is never an error.
+ *   5. THE ANDROID SHELL REALLY EMITS THE SIGNAL (source-level check).
+ *   6. EVERY LANGUAGE CAN SAY IT.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -60,14 +54,27 @@ const { brandDomain, BRAND_NAME, brandMarkSvg, screenshotFilename } = await impo
 const { publicAppUrl } = await import('../src/lib/nativeShell');
 const screenShare = await import('../src/lib/screenShare.js');
 const { useAppStore } = await import('../src/store/useAppStore.js');
-const BrandRail = (await import('../src/components/BrandRail.jsx')).default;
+const promptModule = await import('../src/components/ScreenshotSharePrompt.jsx');
+const ScreenshotSharePrompt = promptModule.default;
+const { SCREENSHOT_PROMPT_MS } = promptModule;
+const detect = await import('../src/lib/screenshotDetect.js');
 
 /** A Blob that behaves like a picture without being one. */
 const fakePng = (bytes = 2048) => new Blob([new Uint8Array(bytes)], { type: 'image/png' });
 
-const mountRail = (route = '/market') => render(
-  <MemoryRouter initialEntries={[route]}><BrandRail /></MemoryRouter>
+const mountPrompt = (route = '/market', props = {}) => render(
+  <MemoryRouter initialEntries={[route]}><ScreenshotSharePrompt {...props} /></MemoryRouter>
 );
+
+/** What the Android shell does after a capture. */
+const takeScreenshot = () => act(() => { window.dispatchEvent(new Event(detect.SCREENSHOT_EVENT)); });
+
+/** Mount, screenshot, and hand back the queries. */
+const mountAfterScreenshot = (route = '/market', props = {}) => {
+  const view = mountPrompt(route, props);
+  takeScreenshot();
+  return view;
+};
 
 beforeEach(() => {
   nativeMode = false;
@@ -85,47 +92,70 @@ afterEach(() => {
   delete navigator.canShare;
 });
 
-/* ═══════════════════ 1. the rail states who we are ═══════════════════════ */
+/* ═══════════════════ 1. only after a screenshot, only for 30 s ═══════════ */
 
-describe('the rail names the app and its address', () => {
-  it('draws the coin, the name, the canonical host and the share button', () => {
-    const { getByTestId, container } = mountRail();
-    const rail = getByTestId('brand-rail');
-    expect(rail.querySelector('svg'), 'the mark is drawn, not a word').toBeTruthy();
-    expect(rail.textContent).toContain(BRAND_NAME);
-    expect(rail.textContent).toContain(brandDomain());
+describe('the prompt appears only after a screenshot, and only for 30 seconds', () => {
+  it('renders nothing at all until a screenshot happens', () => {
+    const { queryByTestId } = mountPrompt();
+    expect(queryByTestId('screenshot-prompt'), 'no permanent bar').toBeNull();
+    expect(queryByTestId('screenshot-share')).toBeNull();
+  });
+
+  it('appears on the native shell\'s signal and names the site address', () => {
+    const { getByTestId } = mountAfterScreenshot();
+    const prompt = getByTestId('screenshot-prompt');
+    expect(prompt.textContent).toContain('You took a screenshot');
+    expect(prompt.textContent).toContain(brandDomain());
+    expect(prompt.querySelector('svg'), 'the brand coin is drawn').toBeTruthy();
     expect(getByTestId('screenshot-share')).toBeTruthy();
-    expect(container.querySelector('.brand-rail-name').textContent).toBe('FBT Swap');
+  });
+
+  it('closes itself after 30 seconds, and a new screenshot restarts the clock', () => {
+    vi.useFakeTimers();
+    try {
+      const { queryByTestId } = mountAfterScreenshot();
+      expect(SCREENSHOT_PROMPT_MS).toBe(30_000);
+      act(() => { vi.advanceTimersByTime(20_000); });
+      expect(queryByTestId('screenshot-prompt')).not.toBeNull();
+      /* past the debounce, a second capture: 30 s from HERE */
+      takeScreenshot();
+      act(() => { vi.advanceTimersByTime(20_000); });
+      expect(queryByTestId('screenshot-prompt'), 'restarted, so still up at 40 s').not.toBeNull();
+      act(() => { vi.advanceTimersByTime(10_500); });
+      expect(queryByTestId('screenshot-prompt')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the close button dismisses it', () => {
+    const { getByTestId, queryByTestId } = mountAfterScreenshot();
+    fireEvent.click(getByTestId('screenshot-prompt-close'));
+    expect(queryByTestId('screenshot-prompt')).toBeNull();
+  });
+
+  it('keeps itself out of the picture it offers to share', () => {
+    const { getByTestId } = mountAfterScreenshot();
+    expect(getByTestId('screenshot-prompt').getAttribute('data-screenshot-ignore')).toBe('true');
   });
 
   it('takes the address from the identity module, not from a literal', () => {
-    /* `publicAppUrl()` is the only thing in the app allowed to say who we are;
-       it rejects a configured origin that is not the canonical host. */
     expect(brandDomain()).toBe(new URL(publicAppUrl('/')).host.replace(/^www\./i, ''));
     expect(brandDomain()).toBe('fbtswap.ir');
     expect(brandDomain()).not.toContain('lawpoetics');
   });
 
   it('keeps the address readable in a right-to-left layout', () => {
-    const { getByTestId } = mountRail();
-    /* The identity line is LTR by content even when the app is RTL: a mirrored
-       monospace host is an address nobody can read back to a browser. */
-    expect(getByTestId('brand-rail').querySelector('.brand-rail-id').getAttribute('dir')).toBe('ltr');
-    const css = read('src/styles/brand-rail.css');
-    expect(/\.brand-rail-domain\s*\{[^}]*direction:\s*ltr/.test(css)).toBe(true);
-    expect(css).toContain('unicode-bidi: isolate');
+    const { container } = mountAfterScreenshot();
+    expect(container.querySelector('.screenshot-prompt-domain').getAttribute('dir')).toBe('ltr');
+    expect(read('src/styles/screenshot-prompt.css')).toContain('unicode-bidi: isolate');
   });
 
-  it('opts its own button out of the picture it takes', () => {
-    const { getByTestId } = mountRail();
-    expect(getByTestId('screenshot-share').getAttribute('data-screenshot-ignore')).toBe('true');
-  });
-
-  it('sits at the bottom edge on a route that has no nav', () => {
-    const { getByTestId } = render(<MemoryRouter><BrandRail bare /></MemoryRouter>);
-    const rail = getByTestId('brand-rail');
-    expect(rail.className).toContain('brand-rail--bare');
-    expect(rail.getAttribute('data-bare')).toBe('true');
+  it('places itself by route: above the nav, at the edge on /pay, from the top on /intent', () => {
+    const { getByTestId } = mountAfterScreenshot('/pay/abc', { placement: 'bare' });
+    expect(getByTestId('screenshot-prompt').className).toContain('screenshot-prompt--bare');
+    const app = read('src/App.jsx');
+    expect(app).toContain("<ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless ? 'bare' : 'nav'} />");
   });
 
   it('the mark exists as SVG too, for the canvas that brands the picture', () => {
@@ -134,6 +164,40 @@ describe('the rail names the app and its address', () => {
     expect(svg).toContain('viewBox="0 0 24 24"');
     expect(svg).toContain('#00e5ff');
     expect(screenshotFilename({ screen: '/market?tab=all' })).toMatch(/^fbtswap-market-tab-all-.*\.png$/);
+  });
+});
+
+/* ═══════════════════ 1b. what counts as a screenshot ═══════════════════ */
+
+describe('screenshot detection', () => {
+  it('knows the desktop shortcuts and nothing else', () => {
+    expect(detect.isScreenshotKey({ key: 'PrintScreen' })).toBe(true);
+    expect(detect.isScreenshotKey({ code: 'PrintScreen' })).toBe(true);
+    expect(detect.isScreenshotKey({ key: '3', metaKey: true, shiftKey: true })).toBe(true);
+    expect(detect.isScreenshotKey({ key: '4', code: 'Digit4', metaKey: true, shiftKey: true })).toBe(true);
+    expect(detect.isScreenshotKey({ key: 's', metaKey: true, shiftKey: true })).toBe(true);
+    expect(detect.isScreenshotKey({ key: '3', shiftKey: true }), 'Shift+3 is typing a #').toBe(false);
+    expect(detect.isScreenshotKey({ key: 's', metaKey: true }), 'Cmd+S is save').toBe(false);
+    expect(detect.isScreenshotKey({ key: 'a' })).toBe(false);
+    expect(detect.isScreenshotKey(null)).toBe(false);
+  });
+
+  it('folds one capture\'s several signals into one', () => {
+    let clock = 1000;
+    const shots = [];
+    const off = detect.subscribeScreenshots((info) => shots.push(info), { now: () => clock });
+    detect.announceScreenshot();
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'PrintScreen' }));
+    expect(shots).toHaveLength(1);
+    expect(shots[0].source).toBe('system');
+    clock += detect.SCREENSHOT_DEBOUNCE_MS + 1;
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'PrintScreen' }));
+    expect(shots).toHaveLength(2);
+    expect(shots[1].source).toBe('keyboard');
+    off();
+    clock += 10_000;
+    detect.announceScreenshot();
+    expect(shots, 'unsubscribed').toHaveLength(2);
   });
 });
 
@@ -147,7 +211,7 @@ describe('the capture keeps the screen and drops the chrome', () => {
         <div class="ptr-content">
           <main class="page"><div class="card" id="kept">content</div></main>
         </div>
-        <div class="brand-rail" id="rail">branding</div>
+        <div class="screenshot-prompt" id="rail">prompt</div>
         <nav class="bottom-nav" id="nav">tabs</nav>
         <div class="toast-host" id="toast">a toast</div>
         <div class="ptr-indicator" id="ptr">pull</div>
@@ -179,7 +243,7 @@ describe('the capture keeps the screen and drops the chrome', () => {
     expect(typeof filter).toBe('function');
     const byId = (id) => document.getElementById(id);
     expect(filter(byId('nav')), 'the bottom nav is fixed; it would land at the wrong offset').toBe(false);
-    expect(filter(byId('rail')), 'the rail is drawn into the picture, not photographed').toBe(false);
+    expect(filter(byId('rail')), 'the prompt is not part of the screen it offers to share').toBe(false);
     expect(filter(byId('toast')), 'a transient toast is not what the reader chose').toBe(false);
     expect(filter(byId('ptr')), 'a mid-gesture refresh capsule is not the screen').toBe(false);
     expect(filter(byId('kept')), 'the page itself is the picture').toBe(true);
@@ -288,7 +352,7 @@ describe('the picture is handed over by the best rung this device has', () => {
 
 /* ═══════════════════ 4. the button, end to end ═══════════════════════ */
 
-describe('the button takes the picture, brands it and shares it', () => {
+describe('the prompt\'s button takes the picture, brands it and shares it', () => {
   it('shares the link when this device cannot take the picture — never nothing', async () => {
     /* No renderer can be injected through the button, and jsdom has no canvas, so
        this exercises the real fallback: the capture fails, `shareLink` opens the
@@ -297,25 +361,24 @@ describe('the button takes the picture, brands it and shares it', () => {
     navigator.share = share;
     navigator.canShare = vi.fn(() => false);
 
-    const { getByTestId } = mountRail('/market');
+    const { getByTestId, queryByTestId } = mountAfterScreenshot('/market');
     fireEvent.click(getByTestId('screenshot-share'));
 
     await waitFor(() => expect(share).toHaveBeenCalled());
     const payload = share.mock.calls[0][0];
     expect(payload.url).toContain('fbtswap.ir');
     expect(payload.url).toContain('#/market');
-    /* The button is idle again — a stuck spinner on a global rail would outlive
-       the screen it was pressed on. */
-    await waitFor(() => expect(getByTestId('screenshot-share').disabled).toBe(false));
+    /* Done is done: the offer closes once the share has run. */
+    await waitFor(() => expect(queryByTestId('screenshot-prompt')).toBeNull());
   });
 
   it('toasts nothing when the user simply closed the sheet', async () => {
     navigator.share = vi.fn(async () => { const error = new Error('closed'); error.name = 'AbortError'; throw error; });
     navigator.canShare = vi.fn(() => false);
 
-    const { getByTestId } = mountRail('/market');
+    const { getByTestId, queryByTestId } = mountAfterScreenshot('/market');
     fireEvent.click(getByTestId('screenshot-share'));
-    await waitFor(() => expect(getByTestId('screenshot-share').disabled).toBe(false));
+    await waitFor(() => expect(queryByTestId('screenshot-prompt')).toBeNull());
     expect(useAppStore.getState().notifications.filter((note) => note.kind === 'error')).toHaveLength(0);
   });
 
@@ -324,108 +387,40 @@ describe('the button takes the picture, brands it and shares it', () => {
     navigator.share = share;
     navigator.canShare = vi.fn(() => false);
 
-    const { getByTestId } = mountRail('/loan?tab=solana');
+    const { getByTestId } = mountAfterScreenshot('/loan?tab=solana');
     fireEvent.click(getByTestId('screenshot-share'));
     await waitFor(() => expect(share).toHaveBeenCalled());
     expect(share.mock.calls[0][0].url).toContain('#/loan?tab=solana');
   });
 });
 
-/* ═══════════════════ 5. the rail and the nav agree ═══════════════════════ */
+/* ═══════════════════ 5. the permanent rail is gone; the shell emits ══════ */
 
-describe('the rail is lined up with the bar under it', () => {
-  /**
-   * The `max-width` a selector is given, per media range.
-   *
-   * Top-level `@media` blocks are matched brace-by-brace first, and the rules
-   * inside each are read from that block alone — counting braces backwards from
-   * a match looks like it works until a stylesheet has a comment or a nested
-   * block in the way, and index.css is 12 000 lines of both.
-   */
-  const widths = (rawCss, selector) => {
-    /* Comments come out first: they carry commas and braces of their own, and
-       either one is enough to make a selector list stop matching itself. */
-    const css = rawCss.replace(/\/\*[\s\S]*?\*\//g, '');
-    const blocks = [];
-    let cursor = 0;
-    let rest = '';
-    for (const at of css.matchAll(/@media([^{]*)\{/g)) {
-      const open = at.index + at[0].length - 1;
-      let depth = 0;
-      let endBrace = -1;
-      for (let i = open; i < css.length; i += 1) {
-        if (css[i] === '{') depth += 1;
-        else if (css[i] === '}') { depth -= 1; if (depth === 0) { endBrace = i; break; } }
-      }
-      if (endBrace < 0) continue;
-      rest += css.slice(cursor, at.index);
-      blocks.push({ range: `@media${at[1].replace(/\s+/g, ' ').trim()}`, text: css.slice(open + 1, endBrace) });
-      cursor = endBrace + 1;
-    }
-    rest += css.slice(cursor);
-
-    const inText = (text, range) => {
-      const found = [];
-      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const rule = new RegExp(`([^{}]*${escaped}[^{}]*)\\{([^}]*)\\}`, 'g');
-      for (const match of text.matchAll(rule)) {
-        const [, selectors, body] = match;
-        if (!selectors.split(',').some((one) => one.trim() === selector)) continue;
-        const width = /max-width:\s*(\d+)px/.exec(body);
-        if (width) found.push({ px: Number(width[1]), range });
-      }
-      return found;
-    };
-
-    return [...inText(rest, null), ...blocks.flatMap((block) => inText(block.text, block.range))];
-  };
-
-  const startsAt = (rule) => Number(/min-width:\s*(\d+)px/.exec(rule.range || '')?.[1] ?? 0);
-
-  it('takes the nav’s widths at every breakpoint', () => {
-    const railCss = read('src/styles/brand-rail.css');
-    const indexCss = read('src/index.css');
-    const rail = widths(railCss, '.brand-rail');
-    const nav = widths(indexCss, '.bottom-nav');
-
-    for (const breakpoint of [0, 600, 900, 1400]) {
-      const railWidth = rail.filter((row) => startsAt(row) === breakpoint).pop();
-      const navWidth = nav.filter((row) => startsAt(row) === breakpoint).pop();
-      expect(railWidth, `a rail width from ${breakpoint}px`).toBeTruthy();
-      expect(navWidth, `index.css still has a nav width from ${breakpoint}px`).toBeTruthy();
-      expect(railWidth.px, `the rail matches the nav from ${breakpoint}px`).toBe(navWidth.px);
-    }
-  });
-
-  it('reserves its own height at the bottom of the shell', () => {
-    const railCss = read('src/styles/brand-rail.css');
-    /* The nav's space is `--nav-h`; the rail lives in the gap, so the shell's
-       reservation has to grow — otherwise the last card of every page hides
-       behind the branding. */
-    expect(railCss).toContain('--brand-rail-h');
-    const padding = /\.app-shell:not\(\.app-shell--headerless\)\s*\{[^}]*padding-bottom:[^}]*\}/.exec(railCss)?.[0] ?? '';
-    expect(padding).toContain('--nav-h');
-    expect(padding).toContain('--brand-rail-h');
-    expect(padding, 'the headerless shell keeps owning its own bottom padding').toContain('--headerless');
-  });
-
-  it('widens with the derivatives hall, which widens the column', () => {
-    const hallCss = read('src/styles/derivatives-glass.css');
-    const rail = widths(hallCss, 'body.hall-wide .brand-rail');
-    const shell = widths(hallCss, 'body.hall-wide .app-shell').filter((row) => row.range);
-    expect(rail.length).toBe(3);
-    for (const rule of shell.slice(1)) {
-      const partner = rail.find((row) => row.range === rule.range);
-      expect(partner?.px, `the rail matches the shell at ${rule.range}`).toBe(rule.px);
-    }
-  });
-
-  it('is mounted by the chrome, on every route that has a nav', () => {
+describe('the always-on rail is gone, and the Android shell reports captures', () => {
+  it('no permanent bar is mounted and no bottom space is reserved for one', () => {
     const app = read('src/App.jsx');
-    expect(app).toContain('<BrandRail');
-    /* `/intent` ships its own bottom tab bar; stacking a rail under it is the
-       same mistake AppChrome already refuses for the app's nav. */
-    expect(app).toMatch(/pathname !== '\/intent' && <BrandRail bare=\{headerless\} \/>/);
+    expect(app).not.toContain('<BrandRail');
+    expect(app).not.toContain('brand-rail');
+    const css = [read('src/index.css'), read('src/styles/derivatives-glass.css'), read('src/styles/screenshot-prompt.css')].join('\n');
+    expect(css).not.toContain('.brand-rail');
+    expect(css).not.toContain('--brand-rail-h');
+  });
+
+  it('MainActivity dispatches fbt:screenshot from both Android hooks', () => {
+    const java = read('android/app/src/main/java/ir/fbtswap/app/MainActivity.java');
+    expect(java).toContain("window.dispatchEvent(new Event('fbt:screenshot'))");
+    expect(java).toContain('registerScreenCaptureCallback');
+    expect(java).toContain('unregisterScreenCaptureCallback');
+    expect(java).toContain('MediaStore.Images.Media.EXTERNAL_CONTENT_URI');
+    expect(java, 'lifecycle overrides must stay public (BridgeActivity declares them public)').toMatch(/public void onStart\(\)/);
+    expect(java).toMatch(/public void onStop\(\)/);
+    const manifest = read('android/app/src/main/AndroidManifest.xml');
+    expect(manifest).toMatch(/uses-permission[^>]*DETECT_SCREEN_CAPTURE/);
+    expect(manifest, 'no storage permission for this').not.toMatch(/uses-permission[^>]*(READ_MEDIA_IMAGES|READ_EXTERNAL_STORAGE)/);
+  });
+
+  it('the event name the shell dispatches is the one the page listens for', () => {
+    expect(detect.SCREENSHOT_EVENT).toBe('fbt:screenshot');
   });
 });
 
@@ -435,7 +430,8 @@ describe('every language can say it', () => {
   const KEYS = [
     ['share', 'screen'], ['share', 'screenBusy'], ['share', 'screenAria'], ['share', 'screenText'],
     ['toast', 'screenSavedAndCopied'], ['toast', 'screenSaved'], ['toast', 'screenLinkCopied'],
-    ['toast', 'screenLinkShared'], ['toast', 'screenFailed']
+    ['toast', 'screenLinkShared'], ['toast', 'screenFailed'],
+    ['share', 'shotTitle'], ['share', 'shotBody'], ['share', 'shotShare'], ['share', 'shotClose']
   ];
 
   it('in all 12 locales', () => {
@@ -444,6 +440,7 @@ describe('every language can say it', () => {
       for (const [namespace, key] of KEYS) {
         const sentence = messages?.[namespace]?.[key];
         expect(typeof sentence === 'string' && sentence.trim().length > 0, `${locale}: ${namespace}.${key}`).toBe(true);
+        if (key === 'shotBody') expect(sentence, `${locale}: the address is interpolated, not typed`).toContain('{{domain}}');
       }
     }
   });

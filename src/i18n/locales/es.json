@@ -58,7 +58,11 @@
     "screen": "Compartir",
     "screenBusy": "Preparando",
     "screenAria": "Haz una captura de esta pantalla y compártela",
-    "screenText": "FBT Swap — swap sin custodia, rendimiento y mercados"
+    "screenText": "FBT Swap — swap sin custodia, rendimiento y mercados",
+    "shotTitle": "Has hecho una captura de pantalla",
+    "shotBody": "¿Quieres compartirla con la marca de agua de {{domain}}?",
+    "shotShare": "Compartir con marca de agua",
+    "shotClose": "Cerrar"
   },
   "toast": {
     "screenSavedAndCopied": "Captura guardada: el enlace también se copió.",

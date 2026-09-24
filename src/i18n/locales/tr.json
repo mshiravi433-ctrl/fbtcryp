@@ -58,7 +58,11 @@
     "screen": "Paylaş",
     "screenBusy": "Hazırlanıyor",
     "screenAria": "Bu ekranın ekran görüntüsünü al ve paylaş",
-    "screenText": "FBT Swap — saklamasız takas, getiri ve piyasalar"
+    "screenText": "FBT Swap — saklamasız takas, getiri ve piyasalar",
+    "shotTitle": "Ekran görüntüsü aldınız",
+    "shotBody": "{{domain}} filigranıyla paylaşmak ister misiniz?",
+    "shotShare": "Filigranla paylaş",
+    "shotClose": "Kapat"
   },
   "toast": {
     "screenSavedAndCopied": "Ekran görüntüsü kaydedildi — bağlantı da kopyalandı.",

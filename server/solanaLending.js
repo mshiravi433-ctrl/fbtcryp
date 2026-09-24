@@ -92,6 +92,7 @@ import {
   collectKaminoTransactions,
   isVersionedTransaction,
   preflightSolanaAction,
+  readVanillaObligation,
   toSolanaUnits
 } from '../src/lib/solanaLending.js';
 
@@ -687,7 +688,7 @@ export async function buildKaminoTransaction({ action, mint, amount, decimals, w
   let obligation = null;
   let obligationFailed = false;
   try {
-    obligation = await holder.market.getUserVanillaObligation(owner);
+    obligation = await readVanillaObligation(holder.market, owner);
   } catch { obligation = null; obligationFailed = true; }
   /* An obligation READ failure is a network failure, not «no position»:
      answering borrow with SOLANA_COLLATERAL_REQUIRED here would send a user
@@ -699,7 +700,9 @@ export async function buildKaminoTransaction({ action, mint, amount, decimals, w
   /* §7 — the same preflight the browser runs, over the same snapshot the panel
      is looking at. Refusing here rather than in the wallet means the user is
      told why in their own language before an approval screen appears. */
-  const snapshot = await readKaminoMarketSnapshot({ wallet, now });
+  /* force: a build usually follows a transaction the user just made, and a
+     20-second-old position would refuse (or allow) the wrong amount. */
+  const snapshot = await readKaminoMarketSnapshot({ wallet, now, force: true });
   const asset = (snapshot.assets || []).find((row) => String(row.address) === String(mint)) || null;
   if (!asset) return { ok: false, code: 'ASSET_NOT_SUPPORTED' };
   const preflight = preflightSolanaAction({ action: kind, asset, amount, snapshot });

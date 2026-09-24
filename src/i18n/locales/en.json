@@ -5473,6 +5473,10 @@
     "screenBusy": "Preparing",
     "screenAria": "Take a screenshot of this screen and share it",
     "screenText": "FBT Swap — non-custodial swap, earn and markets",
+    "shotTitle": "You took a screenshot",
+    "shotBody": "Want to share it with the {{domain}} watermark?",
+    "shotShare": "Share with watermark",
+    "shotClose": "Close",
     "title": "Share",
     "copy": "Copy link",
     "via": "Share via"

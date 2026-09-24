@@ -80,6 +80,8 @@
            VIBRATE         — haptic feedback on taps and confirmations
            CAMERA          — the QR scanner for reading wallet addresses
            POST_NOTIFICATIONS — price alerts and order triggers
+           DETECT_SCREEN_CAPTURE — «you took a screenshot, share it?» (API 34+,
+                             normal permission; the image is never read)
 
          NOT requested, and should stay that way:
            READ/WRITE_EXTERNAL_STORAGE — the encrypted wallet lives in app
@@ -91,6 +93,15 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+      DETECT_SCREEN_CAPTURE — Android 14+ tells the visible activity that the
+      user took a screenshot (Activity.ScreenCaptureCallback). A NORMAL,
+      install-time permission: no dialog, no access to the image itself. The app
+      uses the signal only to offer, for 30 seconds, «share this screen with the
+      site's watermark» (src/components/ScreenshotSharePrompt.jsx).
+    -->
+    <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE" />
 
     <!--
       CAMERA — for the QR scanner (src/components/QrScanner.jsx).
