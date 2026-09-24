@@ -105,6 +105,7 @@ const ADVECT_FRAG = `
   uniform vec2 uDyeTexelSize;  // texel size of the sampled source grid
   uniform float uDt;
   uniform float uDissipation;
+  uniform float uFade;         // linear fade floor (dye only; 0 for velocity)
   vec4 bilerp (sampler2D sam, vec2 uv, vec2 tsize) {
     vec2 st = uv / tsize - 0.5;
     vec2 iuv = floor(st);
@@ -119,7 +120,13 @@ const ADVECT_FRAG = `
     vec2 coord = vUv - uDt * bilerp(uVelocity, vUv, uTexelSize).xy * uTexelSize;
     vec4 result = bilerp(uSource, coord, uDyeTexelSize);
     float decay = 1.0 + uDissipation * uDt;
-    gl_FragColor = result / decay;
+    result /= decay;
+    /* Exponential decay alone never reaches zero: the faint tail of a stroke
+       lingered for minutes as a pale ghost line. A small linear floor on the
+       dye (never on velocity, which is signed) takes that tail smoothly to
+       exactly 0 once it is already nearly invisible. */
+    if (uFade > 0.0) result.rgb = max(result.rgb - vec3(uFade * uDt), vec3(0.0));
+    gl_FragColor = result;
   }
 `
 
@@ -273,7 +280,13 @@ const DISPLAY_FRAG = `
     float Tv = texture2D(uVelocity, vT).x;
     float Bv = texture2D(uVelocity, vB).x;
     float spin = Rv - Lv - Tv + Bv;
-    col += vec3(0.85, 0.92, 1.0) * smoothstep(0.3, 1.4, abs(spin)) * 0.16;
+    /* Curl sheen — tinted by the paint itself and gated on paint being
+       present. It used to be a fixed near-white added wherever the velocity
+       field still curled; velocity outlives the dye, so a fading stroke left
+       a WHITE line behind for minutes. Now no paint means no sheen. */
+    float wet = smoothstep(0.015, 0.22, lum);
+    vec3 sheen = mix(vec3(0.85, 0.92, 1.0), normalize(dye + 0.0001) * 1.1, 0.6);
+    col += sheen * smoothstep(0.3, 1.4, abs(spin)) * 0.12 * wet;
     /* Soft knee: thin strokes stack additively fast, so map the tail off with
        a filmic curve — saturated colour stays saturated. */
     col = 1.0 - exp(-col * 1.35);
@@ -430,7 +443,7 @@ class FluidEngine {
     this.clearProg = makeProgram(gl, VERT_SRC, CLEAR_FRAG, ['uColor'])
     this.splatProg = makeProgram(gl, VERT_SRC, SPLAT_FRAG, ['uPoint', 'uColor', 'uAspect', 'uRadius'])
     this.advectProg = makeProgram(gl, VERT_SRC, ADVECT_FRAG, [
-      'uVelocity', 'uSource', 'uTexelSize', 'uDyeTexelSize', 'uDt', 'uDissipation'
+      'uVelocity', 'uSource', 'uTexelSize', 'uDyeTexelSize', 'uDt', 'uDissipation', 'uFade'
     ])
     this.divergenceProg = makeProgram(gl, VERT_SRC, DIVERGENCE_FRAG, ['uVelocity'])
     this.curlProg = makeProgram(gl, VERT_SRC, CURL_FRAG, ['uVelocity'])
@@ -456,9 +469,14 @@ class FluidEngine {
     //     through the paint after the finger stops;
     //   • vorticity is on the strong side so swirls are an obvious,
     //     mesmerising feature of the motion rather than a hint.
+    //   • velocity used to decay at 0.2/s while vorticity confinement kept
+    //     feeding it, so the shear along an old stroke stayed alive long after
+    //     its colour was gone (the "white line"). It now settles in a few
+    //     seconds, a little after the dye, so the fade-out reads as smooth.
     this.dyeDissipation = 0.72
-    this.velDissipation = 0.2
-    this.curlStrength = 30
+    this.dyeFade = 0.018
+    this.velDissipation = 0.85
+    this.curlStrength = 20
     this.pressureIterations = 14
 
     // Stroke geometry — the heart of the "line, not blob" look. The radius
@@ -575,7 +593,7 @@ class FluidEngine {
     gl.disable(gl.BLEND)
   }
 
-  advect(dstFbo, srcFbo, velFbo, dt, dissipation) {
+  advect(dstFbo, srcFbo, velFbo, dt, dissipation, fade = 0) {
     const gl = this.gl
     const p = this.advectProg
     gl.disable(gl.BLEND)
@@ -590,6 +608,7 @@ class FluidEngine {
     gl.uniform2fv(p.loc.uDyeTexelSize, [1 / srcFbo.w, 1 / srcFbo.h])
     gl.uniform1f(p.loc.uDt, dt)
     gl.uniform1f(p.loc.uDissipation, dissipation)
+    gl.uniform1f(p.loc.uFade, fade)
     this.drawTo(dstFbo, p)
   }
 
@@ -782,7 +801,7 @@ class FluidEngine {
 
     this.advect(this.vel[this.velIdx ^ 1], this.vel[this.velIdx], this.vel[this.velIdx], dt, this.velDissipation)
     this.velIdx ^= 1
-    this.advect(this.dye[this.dyeIdx ^ 1], this.dye[this.dyeIdx], this.vel[this.velIdx], dt, this.dyeDissipation)
+    this.advect(this.dye[this.dyeIdx ^ 1], this.dye[this.dyeIdx], this.vel[this.velIdx], dt, this.dyeDissipation, this.dyeFade)
     this.dyeIdx ^= 1
     this.computeDivergence()
     this.computeCurl()

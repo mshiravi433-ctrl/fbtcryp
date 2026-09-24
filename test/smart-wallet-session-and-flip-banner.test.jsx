@@ -99,12 +99,16 @@ describe('RWA / Horizon flip banner', () => {
     expect(onGoRwa).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-flips on a timer', () => {
+  it('auto-flips on a timer — on the slowed-down rhythm (was 6.5s, now 12s)', () => {
     const { container } = render(<RwaHorizonFlipBanner isRTL lang="fa" />);
     const root = container.querySelector('.rhb');
+    /* The old rhythm flipped at 6.5s; «سرعتش کمتر شود» slowed the banner
+       down, so it must still be on the FIRST face at that point. */
     act(() => { vi.advanceTimersByTime(6600); });
+    expect(root.dataset.side).toBe('rwa');
+    act(() => { vi.advanceTimersByTime(5500); });
     expect(root.dataset.side).toBe('hz');
-    act(() => { vi.advanceTimersByTime(6600); });
+    act(() => { vi.advanceTimersByTime(12100); });
     expect(root.dataset.side).toBe('rwa');
   });
 });

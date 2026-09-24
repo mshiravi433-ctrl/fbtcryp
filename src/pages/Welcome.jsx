@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
 import { IconChevronRight } from '../components/Icons';
-import { AnimatedLanguages, useStill } from '../components/AnimatedIcon';
+import { OnbTile, GlyphLanguages } from '../components/OnboardingIcons';
+import '../styles/onboarding-icons.css';
 import LaunchProgress from '../components/LaunchProgress';
 
 /**
@@ -28,18 +29,18 @@ import LaunchProgress from '../components/LaunchProgress';
  */
 export default function Welcome({ onDone }) {
   const { t } = useTranslation();
-  const still = useStill();
 
   return (
     <div className="welcome-stage">
       <div className="welcome-head">
         <motion.div
-          className="welcome-badge"
           initial={{ scale: 0.6, rotate: -12, opacity: 0 }}
           animate={{ scale: 1, rotate: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 260, damping: 18 }}
         >
-          <AnimatedLanguages active still={still} width={26} height={26} />
+          <OnbTile hues={['#00b8e6', '#7c4dff']} size={68} radius={22} className="is-badge">
+            <GlyphLanguages a="#00b8e6" b="#7c4dff" size={42} />
+          </OnbTile>
         </motion.div>
         <motion.h1
           className="h1"

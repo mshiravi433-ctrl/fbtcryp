@@ -1,0 +1,116 @@
+/* Onboarding icons — glass tile + duotone glyphs (see OnboardingIcons.jsx).
+ * Theme-aware: dark glass with a coloured glow on dark, frosted white with a
+ * soft coloured shadow on light. The glyphs carry their own gradients, so the
+ * tile only has to be a calm, legible surface in both themes. */
+
+@property --onb-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.onb-tile {
+  --onb-a: #00e5ff;
+  --onb-b: #7c4dff;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  isolation: isolate;
+  background:
+    radial-gradient(120% 120% at 20% 0%, color-mix(in srgb, var(--onb-a) 26%, transparent), transparent 60%),
+    radial-gradient(120% 120% at 100% 100%, color-mix(in srgb, var(--onb-b) 24%, transparent), transparent 60%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)),
+    #0d1022;
+  box-shadow:
+    0 22px 48px -20px color-mix(in srgb, var(--onb-a) 70%, transparent),
+    0 10px 26px -14px color-mix(in srgb, var(--onb-b) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* rotating gradient rim */
+.onb-tile-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--onb-angle), var(--onb-a), var(--onb-b), transparent 45%, transparent 55%, var(--onb-a));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: onbRim 7s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes onbRim { to { --onb-angle: 360deg; } }
+
+/* soft glass highlight */
+.onb-tile-glint {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), transparent 38%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.onb-tile-ic { position: relative; z-index: 3; display: grid; place-items: center; }
+
+/* Welcome badge variant */
+.onb-tile.is-badge { border-radius: 20px; }
+
+/* ── light theme ─────────────────────────────────────────────────────── */
+:root[data-theme='light'] .onb-tile {
+  background:
+    radial-gradient(120% 120% at 20% 0%, color-mix(in srgb, var(--onb-a) 16%, transparent), transparent 60%),
+    radial-gradient(120% 120% at 100% 100%, color-mix(in srgb, var(--onb-b) 14%, transparent), transparent 60%),
+    linear-gradient(150deg, #ffffff, #f4f6fc);
+  box-shadow:
+    0 20px 40px -22px color-mix(in srgb, var(--onb-b) 75%, transparent),
+    0 8px 18px -10px rgba(16, 20, 40, 0.18),
+    inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .onb-tile-glint { background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), transparent 40%); }
+:root[data-theme='light'] .onb-ring { border-color: rgba(16, 20, 40, 0.10); }
+
+/* ── glyph micro-motion ──────────────────────────────────────────────── */
+.onbi { overflow: visible; display: block; }
+.onbi .onbi-float,
+.onbi .onbi-rise,
+.onbi .onbi-peek,
+.onbi .onbi-pop,
+.onbi .onbi-ping,
+.onbi .onbi-twinkle { transform-box: fill-box; transform-origin: center; }
+.onbi .onbi-spin,
+.onbi .onbi-orbit { transform-box: view-box; transform-origin: 32px 32px; }
+
+.onbi-float { animation: onbiFloat 4s ease-in-out infinite; }
+.onbi-float.d2 { animation-delay: -2s; }
+.onbi-rise { animation: onbiRise 3.6s ease-in-out infinite; }
+.onbi-peek { animation: onbiPeek 4.4s ease-in-out infinite; }
+.onbi-pop { animation: onbiPop 4s ease-in-out infinite; }
+.onbi-spin { animation: onbiSpin 14s linear infinite; }
+.onbi-orbit { animation: onbiSpin 22s linear infinite; }
+.onbi-draw { stroke-dasharray: 100; stroke-dashoffset: 100; animation: onbiDraw 4.5s cubic-bezier(0.6, 0, 0.2, 1) infinite; }
+.onbi-check { stroke-dasharray: 100; stroke-dashoffset: 100; animation: onbiDraw 4s cubic-bezier(0.6, 0, 0.2, 1) infinite; }
+.onbi-ping { animation: onbiPing 4.5s ease-in-out infinite; }
+.onbi-twinkle { animation: onbiTwinkle 3.2s ease-in-out infinite; }
+.onbi-meridian { animation: onbiMeridian 6s ease-in-out infinite; }
+
+@keyframes onbiFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes onbiRise { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-1.5px); } }
+@keyframes onbiPeek { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-3px) rotate(-2deg); } }
+@keyframes onbiPop { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes onbiSpin { to { transform: rotate(360deg); } }
+@keyframes onbiDraw { 0% { stroke-dashoffset: 100; } 50%, 88% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0.25; } }
+@keyframes onbiPing { 0%, 45% { opacity: 0; transform: scale(0.3); } 58% { opacity: 1; transform: scale(1.4); } 70%, 90% { opacity: 1; transform: scale(1); } 100% { opacity: 0; } }
+@keyframes onbiTwinkle { 0%, 100% { opacity: 0.25; transform: scale(0.6) rotate(0deg); } 50% { opacity: 1; transform: scale(1.1) rotate(45deg); } }
+@keyframes onbiMeridian { 0%, 100% { rx: 9px; } 50% { rx: 16px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .onb-tile-rim,
+  .onbi * { animation: none !important; }
+  .onbi-draw, .onbi-check { stroke-dashoffset: 0; }
+}
+:root[data-reduce-motion='true'] .onb-tile-rim,
+:root[data-reduce-motion='true'] .onbi * { animation: none !important; }

@@ -167,7 +167,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
       {/* ── HERO ────────────────────────────────────────────── */}
       <motion.section
-        className="wallet-hero-modern"
+        className="wallet-hero-modern sw-hero"
         variants={riseIn}
         initial="hidden"
         animate="show"
@@ -175,8 +175,6 @@ export default function SmartWallet({ embedded = false, onBack }) {
           marginTop: embedded ? 0 : 12,
           padding: 20,
           borderRadius: 22,
-          background: 'linear-gradient(135deg, rgba(124,77,255,0.22), rgba(0,229,255,0.12) 55%, rgba(255,45,149,0.18))',
-          border: '1px solid rgba(255,255,255,0.08)',
           position: 'relative',
           overflow: 'hidden'
         }}
@@ -194,7 +192,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
               <IconShield width={22} height={22} />
             </span>
             <span>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>{t('smart.title')}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-1)' }}>{t('smart.title')}</div>
               <div className="faint" style={{ fontSize: 11.5 }}>{t('smart.subtitle')}</div>
             </span>
           </span>
@@ -219,7 +217,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
               ${spend.usd.toFixed(2)} / ${effectiveDaily}{sessionBonus > 0 ? ` (+${sessionBonus})` : ''}
             </span>
           </div>
-          <div style={{ height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+          <div className="sw-track" style={{ height: 10, borderRadius: 999, overflow: 'hidden' }}>
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${spentPct}%` }}
@@ -252,23 +250,21 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
       {/* ── LIMITS BENTO ────────────────────────────────────── */}
       <motion.section
-        className="wallet-pie-card"
+        className="wallet-pie-card sw-limits"
         variants={riseIn}
         initial="hidden"
         animate="show"
         style={{
           marginTop: 14,
           padding: 18,
-          borderRadius: 20,
-          background: 'linear-gradient(168deg, rgba(20, 24, 42, 0.75), rgba(10, 14, 26, 0.85))',
-          border: '1px solid rgba(255, 255, 255, 0.08)'
+          borderRadius: 20
         }}
       >
         <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 12, color: 'var(--text-1)' }}>
           {t('smart.daily')} & {t('smart.perTx')}
         </div>
         <div className="row" style={{ gap: 12 }}>
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.035)', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="sw-subbox" style={{ flex: 1, padding: '12px 14px', borderRadius: 14 }}>
             <label className="field-label" style={{ marginTop: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{t('smart.daily')}</label>
             <div style={{ position: 'relative', marginTop: 6 }}>
               <input
@@ -276,12 +272,13 @@ export default function SmartWallet({ embedded = false, onBack }) {
                 inputMode="decimal"
                 value={policy.dailyLimitUsd}
                 onChange={(e) => { savePolicy({ dailyLimitUsd: e.target.value }); refresh(); }}
-                style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 10, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--line)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700 }}
+                className="sw-input"
+                style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}
               />
               <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>$</span>
             </div>
           </div>
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.035)', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="sw-subbox" style={{ flex: 1, padding: '12px 14px', borderRadius: 14 }}>
             <label className="field-label" style={{ marginTop: 0, fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>{t('smart.perTx')}</label>
             <div style={{ position: 'relative', marginTop: 6 }}>
               <input
@@ -289,7 +286,8 @@ export default function SmartWallet({ embedded = false, onBack }) {
                 inputMode="decimal"
                 value={policy.perTxLimitUsd}
                 onChange={(e) => { savePolicy({ perTxLimitUsd: e.target.value }); refresh(); }}
-                style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 10, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--line)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700 }}
+                className="sw-input"
+                style={{ width: '100%', padding: '8px 24px 8px 10px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}
               />
               <span style={{ position: 'absolute', insetInlineEnd: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--text-3)' }}>$</span>
             </div>
@@ -399,9 +397,9 @@ export default function SmartWallet({ embedded = false, onBack }) {
         {policy.guardians.length > 0 && (
           <div className="stack" style={{ gap: 7, marginTop: 10 }}>
             {policy.guardians.map((g) => (
-              <div key={g} className="row-between" style={{
+              <div key={g} className="row-between sw-listrow" style={{
                 padding: '8px 10px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)'
+                border: '1px solid var(--line)'
               }}>
                 <span className="mono" style={{ fontSize: 11 }}>{g.slice(0, 8)}…{g.slice(-6)}</span>
                 <button className="btn btn-ghost btn-sm" onClick={() => { removeGuardian(g); refresh(); }}>
@@ -440,9 +438,9 @@ export default function SmartWallet({ embedded = false, onBack }) {
         {policy.allowlist.length > 0 && (
           <div className="stack" style={{ gap: 7, marginTop: 10 }}>
             {policy.allowlist.map((g) => (
-              <div key={g} className="row-between" style={{
+              <div key={g} className="row-between sw-listrow" style={{
                 padding: '8px 10px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--line)'
+                border: '1px solid var(--line)'
               }}>
                 <span className="mono" style={{ fontSize: 11 }}>{g.slice(0, 8)}…{g.slice(-6)}</span>
                 <button className="btn btn-ghost btn-sm" onClick={() => { removeAllowlist(g); refresh(); }}>
@@ -467,9 +465,6 @@ export default function SmartWallet({ embedded = false, onBack }) {
           marginTop: 14,
           padding: 18,
           borderRadius: 20,
-          background: 'linear-gradient(168deg, rgba(20, 24, 42, 0.75), rgba(10, 14, 26, 0.85))',
-          border: '1px solid rgba(0, 229, 255, 0.18)',
-          boxShadow: '0 12px 34px rgba(0, 0, 0, 0.35)',
           position: 'relative'
         }}
       >
@@ -504,12 +499,10 @@ export default function SmartWallet({ embedded = false, onBack }) {
         >
           {/* Micro-box 1: Preferred Chain */}
           <div
-            className="smart-micro-box"
+            className="smart-micro-box sw-subbox"
             style={{
               padding: '12px 14px',
               borderRadius: 14,
-              background: 'rgba(255, 255, 255, 0.035)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
               flexDirection: 'column',
               gap: 6
@@ -524,13 +517,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
             <select
               value={intentMem.preferredChainId}
               onChange={(e) => patchRules({ preferredChainId: Number(e.target.value) })}
+              className="sw-input"
               style={{
                 width: '100%',
                 padding: '8px 10px',
                 borderRadius: 10,
-                background: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid var(--line)',
-                color: 'var(--text-1)',
                 fontSize: 12.5,
                 fontWeight: 600
               }}
@@ -543,12 +534,10 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
           {/* Micro-box 2: Max Slippage */}
           <div
-            className="smart-micro-box"
+            className="smart-micro-box sw-subbox"
             style={{
               padding: '12px 14px',
               borderRadius: 14,
-              background: 'rgba(255, 255, 255, 0.035)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
               flexDirection: 'column',
               gap: 6
@@ -568,13 +557,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
                 max="5"
                 value={intentMem.maxSlippagePct}
                 onChange={(e) => patchRules({ maxSlippagePct: e.target.value })}
+                className="sw-input"
                 style={{
                   width: '100%',
                   padding: '8px 24px 8px 10px',
                   borderRadius: 10,
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  border: '1px solid var(--line)',
-                  color: 'var(--text-1)',
                   fontSize: 12.5,
                   fontWeight: 600
                 }}
@@ -585,12 +572,10 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
           {/* Micro-box 3: Per-intent ceiling */}
           <div
-            className="smart-micro-box"
+            className="smart-micro-box sw-subbox"
             style={{
               padding: '12px 14px',
               borderRadius: 14,
-              background: 'rgba(255, 255, 255, 0.035)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
               flexDirection: 'column',
               gap: 6
@@ -609,13 +594,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
                 inputMode="decimal"
                 value={intentMem.maxPerIntentUsd}
                 onChange={(e) => patchRules({ maxPerIntentUsd: e.target.value })}
+                className="sw-input"
                 style={{
                   width: '100%',
                   padding: '8px 24px 8px 10px',
                   borderRadius: 10,
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  border: '1px solid var(--line)',
-                  color: 'var(--text-1)',
                   fontSize: 12.5,
                   fontWeight: 600
                 }}
@@ -626,12 +609,10 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
           {/* Micro-box 4: Route privately above */}
           <div
-            className="smart-micro-box"
+            className="smart-micro-box sw-subbox"
             style={{
               padding: '12px 14px',
               borderRadius: 14,
-              background: 'rgba(255, 255, 255, 0.035)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
               flexDirection: 'column',
               gap: 6
@@ -650,13 +631,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
                 inputMode="decimal"
                 value={intentMem.privateAboveUsd}
                 onChange={(e) => patchRules({ privateAboveUsd: e.target.value })}
+                className="sw-input"
                 style={{
                   width: '100%',
                   padding: '8px 24px 8px 10px',
                   borderRadius: 10,
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  border: '1px solid var(--line)',
-                  color: 'var(--text-1)',
                   fontSize: 12.5,
                   fontWeight: 600
                 }}
@@ -668,12 +647,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
         {/* Micro-box 5: Execution Proof Switch */}
         <div
+          className="sw-subbox"
           style={{
             marginTop: 12,
             padding: '12px 14px',
             borderRadius: 14,
-            background: 'rgba(255, 255, 255, 0.035)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -700,12 +678,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
         {/* Effective summary note */}
         <div
+          className="sw-note"
           style={{
             marginTop: 12,
             padding: '10px 12px',
             borderRadius: 12,
-            background: 'rgba(0, 229, 255, 0.05)',
-            border: '1px solid rgba(0, 229, 255, 0.12)',
             fontSize: 11.5,
             lineHeight: 1.6,
             color: 'var(--text-2)'
