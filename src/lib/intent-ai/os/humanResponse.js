@@ -565,10 +565,10 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     return {
       message: lang === 'fa'
         ? (knowsCapital
-          ? 'هدف را گرفتم. حالا کل اکوسیستم را یک‌جا می‌خوانم — کیف پول، پرتفوی، کریپتو، RWA، سهام، فارکس، کالا، وام، فارم، نقدینگی، فیوچرز، dYdX، بریج، اسمارت‌مانی، نهنگ‌ها، اخبار، ماکرو، ریسک، کارمزد و گاز — و بین همه‌ی ماژول‌ها مقایسه می‌کنم تا یک استراتژی پرتفوی مرحله‌به‌مرحله بسازم. نه یک پاسخ متنی.'
+          ? 'هدف را گرفتم. داده‌های قابل‌دسترس این لحظه را بررسی و گزینه‌های دارای منبع معتبر را مقایسه می‌کنم؛ موارد بی‌داده یا غیرقابل‌اجرا و مراحل نیازمند تأیید کیف پول را در کارت مشخص می‌کنم.'
           : 'برای ساختن استراتژی باید سرمایه‌ات را بدانم — مبلغ را بنویس یا کیف پول را وصل کن. بقیه‌ی اعداد (هدف، بازه، ریسک) را از جمله‌ات می‌خوانم.')
         : (knowsCapital
-          ? 'Goal taken. Reading the whole ecosystem at once — wallet, portfolio, crypto, RWA, stocks, forex, commodities, lending, farms, pools, futures, dYdX, bridge, smart money, whales, news, macro, risk, fees and gas — then comparing every module to build one staged portfolio strategy. Not a text answer.'
+          ? 'Goal taken. Checking currently available data and comparing sourced opportunities. Missing feeds, execution limits and steps needing your wallet approval will be shown in the card.'
           : 'To build a strategy I need your capital — type the amount or connect the wallet. I read the rest (target, horizon, risk) from your sentence.'),
       ui: { type: 'STRATEGY_PLAN_CARD' },
       strategyRequest: {

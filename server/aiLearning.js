@@ -106,7 +106,8 @@ export async function recordIntentOutcome({
     providerUsed: String(providerUsed || 'internal'),
     modelsConsulted: Array.isArray(modelsConsulted) ? modelsConsulted.slice(0, 5) : [],
     strategyId: strategyId ? String(strategyId).slice(0, 48) : null,
-    executionSuccess: Boolean(executionSuccess),
+    // null means no execution was attempted (an analysis/chat turn).
+    executionSuccess: executionSuccess === null ? null : Boolean(executionSuccess),
     userApproved: userApproved === true ? true : userApproved === false ? false : null,
     confidenceScore: Number(confidenceScore) || 80,
     durationMs: Number(durationMs) || 0,
@@ -150,7 +151,8 @@ export async function getLearningInsights() {
   if (totalIntents === 0) {
     return {
       totalIntents: 0,
-      successRate: 1.0,
+      successRate: null,
+      executionSamples: 0,
       providerPerformance: {},
       topStrategies: [],
       commonErrors: [],
@@ -159,8 +161,9 @@ export async function getLearningInsights() {
   }
 
   // 1. Success rate
-  const successes = records.filter((r) => r.executionSuccess).length;
-  const successRate = totalIntents > 0 ? Number((successes / totalIntents).toFixed(2)) : 1.0;
+  const decided = records.filter((r) => typeof r.executionSuccess === 'boolean');
+  const successes = decided.filter((r) => r.executionSuccess).length;
+  const successRate = decided.length ? Number((successes / decided.length).toFixed(2)) : null;
 
   // 2. Provider performance breakdown
   const providerStats = {};
@@ -173,6 +176,7 @@ export async function getLearningInsights() {
       providerStats[p] = { count: 0, successCount: 0, totalLatency: 0 };
     }
     providerStats[p].count += 1;
+    if (typeof r.executionSuccess === 'boolean') providerStats[p].executionCount = (providerStats[p].executionCount || 0) + 1;
     if (r.executionSuccess) providerStats[p].successCount += 1;
     providerStats[p].totalLatency += r.durationMs;
   }
@@ -181,7 +185,8 @@ export async function getLearningInsights() {
   for (const [p, stats] of Object.entries(providerStats)) {
     providerPerformance[p] = {
       uses: stats.count,
-      successRate: stats.count > 0 ? Number((stats.successCount / stats.count).toFixed(2)) : 1.0,
+      successRate: stats.executionCount ? Number((stats.successCount / stats.executionCount).toFixed(2)) : null,
+      executionSamples: stats.executionCount || 0,
       avgLatencyMs: stats.count > 0 ? Math.round(stats.totalLatency / stats.count) : 0
     };
   }
@@ -201,6 +206,7 @@ export async function getLearningInsights() {
   return {
     totalIntents,
     successRate,
+    executionSamples: decided.length,
     providerPerformance,
     commonErrors,
     averageLatencyMs: Math.round(totalLatency / totalIntents),

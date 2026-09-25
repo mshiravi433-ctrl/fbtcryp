@@ -35,18 +35,27 @@ import { localizeStrategy } from './strategyLocales.js';
 import { createStrategyRuntime } from './strategyRuntime.js';
 import { FEE_BPS } from '../feeBps.js';
 import { SPECULATION_ENABLED } from '../features.js';
+import {
+  COMPOUND_BASE_SUPPLY_OPEN_TO_PUBLIC, MORPHO_BASE_SUPPLY_OPEN_TO_PUBLIC,
+  LIDO_STAKE_OPEN_TO_PUBLIC
+} from '../farmRolloutMode.js';
+import { liveMarketRows } from './liveMarketRows.js';
+import { TOKENS } from '../chains.js';
 
 
 /** One memoised promise per upstream call, shared by every domain that needs it. */
 const shared = new Map();
 function once(key, factory) {
+  const cached = shared.get(key);
+  if (cached && Date.now() - cached.at < 45_000) return cached.promise;
+  shared.delete(key);
   if (!shared.has(key)) {
     const promise = Promise.resolve()
       .then(factory)
       .catch((err) => { shared.delete(key); throw err; });
-    shared.set(key, promise);
+    shared.set(key, { promise, at: Date.now() });
   }
-  return shared.get(key);
+  return shared.get(key).promise;
 }
 
 /** Drop the shared promises so the next turn re-reads (used after a revision). */
@@ -56,21 +65,25 @@ const LENDING_PROJECTS = /aave|compound|morpho|spark|venus|fluid|kamino|marginfi
 
 /** DefiLlama pool → the shape the engine normalises. */
 function poolRow(pool = {}) {
-  const symbol = String(pool.symbol || '').toUpperCase();
+  // Lido's feed quotes stETH, but the in-app staking panel takes ETH as the
+  // deposit asset. Never prefill a stETH supply into an ETH-only form.
+  const symbol = pool.venue === 'lido' ? 'ETH' : String(pool.symbol || '').toUpperCase();
   const isLp = symbol.includes('-');
   const project = String(pool.project || '');
-  const family = LENDING_PROJECTS.test(project) ? 'lending' : (isLp ? 'lp' : 'farm');
+  const family = pool.venue === 'lido' ? 'staking'
+    : (LENDING_PROJECTS.test(project) ? 'lending' : (isLp ? 'lp' : 'farm'));
   return {
-    id: String(pool.pool || `${project}:${symbol}`),
+    id: String(pool.pool || pool.id || `${project}:${symbol}`),
     symbol,
     project,
+    venue: pool.venue || project,
     family,
     apy: num(pool.apy ?? pool.apyBase),
     apyBase: num(pool.apyBase),
     tvlUsd: num(pool.tvlUsd),
     chain: pool.chain,
-    chainId: num(pool.chainId),
-    risk: pool.risk || (num(pool.apy) > 40 ? 'high' : (num(pool.apy) > 15 ? 'medium' : 'low')),
+    chainId: num(pool.chainId) ?? ({ base: 8453, arbitrum: 42161, ethereum: 1 }[String(pool.chain || '').toLowerCase()] ?? null),
+    risk: pool.risk || (symbol === 'STETH' ? 'medium' : (num(pool.apy) > 40 ? 'high' : (num(pool.apy) > 15 ? 'medium' : 'low'))),
     poolMeta: pool.poolMeta || null,
     stablecoin: /USD/i.test(symbol) ? true : undefined
   };
@@ -93,14 +106,14 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
 
   const readers = {
     /* ── zero-request reads: this turn already has them ─────────────────── */
-    wallet: async () => ({
-      connected: Boolean(walletState?.connected || walletState?.isConnected),
+    wallet: async () => !walletState?.connected && !walletState?.isConnected ? null : ({
+      connected: true,
       address: walletState?.address || null,
       chainId: num(walletState?.chainId),
       balances: Array.isArray(walletState?.balances) ? walletState.balances : (context.balances || [])
     }),
     portfolio: async () => {
-      if (!pf) return { totalValueUsd: null, holdings: [], reason: 'NO_PORTFOLIO_SNAPSHOT' };
+      if (!pf || (pf.totalValueUsd == null && pf.totalUsd == null && !holdings.length)) return null;
       const total = num(pf.totalValueUsd ?? pf.totalUsd) ?? holdings.reduce((acc, h) => acc + (num(h.valueUsd) || 0), 0);
       return { totalValueUsd: total || null, holdings, chainId: num(pf.chainId ?? walletState?.chainId) };
     },
@@ -128,35 +141,34 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
     /* ── one request each, cached by src/lib/api for five minutes ────────── */
     crypto: async () => {
       const { getMarkets } = await import('../api');
-      const rows = await getMarkets({ perPage: 40 });
-      return Array.isArray(rows) ? rows.slice(0, 40).map((c) => ({
-        id: c.id, symbol: String(c.symbol || '').toUpperCase(), family: 'crypto',
-        price: num(c.current_price), apy: null,
-        forwardReturnPct: null,
-        volatilityPct: Math.abs(num(c.price_change_percentage_24h) || 0),
-        marketCap: num(c.market_cap), tvlUsd: num(c.total_volume),
-        risk: ['BTC', 'ETH'].includes(String(c.symbol || '').toUpperCase()) ? 'medium' : 'high'
-      })) : null;
+      // getMarkets serves a bundled offline snapshot when both providers fail.
+      // Only explicitly live rows are usable as strategy opportunities.
+      return liveMarketRows(await getMarkets({ perPage: 40 }), {
+        registry: TOKENS, preferredChainId: walletState?.chainId
+      });
     },
     rwa: async () => {
       const { getCategory } = await import('../api');
-      const rows = await getCategory('rwa', { perPage: 25 });
-      return Array.isArray(rows) ? rows.slice(0, 25).map((c) => ({
-        id: c.id, symbol: String(c.symbol || '').toUpperCase(), family: 'rwa',
-        price: num(c.current_price),
-        volatilityPct: Math.abs(num(c.price_change_percentage_24h) || 0),
-        tvlUsd: num(c.market_cap), risk: 'medium'
-      })) : null;
+      // getCategory has NO offline rows: its empty fallback stays empty.
+      return liveMarketRows(await getCategory('rwa', { perPage: 25 }), {
+        family: 'rwa', limit: 25,
+        registry: TOKENS, preferredChainId: walletState?.chainId
+      });
     },
     macro: async () => {
-      const [{ getGlobal, getOhlc, normalizeGlobal }, { marketRegime }] = await Promise.all([
+      const [{ getGlobal, getOhlc, lastFetchFailed }, { marketRegime }] = await Promise.all([
         import('../api'), import('../macro.js')
       ]);
       const [globalRaw, ohlc] = await Promise.all([
         getGlobal().catch(() => null),
         getOhlc('bitcoin', 30).catch(() => null)
       ]);
-      const global = normalizeGlobal(globalRaw || {});
+      // getGlobal can return bundled offline figures. Never label those live.
+      if (!globalRaw || globalRaw.dataProvenance !== 'live' || lastFetchFailed('global')) return null;
+      // getGlobal already normalises both the backend and CoinLore into
+      // mcapChange/btcDominance. Re-normalising it as raw CoinLore zeroed every
+      // macro signal even with a valid live response.
+      const global = globalRaw;
       const series = Array.isArray(ohlc) ? ohlc.map((p) => (Array.isArray(p) ? p[1] : num(p?.close))).filter((v) => num(v) != null) : [];
       const regime = marketRegime({ global, btcSeries: series }) || null;
       return {
@@ -214,6 +226,7 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
       const { smartMoneyContext } = await import('../smartMoneyAI.js');
       const ctx = await smartMoneyContext({ window: '24h' });
       const flows = ctx?.overview?.flows?.windows?.['24h'] || {};
+      if (ctx?.ok === false || (!ctx?.dataPoints?.length && num(flows.netUsd) == null)) return null;
       return {
         netFlowUsd: num(flows.netUsd),
         inflowUsd: num(flows.inflowUsd),
@@ -227,6 +240,7 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
       const { fetchWhales } = await import('../whales.js');
       const data = await fetchWhales({ limit: 25 });
       const events = Array.isArray(data?.events) ? data.events : (Array.isArray(data) ? data : []);
+      if (!events.length) return null;
       const inflow = events.reduce((acc, e) => acc + (/exchange|deposit/i.test(String(e.to || e.direction)) ? (num(e.amountUsd) || 0) : 0), 0);
       const outflow = events.reduce((acc, e) => acc + (/withdraw|out/i.test(String(e.direction || '')) ? (num(e.amountUsd) || 0) : 0), 0);
       return { eventCount: events.length, exchangeInflowUsd: inflow, exchangeOutflowUsd: outflow, events: events.slice(0, 10) };
@@ -235,6 +249,7 @@ export function createChatEcosystemReaders({ context = {}, results = {}, wallet 
       const { getNews } = await import('../news.js');
       const data = await getNews({ coins: ['bitcoin', 'ethereum'] });
       const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+      if (!items.length) return null;
       return { count: items.length, sentimentScore: num(data?.sentiment ?? data?.sentimentScore), tone: data?.tone || null, items: items.slice(0, 5) };
     }
   };
@@ -272,10 +287,11 @@ function ostiumReaders() {
   });
   const pick = (test) => async () => {
     const all = await pairs();
-    return all.filter((p) => test(String(p.category || ''))).slice(0, 25).map((p) => ({
+    return all.filter((p) => p.isMarketOpen === true && num(p.mid) > 0
+      && test(String(p.category || ''))).slice(0, 25).map((p) => ({
       id: p.pairId, symbol: p.from, family: null, venue: 'Ostium',
       price: num(p.mid), openFeeBps: num(p.openFeeBps), leverage: 1,
-      marketOpen: Boolean(p.isMarketOpen), risk: 'medium'
+      marketOpen: true, chainId: 42161, risk: 'medium'
     }));
   };
   return {
@@ -290,11 +306,29 @@ function yieldReaders() {
   const pools = () => once('yields', async () => {
     const { getYields } = await import('../yields.js');
     const data = await getYields();
-    return (Array.isArray(data?.pools) ? data.pools : []).map(poolRow);
+    // Only the five pinned venues have in-app deposit adapters. The rest of
+    // the discovery feed has rates, not an executable position here.
+    if (data?.freshness !== 'FRESH') return [];
+    // Aave's public /loan screen can supply on Base/Arbitrum with an on-chain
+    // reserve check. The other three use the Farm in-app panels: only show an
+    // executable position when that very adapter is public in THIS build.
+    const available = new Set([
+      'aave-base', 'aave-arbitrum',
+      ...(COMPOUND_BASE_SUPPLY_OPEN_TO_PUBLIC ? ['compound-base'] : []),
+      ...(MORPHO_BASE_SUPPLY_OPEN_TO_PUBLIC ? ['morpho-base'] : []),
+      ...(LIDO_STAKE_OPEN_TO_PUBLIC ? ['lido'] : [])
+    ]);
+    return (Array.isArray(data?.venues) ? data.venues : [])
+      .filter((p) => p.pinned === true && p.freshness === 'FRESH' && available.has(p.venue))
+      .map(poolRow);
   });
   const pick = (family) => async () => {
     const all = await pools();
-    const rows = all.filter((p) => p.family === family && num(p.apy) != null);
+    // Staking has no separate layer-2 domain: it shares the farming read,
+    // while keeping its own family in the opportunity universe. Without this
+    // Lido was fetched but silently discarded before ranking.
+    const rows = all.filter((p) => (p.family === family || (family === 'farm' && p.family === 'staking'))
+      && num(p.apy) != null);
     rows.sort((a, b) => num(b.apy) - num(a.apy));
     return rows.slice(0, 40);
   };
@@ -348,7 +382,15 @@ export function createChatStrategyRuntime({ strategy, spec, context = {}, result
     strategy,
     goal: spec,
     /* A revision MUST be a fresh read — never this turn's cache. */
-    readEcosystem: async () => { resetSharedReads(); return reader.read({ force: true }); },
+    readEcosystem: async () => {
+      resetSharedReads();
+      // The domain cache is not the only cache: getMarkets/getCategory/getGlobal
+      // also memoise for up to five minutes. A manual rebuild must at least
+      // try the providers again instead of silently re-scoring the old rows.
+      const { clearApiCache } = await import('../api');
+      clearApiCache();
+      return reader.read({ force: true });
+    },
     onEvent,
     /* Stage truth restored from strategyStore: a plan resumed after a reload
        continues on the stage it actually reached instead of restarting. */

@@ -374,10 +374,11 @@ export function StatusPanel({ open, onClose, status, locale = 'fa' }) {
   const wiringValue = aiTools
     ? (aiTools.online ? `${aiTools.count} ✓` : `${aiTools.count} · ${opsText('ops.unavailable', locale)}`)
     : '…';
-  const providersLabel = isEn ? 'AI models active' : 'مدل‌های فعال هوش مصنوعی';
-  const activeProv = Math.max(status?.providersActive ?? 0, 4);
-  const totalProv = Math.max(status?.providersTotal ?? 0, activeProv);
-  const providersValue = `${activeProv}/${totalProv}`;
+  const providersLabel = isEn ? 'AI models configured (not health-checked)' : 'مدل‌های پیکربندی‌شده (بدون آزمون سلامت)';
+  // No floor: zero or an unavailable gateway is a real status, not four models.
+  const providersValue = status?.providersTotal == null
+    ? (isEn ? 'unavailable' : 'نامشخص')
+    : `${status.providersActive ?? 0}/${status.providersTotal}`;
 
   return (
     <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={L.title}>
@@ -758,7 +759,7 @@ export function IntelligencePanel({
                     <div className="iaos-intel-card-head">
                       <strong>{p.name}</strong>
                       <span className={`iaos-pill ${live ? 'iaos-pill-ok' : 'iaos-pill-warn'}`}>
-                        {live ? (isEn ? 'Active' : 'فعال') : (isEn ? 'Needs key' : 'نیازمند کلید')}
+                        {live ? (isEn ? 'Configured' : 'پیکربندی‌شده') : (isEn ? 'Needs key' : 'نیازمند کلید')}
                       </span>
                     </div>
                     <p>{p.specialty || p.role}</p>
@@ -809,7 +810,7 @@ export function IntelligencePanel({
                 <div key={a.id} className="iaos-intel-card">
                   <div className="iaos-intel-card-head">
                     <strong>{a.name}</strong>
-                    <span className="iaos-pill iaos-pill-ok">{isEn ? 'Online' : 'برخط'}</span>
+                    <span className="iaos-pill">{isEn ? 'Built-in role' : 'نقش داخلی'}</span>
                   </div>
                   <p>{a.role}</p>
                   <small>{isEn ? 'Authority: Read & Plan only — Signing requires user wallet' : 'اختیارات: تحلیل و برنامه‌ریزی — امضا منحصراً با تأیید کاربر'}</small>
@@ -834,16 +835,16 @@ export function IntelligencePanel({
                 <strong>{isEn ? 'AI Debate Architecture' : 'معماری مناظره و اجماع چندمدلی'}</strong>
                 <p>
                   {isEn
-                    ? 'For strategic or high-stakes intents, FBT invokes multiple models simultaneously (Market Intelligence, Risk Guardian, Strategy Architect). Divergent views are reconciled into a weighted Consensus Score.'
-                    : 'برای درخواست‌های حساس یا نیازمند تحلیل جامع، سیستم به‌طور همزمان چند هوش مصنوعی را برای ارزیابی بازار، سنجش ریسک و طراحی استراتژی فرامی‌خواند و دیدگاه‌های متضاد را در موتور اجماع بررسی می‌کند.'}
+                    ? 'The internal strategy engine compares live-sourced options. External models join only when configured and actually invoked; a configured key is not a health check or proof of consensus.'
+                    : 'موتور داخلی گزینه‌های دارای داده زنده را مقایسه می‌کند. مدل بیرونی فقط در صورت پیکربندی و فراخوانی واقعی شرکت دارد؛ داشتن کلید به معنی سلامت یا اجماعِ انجام‌شده نیست.'}
                 </p>
               </div>
               <div className="iaos-status-cell">
                 <strong>{isEn ? 'Live Data Grounding Rule' : 'اصل عدم حدس قیمت و موجودی'}</strong>
                 <p>
                   {isEn
-                    ? 'AI models are strictly prohibited from guessing prices or wallet balances. All inputs are fetched live via on-chain RPCs, DEX aggregators, and curated data oracles.'
-                    : 'مدل‌های هوش مصنوعی مطلقاً مجاز به حدس قیمت یا موجودی نیستند. تمام داده‌ها به‌صورت زنده از اوراکل‌ها و گره‌های بلاکچین دریافت و به مدل تزریق می‌شوند.'}
+                    ? 'Strategies use live-sourced market and yield observations and report missing reads. Some market screens have labelled offline snapshots; the strategy engine excludes those from tradable recommendations.'
+                    : 'استراتژی‌ها از خوانش زنده بازار و نرخ استفاده می‌کنند و شکاف‌ها را نشان می‌دهند. بعضی صفحه‌های بازار snapshot آفلاینِ برچسب‌دار دارند؛ موتور استراتژی آن‌ها را به‌عنوان فرصت معاملاتی نمی‌پذیرد.'}
                 </p>
               </div>
             </div>
@@ -870,7 +871,7 @@ export function IntelligencePanel({
               <div className="iaos-status-cell">
                 <small>{isEn ? 'Execution success rate' : 'نرخ موفقیت عملیات'}</small>
                 <strong>
-                  {Number.isFinite(Number(learningStats?.successRate)) && Number(learningStats?.totalIntents) > 0
+                  {learningStats?.successRate != null && Number(learningStats?.executionSamples) > 0
                     ? `${Math.round(Number(learningStats.successRate) * 100)}%`
                     : '—'}
                 </strong>

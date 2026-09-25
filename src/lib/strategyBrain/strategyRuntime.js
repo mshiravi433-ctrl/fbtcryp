@@ -134,11 +134,17 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
     const prior = savedProgress?.[s.id];
     const validState = prior && STAGE_STATES.includes(prior.state);
     if (validState) {
+      // localStorage is an untrusted cache. It is neither a chain receipt nor
+      // a live portfolio read. Re-check preflight on every reload; a financial
+      // confirmation needs provider reconciliation before another transfer.
+      const resetPreflight = s.id === 'preflight' && ['CONFIRMED', 'RUNNING'].includes(prior.state);
+      const reverify = s.movesFunds && prior.state === 'CONFIRMED';
       return [s.id, {
         stageId: s.id,
-        state: prior.state,
-        confirmedAt: Number(prior.confirmedAt) || null,
-        receipt: prior.receipt || null,
+        state: resetPreflight ? 'READY' : (reverify ? 'RUNNING' : prior.state),
+        confirmedAt: resetPreflight || reverify ? null : (Number(prior.confirmedAt) || null),
+        receipt: resetPreflight ? null : (prior.receipt || null),
+        needsReverification: Boolean(reverify || prior.needsReverification),
         error: prior.error || null,
         attempts: Number(prior.attempts) || 0,
         startedAt: Number(prior.startedAt) || null
@@ -176,6 +182,8 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
       const progress = stageProgress[stage.id];
       if (!progress || progress.state === 'CONFIRMED' || progress.state === 'SKIPPED') continue;
       if (progress.state === 'FAILED') return { ok: false, code: 'STAGE_FAILED', stageId: stage.id, detail: progress.error?.code || 'FAILED' };
+      if (progress.state === 'RUNNING') return { ok: false, code: 'AWAITING_RECEIPT', stageId: stage.id,
+        actions: stage.actions || [], detail: 'Reconcile the pending action before starting another stage.' };
       const blockers = stageOrder.filter((s) => s.order < stage.order).filter((s) => stageProgress[s.id]?.state !== 'CONFIRMED');
       if (blockers.length) return { ok: false, code: 'BLOCKED', stageId: stage.id, waitingOn: blockers.map((b) => b.id) };
       return { ok: true, stage, actions: stage.actions || [], movesFunds: Boolean(stage.movesFunds) };
@@ -195,13 +203,34 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
     return { ...next, executionAuthorized: false, requiresSignature: next.actions.some((a) => a.requiresSignature) };
   }
 
-  /** The venue signed and the receipt verifies. */
-  function confirmStage(stageId, { receipt = null, txHash = null } = {}) {
+  /**
+   * Only a verified venue receipt may advance a money stage. A user saying
+   * "done" (or returning to chat) is not an on-chain settlement. The caller
+   * must verify every action with its provider BEFORE invoking this method.
+   */
+  function confirmStage(stageId, { receipt = null } = {}) {
     const progress = stageProgress[stageId];
-    if (!progress) return { ok: false, code: 'UNKNOWN_STAGE' };
+    const stage = stageOrder.find((s) => s.id === stageId);
+    if (!progress || !stage) return { ok: false, code: 'UNKNOWN_STAGE' };
+    const next = nextStage();
+    if (progress.state !== 'RUNNING' || next.code !== 'AWAITING_RECEIPT' || next.stageId !== stageId) {
+      return { ok: false, code: 'STAGE_NOT_RUNNING' };
+    }
+    if (stage.movesFunds) {
+      const signed = (stage.actions || []).filter((a) => a.requiresSignature);
+      const proofs = Array.isArray(receipt?.actions) ? receipt.actions : [];
+      if (!signed.length || receipt?.verified !== true || proofs.length !== signed.length
+        || proofs.some((r, i) => r?.verified !== true || r?.capabilityId !== signed[i].capabilityId
+          || !r?.txHash || !/^(0x[0-9a-f]{64}|[1-9A-HJ-NP-Za-km-z]{32,100})$/i.test(r.txHash))) {
+        return { ok: false, code: 'VERIFIED_RECEIPTS_REQUIRED', requiredActions: signed.length };
+      }
+    } else if (receipt?.ok !== true) {
+      return { ok: false, code: 'PREFLIGHT_EVIDENCE_REQUIRED' };
+    }
     progress.state = 'CONFIRMED';
+    progress.needsReverification = false;
     progress.confirmedAt = now();
-    progress.receipt = receipt || (txHash ? { txHash } : null);
+    progress.receipt = receipt;
     emit({ type: 'STAGE_CONFIRMED', strategyId: current.strategyId, stageId, receipt: progress.receipt });
     return { ok: true, stage: stageId, next: nextStage() };
   }
@@ -210,6 +239,7 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
   function failStage(stageId, error = {}) {
     const progress = stageProgress[stageId];
     if (!progress) return { ok: false, code: 'UNKNOWN_STAGE' };
+    if (progress.state !== 'RUNNING') return { ok: false, code: 'STAGE_NOT_RUNNING' };
     progress.state = 'FAILED';
     progress.error = { code: String(error.code || 'FAILED'), message: String(error.message || '').slice(0, 160) };
     emit({ type: 'STAGE_FAILED', strategyId: current.strategyId, stageId, error: progress.error });
@@ -219,6 +249,9 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
   function skipStage(stageId, reason = 'SKIPPED_BY_USER') {
     const progress = stageProgress[stageId];
     if (!progress) return { ok: false, code: 'UNKNOWN_STAGE' };
+    if (stageOrder.find((s) => s.id === stageId)?.movesFunds || stageId === 'preflight') {
+      return { ok: false, code: 'CANNOT_SKIP_REQUIRED_STAGE' };
+    }
     progress.state = 'SKIPPED';
     progress.error = { code: reason };
     emit({ type: 'STAGE_SKIPPED', strategyId: current.strategyId, stageId, reason });
@@ -312,15 +345,16 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
     });
     if (revisions.length > max) revisions.splice(0, revisions.length - max);
 
-    /* Carry the deployment truth forward: a stage already signed stays
-       confirmed, the new plan's remaining stages start from READY. */
-    const confirmed = Object.entries(stageProgress).filter(([, p]) => p.state === 'CONFIRMED').map(([id]) => id);
+    /* New allocations cannot inherit confirmations for old actions just
+       because both blueprints call a stage "deploy-market". Recheck the wallet
+       and quote every action under the revised plan. Prior receipts remain on
+       the old persisted strategy, never masquerade as receipts for this one. */
     current = next;
     for (const stage of current.stages || []) {
-      const prior = stageProgress[stage.id];
-      stageProgress[stage.id] = prior && confirmed.includes(stage.id)
-        ? prior
-        : { stageId: stage.id, state: stage.order === 0 ? 'CONFIRMED' : 'READY', confirmedAt: prior?.confirmedAt ?? null, receipt: prior?.receipt ?? null, error: null, attempts: 0 };
+      stageProgress[stage.id] = {
+        stageId: stage.id, state: stage.order === 0 ? 'READY' : 'PENDING',
+        confirmedAt: null, receipt: null, error: null, attempts: 0
+      };
     }
     for (const sleeve of current.sleeves || []) sleeve.stageId = stageOfFamily(sleeve.family);
 

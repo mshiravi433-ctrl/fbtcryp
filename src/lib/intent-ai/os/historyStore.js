@@ -44,6 +44,12 @@ function stripSecretsDeep(value, depth = 0) {
   if (Array.isArray(value)) return value.map((v) => stripSecretsDeep(v, depth + 1));
   const out = {};
   for (const [k, v] of Object.entries(value)) {
+    // This boolean is a public execution requirement, not a signature. A
+    // resumed strategy must still know which actions require wallet approval.
+    if (k === 'requiresSignature' && typeof v === 'boolean') {
+      out[k] = v;
+      continue;
+    }
     if (FORBIDDEN.test(k)) continue;
     out[k] = stripSecretsDeep(v, depth + 1);
   }

@@ -3,7 +3,8 @@
  *
  * POST /api/intents/v1/operator-evidence
  *
- * Auth: dual-operator (two signed operator IDs required in header).
+ * Auth: an operator-only server key plus two distinct operator IDs. Headers
+ * containing mere names are NOT authentication.
  * Appends evidence to an in-memory store that feeds scanOperationalProviders.
  * Every entry is also sent to the audit log.
  *
@@ -13,7 +14,7 @@
  * NEVER accepts raw keys, private keys, seed phrases, or credentials in payload.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { normalizeEvidence, EVIDENCE_KINDS } from '../src/lib/intent-ai/operationalActivation.js';
 import { auditAppend } from './intentAuditLog.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
@@ -85,6 +86,14 @@ function loadEvidenceFromEnv(env = process.env, now = Date.now()) {
  * Requires two distinct operator IDs in X-Operator-1 and X-Operator-2.
  */
 function validateDualOperatorAuth(req) {
+  const expected = String(process.env.INTENT_OPERATOR_EVIDENCE_KEY || '').trim();
+  if (expected.length < 24) return { ok: false, code: 'OPERATOR_EVIDENCE_NOT_CONFIGURED', status: 503 };
+  const supplied = String(req.headers['x-operator-evidence-key'] || '');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(supplied);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { ok: false, code: 'OPERATOR_EVIDENCE_AUTH_REQUIRED', status: 401 };
+  }
   const op1 = String(req.headers['x-operator-1'] || '').trim();
   const op2 = String(req.headers['x-operator-2'] || '').trim();
 
@@ -257,7 +266,9 @@ export async function ensureOperatorEvidenceHydrated({ now = Date.now() } = {}) 
       ...validated.normalized,
       injectedBy: ['durable-evidence-store'],
       injectedAt: now,
-      source: 'operator-durable-store'
+      source: record.source || 'unattributed-durable-evidence',
+      authVersion: record.authVersion || null,
+      provenance: record.provenance || null
     });
     hydrated += 1;
   }
@@ -274,7 +285,7 @@ export async function handleOperatorEvidence(req, res) {
   /* Auth check */
   const auth = validateDualOperatorAuth(req);
   if (!auth.ok) {
-    return res.status(401).json({
+    return res.status(auth.status || 401).json({
       schema: OPERATOR_EVIDENCE_SCHEMA,
       ok: false,
       code: auth.code,
@@ -313,7 +324,8 @@ export async function handleOperatorEvidence(req, res) {
       ...validation.normalized,
       injectedBy: auth.operators,
       injectedAt: now,
-      source: 'operator-evidence-endpoint'
+      source: 'operator-evidence-endpoint',
+      authVersion: 'operator-v2'
     });
 
     /* Audit log */
@@ -366,7 +378,10 @@ export function getStoredEvidence({ now = Date.now() } = {}) {
         expiresAt: record.expiresAt,
         status: 'verified',
         health: 'healthy',
-        attested: true
+        attested: true,
+        source: record.source || 'unknown',
+        authVersion: record.authVersion || null,
+        provenance: record.provenance || null
       });
     }
   }
@@ -447,10 +462,16 @@ export function evidenceStoreStatus({ now = Date.now() } = {}) {
   const missing = allKinds.filter(k => !stored.has(k));
 
   const sandboxSeeded = [...evidenceStore.values()].some((r) => r.source === SANDBOX_EVIDENCE_SOURCE);
+  const reviewedKinds = new Set([...evidenceStore.values()]
+    .filter((r) => r.expiresAt > now && r.source !== SANDBOX_EVIDENCE_SOURCE
+      && r.source !== 'auto-local-evidence' && r.source !== 'unattributed-durable-evidence'
+      && (r.source !== 'operator-evidence-endpoint' || r.authVersion === 'operator-v2'))
+    .map((r) => r.kind));
 
   return {
     schema: OPERATOR_EVIDENCE_SCHEMA,
-    mode: sandboxSeeded ? SANDBOX_EVIDENCE_PROVENANCE : 'operator-reviewed',
+    mode: reviewedKinds.size === allKinds.length ? 'operator-reviewed'
+      : (sandboxSeeded ? SANDBOX_EVIDENCE_PROVENANCE : 'unverified'),
     sandboxEnabled: sandboxEvidenceEnabled(),
     totalKindsRequired: allKinds.length,
     stored: [...stored],
@@ -459,8 +480,9 @@ export function evidenceStoreStatus({ now = Date.now() } = {}) {
     storedCount: stored.size,
     missingCount: missing.length,
     evidence: `${stored.size}/${allKinds.length}`,
-    operational: stored.size === allKinds.length && missing.length === 0,
-    launchAllowed: stored.size === allKinds.length && missing.length === 0,
+    reviewedCount: reviewedKinds.size,
+    operational: reviewedKinds.size === allKinds.length,
+    launchAllowed: reviewedKinds.size === allKinds.length,
     durable: storeDurable(),
     storeKey: OPERATOR_EVIDENCE_STORE_KEY,
     records

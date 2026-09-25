@@ -45,7 +45,9 @@ try {
     expiresAt: now + 3600_000,
     status: 'verified',
     health: 'healthy',
-    attested: true
+    attested: true,
+    source: 'operator-evidence-endpoint',
+    authVersion: 'operator-v2'
   }));
 
   /* 1. persist — the handler writes this exact shape. */
@@ -67,7 +69,7 @@ try {
     Array.isArray(status.records) && status.records.length === 21 && status.records.every((r) => /^[0-9a-f]{64}$/.test(r.digest)));
 
   const phaseStatus = await fetch(`${base}/api/intents/v1/phase-status`).then((r) => r.json());
-  check('the restored snapshot opens the launch gate', phaseStatus.launchAllowed === true && phaseStatus.evidence.status === '21/21');
+  check('restored aggregate evidence alone does not override plane blockers', phaseStatus.launchAllowed === false && phaseStatus.evidence.status === '21/21');
   check('execution remains disabled after restore', phaseStatus.executionActivated === false && phaseStatus.rawCredentialsAllowed === false);
   check('the full specification is present after restore', phaseStatus.phaseCount === 196 && phaseStatus.specificationImplementedThrough === 216);
 

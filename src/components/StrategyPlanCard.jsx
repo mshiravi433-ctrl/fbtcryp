@@ -26,6 +26,8 @@
  * never as an empty card.
  */
 import { useMemo, useState } from 'react';
+import { loadStrategyPlan } from '../lib/strategyBrain/strategyStore.js';
+import { strategyActionRoute, strategyReceiptSupport } from '../lib/strategyBrain/strategyReceipts.js';
 
 const pct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}%` : '—');
 const usd = (v, d = 0) => (Number.isFinite(Number(v)) ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: d })}` : '—');
@@ -264,8 +266,18 @@ function SleeveList({ sleeves, fa, onOpenRoute }) {
   );
 }
 
-function StageList({ stages, fa, onOpenRoute }) {
+function StageList({ stages, strategyId, fa, onOpenRoute }) {
   if (!Array.isArray(stages) || !stages.length) return null;
+  // In a multi-action stage these buttons are how the user reaches legs 2+.
+  // Only an already RUNNING, persisted stage receives the receipt locator;
+  // merely viewing a venue before preflight never starts or credits the plan.
+  const saved = strategyId ? loadStrategyPlan(strategyId) : null;
+  const pendingRoute = (st, a, i) => {
+    const fromStore = saved?.strategy?.stages?.find((s) => s.id === st.id)?.actions?.[i];
+    return saved?.runtime?.stageProgress?.[st.id]?.state === 'RUNNING'
+      && fromStore?.route === a.route && fromStore?.capabilityId === a.capabilityId
+      ? strategyActionRoute(a, { strategyId, stageId: st.id, actionIndex: i }) : a.route;
+  };
   return (
     <div className="isp-block" data-testid="strategy-stages">
       <div className="isp-block-head">
@@ -287,8 +299,16 @@ function StageList({ stages, fa, onOpenRoute }) {
                 <li key={`${a.operation}-${i}`}>
                   <span dir="ltr">{a.module} · {a.operation}</span>
                   {a.requiresSignature ? <em>{fa ? 'امضای تو' : 'your signature'}</em> : null}
+                  {a.requiresSignature && !strategyReceiptSupport(a)
+                    ? <small title={fa ? 'صفحه مقصد فعال است، ولی رسید این اقدام هنوز در طرح تطبیق خودکار ندارد.'
+                      : 'The venue works, but this action has no independent stage receipt verifier yet.'}>
+                      {fa ? 'تطبیق خودکار ندارد' : 'no auto-reconciliation'}
+                    </small> : null}
                   {onOpenRoute && a.route ? (
-                    <button type="button" className="isp-link" onClick={() => onOpenRoute(a.route)}>{fa ? 'برو' : 'Open'} ↗</button>
+                    <button type="button" className="isp-link" onClick={() => onOpenRoute(pendingRoute(st, a, i))}>
+                      {saved?.runtime?.stageProgress?.[st.id]?.state === 'RUNNING'
+                        ? (fa ? 'اجرای اقدام' : 'Open action') : (fa ? 'بررسی صفحه' : 'Preview venue')} ↗
+                    </button>
                   ) : null}
                 </li>
               ))}
@@ -398,7 +418,7 @@ export function StrategyPlanCard({
         <div><dt>{fa ? 'سود سالانه لازم' : 'APY required'}</dt><dd dir="ltr">{pct(verdict.requiredApyPct)}</dd></div>
         <div><dt>{fa ? 'نرخ‌های واقعی' : 'Sourced'}</dt><dd dir="ltr">{pct(verdict.sourcedReturnPct)}</dd></div>
         <div><dt>{fa ? 'فقط از قیمت' : 'Price only'}</dt><dd dir="ltr">{pct(verdict.priceGapPct)}</dd></div>
-        <div><dt>{fa ? 'دامنه ۱σ' : '1σ range'}</dt><dd dir="ltr">{verdict.rangePct != null ? `±${pct(verdict.rangePct, 1)}` : '—'}</dd></div>
+        <div><dt>{fa ? 'دامنه تنش (تقریبی)' : 'Stress proxy (rough)'}</dt><dd dir="ltr">{verdict.rangePct != null ? `±${pct(verdict.rangePct, 1)}` : '—'}</dd></div>
         <div><dt>{fa ? 'ارزش انتظار' : 'Expected'}</dt><dd dir="ltr">{usd(verdict.expectedValueUsd)}</dd></div>
         <div><dt>{fa ? 'هزینه ورود' : 'Entry cost'}</dt><dd dir="ltr">{pct(cost.totalPct)}{cost.complete ? '' : '*'}</dd></div>
       </dl>
@@ -437,7 +457,7 @@ export function StrategyPlanCard({
       {showingChosen ? (
         <>
           <SleeveList sleeves={effective.sleeves} fa={fa} onOpenRoute={onOpenRoute} />
-          <StageList stages={effective.stages} fa={fa} onOpenRoute={onOpenRoute} />
+          <StageList stages={effective.stages} strategyId={effective.strategyId} fa={fa} onOpenRoute={onOpenRoute} />
           <MonitorList monitors={effective.monitors} fa={fa} />
 
           <div className="isp-risk" data-testid="strategy-risk">
@@ -460,7 +480,8 @@ export function StrategyPlanCard({
                 onClick={() => onExecuteStage(effective)}
                 data-testid="strategy-execute-stage"
               >
-                {busy ? (fa ? 'در حال اجرا…' : 'Running…') : (fa ? 'مرحله بعد را با تأیید من اجرا کن' : 'Run the next stage with my confirmation')}
+                {busy ? (fa ? 'در حال بررسی…' : 'Checking…')
+                  : (fa ? 'اجرای مرحله بعد / تطبیق رسید' : 'Run next stage / reconcile receipt')}
               </button>
               {onMonitor ? (
                 <button
@@ -473,7 +494,7 @@ export function StrategyPlanCard({
                   {fa ? 'برنامه را با وضعیت واقعی بسنج' : 'Check the plan against reality'}
                 </button>
               ) : null}
-              {onRevise && live?.decision === 'REVISE' ? (
+              {onRevise ? (
                 <button
                   type="button"
                   className="isp-btn is-ghost"
@@ -481,7 +502,9 @@ export function StrategyPlanCard({
                   onClick={() => onRevise(effective)}
                   data-testid="strategy-revise"
                 >
-                  {fa ? 'استراتژی را بازسازی کن' : 'Rebuild the strategy'}
+                  {live?.decision === 'REVISE'
+                    ? (fa ? 'استراتژی را بازسازی کن' : 'Rebuild the strategy')
+                    : (fa ? 'تحلیل را با دادهٔ تازه بازسازی کن' : 'Rebuild with fresh data')}
                 </button>
               ) : null}
             </div>

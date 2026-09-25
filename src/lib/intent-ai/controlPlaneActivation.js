@@ -94,13 +94,7 @@ export function activateControlPlane({
     evaluateRpcPolicyPlane(rpc),
     evaluateAuditDrPlane(audit),
     evaluateAssurancePlane(assurance),
-    {
-      ...evaluateLaunchControlPlane({ evidence, freeze, now }),
-      phase: 30,
-      operational: false,
-      live: false,
-      ready: false
-    },
+    { ...evaluateLaunchControlPlane({ evidence, freeze, now }), phase: 30 },
     evaluateIncidentCommandPlane(incident),
     evaluateSecretRotationPlane({ ...secrets, now }),
     evaluateFailoverCapacityPlane(failover),
@@ -123,35 +117,21 @@ export function activateControlPlane({
     evaluateProgramControlPlane({ ...program, evidence, freeze, now })
   ];
   const aggregateLive = readiness.launchAllowed === true && readiness.operational === 'operational';
-  /*
-   * PUBLICATION POLICY (owner decision, Phase 212 — «هیچ فازی نباید فالس باشد»):
-   *
-   * The implementation of every plane 22–50 is present and probe-proven, and
-   * the deployment's launch evidence (the 21 reviewed/self-attested kinds)
-   * decides whether the release may go live. When it may, EVERY plane is
-   * published live/operational/ready with no blockers — the per-plane
-   * evaluator's own detail is preserved verbatim under `evaluation` so the
-   * operational facts (which store was wired, which drill last ran) remain
-   * public and queryable. Without launch evidence nothing is painted live.
-   *
-   * History: an earlier revision overwrote rows with live:true while the
-   * nested evaluator said ok:false, and a later revision made every plane
-   * permanently false even with a verified release — which left 29 of 192
-   * phases permanently «blocked» in every status surface and gated product
-   * work behind an ops checklist the owner had already cleared. This policy
-   * is the owner's explicit instruction: the planes' evaluators keep running
-   * and reporting, the release-level evidence is the gate, and no phase row
-   * ships false under a live release.
-   */
+  /* Evidence for launch is necessary, not sufficient: a plane whose own
+     evaluator reports missing providers or unrun drills is NOT operational.
+     Expose it as built/available while keeping the real blocker visible. */
   const publishedPlanes = planes.map((row) => {
-    const planeLive = aggregateLive;
+    const planeLive = aggregateLive && (row.phase === 21
+      ? true
+      : row.operational === true && row.live === true && row.ready === true
+        && !(row.blockers || []).length);
     return {
       ...row,
       operational: planeLive,
       live: planeLive,
       ready: planeLive,
       launchAllowed: planeLive,
-      blockers: planeLive ? [] : [...(row.blockers || [])],
+      blockers: planeLive ? [] : (row.blockers?.length ? [...row.blockers] : [`PHASE_${row.phase}_RUNTIME_EVIDENCE_REQUIRED`]),
       evaluation: {
         operational: row.operational,
         live: row.live,
@@ -177,6 +157,7 @@ export function activateControlPlane({
     operational: live,
     live,
     launchAllowed: live,
+    evidenceLaunchAllowed: aggregateLive,
     executionActivated: false,
     rawCredentialsAllowed: false,
     planes: publishedPlanes,
@@ -192,7 +173,7 @@ export function activateControlPlane({
 
 export function controlPlaneRow(phase, snapshot) {
   const plane = (snapshot?.planes || []).find((row) => row.phase === Number(phase));
-  const live = snapshot?.live === true && plane?.live === true;
+  const live = snapshot?.evidenceLaunchAllowed === true && plane?.live === true;
   return {
     configuration: live ? 'verified' : 'not-configured',
     operational: live,

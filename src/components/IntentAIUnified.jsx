@@ -97,6 +97,9 @@ import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
 import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
 import { StrategyPlanCard } from './StrategyPlanCard.jsx';
 import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
+import { resolveGoalTurn } from '../lib/strategyBrain/goalTurn.js';
+import { evaluateStrategyPreflight } from '../lib/strategyBrain/strategyPreflight.js';
+import { reconcileStrategyReceipts, strategyActionRoute, strategyReceiptSupport } from '../lib/strategyBrain/strategyReceipts.js';
 import {
   saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs, linkRevision
 } from '../lib/strategyBrain/strategyStore.js';
@@ -277,11 +280,8 @@ import {
   bootstrapIntentOSSession,
   persistIntentOSSession,
   ingestUserTurn,
-  orchestrateIntent,
-  prepareExecution,
   activateMonitoring,
-  resumeConversationState,
-  parseAnswerValue
+  resumeConversationState
 } from '../lib/intent-ai/os/upgrade8/index.js';
 
 const CONVERSATION_KEY = 'fbt.ai.os.conversation.v2';
@@ -753,66 +753,6 @@ function sameWalletFacts(a, b) {
   return key(a) === key(b);
 }
 
-function choiceLabel(choice) {
-  return choice?.label || choice?.title || choice?.value || choice?.id || 'option';
-}
-
-function buildTargetAllocation(optionId, portfolio = {}) {
-  const positions = Array.isArray(portfolio.positions) ? portfolio.positions : [];
-  const total = Number(portfolio.totalValue) || 0;
-  const sorted = [...positions].sort((a, b) => (Number(b?.valueUsd) || 0) - (Number(a?.valueUsd) || 0));
-  const top = sorted[0]?.symbol || 'CORE';
-  if (!sorted.length || total <= 0) {
-    return [
-      { symbol: 'BTC', fromPct: 0, toPct: optionId === 'defensive-rebalance' ? 40 : optionId === 'balanced-rotation' ? 35 : 25 },
-      { symbol: 'ETH', fromPct: 0, toPct: optionId === 'defensive-rebalance' ? 25 : optionId === 'balanced-rotation' ? 30 : 25 },
-      { symbol: 'STABLES', fromPct: 0, toPct: optionId === 'defensive-rebalance' ? 35 : optionId === 'balanced-rotation' ? 20 : 10 }
-    ];
-  }
-  if (optionId === 'defensive-rebalance') {
-    return [
-      { symbol: top, fromPct: Number(sorted[0]?.weightPct) || 0, toPct: 30 },
-      { symbol: 'BTC', fromPct: Number(sorted[1]?.weightPct) || 0, toPct: 30 },
-      { symbol: 'STABLES', fromPct: Number(sorted[2]?.weightPct) || 0, toPct: 40 }
-    ];
-  }
-  if (optionId === 'opportunistic-tilt') {
-    return [
-      { symbol: top, fromPct: Number(sorted[0]?.weightPct) || 0, toPct: 35 },
-      { symbol: 'BTC', fromPct: Number(sorted[1]?.weightPct) || 0, toPct: 25 },
-      { symbol: 'TACTICAL', fromPct: Number(sorted[2]?.weightPct) || 0, toPct: 20 },
-      { symbol: 'STABLES', fromPct: Number(sorted[3]?.weightPct) || 0, toPct: 20 }
-    ];
-  }
-  return [
-    { symbol: top, fromPct: Number(sorted[0]?.weightPct) || 0, toPct: 35 },
-    { symbol: 'BTC', fromPct: Number(sorted[1]?.weightPct) || 0, toPct: 30 },
-    { symbol: 'ETH', fromPct: Number(sorted[2]?.weightPct) || 0, toPct: 20 },
-    { symbol: 'STABLES', fromPct: Number(sorted[3]?.weightPct) || 0, toPct: 15 }
-  ];
-}
-
-function buildRecommendationAction(state, portfolio = {}) {
-  const selected = state?.agentState?.lastPresentedOptions?.find?.((item) => item.selected)
-    || state?.agentState?.lastPresentedOptions?.[1]
-    || null;
-  const optionId = selected?.id || 'balanced-rotation';
-  const allocation = buildTargetAllocation(optionId, portfolio);
-  return {
-    type: 'REBALANCE',
-    asset: 'PORTFOLIO',
-    strategyId: optionId,
-    title: selected?.label || 'Balanced rotation',
-    impactSummary: selected?.meta?.rationale || 'Reduce concentration and rotate into a more diversified mix.',
-    parameters: {
-      targetAllocation: allocation,
-      horizonMonths: state?.collectedSlots?.timeframe || null,
-      riskProfile: state?.collectedSlots?.riskProfile || null
-    },
-    estimatedGasUsd: 6.5
-  };
-}
-
 export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const { t, i18n } = useTranslation();
   const locale = i18n?.language || 'fa';
@@ -1256,10 +1196,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       evmAddresses: wallet?.address ? [wallet.address] : []
     };
     const portfolioSnap = {
-      dataStatus: multi?.loading ? 'pending' : (holdings.length ? 'live' : (walletSnap.connected ? 'empty' : 'unavailable')),
-      // Only a verified read (live or empty) carries a timestamp; a pending
-      // or unavailable snapshot stays bare so freshness reports it missing.
-      ...(!multi?.loading && walletSnap.connected ? { fetchedAt: Date.now(), source: 'portfolio' } : {}),
+      dataStatus: multi?.loading ? 'pending' : multi?.partial ? 'partial'
+        : (holdings.length ? 'live' : (walletSnap.connected ? 'empty' : 'unavailable')),
+      // Only a priced, provider-backed read is capital evidence. The market
+      // layer can show offline prices while the wallet's RPC read succeeds.
+      priceDataStatus: multi?.priceDataStatus || 'unavailable',
+      ...(!multi?.loading && !multi?.fromSnapshot && multi?.priceDataStatus === 'live'
+        && Number(multi?.updatedAt) > 0 && walletSnap.connected
+        ? { fetchedAt: Number(multi.updatedAt), source: 'portfolio' } : {}),
       freshness: multi?.loading ? 'PENDING' : 'FRESH',
       hydrating: Boolean(walletSnap.connected && multi?.loading),
       totalValueUsd: Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null,
@@ -1483,7 +1427,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       chain: r.chainId ?? null,
       chainId: r.chainId ?? null,
       amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
-      valueUsd: Number.isFinite(Number(r.valueUsd)) ? Number(r.valueUsd) : null,
+      valueUsd: r.valueUsd != null && Number.isFinite(Number(r.valueUsd)) ? Number(r.valueUsd) : null,
       dataStatus: 'client'
     }));
     const balances = [...solRows, ...evmRows];
@@ -1524,8 +1468,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         solanaAddresses: solanaAddressLive ? [solanaAddressLive] : []
       },
       portfolio: {
-        dataStatus: hydrating ? 'pending' : readFailed ? 'error' : (canReadPortfolio || solanaRows.length ? (multi?.partial ? 'partial' : 'live') : 'unavailable'),
-        ...((canReadPortfolio || solanaRows.length) && !hydrating ? { fetchedAt: Date.now(), source: 'portfolio' } : {}),
+        dataStatus: hydrating ? 'pending' : readFailed ? 'error'
+          : canReadPortfolio ? (multi?.partial || solanaRows.length ? 'partial' : 'live')
+            : (solanaRows.length ? 'partial' : 'unavailable'),
+        // Solana's on-chain SOL amount has no independently priced USD value
+        // here; a bare balance must never make the combined USD book "live".
+        priceDataStatus: multi?.priceDataStatus || 'unavailable',
+        ...((canReadPortfolio || solanaRows.length) && !hydrating && !multi?.fromSnapshot
+          && multi?.priceDataStatus === 'live' && Number(multi?.updatedAt) > 0
+          ? { fetchedAt: Number(multi.updatedAt), source: 'portfolio' } : {}),
         freshness: hydrating ? 'PENDING' : 'FRESH',
         hydrating,
         totalValueUsd: evmTotal != null ? evmTotal + solTotal : (solTotal || null),
@@ -1807,45 +1758,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const refResolver = refResolverRef.current;
       const ctxResolver = ctxResolverRef.current;
       const conv = convStateRef.current;
-      const os8Current = os8StateRef.current || os8Turn?.state || os8Before;
-      const os8Intent = (os8Current?.intents || []).find((item) => item.intentId === os8Current?.activeIntent) || null;
-      const os8Goal = (os8Current?.goals || []).find((item) => item.goalId === os8Current?.activeGoal) || null;
       const fa = locale.startsWith('fa');
-
-      const selectedReference = message.length <= 120
-        ? parseAnswerValue({ text: message, question: { expectedType: 'selection', options: [] }, state: os8Current })
-        : null;
-      if (!pendingExecution && selectedReference?.optionIndex != null && Array.isArray(os8Current?.agentState?.lastPresentedOptions) && os8Current.agentState.lastPresentedOptions.length) {
-        const nextOptions = os8Current.agentState.lastPresentedOptions.map((item, index) => ({ ...item, selected: index === selectedReference.optionIndex }));
-        os8StateRef.current = {
-          ...os8Current,
-          agentState: {
-            ...(os8Current.agentState || {}),
-            lastPresentedOptions: nextOptions
-          },
-          lastUpdated: Date.now()
-        };
-        saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
-        const picked = nextOptions[selectedReference.optionIndex];
-        const pickMsg = {
-          id: makeId(),
-          role: 'ai',
-          content: fa
-            ? `متوجه شدم — ${choiceLabel(picked)} را به‌عنوان مسیر منتخب ادامه می‌دهم. اگر بخواهی می‌توانم همین حالا شبیه‌سازی و آماده‌سازی اجرای امن را انجام بدهم.`
-            : `Got it — I'll continue with ${choiceLabel(picked)} as the selected path. If you want, I can simulate it now and prepare a safe execution flow.`,
-          kind: 'assistant',
-          ui: { type: 'TEXT' },
-          intentType: os8Intent?.type || null,
-          detectedIntent: os8Intent?.type || null
-        };
-        setMessages((prev) => [...prev, pickMsg]);
-        setConvState((prev) => appendConvMessage(prev, pickMsg));
-        setThinking([]);
-        setThinkingState('idle');
-        setActivitySteps([]);
-        busyRef.current = false;
-        return true;
-      }
+      // The conversation state still remembers the user's slots, but the
+      // Upgrade-8 generic 50/30/20 portfolio suggestion is NOT a financial
+      // plan. Strategy Brain owns explicit return targets. In particular, do
+      // not turn "1000 dollars, 30% in 30 days" into an unsourced allocation.
+      const goalTurn = resolveGoalTurn({
+        text: message, messages: messagesRef.current || messages,
+        portfolio: aiContext.portfolio, wallet, balances: aiContext.balances
+      });
+      const effectiveMessage = goalTurn.objective ? goalTurn.text : message;
 
       // Check if user is asking to launch or create a token
       if (/(?:توکن.*(?:میخام|می‌خوام|میخوام|بسازم|لانچ)|(?:لانچ|launch|ساخت|ایجاد|create).*توکن|launch.*token|token.*launch)/i.test(message)) {
@@ -1873,129 +1795,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         return true;
       }
 
-      const isPortfolioOrGoalReady = os8Intent?.type === 'PORTFOLIO_ANALYSIS' &&
-        (os8Turn?.binding?.slot === 'riskProfile' ||
-         !(os8Turn?.state?.missingSlots || []).length ||
-         (os8Goal?.riskProfile && (os8Goal?.horizonDays || os8Goal?.horizonMonths)));
-
-      if (isPortfolioOrGoalReady) {
-        const orchestrated = await orchestrateIntent({
-          state: os8Turn?.state || os8Current,
-          message,
-          walletContext: aiContext.wallet,
-          portfolioContext: portfolioContextForOs8,
-          locale
-        });
-        os8StateRef.current = orchestrated.state;
-        saveLocalIntentOSState(orchestrated.state, 'intent-unified');
-        const consensus = orchestrated.orchestration?.consensus || {};
-        const options = Array.isArray(consensus.options) ? consensus.options : [];
-        const optionLines = options.map((option, index) => `${index + 1}) ${option.label} — ${option.rationale}`).join('\n');
-
-        const riskVal = os8Turn?.binding?.value || os8Goal?.riskProfile || os8Turn?.state?.collectedSlots?.riskProfile || 'medium';
-        const riskFa = riskVal === 'medium' ? 'متوسط' : riskVal === 'low' ? 'کم' : 'زیاد';
-        const horizonText = os8Goal?.horizonDays
-          ? `${os8Goal.horizonDays} روزه`
-          : os8Goal?.horizonMonths
-            ? `${os8Goal.horizonMonths} ماهه`
-            : (fa ? 'کوتاه‌مدت' : 'short-term');
-        const amountText = os8Goal?.amountUsd ? (fa ? `سرمایه $${os8Goal.amountUsd}` : `capital $${os8Goal.amountUsd}`) : null;
-
-        const actionsSummary = fa
-          ? `\n\n📌 کارهای پیشنهادی برای اجرا:\n۱. تخصیص ۵۰٪ به استیبل‌کوین‌ها جهت دریافت بازدهی سالانه (APY) با ریسک پایین\n۲. تخصیص ۳۰٪ به دارایی‌های شاخص و اصلی بازار\n۳. تخصیص ۲۰٪ به موقعیت‌های دارای پتانسیل رشد مناسب\n۴. تنظیم حد ضرر و پایش مستمر خودکار توسط ایجنت‌ها`
-          : `\n\n📌 Suggested actions:\n1. Allocate 50% to stablecoins for steady APY yield\n2. Allocate 30% to core assets\n3. Allocate 20% to growth/momentum opportunities\n4. Set automated agent monitors`;
-
-        const responseText = fa
-          ? `برنامه پیشنهادی برای ${amountText ? `${amountText} با ` : ''}ریسک ${riskFa} و افق ${horizonText} آماده شد:\n\n${optionLines}${actionsSummary}\n\nپیشنهاد اصلی FBT: ${consensus.preferredOption?.label || 'چرخش متعادل و متنوع‌سازی'}. برای ادامه می‌توانید بگویید «انجام بده» یا یکی از گزینه‌ها را انتخاب کنید.`
-          : `Plan prepared for ${amountText ? `${amountText} with ` : ''}${riskVal} risk and ${horizonText} horizon:\n\n${optionLines}${actionsSummary}\n\nPrimary recommendation: ${consensus.preferredOption?.label || 'Balanced rotation'}. Say "do it" or select an option to proceed.`;
-
-        const aiMsg = {
-          id: makeId(),
-          role: 'ai',
-          content: responseText,
-          kind: 'assistant',
-          ui: { type: 'TEXT' },
-          intentType: os8Intent?.type || 'PORTFOLIO_ANALYSIS',
-          detectedIntent: os8Intent?.type || 'PORTFOLIO_ANALYSIS',
-          choices: options.map((option, index) => ({ id: option.id || `opt-${index}`, label: `${fa ? 'گزینه' : 'Option'} ${index + 1}: ${option.label}`, value: option.id || option.label })),
-          choiceKind: 'STRATEGY_OPTION'
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-        setConvState((prev) => {
-          let next = appendConvMessage(prev, aiMsg);
-          next = setConvQuestion(next, '', { questionId: null, expectedType: null });
-          next = updateIntentStatus(next, INTENT_STATUS.READY);
-          return next;
-        });
-        setPredictedNext(options.map((option, index) => ({ id: option.id || `opt-${index}`, label: option.label, prompt: option.label })));
-        setSuggestions([]);
-        setThinking([]);
-        setThinkingState('idle');
-        setActivitySteps([]);
-        busyRef.current = false;
-        return true;
-      }
-
-      if (!pendingExecution && /(?:^|\s)(?:انجامش بده|انجام بده|تأیید|تایید|do it|go ahead|confirm)(?:\s|$)/i.test(message) && os8Intent?.type === 'PORTFOLIO_ANALYSIS' && os8Current?.agentState?.lastPresentedOptions?.some?.((item) => item.selected)) {
-        const preparedV8 = prepareExecution({
-          state: os8Current,
-          action: buildRecommendationAction(os8Current, portfolioContextForOs8),
-          walletContext: aiContext.wallet
-        });
-        os8StateRef.current = preparedV8.state;
-        saveLocalIntentOSState(preparedV8.state, 'intent-unified');
-        const selected = os8Current.agentState.lastPresentedOptions.find((item) => item.selected) || os8Current.agentState.lastPresentedOptions[0];
-        setPendingExecution({
-          action: preparedV8.execution.action,
-          actions: [preparedV8.execution.action],
-          message,
-          card: {
-            title: fa ? '✦ آماده‌سازی اجرای امن' : '✦ Safe execution prepared',
-            headline: fa
-              ? `استراتژی ${choiceLabel(selected)} انتخاب شد. قبل از اجرا شبیه‌سازی، مجوز و وضعیت کیف پول بررسی می‌شود.`
-              : `${choiceLabel(selected)} selected. Simulation, permissions and wallet freshness will be checked before execution.`,
-            rows: preparedV8.execution.action?.parameters?.targetAllocation || [],
-            tradeCount: (preparedV8.execution.action?.parameters?.targetAllocation || []).length,
-            estimatedFeeUsd: preparedV8.simulation?.estimatedGasUsd || preparedV8.execution.action?.estimatedGasUsd || null,
-            confirmLabel: fa ? 'تأیید و اجرای امن' : 'Confirm safe execution',
-            editLabel: fa ? 'ویرایش' : 'Edit'
-          },
-          rebalance: { target: preparedV8.execution.action?.parameters?.targetAllocation || [] },
-          intentId: os8Intent?.intentId || null,
-          intentType: 'REBALANCE',
-          walletSnapshot: walletMgrRef.current.takeSnapshot({
-            connected: walletConnected,
-            canSign: walletCanSign,
-            address: wallet?.address || null,
-            chainId: wallet?.chainId || null,
-            balances: aiContext.balances,
-            tokenBalances: aiContext.balances
-          })
-        });
-        setConvState((prev) => setConvPending(prev, { action: preparedV8.execution.action, intentId: os8Intent?.intentId || null }));
-        const prepMsg = {
-          id: makeId(),
-          role: 'ai',
-          content: fa
-            ? `آماده‌ام. اول شبیه‌سازی و بررسی ایمنی را انجام می‌دهم؛ بعد از تأیید نهایی، اجرا و مانیتورینگ شروع می‌شود.${preparedV8.simulation?.warnings?.length ? ` هشدارها: ${preparedV8.simulation.warnings.join('، ')}` : ''}`
-            : `Ready. I will simulate and run safety checks first; after your final confirmation, execution and monitoring will start.${preparedV8.simulation?.warnings?.length ? ` Warnings: ${preparedV8.simulation.warnings.join(', ')}` : ''}`,
-          kind: 'assistant',
-          ui: { type: 'TEXT' },
-          intentType: 'REBALANCE',
-          detectedIntent: 'REBALANCE'
-        };
-        setMessages((prev) => [...prev, prepMsg]);
-        setConvState((prev) => appendConvMessage(prev, prepMsg));
-        setThinking([]);
-        setThinkingState('idle');
-        setActivitySteps([]);
-        busyRef.current = false;
-        return true;
-      }
-
       // Bare «اره» / «بله تایید شد» and named page-opens («افق جهانی را باز کن»)
       // must reach the OS — leftover lastQuestion must not swallow them.
-      if (isBareFollowUp(message) || isPageOpenUtterance(message)) {
+      if (goalTurn.objective || isBareFollowUp(message) || isPageOpenUtterance(message)) {
         /* fall through to context + OS process() */
       } else if (conv.lastQuestion && conv.lastQuestionId && message.length < 100) {
         const shortParsed = parseShortAnswer(message);
@@ -2027,22 +1829,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             setConvState((prev) => setConvQuestion(prev, fa ? 'ریسک متوسط را در نظر بگیرم؟' : 'Should I consider medium risk?', { questionId: makeId('q'), expectedType: 'risk' }));
           } else if (slotKey === 'riskProfile') {
             const riskVal = fillResult.value === 'low' ? (fa ? 'کم' : 'low') : fillResult.value === 'high' ? (fa ? 'زیاد' : 'high') : (fa ? 'متوسط' : 'medium');
-            const orchestrated = await orchestrateIntent({
-              state: os8StateRef.current || conv,
-              message,
-              walletContext: aiContext.wallet,
-              portfolioContext: portfolioContextForOs8,
-              locale
-            });
-            const consensus = orchestrated.orchestration?.consensus || {};
-            const options = Array.isArray(consensus.options) ? consensus.options : [];
-            const optionLines = options.map((option, index) => `${index + 1}) ${option.label} — ${option.rationale}`).join('\n');
-            const actionsSummary = fa
-              ? `\n\n📌 کارهای پیشنهادی برای اجرا:\n۱. تخصیص ۵۰٪ به استیبل‌کوین‌ها جهت دریافت بازدهی سالانه (APY) با ریسک پایین\n۲. تخصیص ۳۰٪ به دارایی‌های شاخص و اصلی بازار\n۳. تخصیص ۲۰٪ به موقعیت‌های دارای پتانسیل رشد مناسب\n۴. تنظیم حد ضرر و پایش مستمر خودکار توسط ایجنت‌ها`
-              : `\n\n📌 Suggested actions:\n1. Allocate 50% to stablecoins for steady APY yield\n2. Allocate 30% to core assets\n3. Allocate 20% to growth/momentum opportunities\n4. Set automated agent monitors`;
+            // A risk answer is a preference, never permission to invent an
+            // allocation or prepare a transaction. A complete objective has
+            // already been resumed by resolveGoalTurn above; for a bare
+            // portfolio question ask for the actual objective instead.
             responseText = fa
-              ? `ریسک ${riskVal} ثبت شد. برای شما این برنامه را پیشنهاد می‌کنم:\n\n${optionLines}${actionsSummary}\n\nپیشنهاد اصلی FBT: ${consensus.preferredOption?.label || 'چرخش متعادل و متنوع‌سازی'}. برای ادامه می‌توانید بگویید «انجام بده» یا یکی از گزینه‌ها را انتخاب کنید.`
-              : `${fillResult.value} risk recorded. Here is the recommended plan:\n\n${optionLines}${actionsSummary}\n\nPrimary recommendation: ${consensus.preferredOption?.label || 'Balanced rotation'}. Say "do it" or select an option to proceed.`;
+              ? `ریسک ${riskVal} ثبت شد. برای ساخت برنامه، سرمایه، هدف سود و بازه زمانی‌ات را بگو؛ تحلیل بدون نرخ واقعی و تأیید کیف پول اجرا نمی‌شود.`
+              : `${riskVal} risk recorded. Tell me your capital, return target and horizon to build a plan from real rates; execution still needs your wallet approval.`;
           } else if (slotKey === 'targetReturn') {
             responseText = fa
               ? `هدف ${fillResult.value.value}% سود ثبت شد. در چه بازه‌ای می‌خوای به این سود برسی؟`
@@ -2150,7 +1943,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       // 0. Context continuation + natural-language monitor/order/opportunity
       // Page-open utterances skip this: «افق جهانی را باز کن» is not a monitor.
       if (contextHandlerRef.current && !isPageOpenUtterance(message)) {
-        const ctxOut = await contextHandlerRef.current(message);
+        const ctxOut = goalTurn.objective ? null : await contextHandlerRef.current(message);
         if (ctxOut?.handled) {
           setThinking([]);
           setThinkingState('idle');
@@ -2192,7 +1985,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setActivitySteps((prev) => prev.map((s) => s.id === 'wallet' ? { ...s, status: 'completed' } : s.id === 'market' ? { ...s, status: 'active' } : s));
 
       const osResult = await intentOS.process({
-        message,
+        message: effectiveMessage,
         conversationId,
         currentPage,
         walletState,
@@ -2516,7 +2309,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
 
       const res = await aiChat({
-        message,
+        message: effectiveMessage,
+        // The server fallback uses the SAME unfinished goal as the local chat.
+        // Send a bounded, plain-text history, never entire UI/plan/wallet blobs.
+        messages: (messagesRef.current || []).filter((row) => row?.role === 'user' || row?.role === 'ai')
+          .slice(-8).map((row) => ({
+            role: row.role,
+            content: String(row.content || '').slice(0, 1200),
+            ...(row.strategyRequest?.text ? { strategyRequest: { text: String(row.strategyRequest.text).slice(0, 1200) } } : {}),
+            ...(row.strategyDraft?.text ? { strategyDraft: { text: String(row.strategyDraft.text).slice(0, 1200) } } : {})
+          })),
+        surface: currentPage,
         conversationId,
         context: aiContext,
         resume: opts.resume === true,
@@ -2571,6 +2374,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         actions: Array.isArray(reply.actions) ? reply.actions : [],
         rebalance: reply.rebalance || null,
         strategyRequest: reply.strategyRequest || null,
+        strategyDraft: reply.strategyDraft || null,
         strategyEntities: reply.strategyRequest ? (reply.intent?.entities || null) : null,
         /* The server fallback used to swallow goal turns into a TEXT line; it
            now emits the same GOAL_PLAN_CARD + goalRequest the local OS does,
@@ -3099,18 +2903,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    */
   const strategyRuntimesRef = useRef(new Map());
 
-  /* Write the runtime's stage truth back to the store. Called after anything
-     that changes progress, so a reload picks up where this left off. Storage
-     failure is swallowed on purpose: losing persistence must never block a
-     stage the user just signed. */
+  /* Persist stage progress before handing off to a wallet. If this write
+     fails, the venue cannot safely attribute a later receipt to the plan;
+     fail the *handoff*, not the financial transaction (none was sent yet). */
   const persistStrategyRuntime = useCallback((strategy, spec, runtime) => {
-    if (!strategy?.ok || !runtime) return;
+    if (!strategy?.ok || !runtime) return false;
     try {
-      saveStrategyPlan({ strategy, goal: spec || strategy.goal || null, runtime: runtime.state() });
-    } catch { /* ignore */ }
+      return Boolean(saveStrategyPlan({ strategy, goal: spec || strategy.goal || null, runtime: runtime.state() }));
+    } catch { return false; }
   }, []);
 
-  const runStrategyStage = useCallback((message, strategy) => {
+  const runStrategyStage = useCallback(async (message, strategy) => {
     if (!strategy?.ok) return;
     let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
     if (!runtime) {
@@ -3135,6 +2938,45 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const next = runtime.nextStage();
     const fa = locale.startsWith('fa');
     if (!next.ok) {
+      if (next.code === 'AWAITING_RECEIPT') {
+        const read = await reconcileStrategyReceipts({
+          strategy, stageId: next.stageId, owner: aiContext.wallet?.address,
+          getProvider: wallet?.getReadProvider ? (chainId) => wallet.getReadProvider(chainId) : null
+        });
+        if (read.ok) {
+          const confirmed = runtime.confirmStage(next.stageId, { receipt: read.receipt });
+          if (confirmed.ok) {
+            if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+              strategyRuntimesRef.current.delete(strategy.strategyId);
+              setMessages((prev) => [...prev, {
+                id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+                content: fa
+                  ? 'تراکنش‌ها روی زنجیره تطبیق شدند، اما ثبت تأیید مرحله در این دستگاه انجام نشد. رسید را نگه دار؛ پس از رفع مشکل ذخیره‌سازی، دوباره «ادامه» را بزن تا بدون امضای مجدد بررسی شود.'
+                  : 'Transactions were verified on-chain, but this device could not save the stage confirmation. Keep the receipts; fix storage and retry Continue to reconcile without signing again.'
+              }]);
+              return;
+            }
+            setMessages((prev) => [...prev, {
+              id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+              content: fa
+                ? `رسیدهای ${read.receipt.actions.length} اقدام «${next.stageId}» روی زنجیره و با حساب تو تطبیق داده شدند. مرحله بعد فقط با تأیید تازه تو شروع می‌شود.`
+                : `The ${read.receipt.actions.length} receipts for “${next.stageId}” matched on-chain transactions from your wallet. The next stage starts only with your fresh confirmation.`
+            }]);
+            return;
+          }
+        }
+        // A missing local hint or an unrelated receipt is NOT evidence that
+        // the transaction failed. Do not re-open the venue automatically:
+        // re-signing before inspecting the wallet can send the same amount twice.
+        const missing = read.missing?.map((r) => `${r.actionIndex + 1}: ${r.code}`).join('، ') || read.code;
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa
+            ? `مرحله «${next.stageId}» هنوز قطعی نیست (${missing}). ${read.verifiedCount || 0} از ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} اقدام تطبیق شد. قبل از هر امضای دوباره، وضعیت تراکنش در کیف پول/صفحه مقصد را بررسی کن؛ مرحله بعد قفل است.`
+            : `Stage “${next.stageId}” is not settled (${missing}). ${read.verifiedCount || 0} of ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} actions reconciled. Inspect the wallet/venue before signing again; later stages stay locked.`
+        }]);
+        return;
+      }
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
         content: fa
@@ -3150,70 +2992,162 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }]);
       return;
     }
-    /* A stage that moves no funds and names no venue page is executed IN the
-       chat — from the live app state already in hand — instead of navigating
-       anywhere. Preflight reports balances + limits; the monitor stage runs the
-       real plan-vs-reality check. Money stages still hand off to the venue
-       that owns the signature (§67). */
-    const venueActions = (next.actions || []).filter((a) => a?.route && !String(a.route).startsWith('/intent'));
-    if (!next.movesFunds && venueActions.length === 0) {
-      runtime.advance();
-      persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
-      if (next.stage?.id === 'monitor') {
-        monitorStrategy(message, strategy);
+    /* Run preflight IN chat, against a fresh, complete wallet snapshot. A
+       disconnect, unknown capital, partial portfolio or out-of-band risk is a
+       refusal — it cannot be recorded as a completed check. Gas, approvals and
+       the final quote still belong to each venue before its wallet signature. */
+    if (next.stage?.id === 'preflight') {
+      const check = evaluateStrategyPreflight({
+        strategy, wallet: aiContext.wallet, portfolio: aiContext.portfolio
+      });
+      if (!check.ok) {
+        const hints = {
+          WALLET_REQUIRED: fa ? 'کیف پول را وصل کن.' : 'Connect a wallet.',
+          WALLET_CANNOT_SIGN: fa ? 'کیف پول را باز کن.' : 'Unlock your wallet.',
+          PORTFOLIO_NOT_LIVE: fa ? 'خواندن پرتفوی را تازه کن.' : 'Refresh the portfolio read.',
+          PRICE_NOT_LIVE: fa ? 'قیمت دلاری دارایی‌ها زنده نیست؛ بازار را تازه کن.' : 'Refresh the live USD market prices.',
+          PORTFOLIO_STALE: fa ? 'داده کیف پول کهنه است؛ دوباره بخوان.' : 'Refresh the wallet data.',
+          CAPITAL_NOT_VERIFIED: fa ? 'موجودی خوانده‌شده سرمایه هدف را پوشش نمی‌دهد.' : 'The read balance does not cover your stated capital.',
+          SOURCE_CHAIN_CAPITAL_NOT_VERIFIED: fa ? 'سرمایه کافی روی زنجیره کیف پول فعلی نیست؛ من موجودی زنجیره دیگر را قابل خرج اینجا نمی‌دانم.' : 'Not enough capital on the current wallet chain; capital on another chain is not spendable here.',
+          BRIDGE_USDC_NOT_VERIFIED: fa ? 'برای بریج باید روی زنجیره مبدأ USDC کافی داشته باشی؛ تبدیل دارایی نیازمند قیمت تازه و امضای جداست.' : 'The source chain needs enough USDC to bridge; conversion needs a fresh quote and a separate wallet signature.',
+          WALLET_CHAIN_DIFFERS_REBUILD: fa ? 'زنجیره کیف پول با برنامه نمی‌خواند؛ با کیف پول وصل‌شده برنامه را بازسازی کن.' : 'The wallet chain differs from the plan; rebuild with the connected wallet.',
+          RISK_LIMIT: fa ? 'طرح از محدودیت ریسک می‌گذرد؛ برنامه را بازسازی کن.' : 'The plan exceeds the risk limit; rebuild it.'
+        };
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa
+            ? `پیش‌پرواز تأیید نشد (${check.code}). ${hints[check.code] || 'طرح را دوباره بررسی کن.'} هیچ مرحله‌ای اجرا یا تأیید نشد.`
+            : `Preflight did not pass (${check.code}). ${hints[check.code] || 'Review the plan.'} No stage was run or confirmed.`,
+          actions: check.code === 'BRIDGE_USDC_NOT_VERIFIED'
+            ? [{ id: 'prepare-usdc', label: fa ? 'تبدیل به USDC در سواپ' : 'Convert to USDC in Swap',
+              route: `/swap?chain=${encodeURIComponent(String(aiContext.wallet?.chainId || ''))}&to=USDC` }]
+            : []
+        }]);
         return;
       }
-      const total = Number(aiContext.portfolio?.totalValueUsd);
-      const chainName = wallet?.chainName || (wallet?.chainId != null ? `chain ${wallet.chainId}` : null);
-      const dd = strategy.risk?.drawdownBudgetPct;
-      const costLine = strategy.cost?.totalPct != null
-        ? (fa ? `هزینه ورود ${strategy.cost.totalPct}٪` : `entry cost ${strategy.cost.totalPct}%`)
-        : (fa ? 'گاز خوانده نشد — رقم هزینه کف است' : 'gas unread — the cost figure is a floor');
+      runtime.advance();
+      const verified = runtime.confirmStage('preflight', {
+        receipt: { ok: true, kind: 'local-wallet-risk-check', checkedAt: check.checkedAt,
+          availableUsd: check.availableUsd, unverified: check.unverified }
+      });
+      if (!verified.ok) return;
+      if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+        strategyRuntimesRef.current.delete(strategy.strategyId);
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa ? 'پیش‌پرواز بررسی شد ولی ذخیره نشد؛ قبل از هر مرحلهٔ مالی دوباره تلاش کن.'
+            : 'Preflight was checked but could not be saved; retry before any financial stage.'
+        }]);
+        return;
+      }
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
         content: fa
-          ? `✅ «${next.stage?.title || 'پیش‌پرواز'}» همین‌جا انجام شد — بدون جابه‌جایی پول:\n• موجودی خوانده‌شده: ${Number.isFinite(total) ? `$${total.toLocaleString('en-US')}` : 'کیف پول وصل نیست'}${chainName ? ` (${chainName})` : ''}\n• سقف افت مجاز: ${dd != null ? `${dd}٪` : '—'} · ${costLine}\nمرحله بعد امضا می‌خواهد — با «اجرای مرحله بعد» ادامه بده.`
-          : `✅ “${next.stage?.title || 'Preflight'}” ran right here — no funds moved:\n• Read balance: ${Number.isFinite(total) ? `$${total.toLocaleString('en-US')}` : 'wallet not connected'}${chainName ? ` (${chainName})` : ''}\n• Drawdown budget: ${dd != null ? `${dd}%` : '—'} · ${costLine}\nThe next stage needs a signature — continue with “Run next stage”.`
+          ? `پیش‌پرواز محلی گذشت: موجودی خوانده‌شده $${check.availableUsd.toLocaleString('en-US')}، سقف ریسک بررسی شد. گاز، مجوز توکن و قیمت هنوز تأیید نشده‌اند؛ صفحه مقصد قبل از امضای هر تراکنش دوباره بررسی‌شان می‌کند. با دکمه مرحله بعد ادامه بده.`
+          : `Local preflight passed: read balance $${check.availableUsd.toLocaleString('en-US')} and risk budget checked. Gas, token approval and live quote are NOT verified yet; review each at the venue before signing. Continue with the next stage button.`
       }]);
       return;
     }
-    if (next.movesFunds && !walletConnected) { openWalletSheet(message.content, 'STRATEGY_PLAN'); return; }
-    const first = next.actions?.find((a) => a.route) || null;
+    if (next.stage?.id === 'monitor') {
+      // Observing without a real portfolio is a refusal, not a completed stage.
+      const result = monitorStrategy(message, strategy);
+      if (result?.ok) {
+        runtime.advance();
+        runtime.confirmStage('monitor', { receipt: { ok: true, kind: 'portfolio-observation', checkedAt: Date.now() } });
+        if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+          strategyRuntimesRef.current.delete(strategy.strategyId);
+          setMessages((prev) => [...prev, {
+            id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+            content: fa ? 'پایش انجام شد اما ثبت مرحله روی دستگاه شکست خورد؛ برای ادامهٔ قابل‌اتکا دوباره تلاش کن.'
+              : 'The monitoring read ran, but this device could not save its stage; retry before treating it as persistent.'
+          }]);
+        }
+      }
+      return;
+    }
+    if (next.movesFunds && (!walletConnected || !walletCanSign)) { openWalletSheet(message.content, 'STRATEGY_PLAN'); return; }
+    const firstIndex = next.actions?.findIndex((a) => a.requiresSignature && a.route) ?? -1;
+    const first = firstIndex >= 0 ? next.actions[firstIndex] : null;
+    const actionRoute = (action, index) => strategyActionRoute(action, {
+      strategyId: strategy.strategyId, stageId: next.stage.id, actionIndex: index
+    });
+    if (next.movesFunds && (!first || next.actions.some((a) => a.requiresSignature && !a.route))) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa ? 'یکی از اقدام‌ها صفحهٔ اجرای معتبر ندارد؛ مرحله شروع نشد. طرح را بازسازی کن.'
+          : 'An action has no execution venue; this stage was not started. Rebuild the plan.'
+      }]);
+      return;
+    }
+    const unverifiable = next.movesFunds
+      ? next.actions.map((a, i) => ({ action: a, index: i }))
+        .filter(({ action }) => action.requiresSignature && !strategyReceiptSupport(action)) : [];
+    if (unverifiable.length) {
+      // The venue itself remains available, but do not send a user to sign an
+      // action whose result this strategy can never attribute or reconcile.
+      // The preview routes below are deliberately NOT stage-labelled.
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? `مرحله «${next.stage.title}» آغاز نشد: برای ${unverifiable.map(({ index }) => index + 1).join('، ')} رسید قابل‌تطبیق خودکار ندارم. صفحه‌های مقصد مستقلاً قابل استفاده‌اند، اما انجامشان را به این طرح منتسب یا مرحله بعد را باز نمی‌کنم. برای ادامهٔ مرحله‌ای، طرح قابل‌تأیید دیگری بساز.`
+          : `Stage “${next.stage.title}” was not started: action(s) ${unverifiable.map(({ index }) => index + 1).join(', ')} lack independent receipt reconciliation. You can use their venues separately, but I cannot attribute them to this plan or unlock later stages. Rebuild a verifiable plan to continue in stages.`,
+        actions: unverifiable.map(({ action, index }) => ({
+          id: `standalone-${next.stage.id}-${index}`, label: `${index + 1}. ${action.operation} · ${action.route}`,
+          route: action.route
+        }))
+      }]);
+      return;
+    }
     /*
      * Only now is the stage really leaving this surface, so only now is it
      * marked RUNNING and written back. Marking it earlier would record a
      * hand-off that never happened when the wallet gate turns the user away.
      *
-     * RUNNING is the honest ceiling here: the signature happens on the venue
-     * page, and this surface has no receipt to bring back, so nothing is ever
-     * marked CONFIRMED from chat. A returning user sees "this stage is with
-     * the venue", not a false "done".
+     * RUNNING is the honest ceiling here: the signature happens at the venue.
+     * On return, chat asks the provider for the transaction and protocol event;
+     * only a matching proof can mark this stage CONFIRMED.
      */
     runtime.advance();
-    persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
+    if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+      // Do not navigate to a wallet after losing the only pending-stage key.
+      // Drop the in-memory advance so retry can hydrate the last saved state.
+      strategyRuntimesRef.current.delete(strategy.strategyId);
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? 'ذخیرهٔ مرحله در دستگاه ممکن نشد؛ هیچ صفحهٔ امضایی باز نکردم. فضای ذخیره‌سازی مرورگر را بررسی کن و دوباره تلاش کن.'
+          : 'Could not save the pending stage on this device; no signing page was opened. Check browser storage and retry.'
+      }]);
+      return;
+    }
     setMessages((prev) => [...prev, {
       id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
       content: fa
         ? `مرحله «${next.stage.title}»: ${next.stage.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم.`
         : `Stage "${next.stage.title}": ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat.`,
-      actions: first ? [{ id: `stage-${next.stage.id}`, route: first.route, label: fa ? 'باز کن' : 'Open' }] : []
+      actions: (next.actions || []).map((action, i) => ({ action, index: i }))
+        .filter(({ action }) => action.route).map(({ action, index }) => ({
+          id: `stage-${next.stage.id}-${index}`, route: actionRoute(action, index),
+          label: `${index + 1}. ${action.operation || action.module} ${action.params?.asset || action.params?.token || ''}`.trim()
+        }))
     }]);
     if (first?.route) {
-      /* The stage hand-off carries its own identity so the return turn can
-         confirm or skip the exact stage the user acted on. */
+      /* Identify the exact pending action for receipt lookup on return;
+         the handoff itself neither confirms nor skips a money stage. */
       try {
         writePendingHandoff({
-          route: first.route,
+          route: actionRoute(first, firstIndex),
           label: fa ? `مرحله «${next.stage.title}» در ${routeFaLabel(first.route)}` : `Stage "${next.stage.title}" on ${first.route}`,
           kind: 'strategy-stage',
           strategyId: strategy.strategyId,
           stageId: next.stage.id,
+          actionIndex: firstIndex,
           seasonId: seasonIdRef.current
         });
       } catch {}
-      navigate(first.route);
+      navigate(actionRoute(first, firstIndex));
     }
-  }, [aiContext, wallet, locale, walletConnected, openWalletSheet, navigate, persistStrategyRuntime]);
+  }, [aiContext, wallet, locale, walletConnected, walletCanSign, openWalletSheet, navigate, persistStrategyRuntime]);
 
   /*
    * ─── STRATEGY BRAIN: monitoring and revision ────────────────────────────
@@ -3266,12 +3200,32 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const fa = locale.startsWith('fa');
     if (!runtime) return;
     const portfolio = aiContext.portfolio || null;
-    const valueUsd = Number(portfolio?.totalValueUsd);
-    if (!Number.isFinite(valueUsd) || valueUsd <= 0) {
+    const financialStages = (strategy.stages || []).filter((s) => s.movesFunds);
+    const confirmed = runtime.state().stageProgress || {};
+    const hasReceipts = financialStages.length > 0 && financialStages.every((s) =>
+      confirmed[s.id]?.state === 'CONFIRMED' && confirmed[s.id]?.receipt?.verified === true);
+    // A total wallet balance is NOT this strategy's P&L (the user can hold
+    // other assets). Until venue receipts and attributable positions exist,
+    // reporting CONTINUE/REVISE/HALT from the whole wallet would fabricate it.
+    if (!hasReceipts || !portfolio?.strategyPositions?.[strategy.strategyId]) {
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
         content: fa
-          ? 'برای سنجیدن برنامه باید ارزش واقعی پرتفوی را ببینم — کیف پول را وصل کن تا بتوانم مقایسه کنم. حدس نمی‌زنم.'
+          ? 'پایش سود این استراتژی هنوز قابل‌تأیید نیست: رسید معتبرِ همه مراحل مالی و موقعیت‌های منتسب به همین طرح لازم است. ارزش کل کیف پول، سود این برنامه نیست.'
+          : 'Strategy P&L cannot be verified yet: every financial stage needs a checked receipt and positions attributable to this plan. Total wallet value is not this strategy’s return.'
+      }]);
+      return { ok: false, code: 'STRATEGY_POSITIONS_UNATTRIBUTED' };
+    }
+    const valueUsd = Number(portfolio.strategyPositions[strategy.strategyId]?.valueUsd);
+    if (portfolio?.dataStatus !== 'live' || portfolio.partial === true
+      || !Number.isFinite(Number(portfolio.fetchedAt))
+      || Number(portfolio.fetchedAt) > Date.now() + 5_000
+      || Date.now() - Number(portfolio.fetchedAt) > 120_000
+      || !Number.isFinite(valueUsd) || valueUsd <= 0) {
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? 'برای سنجیدن برنامه باید ارزش واقعی و تازهٔ پرتفوی را ببینم — کیف پول را وصل و داده‌ها را تازه کن. حدس نمی‌زنم.'
           : 'To check the plan I need the portfolio\'s real value — connect the wallet so I can compare it. I will not guess.'
       }]);
       return;
@@ -3298,6 +3252,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         ? `${label} ارزش واقعی ${Number(valueUsd).toLocaleString()} دلار در برابر سرمایه‌ی ${Number(strategy.goal?.capitalUsd || 0).toLocaleString()} دلار.`
         : `${label} Real value $${Number(valueUsd).toLocaleString()} against $${Number(strategy.goal?.capitalUsd || 0).toLocaleString()} of capital.`
     }]);
+    return result;
   }, [aiContext, locale, persistStrategyRuntime, strategyRuntimeFor]);
 
   const reviseStrategy = useCallback(async (message, strategy) => {
@@ -3794,13 +3749,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const chooseOption = useCallback((msg, choice) => {
     if (!choice) return;
-    /*
-     * The RETURN-turn answers. «انجام شد» on a strategy stage confirms THAT
-     * stage on the runtime — with a receipt that says the source is the
-     * user's own word, never a fabricated tx hash — and offers the next
-     * stage. «لغو شد» skips the stage without recording any success. Plain
-     * routes just get an honest acknowledgement.
-     */
+    /* A navigation return is not a settlement receipt. Neither "cancelled"
+       nor "done" changes a money stage without independent reconciliation. */
     if (msg?.choiceKind === 'HANDOFF_OUTCOME') {
       const pickedId = String(choice?.id || choice?.value || '');
       const faLoc = locale.startsWith('fa');
@@ -3809,10 +3759,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       const say = (content, extra = {}) => setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', content, kind: 'assistant', ui: { type: 'TEXT' }, ...extra
       }]);
-      const nextStageChoice = (strategyId) => ({
-        choices: [{ id: 'strategy-next', value: strategyId, label: faLoc ? '▶️ مرحله بعد را اجرا کن' : '▶️ Run the next stage' }],
-        choiceKind: 'STRATEGY_NEXT'
-      });
+
       if (pickedId === 'handoff-browse') {
         say(faLoc ? 'باشه، مشکلی نیست. هر وقت آماده بودی بگو ادامه بده.' : 'No problem. Say continue whenever you are ready.');
         return;
@@ -3822,44 +3769,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         : null;
       const plan = planMsg?.strategyPlan || null;
       if (pickedId === 'handoff-cancelled') {
-        if (plan && handoff.stageId) {
-          try {
-            const runtime = strategyRuntimeFor(planMsg, plan);
-            runtime?.skipStage?.(handoff.stageId, 'CANCELLED_BY_USER');
-            if (runtime) persistStrategyRuntime(plan, planMsg.strategySpec || null, runtime);
-          } catch {}
-        }
-        say(faLoc
-          ? `لغو شد — «${handoff.label || ''}» انجام نشد و چیزی به عنوان موفق ثبت نشد. اگه بخوای با شرایط جدید ادامه می‌دیم.`
-          : `Cancelled — "${handoff.label || ''}" did not happen and nothing was recorded as a success. We can continue with new terms whenever you want.`,
-        plan ? nextStageChoice(plan.strategyId) : {});
+        // "I cancelled" cannot prove that a broadcast transaction did not
+        // settle while the app was backgrounded. Keep a money stage RUNNING,
+        // not FAILED; never unlock it or offer a silent re-send.
+        say(plan && handoff.stageId
+          ? (faLoc
+            ? `لغو را ثبت کردم، اما وضعیت زنجیرهٔ «${handoff.stageId}» هنوز نامعلوم است. پیش از هر امضای دوباره تاریخچه را ببین؛ مرحله‌های بعد بسته می‌مانند.`
+            : `Noted, but the on-chain status of “${handoff.stageId}” is still unknown. Inspect history before signing again; later stages stay locked.`)
+          : (faLoc ? 'باشه، هیچ نتیجه‌ای ثبت نشد.' : 'Understood; no outcome was recorded.'));
         return;
       }
-      // handoff-done (or any unknown answer to the outcome question: the user
-      // tapped something affirmative — treat it as done, honestly sourced).
       if (plan && handoff.stageId) {
-        let next = null;
-        try {
-          const runtime = strategyRuntimeFor(planMsg, plan);
-          const res = runtime?.confirmStage?.(handoff.stageId, { receipt: { source: 'user-confirmed', at: Date.now() } });
-          if (runtime) persistStrategyRuntime(plan, planMsg.strategySpec || null, runtime);
-          next = res?.next || runtime?.nextStage?.() || null;
-        } catch {}
-        if (next?.done) {
-          say(faLoc
-            ? `انجام شد و ثبت شد — همه مراحل «${plan.comparison?.find?.((c) => c.id === plan.chosen)?.title || ''}» تأیید شدند. از اینجا پایش ادامه دارد؛ هر وقت خواستی بگو «وضعیت» تا برنامه را با واقعیت بسنجم.`
-            : 'Done and recorded — every stage is confirmed. From here it is monitoring; say "status" any time to check the plan against reality.');
-        } else {
-          say(faLoc
-            ? `انجام شد و ثبت شد — مرحله «${handoff.stageId}» تأیید شد (به گفته خودت).${next?.stage?.title ? ` مرحله بعد «${next.stage.title}» آماده است.` : ''}`
-            : `Done and recorded — stage "${handoff.stageId}" is confirmed (by your word).${next?.stage?.title ? ` Next up is "${next.stage.title}".` : ''}`,
-          next && !next.done ? nextStageChoice(plan.strategyId) : {});
-        }
+        // A claim of "done" triggers provider reconciliation; the user's
+        // words alone never satisfy even one signed action.
+        void runStrategyStage(planMsg, plan);
         return;
       }
       say(faLoc
-        ? `عالیه — «${handoff.label || ''}» انجام شد. اگه کار دیگری مونده بگو تا ادامه بدیم.`
-        : `Great — "${handoff.label || ''}" is done. Tell me what is left and we continue.`);
+        ? `متوجه شدم — به «${handoff.label || ''}» رفتی. نتیجه را بدون رسید تأییدشده قطعی ثبت نمی‌کنم.`
+        : `Noted: you visited "${handoff.label || ''}". I cannot mark an outcome final without a verified receipt.`);
       return;
     }
     /*
@@ -3882,35 +3810,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           content: faLoc ? 'برنامه را در این رشته پیدا نکردم — سشن عوض شده؟' : 'I could not find the plan in this thread — did the season change?'
         }]);
       }
-      return;
-    }
-    if (msg?.choiceKind === 'STRATEGY_OPTION') {
-      const current = os8StateRef.current || loadLocalIntentOSState('intent-unified');
-      const nextOptions = (current.agentState?.lastPresentedOptions || []).map((item) => ({
-        ...item,
-        selected: String(item.id) === String(choice.value || choice.id)
-      }));
-      os8StateRef.current = {
-        ...current,
-        agentState: {
-          ...(current.agentState || {}),
-          lastPresentedOptions: nextOptions
-        },
-        lastUpdated: Date.now()
-      };
-      saveLocalIntentOSState(os8StateRef.current, 'intent-unified');
-      const selected = nextOptions.find((item) => item.selected) || nextOptions[0] || choice;
-      setMessages((prev) => [...prev, {
-        id: makeId(),
-        role: 'ai',
-        content: locale.startsWith('fa')
-          ? `${choiceLabel(selected)} انتخاب شد. اگر بخواهی می‌توانم با «انجام بده» اجرای امن را آماده کنم.`
-          : `${choiceLabel(selected)} selected. Say “do it” when you want me to prepare safe execution.`,
-        kind: 'assistant',
-        ui: { type: 'TEXT' },
-        intentType: 'PORTFOLIO_ANALYSIS',
-        detectedIntent: 'PORTFOLIO_ANALYSIS'
-      }]);
       return;
     }
     const hints = {};
@@ -4509,7 +4408,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         && existing.kind === 'strategy-stage'
         && (Date.now() - Number(existing.at || 0)) < 5 * 60 * 1000;
       if (!freshStageHandoff) {
-        writePendingHandoff({ route: target.to, label: routeFaLabel(target.to), kind: 'route', seasonId: seasonIdRef.current });
+        // A later leg opened from the plan card is still a strategy handoff.
+        // Check its identity against the stored RUNNING stage: URL parameters
+        // alone cannot start a stage or assert an outcome.
+        const url = new URL(target.to, 'https://app.invalid');
+        const strategyId = url.searchParams.get('strategyId');
+        const stageId = url.searchParams.get('stageId');
+        const rawIndex = url.searchParams.get('actionIndex');
+        const index = rawIndex == null ? -1 : Number(rawIndex);
+        const stored = strategyId ? loadStrategyPlan(strategyId) : null;
+        const stage = stored?.strategy?.stages?.find((s) => s.id === stageId);
+        const action = stage?.actions?.[index];
+        const pending = stored?.runtime?.stageProgress?.[stageId]?.state === 'RUNNING'
+          && action?.requiresSignature && target.to === strategyActionRoute(action, { strategyId, stageId, actionIndex: index });
+        writePendingHandoff(pending
+          ? { route: target.to, label: routeFaLabel(target.to), kind: 'strategy-stage',
+            strategyId, stageId, actionIndex: index, seasonId: seasonIdRef.current }
+          : { route: target.to, label: routeFaLabel(target.to), kind: 'route', seasonId: seasonIdRef.current });
       }
     } catch {}
     try { navigate(target.to); } catch { /* router ready */ }
@@ -4548,7 +4463,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         stageId: pending.stageId || null
       },
       choices: [
-        { id: 'handoff-done', label: faLoc ? '✅ انجام شد — ادامه بده' : '✅ Done — continue' },
+        { id: 'handoff-done', label: pending.kind === 'strategy-stage'
+          ? (faLoc ? 'تراکنش را در صفحه مقصد انجام دادم' : 'I used the venue')
+          : (faLoc ? '✅ انجام شد' : '✅ Done') },
         { id: 'handoff-cancelled', label: faLoc ? '❌ لغو شد' : '❌ Cancelled' },
         { id: 'handoff-browse', label: faLoc ? '👀 فقط نگاه کردم' : '👀 Just looking' }
       ],
@@ -6164,12 +6081,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           automationsCount: automations.length,
           engine: monitorEngineStatus || {},
           aiTools: aiToolsInfo,
-          providersActive: (Array.isArray(aiProviders) && aiProviders.filter((p) => p.configured || p.status === 'ACTIVE').length > 0)
-            ? aiProviders.filter((p) => p.configured || p.status === 'ACTIVE').length
-            : 4,
-          providersTotal: (Array.isArray(aiProviders) && aiProviders.length > 0)
-            ? aiProviders.length
-            : 4
+          providersActive: providersStatus === 'ready'
+            ? aiProviders.filter((p) => p.status === 'ACTIVE').length : null,
+          providersTotal: providersStatus === 'ready' ? aiProviders.length : null
         }}
         locale={locale}
       />

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AssetIcon from '../AssetIcon';
 import AaveBaseUsdcPanel from './AaveBaseUsdcPanel';
@@ -135,9 +136,10 @@ const HUB_ROWS = {
   'morpho-base': { titleKey: 'farm.morpho.panelTitle', chain: '8453', symbol: 'USDC' }
 };
 
-function HubRow({ id, descriptor, Panel }) {
+function HubRow({ id, descriptor, Panel, requestedVenue, initialAmount }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => requestedVenue === id);
+  useEffect(() => { if (requestedVenue === id) setOpen(true); }, [id, requestedVenue]);
   const row = HUB_ROWS[id] ?? {};
   return (
     <section className="farm-hub-row" data-testid={`farm-hub-row-${id}`}>
@@ -161,7 +163,7 @@ function HubRow({ id, descriptor, Panel }) {
       */}
       {open && (
         <div className="farm-hub-body">
-          <Panel pool={descriptor} />
+          <Panel pool={descriptor} initialAmount={requestedVenue === id && id !== 'lido' ? initialAmount : null} />
         </div>
       )}
     </section>
@@ -169,10 +171,23 @@ function HubRow({ id, descriptor, Panel }) {
 }
 
 export default function FarmPositionHub() {
+  const [params] = useSearchParams();
+  const rawVenue = String(params.get('venue') || '');
+  const venue = FARM_EXECUTION_ADAPTERS.some(({ id }) => id === rawVenue) ? rawVenue : null;
+  const usd = Number(params.get('amount'));
+  const initialAmount = Number.isFinite(usd) && usd > 0 && usd <= 1_000_000 ? String(usd) : null;
+  useEffect(() => {
+    if (!venue) return undefined;
+    const timer = setTimeout(() => {
+      document.querySelector(`[data-testid="farm-hub-row-${venue}"]`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }, 140);
+    return () => clearTimeout(timer);
+  }, [venue]);
   return (
     <div className="stack farm-position-hub" data-testid="farm-position-hub">
       {FARM_EXECUTION_ADAPTERS.map(({ id, descriptor, Panel }) => (
-        <HubRow key={id} id={id} descriptor={descriptor} Panel={Panel} />
+        <HubRow key={id} id={id} descriptor={descriptor} Panel={Panel}
+          requestedVenue={venue} initialAmount={initialAmount} />
       ))}
     </div>
   );

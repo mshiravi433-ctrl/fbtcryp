@@ -71,6 +71,18 @@ try {
     surface: '/intent'
   });
   t('chat: missing capital asks, not plans', missing.json?.reply?.strategyRequest == null && Boolean(missing.json?.reply?.intent?.minimalQuestion?.fa), String(missing.json?.reply?.text || '').slice(0, 80));
+  t('chat: the unanswered strategy remembers only its missing-slot draft',
+    Boolean(missing.json?.reply?.strategyDraft?.text) && !missing.json?.reply?.strategyRequest);
+  const followUp = await post('/api/v1/ai/chat', {
+    message: '۱۰۰۰ دلار در ۳۰ روز، ریسک متوسط', locale: 'fa', surface: '/intent',
+    messages: [{ role: 'user', content: '۳۰ درصد سود میخوام' },
+      { role: 'ai', content: missing.json?.reply?.text || '', strategyDraft: missing.json?.reply?.strategyDraft }]
+  });
+  t('chat: short answer completes the original goal in the same thread',
+    followUp.json?.reply?.ui?.type === 'STRATEGY_PLAN_CARD'
+      && /۱۰۰۰/.test(followUp.json?.reply?.strategyRequest?.text || '')
+      && /۳۰ درصد/.test(followUp.json?.reply?.strategyRequest?.text || ''),
+    JSON.stringify(followUp.json?.reply?.strategyRequest || followUp.json?.reply?.text));
 
   /* ── 1d. the chat IS the OS: in place on /intent ──────────────────────── */
   const inPlace = await post('/api/v1/ai/chat', {

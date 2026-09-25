@@ -86,7 +86,7 @@ import {
   buildSystemPrompt
 } from '../src/lib/intent-ai/os/systemPrompt.js';
 import { understandIntent, updateIntentSession } from '../src/lib/intent-ai/os/index.js';
-import { parseGoalSpec } from '../src/lib/strategyBrain/goalSpec.js';
+import { resolveGoalTurn } from '../src/lib/strategyBrain/goalTurn.js';
 import { resolveChatRoute } from '../src/lib/intent-ai/autonomy/chatRoutes.js';
 import {
   getAvailableProviders,
@@ -1182,20 +1182,19 @@ const STRATEGY_MISSING_LABEL = Object.freeze({
   horizonDays: { fa: 'بازه زمانی', en: 'horizon' }
 });
 
-function richObjectiveReply({ message, u4, context, locale, surface }) {
+function richObjectiveReply({ message, u4, context, locale, surface, messages = [] }) {
   const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
   const type = String(u4?.type || '').toUpperCase();
   const entities = (u4 && typeof u4.entities === 'object' && u4.entities) || {};
 
   /* ── 1. whole-ecosystem objective → STRATEGY_PLAN_CARD ─────────────── */
-  const spec = parseGoalSpec({
-    text: message,
-    entities,
-    portfolio: context?.portfolio || null,
-    balances: context?.balances || null,
-    wallet: context?.wallet || null
+  const turn = resolveGoalTurn({
+    text: message, messages,
+    entities, portfolio: context?.portfolio || null,
+    balances: context?.balances || null, wallet: context?.wallet || null
   });
-  if (type === 'STRATEGY_PLAN' || spec.ok) {
+  const spec = turn.spec;
+  if (type === 'STRATEGY_PLAN' || turn.objective) {
     if (!spec.ok) {
       const missing = (spec.missing || []).map((m) => STRATEGY_MISSING_LABEL[m]?.[fa ? 'fa' : 'en'] || m);
       const qFa = `برای ساختن استراتژی کامل این‌ها کم است: ${missing.join('، ')}. مثلاً بنویس «۱۰۰۰ دلار، ۳۰٪ سود در ۳۰ روز، ریسک متوسط» تا تحلیل کامل، مقایسه گزینه‌ها و مراحل اجرا را با لینک آماده بدهم.`;
@@ -1212,19 +1211,20 @@ function richObjectiveReply({ message, u4, context, locale, surface }) {
           minimalQuestion: { fa: qFa, en: qEn }
         },
         strategyRequest: null,
+        strategyDraft: { text: turn.text },
         goalDetected: true
       };
     }
     const riskFa = { conservative: 'محافظه‌کار', balanced: 'متعادل', aggressive: 'تهاجمی' }[spec.riskProfile] || spec.riskProfile;
     const text = fa
-      ? `هدف را گرفتم: ${Number(spec.capitalUsd).toLocaleString('en-US')} دلار، ${spec.targetPct}٪ سود در ${spec.horizonDays} روز، ریسک ${riskFa}. حالا کل اکوسیستم را یک‌جا می‌خوانم — کیف پول، پرتفوی، کریپتو، RWA، سهام، فارکس، کالا، وام، فارم، نقدینگی، فیوچرز، dYdX، بریج، اسمارت‌مانی، نهنگ‌ها، اخبار، ماکرو، ریسک، کارمزد و گاز — و بین همه‌ی ماژول‌ها مقایسه می‌کنم تا یک استراتژی پرتفوی مرحله‌به‌مرحله بسازم. نه یک پاسخ متنی.`
-      : `Goal taken: $${Number(spec.capitalUsd).toLocaleString('en-US')}, ${spec.targetPct}% in ${spec.horizonDays} days, ${spec.riskProfile} risk. Reading the whole ecosystem at once — wallet, portfolio, crypto, RWA, stocks, forex, commodities, lending, farms, pools, futures, dYdX, bridge, smart money, whales, news, macro, risk, fees and gas — then comparing every module to build one staged portfolio strategy. Not a text answer.`;
+      ? `هدف را گرفتم: ${Number(spec.capitalUsd).toLocaleString('en-US')} دلار، ${spec.targetPct}٪ سود در ${spec.horizonDays} روز، ریسک ${riskFa}. اکنون ماژول‌های در دسترس را با دادهٔ واقعی می‌خوانم و گزینه‌های قابل‌اجرا را مقایسه می‌کنم. پوشش، شکاف داده، ریسک و مراحل در همین کارت مشخص می‌شود؛ هیچ سودی تضمین نیست و بدون امضای تو پولی جابه‌جا نمی‌شود.`
+      : `Goal taken: $${Number(spec.capitalUsd).toLocaleString('en-US')}, ${spec.targetPct}% in ${spec.horizonDays} days, ${spec.riskProfile} risk. I am reading available modules and comparing executable options. This card will show actual coverage, missing data, risk and stages; no return is guaranteed and nothing moves without your signature.`;
     return {
       ok: true,
       text,
       ui: { type: 'STRATEGY_PLAN_CARD' },
-      intent: { type: 'STRATEGY_PLAN', ...u4, entities, confidence: u4.confidence ?? null },
-      strategyRequest: { text: message, entities, knownCapital: true },
+      intent: { ...u4, type: 'STRATEGY_PLAN', entities, confidence: u4.confidence ?? null },
+      strategyRequest: { text: turn.text, entities, knownCapital: true },
       suggestions: [],
       goalDetected: true
     };
@@ -1339,7 +1339,16 @@ router.post('/chat', async (req, res) => {
   /* Rich objective / in-place turns are answered here (see above): the V1
      renderer below cannot express them and would fall back to a generic line. */
   const surface = req.body?.surface || req.body?.currentPage || '/';
-  const rich = richObjectiveReply({ message, u4, context, locale: locale || 'fa', surface });
+  const rich = richObjectiveReply({ message, u4, context, locale: locale || 'fa', surface,
+    messages: Array.isArray(req.body?.messages) ? req.body.messages.slice(-8)
+      .filter((row) => row && (row.role === 'ai' || row.role === 'assistant' || row.role === 'user'))
+      .map((row) => ({ role: row.role,
+        content: String(row.content || '').slice(0, 1200),
+        ...(typeof row.strategyRequest?.text === 'string'
+          ? { strategyRequest: { text: row.strategyRequest.text.slice(0, 1200) } } : {}),
+        ...(typeof row.strategyDraft?.text === 'string'
+          ? { strategyDraft: { text: row.strategyDraft.text.slice(0, 1200) } } : {})
+      })) : [] });
   if (rich?.ok) {
     const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const reply = {
@@ -1360,6 +1369,7 @@ router.post('/chat', async (req, res) => {
       choiceKind: null,
       goalDetected: rich.goalDetected === true,
       strategyRequest: rich.strategyRequest || null,
+      strategyDraft: rich.strategyDraft || null,
       goalRequest: rich.goalRequest || null,
       inPlace: rich.inPlace === true,
       openTab: rich.openTab || null,
@@ -1373,9 +1383,9 @@ router.post('/chat', async (req, res) => {
       intentId,
       intentType: rich.intent?.type || 'GENERAL',
       providerUsed: 'internal',
-      modelsConsulted: getActiveProviderIds(),
-      confidenceScore: 0.85,
-      executionSuccess: true,
+      modelsConsulted: ['internal'],
+      confidenceScore: Math.round((Number(u4.confidence) || 0.5) * 100),
+      executionSuccess: null,
       durationMs: 0,
       locale: locale || 'fa'
     }).catch(() => {});
@@ -1770,9 +1780,9 @@ router.post('/chat', async (req, res) => {
     intentId,
     intentType: human.intent?.type || 'GENERAL',
     providerUsed: llm?.model ? 'gateway-llm' : 'internal',
-    modelsConsulted: getActiveProviderIds(),
+    modelsConsulted: llm?.model ? [llm.model] : ['internal'],
     confidenceScore: confidenceMetrics.confidenceScore,
-    executionSuccess: true,
+    executionSuccess: null,
     durationMs: nowMs() - ctx.now,
     locale: locale || 'fa'
   }).catch(() => {});

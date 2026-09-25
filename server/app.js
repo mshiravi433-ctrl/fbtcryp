@@ -1865,9 +1865,9 @@ app.get('/api/intents/v1/public-status', async (_req, res) => {
   const activation = status.phase21?.readiness;
   const active = status.launchAllowed === true;
   const activeBanner = [
-    'System Active & Verified.',
-    'Execution Ready — wallet confirmation remains required.',
-    'Current operational evidence is attested and within its validity window.'
+    'Runtime evidence and control-plane checks verified.',
+    'Financial actions still require a fresh venue quote, wallet confirmation and verified settlement.',
+    'Operational evidence is current; execution is not automatic.'
   ];
   /* Report the evidence the store actually holds. This previously published a
      flat 21 whenever launch was allowed, so the public count could not fall
@@ -1878,7 +1878,8 @@ app.get('/api/intents/v1/public-status', async (_req, res) => {
     schema: 'fbt.public-status.v1',
     service: 'FBT Intent AI',
     generatedAt: status.generatedAt,
-    status: active ? 'operational' : 'unavailable',
+    status: active ? 'operational' : (status.capabilitiesAvailable ? 'implementation-available' : 'unavailable'),
+    capabilitiesAvailable: status.capabilitiesAvailable,
     launchAllowed: active,
     isFrozen: false,
     evidence: { stored: storedEvidence, required: 21, status: `${storedEvidence}/21` },
@@ -1891,6 +1892,7 @@ app.get('/api/intents/v1/public-status', async (_req, res) => {
       phase: phase.phase,
       id: phase.id,
       implementation: phase.implementation,
+      available: phase.available,
       configuration: phase.configuration,
       operational: phase.operational === true,
       live: phase.live === true,
@@ -1901,7 +1903,7 @@ app.get('/api/intents/v1/public-status', async (_req, res) => {
     })),
     claims: {
       deployed: active,
-      reproducible: activation?.launchAllowed === true,
+      reproducible: active && activation?.launchAllowed === true,
       publicVerification: active,
       production: active,
       executionActivated: false,

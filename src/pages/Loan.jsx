@@ -56,6 +56,7 @@ import { SOLANA_LENDING_CHAIN_ID } from '../lib/lending.js';
 import { loanErrorText } from '../lib/loanErrors';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import { apiBase } from '../lib/apiBase';
+import { recordStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
 import {
   lendingVenue, lendingSupported, lendingAssetsFor,
   readAllowance,
@@ -3256,6 +3257,21 @@ export default function Loan() {
         historyRef.current.settle(historyId, { status: TX_STATUS.CONFIRMED, hash: mainHash });
         setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
 
+        /* The strategy route's identifiers are only for finding a candidate
+         * receipt on return. A different asset, account, chain, amount or
+         * action is rejected here; chat STILL queries the provider and decodes
+         * the actual supply transaction/event before it can unlock the stage. */
+        if (exec.action === 'supply' && exec.asset?.symbol === 'USDC') {
+          const supplyHash = (result.completed || []).find((step) => step.id === 'supply')?.hash;
+          if (supplyHash) recordStrategyReceiptHint({
+            strategyId: searchParams.get('strategyId'),
+            stageId: searchParams.get('stageId'),
+            actionIndex: searchParams.get('actionIndex'),
+            txHash: supplyHash, owner: address, chainId: exec.chainId,
+            asset: exec.asset.symbol, amountWei: exec.amountWei
+          });
+        }
+
         /* A confirmed, on-chain lending action is real rewarded activity. */
         const actionKey =
           exec.action === 'supply' ? 'lending'
@@ -3294,7 +3310,7 @@ export default function Loan() {
       guardRef.current.release(idemKey);
       updateMachine();
     }
-  }, [exec, getSigner, getReadProvider, address, chain, refresh, haptic, updateMachine, readOnly, canTransact, venue, t]);
+  }, [exec, getSigner, getReadProvider, address, chain, refresh, haptic, updateMachine, readOnly, canTransact, venue, t, searchParams]);
 
   /** §15: ERROR → RETRY → VALIDATING. A fresh attempt with a fresh requestId. */
   const retryExecution = useCallback(() => {

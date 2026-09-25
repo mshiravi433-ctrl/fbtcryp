@@ -256,8 +256,13 @@ for (const [id, name] of REPORTED) {
 const walletSrc = code('src/pages/Wallet.jsx');
 check('wallet: the network picker no longer slices the registry to six',
   !/EVM_CHAIN_ORDER\.slice\(0,\s*6\)/.test(walletSrc));
+// The portfolio hook resolves the full registry; the wallet paints its
+// resulting rows. Looking for EVM_CHAIN_ORDER.map *inside Wallet.jsx* misses
+// this legitimate split and fails even when every network is represented.
+const portfolioSrc = code('src/hooks/useMultiChainPortfolio.js');
 check('wallet: the network picker maps the whole registry',
-  /EVM_CHAIN_ORDER\.map\(/.test(walletSrc));
+  /portfolio\.chains/.test(walletSrc) && /chains\.map\(/.test(walletSrc)
+  && /EVM_CHAIN_ORDER\.map\(/.test(portfolioSrc));
 const { EVM_CHAIN_ORDER, EVM_CHAINS } = await import('../src/lib/chains.js');
 check(`wallet: the registry holds ${EVM_CHAIN_ORDER.length} chains, all resolvable`,
   EVM_CHAIN_ORDER.length >= 16 && EVM_CHAIN_ORDER.every((id) => EVM_CHAINS[id]?.short));
@@ -277,8 +282,9 @@ check('perp: the rail has a real tap height', /\.perp-rail-tab\s*\{[^}]*min-heig
 check('perp: the rail is styled outside the overview-only wrapper',
   /\.perp-rail\s*\{/.test(perpCss) && !/\.perp-modern \.perp-rail\s*\{/.test(perpCss));
 check('perp: the virtual-credit doorway carries an icon', /perp-cta-ico/.test(perpSrc) && /\.perp-cta-ico\s*\{/.test(perpCss));
+const perpCtaMinHeight = perpCss.match(/\.perp-cta\s*\{[^}]*min-height:\s*(\d+)px/);
 check('perp: the virtual-credit doorway has a real minimum height',
-  /\.perp-cta\s*\{[^}]*min-height:\s*7\dpx/.test(perpCss));
+  Number(perpCtaMinHeight?.[1]) >= 70);
 
 export default results;
 

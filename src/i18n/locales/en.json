@@ -771,7 +771,8 @@
       "SIMULATION_REQUIRED": "The on-chain preflight has not passed yet, so nothing was signed.",
       "ROUTE_CHANGED": "The route changed after you reviewed it. Review the new terms and sign again.",
       "APPROVAL_REQUIRED": "This token needs an approval first. You sign it in your own wallet.",
-      "CONFIRMATION_TIMEOUT": "The replacement is taking too long to confirm."
+      "CONFIRMATION_TIMEOUT": "The replacement is taking too long to confirm.",
+      "STRATEGY_GASLESS_UNVERIFIABLE": "This strategy stage needs a wallet-sent swap receipt. Turn off gasless and review the quote again. Nothing was sent."
     },
     "platformFee": "Platform fee ({{pct}}%)",
     "bestOf": "best of {{n}} route(s)",
@@ -10543,7 +10544,7 @@
     "noFbtFee": "No FBT fee",
     "noFbtFeeSub": "Lending goes straight to the protocol",
     "fbtFeeLine": "FBT fee",
-    "fbtFeeNone": "None here — FBT takes no fee on lending (standard 0.70% fee applies on swap)",
+    "fbtFeeNone": "None here — FBT takes no fee on lending (the standard 0.70% EVM swap fee applies if you swap first)",
     "networkFee": "Network fee (max)",
     "networkFeeUsd": "in USD",
     "feeUsdIsEstimate": "estimate",

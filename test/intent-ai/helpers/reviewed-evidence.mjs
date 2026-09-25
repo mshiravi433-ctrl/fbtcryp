@@ -13,6 +13,8 @@ import { createHash } from 'node:crypto';
 import { EVIDENCE_KINDS } from '../../../src/lib/intent-ai/operationalActivation.js';
 
 export const REVIEWED_OPERATORS = Object.freeze(['review-ledger-a', 'review-ledger-b']);
+// Fixture-only operator key. Never configured in a deployment by the app.
+process.env.INTENT_OPERATOR_EVIDENCE_KEY ||= 'test-only-operator-evidence-key-2026';
 
 export function reviewedEvidenceRecords({ now = Date.now(), ttlMs = 6 * 3600_000 } = {}) {
   return EVIDENCE_KINDS.map((kind) => ({
@@ -35,7 +37,8 @@ export async function injectReviewedEvidence(base, options = {}) {
     headers: {
       'content-type': 'application/json',
       'X-Operator-1': op1,
-      'X-Operator-2': op2
+      'X-Operator-2': op2,
+      'x-operator-evidence-key': process.env.INTENT_OPERATOR_EVIDENCE_KEY
     },
     body: JSON.stringify(body)
   });

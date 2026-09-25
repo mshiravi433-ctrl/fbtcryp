@@ -37,6 +37,8 @@ export function toAsciiDigits(input) {
   return String(input ?? '')
     .replace(/[۰-۹٠-٩]/g, (d) => FA_DIGITS[d] ?? d)
     .replace(/[٬،]/g, '')
+    .replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, '') // $1,000 is capital, not $1 or $0
+    .replace(/٫/g, '.')
     .replace(/\u200c/g, ' ');
 }
 
@@ -51,7 +53,7 @@ const WORD_NUMBERS = Object.freeze({
 
 /* «در یک سال» / "a year" — the indefinite article is a ONE, but only where a
    time unit follows it, so it is listed here and not in WORD_NUMBERS. */
-const HORIZON_TOKENS = '\\d+(?:\\.\\d+)?|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|یک|يك|one|two|three|four|five|six|seven|eight|nine|ten|twelve|a|an';
+const HORIZON_TOKENS = '\\d+(?:\\.\\d+)?|بیست|سی|پنجاه|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده|یک|يك|one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|thirty|fifty|a|an';
 
 function wordNumber(token) {
   const t = String(token || '').trim().toLowerCase();

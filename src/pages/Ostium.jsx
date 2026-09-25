@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
@@ -134,6 +134,10 @@ function PairInfoStrip({ market, t, i18n, onOpen }) {
 export default function Ostium({ embedded = false }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedMarket = searchParams.get('market');
+  const requestedCollateral = Number(searchParams.get('collateral'));
+  const pendingPreset = useRef(Boolean(requestedMarket));
   const wallet = useWallet();
   const { haptic } = useTelegram();
   const slippagePct = useSettingsStore((s) => s.defaultSlippage);
@@ -145,7 +149,9 @@ export default function Ostium({ embedded = false }) {
   const [pairId, setPairId] = useState('');
   const [marketSearch, setMarketSearch] = useState('');
   const [side, setSide] = useState('long');
-  const [collateral, setCollateral] = useState('50');
+  const [collateral, setCollateral] = useState(() =>
+    Number.isFinite(requestedCollateral) && requestedCollateral > 0 && requestedCollateral <= 1_000_000
+      ? String(requestedCollateral) : '50');
   const [leverage, setLeverage] = useState('5');
   const [takeProfit, setTakeProfit] = useState('');
   const [stopLoss, setStopLoss] = useState('');
@@ -200,8 +206,20 @@ export default function Ostium({ embedded = false }) {
   }, [markets, category, marketSearch]);
 
   useEffect(() => {
+    // The strategy handoff selects a REAL pair from the live feed once, not
+    // just the Ostium tab. A later manual category/pair change remains the
+    // user's choice; a stale/unknown market falls back to the normal picker.
+    if (pendingPreset.current && markets.length) {
+      const target = markets.find((m) => m.pairId === requestedMarket);
+      if (target) {
+        if (category !== target.uiCategory) { setCategory(target.uiCategory); return; }
+        setPairId(target.pairId);
+      }
+      pendingPreset.current = false;
+      if (target) return;
+    }
     if (visible.length && !visible.some((m) => m.pairId === pairId)) setPairId(visible[0].pairId);
-  }, [visible, pairId]);
+  }, [visible, markets, requestedMarket, pairId, category]);
 
   const market = markets.find((m) => m.pairId === pairId) || visible[0];
   const effectiveMax = market?.isDayTradingClosed && market.overnightMaxLeverage > 0

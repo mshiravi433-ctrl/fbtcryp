@@ -33,6 +33,8 @@ import { TelegramProvider } from '../src/context/TelegramContext.jsx';
 import { WalletProvider } from '../src/context/WalletContext.jsx';
 import Loan from '../src/pages/Loan.jsx';
 import { AAVE_POOL_ABI, ERC20_MIN_ABI, AAVE_V3_POOLS, lendingAssetsFor } from '../src/lib/lending.js';
+import { saveStrategyPlan } from '../src/lib/strategyBrain/strategyStore.js';
+import { STRATEGY_RECEIPT_HINTS_KEY } from '../src/lib/strategyBrain/strategyReceipts.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CHAIN = 42161;
@@ -73,10 +75,12 @@ export async function run(container) {
      the app cannot tell the two apart from production behaviour. */
   const sent = [];               // every eth_sendTransaction, in order
   const usdt = lendingAssetsFor(CHAIN).find((a) => a.symbol === 'USDT');
+  const usdc = lendingAssetsFor(CHAIN).find((a) => a.symbol === 'USDC');
   const asset = usdt.address.toLowerCase();
   /* 6 decimals: 300 in the wallet, 100 already supplied, 40 borrowed. */
   const balances = {
     [asset]: 300000000n,
+    [usdc.address.toLowerCase()]: 300000000n,
     [ATOKEN.toLowerCase()]: 100000000n,
     [VDEBT.toLowerCase()]: 40000000n
   };
@@ -98,8 +102,8 @@ export async function run(container) {
 
     if (to === POOL && selector === poolIface.getFunction('getReserveData').selector) {
       const [target] = poolIface.decodeFunctionData('getReserveData', data);
-      if (String(target).toLowerCase() !== asset) {
-        /* Anything but our one listed asset is genuinely not a reserve. */
+      if (![asset, usdc.address.toLowerCase()].includes(String(target).toLowerCase())) {
+        /* Anything but the two stubbed stablecoin reserves is not listed. */
         return coder.encode(RESERVE_TUPLE, [[0n, 0n, 0n, 0n, 0n, 0n, 0, 0,
           '0x0000000000000000000000000000000000000000', '0x0000000000000000000000000000000000000000',
           '0x0000000000000000000000000000000000000000', '0x0000000000000000000000000000000000000000',
@@ -449,7 +453,48 @@ export async function run(container) {
     t('the prefilled hand-off is ready to run in the page (no second form)',
       !!byId('loan-action') || !!byId('loan-connect'));
 
-    /* ═══════ 8. THE PAGE HAS NO ROUTE OUT ═══════ */
+    /* ═══════ 8. STRATEGY HANDOFF: THE ACTION HASH, NOT THE APPROVAL ═══════ */
+    const strategyId = 'strat_loan_probe';
+    const strategyAction = {
+      module: 'lending', operation: 'SUPPLY', capabilityId: 'lending.supply',
+      requiresSignature: true, route: `/loan?tab=supply&asset=USDC&amount=125&chain=${CHAIN}`,
+      params: { venue: 'aave-arbitrum', asset: 'USDC', chainId: CHAIN, amountUsd: 125 }
+    };
+    const staged = { ok: true, strategyId, goal: { capitalUsd: 1000 },
+      stages: [{ id: 'deploy-yield', order: 2, movesFunds: true, actions: [strategyAction] }] };
+    saveStrategyPlan({ strategy: staged,
+      runtime: { stageProgress: { 'deploy-yield': { state: 'RUNNING', startedAt: Date.now() } } }
+    });
+    await mountAt(`#/loan?tab=supply&asset=USDC&amount=125&chain=${CHAIN}&strategyId=${strategyId}&stageId=deploy-yield&actionIndex=0`);
+    await act(async () => { await sleep(550); });
+    if (byId('loan-connect')) {
+      await act(async () => { click(byId('loan-connect')); });
+      await act(async () => { await sleep(350); });
+    }
+    t('the strategy handoff preselects USDC and the exact planned amount',
+      byId('loan-amount-supply')?.value === '125' && !!byId('loan-asset-usdc'));
+    const beforeStrategy = sent.length;
+    if (byId('loan-action')) {
+      await act(async () => { click(byId('loan-action')); });
+      await act(async () => { await sleep(190); });
+      if (byId('loan-exec-confirm')) {
+        await act(async () => { click(byId('loan-exec-confirm')); });
+        await act(async () => { await sleep(600); });
+      }
+    }
+    const supplyIndex = sent.findIndex((tx, i) => i >= beforeStrategy
+      && String(tx.to || '').toLowerCase() === POOL
+      && String(tx.data || '').startsWith(poolIface.getFunction('supply').selector));
+    const candidate = (() => {
+      try { return JSON.parse(localStorage.getItem(STRATEGY_RECEIPT_HINTS_KEY) || '[]')
+        .find((h) => h.strategyId === strategyId && h.stageId === 'deploy-yield' && h.actionIndex === 0); }
+      catch { return null; }
+    })();
+    t('the loan records the supply hash under the strategy action, never an approval hash',
+      supplyIndex >= 0 && candidate?.txHash === hashes[supplyIndex]?.toLowerCase()
+      && candidate.owner === ACCOUNT.toLowerCase() && candidate.chainId === CHAIN);
+
+    /* ═══════ 9. THE PAGE HAS NO ROUTE OUT ═══════ */
     t('no control on the loan screen routes to Intent OS',
       qa('a').every((a) => !/#\/intent/.test(a.getAttribute('href') || '')));
   } catch (error) {
