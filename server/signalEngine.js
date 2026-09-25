@@ -347,8 +347,16 @@ export async function explainSignal({
     return localExplanation({ symbol, name, safe, classification, confidence, riskLabel, lang, insufficient: true });
   }
 
+  // The gateway's internal fallback returns plausible prose, not an evidence-
+  // grounded model answer. Never label it 'ai' or let it invent technical
+  // levels and volume when no external provider actually answered.
+  if (!anyAiConfigured()) {
+    return localExplanation({ symbol, name, safe, classification, confidence, riskLabel, lang });
+  }
   const day = new Date().toISOString().slice(0, 10);
-  const key = `ai:why:${String(symbol).toUpperCase()}:${lang}:${day}`;
+  // Bump the key: older entries mislabeled the internal fallback as external
+  // consensus and may contain unmeasured price/volume claims.
+  const key = `ai:why:v2:${String(symbol).toUpperCase()}:${lang}:${day}`;
   try {
     const { value } = await withPersistentCache(
       key,
@@ -396,7 +404,7 @@ async function runWhy({ symbol, name, safe, classification, confidence, riskLabe
     json: true
   });
 
-  const parsed = results.map((r) => {
+  const parsed = results.filter((r) => r.provider !== 'internal').map((r) => {
     const body = parseWhyJson(r.text);
     /* An empty model output is NOT an answer — fall back to the honest
        deterministic explanation rather than shipping blank sections. */

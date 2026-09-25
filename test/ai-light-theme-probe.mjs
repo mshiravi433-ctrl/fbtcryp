@@ -269,9 +269,14 @@ try {
      A light-theme fix that dulls the dark theme is not a fix. */
   check('dark: the canvas is still near-black', toRgb(dark.tokens['--tag-bg'])[0] < 20);
   check('dark: the text is still near-white', toRgb(dark.val(D.page, 'color'))[0] > 230);
-  check('dark: the tab bar is still black glass', dark.cs(D.tabbar, 'backgroundColor') === 'rgba(12, 12, 15, 0.92)');
+  // The newer glass skin uses 14/14/19 and an 8/8/12 wash rather than the
+  // old exact 12/12/15 and 5/5/6 literals. Assert contrast, not stale paint.
+  check('dark: the tab bar is still black glass',
+    (toRgb(dark.cs(D.tabbar, 'backgroundColor')) || [255])[0] < 25);
   check('dark: the primary button is still a white pill', dark.cs(D.spawn, 'backgroundColor') === 'rgb(255, 255, 255)');
-  check('dark: the header wash is still black', /rgba\(5, 5, 6/.test(dark.cs(D.header, 'backgroundImage')));
+  const headerDark = dark.cs(D.header, 'backgroundImage').match(/rgba\((\d+),\s*(\d+),\s*(\d+)/);
+  check('dark: the header wash is still black',
+    Boolean(headerDark) && Math.max(...headerDark.slice(1).map(Number)) < 25);
   check('dark: the option cards keep their glass, not a white fill',
     dark.cs(D.opsCard, 'backgroundColor') !== 'rgb(255, 255, 255)');
   check('dark contrast — muted text on the canvas reaches AA', aa(dark.tokens['--tag-muted'], dark.tokens['--tag-bg']));

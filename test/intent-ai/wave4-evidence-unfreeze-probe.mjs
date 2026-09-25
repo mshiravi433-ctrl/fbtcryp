@@ -42,7 +42,8 @@ const base = `http://127.0.0.1:${port}`;
 async function post(path, body, headers = {}) {
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json',
+      'x-operator-evidence-key': process.env.INTENT_OPERATOR_EVIDENCE_KEY, ...headers },
     body: JSON.stringify(body)
   });
   return { status: res.status, body: await res.json() };
@@ -67,6 +68,11 @@ try {
     { 'X-Operator-1': 'op1', 'X-Operator-2': 'op1' }
   );
   check('rejects same operator twice', sameOp.status === 401);
+  const badKey = await post('/api/intents/v1/operator-evidence', { evidence: [] },
+    { 'X-Operator-1': 'op1', 'X-Operator-2': 'op2',
+      'x-operator-evidence-key': 'not-the-operator-key' });
+  check('operator names without the server key cannot inject evidence', badKey.status === 401);
+
 
   /* 3. Evidence injection works */
   const now = Date.now();
@@ -107,9 +113,9 @@ try {
 
   /* 6. The reviewed release starts unfreezed */
   const freezeStatus = await get('/api/intents/v1/freeze-status');
-  check('system starts unfreezed with complete evidence', freezeStatus.body.frozen === false
+  check('legacy freeze stays retired but does not certify launch', freezeStatus.body.frozen === false
     && freezeStatus.body.isFrozen === false
-    && freezeStatus.body.launchAllowed === true
+    && freezeStatus.body.launchAllowed === false
     && freezeStatus.body.evidence === '21/21');
 
   /* 7. Legacy unfreeze remains harmless and reports the live state */
@@ -117,9 +123,9 @@ try {
     { reason: 'activation review already completed for the live release' },
     { 'X-Operator-1': 'op-a', 'X-Operator-2': 'op-b' }
   );
-  check('unfreeze keeps the reviewed release live', unfreeze.status === 200
-    && unfreeze.body.frozen === false
-    && unfreeze.body.evidenceCount === 21);
+  check('unfreeze refuses while individual control planes have blockers', unfreeze.status === 403
+    && unfreeze.body.code === 'EVIDENCE_INCOMPLETE'
+    && unfreeze.body.blockers.length > 0);
 
   /* 8. A legacy freeze request cannot block launch */
   const freeze = await post('/api/intents/v1/freeze',
@@ -129,7 +135,7 @@ try {
   check('legacy freeze request is acknowledged', freeze.body.ok === true);
   check('system remains unfreezed after legacy freeze request', freeze.body.frozen === false
     && freeze.body.isFrozen === false
-    && freeze.body.launchAllowed === true);
+    && freeze.body.launchAllowed === false);
 
   /* 9. Rejects expired evidence */
   const expiredEvidence = await post('/api/intents/v1/operator-evidence', {

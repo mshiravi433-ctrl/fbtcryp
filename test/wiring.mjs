@@ -975,7 +975,9 @@ export default function run() {
      * router's HTTP probe (test/futures-bff-probe.mjs); here the MOUNT is what
      * must exist, so a client prefix under a mount is routed by construction.
      */
-    const mounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*[a-zA-Z]+Router\(\)/g)].map(([, p]) => p);
+    const mounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*([a-zA-Z][\w.]*(?:\(\))?)\s*\)/g)]
+      .filter(([, , handler]) => /Router(?:\(\))?$|Routes$|\.router$/.test(handler))
+      .map(([, p]) => p);
     const unrouted = [...called].filter(
       (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p)) && !mounted.some((m) => p === m || p.startsWith(`${m}/`))
     );

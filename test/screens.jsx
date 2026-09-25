@@ -372,12 +372,9 @@ export async function run(container) {
       await act(async () => { await sleep(40); });
       const box = container.querySelector('[data-testid="smart-wallet-intent-rules"]');
       out.push(['the smart wallet page carries the Intent OS rules box', Boolean(box)]);
-      out.push(['the rules box is a closed disclosure, not a second settings screen',
-        Boolean(box) && box.tagName === 'DETAILS' && box.open === false]);
+      out.push(['the rules are editable in place, not a link to a second settings screen',
+        Boolean(box) && box.tagName === 'SECTION' && Boolean(box.querySelector('select, input'))]);
       if (box) {
-        /* jsdom does not implement the <summary> activation behaviour, so the
-           open is driven the way the browser would leave it. */
-        await act(async () => { box.open = true; await sleep(20); });
         const controls = box.querySelectorAll('select, input').length;
         out.push(['the rules box edits the four real rules plus the proof switch', controls >= 4 && /proof/i.test(box.textContent || '')]);
         const text = (box.textContent || '').replace(/\s+/g, ' ');

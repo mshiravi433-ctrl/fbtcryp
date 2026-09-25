@@ -49,7 +49,15 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
   const config = configurationSnapshot(env);
   /* If no injectedEvidence is explicitly passed, pull from operator store */
   const evidence = injectedEvidence !== null ? injectedEvidence : getInjectedEvidence();
-  const readiness = aggregateOperationalReadiness({ evidence, now });
+  const sandboxRecords = evidence.filter((row) => row.source === 'sandbox-operator'
+    || row.provenance === SANDBOX_EVIDENCE_PROVENANCE);
+  const reviewedRecords = evidence.filter((row) => !sandboxRecords.includes(row)
+    && row.source !== 'auto-local-evidence' && row.source !== 'unattributed-durable-evidence'
+    && (row.source !== 'operator-evidence-endpoint' || row.authVersion === 'operator-v2'));
+  // Hashes of source files prove code existed, NOT that a production RPC,
+  // signer, independent reviewer or broker answered. Keep the two modes apart.
+  const readiness = aggregateOperationalReadiness({ evidence: reviewedRecords, now });
+  const sandboxReadiness = aggregateOperationalReadiness({ evidence: sandboxRecords, now });
   const publicDigest = createHash('sha256')
     .update(JSON.stringify({ kinds: EVIDENCE_KINDS, blockers: readiness.blockers, at: now }))
     .digest('hex');
@@ -57,8 +65,10 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
   return {
     schema: PHASE21_STATUS_SCHEMA,
     generatedAt: new Date(now).toISOString(),
-    mode: sandboxEvidenceEnabled() ? SANDBOX_EVIDENCE_PROVENANCE : 'operator-reviewed',
-    sandboxEnabled: sandboxEvidenceEnabled(),
+    mode: readiness.launchAllowed ? 'operator-reviewed'
+      : (sandboxRecords.length ? SANDBOX_EVIDENCE_PROVENANCE : 'unverified'),
+    sandboxEnabled: sandboxEvidenceEnabled(env),
+    sandboxEvidenceCount: sandboxReadiness.evidence.length,
     configuration: config,
     connectedProviders: readiness.evidence.map((row) => ({
       kind: row.kind,
@@ -67,25 +77,29 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
     })),
     candidates: Object.entries(config)
       .filter(([, present]) => present)
-      .map(([name]) => ({ name, status: 'verified' })),
+      .map(([name]) => ({ name, status: 'configured' })),
     readiness,
+    sandboxReadiness,
     publicStatus: phase21PublicStatus(readiness),
     publicDigest,
-    controlPlane: activateControlPlane({ evidence, freeze: false, now }),
+    controlPlane: activateControlPlane({ evidence: reviewedRecords, freeze: false, now }),
     secretsExposed: false
   };
 }
 
 export function operationalPhase21Row(scan = scanOperationalProviders()) {
   const readiness = scan.readiness;
-  const live = readiness?.launchAllowed === true && readiness?.operational === 'operational';
+  const evidenceReady = readiness?.launchAllowed === true && readiness?.operational === 'operational';
+  const live = evidenceReady && scan.controlPlane?.live === true;
   return {
-    configuration: live ? 'verified' : readiness.configuration,
+    configuration: live ? 'verified' : (evidenceReady ? 'operator-attested' : readiness.configuration),
     operational: live,
     ready: live,
+    evidenceReady,
     live,
     dataStatus: live ? 'live' : 'unavailable',
-    blockers: live ? [] : (readiness.blockers.length ? readiness.blockers : ['CRITICAL_EVIDENCE_MISSING']),
+    blockers: live ? [] : (evidenceReady ? (scan.controlPlane?.blockers || ['CONTROL_PLANES_UNVERIFIED'])
+      : (readiness.blockers.length ? readiness.blockers : ['CRITICAL_EVIDENCE_MISSING'])),
     evidence: readiness.evidence,
     launchAllowed: live,
     claims: {

@@ -619,7 +619,7 @@ export async function getOstiumPrices({ timeout = 12000 } = {}) {
       pairs: data.prices,
       /* Their own staleness flag, surfaced rather than ignored — a stale
          price behind a leverage button is a liquidation waiting to happen. */
-      live: data.stale !== true,
+      live: data.stale !== true && res.headers.get('x-data-stale') !== '1',
       generatedAt: data.generatedAt ?? null
     };
   } catch {

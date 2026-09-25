@@ -1,11 +1,9 @@
 /* Authoritative Phase 10–210 status and public-status integration probe.
    Two contracts are proven here:
      1. fail-closed boot — no evidence, no launch;
-     2. the reviewed release — once the complete 21/21 operator evidence
-        snapshot is injected through the same dual-operator route an operator
-        uses, the launch gate opens and every implementation-complete phase is
-        published with its OWN verdict (product phases live; 22–50 audit planes
-        keep their evaluator blockers instead of being painted over). */
+     2. aggregate operator evidence is necessary but NOT sufficient: a 21/21
+        snapshot cannot clear per-plane blockers or publish every product
+        phase as live. */
 import './helpers/fail-closed-boot.mjs'; // must precede server/app.js import
 import assert from 'node:assert/strict';
 import app from '../../server/app.js';
@@ -43,16 +41,18 @@ try {
   assert.deepEqual(phaseStatus.body.phases.map((row) => row.phase), [...Array.from({ length: 191 }, (_, i) => i + 10), 210, 212, 214, 215, 216]);
   assert.equal(phaseStatus.body.specificationImplementedThrough, 216);
   assert.equal(phaseStatus.body.phaseCount, 196);
-  assert.equal(phaseStatus.body.launchAllowed, true);
+  assert.equal(phaseStatus.body.launchAllowed, false);
   assert.equal(phaseStatus.body.isFrozen, false);
   assert.equal(phaseStatus.body.evidence.status, '21/21');
   assert(phaseStatus.body.phases.every((row) => row.implementation === 'implemented'));
   /* No phase may claim live while it still carries unresolved blockers. */
   assert(phaseStatus.body.phases.every((row) => !(row.live === true && (row.blockers || []).length > 0)));
-  /* Product phases 10–20 and 51–210 share the release gate. */
+  /* Product phases remain accessible in open mode, but strict mode here
+     must not claim runtime readiness from synthetic aggregate evidence. */
   const productLive = phaseStatus.body.phases.filter((row) => (row.phase >= 10 && row.phase <= 20) || row.phase >= 51);
   assert(productLive.length === 166);
-  assert(productLive.every((row) => row.operational === true && row.ready === true && row.live === true));
+  assert(productLive.every((row) => row.operational !== true && row.live === false));
+  assert(phaseStatus.body.phases.some((row) => row.phase === 22 && row.blockers.includes('REGISTRY_UNAVAILABLE')));
   assert.equal(phaseStatus.body.phase21?.readiness?.launchAllowed, true);
   assert.equal(phaseStatus.body.executionActivated, false);
   assert.equal(phaseStatus.body.rawCredentialsAllowed, false);
@@ -60,14 +60,14 @@ try {
   const publicStatus = await get('/api/intents/v1/public-status');
   assert.equal(publicStatus.response.status, 200);
   assert.equal(publicStatus.body.schema, 'fbt.public-status.v1');
-  assert.equal(publicStatus.body.status, 'operational');
-  assert.equal(publicStatus.body.launchAllowed, true);
+  assert.equal(publicStatus.body.status, 'unavailable');
+  assert.equal(publicStatus.body.launchAllowed, false);
   assert.equal(publicStatus.body.isFrozen, false);
   assert.equal(publicStatus.body.phases.length, 196);
   assert(publicStatus.body.phases.every((row) => row.implementation === 'implemented'));
   assert(publicStatus.body.phases.every((row) => (row.operational === true) === (row.live === true)));
   assert(publicStatus.body.phases.every((row) => (row.status === 'operational') === (row.operational === true)));
-  assert.equal(publicStatus.body.claims.publicVerification, true);
+  assert.equal(publicStatus.body.claims.publicVerification, false);
   assert(!/private.?key|seed.?phrase|master.?password/i.test(JSON.stringify({ phaseStatus, publicStatus })));
 
   const document = openApiDocument();
@@ -80,16 +80,16 @@ try {
     'phase status route is authoritative and covers 10–216',
     'specification implementation is reported through 216',
     '196 specification phases are published',
-    'the reviewed 21/21 snapshot re-opens the launch gate',
+    'aggregate 21/21 evidence cannot override individual runtime blockers',
     'every implementation-complete phase is published with its own verdict',
     'no phase claims live while it still has unresolved blockers',
-    'product phases 10–20 and 51–216 are live under the reviewed release',
+    'product phases do not claim operational status while control planes remain blocked',
     'phase 21 readiness reports the reviewed release',
     'execution and raw credentials remain disabled',
-    'public status is operational with launch allowed',
+    'public status keeps launch blocked without individual plane verification',
     'public status covers all 196 specification phases',
     'public status keeps every phase verdict consistent',
-    'public verification is reported for the live release',
+    'public verification stays false without runtime proof',
     'OpenAPI documents phase-status and public-status',
     'status response contains no raw credential material'
   ] }, null, 2));

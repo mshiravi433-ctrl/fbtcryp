@@ -62,6 +62,7 @@ import { evaluateExecutionGate, isBlocked, requiresAcknowledgement } from '../li
 import { checkPolicy, recordSpend } from '../lib/smartWallet';
 import { recordLot } from '../lib/portfolioIntel';
 import { recordSwap, confirmSwap, cancelSwap, failSwap } from '../lib/swapHistory';
+import { recordStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
 import { POINT_VALUES } from '../lib/ranks';
 import { createExecutionProof } from '../lib/executionProof';
@@ -940,6 +941,10 @@ export default function Swap() {
       setTxState({ stage: 'error', message: 'CONFIDENTIAL_MODE_UNAVAILABLE' });
       return;
     }
+    if (useGasless && searchParams.get('strategyId')) {
+      setTxState({ stage: 'error', error: 'STRATEGY_GASLESS_UNVERIFIABLE' });
+      return;
+    }
     if (useGasless) return runGasless();
     if (!enforcePolicy()) return;
 
@@ -1189,6 +1194,19 @@ export default function Swap() {
       }
 
       if (ok) {
+        // Candidate locator only: the chat verifies the wallet's sender, both
+        // ERC-20 Transfer events, chain, input amount and block time from its
+        // own provider. Native outputs cannot be proven by those logs and
+        // deliberately stay unconfirmed in a staged strategy.
+        if (fromToken?.symbol === 'USDC' && toToken?.address && !toToken.native) {
+          recordStrategyReceiptHint({
+            strategyId: searchParams.get('strategyId'),
+            stageId: searchParams.get('stageId'),
+            actionIndex: searchParams.get('actionIndex'),
+            txHash: tx.hash, owner: wallet.address, chainId,
+            asset: toToken.symbol, amountWei: fresh.amountInWei
+          });
+        }
         const rewards = useAppStore.getState();
         rewards.awardPoints('swap', POINT_VALUES.swap, {
           network: 'evm',

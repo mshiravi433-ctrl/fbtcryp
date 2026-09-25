@@ -21,13 +21,14 @@ const PUBLIC_CG = 'https://api.coingecko.com/api/v3';
 
 const memo = new Map();
 
-async function fetchJson(url, { timeout = 12000 } = {}) {
+async function fetchJson(url, { timeout = 12000, withMeta = false } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+    return withMeta ? { data, stale: res.headers.get('x-data-stale') === '1' } : data;
   } finally {
     clearTimeout(timer);
   }
@@ -152,12 +153,15 @@ export function clearApiCache() {
 export function getGlobal() {
   return resilient('global', {
     ttl: 45000,
-    backend: () => fetchJson(`${apiBase()}/global`),
+    backend: async () => {
+      const { data, stale } = await fetchJson(`${apiBase()}/global`, { withMeta: true });
+      return { ...data, dataProvenance: stale ? 'stale' : 'live' };
+    },
     direct: async () => {
       const raw = await fetchJson('https://api.coinlore.net/api/global/');
-      return normalizeGlobal(Array.isArray(raw) ? raw[0] : raw);
+      return { ...normalizeGlobal(Array.isArray(raw) ? raw[0] : raw), dataProvenance: 'live' };
     },
-    fallback: () => offlineGlobal()
+    fallback: () => ({ ...offlineGlobal(), dataProvenance: 'offline' })
   });
 }
 
@@ -185,10 +189,13 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
 
   return resilient(`markets:${vs}:${page}:${perPage}`, {
     ttl: 30000,
-    backend: async () => withProvenance(
-      await fetchJson(`${apiBase()}/markets?page=${page}&per_page=${perPage}&vs=${vs}`),
-      'live'
-    ),
+    backend: async () => {
+      const { data, stale } = await fetchJson(`${apiBase()}/markets?page=${page}&per_page=${perPage}&vs=${vs}`, { withMeta: true });
+      // The server may fall back to an expired in-memory cache on failure.
+      // Its x-data-stale header must survive this client layer; a stale quote
+      // is useful for browsing but is not an executable strategy observation.
+      return withProvenance(data, stale ? 'stale' : 'live');
+    },
     direct: async () => {
       const raw = await fetchJson(
         `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&order=market_cap_desc&per_page=${perPage}` +
@@ -242,14 +249,17 @@ export function getCategory(category, { perPage = 50, vs = 'usd' } = {}) {
      * we share with the rest of the app.
      */
     ttl: 300_000,
-    backend: () => fetchJson(`${apiBase()}/category/${slug}?per_page=${perPage}&vs=${vs}`),
+    backend: async () => {
+      const { data, stale } = await fetchJson(`${apiBase()}/category/${slug}?per_page=${perPage}&vs=${vs}`, { withMeta: true });
+      return (Array.isArray(data) ? data : []).map((row) => ({ ...row, dataProvenance: stale ? 'stale' : 'live' }));
+    },
     direct: async () => {
       const raw = await fetchJson(
         `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
           `&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=true` +
           `&price_change_percentage=1h,24h,7d`
       );
-      return raw.map(normalizeCoin);
+      return raw.map((coin) => ({ ...normalizeCoin(coin), dataProvenance: 'live' }));
     },
     /*
      * Empty, not the offline snapshot. That snapshot is the top coins by

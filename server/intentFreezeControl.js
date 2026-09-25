@@ -6,8 +6,8 @@
  * unfreezed and reports its reviewed 21/21 evidence snapshot.
  */
 
-import { getStoredEvidence } from './intentOperatorEvidence.js';
 import { aggregateOperationalReadiness } from '../src/lib/intent-ai/operationalActivation.js';
+import { scanOperationalProviders } from './intentOperationalEvidence.js';
 
 export const FREEZE_CONTROL_SCHEMA = 'fbt.freeze-control.v1';
 
@@ -47,15 +47,17 @@ export function attemptUnfreeze({ operators = [], reason = '', evidence = [], no
   }
 
   /* Check evidence */
-  const allEvidence = evidence.length > 0 ? evidence : getStoredEvidence({ now });
+  const allEvidence = evidence.length > 0 ? evidence : scanOperationalProviders({ now }).readiness.evidence;
   const readiness = aggregateOperationalReadiness({ evidence: allEvidence, now });
 
-  if (!readiness.launchAllowed) {
+  const plane = scanOperationalProviders({ now }).controlPlane;
+  if (!readiness.launchAllowed || plane?.live !== true) {
+    const blockers = [...new Set([...(readiness.blockers || []), ...(plane?.blockers || [])])];
     return {
       ok: false,
       code: 'EVIDENCE_INCOMPLETE',
-      blockers: readiness.blockers,
-      detail: `${readiness.blockers.length} critical blocker(s) remain.`
+      blockers,
+      detail: `${blockers.length} critical blocker(s) remain.`
     };
   }
 
@@ -90,7 +92,7 @@ export function refreeze({ operator = 'system', reason = 'legacy-freeze-request'
     reason: `freeze request ignored: ${String(reason).slice(0, 200)}`,
     changedAt: now,
     changedBy: [operator],
-    evidenceAtChange: (getStoredEvidence({ now }) || []).length
+    evidenceAtChange: scanOperationalProviders({ now }).readiness.evidence.length
   };
   return {
     ok: true,
@@ -124,9 +126,9 @@ export function freezeStateReport({ now = Date.now() } = {}) {
      announced a complete evidence set and an allowed launch on a deployment
      that had neither. Freeze itself remains retired; that is a separate
      concern from lying about the evidence count. */
-  const evidence = getStoredEvidence({ now });
-  const readiness = aggregateOperationalReadiness({ evidence, now });
-  const stored = Array.isArray(evidence) ? evidence.length : 0;
+  const scan = scanOperationalProviders({ now });
+  const readiness = scan.readiness;
+  const stored = readiness.evidence.length;
   return {
     schema: FREEZE_CONTROL_SCHEMA,
     frozen: false,
@@ -135,7 +137,7 @@ export function freezeStateReport({ now = Date.now() } = {}) {
     changedAt: freezeState.changedAt,
     changedBy: freezeState.changedBy,
     evidenceAtChange: stored,
-    launchAllowed: readiness.launchAllowed === true && readiness.operational === 'operational',
+    launchAllowed: readiness.launchAllowed === true && scan.controlPlane?.live === true,
     evidence: `${stored}/21`
   };
 }
@@ -158,7 +160,7 @@ export function handleUnfreeze(req, res) {
     });
   }
 
-  const evidence = getStoredEvidence({ now });
+  const evidence = scanOperationalProviders({ now }).readiness.evidence;
   const result = attemptUnfreeze({
     operators: [op1, op2],
     reason,

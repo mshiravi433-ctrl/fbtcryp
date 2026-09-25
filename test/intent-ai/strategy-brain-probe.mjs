@@ -331,11 +331,14 @@ try {
   check('a confirmed stage unlocks the next one',
     ['deploy-yield', 'consolidate'].includes(runtime.nextStage().stage?.id), runtime.nextStage().stage?.id);
 
-  runtime.failStage('deploy-yield', { code: 'USER_REJECTED', message: 'wallet closed' });
+  const inFlight = runtime.advance();
+  check('an in-flight stage does not start a second transfer',
+    runtime.advance().code === 'AWAITING_RECEIPT' && runtime.state().stageProgress[inFlight.stage.id].attempts === 1);
+  runtime.failStage(inFlight.stage.id, { code: 'USER_REJECTED', message: 'wallet closed' });
   const afterFail = runtime.nextStage();
   check('a failed stage STOPS the plan instead of skipping ahead',
     afterFail.ok === false && afterFail.code === 'STAGE_FAILED', JSON.stringify(afterFail));
-  check('the failure keeps its own code', runtime.state().stageProgress['deploy-yield'].error.code === 'USER_REJECTED');
+  check('the failure keeps its own code', runtime.state().stageProgress[inFlight.stage.id].error.code === 'USER_REJECTED');
 
   const observing = createStrategyRuntime({ strategy, goal: spec, readEcosystem: async () => state, now: () => 1_800_000_000_000 });
   const calm = observing.observe({ portfolioValueUsd: 10050, drawdownPct: 1 });
@@ -345,7 +348,18 @@ try {
     breachUndeployed.decision === 'HALT' && breachUndeployed.triggers.some((t) => t.id === 'drawdown-budget'),
     breachUndeployed.decision);
   const deployed = createStrategyRuntime({ strategy, goal: spec, readEcosystem: async () => { reads += 1; return state; }, now: () => 1_800_000_000_000 });
-  for (const st of strategy.stages.filter((x) => x.movesFunds)) deployed.confirmStage(st.id, { receipt: { ok: true } });
+  deployed.advance();
+  deployed.confirmStage('preflight', { receipt: { ok: true } });
+  for (const st of strategy.stages.filter((x) => x.movesFunds)) {
+    const running = deployed.advance();
+    check(`fixture deploys the expected money stage ${st.id}`, running.stage?.id === st.id);
+    const actions = st.actions.filter((a) => a.requiresSignature).map((a, i) => ({
+      verified: true, capabilityId: a.capabilityId,
+      txHash: `0x${(i + 1).toString(16).padStart(64, '0')}`
+    }));
+    const result = deployed.confirmStage(st.id, { receipt: { verified: true, actions } });
+    check(`fixture provides all verified action receipts for ${st.id}`, result.ok);
+  }
   const breach = deployed.observe({ portfolioValueUsd: 8000, drawdownPct: 25 });
   check('the same breach on a DEPLOYED plan triggers a revision, not a halt',
     breach.decision === 'REVISE' && breach.triggers.some((t) => t.id === 'drawdown-budget'),
@@ -399,9 +413,9 @@ try {
   check('the card request carries the sentence the numbers came from',
     human.strategyRequest?.text === FA_GOAL);
   check('the strategy answer stays in the chat (it is not a page)',
-    /استراتژی|اکوسیستم/.test(human.message) && human.navigated === undefined);
+    /هدف را گرفتم/.test(human.message) && human.navigated === undefined);
   const humanEn = buildHumanResponse({ intent, context: { lastMessage: EN_GOAL }, results: {}, plan: {}, locale: 'en-US' });
-  check('an English ask gets an English card intro', /ecosystem/i.test(humanEn.message));
+  check('an English ask gets an English card intro', /Goal taken/i.test(humanEn.message));
 
   const card = OPERATIONS.find((c) => c.id === 'strategy_build');
   check('the Operations Center has the strategy card', Boolean(card) && card.category === 'goals');
@@ -473,7 +487,10 @@ try {
   /* ── the stage truth is what cannot be rebuilt ────────────────────────── */
   const advancing = persistRt.advance();
   const stageA = advancing.stage.id;
-  persistRt.confirmStage(stageA, { txHash: '0xreceipt1' });
+  const preflightReceipt = { ok: true, kind: 'local-check', checkedAt: T0, txHash: '0xreceipt1' };
+  check('preflight cannot be marked done without local check evidence',
+    persistRt.confirmStage(stageA, { receipt: { txHash: '0xreceipt1' } }).ok === false);
+  persistRt.confirmStage(stageA, { receipt: preflightReceipt });
   saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, runtime: persistRt.state(), store: persistStore, now: T0 + 60_000 });
 
   const reloaded = loadStrategyPlan(persistPlan.strategyId, { store: persistStore });
@@ -490,14 +507,25 @@ try {
   const resumedArgs = hydrateRuntimeArgs(reloaded);
   check('a stored record yields runtime arguments', Boolean(resumedArgs?.strategy));
   const resumed = createStrategyRuntime({ ...resumedArgs, now: () => T0 + 60_000 });
-  check('the resumed runtime keeps the confirmation',
-    resumed.state().stageProgress[stageA].state === 'CONFIRMED');
-  check('the resumed runtime keeps the receipt',
-    resumed.state().stageProgress[stageA].receipt?.txHash === '0xreceipt1');
+  check('a resumed preflight is re-checked, not trusted from localStorage',
+    resumed.state().stageProgress[stageA].state === 'READY'
+    && resumed.state().stageProgress[stageA].receipt === null);
+  check('the old preflight result is still visible in the saved audit snapshot',
+    reloaded.runtime.stageProgress[stageA].receipt?.txHash === '0xreceipt1');
+  resumed.advance();
+  resumed.confirmStage(stageA, { receipt: { ok: true, kind: 'fresh-local-check' } });
   const afterResume = resumed.nextStage();
-  check('the resumed runtime does not re-run the confirmed stage',
+  check('after a fresh preflight a resumed plan can proceed to the real stage',
     afterResume.ok && afterResume.stage?.id !== stageA,
     JSON.stringify({ ok: afterResume.ok, stage: afterResume.stage?.id, code: afterResume.code }));
+  const forgedStage = strategy.stages.find((s) => s.movesFunds);
+  const forged = createStrategyRuntime({ strategy, goal: spec,
+    hydrate: { stageProgress: { [forgedStage.id]: { state: 'CONFIRMED', confirmedAt: T0,
+      receipt: { verified: true, actions: [{ verified: true, txHash: `0x${'f'.repeat(64)}` }] } } } },
+    now: () => T0 + 60_000 });
+  check('a forged or stale stored money confirmation never unlocks the next stage',
+    forged.state().stageProgress[forgedStage.id].state === 'RUNNING'
+    && forged.state().stageProgress[forgedStage.id].needsReverification === true);
 
   const freshRt = createStrategyRuntime({ strategy: persistPlan, goal: goalForPersist, now: () => T0 + 60_000 });
   check('without hydration the same plan starts over',
@@ -512,7 +540,8 @@ try {
     now: T0 + 1
   });
   const withSecrets = createStrategyRuntime({ strategy: secretPlan, goal: goalForPersist, now: () => T0 });
-  withSecrets.confirmStage(secretPlan.stages[0].id, { receipt: { txHash: '0xabc', signature: '0xDEADBEEF' } });
+  withSecrets.advance();
+  withSecrets.confirmStage(secretPlan.stages[0].id, { receipt: { ok: true, txHash: '0xabc', signature: '0xDEADBEEF' } });
   saveStrategyPlan({
     strategy: secretPlan, goal: goalForPersist, runtime: withSecrets.state(),
     store: secretStore, now: T0
@@ -561,7 +590,14 @@ try {
     strategy: persistPlan, goal: goalForPersist, now: () => T0,
     readEcosystem: async () => createEcosystemReader({ readers: readersFrom(ECOSYSTEM) }).read()
   });
-  rtWithRead.confirmStage(persistPlan.stages.find((s) => s.movesFunds).id, { txHash: '0xfirst' });
+  rtWithRead.advance();
+  rtWithRead.confirmStage('preflight', { receipt: { ok: true } });
+  const firstMoney = rtWithRead.advance();
+  const firstMoneyHash = `0x${'a'.repeat(64)}`;
+  const moneyReceipt = { verified: true, actions: firstMoney.actions.filter((a) => a.requiresSignature)
+    .map((a) => ({ verified: true, capabilityId: a.capabilityId, txHash: firstMoneyHash })) };
+  check('old money stage requires actual verified receipt data',
+    rtWithRead.confirmStage(firstMoney.stage.id, { receipt: moneyReceipt }).ok === true);
   saveStrategyPlan({ strategy: persistPlan, goal: goalForPersist, runtime: rtWithRead.state(), store: reviseStore, now: T0 });
   const persistRevised = await rtWithRead.revise({ reason: 'drawdown-budget' });
   saveStrategyPlan({ strategy: persistRevised.strategy, goal: goalForPersist, runtime: rtWithRead.state(), store: reviseStore, now: T0 + 5_000 });
@@ -570,8 +606,11 @@ try {
   const head = loadStrategyPlan(persistRevised.strategy.strategyId, { store: reviseStore });
   check('both ends of a revision are stored', Boolean(head) && Boolean(loadStrategyPlan(persistPlan.strategyId, { store: reviseStore })));
   check('the revision points back at the plan it replaced', head?.supersedes === persistPlan.strategyId, `${head?.supersedes}`);
-  check('the resumed revision keeps the stage that was already signed',
-    Object.values(head?.runtime?.stageProgress || {}).some((p) => p.state === 'CONFIRMED' && p.receipt?.txHash === '0xfirst'));
+  check('the old signed receipt stays on the old plan',
+    Object.values(loadStrategyPlan(persistPlan.strategyId, { store: reviseStore })?.runtime?.stageProgress || {})
+      .some((p) => p.state === 'CONFIRMED' && p.receipt?.actions?.[0]?.txHash === firstMoneyHash));
+  check('a revised strategy NEVER inherits confirmations for new actions',
+    Object.values(head?.runtime?.stageProgress || {}).every((p) => p.state !== 'CONFIRMED'));
   check('a resumed revision still remembers how many revisions it used',
     createStrategyRuntime({ ...hydrateRuntimeArgs(head), now: () => T0 + 5_000 }).state().revisionCount === 1,
     `${createStrategyRuntime({ ...hydrateRuntimeArgs(head), now: () => T0 + 5_000 }).state().revisionCount}`);

@@ -33,6 +33,8 @@ import { WalletProvider } from '../../src/context/WalletContext.jsx';
 import IntentAIUnified from '../../src/components/IntentAIUnified.jsx';
 import { DECISION_LABELS } from '../../src/components/StrategyPlanCard.jsx';
 import { STRATEGY_DECISIONS } from '../../src/lib/strategyBrain/strategyRuntime.js';
+import { clearApiCache } from '../../src/lib/api.js';
+import { resetSharedReads } from '../../src/lib/strategyBrain/chatBridge.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -124,69 +126,53 @@ export async function run(container) {
     check('the refusal names a reason code', Boolean(refused.dataset.code));
   }
 
-  /* ── Persistence: a plan built for a months-long horizon must survive the
-        tab closing, otherwise the stage progress that staged execution and
-        revision both act on is gone. This is the check that fails if the
-        store is written but never CALLED from the component. ──────────── */
+  /* This mounted run deliberately has NO upstream access. A refusal must not
+     leave a saved "live" plan or an execution button. The positive plan and
+     receipt lifecycle are exercised separately with an explicit fixture in
+     strategy-brain-probe; they must never borrow this offline snapshot. */
   const STORE_KEY = 'fbt.strategy-brain.plans.v1';
   let stored = null;
   try { stored = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch { stored = null; }
-  check('the built plan is written to the strategy store', Boolean(stored),
-    stored ? '' : 'nothing under ' + STORE_KEY);
-  check('the store holds a resumable strategy',
-    Array.isArray(stored?.plans) && stored.plans.length > 0 && stored.plans[0].strategy?.ok === true);
-  const storedPlan = stored?.plans?.[0];
-  check('the stored plan carries the goal it was built from',
-    Number(storedPlan?.goal?.capitalUsd) === 10000 && Number(storedPlan?.goal?.targetPct) === 15,
-    JSON.stringify({ capital: storedPlan?.goal?.capitalUsd, target: storedPlan?.goal?.targetPct }));
-  check('the stored plan keeps its stage list',
-    (storedPlan?.strategy?.stages || []).length > 0,
-    `${(storedPlan?.strategy?.stages || []).length} stages`);
-  check('no signature payload reached storage',
-    !/privatekey|mnemonic|seedphrase/i.test(localStorage.getItem(STORE_KEY) || ''));
-
-  /* ── Running a stage must move the plan's state, and write it back. A
-        hand-off that records nothing leaves a returning user at stage one
-        forever — and a hand-off that records CONFIRMED would be a lie,
-        because the signature happens on the venue page, not here. ─────── */
-  const runBtn = q('[data-testid="strategy-execute-stage"]');
-  check('the card offers to run the next stage', !!runBtn && runBtn.disabled === false);
-  if (runBtn) {
-    const before = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [])[0];
-    await act(async () => { runBtn.click(); });
-    for (let i = 0; i < 20; i += 1) { await act(async () => { await sleep(50); }); }
-    const after = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [])[0];
-    const states = Object.values(after?.runtime?.stageProgress || {});
-    check('running a stage records stage progress in the store',
-      states.length > 0, `${states.length} stage rows`);
-    check('the handed-off stage is marked RUNNING, never CONFIRMED',
-      states.some((s) => s.state === 'RUNNING') && !states.some((s) => s.state === 'CONFIRMED'),
-      JSON.stringify(states.map((s) => s.state)));
-    check('the stored plan is still the same strategy after the run',
-      after?.strategyId === before?.strategyId && Boolean(after?.strategyId),
-      `${before?.strategyId} -> ${after?.strategyId}`);
-    check('the chat says the signature happens on the venue page, not in chat',
-      (container.textContent || '').includes('امضا') || (container.textContent || '').includes('signature'));
-  }
-
-  /* ── Monitoring: the plan must be measurable against reality, and must
-        refuse rather than guess when there is no portfolio to measure. In
-        this environment no wallet is connected, so the honest outcome is a
-        named refusal — a verdict invented from nothing would be a lie in
-        the one place the whole feature exists to avoid. ───────────────── */
-  const monitorBtn = q('[data-testid="strategy-monitor"]');
-  check('the card offers to check the plan against reality', !!monitorBtn && monitorBtn.disabled === false);
-  if (monitorBtn) {
-    await act(async () => { monitorBtn.click(); });
-    for (let i = 0; i < 20; i += 1) { await act(async () => { await sleep(50); }); }
-    const bodyText = container.textContent || '';
-    check('monitoring without a portfolio refuses instead of guessing',
-      bodyText.includes('کیف پول') || bodyText.includes('wallet'),
-      bodyText.slice(-260));
-    check('it does not invent a verdict without data',
+  if (refused) {
+    check('offline refusal is not persisted as an executable strategy',
+      !stored?.plans?.some((p) => p.strategy?.ok === true));
+    check('offline refusal cannot start a financial stage',
+      !q('[data-testid="strategy-execute-stage"]'));
+    check('offline refusal does not claim monitored performance',
       !q('[data-testid="strategy-live"]'));
-    check('it does not offer to rebuild on data it never saw',
-      !q('[data-testid="strategy-revise"]'));
+  } else {
+    check('the built plan is written to the strategy store', Boolean(stored));
+    check('the store holds a resumable strategy',
+      Array.isArray(stored?.plans) && stored.plans.some((p) => p.strategy?.ok === true));
+    const storedPlan = stored?.plans?.[0];
+    check('the stored plan carries the goal it was built from',
+      Number(storedPlan?.goal?.capitalUsd) === 10000 && Number(storedPlan?.goal?.targetPct) === 15);
+    check('the stored plan keeps its stage list', (storedPlan?.strategy?.stages || []).length > 0);
+    check('no signature payload reached storage',
+      !/privatekey|mnemonic|seedphrase/i.test(localStorage.getItem(STORE_KEY) || ''));
+    const runBtn = q('[data-testid="strategy-execute-stage"]');
+    check('the card offers to run the next stage', !!runBtn && runBtn.disabled === false);
+    if (runBtn) {
+      const before = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [])[0];
+      await act(async () => { runBtn.click(); });
+      for (let i = 0; i < 20; i += 1) { await act(async () => { await sleep(50); }); }
+      const after = (JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [])[0];
+      const states = Object.values(after?.runtime?.stageProgress || {});
+      check('running a stage records stage progress in the store', states.length > 0);
+      check('the handed-off stage is never silently CONFIRMED',
+        !states.some((st) => st.state === 'CONFIRMED' && st.stageId !== 'preflight'));
+      check('the stored plan is still the same strategy after the run',
+        after?.strategyId === before?.strategyId && Boolean(after?.strategyId));
+    }
+    const monitorBtn = q('[data-testid="strategy-monitor"]');
+    check('the card offers to check the plan against reality', !!monitorBtn);
+    if (monitorBtn) {
+      await act(async () => { monitorBtn.click(); });
+      for (let i = 0; i < 20; i += 1) { await act(async () => { await sleep(50); }); }
+      check('monitoring without a portfolio refuses instead of guessing',
+        /کیف پول|wallet/.test(container.textContent || ''));
+      check('it does not invent a verdict without data', !q('[data-testid="strategy-live"]'));
+    }
   }
 
   /* ── The plain portfolio question must NOT be swallowed by the objective
@@ -206,6 +192,56 @@ export async function run(container) {
   const lastText = bubbles[bubbles.length - 1]?.textContent || '';
   check('a portfolio question is not answered as a strategy request',
     !lastText.includes('استراتژی پرتفوی') && lastText.length > 5);
+
+  /* Positive SEAM: use the server's actual normalized markets shape, not a
+     pre-built strategy fixture. Explicit capital lets someone without a wallet
+     get a comparison in THIS chat; the execution gate must still refuse until
+     a real balance, a fresh USD quote and a signer exist. */
+  clearApiCache();
+  resetSharedReads();
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    const market = (id, symbol, price, change24h) => ({
+      id, symbol, price, change24h, mcap: 1_000_000_000, volume: 1_000_000
+    });
+    if (u.includes('/markets?')) return new Response(JSON.stringify([
+      market('ethereum', 'ETH', 3000, -2.5), market('chainlink', 'LINK', 25, 1.3)
+    ]), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('/category/')) return new Response(JSON.stringify([
+      market('pax-gold', 'PAXG', 3300, 1)
+    ]), { status: 200, headers: { 'content-type': 'application/json' } });
+    throw new Error('test: other domains deliberately unavailable');
+  };
+  try {
+    const input3 = q('.iaos-composer input.iaos-input');
+    await act(async () => { setInputValue(input3, 'من ۱۰۰۰ دلار دارم، در ۳۰ روز ۳۰٪ سود می‌خواهم، ریسک متوسط'); });
+    const send3 = q('.iaos-composer button.iaos-send');
+    if (send3 && !send3.disabled) await act(async () => { send3.click(); });
+    let planCard = null;
+    for (let i = 0; i < 90; i += 1) {
+      await act(async () => { await sleep(50); });
+      planCard = q('[data-testid="strategy-plan-card"]');
+      if (planCard) break;
+    }
+    check('live market-shaped feed yields a complete plan in the same chat', !!planCard);
+    if (planCard) {
+      check('objective numbers are kept on the plan card', /1,000|۱٬۰۰۰/.test(planCard.textContent || '') && /30/.test(planCard.textContent || ''));
+      check('real, executable positions and stages appear instead of only links',
+        !!planCard.querySelector('[data-testid="strategy-sleeves"]')
+        && !!planCard.querySelector('[data-testid="strategy-stages"]'));
+      check('30% in 30 days is not promised as guaranteed income',
+        planCard.dataset.reachable === 'false');
+      const run = planCard.querySelector('[data-testid="strategy-execute-stage"]');
+      if (run) await act(async () => { run.click(); await sleep(30); });
+      const stored = JSON.parse(localStorage.getItem(STORE_KEY) || '{}').plans || [];
+      check('without a wallet the local preflight refuses and moves no funds',
+        stored.some((p) => p.strategy?.ok && p.runtime?.stageProgress?.preflight?.state !== 'CONFIRMED')
+        && /WALLET_REQUIRED/.test(container.textContent || ''));
+    }
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
 
   await act(async () => { root.unmount(); });
   return rows;

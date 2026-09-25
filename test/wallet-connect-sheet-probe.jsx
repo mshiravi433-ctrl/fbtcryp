@@ -49,7 +49,10 @@ export async function run(container) {
   out.push(['the retired email/social row is gone', !/Email|Social|Google|Apple/i.test(text)]);
   out.push(['the in-app vault is offered', text.length > 0 && buttons.length >= 3]);
   out.push(['the self-custody warning is on screen', /keys|seed|recovery/i.test(text)]);
-  out.push(['the health check is one tap away', Boolean(surface.querySelector('details'))]);
+  /* The connection-health panel was intentionally hidden at the owner's
+     request; never regress to showing diagnostics in the connect chooser. */
+  out.push(['connection diagnostics stay hidden in the chooser',
+    !surface.querySelector('.wallet-health-panel') && !surface.querySelector('details')]);
   /* The two INTERPOLATED keys are the only ones that can silently resolve to
      nothing — every literal key is present in the shipped locale files. */
   const leaks = (text.match(/wallet\.(?:err|strength)\.[a-zA-Z]+/g) || []);
@@ -69,7 +72,8 @@ export async function run(container) {
   out.push([`the options are grouped, not one flat list (${groupLabels.length} groups)`, groupLabels.length >= 2]);
   out.push(['every wallet row has an icon tile', wcRows.length >= 3 && wcRows.every((r) => r.querySelector('.wc-mark'))]);
   out.push(['each row explains itself in a second line', wcRows.every((r) => r.querySelector('.wc-card-sub'))]);
-  out.push(['the self-custody line is its own footer', Boolean(surface.querySelector('.wc-foot'))]);
+  out.push(['the self-custody line is visible in the chooser heading',
+    /keys|seed|recovery/i.test(surface.querySelector('.wc-sub')?.textContent || '')]);
   /* A chevron that points the right way in Persian is a CSS rule, not an inline
      style: `[dir='rtl'] .wc-chev { transform: scaleX(-1) }`. */
   out.push(['every row ends in a direction-aware chevron', wcRows.every((r) => r.querySelector('.wc-chev'))]);

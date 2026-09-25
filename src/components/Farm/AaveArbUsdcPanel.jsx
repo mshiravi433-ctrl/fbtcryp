@@ -76,12 +76,12 @@ function StepList({ steps, t }) {
   );
 }
 
-export default function AaveArbUsdcPanel({ pool }) {
+export default function AaveArbUsdcPanel({ pool, initialAmount = null }) {
   const { t } = useTranslation();
   const wallet = useWallet();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState('supply'); // 'supply' | 'withdraw'
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(() => initialAmount || '');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
   const [position, setPosition] = useState(null);

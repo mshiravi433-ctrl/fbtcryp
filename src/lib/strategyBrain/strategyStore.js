@@ -42,6 +42,13 @@ function stripSecretsDeep(value, depth = 0) {
   if (Array.isArray(value)) return value.map((v) => stripSecretsDeep(v, depth + 1));
   const out = {};
   for (const [k, v] of Object.entries(value)) {
+    // A capability's public boolean "requiresSignature" is NOT a signed
+    // payload. Removing it made resumed money stages appear to have no signed
+    // actions, so receipt reconciliation could never finish after reload.
+    if (k === 'requiresSignature' && typeof v === 'boolean') {
+      out[k] = v;
+      continue;
+    }
     if (FORBIDDEN.test(k)) continue;
     out[k] = stripSecretsDeep(v, depth + 1);
   }
@@ -154,18 +161,40 @@ export function linkRevision({ fromStrategyId, toStrategyId, store = defaultStor
 }
 
 export function readStrategyPlans({ store = defaultStorage() } = {}) {
-  return readDoc(store).plans;
+  return readDoc(store).plans.map(restoreLegacyExecutionFlags);
 }
 
 /** The most recently saved plan — the one a returning user resumes. */
 export function latestStrategyPlan({ store = defaultStorage() } = {}) {
   const plans = readDoc(store).plans;
-  return plans.length ? plans[0] : null;
+  return plans.length ? restoreLegacyExecutionFlags(plans[0]) : null;
+}
+
+function restoreLegacyExecutionFlags(record) {
+  // Earlier builds scrubbed every key containing "signature", inadvertently
+  // removing the harmless requiresSignature boolean from saved actions. Only
+  // these three engine-built financial stage IDs contain all-signed actions.
+  // Restoring a missing flag here does NOT make a receipt trusted: the current
+  // wallet, saved running state, timestamp and provider proof are still checked.
+  const financial = new Set(['consolidate', 'deploy-yield', 'deploy-market']);
+  if (record?.schema !== STRATEGY_STORE_SCHEMA || !Array.isArray(record?.strategy?.stages)) return record;
+  let changed = false;
+  const stages = record.strategy.stages.map((stage) => {
+    if (!financial.has(stage.id) || stage.movesFunds !== true || !Array.isArray(stage.actions)) return stage;
+    const actions = stage.actions.map((action) => {
+      if (typeof action.requiresSignature === 'boolean' || !action.route || !action.capabilityId || !action.operation) return action;
+      changed = true;
+      return { ...action, requiresSignature: true };
+    });
+    return { ...stage, actions };
+  });
+  return changed ? { ...record, strategy: { ...record.strategy, stages } } : record;
 }
 
 export function loadStrategyPlan(strategyId, { store = defaultStorage() } = {}) {
   if (!strategyId) return null;
-  return readDoc(store).plans.find((p) => p.strategyId === strategyId) || null;
+  const found = readDoc(store).plans.find((p) => p.strategyId === strategyId) || null;
+  return restoreLegacyExecutionFlags(found);
 }
 
 /** Drop one plan, or everything when no id is given. */

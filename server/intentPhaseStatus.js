@@ -2,14 +2,13 @@
  * FBT INTENT AI — authoritative live status for specification Phases 10–200.
  *
  * Source and test coverage describe implementation. The operational status is
- * driven by the reviewed 21/21 evidence snapshot, so all specified phases can
- * be published live without exposing credentials or depending on a deployment's
- * current working directory.
+ * driven by reviewed evidence AND the individual control-plane evaluators.
+ * An aggregate 21/21 snapshot alone cannot publish every phase as live.
  *
  * Phases 51–100 are product arcs implemented by src/lib/intent-ai modules and
- * proven by test/intent-ai/phaseNN-*.mjs probes. They share the same launch
- * gate as 11–20: the reviewed evidence decides whether the whole release is
- * live; per-phase granular provider checks live in the 22–50 control planes
+ * exercised by test/intent-ai/phaseNN-*.mjs probes. The reviewed evidence
+ * and per-phase control-plane checks together gate any claim that the full
+ * release is operational. Granular provider checks live in the 22–50 planes
  * and in /api/intents/v1/later-phase-probe.
  */
 
@@ -418,48 +417,19 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
   const freeze = freezeStateReport({ now });
   const evidenceAllowsLaunch = scan.readiness?.launchAllowed === true
     && scan.readiness?.operational === 'operational';
-  /*
-   * OPEN MODE — owner directive 2026-09-25 («همه فازها باز باشند، هیچ
-   * محدودیتی بخاطر امنیت»).
-   *
-   * The deployment already self-attests via the sandbox operator by default,
-   * but a single mis-set env var (INTENT_AI_SANDBOX_EVIDENCE=0, NODE_ENV=test
-   * leaking into a host) used to flip all 196 rows to blocked and every
-   * status surface to \"pending\" — with zero change in the code. Open mode
-   * makes the shipped default robust: every implementation-complete phase
-   * (source + probe present on disk) is published live.
-   *
-   * What this does NOT lift, ever:
-   *   · executionActivated stays false — every transaction still requires the
-   *     user's own wallet signature (the server holds no key and cannot sign);
-   *   · rawCredentialsAllowed stays false;
-   *   · the evidence counters below still report what the store REALLY holds.
-   *
-   * `gate` names which rule opened the launch: 'evidence' (reviewed/external
-   * records) or 'open-mode' (owner default). Audits restore strict fail-closed
-   * with INTENT_OS_OPEN_MODE=0 — the fail-closed probes pin exactly that.
-   */
+  /* Open mode makes implemented capabilities accessible, not "verified".
+     Source files and local probes cannot attest an external provider, signer,
+     or production incident drill. Live/launch status depends on reviewed
+     operator evidence independently of product accessibility. */
   const openMode = String(process.env.INTENT_OS_OPEN_MODE ?? '1').trim() !== '0';
-  const openCarriesGate = openMode && !evidenceAllowsLaunch;
-  const live = evidenceAllowsLaunch || openMode;
-  const gate = evidenceAllowsLaunch ? 'evidence' : (openMode ? 'open-mode' : 'closed');
-  /*
-   * Every phase reports its own activation state. A previous revision short-
-   * circuited to activeStatus() for ALL phases the moment the aggregate
-   * evidence allowed launch, which discarded each phase's real evaluation and
-   * published `operational: true` for phases whose own evidence was missing.
-   * The per-phase resolvers below are the source of truth; `live` only decides
-   * whether a phase is ALLOWED to be live, never that it IS.
-   */
+  // Aggregate evidence alone cannot clear blockers in the individual 22–50 planes.
+  const live = evidenceAllowsLaunch && scan.controlPlane?.live === true;
+  const gate = live ? 'evidence' : (openMode ? 'open-mode-access' : 'closed');
   const phases = SPEC_PHASES.map((phase) => {
     const sourcePresent = phase.source.every(sourceExists);
     const testsPresent = phase.tests.every(sourceExists);
     const implemented = sourcePresent && testsPresent;
-    /* Open mode publishes every implementation-complete row live; a row whose
-       source or probe is genuinely missing from the deployment still reports
-       partial with its real blockers — open mode never invents code. */
-    const activation = openCarriesGate
-      ? (implemented ? activeStatus() : inactiveStatus(phase))
+    const activation = !implemented ? inactiveStatus(phase)
       : phase.phase === 10
         ? (live ? activeStatus() : phase10Status())
         : phase.phase === 21
@@ -480,6 +450,7 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
       tests: [...phase.tests],
       sourcePresent,
       testsPresent,
+      available: implemented && (openMode || activation.live === true),
       configuration: activation.configuration,
       operational: activation.operational,
       ready: activation.ready,
@@ -488,8 +459,8 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
       blockers: activation.blockers,
       requiredEvidence: [...phase.requiredEvidence],
       claims: {
-        verified: live,
-        production: live,
+        verified: activation.live === true,
+        production: activation.live === true && live && scan.mode === 'operator-reviewed',
         executionActivated: false,
         rawCredentialsAllowed: false
       }
@@ -499,14 +470,13 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
   return {
     schema: PHASE_STATUS_SCHEMA,
     generatedAt: new Date(now).toISOString(),
-    status: live ? 'operational' : 'partial',
+    status: live ? 'operational' : (openMode ? 'implementation-available' : 'partial'),
     operational: live,
     live,
-    /* Which rule opened the launch: reviewed 'evidence' or the 'open-mode'
-       owner default. 'closed' only when open mode is pinned off AND evidence
-       is missing (the state the fail-closed probes measure). */
+    /* Accessibility and reviewed launch are separate. */
     gate,
     openMode,
+    capabilitiesAvailable: openMode || live,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
     specificationImplementedThrough: 216,
     /* The release gate is aggregate; the live rows are published per phase. The
@@ -525,6 +495,7 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
     isFrozen: false,
     evidence: { stored: scan.readiness?.evidence?.length || 0, required: 21, status: `${scan.readiness?.evidence?.length || 0}/21` },
     operationalActivation: scan.publicStatus,
+    sandboxEvidenceCount: scan.sandboxEvidenceCount || 0,
     phase21: scan,
     freeze
   };

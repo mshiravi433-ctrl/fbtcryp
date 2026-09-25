@@ -157,9 +157,10 @@ async function pooledMap(items, limit, worker) {
 
 /** Price one row against the market map. `null` when the market has no price for it. */
 function priceRow(row, priceMap) {
-  const price = row.coingeckoId ? priceMap?.[row.coingeckoId] : undefined;
-  const numeric = Number.isFinite(Number(price)) ? Number(price) : null;
-  return { price: numeric, value: numeric == null ? null : row.amount * numeric };
+  const quote = row.coingeckoId ? priceMap?.[row.coingeckoId] : null;
+  const numeric = quote?.price != null && Number.isFinite(Number(quote.price)) ? Number(quote.price) : null;
+  return { price: numeric, value: numeric == null ? null : row.amount * numeric,
+    priceProvenance: quote?.dataProvenance || 'unavailable' };
 }
 
 export function useMultiChainPortfolio(wallet) {
@@ -169,7 +170,7 @@ export function useMultiChainPortfolio(wallet) {
   const { data: markets, loading: marketsLoading } = useMarkets(250);
   const priceMap = useMemo(() => {
     const m = {};
-    (markets ?? []).forEach((c) => { m[c.id] = c.price; });
+    (markets ?? []).forEach((c) => { m[c.id] = { price: c.price, dataProvenance: c.dataProvenance }; });
     return m;
   }, [markets]);
 
@@ -325,12 +326,12 @@ export function useMultiChainPortfolio(wallet) {
       let totalValue = 0;
       let pricedCount = 0;
       const rows = chain.rows.map((row) => {
-        const { price, value } = priceRow(row, priceMap);
+        const { price, value, priceProvenance } = priceRow(row, priceMap);
         if (value != null) {
           totalValue += value;
           pricedCount += 1;
         }
-        return { ...row, price, value };
+        return { ...row, price, value, priceProvenance };
       });
       rows.sort((a, b) => {
         if (a.value == null && b.value == null) return b.amount - a.amount;
@@ -345,6 +346,11 @@ export function useMultiChainPortfolio(wallet) {
     const pricedCount = byChain.reduce((s, c) => s + c.pricedCount, 0);
     const totalCount = byChain.reduce((s, c) => s + c.rows.length, 0);
     const failures = byChain.filter((c) => c.error).map((c) => c.chainShort);
+    // The market screen intentionally displays offline/stale snapshots. A
+    // wallet USD total derived from them remains useful for browsing but can
+    // never be a fresh capital check for an executable strategy.
+    const priceDataStatus = !markets?.length ? 'unavailable'
+      : markets.every((c) => c.dataProvenance === 'live') ? 'live' : 'stale';
     // Flatten rows across all chains for "All networks"
     const allRows = byChain.flatMap((c) => c.rows);
     allRows.sort((a, b) => {
@@ -362,11 +368,13 @@ export function useMultiChainPortfolio(wallet) {
       /* `partial` now also covers a chain whose rows are the previous read:
          the total is still the best number we have, but the coverage badge is
          not allowed to call it fresh. */
-      partial: failures.length > 0 || pricedCount < totalCount || byChain.some((c) => c.stale),
+      partial: failures.length > 0 || pricedCount < totalCount || byChain.some((c) => c.stale)
+        || priceDataStatus !== 'live',
+      priceDataStatus,
       staleChains: byChain.filter((c) => c.stale).map((c) => c.chainShort),
       failures
     };
-  }, [chains, priceMap]);
+  }, [chains, priceMap, markets]);
 
   /*
    * ─── THE RETURNED OBJECT IS MEMOISED, AND THAT IS LOAD-BEARING ──────────
@@ -397,6 +405,7 @@ export function useMultiChainPortfolio(wallet) {
     pricedCount: aggregated.pricedCount,
     totalCount: aggregated.totalCount,
     partial: aggregated.partial,
+    priceDataStatus: aggregated.priceDataStatus,
     staleChains: aggregated.staleChains,
     failedChains: aggregated.failures,
     activeChainId,
@@ -417,7 +426,7 @@ export function useMultiChainPortfolio(wallet) {
     refresh: load
   }), [
     aggregated.chains, aggregated.allRows, aggregated.totalValue, aggregated.pricedCount,
-    aggregated.totalCount, aggregated.partial, aggregated.staleChains, aggregated.failures,
+    aggregated.totalCount, aggregated.partial, aggregated.priceDataStatus, aggregated.staleChains, aggregated.failures,
     activeChainId, busy, loaded, fromSnapshot, marketsLoading, error, updatedAt, load
   ]);
 }

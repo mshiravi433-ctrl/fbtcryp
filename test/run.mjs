@@ -16,6 +16,7 @@
  * Vite into a classic/SSR bundle first.
  */
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
 import './lending-engine-probe.mjs';
@@ -772,7 +773,12 @@ console.log('▸ probing the free Upstash durable-store fallback…');
 
 await import('./intent-ai/phase-status-probe.mjs');
 await import('./intent-ai/open-mode-default-probe.mjs');
-await import('./intent-ai/rich-objective-probe.mjs');
+// Other API probes have already spent requests from the *same* localhost IP
+// in this process. Isolate the multi-turn chat contract so the production
+// AI rate limiter does not turn its third assertion into a synthetic 429.
+execFileSync(process.execPath, ['test/intent-ai/rich-objective-probe.mjs'], {
+  stdio: 'inherit', env: { ...process.env, RATE_LIMIT: '100000', AI_RATE_LIMIT: '50' }
+});
 
 /* Phase 213 — the AI quality bar: 1,000+ deterministic intent cases against the
    real classifier, plus the dead-deployment honesty sweep. */
@@ -1014,10 +1020,24 @@ report('connect sheet (mounted)', await runWcSheet(document.getElementById('r'))
 /* The repository intentionally does not track dist/. Build the shipped static
    bundle here so `npm test` is self-contained in a fresh clone rather than
    depending on somebody having run `npm run build` first. */
-console.log('▸ building shipped static bundle for boot checks…');
-npxShip(['vite', 'build', '--logLevel', 'error']);
-console.log('▸ building app as a classic script for jsdom…');
-npxShip(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);
+if (process.env.FBT_TEST_PREBUILT === '1') {
+  // On a 4 GB host the runner plus Rollup can exceed physical memory even
+  // though EACH build succeeds alone. For that case, first run `npm run build`
+  // `NODE_OPTIONS=--max-old-space-size=3072 npx vite build -c test/vite.iife.mjs`,
+  // then build VITE_ENABLE_SPECULATION=false and true with --outDir
+  // test/.out/store-ci and test/.out/spec-ci respectively, using the same heap;
+  // finally run FBT_TEST_PREBUILT=1 npm test. This opt-in never pretends missing
+  // artifacts are a green build; the operator must rebuild after source edits.
+  for (const file of ['dist/index.html', 'test/.out/iife/app.js']) {
+    if (!existsSync(file)) throw new Error(`FBT_TEST_PREBUILT requires ${file}; build it first`);
+  }
+  console.log('▸ using explicitly prebuilt app bundles (not rebuilding in runner)…');
+} else {
+  console.log('▸ building shipped static bundle for boot checks…');
+  npxShip(['vite', 'build', '--logLevel', 'error']);
+  console.log('▸ building app as a classic script for jsdom…');
+  npxShip(['vite', 'build', '-c', 'test/vite.iife.mjs', '--logLevel', 'error']);
+}
 console.log('▸ running boot test with all external hosts unreachable…');
 const bootRows = (await import('./boot-e2e.mjs')).default;
 report('boot under a dead network', bootRows);
@@ -1457,6 +1477,12 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
   const rows = [];
   const gameChunk = /^(Play|Crash|Dice|Mines|Wheel|CoinFlip)/i;
   const specChunk = /^(Predict|Perp|Invest)/i;
+  const prebuiltShip = process.env.FBT_TEST_PREBUILT === '1';
+  const storeAssetsDir = prebuiltShip ? 'test/.out/store-ci/assets' : 'dist/assets';
+  const specAssetsDir = prebuiltShip ? 'test/.out/spec-ci/assets' : 'dist/assets';
+  if (prebuiltShip && (!existsSync(storeAssetsDir) || !existsSync(specAssetsDir))) {
+    throw new Error('FBT_TEST_PREBUILT requires store-ci and spec-ci Vite builds; build both after source edits');
+  }
 
   /* ---- A. deleted, not flagged ---- */
   for (const gone of [
@@ -1468,38 +1494,29 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
     rows.push([`${gone} is deleted from the repo`, !existsSync(gone)]);
   }
 
-  rmSync('dist', { recursive: true, force: true });
-  {
-    /* The same 4 GB-box heap trap the IIFE build hit (see npxShip above),
-       caught here instead of in the suite: these builds write dist/ for the
-       chunk assertions, so they run with the same raised heap. */
+  if (!prebuiltShip) {
+    rmSync('dist', { recursive: true, force: true });
     const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false', NODE_OPTIONS: BUILD_NODE_OPTIONS };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env
+      stdio: ['ignore', 'pipe', 'pipe'], env
     });
   }
-  const defaultAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
+  const defaultAssets = existsSync(storeAssetsDir) ? readdirSync(storeAssetsDir) : [];
   rows.push(['store build emits no arcade chunk', !defaultAssets.some((f) => gameChunk.test(f))]);
   rows.push(['store build emits no speculation chunk when explicitly disabled', !defaultAssets.some((f) => specChunk.test(f))]);
   rows.push(['store build still produced a bundle', defaultAssets.length > 5]);
 
   /* ---- B. the speculation opt-in still works, and still has no games ---- */
-  rmSync('dist', { recursive: true, force: true });
-  {
-    /* Ship-flavor build too (see npxShip): this writes dist/ for the budget.
-       The speculation build is the LARGER of the two and is the one that
-       OOMs on a 4 GB box at Node's default ~1.95 GB heap — verified on the
-       base commit in this environment — so it gets the same raised heap. */
+  if (!prebuiltShip) {
+    rmSync('dist', { recursive: true, force: true });
     const env = { ...process.env, VITE_ENABLE_SPECULATION: 'true', NODE_OPTIONS: BUILD_NODE_OPTIONS };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env
+      stdio: ['ignore', 'pipe', 'pipe'], env
     });
   }
-  const fullAssets = existsSync('dist/assets') ? readdirSync('dist/assets') : [];
+  const fullAssets = existsSync(specAssetsDir) ? readdirSync(specAssetsDir) : [];
   rows.push([
     'VITE_ENABLE_SPECULATION=true does emit those screens',
     fullAssets.some((f) => specChunk.test(f))
@@ -1519,7 +1536,7 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
   {
     const text = fullAssets
       .filter((f) => f.endsWith('.js'))
-      .map((f) => readFileSync(`dist/assets/${f}`, 'utf8'))
+      .map((f) => readFileSync(`${specAssetsDir}/${f}`, 'utf8'))
       .join('\n');
     const arcadeWords = ['gambling-style', 'house edge', 'Provably fair', 'قمار'];
     const found = arcadeWords.filter((w) => text.includes(w));
@@ -1530,9 +1547,10 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
     rows.push(['there was actually a full bundle to scan', text.length > 100000]);
   }
 
-  // Leave the tree in the store-safe state.
-  rmSync('dist', { recursive: true, force: true });
-  {
+  // Leave dist/ in the store-safe state. In prebuilt mode it was never
+  // removed; verify the actual store-ci output below, not a stale dist copy.
+  if (!prebuiltShip) {
+    rmSync('dist', { recursive: true, force: true });
     const env = { ...process.env, VITE_ENABLE_SPECULATION: 'false' };
     delete env.NODE_ENV;
     execFileSync('npx', ['vite', 'build', '--logLevel', 'error'], { stdio: ['ignore', 'pipe', 'pipe'], env });
@@ -1563,7 +1581,7 @@ console.log('\n▸ verifying the arcade is absent and the speculation flag works
       'پیش‌بینی قیمت', 'قمار', 'اهرم', 'المضاربة'
     ];
 
-    const assetDir = 'dist/assets';
+    const assetDir = storeAssetsDir;
     const files = existsSync(assetDir) ? readdirSync(assetDir) : [];
     const text = files
       .filter((f) => f.endsWith('.js'))
@@ -1733,8 +1751,17 @@ console.log('\n▸ measuring the AI surface in light and dark…');
    immutable nonce admission, and public inclusion evidence. */
 console.log('\n▸ probing the signed solver commitment API…');
 {
-  const intentApiRows = (await import('./intent-api-probe.mjs')).default;
-  report('intent commitment API', intentApiRows);
+  // This lifecycle probe must install ephemeral solver keys BEFORE app.js is
+  // imported. Earlier HTTP probes have already imported it (and used the same
+  // IP's auction budgets); reusing their module instance invalidates the keys
+  // and can turn a missing close into a misleading TypeError downstream.
+  const marker = '__FBT_TEST_ROWS__';
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e',
+    `const {default:rows}=await import('./test/intent-api-probe.mjs'); console.log('${marker}'+JSON.stringify(rows));`
+  ], { env: { ...process.env, RATE_LIMIT: '100000' }, encoding: 'utf8', maxBuffer: 5_000_000 });
+  const at = output.lastIndexOf(marker);
+  if (at < 0) throw new Error('intent-api-probe returned no result rows');
+  report('intent commitment API', JSON.parse(output.slice(at + marker.length).trim()));
 }
 
 /* Real HTTP + module coverage for the authenticated agent/strategy registry:

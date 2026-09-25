@@ -189,12 +189,20 @@ const HANDOFF_OF_FAMILY = Object.freeze({
   lp: { route: '/farm', capabilityId: 'liquidity.add', module: 'liquidity', operation: 'ADD_LIQUIDITY' },
   cash: { route: '/loan', capabilityId: 'lending.supply', module: 'lending', operation: 'SUPPLY_STABLE' },
   crypto: { route: '/swap', capabilityId: 'swap.quote', module: 'swap', operation: 'BUY' },
-  rwa: { route: '/market', capabilityId: 'rwa.tokens', module: 'swap', operation: 'BUY' },
+  rwa: { route: '/swap', capabilityId: 'swap.quote', module: 'swap', operation: 'BUY' },
   equity: { route: '/stocks', capabilityId: 'stocks.list', module: 'markets', operation: 'BUY_EQUITY' },
   fx: { route: '/stocks', capabilityId: 'horizon.forex', module: 'markets', operation: 'BUY_FX' },
   commodity: { route: '/stocks', capabilityId: 'horizon.commodities', module: 'markets', operation: 'BUY_COMMODITY' },
   derivatives: { route: '/perp', capabilityId: 'futures.open', module: 'futures', operation: 'OPEN_POSITION' }
 });
+
+const FARM_PANEL_VENUES = new Set(['compound-base', 'morpho-base', 'lido']);
+function handoffForSleeve(sleeve) {
+  const base = HANDOFF_OF_FAMILY[sleeve.family] || null;
+  if (!base || !FARM_PANEL_VENUES.has(String(sleeve.venue || ''))) return base;
+  return { route: '/farm', capabilityId: 'farming.deposit', module: 'farm',
+    operation: sleeve.venue === 'lido' ? 'STAKE_ETH' : 'SUPPLY' };
+}
 
 const STABLE_RE = /^(USDC|USDT|DAI|FDUSD|TUSD|USDE|USDbC|GHO|PYUSD|USD\+)$/i;
 
@@ -203,7 +211,7 @@ const STABLE_RE = /^(USDC|USDT|DAI|FDUSD|TUSD|USDE|USDbC|GHO|PYUSD|USD\+)$/i;
  * allowed into a plan with an expected return of exactly zero — the engine
  * does not forecast — and they carry a measured volatility range instead.
  */
-export const PRICE_FAMILIES = Object.freeze(['crypto', 'rwa', 'equity', 'fx', 'commodity']);
+export const PRICE_FAMILIES = Object.freeze(['crypto', 'rwa', 'equity', 'fx', 'commodity', 'derivatives']);
 const isPriceFamily = (family) => PRICE_FAMILIES.includes(family);
 
 function deriveRisk({ poolRisk = null, apy = null, volatilityPct = null, drawdownPct = null, tvlUsd = null, volumeUsd = null, family = null }) {
@@ -280,8 +288,12 @@ export function normalizeOpportunity(domain, raw = {}) {
    * part of the target that must come from price is reported as a RANGE from
    * measured volatility instead of being quietly added to the expected return.
    */
-  const returnPctAnnual = apy ?? funding ?? historical ?? (priceFamily ? 0 : null);
-  const basis = apy != null ? 'apy' : (funding != null ? 'funding' : (historical != null ? 'historical' : (priceFamily ? 'zero-drift' : 'none')));
+  // Funding is NOT income without a matching direction, open quote and
+  // maintenance margin. A market snapshot never supplies those, so derivative
+  // price exposure has zero forecast just like spot.
+  const returnPctAnnual = family === 'derivatives' ? 0 : (apy ?? historical ?? (priceFamily ? 0 : null));
+  const basis = family === 'derivatives' ? 'zero-drift'
+    : apy != null ? 'apy' : (historical != null ? 'historical' : (priceFamily ? 'zero-drift' : 'none'));
 
   const dailyVolPct = num(raw.volatilityPct ?? raw.volatility ?? raw.priceChange24hPct ?? raw.price_change_percentage_24h);
   const annualVolPct = annualVolatilityPct(raw);
@@ -322,7 +334,8 @@ export function normalizeOpportunity(domain, raw = {}) {
     tvlUsd,
     liquidityUsd: tvlUsd,
     dataStatus: 'live',
-    side: raw.side || (funding != null && funding < 0 ? 'short' : 'long'),
+    executable: raw.executable !== false,
+    side: raw.side || null,
     raw: null
   };
 }
@@ -367,7 +380,7 @@ export const BLUEPRINTS = Object.freeze([
   },
   {
     id: 'yield_core', title: 'DeFi yield core',
-    idea: 'Lending plus farms and pools — the app\'s own yield venues, diversified across protocols.',
+    idea: 'Live lending and staking from verified in-app venues, diversified where available.',
     weights: {
       conservative: { cash: 30, lending: 40, staking: 30 },
       balanced: { lending: 30, farm: 30, lp: 20, staking: 20 },
@@ -385,7 +398,7 @@ export const BLUEPRINTS = Object.freeze([
   },
   {
     id: 'hedged_growth', title: 'Hedged growth',
-    idea: 'Growth sleeve with a funding-funded hedge, so a fall is partly paid for by the perp book.',
+    idea: 'Growth sleeve with optional derivative exposure; no hedge benefit or funding income is assumed without a live position-specific quote.',
     weights: {
       conservative: null,
       balanced: { lending: 25, farm: 20, crypto: 25, derivatives: 15, rwa: 15 },
@@ -393,8 +406,8 @@ export const BLUEPRINTS = Object.freeze([
     }
   },
   {
-    id: 'funding_carry', title: 'Funding carry',
-    idea: 'Collect perp funding instead of betting on direction — only where a live funding rate exists.',
+    id: 'funding_carry', title: 'Derivative exposure (no carry assumed)',
+    idea: 'A high-risk directional alternative; funding is a cost or income only after side, quote and margin are known.',
     weights: {
       conservative: null,
       balanced: { cash: 30, lending: 25, derivatives: 30, farm: 15 },
@@ -545,7 +558,7 @@ export function expandBlueprint({ blueprint, profile, universe, marketView, maxS
   for (const [family, weight] of Object.entries(weights)) {
     if (!allowed.has(family)) { dropped.push({ family, reason: 'outside risk band' }); continue; }
     const pool = universe
-      .filter((row) => row.family === family)
+      .filter((row) => row.family === family && row.executable !== false)
       .filter((row) => row.riskRank <= profile.maxRiskRank)
       .filter((row) => profile.allowsLeverage || row.leverage <= 1)
       /* A yield row must have a sourced rate. A PRICE row is allowed with zero
@@ -772,7 +785,6 @@ export function explainRanking(ranked = []) {
    STAGES — the plan as a sequence of handoffs, not a wall of actions
    ══════════════════════════════════════════════════════════════════════════ */
 
-const needsSwapFirst = (sleeve) => ['crypto', 'rwa', 'equity', 'fx', 'commodity'].includes(sleeve.family);
 const needsBridge = (sleeve, walletChainId) => sleeve.chainId != null && walletChainId != null && sleeve.chainId !== walletChainId;
 
 /**
@@ -812,10 +824,10 @@ function stageRoute(handoff, params = {}) {
   const chainId = num(params.chainId) > 0 ? num(params.chainId) : null;
   const asset = cleanSymbol(params.asset || params.toToken);
   if (base === '/swap') {
-    /* The stage sizes legs in USD; the swap form sizes in FROM units — so the
-       from leg is pinned to USDT (curated on every chain) and the user can
-       switch it on the page. `to` must be curated or the page ignores it. */
-    return `/swap${stageQuery({ from: 'USDT', to: asset, amount: amountUsd, chain: chainId })}`;
+    /* The consolidation stage bridges USDC, not USDT. Both quote and handoff
+       must use the same base asset on the destination chain; the venue will
+       still check the actual balance, live quote and signature. */
+    return `/swap${stageQuery({ from: 'USDC', to: asset, amount: amountUsd, chain: chainId })}`;
   }
   if (base === '/bridge') {
     return `/bridge${stageQuery({
@@ -829,13 +841,24 @@ function stageRoute(handoff, params = {}) {
     return `/loan${stageQuery({ tab: 'supply', asset, amount: amountUsd, chain: chainId })}`;
   }
   if (base === '/farm') {
+    const venue = String(params.venue || '');
+    if (FARM_PANEL_VENUES.has(venue)) return `/farm${stageQuery({
+      tab: 'inapp', venue,
+      // Farm's Lido form takes ETH, not USD. Its amount must be chosen from a
+      // fresh venue quote; a USD leg must never be typed into that input.
+      amount: venue === 'lido' ? null : amountUsd
+    })}`;
     return `/farm${stageQuery({ pool: params.poolId || null, amount: amountUsd })}`;
   }
+  if (base === '/perp' && params.venue === 'dYdX') return '/dydx';
   if (base === '/perp') {
     /* No side: the engine does not pick directions — the user does, on the
        venue page, after reading the quote and the risk verdict there. */
     return `/perp${stageQuery({ tab: 'onchain', market: asset, collateral: amountUsd })}`;
   }
+  if (base === '/stocks' && params.venue === 'Ostium') return `/stocks${stageQuery({
+    tab: 'ostium', market: params.marketId, collateral: amountUsd
+  })}`;
   return base;
 }
 
@@ -850,7 +873,7 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
     id: 'preflight',
     order: 0,
     title: 'Pre-flight',
-    objective: 'Confirm capital, allowances, gas and risk limits before anything moves.',
+    objective: 'Verify live wallet capital and risk limits here; approvals, gas and quotes are checked at the venue before signing.',
     enterWhen: 'immediately',
     movesFunds: false,
     actions: [
@@ -861,33 +884,31 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
     status: 'PENDING'
   });
 
-  /* Stage 1 — get into the base asset / chain the sleeves need. */
-  const swapSleeves = sleeves.filter(needsSwapFirst);
+  /* Stage 1 — bridge the base asset ONLY where a sourced sleeve lives on
+     another chain. The market sleeve's BUY happens in deploy-market, once;
+     an earlier version bought the same asset in consolidate and again there. */
   const bridgeSleeves = sleeves.filter((s) => needsBridge(s, walletChainId));
-  if (swapSleeves.length || bridgeSleeves.length) {
-    const amountUsd = r2(swapSleeves.reduce((acc, s) => acc + (capitalUsd * s.weightPct) / 100, 0));
+  if (bridgeSleeves.length) {
+    const byChain = new Map();
+    for (const sleeve of bridgeSleeves) byChain.set(sleeve.chainId,
+      (byChain.get(sleeve.chainId) || 0) + (capitalUsd * sleeve.weightPct) / 100);
+    const totalUsd = r2([...byChain.values()].reduce((a, b) => a + b, 0));
     stages.push({
-      id: 'consolidate',
-      order: 1,
-      title: 'Consolidate base asset',
-      objective: bridgeSleeves.length
-        ? `Move ${amountUsd ?? '—'} USD onto the chain(s) the sleeves live on, then into the entry asset.`
-        : `Move ${amountUsd ?? '—'} USD into the entry asset(s) for the market sleeves.`,
-      enterWhen: 'pre-flight passed',
-      movesFunds: true,
-      actions: [
-        ...(bridgeSleeves.length ? [{
-          module: 'bridge', operation: 'BRIDGE', route: stageRoute({ route: '/bridge' }, { fromChainId: walletChainId, toChainId: bridgeSleeves[0].chainId ?? null, token: bridgeSleeves[0].asset, amountUsd: r2((capitalUsd * bridgeSleeves[0].weightPct) / 100) }), capabilityId: 'bridge.quote', requiresSignature: true,
-          params: { toChainId: bridgeSleeves[0].chainId ?? null, amountUsd: r2((capitalUsd * bridgeSleeves[0].weightPct) / 100) }
-        }] : []),
-        ...(swapSleeves.length ? [{
-          module: 'swap', operation: 'BUY', route: stageRoute({ route: '/swap' }, { toToken: swapSleeves[0].asset, amountUsd, chainId: walletChainId }), capabilityId: 'swap.quote', requiresSignature: true,
-          params: { toToken: swapSleeves[0].asset, amountUsd }
-        }] : [])
-      ],
-      maxCostUsd: r2((cost.totalPct ?? cost.feePct) / 100 * capitalUsd * 0.6),
-      rollback: 'Reverse swap / bridge back to the base asset.',
-      status: 'PENDING'
+      id: 'consolidate', order: 1, title: 'Bridge base asset',
+      objective: `Move about ${totalUsd} USD of USDC to ${byChain.size} destination chain(s); no asset purchase in this stage.`,
+      enterWhen: 'pre-flight passed', movesFunds: true,
+      actions: [...byChain].map(([toChainId, amount]) => {
+        const amountUsd = r2(amount);
+        return {
+          module: 'bridge', operation: 'BRIDGE',
+          route: stageRoute({ route: '/bridge' }, {
+            fromChainId: walletChainId, toChainId, token: 'USDC', amountUsd
+          }),
+          capabilityId: 'bridge.quote', requiresSignature: true,
+          params: { fromChainId: walletChainId, toChainId, token: 'USDC', amountUsd }
+        };
+      }),
+      rollback: 'Review a separate reverse bridge quote; recovery is not automatic.', status: 'PENDING'
     });
   }
 
@@ -902,10 +923,10 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
       enterWhen: 'base asset in place',
       movesFunds: true,
       actions: yieldSleeves.map((s) => {
-        const handoff = HANDOFF_OF_FAMILY[s.family] || HANDOFF_OF_FAMILY.lending;
+        const handoff = handoffForSleeve(s) || HANDOFF_OF_FAMILY.lending;
         const legUsd = r2((capitalUsd * s.weightPct) / 100);
         return {
-          module: handoff.module, operation: handoff.operation, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? walletChainId ?? null, poolId: s.id, amountUsd: legUsd }), capabilityId: handoff.capabilityId,
+          module: handoff.module, operation: handoff.operation, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? walletChainId ?? null, poolId: s.id, venue: s.venue, amountUsd: legUsd }), capabilityId: handoff.capabilityId,
           requiresSignature: true,
           params: {
             venue: s.venue, asset: s.asset, chainId: s.chainId ?? null, poolId: s.id,
@@ -927,16 +948,16 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
       order: 3,
       title: 'Deploy the market sleeve',
       objective: `Add the ${r2(marketSleeves.reduce((a, s) => a + s.weightPct, 0))}% that has price risk, sized so the drawdown budget still holds.`,
-      enterWhen: 'yield core confirmed',
+      enterWhen: 'all preceding stages confirmed',
       movesFunds: true,
       actions: marketSleeves.map((s) => {
-        const handoff = HANDOFF_OF_FAMILY[s.family] || HANDOFF_OF_FAMILY.crypto;
+        const handoff = handoffForSleeve(s) || HANDOFF_OF_FAMILY.crypto;
         const legUsd = r2((capitalUsd * s.weightPct) / 100);
         return {
-          module: handoff.module, operation: handoff.operation, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? walletChainId ?? null, amountUsd: legUsd }), capabilityId: handoff.capabilityId,
+          module: handoff.module, operation: handoff.operation, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? walletChainId ?? null, venue: s.venue, marketId: s.id, amountUsd: legUsd }), capabilityId: handoff.capabilityId,
           requiresSignature: true,
           params: {
-            venue: s.venue, asset: s.asset, chainId: s.chainId ?? null, marketId: s.id, side: s.side || 'long',
+            venue: s.venue, asset: s.asset, chainId: s.chainId ?? null, marketId: s.id, side: s.side || null,
             amountUsd: legUsd
           }
         };
@@ -950,7 +971,7 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
   /* Stage 4 — watch it. A plan nobody watches is a plan nobody can fix. */
   stages.push({
     id: 'monitor',
-    order: stages.length,
+    order: 4,
     title: 'Monitor and rebalance',
     objective: 'Track realised return against the plan curve and the drawdown budget; re-plan when either breaks.',
     enterWhen: 'all deployment stages confirmed',
@@ -1112,13 +1133,13 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
   const ranking = explainRanking(pool);
 
   const sleeves = chosen.sleeves.map((s) => {
-    const handoff = HANDOFF_OF_FAMILY[s.family] || null;
+    const handoff = handoffForSleeve(s);
     const legUsd = r2((capitalUsd * s.weightPct) / 100);
     return {
       ...s,
       amountUsd: legUsd,
       handoff: handoff
-        ? { ...handoff, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? null, poolId: s.id, amountUsd: legUsd }) }
+        ? { ...handoff, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? null, poolId: s.id, marketId: s.id, venue: s.venue, amountUsd: legUsd }) }
         : null
     };
   });
@@ -1157,7 +1178,7 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
   const quotedRange = chosen.rangePct ?? stretch?.rangePct ?? null;
   const honesty = reachable
     ? `This is a plan, not a promise. ${chosen.expectedReturnPct}% over ${horizonDays} days is what the live rates in this turn support — ${(chosen.confidence * 100).toFixed(0)}% of the decision rests on a read that actually answered. Markets can move against it.`
-    : `Your target needs ${requiredApyPct != null ? `${r2(requiredApyPct)}%` : '—'} APY. Every rate this ecosystem can source right now adds up to ${sourcedReturnPct != null ? `${sourcedReturnPct}%` : '—'} over ${horizonDays} days${daysAtPlanRate != null ? `, and would need ${Math.round(daysAtPlanRate)} days` : ''}. The remaining ${priceGapPct != null ? `${priceGapPct} points` : 'rest'} can only come from price — where I have no forecast, only a measured range of ${quotedRange != null ? `±${quotedRange}%` : '—'} (1σ) over the horizon${stretch ? `, which is what the ${stretch.title} alternative is betting on` : ''}. I am not going to dress that up as your target.`;
+    : `Your target needs ${requiredApyPct != null ? `${r2(requiredApyPct)}%` : '—'} APY. Every rate this ecosystem can source right now adds up to ${sourcedReturnPct != null ? `${sourcedReturnPct}%` : '—'} over ${horizonDays} days${daysAtPlanRate != null ? `, and would need ${Math.round(daysAtPlanRate)} days` : ''}. The remaining ${priceGapPct != null ? `${priceGapPct} points` : 'rest'} can only come from price — where I have no forecast, only a 24h-move-derived stress proxy of ${quotedRange != null ? `±${quotedRange}%` : '—'} over the horizon${stretch ? `, which is what the ${stretch.title} alternative is betting on` : ''}. I am not going to dress that up as your target.`;
 
   return {
     ok: true,
@@ -1200,7 +1221,7 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
       default: chosen.id,
       stretch: !reachable && stretch ? stretch.id : null,
       stretchNote: !reachable && stretch
-        ? `${stretch.title} is the only shape here that could reach ${goal.targetPct}% — and only through price, which is not forecast: ${stretch.priceExposurePct}% of capital exposed, measured 1σ range ±${stretch.rangePct ?? '—'}%.`
+        ? `${stretch.title} is the only shape here that could reach ${goal.targetPct}% — and only through price, which is not forecast: ${stretch.priceExposurePct}% of capital exposed, 24h-move stress proxy ±${stretch.rangePct ?? '—'}%.`
         : null
     },
     verdict: {
@@ -1213,7 +1234,7 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
       /* …and the part that can only come from price. */
       priceGapPct,
       priceExposurePct: chosen.priceExposurePct,
-      /* ±1σ over the horizon from measured volatility — a range, not a forecast. */
+      /* A 24h-move stress proxy over the horizon, NOT a statistical 1σ forecast. */
       rangePct: chosen.rangePct,
       expectedValueUsd: r2(capitalUsd * (1 + (chosen.expectedReturnPct || 0) / 100)),
       daysToTargetAtPlanRate: daysAtPlanRate != null ? Math.round(daysAtPlanRate) : null,
@@ -1229,7 +1250,7 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
     confidence: chosen.confidence,
     honesty,
     limitations: [
-      'Expected returns come from live APYs and measured histories in this turn, not from a forecast.',
+      'Expected returns use current variable APYs, not promised future rates; a daily move is only a stress proxy, not a statistical forecast.',
       'Nothing here signs or broadcasts — every stage hands off to the venue that owns the signature.',
       ...(!positionRead
         ? ['Planned on the capital you stated: no wallet was read, so your existing holdings and their concentration are not in this plan.']

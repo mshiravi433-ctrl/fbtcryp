@@ -70,8 +70,8 @@ export const aiSuggest = ({ message, conversationId, context, prior } = {}) =>
 /* AI Upgrade 5: complex turns can coordinate several models + web research,
    so the chat turn gets a longer budget than the default 12s. The server
    enforces its own deadline and always answers with what it has. */
-export const aiChat = ({ message, surface, conversationId, aiControl, prior, context, resume, hints, transparency } = {}) =>
-  call('/v1/ai/chat', { method: 'POST', body: payload({ message, surface, conversationId, aiControl, prior, context, resume, hints, transparency }), timeout: 30000 });
+export const aiChat = ({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency } = {}) =>
+  call('/v1/ai/chat', { method: 'POST', body: payload({ message, messages, surface, conversationId, aiControl, prior, context, resume, hints, transparency }), timeout: 30000 });
 /** 👍/👎 feedback for one AI answer (Upgrade 5 §64). */
 export const aiFeedback = ({ intentId, rating, reason = '', comment = '' } = {}) =>
   call('/v1/ai/feedback', { method: 'POST', body: payload({ intentId, rating, reason, comment }) });

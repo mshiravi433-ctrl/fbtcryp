@@ -57,12 +57,12 @@ function StepList({ steps, t }) {
   );
 }
 
-export default function MorphoBaseUsdcPanel({ pool }) {
+export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
   const { t } = useTranslation();
   const wallet = useWallet();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState('supply');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(() => initialAmount || '');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
   const [position, setPosition] = useState(null);
