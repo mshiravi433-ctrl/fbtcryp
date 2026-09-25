@@ -1,34 +1,57 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import '../styles/rwa-banners.css';
 
 /*
- * RwaHorizonSwapBanners — two minimal banners that swap HORIZONTALLY.
+ * RwaHorizonSwapBanners — the RWA / Global-Horizon banner on the stocks page
+ * («سهام توکنیزه» tab). Two slides that swap HORIZONTALLY inside one
+ * animated, theme-aware glass slab.
  *
- * Request, verbatim: «ببین اصلا فلیپ کارت نباشه یجور دوتا بنر به صورت سواپ
- * افقی باشد و مینیمال تر با گردی گوشه ها باشد متناسب با تم و زبان و ایفون و
- * اندروید و کامپیوتر و متن کمتر و مینیمال تر قشنگ باشد خیلی مینیمال و مدرن تر
- * و قشنگ تر» — the RWA / Global-Horizon flip card on the stocks page was
- * «خیلی بزرگه و شلوغه، خیلی متن داره», and on iPhone the two faces painted on
- * top of each other while rotating.
+ * Request, verbatim (2026-09-25): «دکمه چپ و راست را در بنر مخفی کن · تم
+ * مناسب و زبان مناسب · بنر باید ایکون مدرن و انیمیشن بیشتر و باکس بسیار مدرن
+ * تر و خاص تر شود … اندازه هم میتونی کمی بزرگتر شود».
  *
- * What this is instead:
+ * ─── THE «LEFT AND RIGHT BUTTONS» WERE A BUG, NOT A FEATURE ────────────────
+ * The previous banner drew its two 5px indicator dots as <button>s. The app's
+ * global tap-target rule (`button { min-height: 44px; min-width: 44px }`,
+ * src/index.css) inflated each dot into a 44px disc, so what the owner saw
+ * was two big grey circles sitting in the middle of the banner, on top of the
+ * subtitle — one on the left, one on the right of centre. Those are gone:
  *
- *  - NO 3D. No preserve-3d, no backface-visibility, no rotateY — the class of
- *    paint bug that made the iPhone show both faces at once simply cannot
- *    exist. One slide is visible at a time; the track slides 50% sideways.
- *  - TWO SLIDES, HORIZONTAL SWAP — the track translates along the inline
- *    axis, direction-aware (RTL slides the other way an RTL reader expects).
- *  - MINIMAL TEXT — a title, one short line, a dot indicator. The old card
- *    carried an eyebrow, a badge, a two-part title, a sub, three or four
- *    chips, two feature lines and a CTA button; every one of those is gone.
- *  - THEME-AWARE — the surface, line and text colours come from the app's
- *    tokens (var(--bg-panel) …), so light and dark themes both read, unlike
- *    the old always-dark glass.
- *  - ROUNDED CORNERS, one radius, on every platform; the slide sizes are
- *    fluid (no 3D stage to overflow), so iPhone, Android and desktop all get
- *    the same layout with nothing to clip.
+ *  - the indicator is now a pair of hairline SEGMENTS (<span>, not <button>),
+ *    so no global button rule can ever touch them; the active segment fills
+ *    over the 10-second dwell, which is also how the banner says «this
+ *    rotates on its own» without a control;
+ *  - the circular «go» arrow at the end of each slide is gone too — the whole
+ *    slide was already the tap target, the arrow was a second, redundant
+ *    button that read as a carousel control;
+ *  - the ONLY <button>s left are the two slides themselves. Keyboard users
+ *    switch with the arrow keys; touch users swipe; everyone else waits ten
+ *    seconds.
  *
- * Behaviour kept from the card it replaces (it was earned, not ornamental):
+ * ─── WHAT THE BOX IS NOW ───────────────────────────────────────────────────
+ *  - one glass surface built from the app's own tokens (var(--bg-panel),
+ *    var(--line), var(--text-…)) so dark and light both read as native;
+ *  - two aurora glow fields — one per slide's palette (gold/violet for RWA,
+ *    cyan/mint for the horizon) — that drift slowly and cross-fade with the
+ *    slide, so the whole box changes mood with the content;
+ *  - a comet of light travelling around the border, a light sweep across the
+ *    glass every few seconds, a faint dot grid for depth;
+ *  - a 60px "orb" icon: two counter-rotating rings around a glass core that
+ *    holds a drawn glyph with its own life (an orbiting token and a shimmer
+ *    on the ingots; a turning meridian, a self-drawing trend line and a
+ *    satellite on the globe);
+ *  - a self-drawing sparkline in the trailing half of each slide, masked so
+ *    it never competes with the title.
+ *
+ * Every animation is transform/opacity (compositor work), except the two
+ * dash-offset line draws, which are tiny SVG paths. Decorations on the
+ * inactive slide are paused; prefers-reduced-motion switches all of them off
+ * and leaves a still, fully legible banner.
+ *
+ * Behaviour kept from the banner this replaces (it was earned, not
+ * ornamental):
+ *  - NO 3D anywhere — the iPhone face-over-face paint bug has no geometry to
+ *    happen in; the track slides 50% along the inline axis, RTL-aware;
  *  - autoplay advances on its own (10s) and pauses on real hover only — a
  *    touch tap must never pause it (the synthetic-mouseenter bug);
  *  - a hidden tab or prefers-reduced-motion stops the motion;
@@ -40,47 +63,125 @@ import '../styles/rwa-banners.css';
 const AUTO_MS = 10000;
 const COUNT = 2;
 
-/* ─── tiny animated glyphs (drawn, not borrowed) ───────────────────────── */
+/* ─── the glyphs (drawn, not borrowed) ──────────────────────────────────── */
 
-/** Gold bars — RWA's whole pitch in one stroke picture. */
+/**
+ * RWA — three ingots with a shimmer, a token on its own orbit and a
+ * four-point sparkle. `currentColor` is the slide accent; the secondary
+ * accent comes through the `--acc2` custom property the stylesheet sets.
+ */
 function RwaGlyph() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <g className="rhs-float">
-        <path d="M4.2 19.5h5.6l-1.5-4.6H5.7z" fill="currentColor" opacity="0.9" />
-        <path d="M14.2 19.5h5.6l-1.5-4.6h-2.6z" fill="currentColor" opacity="0.65" />
-        <path d="M9.2 14.2h5.6l-1.5-4.6h-2.6z" fill="currentColor" />
-        <path className="rhs-shine" d="M4.2 19.5h15.6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" opacity="0.5" />
+      <g className="rhs-g-bars">
+        <path d="M3.3 18.9h6.8l-1.4-4.4H4.7z" fill="currentColor" opacity="0.72" />
+        <path d="M13.9 18.9h6.8l-1.4-4.4h-4z" fill="currentColor" opacity="0.72" />
+        <path d="M8.6 13.4h6.8L14 9h-4z" fill="currentColor" />
+        <path className="rhs-g-shine" d="M10.6 10.3h2.2" stroke="#fff" strokeWidth="1" strokeLinecap="round" />
       </g>
+      <path d="M3 20.7h18" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.45" />
+      <g className="rhs-g-orbit">
+        <circle cx="12" cy="3.1" r="1.55" fill="var(--acc2)" />
+      </g>
+      <path
+        className="rhs-g-spark"
+        d="M19.3 3.6l.55 1.45 1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
 
-/** Globe + orbiting node — the horizon in one picture. */
+/**
+ * Global Horizon — a globe whose meridian turns, a trend line that draws
+ * itself across the lower-right, and a satellite on a slow orbit.
+ */
 function HorizonGlyph() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="7.2" stroke="currentColor" strokeWidth="1.5" />
-      <ellipse cx="12" cy="12" rx="3.1" ry="7.2" stroke="currentColor" strokeWidth="1.1" opacity="0.75" />
-      <path d="M4.8 12h14.4" stroke="currentColor" strokeWidth="1.1" opacity="0.75" />
-      <g className="rhs-orbit">
-        <circle cx="12" cy="3.2" r="1.5" fill="currentColor" />
+      <circle cx="11" cy="12.4" r="7" stroke="currentColor" strokeWidth="1.5" />
+      <ellipse className="rhs-g-meridian" cx="11" cy="12.4" rx="3" ry="7" stroke="currentColor" strokeWidth="1.1" opacity="0.72" />
+      <path d="M4 12.4h14" stroke="currentColor" strokeWidth="1.1" opacity="0.72" />
+      <path d="M5.4 8.9h11.2M5.4 15.9h11.2" stroke="currentColor" strokeWidth="0.9" opacity="0.38" />
+      <path
+        className="rhs-g-trend"
+        d="M13.2 20.2l3-3.1 2 1.7 3.6-4.3"
+        stroke="var(--acc2)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        className="rhs-g-trend-head"
+        d="M19.4 14.4h2.5v2.5"
+        stroke="var(--acc2)"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <g className="rhs-g-orbit">
+        <circle cx="11" cy="3.4" r="1.4" fill="currentColor" />
       </g>
     </svg>
   );
 }
 
-function Arrow() {
+/* ─── the orb: two rings around a glass core ────────────────────────────── */
+
+function Orb({ children }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 12h14M13 6l6 6-6 6" />
-    </svg>
+    <span className="rhs-orb" aria-hidden="true">
+      <svg className="rhs-ring" viewBox="0 0 64 64" fill="none">
+        <circle className="rhs-ring-dash" cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="1" strokeDasharray="2.5 5.5" strokeLinecap="round" />
+        <circle className="rhs-ring-arc" cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="1.6" strokeDasharray="34 130" strokeLinecap="round" />
+      </svg>
+      <span className="rhs-orb-core">{children}</span>
+    </span>
+  );
+}
+
+/* ─── the sparkline art in the trailing half of a slide ─────────────────── */
+
+const SPARK = {
+  /* a steady, bond-like climb */
+  rwa: 'M0 50C18 48 30 43 48 40S82 34 98 29 130 21 150 15',
+  /* a livelier, forex-like climb */
+  hz: 'M0 52L18 44 34 47 52 36 70 41 88 26 106 31 124 18 138 22 150 9'
+};
+const SPARK_END = { rwa: [150, 15], hz: [150, 9] };
+
+function SparkArt({ tone }) {
+  const gid = useId().replace(/:/g, '');
+  const d = SPARK[tone];
+  const [ex, ey] = SPARK_END[tone];
+  return (
+    <span className="rhs-art" aria-hidden="true">
+      <svg viewBox="0 0 160 64" preserveAspectRatio="xMaxYMax meet">
+        <defs>
+          <linearGradient id={`rhs-fill-${gid}`} x1="0" y1="0" x2="0" y2="1">
+            {/* stop-color is set as a style, not an attribute: `currentColor`
+                in a <stop> attribute resolves against the gradient's own
+                inherited colour, which some engines take from the root, not
+                the accent — a black wash under a gold line. */}
+            <stop offset="0" style={{ stopColor: 'var(--acc)' }} stopOpacity="0.26" />
+            <stop offset="1" style={{ stopColor: 'var(--acc)' }} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path className="rhs-spark-fill" d={`${d}L150 64H0Z`} fill={`url(#rhs-fill-${gid})`} />
+        <path className="rhs-spark-line" d={d} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle className="rhs-spark-halo" cx={ex} cy={ey} r="3.2" fill="currentColor" />
+        <circle className="rhs-spark-dot" cx={ex} cy={ey} r="2.4" fill="currentColor" />
+      </svg>
+    </span>
   );
 }
 
 /* ─── one slide ─────────────────────────────────────────────────────────── */
 
 function Slide({ tone, active, title, sub, ariaLabel, onGo, children }) {
+  /* «Gold · Treasuries · Robinhood» — one line, but the separators are drawn
+     as accent dots rather than typed, so the line reads as designed. */
+  const parts = String(sub).split(' · ');
   return (
     <button
       type="button"
@@ -90,12 +191,19 @@ function Slide({ tone, active, title, sub, ariaLabel, onGo, children }) {
       tabIndex={active ? 0 : -1}
       onClick={onGo}
     >
-      <span className={`rhs-icon rhs-icon--${tone}`} aria-hidden="true">{children}</span>
+      <SparkArt tone={tone} />
+      <Orb>{children}</Orb>
       <span className="rhs-text">
         <span className="rhs-title">{title}</span>
-        <span className="rhs-sub">{sub}</span>
+        <span className="rhs-sub">
+          {parts.map((p, i) => (
+            <span key={i} className="rhs-sub-part">
+              {i > 0 && <i className="rhs-sep" aria-hidden="true" />}
+              {p}
+            </span>
+          ))}
+        </span>
       </span>
-      <span className="rhs-go" aria-hidden="true"><Arrow /></span>
     </button>
   );
 }
@@ -112,9 +220,9 @@ export default function RwaHorizonSwapBanners({ onGoRwa, onGoHorizon, haptic, is
 
   const l = String(lang || '').toLowerCase();
   /*
-   * ─── ONLY PERSIAN GETS PERSIAN — the same rule the flip card was pinned to
-   * («وقتی روی زبانی به غیر فارسی و انگلیسی باشد … باید انگلیسی باشد»).
-   * `isRTL` says which way the text runs, never which language it is.
+   * ─── ONLY PERSIAN GETS PERSIAN — the rule the owner set («وقتی روی زبانی به
+   * غیر فارسی و انگلیسی باشد … باید انگلیسی باشد»). `isRTL` says which way
+   * the text runs, never which language it is.
    */
   const isEn = !l.startsWith('fa');
 
@@ -181,6 +289,16 @@ export default function RwaHorizonSwapBanners({ onGoRwa, onGoHorizon, haptic, is
     choose(index + (forward ? 1 : -1));
   };
 
+  /* keyboard: the arrow that points at the next slide advances — physically
+     RIGHT in LTR, physically LEFT in RTL. With no indicator buttons left
+     this is how a keyboard user moves between the two. */
+  const onKeyDown = (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const forward = isRTL ? e.key === 'ArrowLeft' : e.key === 'ArrowRight';
+    choose(index + (forward ? 1 : -1));
+  };
+
   const rwa = {
     title: isEn ? 'Real-World Assets' : 'دارایی‌های واقعی',
     sub: isEn ? 'Gold · Treasuries · Robinhood' : 'طلا · خزانه · رابین‌هود',
@@ -207,9 +325,16 @@ export default function RwaHorizonSwapBanners({ onGoRwa, onGoHorizon, haptic, is
       onBlurCapture={() => setPaused(false)}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
+      onKeyDown={onKeyDown}
       aria-roledescription={isEn ? 'auto-rotating banner' : 'بنر چرخشی'}
     >
       <div className="rhs-viewport">
+        {/* the two aurora fields; the one for the current slide is lit */}
+        <div className="rhs-glow rhs-glow--rwa" aria-hidden="true" />
+        <div className="rhs-glow rhs-glow--hz" aria-hidden="true" />
+        <div className="rhs-grid" aria-hidden="true" />
+        <div className="rhs-sweep" aria-hidden="true" />
+
         <div className="rhs-track" style={{ transform: `translateX(${shift}%)` }}>
           <Slide tone="rwa" active={index === 0} title={rwa.title} sub={rwa.sub} ariaLabel={rwa.ariaLabel} onGo={go('rwa')}>
             <RwaGlyph />
@@ -218,21 +343,31 @@ export default function RwaHorizonSwapBanners({ onGoRwa, onGoHorizon, haptic, is
             <HorizonGlyph />
           </Slide>
         </div>
+
+        {/*
+          The indicator: two hairline segments, NOT buttons — see the header
+          comment for the 44px discs that a <button> here became. The active
+          one fills over the dwell; it is re-keyed on every slide change and
+          on every pause/resume so the fill and the timer can never drift
+          apart (the timer restarts from zero on resume, and so does this).
+        */}
+        <div className="rhs-timeline" aria-hidden="true">
+          {[0, 1].map((i) => (
+            <span key={i} className={`rhs-seg ${index === i ? 'is-on' : ''}`}>
+              {index === i && (
+                <i
+                  key={`${index}-${autoplay ? 'run' : 'hold'}`}
+                  className="rhs-seg-fill"
+                  style={{ animationDuration: `${AUTO_MS}ms` }}
+                />
+              )}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* The whole indicator: two dots. The active one stretches into a pill. */}
-      <div className="rhs-dots">
-        {[0, 1].map((i) => (
-          <button
-            key={i}
-            type="button"
-            className={`rhs-dot ${index === i ? 'is-on' : ''}`}
-            aria-label={i === 0 ? (isEn ? 'Real-World Assets banner' : 'بنر دارایی‌های واقعی') : (isEn ? 'Global Horizon banner' : 'بنر افق جهانی')}
-            aria-current={index === i}
-            onClick={() => choose(i)}
-          />
-        ))}
-      </div>
+      {/* the comet: one light travelling around the border, in the slide's accent */}
+      <div className="rhs-frame" aria-hidden="true" />
     </section>
   );
 }

@@ -957,10 +957,15 @@ console.log('\n▸ measuring the trade + token-sheet surface in light and dark�
 /* The stocks page → «سهام توکنیزه» (equity) SWAP banner in light and dark.
    The flip card it replaced painted its two faces over each other on iPhone
    (3D geometry) and was reported as «خیلی بزرگه و شلوغه»; it is now two
-   minimal horizontal slides. The probe locks that in: no 3D geometry left,
-   one track + two 50% slides + two dots, the RTL shift mirrored, every
-   surface and text bound to an app token, and the token pairs themselves
-   clearing WCAG AA in dark AND light (with the light theme's deeper accents). */
+   horizontal slides inside one animated glass box. The 2026-09-25 pass
+   removed the «left and right buttons» — the two indicator dots were
+   <button>s that the global 44px tap-target rule inflated into grey discs
+   over the subtitle. The probe locks all of it in: no 3D geometry, one track
+   + two 50% slides, the slides the ONLY buttons (indicator = inert spans,
+   no «go» arrow), the RTL shift mirrored, every animation compositor-only
+   and paused on the hidden slide, every surface and text bound to an app
+   token, and the composited text-over-aurora surfaces clearing WCAG AA in
+   dark, light AND the pre-paint light fallback. */
 console.log('\n▸ measuring the stocks swap banner (equity tab) in light and dark…');
 {
   const { default: swapBannerRows } = await import('./stocks-swap-banner-probe.mjs');

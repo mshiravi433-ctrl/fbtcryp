@@ -615,10 +615,14 @@ export default function Stocks() {
             </InfoBox>
           </motion.div>
 
-          {/* Two minimal banners that swap horizontally — RWA + Horizon (افق جهانی).
-              Replaced the 3D flip card: on iPhone the two faces painted over each
-              other while rotating, and the card was «خیلی بزرگه و شلوغه». No 3D
-              left for that to happen in. */}
+          {/* The RWA + Horizon (افق جهانی) banner: two slides that swap
+              horizontally inside one animated glass slab (aurora fields, a
+              border comet, a two-ring orb, a self-drawing sparkline), sized
+              112/128px. Replaced the 3D flip card: on iPhone the two faces
+              painted over each other while rotating — no 3D left for that to
+              happen in. Its only buttons are the two slides: the old indicator
+              dots were <button>s, and the global 44px tap-target rule turned
+              them into the «دکمه چپ و راست» the owner asked to hide. */}
           <motion.div variants={riseIn} initial="hidden" animate="show">
             <RwaHorizonSwapBanners
               haptic={haptic}
