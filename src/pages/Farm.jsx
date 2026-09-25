@@ -973,6 +973,35 @@ export default function Farm() {
   }, [opportunities, filter, q, chain, sort]);
 
   useEffect(() => { setVisibleCount(24); }, [filter, q, chain, sort]);
+
+  /*
+   * Strategy-brain deep link (/farm?pool=<defillama-id>&amount=<usd>): select
+   * the exact pool the plan named and size the deposit box to the leg, so the
+   * user lands on the pool with the numbers already in place. Runs once, after
+   * the feed arrives; an unknown id is ignored rather than guessed.
+   */
+  const poolPrefillDone = useRef(false);
+  useEffect(() => {
+    if (poolPrefillDone.current) return;
+    const want = params.get('pool');
+    if (!want || !opportunities.length) return;
+    poolPrefillDone.current = true;
+    const amt = Number(params.get('amount'));
+    const next = new URLSearchParams(params);
+    next.delete('pool');
+    next.delete('amount');
+    setParams(next, { replace: true });
+    if (Number.isFinite(amt) && amt > 0) setCustomAmount(String(amt));
+    const hit = opportunities.find((p) => String(p?.id) === String(want))
+      || venueOpportunities.find((p) => String(p?.id) === String(want));
+    if (hit) {
+      setSelected(hit);
+      setExpandedId(hit.id);
+      setTimeout(() => {
+        document.getElementById(`farm-pool-${hit.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 120);
+    }
+  }, [params, opportunities, venueOpportunities, setParams]);
   const chains = useMemo(() => [...new Set(opportunities.map((p) => p.chain))].sort(), [opportunities]);
   const selectedPool = opportunities.find((p) => p.id === selected?.id) || null;
 

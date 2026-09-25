@@ -165,6 +165,11 @@ process.env.LEARNING_EVENT_RATE_LIMIT = process.env.LEARNING_EVENT_RATE_LIMIT ||
  * also disables it), and the settings dashboard marks sandbox mode clearly.
  */
 process.env.INTENT_AI_SANDBOX_EVIDENCE = process.env.INTENT_AI_SANDBOX_EVIDENCE || '0';
+/* Same pin for open mode (server/intentPhaseStatus.js): the suite measures the
+   strict fail-closed property, so the shipped open default is off for the
+   whole run. test/intent-ai/open-mode-default-probe.mjs proves the default
+   itself by toggling the flag around a blocked scan. */
+process.env.INTENT_OS_OPEN_MODE = process.env.INTENT_OS_OPEN_MODE || '0';
 /*
  * The same trap, one budget over: the intent probe walks the full
  * claim/dispute/adjudication/cross-chain lifecycle and exceeds the
@@ -766,6 +771,8 @@ console.log('▸ probing the free Upstash durable-store fallback…');
 }
 
 await import('./intent-ai/phase-status-probe.mjs');
+await import('./intent-ai/open-mode-default-probe.mjs');
+await import('./intent-ai/rich-objective-probe.mjs');
 
 /* Phase 213 — the AI quality bar: 1,000+ deterministic intent cases against the
    real classifier, plus the dead-deployment honesty sweep. */

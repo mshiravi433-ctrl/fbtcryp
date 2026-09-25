@@ -325,7 +325,10 @@ export function createIntentOS({
           // "what can you do" is a chat answer by definition
           'CAPABILITIES',
           // the ops surfaces answer with their own live panels
-          'OPS_CENTER', 'AGENTS', 'STRATEGY', 'STRATEGY_PLAN', 'SYSTEM_STATUS'
+          'OPS_CENTER', 'AGENTS', 'STRATEGY', 'STRATEGY_PLAN', 'SYSTEM_STATUS',
+          // the chat IS the Intent OS surface — «intent os را باز کن» typed
+          // inside it is answered here, never \"navigated\" to itself.
+          'INTENT_OS'
         ];
         let workingIntent = intent;
         const stayInChat = ANSWER_IN_CHAT.includes(workingIntent.type);
@@ -376,8 +379,29 @@ export function createIntentOS({
         // SSOT-first routing, with an adapter for follow-up slots, SEND→wallet,
         // speculation gating and entity-driven swap/bridge fallback.
         const routing = resolveIntent(workingIntent, message, { openPage, slots: getOperationalSlots() });
-        const handoffRoute = routing.route;
-        const forceOpen = routing.openPage === true;
+        let handoffRoute = routing.route;
+        let forceOpen = routing.openPage === true;
+        /*
+         * ─── THE CHAT IS THE INTENT OS — never \"open\" it onto itself ─────
+         * /intent IS the assistant: a handoff whose destination is /intent*
+         * while the user is already on /intent* is not a navigation, it is a
+         * tab/panel switch inside this same surface. Cancelling the navigation
+         * here is what stops the «صفحه Intent OS را باز کردم» nonsense the
+         * user reported seeing INSIDE the chat. The destination is stashed on
+         * the intent so the human layer answers \"here\" (and hands the client
+         * the tab/panel to show) instead of claiming a page opened.
+         */
+        const onIntentSurface = String(currentPage || '').startsWith('/intent');
+        if (onIntentSurface && handoffRoute && String(handoffRoute).startsWith('/intent')) {
+          workingIntent = {
+            ...workingIntent,
+            navigation: { ...(workingIntent.navigation || {}), route: null },
+            inPlaceRoute: handoffRoute
+          };
+          handoffRoute = null;
+          forceOpen = false;
+          openPage = false;
+        }
 
         if (executionResult?.cancelled) {
           // already handled
@@ -396,9 +420,15 @@ export function createIntentOS({
           executionResult = { ok: true, route: handoffRoute, handoff: true };
         } else if (plan.readOnly || workingIntent.readOnly || workingIntent.type === 'NAVIGATION' || workingIntent.type === 'NEWS_SEARCH') {
           if (workingIntent.type === 'NAVIGATION' || workingIntent.type === 'NEWS_SEARCH') {
-            executionResult = await navAgent.handleIntent(workingIntent, context);
-            if (executionResult.ok && executionResult.route && liveNavigation?.navigate) {
-              await liveNavigation.navigate({ route: executionResult.route });
+            if (workingIntent.inPlaceRoute) {
+              /* The destination is this same surface (see the in-place guard
+                 above): nothing to navigate, the human layer answers \"here\". */
+              executionResult = { ok: true, inPlace: workingIntent.inPlaceRoute };
+            } else {
+              executionResult = await navAgent.handleIntent(workingIntent, context);
+              if (executionResult.ok && executionResult.route && liveNavigation?.navigate) {
+                await liveNavigation.navigate({ route: executionResult.route });
+              }
             }
           } else {
             const toolRun = await executeIntentTools({ intent: workingIntent, context, services: mergedServices });
@@ -621,7 +651,7 @@ export function createIntentOS({
           ui: human.ui,
           card: human.card,
           requiresConfirmation: human.requiresConfirmation || plan.requiresConfirmation,
-          navigated: human.navigated || executionResult?.route || null
+          navigated: workingIntent.inPlaceRoute ? null : (human.navigated || executionResult?.route || null)
         };
         
       } catch (err) {

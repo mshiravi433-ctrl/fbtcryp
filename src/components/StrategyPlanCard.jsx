@@ -218,7 +218,7 @@ function ComparisonTable({ strategy, fa, picked, onPick }) {
   );
 }
 
-function SleeveList({ sleeves, fa }) {
+function SleeveList({ sleeves, fa, onOpenRoute }) {
   if (!Array.isArray(sleeves) || !sleeves.length) return null;
   return (
     <div className="isp-block" data-testid="strategy-sleeves">
@@ -248,7 +248,13 @@ function SleeveList({ sleeves, fa }) {
                 {s.priceExposurePct != null ? null : null}
               </div>
               {s.handoff?.route ? (
-                <span className="isp-sleeve-route" dir="ltr">{s.handoff.route}</span>
+                onOpenRoute ? (
+                  <button type="button" className="isp-link" dir="ltr" onClick={() => onOpenRoute(s.handoff.route)}>
+                    {s.handoff.module || 'Open'} · {(s.amountUsd != null ? `$${Number(s.amountUsd).toLocaleString('en-US')}` : '')} ↗
+                  </button>
+                ) : (
+                  <span className="isp-sleeve-route" dir="ltr">{s.handoff.route}</span>
+                )
               ) : null}
             </li>
           );
@@ -430,7 +436,7 @@ export function StrategyPlanCard({
 
       {showingChosen ? (
         <>
-          <SleeveList sleeves={effective.sleeves} fa={fa} />
+          <SleeveList sleeves={effective.sleeves} fa={fa} onOpenRoute={onOpenRoute} />
           <StageList stages={effective.stages} fa={fa} onOpenRoute={onOpenRoute} />
           <MonitorList monitors={effective.monitors} fa={fa} />
 

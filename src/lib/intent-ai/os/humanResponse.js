@@ -6,6 +6,7 @@
 
 import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 import { pageName } from './moduleRouter.js';
+import { resolveChatRoute } from '../autonomy/chatRoutes.js';
 import { parseGoalSpec } from '../../strategyBrain/goalSpec.js';
 
 const LEAK_PATTERNS = [
@@ -108,6 +109,31 @@ export function stripInternalLeaks(text) {
 function langOf(locale) {
   const code = String(locale || 'fa').toLowerCase();
   return code.startsWith('en') ? 'en' : 'fa';
+}
+
+/* Human name for an in-place /intent* destination (the user is already here). */
+function inPlaceName(route, lang) {
+  const tab = (() => {
+    try {
+      const qi = String(route || '').indexOf('?');
+      if (qi < 0) return '';
+      return new URLSearchParams(String(route).slice(qi + 1)).get('tab') || '';
+    } catch { return ''; }
+  })().toLowerCase();
+  const names = {
+    ops: { fa: 'مرکز عملیات', en: 'the Operations Center' },
+    operations: { fa: 'مرکز عملیات', en: 'the Operations Center' },
+    agents: { fa: 'ایجنت‌ها', en: 'Agents' },
+    strategies: { fa: 'استراتژی‌ها', en: 'Strategies' },
+    status: { fa: 'وضعیت سیستم', en: 'System Status' },
+    history: { fa: 'تاریخچه', en: 'History' },
+    intelligence: { fa: 'هوش چندمدلی', en: 'Multi-AI Intelligence' },
+    activity: { fa: 'فعالیت‌ها', en: 'Activity' },
+    chat: { fa: 'چت', en: 'the chat' }
+  };
+  const hit = names[tab];
+  if (hit) return lang === 'fa' ? hit.fa : hit.en;
+  return lang === 'fa' ? 'همین صفحه' : 'this page';
 }
 
 function money(n) {
@@ -406,6 +432,67 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         : 'Closing your wallet — the wallet page opened and will disconnect there.',
       ui: { type: 'TEXT' },
       navigated: results.route
+    };
+  }
+
+  /*
+   * ─── IN-PLACE: the destination is this same surface ──────────────────────
+   * The chat IS the Intent OS (/intent). When the OS cancelled a navigation
+   * to /intent* because the user is already there (os/index.js in-place
+   * guard), the answer is \"here\" — never «صفحه Intent OS را باز کردم».
+   * The client auto-shows the tab/panel from `openTab`/`openPanel`, so the
+   * user lands on the destination with zero taps.
+   */
+  const inPlaceRoute = intent?.inPlaceRoute || results?.inPlace || null;
+  if (inPlaceRoute) {
+    const target = resolveChatRoute(inPlaceRoute, { currentPathname: '/intent' });
+    const show = target.kind === 'panel'
+      ? { openPanel: target.panel }
+      : target.kind === 'ecosystem'
+        ? { openEcosystem: target.ecoKind }
+        : target.kind === 'tab'
+          ? { openTab: target.tab }
+          : {};
+    const destName = inPlaceName(inPlaceRoute, lang);
+    return {
+      message: lang === 'fa'
+        ? `تو الان داخل Intent OS هستی — همین چت، مغز اصلی اپ. ${destName} را همین‌جا نشان می‌دهم؛ لازم نیست جایی بروی.`
+        : `You are already inside the Intent OS — this chat is the app's main brain. Showing ${destName} right here; nowhere to go.`,
+      ui: { type: 'TEXT' },
+      inPlace: true,
+      ...show
+    };
+  }
+
+  /*
+   * ─── «intent os» as a TOPIC (not a navigation) ───────────────────────────
+   * Reaching here means no navigation happened: either the user asked ABOUT
+   * the assistant (\"intent os چیست\") or named it without an open verb from a
+   * surface where staying put is correct. Either way the answer describes the
+   * brain and offers its live panels — it never claims a page opened.
+   */
+  if (type === 'INTENT_OS') {
+    /* A real navigation happened (user asked from another page): say so. */
+    if (results.route) {
+      return {
+        message: lang === 'fa'
+          ? 'چت Intent OS را باز کردم — همان مغز اصلی اپ: پرتفوی، بازار، سواپ، فارم، وام و استراتژی را از داده زنده همان‌جا بخوان و اجرا کن.'
+          : 'Opened the Intent OS chat — the app\'s main brain: read and run portfolio, markets, swap, farm, lending and strategies from live data there.',
+        ui: { type: 'TEXT' },
+        navigated: results.route
+      };
+    }
+    return {
+      message: lang === 'fa'
+        ? 'من Intent OS هستم — همین چت، مغز اصلی اپ. پرتفوی، بازار، سواپ، فارم، وام، اسمارت‌مانی و استراتژی را از داده زنده همین‌جا می‌خوانم و اجرا می‌کنم؛ امضا همیشه با کیف پول توست. مرکز عملیات، ایجنت‌ها و استراتژی‌ها هم تب‌های همین صفحه‌اند.'
+        : 'I am the Intent OS — this chat, the app\'s main brain. I read and run portfolio, markets, swap, farm, lending, smart money and strategies from live data right here; signing is always your wallet\'s. Ops, agents and strategies are tabs of this same page.',
+      ui: { type: 'TEXT' },
+      inPlace: String(context?.currentPage || '').startsWith('/intent'),
+      actions: [
+        { id: 'open-ops', route: '/intent?tab=ops', label: lang === 'fa' ? 'مرکز عملیات' : 'Ops Center' },
+        { id: 'open-agents', route: '/intent?tab=agents', label: lang === 'fa' ? 'ایجنت‌ها' : 'Agents' },
+        { id: 'open-strategies', route: '/intent?tab=strategies', label: lang === 'fa' ? 'استراتژی‌ها' : 'Strategies' }
+      ]
     };
   }
 
@@ -1156,6 +1243,32 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         tab: 'status'
       }
     }[type];
+    /*
+     * On /intent these panels live INSIDE this same surface: the client shows
+     * the tab/panel immediately (openTab/openPanel) and the copy says
+     * \"here\", not \"opened\". From any other page the chip navigates there.
+     */
+    const onIntent = String(context?.currentPage || '').startsWith('/intent');
+    if (onIntent) {
+      const target = resolveChatRoute(`/intent?tab=${copy.tab}`, { currentPathname: '/intent' });
+      const show = target.kind === 'panel'
+        ? { openPanel: target.panel }
+        : target.kind === 'ecosystem'
+          ? { openEcosystem: target.ecoKind }
+          : target.kind === 'tab'
+            ? { openTab: target.tab }
+            : {};
+      const here = lang === 'fa'
+        ? `${copy.fa} همین‌جا، در همین صفحه نشانش می‌دهم.`
+        : `${copy.en} Showing it right here, on this same page.`;
+      return {
+        message: here,
+        ui: { type: 'TEXT' },
+        inPlace: true,
+        ...show,
+        actions: [{ id: `open-${copy.tab}`, route: `/intent?tab=${copy.tab}`, label: lang === 'fa' ? 'نمایش' : 'Show' }]
+      };
+    }
     return {
       message: lang === 'fa' ? copy.fa : copy.en,
       ui: { type: 'TEXT' },
