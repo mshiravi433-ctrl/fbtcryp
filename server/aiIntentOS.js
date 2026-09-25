@@ -86,6 +86,8 @@ import {
   buildSystemPrompt
 } from '../src/lib/intent-ai/os/systemPrompt.js';
 import { understandIntent, updateIntentSession } from '../src/lib/intent-ai/os/index.js';
+import { parseGoalSpec } from '../src/lib/strategyBrain/goalSpec.js';
+import { resolveChatRoute } from '../src/lib/intent-ai/autonomy/chatRoutes.js';
 import {
   getAvailableProviders,
   getActiveProviderIds,
@@ -1161,6 +1163,148 @@ router.post('/suggestions', async (req, res) => {
   });
 });
 
+/* ─── RICH OBJECTIVE REPLIES (server-side) ─────────────────────────────────
+ * The V1 deterministic renderer below only speaks GENERAL / GOAL /
+ * INVESTMENT_PLAN, so a profit objective («1000 دلار در ۳۰ روز به سود ۳۰
+ * درصد با ریسک متوسط») classified correctly by the OS layer (STRATEGY_PLAN)
+ * was re-classified GENERAL by the V1 lexicon and answered with the generic
+ * two-line fallback — the reported «پیشنهاد مزخرف». These turns are answered
+ * HERE with the same rich card contracts the browser OS emits, so the server
+ * fallback renders the full engine (analysis, comparison, allocation, staged
+ * handoffs with prefilled links) instead of a suggestion sentence.
+ *
+ * Nothing here executes: the card compiles from live reads on the client and
+ * every money-moving step still needs the user's wallet signature (§67).
+ */
+const STRATEGY_MISSING_LABEL = Object.freeze({
+  capitalUsd: { fa: 'سرمایه', en: 'capital' },
+  targetPct: { fa: 'هدف سود', en: 'target return' },
+  horizonDays: { fa: 'بازه زمانی', en: 'horizon' }
+});
+
+function richObjectiveReply({ message, u4, context, locale, surface }) {
+  const fa = String(locale || 'fa').toLowerCase().startsWith('fa');
+  const type = String(u4?.type || '').toUpperCase();
+  const entities = (u4 && typeof u4.entities === 'object' && u4.entities) || {};
+
+  /* ── 1. whole-ecosystem objective → STRATEGY_PLAN_CARD ─────────────── */
+  const spec = parseGoalSpec({
+    text: message,
+    entities,
+    portfolio: context?.portfolio || null,
+    balances: context?.balances || null,
+    wallet: context?.wallet || null
+  });
+  if (type === 'STRATEGY_PLAN' || spec.ok) {
+    if (!spec.ok) {
+      const missing = (spec.missing || []).map((m) => STRATEGY_MISSING_LABEL[m]?.[fa ? 'fa' : 'en'] || m);
+      const qFa = `برای ساختن استراتژی کامل این‌ها کم است: ${missing.join('، ')}. مثلاً بنویس «۱۰۰۰ دلار، ۳۰٪ سود در ۳۰ روز، ریسک متوسط» تا تحلیل کامل، مقایسه گزینه‌ها و مراحل اجرا را با لینک آماده بدهم.`;
+      const qEn = `To build the full strategy I still need: ${missing.join(', ')}. For example: \"$1,000, 30% in 30 days, medium risk\" — then I give you the full analysis, the compared options and the execution stages with links.`;
+      return {
+        ok: true,
+        text: fa ? qFa : qEn,
+        ui: { type: 'TEXT' },
+        intent: {
+          type: 'STRATEGY_PLAN',
+          entities,
+          confidence: u4.confidence ?? null,
+          missingInformation: spec.missing || [],
+          minimalQuestion: { fa: qFa, en: qEn }
+        },
+        strategyRequest: null,
+        goalDetected: true
+      };
+    }
+    const riskFa = { conservative: 'محافظه‌کار', balanced: 'متعادل', aggressive: 'تهاجمی' }[spec.riskProfile] || spec.riskProfile;
+    const text = fa
+      ? `هدف را گرفتم: ${Number(spec.capitalUsd).toLocaleString('en-US')} دلار، ${spec.targetPct}٪ سود در ${spec.horizonDays} روز، ریسک ${riskFa}. حالا کل اکوسیستم را یک‌جا می‌خوانم — کیف پول، پرتفوی، کریپتو، RWA، سهام، فارکس، کالا، وام، فارم، نقدینگی، فیوچرز، dYdX، بریج، اسمارت‌مانی، نهنگ‌ها، اخبار، ماکرو، ریسک، کارمزد و گاز — و بین همه‌ی ماژول‌ها مقایسه می‌کنم تا یک استراتژی پرتفوی مرحله‌به‌مرحله بسازم. نه یک پاسخ متنی.`
+      : `Goal taken: $${Number(spec.capitalUsd).toLocaleString('en-US')}, ${spec.targetPct}% in ${spec.horizonDays} days, ${spec.riskProfile} risk. Reading the whole ecosystem at once — wallet, portfolio, crypto, RWA, stocks, forex, commodities, lending, farms, pools, futures, dYdX, bridge, smart money, whales, news, macro, risk, fees and gas — then comparing every module to build one staged portfolio strategy. Not a text answer.`;
+    return {
+      ok: true,
+      text,
+      ui: { type: 'STRATEGY_PLAN_CARD' },
+      intent: { type: 'STRATEGY_PLAN', ...u4, entities, confidence: u4.confidence ?? null },
+      strategyRequest: { text: message, entities, knownCapital: true },
+      suggestions: [],
+      goalDetected: true
+    };
+  }
+
+  /* ── 2. named multiple («سودم دو برابر شود») → GOAL_PLAN_CARD ───────── */
+  if (type === 'GOAL_PLAN') {
+    const multiple = Number(entities.goalMultiple) > 1 ? Number(entities.goalMultiple) : 2;
+    const horizonDays = Number(entities.horizonDays) > 0 ? Number(entities.horizonDays) : 365;
+    const text = fa
+      ? `هدف را گرفتم: ${multiple} برابر در ${horizonDays} روز. حالا نرخ‌های واقعیِ همین لحظه را می‌خوانم و می‌گویم شدنی است یا نه — با عدد، نه با وعده.`
+      : `Goal noted: ${multiple}× in ${horizonDays} days. Reading the live rates now and telling you whether it is reachable — with numbers, not a promise.`;
+    return {
+      ok: true,
+      text,
+      ui: { type: 'GOAL_PLAN_CARD' },
+      intent: { type: 'GOAL_PLAN', ...u4, entities },
+      goalRequest: { multiple, horizonDays },
+      goalDetected: true
+    };
+  }
+
+  /* ── 3. the chat IS the Intent OS — answer in place, never \"open\" ─── */
+  if (type === 'INTENT_OS') {
+    const onIntent = String(surface || '').startsWith('/intent');
+    if (onIntent) {
+      return {
+        ok: true,
+        text: fa
+          ? 'تو الان داخل Intent OS هستی — همین چت، مغز اصلی اپ. پرتفوی، بازار، سواپ، فارم، وام، اسمارت‌مانی و استراتژی را از داده زنده همین‌جا می‌خوانم و اجرا می‌کنم؛ امضا همیشه با کیف پول توست.'
+          : 'You are already inside the Intent OS — this chat is the app\'s main brain. I read and run portfolio, markets, swap, farm, lending, smart money and strategies from live data right here; signing is always your wallet\'s.',
+        ui: { type: 'TEXT' },
+        intent: { type: 'INTENT_OS', ...u4, entities },
+        inPlace: true,
+        openTab: 'chat',
+        actions: [
+          { id: 'open-ops', route: '/intent?tab=ops', label: fa ? 'مرکز عملیات' : 'Ops Center' },
+          { id: 'open-agents', route: '/intent?tab=agents', label: fa ? 'ایجنت‌ها' : 'Agents' }
+        ],
+        goalDetected: false
+      };
+    }
+    return {
+      ok: true,
+      text: fa
+        ? 'چت Intent OS را باز کن — همان مغز اصلی اپ: پرتفوی، بازار، سواپ، فارم، وام و استراتژی را از داده زنده همان‌جا بخوان و اجرا کن.'
+        : 'Open the Intent OS chat — the app\'s main brain: read and run portfolio, markets, swap, farm, lending and strategies from live data there.',
+      ui: { type: 'TEXT' },
+      intent: { type: 'INTENT_OS', ...u4, entities },
+      actions: [{ id: 'open-intent-os', route: '/intent', label: 'Intent OS ↗' }],
+      goalDetected: false
+    };
+  }
+  if (['OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS'].includes(type) && String(surface || '').startsWith('/intent')) {
+    const tab = { OPS_CENTER: 'ops', AGENTS: 'agents', STRATEGY: 'strategies', SYSTEM_STATUS: 'status' }[type];
+    const target = resolveChatRoute(`/intent?tab=${tab}`, { currentPathname: '/intent' });
+    const show = target.kind === 'panel'
+      ? { openPanel: target.panel }
+      : target.kind === 'ecosystem'
+        ? { openEcosystem: target.ecoKind }
+        : { openTab: target.tab || 'chat' };
+    const name = fa
+      ? ({ OPS_CENTER: 'مرکز عملیات', AGENTS: 'ایجنت‌ها', STRATEGY: 'استراتژی‌ها', SYSTEM_STATUS: 'وضعیت سیستم' })[type]
+      : type;
+    return {
+      ok: true,
+      text: fa
+        ? `${name} همین‌جاست — در همین صفحه‌ی Intent OS نشانش می‌دهم؛ لازم نیست جایی بروی.`
+        : `${name} lives here — showing it on this same Intent OS page; nowhere to go.`,
+      ui: { type: 'TEXT' },
+      intent: { type, ...u4, entities },
+      inPlace: true,
+      ...show,
+      actions: [{ id: `open-${tab}`, route: `/intent?tab=${tab}`, label: fa ? 'نمایش' : 'Show' }],
+      goalDetected: false
+    };
+  }
+  return null;
+}
+
 router.post('/chat', async (req, res) => {
   const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
@@ -1170,7 +1314,7 @@ router.post('/chat', async (req, res) => {
   const prior = req.body?.prior && AI_INTENTS.includes(String(req.body.prior.intent || '').toUpperCase())
     ? { intent: String(req.body.prior.intent).toUpperCase(), surface: req.body.prior.surface || null }
     : null;
-  
+
   // Upgrade 4 Intent Understanding & Context Resolution
   const u4 = understandIntent(message, {
     locale,
@@ -1189,6 +1333,66 @@ router.post('/chat', async (req, res) => {
       assumptions: u4.assumptions,
       confidence: u4.confidence,
       isCorrection: u4.isCorrection
+    });
+  }
+
+  /* Rich objective / in-place turns are answered here (see above): the V1
+     renderer below cannot express them and would fall back to a generic line. */
+  const surface = req.body?.surface || req.body?.currentPage || '/';
+  const rich = richObjectiveReply({ message, u4, context, locale: locale || 'fa', surface });
+  if (rich?.ok) {
+    const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const reply = {
+      text: stripInternalLeaks(rich.text),
+      message: stripInternalLeaks(rich.text),
+      contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
+      intent: rich.intent || { type: u4.type, entities: u4.entities || {} },
+      confidence: u4.confidence ?? 0.8,
+      ui: rich.ui || { type: 'TEXT' },
+      card: null,
+      actions: Array.isArray(rich.actions) ? rich.actions : [],
+      suggestions: Array.isArray(rich.suggestions) ? rich.suggestions : suggestionsFor({ message, intent: rich.intent?.type || u4.type, context }),
+      pendingIntent: null,
+      intentId,
+      actionPlan: null,
+      actionPlanId: null,
+      choices: [],
+      choiceKind: null,
+      goalDetected: rich.goalDetected === true,
+      strategyRequest: rich.strategyRequest || null,
+      goalRequest: rich.goalRequest || null,
+      inPlace: rich.inPlace === true,
+      openTab: rich.openTab || null,
+      openPanel: rich.openPanel || null,
+      openEcosystem: rich.openEcosystem || null,
+      executed: false,
+      broadcasts: false,
+      requiresUserSignature: false
+    };
+    recordIntentOutcome({
+      intentId,
+      intentType: rich.intent?.type || 'GENERAL',
+      providerUsed: 'internal',
+      modelsConsulted: getActiveProviderIds(),
+      confidenceScore: 0.85,
+      executionSuccess: true,
+      durationMs: 0,
+      locale: locale || 'fa'
+    }).catch(() => {});
+    const nextMemory = await appendMemory(ownerFor(req), {
+      conversationId: req.body?.conversationId || null,
+      summary: safeMemoryText(`${(context.conversationSummary || '').slice(-600)}\n${safe(message, 240)}`.slice(-900), 600) || safe(message, 240),
+      recentIntents: [rich.intent?.type || 'GENERAL', safe(message, 240)],
+      preferences: [],
+      activeTasks: [],
+      goals: rich.goalDetected ? ['financial-goal'] : []
+    });
+    return res.json({
+      ok: true,
+      schema: 'fbt.ai-chat.v1',
+      reply,
+      context: { ...context, conversationSummary: nextMemory.summary || context.conversationSummary },
+      at: nowMs()
     });
   }
 
@@ -1497,7 +1701,11 @@ router.post('/chat', async (req, res) => {
     intent: {
       ...human.intent,
       ...u4,
-      type: human.intent?.type || u4.type
+      /* The OS classifier (u4) outranks the V1 lexicon when it is specific:
+         V1 called «1000 دلار … سود ۳۰ درصد» GENERAL and its label overwrote
+         the correct STRATEGY_PLAN here — the client then rendered the generic
+         fallback instead of the engine card. */
+      type: (u4?.type && u4.type !== 'GENERAL') ? u4.type : (human.intent?.type || u4?.type || 'GENERAL')
     },
     confidence: out.plan.confidence,
     confidenceMetrics,

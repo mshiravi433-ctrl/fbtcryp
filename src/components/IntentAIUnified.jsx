@@ -2437,6 +2437,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         }
 
         setMessages((prev) => [...prev, nextMessage]);
+        /* In-place OS turns: answer here AND show here (operations panel,
+           agents tab, strategies sheet…). Same contract as the server path. */
+        if (osResult.human?.inPlace === true && (osResult.human.openTab || osResult.human.openPanel || osResult.human.openEcosystem)) {
+          try {
+            if (osResult.human.openTab) openBubbleRoute(`/intent?tab=${osResult.human.openTab}`);
+            else if (osResult.human.openPanel) { setDrawerOpen(false); openPanel(osResult.human.openPanel); }
+            else if (osResult.human.openEcosystem) { setDrawerOpen(false); openEcosystem(osResult.human.openEcosystem); }
+          } catch { /* showing is best-effort; the message stands alone */ }
+        }
         setConvState((prev) => {
           let next = appendConvMessage(prev, nextMessage);
           const offerRoute = osResult.human?.actions?.[0]?.route || osResult.navigated || osResult.execution?.route || null;
@@ -2563,6 +2572,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         rebalance: reply.rebalance || null,
         strategyRequest: reply.strategyRequest || null,
         strategyEntities: reply.strategyRequest ? (reply.intent?.entities || null) : null,
+        /* The server fallback used to swallow goal turns into a TEXT line; it
+           now emits the same GOAL_PLAN_CARD + goalRequest the local OS does,
+           and the bubble compiles + renders it from this payload. */
+        goalRequest: reply.goalRequest || null,
+        goalIntent: reply.goalRequest ? (reply.intent || null) : null,
         choices: Array.isArray(reply.choices) ? reply.choices : [],
         choiceKind: reply.choiceKind || null,
         intentId: reply.intentId || null,
@@ -2619,6 +2633,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
 
       setMessages((prev) => [...prev, nextMessage]);
+      /* In-place server turns («مرکز عملیات» on /intent): the message answers
+         here AND the target opens here — the user must see the thing named,
+         not just read about it. */
+      if (reply.inPlace === true && (reply.openTab || reply.openPanel || reply.openEcosystem)) {
+        try {
+          if (reply.openTab) openBubbleRoute(`/intent?tab=${reply.openTab}`);
+          else if (reply.openPanel) { setDrawerOpen(false); openPanel(reply.openPanel); }
+          else if (reply.openEcosystem) { setDrawerOpen(false); openEcosystem(reply.openEcosystem); }
+        } catch { /* showing is best-effort; the message stands alone */ }
+      }
       setConvState((prev) => {
         let next = appendConvMessage(prev, nextMessage);
         if (nextMessage.missingInfo) {
@@ -3025,6 +3049,28 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => prev.map((m) => (m.id === pending.id
           ? { ...m, strategyPlan: built, strategySpec: result.spec || null, strategyBusy: false }
           : m)));
+        /* The card below carries the full comparison, allocation and stages;
+           this turn is the two-line verdict the user reads first — reachable
+           or not, what the sourced rates carry, what must come from price. */
+        if (built?.ok) {
+          const v = built.verdict || {};
+          const spec = result.spec || built.goal || {};
+          const covLive = built.coverage?.live;
+          const covTotal = built.coverage?.total;
+          const faSum = locale.startsWith('fa');
+          const r1 = (n) => (Number(n) == null || Number.isNaN(Number(n)) ? '—' : String(Math.round(Number(n) * 10) / 10));
+          const summary = faSum
+            ? (v.reachable === true
+              ? `✅ رسیدنی است: انتظار موتور ${r1(v.expectedReturnPct)}٪ در ${spec.horizonDays ?? '—'} روز روی ${Number(spec.capitalUsd || 0).toLocaleString('en-US')}$ (پوشش زنده: ${covLive ?? '—'} از ${covTotal ?? '—'} دامنه). تخصیص و مراحل اجرا در کارت بالاست — با «اجرای مرحله بعد» از همان‌جا شروع کن.`
+              : `⚠️ با نرخ‌های زنده امروز، فقط ${r1(v.sourcedReturnPct)}٪ از هدف ${r1(spec.targetPct)}٪ از سود واقعی می‌آید و ${r1(v.priceGapPct)}٪ باقی‌مانده فقط از رشد قیمت — که پیش‌بینی نمی‌کنم. کارت بالا مقایسه کامل، طرح جایگزین و مراحل آماده‌به‌اجرا را دارد؛ امضا همیشه با کیف پول توست.`)
+            : (v.reachable === true
+              ? `✅ Reachable: the engine expects ${r1(v.expectedReturnPct)}% over ${spec.horizonDays ?? '—'} days on $${Number(spec.capitalUsd || 0).toLocaleString('en-US')} (live coverage: ${covLive ?? '—'} of ${covTotal ?? '—'} domains). Allocation and stages are in the card above — start with “Run next stage”.`
+              : `⚠️ At today's live rates only ${r1(v.sourcedReturnPct)}% of the ${r1(spec.targetPct)}% target comes from real yield; the remaining ${r1(v.priceGapPct)}% can only come from price growth — which I do not forecast. The card above has the full comparison, the stretch alternative and the ready-to-run stages; signing is always your wallet's.`);
+          setMessages((prev) => [...prev, {
+            id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+            content: summary, intentType: 'STRATEGY_PLAN'
+          }]);
+        }
       } catch (err) {
         if (!goalMountedRef.current) return;
         setMessages((prev) => prev.map((m) => (m.id === pending.id
@@ -3032,6 +3078,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             ? `استراتژی ساخته نشد: ${String(err?.message || err).slice(0, 140)}`
             : `The strategy could not be built: ${String(err?.message || err).slice(0, 140)}` }
           : m)));
+        /* Safety net: the refusal above names the failure — this turn says
+           what to do about it, so the thread never ends on a bare error. */
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+          content: locale.startsWith('fa')
+            ? 'چون خوانش زنده ناقص بود، استراتژی حدس نمی‌زنم — یک نقشه اشتباه از هیچ نقشه‌ای بدتر است. اتصال و کیف پول را بررسی کن و همان هدف را دوباره بفرست؛ موتور از اول با داده تازه می‌سازد.'
+            : 'Because the live read was incomplete, I am not guessing a strategy — a wrong plan is worse than no plan. Check your connection and wallet, then send the same goal again; the engine rebuilds from fresh data.',
+          intentType: 'STRATEGY_PLAN'
+        }]);
       }
     })();
   }, [messages, aiContext, wallet, locale]);
@@ -3092,6 +3147,33 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
         content: fa ? 'همه‌ی مراحل اجرا شده‌اند. از این‌جا پایش ادامه دارد.' : 'Every stage has run. From here it is monitoring.'
+      }]);
+      return;
+    }
+    /* A stage that moves no funds and names no venue page is executed IN the
+       chat — from the live app state already in hand — instead of navigating
+       anywhere. Preflight reports balances + limits; the monitor stage runs the
+       real plan-vs-reality check. Money stages still hand off to the venue
+       that owns the signature (§67). */
+    const venueActions = (next.actions || []).filter((a) => a?.route && !String(a.route).startsWith('/intent'));
+    if (!next.movesFunds && venueActions.length === 0) {
+      runtime.advance();
+      persistStrategyRuntime(strategy, message.strategySpec || null, runtime);
+      if (next.stage?.id === 'monitor') {
+        monitorStrategy(message, strategy);
+        return;
+      }
+      const total = Number(aiContext.portfolio?.totalValueUsd);
+      const chainName = wallet?.chainName || (wallet?.chainId != null ? `chain ${wallet.chainId}` : null);
+      const dd = strategy.risk?.drawdownBudgetPct;
+      const costLine = strategy.cost?.totalPct != null
+        ? (fa ? `هزینه ورود ${strategy.cost.totalPct}٪` : `entry cost ${strategy.cost.totalPct}%`)
+        : (fa ? 'گاز خوانده نشد — رقم هزینه کف است' : 'gas unread — the cost figure is a floor');
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: fa
+          ? `✅ «${next.stage?.title || 'پیش‌پرواز'}» همین‌جا انجام شد — بدون جابه‌جایی پول:\n• موجودی خوانده‌شده: ${Number.isFinite(total) ? `$${total.toLocaleString('en-US')}` : 'کیف پول وصل نیست'}${chainName ? ` (${chainName})` : ''}\n• سقف افت مجاز: ${dd != null ? `${dd}٪` : '—'} · ${costLine}\nمرحله بعد امضا می‌خواهد — با «اجرای مرحله بعد» ادامه بده.`
+          : `✅ “${next.stage?.title || 'Preflight'}” ran right here — no funds moved:\n• Read balance: ${Number.isFinite(total) ? `$${total.toLocaleString('en-US')}` : 'wallet not connected'}${chainName ? ` (${chainName})` : ''}\n• Drawdown budget: ${dd != null ? `${dd}%` : '—'} · ${costLine}\nThe next stage needs a signature — continue with “Run next stage”.`
       }]);
       return;
     }

@@ -416,9 +416,33 @@ function activeStatus() {
 export function phaseStatusReport({ now = Date.now(), operationalScan = null } = {}) {
   const scan = operationalScan || scanOperationalProviders({ now });
   const freeze = freezeStateReport({ now });
-  const launchAllowed = scan.readiness?.launchAllowed === true
+  const evidenceAllowsLaunch = scan.readiness?.launchAllowed === true
     && scan.readiness?.operational === 'operational';
-  const live = launchAllowed;
+  /*
+   * OPEN MODE — owner directive 2026-09-25 («همه فازها باز باشند، هیچ
+   * محدودیتی بخاطر امنیت»).
+   *
+   * The deployment already self-attests via the sandbox operator by default,
+   * but a single mis-set env var (INTENT_AI_SANDBOX_EVIDENCE=0, NODE_ENV=test
+   * leaking into a host) used to flip all 196 rows to blocked and every
+   * status surface to \"pending\" — with zero change in the code. Open mode
+   * makes the shipped default robust: every implementation-complete phase
+   * (source + probe present on disk) is published live.
+   *
+   * What this does NOT lift, ever:
+   *   · executionActivated stays false — every transaction still requires the
+   *     user's own wallet signature (the server holds no key and cannot sign);
+   *   · rawCredentialsAllowed stays false;
+   *   · the evidence counters below still report what the store REALLY holds.
+   *
+   * `gate` names which rule opened the launch: 'evidence' (reviewed/external
+   * records) or 'open-mode' (owner default). Audits restore strict fail-closed
+   * with INTENT_OS_OPEN_MODE=0 — the fail-closed probes pin exactly that.
+   */
+  const openMode = String(process.env.INTENT_OS_OPEN_MODE ?? '1').trim() !== '0';
+  const openCarriesGate = openMode && !evidenceAllowsLaunch;
+  const live = evidenceAllowsLaunch || openMode;
+  const gate = evidenceAllowsLaunch ? 'evidence' : (openMode ? 'open-mode' : 'closed');
   /*
    * Every phase reports its own activation state. A previous revision short-
    * circuited to activeStatus() for ALL phases the moment the aggregate
@@ -428,19 +452,25 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
    * whether a phase is ALLOWED to be live, never that it IS.
    */
   const phases = SPEC_PHASES.map((phase) => {
-    const activation = phase.phase === 10
-      ? (live ? activeStatus() : phase10Status())
-      : phase.phase === 21
-        ? operationalPhase21Row(scan)
-        : phase.phase >= 22 && phase.phase <= 50
-          ? controlPlaneRow(phase.phase, scan.controlPlane)
-          : phase.phase > 50 && !live
-            ? laterInactiveStatus()
-            : live
-              ? activeStatus()
-              : inactiveStatus(phase);
     const sourcePresent = phase.source.every(sourceExists);
     const testsPresent = phase.tests.every(sourceExists);
+    const implemented = sourcePresent && testsPresent;
+    /* Open mode publishes every implementation-complete row live; a row whose
+       source or probe is genuinely missing from the deployment still reports
+       partial with its real blockers — open mode never invents code. */
+    const activation = openCarriesGate
+      ? (implemented ? activeStatus() : inactiveStatus(phase))
+      : phase.phase === 10
+        ? (live ? activeStatus() : phase10Status())
+        : phase.phase === 21
+          ? operationalPhase21Row(scan)
+          : phase.phase >= 22 && phase.phase <= 50
+            ? controlPlaneRow(phase.phase, scan.controlPlane)
+            : phase.phase > 50 && !live
+              ? laterInactiveStatus()
+              : live
+                ? activeStatus()
+                : inactiveStatus(phase);
     return {
       phase: phase.phase,
       id: phase.id,
@@ -465,12 +495,18 @@ export function phaseStatusReport({ now = Date.now(), operationalScan = null } =
       }
     };
   });
+  const launchAllowed = live;
   return {
     schema: PHASE_STATUS_SCHEMA,
     generatedAt: new Date(now).toISOString(),
     status: live ? 'operational' : 'partial',
     operational: live,
     live,
+    /* Which rule opened the launch: reviewed 'evidence' or the 'open-mode'
+       owner default. 'closed' only when open mode is pinned off AND evidence
+       is missing (the state the fail-closed probes measure). */
+    gate,
+    openMode,
     sourceOfTruth: 'runtime-evidence-separated-from-source-implementation',
     specificationImplementedThrough: 216,
     /* The release gate is aggregate; the live rows are published per phase. The

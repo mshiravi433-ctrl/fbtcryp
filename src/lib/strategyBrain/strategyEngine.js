@@ -781,6 +781,64 @@ const needsBridge = (sleeve, walletChainId) => sleeve.chainId != null && walletC
  * capability id the Operations catalog uses, and `requiresSignature: true`.
  * Nothing here signs and nothing here moves funds.
  */
+/* Build a query string from known values only — unknown stays absent (never
+   guessed into a URL the user will sign from). */
+function stageQuery(params = {}) {
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v == null || v === '' || v === false) continue;
+    usp.set(k, String(v));
+  }
+  const s = usp.toString();
+  return s ? `?${s}` : '';
+}
+
+const cleanSymbol = (v) => {
+  const s = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  return s || null;
+};
+
+/*
+ * Every stage action links to the venue that owns the signature — PREFILLED
+ * with what the plan actually knows (asset, USD amount, chain, pool). The
+ * user reviews and signs on that page; the link only removes the re-typing.
+ * Pages read: /swap?from&to&amount&chain · /bridge?fromChain&toChain&token&
+ * amount · /loan?tab&asset&amount&chain · /farm?pool&amount ·
+ * /perp?tab=onchain&market&collateral.
+ */
+function stageRoute(handoff, params = {}) {
+  const base = handoff?.route || '/wallet';
+  const amountUsd = num(params.amountUsd) > 0 ? Math.round(num(params.amountUsd) * 100) / 100 : null;
+  const chainId = num(params.chainId) > 0 ? num(params.chainId) : null;
+  const asset = cleanSymbol(params.asset || params.toToken);
+  if (base === '/swap') {
+    /* The stage sizes legs in USD; the swap form sizes in FROM units — so the
+       from leg is pinned to USDT (curated on every chain) and the user can
+       switch it on the page. `to` must be curated or the page ignores it. */
+    return `/swap${stageQuery({ from: 'USDT', to: asset, amount: amountUsd, chain: chainId })}`;
+  }
+  if (base === '/bridge') {
+    return `/bridge${stageQuery({
+      fromChain: num(params.fromChainId) > 0 ? num(params.fromChainId) : null,
+      toChain: num(params.toChainId) > 0 ? num(params.toChainId) : null,
+      token: cleanSymbol(params.token) || 'USDT',
+      amount: amountUsd
+    })}`;
+  }
+  if (base === '/loan') {
+    return `/loan${stageQuery({ tab: 'supply', asset, amount: amountUsd, chain: chainId })}`;
+  }
+  if (base === '/farm') {
+    return `/farm${stageQuery({ pool: params.poolId || null, amount: amountUsd })}`;
+  }
+  if (base === '/perp') {
+    /* No side: the engine does not pick directions — the user does, on the
+       venue page, after reading the quote and the risk verdict there. */
+    return `/perp${stageQuery({ tab: 'onchain', market: asset, collateral: amountUsd })}`;
+  }
+  return base;
+}
+
 export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonDays }) {
   const sleeves = candidate.sleeves;
   const walletChainId = num(domainData(state, 'wallet')?.chainId ?? domainData(state, 'portfolio')?.chainId);
@@ -819,11 +877,11 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
       movesFunds: true,
       actions: [
         ...(bridgeSleeves.length ? [{
-          module: 'bridge', operation: 'BRIDGE', route: '/bridge', capabilityId: 'bridge.quote', requiresSignature: true,
+          module: 'bridge', operation: 'BRIDGE', route: stageRoute({ route: '/bridge' }, { fromChainId: walletChainId, toChainId: bridgeSleeves[0].chainId ?? null, token: bridgeSleeves[0].asset, amountUsd: r2((capitalUsd * bridgeSleeves[0].weightPct) / 100) }), capabilityId: 'bridge.quote', requiresSignature: true,
           params: { toChainId: bridgeSleeves[0].chainId ?? null, amountUsd: r2((capitalUsd * bridgeSleeves[0].weightPct) / 100) }
         }] : []),
         ...(swapSleeves.length ? [{
-          module: 'swap', operation: 'BUY', route: '/swap', capabilityId: 'swap.quote', requiresSignature: true,
+          module: 'swap', operation: 'BUY', route: stageRoute({ route: '/swap' }, { toToken: swapSleeves[0].asset, amountUsd, chainId: walletChainId }), capabilityId: 'swap.quote', requiresSignature: true,
           params: { toToken: swapSleeves[0].asset, amountUsd }
         }] : [])
       ],
@@ -845,12 +903,13 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
       movesFunds: true,
       actions: yieldSleeves.map((s) => {
         const handoff = HANDOFF_OF_FAMILY[s.family] || HANDOFF_OF_FAMILY.lending;
+        const legUsd = r2((capitalUsd * s.weightPct) / 100);
         return {
-          module: handoff.module, operation: handoff.operation, route: handoff.route, capabilityId: handoff.capabilityId,
+          module: handoff.module, operation: handoff.operation, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? walletChainId ?? null, poolId: s.id, amountUsd: legUsd }), capabilityId: handoff.capabilityId,
           requiresSignature: true,
           params: {
             venue: s.venue, asset: s.asset, chainId: s.chainId ?? null, poolId: s.id,
-            amountUsd: r2((capitalUsd * s.weightPct) / 100), expectedApyPct: s.returnPctAnnual
+            amountUsd: legUsd, expectedApyPct: s.returnPctAnnual
           }
         };
       }),
@@ -872,12 +931,13 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
       movesFunds: true,
       actions: marketSleeves.map((s) => {
         const handoff = HANDOFF_OF_FAMILY[s.family] || HANDOFF_OF_FAMILY.crypto;
+        const legUsd = r2((capitalUsd * s.weightPct) / 100);
         return {
-          module: handoff.module, operation: handoff.operation, route: handoff.route, capabilityId: handoff.capabilityId,
+          module: handoff.module, operation: handoff.operation, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? walletChainId ?? null, amountUsd: legUsd }), capabilityId: handoff.capabilityId,
           requiresSignature: true,
           params: {
             venue: s.venue, asset: s.asset, chainId: s.chainId ?? null, marketId: s.id, side: s.side || 'long',
-            amountUsd: r2((capitalUsd * s.weightPct) / 100)
+            amountUsd: legUsd
           }
         };
       }),
@@ -1051,11 +1111,17 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
   }));
   const ranking = explainRanking(pool);
 
-  const sleeves = chosen.sleeves.map((s) => ({
-    ...s,
-    amountUsd: r2((capitalUsd * s.weightPct) / 100),
-    handoff: HANDOFF_OF_FAMILY[s.family] || null
-  }));
+  const sleeves = chosen.sleeves.map((s) => {
+    const handoff = HANDOFF_OF_FAMILY[s.family] || null;
+    const legUsd = r2((capitalUsd * s.weightPct) / 100);
+    return {
+      ...s,
+      amountUsd: legUsd,
+      handoff: handoff
+        ? { ...handoff, route: stageRoute(handoff, { asset: s.asset, chainId: s.chainId ?? null, poolId: s.id, amountUsd: legUsd }) }
+        : null
+    };
+  });
   const cost = estimateCost({ sleeves: chosen.sleeves, capitalUsd, gas });
   const stages = buildStages({ candidate: chosen, goal, capitalUsd, state, cost, horizonDays });
   const monitors = buildMonitors({ goal, horizonDays, profile, candidate: chosen });

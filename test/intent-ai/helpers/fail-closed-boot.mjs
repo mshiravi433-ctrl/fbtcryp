@@ -10,3 +10,7 @@
  * guarantee test/run.mjs pins for the whole harness run.
  */
 process.env.INTENT_AI_SANDBOX_EVIDENCE = '0';
+/* Open mode (server/intentPhaseStatus.js) is the shipped default and would
+   also defeat the property these probes measure, so it is pinned off here
+   alongside the sandbox. Production runs with the default (open). */
+process.env.INTENT_OS_OPEN_MODE = '0';
