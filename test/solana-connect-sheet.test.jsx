@@ -136,6 +136,7 @@ afterEach(() => {
   delete window.Capacitor;
   delete window.FBTSolanaLink;
   deeplink.resetDeeplink();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -214,6 +215,61 @@ describe('connecting a Solana wallet on a phone', () => {
     expect(solanaAddress()).toBe(ADDRESS);
     /* …and the tab this started from shows it without a reload. */
     expect(screen.getAllByText(shortAddress(ADDRESS)).length).toBeGreaterThan(0);
+  });
+
+  /*
+   * THE ANDROID RETURN PATH, PINNED.
+   *
+   * «میره داخل کیف پول سولانا و متصل میشود، اما وقتی برمیگردیم به اپ اندرویدی و
+   * دکمه بررسی را میزنیم میگه کیف پول متصل نشده». A connect started from the APK
+   * carries `apk=1` on its redirect link. When that link lands in a BROWSER
+   * (the APK's App Link for fbtswap.ir is not verified on this build, so the
+   * wallet's https redirect opens in Chrome), the connection must NOT be
+   * rescued in the browser's storage — it must be trampolined home to the APK
+   * via `ir.fbtswap.app://solconnect`, or the app the user came from stays
+   * unconnected forever while the address lives only in Chrome.
+   *
+   * The request is made with `isNativeShell()` true (the APK fired it, so the
+   * `apk=1` tag is on the link); the answer is then completed with
+   * `isNativeShell()` false and an Android UA — i.e. as it reaches Chrome.
+   */
+  it('trampolines an APK-originated return home instead of rescuing it in the browser', async () => {
+    await openSheetThroughWalletTab();
+    fireEvent.click(screen.getByTestId('sol-connect-phantom'));
+    await waitFor(() => expect(Browser.open).toHaveBeenCalledTimes(1));
+
+    /* The request was fired from the APK: the redirect link carries `apk=1`. */
+    const launched = lastOpenedUrl();
+    const launchedUrl = new URL(launched);
+    const redirect = launchedUrl.searchParams.get('redirect_link');
+    expect(redirect).toMatch(/[?&]apk=1(?:&|#|$)/);
+
+    /* Now the answer reaches a BROWSER, not the app. */
+    const originalCapacitor = window.Capacitor;
+    const ANDROID_UA = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120 Mobile';
+    vi.stubGlobal('navigator', { ...window.navigator, userAgent: ANDROID_UA });
+    window.Capacitor = { isNativePlatform: () => false };
+
+    const answer = walletAnswer(launched, { public_key: ADDRESS, session: SESSION });
+    let result;
+    await act(async () => {
+      result = await deeplink.completeDeeplinkReturn(answer);
+    });
+
+    /* It did NOT complete in the browser. */
+    expect(solanaAddress()).toBeNull();
+    expect(deeplink.deeplinkSession()).toBeNull();
+    /* It told the caller it sent the answer home. */
+    expect(result?.code).toBe('TRAMPOLINED_TO_APP');
+    /* The browser was handed the APK's custom scheme, carrying the full answer. */
+    const fallback = document.getElementById('fbt-solconnect-fallback');
+    const link = fallback?.querySelector('a');
+    expect(link?.getAttribute('href') ?? '').toMatch(/^ir\.fbtswap\.app:\/\/solconnect\?/);
+    expect(link?.getAttribute('href') ?? '').toContain('phantom_encryption_public_key=');
+
+    /* Restore the APK env so afterEach's reset is sane. */
+    window.Capacitor = originalCapacitor;
+    vi.unstubAllGlobals();
   });
 
   /*
