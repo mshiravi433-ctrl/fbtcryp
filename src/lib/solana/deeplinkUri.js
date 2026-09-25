@@ -715,6 +715,10 @@ export function stripDeeplinkReturn(rawUrl) {
     'sol',
     'walletId',
     'wallet_id',
+    /* the APK-return tag. It is only a router hint (send this answer home to
+       the Android app); it carries no session material, but the address bar
+       has no business keeping it after the return is consumed. */
+    'apk',
     /* the return blob is consumed once; keeping it in the address bar would
        re-offer it on every refresh and carry session material into a copied
        link. */

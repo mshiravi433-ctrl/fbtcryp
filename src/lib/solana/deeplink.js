@@ -672,7 +672,26 @@ export function consumeDeeplinkResult() {
  * wallet appends its own parameters to this exact string.
  */
 export function deeplinkRedirect(requestId, blob = null) {
-  const base = publicAppUrl(`/?${RETURN_MARKER}&rid=${encodeURIComponent(requestId)}`);
+  let base = publicAppUrl(`/?${RETURN_MARKER}&rid=${encodeURIComponent(requestId)}`);
+  /*
+   * THE ANDROID APK RETURN TAG.
+   *
+   * A connect/sign request fired from inside the APK builds its redirect link
+   * here — and on most builds the APK's App Link for `fbtswap.ir` is NOT
+   * verified (the installed signing cert does not match the published
+   * `assetlinks.json`, or that file is absent), so the wallet's https
+   * redirect opens in CHROME instead of the app. The generic blob rescue in
+   * `completeDeeplinkReturn` then completes the connection in Chrome's own
+   * storage — leaving the APK, which holds the real pending request, staring
+   * at «منتظر تأیید…» while the address lives somewhere the user is not.
+   *
+   * Tagging the link with `apk=1` lets `completeDeeplinkReturn` recognise an
+   * APK-originated return that has landed in a browser and TRAMPOLINE it back
+   * into the app before the blob rescue runs (see the `apk=1` branch there).
+   * The tag is a query parameter only: it does not touch the origin that
+   * Phantom compares against `app_url`, so the request is never rejected.
+   */
+  if (isNativeShell()) base += '&apk=1';
   if (blob) return `${base}&fbt=${blob}`;
   return base;
 }
@@ -1271,6 +1290,49 @@ export async function completeDeeplinkReturn(rawUrl) {
   if (read.state === 'none') return { ok: false, code: 'NOT_A_RETURN' };
 
   const requestId = read.params?.requestId ?? null;
+
+  /*
+   * THE ANDROID APK RETURN — KEPT INSIDE THE APK.
+   *
+   * A request fired from the APK carries `apk=1` on its redirect link (see
+   * `deeplinkRedirect`). When that link reaches a BROWSER instead of the app —
+   * the APK's App Link for `fbtswap.ir` is not verified on this build, or the
+   * wallet opened the https redirect in Chrome — the request's own pending row
+   * lives in the APK's WebView storage, NOT in this browser's. `pendingFromBlob`
+   * would otherwise rescue the connection HERE, in the browser, so the app the
+   * user came from is left unconnected while the address exists only in Chrome.
+   *
+   * So, before the blob rescue, hand the answer straight back to the APK via
+   * its custom scheme `ir.fbtswap.app://solconnect?…` (the trampoline). The
+   * whole URL — `sol`, `rid`, `fbt`, and the wallet's own encryption key,
+   * nonce and data — rides in the query, so the APK receives exactly the
+   * answer the wallet sent and completes the connection where the user is
+   * standing.
+   *
+   * The marker is what keeps the genuine in-browser flow working: a real
+   * Android-Chrome user's request has no `apk=1`, so it still rescues here as
+   * before. Only an APK-originated return is sent home. `isNativeShell()` being
+   * true means we ARE the APK already, in which case the App Link delivered the
+   * answer directly and the branch below handles it — so we skip the trampoline
+   * entirely there.
+   */
+  if (
+    typeof window !== 'undefined' &&
+    !isNativeShell() &&
+    /[?&]apk=1(?:&|#|$)/.test(String(rawUrl)) &&
+    read.state !== 'none'
+  ) {
+    const ua = String(
+      window.navigator?.userAgent ||
+      (typeof navigator !== 'undefined' ? navigator.userAgent : '') ||
+      ''
+    );
+    if (/Android/i.test(ua)) {
+      trampolineToNativeApp(rawUrl);
+      return { ok: false, code: 'TRAMPOLINED_TO_APP', requestId };
+    }
+  }
+
   let pending = findPending(requestId);
 
   if (!pending) {
@@ -1292,9 +1354,10 @@ export async function completeDeeplinkReturn(rawUrl) {
      * user is actually standing in, instead of stranded in the wrong one
      * with a «back to app» bar that goes nowhere.
      *
-     * Deliberately before the trampoline: on a phone where BOTH the blob and
-     * the APK scheme exist (Android), the blob is the same round trip that
-     * would reach the APK — except completed where the user is looking.
+     * On Android, an `apk=1` return has already been trampolined home by the
+     * branch above, so reaching here means this is a genuine browser round
+     * trip (or a replay): complete the connection in the browser the user is
+     * in, as before.
      */
     pending = pendingFromBlob(rawUrl, requestId);
   }
