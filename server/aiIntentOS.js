@@ -1599,7 +1599,17 @@ router.post('/chat', async (req, res) => {
         context: {
           market: context.market,
           portfolio: context.portfolio,
-          locale: locale || 'fa'
+          locale: locale || 'fa',
+          /* Phase 213 — when the browser says this turn is an answer to an open
+             question (or arrives while one is still open), the model is told so
+             as a directive. Without it the turn was re-derived from scratch and
+             the question was silently dropped. */
+          directives: [
+            req.body?.hints?.answerBinding?.prompt,
+            req.body?.hints?.answerBinding?.verdict?.stillOpen === true
+              ? 'The previously asked question is still unanswered; if you serve a new request, remind about it once at the end in fresh wording.'
+              : null
+          ].filter(Boolean)
         },
         intentType: human.intent?.type || intent,
         entities: u4.entities || {},

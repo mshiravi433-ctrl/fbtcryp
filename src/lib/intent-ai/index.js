@@ -1413,4 +1413,7 @@ export { createEvmAdapter, createSolanaAdapter, adapterForChain, chainKind, norm
 export { formatHumanResponse, formatExecutionResult, formatExecutionProgress, formatConnectThanks, stripInternalLeaks, AI_RESPONSE_SCHEMA, UI_TYPES } from './humanResponse.js';
 export { runAction, runExecutionPlan, runRebalance } from './executionRuntime.js';
 
-export const INTENT_AI_VERSION = 'intent-os.phase200.bounded-autonomy.v1';
+/* Phase 213: the chat IS the Intent OS surface — the durable open-question
+   ledger, the OS event mirror, the five coordination modes and the explicit
+   web-search door all live on the conversation surface. */
+export const INTENT_AI_VERSION = 'intent-os.phase213.chat-surface.v1';
