@@ -17,5 +17,5 @@ export function operateDependencyAttestation({ sbom = null, suppliers = [] } = {
 
 export function evaluateDependencyAttestationPlane(input = {}) {
   const row = operateDependencyAttestation(input);
-  return opsPlane(37, PHASE37_SCHEMA, [row.code || 'DEPENDENCY_NOT_OPERATIONAL'], { deps: row });
+  return opsPlane(37, PHASE37_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, deps: row });
 }

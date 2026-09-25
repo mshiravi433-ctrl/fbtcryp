@@ -13,5 +13,5 @@ export function operateCapitalBond({ bond = null, custody = null } = {}) {
 
 export function evaluateCapitalBondPlane(input = {}) {
   const row = operateCapitalBond(input);
-  return opsPlane(48, PHASE48_SCHEMA, [row.code || 'CAPITAL_BOND_NOT_OPERATIONAL'], { bond: row });
+  return opsPlane(48, PHASE48_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, bond: row });
 }

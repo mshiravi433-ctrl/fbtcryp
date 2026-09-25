@@ -317,8 +317,36 @@ export default function IntentAIPanel({
 }) {
   const { t, i18n } = useTranslation();
   const [mode, setMode] = useState(PRIMARY_MODES[0]);
-  const [level, setLevel] = useState(1);
-  const [session, setSession] = useState(() => startSession({ mode: PRIMARY_MODES[0], level: 1, defaultChainId }));
+  const [level, setLevel] = useState(3);
+  /*
+   * L3 policy editor defaults. Chains and protocols default to EVERY allowed
+   * value and assets defaults to blank (= all assets): a fresh session that
+   * only quotes USDC→ETH on Arbitrum must not be refused because the default
+   * policy forgot a network. The money caps stay tight ($1k / $200 / $100) —
+   * broad scope, bounded size; the user raises them deliberately.
+   *
+   * This state lives ABOVE the session: with the L3 default, the very first
+   * session must already carry the real policy input (the mount effect's
+   * identity guard keeps the initial session).
+   */
+  const [policyInput, setPolicyInput] = useState({
+    /* The documented defaults: $1k capital / $200 per transaction / $100 max
+       loss (see the L3 policy editor comment above). The previous values
+       ($500/$50/$50) refused a plain $100 swap with TRANSACTION_LIMIT_EXCEEDED
+       before the user had touched a single setting. */
+    maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
+    /*
+     * A fresh L3 policy MUST carry at least one chain and one protocol:
+     * sanitizePolicy refuses an L3 policy with empty lists (createPolicy then
+     * returns policy: null and every turn answers POLICY_BAD_POLICY — the
+     * exact dead end this restores). These defaults were commented out,
+     * which made the first L3 session in a fresh profile unusable.
+     */
+    allowedChains: '42161,1,137,10',
+    allowedProtocols: 'swap,bridge,lending',
+    allowedAssets: '', durationMin: 30
+  });
+  const [session, setSession] = useState(() => startSession({ mode: PRIMARY_MODES[0], level: 3, defaultChainId, policyInput: buildPolicy(policyInput) }));
   const [input, setInput] = useState('');
   const [gate, setGate] = useState(null);
   const [risk, setRisk] = useState(null);
@@ -360,30 +388,6 @@ export default function IntentAIPanel({
       selectedId: externalAgentChoice
     });
   }, [mode, session?.externalAgentDiscovery, externalAgentChoice]);
-  /*
-   * L3 policy editor defaults. Chains and protocols default to EVERY allowed
-   * value and assets defaults to blank (= all assets): a fresh session that
-   * only quotes USDC→ETH on Arbitrum must not be refused because the default
-   * policy forgot a network. The money caps stay tight ($1k / $200 / $100) —
-   * broad scope, bounded size; the user raises them deliberately.
-   */
-  const [policyInput, setPolicyInput] = useState({
-    /* The documented defaults: $1k capital / $200 per transaction / $100 max
-       loss (see the L3 policy editor comment above). The previous values
-       ($500/$50/$50) refused a plain $100 swap with TRANSACTION_LIMIT_EXCEEDED
-       before the user had touched a single setting. */
-    maxCapitalUsd: 1000, maxTransactionUsd: 200, maxLossUsd: 100, maxLeverage: 2,
-    /*
-     * A fresh L3 policy MUST carry at least one chain and one protocol:
-     * sanitizePolicy refuses an L3 policy with empty lists (createPolicy then
-     * returns policy: null and every turn answers POLICY_BAD_POLICY — the
-     * exact dead end this restores). These defaults were commented out,
-     * which made the first L3 session in a fresh profile unusable.
-     */
-    allowedChains: '42161,1,137,10',
-    allowedProtocols: 'swap,bridge,lending',
-    allowedAssets: '', durationMin: 30
-  });
   const threadRef = useRef(null);
   const inputRef = useRef(null);
   /*

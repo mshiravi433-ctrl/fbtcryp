@@ -16,5 +16,5 @@ export function operateContinuousVerification({ probe = null, now = Date.now() }
 
 export function evaluateContinuousVerificationPlane(input = {}) {
   const row = operateContinuousVerification(input);
-  return opsPlane(38, PHASE38_SCHEMA, [row.code || 'CONTINUOUS_VERIFICATION_NOT_OPERATIONAL'], { probe: row });
+  return opsPlane(38, PHASE38_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, probe: row });
 }

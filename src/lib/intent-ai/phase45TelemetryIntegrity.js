@@ -14,5 +14,5 @@ export function operateTelemetryIntegrity({ stream = null, consent = null } = {}
 
 export function evaluateTelemetryIntegrityPlane(input = {}) {
   const row = operateTelemetryIntegrity(input);
-  return opsPlane(45, PHASE45_SCHEMA, [row.code || 'TELEMETRY_NOT_OPERATIONAL'], { telemetry: row });
+  return opsPlane(45, PHASE45_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, telemetry: row });
 }

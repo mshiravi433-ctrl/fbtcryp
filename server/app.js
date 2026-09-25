@@ -389,6 +389,7 @@ import {
 import { activationReport } from './intentActivation.js';
 import { phaseStatusReport } from './intentPhaseStatus.js';
 import { handleOperatorEvidence, evidenceStoreStatus, getStoredEvidence, ensureOperatorEvidenceHydrated } from './intentOperatorEvidence.js';
+import { handlePlaneAttestations, planeAttestationsStatus, ensurePlaneAttestationsHydrated } from './intentPlaneAttestations.js';
 import { activationConfigPresence } from './intentActivationConfig.js';
 import { collectVenueFeeds, buildProfitPlan, PROFIT_PLAN_SCHEMA } from './multiVenue.js';
 import {
@@ -1855,12 +1856,14 @@ app.get('/api/intents/v1/activation', async (_req, res) => {
  * release and its 21/21 evidence summary. */
 app.get('/api/intents/v1/phase-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
+  await ensurePlaneAttestationsHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=15, s-maxage=15, stale-while-revalidate=60');
   return res.json(phaseStatusReport());
 });
 
 app.get('/api/intents/v1/public-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
+  await ensurePlaneAttestationsHydrated().catch(() => {});
   const status = phaseStatusReport();
   const activation = status.phase21?.readiness;
   const active = status.launchAllowed === true;
@@ -1919,6 +1922,21 @@ app.post('/api/intents/v1/operator-evidence', async (req, res) => {
   return handleOperatorEvidence(req, res);
 });
 
+/* ── Full activation: Owner Plane Attestations (control planes 22–50) ────
+ * POST injects the owner bundle (dual-operator auth, same key as evidence);
+ * GET reports counts/validity only. The bundle supplies each plane's
+ * operating-posture facts; the evaluators still run their own contracts. */
+app.post('/api/intents/v1/plane-attestations', async (req, res) => {
+  await ensurePlaneAttestationsHydrated().catch(() => {});
+  return handlePlaneAttestations(req, res);
+});
+
+app.get('/api/intents/v1/plane-attestations', async (_req, res) => {
+  await ensurePlaneAttestationsHydrated().catch(() => {});
+  res.set('cache-control', 'public, max-age=15, s-maxage=15');
+  return res.json(planeAttestationsStatus());
+});
+
 /* ── Compatibility status controls (Launch Freeze is retired) ──────────── */
 app.post('/api/intents/v1/unfreeze', async (req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
@@ -1932,6 +1950,7 @@ app.post('/api/intents/v1/freeze', async (req, res) => {
 
 app.get('/api/intents/v1/freeze-status', async (_req, res) => {
   await ensureOperatorEvidenceHydrated().catch(() => {});
+  await ensurePlaneAttestationsHydrated().catch(() => {});
   res.set('cache-control', 'public, max-age=5, s-maxage=5');
   return res.json(freezeStateReport());
 });

@@ -14,5 +14,5 @@ export function operateAgentFleet({ fleet = null, sandbox = null } = {}) {
 
 export function evaluateAgentFleetPlane(input = {}) {
   const row = operateAgentFleet(input);
-  return opsPlane(47, PHASE47_SCHEMA, [row.code || 'FLEET_NOT_OPERATIONAL'], { fleet: row });
+  return opsPlane(47, PHASE47_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, fleet: row });
 }

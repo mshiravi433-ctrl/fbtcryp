@@ -15,5 +15,5 @@ export function operateCostKillSpend({ budget = null, spent = null, kill = null 
 
 export function evaluateCostKillSpendPlane(input = {}) {
   const row = operateCostKillSpend(input);
-  return opsPlane(43, PHASE43_SCHEMA, [row.code || 'COST_CONTROLS_NOT_OPERATIONAL'], { cost: row });
+  return opsPlane(43, PHASE43_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, cost: row });
 }

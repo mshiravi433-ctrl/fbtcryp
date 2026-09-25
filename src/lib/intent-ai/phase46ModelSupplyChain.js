@@ -15,5 +15,5 @@ export function operateModelSupplyChain({ model = null, prompt = null } = {}) {
 
 export function evaluateModelSupplyChainPlane(input = {}) {
   const row = operateModelSupplyChain(input);
-  return opsPlane(46, PHASE46_SCHEMA, [row.code || 'MODEL_SUPPLY_NOT_OPERATIONAL'], { model: row });
+  return opsPlane(46, PHASE46_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, model: row });
 }

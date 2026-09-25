@@ -76,10 +76,15 @@ function sid() {
 /**
  * Start a session under exactly one of the three product modes. `level` is a
  * separate preparation/execution permission tier; it is never a fourth mode.
+ *
+ * Owner policy (2026-09-25, full activation): the default tier is L3
+ * (autonomous preparation under the session policy — the wallet still signs,
+ * execution is never automatic). L1/L2 stay selectable per session. An
+ * explicitly invalid level still fails closed to L1 (least privilege).
  */
 export function startSession({
   mode = 'human-ai',
-  level = 1,
+  level = 3,
   policyInput = null,
   defaultChainId = 42161,
   runtime = {},

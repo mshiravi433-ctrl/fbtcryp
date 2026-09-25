@@ -15,5 +15,5 @@ export function operateReleaseTrain({ train = null, change = null, freeze = true
 
 export function evaluateReleaseTrainPlane(input = {}) {
   const row = operateReleaseTrain(input);
-  return opsPlane(41, PHASE41_SCHEMA, [row.code || 'RELEASE_TRAIN_NOT_OPERATIONAL'], { train: row });
+  return opsPlane(41, PHASE41_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, train: row });
 }

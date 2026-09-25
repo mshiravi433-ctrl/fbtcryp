@@ -622,7 +622,9 @@ export default async function run() {
   /* ---- the chat path: a vague ask gets a question AND a proposal ---- */
 
   const human = await import('../../src/lib/intent-ai/humanAi.js');
-  let session = human.startSession({ locale: 'fa', defaultChainId: 42161 });
+  /* This probe measures the L1 guided-flow contract (question + proposal),
+     so it pins level 1: the session default is L3 (policy-confirmed). */
+  let session = human.startSession({ locale: 'fa', defaultChainId: 42161, level: 1 });
   let turn = human.chatTurn(session, 'میخوام پولم رشد کنه', {
     portfolioUsd: 2000,
     balances: [{ symbol: 'USDT', usd: 1200 }, { symbol: 'ETH', usd: 500 }, { symbol: 'BTC', usd: 300 }],
@@ -650,7 +652,7 @@ export default async function run() {
   /* ---- the proposal must arrive in the customer's language ----------- */
 
   const locales = await import('../../src/lib/intent-ai/outputLocales.js');
-  let faSession = human.startSession({ locale: 'fa', defaultChainId: 42161 });
+  let faSession = human.startSession({ locale: 'fa', defaultChainId: 42161, level: 1 });
   const faTurn = human.chatTurn(faSession, 'میخوام پولم رشد کنه', {
     locale: 'fa', portfolioUsd: 2000,
     balances: [{ symbol: 'USDT', usd: 1200 }, { symbol: 'ETH', usd: 500 }]
@@ -663,7 +665,7 @@ export default async function run() {
     && faProposal.assumptions.every((a) => /[\u0600-\u06FF]/.test(a))
     && !faProposal.assumptions.some((a) => /\(EN\)$/.test(a)));
 
-  const enTurn = human.chatTurn(human.startSession({ locale: 'en', defaultChainId: 42161 }),
+  const enTurn = human.chatTurn(human.startSession({ locale: 'en', defaultChainId: 42161, level: 1 }),
     'I want my money to grow', { locale: 'en', portfolioUsd: 2000 });
   t('an English ask gets an English proposal',
     (() => {

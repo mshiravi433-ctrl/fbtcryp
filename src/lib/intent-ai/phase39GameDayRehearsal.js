@@ -16,5 +16,5 @@ export function operateGameDay({ rehearsal = null } = {}) {
 
 export function evaluateGameDayPlane(input = {}) {
   const row = operateGameDay(input);
-  return opsPlane(39, PHASE39_SCHEMA, [row.code || 'GAMEDAY_NOT_OPERATIONAL'], { rehearsal: row });
+  return opsPlane(39, PHASE39_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, rehearsal: row });
 }

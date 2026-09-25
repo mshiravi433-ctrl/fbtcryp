@@ -19,5 +19,5 @@ export function operateFailover({ primary = null, secondary = null, drill = null
 
 export function evaluateFailoverCapacityPlane(input = {}) {
   const row = operateFailover(input);
-  return opsPlane(33, PHASE33_SCHEMA, [row.code || 'FAILOVER_NOT_OPERATIONAL'], { failover: row });
+  return opsPlane(33, PHASE33_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, failover: row });
 }

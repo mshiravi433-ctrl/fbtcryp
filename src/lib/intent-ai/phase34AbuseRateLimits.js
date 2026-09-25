@@ -17,5 +17,5 @@ export function operateAbuseLimits({ limiter = null, enforcement = null } = {}) 
 
 export function evaluateAbuseRateLimitPlane(input = {}) {
   const row = operateAbuseLimits(input);
-  return opsPlane(34, PHASE34_SCHEMA, [row.code || 'ABUSE_LIMITS_NOT_OPERATIONAL'], { limits: row });
+  return opsPlane(34, PHASE34_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, limits: row });
 }

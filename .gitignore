@@ -55,3 +55,6 @@ scripts/.vendor-velocity-entry.generated.mjs
 scripts/.vendor-kamino-entry.generated.mjs
 # the browser-Buffer shim esbuild emits into the vendor bundle
 scripts/.vendor-kamino-buffer-shim.generated.mjs
+
+# Intent OS sandbox registry (local dev only, rebuilt every boot)
+data/

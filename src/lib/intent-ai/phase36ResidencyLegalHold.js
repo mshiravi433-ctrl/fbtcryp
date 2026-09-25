@@ -17,5 +17,5 @@ export function operateResidencyHold({ residency = null, hold = null } = {}) {
 
 export function evaluateResidencyHoldPlane(input = {}) {
   const row = operateResidencyHold(input);
-  return opsPlane(36, PHASE36_SCHEMA, [row.code || 'RESIDENCY_NOT_OPERATIONAL'], { residency: row });
+  return opsPlane(36, PHASE36_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, residency: row });
 }

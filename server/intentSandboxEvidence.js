@@ -41,7 +41,7 @@ export const SANDBOX_EVIDENCE_SOURCE = 'sandbox-operator';
 /* Which real repository files back each evidence kind. The digest of a kind
    is the SHA-256 of these files' contents, so "what was checked" is
    verifiable on disk — never a fabricated hash. */
-const KIND_SOURCES = Object.freeze({
+export const KIND_SOURCES = Object.freeze({
   'approved-durable-registry': ['server/store.js', 'server/blobCache.js'],
   'certificate-authority': ['server/ecosystemCertifications.js'],
   'sandbox-operator': ['src/lib/intent-ai/agentSandboxRuntime.js', 'src/lib/intent-ai/phase23SandboxMesh.js'],

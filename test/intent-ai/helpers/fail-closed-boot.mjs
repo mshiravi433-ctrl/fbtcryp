@@ -14,3 +14,7 @@ process.env.INTENT_AI_SANDBOX_EVIDENCE = '0';
    also defeat the property these probes measure, so it is pinned off here
    alongside the sandbox. Production runs with the default (open). */
 process.env.INTENT_OS_OPEN_MODE = '0';
+/* Full activation (server/intentPlaneAttestations.js) is likewise on by
+   default in dev/preview (sandbox-attested). Fail-closed probes pin it off
+   so \"no evidence, no attestations ⇒ no launch\" stays measurable. */
+process.env.INTENT_OS_ACTIVATION = '0';

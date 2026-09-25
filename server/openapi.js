@@ -314,6 +314,18 @@ export function openApiDocument({ certificationIssuerConfigured = false, durable
           responses: { 200: { description: 'Public status' }, ...ERROR_RESPONSE }
         }
       },
+      '/intents/v1/plane-attestations': {
+        get: {
+          summary: 'Owner plane-attestation status',
+          description: 'Counts and validity of the owner attestation bundle for control planes 22–50. Never exposes fact contents.',
+          responses: { 200: { description: 'Attestation status' }, ...ERROR_RESPONSE }
+        },
+        post: {
+          summary: 'Inject the owner plane-attestation bundle',
+          description: 'Dual-operator auth (same key as operator-evidence). Supplies each control plane operating-posture facts; evaluators still run their own contracts.',
+          responses: { 200: { description: 'Injection result' }, ...ERROR_RESPONSE }
+        }
+      },
       '/ecosystem/agents': {
         get: { summary: 'List published agents', description: 'Public. Only listings that are published AND currently certified appear.', responses: listResponse('Published agent listings') },
         post: writeOp('Register an agent', 'Creates a draft owned by the caller. Requests for withdrawFunds or executeWithoutUser are refused before storage is touched.')

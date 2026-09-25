@@ -33,14 +33,18 @@ export function evaluateAuditDrPlane(input = {}) {
   const audit = operateImmutableAudit(input.audit || {});
   const backup = operateBackupRestore(input.backup || {});
   const blockers = [audit.code, backup.code].filter(Boolean);
+  /* Honest verdict: live exactly when the immutable-audit write and the
+     backup/restore drill both verify. Tamper still fails closed. */
+  const codes = [...new Set(blockers)];
+  const pass = codes.length === 0 && audit.ok === true && backup.ok === true;
   return {
     phase: 28,
     schema: PHASE28_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    blockers: [...new Set(blockers.length ? blockers : ['AUDIT_ROOT_REQUIRED'])],
+    operational: pass,
+    live: pass,
+    ready: pass,
+    blockers: codes,
     audit,
     backup
   };
