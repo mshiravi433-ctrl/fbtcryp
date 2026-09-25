@@ -2777,6 +2777,8 @@
     },
     "outlookLocal": "Indicator read",
     "aiMetaLocal": "Generated on this device straight from the indicators (RSI, MACD, Bollinger, moving averages, volatility). No language model is involved — every sentence comes from a number that was actually computed.",
+    "outlookRules": "Rule-engine read",
+    "aiMetaRules": "No AI model answered, so the server's rule engine wrote this from the indicators. No language model is involved — and it is generic, not a reading of live news.",
     "disclaimerTitle": "What these indicators are — and what they cannot tell you",
     "projectionTitle": "Weekly and monthly outlook",
     "marketAtGlance": "The whole market at a glance",
@@ -3398,6 +3400,7 @@
       "send": "Send",
       "thinking": "Thinking…",
       "clear": "Clear",
+      "degraded": "No AI model answered, so this reply came from FBT's built-in rule engine. It is generic guidance, not an analysis of live data.",
       "noAnswer": "We do not have a reliable answer for that. Please email fbtswap@gmail.com so a person can look at it — include the transaction hash if it is about a trade.",
       "disclaimer": "Answers about FBT Swap come from our own documentation. General answers may use a web search and can be wrong — never share your recovery phrase with anyone, including this assistant.",
       "s": {
@@ -3410,6 +3413,7 @@
         "local": "From our docs",
         "model": "AI · from our docs",
         "web": "AI · web search",
+        "rules": "Rule engine · no live model",
         "none": "No answer found"
       }
     }

@@ -632,6 +632,50 @@ export function OrderCard({ order, locale = 'fa' }) {
   );
 }
 
+/*
+ * ─── «CONFIGURED» IS NOT «WORKING», AND THE PANEL NOW SAYS WHICH ───────────
+ * The reported failure was nine green cards over a fleet where one model could
+ * answer: every key was saved in the host environment, and eight of the nine
+ * providers still refused the call — a retired model id (Groq
+ * llama-3.3-70b-versatile, shut down 2026-08-16; Gemini gemini-2.0-flash), a
+ * paid model on a free tier (Mistral), an empty credit balance (Anthropic,
+ * DeepSeek, AIMLAPI) and a malformed Cloudflare run URL (ours).
+ *
+ * So each card carries the gateway's VERDICT — what happened the last time that
+ * provider was actually called — next to the presence of its key, with the
+ * reason in the user's language and the server's own fix line under it.
+ */
+const VERDICT_COPY = {
+  NEEDS_KEY: { fa: 'نیازمند کلید', en: 'Needs key' },
+  HEALTHY: { fa: 'پاسخ داد', en: 'Answered' },
+  UNTESTED: { fa: 'کلید دارد · آزموده‌نشده', en: 'Key present · untested' },
+  MODEL_UNAVAILABLE: { fa: 'مدل از رده خارج است', en: 'Model retired' },
+  MODEL_TIER: { fa: 'مدل بالاتر از سطح اشتراک', en: 'Model above plan tier' },
+  AUTH: { fa: 'کلید رد شد', en: 'Key rejected' },
+  BILLING: { fa: 'اعتبار حساب تمام شده', en: 'Account has no credit' },
+  PERMISSION: { fa: 'اجازهٔ این درخواست را ندارد', en: 'Not permitted' },
+  QUOTA: { fa: 'سهمیه یا نرخ محدود شده', en: 'Rate limited / quota' },
+  CF_ACCOUNT: { fa: 'شناسهٔ حساب کلادفلر اشتباه است', en: 'Bad Cloudflare account id' },
+  TIMEOUT: { fa: 'در مهلت مقرر پاسخ نداد', en: 'Timed out' },
+  NETWORK: { fa: 'مسیر شبکه به ارائه‌دهنده بسته است', en: 'Network path failed' },
+  EMPTY: { fa: 'پاسخ خالی یا مسدود شد', en: 'Empty / blocked reply' },
+  ANTHROPIC_SAMPLING: { fa: 'پارامترهای نمونه‌گیری رد شد', en: 'Sampling parameters rejected' },
+  ALL_PROVIDERS_FAILED: { fa: 'هیچ ارائه‌دهنده‌ای پاسخ نداد', en: 'No provider answered' },
+  UNKNOWN: { fa: 'خطا', en: 'Error' }
+};
+
+/** `verdict` arrives as 'HEALTHY' | 'UNTESTED' | 'NEEDS_KEY' | 'ERROR:<CODE>'. */
+function verdictParts(verdict, isEn) {
+  const raw = String(verdict || '').trim();
+  const code = raw.startsWith('ERROR:') ? raw.slice(6) : raw;
+  const copy = VERDICT_COPY[code] || VERDICT_COPY.UNKNOWN;
+  return {
+    code,
+    isError: raw.startsWith('ERROR:'),
+    label: isEn ? copy.en : copy.fa
+  };
+}
+
 export function IntelligencePanel({
   open,
   onClose,
@@ -641,7 +685,14 @@ export function IntelligencePanel({
   providersStatus = 'ready',
   providersError = null,
   onRetryProviders = null,
-  onSpawnAgent = null
+  onSpawnAgent = null,
+  /* Fleet summary + live self-test, both produced by the gateway. The parent
+     owns the calls; this file stays presentational. */
+  fleetSummary = null,
+  selfTest = null,
+  selfTestBusy = false,
+  selfTestError = null,
+  onRunSelfTest = null
 }) {
   const [tab, setTab] = useState('models');
   const isEn = locale?.startsWith?.('en');
@@ -665,6 +716,9 @@ export function IntelligencePanel({
    * it, so neither number is ever a bare 0 by omission.
    */
   const fleet = Array.isArray(providers) ? providers : [];
+  const selfTestById = new Map(
+    (selfTest && Array.isArray(selfTest.providers) ? selfTest.providers : []).map((r) => [r.id, r])
+  );
   const activeProviders = fleet.filter((p) => p.configured || p.status === 'ACTIVE');
   const pendingProviders = fleet.filter((p) => !p.configured && p.status !== 'ACTIVE');
   /*
@@ -740,6 +794,54 @@ export function IntelligencePanel({
           {tab === 'models' ? (
             <div className="iaos-intel-grid">
               {/*
+               * The fleet in one line, and the button that proves it.
+               * `fleetSummary` is what the gateway already knows from real
+               * traffic (free to read); the self-test goes and asks every
+               * provider for real, which is why it is a button and not an
+               * effect — it spends a tiny amount of quota per model.
+               */}
+              {fleetSummary || typeof onRunSelfTest === 'function' ? (
+                <div className="iaos-intel-summary" data-testid="intel-fleet-summary">
+                  {fleetSummary ? (
+                    <p dir={isEn ? 'ltr' : 'rtl'} data-testid="intel-fleet-counts">
+                      {isEn
+                        ? `${fleetSummary.configured ?? 0} of ${fleetSummary.total ?? 0} models hold a key · ${fleetSummary.healthy ?? 0} answered · ${fleetSummary.failing ?? 0} refused`
+                        : `${fleetSummary.configured ?? 0} از ${fleetSummary.total ?? 0} مدل کلید دارند · ${fleetSummary.healthy ?? 0} پاسخ داد · ${fleetSummary.failing ?? 0} خطا داد`}
+                      {Array.isArray(fleetSummary.needsKey) && fleetSummary.needsKey.length ? (
+                        <span className="iaos-intel-note" dir="ltr"> · {fleetSummary.needsKey.join(', ')}</span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {typeof onRunSelfTest === 'function' ? (
+                    <button
+                      type="button"
+                      className="iaos-btn"
+                      data-testid="intel-fleet-selftest"
+                      onClick={onRunSelfTest}
+                      disabled={Boolean(selfTestBusy)}
+                    >
+                      {selfTestBusy
+                        ? (isEn ? 'Testing every model…' : 'در حال آزمون هر مدل…')
+                        : (isEn ? 'Run a live test of every model' : 'آزمون زندهٔ همهٔ مدل‌ها')}
+                    </button>
+                  ) : null}
+                  {selfTestError ? (
+                    <p className="iaos-empty" data-testid="intel-fleet-selftest-error">
+                      {isEn
+                        ? `The live test did not complete (${selfTestError}). The verdicts below are from real traffic already served.`
+                        : `آزمون زنده کامل نشد (${selfTestError}). وضعیت‌های پایین از ترافیک واقعیِ پاسخ‌داده‌شده آمده است.`}
+                    </p>
+                  ) : null}
+                  {selfTest?.summary ? (
+                    <p className="iaos-intel-note" data-testid="intel-fleet-selftest-summary" dir={isEn ? 'ltr' : 'rtl'}>
+                      {isEn
+                        ? `Live test: ${selfTest.summary.usableExternalModels ?? 0} external model(s) answered in ${selfTest.durationMs ?? 0} ms.`
+                        : `آزمون زنده: ${selfTest.summary.usableExternalModels ?? 0} مدل بیرونی در ${selfTest.durationMs ?? 0} میلی‌ثانیه پاسخ داد.`}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {/*
                * ─── WHY THE PENDING MODELS ARE RENDERED, NOT HIDDEN ────────
                * The earlier version of this grid hard-coded `configured: true`
                * for five providers, so an install with no keys at all claimed
@@ -754,20 +856,67 @@ export function IntelligencePanel({
                */}
               {fleet.map((p) => {
                 const live = Boolean(p.configured) || p.status === 'ACTIVE';
+                /* A fresh self-test result outranks the remembered verdict: it
+                   is the same question, asked a second ago. */
+                const probe = selfTestById.get(p.id) || null;
+                const verdict = probe
+                  ? (probe.status === 'HEALTHY' ? 'HEALTHY' : probe.status === 'ERROR' ? `ERROR:${probe.reasonCode || 'UNKNOWN'}` : 'NEEDS_KEY')
+                  : (p.verdict || (live ? 'UNTESTED' : 'NEEDS_KEY'));
+                const v = verdictParts(verdict, isEn);
+                const reason = probe?.reasonCode || p.health?.lastError?.reasonCode || null;
+                const detail = probe?.error || p.health?.lastError?.message || null;
+                const fix = probe?.fix || p.health?.lastError?.fix || null;
+                const answeredModel = probe?.model || p.health?.lastSuccess?.model || p.defaultModel;
+                const latency = probe?.latencyMs ?? (p.health?.lastSuccess?.durationMs ?? null);
+                const pillClass = v.isError ? 'iaos-pill-warn' : (verdict === 'HEALTHY' ? 'iaos-pill-ok' : (live ? 'iaos-pill-ok' : 'iaos-pill-warn'));
                 return (
-                  <div key={p.id} className="iaos-intel-card" data-testid={`intel-provider-${p.id}`} data-live={live ? 'true' : 'false'}>
+                  <div
+                    key={p.id}
+                    className="iaos-intel-card"
+                    data-testid={`intel-provider-${p.id}`}
+                    data-live={live ? 'true' : 'false'}
+                    data-verdict={verdict}
+                  >
                     <div className="iaos-intel-card-head">
                       <strong>{p.name}</strong>
-                      <span className={`iaos-pill ${live ? 'iaos-pill-ok' : 'iaos-pill-warn'}`}>
-                        {live ? (isEn ? 'Configured' : 'پیکربندی‌شده') : (isEn ? 'Needs key' : 'نیازمند کلید')}
-                      </span>
+                      <span className={`iaos-pill ${pillClass}`} data-testid={`intel-verdict-${p.id}`}>{v.label}</span>
                     </div>
                     <p>{p.specialty || p.role}</p>
                     <small>{isEn ? 'Cost / Latency:' : 'سطح هزینه / تأخیر:'} {p.costTier || 'standard'}</small>
-                    {p.defaultModel ? <small>{p.defaultModel}</small> : null}
+                    {answeredModel ? (
+                      <small dir="ltr" data-testid={`intel-model-${p.id}`}>
+                        {isEn ? 'Model: ' : 'مدل: '}<code>{answeredModel}</code>
+                        {latency != null ? ` · ${latency}ms` : ''}
+                      </small>
+                    ) : null}
+                    {/* What would be tried next. A retired id is only fatal if
+                        nothing stands behind it — the gateway walks this list. */}
+                    {Array.isArray(p.modelCandidates) && p.modelCandidates.length > 1 ? (
+                      <small className="iaos-intel-note" dir="ltr">
+                        {isEn ? 'Next if it refuses: ' : 'در صورت رد: '}<code>{p.modelCandidates.slice(1).join(' → ')}</code>
+                      </small>
+                    ) : null}
                     {!live && p.envVar ? (
                       <small className="iaos-intel-env" dir="ltr">
                         {isEn ? 'Enable with ' : 'فعال‌سازی با '}<code>{p.envVar}</code>
+                      </small>
+                    ) : null}
+                    {/* The key is present but the stored copy carries quotes or
+                        newlines. The gateway cleans it before sending; saying so
+                        stops the next person pasting it into another tool raw. */}
+                    {live && p.keyDirtyInEnv ? (
+                      <small className="iaos-intel-env" data-testid={`intel-dirty-${p.id}`}>
+                        {isEn
+                          ? `The stored ${p.keySourceEnv || p.envVar} carries stray spaces or quotes — cleaned before use.`
+                          : `مقدار ذخیره‌شدهٔ ${p.keySourceEnv || p.envVar} فاصله یا کوتیشن اضافی دارد — پیش از ارسال تمیز می‌شود.`}
+                      </small>
+                    ) : null}
+                    {v.isError ? (
+                      <small className="iaos-intel-env" data-testid={`intel-reason-${p.id}`}>
+                        <strong>{isEn ? 'Why it refused: ' : 'دلیل رد: '}</strong>
+                        {verdictParts(`ERROR:${reason || 'UNKNOWN'}`, isEn).label}
+                        {fix ? <span dir={isEn ? 'ltr' : 'rtl'}> — {fix}</span> : null}
+                        {detail ? <span className="iaos-intel-note" dir="ltr"> ({String(detail).slice(0, 120)})</span> : null}
                       </small>
                     ) : null}
                   </div>

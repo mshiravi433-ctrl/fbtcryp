@@ -279,18 +279,35 @@ export async function escalateToProviders({
       }), Math.min(left, 8000));
     } catch (err) {
       tried.push({ provider: providerId, status: 'ERROR', error: String(err?.message || err).slice(0, 120) });
-      recordProviderCall(providerId, { ok: false, durationMs: Date.now() - started });
+      /*
+       * Health is one store, owned by the gateway. A gateway failure already
+       * arrived classified and recorded (`err.reasonCode` + `err.fix`); writing
+       * it again from here would count one request twice and replace the real
+       * reason with UNKNOWN — the exact detail /api/v1/ai/gateway/health publishes.
+       * Only a failure the gateway did not classify is recorded here.
+       */
+      if (!err?.reasonCode) {
+        recordProviderCall(providerId, { ok: false, durationMs: Date.now() - started, error: String(err?.message || err).slice(0, 200) });
+      }
       continue;
     }
     if (res === TIMED_OUT) {
       tried.push({ provider: providerId, status: 'TIMEOUT', latencyMs: Date.now() - started });
-      recordProviderCall(providerId, { ok: false, durationMs: Date.now() - started });
+      /*
+       * This one IS ours: the escalation deadline expired while the call was
+       * still in flight, so the gateway has not seen an outcome. Classified as
+       * TIMEOUT (parked 45s) rather than UNKNOWN (60s) because a slow provider
+       * is a transient condition, not an account problem.
+       */
+      recordProviderCall(providerId, { ok: false, durationMs: Date.now() - started, reasonCode: 'TIMEOUT', error: 'escalation deadline exceeded' });
       continue;
     }
     const latencyMs = Date.now() - started;
     const raw = String(res?.text ?? '').trim();
     if (!res || !raw) {
-      recordProviderCall(providerId, { ok: false, durationMs: latencyMs });
+      /* An empty body is a completed call that said nothing — its own class,
+         parked briefly (30s), not lumped in with UNKNOWN. */
+      recordProviderCall(providerId, { ok: false, durationMs: latencyMs, reasonCode: 'EMPTY', error: 'empty response body' });
       tried.push({ provider: providerId, status: 'EMPTY', latencyMs });
       continue;
     }

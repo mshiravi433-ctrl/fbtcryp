@@ -217,7 +217,8 @@ import {
   removeSubscription,
   storeDurable
 } from './store.js';
-import { aiConfigured, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, newsConfigured } from './ai.js';
+import { aiConfigured, aiProvider, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, ignoredAiEnvVarsPresent, newsConfigured } from './ai.js';
+import { getAvailableProviders, getFleetSummary, getProviderHealth, normalizeSecretValue } from './aiGateway.js';
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
 import intentOsUpgrade8Routes from './intentOsUpgrade8.js';
@@ -4444,10 +4445,41 @@ app.get('/api/prices', (req, res) => {
 /* Keys stay here. Responses cached hard so cost stays flat as users grow.    */
 
 const AI_TTL = Number(process.env.AI_CACHE_TTL_MS || 6 * 3600_000); // 6h
+/*
+ * A rule-engine answer is cached for minutes, not hours.
+ *
+ * `routedChat` never throws: when every keyed provider fails it answers from
+ * the internal deterministic engine and marks the result `degraded`. Cached
+ * under the same 6-hour key as a real brief, that fallback outlived the outage
+ * — the providers came back and the app kept serving the rule text it had
+ * pinned, which is indistinguishable from "the AI is still broken". Short TTL
+ * means the next request after recovery is a real model call again, while still
+ * absorbing a retry storm during the outage.
+ */
+const AI_DEGRADED_TTL = Number(process.env.AI_DEGRADED_CACHE_TTL_MS || 5 * 60_000); // 5m
+const aiTtlFor = (value) => (value?.degraded ? AI_DEGRADED_TTL : AI_TTL);
 
-app.get('/api/ai/status', (_req, res) =>
-  res.json({ enabled: aiConfigured(), news: newsConfigured(), persistentCache: blobConfigured() })
-);
+app.get('/api/ai/status', (_req, res) => {
+  const fleet = getFleetSummary();
+  return res.json({
+    enabled: aiConfigured(),
+    news: newsConfigured(),
+    persistentCache: blobConfigured(),
+    /*
+     * `enabled` alone is what made this fleet look fine while it was not: it
+     * only ever meant "at least one key is present". On the live deployment all
+     * nine were present and exactly one provider could answer a call, so every
+     * screen reading `enabled: true` reported a working AI.
+     *
+     * `provider` is the seat that would be asked first right now and `fleet`
+     * says how many of the keyed providers actually answered last time. No live
+     * call is made here — this reads the gateway's health memory, so it stays
+     * free to poll.
+     */
+    provider: aiProvider(),
+    fleet
+  });
+});
 
 /**
  * Live AI diagnosis: actually calls the provider and reports why it failed.
@@ -4482,19 +4514,54 @@ app.get('/api/ai/diagnose', async (req, res) => {
     '';
 
   if (secret && provided !== secret) {
+    /*
+     * Report EVERY provider, not just two. Groq was omitted here once, so a
+     * working Groq setup showed `geminiKeyPresent:false,
+     * openrouterKeyPresent:false` next to `enabled:true` — which reads as
+     * "it works but nothing is configured" and sends you looking for a problem
+     * that does not exist.
+     *
+     * And report the VERDICT, not only the presence. The bug this endpoint
+     * existed to catch had already moved: every key was present, the panel said
+     * «configured» nine times, and eight of the nine still could not complete a
+     * call (retired model ids, a paid model on a free tier, an empty credit
+     * balance, a malformed Cloudflare URL). Presence is half the answer; the
+     * last real call's classification is the other half. Both are free to read
+     * — no live call is made without the secret.
+     */
+    const providers = getAvailableProviders().filter((pp) => pp.id !== 'internal');
     return res.json({
       ok: aiConfigured(),
-      /*
-       * Report EVERY provider, not just two. Groq was omitted here, so a
-       * working Groq setup showed `geminiKeyPresent:false,
-       * openrouterKeyPresent:false` next to `enabled:true` — which reads as
-       * "it works but nothing is configured" and sends you looking for a
-       * problem that does not exist.
-       */
-      groqKeyPresent: Boolean(process.env.GROQ_API_KEY),
-      geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
-      openrouterKeyPresent: Boolean(process.env.OPENROUTER_API_KEY),
       enabled: aiConfigured(),
+      groqKeyPresent: Boolean(normalizeSecretValue(process.env.GROQ_API_KEY)),
+      geminiKeyPresent: Boolean(normalizeSecretValue(process.env.GEMINI_API_KEY)),
+      openrouterKeyPresent: Boolean(normalizeSecretValue(process.env.OPENROUTER_API_KEY)),
+      provider: aiProvider(),
+      fleet: getFleetSummary(),
+      /* Names and booleans only. A key value — or a prefix of one — never
+         leaves the process. */
+      providers: providers.map((pp) => ({
+        id: pp.id,
+        name: pp.name,
+        keyPresent: pp.configured,
+        keyEnvVar: pp.keySourceEnv || pp.envVar,
+        acceptedEnvVars: pp.acceptedEnvVars,
+        keyDirtyInEnv: pp.keyDirtyInEnv,
+        model: pp.defaultModel,
+        modelCandidates: pp.modelCandidates,
+        verdict: pp.verdict,
+        health: pp.health?.availability || (pp.configured ? 'UNKNOWN' : 'NEEDS_KEY'),
+        reasonCode: pp.health?.lastError?.reasonCode || null,
+        lastError: pp.health?.lastError?.message || null,
+        fix: pp.health?.lastError?.fix || null,
+        circuitOpen: Boolean(pp.health?.circuitOpen),
+        lastSuccessAt: pp.health?.lastSuccess?.at || null
+      })),
+      health: getProviderHealth(),
+      /* Keys that look like AI keys but this build does not read. An operator
+         who set one of these is otherwise left staring at a dashboard that
+         shows it as saved while nothing ever picks it up. */
+      ignoredEnvVarsPresent: ignoredAiEnvVarsPresent(),
       note: 'Append ?key=<CRON_SECRET> to run a live provider test.'
     });
   }
@@ -4521,9 +4588,13 @@ app.post('/api/ai/outlook', async (req, res) => {
       key,
       AI_TTL,
       () => generateOutlook({ symbol, name, price, indicators, change24h, change7d, lang }),
-      memoryStore
+      memoryStore,
+      { ttlForValue: aiTtlFor }
     );
     res.set('x-cache', cached ? `HIT:${tier}` : 'MISS');
+    /* Which brain produced this, on the wire: `curl -I` now tells an operator
+       whether the outlook came from a model or from the rule engine. */
+    res.set('x-ai-engine', value?.degraded ? 'internal-rules' : (value?.provider || 'unknown'));
     return res.json(value);
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
@@ -4543,9 +4614,11 @@ app.post('/api/ai/brief', async (req, res) => {
       key,
       AI_TTL,
       () => generateMarketBrief({ global: g, top, lang }),
-      memoryStore
+      memoryStore,
+      { ttlForValue: aiTtlFor }
     );
     res.set('x-cache', cached ? `HIT:${tier}` : 'MISS');
+    res.set('x-ai-engine', value?.degraded ? 'internal-rules' : (value?.provider || 'unknown'));
     return res.json(value);
   } catch (err) {
     return res.status(502).json({ error: 'AI_FAILED', detail: String(err.message).slice(0, 200) });
@@ -6089,6 +6162,13 @@ app.post('/api/ai/ask', async (req, res) => {
       context: Array.isArray(context) ? context : [],
       lang: typeof lang === 'string' ? lang.slice(0, 5) : 'fa'
     });
+    /*
+     * The client cannot tell a model answer from a rule-engine answer unless
+     * the server says so. `source` is now 'model' / 'model-grounded' /
+     * 'internal-rules', and the header carries the same verdict for anything
+     * reading the wire instead of the body.
+     */
+    res.set('x-ai-engine', out?.degraded ? 'internal-rules' : (out?.provider || 'unknown'));
     return res.json(out);
   } catch (err) {
     const msg = String(err.message || '');

@@ -221,7 +221,7 @@ import {
 } from '../lib/intent-ai/os/agentFactory.js';
 import { getYields } from '../lib/yields.js';
 import { loadOrders } from '../lib/orders.js';
-import { fetchAiProviders, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
+import { fetchAiProviders, fetchGatewaySelfTest, fetchLearningStats, fetchAiTools } from '../lib/aiGatewayClient.js';
 import {
   OperationsPanel,
   HistoryPanel,
@@ -933,6 +933,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [serverReachable, setServerReachable] = useState(null);
   const [activeContext, setActiveContext] = useState(null);
   const [aiProviders, setAiProviders] = useState([]);
+  /*
+   * The fleet summary and the live self-test.
+   *
+   * `configured: true` on nine cards is what the panel used to show while eight
+   * of those nine could not complete a single call — every key was saved, and
+   * the models behind them were retired, over-tier or out of credit. The summary
+   * says how many keys exist AND how many answered; the self-test is the button
+   * that goes and asks each provider for real, then prints the reason and the
+   * fix per model. Neither number is derived here — both arrive from the
+   * gateway.
+   */
+  const [aiFleetSummary, setAiFleetSummary] = useState(null);
+  const [aiSelfTest, setAiSelfTest] = useState(null);
+  const [aiSelfTestBusy, setAiSelfTestBusy] = useState(false);
+  const [aiSelfTestError, setAiSelfTestError] = useState(null);
   /*
    * The fleet is read over the network, so "no rows yet" has two very
    * different meanings and the panel has to be able to tell them apart:
@@ -4312,6 +4327,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     const res = await fetchAiProviders().catch(() => null);
     if (res?.ok && Array.isArray(res.providers)) {
       setAiProviders(res.providers);
+      setAiFleetSummary(res.summary || null);
       setProvidersStatus('ready');
       setProvidersError(null);
       return;
@@ -4326,6 +4342,31 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             : (res?.error || 'NETWORK_UNAVAILABLE')
     );
   }, []);
+
+  /*
+   * The live probe. It costs one tiny call per configured provider, so it is a
+   * button, never an automatic effect — and it is the only place in the app that
+   * can tell the operator WHY a model with a saved key is not answering.
+   */
+  const runAiSelfTest = useCallback(async () => {
+    setAiSelfTestBusy(true);
+    setAiSelfTestError(null);
+    const res = await fetchGatewaySelfTest().catch(() => null);
+    setAiSelfTestBusy(false);
+    if (res?.ok && Array.isArray(res.providers)) {
+      setAiSelfTest(res);
+      /* The self-test just proved who can answer — refresh the fleet so the
+         cards and the summary show the verdict rather than the older guess. */
+      void loadAiProviders();
+      return;
+    }
+    setAiSelfTestError(
+      res?.error === 'TIMEOUT' ? 'TIMEOUT'
+        : res?.status === 429 ? 'THROTTLED'
+          : res?.status ? `HTTP_${res.status}`
+            : (res?.error || 'NETWORK_UNAVAILABLE')
+    );
+  }, [loadAiProviders]);
 
   const openPanel = useCallback((name) => {
     setPanel(name);
@@ -6093,6 +6134,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         providers={aiProviders}
         providersStatus={providersStatus}
         providersError={providersError}
+        fleetSummary={aiFleetSummary}
+        selfTest={aiSelfTest}
+        selfTestBusy={aiSelfTestBusy}
+        selfTestError={aiSelfTestError}
+        onRunSelfTest={() => { void runAiSelfTest(); }}
         onRetryProviders={() => { void loadAiProviders(); }}
         learningStats={learningStats}
         locale={locale}

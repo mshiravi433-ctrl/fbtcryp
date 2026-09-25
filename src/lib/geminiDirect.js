@@ -29,13 +29,75 @@ import { feePercentString } from './feeBps';
 import { SUPPORT_EMAIL } from './contact';
 
 const KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || '';
-const MODEL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_MODEL) || 'gemini-2.0-flash';
+
+/*
+ * ─── ONE MODEL ID HERE WAS A SINGLE POINT OF FAILURE ───────────────────────
+ * This path is what the packaged Android app uses when it talks to Gemini
+ * directly, and it was pinned to `gemini-2.0-flash`. Google shut that model
+ * down, so the API now answers 404 "This model … is no longer available" and
+ * every direct-AI feature in the APK went dark while the key stayed perfectly
+ * valid. Same failure the server fleet had.
+ *
+ * So the client does what the gateway does: an ordered candidate list, a
+ * per-model retry on a model-level 404/403, and a memory of which id actually
+ * answered so the next call does not re-pay for the dead ones.
+ */
+const RETIRED = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-pro'];
+const ENV_MODEL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_MODEL) || '';
+const MODEL_CANDIDATES = [...new Set(
+  [ENV_MODEL, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite']
+    .map((m) => String(m || '').trim())
+    .filter(Boolean)
+    /* An explicit VITE_GEMINI_MODEL is respected even if it is on the retired
+       list — but it is never an AUTOMATIC choice. */
+    .filter((m, i) => i === 0 || !RETIRED.includes(m))
+)];
+let ACTIVE_MODEL = MODEL_CANDIDATES[0] || 'gemini-2.5-flash';
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export const directGeminiAvailable = () => Boolean(KEY);
+/** The model id that actually answered last (what the UI attributes the reply to). */
+export const directGeminiModel = () => ACTIVE_MODEL;
 
 const TIMEOUT = 45000;
+
+const isModelError = (status, body) =>
+  status === 404 || (status === 400 && /models?\/|not found|no longer available/i.test(body)) ||
+  (status === 403 && /not available|permission denied to (access|use) (the )?model/i.test(body));
+
+async function callOne(model, { system, user, temperature, maxTokens, json, signal }) {
+  /* Key in a header, not in the query string: the same credential, but it stays
+     out of every access log and out of any error message that quotes the URL. */
+  const res = await fetch(`${BASE}/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KEY },
+    signal,
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: {
+        temperature,
+        maxOutputTokens: maxTokens,
+        ...(json ? { responseMimeType: 'application/json' } : {})
+      }
+    })
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    // Surface the common misconfigurations distinctly so the UI can explain
+    // them rather than showing a generic failure.
+    if (res.status === 400 && /API_KEY_INVALID/i.test(body)) throw Object.assign(new Error('KEY_INVALID'), { status: 400 });
+    if (res.status === 403 && !isModelError(403, body)) throw Object.assign(new Error('KEY_RESTRICTED'), { status: 403 });
+    if (res.status === 429) throw Object.assign(new Error('QUOTA'), { status: 429 });
+    throw Object.assign(new Error(`HTTP_${res.status}`), { status: res.status, modelError: isModelError(res.status, body), body });
+  }
+
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
+  if (!text) throw Object.assign(new Error(data?.promptFeedback?.blockReason ? 'BLOCKED' : 'EMPTY'), { status: 200 });
+  return text;
+}
 
 async function call({ system, user, temperature = 0.3, maxTokens = 700, json = true }) {
   if (!KEY) throw new Error('NO_KEY');
@@ -44,35 +106,22 @@ async function call({ system, user, temperature = 0.3, maxTokens = 700, json = t
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
 
   try {
-    const res = await fetch(`${BASE}/${MODEL}:generateContent?key=${encodeURIComponent(KEY)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: ctrl.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: {
-          temperature,
-          maxOutputTokens: maxTokens,
-          ...(json ? { responseMimeType: 'application/json' } : {})
-        }
-      })
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      // Surface the common misconfigurations distinctly so the UI can explain
-      // them rather than showing a generic failure.
-      if (res.status === 400 && /API_KEY_INVALID/i.test(body)) throw new Error('KEY_INVALID');
-      if (res.status === 403) throw new Error('KEY_RESTRICTED');
-      if (res.status === 429) throw new Error('QUOTA');
-      throw new Error(`HTTP_${res.status}`);
+    /* The model that last answered goes first, so a healthy fleet pays one
+       round-trip and only a stale id triggers the walk down the list. */
+    const order = [ACTIVE_MODEL, ...MODEL_CANDIDATES.filter((m) => m !== ACTIVE_MODEL)];
+    let lastErr = null;
+    for (const model of order) {
+      try {
+        const text = await callOne(model, { system, user, temperature, maxTokens, json, signal: ctrl.signal });
+        ACTIVE_MODEL = model;
+        return text;
+      } catch (err) {
+        lastErr = err;
+        // A dead model id is worth one more try; a dead key is not.
+        if (!err?.modelError) throw err;
+      }
     }
-
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
-    if (!text) throw new Error(data?.promptFeedback?.blockReason ? 'BLOCKED' : 'EMPTY');
-    return text;
+    throw lastErr || new Error('NO_MODEL_AVAILABLE');
   } finally {
     clearTimeout(timer);
   }
@@ -141,7 +190,7 @@ export async function directOutlook({ symbol, name, price, indicators = {}, chan
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 3).map((r) => String(r).slice(0, 160)) : [],
     invalidation: String(parsed.invalidation ?? '').slice(0, 240),
     sources: [],
-    model: MODEL,
+    model: ACTIVE_MODEL,
     direct: true,
     generatedAt: Date.now()
   };
@@ -177,7 +226,7 @@ export async function directBrief({ global, top, lang }) {
     drivers: Array.isArray(parsed.drivers) ? parsed.drivers.slice(0, 3) : [],
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 3) : [],
     sources: [],
-    model: MODEL,
+    model: ACTIVE_MODEL,
     direct: true,
     generatedAt: Date.now()
   };
@@ -212,5 +261,5 @@ export async function directFaq({ question, lang }) {
     maxTokens: 400,
     json: false
   });
-  return { answer: text.trim(), model: MODEL, direct: true, generatedAt: Date.now() };
+  return { answer: text.trim(), model: ACTIVE_MODEL, direct: true, generatedAt: Date.now() };
 }

@@ -241,8 +241,22 @@ export async function blobSet(key, value, ttlMs) {
  *
  * `memo` is the Map-based cache from cache.js so a warm function still avoids
  * the network round-trip entirely.
+ *
+ * `opts.ttlForValue(value)` lets a caller shorten the TTL for a specific
+ * result. The AI brief needs it: when every keyed provider fails, the gateway
+ * answers from the deterministic rule engine rather than throwing, and that
+ * fallback used to be cached under the same 6-hour key as a real model brief.
+ * The visible effect was a rule-engine «تحلیل هوش مصنوعی» pinned for six hours
+ * after a provider had already recovered. A degraded value is now kept just
+ * long enough to stop a retry storm, then re-attempted.
  */
-export async function withPersistentCache(key, ttlMs, producer, memo) {
+export async function withPersistentCache(key, ttlMs, producer, memo, opts = {}) {
+  const ttlFor = (value) => {
+    if (typeof opts.ttlForValue !== 'function') return ttlMs;
+    const t = Number(opts.ttlForValue(value));
+    return Number.isFinite(t) && t > 0 ? Math.min(t, ttlMs) : ttlMs;
+  };
+
   // 1. hot path — same warm function instance
   const local = memo?.get(key);
   if (local && Date.now() < local.expires) {
@@ -252,14 +266,15 @@ export async function withPersistentCache(key, ttlMs, producer, memo) {
   // 2. survives cold starts
   const stored = await blobGet(key);
   if (stored) {
-    memo?.set(key, { value: stored, expires: Date.now() + ttlMs, at: Date.now() });
+    memo?.set(key, { value: stored, expires: Date.now() + ttlFor(stored), at: Date.now() });
     return { value: stored, cached: true, tier: upstashConfigured() ? 'upstash' : 'blob' };
   }
 
   // 3. actually generate — the expensive path we're trying to avoid
   const value = await producer();
-  memo?.set(key, { value, expires: Date.now() + ttlMs, at: Date.now() });
-  blobSet(key, value, ttlMs).catch(() => {});
+  const ttl = ttlFor(value);
+  memo?.set(key, { value, expires: Date.now() + ttl, at: Date.now() });
+  blobSet(key, value, ttl).catch(() => {});
 
-  return { value, cached: false, tier: 'generated' };
+  return { value, cached: false, tier: 'generated', ttlMs: ttl };
 }

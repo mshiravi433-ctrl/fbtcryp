@@ -36,7 +36,11 @@ import {
   isProviderConfigured,
   getActiveProviderIds,
   getPreferredProvidersForTask,
-  sanitizePrompt
+  sanitizePrompt,
+  recordProviderCall as recordGatewayProviderCall,
+  isProviderHealthy as gatewayProviderHealthy,
+  getProviderHealth as gatewayProviderHealth,
+  resetProviderHealth as resetGatewayProviderHealth
 } from './aiGateway.js';
 import { runMultiAiDebate } from './aiConsensus.js';
 import { researchWeb, analyzeWithSources } from './aiWebResearch.js';
@@ -76,53 +80,27 @@ export function resetFleetCursor() { fleetBaseCursor = 0; }
 /*  PROVIDER HEALTH & CIRCUIT BREAKER (§46, §48)                               */
 /* -------------------------------------------------------------------------- */
 
-const HEALTH_WINDOW = 50;
-const healthState = new Map(); // providerId -> { calls: [], openUntil, consecutiveFailures }
-
-export function recordProviderCall(providerId, { ok = true, durationMs = 0, qualityScore = null } = {}) {
-  if (!providerId) return;
-  let st = healthState.get(providerId);
-  if (!st) {
-    st = { calls: [], openUntil: 0, consecutiveFailures: 0 };
-    healthState.set(providerId, st);
-  }
-  st.calls.push({ ok: Boolean(ok), durationMs: Number(durationMs) || 0, qualityScore: qualityScore == null ? null : Number(qualityScore), at: Date.now() });
-  if (st.calls.length > HEALTH_WINDOW) st.calls.shift();
-  st.consecutiveFailures = ok ? 0 : st.consecutiveFailures + 1;
-  /* Circuit breaker: 4 consecutive failures opens the circuit for 60s so a
-     dying provider cannot drag every request into its timeout. */
-  if (st.consecutiveFailures >= 4) st.openUntil = Date.now() + 60_000;
-}
-
-export function isProviderHealthy(providerId) {
-  const st = healthState.get(providerId);
-  if (!st) return true;
-  return Date.now() >= st.openUntil;
-}
-
-export function getProviderHealth() {
-  const out = {};
-  for (const [providerId, st] of healthState.entries()) {
-    const calls = st.calls;
-    const total = calls.length;
-    const okCount = calls.filter((c) => c.ok).length;
-    const avgLatency = total ? Math.round(calls.reduce((a, c) => a + c.durationMs, 0) / total) : 0;
-    const quality = calls.filter((c) => c.qualityScore != null);
-    out[providerId] = {
-      calls: total,
-      successRate: total ? Number((okCount / total).toFixed(2)) : 1,
-      errorRate: total ? Number(((total - okCount) / total).toFixed(2)) : 0,
-      avgLatencyMs: avgLatency,
-      qualityScore: quality.length ? Math.round(quality.reduce((a, c) => a + c.qualityScore, 0) / quality.length) : null,
-      circuitOpen: Date.now() < st.openUntil,
-      availability: Date.now() < st.openUntil ? 'DEGRADED' : 'AVAILABLE'
-    };
-  }
-  return out;
-}
+/*
+ * ONE STORE, NOT TWO. This module used to keep its own `healthState` Map beside
+ * the gateway's, which meant the fleet had two opinions about the same
+ * provider: the collaboration engine could park groq while `routedChat` — the
+ * path /api/ai/ask, /brief and /outlook actually take — kept paying for its
+ * failures on every request, and `/api/v1/ai/gateway/health` reported a circuit
+ * the collaboration layer had never heard of (and the reverse). The gateway now
+ * owns health because every caller goes through it; these are re-exports so the
+ * existing call sites and probes keep working against the same truth.
+ *
+ * The gateway's record is also the richer one: it carries the classified
+ * `reasonCode`, the operator `fix`, and the model that actually answered — so
+ * `aiQuestionIntel`'s `providerHealth` and the escalation ladder now publish the
+ * same numbers the health endpoint does.
+ */
+export const recordProviderCall = recordGatewayProviderCall;
+export const isProviderHealthy = gatewayProviderHealthy;
+export const getProviderHealth = gatewayProviderHealth;
 
 export function resetProviderHealth() {
-  healthState.clear();
+  resetGatewayProviderHealth();
 }
 
 /**
@@ -311,7 +289,14 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         json: true
       });
       const parsed = parseJsonSafe(res.text) || { answer: String(res.text || '').slice(0, 900), claims: [], uncertainty: '' };
-      recordProviderCall(providerId, { ok: true, durationMs: res.durationMs || Date.now() - startedAt, qualityScore: null });
+      /*
+       * Only record what the gateway did not. A call through `executeProviderChat`
+       * is recorded THERE, with the model that answered; recording it again here
+       * would inflate `calls` and average the latency of one request twice. An
+       * injected executor (the probes' fake fleet) is the case with no `engine`
+       * field, and that one is ours to record.
+       */
+      if (!res?.engine) recordProviderCall(providerId, { ok: true, durationMs: res.durationMs || Date.now() - startedAt, qualityScore: null });
       return {
         role,
         provider: providerId,
@@ -327,7 +312,18 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
         ok: true
       };
     } catch (err) {
-      recordProviderCall(providerId, { ok: false, durationMs: Date.now() - startedAt });
+      /*
+       * A gateway failure arrives already classified and already recorded
+       * (`err.reasonCode`, `err.fix`): BILLING, MODEL_UNAVAILABLE, AUTH, …
+       * Recording it a second time here would double the consecutive-failure
+       * count AND overwrite the honest reason with UNKNOWN — destroying the very
+       * detail `/api/v1/ai/gateway/health` exists to publish. So only an
+       * unclassified failure (an injected executor, a bug in this module) is
+       * recorded here.
+       */
+      if (!err?.reasonCode) {
+        recordProviderCall(providerId, { ok: false, durationMs: Date.now() - startedAt, error: String(err?.message || err).slice(0, 200) });
+      }
       // fall through to next candidate (§47)
     }
   }

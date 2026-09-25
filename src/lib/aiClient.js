@@ -129,10 +129,28 @@ async function viaServerOr(directFn, path, payload) {
  * Callers pass `analysis` and `coin` alongside the model payload so the local
  * tier has what it needs; the remote tiers simply ignore the extras.
  */
+/*
+ * The server marks a reply `degraded` when every keyed provider refused and its
+ * own rule engine answered instead. That text must not travel under
+ * `source: 'model'`: the badge on the signals screen would claim a language
+ * model wrote a template. `source: 'rules'` is the third honest label, beside
+ * 'model' (a model answered) and 'local' (this device wrote it).
+ */
+const labelEngine = (res) => {
+  const degraded = Boolean(res?.degraded) || res?.engine === 'internal-rules';
+  return {
+    ...res,
+    source: degraded ? 'rules' : (res.source ?? 'model'),
+    degraded,
+    provider: degraded ? null : (res.provider ?? null),
+    model: degraded ? null : (res.model ?? null)
+  };
+};
+
 export async function getOutlook(payload) {
   try {
     const res = await viaServerOr(directOutlook, '/ai/outlook', payload);
-    if (res?.summary) return { ...res, source: res.source ?? 'model' };
+    if (res?.summary) return labelEngine(res);
   } catch {
     /* fall through to the local narrator */
   }
@@ -147,7 +165,7 @@ export async function getOutlook(payload) {
 export async function getMarketBrief(payload) {
   try {
     const res = await viaServerOr(directBrief, '/ai/brief', payload);
-    if (res?.summary) return { ...res, source: res.source ?? 'model' };
+    if (res?.summary) return labelEngine(res);
   } catch {
     /* fall through */
   }

@@ -15,6 +15,15 @@ import {
   PROVIDER_CONFIGS,
   isProviderConfigured,
   getActiveProviderIds,
+  getAvailableProviders,
+  getFleetSummary,
+  getModelCandidates,
+  getProviderKeyInfo,
+  getProviderHealth,
+  normalizeSecretValue,
+  classifyAiError,
+  orderByHealth,
+  getPreferredProvidersForTask,
   anyAiConfigured,
   routedChat,
   executeProviderChat,
@@ -22,52 +31,107 @@ import {
 } from './aiGateway.js';
 
 const JINA_SEARCH_URL = 'https://s.jina.ai/';
-const JINA_KEY = process.env.JINA_API_KEY || '';
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 45000);
 
-const GROQ_KEY = process.env.GROQ_API_KEY || '';
-const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
-const GEMINI_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '';
-const MODEL = process.env.AI_MODEL || 'openai/gpt-4o-mini';
+/*
+ * ─── WHY THERE ARE NO PROVIDER KEY CONSTANTS IN THIS FILE ANY MORE ────────
+ * This module used to snapshot `GROQ_KEY`, `GEMINI_KEY`, `OPENROUTER_KEY` and
+ * three model names into module-level constants at import time, while the
+ * gateway read the same variables live. Two consequences, both reported in
+ * production:
+ *
+ *   1. DRIFT — GROQ_MODEL defaulted to `openai/gpt-oss-20b` here and to
+ *      `llama-3.3-70b-versatile` in the gateway. The value that reached the
+ *      wire was the gateway's, i.e. a model Groq retired on 2026-08-16, so
+ *      every Groq call 404'd while this file "knew" the right model.
+ *   2. STALENESS — a constant read at import cannot see an env var that the
+ *      host injects later, and it cannot be normalized (quotes, newlines,
+ *      `Bearer ` prefixes, zero-width characters all survive a dashboard
+ *      paste and turn a present key into a 401).
+ *
+ * Everything now goes through the gateway's live, normalized, alias-aware
+ * readers. One source of truth for keys and for model ids.
+ */
+const jinaKey = () => normalizeSecretValue(process.env.JINA_API_KEY || process.env.JINA_KEY || '');
 
 /** Check if any external AI provider is configured */
 export const aiConfigured = () => anyAiConfigured();
 
-/** Active primary provider identifier */
+/**
+ * Active primary provider identifier.
+ *
+ * Not "the first key that exists" — that is how a fleet with eight keys and one
+ * working provider kept reporting a provider that could not answer. This is the
+ * seat that would ACTUALLY be asked first right now: the task-preference order,
+ * re-sorted by live health (proven-good first, circuit-open last).
+ */
 export const aiProvider = () => {
-  if (GROQ_KEY) return 'groq';
-  if (GEMINI_KEY) return 'gemini';
-  if (OPENROUTER_KEY) return 'openrouter';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
-  if (process.env.MISTRAL_API_KEY) return 'mistral';
-  if (process.env.AIMLAPI_KEY) return 'aimlapi';
-  if (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID) return 'workersai';
-  return null;
+  const configured = getPreferredProvidersForTask('general', { configuredOnly: true }).filter((id) => id !== 'internal');
+  if (!configured.length) return null;
+  return orderByHealth(configured)[0] || null;
 };
+
+/** Environment variable names that LOOK like AI keys but are not read by this
+ *  build, so an operator who set them gets told instead of wondering. Grok
+ *  (xAI), OpenAI and Perplexity were de-registered from the fleet; their duties
+ *  are carried by OpenRouter / Anthropic / DeepSeek / AIMLAPI. */
+export const IGNORED_AI_ENV_VARS = Object.freeze([
+  'GROK_API_KEY',
+  'XAI_API_KEY',
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'VITE_GROQ_API_KEY',
+  'VITE_OPENROUTER_API_KEY',
+  'VITE_ANTHROPIC_API_KEY'
+]);
+
+/** Which of the ignored names are actually set in this environment. */
+export function ignoredAiEnvVarsPresent() {
+  return IGNORED_AI_ENV_VARS.filter((name) => normalizeSecretValue(process.env[name]).length > 0);
+}
 
 /**
  * Diagnostic self-test for configured AI providers.
+ *
+ * Two honesty rules this function did not used to follow:
+ *
+ *   1. It reported EVERY provider it knew about, not three. A working Groq
+ *      deployment used to see `geminiKeyPresent:false, openrouterKeyPresent:false`
+ *      next to `enabled:true`.
+ *   2. It reported `ok:true` whenever `routedChat` returned — but routedChat
+ *      NEVER throws: when all eight keyed providers fail it quietly answers from
+ *      the internal rule engine. So the diagnostic said "the AI works" on a
+ *      deployment where not one external model could answer. `ok` is now true
+ *      only when a real model answered, and the rule-engine case is named.
  */
 export async function aiSelfTest() {
-  const activeIds = getActiveProviderIds().filter((id) => id !== 'internal');
+  const providers = getAvailableProviders().filter((p) => p.id !== 'internal');
+  const summary = getFleetSummary();
+
   const out = {
-    groqKeyPresent: Boolean(GROQ_KEY),
-    geminiKeyPresent: Boolean(GEMINI_KEY),
-    openrouterKeyPresent: Boolean(OPENROUTER_KEY),
-    anthropicKeyPresent: Boolean(process.env.ANTHROPIC_API_KEY),
-    deepseekKeyPresent: Boolean(process.env.DEEPSEEK_API_KEY),
-    mistralKeyPresent: Boolean(process.env.MISTRAL_API_KEY),
-    aimlapiKeyPresent: Boolean(process.env.AIMLAPI_KEY),
-    workersaiKeyPresent: Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID),
-    jinaKeyPresent: Boolean(JINA_KEY),
+    schema: 'fbt.ai-selftest.v2',
+    /* Presence + live verdict per provider. Names and booleans only — never a
+       key value, never a prefix of one. */
+    providers: providers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      keyPresent: p.configured,
+      keyEnvVar: p.keySourceEnv || p.envVar,
+      acceptedEnvVars: p.acceptedEnvVars,
+      keyDirtyInEnv: p.keyDirtyInEnv,
+      model: p.defaultModel,
+      modelCandidates: p.modelCandidates,
+      verdict: p.verdict,
+      health: p.health?.availability || (p.configured ? 'UNKNOWN' : 'NEEDS_KEY'),
+      reasonCode: p.health?.lastError?.reasonCode || null,
+      lastError: p.health?.lastError?.message || null,
+      fix: p.health?.lastError?.fix || null,
+      lastSuccessAt: p.health?.lastSuccess?.at || null
+    })),
+    summary,
     provider: aiProvider(),
-    activeProviders: activeIds,
-    groqModel: GROQ_MODEL,
-    geminiModel: GEMINI_MODEL,
-    openrouterModel: MODEL
+    activeProviders: getActiveProviderIds().filter((id) => id !== 'internal'),
+    ignoredEnvVarsPresent: ignoredAiEnvVarsPresent()
   };
 
   if (!aiConfigured()) {
@@ -89,42 +153,41 @@ export async function aiSelfTest() {
       maxTokens: 12,
       json: false
     });
-    out.ok = true;
     out.model = res.model;
     out.provider = res.provider;
+    out.providerName = res.providerName;
+    out.engine = res.engine;
     out.latencyMs = Date.now() - started;
     out.sample = String(res.text).trim().slice(0, 40);
+    out.failoverTrail = res.failoverTrail || [];
+
+    /* A rule-engine answer is NOT a passing AI self-test. */
+    if (res.degraded || res.provider === 'internal') {
+      out.ok = false;
+      out.reason = 'ALL_PROVIDERS_FAILED';
+      out.degraded = true;
+      out.fix =
+        'Every keyed provider was called and none answered, so the internal rule engine replied. ' +
+        'Read `failoverTrail` for the per-provider reason — the usual four are a retired model id, ' +
+        'a paid model on a free tier, an empty credit balance, and a key pasted with stray characters.';
+      return out;
+    }
+
+    out.ok = true;
+    out.degraded = false;
     return out;
   } catch (err) {
-    const msg = String(err.message || err);
+    const cls = classifyAiError(err);
     out.ok = false;
     out.latencyMs = Date.now() - started;
-    out.error = msg.slice(0, 300);
-
-    if (/API_KEY_INVALID|API key not valid|invalid_api_key|^401/i.test(msg)) {
-      out.reason = 'KEY_INVALID';
-      out.fix = 'The API key is wrong, was revoked, or has stray characters. Generate a fresh key and paste it with no quotes or spaces.';
-    } else if (/^403|PERMISSION_DENIED|SERVICE_DISABLED/i.test(msg)) {
-      out.reason = 'KEY_RESTRICTED';
-      out.fix = 'The key is valid but not allowed to make this call. Check permissions or IP restrictions in provider console.';
-    } else if (/^429|RESOURCE_EXHAUSTED|quota/i.test(msg)) {
-      out.reason = 'QUOTA';
-      out.fix = 'Rate limit or free-tier quota exhausted. Wait or enable billing.';
-    } else if (/model_not_found|does not exist|decommissioned/i.test(msg)) {
-      out.reason = 'MODEL_NOT_FOUND';
-      out.fix = 'The configured model is not available. Check provider model list.';
-    } else if (/abort|timeout/i.test(msg)) {
-      out.reason = 'TIMEOUT';
-      out.fix = 'The provider did not answer in time.';
-    } else {
-      out.reason = 'UNKNOWN';
-      out.fix = 'See error details.';
-    }
+    out.error = String(err.message || err).slice(0, 300);
+    out.reason = cls.kind;
+    out.fix = cls.fix;
     return out;
   }
 }
 
-export const newsConfigured = () => Boolean(JINA_KEY);
+export const newsConfigured = () => Boolean(jinaKey());
 
 async function req(url, options, timeout = TIMEOUT_MS) {
   const ctrl = new AbortController();
@@ -148,14 +211,15 @@ async function req(url, options, timeout = TIMEOUT_MS) {
 /* -------------------------------------------------------------------------- */
 
 export async function fetchNews(query, limit = 6) {
-  if (!JINA_KEY) return [];
+  const key = jinaKey();
+  if (!key) return [];
   try {
     const raw = await req(
       `${JINA_SEARCH_URL}?q=${encodeURIComponent(query)}`,
       {
         headers: {
           Accept: 'application/json',
-          Authorization: `Bearer ${JINA_KEY}`,
+          Authorization: `Bearer ${key}`,
           'X-Engine': 'direct',
           'X-Respond-With': 'no-content'
         }
@@ -205,7 +269,7 @@ async function ddgSearch(query, limit = 4) {
 }
 
 export async function webSearch(query, limit = 4) {
-  if (JINA_KEY) {
+  if (jinaKey()) {
     const viaJina = await fetchNews(query, limit);
     if (viaJina.length) return viaJina;
   }
@@ -297,9 +361,27 @@ export async function chat(opts) {
     user: opts.user || '',
     temperature: opts.temperature ?? 0.3,
     maxTokens: opts.maxTokens ?? 700,
-    json: opts.json ?? true
+    json: opts.json ?? true,
+    preferredProvider: opts.preferredProvider || null
   });
-  return { text: res.text, model: res.model, provider: res.provider };
+  /*
+   * The whole gateway result travels, not just the text. Callers that render
+   * this answer need to know WHICH brain produced it: `engine: 'internal-rules'`
+   * with `degraded: true` means no external model answered, and showing that
+   * text under a «هوش مصنوعی» badge is the exact misreport this fleet had.
+   */
+  return {
+    text: res.text,
+    model: res.model,
+    provider: res.provider,
+    providerName: res.providerName,
+    engine: res.engine,
+    degraded: Boolean(res.degraded),
+    degradedReason: res.degradedReason || null,
+    notice: res.notice || null,
+    failoverTrail: res.failoverTrail || [],
+    durationMs: res.durationMs
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -372,7 +454,7 @@ export async function answerSupportQuestion({ question, context = [], lang = 'fa
         `Reply in language code: ${lang}. Under 120 words. No markdown headings.`
       ].join('\n');
 
-  const { text, model } = await chat({
+  const reply = await chat({
     taskType: 'fast',
     system,
     user: q,
@@ -382,8 +464,19 @@ export async function answerSupportQuestion({ question, context = [], lang = 'fa
   });
 
   return {
-    answer: String(text || '').trim(),
-    model,
+    answer: String(reply.text || '').trim(),
+    model: reply.model,
+    /* Which brain answered. `source: 'internal-rules'` is the honest label when
+       every keyed provider failed and the deterministic engine replied — the
+       client prints that instead of implying a live model spoke. */
+    provider: reply.provider,
+    providerName: reply.providerName,
+    engine: reply.engine,
+    source: reply.degraded ? 'internal-rules' : (grounded ? 'model-grounded' : 'model'),
+    degraded: Boolean(reply.degraded),
+    degradedReason: reply.degradedReason || null,
+    notice: reply.notice || null,
+    failoverTrail: reply.failoverTrail || [],
     grounded,
     sources: sources.map((s2) => ({ title: s2.title, url: s2.url }))
   };
@@ -394,7 +487,7 @@ export async function generateOutlook(payload) {
 
   const news = await fetchNews(`${payload.name} ${payload.symbol} crypto news analysis`, 6);
 
-  const { text, model } = await chat({
+  const reply = await chat({
     taskType: 'market',
     system: SYSTEM_PROMPT,
     user: buildUserPrompt({ ...payload, news }),
@@ -403,7 +496,7 @@ export async function generateOutlook(payload) {
     json: true
   });
 
-  const parsed = parseJson(text);
+  const parsed = parseJson(reply.text);
 
   return {
     bias: ['bullish', 'bearish', 'neutral'].includes(parsed.bias) ? parsed.bias : 'neutral',
@@ -421,7 +514,11 @@ export async function generateOutlook(payload) {
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 3).map((r) => String(r).slice(0, 160)) : [],
     invalidation: String(parsed.invalidation ?? '').slice(0, 240),
     sources: news.map((n) => ({ title: n.title, url: n.url })),
-    model,
+    model: reply.model,
+    provider: reply.provider,
+    engine: reply.engine,
+    degraded: Boolean(reply.degraded),
+    degradedReason: reply.degradedReason || null,
     generatedAt: Date.now()
   };
 }
@@ -446,7 +543,7 @@ export async function generateMarketBrief({ global, top, lang }) {
     lang === 'ar' ? '\nWrite the text fields in Arabic. Keep JSON keys in English.' : ''
   ].join('\n');
 
-  const { text, model } = await chat({
+  const reply = await chat({
     taskType: 'market',
     system: `${SYSTEM_PROMPT}\n\nFor this market-wide brief use exactly this JSON shape:\n{"bias":"bullish|bearish|neutral","confidence":0-100,"headline":"max 90 chars","summary":"2-3 sentences","drivers":["..."],"risks":["..."]}`,
     user,
@@ -455,7 +552,7 @@ export async function generateMarketBrief({ global, top, lang }) {
     json: true
   });
 
-  const parsed = parseJson(text);
+  const parsed = parseJson(reply.text);
   return {
     bias: ['bullish', 'bearish', 'neutral'].includes(parsed.bias) ? parsed.bias : 'neutral',
     confidence: clamp(parsed.confidence, 0, 90),
@@ -464,7 +561,11 @@ export async function generateMarketBrief({ global, top, lang }) {
     drivers: Array.isArray(parsed.drivers) ? parsed.drivers.slice(0, 3).map((d) => String(d).slice(0, 160)) : [],
     risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 3).map((r) => String(r).slice(0, 160)) : [],
     sources: news.map((n) => ({ title: n.title, url: n.url })),
-    model,
+    model: reply.model,
+    provider: reply.provider,
+    engine: reply.engine,
+    degraded: Boolean(reply.degraded),
+    degradedReason: reply.degradedReason || null,
     generatedAt: Date.now()
   };
 }
@@ -497,7 +598,7 @@ export async function classifyIntentWithModel({ message = '', intents = [], loca
   ].filter(Boolean).join('\n');
 
   try {
-    const { text: raw, model } = await chat({
+    const reply = await chat({
       taskType: 'fast',
       system: 'You classify financial intent for a self-custody wallet. You never produce amounts, assets, chains, permissions or advice — only one label from the given enum. If you cannot decide, return GENERAL.',
       user,
@@ -505,11 +606,25 @@ export async function classifyIntentWithModel({ message = '', intents = [], loca
       maxTokens: 60,
       json: true
     });
-    const parsed = parseJson(raw);
+    const parsed = parseJson(reply.text);
     const intent = String(parsed?.intent || '').trim().toUpperCase();
-    if (!allowed.includes(intent)) return { ok: false, reason: 'INTENT_NOT_IN_ENUM', model };
+    if (!allowed.includes(intent)) return { ok: false, reason: 'INTENT_NOT_IN_ENUM', model: reply.model, provider: reply.provider };
     const confidence = clamp(parsed?.confidence, 0, 0.99);
-    return { ok: true, intent, confidence: Number(confidence.toFixed(2)), model };
+    /*
+     * A rule-engine label is still usable, but it must not be recorded as model
+     * output: the learning loop scores providers on these decisions, and
+     * crediting `internal` with a model's accuracy corrupts exactly the data
+     * that decides which provider gets the next seat.
+     */
+    return {
+      ok: true,
+      intent,
+      confidence: Number(confidence.toFixed(2)),
+      model: reply.model,
+      provider: reply.provider,
+      engine: reply.engine,
+      degraded: Boolean(reply.degraded)
+    };
   } catch (err) {
     return { ok: false, reason: String(err.message || 'AI_FAILED').slice(0, 120) };
   }

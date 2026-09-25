@@ -1887,6 +1887,95 @@
   word-break: break-all;
 }
 
+/*
+ * ─── THE FLEET LINE AND THE LIVE-TEST BUTTON ───────────────────────────────
+ * Nine cards that each said «پیکربندی‌شده» was the exact thing that made a
+ * broken fleet look healthy: presence of a key is not the same statement as
+ * "this model answered". The summary line carries the two numbers side by side
+ * (how many hold a key, how many actually answered), and the button runs a real
+ * call to every provider so the verdicts below are evidence, not memory.
+ */
+.iaos-intel-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.iaos-intel-summary p {
+  margin: 0;
+  font-size: 11.5px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.iaos-intel-summary .iaos-btn {
+  margin-inline-start: auto;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.iaos-intel-summary .iaos-btn:disabled {
+  opacity: .6;
+  cursor: progress;
+}
+
+/* Model ids, candidate chains and provider error text are ASCII; forcing LTR
+   keeps them readable inside a right-to-left panel. */
+.iaos-intel-note {
+  display: block;
+  text-align: left;
+  color: #94a3b8;
+  word-break: break-word;
+}
+
+.iaos-intel-note code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #93c5fd;
+  word-break: break-all;
+}
+
+/*
+ * A card whose provider REFUSED the last call is marked, not merely dimmed:
+ * dimming is what a key-less card already does, and the two states need to read
+ * differently — one waits on the operator, the other waits on a fix.
+ */
+.iaos-intel-card[data-verdict^='ERROR'] {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.iaos-intel-card[data-verdict='HEALTHY'] {
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+/* Light theme: the same three states on paper, with contrast that survives it. */
+:root[data-theme='light'] .iaos-intel-summary {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme='light'] .iaos-intel-summary p { color: #334155; }
+:root[data-theme='light'] .iaos-intel-note { color: #475569; }
+:root[data-theme='light'] .iaos-intel-note code { color: #1d4ed8; }
+
+:root[data-theme='light'] .iaos-intel-card[data-verdict^='ERROR'] {
+  background: #fff1f2;
+  border-color: rgba(190, 24, 93, 0.35);
+}
+
+:root[data-theme='light'] .iaos-intel-card[data-verdict='HEALTHY'] {
+  border-color: rgba(4, 120, 87, 0.35);
+}
+
 .iaos-multi-ai-badge {
   display: flex;
   flex-wrap: wrap;
