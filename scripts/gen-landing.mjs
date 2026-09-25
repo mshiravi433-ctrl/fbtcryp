@@ -1295,7 +1295,9 @@ const ALTERNATES = [
    */
   ['how-crypto-swap-fees-work', 'کارمزد-سواپ-ارز-دیجیتال'],
   ['custodial-vs-non-custodial-wallets', 'تفاوت-کیف-پول-امانی-و-غیرامانی'],
-  ['what-stays-private-without-kyc', 'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند']
+  ['what-stays-private-without-kyc', 'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند'],
+  /* Each hub lists the corresponding guides in its own language. */
+  ['blog', 'وبلاگ']
 ];
 
 const SOCIAL_CARD = `${SITE}/social-card.png`;

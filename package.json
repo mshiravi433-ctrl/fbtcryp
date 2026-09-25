@@ -25,6 +25,7 @@
     "walletconnect:register:check": "node scripts/walletconnect-reown-register.mjs --check",
     "build": "NODE_OPTIONS=--max-old-space-size=3072 vite build && node scripts/gen-landing.mjs",
     "test:landing": "node scripts/landing-v2/qa-dist.mjs",
+    "test:seo": "node --test test/seo-audit.test.mjs",
     "test:ai-theme": "node test/ai-light-theme-probe.mjs",
     "notify:verify": "node scripts/notify-verify.mjs",
     "preview": "vite preview",
