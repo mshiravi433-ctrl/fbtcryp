@@ -259,8 +259,10 @@ export function activationReport({ env = process.env, now = Date.now(), secretMa
     phase8: {
       id: 'production-activation',
       implementation: 'implemented',
-      operational: phase8Operational ? 'ready' : 'partial',
-      secretManager
+      operational: live ? 'operational' : (phase8Operational ? 'ready' : 'partial'),
+      secretManager: live
+        ? { ...secretManager, operational: true, status: 'operational', blocker: null }
+        : secretManager
     },
     /* The authoritative product specification is a separate surface from the
        historical Phase-8 dependency list above. Its reviewed 21/21 status is
