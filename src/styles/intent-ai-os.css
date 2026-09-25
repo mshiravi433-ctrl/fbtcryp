@@ -4540,3 +4540,148 @@ body:has(.iaos-page-v6) {
     animation: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PHASE 213 — INTENT OS EVENTS AND THE OPEN QUESTION, IN CHAT
+   --------------------------------------------------------------------------
+   Two new pieces of the conversation surface:
+     .iaos-os-card  — a real OS event (execution, monitor, agent, negotiation,
+                      agreement, conflict, escalation) with its transcript.
+     .iaos-qbar     — the question the assistant asked and has not had answered.
+   They reuse the existing bubble vocabulary (radius, glass, tints) so a
+   mirrored event does not look like a different app.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.iaos-os-card {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, .55);
+}
+
+.iaos-os-card.iaos-os-ok { border-color: rgba(34, 197, 94, .42); }
+.iaos-os-card.iaos-os-warn { border-color: rgba(250, 204, 21, .45); }
+.iaos-os-card.iaos-os-bad { border-color: rgba(248, 113, 113, .48); }
+.iaos-os-card.iaos-os-info { border-color: rgba(96, 165, 250, .4); }
+
+.iaos-os-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.iaos-os-kind {
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, .9);
+}
+
+.iaos-os-badge {
+  margin-inline-start: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgba(99, 102, 241, .18);
+  color: #c7d2fe;
+}
+
+.iaos-os-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.iaos-os-line {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: rgba(226, 232, 240, .92);
+}
+
+.iaos-os-speaker {
+  color: #a5b4fc;
+  margin-inline-end: 6px;
+}
+
+.iaos-os-note {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: rgba(148, 163, 184, .92);
+}
+
+.iaos-os-bad-note { color: rgba(248, 113, 113, .95); }
+
+.iaos-os-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.iaos-os-chip { flex: 0 1 auto; }
+
+/* ── the open question bar ─────────────────────────────────────────────── */
+
+.iaos-qbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 8px 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(129, 140, 248, .38);
+  border-radius: 12px;
+  background: rgba(79, 70, 229, .12);
+  font-size: 12.5px;
+  color: #e2e8f0;
+}
+
+.iaos-qbar-ack {
+  border-color: rgba(34, 197, 94, .38);
+  background: rgba(22, 163, 74, .12);
+}
+
+.iaos-qbar-label {
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: #c7d2fe;
+}
+
+.iaos-qbar-text { flex: 1 1 200px; }
+
+.iaos-qbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.iaos-qbar-actions .iaos-btn { flex: 0 1 auto; }
+
+.iaos-qbar-skip {
+  border: 0;
+  background: transparent;
+  color: rgba(148, 163, 184, .9);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+:root[data-theme='light'] .iaos-os-card {
+  background: #fff;
+  border-color: rgba(100, 116, 139, .25);
+}
+
+:root[data-theme='light'] .iaos-os-head,
+:root[data-theme='light'] .iaos-os-line { color: #0f172a; }
+
+:root[data-theme='light'] .iaos-qbar {
+  background: rgba(99, 102, 241, .08);
+  color: #0f172a;
+}

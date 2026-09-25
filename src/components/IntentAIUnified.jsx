@@ -70,7 +70,8 @@ import {
   aiRunAutomation,
   aiExecutionResult,
   aiConfirm,
-  aiFeedback
+  aiFeedback,
+  aiResearch
 } from '../lib/aiIntentClient';
 import { verifyPlanBinding } from '../lib/intent-ai/planDigest.js';
 import { checkConstitution, explainConstitution } from '../lib/intent-ai/constitution.js';
@@ -272,6 +273,23 @@ import { getChatScrollManager } from '../lib/intent-ai/os/upgrade6/chatScrollMan
 import { busV6, EVENTS_V6 } from '../lib/intent-ai/os/upgrade6/eventBusV2.js';
 import { getL1Messages, addL1Message, getL2Tasks, addL2Task, getL3Preferences, addL3Preference, extractL3FromMessage } from '../lib/intent-ai/os/upgrade6/memoryV2.js';
 import { ThinkingOrb, ThinkingOrbLarge, AIActivityTimeline } from './ai/ThinkingOrb.jsx';
+/* ── PHASE 213 — THE CHAT **IS** THE INTENT OS SURFACE ──────────────────────
+ * One durable open question (so the assistant cannot forget what it asked),
+ * one bridge that mirrors real Intent OS events into the thread, the
+ * coordination modes (human↔human, human↔agent, agent↔agent, agreement,
+ * conflict, emergency) and an explicit web-search door — all in chat. */
+import {
+  askQuestion,
+  bindAnswer,
+  closeQuestion,
+  getOpenQuestion,
+  acknowledgement,
+  answerBindingHint
+} from '../lib/intent-ai/chat/questionLedger.js';
+import { createSurfaceGate, eventToChatMessage } from '../lib/intent-ai/chat/osSurface.js';
+import { buildNegotiationContext, runSurfaceCommand } from '../lib/intent-ai/chat/surfaceCommands.js';
+import { offlineSocialFallback } from '../lib/intent-ai/chat/socialChat.js';
+import { OsEventCard, PendingQuestionBar } from './chat/IntentOsSurface.jsx';
 import {
   loadLocalIntentOSState,
   saveLocalIntentOSState,
@@ -521,6 +539,7 @@ export const ConversationRow = memo(function ConversationRow({
   onMonitorOpportunity,
   onFeedback,
   onOpenRoute,
+  onOsChip,
   onGoalExecute,
   onStrategyExecute,
   onStrategyMonitor,
@@ -589,6 +608,12 @@ export const ConversationRow = memo(function ConversationRow({
         ) : null}
         {m.ui?.type === 'RESULT_CARD' && m.card?.txHash ? (
           <div className="iaos-result-hash" data-testid="intent-ai-tx-hash">{m.card.txHash}</div>
+        ) : null}
+        {/* Phase 213 — an Intent OS event / negotiation transcript rendered as
+            a real bubble. Everything on it comes from the module layer; the
+            chips ask the next real question instead of navigating blindly. */}
+        {m.kind === 'os' && m.osEvent ? (
+          <OsEventCard event={m.osEvent} locale={locale} onChip={onOsChip} onOpenRoute={onOpenRoute} />
         ) : null}
         {/* Rich tool-output cards: live token chart + 24h high/low, and the
             allocation view for portfolio answers. */}
@@ -925,6 +950,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       return makeId();
     }
   });
+  /* Phase 213 — the open question, made visible. It is restored from storage on
+     mount (a question asked before a reload is still waiting after it), and the
+     ack line is the proof that an answer was recorded rather than politely
+     ignored. */
+  const [openQuestion, setOpenQuestion] = useState(() => getOpenQuestion({ conversationId }));
+  const [questionAck, setQuestionAck] = useState(null);
+  const surfaceGateRef = useRef(null);
   const [panel, setPanel] = useState(null);
   const [ecoKind, setEcoKind] = useState('agent');
   const [opsBusy, setOpsBusy] = useState(false);
@@ -979,6 +1011,49 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [orderInitial, setOrderInitial] = useState(null);
   const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
   const contextHandlerRef = useRef(null);
+
+  /* ── PHASE 213: Intent OS events become chat rows ────────────────────────
+   * Everything the OS does outside the conversation (an execution finishing, an
+   * agent completing, a wallet connecting, an error, a recovery) used to be
+   * invisible here: the user had to go and find it in a panel. The mirror is
+   * deliberately conservative — a noise list plus a fingerprint gate keep
+   * bookkeeping out and stop a retry from stacking identical rows — and it
+   * appends a FACT, never an instruction. */
+  useEffect(() => {
+    const gate = surfaceGateRef.current || (surfaceGateRef.current = createSurfaceGate());
+    const append = (event) => {
+      let row = null;
+      try {
+        row = eventToChatMessage(event, { locale, gate });
+      } catch { row = null; }
+      if (!row) return null;
+      setMessages((prev) => [...prev, row]);
+      setConvState((prev) => appendConvMessage(prev, row));
+      return row;
+    };
+    const unsubV6 = busV6.on('*', (event) => {
+      append({ type: event?.type, payload: event?.payload || {}, timestamp: event?.timestamp });
+    });
+    const unsubGlobal = onEvent('*', (event) => {
+      append({ type: event?.type, payload: event?.payload || {}, timestamp: event?.timestamp });
+    });
+    return () => {
+      try { unsubV6?.(); } catch { /* already gone */ }
+      try { unsubGlobal?.(); } catch { /* already gone */ }
+    };
+  }, [locale]);
+
+  /* Restore / refresh the open question whenever the conversation switches. */
+  useEffect(() => {
+    setOpenQuestion(getOpenQuestion({ conversationId }));
+    setQuestionAck(null);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!questionAck) return undefined;
+    const timer = setTimeout(() => setQuestionAck(null), 8000);
+    return () => clearTimeout(timer);
+  }, [questionAck]);
 
   // Auto-refresh activity history when entering activity tab
   useEffect(() => {
@@ -1704,6 +1779,29 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       if (!pending || openId !== pending.questionId) pendingU7QuestionRef.current = null;
     } catch { /* binding is best-effort; the turn continues regardless */ }
 
+    /*
+     * ── PHASE 213: THE OPEN QUESTION IS BOUND ON EVERY TURN ────────────────
+     * The Upgrade-8 ref above only knows about questions THIS component asked
+     * in this session. The ledger knows about every question the OS asked —
+     * including the ones that arrived in a server reply, and the ones asked
+     * before a reload — so the user's answer is read as an answer, recorded
+     * where the user can see it, and never asked again. A brand-new request
+     * does not eat the question: it is answered in parallel and the question
+     * stays open (with a fresh reminder, not the same sentence twice).
+     */
+    let ledgerVerdict = null;
+    try {
+      const wasOpen = getOpenQuestion({ conversationId });
+      if (wasOpen) {
+        ledgerVerdict = bindAnswer({ text: message, conversationId });
+        if (ledgerVerdict?.ok) {
+          const ack = acknowledgement(ledgerVerdict, { locale });
+          if (ack) setQuestionAck(ack);
+          setOpenQuestion(ledgerVerdict.closed ? null : getOpenQuestion({ conversationId }));
+        }
+      }
+    } catch { /* the ledger is an assistant, not a gate: never block the turn */ }
+
     // §43 Global Event Bus
     busV6.emit(EVENTS_V6.USER_MESSAGE, { message, conversationId, currentPage });
     const obsIntentId = convStateRef.current.intentId || makeId();
@@ -1768,6 +1866,80 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     setThinking(localizedThinking);
 
     try {
+      /*
+       * ── PHASE 213: THE FOUR COMMANDS THAT OPEN INTENT OS FROM CHAT ────────
+       *   «چه کارهایی می‌تونی؟»            → the whole catalog, every option
+       *   «جستجو کن …» / «search for …»    → a real cited web search
+       *   «با ایجنت مذاکره کن» / «توافق»…  → negotiation/agreement/conflict
+       * Anything else falls through to the pipeline untouched. A question that
+       * these commands produce (a missing negotiation subject, a choice) is
+       * registered in the ledger so the NEXT message binds to it. */
+      try {
+        const surfaceOut = await runSurfaceCommand(message, {
+          locale,
+          conversationId,
+          research: async (args) => aiResearch(args),
+          context: buildNegotiationContext({
+            wallet,
+            portfolio: aiContext?.portfolio,
+            conversationState: convStateRef.current,
+            services: {
+              automations,
+              monitors
+            }
+          })
+        });
+        if (surfaceOut?.handled && surfaceOut.message) {
+          const row = surfaceOut.message;
+          setMessages((prev) => [...prev, row]);
+          setConvState((prev) => appendConvMessage(prev, row));
+          addL1Message(row);
+          if (surfaceOut.question) {
+            const registered = askQuestion({
+              text: surfaceOut.question.text,
+              slot: surfaceOut.question.slot,
+              expectedType: surfaceOut.question.expectedType,
+              options: surfaceOut.question.options,
+              locale,
+              conversationId,
+              source: 'negotiation'
+            });
+            if (registered?.ok) setOpenQuestion(registered.question);
+          } else if (Array.isArray(surfaceOut.chips) && surfaceOut.chips.length) {
+            setSuggestions(surfaceOut.chips.slice(0, MAX_SUGGESTIONS));
+          }
+          setThinking([]);
+          setThinkingState('idle');
+          setActivitySteps([]);
+          stateMachineRef.current.transition(STATES.COMPLETED, { reason: `surface_command_${surfaceOut.command}` });
+          return true;
+        }
+      } catch { /* the surface commands are additive: a failure falls through */ }
+
+      /*
+       * ── PHASE 213: A PLEASANTRY IS ANSWERED AS ONE ───────────────────────
+       * «حالت چطوره» used to reach the local pipeline and come back as
+       * «درخواست کامل شد» — a completion notice for a sentence that asked
+       * nothing. Small talk is answered here, in the language it was typed,
+       * from the same voice tables the server uses, with zero provider calls
+       * (the same law Upgrade 13 applies on the server). «چخبر» is NOT answered
+       * here: it asks for a real brief, so it falls through to the server.
+       */
+      try {
+        const socialRow = offlineSocialFallback(message, { locale });
+        if (socialRow && socialRow.social?.needsServer !== true) {
+          setMessages((prev) => [...prev, socialRow]);
+          setConvState((prev) => appendConvMessage(prev, socialRow));
+          addL1Message(socialRow);
+          setSuggestions([]);
+          setThinking([]);
+          setThinkingState('idle');
+          setActivitySteps([]);
+          stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'social_turn' });
+          return true;
+        }
+      } catch { /* a social turn never blocks the pipeline */ }
+
       // §7, §8, §10 — Check if this is short answer to last question BEFORE full intent understanding
       const slotEngine = slotEngineRef.current;
       const refResolver = refResolverRef.current;
@@ -2171,6 +2343,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         if (u7qText) {
           finalMessage = `${finalMessage}\n\n${u7qText}`;
           pendingU7QuestionRef.current = { questionId: makeId(), intentId: convStateRef.current?.intentId || null, slot: u7q.slot, expectedType: u7q.expectedType };
+          /* Phase 213 — the question is ALSO registered in the durable ledger,
+             so it survives a reload and a later turn is read as its answer. */
+          try {
+            const registered = askQuestion({
+              text: u7qText,
+              slot: u7q.slot,
+              expectedType: u7q.expectedType,
+              intentId: convStateRef.current?.intentId || null,
+              locale,
+              conversationId
+            });
+            if (registered?.ok) setOpenQuestion(registered.question);
+          } catch { /* ledger is best-effort */ }
         }
 
         const nextMessage = {
@@ -2323,6 +2508,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         return true;
       }
 
+      /* Phase 213 — built once, above the call: either the verdict of the
+         question this turn just answered, or the block naming the one that is
+         still open. Null when there is nothing to carry. */
+      const bindingHint = answerBindingHint({ verdict: ledgerVerdict?.ok ? ledgerVerdict : null, locale });
       const res = await aiChat({
         message: effectiveMessage,
         // The server fallback uses the SAME unfinished goal as the local chat.
@@ -2338,7 +2527,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         conversationId,
         context: aiContext,
         resume: opts.resume === true,
-        hints: opts.hints || null
+        /* Phase 213 — the turn carries what it IS: an answer to the open
+           question (with the value already parsed) or a turn that happens while
+           a question stays open. The server uses this to answer the new request
+           AND continue the unfinished one instead of re-deriving intent and
+           forgetting the question entirely. */
+        hints: {
+          ...(opts.hints || {}),
+          ...(bindingHint ? { answerBinding: bindingHint } : {})
+        }
       });
 
       if (res?.ok !== true) {
@@ -2467,6 +2664,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         if (nextMessage.missingInfo) {
           const qId = reply.intentId || makeId('q');
           next = setConvQuestion(next, nextMessage.missingInfo, { questionId: qId, expectedType: reply.intent?.missingInformation?.[0] || 'text' });
+          /* Phase 213 — a question asked in a SERVER reply is registered in the
+             durable ledger too, so the next turn binds to it instead of being
+             re-derived from scratch (this is where questions used to be lost). */
+          const slot = reply.intent?.missingInformation?.[0] || 'text';
+          try {
+            const registered = askQuestion({
+              text: nextMessage.missingInfo,
+              slot,
+              expectedType: slot === 'riskProfile' ? 'text' : slot,
+              options: (nextMessage.choices || []).map((c) => ({ id: c.id, label: c.label })),
+              intentId: reply.intentId || null,
+              locale,
+              conversationId
+            });
+            if (registered?.ok) setOpenQuestion(registered.question);
+          } catch { /* ledger is best-effort */ }
         }
         if (reply.intent) {
           next = setConvIntent(next, reply.intent, { status: nextMessage.missingInfo ? INTENT_STATUS.CLARIFYING : INTENT_STATUS.READY });
@@ -2535,6 +2748,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
 
     } catch (err) {
+      /* Phase 213 — «حالت چطوره» deserves a person, not a retry banner. When the
+         turn itself was social, answer it with the same voice table the server
+         uses; the error banner stays for every turn that actually needed data. */
+      const socialRow = (() => {
+        try { return offlineSocialFallback(message, { locale }); } catch { return null; }
+      })();
+      if (socialRow) {
+        setMessages((prev) => [...prev, socialRow]);
+        addL1Message(socialRow);
+        setThinking([]);
+        setThinkingState('idle');
+        setActivitySteps([]);
+        return true;
+      }
       const human = humanizeError('NETWORK_FAILED', { locale });
       setMessages((prev) => [...prev, {
         id: makeId(),
@@ -2566,14 +2793,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       scrollMgrRef.current.onNewMessage();
     }
     return true;
-  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8]);
+  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8, automations, monitors]);
 
   sendRef.current = sendMessage;
 
   const sendSuggested = useCallback((s) => {
-    if (!s?.prompt) return;
-    setInput(s.prompt);
-    void sendMessage(s.prompt);
+    /* Two callers: the suggestion chips hand a full chip object, the Intent OS
+       card chips hand the sentence itself. Both must actually send — a chip
+       that renders but does nothing is the exact "disabled option" the Phase
+       213 work exists to remove. */
+    const prompt = typeof s === 'string' ? s : (s?.prompt || s?.label || '');
+    if (!prompt) return;
+    setInput(prompt);
+    void sendMessage(prompt);
   }, [sendMessage]);
 
   // Phase 2: predicted chips merge with contextual suggestions; duplicates
@@ -2591,11 +2823,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const drawerItems = useMemo(() => {
     const ctx = { currentPage, lastIntentType: messages[messages.length - 1]?.intentType, locale };
-    return getSuggestionsForMessage('', ctx, locale).map(s => ({
+    const fa = locale.startsWith('fa');
+    /* Phase 213 — the Intent OS catalog is the first row of the “+” sheet:
+       every capability the OS has (all five coordination modes included) is
+       one tap away, and pressing it types the same sentence the chat command
+       understands. Nothing in Intent OS is reachable only from another page. */
+    const catalogRow = {
+      id: 'intent-os-catalog',
+      label: fa ? 'همهٔ گزینه‌های Intent OS' : 'All Intent OS options',
+      prompt: fa ? 'چه کارهایی می‌تونی بکنی؟' : 'what can you do?'
+    };
+    return [catalogRow, ...getSuggestionsForMessage('', ctx, locale).map(s => ({
       id: s.id,
       label: s.label,
       prompt: s.prompt
-    }));
+    }))];
   }, [currentPage, messages, locale]);
 
   const runAction = useCallback(async (item) => {
@@ -5486,6 +5728,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onMonitorOpportunity={monitorOpportunityRow}
                 onFeedback={sendFeedback}
                 onOpenRoute={openBubbleRoute}
+                onOsChip={sendSuggested}
                 onGoalExecute={executeGoalOption}
                 onStrategyExecute={runStrategyStage}
                 onStrategyMonitor={monitorStrategy}
@@ -5644,6 +5887,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </button>
           </div>
         ) : null}
+
+        {/* Phase 213 — the open question stays in front of the user until it is
+            answered or explicitly dropped. It is restored from the durable
+            ledger on mount, so a question asked before a reload is still
+            waiting after it instead of being silently forgotten. */}
+        <PendingQuestionBar
+          question={openQuestion}
+          ack={questionAck}
+          locale={locale}
+          onAnswer={(answer) => { void sendMessage(answer); }}
+          onSkip={() => {
+            try { closeQuestion({ questionId: openQuestion?.id || null, reason: 'skipped' }); } catch { /* nothing to close */ }
+            setOpenQuestion(getOpenQuestion({ conversationId }));
+            setQuestionAck(locale.startsWith('fa') ? 'باشه، سؤال بسته شد.' : 'OK, the question is closed.');
+          }}
+          onDismiss={() => {
+            try { closeQuestion({ questionId: openQuestion?.id || null, reason: 'closed_by_user' }); } catch { /* nothing to close */ }
+            setOpenQuestion(null);
+          }}
+        />
 
         {/* §26 Mobile optimization — keyboard-aware, safe-area.
             Trench-style composer: a black pill with a round “+ actions” button

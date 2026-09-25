@@ -193,6 +193,20 @@ Respond in STRICT JSON:
 
 export function buildSafeContextBlock({ context = {}, knowledge = [], sources = [] } = {}) {
   const lines = [];
+  /*
+   * Phase 213 — directives come FIRST and are read as constraints, not data.
+   * The only producer today is the open-question ledger (`hints.answerBinding`):
+   * "this turn is the answer to the question you asked; acknowledge it and
+   * continue — do not re-ask, do not claim something was recorded that was
+   * not". Putting them above the data is deliberate: a model that reads the
+   * market block first tends to answer as if this were a fresh question, which
+   * is exactly the forgetting this exists to stop.
+   */
+  const directives = Array.isArray(context.directives) ? context.directives.filter((d) => typeof d === 'string' && d.trim()) : [];
+  if (directives.length) {
+    lines.push('MANDATORY TURN DIRECTIVES (highest priority — apply before answering):');
+    for (const d of directives.slice(0, 3)) lines.push(String(d).slice(0, 1600));
+  }
   const market = context.market;
   if (market?.priceMap && Object.keys(market.priceMap).length) {
     lines.push(`LIVE MARKET DATA (source of truth — overrides model memory): ${JSON.stringify(market.priceMap)}`);
