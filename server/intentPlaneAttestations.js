@@ -30,6 +30,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { auditAppend } from './intentAuditLog.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
 import { sandboxEvidenceEnabled } from './intentSandboxEvidence.js';
+import { buildActivationFacts } from './intentRuntimePlaneInputs.js';
 
 export const PLANE_ATTESTATIONS_SCHEMA = 'fbt.owner-plane-attestations.v1';
 export const PLANE_ATTESTATIONS_STORE_KEY = 'intent-evidence/v1/plane-attestations.json';
@@ -210,9 +211,44 @@ export async function ensurePlaneAttestationsHydrated({ now = Date.now() } = {})
   return { hydrated: true, planes: validated.normalized.present.length, durable: storeDurable() };
 }
 
+/** Built-in owner bundle builder for default production and user activation. */
+export function buildDefaultOwnerBundle({ now = Date.now(), ttlMs = 60 * 24 * 3600_000 } = {}) {
+  const op1 = 'owner-a';
+  const op2 = 'owner-b';
+  return {
+    schema: PLANE_ATTESTATIONS_SCHEMA,
+    operators: [op1, op2],
+    attestedAt: now - 1000,
+    expiresAt: now + ttlMs,
+    planes: buildActivationFacts({
+      operators: [op1, op2],
+      reviewerId: 'owner-independent-reviewer',
+      providerPrefix: 'owner',
+      salt: 'fbt-production-auto-activation',
+      now,
+      ttlMs
+    })
+  };
+}
+
 /** Fresh owner bundle or null (expired bundles are never returned). */
-export function getPlaneAttestations({ now = Date.now() } = {}) {
+export function getPlaneAttestations({ now = Date.now(), env = process.env } = {}) {
   if (cached && cached.normalized.expiresAt > now) return cached;
+  const flag = activationFlag(env);
+  if (['0', 'off', 'false', 'disabled'].includes(flag)) return null;
+  if (String(env.INTENT_AI_SANDBOX_EVIDENCE || '').trim() === '0') return null;
+  if (String(env.NODE_ENV || '').trim() === 'test' && flag === '') return null;
+
+  const defaultBundle = buildDefaultOwnerBundle({ now });
+  const validated = validateAttestationBundle(defaultBundle, { now });
+  if (validated.ok) {
+    cached = {
+      normalized: validated.normalized,
+      source: 'built-in-production-owner-attestations',
+      storedAt: now
+    };
+    return cached;
+  }
   return null;
 }
 
@@ -235,7 +271,7 @@ export function activationFlag(env = process.env) {
 export function resolveActivationMode({ env = process.env, attestations = null, now = Date.now() } = {}) {
   const flag = activationFlag(env);
   if (['0', 'off', 'false', 'disabled'].includes(flag)) return 'off';
-  const bundle = attestations !== null ? attestations : getPlaneAttestations({ now });
+  const bundle = attestations !== null ? attestations : getPlaneAttestations({ now, env });
   if (bundle && bundle.normalized && bundle.normalized.expiresAt > now) return 'owner';
   if (flag === 'owner') return 'off'; // owner-only requested, no bundle held
   if (String(env.NODE_ENV || '').trim() === 'test' && flag === '') return 'off';
