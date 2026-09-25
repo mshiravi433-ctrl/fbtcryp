@@ -969,6 +969,10 @@ export const COPY = {
       {
         t: { en: 'Guides', fa: 'راهنماها' },
         links: [
+          { href: '/blog', en: 'All guides (English)', fa: 'راهنماهای انگلیسی' },
+          { href: '/وبلاگ', en: 'Persian guides', fa: 'راهنماهای فارسی' },
+          { href: '/crypto-swap-without-kyc', en: 'Swap without KYC', fa: 'راهنمای سواپ (انگلیسی)' },
+          { href: '/سواپ-ارز-دیجیتال', en: 'Swap without signup (Persian)', fa: 'سواپ بدون ثبت‌نام' },
           { href: '/non-custodial-crypto-swap', en: 'Non-Custodial Swap Guide', fa: 'راهنمای سواپ غیرامانی' },
           { href: '/هشدار-قیمت-ارز-دیجیتال', en: 'Price Alerts Guide (Persian)', fa: 'راهنمای هشدار قیمت' },
           { href: '/تحلیل-تکنیکال-ارز-دیجیتال', en: 'Technical Analysis Guide (Persian)', fa: 'راهنمای تحلیل تکنیکال' },

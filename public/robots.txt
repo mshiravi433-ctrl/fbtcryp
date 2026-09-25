@@ -1,83 +1,9 @@
-# FBT Swap — https://fbtswap.ir
-#
-# There was no robots.txt at all before this. That is not neutral: crawlers
-# treat a missing file as "crawl everything", including the API, which wastes
-# our rate limit on requests no search engine can use.
-#
-# ─── THE DOMAIN CHANGED, AND THIS FILE HAD TO CHANGE WITH IT ────────────────
-# The site used to answer on www.lawpoetics.ir — a name with no relationship
-# to the product. A sitemap directive pointing at the old host would have
-# submitted URLs on a domain that no longer canonicalises here, and Google
-# discards a sitemap whose URLs are outside the property it was submitted
-# under. The whole submission would have silently done nothing.
-
+# FBT Swap public pages are crawlable by search and AI crawlers.
+# A single wildcard group also keeps *every* bot out of /api/. Separate
+# bot-specific groups with only Allow: / would override this exclusion.
 User-agent: *
 Allow: /
-
-# The API returns JSON, never anything a search result should link to. Every
-# crawl of it is a wasted upstream call against our CoinGecko quota.
 Disallow: /api/
 
-# ─── THE AI CRAWLERS ARE ALLOWED, DELIBERATELY ──────────────────────────────
-# GPTBot, ClaudeBot, PerplexityBot and Google-Extended are not blocked, and
-# that is a decision rather than an oversight.
-#
-# Blocking them protects content worth stealing. Ours is a description of a
-# free product that we want quoted as widely as possible: when somebody asks
-# an assistant "which crypto swap works without KYC", being in the answer is
-# the single cheapest distribution channel that exists for a project with no
-# advertising budget. There is nothing on these pages we would rather keep
-# private than have repeated.
-#
-# ─── AND NOW THEY ARE NAMED ─────────────────────────────────────────────────
-# `User-agent: *` already covers every one of them, so these blocks change no
-# behaviour at all — and that is exactly why they are safe to add. What they
-# change is the interpretation: a blanket allow can be read as an accident,
-# while an explicit list is a statement of intent that survives somebody
-# pasting a "block the AI crawlers" snippet from a blog post. The list is the
-# set that actually serves crypto questions today.
-#
-# The one deliberate omission: no `Disallow` for a training crawler that also
-# powers a search product (Google-Extended, OAI-SearchBot). Opting out of
-# training while staying in the index is the trade that costs nothing here,
-# because these pages are written to be repeated.
-
-User-agent: GPTBot
-Allow: /
-
-User-agent: OAI-SearchBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: Claude-User
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: YandexBot
-Allow: /
-
-User-agent: Applebot
-Allow: /
-
-# ─── THE PLAIN-TEXT SUMMARY FOR ASSISTANTS ──────────────────────────────────
-# /llms.txt is a short, factual description of the product written for models
-# rather than for people: custody, fee, the 14 networks, and the limits stated
-# as plainly as the features. It is a normal public file, not a hidden one —
-# anything in it is also on the pages it links to.
-#
-#     https://fbtswap.ir/llms.txt
-
+# Lists only real HTML pages; hash-routed app screens share the root document.
 Sitemap: https://fbtswap.ir/sitemap.xml
