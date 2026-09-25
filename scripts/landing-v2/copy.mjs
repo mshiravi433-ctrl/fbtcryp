@@ -37,17 +37,17 @@ export const COPY = {
     en: {
       lang: 'en',
       dir: 'ltr',
-      title: 'FBT Swap | AI-Powered Decentralized Exchange & Financial OS',
+      title: 'FBTSwap (FBT Swap) | AI-Powered DEX & Financial OS',
       description:
-        'Swap crypto, explore DeFi, discover market opportunities and use AI-powered Intent OS across multiple blockchain networks with FBT Swap.',
+        'FBTSwap, also known as FBT Swap, is a non-custodial crypto swap across 17 networks with market charts, DeFi tools and AI-powered insights.',
       ogLocale: 'en_US'
     },
     fa: {
       lang: 'fa',
       dir: 'rtl',
-      title: 'FBT Swap | صرافی غیرمتمرکز و هوش مصنوعی مالی',
+      title: 'اف‌بی‌تی سواپ (FBTSwap) | صرافی غیرمتمرکز و هوش مالی',
       description:
-        'سواپ ارز دیجیتال، تحلیل بازار، سیگنال‌های هوشمند، دیفای، فارم و Intent OS در یک پلتفرم مالی غیرمتمرکز.',
+        'اف‌بی‌تی سواپ یا FBTSwap؛ سواپ غیرامانی روی ۱۷ شبکه با دادهٔ بازار، نمودار، ابزارهای دیفای و تحلیل هوشمند.',
       ogLocale: 'fa_IR'
     },
     keywords:
@@ -976,7 +976,15 @@ export const COPY = {
           { href: '/non-custodial-crypto-swap', en: 'Non-Custodial Swap Guide', fa: 'راهنمای سواپ غیرامانی' },
           { href: '/هشدار-قیمت-ارز-دیجیتال', en: 'Price Alerts Guide (Persian)', fa: 'راهنمای هشدار قیمت' },
           { href: '/تحلیل-تکنیکال-ارز-دیجیتال', en: 'Technical Analysis Guide (Persian)', fa: 'راهنمای تحلیل تکنیکال' },
-          { href: '/کیف-پول-غیرامانی', en: 'Wallet Security Guide (Persian)', fa: 'راهنمای امنیت کیف پول' }
+          { href: '/کیف-پول-غیرامانی', en: 'Wallet Security Guide (Persian)', fa: 'راهنمای امنیت کیف پول' },
+          { href: '/crypto-education', en: 'Crypto Education', fa: 'آموزش کریپتو (انگلیسی)' },
+          { href: '/آموزش-ارز-دیجیتال', en: 'Crypto Education (Persian)', fa: 'آموزش ارز دیجیتال' },
+          { href: '/developers', en: 'Developer API Guide', fa: 'آموزش توسعه‌دهندگان (انگلیسی)' },
+          { href: '/آموزش-توسعه-دهندگان', en: 'Developer API Guide (Persian)', fa: 'آموزش توسعه‌دهندگان' },
+          { href: '/crypto-market-charts-signals', en: 'Crypto Prices & Market Charts', fa: 'قیمت و نمودار بازار (انگلیسی)' },
+          { href: '/بازار-کریپتو-نمودار-سیگنال', en: 'Crypto Prices & Charts (Persian)', fa: 'قیمت، نمودار و روند بازار' },
+          { href: '/tokenized-global-stocks', en: 'Tokenised Global Stocks', fa: 'سهام توکنی‌شده (انگلیسی)' },
+          { href: '/سهام-جهانی-توکنی‌شده', en: 'Tokenised Global Stocks (Persian)', fa: 'سهام جهانی توکنی‌شده' }
         ]
       },
       {

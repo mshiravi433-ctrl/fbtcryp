@@ -24,8 +24,9 @@ const t = (name, cond) => {
 /* ── static HTML assertions (no JS) ─────────────────────────────── */
 console.log('— static HTML —');
 t('default language is English (html lang=en dir=ltr)', /<html lang="en" dir="ltr" data-lang="en">/.test(html));
-t('English doc title', html.includes('FBT Swap | AI-Powered Decentralized Exchange &amp; Financial OS'));
-t('Persian title embedded for switcher', html.includes('FBT Swap | صرافی غیرمتمرکز و هوش مصنوعی مالی'));
+t('English doc title uses both common brand spellings', html.includes('FBTSwap (FBT Swap) | AI-Powered DEX &amp; Financial OS'));
+t('Persian title includes the Persian and Latin brand names', html.includes('اف‌بی‌تی سواپ (FBTSwap) | صرافی غیرمتمرکز و هوش مالی'));
+t('brand aliases are present in structured data', html.includes('اف بی تی سواپ') && html.includes('FBTSwap'));
 t('canonical is the encoded Persian slug', html.includes('rel="canonical" href="https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2"'));
 t('hreflang en+fa+x-default present', html.includes('hreflang="en"') && html.includes('hreflang="fa"') && html.includes('hreflang="x-default"'));
 t('FAQPage JSON-LD present', html.includes('"FAQPage"'));
@@ -156,7 +157,7 @@ const okFetch = () => (url) => {
 {
   const { d } = await run(null, okFetch, 'en');
   t('EN: document is LTR English by default', d.documentElement.dir === 'ltr' && d.documentElement.lang === 'en');
-  t('EN: doc title remains English', d.title.includes('AI-Powered Decentralized Exchange'));
+  t('EN: doc title remains English', d.title.includes('AI-Powered DEX'));
   t('EN: pulse market cap filled ($)', /\$[\d]/.test(d.querySelector('#pv-mcap')?.textContent || ''));
   t('EN: pulse BTC dominance filled', /54/.test(d.querySelector('#pv-btcd')?.textContent || ''));
   t('EN: tokens table has 10 rows', d.querySelectorAll('#tokens-tbody tr').length === 10);

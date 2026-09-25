@@ -2,23 +2,20 @@
 /**
  * CRAWLABLE LANDING PAGES
  * ---------------------------------------------------------------------------
- * ─── THE PROBLEM, MEASURED ──────────────────────────────────────────────────
- * The app has 33 routes. Google has indexed ONE page.
+ * ─── WHAT THIS GENERATOR CAN AND CANNOT PROVE ───────────────────────────────
+ * The app uses hash-based routes (for example `/#/swap`). A fragment is not
+ * sent in an HTTP request, so those in-app screens do not become separate
+ * crawlable documents merely because a router has a route for them. The
+ * explicit, server-rendered landing pages below provide distinct HTML URLs.
  *
- * That is not bad luck, it is arithmetic: every route is behind a hash
- * (`/#/swap`), and everything after the `#` is never sent to the server. A
- * crawler asking for `/#/swap` receives the identical HTML it got for `/`, so
- * there is exactly one indexable document no matter how many screens exist.
+ * This script also writes the sitemap and robots file into the build output,
+ * but a successful build does NOT prove that Google fetched or indexed them.
+ * Use Google Search Console URL Inspection and the submitted sitemap after
+ * deployment; a `site:` query is not a reliable substitute for that evidence.
  *
- * Verified against the live site: `site:lawpoetics.ir` returns a single
- * result, and `sitemap.xml` honestly lists one URL because inventing hash
- * entries would just 404 on inspection.
- *
- * Meanwhile `/api/orders/watch/status` still reports `watches: 0`. Zero real
- * users. Everything else built recently — the history engine, the second
- * aggregator, the wallet redesign — is worth nothing until somebody arrives,
- * and search is the only arrival channel that costs no money and keeps
- * working while nobody is watching it.
+ * The current workspace cannot confirm live index status, Search Console
+ * ownership or production delivery. Do not describe those states as verified
+ * until they have been checked against the live property.
  *
  * ─── WHY STATIC HTML AND NOT SSR ────────────────────────────────────────────
  * Server-side rendering would mean a rendering server, a second code path for
@@ -43,37 +40,31 @@
  *
  * ─── THE HONESTY RULE FOR THE COPY ──────────────────────────────────────────
  * Every claim below has to be true of the shipped app. The old <title>
- * advertised "9 Chains" and Tron support that does not exist — that text was
- * what Google had indexed, so the one thing search engines knew about us was
- * partly false. Anyone arriving to swap on Tron would find nothing and leave.
- * Do not add a page here for a feature until it works.
+ * advertised "9 Chains" and Tron support that does not exist. If inaccurate
+ * copy is surfaced in search, it misleads visitors; this repository alone
+ * cannot confirm which version Google currently shows. Do not add a page here
+ * for a feature until it works.
  */
 
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderLandingV2, V2_PAGE } from './landing-v2/index.mjs';
+import {
+  MARKET_DASHBOARD_STYLES,
+  marketDashboardScript as renderMarketDashboardScript,
+  renderMarketDashboard
+} from './landing-v2/market-dashboard.mjs';
 
 /*
  * ─── THE CANONICAL HOME IS NOW fbtswap.ir ───────────────────────────────────
- * The site ran on `www.lawpoetics.ir`, a domain whose name has nothing to do
- * with the product. That is not merely untidy — for search it is actively
- * expensive:
+ * The primary hostname is `fbtswap.ir`; this keeps canonical URLs consistent
+ * with the product identity and avoids splitting signals across hostnames. A
+ * matching brand/domain can improve recognition and trust for people, but it
+ * does not by itself guarantee a ranking or prove that a page is indexed.
  *
- *   • EXACT-MATCH SIGNAL. Somebody searching "FBT Swap" sees a result on
- *     "lawpoetics.ir" and has no reason to believe it is the same thing. The
- *     click-through rate on a mismatched domain is measurably worse, and
- *     click-through feeds back into ranking.
- *   • TRUST. On a money app, a domain that does not match the brand is the
- *     single most common shape of a phishing clone. We were training our own
- *     users to ignore the one check that protects them.
- *   • BRAND SEARCH. Every mention of the app anywhere sends people to a name
- *     they then cannot find.
- *
- * `fbtswap.ir` matches the app name, the APK id (`ir.fbt.swap`) and the X
- * handle. Overridable by env so a preview deploy does not claim to be
- * production — a canonical tag pointing at production from a staging build
- * tells Google to index production instead of the page it is looking at,
- * which is how preview URLs quietly vanish from the index.
+ * `fbtswap.ir` also matches the APK id (`ir.fbt.swap`) and the X handle.
+ * SITE is overridable so a preview deploy does not claim to be production —
+ * canonical tags must point at the intended public version of each page.
  */
 const SITE = (process.env.VITE_PUBLIC_URL || 'https://fbtswap.ir').replace(/\/+$/, '');
 const OUT = 'dist';
@@ -516,6 +507,7 @@ const PAGES = [
       'سرمایه‌گذاری در ارز دیجیتال با «کجا نگهش دارم» شروع می‌شود، نه با «چقدر سود می‌دهد». در اف‌بی‌تی سواپ دارایی در کیف پول غیرامانی خودت می‌ماند؛ برنامه رابط است، نه صندوق و نه متولی دارایی. یعنی هیچ‌وقت موجودی‌ات در حساب یک صرافی گرفتار نمی‌شود و برداشت هم منتظر تأیید کسی نمی‌ماند.',
       'گام بعدی، ورود پله‌ای است. برای خرید پله‌ای مبلغ و فاصلهٔ زمانی را انتخاب می‌کنی و برنامه سرِ هر نوبت یادآور می‌شود. اما این یادآور است و نه معاملهٔ خودکار؛ اگر انتظار داری چیزی بدون تأیید تو پول جابه‌جا کند، این ابزار آن کار را نمی‌کند و عمداً هم نمی‌کند. معاملهٔ خودکار نیازمند سپردن دارایی یا مجوز برداشت است و اف‌بی‌تی سواپ هیچ‌کدام را نمی‌گیرد.',
       'برای بازده، گزینه‌ها در یک صفحه جمع شده‌اند: استیکینگ مایع روی دارایی‌هایی مثل اتریوم و سولانا، وام‌دهی و استقراض روی بازارهای شناخته‌شدهٔ دیفای، و استخرهای بازدهی که دادهٔ آن‌ها از منبع عمومی گرفته می‌شود. عدد بازده بدون منبعش معنا ندارد؛ پس هر جا عددی می‌بینی، منبع هم کنارش هست و هر جا داده نرسد، جای عدد خالی می‌ماند و عدد ساختگی نوشته نمی‌شود.',
+      'نرخ APY اگر به دلار یا استیبل‌کوین نمایش داده شود همچنان برآوردی متغیر است، نه سود دلاری ثابت. واحد نمایش اصل سرمایه، برابری استیبل‌کوین با دلار یا مبلغ پرداختی را تضمین نمی‌کند؛ روش محاسبه، دوره، قیمت دارایی و ریسک پروتکل را جدا بررسی کن.',
       'و ریسک، که بخش اصلی ماجراست: نرخ بازده ثابت نیست و با شرایط بازار و مقدار کل نقدینگی تغییر می‌کند؛ در وام‌دهیِ با وثیقه، افت قیمت وثیقه می‌تواند به تسویه ختم شود؛ در استخرهای بازده، ترکیب دارایی‌ها ریسک نامانایی (impermanent loss) دارد؛ و در همهٔ این ابزارها، باگ یا حمله به قرارداد هوشمند یک احتمال واقعی است. در استیکینگ مایع هم توکن دریافتی معادل ۱ به ۱ دارایی اصلی نیست و نرخش می‌تواند کمی بالاتر یا پایین‌تر معامله شود.',
       'پس روش درست این است: هر گزینه را با ریسک و مدت خودش بسنج، پولی که به آن نیاز داری وارد نکن، و انتظار سود تضمینی نداشته باش. اف‌بی‌تی سواپ این گزینه‌ها را نشان می‌دهد و اجرای هر تراکنش را به امضای تو می‌سپارد؛ تصمیم و مسئولیتش با خودت است.'
     ],
@@ -524,6 +516,7 @@ const PAGES = [
       ['خرید پله‌ای', 'یادآور زمان‌بندی‌شده — هر خرید با امضای خودت'],
       ['بازده', 'استیکینگ مایع، وام‌دهی و استخرهای بازده با ذکر منبع داده'],
       ['سود تضمینی', 'ندارد؛ هیچ نرخ ثابتی وعده داده نمی‌شود'],
+      ['سود دلاری', 'نمایش نرخ به دلار، اصل پول یا پرداخت را تضمین نمی‌کند'],
       ['ریسک‌ها', 'نوسان قیمت، قرارداد هوشمند، نقدشوندگی، نامانایی و احتمال تسویه در وثیقه']
     ],
     faqs: [
@@ -536,6 +529,10 @@ const PAGES = [
         a: 'نه. نرخ بازده متغیر است و به شرایط بازار، مقدار نقدینگی و کارمزدها بستگی دارد. هیچ‌جا عدد ثابتی به‌عنوان سود وعده داده نمی‌شود و هر عدد با منبع داده‌اش نمایش داده می‌شود.'
       },
       {
+        q: 'آیا APY که به دلار نمایش داده می‌شود سود دلاری را تضمین می‌کند؟',
+        a: 'خیر. دلار فقط واحد نمایش است، نه پرداخت ثابت یا تضمین اصل سرمایه. نرخ، قیمت توکن، برابری استیبل‌کوین با دلار، نقدشوندگی و ریسک پروتکل می‌توانند نتیجه را تغییر دهند.'
+      },
+      {
         q: 'خرید پله‌ای خودکار انجام می‌شود؟',
         a: 'نه. خرید پله‌ای یک یادآور زمان‌بندی‌شده است. هر خرید یک تراکنش جداست که خودت آن را بررسی و امضا می‌کنی؛ این طراحی عمدی است تا هیچ‌چیز بدون تأیید تو دارایی را جابه‌جا نکند.'
       },
@@ -546,6 +543,11 @@ const PAGES = [
     ],
     ctaLabel: 'دیدن ابزارهای بازده',
     glanceLabel: 'یک نگاه کلی',
+    links: [
+      { href: '/سهام-جهانی-توکنی‌شده', text: 'سهام جهانی توکنی‌شده؛ مالکیت و محدودیت دسترسی' },
+      { href: '/آموزش-ارز-دیجیتال', text: 'مفاهیم پایهٔ کریپتو و امنیت کیف پول' },
+      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'قیمت، نمودار و خوانش روند بازار' }
+    ],
     riskText:
       'هیچ بازدهی تضمین‌شده نیست و ممکن است سرمایه‌ات کم یا از دست برود. نگهداری در کیف پول غیرامانی یعنی مسئولیت کلید هم با خودت است: اگر عبارت بازیابی را گم کنی، هیچ‌کس نمی‌تواند بازیابی کند. این صفحه توصیهٔ مالی نیست.'
   },
@@ -579,6 +581,7 @@ const PAGES = [
       'Putting money into crypto starts with where it is held, not with what it earns. In FBT Swap the asset stays in your own non-custodial wallet — the app is an interface, not a fund and not a custodian. Your balance is never stuck inside an exchange account, and a withdrawal never waits for someone else\u2019s approval.',
       'The second step is staging entries rather than timing one. A recurring-buy reminder lets you choose an amount and an interval and then prompts you to review the purchase. It is a reminder, not an automatic trade: each buy is a separate transaction you approve yourself. That is a deliberate limit — automatic execution requires either custody of your funds or an unlimited allowance over them, and this app takes neither.',
       'For yield, the options sit on one screen: liquid staking on assets such as ETH and SOL, lending and borrowing against established DeFi markets, and yield pools whose figures come from a public data source. A yield number without its source means nothing, so the source travels with the figure — and where a figure is unavailable, the space stays empty rather than being filled with an invented one.',
+      'An APY quoted in dollars or a dollar-pegged token is still a variable estimate, not fixed dollar income. The displayed unit does not guarantee principal, a USD peg or a payout; check how the rate is calculated, its period, the asset price and the protocol risks.',
       'The risk belongs in the same paragraph as the return. Yield rates move with market conditions and total liquidity. In collateralised lending, a fall in the collateral price can trigger liquidation. In two-asset pools, impermanent loss is a real cost when the pair diverges. Every one of these instruments carries smart-contract risk — a bug or an exploit is a possibility, not a hypothetical. And a liquid-staking token is not a 1:1 claim you can always redeem at par; it trades at whatever the market pays for it.',
       'So the workable approach is to judge each option on its own risk and duration, never to commit money you need, and never to expect a guaranteed return. FBT Swap shows the options and hands every execution to your signature. The decision, and the responsibility, stay yours.'
     ],
@@ -587,6 +590,7 @@ const PAGES = [
       ['Recurring buys', 'Reminder-only \u2014 each buy is signed by you'],
       ['Yield', 'Liquid staking, lending markets and pools, each with its data source'],
       ['Guaranteed returns', 'None, and no fixed rate is advertised'],
+      ['Dollar-denominated yield', 'A USD quote does not fix principal or payout'],
       ['Risks', 'Price volatility, smart contracts, liquidity, impermanent loss, liquidation']
     ],
     faqs: [
@@ -599,6 +603,10 @@ const PAGES = [
         a: 'No. Yield rates vary with market conditions, available liquidity and fees. No fixed return is promised anywhere, and every figure is displayed together with the source it came from.'
       },
       {
+        q: 'Does an APY shown in dollars guarantee dollar income?',
+        a: 'No. Dollar denomination is a display unit, not a fixed payout or a guarantee of principal. Rates vary, and token prices, stablecoin pegs, liquidity and protocol risks can change the outcome.'
+      },
+      {
         q: 'Do recurring buys execute automatically?',
         a: 'No. A recurring buy is a scheduled reminder. Each purchase is a separate transaction you review and sign, which is deliberate: nothing should be able to move funds without your approval.'
       },
@@ -608,7 +616,12 @@ const PAGES = [
       }
     ],
     ctaLabel: 'See the yield tools',
-    glanceLabel: 'At a glance'
+    glanceLabel: 'At a glance',
+    links: [
+      { href: '/tokenized-global-stocks', text: 'Tokenised global stocks: ownership and access limits' },
+      { href: '/crypto-education', text: 'Learn crypto fundamentals and wallet safety' },
+      { href: '/crypto-market-charts-signals', text: 'Live crypto prices, charts and trend readings' }
+    ]
   },
   {
     slug: 'سواپ-سولانا',
@@ -1223,19 +1236,21 @@ const BLOG_HUBS = [
     slug: 'blog',
     lang: 'en',
     route: '/#/help',
-    title: 'Guides — fees, custody and privacy, explained plainly | FBT Swap',
+    title: 'Crypto Blog & Practical Guides: Swaps, Wallets and Markets | FBT Swap',
     description:
-      'Three long-form explainers: what a swap fee is made of, what custody decides, and what “no KYC” does and does not buy you. Written to be checkable against the app.',
-    h1: 'Guides',
+      'The FBT Swap crypto blog explains swap fees, wallet custody and privacy, beginner crypto concepts, developer APIs, charts, market signals and tokenised global stocks.',
+    h1: 'Crypto blog and practical guides',
     body: [
-      'Short answers to the questions that decide whether you should be swapping at all, written before the feature list rather than after it.',
-      'Every claim here can be checked inside the app, and every limit is stated next to the feature it belongs to. If a guide and the product ever disagree, the product is wrong.'
+      'Start with a clear answer to a practical question: what a swap quote contains, what a non-custodial wallet changes, what public market data can tell you, or how to use the read-only API.',
+      'The guides are grouped by language and topic. Each describes its limits alongside the feature, uses real examples where available and avoids presenting historical market movement or a displayed yield as a promise.'
     ],
     factLabel: 'Guides',
     facts: [
-      ['What a swap really costs', 'The network fee, the pool fee hidden inside the price, and the platform fee'],
-      ['What custody decides', 'Who can move, freeze or lose your assets — and what self-custody does not fix'],
-      ['What “no KYC” means', 'What this app never collects, and what the chain and your RPC endpoint still see']
+      ['Crypto basics', 'Networks, tokens, wallet safety and informed signing'],
+      ['Swap costs', 'Network gas, pool pricing and the disclosed platform fee'],
+      ['Developer API', 'Read-only market, chart and candle endpoints'],
+      ['Charts and signals', 'Historical market readings, not predictions or advice'],
+      ['Tokenised equities', 'Issuer, ownership, liquidity and access limits']
     ]
   },
   {
@@ -1244,29 +1259,448 @@ const BLOG_HUBS = [
     lang: 'fa',
     dir: 'rtl',
     route: '/#/help',
-    title: 'راهنماها — کارمزد، امانت‌داری و حریم خصوصی، بی‌پرده | FBT Swap',
+    title: 'وبلاگ ارز دیجیتال و راهنماهای کاربردی | سواپ، کیف پول و بازار | FBT Swap',
     description:
-      'سه راهنمای بلند: کارمزد سواپ از چه چیزی ساخته شده، امانت‌داری چه چیزی را تعیین می‌کند، و «بدون احراز هویت» چه چیزی را می‌خرد و چه چیزی را نه.',
-    h1: 'راهنماها',
+      'راهنماهای FBT Swap دربارهٔ کارمزد سواپ، امنیت و امانت‌داری کیف پول، حریم خصوصی، آموزش پایهٔ کریپتو، API توسعه‌دهندگان، نمودار و سهام توکنی‌شده.',
+    h1: 'وبلاگ ارز دیجیتال و راهنماهای کاربردی',
     body: [
-      'پاسخ‌های کوتاه به پرسش‌هایی که تعیین می‌کنند آدم باید اصلاً سواپ بکند یا نه؛ نوشته‌شده پیش از فهرست قابلیت‌ها و نه بعد از آن.',
-      'هر ادعای این‌جا را می‌توانی داخل خود برنامه بررسی کنی و هر محدودیتی کنار همان قابلیتی نوشته شده که به آن مربوط است. اگر روزی راهنما و محصول با هم نخوانند، محصول اشتباه است.'
+      'از یک پرسش عملی شروع کن: نرخ سواپ از چه چیزی ساخته شده، کیف پول غیرامانی چه چیزی را عوض می‌کند، دادهٔ عمومی بازار چه چیزی را نشان می‌دهد یا چطور از API فقط‌خواندنی استفاده کنی.',
+      'راهنماها بر پایهٔ زبان و موضوع کنار هم آمده‌اند. هر صفحه محدودیت را کنار قابلیت توضیح می‌دهد، نمونه‌های واقعی را به کار می‌برد و حرکت گذشتهٔ بازار یا نرخ نمایش‌داده‌شده را وعدهٔ سود معرفی نمی‌کند.'
     ],
     factLabel: 'راهنماها',
     facts: [
-      ['هزینهٔ واقعی یک سواپ', 'کارمزد شبکه، کارمزد استخری که داخل قیمت پنهان است، و کارمزد پلتفرم'],
-      ['امانت‌داری چه چیزی را تعیین می‌کند', 'چه کسی می‌تواند دارایی را جابه‌جا، مسدود یا از دست بدهد — و غیرامانی چه چیزی را حل نمی‌کند'],
-      ['«بدون احراز هویت» یعنی چه', 'این برنامه چه چیزی را جمع نمی‌کند و زنجیره و گرهٔ RPC چه چیزی را می‌بینند']
+      ['مفاهیم پایهٔ کریپتو', 'شبکه، توکن، امنیت کیف پول و امضای آگاهانه'],
+      ['هزینه‌های سواپ', 'گس شبکه، قیمت استخر و کارمزد شفاف پلتفرم'],
+      ['API توسعه‌دهندگان', 'مسیرهای فقط‌خواندنی بازار، نمودار و کندل'],
+      ['نمودار و سیگنال', 'خوانش دادهٔ گذشته؛ نه پیش‌بینی یا توصیه'],
+      ['سهام توکنی‌شده', 'محدودیت ناشر، مالکیت، نقدشوندگی و دسترسی']
     ]
   }
 ];
 
 /*
- * Posts and hubs join PAGES so the sitemap, the reciprocal hreflang pairs, the
- * sibling links and the IndexNow sync check all see them without a second
- * rendering path.
+ * Intent-led learning and data landings. Each page answers a distinct question
+ * in useful, language-specific copy; none is a keyword-only doorway. The market
+ * pair progressively enhances a crawlable static explanation with 30 live
+ * API rows, 7-day sparklines and a transparent, non-prescriptive trend read.
  */
-PAGES.push(...POSTS, ...BLOG_HUBS);
+const SEARCH_LANDINGS = [
+  {
+    slug: 'آموزش-ارز-دیجیتال',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/learn',
+    title: 'آموزش ارز دیجیتال از پایه | سواپ، کیف پول و نمودار | FBT Swap',
+    description: 'راهنمای شروع ارز دیجیتال: تفاوت شبکه و توکن، کیف پول غیرامانی، سواپ، نمودار و ریسک بازده دیفای را روشن و بدون وعدهٔ سود یاد بگیر.',
+    h1: 'آموزش ارز دیجیتال؛ از شبکه و کیف پول تا سواپ و نمودار',
+    body: [
+      'این راهنما برای کسی است که می‌خواهد پیش از وصل‌کردن کیف پول یا تبدیل توکن، بداند هر مرحله چه کاری انجام می‌دهد. از شبکه و آدرس قرارداد شروع می‌کنیم، بعد سراغ امنیت کیف پول، قیمت‌خوانی و ریسک می‌رویم؛ نه از وعدهٔ سود و نه از یک فهرست خرید.',
+      'در FBT Swap، سواپِ روی زنجیره با کیف پول خودت امضا می‌شود. این تفاوت مهم است: برنامه دارایی را نگه نمی‌دارد و نمی‌تواند تراکنش نهایی را برگرداند. در هر گام، کارمزد، محدودیت‌ها و چیزی را که هنوز نمی‌دانیم باید جدا از تبلیغات دید.',
+      'اگر تازه شروع کرده‌ای، راه را به ترتیب برو: اول مفاهیم، بعد یک کیف پول آزمایشی یا شبیه‌ساز، سپس خواندن قیمت و در آخر آشنایی با ابزارهای دیفای. برای تمرین واقعی، هیچ‌وقت از پول ضروری یا مبلغی که توان ازدست‌دادنش را نداری استفاده نکن.'
+    ],
+    sections: [
+      ['۱. شبکه، کوین و توکن چه فرقی دارند؟', [
+        'شبکه دفترکل و قواعدی است که تراکنش روی آن ثبت می‌شود؛ کوین بومی برای پرداخت کارمزد و فعالیت همان شبکه به کار می‌رود؛ توکن قراردادی است که روی یک شبکه ساخته شده است. یک نماد می‌تواند روی چند شبکه قراردادهای متفاوت داشته باشد، پس نام و لوگو برای شناسایی کافی نیست.',
+        'پیش از ارسال یا سواپ، شبکهٔ کیف پول، آدرس قرارداد و دارایی مقصد را دوباره بررسی کن. ارسال دارایی روی شبکهٔ اشتباه ممکن است برگشت‌پذیر نباشد. FBT Swap فهرست شبکه‌های پشتیبانی‌شده را در صفحهٔ شبکه‌ها نشان می‌دهد؛ پشتیبانی از یک شبکه به‌تنهایی تضمین نمی‌کند هر توکنی نقدینگی یا مسیر سواپ داشته باشد.'
+      ]],
+      ['۲. کیف پول غیرامانی و عبارت بازیابی', [
+        'در کیف پول غیرامانی، کلید یا عبارت بازیابی دست خود کاربر است. عبارت بازیابی را در وب‌سایت، چت، فرم پشتیبانی یا کد برنامه وارد نکن و آن را در فضای ابریِ بی‌رمز ذخیره نکن. هرکس آن را داشته باشد می‌تواند دارایی را جابه‌جا کند.',
+        'پیش از امضا، متن درخواست کیف پول را بخوان: اتصال ساده با مجوز انتقال توکن یکی نیست. اگر مقصد، مقدار یا مجوز نامفهوم است، درخواست را رد کن و از مسیر رسمی کیف پول بررسی کن.'
+      ]],
+      ['۳. سواپ ارز دیجیتال از نرخ تا امضا', [
+        'رابط سواپ از تجمیع‌کننده‌های عمومی برای پیدا کردن مسیر در صرافی‌های غیرمتمرکز همان شبکه قیمت می‌گیرد. نرخ، اثر قیمت، حداقل دریافتی و کارمزد پلتفرم را پیش از بازشدن کیف پول بررسی کن. کارمزد گس جداست و به شبکه پرداخت می‌شود؛ کارمزد استخر نیز ممکن است در نرخ پیشنهادی منعکس شود.',
+        'بعد از بررسی جزئیات، کیف پول تراکنش را امضا می‌کند و زنجیره آن را اجرا می‌کند. تراکنش تأییدشده را نمی‌توان مانند پرداخت بانکی لغو کرد. هیچ سرویس غیرامانی نمی‌تواند عبارت بازیابی گم‌شده یا دارایی فرستاده‌شده به نشانی اشتباه را بازیابی کند.'
+      ]],
+      ['۴. نمودار و سیگنال را چطور بخوانیم؟', [
+        'نمودار قیمت می‌گوید در یک بازهٔ گذشته چه اتفاقی افتاده است. بازهٔ زمانی، منبع داده، نقدینگی و نوسان روی برداشت اثر می‌گذارند. سیگنال‌های آماری می‌توانند حرکت چند بازه را خلاصه کنند؛ اما از گذشته آینده را معلوم نمی‌کنند و جای برنامهٔ مدیریت ریسک را نمی‌گیرند.',
+        'صفحهٔ بازار FBT Swap قیمت‌ها، نمودار هفت‌روزه و مقایسهٔ تغییر ۲۴ساعته با هفت‌روزه را نشان می‌دهد. برچسب روندِ آن صفحه صرفاً خلاصهٔ دادهٔ گذشته است، نه دستور خریدوفروش یا توصیهٔ شخصی.'
+      ]],
+      ['۵. «سود دلاری» در دیفای یعنی سود تضمینی نیست', [
+        'وقتی نرخ بازده با دلار یا استیبل‌کوین نمایش داده می‌شود، واحد نمایش به‌تنهایی اصل سرمایه یا مبلغ سود را تضمین نمی‌کند. نرخ استخر و وام‌دهی متغیر است؛ قرارداد هوشمند، نقدشوندگی، افت قیمت دارایی و جداشدن قیمت استیبل‌کوین از یک دلار هم ریسک‌اند.',
+        'سهام جهانیِ توکنی‌شده نیز لزوماً همان مالکیت مستقیم سهم در کارگزاری نیست. صادرکننده، حق بازخرید، بازار ثانویه، کارمزد و محدودیت منطقه‌ای را بررسی کن. صفحهٔ FBT فعلاً دادهٔ بعضی دارایی‌های توکنی‌شده را دنبال می‌کند؛ این به معنی تضمین معامله یا دسترسی در هر کشور نیست.'
+      ]]
+    ],
+    facts: [
+      ['ترتیب یادگیری', 'شبکه و توکن ← کیف پول ← نرخ و کارمزد ← نمودار و ریسک'],
+      ['امضای تراکنش', 'فقط در کیف پولی که خودت کنترل می‌کنی'],
+      ['نمودار و سیگنال', 'خلاصهٔ دادهٔ گذشته؛ نه پیش‌بینی و نه توصیه'],
+      ['بازده دیفای', 'متغیر و پرریسک؛ سود ثابت یا دلاری تضمین نمی‌شود']
+    ],
+    faqs: [
+      { q: 'برای شروع یادگیری ارز دیجیتال چه چیزی را اول یاد بگیرم؟', a: 'اول تفاوت شبکه، کوین و توکن و روش نگهداری عبارت بازیابی را یاد بگیر. بعد هزینهٔ گس، قیمت پیشنهادی، اثر قیمت و حداقل دریافتی را پیش از امضای یک سواپ بررسی کن.' },
+      { q: 'آیا نمودار یا سیگنال سود آینده را تضمین می‌کند؟', a: 'نه. نمودار و سیگنال خلاصه‌ای از داده‌های تاریخی‌اند. بازار می‌تواند برخلاف هر الگو حرکت کند و این محتوا توصیهٔ مالی نیست.' },
+      { q: 'آیا سود دلاری دیفای ثابت است؟', a: 'خیر. نرخ‌ها ممکن است تغییر کنند و ریسک قرارداد، نقدشوندگی، دارایی پایه و استیبل‌کوین باقی است. نمایش یک عدد به دلار به معنی تضمین اصل پول یا بازده نیست.' }
+    ],
+    links: [
+      { href: '/وبلاگ', text: 'وبلاگ و راهنماهای بلند ارز دیجیتال' },
+      { href: '/کیف-پول-غیرامانی', text: 'امنیت کیف پول غیرامانی و عبارت بازیابی' },
+      { href: '/سرمایه-گذاری-در-ارز-دیجیتال', text: 'بازده دیفای و ریسک سرمایه‌گذاری' },
+      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'قیمت ۳۰ دارایی، نمودار و خوانش بازار' }
+    ]
+  },
+  {
+    slug: 'crypto-education',
+    lang: 'en',
+    route: '/#/learn',
+    title: 'Crypto Education for Beginners: Wallets, Swaps and Charts | FBT Swap',
+    description: 'A practical crypto learning guide to networks, tokens, wallet safety, DEX swaps, charts, DeFi yield and risk — without profit promises.',
+    h1: 'Crypto education: networks, wallets, swaps and charts',
+    body: [
+      'This guide is for someone who wants to understand a crypto transaction before connecting a wallet or exchanging a token. It starts with networks and token contracts, then covers wallet safety, price quotes, charts and risk — not a list of coins to buy.',
+      'On-chain swaps in FBT Swap are signed in your own wallet. The interface does not hold assets and cannot reverse a settled transaction. Read the fee, limitations and unknowns at each step rather than relying on a marketing claim.',
+      'A sensible learning path is concepts first, then a test wallet or simulator, then price and chart literacy, and only then DeFi tools. Do not use essential money or funds you cannot afford to lose for practice.'
+    ],
+    sections: [
+      ['1. Network, coin and token are different things', [
+        'A network is the ledger and the rules that record a transaction; its native coin pays for network activity; a token is a contract deployed on a network. The same ticker can refer to different contracts on different networks, so a name or logo is not enough to identify an asset.',
+        'Before sending or swapping, check the wallet network, token contract and destination asset. A transfer on the wrong network may not be recoverable. FBT Swap lists its supported networks, but network support alone does not mean every token has liquidity or a swap route.'
+      ]],
+      ['2. Non-custodial wallets and recovery phrases', [
+        'With a non-custodial wallet, the user controls the key or recovery phrase. Never enter a recovery phrase into a website, chat, support form or application code, and do not leave an unencrypted copy in cloud storage. Anyone who obtains it can move the assets.',
+        'Read wallet prompts before signing: a connection request is not the same as a token-transfer approval. If the destination, amount or permission is unclear, reject the request and verify it through the wallet’s official route.'
+      ]],
+      ['3. From a swap quote to a signed transaction', [
+        'A swap interface asks public aggregators for routes through decentralised exchanges on the selected network. Check the quote, price impact, minimum received and platform fee before the wallet opens. Network gas is separate and paid to the chain; a pool fee may already be reflected in the quoted rate.',
+        'After you review the details, your wallet signs and the chain executes the transaction. A confirmed on-chain transaction cannot be cancelled like a bank payment. A non-custodial service cannot recover a lost recovery phrase or reverse a transfer to the wrong address.'
+      ]],
+      ['4. Reading a chart or signal without treating it as a forecast', [
+        'A price chart records what happened in a past window. Timeframe, data source, liquidity and volatility all affect what a chart can tell you. Statistical signals can summarise movement across windows, but historical data does not reveal the future or replace risk management.',
+        'The FBT market page shows prices, a seven-day chart and a comparison of 24-hour with seven-day change. Its trend label is a summary of past data, not a buy/sell instruction or personalised recommendation.'
+      ]],
+      ['5. Dollar-denominated DeFi yield is not guaranteed dollar profit', [
+        'A yield displayed in dollars or a dollar-pegged token does not guarantee principal or a cash return. Pool and lending rates vary; smart-contract, liquidity, underlying-asset and stablecoin depeg risks remain.',
+        'A tokenised global stock is not automatically the same as direct ownership of a share held at a brokerage. Check the issuer, redemption rights, secondary-market liquidity, fees and regional eligibility. FBT currently tracks selected tokenised-asset data; that does not promise trading access in every country.'
+      ]]
+    ],
+    facts: [
+      ['Learning order', 'Network and token → wallet → quote and fees → chart and risk'],
+      ['Transaction approval', 'Signed only in a wallet you control'],
+      ['Charts and signals', 'Summaries of past data, not forecasts or advice'],
+      ['DeFi yield', 'Variable and risky; no fixed or dollar return is promised']
+    ],
+    faqs: [
+      { q: 'What should a beginner learn first about crypto?', a: 'Start with the difference between a network, a coin and a token, and how to protect a recovery phrase. Then learn to review gas, the quote, price impact and minimum received before signing a swap.' },
+      { q: 'Can a chart or market signal guarantee a future return?', a: 'No. Charts and signals summarise historical data. Markets can move against any pattern, and this material is not financial advice.' },
+      { q: 'Is dollar-denominated DeFi yield fixed?', a: 'No. Rates can change and contract, liquidity, underlying-asset and stablecoin risks remain. Quoting a figure in dollars does not guarantee principal or returns.' }
+    ],
+    links: [
+      { href: '/blog', text: 'Crypto blog and long-form guides' },
+      { href: '/custodial-vs-non-custodial-wallets', text: 'Custodial and non-custodial wallets' },
+      { href: '/crypto-investing-yield-and-lending', text: 'DeFi yield and investing risks' },
+      { href: '/crypto-market-charts-signals', text: 'Thirty assets, charts and market readings' }
+    ]
+  },
+  {
+    slug: 'آموزش-توسعه-دهندگان',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/developers',
+    title: 'آموزش توسعه‌دهندگان وب۳ | شروع کار با API بازار FBT Swap',
+    description: 'راهنمای عملی توسعه‌دهندگان برای API عمومی بازار FBT: نمونهٔ واقعی curl و JavaScript، نمودار و کندل، کنترل خطا و نگهداری امن کلیدها.',
+    h1: 'آموزش توسعه‌دهندگان وب۳؛ اولین درخواست به API بازار',
+    body: [
+      'این آموزش برای ساخت کلاینتی است که دادهٔ عمومی بازار را می‌خواند؛ نه برای امضای تراکنش یا جابه‌جایی دارایی کاربر. هر دو نمونه از endpoint بازار استفاده می‌کنند و کلید API خصوصی لازم ندارند.',
+      'پاسخ‌های API می‌توانند به محدودیت منبع بالادستی، کش یا اختلال شبکه وابسته باشند. وضعیت HTTP را بررسی کن، پاسخ را cache کن و در صورت محدودشدن، backoff داشته باش. این سرویس قرارداد uptime یا SLA برای برنامهٔ تو ارائه نمی‌دهد.',
+      'برای هرپارامتر و endpoint تازه، قرارداد ماشین‌خوان را پیش از توسعه بخوان. مستندات اجرایی باید با پاسخ واقعی سرویس یکی باشد؛ اگر چیزی در OpenAPI نیست، فرض نکن که پشتیبانی می‌شود.'
+    ],
+    sections: [
+      ['۱. API عمومی را با یک درخواست امن شروع کن', [
+        'GET /api/markets?per_page=5 فهرست بازار را از همان دامنه می‌خواند. برای مسیرهای عمومی این راهنما کلید کاربر لازم نیست. پاسخ را JSON فرض کن، اما همیشه response.ok و شکل داده را بررسی کن؛ upstream ممکن است موقتاً در دسترس نباشد.',
+        'در رابط وب، از مسیر نسبی /api استفاده کن تا مرورگر همان دامنه را صدا بزند. برای سرویس بیرونی از آدرس عمومی https://fbtswap.ir/api استفاده کن و محدودیت CORS و شرایط استفاده را از OpenAPI و پاسخ سرور بررسی کن.'
+      ]],
+      ['۲. نمودار خطی و کندل را از endpoint درست بگیر', [
+        'GET /api/chart/bitcoin?days=7 تاریخچهٔ قیمت را برمی‌گرداند. برای نمودار شمعی، GET /api/ohlc/bitcoin?days=30 دادهٔ باز، سقف، کف و بسته‌شدن (OHLC) را می‌دهد. هر دو مسیر دادهٔ تاریخی‌اند و تضمین نمی‌کنند قیمت آینده چه می‌شود.',
+        'برای فهرست ۳۰ دارایی، یک درخواست /api/markets?per_page=30 کافی است؛ همان پاسخ سری sparkline هفت‌روزه را همراه اطلاعات بازار می‌آورد. برای ساخت جدول، از ۳۰ درخواست جداگانهٔ نمودار استفاده نکن.'
+      ]],
+      ['۳. خطا، cache و کلیدها را جدی بگیر', [
+        'پاسخ‌های 4xx و 5xx را از دادهٔ معتبر جدا کن و درخواست ناموفق را به‌عنوان قیمت صفر ذخیره نکن. نتایج را متناسب با نوع داده cache کن، retryها را با فاصلهٔ افزایشی انجام بده و در برابر 429 یا Retry-After مطابق پاسخ سرور رفتار کن.',
+        'کلید ارائه‌دهندهٔ داده یا مدل را در متغیری با پیشوند VITE_، کد فرانت‌اند یا APK نگذار؛ این متغیرها عمومی می‌شوند. کلید خصوصی فقط در محیط سرور نگهداری شود. API بازار FBT برای استفادهٔ عمومی کلید کاربر نمی‌خواهد.'
+      ]],
+      ['۴. از قرارداد API ماشین‌خوان استفاده کن', [
+        'فهرست endpointهای خواندنی، پارامترها و مرزهای سرویس در /api/openapi.json است. از همان مستندات برای ساخت typeها و اعتبارسنجی ورودی استفاده کن و مسیرهای write یا داخلی را به‌عنوان API عمومی فرض نکن.',
+        'قبل از انتشار integration، سناریوی دادهٔ خالی، timeout، پاسخ نامعتبر، rate limit و قطع منبع را آزمایش کن. اگر برنامه‌ات برای تصمیم مالی یا نمایش قیمت به feed نیاز دارد، وضعیت «داده در دسترس نیست» را به‌جای مقدار ساختگی نشان بده.'
+      ]]
+    ],
+    codeSamples: [
+      { label: 'درخواست curl', language: 'bash', code: ['curl -fsS "https://fbtswap.ir/api/markets?per_page=5" ' + String.fromCharCode(92), '  -H "accept: application/json"'].join(String.fromCharCode(10)) },
+      { label: 'خواندن همان API در JavaScript', language: 'javascript', code: [
+        'const response = await fetch("/api/markets?per_page=5", {',
+        '  headers: { accept: "application/json" }',
+        '});',
+        'if (!response.ok) throw new Error("HTTP " + response.status);',
+        'const markets = await response.json();',
+        'console.table(markets.slice(0, 5));'
+      ].join(String.fromCharCode(10)) }
+    ],
+    facts: [
+      ['نوع داده', 'عمومی و فقط‌خواندنی در endpointهای نمونه'],
+      ['احراز هویت', 'برای endpointهای بازار این راهنما لازم نیست'],
+      ['نمودار', 'تاریخچهٔ قیمت و OHLC از مسیرهای جداگانه'],
+      ['قابلیت اطمینان', 'پاسخ upstream را cache و خطا را صریح مدیریت کن']
+    ],
+    faqs: [
+      { q: 'برای API بازار باید کلید بسازم؟', a: 'نمونه‌های عمومی این راهنما برای خواندن بازار به کلید کاربر نیاز ندارند. جزئیات هر مسیر و مرزهای دسترسی را در /api/openapi.json بررسی کن.' },
+      { q: 'آیا API قیمت یا uptime را تضمین می‌کند؟', a: 'نه. داده به سرویس‌های بالادستی و کش وابسته است و uptime یا SLA تضمین‌شده‌ای اعلام نشده. خطا و دادهٔ ناموجود را در برنامهٔ خودت صریح نمایش بده.' },
+      { q: 'آیا باید هر توکن را با یک درخواست نمودار بخوانم؟', a: 'برای جدول ۳۰ دارایی از /api/markets?per_page=30 استفاده کن؛ پاسخ فهرست، دادهٔ sparkline هفت‌روزه هم دارد. درخواست بیشتر از نیاز، سهمیهٔ مشترک را مصرف می‌کند.' }
+    ],
+    links: [
+      { href: '/api/openapi.json', text: 'قرارداد ماشین‌خوان API بازار' },
+      { href: '/developers', text: 'راهنمای توسعه‌دهندگان به زبان انگلیسی' },
+      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'نمونهٔ فهرست ۳۰ دارایی و نمودار زنده' },
+      { href: '/آموزش-ارز-دیجیتال', text: 'مفاهیم پایهٔ ارز دیجیتال' }
+    ]
+  },
+  {
+    slug: 'developers',
+    lang: 'en',
+    route: '/#/developers',
+    title: 'Web3 Developer Guide: FBT Market API Quickstart | FBT Swap',
+    description: 'A practical guide to the public FBT market API: working curl and JavaScript examples, chart and candle endpoints, error handling and key safety.',
+    h1: 'Web3 developer guide: your first market API request',
+    body: [
+      'This quickstart is for a client that reads public market data — not one that signs transactions or moves a user’s funds. Both examples call the market endpoint, and neither needs a private API key.',
+      'API responses depend on upstream limits, caching and network availability. Check HTTP status, cache results and back off when rate-limited. This service does not promise uptime or an SLA for your application.',
+      'Before building against a new route, read the machine-readable contract. Documentation used by an integration should match the server response; do not assume an endpoint is supported if it is absent from OpenAPI.'
+    ],
+    sections: [
+      ['1. Start with one safe public request', [
+        'GET /api/markets?per_page=5 reads a ranked market list from the same origin. The public market endpoints in this guide do not need a user API key. Still check response.ok and validate the response shape; an upstream provider can be temporarily unavailable.',
+        'In a browser client, use the relative /api path so the request stays on the same origin. From another service, use https://fbtswap.ir/api and verify CORS and usage details in OpenAPI and the server response.'
+      ]],
+      ['2. Use the right endpoint for lines and candles', [
+        'GET /api/chart/bitcoin?days=7 returns price history. For candlesticks, GET /api/ohlc/bitcoin?days=30 returns open, high, low and close data. Both describe historical observations; neither promises a future price.',
+        'One request to /api/markets?per_page=30 can supply a 30-asset table and each row’s seven-day sparkline. Do not fan out to thirty separate chart requests for that view.'
+      ]],
+      ['3. Handle errors, caching and credentials deliberately', [
+        'Keep 4xx and 5xx responses separate from valid market data; never store a failed request as a zero price. Cache according to the data type, use exponential backoff, and respect 429 or Retry-After when present.',
+        'Do not put a provider or model key in a VITE_ variable, frontend bundle or APK: those values are public. Keep private credentials in the server environment. The public FBT market examples do not require a user key.'
+      ]],
+      ['4. Build from the machine-readable API contract', [
+        'The read endpoints, parameters and service boundaries are described at /api/openapi.json. Use it to generate types and validate inputs; do not treat write or internal routes as a public integration surface.',
+        'Before release, test empty data, timeouts, malformed responses, rate limits and upstream outages. If your application depends on a feed for a financial decision or a displayed price, show “data unavailable” rather than a made-up value.'
+      ]]
+    ],
+    codeSamples: [
+      { label: 'curl request', language: 'bash', code: ['curl -fsS "https://fbtswap.ir/api/markets?per_page=5" ' + String.fromCharCode(92), '  -H "accept: application/json"'].join(String.fromCharCode(10)) },
+      { label: 'Read the same API in JavaScript', language: 'javascript', code: [
+        'const response = await fetch("/api/markets?per_page=5", {',
+        '  headers: { accept: "application/json" }',
+        '});',
+        'if (!response.ok) throw new Error("HTTP " + response.status);',
+        'const markets = await response.json();',
+        'console.table(markets.slice(0, 5));'
+      ].join(String.fromCharCode(10)) }
+    ],
+    facts: [
+      ['Data scope', 'Public, read-only for the example market endpoints'],
+      ['Authentication', 'Not required for the public market examples'],
+      ['Charts', 'Price history and OHLC use separate endpoints'],
+      ['Reliability', 'Cache upstream data and surface failures honestly']
+    ],
+    faqs: [
+      { q: 'Do I need an API key for market data?', a: 'The public read-only examples in this guide do not require a user key. Check /api/openapi.json for the exact access boundary of each route.' },
+      { q: 'Does the API guarantee prices or uptime?', a: 'No. Data depends on upstream services and caching, and there is no guaranteed uptime or SLA. Your client should make missing or failed data explicit.' },
+      { q: 'Should I fetch a separate chart for each of 30 tokens?', a: 'For a 30-asset table, use /api/markets?per_page=30; the response includes seven-day sparkline data. Unnecessary fan-out consumes shared upstream quota.' }
+    ],
+    links: [
+      { href: '/api/openapi.json', text: 'Machine-readable FBT market API contract' },
+      { href: '/آموزش-توسعه-دهندگان', text: 'Developer guide in Persian' },
+      { href: '/crypto-market-charts-signals', text: 'A 30-asset chart and market dashboard' },
+      { href: '/crypto-education', text: 'Crypto concepts for beginners' }
+    ]
+  },
+  {
+    slug: 'بازار-کریپتو-نمودار-سیگنال',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/signals',
+    marketDashboard: true,
+    title: 'قیمت ارز دیجیتال و نمودار ۳۰ دارایی | سیگنال بازار | FBT Swap',
+    description: 'قیمت و نمودار هفت‌روزهٔ حداکثر ۳۰ دارایی، نبض بازار و خوانش شفاف روند بر پایهٔ تغییر ۲۴ساعته و هفت‌روزه؛ بدون پیش‌بینی یا توصیهٔ خریدوفروش.',
+    h1: 'بازار کریپتو؛ قیمت ۳۰ دارایی، نمودار و خوانش روند',
+    body: [
+      'این صفحه برای بررسی دادهٔ بازار ساخته شده است، نه برای وعده‌دادن دربارهٔ حرکت بعدی قیمت. فهرست زنده از API عمومی FBT می‌آید، بر پایهٔ ترتیب ارزش بازار همان پاسخ مرتب می‌شود و همراه هر دارایی نمودار خطی هفت‌روزه نمایش می‌دهد.',
+      'بخش «نبض بازار» خلاصه‌ای از جهت کلی، گستردگی تغییرات و ریسک مشاهده‌شده در دادهٔ بازار است. برچسب هر توکن فقط مقایسهٔ علامت تغییر ۲۴ساعته با هفت‌روزه است؛ اگر دو بازه هم‌جهت نباشند، نتیجه ترکیبی نشان داده می‌شود.',
+      'مقادیر ممکن است با منبع و کش API تأخیر داشته باشند. اگر فید در دسترس نباشد، صفحه قیمت یا نمودار ساختگی نمی‌سازد. هیچ‌کدام از این خوانش‌ها سیگنال شخصی، توصیهٔ مالی یا تضمین بازده نیست.'
+    ],
+    sections: [
+      ['۳۰ توکن مهم، اما نه یک فهرست ثابت و همیشگی', [
+        'جدول زنده حداکثر ۳۰ دارایی را از پاسخ بازار می‌گیرد. ترتیب فهرست به رتبهٔ ارزش بازار در همان داده وابسته است و با گذر زمان تغییر می‌کند. فهرست نمونهٔ قابل‌خواندن در صفحه فقط نام دارایی‌های شناخته‌شده را برای آشنایی می‌آورد و رتبهٔ زنده نیست.',
+        'قیمت مرجع دلاری برای مقایسه است؛ قیمت اجرا روی یک شبکه یا استخر مشخص ممکن است به‌دلیل نقدینگی، کارمزد و اثر قیمت متفاوت باشد. پیش از هر تراکنش، قیمت و حداقل دریافتی همان مسیر را داخل کیف پول و رابط سواپ بررسی کن.'
+      ]],
+      ['شبکه‌های سواپ پشتیبانی‌شده', [
+        'مسیر سواپ فعلی ۱۷ شبکه دارد: BNB Chain، Ethereum، Polygon، Arbitrum، Base، Optimism، Avalanche، Linea، Sonic، Berachain، Unichain، Monad، Mantle، Scroll، zkSync Era، Robinhood Chain و Solana. هر توکن روی همهٔ این شبکه‌ها موجود نیست و نماد یکسان لزوماً به معنی قرارداد یکسان نیست.',
+        'سواپ بین دو شبکهٔ متفاوت همیشه یک کار سادهٔ توکن‌به‌توکن نیست. در صفحهٔ سواپ، شبکهٔ ورودی و خروجی، کیف پول، مسیر، گس، اثر قیمت و کارمزد را پیش از امضا بررسی کن.'
+      ]],
+      ['این سیگنال‌ها دقیقاً چه می‌گویند؟', [
+        'خوانش ردیف توکن از دادهٔ موجود تغییر ۲۴ساعته و هفت‌روزه را مقایسه می‌کند: مثبت‌بودن هر دو «هر دو بازه مثبت»، منفی‌بودن هر دو «هر دو بازه منفی» و اختلاف جهت «ترکیبی» است. نبود یکی از مقادیر به‌عنوان دادهٔ ناکافی نمایش داده می‌شود.',
+        'این دسته‌بندی تحلیل سادهٔ جهت گذشته است؛ نه پیش‌بینی، نه نقطهٔ ورود یا خروج و نه دستور خرید یا فروش. حتی روند هم‌جهت هم می‌تواند برگردد. نقدشوندگی، نوسان، ریسک قرارداد و احتمال ازدست‌رفتن سرمایه را جداگانه بسنج.'
+      ]]
+    ],
+    facts: [
+      ['فهرست زنده', 'حداکثر ۳۰ دارایی بر اساس ترتیب فعلی پاسخ API بازار'],
+      ['نمودار', 'سری قیمت هفت‌روزه که همراه پاسخ بازار می‌آید'],
+      ['روش خوانش', 'مقایسهٔ تغییر ۲۴ساعته و هفت‌روزه؛ بدون توصیهٔ خریدوفروش'],
+      ['شبکه‌های سواپ', '۱۷ شبکه؛ موجودبودن مسیر برای هر توکن باید جدا بررسی شود']
+    ],
+    faqs: [
+      { q: 'آیا رتبهٔ ۳۰ دارایی همیشه ثابت است؟', a: 'نه. جدول از پاسخ فعلی API بازار مرتب می‌شود و ترتیب بازار تغییر می‌کند. فهرست نام‌های ثابت پایین جدول نمونهٔ آموزشی است، نه رتبه‌بندی لحظه‌ای.' },
+      { q: 'سیگنال سبز یعنی الان بخرم؟', a: 'نه. برچسب فقط هم‌جهتی تغییرهای تاریخی ۲۴ساعته و هفت‌روزه را نشان می‌دهد. پیشنهاد معامله، پیش‌بینی قیمت یا توصیهٔ شخصی نیست.' },
+      { q: 'چرا قیمت این صفحه با قیمت سواپ فرق دارد؟', a: 'قیمت بازار مقدار مرجع است. نرخ اجرا به استخر و مسیر همان شبکه، نقدینگی، کارمزد و اثر قیمت بستگی دارد؛ نرخ نهایی را پیش از امضای تراکنش بررسی کن.' }
+    ],
+    links: [
+      { href: '/تحلیل-تکنیکال-ارز-دیجیتال', text: 'راهنمای خواندن تحلیل و نمودار' },
+      { href: '/سواپ-ارز-دیجیتال', text: 'راهنمای سواپ و بررسی نرخ پیش از امضا' },
+      { href: '/آموزش-ارز-دیجیتال', text: 'آموزش پایهٔ کریپتو و کیف پول' }
+    ]
+  },
+  {
+    slug: 'crypto-market-charts-signals',
+    lang: 'en',
+    route: '/#/signals',
+    marketDashboard: true,
+    title: 'Crypto Prices, 30 Charts and Market Signals | FBT Swap',
+    description: 'Prices and seven-day charts for up to 30 crypto assets, a market pulse and a transparent trend reading based on 24-hour and seven-day changes — not a forecast or trade advice.',
+    h1: 'Crypto market data: 30 assets, charts and trend readings',
+    body: [
+      'This page is for inspecting market data, not promising what prices will do next. The live list comes from the public FBT API, follows the market-cap order returned by that response and shows a seven-day line chart alongside each asset.',
+      'The market-pulse panel summarises broad direction, breadth and observed market risk. Each token trend label compares only the signs of its 24-hour and seven-day changes; if the two windows disagree, the reading is mixed.',
+      'Values may be delayed by the data source or API cache. If a feed is unavailable, the page does not invent prices or charts. None of these readings is a personalised signal, financial advice or a return guarantee.'
+    ],
+    sections: [
+      ['Thirty notable tokens, not a permanent ranking', [
+        'The live table requests up to 30 assets from the market API. The order follows the market-cap ranking in that response and changes over time. A separate readable example list names familiar assets for orientation; it is not a live rank.',
+        'A dollar reference price is useful for comparison, but an execution quote on a particular chain or pool can differ because of liquidity, fees and price impact. Before a transaction, review the route and minimum received in the swap interface.'
+      ]],
+      ['Supported swap networks', [
+        'The current swap routes cover 17 networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Berachain, Unichain, Monad, Mantle, Scroll, zkSync Era, Robinhood Chain and Solana. A token is not available on every network, and a shared ticker does not prove two contracts are the same asset.',
+        'Moving value between different networks is not always a simple token-for-token swap. In the swap interface, check the source and destination network, wallet, route, gas, price impact and fee before signing.'
+      ]],
+      ['What the trend reading actually says', [
+        'The row label compares the available 24-hour and seven-day percentage changes: both positive is “positive on both windows,” both negative is “negative on both windows,” and different directions are “mixed.” If either reading is missing, the page says there is insufficient data.',
+        'This is a simple description of past direction, not a forecast, entry or exit point, or instruction to buy or sell. Even aligned trends can reverse. Evaluate liquidity, volatility, contract risk and the possibility of losing capital separately.'
+      ]]
+    ],
+    facts: [
+      ['Live list', 'Up to 30 assets in the current market API response order'],
+      ['Chart', 'Seven-day price series returned with the market response'],
+      ['Trend method', '24-hour versus seven-day change; no trade recommendation'],
+      ['Swap networks', '17 supported; route availability is token-specific']
+    ],
+    faqs: [
+      { q: 'Is the ranking of the 30 assets fixed?', a: 'No. The table follows the current market API response, and market rankings change. The separate static list is an educational reference, not a live ranking.' },
+      { q: 'Does a positive signal mean I should buy?', a: 'No. The label only compares historical 24-hour and seven-day changes. It is not a trade recommendation, price forecast or personalised advice.' },
+      { q: 'Why can this reference price differ from a swap quote?', a: 'A market price is a reference. Execution depends on the selected network and pool, the route, liquidity, fees and price impact; review the live quote before signing.' }
+    ],
+    links: [
+      { href: '/crypto-market-history-analysis', text: 'A guide to reading chart history' },
+      { href: '/crypto-swap-without-kyc', text: 'Reviewing a swap quote before signing' },
+      { href: '/crypto-education', text: 'Crypto fundamentals and wallet safety' }
+    ]
+  },
+  {
+    slug: 'سهام-جهانی-توکنی‌شده',
+    lang: 'fa',
+    dir: 'rtl',
+    route: '/#/stocks',
+    title: 'سهام جهانی توکنی‌شده | دادهٔ بازار و ریسک‌ها | FBT Swap',
+    description: 'دادهٔ بازارِ برخی سهام توکنی‌شده را بررسی کن؛ تفاوت توکن با مالکیت مستقیم سهم، ریسک صادرکننده، نقدشوندگی و محدودیت دسترسی را بشناس.',
+    h1: 'سهام جهانی توکنی‌شده؛ نمایش قیمت با مالکیت مستقیم یکی نیست',
+    body: [
+      'عبارت «سهام جهانی» در دنیای کریپتو گاهی به توکنی اشاره می‌کند که قیمت یا ادعایی به یک دارایی بورسی مرتبط دارد. ساختار حقوقی، صادرکننده و حق بازخرید هر توکن می‌تواند متفاوت باشد؛ بنابراین نباید صرفاً از روی نام یا نمودار فرض کرد همان سهمی است که در کارگزاری خریده می‌شود.',
+      'FBT برخی دارایی‌های سهام توکنی‌شده را در دادهٔ بازارِ سولانا دنبال می‌کند. این قابلیت به معنی کارگزاری سهام، مالکیت مستقیم سهم، یا امکان معامله برای همهٔ کاربران نیست؛ دسترسی معاملاتی به محل ارائه‌دهنده، دارایی و منطقه وابسته است و عرضهٔ مستقیم هنوز در حال گسترش است.',
+      'پیش از هر تصمیم، مستندات صادرکننده و شبکه، دارایی پایه، نقدشوندگی، حق بازخرید، ساعت بازار، هزینه، ریسک طرف مقابل و وضعیت قانونی در محل زندگی‌ات را بررسی کن. قیمت نمایشی به‌تنهایی نه مالکیت را ثابت می‌کند و نه بازده را تضمین.'
+    ],
+    sections: [
+      ['سهام توکنی‌شده چه چیزی را نشان می‌دهد؟', [
+        'یک توکن ممکن است نمایندهٔ ادعای قراردادی، محصول مشتقه یا سازوکار دیگری باشد؛ تعریف دقیق را فقط مستندات رسمی صادرکننده روشن می‌کند. قوانین، امکان انتقال و حق دریافت دارایی پایه بین محصولات یکسان نیست.',
+        'در FBT، بخشی از این دارایی‌ها برای ردیابی قیمت و اطلاعات بازار فهرست می‌شوند. پیش از فرض مالکیت یا امکان بازخرید، قرارداد توکن و شرایط صادرکننده را مستقل بررسی کن.'
+      ]],
+      ['محدودیت دسترسی و معامله', [
+        'دیدن نماد یا قیمت به معنی آن نیست که همان سهم جهانی را در این برنامه می‌توان خریدوفروش کرد. ارائه‌دهندهٔ توکن، نقدینگی بازار، شبکه، کیف پول و محدودیت‌های منطقه‌ای روی دسترسی اثر دارند. صفحهٔ سهام داخل برنامه، وضعیت هر دارایی را در همان زمان نشان می‌دهد.',
+        'اگر بازار بسته باشد، نقدینگی کم باشد یا سرویس داده قطع شود، ممکن است قیمت مرجع یا امکان معامله در دسترس نباشد. هیچ قیمت یا بازدهی ثابت وعده داده نمی‌شود.'
+      ]],
+      ['چه چیزهایی را پیش از استفاده بررسی کنی؟', [
+        'نام صادرکننده و قرارداد رسمی؛ دارایی پایه و روش نگهداری یا وثیقه؛ امکان و شرایط بازخرید؛ حجم و عمق بازار؛ هزینه‌های شبکه و پلتفرم؛ ساعت بازار و اختلاف قیمت؛ صلاحیت منطقه‌ای و مالیاتی؛ و این‌که چه کسی می‌تواند قرارداد را متوقف یا توکن را فریز کند.',
+        'دارایی توکنی‌شده ممکن است علاوه بر نوسان سهم پایه، ریسک قرارداد و صادرکننده هم داشته باشد. ارزش آن می‌تواند کاهش یابد و سرمایهٔ واردشده ممکن است بخشی یا تماماً از دست برود.'
+      ]],
+      ['سهام جهانی با «سود دلاری» فرق دارد', [
+        'افزایش قیمت سهم تضمین نمی‌شود و پرداخت سود سهام به ساختار توکن و ناشر آن وابسته است. قیمت‌گذاری به دلار یا اتصال به یک سهم، سود دلاری ثابت ایجاد نمی‌کند.',
+        'همین قاعده برای بازده دیفای هم برقرار است: نرخ نمایش‌داده‌شده متغیر است و ریسک قرارداد، نقدشوندگی و استیبل‌کوین را حذف نمی‌کند.'
+      ]]
+    ],
+    facts: [
+      ['وضعیت FBT', 'ردیابی دادهٔ بازار برخی سهام توکنی‌شده؛ نه کارگزاری سهام سنتی'],
+      ['مالکیت', 'باید از مستندات صادرکننده و شرایط همان توکن فهمیده شود'],
+      ['دسترسی', 'به ارائه‌دهنده، نقدشوندگی، شبکه و منطقه وابسته است'],
+      ['بازده', 'قیمت دلاری یا توکنی، سود تضمینی نیست']
+    ],
+    faqs: [
+      { q: 'آیا با دیدن سهام توکنی‌شده مالک مستقیم سهم می‌شوم؟', a: 'نه لزوماً. حق مالکیت، بازخرید و مطالبه به ساختار صادرکننده و شرایط توکن بستگی دارد؛ مستندات رسمی آن محصول را بخوان.' },
+      { q: 'آیا FBT Swap کارگزاری سهام جهانی است؟', a: 'خیر. FBT برخی داده‌های دارایی سهام توکنی‌شده را دنبال می‌کند؛ این صفحه وعدهٔ کارگزاری، مالکیت مستقیم سهم یا دسترسی معاملاتی در هر منطقه نمی‌دهد.' },
+      { q: 'آیا سهام توکنی‌شده یا قیمت دلاری سود ثابت می‌دهد؟', a: 'خیر. قیمت می‌تواند کاهش یابد و پرداخت، نقدشوندگی، صادرکننده، قرارداد و مقررات ریسک دارند. سود یا بازده تضمین‌شده‌ای وعده داده نمی‌شود.' }
+    ],
+    links: [
+      { href: '/tokenized-global-stocks', text: 'راهنمای سهام توکنی‌شده به انگلیسی' },
+      { href: '/سرمایه-گذاری-در-ارز-دیجیتال', text: 'بازده دیفای و ریسک سرمایه‌گذاری' },
+      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'قیمت ارز دیجیتال، نمودار و روند بازار' }
+    ]
+  },
+  {
+    slug: 'tokenized-global-stocks',
+    lang: 'en',
+    route: '/#/stocks',
+    title: 'Tokenised Global Stocks: Market Data, Access and Risks | FBT Swap',
+    description: 'Explore market data for selected tokenised equities and learn how a token differs from direct share ownership, including issuer, liquidity and access risks.',
+    h1: 'Tokenised global stocks: a displayed price is not direct ownership',
+    body: [
+      'In crypto, “global stocks” can refer to a token linked to an equity-market asset or price. The legal structure, issuer and redemption rights vary by token; a ticker or chart alone does not prove that it is the same share held through a brokerage.',
+      'FBT tracks market data for selected tokenised-equity assets on Solana. This is not a stock brokerage, direct share ownership or a promise that every visitor can trade. Availability depends on the issuer, asset and region, and direct trading access is still being rolled out carefully.',
+      'Before deciding, check the issuer and network documentation, underlying asset, liquidity, redemption terms, market hours, fees, counterparty risk and local eligibility. A displayed price alone proves neither ownership nor a guaranteed return.'
+    ],
+    sections: [
+      ['What does a tokenised equity represent?', [
+        'A token can represent a contractual claim, a derivative or another structure; the issuer’s official documentation defines which one. Legal rights, transferability and redemption are not the same across products.',
+        'FBT lists some assets for price and market-data tracking. Independently check the token contract and issuer terms before assuming ownership or redemption rights.'
+      ]],
+      ['Trading access and regional limits', [
+        'Seeing a symbol or price does not mean that the corresponding global share can be bought or sold in this app. Issuer availability, secondary-market liquidity, network, wallet and regional restrictions can all affect access. The in-app Stocks page shows the status available for an asset at that time.',
+        'When a market is closed, liquidity is thin or a data service is unavailable, a reference price or trade may not be available. No fixed price or return is promised.'
+      ]],
+      ['What to check before interacting', [
+        'Verify the issuer and official contract; the underlying asset and backing; redemption terms; market depth and trading volume; network and platform fees; market hours and price differences; regional and tax eligibility; and who can pause the contract or freeze a token.',
+        'A tokenised asset may carry issuer and contract risks in addition to the underlying share’s price risk. Its value can fall, and some or all of the amount committed can be lost.'
+      ]],
+      ['Global stocks are not “dollar yield”', [
+        'A share-price increase is not guaranteed, and any dividend depends on the token’s issuer and structure. A dollar quote or a link to an equity does not create fixed dollar income.',
+        'The same applies to DeFi yield: displayed rates vary, and contract, liquidity and stablecoin risks remain.'
+      ]]
+    ],
+    facts: [
+      ['What FBT offers', 'Market-data tracking for selected tokenised equities, not a traditional brokerage'],
+      ['Ownership', 'Defined by the issuer documentation and the token’s terms'],
+      ['Availability', 'Depends on issuer, liquidity, network and region'],
+      ['Returns', 'A dollar or token price does not promise a return']
+    ],
+    faqs: [
+      { q: 'Does seeing a tokenised stock make me the direct shareholder?', a: 'Not necessarily. Ownership, redemption and claim rights depend on the issuer and the token’s terms; read the product’s official documentation.' },
+      { q: 'Is FBT Swap a global stock brokerage?', a: 'No. FBT tracks market data for selected tokenised-equity assets. This page does not promise brokerage services, direct share ownership or trading access in every region.' },
+      { q: 'Do tokenised stocks or dollar quotes provide fixed income?', a: 'No. Prices can fall, and issuer, liquidity, contract and regulatory risks remain. No fixed or guaranteed return is promised.' }
+    ],
+    links: [
+      { href: '/سهام-جهانی-توکنی‌شده', text: 'سهام جهانی توکنی‌شده: راهنمای فارسی' },
+      { href: '/crypto-investing-yield-and-lending', text: 'DeFi yield and investing risks' },
+      { href: '/crypto-market-charts-signals', text: 'Crypto prices, charts and market readings' }
+    ]
+  }
+];
+
+/*
+ * Search landings, posts and hubs join PAGES so the sitemap, reciprocal
+ * hreflang pairs, sibling links and IndexNow sync check share one source.
+ */
+SEARCH_LANDINGS.forEach((page) => { page.kind = 'resource'; });
+PAGES.push(...SEARCH_LANDINGS, ...POSTS, ...BLOG_HUBS);
 
 const ALTERNATES = [
   /*
@@ -1296,6 +1730,11 @@ const ALTERNATES = [
   ['how-crypto-swap-fees-work', 'کارمزد-سواپ-ارز-دیجیتال'],
   ['custodial-vs-non-custodial-wallets', 'تفاوت-کیف-پول-امانی-و-غیرامانی'],
   ['what-stays-private-without-kyc', 'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند'],
+  /* Matched, language-specific learning, data and tokenised-equity pages. */
+  ['crypto-education', 'آموزش-ارز-دیجیتال'],
+  ['developers', 'آموزش-توسعه-دهندگان'],
+  ['crypto-market-charts-signals', 'بازار-کریپتو-نمودار-سیگنال'],
+  ['tokenized-global-stocks', 'سهام-جهانی-توکنی‌شده'],
   /* Each hub lists the corresponding guides in its own language. */
   ['blog', 'وبلاگ']
 ];
@@ -1376,6 +1815,7 @@ function landingStructuredData(page, url) {
       '@type': 'Organization',
       '@id': organizationId,
       name: 'FBT Swap',
+      alternateName: ['FBTSwap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
       legalName: 'Fanous Bazaar Pishgam Co.',
       url: `${SITE}/`,
       email: 'fbtswap@gmail.com',
@@ -1391,7 +1831,7 @@ function landingStructuredData(page, url) {
       '@id': websiteId,
       url: `${SITE}/`,
       name: 'FBT Swap',
-      alternateName: 'اف‌بی‌تی سواپ',
+      alternateName: ['FBTSwap', 'FBT Swap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
       inLanguage: ['fa', 'en'],
       publisher: { '@id': organizationId }
     },
@@ -1594,29 +2034,33 @@ function render(page) {
     </section>`
     : '';
   /*
-   * The hub's index. Rendered from POSTS rather than hand-written so a guide
-   * can never exist without being listed on the page that is supposed to
-   * list it — the classic orphan page, which is invisible to a crawl that
-   * starts from the links.
+   * The blog/resource index is rendered from the same page objects as the
+   * sitemap. Every post and topic guide is discoverable from its language hub,
+   * so adding a crawlable page cannot silently create an orphan URL.
    */
+  const hubGuides = [
+    ...POSTS.filter((p) => (p.lang || 'en') === lang),
+    ...PAGES.filter((p) => p.kind === 'resource' && (p.lang || 'en') === lang)
+  ];
   const hubIndex =
     page.kind === 'hub'
       ? `<section class="story-card panel reveal" style="--delay:170ms">
       <div class="post-index">
-        ${POSTS.filter((p) => (p.lang || 'en') === lang)
-          .map(
-            (p) => `<a class="post-index-item" href="/${encodeURIComponent(p.slug)}">
-          <span class="post-index-date">${esc(
-            new Date(p.datePublished).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })
-          )}</span>
+        ${hubGuides
+          .map((p) => {
+            const meta = p.datePublished
+              ? new Date(p.datePublished).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })
+              : lang === 'fa' ? 'راهنمای موضوعی' : 'Topic guide';
+            return `<a class="post-index-item" href="/${encodeURIComponent(p.slug)}">
+          <span class="post-index-date">${esc(meta)}</span>
           <h3>${esc(p.h1)}</h3>
           <p>${esc(p.description)}</p>
-        </a>`
-          )
+        </a>`;
+          })
           .join('\n        ')}
       </div>
     </section>`
@@ -1633,6 +2077,22 @@ function render(page) {
   </section>`
     : '';
   const bodyExtra = page.kind === 'hub' ? hubIndex : postSections;
+  const codeSamplesMarkup = page.codeSamples?.length
+    ? `<section class="code-samples panel reveal" aria-labelledby="code-samples-heading" style="--delay:180ms">
+      <div class="section-heading">
+        <p class="section-kicker">API</p>
+        <h2 id="code-samples-heading">${esc(page.lang === 'fa' ? 'نمونهٔ درخواست' : 'Request examples')}</h2>
+      </div>
+      <div class="code-sample-list">
+        ${page.codeSamples.map((sample) => `<figure class="code-sample">
+          <figcaption>${esc(sample.label)}</figcaption>
+          <pre><code class="language-${esc(sample.language)}">${esc(sample.code)}</code></pre>
+        </figure>`).join('\n        ')}
+      </div>
+    </section>`
+    : '';
+  const marketDashboardMarkup = page.marketDashboard ? renderMarketDashboard(lang) : '';
+  const marketDashboardScript = page.marketDashboard ? `<script>${renderMarketDashboardScript(lang)}</script>` : '';
   const factCards = page.facts
     .map(
       ([label, value], index) => `<article class="fact-card" style="--item:${index}">
@@ -2168,6 +2628,13 @@ ${
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
   }
+  .code-samples { margin-top: 18px; padding: clamp(24px, 4vw, 40px); border-radius: 25px; }
+  .code-sample-list { display: grid; gap: 17px; margin-top: 22px; }
+  .code-sample { min-width: 0; margin: 0; }
+  .code-sample figcaption { color: var(--muted); font-size: 13px; font-weight: 750; }
+  .code-sample pre { max-width: 100%; margin: 9px 0 0; padding: 17px; overflow: auto; border: 1px solid rgba(163, 181, 227, .14); border-radius: 14px; color: #d5e5ff; background: #070912; direction: ltr; text-align: left; tab-size: 2; }
+  .code-sample code { font: 12.5px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+  ${page.marketDashboard ? MARKET_DASHBOARD_STYLES : ''}
 </style>
 </head>
 <body class="landing-body">
@@ -2222,6 +2689,10 @@ ${
 
   ${bodyExtra}
 
+  ${codeSamplesMarkup}
+
+  ${marketDashboardMarkup}
+
   ${howToMarkup}
 
   <section id="facts" class="facts-panel panel reveal" aria-labelledby="facts-heading" style="--delay:190ms">
@@ -2261,6 +2732,7 @@ ${
     <p>Fanous Bazaar Pishgam Co., Isfahan, Iran</p>
   </footer>
 </main>
+${marketDashboardScript}
 </body>
 </html>
 `;

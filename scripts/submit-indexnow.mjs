@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * TELL SEARCH ENGINES THE SITE EXISTS — free, no account, instantly.
+ * REQUEST URL REFRESHES FROM PARTICIPATING ENGINES — no account required.
  * ---------------------------------------------------------------------------
  * Asked for: «سایت جدید را وارد موتور جستجو کن».
  *
- * ─── THE PROBLEM ────────────────────────────────────────────────────────────
- * fbtswap.ir is a brand-new domain. Left alone, a crawler finds it whenever it
- * happens to — which for a new .ir with no inbound links is months, not days.
- * Every landing page we generated, including the Persian one that is our best
- * ranking opportunity, sits unindexed in the meantime.
+ * ─── DISCOVERY, NOT AN INDEXING GUARANTEE ───────────────────────────────────
+ * This script sends explicit URLs to engines that participate in IndexNow.
+ * It cannot establish which URLs Google currently has indexed, and a 200
+ * response does not guarantee that any engine will crawl, index or rank them.
+ * Check Google Search Console after the production deployment for that proof.
  *
  * ─── WHY IndexNow AND NOT "SUBMIT TO GOOGLE" ────────────────────────────────
  * Google Search Console needs a human to log in, verify the property and click
@@ -19,10 +19,10 @@
  * key file at the site root, which `public/<key>.txt` does. One POST and every
  * participating engine is told.
  *
- * That matters more for us than the Google-shaped hole suggests. Bing powers
- * DuckDuckGo, Ecosia and ChatGPT's browsing; Yandex is heavily used across the
- * region this app targets. And Google still gets the sitemap it reads on its
- * own — this is additive, not a replacement.
+ * IndexNow is additive to a sitemap, not a Google submission mechanism.
+ * Google does not use IndexNow for URL submission; it discovers URLs through
+ * crawling and the sitemap, and Search Console is where owners inspect status.
+ * A sitemap or accepted IndexNow request still does not imply indexation.
  *
  * ─── AND WHY THIS IS NOT SPAM ───────────────────────────────────────────────
  * Their own FAQ, verbatim: "you should publish only URLs changing (added,
@@ -62,9 +62,8 @@ const ORIGIN = `https://${HOST}`;
 
 /*
  * Only real, server-rendered URLs. In-app routes are hash-based (/#/swap) and
- * a crawler never sees anything after the '#', so submitting them would send
- * five URLs that all resolve to the same document — which is exactly the
- * pattern engines treat as low-quality.
+ * a crawler never sees anything after the '#', so submitting fragments
+ * would not identify distinct HTML documents and would waste notifications.
  *
  * Kept in step with scripts/gen-landing.mjs by hand. A wiring check asserts
  * the two lists agree, because a landing page added there and forgotten here
@@ -95,7 +94,16 @@ const SLUGS = [
   'what-stays-private-without-kyc',
   'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند',
   'blog',
-  'وبلاگ'
+  'وبلاگ',
+  /* Matched discovery pages for learning, API development, markets and equities. */
+  'crypto-education',
+  'آموزش-ارز-دیجیتال',
+  'developers',
+  'آموزش-توسعه-دهندگان',
+  'crypto-market-charts-signals',
+  'بازار-کریپتو-نمودار-سیگنال',
+  'tokenized-global-stocks',
+  'سهام-جهانی-توکنی‌شده'
 ];
 
 const urlList = SLUGS.map((s) => (s ? `${ORIGIN}/${encodeURIComponent(s)}` : `${ORIGIN}/`));
@@ -161,8 +169,9 @@ async function main() {
     console.error('✗ not submitted. Fix the above and re-run.');
     process.exit(0);
   }
-  console.log('✓ Bing, Yandex, Seznam and Naver have been told.');
-  console.log('  Google reads the sitemap on its own; verify in Search Console.');
+  console.log('✓ IndexNow accepted the URL notification for participating engines.');
+  console.log('  This is not a crawl/index/rank guarantee and does not submit URLs to Google.');
+  console.log('  Verify Google discovery and indexing in Search Console after deployment.');
 }
 
 main();

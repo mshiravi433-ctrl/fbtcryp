@@ -110,13 +110,13 @@
       lib/chains.js mentions Tron only to warn that sending an EVM address to
       it burns the funds.
 
-      This mattered more than a typo: it was the text Google had indexed, so
-      the one thing the search engine knew about us was partly false. Someone
-      arriving to swap on Tron finds nothing and leaves, and an advertised
-      capability that does not exist is the kind of claim a store reviewer
-      checks. Keep this number tied to EVM_CHAIN_ORDER + Solana.
+      This matters even if the metadata is only shown as a search snippet: an
+      inaccurate capability claim misleads visitors and reviewers. The build
+      cannot confirm which version Google currently displays; use Search
+      Console after deployment. Keep this number tied to EVM_CHAIN_ORDER +
+      Solana.
     -->
-    <title>FBT Swap — Non-Custodial DEX &amp; Crypto Swap on 17 Chains</title>
+    <title>FBTSwap (FBT Swap) | Non-Custodial Crypto DEX on 17 Networks</title>
     <meta
       name="description"
       content="Non-custodial crypto swaps on 17 networks: BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad, Scroll, zkSync Era, Robinhood Chain and Solana. You hold your keys."
@@ -130,13 +130,14 @@
     <!--
       SEARCH CONSOLE VERIFICATION
       
-      Google will not surface a site it has not been told about, and it can
-      take months to find one on its own. Verifying in Search Console is the
-      single highest-leverage SEO step and it is free.
+      A sitemap and crawlable links help Google discover these pages, but
+      they do not guarantee crawling or indexing. Search Console ownership
+      enables sitemap submission and URL Inspection; check those tools after
+      the production deployment.
       
-      The token below is live. Do NOT remove it: Google re-checks the tag
-      periodically and silently drops the property if it disappears, taking
-      the sitemap submission and all indexing history with it.
+      A verification token is present below, but this source file cannot
+      confirm the current Search Console property status. Keep it unless the
+      property owner deliberately changes the verification method.
       
       Bing: after Google verifies, use "Import from Google Search Console"
       rather than adding a second tag.
@@ -147,7 +148,7 @@
     <!-- Open Graph: Telegram, WhatsApp, LinkedIn, Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FBT Swap" />
-    <meta property="og:title" content="FBT Swap — Non-Custodial DEX &amp; Crypto Swap" />
+    <meta property="og:title" content="FBTSwap (FBT Swap) — Non-Custodial DEX &amp; Crypto Swap" />
     <meta
       property="og:description"
       content="Swap crypto across 17 networks without giving up your keys. Live prices, limit orders and DCA, in 12 languages."
@@ -165,7 +166,7 @@
     <!-- Twitter / X card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@CompanyFbt" />
-    <meta name="twitter:title" content="FBT Swap — Non-Custodial DEX" />
+    <meta name="twitter:title" content="FBTSwap (FBT Swap) — Non-Custodial DEX" />
     <meta
       name="twitter:description"
       content="Swap crypto across 17 networks without giving up your keys."
@@ -205,6 +206,7 @@
             "@type": "Organization",
             "@id": "https://fbtswap.ir/#organization",
             "name": "FBT Swap",
+            "alternateName": ["FBTSwap", "اف‌بی‌تی سواپ", "اف بی تی سواپ"],
             "legalName": "Fanous Bazaar Pishgam Co.",
             "url": "https://fbtswap.ir/",
             "sameAs": ["https://x.com/CompanyFbt"],
@@ -233,7 +235,7 @@
             "@id": "https://fbtswap.ir/#website",
             "url": "https://fbtswap.ir/",
             "name": "FBT Swap",
-            "alternateName": "اف‌بی‌تی سواپ",
+            "alternateName": ["FBTSwap", "FBT Swap", "اف‌بی‌تی سواپ", "اف بی تی سواپ"],
             "inLanguage": ["fa", "en"],
             "publisher": { "@id": "https://fbtswap.ir/#organization" }
           },
@@ -241,7 +243,7 @@
             "@type": "WebPage",
             "@id": "https://fbtswap.ir/#webpage",
             "url": "https://fbtswap.ir/",
-            "name": "FBT Swap — Non-Custodial DEX & Crypto Swap on 17 Chains",
+            "name": "FBTSwap (FBT Swap) | Non-Custodial Crypto DEX on 17 Networks",
             "description": "Non-custodial crypto swaps on 17 supported networks. You hold your own keys and sign every trade.",
             "inLanguage": ["fa-IR", "en"],
             "isPartOf": { "@id": "https://fbtswap.ir/#website" },

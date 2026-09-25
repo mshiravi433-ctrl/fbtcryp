@@ -34,8 +34,12 @@ test('public network claims agree with the chain registry and homepage JSON-LD',
   assert.equal(webPage.name, home.title, 'structured data and <title> agree');
   assert.match(webPage.description, new RegExp(`\\b${networkCount}\\b`));
   assert.match(home.querySelector('meta[name="description"]').content, new RegExp(`\\b${networkCount}\\b`));
-  assert.ok(pages.some((item) => item['@type'] === 'Organization'));
-  assert.ok(pages.some((item) => item['@type'] === 'WebSite'));
+  const organization = pages.find((item) => item['@type'] === 'Organization');
+  const website = pages.find((item) => item['@type'] === 'WebSite');
+  assert.ok(organization);
+  assert.ok(organization.alternateName?.includes('FBTSwap'));
+  assert.ok(organization.alternateName?.includes('اف بی تی سواپ'));
+  assert.ok(website?.alternateName?.includes('FBTSwap'));
   assert.ok(pages.some((item) => item['@type'] === 'SoftwareApplication'));
   assert.equal(home.querySelector('link[rel="canonical"]').href, `${SITE}/`);
 
@@ -115,4 +119,148 @@ test('the flagship landing offers visible paths to both guide hubs', () => {
   assert.ok(links.includes(`${SITE}/${encodeURIComponent('وبلاگ')}`));
   assert.ok(links.includes(`${SITE}/crypto-swap-without-kyc`));
   assert.ok(links.includes(`${SITE}/${encodeURIComponent('سواپ-ارز-دیجیتال')}`));
+});
+
+test('brand search and the new bilingual discovery pages are wired for crawling', () => {
+  const listed = urls();
+  const pairs = [
+    ['crypto-education', 'آموزش-ارز-دیجیتال'],
+    ['developers', 'آموزش-توسعه-دهندگان'],
+    ['crypto-market-charts-signals', 'بازار-کریپتو-نمودار-سیگنال'],
+    ['tokenized-global-stocks', 'سهام-جهانی-توکنی‌شده']
+  ];
+  for (const [enSlug, faSlug] of pairs) {
+    const enUrl = `${SITE}/${enSlug}`;
+    const faUrl = `${SITE}/${encodeURIComponent(faSlug)}`;
+    assert.ok(listed.includes(enUrl), `${enSlug} is in the sitemap`);
+    assert.ok(listed.includes(faUrl), `${faSlug} is in the sitemap`);
+    for (const [url, slug] of [[enUrl, enSlug], [faUrl, faSlug]]) {
+      const doc = html(join(OUT, slug, 'index.html'));
+      assert.equal(doc.querySelector('meta[name="robots"]')?.content, 'index, follow, max-image-preview:large');
+      assert.ok(doc.querySelector('h1')?.textContent.trim());
+      assert.ok(doc.querySelector('link[rel="alternate"][hreflang="x-default"]'));
+      assert.ok([...doc.querySelectorAll('link[rel="alternate"][hreflang]')]
+        .some((link) => link.href === (url === enUrl ? faUrl : enUrl)));
+    }
+  }
+
+  const home = html(join(OUT, 'صرافی-غیرمتمرکز', 'index.html'));
+  const graph = [...home.querySelectorAll('script[type="application/ld+json"]')]
+    .flatMap((script) => JSON.parse(script.textContent)['@graph'] || []);
+  const org = graph.find((node) => node['@type'] === 'Organization');
+  const site = graph.find((node) => node['@type'] === 'WebSite');
+  assert.ok(org?.alternateName?.includes('FBTSwap'));
+  assert.ok(org?.alternateName?.includes('اف‌بی‌تی سواپ'));
+  assert.ok(org?.alternateName?.includes('اف بی تی سواپ'));
+  assert.ok(site?.alternateName?.includes('FBTSwap'));
+  assert.match(home.title, /FBTSwap/);
+  assert.match(home.querySelector('meta[name="description"]').content, /17 networks/);
+});
+
+test('market dashboard and developer guides render honest, working crawlable content', () => {
+  for (const slug of ['crypto-market-charts-signals', 'بازار-کریپتو-نمودار-سیگنال']) {
+    const doc = html(join(OUT, slug, 'index.html'));
+    assert.ok(doc.querySelector('#live-market-data'));
+    assert.equal(doc.querySelectorAll('.market-examples li').length, 30);
+    assert.match(doc.body.textContent, /not a prediction|نه پیش‌بینی|not financial advice/i);
+    const script = [...doc.querySelectorAll('script')].find((node) => node.textContent.includes('/api/markets?page=1&per_page=30'));
+    assert.ok(script, 'market API enhancement is attached to the page');
+    assert.doesNotThrow(() => new Function(script.textContent), 'generated market script parses');
+  }
+
+  for (const slug of ['developers', 'آموزش-توسعه-دهندگان']) {
+    const doc = html(join(OUT, slug, 'index.html'));
+    const snippets = [...doc.querySelectorAll('.code-sample code')].map((code) => code.textContent);
+    assert.equal(snippets.length, 2);
+    assert.ok(snippets[0].includes('https://fbtswap.ir/api/markets?per_page=5'));
+    assert.ok(snippets[0].includes('\n  -H'));
+    assert.ok(snippets[1].includes('fetch("/api/markets?per_page=5"'));
+    assert.ok(snippets[1].includes('\n'));
+    assert.ok([...doc.querySelectorAll('a[href]')].some((link) => link.getAttribute('href') === '/api/openapi.json'));
+  }
+});
+
+test('language blog hubs link to their posts and new topic guides', () => {
+  const expected = {
+    blog: ['crypto-education', 'developers', 'crypto-market-charts-signals', 'tokenized-global-stocks'],
+    'وبلاگ': ['آموزش-ارز-دیجیتال', 'آموزش-توسعه-دهندگان', 'بازار-کریپتو-نمودار-سیگنال', 'سهام-جهانی-توکنی‌شده']
+  };
+  for (const [slug, targets] of Object.entries(expected)) {
+    const doc = html(join(OUT, slug, 'index.html'));
+    const hrefs = [...doc.querySelectorAll('.post-index-item')].map((link) => decodeURIComponent(link.getAttribute('href').replace(/^\//, '')));
+    for (const target of targets) assert.ok(hrefs.includes(target), `${slug} links to ${target}`);
+    assert.ok(hrefs.length >= 7, `${slug} includes the dated posts and topic guides`);
+  }
+});
+
+test('dollar-yield and tokenised-stock pages state their ownership and return limits', () => {
+  const enYield = html(join(OUT, 'crypto-investing-yield-and-lending', 'index.html'));
+  const faYield = html(join(OUT, 'سرمایه-گذاری-در-ارز-دیجیتال', 'index.html'));
+  assert.match(enYield.body.textContent, /An APY quoted in dollars.*not fixed dollar income/i);
+  assert.ok([...enYield.querySelectorAll('summary')].some((node) => /APY shown in dollars/i.test(node.textContent)));
+  assert.match(faYield.body.textContent, /سود دلاری ثابت/);
+  assert.ok([...faYield.querySelectorAll('summary')].some((node) => /به دلار نمایش داده می‌شود سود دلاری را تضمین می‌کند/.test(node.textContent)));
+
+  const enStocks = html(join(OUT, 'tokenized-global-stocks', 'index.html'));
+  const faStocks = html(join(OUT, 'سهام-جهانی-توکنی‌شده', 'index.html'));
+  assert.match(enStocks.body.textContent, /not direct ownership/i);
+  assert.match(enStocks.body.textContent, /not a stock brokerage/i);
+  assert.match(faStocks.body.textContent, /مالکیت مستقیم سهم/);
+  assert.match(faStocks.body.textContent, /کارگزاری سهام/);
+});
+
+test('the market dashboard hydrates safely from the public API and fails closed', async () => {
+  const marketRows = Array.from({ length: 30 }, (_, i) => ({
+    id: `asset-${i}`,
+    name: `Asset ${i}`,
+    symbol: `A${i}`,
+    price: 10 + i,
+    change24h: i % 2 ? 2 : -2,
+    change7d: i % 2 ? 3 : -3,
+    sparkline: Array.from({ length: 168 }, (_, point) => 9 + i + point / 100)
+  }));
+  const pulse = {
+    source: 'live',
+    at: Date.now(),
+    sentiment: { label: 'bullish' },
+    momentum: { direction: 'up' },
+    breadth: { up: 14, total: 20 },
+    risk: { label: 'LOW' }
+  };
+  const marketPage = read(join(OUT, 'crypto-market-charts-signals', 'index.html'));
+  const liveDom = new JSDOM(marketPage, {
+    url: `${SITE}/crypto-market-charts-signals`,
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      window.fetch = async (url) => ({
+        ok: true,
+        status: 200,
+        json: async () => String(url).includes('/api/markets') ? marketRows : pulse
+      });
+    }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const liveDoc = liveDom.window.document;
+  assert.equal(liveDoc.querySelectorAll('#market-assets-body tr').length, 30);
+  assert.equal(liveDoc.querySelectorAll('.market-spark svg').length, 30);
+  assert.match(liveDoc.querySelector('#market-data-count').textContent, /30/);
+  assert.match(liveDoc.querySelector('#market-pulse-sentiment').textContent, /Positive/);
+  assert.match(liveDoc.querySelector('#market-pulse-breadth').textContent, /14 of 20/);
+  assert.match(liveDoc.querySelector('.market-trend').textContent, /Negative on both windows/);
+  liveDom.window.close();
+
+  const failedDom = new JSDOM(marketPage, {
+    url: `${SITE}/crypto-market-charts-signals`,
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      window.fetch = async () => { throw new Error('upstream unavailable'); };
+    }
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const failedDoc = failedDom.window.document;
+  assert.match(failedDoc.querySelector('#market-assets-body').textContent, /Market data unavailable/);
+  assert.doesNotMatch(failedDoc.querySelector('#market-assets-body').textContent, /\$0(?:\.00)?/);
+  assert.match(failedDoc.querySelector('#market-pulse-status').textContent, /Market pulse unavailable/);
+  assert.ok(failedDoc.querySelector('.market-retry'));
+  failedDom.window.close();
 });
