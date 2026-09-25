@@ -14,5 +14,5 @@ export function operateBreakGlass({ ticket = null, actor = null, guardian = null
 
 export function evaluateBreakGlassPlane(input = {}) {
   const row = operateBreakGlass(input);
-  return opsPlane(42, PHASE42_SCHEMA, [row.code || 'BREAK_GLASS_NOT_OPERATIONAL'], { support: row });
+  return opsPlane(42, PHASE42_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, support: row });
 }

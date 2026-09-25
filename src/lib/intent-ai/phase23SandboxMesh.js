@@ -51,16 +51,21 @@ export function evaluateSandboxMeshPlane(input = {}) {
   const mesh = runSandboxMesh(input);
   const audits = (Array.isArray(input.stages) ? input.stages : []).map((stage) => auditSandboxStage({ stage }));
   const blockers = [mesh.code, ...audits.map((row) => row.code)].filter(Boolean);
+  /* Honest verdict: mesh live when the operator and every stage audit pass.
+     handshake/verifiedAgent stay false at plane level — no single agent has
+     handshaked yet; that is a per-session fact, not a plane fact. */
+  const codes = [...new Set(blockers)];
+  const pass = codes.length === 0 && mesh.ok === true;
   return {
     phase: 23,
     schema: PHASE23_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
+    operational: pass,
+    live: pass,
+    ready: pass,
     handshake: false,
     verifiedAgent: false,
-    blockers: [...new Set(blockers.length ? blockers : ['SANDBOX_OPERATOR_UNAVAILABLE'])],
+    blockers: codes,
     mesh
   };
 }

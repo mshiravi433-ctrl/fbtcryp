@@ -13,5 +13,5 @@ export function operateWorkforceAccess({ sso = null, role = null } = {}) {
 
 export function evaluateWorkforceAccessPlane(input = {}) {
   const row = operateWorkforceAccess(input);
-  return opsPlane(44, PHASE44_SCHEMA, [row.code || 'WORKFORCE_ACCESS_NOT_OPERATIONAL'], { access: row });
+  return opsPlane(44, PHASE44_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, access: row });
 }

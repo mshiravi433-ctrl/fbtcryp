@@ -36,15 +36,19 @@ export function evaluateRpcPolicyPlane(input = {}) {
   const rpc = operateRpcQuorum(input);
   const policy = enforceOnchainPolicy(input.policy || {});
   const blockers = [rpc.code, policy.code].filter(Boolean);
+  /* Honest verdict: live exactly when the RPC quorum and the on-chain policy
+     check both pass. A code-hash or policy mismatch still fails closed. */
+  const codes = [...new Set(blockers)];
+  const pass = codes.length === 0 && rpc.ok === true && policy.ok === true;
   return {
     phase: 27,
     schema: PHASE27_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    success: false,
-    blockers: [...new Set(blockers.length ? blockers : ['RPC_OUTAGE'])],
+    operational: pass,
+    live: pass,
+    ready: pass,
+    success: pass,
+    blockers: codes,
     rpc,
     policy
   };

@@ -171,6 +171,11 @@ process.env.INTENT_AI_SANDBOX_EVIDENCE = process.env.INTENT_AI_SANDBOX_EVIDENCE 
    whole run. test/intent-ai/open-mode-default-probe.mjs proves the default
    itself by toggling the flag around a blocked scan. */
 process.env.INTENT_OS_OPEN_MODE = process.env.INTENT_OS_OPEN_MODE || '0';
+/* Same pin for full activation (server/intentPlaneAttestations.js): the suite
+   measures the strict fail-closed property, so the shipped dev/preview
+   activation default is off for the whole run. The phase-status probe lifts
+   this pin locally (and restores it) to prove the owner-activated release. */
+process.env.INTENT_OS_ACTIVATION = process.env.INTENT_OS_ACTIVATION || '0';
 /*
  * The same trap, one budget over: the intent probe walks the full
  * claim/dispute/adjudication/cross-chain lifecycle and exceeds the

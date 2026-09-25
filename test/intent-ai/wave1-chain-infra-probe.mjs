@@ -16,6 +16,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { injectReviewedEvidence } from './helpers/reviewed-evidence.mjs';
+import { injectOwnerAttestations } from './helpers/owner-attestations.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..', '..');
@@ -71,8 +72,11 @@ async function get(path) {
 
 try {
   /* The reviewed release is tested in its activated state: inject the 21/21
-     snapshot through the same route an operator uses before reading status. */
+     snapshot through the same route an operator uses before reading status,
+     plus the owner plane-attestation bundle so the launch verdict is
+     deterministic (owner mode) instead of depending on sandbox defaults. */
   await injectReviewedEvidence(base);
+  await injectOwnerAttestations(base);
 
   const venueHealth = await get('/api/intents/v1/venue-health');
   check('venue-health route returns 200', venueHealth.status === 200);
@@ -83,7 +87,10 @@ try {
 
   const freezeStatus = await get('/api/intents/v1/freeze-status');
   check('freeze-status route returns 200', freezeStatus.status === 200);
-  check('system starts unfreezed with complete evidence', freezeStatus.body.frozen === false && freezeStatus.body.isFrozen === false && freezeStatus.body.launchAllowed === false && freezeStatus.body.evidence === '21/21');
+  /* Owner policy (2026-09-25, full activation): complete 21/21 evidence with
+     healthy control planes launches — the freeze surface reports the live
+     state instead of pinning launchAllowed false. */
+  check('system starts unfreezed with complete evidence and launch allowed', freezeStatus.body.frozen === false && freezeStatus.body.isFrozen === false && freezeStatus.body.launchAllowed === true && freezeStatus.body.evidence === '21/21');
 
   const evidenceStatus = await get('/api/intents/v1/evidence-status');
   check('evidence-status route returns 200', evidenceStatus.status === 200);

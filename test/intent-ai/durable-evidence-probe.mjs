@@ -71,7 +71,7 @@ try {
   const phaseStatus = await fetch(`${base}/api/intents/v1/phase-status`).then((r) => r.json());
   check('restored aggregate evidence alone does not override plane blockers', phaseStatus.launchAllowed === false && phaseStatus.evidence.status === '21/21');
   check('execution remains disabled after restore', phaseStatus.executionActivated === false && phaseStatus.rawCredentialsAllowed === false);
-  check('the full specification is present after restore', phaseStatus.phaseCount === 196 && phaseStatus.specificationImplementedThrough === 216);
+  check('the full specification is present after restore', phaseStatus.phaseCount === 206 && phaseStatus.specificationImplementedThrough === 216);
 
   /* 4. a cold instance: same durable backing, brand-new module scope. */
   const fresh = await import(`../../server/intentOperatorEvidence.js?probe=${Date.now()}`);

@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import { injectReviewedEvidence } from './helpers/reviewed-evidence.mjs';
+import { injectOwnerAttestations } from './helpers/owner-attestations.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..', '..');
@@ -55,8 +56,11 @@ async function get(path) {
 }
 
 try {
-  /* 0. The reviewed release: restore the complete 21/21 snapshot first. */
+  /* 0. The reviewed release: restore the complete 21/21 snapshot first, plus
+     the owner plane-attestation bundle so the launch verdict is deterministic
+     (owner mode) instead of depending on sandbox defaults. */
   await injectReviewedEvidence(base);
+  await injectOwnerAttestations(base);
 
   /* 1. Rejects without dual auth */
   const noAuth = await post('/api/intents/v1/operator-evidence', { evidence: [] });
@@ -111,11 +115,13 @@ try {
   }, { 'X-Operator-1': 'op-a', 'X-Operator-2': 'op-b' });
   check('rejects secret in payload', secretPayload.body.results?.[0]?.ok === false);
 
-  /* 6. The reviewed release starts unfreezed */
+  /* 6. The reviewed release starts unfreezed. Owner policy (2026-09-25, full
+     activation): complete 21/21 evidence with healthy control planes
+     launches — the retired freeze surface reports that live state. */
   const freezeStatus = await get('/api/intents/v1/freeze-status');
-  check('legacy freeze stays retired but does not certify launch', freezeStatus.body.frozen === false
+  check('legacy freeze stays retired and reports the launched release', freezeStatus.body.frozen === false
     && freezeStatus.body.isFrozen === false
-    && freezeStatus.body.launchAllowed === false
+    && freezeStatus.body.launchAllowed === true
     && freezeStatus.body.evidence === '21/21');
 
   /* 7. Legacy unfreeze remains harmless and reports the live state */
@@ -135,7 +141,7 @@ try {
   check('legacy freeze request is acknowledged', freeze.body.ok === true);
   check('system remains unfreezed after legacy freeze request', freeze.body.frozen === false
     && freeze.body.isFrozen === false
-    && freeze.body.launchAllowed === false);
+    && freeze.body.launchAllowed === true);
 
   /* 9. Rejects expired evidence */
   const expiredEvidence = await post('/api/intents/v1/operator-evidence', {

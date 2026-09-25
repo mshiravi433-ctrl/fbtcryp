@@ -59,14 +59,19 @@ export function evaluateSimMonitorPlane(input = {}) {
   const monitor = operateMonitor({ heartbeatAt: input.heartbeatAt, maxAgeMs: input.maxAgeMs, now: input.now });
   const scheduler = operateScheduler(input.scheduler || {});
   const blockers = [sim.code, monitor.code, scheduler.code].filter(Boolean);
+  /* Honest verdict: live exactly when simulator, monitor and the scheduler
+     guard all pass. The scheduler still never signs (operateScheduler
+     fails closed on signs/submits regardless of this flag). */
+  const codes = [...new Set(blockers)];
+  const pass = codes.length === 0 && sim.ok === true && monitor.ok === true && scheduler.ok === true;
   return {
     phase: 24,
     schema: PHASE24_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    blockers: [...new Set(blockers.length ? blockers : ['SIMULATOR_TIMEOUT'])],
+    operational: pass,
+    live: pass,
+    ready: pass,
+    blockers: codes,
     sim,
     monitor,
     scheduler

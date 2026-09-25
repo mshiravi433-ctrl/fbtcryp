@@ -54,15 +54,19 @@ export function quoteVenueOnly({ adapters = {}, now = Date.now() } = {}) {
 
 export function evaluateVenueFederationPlane(input = {}) {
   const federation = federateVenueHealth(input);
+  /* Honest verdict: the federation is live exactly when every adapter is
+     available and attested (and the bridge executable). Per-action execution
+     still requires a fresh quote, venue re-check and wallet signature. */
+  const pass = federation.ok === true && federation.blockers.length === 0;
   return {
     phase: 26,
     schema: PHASE26_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    executable: false,
-    blockers: federation.blockers.length ? federation.blockers : ['PROVIDER_HEALTH_FAILURE'],
+    operational: pass,
+    live: pass,
+    ready: pass,
+    executable: pass,
+    blockers: [...federation.blockers],
     federation
   };
 }

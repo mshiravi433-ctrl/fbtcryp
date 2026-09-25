@@ -25,5 +25,5 @@ export function operateIncidentCommand({ incident = null, commander = null, free
 
 export function evaluateIncidentCommandPlane(input = {}) {
   const row = operateIncidentCommand(input);
-  return opsPlane(31, PHASE31_SCHEMA, [row.code || 'INCIDENT_NOT_OPERATIONAL'], { incident: row });
+  return opsPlane(31, PHASE31_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, incident: row });
 }

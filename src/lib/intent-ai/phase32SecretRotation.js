@@ -18,5 +18,5 @@ export function operateSecretRotation({ manager = null, rotation = null, now = D
 
 export function evaluateSecretRotationPlane(input = {}) {
   const row = operateSecretRotation(input);
-  return opsPlane(32, PHASE32_SCHEMA, [row.code || 'SECRET_ROTATION_NOT_OPERATIONAL'], { rotation: row });
+  return opsPlane(32, PHASE32_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, rotation: row });
 }

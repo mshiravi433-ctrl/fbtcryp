@@ -15,5 +15,5 @@ export function operateRegulatoryReporting({ filing = null, counsel = null } = {
 
 export function evaluateRegulatoryReportingPlane(input = {}) {
   const row = operateRegulatoryReporting(input);
-  return opsPlane(49, PHASE49_SCHEMA, [row.code || 'REGULATORY_REPORTING_NOT_OPERATIONAL'], { reporting: row });
+  return opsPlane(49, PHASE49_SCHEMA, [row.code].filter(Boolean), { pass: row.ok === true, reporting: row });
 }

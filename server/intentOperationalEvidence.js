@@ -16,6 +16,8 @@ import {
 } from '../src/lib/intent-ai/operationalActivation.js';
 import { activateControlPlane } from '../src/lib/intent-ai/controlPlaneActivation.js';
 import { sandboxEvidenceEnabled, SANDBOX_EVIDENCE_PROVENANCE } from './intentSandboxEvidence.js';
+import { getPlaneAttestations, resolveActivationMode } from './intentPlaneAttestations.js';
+import { collectPlaneInputs } from './intentRuntimePlaneInputs.js';
 
 /* Read the operator store directly. Keeping this adapter on a global registry
    made the first serverless invocation dependent on module load order and
@@ -51,9 +53,26 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
   const evidence = injectedEvidence !== null ? injectedEvidence : getInjectedEvidence();
   const sandboxRecords = evidence.filter((row) => row.source === 'sandbox-operator'
     || row.provenance === SANDBOX_EVIDENCE_PROVENANCE);
-  const reviewedRecords = evidence.filter((row) => !sandboxRecords.includes(row)
-    && row.source !== 'auto-local-evidence' && row.source !== 'unattributed-durable-evidence'
-    && (row.source !== 'operator-evidence-endpoint' || row.authVersion === 'operator-v2'));
+  /* Owner policy (2026-09-25, full activation): which records count toward
+     launch depends on the activation mode.
+     - off     — historic behaviour: only dual-operator reviewed records.
+     - owner   — owner-bundle + reviewed + the process's own real local
+                 measurements (auto-local) count; sandbox stays separate.
+     - sandbox — dev/preview: the labelled sandbox self-attestations count.
+     Unattributed leftovers and v1 operator posts never count in any mode. */
+  const attestations = injectedEvidence !== null ? null : getPlaneAttestations({ now });
+  const activationMode = injectedEvidence !== null
+    ? 'off'
+    : resolveActivationMode({ env, attestations, now });
+  const reviewedRecords = evidence.filter((row) => {
+    const isSandbox = row.source === 'sandbox-operator'
+      || row.provenance === SANDBOX_EVIDENCE_PROVENANCE;
+    if (isSandbox) return activationMode === 'sandbox';
+    if (row.source === 'auto-local-evidence') return activationMode !== 'off';
+    if (row.source === 'unattributed-durable-evidence') return false;
+    if (row.source === 'operator-evidence-endpoint' && row.authVersion !== 'operator-v2') return false;
+    return true;
+  });
   // Hashes of source files prove code existed, NOT that a production RPC,
   // signer, independent reviewer or broker answered. Keep the two modes apart.
   const readiness = aggregateOperationalReadiness({ evidence: reviewedRecords, now });
@@ -62,11 +81,37 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
     .update(JSON.stringify({ kinds: EVIDENCE_KINDS, blockers: readiness.blockers, at: now }))
     .digest('hex');
 
+  /* Control-plane inputs: attested facts + live runtime overlays. In `off`
+     mode every plane gets empty inputs and stays blocked (historic). */
+  const launchAllowed = readiness.launchAllowed === true && readiness.operational === 'operational';
+  const collected = collectPlaneInputs({
+    mode: activationMode,
+    facts: activationMode === 'owner' ? (attestations?.normalized.planes || null) : null,
+    launchAllowed,
+    now
+  });
+
+  const countedSandbox = reviewedRecords.some((row) => row.source === 'sandbox-operator'
+    || row.provenance === SANDBOX_EVIDENCE_PROVENANCE);
   return {
     schema: PHASE21_STATUS_SCHEMA,
     generatedAt: new Date(now).toISOString(),
-    mode: readiness.launchAllowed ? 'operator-reviewed'
+    mode: activationMode === 'owner' && launchAllowed ? 'owner-activated'
+      : activationMode === 'sandbox' && countedSandbox ? 'sandbox-attested'
+      : launchAllowed ? 'operator-reviewed'
       : (sandboxRecords.length ? SANDBOX_EVIDENCE_PROVENANCE : 'unverified'),
+    activation: {
+      mode: activationMode,
+      provenance: collected.meta.provenance,
+      planes: collected.meta.planes,
+      attestations: attestations ? {
+        operators: attestations.normalized.operators,
+        source: attestations.source,
+        attestedAt: attestations.normalized.attestedAt,
+        expiresAt: attestations.normalized.expiresAt,
+        planes: attestations.normalized.present.length
+      } : null
+    },
     sandboxEnabled: sandboxEvidenceEnabled(env),
     sandboxEvidenceCount: sandboxReadiness.evidence.length,
     configuration: config,
@@ -82,7 +127,7 @@ export function scanOperationalProviders({ env = process.env, injectedEvidence =
     sandboxReadiness,
     publicStatus: phase21PublicStatus(readiness),
     publicDigest,
-    controlPlane: activateControlPlane({ evidence: reviewedRecords, freeze: false, now }),
+    controlPlane: activateControlPlane({ evidence: reviewedRecords, ...collected.inputs, freeze: false, now }),
     secretsExposed: false
   };
 }

@@ -70,10 +70,9 @@ export function extractDurationDays(text) {
   if (dayMatch) return Math.round(Number(dayMatch[1]));
   const weekMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(week|weeks|wk|wks|هفته)/i);
   if (weekMatch) return Math.round(Number(weekMatch[1]) * 7);
-  const monthMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(month|months|mo|ماه)/i);
-  if (monthMatch) return Math.round(Number(monthMatch[1]) * 30);
-  const yearMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(year|years|yr|yrs|سال)/i);
-  if (yearMatch) return Math.round(Number(yearMatch[1]) * 365);
+  /* Month/year phrases belong to extractDurationMonths. Matching them here
+     used to convert «4 months» into 120 days, and the goal engine prefers an
+     explicit day horizon — so the month value was silently lost. */
   return null;
 }
 

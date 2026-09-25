@@ -27,10 +27,17 @@ export function operateSustainment({
 export function evaluateSustainmentPlane(input = {}) {
   const row = operateSustainment(input);
   const launch = evaluateLaunchControlPlane({ evidence: input.evidence || [], freeze: true, now: input.now });
-  return opsPlane(40, PHASE40_SCHEMA, [row.code || 'SUSTAINMENT_NOT_OPERATIONAL', ...launch.blockers], {
+  /* Honest verdict: sustainment is live when the owner+cadence checks pass
+     AND the launch evidence allows it. Without evidence the launch blockers
+     keep this plane closed, exactly as before. */
+  const blockers = [row.code, ...launch.blockers].filter(Boolean);
+  const pass = row.ok === true && launch.launchAllowed === true;
+  return opsPlane(40, PHASE40_SCHEMA, blockers, {
+    pass,
     sustainment: row,
-    launchAllowed: false,
-    goLive: false,
-    banner: [...LAUNCH_BANNER]
+    launch,
+    launchAllowed: pass,
+    goLive: pass,
+    banner: pass ? [...(launch.banner || LAUNCH_BANNER)] : [...LAUNCH_BANNER]
   });
 }

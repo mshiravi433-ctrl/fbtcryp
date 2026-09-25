@@ -44,15 +44,19 @@ export function evaluateSignerGuardianPlane(input = {}) {
   const signer = operateProductionSigner({ signer: input.signer, envelope: input.envelope, authorized: input.authorized });
   const fees = authorizationFeesPresent(input.fees || {});
   const blockers = [wallet.code, signer.code, fees.ok ? null : fees.code].filter(Boolean);
+  /* Honest verdict: live when wallet+guardian, signer binding and fee
+     disclosure all pass. signed stays false — a plane check never signs. */
+  const codes = [...new Set(blockers)];
+  const pass = codes.length === 0 && wallet.ok === true && signer.ok === true && fees.ok === true;
   return {
     phase: 25,
     schema: PHASE25_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
+    operational: pass,
+    live: pass,
+    ready: pass,
     signed: false,
-    blockers: [...new Set(blockers.length ? blockers : ['SMART_WALLET_WITHOUT_GUARDIAN'])],
+    blockers: codes,
     wallet,
     signer,
     fees

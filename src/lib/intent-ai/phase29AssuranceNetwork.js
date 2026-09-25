@@ -41,16 +41,21 @@ export function operateAssurance({ review = null, privacy = null, compliance = n
 
 export function evaluateAssurancePlane(input = {}) {
   const assurance = operateAssurance(input);
+  /* Honest verdict: the plane is live exactly when the independent review,
+     privacy review and compliance checks pass. The underlying secure/audited
+     claims stay with the review record itself (operateAssurance), not the
+     plane flag — a live plane never upgrades what the review said. */
+  const pass = assurance.ok === true;
   return {
     phase: 29,
     schema: PHASE29_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    verified: false,
+    operational: pass,
+    live: pass,
+    ready: pass,
+    verified: pass,
     claims: assurance.claims || { secure: false, private: false, compliant: false, audited: false },
-    blockers: [assurance.code || (assurance.ok ? 'ASSURANCE_NOT_OPERATIONAL' : 'SECURITY_REVIEW_NOT_INDEPENDENT')],
+    blockers: assurance.code ? [assurance.code] : [],
     assurance
   };
 }

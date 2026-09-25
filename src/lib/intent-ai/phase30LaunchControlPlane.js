@@ -39,6 +39,10 @@ export function evaluateLaunchControlPlane({
     verification: readiness.verification,
     operational: allowed ? 'operational' : 'unavailable',
     live: allowed,
+    /* The control-plane aggregator (controlPlaneActivation) requires an
+       explicit ready flag on every plane; without it phase 30 could never
+       publish live even with complete evidence. */
+    ready: allowed,
     launchAllowed: allowed,
     goLive: allowed,
     freeze: false,

@@ -121,9 +121,12 @@ export function activateControlPlane({
      evaluator reports missing providers or unrun drills is NOT operational.
      Expose it as built/available while keeping the real blocker visible. */
   const publishedPlanes = planes.map((row) => {
+    /* Phase 30 reports operational as the string 'operational'/'unavailable'
+       (its public contract); every other plane uses a boolean. Accept both. */
+    const rowOperational = row.operational === true || row.operational === 'operational';
     const planeLive = aggregateLive && (row.phase === 21
       ? true
-      : row.operational === true && row.live === true && row.ready === true
+      : rowOperational && row.live === true && row.ready === true
         && !(row.blockers || []).length);
     return {
       ...row,

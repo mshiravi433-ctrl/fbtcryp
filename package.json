@@ -294,7 +294,8 @@
     "test:intent-protocol": "node test/protocol/run-all-protocol-tests.mjs",
     "test:mcp": "node test/mcp/mcp-probe.mjs",
     "mcp": "node mcp/src/cli.mjs",
-    "compile:intent-protocol": "node scripts/compile-intent-protocol.mjs"
+    "compile:intent-protocol": "node scripts/compile-intent-protocol.mjs",
+    "intent-os:activate": "node scripts/intent-os-activate.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

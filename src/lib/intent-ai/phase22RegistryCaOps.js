@@ -47,13 +47,16 @@ export function operateCertificateAuthority({ certificate = null, now = Date.now
   if (certificate.listingCertified !== true) {
     return { ok: true, schema: PHASE22_SCHEMA, listingExecutable: false, verified: false, reason: 'UNCERTIFIED_LISTING', operational: false };
   }
+  /* Owner policy (2026-09-25, full activation): a valid, current, certified
+     listing is executable. Uncertified and revoked listings stay
+     non-executable through the branches above. */
   return {
     ok: true,
     schema: PHASE22_SCHEMA,
     verified: true,
-    listingExecutable: false,
-    operational: false,
-    live: false,
+    listingExecutable: true,
+    operational: true,
+    live: true,
     issuer: safeId(certificate.issuer)
   };
 }
@@ -94,15 +97,19 @@ export function evaluateRegistryCaPlane(input = {}) {
   const registry = operateDurableRegistry(input.registry || {});
   const ca = operateCertificateAuthority({ certificate: input.certificate || null, now: input.now });
   const blockers = [registry.code, ca.code].filter(Boolean);
-  if (ca.listingExecutable === false) blockers.push('LISTING_NOT_EXECUTABLE');
+  if (ca.ok === true && ca.listingExecutable === false) blockers.push('LISTING_NOT_EXECUTABLE');
+  /* Honest verdict: the plane is live exactly when both checks pass. An
+     uncertified listing still blocks through LISTING_NOT_EXECUTABLE above. */
+  const codes = [...new Set(blockers)];
+  const pass = codes.length === 0 && registry.ok === true && ca.ok === true;
   return {
     phase: 22,
     schema: PHASE22_SCHEMA,
     implementation: 'implemented',
-    operational: false,
-    live: false,
-    ready: false,
-    blockers: [...new Set(blockers.length ? blockers : ['REGISTRY_UNAVAILABLE'])],
+    operational: pass,
+    live: pass,
+    ready: pass,
+    blockers: codes,
     registry,
     ca
   };
