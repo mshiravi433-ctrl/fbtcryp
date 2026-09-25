@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import qrcode from 'qrcode-generator';
 import Sheet from './Sheet';
+import FancyQr from './FancyQr';
 import TokenIcon from '../lib/tokenIcon';
 import { shortAddress } from '../context/WalletContext';
 import { isSolanaAddress } from '../lib/solana';
@@ -12,23 +12,26 @@ import { IconQr } from './Icons';
 import { IconSend, IconReceive } from './WalletArt';
 import { IconSwap, IconGlobe } from './Icons';
 
-function qrPath(text) {
-  if (!text) return null;
-  try {
-    const q = qrcode(0, 'M');
-    q.addData(text);
-    q.make();
-    const count = q.getModuleCount();
-    let d = '';
-    for (let r = 0; r < count; r += 1) {
-      for (let c = 0; c < count; c += 1) {
-        if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
-      }
-    }
-    return { d, count };
-  } catch {
-    return null;
-  }
+/*
+ * The Solana mark for the receive QR's medallion — three slanted bars in the
+ * chain's purple→green gradient. Sits on the FancyQr top edge (in the quiet
+ * zone, never over a module), which is what makes the Solana receive code a
+ * sibling of the EVM one instead of a bare square («ظاهر کیو‌آر کد سولانا»).
+ */
+function SolMark() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="solQrMarkG" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#9945FF" />
+          <stop offset="100%" stopColor="#14F195" />
+        </linearGradient>
+      </defs>
+      <path d="M6.4 5.2h13.4L17.3 8.1H3.9z" fill="url(#solQrMarkG)" />
+      <path d="M3.9 10.6h13.4l-2.5 2.9H6.4z" fill="url(#solQrMarkG)" />
+      <path d="M6.4 15.9h13.4L17.3 18.8H3.9z" fill="url(#solQrMarkG)" />
+    </svg>
+  );
 }
 
 /** HashRouter reads `location.hash`. A hook would throw in tests that mount this tab without a Router. */
@@ -103,7 +106,6 @@ export default function SolanaWalletHome({
     refresh();
   }, [refresh]);
 
-  const qr = useMemo(() => qrPath(address), [address]);
   const solRow = holdings?.find((row) => row.native);
 
   const copy = async () => {
@@ -320,13 +322,12 @@ export default function SolanaWalletHome({
       <QrScanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScanResult} parse={parseScanned} />
 
       <Sheet open={receiveOpen} onClose={() => setReceiveOpen(false)} title={t('solana.wallet.receiveTitle')}>
-        {qr && (
-          <div className="sol-wal-qr">
-            <svg viewBox={`0 0 ${qr.count} ${qr.count}`} shapeRendering="crispEdges" role="img" aria-label={t('solana.wallet.receiveTitle')}>
-              <path d={qr.d} fill="#000" />
-            </svg>
-          </div>
-        )}
+        <FancyQr
+          value={address}
+          label={t('solana.wallet.receiveTitle')}
+          accent={['#9945FF', '#14F195', '#9945FF']}
+          badge={<SolMark />}
+        />
         <p className="mono sol-wal-full-addr" dir="ltr">{address}</p>
         <p className="notice">{t('solana.wallet.receiveHint')}</p>
         <button type="button" className="btn btn-primary" onClick={copy}>

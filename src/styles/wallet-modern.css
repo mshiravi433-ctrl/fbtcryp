@@ -433,14 +433,6 @@
   align-items: center;
 }
 .sol-wal-both-sum::-webkit-details-marker { display: none; }
-.sol-wal-qr {
-  width: min(220px, 70%);
-  margin: 4px auto 12px;
-  padding: 12px;
-  background: #fff;
-  border-radius: 16px;
-}
-.sol-wal-qr svg { width: 100%; height: auto; display: block; }
 .sol-wal-full-addr { font-size: 12px; word-break: break-all; line-height: 1.7; text-align: center; }
 :root[data-theme='light'] .sol-wal-holdings,
 :root[data-theme='light'] .sol-wal-both {

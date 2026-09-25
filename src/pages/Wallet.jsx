@@ -811,18 +811,21 @@ export default function Wallet() {
   }, [wallet, portfolio]);
 
   /*
-   * P&L / intelligence from the local lot ledger + live holdings. Only built
-   * when there is a real priced total: an unpriced-only wallet would record
-   * a zero snapshot and poison the 24h/7d/30d deltas.
+   * P&L / intelligence from the local lot ledger + live holdings. Always
+   * built now — the "don't record a zero snapshot" guard moved INSIDE
+   * buildIntelligence (which is what writes the snapshot), so an unpriced
+   * wallet can no longer poison the 24h/7d/30d deltas by merely rendering.
+   *
+   * This object is also handed to the embedded Intelligence sheet below:
+   * the sheet used to build its own from its own sixteen-chain re-read, and
+   * while that read was in flight «تخصیص دارایی» told a CONNECTED wallet to
+   * connect its wallet. One verified read, painted everywhere.
    */
-  const intel = useMemo(() => {
-    if (!portfolio.totalValue || portfolio.totalValue <= 0) return null;
-    return buildIntelligence({
-      holdings: portfolio.rows.map((r) => ({
-        symbol: r.symbol, name: r.name, value: r.value, amount: r.amount, chainId: r.chainId, native: r.native
-      }))
-    });
-  }, [portfolio.rows, portfolio.totalValue]);
+  const intel = useMemo(() => buildIntelligence({
+    holdings: portfolio.rows.map((r) => ({
+      symbol: r.symbol, name: r.name, value: r.value, amount: r.amount, chainId: r.chainId, native: r.native
+    }))
+  }), [portfolio.rows]);
 
   /* Real NFT count for the hero chip — from /api/nft, or an honest "not scanned". */
   useEffect(() => {
@@ -1091,9 +1094,12 @@ export default function Wallet() {
         onSend={handleTokenSend}
       />
 
-      {/* Intelligence — the existing embedded Portfolio dashboard */}
+      {/* Intelligence — the existing embedded Portfolio dashboard, fed by this
+          page's own verified read (see the `intel` memo): opening the sheet
+          paints instantly and can never claim the wallet is not connected
+          while it demonstrably is. */}
       <Sheet open={intelSheet} onClose={() => setIntelSheet(false)} title={t('intel.title')} anchor="bottom" size="lg">
-        <Portfolio embedded />
+        <Portfolio embedded portfolio={portfolio} intel={intel} />
       </Sheet>
 
       {/* P&L detail */}

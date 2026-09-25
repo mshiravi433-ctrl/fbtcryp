@@ -16,16 +16,40 @@
  * Why no test caught it: a missing binding is not a syntax error, so both
  * `vite build` and every source-grep wiring assertion passed happily. It can
  * only be caught by RENDERING the sheet, which is what the new probe in
- * test/wallet-probe.jsx now does.
+ * test/wallet-probe.jsx now does. (The wiring suite also asserts, from here
+ * on, that every hook this file calls appears in its react import.)
+ *
+ * ─── FIX: «فقط روی شبکهٔ X ارسال کن» WAS THE WRONG SENTENCE ────────────────
+ * Reported as «مگه آدرس‌ها یکی نیست؟ اگر آره جمله باید عوض شود» — and the
+ * reporter was right. The 0x address IS the same on every EVM network, so
+ * "only send on THIS network" was not just confusing, it was untrue: a payer
+ * who sends USDC on Polygon to this address does NOT lose the funds — they
+ * arrive on Polygon and show up in this wallet's multi-chain list.
+ *
+ * What is actually dangerous — and the only thing the warning now says — is
+ * a NON-EVM network: Solana, Bitcoin or Tron carry different address spaces,
+ * and a transfer from there to a 0x address is gone for good.
+ *
+ * ─── WHY THE QR LIVES IN FancyQr ───────────────────────────────────────────
+ * The EVM QR, the Bitcoin QR and the Solana wallet's QR are now one
+ * component (see components/FancyQr.jsx) — one encoder, one extraordinary
+ * frame, one set of scannability rules. The white plate and the matrix path
+ * format are what test/inapp-wallet-receive.test.jsx decodes; the beauty is
+ * all around them.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import qrcode from 'qrcode-generator';
 import Sheet from './Sheet';
+import FancyQr from './FancyQr';
+import BrandMark from './BrandMark';
 import { useWallet } from '../context/WalletContext';
 import { EVM_CHAINS } from '../lib/chains';
 import { useAppStore } from '../store/useAppStore';
 import { IconCopy, IconCheck } from './Icons';
+import { IconBitcoin } from './WalletArt';
+
+/** 4-character groups so an address can be checked or read aloud. */
+const chunk = (a) => (String(a).match(/.{1,4}/g) ?? []).join(' ');
 
 /**
  * RECEIVE — show this wallet's address so someone can pay into it.
@@ -35,20 +59,8 @@ import { IconCopy, IconCheck } from './Icons';
  * answer is that you fund your own wallet, and this is the screen that lets
  * you do it.
  *
- * ─── WHY A LIBRARY AND NOT A HAND-ROLLED ENCODER ───────────────────────────
- * QR encoding is Reed-Solomon error correction plus a masking pass. A subtly
- * wrong implementation still produces a scannable square — it just decodes to
- * different characters. For a wallet address that means funds sent to an
- * address nobody controls, permanently, with the app confidently displaying
- * the code that caused it. That is not a place to save 40 KB, so this uses a
- * tested encoder, and the output is verified against our own scanner's parser
- * in the test suite.
- *
- * ─── WHY THE NETWORK IS SHOUTED ─────────────────────────────────────────────
- * The same 0x address exists on every EVM chain. A sender who picks the wrong
- * network usually loses the funds. So the network name sits directly under the
- * address in the warning colour, and the copy button copies only the address —
- * never a prefixed URI that a sender might paste somewhere that cannot read it.
+ * The copy button copies only the address — never a prefixed URI that a
+ * sender might paste somewhere that cannot read it.
  */
 export default function ReceiveSheet({ open, onClose }) {
   const { t } = useTranslation();
@@ -58,38 +70,6 @@ export default function ReceiveSheet({ open, onClose }) {
 
   const address = wallet.address;
   const chain = EVM_CHAINS[wallet.chainId];
-
-  /**
-   * Render the QR as an SVG path.
-   *
-   * SVG rather than the library's <img> helper: it scales to any screen
-   * without blurring, needs no canvas, and inherits currentColor so it flips
-   * correctly between light and dark themes. A blurry QR is a QR that will not
-   * scan on the first try.
-   */
-  const qrPath = useMemo(() => {
-    if (!address) return null;
-    try {
-      // Type 0 = auto-size. 'M' correction tolerates ~15% damage, which is the
-      // usual choice for addresses: high enough for a scratched screen, low
-      // enough to keep the modules large and easy to focus on.
-      const q = qrcode(0, 'M');
-      q.addData(address);
-      q.make();
-      const count = q.getModuleCount();
-      let d = '';
-      for (let r = 0; r < count; r += 1) {
-        for (let c = 0; c < count; c += 1) {
-          if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
-        }
-      }
-      return { d, count };
-    } catch {
-      // Never let a rendering problem hide the address itself — the text below
-      // is the authoritative copy anyway.
-      return null;
-    }
-  }, [address]);
 
   const copy = async () => {
     if (!address) return;
@@ -115,7 +95,7 @@ export default function ReceiveSheet({ open, onClose }) {
   };
 
   /** 4-character groups so the address can be checked or read aloud. */
-  const chunked = (a) => (a.match(/.{1,4}/g) ?? []).join(' ');
+  const chunked = useMemo(() => chunk(address), [address]);
 
   if (!address) {
     return (
@@ -128,27 +108,26 @@ export default function ReceiveSheet({ open, onClose }) {
   return (
     <Sheet open={open} onClose={onClose} title={t('receive.title')}>
       <div className="recv-wrap">
-        {qrPath && (
-          <div className="recv-qr recv-qr-modern">
-            <svg
-              viewBox={`0 0 ${qrPath.count} ${qrPath.count}`}
-              shapeRendering="crispEdges"
-              role="img"
-              aria-label={t('receive.title')}
-            >
-              {/* Quiet zone is provided by the white padding around the SVG;
-                  a QR with no margin often fails to scan. */}
-              <path d={qrPath.d} fill="#000" />
-            </svg>
-          </div>
-        )}
+        <FancyQr
+          value={address}
+          label={t('receive.title')}
+          className="recv-qr"
+          accent={['#00e5ff', '#7c4dff', '#00ff9d']}
+          badge={<BrandMark size={19} gradientId="recvQrBrand" strokeWidth={2.2} />}
+        />
 
+        {/*
+          ONE ADDRESS, EVERY EVM NETWORK — the sentence the reporter asked for.
+          The network name still sits here (a payer should see it), but as the
+          network this wallet is on, not as an exclusive claim on the address.
+        */}
         <span className="recv-net-pill">
           <span className="recv-net-dot" aria-hidden="true" />
-          {t('receive.onlyOn', { network: chain?.name ?? t('receive.unknownNetwork') })}
+          {t('receive.sharedEvm')}
+          <span className="recv-net-chain">{chain?.name ?? t('receive.unknownNetwork')}</span>
         </span>
 
-        <div className="recv-addr recv-addr-modern mono">{chunked(address)}</div>
+        <div className="recv-addr recv-addr-modern mono">{chunked}</div>
 
         <div className="recv-actions">
           <button className="recv-btn recv-btn-copy" onClick={copy}>
@@ -225,26 +204,11 @@ function BtcSection() {
    * unlocking the vault while the sheet was open therefore produced React's
    * "Rendered fewer/more hooks than during the previous render" invariant and
    * tore the tree down — the same "sometimes it just breaks" class as the bug
-   * above. Every hook now runs unconditionally, before any return.
+   * above. Every hook now runs unconditionally, before any return. (Today the
+   * QR matrix is built inside FancyQr, which owns its own hooks; the two
+   * useState calls and the derivation effect above stay above the guard for
+   * the same reason, and test/wiring.mjs still asserts it.)
    */
-  const qr = useMemo(() => {
-    if (!btcAddr) return null;
-    try {
-      const q = qrcode(0, 'M');
-      q.addData(btcAddr);
-      q.make();
-      const count = q.getModuleCount();
-      let d = '';
-      for (let r = 0; r < count; r += 1) {
-        for (let c = 0; c < count; c += 1) {
-          if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
-        }
-      }
-      return { d, count };
-    } catch {
-      return null;
-    }
-  }, [btcAddr]);
 
   /*
    * A LOCKED local vault used to render nothing at all here, which reads as
@@ -288,15 +252,16 @@ function BtcSection() {
 
       {btcAddr ? (
         <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-          {qr && (
-            <div style={{ flexShrink: 0, width: 58, height: 58, padding: 4, background: '#fff', borderRadius: 10 }}>
-              <svg viewBox={`0 0 ${qr.count} ${qr.count}`} width="100%" height="100%" shapeRendering="crispEdges" role="img" aria-label={t('receive.btc.title')}>
-                <path d={qr.d} fill="#000" />
-              </svg>
-            </div>
-          )}
+          <FancyQr
+            compact
+            value={btcAddr}
+            label={t('receive.btc.title')}
+            className="fqr-mini"
+            accent={['#f7931a', '#ffb347', '#f7931a']}
+            badge={<IconBitcoin width={19} height={19} />}
+          />
           <div className="mono" dir="ltr" style={{ flex: 1, fontSize: 10.5, wordBreak: 'break-all', lineHeight: 1.7 }}>
-            {(btcAddr.match(/.{1,4}/g) ?? []).join(' ')}
+            {chunk(btcAddr)}
           </div>
           <button type="button" className="btn btn-ghost btn-sm" style={{ borderRadius: 12 }} onClick={copy} aria-label={t('receive.copy')}>
             {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}

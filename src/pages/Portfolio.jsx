@@ -39,6 +39,17 @@ import { loadGoal, saveGoal } from '../lib/goalStore';
  *      math lives in lib/goalMath (pure, unit-tested); the card asks
  *      once and never re-projects from forecasts.
  *
+ * ─── EMBEDDED INTELLIGENCE REUSES THE WALLET'S OWN READ ────────────────────
+ * The wallet's «هوش» tile opens this dashboard in a sheet. It used to spin up
+ * its OWN useMultiChainPortfolio instance there — sixteen chains re-read from
+ * zero on every open, and while that read was in flight the allocation panel
+ * showed its not-connected empty state over a CONNECTED wallet (reported as
+ * «در گزینه تخصیص دارایی … میگه کیف پول را وصل کنید، انگار کار نمیده»). The
+ * Wallet page now hands its already-verified `portfolio` + `intel` down as
+ * props, the sheet paints them in the same frame it opens, and the empty
+ * state tells the truth about WHICH empty it is: not connected, still
+ * reading, or genuinely nothing there.
+ *
  * What it still does NOT do (and will not until those modules are real):
  *   - no on-chain Solana / dYdX / Ostium balance reads (the multi-chain
  *     hook is EVM only — see useMultiChainPortfolio.js);
@@ -52,7 +63,7 @@ function readGoalFromStorage() { return loadGoal(); }
 
 function writeGoalToStorage(goal) { saveGoal(goal); }
 
-export default function Portfolio({ embedded = false, onBack }) {
+export default function Portfolio({ embedded = false, onBack, portfolio: sharedPortfolio = null, intel: sharedIntel = null }) {
   useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -67,21 +78,30 @@ export default function Portfolio({ embedded = false, onBack }) {
    * provider switcher). For everything else we keep the single-chain
    * behaviour the screen always had, so the page still renders for
    * non-EVM wallets and for the unconnected state.
+   *
+   * When the Wallet page embeds this dashboard with its own `portfolio`
+   * object, NEITHER hook is fed: the sheet must not re-read sixteen chains
+   * to re-derive numbers the page already verified — that second read was
+   * exactly what left the allocation panel staring at an empty table.
    */
-  const useMulti = Boolean(wallet?.address && typeof wallet.getReadProvider === 'function');
-  const single = useWalletBalances(useMulti ? null : wallet);
-  const multi = useMultiChainPortfolio(useMulti ? wallet : null);
+  const useMulti = !sharedPortfolio && Boolean(wallet?.address && typeof wallet.getReadProvider === 'function');
+  const single = useWalletBalances(!sharedPortfolio && !useMulti ? wallet : null);
+  const multi = useMultiChainPortfolio(!sharedPortfolio && useMulti ? wallet : null);
 
-  const source = useMulti ? multi : single;
+  const source = sharedPortfolio ?? (useMulti ? multi : single);
   const rows = source.rows ?? [];
-  const total = source.total ?? 0;
 
-  const intel = useMemo(
-    () => buildIntelligence({
+  /* The shared object wins; the local build covers the /portfolio route and
+     the not-yet-wired embed. buildIntelligence keeps unpriced-but-real
+     holdings in `rows`, so an allocation list over it is never a lie that
+     says "connect a wallet" while one is connected. */
+  const builtIntel = useMemo(() => {
+    if (sharedIntel) return null;
+    return buildIntelligence({
       holdings: rows.map((r) => ({ ...r, chainId: r.chainId ?? wallet.chainId ?? null }))
-    }),
-    [rows, wallet.chainId]
-  );
+    });
+  }, [sharedIntel, rows, wallet.chainId]);
+  const intel = sharedIntel ?? builtIntel;
 
   const [expand, setExpand] = useState(false);
   const [goal, setGoal] = useState(() => readGoalFromStorage());
@@ -536,15 +556,29 @@ export default function Portfolio({ embedded = false, onBack }) {
             >
               <div className="wallet-pie-card" style={{ marginTop: 8, padding: 14, borderRadius: 18 }}>
                 {intel.rows.length === 0 ? (
-                  <p className="faint">{t('intel.empty')}</p>
+                  /*
+                   * ─── THE EMPTY STATE NAMES ITS OWN REASON ──────────────────
+                   * This used to print the connect-a-wallet sentence
+                   * unconditionally — the reported bug: a CONNECTED wallet
+                   * reading «کیف را وصل کن» while its holdings were right
+                   * there on the page behind the sheet. Three genuinely
+                   * different empties, three honest sentences.
+                   */
+                  <p className="faint" data-testid="alloc-empty" data-reason={!wallet?.address || wallet.locked ? 'not-connected' : (source.loading || source.pricing) && rows.length === 0 ? 'loading' : 'no-assets'}>
+                    {!wallet?.address || wallet.locked
+                      ? t('intel.empty')
+                      : (source.loading || source.pricing) && rows.length === 0
+                        ? t('intel.loadingHoldings')
+                        : t('intel.noAssets')}
+                  </p>
                 ) : (
                   intel.rows.map((r, i) => (
-                    <div key={r.symbol} style={{ marginBottom: i === intel.rows.length - 1 ? 0 : 10 }}>
+                    <div key={`${r.symbol}:${r.chainId ?? 'x'}`} style={{ marginBottom: i === intel.rows.length - 1 ? 0 : 10 }}>
                       <div className="row-between" style={{ marginBottom: 4 }}>
                         <span style={{ fontSize: 12.5, fontWeight: 700 }}>
                           {r.symbol}
                           <span className="faint" style={{ marginInlineStart: 8, fontWeight: 500, fontSize: 11 }}>
-                            {r.weight.toFixed(1)}%
+                            {r.weight != null ? `${r.weight.toFixed(1)}%` : '—'}
                           </span>
                         </span>
                         <span className="mono" style={{ fontSize: 12 }}>
@@ -559,7 +593,7 @@ export default function Portfolio({ embedded = false, onBack }) {
                       <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
                         <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, r.weight)}%` }}
+                          animate={{ width: `${r.weight != null ? Math.min(100, r.weight) : 0}%` }}
                           transition={{ type: 'spring', stiffness: 110, damping: 20, delay: i * 0.03 }}
                           style={{
                             height: '100%', borderRadius: 999,
