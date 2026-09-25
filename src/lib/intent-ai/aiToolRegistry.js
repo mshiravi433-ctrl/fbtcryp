@@ -58,7 +58,16 @@ export const AI_TOOLS = Object.freeze([
   Object.freeze({ id: 'createFinancialGoal', kind: 'write', scope: 'goal', route: '/v1/ai/goal', live: true }),
   Object.freeze({ id: 'rebalancePortfolio', kind: 'execute', scope: 'portfolio', route: '/portfolio', live: true, requiresSignature: true }),
   Object.freeze({ id: 'getSignals', kind: 'read', scope: 'signals', route: '/signals', live: true }),
-  Object.freeze({ id: 'getMarketAnalysis', kind: 'read', scope: 'research', route: '/v1/ai/chat', live: true })
+  Object.freeze({ id: 'getMarketAnalysis', kind: 'read', scope: 'research', route: '/v1/ai/chat', live: true }),
+  /*
+   * FeeRouter status — the AI's answer to «کارمزد از FeeRouter رد میشه؟» /
+   * "is the fee going through the contract?". Read-only: per-chain deployed
+   * addresses, the live on-chain check (code + feeBps/feeRecipient/owner),
+   * the committed bytecode hash and the honest audit disclosure. The route
+   * is the server endpoint that owns the data, so the tool can never drift
+   * from it.
+   */
+  Object.freeze({ id: 'feeRouter.status', kind: 'read', scope: 'fees', route: '/api/fees/router-status', live: true })
 ]);
 
 export const listAiTools = () => AI_TOOLS.map((t) => ({ ...t }));

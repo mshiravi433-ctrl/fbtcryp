@@ -2458,5 +2458,29 @@ try {
   ]);
 }
 
+/* --------------------- FeeRouter status for the AI ---------------------- */
+/* The AI surfaces (Intent AI tool feeRouter.status, fbt-mcp tool
+   fbt_get_fee_router_status) both point at GET /api/fees/router-status.
+   This probe proves the connection end to end: the honest default report,
+   the live on-chain read against a stub RPC, the NOT_DEPLOYED/UNREACHABLE
+   honesty paths, the real HTTP route and both AI registrations. Runs as a
+   CHILD process: it spawns import-time env scenarios of its own. */
+console.log('▸ FeeRouter status for the AI…');
+try {
+  execFileSync(process.execPath, ['fee-router-status-probe.mjs'], {
+    stdio: 'pipe',
+    cwd: new URL('.', import.meta.url).pathname
+  });
+  report('feerouter status for the AI', [
+    ['FeeRouter connected for the AI — all assertions passed', true]
+  ]);
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+  if (tail) console.log(tail);
+  report('feerouter status for the AI', [
+    ['feerouter status for the AI FAILED (see output)', false]
+  ]);
+}
+
 console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);

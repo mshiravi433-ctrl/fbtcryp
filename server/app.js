@@ -114,6 +114,7 @@ import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoDecode, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
 import { crossChainProbe, crossChainQuotes, crossChainStatus } from './xchain.js';
 import { revenueReadiness } from './readiness.js';
+import { feeRouterStatus, FEE_ROUTER_STATUS_SCHEMA } from './feeRouterStatus.js';
 import { providerStatusReport, recordFailure, recordSuccess } from './providerStatus.js';
 import { probeProviderStatuses } from './providerProbe.js';
 import { networkOverview, validWindow, networkError } from './networkOverview.js';
@@ -6081,6 +6082,30 @@ app.get('/api/btc/status', (_req, res) => res.json(btcStatus()));
  * Reports booleans only, never the configured values.
  */
 app.get('/api/revenue/readiness', (_req, res) => res.json(revenueReadiness()));
+
+/*
+ * FEE ROUTER STATUS — is the self-deployed FeeRouter connected, and where?
+ *
+ * The read-only truth the AI surfaces (Intent AI tool `feeRouter.status`,
+ * fbt-mcp tool `fbt_get_fee_router_status`) and humans rely on: per-chain
+ * configured addresses, a live on-chain check per chain (code present?
+ * feeBps / feeRecipient / owner / dexRouter), the committed bytecode hash
+ * and the audit disclosure. A chain whose RPCs do not answer reports
+ * UNREACHABLE and an address with no code reports NOT_DEPLOYED — the AI is
+ * told what is actually connected instead of inheriting a silent "ok".
+ *
+ * Cached 30 s: on-chain state changes only when we act on it, and the
+ * per-chain RPC walks are the expensive part.
+ */
+app.get('/api/fees/router-status', async (_req, res) => {
+  try {
+    const { value, cached } = await withCache('fee-router-status.v1', 30_000, () => feeRouterStatus({}));
+    res.set('cache-control', 'public, max-age=30, s-maxage=30');
+    return res.json({ ...value, cached: Boolean(cached) });
+  } catch (e) {
+    return res.status(500).json({ schema: FEE_ROUTER_STATUS_SCHEMA, ok: false, code: 'FEE_ROUTER_STATUS_FAILED', detail: e.message });
+  }
+});
 
 /*
  * STANDARD PROVIDER STATUS — one operational shape for every integration.

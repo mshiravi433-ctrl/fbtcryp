@@ -1,3 +1,13 @@
+# ۲۰۲۶-۰۹-۲۵ — FeeRouter به هوش مصنوعی وصل شد: هر دو سطح AI حالا می‌دانند «کارمزد از قرارداد می‌گذرد یا نه»
+
+جزئیات: [2026-09-25-feerouter-ai-connection-FA.md](2026-09-25-feerouter-ai-connection-FA.md).
+
+- **مشکل:** FeeRouter هیچ اتصال مستقیمی به سطوح هوش مصنوعی نداشت — نه ابزار در رجیستری Intent AI، نه ابزار در پل `fbt-mcp` برای ایجنت‌های خارجی، نه routeٔ وضعیت؛ فقط drill داخلیِ policy-contract بود که صرفاً hash می‌گرفت.
+- **راه‌حل:** یک منبعِ واحد — `server/feeRouterStatus.js` + `GET /api/fees/router-status` — با حالت (aggregator | contract)، آدرس‌های per-chain، خوانش زندهٔ on-chain برای هر زنجیرهٔ تنظیم‌شده (code + feeBps/feeRecipient/owner/dexRouter)، hashِ bytecodeٔ committed (همان آرتیفکتی که ops-probe hash می‌کند) و افشای صادقانهٔ «ممیزی‌نشده».
+- **اتصال:** ابزار `feeRouter.status` در رجیستری Intent AI + ابزار `fbt_get_fee_router_status` (public) در `fbt-mcp` — هر دو به همان route نشسته‌اند.
+- **صداقت:** زنجیرهٔ دست‌نیافتنی `UNREACHABLE`، آدرسِ بی‌code `NOT_DEPLOYED`؛ بدون دیپلوی، `aggregator` با توضیحِ مسیر بعدی. okٔ خاموش وجود ندارد.
+- **تست:** `test/fee-router-status-probe.mjs` (۲۵ بررسی: خوانش زنده روی stub RPC، دو مسیرِ صداقت، route واقعی، رجیستری و wiring) در `npm test`؛ همسایه‌ها سبز (fee-mode per-chain، ops-drill، mcp ۴۰/۴۰).
+
 # ۲۰۲۶-۰۹-۲۵ — بنرِ RWA / افق جهانیِ سهام: «دکمه چپ و راست» یک باگِ ۴۴ پیکسلی بود؛ باکسِ شیشه‌ایِ متحرک با گویِ دوحلقه، شفق، دنباله‌دار و اسپارک‌لاین؛ ۱۱۲/۱۲۸px
 
 جزئیات: [2026-09-25-stocks-banner-aurora-redesign-fa.md](2026-09-25-stocks-banner-aurora-redesign-fa.md).
