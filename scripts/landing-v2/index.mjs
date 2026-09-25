@@ -854,7 +854,7 @@ function networks() {
         <div class="net-grid">${cards}</div>
         <figure class="art-panel reveal-l reveal" data-parallax="7">
           <img src="/landing/art-networks.jpg" alt="" width="900" height="675" loading="lazy" decoding="async">
-          <figcaption>${T({ en: 'One interface, ten settlement networks — the chain is a detail, not a decision you have to make first.', fa: 'یک رابط، ده شبکهٔ تسویه — شبکه یک جزئیات است، نه تصمیمی که اول باید بگیری.' })}</figcaption>
+          <figcaption>${T({ en: 'One interface, 17 supported swap networks — the chain is a detail, not a decision you have to make first.', fa: 'یک رابط، ۱۷ شبکهٔ پشتیبانی‌شده برای سواپ؛ شبکه جزئیات است، نه تصمیمی که اول باید بگیری.' })}</figcaption>
           <span class="art-sheen" aria-hidden="true"></span>
         </figure>
       </div>
@@ -1158,6 +1158,7 @@ function structuredData(url, site) {
         '@type': 'Organization',
         '@id': orgId,
         name: 'FBT Swap',
+        alternateName: ['FBTSwap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
         legalName: 'Fanous Bazaar Pishgam Co.',
         url: `${site}/`,
         email: 'fbtswap@gmail.com',
@@ -1169,6 +1170,7 @@ function structuredData(url, site) {
         '@id': websiteId,
         url: `${site}/`,
         name: 'FBT Swap',
+        alternateName: ['FBTSwap', 'FBT Swap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
         inLanguage: ['en', 'fa'],
         publisher: { '@id': orgId }
       },
