@@ -1,16 +1,24 @@
-/* RWA banners — the two minimal, theme-aware banners that replaced the
-   «Aurora Flip» card on the stocks page (2026-09-24).
+/* RWA banners — the stocks page's two theme-aware banners.
  *
- *   .rhs — two RWA / Global-Horizon slides that swap HORIZONTALLY.
- *          No 3D anywhere: the iPhone face-over-face paint bug this replaces
- *          had no geometry it could happen in.
- *   .rwb — the RWA tab header: the same text as before, now as a banner with
- *          an animated SVG icon.
+ *   .rhs — the RWA / Global-Horizon SWAP banner on the «سهام توکنیزه» tab:
+ *          two slides that swap HORIZONTALLY inside one animated glass slab.
+ *          No 3D anywhere: the iPhone face-over-face paint bug this family
+ *          once had has no geometry it could happen in.
+ *   .rwb — the RWA tab header: the same text as before, as a banner with an
+ *          animated SVG icon.
  *
  * Every surface, line and text colour is an app token (var(--bg-panel),
  * var(--line), var(--text-…)), so light and dark themes read identically to
- * the rest of the app. The only literals are the two accents, and each has a
+ * the rest of the app. The only literals are the accents, and each has a
  * deeper light-theme value so it keeps contrast on the white canvas.
+ *
+ * ─── MOTION BUDGET ─────────────────────────────────────────────────────────
+ * Everything that moves here moves by transform or opacity (compositor work),
+ * except two tiny SVG line draws (stroke-dashoffset). The decorations on the
+ * slide that is NOT showing are paused, prefers-reduced-motion switches every
+ * animation off, and a background tab is throttled by the browser itself.
+ * Live at once on a phone: 2 glow drifts, 1 sweep, 1 comet, 2 rings, 2 glyph
+ * parts, 1 sparkline, 1 halo, 1 fill — eleven cheap layers on ONE banner.
  */
 
 /* ─── the swap banner ─────────────────────────────────────────────────── */
@@ -20,27 +28,150 @@
   --rhs-acc-rwa-2: #7c4dff;
   --rhs-acc-hz: #00e5ff;
   --rhs-acc-hz-2: #00ff9d;
+  /* how strongly the aurora fields tint the glass (the probe reads these) */
+  --rhs-glow-a: 26%;
+  --rhs-glow-b: 20%;
+  --rhs-grid-ink: 10%;
+  /* the sweep is a thin sheet of light: faint white on dark glass, a brighter
+     white on light glass (a dark sweep on white would read as a shadow) */
+  --rhs-sweep: rgba(255, 255, 255, 0.075);
+  /* inline-axis sign for the parallax (RTL flips it) */
+  --dir: 1;
+  /* where the two glow centres sit — the primary one behind the orb */
+  --gx1: 14%;
+  --gx2: 86%;
   position: relative;
   width: 100%;
-  height: 86px;
+  height: 112px;
   margin: 2px 0 16px;
-  border-radius: 18px;
+  border-radius: 22px;
   isolation: isolate;
   -webkit-tap-highlight-color: transparent;
 }
+.rhs[dir='rtl'] { --dir: -1; --gx1: 86%; --gx2: 14%; }
+/* the slide's palette drives the whole box: glow, comet, orb, separators */
+.rhs[data-slide='rwa'] { --acc: var(--rhs-acc-rwa); --acc2: var(--rhs-acc-rwa-2); }
+.rhs[data-slide='hz'] { --acc: var(--rhs-acc-hz); --acc2: var(--rhs-acc-hz-2); }
 
 .rhs-viewport {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   overflow: hidden;
-  background:
-    linear-gradient(165deg, color-mix(in srgb, var(--rhs-acc-rwa) 7%, transparent), transparent 42%),
-    var(--bg-panel);
+  background: var(--bg-panel);
   border: 1px solid var(--line);
+  /* a coloured glow under the slab + a hairline of light on its top edge */
+  box-shadow:
+    0 22px 46px -26px color-mix(in srgb, var(--acc) 62%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-1) 7%, transparent);
+  transition: box-shadow 700ms ease;
+  /* Safari: keep transformed children clipped to the rounded corners */
+  transform: translateZ(0);
 }
 
+/* ── the aurora fields — one per palette, cross-faded with the slide ── */
+.rhs-glow {
+  position: absolute;
+  inset: -22%;
+  pointer-events: none;
+  transition: opacity 760ms ease;
+  will-change: transform;
+}
+.rhs-glow--rwa {
+  background:
+    radial-gradient(42% 70% at var(--gx1) 28%, color-mix(in srgb, var(--rhs-acc-rwa) var(--rhs-glow-a), transparent), transparent 72%),
+    radial-gradient(36% 62% at var(--gx2) 82%, color-mix(in srgb, var(--rhs-acc-rwa-2) var(--rhs-glow-b), transparent), transparent 72%);
+  animation: rhsDriftA 16s ease-in-out infinite alternate;
+}
+.rhs-glow--hz {
+  background:
+    radial-gradient(42% 70% at var(--gx1) 30%, color-mix(in srgb, var(--rhs-acc-hz) var(--rhs-glow-a), transparent), transparent 72%),
+    radial-gradient(36% 62% at var(--gx2) 78%, color-mix(in srgb, var(--rhs-acc-hz-2) var(--rhs-glow-b), transparent), transparent 72%);
+  animation: rhsDriftB 19s ease-in-out infinite alternate;
+}
+.rhs[data-slide='hz'] .rhs-glow--rwa,
+.rhs[data-slide='rwa'] .rhs-glow--hz { opacity: 0; }
+@keyframes rhsDriftA {
+  from { transform: translate3d(-2.5%, -3%, 0) scale(1); }
+  to { transform: translate3d(3%, 4%, 0) scale(1.07); }
+}
+@keyframes rhsDriftB {
+  from { transform: translate3d(3%, 3%, 0) scale(1.05); }
+  to { transform: translate3d(-3%, -3.5%, 0) scale(1); }
+}
+
+/* ── a faint dot grid for depth, strongest in the empty middle ── */
+.rhs-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-1) var(--rhs-grid-ink), transparent) 1px, transparent 1.4px);
+  background-size: 16px 16px;
+  -webkit-mask-image: linear-gradient(to right, transparent 6%, #000 38%, #000 62%, transparent 94%);
+  mask-image: linear-gradient(to right, transparent 6%, #000 38%, #000 62%, transparent 94%);
+}
+
+/* ── the light sweep — one pass across the glass every 7.5s ── */
+.rhs-sweep {
+  position: absolute;
+  top: -30%;
+  bottom: -30%;
+  left: 0;
+  width: 30%;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 0%, var(--rhs-sweep) 50%, transparent 100%);
+  transform: translateX(-180%) skewX(-14deg);
+  opacity: 0;
+  animation: rhsSweep 7.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+@keyframes rhsSweep {
+  0% { transform: translateX(-180%) skewX(-14deg); opacity: 0; }
+  6% { opacity: 1; }
+  30% { opacity: 1; }
+  36%, 100% { transform: translateX(460%) skewX(-14deg); opacity: 0; }
+}
+
+/* ── the comet on the border ── */
+.rhs-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.95;
+}
+.rhs-frame::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* a square that still covers the box at every angle: its side must beat the
+     box diagonal (~105% of the width at these proportions), no more — this is
+     one GPU texture, and 280% would be a megapixel of it on a phone */
+  width: 125%;
+  aspect-ratio: 1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 236deg,
+    color-mix(in srgb, var(--acc2) 70%, transparent) 300deg,
+    var(--acc) 340deg,
+    transparent 360deg
+  );
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: rhsComet 9s linear infinite;
+  will-change: transform;
+}
+@keyframes rhsComet { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+/* ── the track ── */
 .rhs-track {
+  position: relative;
   display: flex;
   height: 100%;
   width: 200%;
@@ -52,10 +183,11 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 50%;
+  height: 100%;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 0 18px 4px;
   border: 0;
   background: transparent;
   color: var(--text-1);
@@ -63,53 +195,134 @@
   text-align: start;
   cursor: pointer;
   outline: none;
+  overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
-.rhs-slide:focus-visible { box-shadow: inset 0 0 0 2px var(--line-strong); border-radius: inherit; }
+.rhs-slide:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 18px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 70%, transparent);
+  pointer-events: none;
+}
 
-.rhs-icon {
+/* ── the orb ── */
+.rhs-orb {
+  position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, currentColor 32%, transparent);
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  color: var(--acc);
+  transition: transform 0.3s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.rhs-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rhs-ring-dash {
+  opacity: 0.55;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rhsSpin 14s linear infinite;
+}
+.rhs-ring-arc {
+  stroke: var(--acc2);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rhsSpinBack 8s linear infinite;
+}
+.rhs-orb-core {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--acc) 42%, transparent);
   background:
-    linear-gradient(150deg, color-mix(in srgb, currentColor 16%, transparent), color-mix(in srgb, currentColor 5%, transparent)),
+    radial-gradient(70% 70% at 30% 26%, color-mix(in srgb, #fff 16%, transparent), transparent 60%),
+    linear-gradient(150deg, color-mix(in srgb, var(--acc) 24%, transparent), color-mix(in srgb, var(--acc2) 12%, transparent)),
     var(--bg-raised);
-  color: var(--rhs-acc-rwa);
+  box-shadow:
+    0 10px 24px -10px color-mix(in srgb, var(--acc) 70%, transparent),
+    inset 0 -6px 12px -8px color-mix(in srgb, var(--acc2) 45%, transparent);
+  transition: box-shadow 0.3s;
 }
-.rhs-icon svg { width: 24px; height: 24px; overflow: visible; }
-.rhs-icon--hz { color: var(--rhs-acc-hz); }
+.rhs-orb-core svg { width: 25px; height: 25px; overflow: visible; }
 
-/* gentle life, no spectacle */
-.rhs-float { animation: rhsFloat 5.5s ease-in-out infinite; }
-@keyframes rhsFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-1.4px); }
-}
-.rhs-orbit {
+/* glyph life */
+.rhs-g-orbit {
   transform-box: view-box;
   transform-origin: 12px 12px;
   animation: rhsSpin 9s linear infinite;
 }
+.rhs-slide--hz .rhs-g-orbit { transform-origin: 11px 12.4px; animation-duration: 11s; }
+.rhs-g-bars { animation: rhsFloat 5.5s ease-in-out infinite; }
+.rhs-g-shine { animation: rhsShine 3.6s ease-in-out infinite; }
+.rhs-g-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rhsTwinkle 2.8s ease-in-out infinite;
+}
+.rhs-g-meridian {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rhsMeridian 4.6s ease-in-out infinite;
+}
+.rhs-g-trend,
+.rhs-g-trend-head {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: rhsDraw 5.2s ease-in-out infinite;
+}
+.rhs-g-trend-head { animation-delay: 0.9s; }
+
 @keyframes rhsSpin { to { transform: rotate(360deg); } }
-.rhs-shine { animation: rhsShine 3.8s ease-in-out infinite; }
+@keyframes rhsSpinBack { to { transform: rotate(-360deg); } }
+@keyframes rhsFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.3px); }
+}
 @keyframes rhsShine {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.7; }
+  0%, 100% { opacity: 0.15; transform: translateX(0); }
+  50% { opacity: 0.85; transform: translateX(0.6px); }
+}
+@keyframes rhsTwinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.75) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.1) rotate(45deg); }
+}
+@keyframes rhsMeridian {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.22); }
+}
+@keyframes rhsDraw {
+  0% { stroke-dashoffset: 22; opacity: 1; }
+  38% { stroke-dashoffset: 0; opacity: 1; }
+  80% { stroke-dashoffset: 0; opacity: 1; }
+  92% { stroke-dashoffset: 0; opacity: 0; }
+  100% { stroke-dashoffset: 22; opacity: 0; }
 }
 
+/* ── text ── */
 .rhs-text {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
+  transition: transform 560ms cubic-bezier(0.32, 0.72, 0, 1), opacity 420ms ease;
 }
 .rhs-title {
-  font-size: 14px;
+  font-size: 16.5px;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--text-1);
@@ -117,9 +330,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: transform 0.3s ease;
 }
 .rhs-sub {
-  font-size: 11.5px;
+  /* a block of inline parts (not a flex row): text-overflow only ellipsises
+     inline content, and the longest line has to survive a 320px phone */
+  display: block;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
   line-height: 1.35;
@@ -127,58 +344,151 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.rhs-go {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+.rhs-sub-part { display: inline; }
+.rhs-sep {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 7px;
   border-radius: 50%;
-  color: var(--text-2);
-  border: 1px solid var(--line);
-  background: var(--bg-raised);
-  transition: transform 0.3s cubic-bezier(0.3, 1.4, 0.5, 1), color 0.3s, border-color 0.3s;
+  vertical-align: middle;
+  background: var(--acc);
+  opacity: 0.85;
 }
-.rhs-slide--rwa .rhs-go { color: var(--rhs-acc-rwa); border-color: color-mix(in srgb, var(--rhs-acc-rwa) 35%, transparent); }
-.rhs-slide--hz .rhs-go { color: var(--rhs-acc-hz); border-color: color-mix(in srgb, var(--rhs-acc-hz) 35%, transparent); }
-.rhs[dir='rtl'] .rhs-go svg { transform: scaleX(-1); }
-.rhs-slide:hover .rhs-go { transform: scale(1.08); }
-.rhs-slide:active .rhs-go { transform: scale(0.94); }
 
-/* the whole indicator: two dots, the active one a pill */
-.rhs-dots {
+/* ── the sparkline art in the trailing half ── */
+.rhs-art {
   position: absolute;
-  bottom: 6px;
-  inset-inline-start: 50%;
+  inset-inline-end: 0;
+  bottom: 0;
+  top: 0;
+  width: min(46%, 300px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  color: var(--acc);
+  opacity: 0.82;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to left, #000 46%, transparent 100%);
+  mask-image: linear-gradient(to left, #000 46%, transparent 100%);
+}
+.rhs[dir='rtl'] .rhs-art {
+  -webkit-mask-image: linear-gradient(to right, #000 46%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 46%, transparent 100%);
+}
+.rhs-art svg { width: 100%; height: 100%; max-height: 100%; overflow: visible; }
+.rhs-spark-line {
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  animation: rhsSparkDraw 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.rhs-spark-fill { opacity: 0; animation: rhsSparkFill 9s ease infinite; }
+.rhs-spark-dot { opacity: 0; animation: rhsSparkFill 9s ease infinite; }
+.rhs-spark-halo {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rhsHalo 9s ease-out infinite;
+}
+@keyframes rhsSparkDraw {
+  0% { stroke-dashoffset: 260; opacity: 1; }
+  34% { stroke-dashoffset: 0; opacity: 1; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes rhsSparkFill {
+  0%, 20% { opacity: 0; }
+  40%, 86% { opacity: 1; }
+  95%, 100% { opacity: 0; }
+}
+@keyframes rhsHalo {
+  0%, 34% { opacity: 0; transform: scale(0.6); }
+  40% { opacity: 0.55; transform: scale(1); }
+  60% { opacity: 0; transform: scale(2.6); }
+  100% { opacity: 0; transform: scale(2.6); }
+}
+
+/* ── the slide that is showing vs. the one waiting in the wings ── */
+/* parallax: the incoming text arrives a beat after the surface */
+.rhs-slide:not(.is-active) .rhs-text {
+  opacity: 0;
+  transform: translateX(calc(18px * var(--dir)));
+}
+.rhs-slide:not(.is-active) .rhs-orb { transform: scale(0.88); }
+/* and nothing burns frames while it is out of sight */
+.rhs-slide:not(.is-active) *,
+.rhs-slide:not(.is-active) *::before,
+.rhs-slide:not(.is-active) *::after { animation-play-state: paused; }
+
+/* ── the indicator: two hairline segments, the active one filling ── */
+.rhs-timeline {
+  position: absolute;
+  bottom: 9px;
+  left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 4px;
+  gap: 5px;
   z-index: 2;
+  pointer-events: none;
 }
-.rhs[dir='rtl'] .rhs-dots { transform: translateX(50%); }
-.rhs-dot {
-  width: 5px;
-  height: 5px;
-  padding: 0;
-  border: 0;
+.rhs-seg {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 3px;
   border-radius: 999px;
-  background: var(--line-strong);
-  cursor: pointer;
+  background: color-mix(in srgb, var(--text-2) 32%, transparent);
+  overflow: hidden;
   transition: width 0.35s cubic-bezier(0.32, 0.72, 0, 1), background 0.35s;
 }
-.rhs-dot.is-on { width: 18px; background: var(--text-2); }
-.rhs-dot:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 2px; }
+.rhs-seg.is-on { width: 34px; background: color-mix(in srgb, var(--text-2) 42%, transparent); }
+.rhs-seg-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--acc);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  animation-name: rhsFill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.rhs[dir='rtl'] .rhs-seg-fill { transform-origin: 100% 50%; }
+.rhs.is-paused .rhs-seg-fill { animation-play-state: paused; }
+@keyframes rhsFill { to { transform: scaleX(1); } }
+
+/* ── hover / press — only where a pointer exists ── */
+@media (hover: hover) {
+  .rhs-slide:hover .rhs-orb { transform: scale(1.04); }
+  .rhs-slide:hover .rhs-orb-core {
+    box-shadow:
+      0 12px 28px -8px color-mix(in srgb, var(--acc) 85%, transparent),
+      inset 0 -6px 12px -8px color-mix(in srgb, var(--acc2) 55%, transparent);
+  }
+  .rhs-slide:hover .rhs-title { transform: translateX(calc(2px * var(--dir))); }
+}
+.rhs-slide:active .rhs-orb { transform: scale(0.95); }
+
+/* the narrowest phones (320–359px): the longest line, «Forex · Gold ·
+   Stocks · Indices», gets its 178px by tightening the separators, not by
+   dropping a word */
+@media (max-width: 359px) {
+  .rhs-slide { padding: 0 15px 4px; gap: 12px; }
+  .rhs-sub { font-size: 11.5px; }
+  .rhs-sep { margin: 0 5px; }
+}
 
 /* wider screens: a hair more air, same layout */
 @media (min-width: 640px) {
-  .rhs { height: 96px; border-radius: 20px; }
-  .rhs-slide { padding: 14px 18px; gap: 14px; }
-  .rhs-icon { width: 48px; height: 48px; min-width: 48px; border-radius: 15px; }
-  .rhs-icon svg { width: 26px; height: 26px; }
-  .rhs-title { font-size: 15px; }
-  .rhs-sub { font-size: 12px; }
-  .rhs-dots { bottom: 8px; }
+  .rhs { height: 128px; border-radius: 24px; }
+  .rhs-slide { padding: 0 22px 4px; gap: 16px; }
+  .rhs-orb { width: 66px; height: 66px; min-width: 66px; }
+  .rhs-orb-core { width: 46px; height: 46px; }
+  .rhs-orb-core svg { width: 27px; height: 27px; }
+  .rhs-title { font-size: 18px; }
+  .rhs-sub { font-size: 12.5px; }
+  .rhs-timeline { bottom: 11px; }
+  .rhs-grid { background-size: 18px 18px; }
 }
 
 /* ─── the RWA section banner ──────────────────────────────────────────── */
@@ -277,28 +587,52 @@
 
 /* ─── light theme ─────────────────────────────────────────────────────── */
 /*
- * Deeper accents so they keep contrast on the white canvas. Surfaces, lines
+ * Deeper accents so they keep contrast on the white canvas, and quieter
+ * decoration: the aurora, grid and sweep are tuned for a light glass, where
+ * the same alphas that glow on black would look like stains. Surfaces, lines
  * and text already follow the tokens. The `:root:not([data-theme])` block
  * covers the boot window before the app sets data-theme, mirroring the rule
  * index.css establishes for every themed surface.
  */
 :root[data-theme='light'] .rhs {
   --rhs-acc-rwa: #a86a00;
+  --rhs-acc-rwa-2: #5b46c9;
   --rhs-acc-hz: #00758a;
+  --rhs-acc-hz-2: #00795c;
+  --rhs-glow-a: 14%;
+  --rhs-glow-b: 10%;
+  --rhs-grid-ink: 7%;
+  --rhs-sweep: rgba(255, 255, 255, 0.85);
 }
+:root[data-theme='light'] .rhs-viewport {
+  box-shadow:
+    0 18px 38px -24px color-mix(in srgb, var(--acc) 45%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+:root[data-theme='light'] .rhs-frame { opacity: 0.75; }
+:root[data-theme='light'] .rhs-art { opacity: 0.66; }
 :root[data-theme='light'] .rwb { --rwb-acc: #a86a00; }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']):not([data-theme='light']) .rhs {
     --rhs-acc-rwa: #a86a00;
+    --rhs-acc-rwa-2: #5b46c9;
     --rhs-acc-hz: #00758a;
+    --rhs-acc-hz-2: #00795c;
+    --rhs-glow-a: 14%;
+    --rhs-glow-b: 10%;
+    --rhs-grid-ink: 7%;
+    --rhs-sweep: rgba(255, 255, 255, 0.85);
   }
+  :root:not([data-theme='dark']):not([data-theme='light']) .rhs-frame { opacity: 0.75; }
+  :root:not([data-theme='dark']):not([data-theme='light']) .rhs-art { opacity: 0.66; }
   :root:not([data-theme='dark']):not([data-theme='light']) .rwb { --rwb-acc: #a86a00; }
 }
 
 /* ─── reduced motion: the swap still works, nothing decorates ────────── */
 @media (prefers-reduced-motion: reduce) {
   .rhs-track { transition-duration: 0.01s; }
+  .rhs-text, .rhs-orb, .rhs-title { transition: none; }
   .rhs *,
   .rhs *::before,
   .rhs *::after,
@@ -307,4 +641,9 @@
   .rwb *::after {
     animation: none !important;
   }
+  /* the still frame must be complete: the line drawn, the fill visible */
+  .rhs-spark-line { stroke-dashoffset: 0; }
+  .rhs-spark-fill, .rhs-spark-dot { opacity: 1; }
+  .rhs-g-trend, .rhs-g-trend-head { stroke-dashoffset: 0; }
+  .rhs-sweep, .rhs-frame { display: none; }
 }
