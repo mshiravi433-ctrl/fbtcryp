@@ -56,6 +56,22 @@ export const COLLABORATION_VERSION = '5.0.0';
 const DEADLINE_MS = Number(process.env.AI_COLLAB_DEADLINE_MS || 20000);
 const MAX_MODELS = Number(process.env.AI_COLLAB_MAX_MODELS || 4);
 
+/* Round-robin seat of the fleet. Every collaboration run advances it by one,
+   so successive questions take turns LEADING with a different provider. This
+   is what makes the whole registered fleet "active and working" rather than
+   only the top of the task list: over a normal session every provider holds
+   the primary seat in turn (the task preference still orders the list, and
+   per-role diversity within one question is handled by the seat rotation).
+   Level-1 social turns keep offset 0 so a "hello" always uses the fastest
+   model, never a rotated-to-one. */
+let fleetBaseCursor = 0;
+export function nextFleetBaseOffset(n = 1) {
+  const off = fleetBaseCursor % Math.max(1, n);
+  fleetBaseCursor += 1;
+  return off;
+}
+export function resetFleetCursor() { fleetBaseCursor = 0; }
+
 /* -------------------------------------------------------------------------- */
 /*  PROVIDER HEALTH & CIRCUIT BREAKER (§46, §48)                               */
 /* -------------------------------------------------------------------------- */
@@ -109,13 +125,36 @@ export function resetProviderHealth() {
   healthState.clear();
 }
 
-/** Health-aware provider selection: prefers the gateway's task order but skips
- *  providers whose circuit is open (unless everything is open). */
-function healthyProvidersForTask(taskType, { max = MAX_MODELS, exclude = [] } = {}) {
-  const configured = getPreferredProvidersForTask(taskType, { configuredOnly: true })
+/**
+ * Health-aware provider selection.
+ *
+ * `offset` rotates the primary seat: role i leads with the i-th provider of the
+ * ordered list (wrapping), so the independent analyses a question runs are
+ * DIFFERENT models instead of every role re-picking the same top provider.
+ *
+ * `fullFleet` widens the pool to the whole configured fleet — the task's
+ * preferred order first, then every other configured provider the task list
+ * left out. Without it, providers that only sit in a different task's list
+ * (Mistral, Anthropic, …) could never hold a seat, so the "multi-AI" engine
+ * silently collapsed to a single model. With it, a rotation across roles
+ * reaches every registered provider while the FIRST seat still honours the
+ * task's own preference.
+ *
+ * Providers whose circuit is open are skipped unless everything is open.
+ */
+function healthyProvidersForTask(taskType, { max = MAX_MODELS, exclude = [], offset = 0, fullFleet = false } = {}) {
+  const taskList = getPreferredProvidersForTask(taskType, { configuredOnly: true })
     .filter((p) => p !== 'internal' && !exclude.includes(p));
-  const healthy = configured.filter(isProviderHealthy);
-  const picked = (healthy.length ? healthy : configured).slice(0, max);
+  const allConfigured = getActiveProviderIds()
+    .filter((p) => p !== 'internal' && !exclude.includes(p));
+  const ordered = fullFleet
+    ? [...taskList, ...allConfigured.filter((p) => !taskList.includes(p))]
+    : taskList;
+  const rotated = offset > 0 && ordered.length
+    ? ordered.slice(offset % ordered.length).concat(ordered.slice(0, offset % ordered.length))
+    : ordered;
+  const healthy = rotated.filter(isProviderHealthy);
+  const picked = (healthy.length ? healthy : rotated).slice(0, max);
   return picked;
 }
 
@@ -227,7 +266,7 @@ const ROLE_TASK = {
   [AI_ROLES.FINAL_ANSWER_AI]: 'reasoning'
 };
 
-async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600 }) {
+async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 600, fleet = null, seat = 0 }) {
   const system = `${ROLE_PROMPTS[role] || ROLE_PROMPTS[AI_ROLES.FINAL_ANSWER_AI]}\n${ANALYSIS_JSON_SHAPE}`;
   /*
    * ─── THE USER'S LANGUAGE, NOT THE APP'S TWO ─────────────────────────────
@@ -246,10 +285,21 @@ async function runRole({ role, message, contextBlock, locale, deps, maxTokens = 
   ].filter(Boolean).join('\n\n');
 
   /* deps.selectProviders lets tests inject a fake fleet; production uses the
-     health-aware gateway routing. */
+     health-aware gateway routing.
+     When the caller passes the question's ordered `fleet`, role `seat` takes
+     that seat (wrapping) as its PRIMARY and the following seats as failover —
+     so the independent analyses a question runs are DIFFERENT providers, not
+     one model re-picked by every role. Without a fleet (single-role turns,
+     older callers) it falls back to the role's own task order, full fleet. */
   const candidates = deps.selectProviders
     ? deps.selectProviders(ROLE_TASK[role] || 'general').slice(0, 2)
-    : healthyProvidersForTask(ROLE_TASK[role] || 'general', { max: 2 });
+    : (Array.isArray(fleet) && fleet.length
+        ? (() => {
+            const n = fleet.length;
+            const start = ((Number(seat) % n) + n) % n;
+            return fleet.slice(start).concat(fleet.slice(0, start)).slice(0, 3);
+          })()
+        : healthyProvidersForTask(ROLE_TASK[role] || 'general', { max: 3, fullFleet: true }));
   const startedAt = Date.now();
   for (const providerId of candidates) {
     try {
@@ -603,6 +653,27 @@ export async function runCollaborativeAnalysis({
 
   const contextBlock = buildSafeContextBlock({ context, knowledge, sources: result.sources });
 
+  /* The ordered fleet for THIS question: the dominant task's preferred order
+     first, then every other configured provider (health-aware). One shared
+     list so the roles below take DISTINCT seats — role i leads with seat i —
+     instead of every role re-picking the same top provider. With this the
+     engine is genuinely multi-model: the "multi-AI" answer is actually built
+     from different providers, and every registered provider holds a real
+     seat instead of sitting idle behind the first one that answers. */
+  const fleetTask = (Array.isArray(plan.taskTypes)
+    ? plan.taskTypes.find((t) => t !== 'intent' && t !== 'summarization')
+    : null) || 'general';
+  let fleet = externalConfigured
+    ? healthyProvidersForTask(fleetTask, { max: Number.MAX_SAFE_INTEGER, fullFleet: true })
+    : [];
+  /* Rotate the base of the fleet for analysis turns so the whole registered
+     fleet takes turns holding the primary seat across a session (see
+     fleetBaseCursor). Level 1 keeps offset 0 → the fastest model leads. */
+  if (plan.level >= 2 && fleet.length > 1) {
+    const base = nextFleetBaseOffset(fleet.length);
+    if (base > 0) fleet = fleet.slice(base).concat(fleet.slice(0, base));
+  }
+
   /* ---- Stage 1-2: independent analyses by level (§9) ---- */
   const analyses = [];
 
@@ -616,7 +687,7 @@ export async function runCollaborativeAnalysis({
       result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
       result.degraded = true;
     } else {
-      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: 400 }), null);
+      const single = await withDeadline(runRole({ role: AI_ROLES.CONVERSATION_AI, message, contextBlock, locale, deps: D, maxTokens: 400, fleet, seat: 0 }), null);
       if (single?.ok) {
         analyses.push(single);
         result.answer = single.answer;
@@ -630,14 +701,16 @@ export async function runCollaborativeAnalysis({
       : plan.taskTypes.includes('crypto-analysis') || plan.taskTypes.includes('research') ? AI_ROLES.CRYPTO_RESEARCH_AI
       : plan.taskTypes.includes('risk') ? AI_ROLES.RISK_AI
       : AI_ROLES.CRYPTO_RESEARCH_AI;
-    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D }), null);
+    const single = await withDeadline(runRole({ role, message, contextBlock, locale, deps: D, fleet, seat: 0 }), null);
     if (single?.ok) { analyses.push(single); result.answer = single.answer; }
     else { result.answer = buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale }); result.degraded = true; }
   } else if (plan.level === 3) {
-    /* Two independent models + tools (+web when live). */
+    /* Two independent models + tools (+web when live). Each role takes a
+       different seat of the shared fleet (seat = role index), so the two
+       analyses are genuinely different providers, not one model twice. */
     const roles = pickAnalysisRoles(plan, 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r) => runRole({ role: r, message, contextBlock, locale, deps: D }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, fleet, seat: i }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -645,10 +718,13 @@ export async function runCollaborativeAnalysis({
     result.answer = valid.length ? mergeTwoAnswers(valid, isFa) : buildDegradedAnswer({ message, analysis: plan, context, knowledge, sources: result.sources, locale });
     result.degraded = valid.length === 0;
   } else {
-    /* Levels 4-5: multi-model debate + web + verification (§10, §20). */
+    /* Levels 4-5: multi-model debate + web + verification (§10, §20). Roles
+       take distinct seats of the shared fleet (seat = role index); the
+       verifier and the final-answer synthesiser continue the rotation so a
+       high-stakes question walks several different providers end to end. */
     const roles = pickAnalysisRoles(plan, plan.level >= 5 ? 3 : 2);
     const settled = await withDeadline(
-      Promise.all(roles.map((r) => runRole({ role: r, message, contextBlock, locale, deps: D }))),
+      Promise.all(roles.map((r, i) => runRole({ role: r, message, contextBlock, locale, deps: D, fleet, seat: i }))),
       []
     );
     analyses.push(...(settled || []).filter(Boolean));
@@ -662,7 +738,9 @@ export async function runCollaborativeAnalysis({
         message: `${message}\n\nCANDIDATE ANALYSES TO CHALLENGE:\n${digest}`,
         contextBlock,
         locale,
-        deps: D
+        deps: D,
+        fleet,
+        seat: roles.length
       }), null);
       if (verifier?.ok) analyses.push(verifier);
     }
@@ -677,6 +755,8 @@ export async function runCollaborativeAnalysis({
         contextBlock,
         locale,
         deps: D,
+        fleet,
+        seat: roles.length + 1,
         maxTokens: 800
       }), null);
       result.answer = finalRole?.ok
