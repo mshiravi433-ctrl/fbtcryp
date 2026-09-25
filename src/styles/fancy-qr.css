@@ -1,0 +1,187 @@
+/* ==========================================================================
+   FANCY QR — the stage around every receive QR (see components/FancyQr.jsx).
+   Scoped entirely under .fqr-*, page-agnostic, and theme-safe: the PLATE is
+   always white (scanners demand dark-on-light), so both themes dress the
+   stage and leave the code itself alone.
+   ========================================================================== */
+
+.fqr-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 18px 10px 10px; /* top band is the medallion's home */
+  margin: 4px auto 12px;
+}
+
+/* Blurred accent clouds behind the frame. */
+.fqr-halo {
+  position: absolute;
+  inset: -6% 4% 2%;
+  border-radius: 40px;
+  background:
+    radial-gradient(45% 40% at 22% 28%, color-mix(in srgb, var(--fqr-a) 42%, transparent), transparent 70%),
+    radial-gradient(50% 45% at 78% 24%, color-mix(in srgb, var(--fqr-b) 40%, transparent), transparent 72%),
+    radial-gradient(45% 45% at 50% 88%, color-mix(in srgb, var(--fqr-c) 32%, transparent), transparent 70%);
+  filter: blur(26px) saturate(1.15);
+  opacity: 0.55;
+  z-index: 0;
+  pointer-events: none;
+  animation: fqr-halo 7s ease-in-out infinite alternate;
+}
+
+.fqr-frame {
+  position: relative;
+  z-index: 1;
+  width: min(232px, 62vw);
+}
+
+.fqr-compact .fqr-frame { width: 64px; }
+.fqr-compact { padding: 12px 6px 6px; margin: 0; width: auto; flex: 0 0 auto; }
+.fqr-compact .fqr-badge { display: none; }
+.fqr-compact .fqr-halo { filter: blur(14px); opacity: 0.45; }
+
+/*
+ * The energy ring: a rotating conic accent rim. The opaque white plate covers
+ * the element's middle, so only the 3px lip around the plate reads as a
+ * moving gradient border.
+ */
+.fqr-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 21px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 10%,
+    var(--fqr-a) 21%,
+    var(--fqr-b) 32%,
+    transparent 42% 56%,
+    var(--fqr-c) 67%,
+    var(--fqr-b) 78%,
+    transparent 88%
+  );
+  animation: fqr-spin 5.5s linear infinite;
+  opacity: 0.9;
+  filter: saturate(1.1);
+  pointer-events: none;
+}
+
+.fqr-compact .fqr-ring { border-radius: 14px; inset: -2px; }
+
+/* Scanner-HUD brackets just outside the ring. */
+.fqr-brackets i {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid var(--fqr-a);
+  opacity: 0.85;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fqr-a) 65%, transparent));
+  animation: fqr-bracket 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+.fqr-brackets i:nth-child(1) { top: -9px; left: -9px; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.fqr-brackets i:nth-child(2) { top: -9px; right: -9px; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; animation-delay: 0.7s; border-color: var(--fqr-b); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fqr-b) 65%, transparent)); }
+.fqr-brackets i:nth-child(3) { bottom: -9px; left: -9px; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; animation-delay: 1.4s; border-color: var(--fqr-c); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fqr-c) 65%, transparent)); }
+.fqr-brackets i:nth-child(4) { bottom: -9px; right: -9px; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; animation-delay: 2.1s; }
+.fqr-compact .fqr-brackets i { width: 10px; height: 10px; border-width: 2px; }
+.fqr-compact .fqr-brackets i:nth-child(1) { top: -6px; left: -6px; }
+.fqr-compact .fqr-brackets i:nth-child(2) { top: -6px; right: -6px; }
+.fqr-compact .fqr-brackets i:nth-child(3) { bottom: -6px; left: -6px; }
+.fqr-compact .fqr-brackets i:nth-child(4) { bottom: -6px; right: -6px; }
+
+/*
+ * THE PLATE. White in both themes — never invert this. The padding IS the
+ * QR quiet zone the spec requires; without it the code often will not scan.
+ * Callers may add legacy hook classes (e.g. `recv-qr`) here for tests.
+ */
+.fqr-plate {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 18px;
+  padding: 15px;
+  box-shadow:
+    0 14px 34px -14px color-mix(in srgb, var(--fqr-b) 45%, transparent),
+    0 8px 24px -12px rgba(0, 0, 0, 0.55);
+}
+.fqr-compact .fqr-plate { border-radius: 12px; padding: 6px; }
+
+.fqr-plate svg { display: block; width: 100%; height: auto; }
+
+/*
+ * The scan light. Peak alpha 0.14 over the plate: dark modules stay dark
+ * (they sit near 8% luminance; the veil lifts them a little and still leaves
+ * a contrast ratio far above the 4.5:1 floor), so a photo taken mid-sweep
+ * decodes fine. Decorative only — and off for reduced motion.
+ */
+.fqr-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34%;
+  top: -34%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--fqr-a) 14%, transparent) 45%,
+    color-mix(in srgb, var(--fqr-b) 14%, transparent) 55%,
+    transparent 100%
+  );
+  animation: fqr-beam 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* The chain/brand medallion, sunk into the top edge. It overlaps only the
+   plate's QUIET-ZONE padding band (the plate pads 15px; the badge dips 10px),
+   so no module is ever covered. */
+.fqr-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -38%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background:
+    linear-gradient(#0d1226, #0d1226) padding-box,
+    conic-gradient(from 210deg, var(--fqr-a), var(--fqr-b), var(--fqr-c), var(--fqr-a)) border-box;
+  border: 2px solid transparent;
+  box-shadow:
+    0 10px 22px -8px color-mix(in srgb, var(--fqr-b) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  z-index: 3;
+}
+.fqr-badge svg { display: block; }
+
+@keyframes fqr-spin { to { --fqr-spin: 360deg; } }
+
+@keyframes fqr-halo {
+  from { opacity: 0.42; transform: scale(0.98); }
+  to { opacity: 0.62; transform: scale(1.03); }
+}
+
+@keyframes fqr-beam {
+  0% { top: -34%; }
+  55% { top: 100%; }
+  100% { top: 100%; }
+}
+
+@keyframes fqr-bracket {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.35; }
+}
+
+/* Still, but still special: the ring freezes mid-arc, the beam parks
+   off-plate, the halo and brackets hold a steady glow. */
+@media (prefers-reduced-motion: reduce) {
+  .fqr-ring,
+  .fqr-halo,
+  .fqr-beam,
+  .fqr-brackets i {
+    animation: none;
+  }
+  .fqr-beam { display: none; }
+}

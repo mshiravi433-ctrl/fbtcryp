@@ -166,11 +166,36 @@ function changeSince(snaps, ms, now = Date.now()) {
  *
  * `holdings` is the shape useWalletBalances already produces:
  *   { symbol, value, amount, chainId? }
+ *
+ * ─── A REAL HOLDING IS A ROW, PRICED OR NOT ─────────────────────────────────
+ * This function used to filter `Number(h.value) > 0`, which silently DROPPED
+ * every holding the price feed had not covered yet (value null) and every row
+ * still waiting on its first price tick. When that filter emptied the list,
+ * the wallet's «تخصیص دارایی» panel printed its CONNECT-A-WALLET empty state
+ * over a CONNECTED wallet — reported as «با اینکه کیف پول وصله میگه کیف پول
+ * را وصل کنید، انگار کار نمیده». A holding is kept when it has a positive
+ * amount at all; an unpriced one comes through with `value: null`, `weight:
+ * null` and `hasPrice: false`, and the UI shows a dash for it — never a fake
+ * zero, and never an accusation that the wallet is not connected.
+ *
+ * Totals (`total`, weights, stable share, risk) still count PRICED value
+ * only: a number that includes guesses is worse than a smaller honest one.
  */
 export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date.now() } = {}) {
-  const rows = (holdings || []).filter((h) => Number(h.value) > 0);
-  const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
-  const snaps = recordSnapshot(total, now) || readJson(SNAP_KEY, []);
+  const asValue = (h) => {
+    const v = h?.value;
+    return v == null || !Number.isFinite(Number(v)) ? null : Number(v);
+  };
+  const rows = (holdings || []).filter((h) => {
+    const value = asValue(h);
+    return (value != null && value > 0) || (value == null && Number(h.amount) > 0);
+  });
+  const total = rows.reduce((s, r) => s + (asValue(r) ?? 0), 0);
+  /* A zero total is "nothing priced yet", not a fact about the wallet's
+     worth — recording it would poison the 24h/7d/30d deltas with a fake
+     starting point ("from 0"), so snapshots are written only for real,
+     priced totals. */
+  const snaps = (total > 0 ? recordSnapshot(total, now) : null) || readJson(SNAP_KEY, []);
   const ch24 = changeSince(snaps, 86400000, now);
   const ch7 = changeSince(snaps, 7 * 86400000, now);
   const ch30 = changeSince(snaps, 30 * 86400000, now);
@@ -180,10 +205,10 @@ export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date
 
   const priced = rows.map((r) => {
     const b = bySym[String(r.symbol).toUpperCase()];
-    const value = Number(r.value) || 0;
+    const value = asValue(r);
     const cost = b && b.qty > 0 ? b.cost : null;
-    const pnl = cost != null ? value - cost : null;
-    const pnlPct = cost ? (pnl / cost) * 100 : null;
+    const pnl = cost != null && value != null ? value - cost : null;
+    const pnlPct = cost && pnl != null ? (pnl / cost) * 100 : null;
     return {
       symbol: r.symbol,
       name: r.name,
@@ -192,7 +217,8 @@ export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date
       cost,
       pnl,
       pnlPct,
-      weight: total > 0 ? (value / total) * 100 : 0,
+      weight: value != null && total > 0 ? (value / total) * 100 : null,
+      hasPrice: value != null,
       stable: isStableSymbol(r.symbol),
       chainId: r.chainId ?? null,
       native: Boolean(r.native)
@@ -204,8 +230,12 @@ export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date
   const best = withPnl[0] ?? null;
   const worst = withPnl.length ? withPnl[withPnl.length - 1] : null;
 
-  const stableUsd = priced.filter((r) => r.stable).reduce((s, r) => s + r.value, 0);
-  const topShare = priced[0] && total > 0 ? priced[0].weight : 0;
+  const stableUsd = priced.filter((r) => r.stable).reduce((s, r) => s + (r.value ?? 0), 0);
+  /* Biggest WEIGHT among priced rows — `priced[0]` was whichever holding the
+     hooks happened to list first, which is not the same question. */
+  const topShare = total > 0
+    ? Math.max(0, ...priced.map((r) => r.weight ?? 0))
+    : 0;
 
   const chainMap = new Map();
   for (const r of priced) {
@@ -240,7 +270,7 @@ export function buildIntelligence({ holdings = [], lots = loadLots(), now = Date
     unrealised,
     pnl: realised + unrealised,
     cost: costTotal || null,
-    rows: priced.sort((a, b) => b.value - a.value),
+    rows: priced.sort((a, b) => (b.value ?? -1) - (a.value ?? -1)),
     best,
     worst,
     stableUsd,

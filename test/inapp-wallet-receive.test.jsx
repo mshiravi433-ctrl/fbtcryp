@@ -130,6 +130,24 @@ describe('the receive sheet', () => {
     expect(root().textContent).toContain(en.receive.warning);
   });
 
+  it('says one address covers every EVM network — never “only send here”', () => {
+    /* Reported: «مگه آدرس‌ها یکی نیست؟ اگر آره جمله باید عوض شود». The 0x
+       address IS shared across every EVM chain, so the old «فقط روی این شبکه
+       بفرست» claim was untrue. The pill now states the shared address and
+       names the network as the one this wallet is ON — not as a restriction —
+       and the warning reserves the loss language for non-EVM networks. */
+    render(<ReceiveSheet open onClose={() => {}} />);
+    const pill = root().querySelector('.recv-net-pill').textContent;
+    expect(pill).toContain(en.receive.sharedEvm);
+    expect(en.receive.sharedEvm.toLowerCase()).toContain('evm');
+    // The stale exclusive phrasing is gone from the catalog entirely.
+    expect(en.receive.onlyOn).toBeUndefined();
+    // The warning must separate what is safe (another EVM network) from what
+    // actually loses funds (a non-EVM network).
+    expect(en.receive.warning.toLowerCase()).toContain('evm');
+    expect(en.receive.warning.toLowerCase()).toContain('solana');
+  });
+
   it('names the network it is showing when the wallet sits on another chain', () => {
     /* The same 0x address exists on every EVM chain, so the network line is
        the only thing standing between a payer and a lost deposit. It must

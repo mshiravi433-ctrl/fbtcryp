@@ -4160,17 +4160,17 @@ a.wallet-option,
 .recv-wrap { display: flex; flex-direction: column; align-items: center; }
 
 /*
- * The QR sits on a WHITE card in BOTH themes, never on the page background.
- * Scanners expect dark modules on a light field; inverting it for dark mode
- * makes many readers fail, and the padding is the "quiet zone" the spec
- * requires — without it the code often will not scan at all.
+ * `.recv-qr` is the white PLATE class of the EVM QR — FancyQr paints the
+ * frame (see styles/fancy-qr.css) and keeps this class on the plate as the
+ * test/decode hook (test/inapp-wallet-receive.test.jsx reads `.recv-qr svg
+ * path` and round-trips the matrix through jsQR). The plate is WHITE in both
+ * themes — scanners expect dark modules on a light field — and its padding is
+ * the "quiet zone" the spec requires. `width` is repeated here (fancy-qr.css
+ * sizes the frame) so the plate and frame cannot disagree by a pixel.
  */
 .recv-qr {
   width: min(232px, 62vw);
-  padding: 14px;
-  border-radius: 16px;
   background: #fff;
-  box-shadow: 0 8px 26px -14px rgba(0, 0, 0, 0.6);
 }
 .recv-qr svg { display: block; width: 100%; height: auto; }
 
@@ -4529,15 +4529,12 @@ a.wallet-option,
   font-weight: 900;
 }
 
-/* Receive: glowing QR card, network pill, modern action buttons */
-.recv-qr-modern {
-  border: 1px solid color-mix(in srgb, var(--rgb-1) 28%, transparent);
-  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--rgb-1) 35%, transparent), 0 8px 26px -14px rgba(0, 0, 0, 0.6);
-  padding: 16px;
-}
+/* Receive: network pill, modern action buttons */
 .recv-net-pill {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 7px;
   margin-top: 14px;
   padding: 6px 13px;
@@ -4548,6 +4545,22 @@ a.wallet-option,
   font-size: 11.5px;
   font-weight: 800;
   line-height: 1.5;
+}
+/*
+ * «یک آدرس، همهٔ شبکه‌های EVM» — the shared-address truth replaces the old
+ * «فقط روی این شبکه بفرست» claim. The network NAME still shows (as the
+ * network this wallet is on), in its own chip so a payer reads it in one
+ * glance without mistaking it for a restriction.
+ */
+.recv-net-chain {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rgb-5) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 28%, transparent);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 .recv-net-dot {
   width: 7px;
