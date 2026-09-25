@@ -53,6 +53,9 @@ const SUGGESTIONS = ['fee', 'blockchain', 'failed', 'safe'];
  * Every answer carries a provenance label. A user is entitled to know whether
  * they are reading something a person wrote about this app or something a
  * model generated.
+ *   3. Every reply carries the engine that produced it. When no external model
+ *      answered, the badge reads «موتور قاعده‌محور» and a note says so — a
+ *      template sentence is never presented as a model's reading.
  */
 export default function AskHelp() {
   const { t, i18n } = useTranslation();
@@ -108,12 +111,25 @@ export default function AskHelp() {
       const data = await res.json();
       if (!data?.answer) throw new Error('EMPTY');
 
+      /*
+       * ─── THE SERVER NOW SAYS WHICH BRAIN ANSWERED ───────────────────────
+       * `routedChat` never throws: when every keyed provider refuses (a retired
+       * model id, a paid model on a free tier, an empty credit balance) the
+       * gateway answers from the deterministic rule engine and marks the reply
+       * `degraded`. Labelling that text «هوش مصنوعی» is how a fleet with nine
+       * keys and one working model kept looking healthy — the badge said AI, the
+       * sentence underneath was a template. The badge now follows the engine.
+       */
+      const degraded = Boolean(data.degraded) || data.source === 'internal-rules' || data.engine === 'internal-rules';
       setThread((cur) => [
         ...cur,
         {
           role: 'bot',
           text: data.answer,
-          source: data.grounded ? 'model' : 'web',
+          source: degraded ? 'rules' : (data.source === 'model-grounded' || data.grounded ? 'model' : 'web'),
+          degraded,
+          provider: degraded ? null : (data.provider || null),
+          model: degraded ? null : (data.model || null),
           sources: Array.isArray(data.sources) ? data.sources.filter((s) => s.url) : []
         }
       ]);
@@ -175,6 +191,17 @@ export default function AskHelp() {
                 transition={{ duration: 0.22 }}
               >
                 <div className="ask-bubble">{m.text}</div>
+
+                {/*
+                 * A rule-engine reply says so in its own line. It is not an
+                 * error toast: the answer is still usable, the user just has to
+                 * know no model read their question.
+                 */}
+                {m.role === 'bot' && m.degraded ? (
+                  <p className="ask-degraded" data-testid="ask-degraded-note" role="note">
+                    {t('help.ask.degraded')}
+                  </p>
+                ) : null}
 
                 {m.role === 'bot' && (
                   <div className="ask-meta">

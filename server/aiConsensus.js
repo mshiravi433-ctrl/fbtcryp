@@ -19,7 +19,7 @@
  *       • lowConfidence (flagged if divergence is high or confidence < 60%)
  */
 
-import { parallelMultiProviderChat, getActiveProviderIds, isProviderConfigured, executeProviderChat } from './aiGateway.js';
+import { parallelMultiProviderChat, getActiveProviderIds, isProviderConfigured, executeProviderChat, orderByHealth } from './aiGateway.js';
 
 function parseJsonSafe(text) {
   let t = String(text || '').trim();
@@ -75,22 +75,43 @@ Respond in STRICT JSON:
 }`
 };
 
-// Specialized multi-model routing via OpenRouter and Groq.
-// The market-intelligence seat was Grok's, served through OpenRouter as
-// `x-ai/grok-2`. Grok is no longer a registered provider, so the seat goes to
-// the deployment's own OpenRouter default model.
+/*
+ * Specialized multi-model routing.
+ *
+ * ─── WHY MOST OF THIS TABLE IS NOW `null` ──────────────────────────────────
+ * It used to pin concrete model ids per role: Groq's seats said
+ * `llama-3.3-70b-versatile` and `mixtral-8x7b-32768`, OpenRouter's risk seat
+ * said `anthropic/claude-3.5-sonnet`. All three are retired upstream (Groq shut
+ * llama-3.3-70b-versatile down for Free/Developer tiers on 2026-08-16 and
+ * mixtral-8x7b long before that; Anthropic retired claude-3-5-sonnet on
+ * 2025-10-28), so the debate's Groq seats failed with HTTP 404 on every run and
+ * a "multi-AI consensus" was assembled from whoever survived.
+ *
+ * `null` means "use this provider's own current default", which the gateway
+ * resolves live from the registry and its environment override — one place to
+ * keep current instead of a second, silently-stale copy here. Only the
+ * single-provider case still names models, because there the POINT is three
+ * different brains; those ids come from the gateway's own OpenRouter list.
+ */
 const ROLE_MODELS = {
   openrouter: {
-    market_intelligence: process.env.AI_MODEL || 'openai/gpt-4o-mini',
-    risk_guardian: 'anthropic/claude-3.5-sonnet',
-    strategy_architect: 'deepseek/deepseek-chat'
+    market_intelligence: process.env.AI_MODEL || null,
+    risk_guardian: null,
+    strategy_architect: null
   },
   groq: {
-    market_intelligence: 'llama-3.3-70b-versatile',
-    risk_guardian: 'llama-3.3-70b-versatile',
-    strategy_architect: 'mixtral-8x7b-32768'
+    market_intelligence: null,
+    risk_guardian: null,
+    strategy_architect: null
   }
 };
+
+/** Three genuinely different brains reachable through one OpenRouter key. */
+const OPENROUTER_DIVERSE_MODELS = Object.freeze([
+  process.env.AI_MODEL || 'openai/gpt-4o-mini',
+  'google/gemini-2.5-flash',
+  'anthropic/claude-3.5-haiku'
+]);
 
 /**
  * Run Multi-AI Debate and calculate Consensus.
@@ -152,26 +173,33 @@ export async function runMultiAiDebate({
 } = {}) {
   const active = getActiveProviderIds();
   
-  // Select active providers prioritizing Groq and OpenRouter
-  let debateProviders = preferredProviders.filter(isProviderConfigured);
+  /*
+   * Select the three seats. Health-aware: a provider the gateway has already
+   * classified as parked (empty credit balance, rejected key, retired models)
+   * is not given a debate seat ahead of one that answered a minute ago.
+   */
+  let debateProviders = orderByHealth(preferredProviders.filter(isProviderConfigured));
   if (!debateProviders.length) {
     const priority = ['groq', 'openrouter', 'gemini', 'deepseek', 'anthropic', 'aimlapi', 'mistral', 'workersai'];
-    debateProviders = priority.filter((p) => active.includes(p)).slice(0, 3);
+    debateProviders = orderByHealth(priority.filter((p) => active.includes(p))).slice(0, 3);
   }
 
   // If only OpenRouter is configured, we run multi-model debate across diverse models on OpenRouter (GPT-4o, Claude, DeepSeek)
   let executionPlan = [];
   if (debateProviders.includes('openrouter') && debateProviders.length === 1) {
-    executionPlan = [
-      { provider: 'openrouter', role: 'market_intelligence', model: ROLE_MODELS.openrouter.market_intelligence },
-      { provider: 'openrouter', role: 'risk_guardian', model: 'anthropic/claude-3.5-sonnet' },
-      { provider: 'openrouter', role: 'strategy_architect', model: 'deepseek/deepseek-chat' }
-    ];
+    const roles = ['market_intelligence', 'risk_guardian', 'strategy_architect'];
+    executionPlan = roles.map((role, i) => ({
+      provider: 'openrouter',
+      role,
+      model: OPENROUTER_DIVERSE_MODELS[i % OPENROUTER_DIVERSE_MODELS.length]
+    }));
   } else if (debateProviders.includes('groq') && debateProviders.includes('openrouter')) {
+    /* Each provider answers from its OWN current default (model: null) — the
+       old plan pinned retired ids here and both seats 404'd. */
     executionPlan = [
-      { provider: 'groq', role: 'market_intelligence', model: 'llama-3.3-70b-versatile' },
-      { provider: 'openrouter', role: 'risk_guardian', model: 'anthropic/claude-3.5-sonnet' },
-      { provider: 'openrouter', role: 'strategy_architect', model: 'deepseek/deepseek-chat' }
+      { provider: 'groq', role: 'market_intelligence', model: null },
+      { provider: 'openrouter', role: 'risk_guardian', model: null },
+      { provider: orderByHealth(debateProviders.filter((p) => p !== 'groq' && p !== 'openrouter'))[0] || 'openrouter', role: 'strategy_architect', model: null }
     ];
   } else {
     const roles = ['market_intelligence', 'risk_guardian', 'strategy_architect'];
@@ -412,16 +440,21 @@ function pickDebateSeats(preferredProviders = []) {
   const active = getActiveProviderIds().filter((p) => p !== 'internal');
   const preferred = preferredProviders.filter((p) => isProviderConfigured(p) && p !== 'internal');
   const priority = ['anthropic', 'openrouter', 'deepseek', 'gemini', 'groq', 'aimlapi', 'mistral', 'workersai'];
-  const pool = [...new Set([...preferred, ...priority.filter((p) => active.includes(p))])];
+  /* Health-ordered: the bull/bear/judge seats go to providers that answered
+     recently, not to ones the gateway has already parked for billing or auth. */
+  const pool = orderByHealth([...new Set([...preferred, ...priority.filter((p) => active.includes(p))])]);
   if (!pool.length) return null;
   /* Distinct providers per seat when we have them: a model arguing with
      itself is a weaker debate. With one provider on OpenRouter we still get
-     distinct MODELS behind it. */
+     distinct MODELS behind it — from the gateway's own current OpenRouter list,
+     not from ids pinned here (the pinned `anthropic/claude-3.5-sonnet` and
+     `deepseek/deepseek-chat` pair silently lost its first member when
+     Anthropic retired Claude 3.5 Sonnet). */
   if (pool.length === 1 && pool[0] === 'openrouter') {
     return {
-      bull: { provider: 'openrouter', model: 'deepseek/deepseek-chat' },
-      bear: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
-      judge: { provider: 'openrouter', model: process.env.AI_MODEL || 'openai/gpt-4o-mini' }
+      bull: { provider: 'openrouter', model: OPENROUTER_DIVERSE_MODELS[0] },
+      bear: { provider: 'openrouter', model: OPENROUTER_DIVERSE_MODELS[1] },
+      judge: { provider: 'openrouter', model: OPENROUTER_DIVERSE_MODELS[2] }
     };
   }
   return {

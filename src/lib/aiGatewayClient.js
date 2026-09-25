@@ -44,13 +44,32 @@ export async function fetchAiProviders() {
   return request('/v1/ai/gateway/providers');
 }
 
+/**
+ * What the gateway already knows about the fleet, for free: no provider is
+ * called, so a panel can poll this. `configured` says a key exists; `verdict`
+ * says whether that key could actually answer the last time it was used — the
+ * distinction the whole «کلیدها را گذاشتیم ولی وصل نیست» report was about.
+ */
+export async function fetchAiGatewayHealth() {
+  return request('/v1/ai/gateway/health');
+}
+
 /** The server-side tool registry — the wiring list of what the AI can reach. */
 export async function fetchAiTools() {
   return request('/v1/ai/tools');
 }
 
+/*
+ * The self-test really calls every configured provider, in parallel, under a
+ * server-side deadline (AI_SELFTEST_DEADLINE_MS, 45s default). A 15s client
+ * timeout therefore aborted the one request whose whole job is to answer
+ * «چرا هوش مصنوعی وصل نمی‌شود؟» — the panel showed TIMEOUT while the server was
+ * still collecting the per-provider reasons. It gets the longer leash.
+ */
+export const SELFTEST_TIMEOUT_MS = 60000;
+
 export async function fetchGatewaySelfTest() {
-  return request('/v1/ai/gateway/selftest');
+  return request('/v1/ai/gateway/selftest', { timeout: SELFTEST_TIMEOUT_MS });
 }
 
 export async function executeAiGatewayChat({ taskType = 'general', system, user, preferredProvider, model, temperature, maxTokens, json = true } = {}) {

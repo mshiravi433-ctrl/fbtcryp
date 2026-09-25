@@ -118,6 +118,7 @@ exist by `test/mcp/mcp-probe.mjs`.
 | [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
 | [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
 | [APIS-FA.md](docs/APIS-FA.md) | کدام API لازم است، کدام نیست، و هر کلید چه چیزی اضافه می‌کند |
+| **[AI-PROVIDER-WIRING-FIX-FA.md](docs/AI-PROVIDER-WIRING-FIX-FA.md)** | **«کلیدها را گذاشتم ولی هوش مصنوعی وصل نیست»** — تشخیص واقعی هر ۹ ارائه‌دهنده، مدل‌های بازنشسته، و مسیر تعمیر |
 | [FINANCIAL-GOALS-FA.md](docs/FINANCIAL-GOALS-FA.md) | اهداف مالی (Financial OS): از هدف تا اینتنت، بدون Execution Engine جدید |
 | **[DOWNLOAD-FA.md](docs/DOWNLOAD-FA.md)** | **دانلود اپ و انتشار** — لینک مستقیم + ساخت نسخه امضاشده |
 | [BUILD-NOW-FA.md](docs/BUILD-NOW-FA.md) | **شروع از اینجا** — ساخت اپ و انتشار، گام به گام با گوشی |

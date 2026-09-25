@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import app from './app.js';
 import { normalizeBotToken } from './telegramAuth.js';
+import { getFleetSummary } from './aiGateway.js';
 import { startBot } from './bot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,7 +62,30 @@ app.use((req, res) => {
 app.listen(PORT, HOST, () => {
   console.log(`▸ API + app listening on http://${HOST}:${PORT}`);
   if (!process.env.COINGECKO_API_KEY) console.log('  (no COINGECKO_API_KEY — using the public rate limit)');
-  if (!process.env.OPENROUTER_API_KEY) console.log('  (no OPENROUTER_API_KEY — AI features disabled)');
+  /*
+   * The AI boot line used to test ONE variable and print «AI features disabled»
+   * when it was missing. On the deployment that prompted this fix, all nine keys
+   * were present, eight providers were refusing every call, and the log said
+   * nothing — which is why the outage was invisible from the Vercel console.
+   * Print the fleet instead: how many keys exist, which brain is serving right
+   * now, and if a provider already failed its last real call, why.
+   */
+  try {
+    const fleet = getFleetSummary();
+    if (!fleet.configured) {
+      console.log('  (no AI provider keys — every answer comes from the internal rule engine)');
+    } else {
+      console.log(`  ▸ AI fleet: ${fleet.configured} provider key(s) present — serving from ${fleet.servingFrom.join(', ')}`);
+      if (fleet.failing) {
+        console.log(`    ⚠ ${fleet.failing} failed their last real call: ${fleet.failingIds.map((f) => `${f.id}(${f.reason || f.verdict})`).join(', ')}`);
+        console.log('      fix per provider: /api/ai/diagnose?key=<CRON_SECRET>');
+      } else if (fleet.untested === fleet.configured) {
+        console.log('    (no provider has answered a real call yet — /api/v1/ai/gateway/health will know after the first request)');
+      }
+    }
+  } catch (e) {
+    console.log(`  (AI fleet summary unavailable: ${e.message})`);
+  }
   if (BOT_TOKEN) {
     startBot({ token: BOT_TOKEN, webAppUrl: WEBAPP_URL }).catch((e) => console.error('bot failed:', e.message));
   } else {

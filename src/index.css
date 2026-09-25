@@ -4093,6 +4093,21 @@ a.wallet-option,
 .ask-src-model  { color: var(--ink-cyan);   background: color-mix(in srgb, var(--ink-cyan) 13%, transparent);   border-color: color-mix(in srgb, var(--ink-cyan) 30%, transparent); }
 .ask-src-web    { color: var(--ink-violet); background: color-mix(in srgb, var(--ink-violet) 13%, transparent); border-color: color-mix(in srgb, var(--ink-violet) 30%, transparent); }
 .ask-src-none   { color: var(--text-3);     background: var(--bg-raised);                                       border-color: var(--line); }
+/*
+ * Amber, not cyan: this label means "no model answered". The rule engine's
+ * reply is usable but generic, and it must not wear the same colour as a
+ * model-generated answer — that identical badge over a template sentence is
+ * exactly how a fleet with nine keys and one working model looked healthy.
+ */
+.ask-src-rules  { color: var(--ink-amber);  background: color-mix(in srgb, var(--ink-amber) 14%, transparent);  border-color: color-mix(in srgb, var(--ink-amber) 34%, transparent); }
+
+.ask-degraded {
+  margin: 2px 0 0;
+  padding-inline-start: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-amber);
+}
 
 .ask-link {
   display: inline-flex;

@@ -91,6 +91,8 @@ import { resolveChatRoute } from '../src/lib/intent-ai/autonomy/chatRoutes.js';
 import {
   getAvailableProviders,
   getActiveProviderIds,
+  getFleetSummary,
+  getProviderHealth,
   routedChat,
   gatewaySelfTest
 } from './aiGateway.js';
@@ -827,6 +829,37 @@ router.get('/gateway/providers', (_req, res) => res.json({
   schema: 'fbt.ai-providers.v1',
   providers: getAvailableProviders(),
   activeProviderIds: getActiveProviderIds(),
+  /*
+   * The fleet in one object: how many keys are present, how many of those
+   * actually answered the last time they were called, and what is wrong with
+   * the rest. The panel used to have nine green «configured» pills and no way
+   * to know that only one of them could serve a request.
+   */
+  summary: getFleetSummary(),
+  at: nowMs()
+}));
+
+/**
+ * Free, live-call-free health read. `/gateway/selftest` really calls every
+ * provider, which costs tokens and seconds; this returns what the gateway
+ * already knows from the traffic it has served, so a panel can poll it.
+ */
+router.get('/gateway/health', (_req, res) => res.json({
+  ok: true,
+  schema: 'fbt.ai-gateway-health.v1',
+  summary: getFleetSummary(),
+  health: getProviderHealth(),
+  providers: getAvailableProviders().map((p) => ({
+    id: p.id,
+    name: p.name,
+    configured: p.configured,
+    verdict: p.verdict,
+    model: p.defaultModel,
+    reasonCode: p.health?.lastError?.reasonCode || null,
+    lastError: p.health?.lastError?.message || null,
+    fix: p.health?.lastError?.fix || null,
+    lastSuccessAt: p.health?.lastSuccess?.at || null
+  })),
   at: nowMs()
 }));
 

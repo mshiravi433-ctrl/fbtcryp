@@ -1234,7 +1234,13 @@ function AiAnalysisPanel({ outlook, aiLoading, aiError, horizon, setHorizon }) {
   return (
     <div className="sic-ai-panel">
       <div className="sic-ai-panel-head">
-        <span>{outlook?.source === 'local' ? t('signals.outlookLocal') : t('signals.aiOutlook')}</span>
+        <span>
+          {outlook?.source === 'local'
+            ? t('signals.outlookLocal')
+            : outlook?.source === 'rules'
+              ? t('signals.outlookRules')
+              : t('signals.aiOutlook')}
+        </span>
         {outlook && <span className={`sic-bias ${bias}`}>{t(`signals.bias.${bias}`)} · {Number(outlook.confidence) || 0}%</span>}
       </div>
       <div className="segmented sic-horizon-tabs">
@@ -1280,7 +1286,19 @@ function AiAnalysisPanel({ outlook, aiLoading, aiError, horizon, setHorizon }) {
             </div>
           )}
           {typeof outlook.invalidation === 'string' && outlook.invalidation && <p className="notice sic-ai-invalidation"><strong>{t('signals.invalidation')}:</strong> {outlook.invalidation}</p>}
-          <div className="faint sic-ai-meta">{outlook.source === 'local' ? t('signals.aiMetaLocal') : t('signals.aiMeta', { model: outlook.model })}</div>
+          {/*
+           * Three provenances, three sentences. The rule-engine one exists
+           * because the server's own fallback used to arrive labelled as a model
+           * answer — «تولید شده با fbt-rules-v3» under an «تحلیل هوش مصنوعی»
+           * heading, which reads as a model and is not one.
+           */}
+          <div className="faint sic-ai-meta">
+            {outlook.source === 'local'
+              ? t('signals.aiMetaLocal')
+              : outlook.source === 'rules'
+                ? t('signals.aiMetaRules')
+                : t('signals.aiMeta', { model: outlook.model })}
+          </div>
         </motion.div>
       )}
     </div>
