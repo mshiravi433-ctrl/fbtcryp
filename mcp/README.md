@@ -84,6 +84,7 @@ can grow into one. Each tool advertises its scope as `x-fbt-scope` in
 | --- | --: | --- |
 | `fbt_whoami` | any key | key identity + scopes + the never-sign boundary |
 | `fbt_check_health`, `fbt_get_environments` | public | liveness and what THIS deployment can do |
+| `fbt_get_fee_router_status` | public | is the self-deployed FeeRouter connected: per-chain addresses + live on-chain read (honest UNREACHABLE / NOT_DEPLOYED), bytecode hash, audit state |
 | `fbt_get_markets`, `fbt_get_prices`, `fbt_get_coin`, `fbt_search_coins`, `fbt_get_trending` | public | market discovery and data |
 | `fbt_get_news` | public | aggregated headlines |
 | `fbt_get_signals_pulse`, `fbt_explain_signal` | public | deterministic signal evidence + AI narration of it |

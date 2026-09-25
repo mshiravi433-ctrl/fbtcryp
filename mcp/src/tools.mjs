@@ -79,6 +79,16 @@ const environmentsTool = {
   run: (client) => client.get('/api/environments')
 };
 
+const feeRouterStatusTool = {
+  name: 'fbt_get_fee_router_status',
+  title: 'FeeRouter status',
+  description: 'Deployment and configuration state of the FBT self-collected FeeRouter: per-chain deployed addresses, a live on-chain read where configured (code present, feeBps, feeRecipient, owner, dexRouter), the committed bytecode hash and the audit disclosure. A configured-but-unreachable chain reports UNREACHABLE and an address with no code reports NOT_DEPLOYED — never a silent ok. Read-only; it describes the fee rail, it touches no funds.' + ADVISORY,
+  scope: 'public',
+  routes: ['GET /api/fees/router-status'],
+  inputSchema: obj({}),
+  run: (client) => client.get('/api/fees/router-status')
+};
+
 const whoamiTool = {
   name: 'fbt_whoami',
   title: 'Who am I',
@@ -544,6 +554,7 @@ export const TOOLS = Object.freeze([
   whoamiTool,
   healthTool,
   environmentsTool,
+  feeRouterStatusTool,
   /* market intelligence */
   marketsTool,
   pricesTool,
