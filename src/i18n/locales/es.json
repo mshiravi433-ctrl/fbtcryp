@@ -1467,7 +1467,7 @@
       "relayHost": "el relay propio de la app",
       "serverHost": "el servidor de la propia app",
       "serverTried": "También se consultó al servidor de la app y tampoco pudo leer el mercado.",
-        "showMore": "Mostrar {{n}} más"
+      "showMore": "Mostrar {{n}} más"
     },
     "wallet": {
       "title": "La cartera no se abrió",

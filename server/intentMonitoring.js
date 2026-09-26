@@ -21,6 +21,12 @@
 
 import { createHash } from 'node:crypto';
 import { storeGet, storeSet, storeDurable } from './store.js';
+/* Phase 217 — a monitor could only ever watch a CoinGecko id, so «اگر طلا ۵٪
+   اصلاح کرد…» had nothing to watch: gold was UNKNOWN_ASSET. The registry says
+   which instruments have a real read path, and crossAssetPrice reads them
+   through it (macro for gold/DXY/WTI/SPX, the brain for equities/FX/RWA). */
+import { instrumentFor } from '../src/lib/intent-ai/crossAssetInstruments.js';
+import { readCrossAssetPrices } from './crossAssetPrice.js';
 
 export const MONITOR_STORE_KEY = 'intent-os.monitors.v1';
 export const MONITOR_SCHEMA = 'fbt.intent-monitor.v2';
@@ -125,6 +131,64 @@ export function resolveAsset({ symbol = '', coinId = '' } = {}) {
 }
 
 /**
+ * The asset a monitor may watch — crypto first, then the cross-asset registry.
+ *
+ * `resolveAsset` stays the CRYPTO resolver on purpose: callers such as the
+ * token card feed a coin id to CoinGecko and would break on a `coinId: null`
+ * row. This function is the monitor's own resolver, and it accepts anything
+ * with a real read path:
+ *
+ *   crypto   → { coinId: 'bitcoin',  symbol: 'BTC',  assetClass: 'crypto' }
+ *   macro    → { coinId: null, symbol: 'GOLD', assetClass: 'commodities', read: { kind:'macro', symbol:'GOLD' } }
+ *
+ * An instrument the registry knows but which has NO feed (an ETF in this
+ * deployment) is still refused. A monitor that could never read its own
+ * trigger is the exact "wired to nothing" failure this module exists to
+ * prevent — the refusal is the feature.
+ */
+export function resolveMonitorAsset({ symbol = '', coinId = '' } = {}) {
+  const crypto = resolveAsset({ symbol, coinId });
+  if (crypto) return { ...crypto, assetClass: 'crypto' };
+  const sym = String(symbol || '').trim().toUpperCase();
+  const inst = instrumentFor(sym);
+  if (!inst || inst.read?.kind === 'unreadable') return null;
+  return { coinId: null, symbol: inst.symbol, assetClass: inst.assetClass, read: inst.read };
+}
+
+/**
+ * The extra conditions of ONE instruction («اگر طلا اصلاح کرد و BTC بالای X
+ * بود»), normalised the same way the primary condition is.
+ *
+ * Storing them is not the same as evaluating them — before Phase 217 the
+ * array was persisted and never read, so a two-leg instruction silently
+ * became a one-leg watch. Each row now carries its own asset, metric,
+ * operator, threshold and baseline, and `evaluateMonitor` requires ALL of
+ * them (or ANY, for OR) before the monitor fires.
+ */
+export function normalizeConditions(input = [], logic = 'AND') {
+  const rows = [];
+  for (const raw of (Array.isArray(input) ? input : []).slice(0, 8)) {
+    const metric = String(raw?.metric || 'PRICE').toUpperCase();
+    if (!MONITOR_METRICS.includes(metric)) continue;
+    const asset = FEED_METRICS.includes(metric)
+      ? { symbol: String(raw?.asset?.symbol || 'YIELD').toUpperCase().slice(0, 12), coinId: null, assetClass: 'feed' }
+      : resolveMonitorAsset({ symbol: raw?.asset?.symbol, coinId: raw?.asset?.coinId });
+    if (!asset) continue;
+    const operator = String(raw?.operator || 'ABOVE').toUpperCase();
+    if (!MONITOR_OPERATORS.includes(operator)) continue;
+    const threshold = num(raw?.threshold);
+    if (threshold == null || threshold <= 0) continue;
+    rows.push({
+      id: String(raw?.id || '').trim() || `c${rows.length + 1}`,
+      asset, metric, operator, threshold,
+      basis: raw?.basis ? String(raw.basis).slice(0, 24) : null,
+      baseline: num(raw?.baseline)
+    });
+  }
+  return { rows, logic: String(logic || 'AND').toUpperCase() === 'OR' ? 'OR' : 'AND' };
+}
+
+/**
  * Validate a monitor draft. Returns { error } or { monitor } — the monitor is
  * the durable record shape (no owner, no store ids).
  */
@@ -145,7 +209,7 @@ export function normalizeMonitor(input = {}, { now = Date.now() } = {}) {
         )).toUpperCase().slice(0, 12),
         coinId: null
       }
-    : resolveAsset({ symbol: input?.asset?.symbol, coinId: input?.asset?.coinId });
+    : resolveMonitorAsset({ symbol: input?.asset?.symbol, coinId: input?.asset?.coinId });
   if (!asset) return { error: 'UNKNOWN_ASSET' };
 
   const operator = String(input?.operator || 'ABOVE').toUpperCase();
@@ -160,6 +224,7 @@ export function normalizeMonitor(input = {}, { now = Date.now() } = {}) {
   const label = String(input?.label || '').trim().slice(0, 120);
   const goalText = String(input?.goalText || '').trim().slice(0, 240);
   const targetReturnPct = num(input?.targetReturnPct);
+  const conditions = normalizeConditions(input?.conditions, input?.conditionLogic);
 
   const monitor = {
     id: String(input?.id || '').trim() || makeId(),
@@ -187,7 +252,23 @@ export function normalizeMonitor(input = {}, { now = Date.now() } = {}) {
     ),
     goalText,
     targetReturnPct,
-    conditions: Array.isArray(input?.conditions) ? input.conditions.slice(0, 12) : [],
+    /* Phase 217 — the extra conditions are NORMALISED, not copied: an
+       unresolvable leg is dropped and named, and a frame whose legs all
+       failed to resolve would silently degrade into a single-condition watch
+       that fires on half an instruction. `conditionLogic` says how they
+       combine (AND by default — «اگر A و B» means both). */
+    conditions: conditions.rows,
+    conditionLogic: conditions.logic,
+    droppedConditions: (Array.isArray(input?.conditions) ? input.conditions.length : 0) - conditions.rows.length,
+    /* The allocation this monitor is GUARDING, when the instruction had one.
+       It is data on the record — the monitor notifies, it does not allocate. */
+    allocation: input?.allocation && typeof input.allocation === 'object' ? {
+      symbol: String(input.allocation.symbol || '').toUpperCase().slice(0, 16) || null,
+      assetClass: String(input.allocation.assetClass || '').toLowerCase().slice(0, 16) || null,
+      sizePct: num(input.allocation.sizePct),
+      sizeUsd: num(input.allocation.sizeUsd),
+      kind: String(input.allocation.kind || 'ALLOCATE').toUpperCase().slice(0, 16)
+    } : null,
     alert: {
       endpoint: String(input?.alert?.endpoint || '').trim().slice(0, 320) || null,
       lang: String(input?.alert?.lang || 'fa').slice(0, 5)
@@ -201,6 +282,10 @@ export function normalizeMonitor(input = {}, { now = Date.now() } = {}) {
     eventCount: 0,
     lastEvent: null,
     events: [],
+    /* Per-condition baselines. The primary keeps `baseline` for backwards
+       compatibility with every monitor created before Phase 217; the multi-
+       leg rows key theirs by condition id. */
+    baselines: (input?.baselines && typeof input.baselines === 'object' && !Array.isArray(input.baselines)) ? input.baselines : {},
     source: String(input?.source || 'intent-os').slice(0, 24),
     conversationId: String(input?.conversationId || '').trim().slice(0, 64) || null
   };
@@ -417,12 +502,22 @@ export async function deleteMonitor(owner, id) {
  */
 export async function evaluateMonitor(row, {
   prices = null,
+  /* Phase 217 — `cryptoPrices` is the name the cross-asset reader uses; both
+     names are accepted so a caller that already holds a CoinGecko map can
+     hand it in without learning which module coined which word. */
+  cryptoPrices = null,
   fetchPrices = null,
   fetchSmartMoney = null,
   fetchGlobalVolume = null,
+  /* Phase 217 — the global-intel snapshot (stocks / forex / commodities / rwa)
+     and the macro quote payload. Both are OPTIONAL and both default to a live
+     read; passing them lets a caller batch one read across many monitors. */
+  globalSnapshot = null,
+  macroQuotes = null,
   send = null,
   now = Date.now()
 } = {}) {
+  if (!prices && cryptoPrices) prices = cryptoPrices;
   if (!row || row.status !== 'ACTIVE') {
     return { monitor: row, evaluation: null, triggered: false, skipped: row?.status || 'INACTIVE' };
   }
@@ -507,6 +602,25 @@ export async function evaluateMonitor(row, {
       }, { now });
       return { monitor: patched, evaluation: null, triggered: false, error: 'SMART_MONEY_UNAVAILABLE', detail: String(err?.message || '').slice(0, 120) };
     }
+  } else if (!row.asset.coinId && row.asset.assetClass) {
+    /* Phase 217 — a CROSS-ASSET leg: gold, the dollar index, WTI, a stock, a
+       tokenised treasury. Read through the path its registry row declares
+       (macro for gold/DXY/WTI/SPX, the brain's Avantis/Ostium read for the
+       rest). `macro:GOLD` is a real feed; a refusal here is a real refusal. */
+    const reads = await readCrossAssetPrices([row.asset.symbol], {
+      cryptoPrices: prices, macroQuotes, globalSnapshot, fetchPrices, now
+    });
+    const got = reads?.[row.asset.symbol];
+    value = got?.ok ? got.value : null;
+    if (value == null) {
+      const patched = await patchMonitor(row.owner, row.id, {
+        lastCheckAt: now,
+        nextCheckAt: now + row.intervalMinutes * 60_000,
+        lastError: got?.code || 'PRICES_UNAVAILABLE',
+        updatedAt: now
+      }, { now });
+      return { monitor: patched, evaluation: null, triggered: false, error: got?.code || 'PRICES_UNAVAILABLE', detail: got?.detail || null };
+    }
   } else {
     const id = row.asset.coinId;
     let priceMap = prices;
@@ -560,6 +674,71 @@ export async function evaluateMonitor(row, {
     baseline
   });
 
+  /* ── Phase 217 — the OTHER legs of the instruction ───────────────────────
+     «اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود» is ONE instruction with two
+     legs. Before this the extra legs were stored and never read, so a
+     two-part instruction silently became a one-part watch and could fire on
+     half of what the user asked for. The primary condition is necessary but
+     no longer sufficient: every leg must hold (or any leg, for OR) before the
+     monitor is allowed to trigger. */
+  const extra = Array.isArray(row.conditions) ? row.conditions : [];
+  let legs = null;
+  if (extra.length) {
+    const symbols = [...new Set(extra.map((c) => c?.asset?.symbol).filter(Boolean))];
+    const reads = await readCrossAssetPrices(symbols, {
+      cryptoPrices: prices, macroQuotes, globalSnapshot, fetchPrices, now
+    });
+    const baselines = (row.baselines && typeof row.baselines === 'object' && !Array.isArray(row.baselines)) ? { ...row.baselines } : {};
+    const evals = [];
+    const arming = [];
+    for (const c of extra) {
+      const got = reads?.[c.asset.symbol];
+      const base = c.metric === 'PERCENT_CHANGE' ? num(baselines[c.id]) : null;
+      const ev = evaluateCondition({
+        metric: c.metric, operator: c.operator, threshold: c.threshold,
+        value: got?.ok ? got.value : null, baseline: base
+      });
+      evals.push({
+        id: c.id, asset: c.asset?.symbol || null, assetClass: c.asset?.assetClass || null,
+        metric: c.metric, operator: c.operator, threshold: c.threshold,
+        value: got?.ok ? got.value : null, source: got?.ok ? got.source : null,
+        ...ev
+      });
+      /* A percent leg arms itself from the first real read, exactly like the
+         primary does: a drawdown is measured from a baseline, and inventing
+         one would be a fabricated trigger. The arming turn never fires. */
+      if (c.metric === 'PERCENT_CHANGE' && !(Number(base) > 0) && Number(got?.value) > 0) {
+        arming.push({ id: c.id, baseline: Number(got.value) });
+      }
+    }
+    if (arming.length) {
+      for (const a of arming) baselines[a.id] = a.baseline;
+      const patched = await patchMonitor(row.owner, row.id, {
+        lastCheckAt: now, nextCheckAt: now + row.intervalMinutes * 60_000,
+        lastValue: value ?? null, baselines, lastError: null, updatedAt: now
+      }, { now });
+      return { monitor: patched, evaluation, triggered: false, armed: true, legs: evals, arming: arming.length };
+    }
+    const dead = evals.filter((e) => !e.ok);
+    if (dead.length) {
+      const patched = await patchMonitor(row.owner, row.id, {
+        lastCheckAt: now, nextCheckAt: now + row.intervalMinutes * 60_000,
+        lastValue: value ?? null, lastError: dead[0].reason || 'NO_VALUE', updatedAt: now
+      }, { now });
+      return { monitor: patched, evaluation, triggered: false, error: dead[0].reason || 'NO_VALUE', legs: evals };
+    }
+    const logic = row.conditionLogic === 'OR' ? 'OR' : 'AND';
+    const legsMet = logic === 'OR' ? evals.some((e) => e.hit) : evals.every((e) => e.hit);
+    if (!legsMet) {
+      const patched = await patchMonitor(row.owner, row.id, {
+        lastCheckAt: now, nextCheckAt: now + row.intervalMinutes * 60_000,
+        lastValue: value ?? null, lastError: null, updatedAt: now
+      }, { now });
+      return { monitor: patched, evaluation, triggered: false, legs: evals, waitingOnLegs: evals.filter((e) => !e.hit).map((e) => e.asset) };
+    }
+    legs = evals;
+  }
+
   const basePatch = {
     lastCheckAt: now,
     nextCheckAt: now + row.intervalMinutes * 60_000,
@@ -593,6 +772,9 @@ export async function evaluateMonitor(row, {
     value: evaluation.display,
     threshold: row.threshold,
     message: copy.body,
+    /* Phase 217 — the other legs that also held, so «why did this fire?» is
+       answerable from the event itself and not only from the monitor row. */
+    legs: legs ? legs.map((l) => ({ asset: l.asset, assetClass: l.assetClass, metric: l.metric, operator: l.operator, threshold: l.threshold, value: l.value, hit: l.hit })) : null,
     sent: false,
     pushError: null
   };
@@ -620,7 +802,7 @@ export async function evaluateMonitor(row, {
     lastEvent: event,
     events: [...(Array.isArray(row.events) ? row.events : []), event].slice(-20)
   }, { now });
-  return { monitor: patched, evaluation, triggered: true, sent };
+  return { monitor: patched, evaluation, triggered: true, sent, legs };
 }
 
 /**
@@ -632,6 +814,12 @@ export async function evaluateAllMonitors({
   owner = null,
   fetchPrices = null,
   send = null,
+  /* Phase 217 — optional shared reads. A caller holding a fresh global-intel
+     snapshot (or a macro quote payload) can hand it in once instead of every
+     cross-asset monitor re-reading it; left null, each monitor reads for
+     itself and the macro cache absorbs the cost. */
+  globalSnapshot = null,
+  macroQuotes = null,
   now = Date.now()
 } = {}) {
   const all = await readMonitors();
@@ -657,7 +845,7 @@ export async function evaluateAllMonitors({
     }
   }
   const results = await Promise.allSettled(
-    rows.map((row) => evaluateMonitor(row, { prices, send, now }))
+    rows.map((row) => evaluateMonitor(row, { prices, send, globalSnapshot, macroQuotes, now }))
   );
   const outcomes = results.map((r) => (r.status === 'fulfilled' ? r.value : { error: String(r.reason || 'EVAL_FAILED') }));
   return {

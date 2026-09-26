@@ -72,6 +72,9 @@ import { createOpportunityFitEngine } from './opportunityFit.js';
  * forex/commodities/rwa) through the SAME opportunity contract as crypto. */
 import { createRouteIntelligenceEngine } from './routeIntelligence.js';
 import { createTraditionalAssetsEngine } from './traditionalAssets.js';
+/* Phase 217 — cross-asset conditional intents: RWA / stocks / forex /
+   commodities become the SUBJECT of an intent, not just a page. */
+import { createConditionalAllocationEngine } from './conditionalAllocation.js';
 import { createConversationStateEngine } from './conversationState.js';
 import { createWalletContextEngine } from './walletContext.js';
 import { createAgentRuntime } from './agentRuntimeOps.js';
@@ -262,6 +265,9 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   /* Phase 215 — built BEFORE goalScenarios: the multi-class hook below
      allocates through this engine. */
   const traditionalAssets = createTraditionalAssetsEngine({ collections, observability, log });
+  /* Phase 217 — built AFTER traditionalAssets: the allocation rails and the
+     broker/off-ramp registry it reuses come from there. */
+  const conditionalAllocation = createConditionalAllocationEngine({ collections, observability, log });
   const goalScenarios = createGoalScenariosEngine({
     collections, observability, log,
     /* Phase 215 — the goal scenarios now carry a multi-class allocation
@@ -632,6 +638,7 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
              from the SAME flags endpoint. */
           routeIntelligence: Boolean(routeIntelligence),
           traditionalAssets: Boolean(traditionalAssets),
+          conditionalAllocation: Boolean(conditionalAllocation),
           flags: fiFlags(),
           executionPermission: false
         },
@@ -715,7 +722,8 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
        goal-scenarios engine consumes. */
     routeIntelligence,
     traditionalAssets,
-    multiClassFor
+    multiClassFor,
+    conditionalAllocation
   };
 
   /* Phase 216 — hand the optional server-side on-chain provider (a node RPC

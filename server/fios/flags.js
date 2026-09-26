@@ -51,7 +51,11 @@ export const FI_FLAG_NAMES = Object.freeze([
   'TRADITIONAL_ASSETS_ENABLED',
   /* Phase 216 — the pending lending adapters (compound-v3, morpho,
      solana-lending) surfaced through the FI. */
-  'LENDING_ADAPTERS_ENABLED'
+  'LENDING_ADAPTERS_ENABLED',
+  /* Phase 217 — cross-asset conditional intents: «اگر طلا ۵٪ اصلاح کرد و BTC
+     بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده» on RWA / stocks / forex /
+     commodities, not just crypto. */
+  'CONDITIONAL_ALLOCATION_ENABLED'
 ]);
 
 /** Defaults: everything is ON. Autonomy is ON and stays PERMISSIONED — the
@@ -81,7 +85,8 @@ const DEFAULTS = Object.freeze({
   AGENT_RUNTIME_OPS_ENABLED: true,
   ROUTE_INTELLIGENCE_ENABLED: true,
   TRADITIONAL_ASSETS_ENABLED: true,
-  LENDING_ADAPTERS_ENABLED: true
+  LENDING_ADAPTERS_ENABLED: true,
+  CONDITIONAL_ALLOCATION_ENABLED: true
 });
 
 const FALSEY = new Set(['0', 'false', 'no', 'off', 'disabled']);

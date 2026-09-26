@@ -1467,7 +1467,7 @@
       "relayHost": "le relais de l'application",
       "serverHost": "le serveur de l’application",
       "serverTried": "Le serveur de l’application a aussi été interrogé, et il n’a pas pu lire le marché non plus.",
-        "showMore": "Afficher {{n}} de plus"
+      "showMore": "Afficher {{n}} de plus"
     },
     "wallet": {
       "title": "Le portefeuille ne s'est pas ouvert",

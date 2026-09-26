@@ -9,9 +9,16 @@
  *     backtested signal. Every number is pass-through from a market read;
  *     a field the source did not return stays "—", never a guess.
  *   · PortfolioChatCard — total value + allocation bars per holding.
+ *   · ConditionalAllocationCard (Phase 217) — a cross-asset conditional
+ *     instruction («اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود، ۱۰٪ سرمایه را به
+ *     طلا اختصاص بده»): the conditions, the live reading of each, AND/OR, and
+ *     the allocation the instruction would make. It never shows a state the
+ *     engine did not compute, and an unreadable price renders as unreadable.
  *
- * Both are presentational only: no fetches, no wallet access.
+ * All are presentational only: no fetches, no wallet access, no signing.
  */
+
+import { useTranslation } from 'react-i18next';
 
 const nf = (v, digits = 2) => {
   const n = Number(v);
@@ -202,6 +209,134 @@ export function PortfolioChatCard({ card, locale = 'fa', onOpenRoute }) {
       {onOpenRoute ? (
         <button type="button" className="icc-open" onClick={() => onOpenRoute('/portfolio')}>
           {fa ? 'پرتفوی کامل ↗' : 'Full portfolio ↗'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * PHASE 217 — the cross-asset conditional allocation card.
+ *
+ * `ui` is the payload `server/aiIntentOS.js` builds (see
+ * conditionalAllocationReply). The card is deliberately dumb: it renders the
+ * state, the per-condition reading and the allocation exactly as computed, and
+ * it has no path to a number the server did not send — which is why a dead
+ * gold feed shows «unreadable» here instead of a plausible price.
+ */
+export function ConditionalAllocationCard({ ui, locale = 'fa', onOpenRoute }) {
+  if (!ui || ui.type !== 'CONDITIONAL_ALLOCATION') return null;
+  const { t } = useTranslation();
+  const fa = String(locale || 'fa').startsWith('fa');
+  const conditions = Array.isArray(ui.conditions) ? ui.conditions : [];
+  const logic = ui.logic === 'OR' ? (fa ? 'یا' : 'OR') : (fa ? 'و' : 'AND');
+  const plan = ui.plan && ui.plan.ok ? ui.plan : null;
+
+  const STATE_TONE = { TRIGGERED: 'up', WAITING: 'na', ARMING: 'na', UNREADABLE: 'down', NEEDS_INPUT: 'na' };
+  const STATE_LABEL = {
+    TRIGGERED: fa ? 'شرط‌ها برقرار شد' : 'conditions met',
+    WAITING: fa ? 'برقرار نیست' : 'not met',
+    ARMING: t('intentAIOS.conditional.arming'),
+    UNREADABLE: t('intentAIOS.conditional.unreadable'),
+    NEEDS_INPUT: fa ? 'نیاز به تکمیل' : 'needs input'
+  };
+
+  /* One condition, said the way the user said it: «۵٪ اصلاح کند» not
+     «PERCENT_CHANGE <= -5». This line is the whole point of the card — it is
+     the user's own instruction reflected back for correction. */
+  const conditionText = (c) => {
+    if (!c) return '—';
+    if (c.metric === 'PERCENT_CHANGE') {
+      const pct = Math.abs(Number(c.threshold) || 0);
+      if (c.threshold == null) return `${c.asset} — ${fa ? 'بدون حد نصاب' : 'no threshold'}`;
+      return c.operator === 'BELOW'
+        ? t('intentAIOS.conditional.declines', { pct })
+        : t('intentAIOS.conditional.rises', { pct });
+    }
+    if (c.threshold == null) return `${c.asset} — ${fa ? 'بدون حد نصاب' : 'no threshold'}`;
+    return c.operator === 'BELOW'
+      ? t('intentAIOS.conditional.below', { value: c.threshold })
+      : t('intentAIOS.conditional.above', { value: c.threshold });
+  };
+
+  const legState = (c) => {
+    if (c?.armed) return { label: t('intentAIOS.conditional.arming'), tone: 'na' };
+    if (!c?.ok) return { label: t('intentAIOS.conditional.unreadable'), tone: 'down' };
+    return c.hit
+      ? { label: t('intentAIOS.conditional.met'), tone: 'up' }
+      : { label: t('intentAIOS.conditional.notMet'), tone: 'na' };
+  };
+
+  return (
+    <div className="icc-conditional" data-testid="intent-ai-conditional-card">
+      <div className="icc-conditional-head">
+        <span>{t('intentAIOS.conditional.title')}</span>
+        <b className={`icc-cond-state icc-cond-${STATE_TONE[ui.state] || 'na'}`}>
+          {STATE_LABEL[ui.state] || ui.state || '—'}
+        </b>
+      </div>
+
+      {conditions.length ? (
+        <div className="icc-cond-list" data-testid="intent-ai-conditional-legs">
+          {conditions.map((c, i) => {
+            const st = legState(c);
+            const shown = Number.isFinite(Number(c.sample)) && c.metric === 'PERCENT_CHANGE'
+              ? `${Number(c.sample) >= 0 ? '+' : ''}${Math.round(Number(c.sample) * 100) / 100}%`
+              : (c.value != null ? nf(Number(c.value), 2) : '—');
+            return (
+              <div key={c.id || c.asset || i} className="icc-cond-row">
+                {i > 0 ? <em className="icc-cond-join">{logic}</em> : null}
+                <div className="icc-cond-line">
+                  <strong>{c.asset}</strong>
+                  <span className="icc-cond-text">{conditionText(c)}</span>
+                  <b className={`icc-cond-chip icc-cond-${st.tone}`}>{st.label}</b>
+                </div>
+                <div className="icc-cond-sub">
+                  <span>{fa ? 'خوانده‌شده' : 'read'}: {shown}</span>
+                  {c.source ? <i>{c.source}</i> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {plan ? (
+        <div className="icc-cond-alloc" data-testid="intent-ai-conditional-allocation">
+          <div className="icc-cond-alloc-line">
+            <span>{t('intentAIOS.conditional.allocation')}</span>
+            <b>{fmtPrice(plan.allocationUsd) || '—'}</b>
+          </div>
+          <div className="icc-cond-alloc-sub">
+            <span>
+              {plan.sizePct != null ? `${plan.sizePct}% ${t('intentAIOS.conditional.ofCapital')}` : '—'}
+              {plan.capitalUsd != null ? ` (${fmtPrice(plan.capitalUsd)})` : ''}
+            </span>
+            {plan.target?.symbol ? <b>→ {plan.target.symbol}</b> : null}
+          </div>
+          {plan.units != null ? (
+            <div className="icc-cond-alloc-sub">
+              <span>≈ {nf(plan.units, 6)} {t('intentAIOS.conditional.units')}</span>
+            </div>
+          ) : null}
+          {plan.execution && plan.execution.available === false ? (
+            <p className="icc-cond-note">{t('intentAIOS.conditional.analysisOnly')}</p>
+          ) : null}
+          {plan.rail?.blockedByRail ? (
+            <p className="icc-cond-note">
+              {t('intentAIOS.conditional.aboveRail', { pct: plan.rail.maxSingleAllocationPct })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {Array.isArray(ui.missing) && ui.missing.length ? (
+        <p className="icc-cond-note">{fa ? 'منتظر تکمیل:' : 'waiting on:'} {ui.missing.join(', ')}</p>
+      ) : null}
+
+      {onOpenRoute ? (
+        <button type="button" className="icc-open" onClick={() => onOpenRoute('/intent?tab=automate')}>
+          {t('intentAIOS.conditional.watch')} ↗
         </button>
       ) : null}
     </div>

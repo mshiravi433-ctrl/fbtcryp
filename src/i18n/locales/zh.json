@@ -1277,7 +1277,6 @@
       "RPC_RATE_LIMITED": "网络节点当前被限流——请稍后再试。",
       "AMOUNT_REQUIRED": "Enter a valid amount.",
       "ASSET_NOT_SUPPORTED": "此市场不支持该资产。",
-      "UNKNOWN_ACTION": "不支持该操作。",
       "SOLANA_CONFIRMATION_TIMEOUT": "Solana confirmation timed out; check the transaction status.",
       "TOKEN_NOT_ALLOWED": "该代币不在本市场的审计名单中，无法在此使用。",
       "POOL_NOT_ALLOWED": "该资金池地址不是本网络的审计市场。",
@@ -1468,7 +1467,7 @@
       "relayHost": "应用自身的中继",
       "serverHost": "应用自身的服务器",
       "serverTried": "也询问了应用自身的服务器，它同样无法读取市场。",
-        "showMore": "再显示 {{n}} 项"
+      "showMore": "再显示 {{n}} 项"
     },
     "wallet": {
       "title": "钱包未打开",
