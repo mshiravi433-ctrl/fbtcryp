@@ -286,6 +286,20 @@ import {
   acknowledgement,
   answerBindingHint
 } from '../lib/intent-ai/chat/questionLedger.js';
+/* Multi-Slot Collector — پاسخ به مشکل «بعد از جواب یادش میره». وقتی کاربر
+   هدف‌گذاری می‌کند (سرمایه، سود، بازه، ریسک)، یک فرم چندمرحله‌ای با باکس
+   اختصاصی جواب فعال می‌شود تا هر پاسخ فقط به اسلات متناظر bind شود و
+   بعد از جمع‌آوری همه اطلاعات، درخواست با «تفکر عمیق» تحلیل شود. */
+import {
+  startForm,
+  getActiveForm,
+  getCurrentSlot,
+  submitAnswer as submitFormAnswer,
+  cancelForm,
+  clearForm,
+  detectFormTrigger,
+  FORMS
+} from '../lib/intent-ai/chat/multiSlotCollector.js';
 import { createSurfaceGate, eventToChatMessage } from '../lib/intent-ai/chat/osSurface.js';
 import { buildNegotiationContext, runSurfaceCommand } from '../lib/intent-ai/chat/surfaceCommands.js';
 import { offlineSocialFallback } from '../lib/intent-ai/chat/socialChat.js';
@@ -963,6 +977,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
      ignored. */
   const [openQuestion, setOpenQuestion] = useState(() => getOpenQuestion({ conversationId }));
   const [questionAck, setQuestionAck] = useState(null);
+  /* Multi-Slot Form (فرم چندمرحله‌ای): وقتی فعال است، کامپوزر اصلی غیرفعال
+     می‌شود و یک باکس اختصاصی جواب بالای آن ظاهر می‌شود تا کاربر دقیقاً
+     پاسخش را به همان اسلات بدهد و سیستم بعد از گرفتن تمام اطلاعات با
+     «تفکر عمیق» تحلیل کند. */
+  const [multiSlot, setMultiSlot] = useState(() => {
+    const slot = getCurrentSlot({ conversationId, locale: (i18n?.language || 'fa') });
+    return slot ? { slot, ack: null } : { slot: null, ack: null };
+  });
+  const [multiSlotParseError, setMultiSlotParseError] = useState(null);
   const surfaceGateRef = useRef(null);
   const [panel, setPanel] = useState(null);
   const [ecoKind, setEcoKind] = useState('agent');
@@ -1050,11 +1073,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
   }, [locale]);
 
-  /* Restore / refresh the open question whenever the conversation switches. */
+  /* Restore / refresh the open question AND any multi-slot form whenever the
+     conversation switches or the page is reloaded (durable localStorage). */
   useEffect(() => {
     setOpenQuestion(getOpenQuestion({ conversationId }));
     setQuestionAck(null);
-  }, [conversationId]);
+    const activeSlot = getCurrentSlot({ conversationId, locale: i18n?.language || 'fa' });
+    setMultiSlot(activeSlot ? { slot: activeSlot, ack: null } : { slot: null, ack: null });
+    setMultiSlotParseError(null);
+  }, [conversationId, i18n?.language]);
 
   useEffect(() => {
     if (!questionAck) return undefined;
@@ -1755,10 +1782,92 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (made.ok) savePendingIntent(made.intent);
   }, [conversationId, locale]);
 
+  /* ─── MULTI-SLOT FORM HANDLERS ───────────────────────────────────────────
+   * وقتی فرم چندمرحله‌ای هدف‌دار فعال است، کامپوزر اصلی از این هندلر استفاده
+   * می‌کند تا پاسخ را به اسلات درست bind کند و بعد از تکمیل فرم، کل اطلاعات
+   * را به صورت یک درخواست کامل (نه چند پیام گیج‌کننده) برای هوش مصنوعی بفرستد.
+   */
+  const multiSlotSubmit = useCallback((answerText) => {
+    const fa = (i18n?.language || 'fa').startsWith('fa');
+    const res = submitFormAnswer({ text: answerText, conversationId, locale: i18n?.language || 'fa' });
+    if (!res.ok) {
+      setMultiSlotParseError(res.hint || (fa ? 'پاسخ معتبر وارد کن.' : 'Please enter a valid answer.'));
+      return;
+    }
+    setMultiSlotParseError(null);
+    if (res.cancelled) {
+      setMultiSlot({ slot: null, ack: null });
+      setMessages((prev) => [...prev, {
+        id: makeId(),
+        role: 'ai',
+        content: fa ? 'فرم لغو شد. هر وقت خواستی دوباره شروع کن.' : 'Form cancelled. Start again whenever you like.',
+        kind: 'assistant',
+        ui: { type: 'TEXT' }
+      }]);
+      return;
+    }
+    if (res.complete) {
+      // فرم کامل شد — تمام اطلاعات جمع شد. حالا یک خلاصه به چت اضافه کن
+      // و درخواست اصلی را با «تفکر عمیق» بفرست
+      const data = res.data || {};
+      const summaryMsg = {
+        id: makeId(),
+        role: 'ai',
+        content: `${res.ack}\n\n${res.summary}\n\n${res.nextMessage}`,
+        kind: 'assistant',
+        ui: { type: 'TEXT' }
+      };
+      setMessages((prev) => [...prev, summaryMsg]);
+      setConvState((prev) => appendConvMessage(prev, summaryMsg));
+      setMultiSlot({ slot: null, ack: null });
+
+      // یک پیام کامل بساز که همه اطلاعات را داشته باشد
+      const combinedMessage = fa
+        ? `من ${Number(data.capitalUsd).toLocaleString('en-US')} دلار سرمایه دارم و می‌خواهم در ${data.horizonDays} روز ${data.targetPct}% سود بکنم با ریسک ${data.riskProfile === 'conservative' ? 'کم' : data.riskProfile === 'aggressive' ? 'بالا' : 'متوسط'}. لطفاً یک استراتژی کامل با تحلیل عمیق، مقایسه گزینه‌ها و مراحل اجرا بده.`
+        : `I have $${Number(data.capitalUsd).toLocaleString('en-US')} in capital and I want to make ${data.targetPct}% return in ${data.horizonDays} days with ${data.riskProfile} risk. Please give me a deep analysis, compare options, and suggest a concrete plan.`;
+
+      // فرم را پاک کن و پیام ترکیبی را بفرست
+      // از sendRef استفاده می‌کنیم چون در این نقطه sendMessage ممکن است در closure نباشد
+      clearForm({ conversationId });
+      setTimeout(() => {
+        if (sendRef.current) {
+          void sendRef.current(combinedMessage, { skipUserBubble: false, deepThinking: true });
+        }
+      }, 500);
+      return;
+    }
+    // هنوز کامل نشده — اسلات بعدی
+    setMultiSlot({ slot: res.nextSlot, ack: res.ack });
+  }, [conversationId, i18n]);
+
+  const multiSlotCancel = useCallback(() => {
+    const fa = (i18n?.language || 'fa').startsWith('fa');
+    cancelForm({ conversationId });
+    setMultiSlot({ slot: null, ack: null });
+    setMultiSlotParseError(null);
+    setMessages((prev) => [...prev, {
+      id: makeId(),
+      role: 'ai',
+      content: fa ? 'باشه، از گرفتن اطلاعات منصرف شدیم.' : 'OK, I stopped collecting info.',
+      kind: 'assistant',
+      ui: { type: 'TEXT' }
+    }]);
+  }, [conversationId, i18n]);
+
   // UPGRADE 6 — Enhanced sendMessage with all new intelligence
   const sendMessage = useCallback(async (rawText, opts = {}) => {
     const message = String(rawText || '').trim();
     if (!message || busyRef.current) return null;
+
+    // اگر فرم چندمرحله‌ای فعال است، هر پیام عادی باید به آن پاسخ حساب شود
+    // (مگر اینکه skipUserBubble باشد که از submit داخلی می‌آید)
+    const activeFormBefore = getActiveForm({ conversationId });
+    if (activeFormBefore && !opts?.skipFormIntercept) {
+      multiSlotSubmit(message);
+      setInput('');
+      return null;
+    }
+
     busyRef.current = true;
 
     const os8Before = os8StateRef.current || loadLocalIntentOSState('intent-unified');
@@ -1867,9 +1976,53 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       busV6.emit(EVENTS_V6.ANSWER_RECEIVED, { answer: message, questionId: convStateRef.current.lastQuestionId });
     }
 
+    /* ── MULTI-SLOT TRIGGER DETECTION ───────────────────────────────────────
+     * اگر پیام کاربر درخواست هدف‌دار (استراتژی سرمایه‌گذاری، سود و غیره) است
+     * و هنوز فرم فعالی نداریم، فرم چندمرحله‌ای را شروع کن و جریان عادی را
+     * متوقف کن. اما اگر کاربر همه اطلاعات را یک‌جا داده (سرمایه+سود+بازه)،
+     * فرم را باز نکن و بگذار مستقیم به تحلیل برود. پاسخ‌های بعدی توسط
+     * multiSlotSubmit مدیریت می‌شوند. */
+    const formType = detectFormTrigger(message);
+    if (formType && !opts.skipFormIntercept) {
+      // بررسی سریع: آیا پیام از قبل تمام اطلاعات را دارد؟
+      let alreadyComplete = false;
+      try {
+        const quickSpec = (await import('../lib/strategyBrain/goalSpec.js')).parseGoalSpec({ text: message, portfolio: aiContext.portfolio, wallet, balances: aiContext.balances });
+        alreadyComplete = quickSpec.ok === true;
+      } catch { alreadyComplete = false; }
+      if (!alreadyComplete) {
+        const started = startForm({ formId: formType, conversationId, locale });
+        if (started.ok) {
+          const slot = getCurrentSlot({ conversationId, locale });
+          if (slot) {
+            const fa = locale.startsWith('fa');
+            const introMsg = {
+              id: makeId(),
+              role: 'ai',
+              content: fa
+                ? 'عالی! برای ساختن یک استراتژی دقیق و عمیق، چند مورد را یکی‌یکی از تو می‌پرسم. لطفاً پاسخ هر کدام را در باکس سبز پایین بنویس.'
+                : 'Great! To build a deep, accurate strategy I will ask a few questions one by one. Please answer each in the green box below.',
+              kind: 'assistant',
+              ui: { type: 'TEXT' }
+            };
+            setMessages((prev) => [...prev, introMsg]);
+            setConvState((prev) => appendConvMessage(prev, introMsg));
+            setMultiSlot({ slot, ack: null });
+            setMultiSlotParseError(null);
+            setThinking([]);
+            setThinkingState('idle');
+            setActivitySteps([]);
+            busyRef.current = false;
+            stateMachineRef.current.transition(STATES.CLARIFYING, { reason: 'multi_slot_started' });
+            return null;
+          }
+        }
+      }
+    }
+
     const localizedThinking = locale.startsWith('fa')
-      ? ['در حال درک درخواست شما…', 'بررسی کیف پول و بازار…', 'طراحی مسیر امن…']
-      : ['Understanding your request…', 'Checking wallet & market…', 'Building safe plan…'];
+      ? ['در حال درک درخواست شما…', 'بررسی کیف پول و بازار…', 'طراحی مسیر امن…', 'تفکر عمیق…']
+      : ['Understanding your request…', 'Checking wallet & market…', 'Building safe plan…', 'Thinking deeply…'];
     setThinking(localizedThinking);
 
     try {
@@ -5896,12 +6049,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         ) : null}
 
         {/* Phase 213 — the open question stays in front of the user until it is
-            answered or explicitly dropped. It is restored from the durable
-            ledger on mount, so a question asked before a reload is still
-            waiting after it instead of being silently forgotten. */}
+            answered or explicitly dropped. When a multi-slot goal form is active
+            the bar renders the DEDICATED answer box (سرمایه/سود/بازه/ریسک) so
+            the user's answer is never mis-parsed as a new request. */}
         <PendingQuestionBar
-          question={openQuestion}
+          question={multiSlot.slot ? null : openQuestion}
           ack={questionAck}
+          multiSlot={multiSlot}
+          multiSlotParseError={multiSlotParseError}
           locale={locale}
           onAnswer={(answer) => { void sendMessage(answer); }}
           onSkip={() => {
@@ -5913,6 +6068,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             try { closeQuestion({ questionId: openQuestion?.id || null, reason: 'closed_by_user' }); } catch { /* nothing to close */ }
             setOpenQuestion(null);
           }}
+          onMultiSlotSubmit={multiSlotSubmit}
+          onMultiSlotCancel={multiSlotCancel}
         />
 
         {/* §26 Mobile optimization — keyboard-aware, safe-area.
@@ -5954,17 +6111,20 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             className="iaos-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={dictating
-              ? t('intentAIOS.listening', { defaultValue: locale.startsWith('fa') ? 'دارم گوش می‌دم…' : 'Listening…' })
-              : t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
+            placeholder={multiSlot.slot
+              ? (locale.startsWith('fa') ? 'لطفاً در باکس سبز بالا پاسخ بده…' : 'Please answer in the green box above…')
+              : (dictating
+                ? t('intentAIOS.listening', { defaultValue: locale.startsWith('fa') ? 'دارم گوش می‌دم…' : 'Listening…' })
+                : t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' }))}
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             enterKeyHint="send"
+            disabled={Boolean(multiSlot.slot)}
           />
           <button
             type="submit"
             className="iaos-send"
             aria-label={t('intentAIOS.send', { defaultValue: 'Send' })}
-            disabled={!input.trim() || thinkingState !== 'idle'}
+            disabled={!input.trim() || thinkingState !== 'idle' || Boolean(multiSlot.slot)}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 19V5" />
