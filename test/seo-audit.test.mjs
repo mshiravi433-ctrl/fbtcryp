@@ -72,8 +72,17 @@ test('robots rules apply the API exclusion to every declared crawler group', () 
 
 test('each sitemap URL names real, indexable HTML with unique metadata', () => {
   const entries = urls();
-  const generated = readdirSync(OUT, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(join(OUT, e.name, 'index.html')));
+  /* Recursive: the Persian pages are nested under fa/. Redirect stubs for the
+     old Arabic-script URLs carry a noindex marker and are moves, not pages,
+     so they do not count. */
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      if (!e.isDirectory()) return [];
+      const full = join(dir, e.name);
+      const here = existsSync(join(full, 'index.html')) ? [full] : [];
+      return [...here, ...walk(full)];
+    });
+  const generated = walk(OUT).filter((dir) => !read(join(dir, 'index.html')).includes('content="noindex"'));
   assert.equal(entries.length, generated.length + 1, 'one root URL plus all generated pages');
   assert.equal(new Set(entries).size, entries.length, 'no duplicate URLs');
   assert.ok(entries.includes(`${SITE}/`));
@@ -107,31 +116,34 @@ test('each sitemap URL names real, indexable HTML with unique metadata', () => {
         .some((back) => back.href === url), `${alternate.href} reciprocates ${url}`);
     }
   }
-  const persianHub = `${SITE}/${encodeURIComponent('وبلاگ')}`;
+  const persianHub = `${SITE}/fa/blog`;
   assert.ok([...docs.get(`${SITE}/blog`).querySelectorAll('link[hreflang="fa"]')]
     .some((link) => link.href === persianHub), 'English/Persian hubs are a reciprocal translation pair');
+  const libraryFa = `${SITE}/fa/`;
+  assert.ok([...docs.get(`${SITE}/library`).querySelectorAll('link[hreflang="fa"]')]
+    .some((link) => link.href === libraryFa), 'the two library directories are a reciprocal pair');
 });
 
 test('the flagship landing offers visible paths to both guide hubs', () => {
-  const doc = html(join(OUT, 'صرافی-غیرمتمرکز', 'index.html'));
+  const doc = html(join(OUT, 'decentralized-crypto-exchange', 'index.html'));
   const links = [...doc.querySelectorAll('footer.site a[href]')].map((a) => a.href);
   assert.ok(links.includes(`${SITE}/blog`));
-  assert.ok(links.includes(`${SITE}/${encodeURIComponent('وبلاگ')}`));
+  assert.ok(links.includes(`${SITE}/fa/blog`));
   assert.ok(links.includes(`${SITE}/crypto-swap-without-kyc`));
-  assert.ok(links.includes(`${SITE}/${encodeURIComponent('سواپ-ارز-دیجیتال')}`));
+  assert.ok(links.includes(`${SITE}/fa/crypto-swap-without-kyc`));
 });
 
 test('brand search and the new bilingual discovery pages are wired for crawling', () => {
   const listed = urls();
   const pairs = [
-    ['crypto-education', 'آموزش-ارز-دیجیتال'],
-    ['developers', 'آموزش-توسعه-دهندگان'],
-    ['crypto-market-charts-signals', 'بازار-کریپتو-نمودار-سیگنال'],
-    ['tokenized-global-stocks', 'سهام-جهانی-توکنی‌شده']
+    ['crypto-education', 'fa/crypto-education'],
+    ['developers', 'fa/developers'],
+    ['crypto-market-charts-signals', 'fa/crypto-market-charts-signals'],
+    ['tokenized-global-stocks', 'fa/tokenized-global-stocks']
   ];
   for (const [enSlug, faSlug] of pairs) {
     const enUrl = `${SITE}/${enSlug}`;
-    const faUrl = `${SITE}/${encodeURIComponent(faSlug)}`;
+    const faUrl = `${SITE}/${faSlug}`;
     assert.ok(listed.includes(enUrl), `${enSlug} is in the sitemap`);
     assert.ok(listed.includes(faUrl), `${faSlug} is in the sitemap`);
     for (const [url, slug] of [[enUrl, enSlug], [faUrl, faSlug]]) {
@@ -144,7 +156,7 @@ test('brand search and the new bilingual discovery pages are wired for crawling'
     }
   }
 
-  const home = html(join(OUT, 'صرافی-غیرمتمرکز', 'index.html'));
+  const home = html(join(OUT, 'decentralized-crypto-exchange', 'index.html'));
   const graph = [...home.querySelectorAll('script[type="application/ld+json"]')]
     .flatMap((script) => JSON.parse(script.textContent)['@graph'] || []);
   const org = graph.find((node) => node['@type'] === 'Organization');
@@ -158,7 +170,7 @@ test('brand search and the new bilingual discovery pages are wired for crawling'
 });
 
 test('market dashboard and developer guides render honest, working crawlable content', () => {
-  for (const slug of ['crypto-market-charts-signals', 'بازار-کریپتو-نمودار-سیگنال']) {
+  for (const slug of ['crypto-market-charts-signals', 'fa/crypto-market-charts-signals']) {
     const doc = html(join(OUT, slug, 'index.html'));
     assert.ok(doc.querySelector('#live-market-data'));
     assert.equal(doc.querySelectorAll('.market-examples li').length, 30);
@@ -168,7 +180,7 @@ test('market dashboard and developer guides render honest, working crawlable con
     assert.doesNotThrow(() => new Function(script.textContent), 'generated market script parses');
   }
 
-  for (const slug of ['developers', 'آموزش-توسعه-دهندگان']) {
+  for (const slug of ['developers', 'fa/developers']) {
     const doc = html(join(OUT, slug, 'index.html'));
     const snippets = [...doc.querySelectorAll('.code-sample code')].map((code) => code.textContent);
     assert.equal(snippets.length, 2);
@@ -183,7 +195,7 @@ test('market dashboard and developer guides render honest, working crawlable con
 test('language blog hubs link to their posts and new topic guides', () => {
   const expected = {
     blog: ['crypto-education', 'developers', 'crypto-market-charts-signals', 'tokenized-global-stocks'],
-    'وبلاگ': ['آموزش-ارز-دیجیتال', 'آموزش-توسعه-دهندگان', 'بازار-کریپتو-نمودار-سیگنال', 'سهام-جهانی-توکنی‌شده']
+    'fa/blog': ['fa/crypto-education', 'fa/developers', 'fa/crypto-market-charts-signals', 'fa/tokenized-global-stocks']
   };
   for (const [slug, targets] of Object.entries(expected)) {
     const doc = html(join(OUT, slug, 'index.html'));
@@ -195,14 +207,14 @@ test('language blog hubs link to their posts and new topic guides', () => {
 
 test('dollar-yield and tokenised-stock pages state their ownership and return limits', () => {
   const enYield = html(join(OUT, 'crypto-investing-yield-and-lending', 'index.html'));
-  const faYield = html(join(OUT, 'سرمایه-گذاری-در-ارز-دیجیتال', 'index.html'));
+  const faYield = html(join(OUT, 'fa/crypto-investing-yield-and-lending', 'index.html'));
   assert.match(enYield.body.textContent, /An APY quoted in dollars.*not fixed dollar income/i);
   assert.ok([...enYield.querySelectorAll('summary')].some((node) => /APY shown in dollars/i.test(node.textContent)));
   assert.match(faYield.body.textContent, /سود دلاری ثابت/);
   assert.ok([...faYield.querySelectorAll('summary')].some((node) => /به دلار نمایش داده می‌شود سود دلاری را تضمین می‌کند/.test(node.textContent)));
 
   const enStocks = html(join(OUT, 'tokenized-global-stocks', 'index.html'));
-  const faStocks = html(join(OUT, 'سهام-جهانی-توکنی‌شده', 'index.html'));
+  const faStocks = html(join(OUT, 'fa/tokenized-global-stocks', 'index.html'));
   assert.match(enStocks.body.textContent, /not direct ownership/i);
   assert.match(enStocks.body.textContent, /not a stock brokerage/i);
   assert.match(faStocks.body.textContent, /مالکیت مستقیم سهم/);

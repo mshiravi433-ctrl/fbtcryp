@@ -969,22 +969,24 @@ export const COPY = {
       {
         t: { en: 'Guides', fa: 'راهنماها' },
         links: [
+          { href: '/library', en: 'Page library — every page in one place', fa: 'کتابخانهٔ صفحات (انگلیسی)' },
+          { href: '/fa/', en: 'Persian page library', fa: 'کتابخانهٔ صفحات — فهرست همهٔ صفحات' },
           { href: '/blog', en: 'All guides (English)', fa: 'راهنماهای انگلیسی' },
-          { href: '/وبلاگ', en: 'Persian guides', fa: 'راهنماهای فارسی' },
+          { href: '/fa/blog', en: 'Persian guides', fa: 'راهنماهای فارسی' },
           { href: '/crypto-swap-without-kyc', en: 'Swap without KYC', fa: 'راهنمای سواپ (انگلیسی)' },
-          { href: '/سواپ-ارز-دیجیتال', en: 'Swap without signup (Persian)', fa: 'سواپ بدون ثبت‌نام' },
+          { href: '/fa/crypto-swap-without-kyc', en: 'Swap without signup (Persian)', fa: 'سواپ بدون ثبت‌نام' },
           { href: '/non-custodial-crypto-swap', en: 'Non-Custodial Swap Guide', fa: 'راهنمای سواپ غیرامانی' },
-          { href: '/هشدار-قیمت-ارز-دیجیتال', en: 'Price Alerts Guide (Persian)', fa: 'راهنمای هشدار قیمت' },
-          { href: '/تحلیل-تکنیکال-ارز-دیجیتال', en: 'Technical Analysis Guide (Persian)', fa: 'راهنمای تحلیل تکنیکال' },
-          { href: '/کیف-پول-غیرامانی', en: 'Wallet Security Guide (Persian)', fa: 'راهنمای امنیت کیف پول' },
+          { href: '/fa/crypto-price-alerts-and-dca', en: 'Price Alerts Guide (Persian)', fa: 'راهنمای هشدار قیمت' },
+          { href: '/fa/crypto-market-history-analysis', en: 'Technical Analysis Guide (Persian)', fa: 'راهنمای تحلیل تکنیکال' },
+          { href: '/fa/non-custodial-wallet', en: 'Wallet Security Guide (Persian)', fa: 'راهنمای امنیت کیف پول' },
           { href: '/crypto-education', en: 'Crypto Education', fa: 'آموزش کریپتو (انگلیسی)' },
-          { href: '/آموزش-ارز-دیجیتال', en: 'Crypto Education (Persian)', fa: 'آموزش ارز دیجیتال' },
+          { href: '/fa/crypto-education', en: 'Crypto Education (Persian)', fa: 'آموزش ارز دیجیتال' },
           { href: '/developers', en: 'Developer API Guide', fa: 'آموزش توسعه‌دهندگان (انگلیسی)' },
-          { href: '/آموزش-توسعه-دهندگان', en: 'Developer API Guide (Persian)', fa: 'آموزش توسعه‌دهندگان' },
+          { href: '/fa/developers', en: 'Developer API Guide (Persian)', fa: 'آموزش توسعه‌دهندگان' },
           { href: '/crypto-market-charts-signals', en: 'Crypto Prices & Market Charts', fa: 'قیمت و نمودار بازار (انگلیسی)' },
-          { href: '/بازار-کریپتو-نمودار-سیگنال', en: 'Crypto Prices & Charts (Persian)', fa: 'قیمت، نمودار و روند بازار' },
+          { href: '/fa/crypto-market-charts-signals', en: 'Crypto Prices & Charts (Persian)', fa: 'قیمت، نمودار و روند بازار' },
           { href: '/tokenized-global-stocks', en: 'Tokenised Global Stocks', fa: 'سهام توکنی‌شده (انگلیسی)' },
-          { href: '/سهام-جهانی-توکنی‌شده', en: 'Tokenised Global Stocks (Persian)', fa: 'سهام جهانی توکنی‌شده' }
+          { href: '/fa/tokenized-global-stocks', en: 'Tokenised Global Stocks (Persian)', fa: 'سهام جهانی توکنی‌شده' }
         ]
       },
       {

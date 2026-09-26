@@ -1225,8 +1225,15 @@ function structuredData(url, site) {
 /* The document                                                         */
 /* ------------------------------------------------------------------ */
 
+/*
+ * The slug is English like every other URL under the .ir domain (owner
+ * requirement for better indexing). The old Arabic-script address
+ * /صرافی-غیرمتمرکز gets a 308 in vercel.json plus a static redirect stub
+ * written by scripts/gen-landing.mjs, so the ranking history is carried over
+ * instead of abandoned.
+ */
 export const V2_PAGE = {
-  slug: 'صرافی-غیرمتمرکز',
+  slug: 'decentralized-crypto-exchange',
   changefreq: 'weekly',
   priority: '0.9'
 };
