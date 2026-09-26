@@ -2396,6 +2396,10 @@ for (const [suite, file] of [
   ['FI OS Financial Intelligence Brain (phase 210)', 'intent-ai/phase210-financial-brain-probe.mjs'],
   ['FI OS Cross-Chain Route Intelligence (phase 214)', 'intent-ai/route-intelligence-probe.mjs'],
   ['FI OS Traditional Assets Decision (phase 215)', 'intent-ai/traditional-assets-probe.mjs'],
+  /* Phase 217 — «اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا
+     اختصاص بده»: RWA / stocks / forex / commodities as the SUBJECT of an
+     intent. A child process, like the suites above: it owns its exit code. */
+  ['FI OS Cross-Asset Conditional Allocation (phase 217)', 'intent-ai/conditional-allocation-probe.mjs'],
   ['FI OS Lending Adapters (phase 216)', 'intent-ai/lending-adapters-probe.mjs'],
   /* UPGRADE 13 — conversational depth: the pleasantry/report split in twelve
      languages, the economic brief built from real payloads only, the provider

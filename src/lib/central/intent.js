@@ -30,6 +30,12 @@ export const INTENT_TYPES = Object.freeze({
   PORTFOLIO_ANALYSIS: { modules: ['wallet', 'portfolio', 'crypto', 'risk'], permission: PERMISSION.READ },
   /* «ETF بخرم؟» — the registry decides whether this is a route or a refusal. */
   INSTRUMENT_QUERY: { modules: ['stocks', 'etf', 'funds', 'forex', 'commodities', 'rwa', 'crypto'], permission: PERMISSION.READ },
+  /* Phase 217 — «اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا
+     اختصاص بده». Six understandings at once (asset + cross-asset + portfolio
+     + risk + condition + allocation), across RWA / stocks / forex /
+     commodities as well as crypto. PREPARE, not EXECUTE: the plan is
+     proposed, the broker hand-off is unsigned, the wallet signs. */
+  CONDITIONAL_ALLOCATION: { modules: ['portfolio', 'risk', 'crypto', 'stocks', 'etf', 'funds', 'forex', 'commodities', 'rwa', 'goals'], permission: PERMISSION.PREPARE },
   CONCENTRATION_CHECK: { modules: ['portfolio', 'risk'], permission: PERMISSION.READ },
   ASSET_ANALYSIS: { modules: ['crypto', 'signals', 'news', 'risk'], permission: PERMISSION.READ },
   BALANCE_QUERY: { modules: ['wallet'], permission: PERMISSION.READ },
@@ -76,6 +82,21 @@ const RULES = Object.freeze([
      vague: a cheerful «بله، در حال خرید ETF…» would be a lie, and a «متوجه نشدم»
      wastes the turn. It classifies as its own intent so the registry, not the
      language model, decides whether the answer is a route or a refusal (§8). */
+  /* Phase 217 — a CONDITIONAL cross-asset instruction. It is placed above
+     INSTRUMENT_QUERY on purpose: «اگر طلا ۵٪ اصلاح کرد… اختصاص بده» mentions
+     gold, and the old reading turned that into a QUESTION about the gold
+     page. The defining signal is the PAIR — a conditional marker («اگر / if /
+     وقتی / when») AND an action verb («اختصاص بده / allocate / buy») — so
+     «اگر بیت‌کوین ۲۰٪ بریزد چه می‌شود» (a what-if) and «وقتی رسید به ۱۰۰هزار
+     خبرم کن» (an alert) keep their own intents. Neither names an action. */
+  {
+    intent: 'CONDITIONAL_ALLOCATION',
+    patterns: [
+      /(اگر|اگه|چنانچه|هرگاه|هر وقت|هر زمان|وقتی|زمانی که|در صورت|به شرطی که|\bif\b|\bwhen\b|\bonce\b|\bwhenever\b|in case|provided)[^]{0,80}(اختصاص|تخصیص|منتقل کن|انتقال بده|بگذار|بذار|سرمایه[\s\u200c]?گذاری|ری[\s\u200c]?بالانس|متعادل کن|\ballocat\w*|\bassign\w*|\btransfer\b|\bmove\b|\bshift\b|\bput\b|\binvest\w*|\brebalance\w*|\bre-allocate\w*|\bbuy\b|\bsell\b|\bget\b)/i,
+      /(اگر|اگه|چنانچه|هرگاه|هر وقت|هر زمان|وقتی|زمانی که|در صورت|به شرطی که|\bif\b|\bwhen\b|\bonce\b|\bwhenever\b|in case|provided)[^]{0,80}(درصد|%|در صد)[^]{0,60}(اختصاص|تخصیص|\ballocat\w*|\bassign\w*|منتقل|بذار|بگذار|\bbuy\b|\bsell\b|\binvest\w*)/i
+    ],
+    requires: ['markets']
+  },
   { intent: 'INSTRUMENT_QUERY', patterns: [/\betf\b|\beft\b|صندوق (سرمایه|درآمد| ETF)?|fund\b|stock|سهام|شرکت|فارکس|forex|جفت ?ارز|commodit|کالایی|طلا|نقره|نفت|خاک ?سبز|rwa|real.?world|tokeniz|توکنایز|ملک|املاک/, /\b(aapl|tsla|msft|nvda|spy|qqq|googl?e?|amzn|meta|eurusd|usdjpy|dxy|gold|silver|oil|brent|wti|copper)\b/, /اپل|تسلا|مایکروسافت|انویدیا|گوگل|آمازون|متوان/i], requires: ['markets'] },
   { intent: 'BORROW_CAPACITY', patterns: /(?:چقدر|چه مقدار|حداکثر|سقف|چند).{0,28}(وام|borrow|اعتبار)|ظرفیت (وام|دریافت)|borrowing power|max borrow/i, requires: ['lending'] },
   { intent: 'FUTURES_RISK', patterns: /(فیوچرز|آتی|اهرم|leverage|funding|مارجین|perp|position (باز|open)|\bdydx\b|\bfutures\b)/i, requires: ['futures'] },
@@ -224,6 +245,9 @@ export function classify(message = '', { context = {}, state = {}, suggestions =
 /** Which intent wins when a sentence matches several; see `classify`. */
 const INTENT_PRIORITY = Object.freeze({
   BORROW_CAPACITY: 0.07, EXECUTE_REPAY: 0.075, LOAN_STATUS: 0.06, WHATIF_SIMULATION: 0.05,
+  /* Phase 217 — above INSTRUMENT_QUERY: the same sentence names an instrument,
+     and the instruction reading is the more specific one. */
+  CONDITIONAL_ALLOCATION: 0.085,
   INSTRUMENT_QUERY: 0.05, SET_ALERT: 0.05, NEWS_SUMMARY: 0.045, SIGNAL_READING: 0.045,
   PROFIT_PLAN: 0.045, QUOTE_BRIDGE: 0.04, EXECUTE_BRIDGE: 0.04, FUTURES_RISK: 0.04,
   QUOTE_SWAP: 0.035, EXECUTE_REBALANCE: 0.035, CONCENTRATION_CHECK: 0.03, EXECUTE_SWAP: 0.03,

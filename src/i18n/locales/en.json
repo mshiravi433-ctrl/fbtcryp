@@ -10954,6 +10954,24 @@
     }
   },
   "intentAIOS": {
+    "conditional": {
+      "title": "Conditional allocation",
+      "conditions": "Conditions",
+      "met": "met",
+      "notMet": "not met",
+      "arming": "arming baseline",
+      "unreadable": "unreadable",
+      "allocation": "Allocation",
+      "ofCapital": "of capital",
+      "units": "units",
+      "analysisOnly": "analysis only — no broker configured for this class",
+      "aboveRail": "above the {{pct}}% rail — needs your explicit confirmation",
+      "watch": "Watch this condition",
+      "declines": "a {{pct}}% drop",
+      "rises": "a {{pct}}% rise",
+      "above": "above {{value}}",
+      "below": "below {{value}}"
+    },
     "header": "Intent AI",
     "live": "Live",
     "hello": "Hi — I am Intent AI. Talk to me about your wallet, the market, or any financial goal.",

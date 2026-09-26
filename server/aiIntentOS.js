@@ -50,6 +50,19 @@ import {
 import { listAiTools, AI_TOOL_SCHEMA } from '../src/lib/intent-ai/aiToolRegistry.js';
 import { formatHumanResponse, formatExecutionResult, stripInternalLeaks } from '../src/lib/intent-ai/humanResponse.js';
 import { classifyUserIntent } from '../src/lib/intent-ai/intentKinds.js';
+/* Phase 217 — cross-asset conditional intents. «اگر طلا ۵٪ اصلاح کرد و BTC
+   بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده» is answered HERE instead of
+   being routed to a surface: the V1 renderer can only express a generic line
+   for an instruction that has a trigger, and the assets it names (gold, the
+   dollar index, a stock, an RWA) were not in the AI's vocabulary at all. */
+import { parseConditionalIntent, describeConditionalIntent, questionFor } from '../src/lib/intent-ai/conditionalIntent.js';
+import { instrumentFor } from '../src/lib/intent-ai/crossAssetInstruments.js';
+import { readCrossAssetPrices } from './crossAssetPrice.js';
+import {
+  evaluateOneCondition, combineEvaluations, buildAllocationPlan,
+  monitorDraftFor, CONDITIONAL_ALLOCATION_SCHEMA
+} from './fios/conditionalAllocation.js';
+import { requireFlag } from './fios/flags.js';
 import { planRebalance } from '../src/lib/intent-ai/rebalanceEngine.js';
 import { createPendingIntent, transitionPendingIntent } from '../src/lib/intent-ai/pendingIntent.js';
 import { buildActionPlan, isExecutionReady } from '../src/lib/intent-ai/contextResolver.js';
@@ -1338,6 +1351,160 @@ function richObjectiveReply({ message, u4, context, locale, surface, messages = 
   return null;
 }
 
+/**
+ * PHASE 217 — the cross-asset conditional answer.
+ * ---------------------------------------------------------------------------
+ * Returns `null` when the turn is not a conditional instruction, so every
+ * other turn is untouched. When it IS one, it answers with what it
+ * understood, what it could READ, and what the instruction would allocate —
+ * in that order, because a misread condition that is silently armed is worse
+ * than one that is echoed back.
+ *
+ * Honesty rules that shape the copy:
+ *   · a missing threshold becomes a QUESTION, never a defaulted 5%;
+ *   · an unreadable price is stated as unreadable, and the instruction is NOT
+ *     evaluated — «assume gold corrected» is not a decision;
+ *   · the allocation is computed from the portfolio the client actually sent;
+ *     without it the answer says what is missing instead of inventing a size;
+ *   · execution for a traditional class ends at the broker gate: no provider,
+ *     no fill, and the copy says so in the user's language.
+ */
+export async function conditionalAllocationReply({ message, context, locale = 'fa', readPrices = null } = {}) {
+  const gate = requireFlag('CONDITIONAL_ALLOCATION_ENABLED');
+  if (!gate.ok) return null;
+  const frame = parseConditionalIntent(message, { lang: locale });
+  /* THREE gates, and the middle one is the one that matters:
+       1. a conditional marker («اگر / if / وقتی / when»);
+       2. an ACTION. «اگر بیت‌کوین ۲۰٪ بریزد چه می‌شود» and «وقتی رسید به
+          ۱۰۰هزار خبرم کن» both have a condition and a marker and neither is
+          an instruction — stealing them from the what-if and the alert
+          surfaces would be the worst kind of helpful;
+       3. a condition to watch or a target to allocate into.
+     The confidence floor stays low (0.45) on purpose: a frame that is
+     structurally complete but is missing its threshold must still be
+     ANSWERED, because the answer is the question. */
+  if (!frame.ok || !frame.action) return null;
+  if (!frame.conditions.length && !frame.action.target) return null;
+  if (frame.confidence < 0.45) return null;
+
+  const fa = (locale || 'fa') === 'fa';
+  const summary = describeConditionalIntent(frame, { lang: fa ? 'fa' : 'en' });
+  const classes = [...new Set([
+    ...frame.conditions.map((c) => c.assetClass),
+    ...(frame.action?.target ? [frame.action.target.assetClass] : [])
+  ])];
+
+  /* ── 1. what is missing is ASKED, not assumed ─────────────────────────── */
+  if (frame.missing.length) {
+    const ask = frame.missing.map((m) => questionFor(m, { lang: fa ? 'fa' : 'en' }));
+    return {
+      ok: true,
+      schema: CONDITIONAL_ALLOCATION_SCHEMA,
+      text: fa
+        ? `${summary}\n\nبرای اینکه درستش ببندم: ${ask.join(' ')}`
+        : `${summary}\n\nTo finish it: ${ask.join(' ')}`,
+      intent: { type: 'CONDITIONAL_ALLOCATION', entities: { classes, conditions: frame.conditions.length } },
+      ui: { type: 'CONDITIONAL_ALLOCATION', state: 'NEEDS_INPUT', conditions: frame.conditions, missing: frame.missing },
+      actions: []
+    };
+  }
+
+  /* ── 2. read every instrument the instruction names ───────────────────── */
+  const symbols = [...new Set([
+    ...frame.conditions.map((c) => c.asset),
+    ...(frame.action?.target?.symbol ? [frame.action.target.symbol] : [])
+  ])];
+  /* The chat turn has a budget; a slow macro/global upstream must not hold
+     the reply hostage. A failed read is reported, never filled in. */
+  const withDeadline = (p, ms) => Promise.race([
+    p, new Promise((resolve) => { const t = setTimeout(() => resolve(null), ms); t.unref?.(); })
+  ]);
+  /* `readPrices` is injectable so a probe can drive the whole reply with
+     fixtures: the WRONG number in a chat answer is the most expensive failure
+     this surface can have, so it is the one thing that must be testable
+     without a live upstream. */
+  const readFn = typeof readPrices === 'function'
+    ? (syms) => readPrices(syms)
+    : (syms) => withDeadline(readCrossAssetPrices(syms, { now: Date.now() }), 4000);
+  const reads = await Promise.resolve()
+    .then(() => readFn(symbols))
+    .catch(() => null) || Object.fromEntries(symbols.map((s) => [s, { ok: false, code: 'READ_TIMEOUT' }]));
+
+  const baselines = {};
+  const evaluations = frame.conditions.map((c) => evaluateOneCondition(c, reads[c.asset] || null, { baseline: baselines[c.asset] ?? null }));
+  const combined = combineEvaluations(evaluations, frame.logic);
+
+  const capitalUsd = Number(context?.portfolio?.totalValueUsd) || null;
+  const plan = combined.state === 'TRIGGERED'
+    ? buildAllocationPlan(frame, { capitalUsd, reads, now: Date.now() })
+    : null;
+
+  /* ── 3. say it, in the user's language ────────────────────────────────── */
+  const nameOf = (symbol) => instrumentFor(symbol)?.name?.[fa ? 'fa' : 'en'] || symbol;
+  const lines = [summary];
+  const state = combined.state;
+
+  if (state === 'ARMING') {
+    const armed = evaluations.filter((e) => e.armed).map((e) => `${nameOf(e.asset)} ${e.value}`);
+    lines.push(fa
+      ? `خط پایه ثبت شد (${armed.join('، ')}). از این لحظه افت واقعی اندازه‌گیری می‌شود و همین الان کاری انجام نمی‌دهم.`
+      : `Baseline recorded (${armed.join(', ')}). The drawdown is measured from here — nothing fires on the arming read.`);
+  } else if (state === 'UNREADABLE') {
+    const dead = evaluations.filter((e) => !e.ok).map((e) => nameOf(e.asset));
+    lines.push(fa
+      ? `قیمت ${dead.join(' و ')} در این لحظه قابل خواندن نیست، برای همین شرط را ارزیابی نمی‌کنم — حدس نمی‌زنم.`
+      : `I cannot read ${dead.join(' and ')} right now, so I am not evaluating the condition — I do not guess.`);
+  } else if (state === 'TRIGGERED') {
+    if (plan?.ok) {
+      lines.push(fa
+        ? `شرط‌ها برقرار شد. پیشنهاد: ${plan.allocationUsd} دلار (${plan.sizePct}٪ از ${plan.capitalUsd} دلار) به ${nameOf(plan.target.symbol)}${plan.units != null ? ` ≈ ${plan.units} واحد` : ''}.`
+        : `The conditions are met. Proposed: $${plan.allocationUsd} (${plan.sizePct}% of $${plan.capitalUsd}) into ${nameOf(plan.target.symbol)}${plan.units != null ? ` ≈ ${plan.units} units` : ''}.`);
+      if (!plan.execution?.available) {
+        lines.push(fa
+          ? `اجرای این کلاس فقط از طریق بروکرِ پیکربندی‌شده ممکن است و الان تنظیم نیست — این فقط تحلیل است، سفارشی ثبت نشده.`
+          : `This class executes only through a configured broker, and none is configured — this is analysis; no order was placed.`);
+      }
+      if (plan.rail?.blockedByRail) {
+        lines.push(fa ? `این مقدار بالای سقف ${plan.rail.maxSingleAllocationPct}٪ است؛ بدون تأیید صریح شما اجرا نمی‌شود.` : `This is above the ${plan.rail.maxSingleAllocationPct}% rail — it will not run without your explicit confirmation.`);
+      }
+      for (const w of plan.warnings.filter((w) => w.code === 'CAPITAL_SOURCE_ASSUMED')) lines.push(w.detail);
+    } else {
+      lines.push(fa
+        ? `شرط‌ها برقرار شد، اما اندازه را نمی‌توانم حساب کنم: ${plan?.detail || 'نیاز به خواندن پرتفوی'}`
+        : `The conditions are met, but I cannot size it: ${plan?.detail || 'the portfolio read is missing'}`);
+    }
+  } else {
+    const status = evaluations.map((e) => {
+      const shown = e.sample == null ? '—' : `${Number(e.sample).toFixed(2)}%`;
+      const op = e.operator === 'BELOW' ? '<=' : '>=';
+      return `${nameOf(e.asset)} ${shown} ${op} ${e.threshold}`;
+    });
+    lines.push(fa
+      ? `هنوز برقرار نیست. وضعیت فعلی: ${status.join(' | ')}`
+      : `Not met yet. Current readings: ${status.join(' | ')}`);
+  }
+
+  const watch = monitorDraftFor(frame, { lang: fa ? 'fa' : 'en' });
+  return {
+    ok: true,
+    schema: CONDITIONAL_ALLOCATION_SCHEMA,
+    text: stripInternalLeaks(lines.join('\n')),
+    intent: { type: 'CONDITIONAL_ALLOCATION', entities: { classes, conditions: frame.conditions.length, logic: frame.logic } },
+    ui: {
+      type: 'CONDITIONAL_ALLOCATION',
+      state,
+      conditions: evaluations,
+      logic: frame.logic,
+      plan,
+      watch: watch.ok ? watch.monitor : null,
+      classes
+    },
+    actions: [{ id: 'open-conditional-watch', route: '/intent?tab=automate', label: fa ? 'پاییدن این شرط ↗' : 'Watch this condition ↗' }],
+    executed: false,
+    requiresUserSignature: false
+  };
+}
+
 router.post('/chat', async (req, res) => {
   const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
@@ -1435,6 +1602,64 @@ router.post('/chat', async (req, res) => {
       schema: 'fbt.ai-chat.v1',
       reply,
       context: { ...context, conversationSummary: nextMemory.summary || context.conversationSummary },
+      at: nowMs()
+    });
+  }
+
+  /* Phase 217 — a cross-asset conditional instruction («اگر طلا ۵٪ اصلاح کرد
+     و BTC بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده»). Answered before the
+     surface router: the sentence names asset classes the V1 renderer has no
+     lane for, and routing it onward turned an instruction into a page. */
+  let conditional = null;
+  try {
+    conditional = await conditionalAllocationReply({ message, context, locale: locale || 'fa' });
+  } catch (err) {
+    log?.(`ai-os:conditional-failed:${String(err?.message || err).slice(0, 80)}`);
+  }
+  if (conditional?.ok) {
+    const intentId = `int_${nowMs().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    recordIntentOutcome({
+      intentId,
+      intentType: 'CONDITIONAL_ALLOCATION',
+      providerUsed: 'internal',
+      modelsConsulted: ['internal'],
+      confidenceScore: Math.round((Number(u4.confidence) || 0.5) * 100),
+      executionSuccess: null,
+      durationMs: 0,
+      locale: locale || 'fa'
+    }).catch(() => {});
+    return res.json({
+      ok: true,
+      schema: 'fbt.ai-chat.v1',
+      reply: {
+        text: conditional.text,
+        message: conditional.text,
+        contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
+        intent: conditional.intent,
+        confidence: u4.confidence ?? 0.8,
+        ui: conditional.ui,
+        card: null,
+        actions: conditional.actions || [],
+        suggestions: suggestionsFor({ message, intent: 'CONDITIONAL_ALLOCATION', context }),
+        pendingIntent: null,
+        intentId,
+        actionPlan: null,
+        actionPlanId: null,
+        choices: [],
+        choiceKind: null,
+        goalDetected: false,
+        strategyRequest: null,
+        strategyDraft: null,
+        goalRequest: null,
+        inPlace: false,
+        openTab: 'automate',
+        openPanel: null,
+        openEcosystem: null,
+        executed: false,
+        broadcasts: false,
+        requiresUserSignature: false
+      },
+      context,
       at: nowMs()
     });
   }

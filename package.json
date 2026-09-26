@@ -103,6 +103,7 @@
     "test:cross-chain": "node test/cross-chain-probe.mjs",
     "test:central-os": "node test/central-os-probe.mjs",
     "test:fios": "node test/fios/fios-core-probe.mjs && node test/fios/fios-autonomy-probe.mjs && node test/fios/fios-intelligence-probe.mjs && node test/intent-ai/phase210-financial-brain-probe.mjs && node test/intent-ai/phase211-global-intelligence-probe.mjs && node test/intent-ai/phase211-routes-inventory-probe.mjs",
+    "test:phase217": "node test/intent-ai/conditional-allocation-probe.mjs",
     "test:phase213": "node test/intent-ai/phase213-chat-surface-probe.mjs",
     "test:phase213-ui": "vite build -c test/vite.phase213.mjs --logLevel error && node test/run-one-probe.mjs ./.out/phase213/phase213-chat-surface-ui-probe.js",
     "test:phase213-all": "npm run test:phase213 && npm run test:phase213-ui",

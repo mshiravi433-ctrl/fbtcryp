@@ -24,6 +24,11 @@
 import { Router } from 'express';
 import { fiFlags } from './flags.js';
 import { normalizeOpportunity } from './traditionalAssets.js';
+/* Phase 217 — the cross-asset instrument registry (what can be read/watched)
+   and the monitor bridge that turns a parsed frame into a durable watch. */
+import { INSTRUMENTS, instrumentsInClass, CROSS_ASSET_CLASSES } from '../../src/lib/intent-ai/crossAssetInstruments.js';
+import { monitorDraftFor } from './conditionalAllocation.js';
+import { createMonitor } from '../intentMonitoring.js';
 
 export const FI_ROUTES_SCHEMA = 'fbt.fi.routes.v1';
 
@@ -1293,6 +1298,147 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
       requiredAnnualizedPct: fi.goalReasoning.requiredAnnualizedPct({ targetReturnPct: reasoning.targetReturnPct, horizonMonths: reasoning.horizonMonths }),
       durable: fi.collections.durable()
     };
+  }));
+
+  /* ══════════════════ Phase 217: cross-asset conditional intents ════════════
+   * RWA / stocks / forex / commodities as the SUBJECT of an intent, not just a
+   * page. «اگر طلا ۵٪ اصلاح کرد و BTC بالای ۶۵۰۰۰ بود، ۱۰٪ سرمایه را به طلا
+   * اختصاص بده» has to be understood as gold + BTC + portfolio + risk +
+   * condition + allocation at once.
+   *
+   *   GET  /deep/instruments            the registry: what can be read, watched
+   *                                     and allocated into — and what cannot
+   *   POST /deep/conditional/parse      text → frame + the questions for what
+   *                                     is missing (never a default)
+   *   POST /deep/conditional/evaluate   frame → TRIGGERED / WAITING / ARMING /
+   *                                     UNREADABLE + the allocation plan
+   *   POST /deep/conditional/plan       what «۱۰٪ سرمایه» IS in dollars
+   *   POST /deep/conditional/watch      arm it in the monitor engine
+   *
+   * None of these sign, submit or claim a fill. The allocation plan is
+   * PROPOSED; the broker hand-off is UNSIGNED; the wallet signs.
+   */
+
+  router.get('/deep/instruments', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const cls = String(req.query.class || req.query.assetClass || '').toLowerCase();
+    const rows = cls ? instrumentsInClass(cls) : INSTRUMENTS;
+    return {
+      ok: true,
+      schema: 'fbt.cross-asset-instrument.v1',
+      count: rows.length,
+      classes: CROSS_ASSET_CLASSES,
+      instruments: rows.map((i) => ({
+        symbol: i.symbol,
+        assetClass: i.assetClass,
+        name: i.name || null,
+        unit: i.unit || null,
+        readable: i.read?.kind !== 'unreadable',
+        read: i.read?.kind || null,
+        reason: i.read?.reason || null
+      })),
+      /* The honesty line: a class with no feed is named, not hidden. */
+      unreadableClasses: [...new Set(INSTRUMENTS.filter((i) => i.read?.kind === 'unreadable').map((i) => i.assetClass))],
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.post('/deep/conditional/parse', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const text = String(body.text || body.message || '').slice(0, MAX_TEXT);
+    if (!text.trim()) return reject(400, 'TEXT_REQUIRED');
+    const out = fi.conditionalAllocation.parse(owner, { text, lang: body.lang || null });
+    if (!out.ok) return reject(409, out.code, 'the cross-asset conditional engine is disabled', { flag: out.flag });
+    return {
+      ok: true,
+      schema: out.schema,
+      understood: out.understood,
+      intent: out.intent,
+      summary: out.summary,
+      questions: out.questions,
+      classes: out.classes,
+      unreadable: out.unreadable,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.post('/deep/conditional/evaluate', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const text = String(body.text || body.message || '').slice(0, MAX_TEXT);
+    if (!text.trim() && !body.intent) return reject(400, 'TEXT_OR_INTENT_REQUIRED');
+    /* The capital read is the same number the chat quotes (§11): the financial
+       state, never a body-supplied figure — a client that could POST its own
+       net worth could POST any allocation size it liked. */
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const out = await fi.conditionalAllocation.evaluate(owner, {
+      intent: body.intent || null,
+      text: text.trim() || null,
+      financial,
+      baselines: body.baselines && typeof body.baselines === 'object' ? body.baselines : {},
+      globalSnapshot: body.globalSnapshot || null,
+      allowAboveRail: body.allowAboveRail === true,
+      correlationId: body.correlationId || null
+    });
+    if (!out.ok && out.flag) return reject(409, out.code, 'the cross-asset conditional engine is disabled', { flag: out.flag });
+    return {
+      ok: true,
+      schema: out.schema,
+      state: out.state,
+      reason: out.reason,
+      summary: out.summary,
+      evaluations: out.record?.evaluations || [],
+      reads: out.record?.reads || {},
+      newBaselines: out.newBaselines,
+      plan: out.record?.plan || null,
+      questions: out.questions || null,
+      simulated: false,
+      signs: false,
+      executionPermission: false,
+      durable: fi.collections.durable()
+    };
+  }));
+
+  router.post('/deep/conditional/plan', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const text = String(body.text || body.message || '').slice(0, MAX_TEXT);
+    if (!text.trim() && !body.intent) return reject(400, 'TEXT_OR_INTENT_REQUIRED');
+    const financial = await fi.financialStateFor(owner).catch(() => null);
+    const plan = fi.conditionalAllocation.planFor(owner, {
+      intent: body.intent || null,
+      text: text.trim() || null,
+      financial,
+      allowAboveRail: body.allowAboveRail === true
+    });
+    if (!plan.ok) return reject(409, plan.code, plan.detail || null);
+    return { ok: true, plan, simulated: false, signs: false, executionPermission: false, durable: fi.collections.durable() };
+  }));
+
+  router.post('/deep/conditional/watch', route(async (req, res, owner) => {
+    await ensureMigrated(owner);
+    const body = req.body || {};
+    const text = String(body.text || body.message || '').slice(0, MAX_TEXT);
+    if (!text.trim() && !body.intent) return reject(400, 'TEXT_OR_INTENT_REQUIRED');
+    const parsed = fi.conditionalAllocation.parse(owner, {
+      intent: null, text: body.intent ? null : text, lang: body.lang || null
+    });
+    const frame = body.intent || parsed.intent;
+    if (!frame) return reject(400, 'INTENT_UNREADABLE');
+    const draft = monitorDraftFor(frame, { lang: frame.lang || body.lang || 'fa' });
+    if (!draft.ok) return reject(409, draft.code, draft.detail || null);
+    /* A condition on an instrument with no feed is refused HERE, at creation —
+       a monitor that could never read its own trigger is the exact "wired to
+       nothing" failure the monitor engine already refuses for unknown tickers. */
+    const unreadable = [
+      ...(frame.conditions || []).map((c) => c.asset)
+    ].filter((s) => !INSTRUMENTS.find((i) => i.symbol === s && i.read?.kind !== 'unreadable'));
+    if (unreadable.length) return reject(409, 'NO_FEED_FOR_INSTRUMENT', `no price feed for ${unreadable.join(', ')} in this deployment — this condition can be analysed but not watched`);
+    const out = await createMonitor(owner, { ...draft.monitor, conversationId: body.conversationId || null }, {});
+    return out.ok
+      ? { ok: true, monitor: out.monitor, draft: draft.monitor, simulated: false, executionPermission: false, durable: fi.collections.durable() }
+      : reject(409, 'MONITOR_CREATE_FAILED', out.error || null);
   }));
 
   router.get('/deep/agents/runtime', route(async (req, res, owner) => {

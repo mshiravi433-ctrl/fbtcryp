@@ -32,6 +32,11 @@ export const USER_INTENTS = Object.freeze([
   'LEND',
   'FUTURES',
   'STOCK',
+  /* Phase 217 — «اگر طلا ۵٪ اصلاح کرد … ۱۰٪ سرمایه را به طلا اختصاص بده».
+     A conditional CROSS-ASSET instruction: gold + BTC + portfolio + risk +
+     condition + allocation in one sentence, on RWA / stocks / forex /
+     commodities exactly as on crypto. */
+  'CONDITIONAL_ALLOCATION',
   'RESEARCH',
   'GENERAL'
 ]);
@@ -56,7 +61,11 @@ export const WALLET_PREFERRED_INTENTS = Object.freeze([
   'ANALYZE_PORTFOLIO',
   'INVESTMENT_PLAN',
   'GOAL',
-  'STOCK'
+  'STOCK',
+  /* The allocation is a share of capital, so a wallet makes the number real —
+     but the plan can still be EXPLAINED without one («۱۰٪ ≈ ۸۳۵ دلار از
+     ۸۳۵۰ دلار» needs a portfolio read, not a signature). */
+  'CONDITIONAL_ALLOCATION'
 ]);
 
 /** Intents that produce an executable action card (never analysis). */
@@ -75,6 +84,17 @@ export const EXECUTABLE_INTENTS = Object.freeze([
 ]);
 
 const RULES = Object.freeze([
+  {
+    /* Phase 217 — first in the list so it outranks STOCK and BUY: a sentence
+       that says «اگر … اختصاص بده» is not a question about the gold page and
+       not a plain buy, it is an instruction with a trigger. Both halves are
+       required (a marker and an allocation verb), because «اگر بیت‌کوین ریخت
+       چه می‌شود» is a what-if and must stay one. */
+    kind: 'CONDITIONAL_ALLOCATION',
+    weight: 8,
+    words: ['allocate', 'assign', 'put ', 'invest ', 'rebalance', 'if ', 'when ', 'once ', 'whenever'],
+    stems: ['اختصاص', 'تخصیص', 'منتقل کن', 'بذار', 'بگذار', 'اگر', 'اگه', 'وقتی', 'در صورت', 'چنانچه']
+  },
   {
     kind: 'REBALANCE_PORTFOLIO',
     weight: 6,
@@ -228,6 +248,18 @@ export function classifyUserIntent(message, classification = null) {
   }
   if (kind === 'ANALYZE_PORTFOLIO' && votes.some((v) => v.kind === 'REBALANCE_PORTFOLIO' && v.score >= 6)) {
     kind = 'REBALANCE_PORTFOLIO';
+  }
+  /* Phase 217 — CONDITIONAL_ALLOCATION needs BOTH halves. A single lexical hit
+     («if …» in a what-if, or «allocate» in a plain allocation question) is not
+     an instruction with a trigger; demanding the pair is what keeps
+     «اگر بیت‌کوین ریخت چه می‌شود» a what-if and «notify me when BTC moves» an
+     alert. Without this the rule's weight 8 swallowed both. */
+  if (kind === 'CONDITIONAL_ALLOCATION') {
+    const hasMarker = /(اگر|اگه|چنانچه|هرگاه|هر وقت|وقتی|زمانی که|در صورت|\bif\b|\bwhen\b|\bonce\b|\bwhenever\b)/i.test(raw);
+    const hasAction = /(اختصاص|تخصیص|منتقل کن|انتقال بده|بگذار|بذار|سرمایه[\s\u200c]?گذاری|ری[\s\u200c]?بالانس|متعادل کن|\ballocat\w*|\bassign\w*|\btransfer\b|\bmove\b|\bshift\b|\bput\b|\binvest\w*|\brebalance\w*|\bbuy\b|\bsell\b)/i.test(raw);
+    if (!hasMarker || !hasAction) {
+      kind = votes.find((v) => v.kind !== 'CONDITIONAL_ALLOCATION')?.kind || fromCommandCenter(classification);
+    }
   }
   if (!USER_INTENTS.includes(kind)) kind = 'GENERAL';
 

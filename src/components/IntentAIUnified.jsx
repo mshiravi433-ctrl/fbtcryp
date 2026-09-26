@@ -236,7 +236,7 @@ import {
 } from './IntentOpsPanels.jsx';
 import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
 import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
-import { TokenMarketCard, PortfolioChatCard } from './IntentChatCards.jsx';
+import { TokenMarketCard, PortfolioChatCard, ConditionalAllocationCard } from './IntentChatCards.jsx';
 
 // UPGRADE 6 — New modules
 import {
@@ -622,6 +622,13 @@ export const ConversationRow = memo(function ConversationRow({
         ) : null}
         {m.card?.kind === 'PORTFOLIO' ? (
           <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
+        ) : null}
+        {/* Phase 217 — a cross-asset conditional instruction («اگر طلا ۵٪ اصلاح
+            کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده»). The
+            conditions, what each one read, and the allocation — so a misread
+            trigger is visible and correctable before anything is armed. */}
+        {m.ui?.type === 'CONDITIONAL_ALLOCATION' ? (
+          <ConditionalAllocationCard ui={m.ui} locale={locale} onOpenRoute={onOpenRoute} />
         ) : null}
         {/* Route chips («فارم», «بازار», «نمودار کامل»…) built by the human
            layer from real results — one tap navigates, no re-typing.

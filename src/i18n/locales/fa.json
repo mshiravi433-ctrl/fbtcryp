@@ -10954,6 +10954,24 @@
     }
   },
   "intentAIOS": {
+    "conditional": {
+      "title": "تخصیص شرطی",
+      "conditions": "شرط‌ها",
+      "met": "برقرار",
+      "notMet": "برقرار نیست",
+      "arming": "در حال ثبت خط پایه",
+      "unreadable": "قابل خواندن نیست",
+      "allocation": "تخصیص",
+      "ofCapital": "از سرمایه",
+      "units": "واحد",
+      "analysisOnly": "فقط تحلیل — برای این کلاس بروکری تنظیم نشده است",
+      "aboveRail": "بالای سقف {{pct}}٪ — نیاز به تأیید صریح شما",
+      "watch": "پاییدن این شرط",
+      "declines": "افت {{pct}}٪",
+      "rises": "رشد {{pct}}٪",
+      "above": "بالای {{value}}",
+      "below": "زیر {{value}}"
+    },
     "header": "Intent AI",
     "live": "زنده",
     "hello": "سلام! من Intent AI هستم. درباره کیف پول، بازار یا هر هدف مالی‌ات صحبت کن.",

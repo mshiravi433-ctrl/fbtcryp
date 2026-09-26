@@ -118,6 +118,29 @@ export const PLAN_TEMPLATES = Object.freeze({
     step('news.read', 'news', 'read', { optional: true }),
     step('present', 'session', 'read', { dependsOn: ['signals.read', 'markets.read'] })
   ],
+  /* Phase 217 — «اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا
+     اختصاص بده».
+     The plan reads the CAPITAL (the allocation is a share of it, and a share
+     of an unread number is an invention), the RISK stance (a drawdown is a
+     risk statement), and every asset class the instruction names — crypto and
+     traditional through the same step shape, each OPTIONAL so a dead class
+     feed prunes itself and is reported, instead of the whole answer failing.
+     It ends at a CONFIRM gate: the plan is proposed, the broker hand-off is
+     unsigned, and the wallet still signs. There is no execute step here —
+     that is not an oversight, it is the boundary. */
+  CONDITIONAL_ALLOCATION: () => [
+    step('portfolio.read', 'portfolio', 'read'),
+    step('risk.analyze', 'risk', 'read', { dependsOn: ['portfolio.read'], riskContext: 'portfolio', note: 'the size is a share of capital, and the condition is a risk statement — both are read, never assumed' }),
+    step('markets.read', 'crypto', 'read', { optional: true, note: 'the crypto leg of the condition, when the instruction names one' }),
+    step('stocks.read', 'stocks', 'read', { optional: true }),
+    step('etf.read', 'etf', 'read', { optional: true }),
+    step('forex.read', 'forex', 'read', { optional: true }),
+    step('commodities.read', 'commodities', 'read', { optional: true }),
+    step('rwa.read', 'rwa', 'read', { optional: true }),
+    step('allocation.plan', 'portfolio', 'read', { dependsOn: ['portfolio.read', 'risk.analyze'], input: { factor: 'allocation', sizePct: '$percent', target: '$asset' }, note: '«۱۰٪ سرمایه» → dollars, from the real capital read; no read → NO_CAPITAL_READ, never a default' }),
+    { ...CONFIRM_GATE, dependsOn: ['allocation.plan'] },
+    step('present', 'session', 'read', { dependsOn: ['allocation.plan', 'confirm'] })
+  ],
   WHATIF_SIMULATION: () => [
     step('portfolio.read', 'portfolio', 'read'),
     step('markets.read', 'crypto', 'read'),

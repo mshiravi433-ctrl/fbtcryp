@@ -4685,3 +4685,175 @@ body:has(.iaos-page-v6) {
   background: rgba(99, 102, 241, .08);
   color: #0f172a;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Phase 217 — the cross-asset conditional allocation card.
+   «اگر طلا ۵٪ اصلاح کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده»
+   The card is a mirror: whatever the engine computed is what is drawn, and an
+   unreadable price gets the same visual weight as a met condition so a dead
+   feed can never be mistaken for a satisfied one.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.icc-conditional {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(129, 140, 248, .26);
+  background: linear-gradient(180deg, rgba(49, 46, 129, .30), rgba(30, 41, 59, .34));
+}
+
+.icc-conditional-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.icc-conditional-head span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: #c7d2fe;
+}
+
+.icc-cond-state {
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.icc-cond-up {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, .45);
+  background: rgba(16, 185, 129, .16);
+}
+
+.icc-cond-down {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, .45);
+  background: rgba(239, 68, 68, .16);
+}
+
+.icc-cond-na {
+  color: rgba(203, 213, 225, .95);
+  border-color: rgba(148, 163, 184, .35);
+  background: rgba(148, 163, 184, .12);
+}
+
+.icc-cond-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.icc-cond-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.icc-cond-join {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  color: rgba(165, 180, 252, .85);
+  text-transform: uppercase;
+}
+
+.icc-cond-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.icc-cond-line strong {
+  font-size: 12.5px;
+  color: #eef2ff;
+  min-width: 44px;
+}
+
+.icc-cond-text {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  color: rgba(226, 232, 240, .92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icc-cond-chip {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.icc-cond-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: rgba(148, 163, 184, .92);
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-cond-sub i {
+  font-style: normal;
+  opacity: .8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icc-cond-alloc {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(129, 140, 248, .26);
+}
+
+.icc-cond-alloc-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.icc-cond-alloc-line span {
+  font-size: 11px;
+  font-weight: 800;
+  color: #c7d2fe;
+}
+
+.icc-cond-alloc-line b {
+  font-size: 15px;
+  font-weight: 900;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-cond-alloc-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: rgba(148, 163, 184, .95);
+  font-variant-numeric: tabular-nums;
+}
+
+.icc-cond-note {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #fcd34d;
+}
