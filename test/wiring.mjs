@@ -2045,9 +2045,14 @@ export default function run() {
 
     /* The SPA needs JavaScript, but a no-JS visitor must not be left behind a
        permanent boot spinner. This is visible fallback content—not a hidden
-       keyword block—and gives lightweight crawlers real paths to the guides. */
+       keyword block—and gives lightweight crawlers real paths to the guides.
+       It must link both the flagship landing AND the two library directories,
+       which are the reference points a visitor (or a crawler) uses to find
+       every other page. */
     t('the homepage has a readable no-JS fallback linked to the guides',
-      /<noscript>[\s\S]*?id="no-js-content"[\s\S]*?صرافی-غیرمتمرکز/.test(html));
+      /<noscript>[\s\S]*?id="no-js-content"[\s\S]*?decentralized-crypto-exchange/.test(html) &&
+      /<noscript>[\s\S]*?href="\/library"/.test(html) &&
+      /<noscript>[\s\S]*?href="\/fa\/"/.test(html));
 
     // Structured data is what turns us from an untyped page into a
     // recognised application in a directory or a rich result.
@@ -3432,7 +3437,7 @@ export default function run() {
       /hero-panel/.test(gen) && /ambient-grid/.test(gen) && /fact-card/.test(gen) && /@keyframes rise-in/.test(gen));
     t('landing motion respects prefers-reduced-motion', /prefers-reduced-motion/.test(gen));
 
-    for (const slug of ['هشدار-قیمت-ارز-دیجیتال', 'تحلیل-تکنیکال-ارز-دیجیتال', 'کیف-پول-غیرامانی']) {
+    for (const slug of ['fa/crypto-price-alerts-and-dca', 'fa/crypto-market-history-analysis', 'fa/non-custodial-wallet']) {
       t(`a substantive Persian feature page exists for ${slug}`, gen.includes(`slug: '${slug}'`));
     }
 
@@ -6276,12 +6281,14 @@ export default function run() {
       /ALTERNATES/.test(gen) && /rel="alternate" hreflang=/.test(gen));
 
     /*
-     * A non-ASCII slug MUST be percent-encoded in the sitemap. An unencoded
-     * character makes the sitemap invalid per spec, and an invalid sitemap is
-     * rejected whole — taking the English pages down with it.
+     * The URLs are English now, but the Persian pages nest under fa/, so a
+     * slug still contains a `/`. slugPath() must encode segment-by-segment —
+     * a whole-slug encodeURIComponent would turn that `/` into %2F and break
+     * the path. Any unencoded non-ASCII character left over would make the
+     * sitemap invalid per spec, and an invalid sitemap is rejected whole.
      */
-    t('non-ASCII slugs are percent-encoded for the sitemap',
-      /encodeURIComponent\(p\.slug\)/.test(gen));
+    t('slugs are URL-encoded segment-wise for the sitemap',
+      /const slugPath = /.test(gen) && /slugPath\(p\.slug\)/.test(gen));
   }
 
   /* ---- 65. coin artwork: the right size, from one component ------------- */

@@ -18,6 +18,23 @@
       "destination": "/index.html"
     }
   ],
+  "redirects": [
+    { "source": "/صرافی-غیرمتمرکز", "destination": "/decentralized-crypto-exchange", "statusCode": 308 },
+    { "source": "/هشدار-قیمت-ارز-دیجیتال", "destination": "/fa/crypto-price-alerts-and-dca", "statusCode": 308 },
+    { "source": "/تحلیل-تکنیکال-ارز-دیجیتال", "destination": "/fa/crypto-market-history-analysis", "statusCode": 308 },
+    { "source": "/کیف-پول-غیرامانی", "destination": "/fa/non-custodial-wallet", "statusCode": 308 },
+    { "source": "/سواپ-ارز-دیجیتال", "destination": "/fa/crypto-swap-without-kyc", "statusCode": 308 },
+    { "source": "/سرمایه-گذاری-در-ارز-دیجیتال", "destination": "/fa/crypto-investing-yield-and-lending", "statusCode": 308 },
+    { "source": "/سواپ-سولانا", "destination": "/fa/solana-token-swap", "statusCode": 308 },
+    { "source": "/آموزش-ارز-دیجیتال", "destination": "/fa/crypto-education", "statusCode": 308 },
+    { "source": "/آموزش-توسعه-دهندگان", "destination": "/fa/developers", "statusCode": 308 },
+    { "source": "/بازار-کریپتو-نمودار-سیگنال", "destination": "/fa/crypto-market-charts-signals", "statusCode": 308 },
+    { "source": "/سهام-جهانی-توکنی‌شده", "destination": "/fa/tokenized-global-stocks", "statusCode": 308 },
+    { "source": "/کارمزد-سواپ-ارز-دیجیتال", "destination": "/fa/how-crypto-swap-fees-work", "statusCode": 308 },
+    { "source": "/تفاوت-کیف-پول-امانی-و-غیرامانی", "destination": "/fa/custodial-vs-non-custodial-wallets", "statusCode": 308 },
+    { "source": "/بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند", "destination": "/fa/what-stays-private-without-kyc", "statusCode": 308 },
+    { "source": "/وبلاگ", "destination": "/fa/blog", "statusCode": 308 }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",

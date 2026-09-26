@@ -74,39 +74,47 @@ const SLUGS = [
   'non-custodial-crypto-swap',
   'crypto-price-alerts-and-dca',
   'crypto-market-history-analysis',
-  /* Persian. Percent-encoded: an unencoded non-ASCII path is rejected. */
-  'صرافی-غیرمتمرکز',
-  'هشدار-قیمت-ارز-دیجیتال',
-  'تحلیل-تکنیکال-ارز-دیجیتال',
-  'کیف-پول-غیرامانی',
+  /* The flagship bilingual landing and the two library directories. Every URL
+     is an English path — the Persian pages live under /fa/ with English slugs,
+     because that is what indexes better under the .ir domain. */
+  'decentralized-crypto-exchange',
+  'library',
+  'fa/',
+  'fa/crypto-price-alerts-and-dca',
+  'fa/crypto-market-history-analysis',
+  'fa/non-custodial-wallet',
   /* The three intents — swap, crypto, investing — in both languages. */
-  'سواپ-ارز-دیجیتال',
+  'fa/crypto-swap-without-kyc',
   'crypto-swap-without-kyc',
-  'سرمایه-گذاری-در-ارز-دیجیتال',
+  'fa/crypto-investing-yield-and-lending',
   'crypto-investing-yield-and-lending',
-  'سواپ-سولانا',
+  'fa/solana-token-swap',
   'solana-token-swap',
   /* The guides and the two hubs, written in their own language. */
   'how-crypto-swap-fees-work',
-  'کارمزد-سواپ-ارز-دیجیتال',
+  'fa/how-crypto-swap-fees-work',
   'custodial-vs-non-custodial-wallets',
-  'تفاوت-کیف-پول-امانی-و-غیرامانی',
+  'fa/custodial-vs-non-custodial-wallets',
   'what-stays-private-without-kyc',
-  'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند',
+  'fa/what-stays-private-without-kyc',
   'blog',
-  'وبلاگ',
+  'fa/blog',
   /* Matched discovery pages for learning, API development, markets and equities. */
   'crypto-education',
-  'آموزش-ارز-دیجیتال',
+  'fa/crypto-education',
   'developers',
-  'آموزش-توسعه-دهندگان',
+  'fa/developers',
   'crypto-market-charts-signals',
-  'بازار-کریپتو-نمودار-سیگنال',
+  'fa/crypto-market-charts-signals',
   'tokenized-global-stocks',
-  'سهام-جهانی-توکنی‌شده'
+  'fa/tokenized-global-stocks'
 ];
 
-const urlList = SLUGS.map((s) => (s ? `${ORIGIN}/${encodeURIComponent(s)}` : `${ORIGIN}/`));
+/* Segment-wise encoding: the `/` inside `fa/…` and `fa/` itself must survive
+   as a path separator, not become %2F. */
+const urlList = SLUGS.map((s) =>
+  s ? `${ORIGIN}/${s.split('/').map(encodeURIComponent).join('/')}` : `${ORIGIN}/`
+);
 
 const body = {
   host: HOST,

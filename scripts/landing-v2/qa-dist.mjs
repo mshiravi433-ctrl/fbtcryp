@@ -12,7 +12,7 @@ import { JSDOM } from 'jsdom';
 import { COPY } from './copy.mjs';
 import { gateSpeculation } from './index.mjs';
 
-const dist = join(process.cwd(), 'dist', 'صرافی-غیرمتمرکز', 'index.html');
+const dist = join(process.cwd(), 'dist', 'decentralized-crypto-exchange', 'index.html');
 const html = readFileSync(dist, 'utf8');
 
 let pass = 0, fail = 0;
@@ -27,7 +27,7 @@ t('default language is English (html lang=en dir=ltr)', /<html lang="en" dir="lt
 t('English doc title uses both common brand spellings', html.includes('FBTSwap (FBT Swap) | AI-Powered DEX &amp; Financial OS'));
 t('Persian title includes the Persian and Latin brand names', html.includes('اف‌بی‌تی سواپ (FBTSwap) | صرافی غیرمتمرکز و هوش مالی'));
 t('brand aliases are present in structured data', html.includes('اف بی تی سواپ') && html.includes('FBTSwap'));
-t('canonical is the encoded Persian slug', html.includes('rel="canonical" href="https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2"'));
+t('canonical is the English flagship slug', html.includes('rel="canonical" href="https://fbtswap.ir/decentralized-crypto-exchange"'));
 t('hreflang en+fa+x-default present', html.includes('hreflang="en"') && html.includes('hreflang="fa"') && html.includes('hreflang="x-default"'));
 t('FAQPage JSON-LD present', html.includes('"FAQPage"'));
 t('SoftwareApplication JSON-LD present', html.includes('"SoftwareApplication"'));
@@ -133,7 +133,7 @@ const SOLANA = {
 
 async function run(storageSeed, fetchImpl, label) {
   const dom = new JSDOM(html, {
-    url: 'https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2/',
+    url: 'https://fbtswap.ir/decentralized-crypto-exchange/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
@@ -284,7 +284,7 @@ console.log('— guides —');
 {
   const post = (slug) => readFileSync(join(process.cwd(), 'dist', slug, 'index.html'), 'utf8');
   const en = post('how-crypto-swap-fees-work');
-  const fa = post('کارمزد-سواپ-ارز-دیجیتال');
+  const fa = post('fa/how-crypto-swap-fees-work');
 
   t('a guide is a BlogPosting with a real date', /"@type":"BlogPosting"/.test(en) && /"datePublished":"\d{4}-\d{2}-\d{2}"/.test(en));
   t('the guide names the company as author, not an invented byline', /"author":\{"@id":"https:\/\/fbtswap.ir\/#organization"\}/.test(en));
@@ -294,11 +294,11 @@ console.log('— guides —');
   t('the fee is the one the app charges (0.70%)', /0\.70%/.test(en) && /۰٫۷٪/.test(fa));
   t('...and it says the fee is shown before signing', /before the wallet is asked to sign|shown on the screen before/i.test(en));
   t('the guide links to the page that does the thing it explains', /href="\/crypto-swap-without-kyc"/.test(en));
-  t('its hreflang pair is reciprocal', /hreflang="fa" href="[^"]*%DA%A9%D8%A7%D8%B1%D9%85%D8%B2%D8%AF/.test(en) && /hreflang="en" href="[^"]*how-crypto-swap-fees-work"/.test(fa));
+  t('its hreflang pair is reciprocal', /hreflang="fa" href="[^"]*\/fa\/how-crypto-swap-fees-work"/.test(en) && /hreflang="en" href="[^"]*how-crypto-swap-fees-work"/.test(fa));
   t('how the fee is split is on the page, not only in the markup', /Three costs in one swap/.test(en));
 
   const enHub = post('blog');
-  const faHub = post('وبلاگ');
+  const faHub = post('fa/blog');
   t('the hub is a Blog', /"@type":"Blog"/.test(enHub));
   t('the hub lists every guide it links to', (() => {
     /* Count the collection members, not the key: one `blogPost` key with three
@@ -308,13 +308,12 @@ console.log('— guides —');
     return blog?.blogPost?.length === 3 && blog.blogPost.every((b) => b.datePublished && b.url);
   })());
   t('the hub is not an orphan: it links to each guide', ['how-crypto-swap-fees-work', 'custodial-vs-non-custodial-wallets', 'what-stays-private-without-kyc'].every((s) => enHub.includes(`/${s}`)));
-  /* Percent-encoded, because a bare non-ASCII path in an href is what a
-     browser encodes anyway — assertEquals on the encoded form is what the
-     crawler actually fetches. The hub must link its own language's guides. */
+  /* The Persian hub indexes the Persian section: plain ASCII /fa/<slug> hrefs
+     now, and it must not cross-link the bare English guide paths. */
   t('the Persian hub indexes the Persian guides',
-    faHub.includes(encodeURIComponent('کارمزد-سواپ-ارز-دیجیتال'))
-    && faHub.includes(encodeURIComponent('تفاوت-کیف-پول-امانی-و-غیرامانی'))
-    && !faHub.includes('how-crypto-swap-fees-work'));
+    faHub.includes('href="/fa/how-crypto-swap-fees-work"')
+    && faHub.includes('href="/fa/custodial-vs-non-custodial-wallets"')
+    && !faHub.includes('href="/how-crypto-swap-fees-work"'));
   t('no guide promises a return or a ranking', !/guaranteed|risk-free|will rise|سود تضمینی|بدون ریسک/i.test(en + fa));
 
   const sitemap = readFileSync(join(process.cwd(), 'dist', 'sitemap.xml'), 'utf8');
@@ -324,9 +323,18 @@ console.log('— guides —');
      future page and teach people to edit the test instead of reading it. */
   t('the sitemap lists one URL per generated page, plus the app shell', (() => {
     /* Landing directories, identified by having an index.html — the assets,
-       fonts and vendor directories are not pages. */
-    const dirs = readdirSync(join(process.cwd(), 'dist'), { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(process.cwd(), 'dist', e.name, 'index.html'))).length;
+       fonts and vendor directories are not pages. Walked recursively because
+       the Persian pages nest under fa/, and noindex redirect stubs for the
+       old Arabic-script URLs are moves, not pages, so they do not count. */
+    const dist = join(process.cwd(), 'dist');
+    const walk = (dir) =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        if (!e.isDirectory()) return [];
+        const full = join(dir, e.name);
+        const here = existsSync(join(full, 'index.html')) ? [full] : [];
+        return [...here, ...walk(full)];
+      });
+    const dirs = walk(dist).filter((d) => !readFileSync(join(d, 'index.html'), 'utf8').includes('content="noindex"')).length;
     return (sitemap.match(/<loc>/g) || []).length === dirs + 1;
   })());
 }

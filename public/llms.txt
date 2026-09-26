@@ -32,7 +32,7 @@ Canonical domain: https://fbtswap.ir (there is no other official domain)
 - **Platforms:** Android APK (package `ir.fbt.swap`), installable web app, and a
   Telegram Mini App. There is no iOS build.
 - **Languages:** Persian and English. The app is Persian-first; the marketing
-  landing page at /صرافی-غیرمتمرکز is bilingual in one document.
+  landing page at /decentralized-crypto-exchange is bilingual in one document.
 
 ## What it is not
 
@@ -45,18 +45,19 @@ Canonical domain: https://fbtswap.ir (there is no other official domain)
 
 ## Pages
 
-- [English guides](https://fbtswap.ir/blog) and [راهنماهای فارسی](https://fbtswap.ir/وبلاگ): published explanations of fees, custody and privacy.
-- [Bilingual landing: non-custodial exchange and financial OS](https://fbtswap.ir/صرافی-غیرمتمرکز): the full product tour in Persian and English — swap, wallet, AI intent, market signals, farming, stocks, Solana, security.
+- [Page library](https://fbtswap.ir/library) and [کتابخانهٔ صفحات](https://fbtswap.ir/fa/): the reference directory that lists every published page, grouped by topic. Every Persian page lives under /fa/ with an English slug.
+- [English guides](https://fbtswap.ir/blog) and [راهنماهای فارسی](https://fbtswap.ir/fa/blog): published explanations of fees, custody and privacy.
+- [Bilingual landing: non-custodial exchange and financial OS](https://fbtswap.ir/decentralized-crypto-exchange): the full product tour in Persian and English — swap, wallet, AI intent, market signals, farming, stocks, Solana, security.
 - [Swap crypto without KYC](https://fbtswap.ir/crypto-swap-without-kyc): step-by-step, with the fee and the limits stated.
-- [سواپ ارز دیجیتال](https://fbtswap.ir/سواپ-ارز-دیجیتال): the same guide for Persian readers.
+- [سواپ ارز دیجیتال](https://fbtswap.ir/fa/crypto-swap-without-kyc): the same guide for Persian readers.
 - [Crypto investing, yield and lending](https://fbtswap.ir/crypto-investing-yield-and-lending): what the yield tools are, and every risk that comes with them.
-- [سرمایه‌گذاری در ارز دیجیتال](https://fbtswap.ir/سرمایه-گذاری-در-ارز-دیجیتال): همان موضوع برای خوانندهٔ فارسی.
+- [سرمایه‌گذاری در ارز دیجیتال](https://fbtswap.ir/fa/crypto-investing-yield-and-lending): همان موضوع برای خوانندهٔ فارسی.
 - [Solana token swap (SPL and Token-2022)](https://fbtswap.ir/solana-token-swap)
-- [سواپ سولانا](https://fbtswap.ir/سواپ-سولانا)
+- [سواپ سولانا](https://fbtswap.ir/fa/solana-token-swap)
 - [Non-custodial crypto swap](https://fbtswap.ir/non-custodial-crypto-swap)
-- [Price alerts and recurring buys](https://fbtswap.ir/crypto-price-alerts-and-dca) · [هشدار قیمت ارز دیجیتال](https://fbtswap.ir/هشدار-قیمت-ارز-دیجیتال)
-- [Chart history and technical readings](https://fbtswap.ir/crypto-market-history-analysis) · [تحلیل تکنیکال ارز دیجیتال](https://fbtswap.ir/تحلیل-تکنیکال-ارز-دیجیتال)
-- [کیف پول غیرامانی](https://fbtswap.ir/کیف-پول-غیرامانی)
+- [Price alerts and recurring buys](https://fbtswap.ir/crypto-price-alerts-and-dca) · [هشدار قیمت ارز دیجیتال](https://fbtswap.ir/fa/crypto-price-alerts-and-dca)
+- [Chart history and technical readings](https://fbtswap.ir/crypto-market-history-analysis) · [تحلیل تکنیکال ارز دیجیتال](https://fbtswap.ir/fa/crypto-market-history-analysis)
+- [کیف پول غیرامانی](https://fbtswap.ir/fa/non-custodial-wallet)
 
 ## Citing this site
 

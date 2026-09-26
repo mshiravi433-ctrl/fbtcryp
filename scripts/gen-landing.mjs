@@ -70,6 +70,71 @@ const SITE = (process.env.VITE_PUBLIC_URL || 'https://fbtswap.ir').replace(/\/+$
 const OUT = 'dist';
 
 /**
+ * Encode a slug for a URL. `encodeURIComponent` on the whole slug would
+ * turn the `/` in the Persian-language paths (`fa/crypto-swap-without-kyc`)
+ * into `%2F`, which is a different (and uglier) URL — so each segment is
+ * encoded on its own. ASCII slugs pass through untouched.
+ */
+const slugPath = (slug) => slug.split('/').map(encodeURIComponent).join('/');
+
+/*
+ * ─── THE ICON SET ────────────────────────────────────────────────────────────
+ * One hand-tuned stroke icon per topic, drawn as inline SVG so the pages stay
+ * single-file (no sprite request, no layout shift: every chip has a fixed
+ * size). `pathLength` is NOT set, because these icons animate by transform
+ * and glow rather than by stroking — the motion budget at the bottom of the
+ * stylesheet decides which of these ever moves on a phone.
+ */
+const ICON_PATHS = {
+  swap: '<path d="M7 4 3.5 7.5 7 11"/><path d="M3.5 7.5H16a4 4 0 0 1 4 4v1"/><path d="m17 20 3.5-3.5L17 13"/><path d="M20.5 16.5H8a4 4 0 0 1-4-4v-1"/>',
+  wallet: '<path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h11.5v2.5"/><path d="M3.5 7.5V17A2.5 2.5 0 0 0 6 19.5h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2.5H6"/><circle cx="16.2" cy="13.8" r="1.2"/>',
+  shield: '<path d="M12 3.5 5.2 6.1v5.2c0 4.3 2.9 7.3 6.8 8.7 3.9-1.4 6.8-4.4 6.8-8.7V6.1Z"/><path d="m9.2 11.9 2.1 2.1 3.7-3.9"/>',
+  bell: '<path d="M6.2 9.7a5.8 5.8 0 0 1 11.6 0c0 3.1.8 4.5 1.6 5.5.3.4 0 .8-.5.8H5.1c-.5 0-.8-.4-.5-.8.8-1 1.6-2.4 1.6-5.5Z"/><path d="M10 19.2a2 2 0 0 0 4 0"/>',
+  chart: '<path d="M4 4.5v15h16"/><path d="m7 14.5 3.2-4 2.9 2.5 4.4-6"/><path d="M17.5 7h.01"/>',
+  history: '<path d="M4.6 7.4A8.5 8.5 0 1 1 3.5 12"/><path d="M3.5 7.5V12H8"/><path d="M12 8v4l2.8 1.9"/>',
+  leaf: '<path d="M12 20.5v-9.3"/><path d="M12 13.2c0-3.7-3-6.7-6.7-6.7 0 3.7 3 6.7 6.7 6.7Z"/><path d="M12 10.8c0-3 2.5-5.4 5.4-5.4.3 3-2.4 5.4-5.4 5.4Z"/>',
+  solana: '<path d="M7.2 5.2h11.6l-3.2 3.6H4Z"/><path d="M7.2 10.2h11.6l-3.2 3.6H4Z"/><path d="M7.2 15.2h11.6l-3.2 3.6H4Z"/>',
+  book: '<path d="M4.5 6.3A2.3 2.3 0 0 1 6.8 4h12.7v13.7H6.8a2.3 2.3 0 0 0-2.3 2.3Z"/><path d="M4.5 20V6.3"/><path d="M8.6 8.3h6.9M8.6 11.5h4.6"/>',
+  code: '<path d="m8.7 7.2-4.9 4.8 4.9 4.8"/><path d="m15.3 7.2 4.9 4.8-4.9 4.8"/>',
+  pulse: '<path d="M3 12.5h3.6l2.6-6.8 4.4 12 2.4-5.2H21"/>',
+  globe: '<circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8"/><path d="M12 3.6c2.7 2.3 4 5.1 4 8.4s-1.3 6.1-4 8.4c-2.7-2.3-4-5.1-4-8.4s1.3-6.1 4-8.4Z"/>',
+  receipt: '<path d="M6.3 3.5h11.4V20l-2.1-1.5-1.6 1.2-2-1.4-2 1.4-1.6-1.2L6.3 20Z"/><path d="M9.3 8.2h5.4M9.3 11.7h5.4"/>',
+  key: '<circle cx="7.8" cy="15" r="4"/><path d="m10.8 12 8.4-8.4"/><path d="m16.2 6.6 2.6 2.6M13.6 9.2l2 2"/>',
+  privacy: '<path d="m4 4.5 16 15"/><path d="M9.6 5.6a9.8 9.8 0 0 1 2.4-.3c4.4 0 7.9 3 9.4 6.7a13.8 13.8 0 0 1-2.8 4M6.3 7.2A13 13 0 0 0 2.6 12c1.5 3.7 5 6.7 9.4 6.7 1.5 0 2.9-.3 4.1-.9"/><path d="M10.1 10.3a2.7 2.7 0 0 0 3.7 3.9"/>',
+  grid: '<rect x="4" y="4" width="7.2" height="7.2" rx="2.2"/><rect x="12.8" y="4" width="7.2" height="7.2" rx="2.2"/><rect x="4" y="12.8" width="7.2" height="7.2" rx="2.2"/><rect x="12.8" y="12.8" width="7.2" height="7.2" rx="2.2"/>',
+  spark: '<path d="M12 3.6 13.9 10l6.5 2-6.5 2L12 20.4 10.1 14l-6.5-2 6.5-2Z"/>',
+  alert: '<path d="M12 4.3 2.9 19.4h18.2Z"/><path d="M12 10.2v4.1"/><path d="M12 16.9h.01"/>',
+  layers: '<path d="m12 3.6 8.4 4.6L12 12.8 3.6 8.2Z"/><path d="m3.6 12.3 8.4 4.6 8.4-4.6"/><path d="m3.6 16.2 8.4 4.6 8.4-4.6"/>',
+  chat: '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.6 3.6V16h-.9A2.5 2.5 0 0 1 4 13.5Z"/><path d="M8.3 9h7.4M8.3 12h4.6"/>',
+  arrow: '<path d="M7 17 17 7"/><path d="M9.5 7H17v7.5"/>',
+  network: '<circle cx="5.6" cy="12" r="2.3"/><circle cx="18.4" cy="5.9" r="2.3"/><circle cx="18.4" cy="18.1" r="2.3"/><path d="m7.8 10.9 8.4-4M7.8 13.1l8.4 4"/>',
+  check: '<path d="m5.5 12.6 4.3 4.3L18.5 7.4"/>'
+};
+const iconSvg = (name) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[name] || ICON_PATHS.spark}</svg>`;
+/** A fixed-size icon tile. Never layout-shifts: the chip is sized in CSS. */
+const iconChip = (name, extra = '') =>
+  `<span class="icon-chip${extra ? ' ' + extra : ''}" aria-hidden="true">${iconSvg(name)}</span>`;
+
+/* Icons for the "at a glance" cards when a page does not name its own.
+   Deterministic per position, so every build renders the same page. */
+const FACT_ICON_CYCLE = ['wallet', 'shield', 'chart', 'bell', 'leaf', 'globe', 'key', 'receipt', 'pulse', 'book', 'layers', 'history', 'spark', 'network', 'code', 'solana'];
+/* The four idle animations an icon chip may run. Assigned round-robin so a
+   grid of cards never pulses in unison — the wave reads as life, not as a
+   strobe. All of them are switched off by the motion budget below. */
+const FX_CYCLE = ['fx-float', 'fx-breathe', 'fx-orbit', 'fx-tilt'];
+
+/* The library groups its directory by these topics; the labels are part of
+   the visible page in both languages. */
+const TOPICS = {
+  swap: { en: 'Swap & custody', fa: 'سواپ و نگهداری دارایی' },
+  market: { en: 'Markets, charts & alerts', fa: 'بازار، نمودار و هشدار قیمت' },
+  invest: { en: 'Investing, yield & stocks', fa: 'سرمایه‌گذاری، بازده و سهام' },
+  learn: { en: 'Learning, guides & blog', fa: 'آموزش، راهنماها و وبلاگ' }
+};
+const TOPIC_ORDER = ['swap', 'market', 'invest', 'learn'];
+
+/**
  * One entry per page.
  *
  * Kept deliberately short. A handful of pages about things people actually
@@ -81,6 +146,8 @@ const OUT = 'dist';
 const PAGES = [
   {
     slug: 'non-custodial-crypto-swap',
+    icon: 'key',
+    topic: 'swap',
     lang: 'en',
     route: '/#/swap',
     title: 'Non-Custodial Crypto Swap — Keep Your Own Keys | FBT Swap',
@@ -115,6 +182,8 @@ const PAGES = [
   },
   {
     slug: 'crypto-price-alerts-and-dca',
+    icon: 'bell',
+    topic: 'market',
     lang: 'en',
     route: '/#/orders',
     title: 'Crypto Price Alerts and Recurring Buys | FBT Swap',
@@ -149,6 +218,8 @@ const PAGES = [
   },
   {
     slug: 'crypto-market-history-analysis',
+    icon: 'history',
+    topic: 'market',
     lang: 'en',
     route: '/#/signals',
     title: 'Crypto Chart History — What the Past Actually Says | FBT Swap',
@@ -204,7 +275,9 @@ const PAGES = [
    * and points to the screen that performs the described task.
    */
   {
-    slug: 'هشدار-قیمت-ارز-دیجیتال',
+    slug: 'fa/crypto-price-alerts-and-dca',
+    icon: 'bell',
+    topic: 'market',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/orders',
@@ -244,7 +317,9 @@ const PAGES = [
       'هشدار، پیشنهاد خرید یا فروش نیست و رسیدن اعلان تضمین نمی‌شود. ارزهای دیجیتال پرنوسان‌اند و تراکنش روی زنجیره برگشت‌ناپذیر است؛ ممکن است همهٔ پولت را از دست بدهی.'
   },
   {
-    slug: 'تحلیل-تکنیکال-ارز-دیجیتال',
+    slug: 'fa/crypto-market-history-analysis',
+    icon: 'history',
+    topic: 'market',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/signals',
@@ -283,7 +358,9 @@ const PAGES = [
       'اندیکاتورهای تکنیکال دربارهٔ دادهٔ گذشته‌اند، نه تضمین آینده. این صفحه توصیهٔ مالی نیست و ممکن است در ارزهای دیجیتال همهٔ پولت را از دست بدهی.'
   },
   {
-    slug: 'کیف-پول-غیرامانی',
+    slug: 'fa/non-custodial-wallet',
+    icon: 'wallet',
+    topic: 'swap',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/wallet',
@@ -352,7 +429,9 @@ const PAGES = [
    * ═══════════════════════════════════════════════════════════════════════ */
 
   {
-    slug: 'سواپ-ارز-دیجیتال',
+    slug: 'fa/crypto-swap-without-kyc',
+    icon: 'swap',
+    topic: 'swap',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/swap',
@@ -417,11 +496,13 @@ const PAGES = [
   },
   {
     slug: 'crypto-swap-without-kyc',
+    icon: 'swap',
+    topic: 'swap',
     lang: 'en',
     route: '/#/swap',
     title: 'Crypto Swap Without KYC — No Signup, No Custody | FBT Swap',
     description:
-      'Swap tokens on 14 networks with no account, no email and no identity upload. The rate, the price impact and the 0.70% fee are shown before you sign.',
+      'Swap tokens on 17 networks with no account, no email and no identity upload. The rate, the price impact and the 0.70% fee are shown before you sign.',
     h1: 'Swap crypto without KYC, without an account and without custody',
     howTo: [
       [
@@ -477,7 +558,9 @@ const PAGES = [
     glanceLabel: 'At a glance'
   },
   {
-    slug: 'سرمایه-گذاری-در-ارز-دیجیتال',
+    slug: 'fa/crypto-investing-yield-and-lending',
+    icon: 'leaf',
+    topic: 'invest',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/farm',
@@ -544,15 +627,17 @@ const PAGES = [
     ctaLabel: 'دیدن ابزارهای بازده',
     glanceLabel: 'یک نگاه کلی',
     links: [
-      { href: '/سهام-جهانی-توکنی‌شده', text: 'سهام جهانی توکنی‌شده؛ مالکیت و محدودیت دسترسی' },
-      { href: '/آموزش-ارز-دیجیتال', text: 'مفاهیم پایهٔ کریپتو و امنیت کیف پول' },
-      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'قیمت، نمودار و خوانش روند بازار' }
+      { href: '/fa/tokenized-global-stocks', text: 'سهام جهانی توکنی‌شده؛ مالکیت و محدودیت دسترسی' },
+      { href: '/fa/crypto-education', text: 'مفاهیم پایهٔ کریپتو و امنیت کیف پول' },
+      { href: '/fa/crypto-market-charts-signals', text: 'قیمت، نمودار و خوانش روند بازار' }
     ],
     riskText:
       'هیچ بازدهی تضمین‌شده نیست و ممکن است سرمایه‌ات کم یا از دست برود. نگهداری در کیف پول غیرامانی یعنی مسئولیت کلید هم با خودت است: اگر عبارت بازیابی را گم کنی، هیچ‌کس نمی‌تواند بازیابی کند. این صفحه توصیهٔ مالی نیست.'
   },
   {
     slug: 'crypto-investing-yield-and-lending',
+    icon: 'leaf',
+    topic: 'invest',
     lang: 'en',
     route: '/#/farm',
     title: 'Crypto Investing Without Giving Up Custody — Yield, Lending, Risk | FBT Swap',
@@ -624,7 +709,9 @@ const PAGES = [
     ]
   },
   {
-    slug: 'سواپ-سولانا',
+    slug: 'fa/solana-token-swap',
+    icon: 'solana',
+    topic: 'swap',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/solana',
@@ -685,6 +772,8 @@ const PAGES = [
   },
   {
     slug: 'solana-token-swap',
+    icon: 'solana',
+    topic: 'swap',
     lang: 'en',
     route: '/#/solana',
     title: 'Solana Token Swap — SPL and Token-2022, Signed in Your Wallet | FBT Swap',
@@ -776,6 +865,8 @@ const POSTS = [
   {
     kind: 'post',
     slug: 'how-crypto-swap-fees-work',
+    icon: 'receipt',
+    topic: 'learn',
     lang: 'en',
     route: '/#/swap',
     datePublished: '2026-09-24',
@@ -853,7 +944,9 @@ const POSTS = [
   },
   {
     kind: 'post',
-    slug: 'کارمزد-سواپ-ارز-دیجیتال',
+    slug: 'fa/how-crypto-swap-fees-work',
+    icon: 'receipt',
+    topic: 'learn',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/swap',
@@ -925,15 +1018,17 @@ const POSTS = [
       }
     ],
     links: [
-      { href: '/سواپ-ارز-دیجیتال', text: 'سواپ بدون حساب کاربری و بدون احراز هویت' },
-      { href: '/تحلیل-تکنیکال-ارز-دیجیتال', text: 'پیش از معامله ببین یک سطح قیمتی قبلاً چطور رفتار کرده' },
-      { href: '/کیف-پول-غیرامانی', text: 'چرا کلیدها در کیف پول خودت می‌مانند' }
+      { href: '/fa/crypto-swap-without-kyc', text: 'سواپ بدون حساب کاربری و بدون احراز هویت' },
+      { href: '/fa/crypto-market-history-analysis', text: 'پیش از معامله ببین یک سطح قیمتی قبلاً چطور رفتار کرده' },
+      { href: '/fa/non-custodial-wallet', text: 'چرا کلیدها در کیف پول خودت می‌مانند' }
     ]
   },
 
   {
     kind: 'post',
     slug: 'custodial-vs-non-custodial-wallets',
+    icon: 'key',
+    topic: 'learn',
     lang: 'en',
     route: '/#/wallet',
     datePublished: '2026-09-24',
@@ -1004,7 +1099,9 @@ const POSTS = [
   },
   {
     kind: 'post',
-    slug: 'تفاوت-کیف-پول-امانی-و-غیرامانی',
+    slug: 'fa/custodial-vs-non-custodial-wallets',
+    icon: 'key',
+    topic: 'learn',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/wallet',
@@ -1069,15 +1166,17 @@ const POSTS = [
       }
     ],
     links: [
-      { href: '/کیف-پول-غیرامانی', text: 'کیف پول غیرامانی دقیقاً یعنی چه' },
-      { href: '/سواپ-ارز-دیجیتال', text: 'سواپ بدون حساب کاربری و بدون احراز هویت' },
-      { href: '/سرمایه-گذاری-در-ارز-دیجیتال', text: 'وقتی امانت‌داری وارد بازده می‌شود، چه چیزی عوض می‌شود' }
+      { href: '/fa/non-custodial-wallet', text: 'کیف پول غیرامانی دقیقاً یعنی چه' },
+      { href: '/fa/crypto-swap-without-kyc', text: 'سواپ بدون حساب کاربری و بدون احراز هویت' },
+      { href: '/fa/crypto-investing-yield-and-lending', text: 'وقتی امانت‌داری وارد بازده می‌شود، چه چیزی عوض می‌شود' }
     ]
   },
 
   {
     kind: 'post',
     slug: 'what-stays-private-without-kyc',
+    icon: 'privacy',
+    topic: 'learn',
     lang: 'en',
     route: '/#/swap',
     datePublished: '2026-09-24',
@@ -1154,7 +1253,9 @@ const POSTS = [
   },
   {
     kind: 'post',
-    slug: 'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند',
+    slug: 'fa/what-stays-private-without-kyc',
+    icon: 'privacy',
+    topic: 'learn',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/swap',
@@ -1223,9 +1324,9 @@ const POSTS = [
       }
     ],
     links: [
-      { href: '/سواپ-ارز-دیجیتال', text: 'جریان سواپ بدون حساب کاربری چطور کار می‌کند' },
-      { href: '/سواپ-سولانا', text: 'سواپ سولانا، SPL و Token-2022 — و آنچه Token-2022 می‌تواند محدود کند' },
-      { href: '/کیف-پول-غیرامانی', text: 'چه کسی امضا می‌کند و کلیدها کجا می‌مانند' }
+      { href: '/fa/crypto-swap-without-kyc', text: 'جریان سواپ بدون حساب کاربری چطور کار می‌کند' },
+      { href: '/fa/solana-token-swap', text: 'سواپ سولانا، SPL و Token-2022 — و آنچه Token-2022 می‌تواند محدود کند' },
+      { href: '/fa/non-custodial-wallet', text: 'چه کسی امضا می‌کند و کلیدها کجا می‌مانند' }
     ]
   }
 ];
@@ -1234,6 +1335,8 @@ const BLOG_HUBS = [
   {
     kind: 'hub',
     slug: 'blog',
+    icon: 'book',
+    topic: 'learn',
     lang: 'en',
     route: '/#/help',
     title: 'Crypto Blog & Practical Guides: Swaps, Wallets and Markets | FBT Swap',
@@ -1255,7 +1358,9 @@ const BLOG_HUBS = [
   },
   {
     kind: 'hub',
-    slug: 'وبلاگ',
+    slug: 'fa/blog',
+    icon: 'book',
+    topic: 'learn',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/help',
@@ -1286,7 +1391,9 @@ const BLOG_HUBS = [
  */
 const SEARCH_LANDINGS = [
   {
-    slug: 'آموزش-ارز-دیجیتال',
+    slug: 'fa/crypto-education',
+    icon: 'book',
+    topic: 'learn',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/learn',
@@ -1332,14 +1439,16 @@ const SEARCH_LANDINGS = [
       { q: 'آیا سود دلاری دیفای ثابت است؟', a: 'خیر. نرخ‌ها ممکن است تغییر کنند و ریسک قرارداد، نقدشوندگی، دارایی پایه و استیبل‌کوین باقی است. نمایش یک عدد به دلار به معنی تضمین اصل پول یا بازده نیست.' }
     ],
     links: [
-      { href: '/وبلاگ', text: 'وبلاگ و راهنماهای بلند ارز دیجیتال' },
-      { href: '/کیف-پول-غیرامانی', text: 'امنیت کیف پول غیرامانی و عبارت بازیابی' },
-      { href: '/سرمایه-گذاری-در-ارز-دیجیتال', text: 'بازده دیفای و ریسک سرمایه‌گذاری' },
-      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'قیمت ۳۰ دارایی، نمودار و خوانش بازار' }
+      { href: '/fa/blog', text: 'وبلاگ و راهنماهای بلند ارز دیجیتال' },
+      { href: '/fa/non-custodial-wallet', text: 'امنیت کیف پول غیرامانی و عبارت بازیابی' },
+      { href: '/fa/crypto-investing-yield-and-lending', text: 'بازده دیفای و ریسک سرمایه‌گذاری' },
+      { href: '/fa/crypto-market-charts-signals', text: 'قیمت ۳۰ دارایی، نمودار و خوانش بازار' }
     ]
   },
   {
     slug: 'crypto-education',
+    icon: 'book',
+    topic: 'learn',
     lang: 'en',
     route: '/#/learn',
     title: 'Crypto Education for Beginners: Wallets, Swaps and Charts | FBT Swap',
@@ -1391,7 +1500,9 @@ const SEARCH_LANDINGS = [
     ]
   },
   {
-    slug: 'آموزش-توسعه-دهندگان',
+    slug: 'fa/developers',
+    icon: 'code',
+    topic: 'learn',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/developers',
@@ -1446,12 +1557,14 @@ const SEARCH_LANDINGS = [
     links: [
       { href: '/api/openapi.json', text: 'قرارداد ماشین‌خوان API بازار' },
       { href: '/developers', text: 'راهنمای توسعه‌دهندگان به زبان انگلیسی' },
-      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'نمونهٔ فهرست ۳۰ دارایی و نمودار زنده' },
-      { href: '/آموزش-ارز-دیجیتال', text: 'مفاهیم پایهٔ ارز دیجیتال' }
+      { href: '/fa/crypto-market-charts-signals', text: 'نمونهٔ فهرست ۳۰ دارایی و نمودار زنده' },
+      { href: '/fa/crypto-education', text: 'مفاهیم پایهٔ ارز دیجیتال' }
     ]
   },
   {
     slug: 'developers',
+    icon: 'code',
+    topic: 'learn',
     lang: 'en',
     route: '/#/developers',
     title: 'Web3 Developer Guide: FBT Market API Quickstart | FBT Swap',
@@ -1504,13 +1617,15 @@ const SEARCH_LANDINGS = [
     ],
     links: [
       { href: '/api/openapi.json', text: 'Machine-readable FBT market API contract' },
-      { href: '/آموزش-توسعه-دهندگان', text: 'Developer guide in Persian' },
+      { href: '/fa/developers', text: 'Developer guide in Persian' },
       { href: '/crypto-market-charts-signals', text: 'A 30-asset chart and market dashboard' },
       { href: '/crypto-education', text: 'Crypto concepts for beginners' }
     ]
   },
   {
-    slug: 'بازار-کریپتو-نمودار-سیگنال',
+    slug: 'fa/crypto-market-charts-signals',
+    icon: 'pulse',
+    topic: 'market',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/signals',
@@ -1549,13 +1664,15 @@ const SEARCH_LANDINGS = [
       { q: 'چرا قیمت این صفحه با قیمت سواپ فرق دارد؟', a: 'قیمت بازار مقدار مرجع است. نرخ اجرا به استخر و مسیر همان شبکه، نقدینگی، کارمزد و اثر قیمت بستگی دارد؛ نرخ نهایی را پیش از امضای تراکنش بررسی کن.' }
     ],
     links: [
-      { href: '/تحلیل-تکنیکال-ارز-دیجیتال', text: 'راهنمای خواندن تحلیل و نمودار' },
-      { href: '/سواپ-ارز-دیجیتال', text: 'راهنمای سواپ و بررسی نرخ پیش از امضا' },
-      { href: '/آموزش-ارز-دیجیتال', text: 'آموزش پایهٔ کریپتو و کیف پول' }
+      { href: '/fa/crypto-market-history-analysis', text: 'راهنمای خواندن تحلیل و نمودار' },
+      { href: '/fa/crypto-swap-without-kyc', text: 'راهنمای سواپ و بررسی نرخ پیش از امضا' },
+      { href: '/fa/crypto-education', text: 'آموزش پایهٔ کریپتو و کیف پول' }
     ]
   },
   {
     slug: 'crypto-market-charts-signals',
+    icon: 'pulse',
+    topic: 'market',
     lang: 'en',
     route: '/#/signals',
     marketDashboard: true,
@@ -1599,7 +1716,9 @@ const SEARCH_LANDINGS = [
     ]
   },
   {
-    slug: 'سهام-جهانی-توکنی‌شده',
+    slug: 'fa/tokenized-global-stocks',
+    icon: 'globe',
+    topic: 'invest',
     lang: 'fa',
     dir: 'rtl',
     route: '/#/stocks',
@@ -1642,12 +1761,14 @@ const SEARCH_LANDINGS = [
     ],
     links: [
       { href: '/tokenized-global-stocks', text: 'راهنمای سهام توکنی‌شده به انگلیسی' },
-      { href: '/سرمایه-گذاری-در-ارز-دیجیتال', text: 'بازده دیفای و ریسک سرمایه‌گذاری' },
-      { href: '/بازار-کریپتو-نمودار-سیگنال', text: 'قیمت ارز دیجیتال، نمودار و روند بازار' }
+      { href: '/fa/crypto-investing-yield-and-lending', text: 'بازده دیفای و ریسک سرمایه‌گذاری' },
+      { href: '/fa/crypto-market-charts-signals', text: 'قیمت ارز دیجیتال، نمودار و روند بازار' }
     ]
   },
   {
     slug: 'tokenized-global-stocks',
+    icon: 'globe',
+    topic: 'invest',
     lang: 'en',
     route: '/#/stocks',
     title: 'Tokenised Global Stocks: Market Data, Access and Risks | FBT Swap',
@@ -1688,9 +1809,71 @@ const SEARCH_LANDINGS = [
       { q: 'Do tokenised stocks or dollar quotes provide fixed income?', a: 'No. Prices can fall, and issuer, liquidity, contract and regulatory risks remain. No fixed or guaranteed return is promised.' }
     ],
     links: [
-      { href: '/سهام-جهانی-توکنی‌شده', text: 'سهام جهانی توکنی‌شده: راهنمای فارسی' },
+      { href: '/fa/tokenized-global-stocks', text: 'سهام جهانی توکنی‌شده: راهنمای فارسی' },
       { href: '/crypto-investing-yield-and-lending', text: 'DeFi yield and investing risks' },
       { href: '/crypto-market-charts-signals', text: 'Crypto prices, charts and market readings' }
+    ]
+  }
+];
+
+/*
+ * ─── THE LIBRARY: ONE REFERENCE PAGE FOR EVERY SEO PAGE ─────────────────────
+ * The owner's ask, in his words: every page should live somewhere a person
+ * can find it, «در جایی مرجع باشد که کاربر خواست برود پیدایش کند» — including
+ * the Persian pages. The library is that reference: a bilingual pair of
+ * directory pages that list EVERY published landing, grouped by topic, with
+ * the flagship landing pinned on top. It is rendered from the same PAGES
+ * array as the sitemap, so a page cannot exist without being listed here.
+ *
+ * The Persian library lives at `/fa/` on purpose: it doubles as the landing
+ * of the whole Persian section, and every Persian page now sits one level
+ * below it (`/fa/crypto-swap-without-kyc`, …) — English-looking, indexable
+ * URLs under the .ir domain, exactly as requested.
+ */
+const LIBRARY_PAGES = [
+  {
+    kind: 'library',
+    slug: 'library',
+    lang: 'en',
+    icon: 'grid',
+    topic: 'learn',
+    route: '/#/swap',
+    title: 'FBT Swap Library — Every Crypto Guide, Tool and Market Page in One Place',
+    description:
+      'The complete directory of FBT Swap pages: non-custodial swap without KYC, price alerts, investing and yield, market charts, developer API, long guides and the blog — in English and Persian.',
+    h1: 'The FBT Swap library — every page, one place',
+    body: [
+      'Every page FBT Swap publishes for search is listed here, grouped by topic and marked by language. The English pages sit directly under the domain; the Persian pages live under /fa/ with the same English address, so both are easy to read, easy to index and easy to share.',
+      'Start with the flagship landing for the full product tour, or open any card below. Each page states its own limits next to its features — the same honesty rule applies to every link in this directory.'
+    ],
+    facts: [
+      ['Topics', 'Swap & custody, markets & charts, investing & yield, learning & guides'],
+      ['Languages', 'English and Persian (فارسی), each page written for its own reader'],
+      ['URLs', 'English addresses under the .ir domain — Persian pages live under /fa/'],
+      ['Promises', 'None. No guaranteed return, no fabricated ranking, no hidden fee']
+    ]
+  },
+  {
+    kind: 'library',
+    slug: 'fa/',
+    lang: 'fa',
+    dir: 'rtl',
+    icon: 'grid',
+    topic: 'learn',
+    route: '/#/swap',
+    title: 'کتابخانهٔ اف‌بی‌تی سواپ — همهٔ صفحات، راهنماها و بازار در یک‌جا',
+    description:
+      'فهرست کامل صفحات اف‌بی‌تی سواپ: سواپ بدون احراز هویت، هشدار قیمت، سرمایه‌گذاری و بازده، نمودار بازار، API توسعه‌دهندگان، راهنماهای بلند و وبلاگ — به فارسی و انگلیسی.',
+    h1: 'کتابخانهٔ اف‌بی‌تی سواپ؛ هر صفحه در یک‌جا',
+    body: [
+      'هر صفحه‌ای که اف‌بی‌تی سواپ برای جست‌وجو منتشر کرده این‌جا فهرست شده است: به تفکیک موضوع و با برچسب زبان. صفحه‌های انگلیسی مستقیم زیر دامنه نشسته‌اند و صفحه‌های فارسی زیر /fa/ با همان نشانی انگلیسی — تا هم برای خواننده راحت باشد و هم برای ایندکس‌شدن.',
+      'از لندینگ اصلی برای دیدن تور کامل محصول شروع کن، یا هر کارت را که خواستی باز کن. هر صفحه محدودیت‌هایش را کنار قابلیت‌هایش می‌نویسد؛ همین قاعدهٔ صداقت برای همهٔ لینک‌های این فهرست برقرار است.'
+    ],
+    facts: [
+      ['موضوع‌ها', 'سواپ و نگهداری، بازار و نمودار، سرمایه‌گذاری و بازده، آموزش و راهنماها'],
+      ['زبان‌ها', 'فارسی و انگلیسی؛ هر صفحه برای خوانندهٔ خودش نوشته شده'],
+      ['نشانی‌ها', 'آدرس انگلیسی زیر دامنهٔ ir. — صفحات فارسی زیر /fa/'],
+      ['وعده‌ها', 'ندارد. نه سود تضمینی، نه رتبهٔ ساختگی، نه کارمزد پنهان']
     ]
   }
 ];
@@ -1700,19 +1883,19 @@ const SEARCH_LANDINGS = [
  * hreflang pairs, sibling links and IndexNow sync check share one source.
  */
 SEARCH_LANDINGS.forEach((page) => { page.kind = 'resource'; });
-PAGES.push(...SEARCH_LANDINGS, ...POSTS, ...BLOG_HUBS);
+PAGES.push(...SEARCH_LANDINGS, ...POSTS, ...BLOG_HUBS, ...LIBRARY_PAGES);
 
 const ALTERNATES = [
   /*
-   * The old ['non-custodial-crypto-swap', 'صرافی-غیرمتمرکز'] pair was
+   * The old ['non-custodial-crypto-swap', 'decentralized-crypto-exchange'] pair was
    * removed on purpose: the slug now hosts a bilingual English-default
    * super-landing (scripts/landing-v2/) that is NOT a translation of the
    * non-custodial guide. It declares its own en/fa/x-default hreflang
    * instead. Pairing the guide with it would be the incorrect-annotation
    * case the comment above warns about.
    */
-  ['crypto-price-alerts-and-dca', 'هشدار-قیمت-ارز-دیجیتال'],
-  ['crypto-market-history-analysis', 'تحلیل-تکنیکال-ارز-دیجیتال'],
+  ['crypto-price-alerts-and-dca', 'fa/crypto-price-alerts-and-dca'],
+  ['crypto-market-history-analysis', 'fa/crypto-market-history-analysis'],
   /*
    * The three pairs added with the swap / crypto / investing pages. Each one
    * is a real translation: the same claims, the same limits, the same fee
@@ -1720,23 +1903,26 @@ const ALTERNATES = [
    * across. That is the test for whether a page belongs in this list — if the
    * Persian page says something the English page does not, the pair is a bug.
    */
-  ['crypto-swap-without-kyc', 'سواپ-ارز-دیجیتال'],
-  ['crypto-investing-yield-and-lending', 'سرمایه-گذاری-در-ارز-دیجیتال'],
-  ['solana-token-swap', 'سواپ-سولانا'],
+  ['crypto-swap-without-kyc', 'fa/crypto-swap-without-kyc'],
+  ['crypto-investing-yield-and-lending', 'fa/crypto-investing-yield-and-lending'],
+  ['solana-token-swap', 'fa/solana-token-swap'],
   /*
    * The three guides. Same rule as above: each pair is the same argument in
    * two languages, not a summary of the other one.
    */
-  ['how-crypto-swap-fees-work', 'کارمزد-سواپ-ارز-دیجیتال'],
-  ['custodial-vs-non-custodial-wallets', 'تفاوت-کیف-پول-امانی-و-غیرامانی'],
-  ['what-stays-private-without-kyc', 'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند'],
+  ['how-crypto-swap-fees-work', 'fa/how-crypto-swap-fees-work'],
+  ['custodial-vs-non-custodial-wallets', 'fa/custodial-vs-non-custodial-wallets'],
+  ['what-stays-private-without-kyc', 'fa/what-stays-private-without-kyc'],
   /* Matched, language-specific learning, data and tokenised-equity pages. */
-  ['crypto-education', 'آموزش-ارز-دیجیتال'],
-  ['developers', 'آموزش-توسعه-دهندگان'],
-  ['crypto-market-charts-signals', 'بازار-کریپتو-نمودار-سیگنال'],
-  ['tokenized-global-stocks', 'سهام-جهانی-توکنی‌شده'],
+  ['crypto-education', 'fa/crypto-education'],
+  ['developers', 'fa/developers'],
+  ['crypto-market-charts-signals', 'fa/crypto-market-charts-signals'],
+  ['tokenized-global-stocks', 'fa/tokenized-global-stocks'],
   /* Each hub lists the corresponding guides in its own language. */
-  ['blog', 'وبلاگ']
+  ['blog', 'fa/blog'],
+  /* The two directories mirror each other exactly — same pages, same order,
+     labels translated. */
+  ['library', 'fa/']
 ];
 
 const SOCIAL_CARD = `${SITE}/social-card.png`;
@@ -1770,6 +1956,14 @@ function copyFor(lang) {
         readNext: 'ادامهٔ مطالعه',
         guides: 'راهنماها',
         minRead: 'دقیقه مطالعه',
+        /* Library (مرجع صفحات) — the reference directory every page links to. */
+        library: 'کتابخانهٔ صفحات',
+        allPages: 'همهٔ صفحات',
+        libraryKicker: 'فهرست مرجع',
+        flagship: 'صفحهٔ اصلی محصول',
+        flagshipHint: 'تور کامل اف‌بی‌تی سواپ؛ سواپ، کیف پول، بازار، سهام و سولانا',
+        langVersion: 'English version',
+        langAria: 'نسخهٔ انگلیسی همین صفحه',
         /* The two defaults that used to be hardcoded English strings in
            render(): a Persian page that forgot its own riskText shipped an
            English risk paragraph. A default is only safe when it is in the
@@ -1793,6 +1987,14 @@ function copyFor(lang) {
         readNext: 'Read next',
         guides: 'Guides',
         minRead: 'min read',
+        /* Library (the page directory) — the reference every page links to. */
+        library: 'Page library',
+        allPages: 'All pages',
+        libraryKicker: 'Reference directory',
+        flagship: 'The flagship landing',
+        flagshipHint: 'The full FBT Swap tour: swap, wallet, markets, stocks and Solana',
+        langVersion: 'نسخهٔ فارسی',
+        langAria: 'Persian version of this page',
         ctaDefault: 'Open the app',
         riskText:
           'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
@@ -1854,13 +2056,46 @@ function landingStructuredData(page, url) {
       ...(page.faqs?.length ? { mainEntity: { '@id': faqId } } : {})
     },
     {
+      /* Three crumbs now, matching the visible breadcrumb: Home / Library /
+         page. The library is the reference directory every page hangs off. */
       '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: ui.home, item: `${SITE}/` },
-        { '@type': 'ListItem', position: 2, name: page.h1, item: url }
+        { '@type': 'ListItem', position: 2, name: ui.library, item: `${SITE}/${slugPath(page.lang === 'fa' ? 'fa/' : 'library')}` },
+        { '@type': 'ListItem', position: 3, name: page.h1, item: url }
       ]
     }
   ];
+
+  /*
+   * The library additionally exposes its whole directory as an ItemList, so
+   * the single page that lists everything also hands crawlers every URL in
+   * one structured block. Built from PAGES itself — never a second list that
+   * could drift.
+   */
+  if (page.kind === 'library') {
+    const items = PAGES.filter((p) => p.kind !== 'library');
+    graph.push({
+      '@type': 'ItemList',
+      '@id': `${url}#directory`,
+      name: page.h1,
+      numberOfItems: items.length + 1,
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: 'FBT Swap — decentralized crypto exchange',
+          url: `${SITE}/${slugPath(V2_PAGE.slug)}`
+        },
+        ...items.map((p, i) => ({
+          '@type': 'ListItem',
+          position: i + 2,
+          name: p.h1,
+          url: `${SITE}/${slugPath(p.slug)}`
+        }))
+      ]
+    });
+  }
 
   /*
    * A guide is a BlogPosting, and it says so — with a real date, a named
@@ -1869,7 +2104,7 @@ function landingStructuredData(page, url) {
    * and a fake one is a lie a reviewer can catch in one click.
    */
   if (page.kind === 'post') {
-    const hubSlug = page.lang === 'fa' ? 'وبلاگ' : 'blog';
+    const hubSlug = page.lang === 'fa' ? 'fa/blog' : 'blog';
     graph.push({
       '@type': 'BlogPosting',
       '@id': `${url}#article`,
@@ -1880,7 +2115,7 @@ function landingStructuredData(page, url) {
       dateModified: page.dateModified || page.datePublished,
       author: { '@id': organizationId },
       publisher: { '@id': organizationId },
-      isPartOf: { '@id': `${SITE}/${encodeURIComponent(hubSlug)}#blog` },
+      isPartOf: { '@id': `${SITE}/${slugPath(hubSlug)}#blog` },
       mainEntityOfPage: { '@id': pageId },
       articleSection: 'Guides',
       image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
@@ -1904,7 +2139,7 @@ function landingStructuredData(page, url) {
         '@type': 'BlogPosting',
         headline: p.h1,
         description: p.description,
-        url: `${SITE}/${encodeURIComponent(p.slug)}`,
+        url: `${SITE}/${slugPath(p.slug)}`,
         datePublished: p.datePublished
       }))
     });
@@ -1958,19 +2193,28 @@ function landingStructuredData(page, url) {
 
 function render(page) {
   /*
-   * The Persian slug contains Arabic-script characters, which are legal in a
-   * URL path but MUST be percent-encoded before they go into `<link
-   * rel="canonical">` or a sitemap. An unencoded non-ASCII character makes a
-   * sitemap invalid per the spec, and an invalid sitemap is rejected whole —
-   * taking the English pages down with it.
-   *
-   * `encodeURIComponent` and not `encodeURI`: the latter leaves `/` alone,
-   * which is right for a whole path and wrong for a single segment.
+   * Every URL under .ir is now an ENGLISH path — the owner's requirement for
+   * better indexing («بعد از .ir باید انگلیسی باشد»). The Persian pages moved
+   * from Arabic-script slugs to `/fa/<english-slug>`; slugPath() encodes each
+   * segment on its own so the `/` survives while anything non-ASCII would
+   * still be percent-encoded (a sitemap with raw non-ASCII is invalid per the
+   * spec and rejected whole, taking every URL down with it).
    */
-  const url = `${SITE}/${encodeURIComponent(page.slug)}`;
+  const url = `${SITE}/${slugPath(page.slug)}`;
   const appUrl = `${SITE}${page.route}`;
   const lang = page.lang || 'en';
   const dir = page.dir || 'ltr';
+  const isLibrary = page.kind === 'library';
+  /* The language-mate of this page, when one exists: shown as a pill in the
+     top bar and in the footer, so a reader can always cross over. */
+  const langMate = (() => {
+    const group = ALTERNATES.find((g) => g.includes(page.slug) && g.length > 1);
+    if (!group) return null;
+    const other = group.find((slug) => slug !== page.slug);
+    if (!other) return null;
+    const mate = PAGES.find((x) => x.slug === other);
+    return mate ? { url: `${SITE}/${slugPath(mate.slug)}`, lang: mate.lang || 'en' } : null;
+  })();
 
   /*
    * hreflang, and specifically the RECIPROCAL pair.
@@ -1993,11 +2237,11 @@ function render(page) {
           ...pages.map(
             (other) =>
               `<link rel="alternate" hreflang="${other.lang || 'en'}" href="${esc(
-                `${SITE}/${encodeURIComponent(other.slug)}`
+                `${SITE}/${slugPath(other.slug)}`
               )}">`
           ),
           `<link rel="alternate" hreflang="x-default" href="${esc(
-            `${SITE}/${encodeURIComponent(defaultPage.slug)}`
+            `${SITE}/${slugPath(defaultPage.slug)}`
           )}">`
         ].join('\n');
       })()
@@ -2042,12 +2286,14 @@ function render(page) {
     ...POSTS.filter((p) => (p.lang || 'en') === lang),
     ...PAGES.filter((p) => p.kind === 'resource' && (p.lang || 'en') === lang)
   ];
+  /** True for the two directory pages themselves — they never list themselves. */
+  const isLibraryOf = (p) => p.kind === 'library';
   const hubIndex =
     page.kind === 'hub'
       ? `<section class="story-card panel reveal" style="--delay:170ms">
       <div class="post-index">
         ${hubGuides
-          .map((p) => {
+          .map((p, i) => {
             const meta = p.datePublished
               ? new Date(p.datePublished).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
                   year: 'numeric',
@@ -2055,33 +2301,90 @@ function render(page) {
                   day: 'numeric'
                 })
               : lang === 'fa' ? 'راهنمای موضوعی' : 'Topic guide';
-            return `<a class="post-index-item" href="/${encodeURIComponent(p.slug)}">
-          <span class="post-index-date">${esc(meta)}</span>
-          <h3>${esc(p.h1)}</h3>
-          <p>${esc(p.description)}</p>
+            return `<a class="post-index-item" href="/${slugPath(p.slug)}">
+          ${iconChip(p.icon || 'book', `icon-md ${FX_CYCLE[i % FX_CYCLE.length]}`)}
+          <span class="post-index-body">
+            <span class="post-index-date">${esc(meta)}</span>
+            <h3>${esc(p.h1)}</h3>
+            <p>${esc(p.description)}</p>
+          </span>
+          <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span>
         </a>`;
           })
           .join('\n        ')}
       </div>
     </section>`
       : '';
-  const postLinks = page.links?.length
-    ? `<section class="related-panel reveal" aria-labelledby="next-heading" style="--delay:300ms">
-    <div class="section-heading">
-      <p class="section-kicker">${esc(ui.readNext)}</p>
-      <h2 id="next-heading">${esc(ui.readNext)}</h2>
-    </div>
-    <div class="related-links">
-      ${page.links.map((l) => `<a href="${esc(l.href)}">${esc(l.text)} <span aria-hidden="true">\u2197</span></a>`).join('\n      ')}
+  /*
+   * THE LIBRARY DIRECTORY. Rendered from PAGES itself — grouped by topic,
+   * every card carrying its page icon, a language badge and the description.
+   * The flagship landing gets its own banner card on top, because it is the
+   * one page that shows the whole product rather than one topic.
+   */
+  const libraryMarkup = isLibrary
+    ? `<section class="library-panel panel reveal" aria-labelledby="library-heading" style="--delay:150ms">
+    <a class="lib-flagship" href="/${slugPath(V2_PAGE.slug)}">
+      ${iconChip('spark', 'icon-lg fx-breathe')}
+      <span class="lib-flagship-copy">
+        <span class="lib-flagship-kicker">${esc(ui.flagship)}</span>
+        <strong>FBT Swap — ${lang === 'fa' ? 'صرافی غیرمتمرکز و هوش مالی' : 'decentralized crypto exchange & financial OS'}</strong>
+        <span class="lib-flagship-hint">${esc(ui.flagshipHint)}</span>
+      </span>
+      <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span>
+    </a>
+    <div class="lib-groups">
+      ${TOPIC_ORDER.map((topicId) => {
+        /* Same-language pages first: the Persian directory leads with the
+           Persian pages, the English one with the English pages. */
+        const all = PAGES.filter((p) => p.topic === topicId && !isLibraryOf(p));
+        const members = [
+          ...all.filter((p) => (p.lang || 'en') === lang),
+          ...all.filter((p) => (p.lang || 'en') !== lang)
+        ];
+        if (!members.length) return '';
+        return `<div class="lib-group">
+        <h3 class="lib-group-title">${iconSvg('layers')}<span>${esc(TOPICS[topicId][lang])}</span></h3>
+        <div class="lib-grid">
+          ${members
+            .map((p, i) => `<a class="lib-card" href="/${slugPath(p.slug)}">
+            ${iconChip(p.icon || 'spark', `icon-md ${FX_CYCLE[i % FX_CYCLE.length]}`)}
+            <span class="lib-card-copy">
+              <span class="lib-card-top"><span class="lang-badge ${p.lang === 'fa' ? 'lang-fa' : 'lang-en'}">${p.lang === 'fa' ? 'فارسی' : 'EN'}</span>${p.kind === 'post' ? `<span class="lib-card-date">${esc(p.datePublished || '')}</span>` : ''}</span>
+              <h4>${esc(p.h1)}</h4>
+              <p>${esc(p.description)}</p>
+            </span>
+            <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span>
+          </a>`)
+            .join('\n          ')}
+        </div>
+      </div>`;
+      }).join('\n      ')}
     </div>
   </section>`
     : '';
-  const bodyExtra = page.kind === 'hub' ? hubIndex : postSections;
+  const postLinks = page.links?.length
+    ? `<section class="related-panel panel reveal" aria-labelledby="next-heading" style="--delay:120ms">
+    <div class="section-heading">
+      ${iconChip('book', 'icon-md fx-float')}
+      <div class="section-heading-copy">
+        <p class="section-kicker">${esc(ui.readNext)}</p>
+        <h2 id="next-heading">${esc(ui.readNext)}</h2>
+      </div>
+    </div>
+    <div class="related-links">
+      ${page.links.map((l) => `<a href="${esc(l.href)}"><span>${esc(l.text)}</span> <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span></a>`).join('\n      ')}
+    </div>
+  </section>`
+    : '';
+  const bodyExtra = page.kind === 'hub' ? hubIndex : isLibrary ? libraryMarkup : postSections;
   const codeSamplesMarkup = page.codeSamples?.length
-    ? `<section class="code-samples panel reveal" aria-labelledby="code-samples-heading" style="--delay:180ms">
+    ? `<section class="code-samples panel reveal" aria-labelledby="code-samples-heading" style="--delay:140ms">
       <div class="section-heading">
-        <p class="section-kicker">API</p>
-        <h2 id="code-samples-heading">${esc(page.lang === 'fa' ? 'نمونهٔ درخواست' : 'Request examples')}</h2>
+        ${iconChip('code', 'icon-md fx-tilt')}
+        <div class="section-heading-copy">
+          <p class="section-kicker">API</p>
+          <h2 id="code-samples-heading">${esc(page.lang === 'fa' ? 'نمونهٔ درخواست' : 'Request examples')}</h2>
+        </div>
       </div>
       <div class="code-sample-list">
         ${page.codeSamples.map((sample) => `<figure class="code-sample">
@@ -2091,11 +2394,20 @@ function render(page) {
       </div>
     </section>`
     : '';
-  const marketDashboardMarkup = page.marketDashboard ? renderMarketDashboard(lang) : '';
+  const marketDashboardMarkup = page.marketDashboard ? renderMarketDashboard(lang) : '' ;
   const marketDashboardScript = page.marketDashboard ? `<script>${renderMarketDashboardScript(lang)}</script>` : '';
+  /*
+   * "At a glance" cards. Each one now carries an animated icon chip and a
+   * monospace index; the icon is the page's own topic icon for the first
+   * card and a deterministic cycle after that, so builds are reproducible.
+   */
   const factCards = page.facts
     .map(
       ([label, value], index) => `<article class="fact-card" style="--item:${index}">
+        ${iconChip(
+          index === 0 ? page.icon || 'spark' : FACT_ICON_CYCLE[(index + 3) % FACT_ICON_CYCLE.length],
+          `icon-md ${FX_CYCLE[index % FX_CYCLE.length]}`
+        )}
         <span class="fact-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span>
         <h3>${esc(label)}</h3>
         <p>${esc(value)}</p>
@@ -2105,21 +2417,25 @@ function render(page) {
   const highlights = page.facts
     .slice(0, 3)
     .map(
-      ([label, value]) => `<div class="highlight">
-        <span>${esc(label)}</span>
+      ([label, value], i) => `<div class="highlight">
+        <span class="hl-dot" aria-hidden="true"></span>
+        <span class="hl-label">${esc(label)}</span>
         <strong>${esc(value)}</strong>
       </div>`
     )
     .join('\n      ');
   const siblingLinks = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
-    .map((p) => `<a href="/${encodeURIComponent(p.slug)}">${esc(p.h1)} <span aria-hidden="true">↗</span></a>`)
+    .map((p) => `<a href="/${slugPath(p.slug)}"><span>${esc(p.h1)}</span> <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span></a>`)
     .join('\n        ');
   const faqMarkup = page.faqs?.length
-    ? `<section class="faq-panel panel reveal" aria-labelledby="faq-heading" style="--delay:260ms">
+    ? `<section class="faq-panel panel reveal" aria-labelledby="faq-heading" style="--delay:140ms">
       <div class="section-heading">
-        <p class="section-kicker">FAQ</p>
-        <h2 id="faq-heading">${esc(ui.faq)}</h2>
-        <p>${esc(ui.faqHint)}</p>
+        ${iconChip('chat', 'icon-md fx-breathe')}
+        <div class="section-heading-copy">
+          <p class="section-kicker">FAQ</p>
+          <h2 id="faq-heading">${esc(ui.faq)}</h2>
+          <p>${esc(ui.faqHint)}</p>
+        </div>
       </div>
       <div class="faq-list">
         ${page.faqs
@@ -2141,10 +2457,13 @@ function render(page) {
    * notices until a manual action arrives.
    */
   const howToMarkup = page.howTo?.length
-    ? `<section class="howto-panel panel reveal" aria-labelledby="howto-heading" style="--delay:150ms">
+    ? `<section class="howto-panel panel reveal" aria-labelledby="howto-heading" style="--delay:120ms">
     <div class="section-heading">
-      <p class="section-kicker">${esc(page.lang === 'fa' ? 'گام‌به‌گام' : 'Step by step')}</p>
-      <h2 id="howto-heading">${esc(page.lang === 'fa' ? 'چطور انجام می‌شود' : 'How it works')}</h2>
+      ${iconChip('layers', 'icon-md fx-orbit')}
+      <div class="section-heading-copy">
+        <p class="section-kicker">${esc(page.lang === 'fa' ? 'گام‌به‌گام' : 'Step by step')}</p>
+        <h2 id="howto-heading">${esc(page.lang === 'fa' ? 'چطور انجام می‌شود' : 'How it works')}</h2>
+      </div>
     </div>
     <ol class="howto-list">
       ${page.howTo
@@ -2170,6 +2489,14 @@ function render(page) {
    * learns nothing about what the app does — the page has to be worth reading
    * on its own or it should not exist.
    */
+  /*
+   * ─── THE 2026 TEMPLATE ─────────────────────────────────────────────────────
+   * One shared design system for every SEO page: aurora-glass panels on a
+   * deep-space background, a strict spacing scale, animated line icons in
+   * fixed-size chips (they can never shift the layout), and a motion budget
+   * at the bottom that decides how much of that movement a phone ever paints.
+   * The CTA stays a plain anchor — the page is worth reading, not a doorway.
+   */
   return `<!doctype html>
 <html lang="${esc(lang)}" dir="${esc(dir)}">
 <head>
@@ -2180,7 +2507,7 @@ function render(page) {
 <link rel="canonical" href="${esc(url)}">
 ${hreflang}
 <meta name="robots" content="index, follow, max-image-preview:large">
-<meta name="theme-color" content="#06070c">
+<meta name="theme-color" content="#05060d">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
@@ -2214,426 +2541,726 @@ ${
 <style>
   :root {
     color-scheme: dark;
-    --ink: #edf2ff;
-    --muted: #aab5cf;
-    --quiet: #75819f;
-    --line: rgba(174, 191, 234, .16);
-    --glass: rgba(13, 17, 31, .72);
-    --glass-strong: rgba(13, 17, 31, .9);
-    --cyan: #4eeaff;
-    --violet: #9476ff;
-    --pink: #ff68ca;
-    --lime: #63f5bb;
+    --bg: #05060d;
+    --ink: #eef2ff;
+    --muted: #a9b4d0;
+    --quiet: #6f7d9e;
+    --line: rgba(168, 186, 236, .14);
+    --line-strong: rgba(168, 186, 236, .26);
+    --cy: #54e8ff;
+    --vi: #9b7bff;
+    --pi: #ff6ec7;
+    --li: #5ef2b8;
+    --am: #ffc35c;
+    --grad: linear-gradient(118deg, #54e8ff, #9b7bff 55%, #ff6ec7);
+    --panel: linear-gradient(150deg, rgba(21, 27, 51, .82), rgba(9, 12, 25, .68));
+    --panel-solid: linear-gradient(150deg, rgba(19, 24, 45, .97), rgba(9, 12, 25, .95));
+    --r-lg: 28px;
+    --r-md: 20px;
+    --r-sm: 14px;
+    --gap: clamp(16px, 2.4vw, 22px);
   }
   * { box-sizing: border-box; }
-  html { min-height: 100%; background: #04050b; scroll-behavior: smooth; }
+  html { min-height: 100%; background: var(--bg); scroll-behavior: smooth; }
   body {
     min-height: 100svh;
     margin: 0;
     overflow-x: hidden;
     background:
-      radial-gradient(900px 520px at 12% -8%, rgba(80, 63, 191, .20), transparent 62%),
-      radial-gradient(760px 500px at 96% 13%, rgba(0, 198, 255, .13), transparent 63%),
-      #04050b;
+      radial-gradient(950px 540px at 14% -9%, rgba(88, 68, 200, .22), transparent 62%),
+      radial-gradient(820px 520px at 94% 12%, rgba(0, 190, 250, .14), transparent 63%),
+      radial-gradient(700px 480px at 55% 115%, rgba(255, 110, 199, .07), transparent 65%),
+      var(--bg);
     color: var(--ink);
     font: 16px/${dir === 'rtl' ? '1.95' : '1.75'} ${
       dir === 'rtl' ? "'Vazirmatn', " : ''
     }system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   a { color: inherit; }
+  ::selection { background: rgba(84, 232, 255, .28); }
+
   .skip-link {
     position: fixed;
-    z-index: 20;
+    z-index: 30;
     inset-block-start: 10px;
     inset-inline-start: 10px;
-    transform: translateY(-180%);
-    padding: 9px 14px;
-    border-radius: 10px;
-    color: #041018;
-    background: var(--cyan);
+    transform: translateY(-220%);
+    padding: 10px 16px;
+    border-radius: 12px;
+    color: #051018;
+    background: var(--cy);
     font-weight: 800;
     text-decoration: none;
     transition: transform .18s ease;
   }
   .skip-link:focus { transform: translateY(0); }
+
+  /* ── ambient background: static art, cheap motion ─────────────────────── */
   .ambient { position: fixed; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
-  .ambient::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(4, 5, 11, .05), rgba(4, 5, 11, .92) 82%, #04050b);
-  }
   .ambient-grid {
     position: absolute;
-    inset: -35%;
-    opacity: .42;
+    inset: -32%;
+    opacity: .38;
     background-image:
-      linear-gradient(rgba(113, 127, 180, .11) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(113, 127, 180, .11) 1px, transparent 1px);
-    background-size: 54px 54px;
-    mask-image: radial-gradient(ellipse 68% 48% at 50% 26%, #000, transparent 76%);
-    transform: perspective(500px) rotateX(62deg) translateY(-10%);
-    animation: grid-drift 22s linear infinite;
+      linear-gradient(rgba(116, 130, 186, .10) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(116, 130, 186, .10) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 66% 46% at 50% 24%, #000, transparent 76%);
+    transform: perspective(520px) rotateX(61deg) translateY(-9%);
+    animation: grid-drift 26s linear infinite;
   }
   .orb {
     position: absolute;
-    width: clamp(260px, 35vw, 570px);
+    width: clamp(280px, 36vw, 580px);
     aspect-ratio: 1;
     border-radius: 50%;
-    filter: blur(24px);
-    opacity: .34;
+    filter: blur(18px);
+    opacity: .32;
     mix-blend-mode: screen;
   }
   .orb-one {
-    inset: -17% auto auto -13%;
-    background: radial-gradient(circle at 58% 52%, #8b5cff, transparent 66%);
-    animation: orb-one 18s ease-in-out infinite alternate;
+    inset: -16% auto auto -12%;
+    background: radial-gradient(circle at 58% 52%, #7b52ff, transparent 66%);
+    animation: orb-one 22s ease-in-out infinite alternate;
   }
   .orb-two {
-    inset: 12% -14% auto auto;
-    background: radial-gradient(circle at 42% 42%, #00d9ff, transparent 64%);
-    animation: orb-two 21s ease-in-out infinite alternate;
+    inset: 14% -13% auto auto;
+    background: radial-gradient(circle at 42% 42%, #00d5ff, transparent 64%);
+    animation: orb-two 26s ease-in-out infinite alternate;
   }
-  .orb-three {
-    inset: auto 18% -26% auto;
-    width: clamp(220px, 28vw, 470px);
-    background: radial-gradient(circle at 50% 50%, #e851c6, transparent 66%);
-    animation: orb-three 16s ease-in-out infinite alternate;
-  }
+
+  /* ── page column: one grid, one spacing scale ─────────────────────────── */
   .landing-page {
     position: relative;
     z-index: 1;
-    width: min(100% - 32px, 1060px);
+    display: grid;
+    gap: var(--gap);
+    width: min(100% - 36px, 1080px);
     margin: 0 auto;
-    padding: clamp(22px, 5vw, 58px) 0 72px;
+    padding: clamp(18px, 3.6vw, 40px) 0 clamp(56px, 8vw, 88px);
   }
-  .hero-panel,
-  .panel,
-  .risk-panel,
-  .related-panel,
-  footer {
+  .hero-panel, .panel, .risk-panel, footer {
     border: 1px solid var(--line);
-    background: linear-gradient(140deg, rgba(20, 26, 47, .86), rgba(9, 12, 24, .70));
-    box-shadow: 0 24px 80px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .045);
-    backdrop-filter: blur(16px);
+    background: var(--panel);
+    box-shadow: 0 26px 70px rgba(0, 0, 0, .30), inset 0 1px 0 rgba(255, 255, 255, .05);
+    backdrop-filter: blur(14px);
   }
+  .panel { padding: clamp(24px, 4.4vw, 44px); border-radius: var(--r-lg); }
+
+  /* ── hero ─────────────────────────────────────────────────────────────── */
   .hero-panel {
     position: relative;
     overflow: hidden;
     isolation: isolate;
-    padding: clamp(24px, 5vw, 54px);
-    border-radius: clamp(24px, 4vw, 38px);
+    padding: clamp(22px, 4.4vw, 46px) clamp(22px, 4.6vw, 50px) clamp(24px, 4.6vw, 48px);
+    border-radius: clamp(26px, 4vw, 40px);
   }
   .hero-panel::before {
     content: '';
     position: absolute;
     z-index: -1;
-    inset: -55% -14% auto auto;
-    width: min(680px, 72vw);
+    inset: -58% -16% auto auto;
+    width: min(660px, 72vw);
     aspect-ratio: 1;
-    border: 1px solid rgba(78, 234, 255, .22);
+    border: 1px dashed rgba(122, 150, 255, .26);
     border-radius: 50%;
-    box-shadow: 0 0 0 48px rgba(133, 104, 255, .045), 0 0 0 96px rgba(78, 234, 255, .025);
-    animation: halo-spin 32s linear infinite;
+    box-shadow: 0 0 0 52px rgba(133, 104, 255, .045), 0 0 0 104px rgba(84, 232, 255, .026);
+    animation: spin-slow 46s linear infinite;
   }
   .hero-panel::after {
     content: '';
     position: absolute;
     z-index: -1;
     inset: 0;
-    opacity: .7;
-    background: linear-gradient(110deg, transparent 24%, rgba(111, 237, 255, .08) 45%, transparent 61%);
-    transform: translateX(-120%);
-    animation: sheen 8s ease-in-out infinite;
+    opacity: .6;
+    background: linear-gradient(110deg, transparent 26%, rgba(111, 237, 255, .075) 46%, transparent 62%);
+    transform: translateX(-130%);
+    animation: sheen 9.5s ease-in-out infinite;
+  }
+  [dir="rtl"] .hero-panel::after { transform: translateX(130%); }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: clamp(24px, 4vw, 40px);
   }
   .crumb {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
     align-items: center;
-    margin: 0 0 clamp(30px, 5vw, 50px);
+    gap: 7px;
+    margin: 0;
     color: var(--quiet);
     font-size: 12px;
+    letter-spacing: .01em;
   }
-  .crumb a { color: var(--muted); text-underline-offset: 4px; }
-  .crumb a:hover { color: var(--cyan); }
-  .crumb span[aria-current] { max-width: min(600px, 68vw); overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
-  .brand-row { display: flex; align-items: center; gap: 12px; }
+  .crumb a { color: var(--muted); text-decoration: none; transition: color .18s ease; }
+  .crumb a:hover { color: var(--cy); }
+  .crumb-sep { opacity: .5; }
+  .crumb span[aria-current] { max-width: min(520px, 62vw); overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+  .lang-pill {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 13px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--muted);
+    background: rgba(10, 14, 30, .5);
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: border-color .2s ease, color .2s ease, transform .2s ease;
+  }
+  .lang-pill svg { width: 14px; height: 14px; color: var(--cy); }
+  .lang-pill:hover { border-color: rgba(84, 232, 255, .55); color: var(--ink); transform: translateY(-1px); }
+
+  .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 11px;
     color: var(--ink);
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 800;
-    letter-spacing: .015em;
+    letter-spacing: .01em;
     text-decoration: none;
   }
   .brand-mark {
     display: grid;
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     place-items: center;
     border: 1px solid rgba(119, 241, 255, .34);
     border-radius: 13px;
-    background: linear-gradient(145deg, rgba(78, 234, 255, .24), rgba(148, 118, 255, .24));
-    box-shadow: 0 9px 28px rgba(23, 209, 255, .14);
+    background: linear-gradient(145deg, rgba(84, 232, 255, .22), rgba(155, 123, 255, .22));
+    box-shadow: 0 10px 26px rgba(23, 200, 255, .16);
+    transition: transform .3s cubic-bezier(.16, 1, .3, 1);
   }
+  .brand:hover .brand-mark { transform: rotate(-6deg) scale(1.05); }
   .brand-mark img { width: 28px; height: 28px; border-radius: 9px; }
-  .hero-copy { max-width: 800px; margin-top: clamp(30px, 5vw, 58px); }
-  .eyebrow,
-  .section-kicker {
-    display: flex;
+  .pages-pill {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    margin: 0 0 13px;
-    color: var(--cyan);
+    padding: 9px 15px;
+    border: 1px solid rgba(155, 123, 255, .34);
+    border-radius: 999px;
+    color: #cdbdfc;
+    background: rgba(155, 123, 255, .09);
+    font-size: 12.5px;
+    font-weight: 750;
+    text-decoration: none;
+    transition: border-color .2s ease, background .2s ease, transform .2s ease;
+  }
+  .pages-pill svg { width: 15px; height: 15px; color: var(--vi); }
+  .pages-pill:hover { border-color: rgba(155, 123, 255, .66); background: rgba(155, 123, 255, .16); transform: translateY(-1px); }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: clamp(20px, 4vw, 48px);
+    margin-top: clamp(26px, 4.6vw, 50px);
+  }
+  .hero-copy { min-width: 0; max-width: 780px; }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 16px;
+    padding: 7px 15px;
+    border: 1px solid rgba(84, 232, 255, .26);
+    border-radius: 999px;
+    background: rgba(84, 232, 255, .065);
+    color: #9deeff;
     font-size: 11px;
     font-weight: 800;
-    letter-spacing: .11em;
+    letter-spacing: .10em;
     text-transform: uppercase;
   }
-  .eyebrow::before {
-    width: 8px;
-    height: 8px;
+  .eyebrow-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
     border-radius: 50%;
-    background: var(--lime);
-    box-shadow: 0 0 0 5px rgba(99, 245, 187, .12), 0 0 18px var(--lime);
-    content: '';
-    animation: pulse-dot 2.4s ease-in-out infinite;
+    background: var(--li);
+    animation: dot-breathe 3.4s ease-in-out infinite;
   }
-  h1,
-  h2,
-  h3,
-  p { margin-top: 0; }
+  h1, h2, h3, h4, p { margin-top: 0; }
   h1 {
-    max-width: 900px;
-    margin-bottom: 19px;
+    max-width: 860px;
+    margin-bottom: 20px;
     color: #f5f7ff;
-    font-size: clamp(32px, 6vw, 62px);
+    font-size: clamp(31px, 5.6vw, 58px);
     font-weight: 850;
-    letter-spacing: -.045em;
-    line-height: 1.12;
+    letter-spacing: -.04em;
+    line-height: 1.16;
     text-wrap: balance;
+  }
+  h1::after {
+    content: '';
+    display: block;
+    width: 92px;
+    height: 4px;
+    margin-top: 22px;
+    border-radius: 2px;
+    background: var(--grad);
   }
   .lede {
     max-width: 720px;
     margin-bottom: 0;
-    color: #c3cbe0;
-    font-size: clamp(16px, 2.1vw, 19px);
-    line-height: 1.85;
+    color: #c4cde3;
+    font-size: clamp(15.5px, 2vw, 18.5px);
+    line-height: ${dir === 'rtl' ? '2' : '1.8'};
     text-wrap: pretty;
   }
-  .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 31px; }
-  .cta,
-  .soft-cta {
+  .post-meta { margin: 14px 0 0; color: var(--quiet); font-size: 12.5px; letter-spacing: .01em; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .cta, .soft-cta {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 52px;
-    border-radius: 15px;
+    min-height: 54px;
+    border-radius: 16px;
+    font-size: 15px;
     font-weight: 800;
     text-decoration: none;
-    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+    transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease, color .24s ease;
   }
   .cta {
     position: relative;
     isolation: isolate;
     overflow: hidden;
-    gap: 12px;
-    padding: 13px 20px;
-    color: #041018;
-    background: linear-gradient(122deg, var(--cyan), #a8f7ff 42%, var(--violet));
-    box-shadow: 0 14px 34px rgba(51, 201, 255, .22);
+    gap: 11px;
+    padding: 14px 26px;
+    color: #061019;
+    background: linear-gradient(118deg, #54e8ff, #8f7bff 60%, #c86ef7);
+    box-shadow: 0 16px 40px rgba(80, 170, 255, .26), inset 0 1px 0 rgba(255, 255, 255, .4);
   }
+  .cta svg { width: 18px; height: 18px; }
   .cta::before {
     position: absolute;
     z-index: -1;
     inset: 0;
-    background: linear-gradient(110deg, transparent 22%, rgba(255, 255, 255, .72) 48%, transparent 72%);
+    background: linear-gradient(110deg, transparent 24%, rgba(255, 255, 255, .7) 48%, transparent 70%);
     content: '';
-    transform: translateX(-130%);
-    transition: transform .55s ease;
+    transform: translateX(-135%);
+    transition: transform .6s ease;
   }
-  .cta:hover { box-shadow: 0 18px 44px rgba(51, 201, 255, .35); transform: translateY(-2px); }
-  .cta:hover::before { transform: translateX(130%); }
-  .cta-arrow { font-size: 18px; line-height: 1; transition: transform .22s ease; }
+  [dir="rtl"] .cta::before { transform: translateX(135%); }
+  .cta:hover { box-shadow: 0 22px 52px rgba(80, 170, 255, .4); transform: translateY(-2px); }
+  .cta:hover::before { transform: translateX(135%); }
+  [dir="rtl"] .cta:hover::before { transform: translateX(-135%); }
+  .cta-arrow { font-size: 18px; line-height: 1; transition: transform .24s ease; }
   .cta:hover .cta-arrow { transform: translateX(4px); }
-  [dir="rtl"] .cta:hover .cta-arrow { transform: translateX(-4px); }
+  [dir="rtl"] .cta-arrow { transform: scaleX(-1); }
+  [dir="rtl"] .cta:hover .cta-arrow { transform: scaleX(-1) translateX(4px); }
   .soft-cta {
     gap: 9px;
-    padding: 13px 18px;
-    border: 1px solid rgba(169, 185, 228, .22);
+    padding: 14px 22px;
+    border: 1px solid var(--line-strong);
     color: var(--muted);
-    background: rgba(255, 255, 255, .025);
+    background: rgba(255, 255, 255, .026);
   }
-  .soft-cta:hover { border-color: rgba(78, 234, 255, .6); color: var(--ink); transform: translateY(-2px); }
+  .soft-cta:hover { border-color: rgba(84, 232, 255, .6); color: var(--ink); transform: translateY(-2px); }
+
+  /* the hero emblem: a floating icon medallion with two slow rings */
+  .hero-emblem { position: relative; display: grid; place-items: center; width: clamp(200px, 24vw, 280px); aspect-ratio: 1; }
+  .emblem-ring { position: absolute; inset: 0; border: 1px dashed rgba(122, 150, 255, .3); border-radius: 50%; animation: spin-slow 44s linear infinite; }
+  .emblem-ring-2 { inset: 13%; border-style: solid; border-color: rgba(84, 232, 255, .17); animation: spin-rev 62s linear infinite; }
+  .emblem-glow { position: absolute; inset: 24%; border-radius: 50%; background: radial-gradient(circle, rgba(84, 232, 255, .17), transparent 70%); animation: glow-breathe 7.5s ease-in-out infinite; }
+  .sparkle { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #cfeaff; animation: twinkle 6s ease-in-out infinite; }
+  .sparkle-a { inset: 9% 22% auto auto; }
+  .sparkle-b { inset: auto 12% 16% auto; animation-delay: 2s; }
+  .sparkle-c { inset: auto auto 8% 20%; animation-delay: 4s; }
+
   .highlight-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: clamp(36px, 6vw, 62px);
+    gap: 12px;
+    margin-top: clamp(30px, 5vw, 52px);
   }
   .highlight {
+    position: relative;
     min-width: 0;
-    padding: 15px;
+    padding: 15px 16px 14px;
     border: 1px solid rgba(163, 181, 227, .13);
-    border-radius: 16px;
-    background: rgba(4, 7, 17, .34);
+    border-radius: 17px;
+    background: rgba(5, 8, 18, .42);
+    transition: border-color .22s ease, transform .22s ease;
   }
-  .highlight span { display: block; margin-bottom: 5px; color: var(--quiet); font-size: 11px; font-weight: 750; }
-  .highlight strong { display: -webkit-box; overflow: hidden; color: #e4e9f7; font-size: 12px; font-weight: 650; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .panel,
-  .risk-panel,
-  .related-panel { margin-top: 18px; border-radius: 25px; }
-  .story-card { padding: clamp(24px, 4vw, 40px); }
-  .section-heading { max-width: 710px; }
-  .section-heading h2 { margin-bottom: 9px; color: #eff3ff; font-size: clamp(23px, 3vw, 31px); letter-spacing: -.025em; line-height: 1.25; }
-  .section-heading > p:last-child { margin-bottom: 0; color: var(--quiet); font-size: 14px; }
-  .story-copy { max-width: 770px; margin-top: 25px; }
-  .story-copy p { margin-bottom: 17px; color: #bdc6dc; font-size: 15.5px; line-height: 1.95; }
+  .highlight:hover { border-color: rgba(84, 232, 255, .4); transform: translateY(-2px); }
+  .hl-dot {
+    position: absolute;
+    inset-block-start: 17px;
+    inset-inline-start: 16px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--grad);
+    box-shadow: 0 0 12px rgba(84, 232, 255, .55);
+  }
+  .hl-label { display: block; margin: 0 0 6px; padding-inline-start: 17px; color: var(--quiet); font-size: 11px; font-weight: 780; letter-spacing: .04em; }
+  .highlight strong { display: -webkit-box; overflow: hidden; color: #e5eaf8; font-size: 12.5px; font-weight: 640; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+
+  /* ── icon chips: one size per role, four idle animations, four tones ──── */
+  .icon-chip {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(122, 205, 255, .24);
+    border-radius: 14px;
+    color: var(--cy);
+    background: linear-gradient(145deg, rgba(84, 232, 255, .13), rgba(155, 123, 255, .13));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 8px 20px rgba(20, 110, 200, .12);
+    transition: border-color .3s ease, color .3s ease, box-shadow .3s ease;
+  }
+  .icon-chip svg { width: 22px; height: 22px; }
+  .icon-md { width: 46px; height: 46px; border-radius: 15px; }
+  .icon-lg { width: 58px; height: 58px; border-radius: 18px; }
+  .icon-lg svg { width: 28px; height: 28px; }
+  .icon-xl { width: 92px; height: 92px; border-radius: 28px; border-color: rgba(122, 205, 255, .36); }
+  .icon-xl svg { width: 44px; height: 44px; }
+  /* tone cycle — every 2nd/3rd/4th chip in a list gets a different hue so a
+     grid of icons reads as a set, not a stamp */
+  :where(.facts-grid, .lib-grid, .post-index) > :nth-child(4n+2) .icon-chip { color: var(--vi); border-color: rgba(168, 140, 255, .3); background: linear-gradient(145deg, rgba(155, 123, 255, .16), rgba(84, 232, 255, .08)); }
+  :where(.facts-grid, .lib-grid, .post-index) > :nth-child(4n+3) .icon-chip { color: var(--li); border-color: rgba(94, 242, 184, .3); background: linear-gradient(145deg, rgba(94, 242, 184, .13), rgba(0, 200, 255, .07)); }
+  :where(.facts-grid, .lib-grid, .post-index) > :nth-child(4n+4) .icon-chip { color: var(--pi); border-color: rgba(255, 110, 199, .3); background: linear-gradient(145deg, rgba(255, 110, 199, .12), rgba(155, 123, 255, .08)); }
+  /* idle animations — transform/opacity only, all switched off below */
+  .fx-float { animation: fx-float 5.6s ease-in-out infinite alternate; }
+  .fx-breathe { animation: fx-breathe 4.8s ease-in-out infinite; }
+  .fx-tilt { animation: fx-tilt 6.6s ease-in-out infinite alternate; }
+  .fx-orbit::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: var(--li);
+    box-shadow: 0 0 9px var(--li);
+    animation: orbit-dot 9.5s linear infinite;
+  }
+
+  /* ── section headings ─────────────────────────────────────────────────── */
+  .section-heading { display: flex; align-items: flex-start; gap: 16px; max-width: 760px; }
+  .section-heading-copy { min-width: 0; }
+  .section-kicker {
+    margin: 0 0 6px;
+    color: var(--cy);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .section-heading h2 { margin-bottom: 6px; color: #eff3ff; font-size: clamp(22px, 3vw, 30px); font-weight: 820; letter-spacing: -.025em; line-height: 1.3; }
+  .section-heading > .section-heading-copy > p:last-child { margin-bottom: 0; color: var(--quiet); font-size: 13.5px; }
+
+  .story-copy { max-width: 780px; margin-top: 24px; }
+  .story-copy p { margin-bottom: 17px; color: #bcc5db; font-size: 15.5px; line-height: ${dir === 'rtl' ? '2.05' : '1.9'}; }
   .story-copy p:last-child { margin-bottom: 0; }
 
-  /* The step list the HowTo schema mirrors. Numbered with a monospace index
-     rather than a disc, because the order is the information. Logical
-     properties only (margin-inline-start, inset-inline-start) so RTL gets the
-     mirrored layout for free — the list is rendered in Persian too. */
-  .howto-panel { margin-top: 18px; border-radius: 25px; }
-  .howto-list { margin: 24px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; counter-reset: howto; }
-  .howto-list li { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; padding: 16px 17px; border: 1px solid rgba(163, 181, 227, .12); border-radius: 17px; background: rgba(12, 10, 30, .5); }
-  .howto-list h3 { margin: 0 0 7px; font-size: 14.5px; letter-spacing: -.01em; }
-  .howto-list p { margin: 0; color: #aeb8ce; font-size: 14px; line-height: 1.85; }
-  .howto-num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 700; color: #8b5cf6; padding-top: 2px; }
-
   /* ── guides ───────────────────────────────────────────────────────────── */
-  .post-meta { margin: 14px 0 0; color: #75819f; font-size: 12.5px; letter-spacing: .01em; }
-  .post-body { margin-top: 18px; border-radius: 25px; }
-  .post-block { margin-top: 30px; }
-  .post-block:first-child { margin-top: 6px; }
-  .post-block h2 { margin: 0 0 12px; font-size: clamp(19px, 2.4vw, 24px); line-height: 1.35; letter-spacing: -.015em; }
-  .post-block p { margin: 0 0 15px; color: #b6c0d6; font-size: 15px; line-height: 1.95; }
+  .post-body .post-block { margin-top: 30px; }
+  .post-body .post-block:first-child { margin-top: 8px; }
+  .post-block h2 { margin: 0 0 12px; font-size: clamp(18.5px, 2.4vw, 23.5px); line-height: 1.4; letter-spacing: -.015em; }
+  .post-block p { margin: 0 0 15px; color: #b6c0d6; font-size: 15px; line-height: ${dir === 'rtl' ? '2.05' : '1.9'}; }
   .post-block p:last-child { margin-bottom: 0; }
-  .post-index { display: grid; gap: 12px; margin-top: 24px; }
-  .post-index-item { display: block; padding: 17px 18px; border: 1px solid rgba(163, 181, 227, .12); border-radius: 17px; background: rgba(12, 10, 30, .5); text-decoration: none; transition: border-color .18s ease, transform .18s ease; }
-  .post-index-item:hover { border-color: rgba(148, 118, 255, .45); transform: translateY(-1px); }
-  .post-index-item h3 { margin: 0 0 7px; font-size: 15.5px; color: #edf2ff; letter-spacing: -.01em; }
-  .post-index-item p { margin: 0; color: #aeb8ce; font-size: 13.5px; line-height: 1.8; }
-  .post-index-date { display: block; margin-bottom: 8px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #75819f; }
-  .facts-panel { padding: clamp(24px, 4vw, 40px); }
-  .facts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+  .post-index { display: grid; gap: 13px; margin-top: 26px; }
+  .post-index-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    padding: 17px 18px;
+    border: 1px solid rgba(163, 181, 227, .13);
+    border-radius: var(--r-md);
+    background: rgba(8, 11, 24, .5);
+    text-decoration: none;
+    transition: border-color .2s ease, transform .2s ease, background .2s ease;
+  }
+  .post-index-item:hover { border-color: rgba(155, 123, 255, .5); background: rgba(12, 15, 34, .7); transform: translateY(-2px); }
+  .post-index-item:hover .icon-chip { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 0 22px rgba(120, 160, 255, .25); }
+  .post-index-body { min-width: 0; }
+  .post-index-date { display: block; margin-bottom: 6px; color: var(--quiet); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; letter-spacing: .04em; }
+  .post-index-item h3 { margin: 0 0 6px; color: #edf2ff; font-size: 15.5px; letter-spacing: -.01em; line-height: 1.45; }
+  .post-index-item p { margin: 0; overflow: hidden; color: #aeb8ce; font-size: 13px; line-height: 1.75; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+
+  /* ── library directory ────────────────────────────────────────────────── */
+  .lib-flagship {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    margin-top: 26px;
+    padding: 20px 22px;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    background: var(--panel-solid) padding-box, linear-gradient(120deg, rgba(84, 232, 255, .55), rgba(155, 123, 255, .55), rgba(255, 110, 199, .45)) border-box;
+    text-decoration: none;
+    transition: transform .22s ease, box-shadow .22s ease;
+  }
+  .lib-flagship:hover { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(90, 120, 255, .18); }
+  .lib-flagship-copy { display: grid; gap: 3px; min-width: 0; }
+  .lib-flagship-kicker { color: var(--cy); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .lib-flagship strong { color: #f2f5ff; font-size: clamp(15.5px, 2vw, 18px); letter-spacing: -.01em; }
+  .lib-flagship-hint { color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  .lib-groups { display: grid; gap: 26px; margin-top: 30px; }
+  .lib-group-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 13px;
+    color: #dbe3f7;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .lib-group-title svg { width: 16px; height: 16px; color: var(--vi); }
+  .lib-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+  .lib-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 15px;
+    padding: 17px 18px;
+    border: 1px solid rgba(163, 181, 227, .13);
+    border-radius: var(--r-md);
+    background: rgba(8, 11, 24, .5);
+    text-decoration: none;
+    transition: border-color .2s ease, transform .2s ease, background .2s ease;
+  }
+  .lib-card:hover { border-color: rgba(84, 232, 255, .46); background: rgba(11, 15, 32, .72); transform: translateY(-2px); }
+  .lib-card:hover .icon-chip { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 0 22px rgba(84, 232, 255, .22); }
+  .lib-card-copy { min-width: 0; }
+  .lib-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .lang-badge { padding: 2px 8px; border-radius: 999px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 700; letter-spacing: .05em; }
+  .lang-en { color: #9deeff; border: 1px solid rgba(84, 232, 255, .36); background: rgba(84, 232, 255, .07); }
+  .lang-fa { color: #cdbdfc; border: 1px solid rgba(155, 123, 255, .4); background: rgba(155, 123, 255, .09); }
+  .lib-card-date { color: var(--quiet); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; }
+  .lib-card h4 { margin: 0 0 5px; color: #edf2ff; font-size: 14.5px; font-weight: 780; letter-spacing: -.01em; line-height: 1.45; }
+  .lib-card p { margin: 0; overflow: hidden; color: #a7b1c8; font-size: 12.5px; line-height: 1.7; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .card-arrow { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 50%; color: var(--quiet); transition: color .2s ease, border-color .2s ease, transform .2s ease; }
+  .card-arrow svg { width: 14px; height: 14px; }
+  [dir="rtl"] .card-arrow svg { transform: scaleX(-1); }
+  a:hover > .card-arrow, .lib-card:hover .card-arrow, .lib-flagship:hover .card-arrow, .post-index-item:hover .card-arrow { color: var(--cy); border-color: rgba(84, 232, 255, .5); transform: translate(2px, -2px); }
+  [dir="rtl"] .lib-card:hover .card-arrow, [dir="rtl"] .lib-flagship:hover .card-arrow, [dir="rtl"] .post-index-item:hover .card-arrow, [dir="rtl"] a:hover > .card-arrow { transform: translate(-2px, -2px); }
+
+  /* ── facts ────────────────────────────────────────────────────────────── */
+  .facts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 26px; }
   .fact-card {
     position: relative;
     min-width: 0;
-    overflow: hidden;
-    padding: 21px 20px 19px;
+    padding: 21px 20px 20px;
     border: 1px solid rgba(164, 182, 229, .13);
-    border-radius: 19px;
-    background: linear-gradient(145deg, rgba(32, 40, 71, .45), rgba(9, 13, 27, .42));
-    transition: transform .24s ease, border-color .24s ease, background .24s ease;
+    border-radius: var(--r-md);
+    background: linear-gradient(148deg, rgba(30, 38, 70, .46), rgba(9, 13, 27, .42));
+    transition: transform .26s ease, border-color .26s ease, background .26s ease;
   }
-  .fact-card::after { position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: linear-gradient(var(--cyan), var(--violet)); content: ''; opacity: .72; }
-  .fact-card:hover { border-color: rgba(78, 234, 255, .42); background: linear-gradient(145deg, rgba(38, 51, 91, .64), rgba(9, 13, 27, .62)); transform: translateY(-4px); }
-  .fact-index { display: block; margin-bottom: 17px; color: rgba(148, 118, 255, .88); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
-  .fact-card h3 { margin-bottom: 7px; color: #edf1ff; font-size: 15px; }
-  .fact-card p { margin-bottom: 0; color: var(--muted); font-size: 13.5px; line-height: 1.75; }
-  .faq-panel { padding: clamp(24px, 4vw, 40px); }
-  .faq-list { margin-top: 24px; border-top: 1px solid var(--line); }
+  .fact-card:hover { border-color: rgba(84, 232, 255, .44); background: linear-gradient(148deg, rgba(37, 49, 90, .62), rgba(9, 13, 27, .6)); transform: translateY(-4px); }
+  .fact-card:hover .icon-chip { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 0 24px rgba(84, 232, 255, .24); }
+  .fact-card .icon-chip { margin-bottom: 16px; }
+  .fact-index { position: absolute; inset-block-start: 22px; inset-inline-end: 20px; color: rgba(155, 123, 255, .85); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+  .fact-card h3 { margin-bottom: 7px; color: #edf1ff; font-size: 15px; letter-spacing: -.01em; }
+  .fact-card p { margin-bottom: 0; color: var(--muted); font-size: 13.5px; line-height: 1.8; }
+
+  /* ── how-to rail ──────────────────────────────────────────────────────── */
+  .howto-list { position: relative; margin: 26px 0 0; padding: 0; list-style: none; display: grid; gap: 13px; counter-reset: howto; }
+  .howto-list::before {
+    content: '';
+    position: absolute;
+    inset-block: 26px;
+    inset-inline-start: 25px;
+    width: 1px;
+    background: linear-gradient(rgba(84, 232, 255, 0), rgba(122, 150, 255, .3) 18%, rgba(122, 150, 255, .3) 82%, rgba(84, 232, 255, 0));
+  }
+  .howto-list li { position: relative; display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 16px; align-items: start; padding: 17px 18px; border: 1px solid rgba(163, 181, 227, .12); border-radius: var(--r-md); background: rgba(8, 11, 24, .5); transition: border-color .2s ease, transform .2s ease; }
+  .howto-list li:hover { border-color: rgba(84, 232, 255, .4); transform: translateY(-2px); }
+  .howto-list h3 { margin: 0 0 7px; font-size: 15px; letter-spacing: -.01em; line-height: 1.5; }
+  .howto-list p { margin: 0; color: #aeb8ce; font-size: 13.5px; line-height: 1.9; }
+  .howto-num {
+    display: grid;
+    place-items: center;
+    width: 50px;
+    height: 50px;
+    border: 1px solid rgba(122, 205, 255, .28);
+    border-radius: 16px;
+    background: linear-gradient(150deg, rgba(20, 26, 50, .95), rgba(10, 13, 28, .95));
+    color: var(--cy);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    font-weight: 750;
+  }
+
+  /* ── faq ──────────────────────────────────────────────────────────────── */
+  .faq-list { margin-top: 26px; border-top: 1px solid var(--line); }
   .faq-list details { border-bottom: 1px solid var(--line); }
-  .faq-list summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; color: #e8edf9; cursor: pointer; font-size: 15px; font-weight: 730; line-height: 1.55; list-style: none; }
+  .faq-list summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 19px 2px; color: #e8edf9; cursor: pointer; font-size: 15px; font-weight: 740; line-height: 1.6; list-style: none; transition: color .18s ease; }
+  .faq-list summary:hover { color: var(--cy); }
   .faq-list summary::-webkit-details-marker { display: none; }
-  .faq-plus { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; border: 1px solid rgba(135, 150, 195, .26); border-radius: 9px; color: var(--cyan); font-size: 18px; font-weight: 400; transition: transform .2s ease, background .2s ease; }
-  details[open] .faq-plus { background: rgba(78, 234, 255, .11); transform: rotate(45deg); }
-  .faq-list details p { max-width: 750px; margin: -2px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.85; }
-  .risk-panel { display: flex; gap: 16px; padding: 20px 22px; border-color: rgba(255, 183, 70, .26); background: linear-gradient(135deg, rgba(77, 48, 18, .45), rgba(18, 15, 21, .65)); }
-  .risk-mark { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border: 1px solid rgba(255, 183, 70, .43); border-radius: 10px; color: #ffbf5d; font-family: ui-monospace, monospace; font-weight: 900; }
-  .risk-panel h2 { margin-bottom: 5px; color: #ffe4b5; font-size: 14px; }
-  .risk-panel p { margin-bottom: 0; color: #d1c3ac; font-size: 13px; line-height: 1.8; }
-  .related-panel { padding: clamp(24px, 4vw, 38px); }
-  .related-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 22px; }
-  .related-links a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 14px 15px; border: 1px solid rgba(163, 181, 227, .13); border-radius: 15px; color: #c5cee2; font-size: 13px; font-weight: 650; line-height: 1.55; text-decoration: none; transition: border-color .2s ease, color .2s ease, transform .2s ease; }
-  .related-links a:hover { border-color: rgba(78, 234, 255, .48); color: var(--cyan); transform: translateY(-2px); }
-  .related-links a span { color: var(--violet); font-size: 16px; }
-  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 18px; padding: 19px 21px; border-radius: 19px; color: var(--quiet); font-size: 12px; }
+  .faq-plus { display: grid; width: 29px; height: 29px; flex: 0 0 29px; place-items: center; border: 1px solid rgba(135, 150, 195, .28); border-radius: 10px; color: var(--cy); font-size: 18px; font-weight: 400; transition: transform .24s ease, background .24s ease, border-color .24s ease; }
+  details[open] .faq-plus { background: rgba(84, 232, 255, .12); border-color: rgba(84, 232, 255, .45); transform: rotate(45deg); }
+  .faq-list details p { max-width: 750px; margin: -3px 0 19px; color: var(--muted); font-size: 14px; line-height: 1.9; }
+
+  /* ── risk ─────────────────────────────────────────────────────────────── */
+  .risk-panel {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+    padding: 20px 22px;
+    border: 1px solid rgba(255, 195, 92, .3);
+    border-radius: var(--r-md);
+    background: linear-gradient(140deg, rgba(70, 46, 15, .5), rgba(16, 14, 22, .72));
+  }
+  .risk-panel .icon-chip { color: var(--am); border-color: rgba(255, 195, 92, .42); background: linear-gradient(145deg, rgba(255, 195, 92, .16), rgba(255, 110, 110, .08)); }
+  .risk-panel h2 { margin-bottom: 5px; color: #ffe4b5; font-size: 14px; letter-spacing: .01em; }
+  .risk-panel p { margin-bottom: 0; color: #d3c5ad; font-size: 13px; line-height: 1.85; }
+
+  /* ── related ──────────────────────────────────────────────────────────── */
+  .related-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+  .related-links a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 15px 16px;
+    border: 1px solid rgba(163, 181, 227, .13);
+    border-radius: 16px;
+    background: rgba(8, 11, 24, .45);
+    color: #c5cee2;
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.6;
+    text-decoration: none;
+    transition: border-color .2s ease, color .2s ease, transform .2s ease;
+  }
+  .related-links a > span:first-child { min-width: 0; }
+  .related-links a:hover { border-color: rgba(84, 232, 255, .5); color: var(--ink); transform: translateY(-2px); }
+
+  /* ── footer ───────────────────────────────────────────────────────────── */
+  footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 22px;
+    padding: 20px 24px;
+    border-radius: var(--r-md);
+    color: var(--quiet);
+    font-size: 12px;
+    line-height: 1.9;
+  }
   footer p { margin: 0; }
-  footer a { color: var(--muted); text-underline-offset: 4px; }
-  footer a:hover { color: var(--cyan); }
-  .reveal { animation: rise-in .75s cubic-bezier(.16, 1, .3, 1) both; animation-delay: var(--delay, 0ms); }
-  @keyframes rise-in { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes grid-drift { from { transform: perspective(500px) rotateX(62deg) translate3d(0, -10%, 0); } to { transform: perspective(500px) rotateX(62deg) translate3d(54px, -10%, 0); } }
-  @keyframes orb-one { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(11vw, 9vh, 0) scale(1.16); } }
-  @keyframes orb-two { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-12vw, 12vh, 0) scale(1.13); } }
-  @keyframes orb-three { from { transform: translate3d(0, 0, 0) scale(.92); } to { transform: translate3d(-8vw, -9vh, 0) scale(1.14); } }
-  @keyframes halo-spin { to { transform: rotate(360deg); } }
-  @keyframes sheen { 0%, 35% { transform: translateX(-130%); } 62%, 100% { transform: translateX(130%); } }
-  @keyframes pulse-dot { 0%, 100% { box-shadow: 0 0 0 5px rgba(99, 245, 187, .12), 0 0 13px var(--lime); } 50% { box-shadow: 0 0 0 8px rgba(99, 245, 187, .04), 0 0 22px var(--lime); } }
+  footer a { color: var(--muted); text-decoration: none; text-underline-offset: 4px; transition: color .18s ease; }
+  footer a:hover { color: var(--cy); }
+  .footer-nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .footer-nav a { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
+  .footer-nav svg { width: 13px; height: 13px; color: var(--vi); }
+
+  /* ── code samples (developer guide) ───────────────────────────────────── */
+  .code-sample-list { display: grid; gap: 17px; margin-top: 24px; }
+  .code-sample { min-width: 0; margin: 0; }
+  .code-sample figcaption { color: var(--muted); font-size: 13px; font-weight: 750; }
+  .code-sample pre { max-width: 100%; margin: 9px 0 0; padding: 17px; overflow: auto; border: 1px solid rgba(163, 181, 227, .14); border-radius: var(--r-sm); color: #d5e5ff; background: #070912; direction: ltr; text-align: left; tab-size: 2; }
+  .code-sample code { font: 12.5px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+
+  /* ── reveal: CSS fallback first, JS scroll-reveal enhances it ─────────── */
+  .reveal { animation: rise-in .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: var(--delay, 0ms); }
+  html.js .reveal { animation: none; opacity: 0; transform: translateY(26px); }
+  html.js .reveal.in {
+    opacity: 1;
+    transform: none;
+    transition: opacity .8s ease, transform .8s cubic-bezier(.16, 1, .3, 1);
+    transition-delay: var(--delay, 0ms);
+  }
+
+  @keyframes rise-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes grid-drift { from { transform: perspective(520px) rotateX(61deg) translate3d(0, -9%, 0); } to { transform: perspective(520px) rotateX(61deg) translate3d(56px, -9%, 0); } }
+  @keyframes orb-one { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(10vw, 8vh, 0) scale(1.15); } }
+  @keyframes orb-two { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-11vw, 10vh, 0) scale(1.12); } }
+  @keyframes spin-slow { to { transform: rotate(360deg); } }
+  @keyframes spin-rev { to { transform: rotate(-360deg); } }
+  @keyframes sheen { 0%, 38% { transform: translateX(-130%); } 64%, 100% { transform: translateX(130%); } }
+  @keyframes dot-breathe { 0%, 100% { opacity: .55; transform: scale(1); box-shadow: 0 0 0 0 rgba(94, 242, 184, .3); } 50% { opacity: 1; transform: scale(1.22); box-shadow: 0 0 0 5px rgba(94, 242, 184, 0); } }
+  @keyframes glow-breathe { 0%, 100% { opacity: .5; transform: scale(.96); } 50% { opacity: .95; transform: scale(1.05); } }
+  @keyframes twinkle { 0%, 100% { opacity: .18; transform: scale(.8); } 50% { opacity: .9; transform: scale(1.15); } }
+  @keyframes fx-float { from { transform: translateY(2.5px); } to { transform: translateY(-3.5px); } }
+  @keyframes fx-breathe { 0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 8px 20px rgba(20, 110, 200, .12); } 50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09), 0 8px 20px rgba(20, 110, 200, .12), 0 0 22px 1px rgba(84, 232, 255, .24); } }
+  @keyframes fx-tilt { from { transform: rotate(-3.5deg); } to { transform: rotate(3.5deg); } }
+  @keyframes orbit-dot { from { transform: rotate(0deg) translateY(-28px); } to { transform: rotate(360deg) translateY(-28px); } }
+
+  /* Letter-spacing tears Arabic-script glyphs apart — Persian renders with
+     tracking back at zero everywhere a kicker/label might carry it. */
+  [dir="rtl"] .eyebrow, [dir="rtl"] .section-kicker, [dir="rtl"] .lib-group-title,
+  [dir="rtl"] .lib-flagship-kicker, [dir="rtl"] .hl-label, [dir="rtl"] .fact-index,
+  [dir="rtl"] .post-index-date, [dir="rtl"] .lang-badge { letter-spacing: 0; }
+
+  @media (max-width: 900px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .hero-emblem { display: none; }
+  }
   @media (max-width: 680px) {
-    .landing-page { width: min(100% - 22px, 1060px); padding-top: 14px; }
-    .hero-panel { padding: 24px 20px 21px; border-radius: 24px; }
-    .crumb { margin-bottom: 31px; }
-    .crumb span[aria-current] { max-width: 56vw; }
-    h1 { font-size: clamp(31px, 10.2vw, 47px); }
-    .lede { font-size: 15.5px; }
+    :root { --gap: 14px; }
+    .landing-page { width: min(100% - 24px, 1080px); }
+    .topbar { margin-bottom: 24px; }
+    .crumb span[aria-current] { max-width: 52vw; }
+    h1 { font-size: clamp(29px, 9vw, 44px); }
+    h1::after { margin-top: 16px; }
     .hero-actions { display: grid; grid-template-columns: 1fr; }
     .cta, .soft-cta { width: 100%; }
-    .highlight-grid, .facts-grid, .related-links { grid-template-columns: 1fr; }
-    .howto-list li { padding: 14px 15px; }
-    .post-block { margin-top: 24px; }
-    .post-block p { font-size: 14.5px; line-height: 1.9; }
-    .highlight { padding: 13px 14px; }
-    .highlight strong { -webkit-line-clamp: 3; }
-    .panel, .risk-panel, .related-panel { border-radius: 21px; }
-    .fact-card { padding: 18px 17px; }
-    .risk-panel { padding: 18px; }
-    footer { display: block; line-height: 1.9; }
+    .highlight-grid { grid-template-columns: 1fr; }
+    .facts-grid, .related-links, .lib-grid { grid-template-columns: 1fr; }
+    .panel { padding: 22px 20px; border-radius: 22px; }
+    .lib-flagship { grid-template-columns: auto minmax(0, 1fr); }
+    .lib-flagship .card-arrow { display: none; }
+    .post-index-item { grid-template-columns: auto minmax(0, 1fr); }
+    .post-index-item .card-arrow { display: none; }
+    .howto-list::before { display: none; }
+    .howto-list li { grid-template-columns: 1fr; gap: 12px; }
+    .howto-num { width: 44px; height: 44px; border-radius: 14px; }
+    footer { display: block; }
     footer p + p { margin-top: 8px; }
+    .footer-nav { margin-top: 10px; }
   }
+
   /*
    * ─── MOTION BUDGET ─────────────────────────────────────────────────────────
-   * The same rule the bilingual landing learned the hard way: the background
-   * art stays, the movement goes. A phone painting a drifting grid, three
-   * travelling orbs, a rotating halo, a sweeping sheen and a pulsing live dot
-   * at the same time is a phone that drops frames while you scroll — and a
-   * dropped frame on a page that is mostly text reads as a flickering page,
-   * which is exactly the bug report that started this.
-   *
-   * Two selectors, no user-agent sniffing: a device that cannot hover is a
-   * device whose motion budget is worth spending on the content instead.
-   * Everything here is 'animation: none', so the artwork is still rendered —
-   * it just holds its first frame. Short finite animations (the .75s reveal,
-   * reduced-motion) are untouched.
+   * The hard-earned rule of this codebase: a device that cannot hover is a
+   * device whose frame budget is spent on reading, not on ambience. The art
+   * stays — grid, orbs, medallion — but every infinite animation holds its
+   * first frame, the blur kernels come off, and backdrop-filter is traded for
+   * near-opaque panels. Short finite reveals are untouched. No user-agent
+   * sniffing anywhere: one document, two budgets.
    */
   @media (hover: none), (max-width: 999px) {
-    .ambient-grid { animation: none; }
-    .orb-one, .orb-two, .orb-three { animation: none; }
-    .hero-panel::before { animation: none; }
-    .hero-panel::after { animation: none; opacity: 0; }
-    .live-dot { animation-duration: 5.2s; }
-    /*
-     * The blur is not free either: a 24px kernel over three full-page layers
-     * is a per-frame convolution of everything underneath them. They are
-     * radial gradients, which already fade to transparency, so on a phone the
-     * blur is traded for a slightly wider falloff.
-     */
-    .orb { filter: none; opacity: .26; }
-    /*
-     * 'backdrop-filter' on every panel means the compositor re-reads and
-     * blurs the page behind each card on every frame the page moves — on a
-     * document that is thousands of pixels tall. The panels were already
-     * 86% opaque over a near-black background, so the blur was buying
-     * almost nothing visible at a real per-frame cost.
-     */
-    .hero-panel, .panel, .risk-panel, .related-panel, footer { backdrop-filter: none; background: linear-gradient(140deg, rgba(19, 24, 44, .95), rgba(9, 12, 24, .92)); }
+    .ambient-grid, .orb-one, .orb-two { animation: none; }
+    .hero-panel::before, .hero-panel::after { animation: none; }
+    .hero-panel::after { opacity: 0; }
+    .eyebrow-dot, .emblem-glow, .sparkle { animation: none; }
+    .emblem-ring, .emblem-ring-2 { animation: none; }
+    .fx-float, .fx-breathe, .fx-tilt { animation: none; }
+    .fx-orbit::after { display: none; }
+    .orb { filter: none; opacity: .24; }
+    .hero-panel, .panel, .risk-panel, footer { backdrop-filter: none; background: var(--panel-solid); }
   }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
   }
-  .code-samples { margin-top: 18px; padding: clamp(24px, 4vw, 40px); border-radius: 25px; }
-  .code-sample-list { display: grid; gap: 17px; margin-top: 22px; }
-  .code-sample { min-width: 0; margin: 0; }
-  .code-sample figcaption { color: var(--muted); font-size: 13px; font-weight: 750; }
-  .code-sample pre { max-width: 100%; margin: 9px 0 0; padding: 17px; overflow: auto; border: 1px solid rgba(163, 181, 227, .14); border-radius: 14px; color: #d5e5ff; background: #070912; direction: ltr; text-align: left; tab-size: 2; }
-  .code-sample code { font: 12.5px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
   ${page.marketDashboard ? MARKET_DASHBOARD_STYLES : ''}
 </style>
 </head>
@@ -2643,33 +3270,50 @@ ${
   <span class="ambient-grid"></span>
   <span class="orb orb-one"></span>
   <span class="orb orb-two"></span>
-  <span class="orb orb-three"></span>
 </div>
 <main id="content" class="landing-page" tabindex="-1">
-  <header class="hero-panel reveal" style="--delay:40ms">
-    <nav class="crumb" aria-label="${esc(ui.breadcrumb)}">
-      <a href="${esc(SITE)}/">${esc(ui.home)}</a>
-      <span aria-hidden="true">/</span>
-      <span aria-current="page">${esc(page.h1)}</span>
-    </nav>
+  <header class="hero-panel reveal" style="--delay:20ms">
+    <div class="topbar">
+      <nav class="crumb" aria-label="${esc(ui.breadcrumb)}">
+        <a href="${esc(SITE)}/">${esc(ui.home)}</a>
+        <span class="crumb-sep" aria-hidden="true">/</span>
+        ${isLibrary
+          ? `<span aria-current="page">${esc(ui.library)}</span>`
+          : `<a href="${esc(SITE)}/${slugPath(lang === 'fa' ? 'fa/' : 'library')}">${esc(ui.library)}</a>
+        <span class="crumb-sep" aria-hidden="true">/</span>
+        <span aria-current="page">${esc(page.h1)}</span>`}
+      </nav>
+      ${langMate ? `<a class="lang-pill" href="${esc(langMate.url)}" aria-label="${esc(ui.langAria)}">${iconSvg('globe')}<span>${esc(ui.langVersion)}</span></a>` : ''}
+    </div>
 
     <div class="brand-row">
       <a class="brand" href="${esc(SITE)}/" aria-label="FBT Swap">
         <span class="brand-mark"><img src="/icon-192.png" alt="" width="28" height="28"></span>
         <span>FBT Swap</span>
       </a>
+      ${isLibrary ? '' : `<a class="pages-pill" href="${esc(SITE)}/${slugPath(lang === 'fa' ? 'fa/' : 'library')}">${iconSvg('grid')}<span>${esc(ui.allPages)}</span></a>`}
     </div>
 
-    <div class="hero-copy">
-      <p class="eyebrow">${esc(ui.eyebrow)}</p>
-      <h1>${esc(page.h1)}</h1>
-      <p class="lede">${esc(page.description)}</p>
-      ${postMeta}
-    </div>
-
-    <div class="hero-actions">
-      <a class="cta" href="${esc(appUrl)}"><span>${esc(page.ctaLabel || ui.ctaDefault)}</span><span class="cta-arrow" aria-hidden="true">→</span></a>
-      <a class="soft-cta" href="#facts"><span>${esc(ui.details)}</span><span aria-hidden="true">↓</span></a>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>${esc(ui.eyebrow)}</p>
+        <h1>${esc(page.h1)}</h1>
+        <p class="lede">${esc(page.description)}</p>
+        ${postMeta}
+        <div class="hero-actions">
+          <a class="cta" href="${esc(appUrl)}">${iconSvg('spark')}<span>${esc(page.ctaLabel || ui.ctaDefault)}</span><span class="cta-arrow" aria-hidden="true">\u2192</span></a>
+          ${isLibrary ? `<a class="soft-cta" href="#directory-top"><span>${esc(ui.details)}</span><span aria-hidden="true">\u2193</span></a>` : `<a class="soft-cta" href="#facts"><span>${esc(ui.details)}</span><span aria-hidden="true">\u2193</span></a>`}
+        </div>
+      </div>
+      <div class="hero-emblem" aria-hidden="true">
+        <span class="emblem-ring"></span>
+        <span class="emblem-ring emblem-ring-2"></span>
+        <span class="emblem-glow"></span>
+        <span class="sparkle sparkle-a"></span>
+        <span class="sparkle sparkle-b"></span>
+        <span class="sparkle sparkle-c"></span>
+        ${iconChip(page.icon || 'spark', 'icon-xl fx-float')}
+      </div>
     </div>
 
     <div class="highlight-grid" aria-label="${esc(ui.highlights)}">
@@ -2677,10 +3321,13 @@ ${
     </div>
   </header>
 
-  <section class="story-card panel reveal" aria-labelledby="story-heading" style="--delay:120ms">
+  <section class="story-card panel reveal" aria-labelledby="story-heading" style="--delay:60ms">
     <div class="section-heading">
-      <p class="section-kicker">FBT Swap</p>
-      <h2 id="story-heading">${esc(ui.story)}</h2>
+      ${iconChip(isLibrary ? 'grid' : 'spark', 'icon-md fx-breathe')}
+      <div class="section-heading-copy">
+        <p class="section-kicker">${isLibrary ? esc(ui.libraryKicker) : 'FBT Swap'}</p>
+        <h2 id="story-heading">${esc(ui.story)}</h2>
+      </div>
     </div>
     <div class="story-copy">
       ${page.body.map((paragraph) => `<p>${esc(paragraph)}</p>`).join('\n      ')}
@@ -2695,10 +3342,13 @@ ${
 
   ${howToMarkup}
 
-  <section id="facts" class="facts-panel panel reveal" aria-labelledby="facts-heading" style="--delay:190ms">
+  <section id="${isLibrary ? 'directory-top' : 'facts'}" class="facts-panel panel reveal" aria-labelledby="facts-heading" style="--delay:80ms">
     <div class="section-heading">
-      <p class="section-kicker">${esc(ui.highlights)}</p>
-      <h2 id="facts-heading">${esc(page.glanceLabel || ui.highlights)}</h2>
+      ${iconChip(page.icon || 'spark', 'icon-md fx-float')}
+      <div class="section-heading-copy">
+        <p class="section-kicker">${esc(ui.highlights)}</p>
+        <h2 id="facts-heading">${esc(page.glanceLabel || ui.highlights)}</h2>
+      </div>
     </div>
     <div class="facts-grid">
       ${factCards}
@@ -2707,8 +3357,8 @@ ${
 
   ${faqMarkup}
 
-  <section class="risk-panel reveal" aria-labelledby="risk-heading" style="--delay:320ms">
-    <span class="risk-mark" aria-hidden="true">!</span>
+  <section class="risk-panel reveal" aria-labelledby="risk-heading" style="--delay:100ms">
+    ${iconChip('alert', 'icon-md')}
     <div>
       <h2 id="risk-heading">${esc(ui.risk)}</h2>
       <p>${esc(page.riskText || ui.riskText)}</p>
@@ -2717,21 +3367,51 @@ ${
 
   ${postLinks}
 
-  <section class="related-panel reveal" aria-labelledby="related-heading" style="--delay:380ms">
+  ${isLibrary ? '' : `<section class="related-panel panel reveal" aria-labelledby="related-heading" style="--delay:110ms">
     <div class="section-heading">
-      <p class="section-kicker">FBT Swap</p>
-      <h2 id="related-heading">${esc(ui.related)}</h2>
+      ${iconChip('grid', 'icon-md fx-tilt')}
+      <div class="section-heading-copy">
+        <p class="section-kicker">FBT Swap</p>
+        <h2 id="related-heading">${esc(ui.related)}</h2>
+      </div>
     </div>
     <div class="related-links">
       ${siblingLinks}
     </div>
-  </section>
+  </section>`}
 
-  <footer class="reveal" style="--delay:440ms">
-    <p><a href="${esc(SITE)}/">FBT Swap</a> &middot; <a href="${esc(SITE)}/#/legal/privacy">Privacy</a> &middot; <a href="${esc(SITE)}/#/legal/terms">Terms</a></p>
-    <p>Fanous Bazaar Pishgam Co., Isfahan, Iran</p>
+  <footer class="reveal" style="--delay:120ms">
+    <p><a href="${esc(SITE)}/">FBT Swap</a> &middot; Fanous Bazaar Pishgam Co., Isfahan, Iran</p>
+    <nav class="footer-nav" aria-label="${esc(ui.breadcrumb)}">
+      <a href="${esc(SITE)}/${slugPath(lang === 'fa' ? 'fa/' : 'library')}">${iconSvg('grid')}<span>${esc(ui.library)}</span></a>
+      ${langMate ? `<a href="${esc(langMate.url)}">${iconSvg('globe')}<span>${esc(ui.langVersion)}</span></a>` : ''}
+      <a href="${esc(SITE)}/#/legal/privacy"><span>Privacy</span></a>
+      <a href="${esc(SITE)}/#/legal/terms"><span>Terms</span></a>
+    </nav>
   </footer>
 </main>
+<script>
+  /* Scroll reveal: the CSS-only rise-in above is the no-JS fallback; when a
+     browser has both JS and IntersectionObserver, panels animate as they
+     enter the viewport instead of all at once on load. Reduced-motion users
+     get everything immediately, with no transition. */
+  (function () {
+    var d = document.documentElement;
+    d.classList.add('js');
+    var els = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || !('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
+      });
+    }, { threshold: 0.06, rootMargin: '0px 0px -7% 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
 ${marketDashboardScript}
 </body>
 </html>
@@ -2740,12 +3420,70 @@ ${marketDashboardScript}
 
 /* -------------------------------------------------------------------------- */
 
+/*
+ * ─── MOVED: the old Arabic-script URLs ───────────────────────────────────────
+ * Every URL under the .ir domain is English now (owner requirement for better
+ * indexing). The Persian pages moved to /fa/<english-slug> and the flagship
+ * landing to /decentralized-crypto-exchange. The old addresses were live and
+ * indexed, so they get TWO layers of redirect:
+ *
+ *   1. vercel.json — real 308 server redirects. This is the one crawlers hit.
+ *   2. The static stubs below — a noindex document with a canonical pointing
+ *      at the new URL, a JS replace and a visible link. Insurance for any
+ *      host that serves dist/ without the Vercel routing config.
+ *
+ * The stubs are deliberately NOT meta-refresh redirects: an instant refresh
+ * page is the doorway-page pattern the wiring audit bans, and a JS replace +
+ * canonical is equally effective behind a real 308.
+ */
+const MOVED = {
+  'هشدار-قیمت-ارز-دیجیتال': 'fa/crypto-price-alerts-and-dca',
+  'تحلیل-تکنیکال-ارز-دیجیتال': 'fa/crypto-market-history-analysis',
+  'کیف-پول-غیرامانی': 'fa/non-custodial-wallet',
+  'سواپ-ارز-دیجیتال': 'fa/crypto-swap-without-kyc',
+  'سرمایه-گذاری-در-ارز-دیجیتال': 'fa/crypto-investing-yield-and-lending',
+  'سواپ-سولانا': 'fa/solana-token-swap',
+  'آموزش-ارز-دیجیتال': 'fa/crypto-education',
+  'آموزش-توسعه-دهندگان': 'fa/developers',
+  'بازار-کریپتو-نمودار-سیگنال': 'fa/crypto-market-charts-signals',
+  'سهام-جهانی-توکنی‌شده': 'fa/tokenized-global-stocks',
+  'کارمزد-سواپ-ارز-دیجیتال': 'fa/how-crypto-swap-fees-work',
+  'تفاوت-کیف-پول-امانی-و-غیرامانی': 'fa/custodial-vs-non-custodial-wallets',
+  'بدون-احراز-هویت-چه-چیزی-خصوصی-می-ماند': 'fa/what-stays-private-without-kyc',
+  'وبلاگ': 'fa/blog',
+  'صرافی-غیرمتمرکز': V2_PAGE.slug
+};
+function renderMovedStub(newSlug) {
+  const target = `${SITE}/${slugPath(newSlug)}`;
+  return `<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>انتقال به نشانی جدید | FBT Swap</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="${esc(target)}">
+<meta name="theme-color" content="#05060d">
+<script>window.location.replace(${JSON.stringify(target)} + (window.location.hash || ''));</script>
+<style>body{margin:0;min-height:100svh;display:grid;place-items:center;background:#05060d;color:#eef2ff;font:16px/2 system-ui,'Vazirmatn',sans-serif;text-align:center}main{padding:32px;max-width:420px}a{color:#54e8ff;font-weight:700}</style>
+</head>
+<body>
+<main>
+<p>این صفحه به نشانی تازهٔ انگلیسی منتقل شده است و اکنون به‌صورت خودکار باز می‌شود.</p>
+<p><a href="${esc(target)}">ادامهٔ مطلب در نشانی جدید</a></p>
+</main>
+</body>
+</html>
+`;
+}
+
 function main() {
   for (const page of PAGES) {
     /*
      * A DIRECTORY with index.html, not `slug.html`. Static hosts serve
      * `/slug/` from `/slug/index.html`, giving a clean URL with no extension
-     * — and a URL that ends in `.html` looks abandoned in 2026.
+     * — and a URL that ends in `.html` looks abandoned in 2026. Persian
+     * pages are nested one level down (`fa/<slug>/index.html`).
      */
     const dir = join(OUT, page.slug);
     mkdirSync(dir, { recursive: true });
@@ -2755,13 +3493,19 @@ function main() {
   /*
    * The flagship bilingual landing. It used to live in PAGES above as a
    * plain Persian guide; it is now the FBT Financial OS landing 2.0 with
-   * its own template and live market data. Same URL, so existing rankings,
-   * the Search Console history and the IndexNow submission list keep
-   * pointing at the right place.
+   * its own template and live market data. Its URL moved to the English
+   * slug /decentralized-crypto-exchange; the old address gets a 308 (see
+   * vercel.json) plus a static stub below.
    */
   const v2Dir = join(OUT, V2_PAGE.slug);
   mkdirSync(v2Dir, { recursive: true });
   writeFileSync(join(v2Dir, 'index.html'), renderLandingV2({ site: SITE }), 'utf8');
+
+  for (const [oldSlug, newSlug] of Object.entries(MOVED)) {
+    const dir = join(OUT, oldSlug);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'index.html'), renderMovedStub(newSlug), 'utf8');
+  }
 
   /*
    * Rewrite the sitemap so the new pages are actually discoverable. Submitting
@@ -2778,10 +3522,10 @@ function main() {
    */
   const urls = [
     `  <url>\n    <loc>${SITE}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
-    `  <url>\n    <loc>${SITE}/${encodeURIComponent(V2_PAGE.slug)}</loc>\n    <changefreq>${V2_PAGE.changefreq}</changefreq>\n    <priority>${V2_PAGE.priority}</priority>\n  </url>`,
+    `  <url>\n    <loc>${SITE}/${slugPath(V2_PAGE.slug)}</loc>\n    <changefreq>${V2_PAGE.changefreq}</changefreq>\n    <priority>${V2_PAGE.priority}</priority>\n  </url>`,
     ...PAGES.map(
       (p) =>
-        `  <url>\n    <loc>${SITE}/${encodeURIComponent(p.slug)}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>`
+        `  <url>\n    <loc>${SITE}/${slugPath(p.slug)}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>`
     )
   ];
 
