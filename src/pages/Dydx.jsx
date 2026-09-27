@@ -11,6 +11,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
 import '../styles/derivatives-glass.css';
+import { prepareDydxOnboardingNetwork } from '../lib/dydxOnboarding.js';
 import {
   DYDX_BUILDER_ADDRESS,
   DYDX_BUILDER_FEE_PPM,
@@ -139,13 +140,23 @@ export default function Dydx() {
     setBusy(true);
     setError(null);
     try {
-      const signer = wallet.getSigner?.();
+      /* The onboarding EIP-712 domain is explicitly Ethereum mainnet (chain 1).
+         A few mobile wallets silently return without showing the typed-data
+         prompt if their active chain disagrees with that domain. Switch first,
+         then verify the provider state before asking for the signature. */
+      await prepareDydxOnboardingNetwork(wallet);
+      const signer = (await wallet.ensureSigner?.()) || wallet.getSigner?.();
       const connected = await connectDydx(signer);
       setDydxAddress(connected.address);
       await refreshAccount(connected.address);
       haptic?.('success');
     } catch (e) {
-      setError(/reject|denied|cancel/i.test(String(e?.message)) ? 'REJECTED' : (e?.message || 'CONNECT_FAILED'));
+      const message = String(e?.message || e || 'CONNECT_FAILED');
+      const nestedCode = String(e?.code || e?.error?.code || '');
+      if (nestedCode === '4001' || /reject|denied|cancel/i.test(message)) setError('REJECTED');
+      else if (/DYDX_NETWORK_REQUIRED/.test(message)) setError('NETWORK_REQUIRED');
+      else if (/WALLET_RETURNED_UNSIGNED/.test(message)) setError('WALLET_RETURNED_UNSIGNED');
+      else setError(message || 'CONNECT_FAILED');
       haptic?.('error');
     } finally {
       setBusy(false);

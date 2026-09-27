@@ -315,10 +315,13 @@ export async function reopenRelay(eip, { withTimeout: race = null } = {}) {
  * the remaining budget collapses to this grace window, and the failure it
  * ends with names what happened: RETURNED_UNSIGNED, not NO_RESPONSE.
  *
- * 12 seconds is generous for a relay round-trip on a slow mobile network and
- * short enough that the user is not staring at a spinner after pressing Back.
+ * Thirty seconds covers both the Android relay-recovery path (up to 9 seconds)
+ * and slower WalletConnect responses from mobile wallets. The earlier 12-second
+ * window could expire at the same time as a dead relay was being restarted,
+ * misreporting a delayed but valid EIP-712 signature as unsigned. A genuine
+ * Back/cancel still ends far sooner than the full three-minute signing bound.
  */
-export const RETURN_GRACE_MS = 12_000;
+export const RETURN_GRACE_MS = 30_000;
 
 /**
  * Stop the signing clock while this document is not on screen, and collapse

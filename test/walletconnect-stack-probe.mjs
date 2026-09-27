@@ -97,6 +97,7 @@ import {
 } from '../src/lib/wc/trace.js';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../src/lib/chains.js';
 import {
+  RETURN_GRACE_MS,
   SIGN_ERRORS,
   classifySignError,
   guardEip1193,
@@ -1456,6 +1457,9 @@ export default async function run() {
    * that measures the user rather than the network.
    */
   {
+    t('the native returned-signature grace exceeds the full Android relay-restart budget',
+      RETURN_GRACE_MS >= 30_000 && RETURN_GRACE_MS > 9_000);
+
     const session = {
       namespaces: {
         eip155: {

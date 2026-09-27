@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07101e">
+<title>از سهام تا آن‌چین | نقشه بازارهای مدرن</title>
+<style>
+:root{color-scheme:dark;--bg:#06101e;--panel:#0b1726;--cyan:#68e4e5;--teal:#33bea9;--gold:#f2c77c;--muted:#9db0c4;--line:rgba(172,211,224,.13);--white:#eff7fb}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(ellipse at 78% 0%,#10273a 0%,#071321 42%,#040a12 100%);color:var(--white);font-family:Tahoma,"Noto Sans Arabic","Segoe UI",Arial,sans-serif}body{padding:26px 20px 34px}.shell{max-width:1440px;margin:auto}.masthead{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 auto 16px}.brand{display:flex;align-items:center;gap:12px}.brand-mark{width:42px;height:42px;border-radius:14px;border:1px solid rgba(104,228,229,.28);background:linear-gradient(140deg,rgba(104,228,229,.18),rgba(51,190,169,.06));display:grid;place-items:center;color:var(--cyan);font-weight:800;box-shadow:0 0 30px rgba(47,195,184,.12)}.brand-title{font-size:15px;font-weight:700;letter-spacing:.01em}.brand-sub{font-size:10px;color:#7e96a9;letter-spacing:.2em;margin-top:4px;direction:ltr;text-align:right}.mast-right{font-size:12px;color:#91a9bb;border:1px solid var(--line);background:rgba(12,26,42,.65);padding:9px 14px;border-radius:99px}.player{border:1px solid rgba(174,219,228,.17);border-radius:23px;overflow:hidden;background:#030811;box-shadow:0 28px 100px rgba(0,0,0,.45),0 0 60px rgba(40,195,187,.08)}.stage{position:relative;width:100%;aspect-ratio:16/9;background:#07101e;overflow:hidden}.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}.stage-shade{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 90px rgba(0,0,0,.27),inset 0 -100px 150px rgba(1,7,14,.23)}.stage-topline{position:absolute;top:18px;left:22px;right:22px;display:flex;align-items:center;justify-content:space-between;pointer-events:none}.live-pill,.chapter-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(223,246,247,.17);border-radius:99px;background:rgba(4,14,24,.48);backdrop-filter:blur(12px);padding:8px 12px;color:#e3f6f6;font-size:11px}.live-dot{width:7px;height:7px;border-radius:50%;background:#67e6d8;box-shadow:0 0 12px #67e6d8}.chapter-pill{color:#b6cbd4;direction:ltr}.controls{padding:15px 18px 17px;background:linear-gradient(180deg,#0c1827,#091421);border-top:1px solid rgba(255,255,255,.065)}.timeline-wrap{display:flex;align-items:center;gap:12px;margin-bottom:14px}.time{font:11px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;color:#9ab0c0;min-width:44px;text-align:center;direction:ltr}.timeline{height:5px;position:relative;flex:1;background:rgba(171,201,212,.16);border-radius:9px;overflow:hidden}.timeline-fill{height:100%;width:0;background:linear-gradient(90deg,#48caba,#67e4e5,#eec77b);border-radius:9px;transition:width .12s linear;box-shadow:0 0 14px rgba(104,228,229,.4)}.control-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.control-group{display:flex;align-items:center;gap:9px}.button{border:1px solid rgba(191,223,231,.15);color:#d9e9ef;background:rgba(13,28,44,.8);border-radius:12px;min-height:42px;padding:0 15px;font:600 12px Tahoma,"Segoe UI",sans-serif;cursor:pointer;transition:transform .18s,border-color .18s,background .18s}.button:hover{transform:translateY(-1px);border-color:rgba(104,228,229,.55);background:rgba(20,49,62,.85)}.button:disabled{opacity:.5;cursor:wait;transform:none}.button.primary{background:linear-gradient(135deg,#087f82,#176c78);border-color:rgba(105,235,224,.35);color:white;min-width:116px;box-shadow:0 8px 25px rgba(21,147,145,.16)}.button.export{border-color:rgba(238,194,116,.36);color:#f5dcae}.button-icon{font-size:15px;vertical-align:-1px;margin-left:5px}.volume{width:86px;accent-color:var(--cyan)}.chapter-name{color:#9cb1bf;font-size:11px;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.below{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:14px}.card{border:1px solid var(--line);background:linear-gradient(145deg,rgba(14,29,45,.86),rgba(8,18,30,.88));border-radius:17px;padding:17px 19px;min-height:93px}.card h2{font-size:13px;margin:0 0 8px;color:#d9ecef}.card p{font-size:12px;line-height:1.9;color:#97adbc;margin:0}.progress-chapters{display:flex;align-items:center;gap:6px;margin-top:12px}.chapter-dot{height:4px;flex:1;border-radius:9px;background:rgba(151,179,192,.18);transition:.25s}.chapter-dot.active{background:linear-gradient(90deg,#3cc6bc,#8ae7dc);box-shadow:0 0 12px rgba(72,202,190,.3)}.footer-note{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-top:12px;padding:0 3px;color:#748c9d;font-size:10px}.footer-note strong{color:#9eb4c4;font-weight:500}.toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,18px);opacity:0;pointer-events:none;background:#10273a;border:1px solid rgba(104,228,229,.28);color:#effafb;padding:11px 16px;border-radius:12px;font-size:12px;transition:.25s;z-index:10}.toast.show{opacity:1;transform:translate(-50%,0)}.download-link{color:var(--cyan);text-decoration:none}.hidden-audio{display:none}
+@media(max-width:760px){body{padding:12px 10px 24px}.masthead{margin-bottom:10px}.brand-mark{width:36px;height:36px}.brand-title{font-size:13px}.mast-right{font-size:10px;padding:7px 10px}.player{border-radius:15px}.stage-topline{top:8px;left:9px;right:9px}.live-pill,.chapter-pill{font-size:8px;padding:5px 8px}.below{grid-template-columns:1fr}.card{min-height:0;padding:13px 15px}.card p{font-size:11px}.control-row{flex-wrap:wrap}.control-group{gap:6px}.button{min-height:38px;padding:0 10px;font-size:10px}.button.primary{min-width:90px}.volume{width:60px}.chapter-name{max-width:95vw;order:3;width:100%;text-align:center}.footer-note{font-size:9px;flex-direction:column;align-items:flex-start;gap:6px}.time{min-width:38px;font-size:9px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead">
+    <div class="brand"><div class="brand-mark">م</div><div><div class="brand-title">نقشه بازارهای مدرن</div><div class="brand-sub">MARKET MAP · PERSIAN EDITION</div></div></div>
+    <div class="mast-right">فیلم آموزشی · حدود ۵ دقیقه و ۱۶ ثانیه</div>
+  </header>
+  <main>
+    <section class="player" aria-label="فیلم آموزشی بازارها">
+      <div class="stage"><canvas id="film" width="1920" height="1080" aria-label="تصاویر و عنوان فصل جاری"></canvas><div class="stage-shade"></div><div class="stage-topline"><div class="live-pill"><span class="live-dot"></span><span>آموزش تصویری</span></div><div class="chapter-pill" id="chapterPill">01 / 10</div></div></div>
+      <div class="controls">
+        <div class="timeline-wrap"><span class="time" id="currentTime">00:00</span><div class="timeline" aria-label="پیشرفت فیلم"><div class="timeline-fill" id="timelineFill"></div></div><span class="time" id="totalTime">05:16</span></div>
+        <div class="control-row">
+          <div class="control-group">
+            <button class="button primary" id="playButton" type="button"><span class="button-icon">▶</span> پخش فیلم</button>
+            <button class="button" id="prevButton" type="button" aria-label="فصل قبل">قبلی</button>
+            <button class="button" id="nextButton" type="button" aria-label="فصل بعد">بعدی</button>
+            <span class="chapter-name" id="chapterName">سهام؛ سهمی از یک شرکت</span>
+          </div>
+          <div class="control-group">
+            <label for="volume" style="font-size:10px;color:#91a7b7">صدا</label><input class="volume" id="volume" type="range" min="0" max="1" step="0.05" value="0.9" aria-label="بلندی صدا">
+            <button class="button export" id="exportButton" type="button"><span class="button-icon">⬇</span> خروجی ویدیو WebM</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="below">
+      <div class="card"><h2 id="summaryTitle">از سهم تا قرارداد</h2><p id="summaryText">در این فیلم، مفاهیم را از سهام تا معاملات آن‌چین به زبان روشن و با تأکید بر ریسک مرور می‌کنیم.</p><div class="progress-chapters" id="chapterDots"></div></div>
+      <div class="card"><h2>یادآوری مهم</h2><p>آموزش عمومی است، نه توصیه مالی. اهرم می‌تواند زیان را سریع‌تر کند. پیش از امضای هر پیام یا تراکنش، شبکه، دامنه، مقصد و مبلغ را بررسی کنید؛ عبارت بازیابی را هرگز به اشتراک نگذارید.</p></div>
+    </section>
+    <div class="footer-note"><span><strong>سهام · RWA · افق جهانی · فیوچرز · dYdX · آن‌چین</strong></span><span>صدا و تصاویر ساخته‌شده برای این آموزش · اطلاعات بازار متغیر است</span></div>
+  </main>
+</div>
+<audio id="voice" class="hidden-audio" preload="auto"></audio>
+<div class="toast" id="toast" role="status"></div>
+<script>
+(() => {
+  'use strict';
+  const segments = [
+    {title:'سهام؛ سهمی از یک شرکت', kicker:'01 · بازار سهام', image:'stocks.jpg', audio:'narration-01-stocks.mp3', seconds:36.2, summary:'سهم یعنی مشارکت در مالکیت یک شرکت؛ قیمت، ریسک و نقدشوندگی را جداگانه بسنجید.', bullets:['مالکیت بخشی از کسب‌وکار','سود و اصل سرمایه تضمین نیست','سفارش بازار با سفارش محدود فرق دارد'], key:'قیمت سهم می‌تواند با سود شرکت، نرخ بهره، خبر و عرضه‌وتقاضا تغییر کند.'},
+    {title:'پیش از خرید چه بسنجیم؟', kicker:'01 · بررسی سهم', image:'stocks.jpg', audio:'narration-01b-stock-checklist.mp3', seconds:22.1, summary:'به‌جای دنبال‌کردن شایعه یا رشد اخیر، شرکت، بدهی، ارزش‌گذاری و افق خود را بررسی کنید.', bullets:['درآمد، سود و بدهی شرکت','ارزش‌گذاری، نه فقط نمودار','تنوع ریسک؛ بدون تضمین سود'], key:'اندازه موقعیت را با توان تحمل افت و دلیل روشن برای ورود هماهنگ کنید.'},
+    {title:'دارایی واقعی، توکن دیجیتال', kicker:'02 · توکنیزه‌سازی RWA', image:'rwa.jpg', audio:'narration-02-rwa.mp3', seconds:36.1, summary:'توکن RWA نماینده یا ادعایی وابسته به دارایی بیرون از زنجیره است؛ نه لزوماً مالکیت مستقیم.', bullets:['ملک، طلا یا اوراق؛ با حق مشخص','صادرکننده و متولی دارایی مهم‌اند','بلاکچین ریسک حقوقی را حذف نمی‌کند'], key:'توکن، خودبه‌خود معادل مالکیت مستقیم دارایی فیزیکی نیست.'},
+    {title:'توکن‌سازی بدون افسانه', kicker:'02 · ارزیابی RWA', image:'rwa.jpg', audio:'narration-02b-rwa-checklist.mp3', seconds:24.8, summary:'پشتوانه، حق قانونی، بازخرید، نگهداری و نقدشوندگی را از اسناد معتبر بررسی کنید.', bullets:['حق دارنده در اسناد رسمی','مسیر بازخرید و کارمزدها','ریسک صادرکننده، متولی و قرارداد'], key:'اگر دقیقاً نمی‌دانید چه حقی می‌خرید، مکث کنید و سؤال بپرسید.'},
+    {title:'افق جهانی؛ فراتر از یک بازار', kicker:'03 · بازارهای جهانی', image:'global.jpg', audio:'narration-03-global.mp3', seconds:36.8, summary:'سهام، ارزها، کالاها و شاخص‌ها ساعت، نقدشوندگی و سازوکار اجرای یکسانی ندارند.', bullets:['سهام، ارز، فلزات و کالاها','دارایی نقدی با قرارداد مشتقه فرق دارد','Ostium در این مسیر از Arbitrum استفاده می‌کند'], key:'تنوع بازار بیشتر است؛ اما تنوع به معنی ریسک کمتر نیست.'},
+    {title:'ساعت، ارز و نقدشوندگی', kicker:'03 · افق جهانی', image:'global.jpg', audio:'narration-03b-global-checklist.mp3', seconds:23.0, summary:'ساعات بازار، تعطیلات، ارز قیمت‌گذاری و تازگی فید را پیش از هر سفارش کنترل کنید.', bullets:['جلسات و تعطیلات بازار','اختلاف قیمت خرید و فروش','تازگی فید و محدودیت دسترسی'], key:'اگر داده تازه و قابل‌تأیید نیست، قیمت قدیمی را مبنای معامله نگذارید.'},
+    {title:'فیوچرز؛ قرارداد، نه مالکیت', kicker:'04 · قراردادهای آتی', image:'futures.jpg', audio:'narration-04-futures.mp3', seconds:36.1, summary:'لانگ و شورت از تغییر قیمت اثر می‌گیرند؛ پرپچوال‌ها فاندینگ، وثیقه و لیکوئیدیشن دارند.', bullets:['لانگ و شورت؛ دو جهت بازار','اهرم، سود و زیان را بزرگ می‌کند','فاندینگ، لغزش و کارمزد را حساب کنید'], key:'در فیوچرز مالک دارایی پایه نیستید و ممکن است بخشی یا تمام وثیقه را از دست بدهید.'},
+    {title:'اهرم؛ ریسک را بزرگ می‌کند', kicker:'04 · مدیریت ریسک', image:'futures.jpg', audio:'narration-04b-futures-risk.mp3', seconds:24.6, summary:'زیان را به پول واقعی حساب کنید؛ اهرم بالا فرصت رایگان نیست و حد ضرر هم تضمین اجرا ندارد.', bullets:['اندازه اسمی با وثیقه فرق دارد','حرکت کوچک می‌تواند زیان بزرگ بسازد','گاهی بهترین معامله، معامله‌نکردن است'], key:'با پول ضروری یا قرضی وارد معامله اهرمی نشوید.'},
+    {title:'dYdX؛ دو زنجیره، دو نقش', kicker:'05 · dYdX', image:'dydx.jpg', audio:'narration-05-dydx.mp3', seconds:35.4, summary:'پیام اتصال روی Ethereum Mainnet امضا می‌شود؛ معامله روی زنجیره dYdX انجام می‌گیرد.', bullets:['EIP-712 برای پیام آنبوردینگ','chainId یک یعنی Ethereum Mainnet','کلید معاملاتی در حافظه نشست'], key:'امضای اتصال، تراکنش انتقال پول نیست؛ وثیقه هم جداگانه تأمین می‌شود.'},
+    {title:'آن‌چین؛ امضا یعنی مسئولیت', kicker:'06 · معاملات On-chain', image:'onchain.jpg', audio:'narration-06-onchain.mp3', seconds:40.8, summary:'در مسیرهای این برنامه، dYdX، افق جهانی و تب On-chain شبکه‌های متفاوتی دارند.', bullets:['On-chain Futures: Velocity روی Solana','Global Horizon / Ostium: Arbitrum','شبکه، قرارداد، توکن و مجوز را بخوانید'], key:'آموزش عمومی است، نه توصیه مالی؛ عبارت بازیابی را هرگز به کسی ندهید.'}
+  ];
+  const canvas = document.getElementById('film');
+  const ctx = canvas.getContext('2d');
+  const voice = document.getElementById('voice');
+  const playButton = document.getElementById('playButton');
+  const exportButton = document.getElementById('exportButton');
+  const fill = document.getElementById('timelineFill');
+  const images = {};
+  const totalSeconds = segments.reduce((sum, s) => sum + s.seconds, 0);
+  let current = 0, playing = false, recording = false, recordedChunks = [], recorder = null;
+  let sceneStartedAt = performance.now(), endCard = false, audioContext = null, audioDestination = null, audioNode = null, mediaStream = null;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (id) => document.getElementById(id);
+  const formatTime = (seconds) => { const n = Math.max(0, Math.floor(seconds || 0)); return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`; };
+  function toast(message) { const el=$('toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.classList.remove('show'),3400); }
+  function drawCover(img, progress, alpha=1) {
+    const W=canvas.width,H=canvas.height;
+    if (!img || !img.complete || !img.naturalWidth) { ctx.fillStyle='#071321';ctx.fillRect(0,0,W,H);return; }
+    const scale=Math.max(W/img.naturalWidth,H/img.naturalHeight)*(reduceMotion?1.02:1.04+progress*.075);
+    const dw=img.naturalWidth*scale,dh=img.naturalHeight*scale;
+    const drift=reduceMotion?0:Math.sin(progress*Math.PI)*26;
+    const dx=(W-dw)/2+drift,dy=(H-dh)/2;
+    ctx.globalAlpha=alpha;ctx.drawImage(img,dx,dy,dw,dh);ctx.globalAlpha=1;
+  }
+  function roundedRect(x,y,w,h,r,fillStyle,strokeStyle=null){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fillStyle;ctx.fill();if(strokeStyle){ctx.strokeStyle=strokeStyle;ctx.lineWidth=2;ctx.stroke();}}
+  function drawText(text,x,y,size,color,weight='400',align='right',maxWidth=850){ctx.save();ctx.direction='rtl';ctx.textAlign=align;ctx.textBaseline='alphabetic';ctx.font=`${weight} ${size}px Tahoma, "Noto Sans Arabic", "Segoe UI", Arial, sans-serif`;ctx.fillStyle=color;ctx.shadowColor='rgba(0,0,0,.28)';ctx.shadowBlur=14;ctx.fillText(text,x,y,maxWidth);ctx.restore();}
+  function drawFrame(now) {
+    const W=canvas.width,H=canvas.height,s=segments[current]||segments[0];
+    const local=Math.min(1,Math.max(0,(voice.currentTime||0)/Math.max(1,s.seconds)));
+    ctx.clearRect(0,0,W,H);drawCover(images[s.image],local,1);
+    if(current<segments.length-1&&local>.97)drawCover(images[segments[current+1].image],0,Math.min(1,(local-.97)/.03));
+    const left=ctx.createLinearGradient(0,0,1260,0);left.addColorStop(0,'rgba(4,11,20,.94)');left.addColorStop(.47,'rgba(5,14,24,.79)');left.addColorStop(1,'rgba(5,14,24,0)');ctx.fillStyle=left;ctx.fillRect(0,0,W,H);
+    const bottom=ctx.createLinearGradient(0,650,0,H);bottom.addColorStop(0,'rgba(3,9,17,0)');bottom.addColorStop(1,'rgba(3,9,17,.77)');ctx.fillStyle=bottom;ctx.fillRect(0,650,W,430);
+    ctx.fillStyle='rgba(104,228,229,.78)';ctx.fillRect(120,190,5,650);
+    drawText('نقشه بازارهای مدرن',930,205,25,'#89e7df','700','right',770);
+    drawText(s.kicker,930,283,27,'#efce91','600','right',770);
+    const titleWords=s.title.length>27?s.title.split('؛'):null;
+    if(titleWords&&titleWords.length>1){drawText(titleWords[0]+'؛',930,385,69,'#f2f8fa','700','right',790);drawText(titleWords.slice(1).join('؛'),930,472,58,'#f2f8fa','700','right',790);}
+    else drawText(s.title,930,405,65,'#f2f8fa','700','right',790);
+    const startY=titleWords&&titleWords.length>1?570:510;
+    s.bullets.forEach((line,i)=>{
+      const y=startY+i*66;
+      ctx.beginPath();ctx.arc(914,y-10,5,0,Math.PI*2);ctx.fillStyle=i===0?'#e9c781':'#64dcd5';ctx.fill();
+      drawText(line,890,y,30,'#c7d8e0','400','right',740);
+    });
+    roundedRect(145,890,1570,104,22,'rgba(4,15,25,.68)','rgba(203,232,237,.13)');
+    drawText(s.key,1660,954,29,'#f3f6ee','500','right',1440);
+    drawText('آموزش عمومی · نه توصیه مالی',1660,1032,17,'rgba(213,229,232,.68)','400','right',600);
+    const progress=(current+local)/segments.length;
+    roundedRect(120,1050,1680,5,4,'rgba(196,223,228,.18)');
+    roundedRect(120,1050,1680*progress,5,4,'#54d6cc');
+    if(endCard){ctx.fillStyle='rgba(3,10,18,.52)';ctx.fillRect(0,0,W,H);roundedRect(210,285,1500,430,38,'rgba(7,20,32,.78)','rgba(119,222,214,.24)');drawText('از سهام تا آن‌چین',1500,430,74,'#f4f8f5','700','right',1120);drawText('آگاهانه بررسی کنید؛ مسئولانه تصمیم بگیرید.',1500,520,39,'#83e5db','500','right',1120);drawText('پایان · آموزش عمومی، نه توصیه مالی',1500,615,25,'#b2c4cb','400','right',1120);}
+    requestAnimationFrame(drawFrame);
+  }
+  segments.forEach((s,i)=>{const img=new Image();img.src=s.image;images[s.image]=img;const dot=document.createElement('span');dot.className='chapter-dot'+(i===0?' active':'');dot.title=s.title;$('chapterDots').appendChild(dot);});
+  requestAnimationFrame(drawFrame);
+  function updateInterface(){
+    const s=segments[current]||segments[0];
+    $('chapterPill').textContent=`${String(current+1).padStart(2,'0')} / ${String(segments.length).padStart(2,'0')}`;
+    $('chapterName').textContent=s.title;$('summaryTitle').textContent=s.kicker;$('summaryText').textContent=s.summary;
+    [...$('chapterDots').children].forEach((dot,i)=>dot.classList.toggle('active',i===current));
+    const elapsed=segments.slice(0,current).reduce((a,x)=>a+x.seconds,0)+(Number.isFinite(voice.currentTime)?voice.currentTime:0);
+    fill.style.width=`${Math.min(100,elapsed/totalSeconds*100)}%`;$('currentTime').textContent=formatTime(elapsed);$('totalTime').textContent=formatTime(totalSeconds);
+    playButton.innerHTML=playing?'<span class="button-icon">Ⅱ</span> مکث':'<span class="button-icon">▶</span> پخش فیلم';
+  }
+  async function startSegment(index,offset=0,autoplay=true){
+    if(index<0||index>=segments.length)return;
+    current=index;endCard=false;sceneStartedAt=performance.now();voice.pause();voice.src=segments[index].audio;voice.load();updateInterface();
+    await new Promise(resolve=>{if(voice.readyState>=1)return resolve();voice.addEventListener('loadedmetadata',resolve,{once:true});voice.addEventListener('error',resolve,{once:true});setTimeout(resolve,5000);});
+    if(offset>0&&Number.isFinite(voice.duration))voice.currentTime=Math.min(offset,Math.max(0,voice.duration-.1));
+    if(autoplay){try{await voice.play();playing=true;}catch(e){playing=false;toast('برای پخش، یک‌بار دکمهٔ پخش را لمس کنید.');}}
+    updateInterface();
+  }
+  async function play(){
+    if(endCard||current===segments.length-1&&voice.ended){current=0;await startSegment(0,0,true);return;}
+    if(!voice.src){await startSegment(0,0,true);return;}
+    try{if(audioContext?.state==='suspended')await audioContext.resume();await voice.play();playing=true;endCard=false;}catch{toast('پخش صدا ممکن نشد؛ دوباره تلاش کنید.');}
+    updateInterface();
+  }
+  function pause(){voice.pause();playing=false;updateInterface();}
+  playButton.addEventListener('click',()=>playing?pause():play());
+  $('prevButton').addEventListener('click',()=>{const wasPlaying=playing;startSegment(Math.max(0,current-1),0,wasPlaying);});
+  $('nextButton').addEventListener('click',()=>{const wasPlaying=playing;startSegment(Math.min(segments.length-1,current+1),0,wasPlaying);});
+  $('volume').addEventListener('input',e=>{voice.volume=Number(e.target.value);});voice.volume=.9;
+  voice.addEventListener('play',()=>{playing=true;updateInterface();});voice.addEventListener('pause',()=>{playing=false;updateInterface();});
+  voice.addEventListener('timeupdate',updateInterface);
+  voice.addEventListener('ended',async()=>{
+    if(current<segments.length-1){await startSegment(current+1,0,true);return;}
+    playing=false;endCard=true;updateInterface();
+    if(recording)setTimeout(()=>{if(recorder?.state==='recording')recorder.stop();},2600);
+  });
+  window.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target.tagName!=='BUTTON'&&e.target.tagName!=='INPUT'){e.preventDefault();playing?pause():play();}});
+  async function setupRecorder(){
+    if(!window.MediaRecorder||!canvas.captureStream){toast('ضبط مستقیم WebM در این مرورگر پشتیبانی نمی‌شود؛ فیلم را پخش کنید و از ضبط صفحه استفاده کنید.');return false;}
+    if(!audioContext){audioContext=new(window.AudioContext||window.webkitAudioContext)();audioDestination=audioContext.createMediaStreamDestination();audioNode=audioContext.createMediaElementSource(voice);audioNode.connect(audioDestination);audioNode.connect(audioContext.destination);}
+    if(audioContext.state==='suspended')await audioContext.resume();
+    const videoStream=canvas.captureStream(30);mediaStream=new MediaStream([...videoStream.getVideoTracks(),...audioDestination.stream.getAudioTracks()]);
+    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(x=>MediaRecorder.isTypeSupported(x));
+    if(!mime){toast('این مرورگر کدک WebM لازم را ندارد. در Chrome یا Edge باز کنید.');return false;}
+    recorder=new MediaRecorder(mediaStream,{mimeType:mime,videoBitsPerSecond:5_000_000,audioBitsPerSecond:160_000});recordedChunks=[];
+    recorder.ondataavailable=e=>{if(e.data&&e.data.size)recordedChunks.push(e.data);};
+    recorder.onstop=()=>{
+      recording=false;exportButton.disabled=false;playButton.disabled=false;$('prevButton').disabled=false;$('nextButton').disabled=false;exportButton.innerHTML='<span class="button-icon">⬇</span> خروجی ویدیو WebM';
+      const blob=new Blob(recordedChunks,{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='market-map-persian.webm';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60_000);toast('ویدیوی WebM آماده و دانلود شد.');mediaStream?.getTracks().forEach(t=>t.stop());
+    };
+    recorder.onerror=()=>{recording=false;exportButton.disabled=false;playButton.disabled=false;$('prevButton').disabled=false;$('nextButton').disabled=false;toast('ضبط ویدیو در مرورگر متوقف شد.');};return true;
+  }
+  exportButton.addEventListener('click',async()=>{
+    if(recording)return;
+    exportButton.disabled=true;exportButton.textContent='در حال آماده‌سازی…';
+    const ok=await setupRecorder();if(!ok){exportButton.disabled=false;exportButton.innerHTML='<span class="button-icon">⬇</span> خروجی ویدیو WebM';return;}
+    try{playButton.disabled=true;$('prevButton').disabled=true;$('nextButton').disabled=true;current=0;endCard=false;await startSegment(0,0,false);await audioContext.resume();recording=true;recorder.start(1000);exportButton.textContent='در حال ضبط فیلم…';await voice.play();playing=true;updateInterface();toast('ضبط آغاز شد؛ تا پایان فیلم این صفحه را نبندید.');}
+    catch{if(recorder?.state==='recording')recorder.stop();else{exportButton.disabled=false;playButton.disabled=false;$('prevButton').disabled=false;$('nextButton').disabled=false;recording=false;toast('شروع ضبط ممکن نشد؛ ابتدا پخش فیلم را امتحان کنید.');}}
+  });
+  updateInterface();
+})();
+</script>
+</body>
+</html>

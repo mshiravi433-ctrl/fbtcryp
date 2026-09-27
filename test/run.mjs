@@ -808,6 +808,15 @@ console.log('▸ probing FBT Intent AI — later-phase 31–100 (in-process work
   if (Array.isArray(laterRows)) report('intent-ai later-phase', laterRows);
 }
 
+/* The dYdX onboarding EIP-712 payload is for Ethereum mainnet even though the
+   order account lives on dYdX Chain. Verify the wallet's active chain before
+   requesting a signature, including the delayed-chainChanged mobile case. */
+console.log('▸ probing dYdX onboarding network preparation…');
+{
+  const { default: dydxRows } = await import('./dydx-onboarding-probe.mjs');
+  report('dYdX onboarding', dydxRows);
+}
+
 /* ------------------------------ 0b. WalletConnect stack ---------------------- */
 /* The whole wallet-connect stack (src/lib/wc/), against the real source with
    only the external boundary faked: sockets, fetch, storage, window and the

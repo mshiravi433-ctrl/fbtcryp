@@ -6594,7 +6594,7 @@
     "tradingAccount": "dYdX Chain account",
     "notConnected": "Not connected",
     "connect": "Connect dYdX",
-    "connectNote": "Your EVM wallet signs the official onboarding message. The derived dYdX key exists only in memory and is never sent to FBT or stored.",
+    "connectNote": "The wallet switches to Ethereum Mainnet for dYdX's official onboarding signature. This is a message signature, not a transaction; the derived dYdX key stays in memory and is never sent to FBT or stored.",
     "equity": "Account equity",
     "marketUnavailable": "The dYdX indexer is unavailable. Orders are disabled instead of using stale data.",
     "market": "Market",
@@ -6621,6 +6621,8 @@
     "confirmRisk": "This broadcasts a real order to dYdX Chain. IOC market orders may fill partially or at a worse price up to the displayed slippage limit.",
     "err": {
       "REJECTED": "You rejected the onboarding signature. Nothing was sent.",
+      "NETWORK_REQUIRED": "dYdX onboarding must be signed on Ethereum Mainnet. Approve the wallet network switch and try Connect dYdX again; no signature or transaction has been sent.",
+      "WALLET_RETURNED_UNSIGNED": "The wallet returned without a signature, so dYdX onboarding did not finish and nothing was sent. Keep the wallet open, sign “dYdX Chain Onboarding,” and wait for the app to finish connecting before returning; then retry.",
       "NO_SIGNER": "Unlock or reconnect your EVM wallet.",
       "CONNECT_FAILED": "Could not create the dYdX signing session.",
       "NOT_CONNECTED": "Connect dYdX first.",
