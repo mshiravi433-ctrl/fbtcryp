@@ -210,8 +210,10 @@ async function loadClient() {
  * said chain 1. Wallets refuse that mismatch (MetaMask: «Provided chainId
  * must match the active chainId»; Trust and most mobile wallets drop it
  * without drawing a prompt). The user saw the wallet open with nothing to
- * sign, came back, and the signing guard correctly reported
- * WALLET_RETURNED_UNSIGNED — through ethers' «could not coalesce error».
+ * sign, came back, and the signing guard reported WALLET_RETURNED_UNSIGNED
+ * through ethers' «could not coalesce error». That code was only a timeout
+ * heuristic, not proof of an unsigned return. The guard now retains the
+ * pending request across app switches so relay recovery can deliver it.
  *
  * dydx.trade itself switches the wallet to Ethereum before asking (v4-web
  * `useMatchingEvmNetwork` in its key-generation step). So does this, now:
