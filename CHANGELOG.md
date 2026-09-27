@@ -1,3 +1,13 @@
+# ۲۰۲۶-۰۹-۲۷ — مدار dYdX: «اتصال dYdX» دیگر WALLET_RETURNED_UNSIGNED نمی‌دهد — کیف پول اول به اتریوم می‌رود
+
+جزئیات: [2026-09-27-dydx-onboarding-ethereum-switch-fa.md](2026-09-27-dydx-onboarding-ethereum-switch-fa.md).
+
+- **ریشه:** امضای آنبوردینگ dYdX دامنهٔ `chainId: 1` دارد، اما کیف پول روی BNB Chain (پیش‌فرض اپ) بود؛ کیف‌پول‌ها این ناهمخوانی را رد یا بی‌صدا حذف می‌کنند ⇒ هیچ صفحهٔ امضایی نمی‌آمد و گارد `WALLET_RETURNED_UNSIGNED` می‌داد.
+- **رفع:** مثل dydx.trade، اول سوییچ به اتریوم (در WalletConnect محلی و بی‌پنجره)، بعد `eth_signTypedData_v4` خام با chainId عددی، تأیید امضا با آدرس متصل، و برگرداندن شبکه. امضا بایت‌به‌بایت همان قبلی است ⇒ آدرس dYdX کاربران عوض نمی‌شود.
+- **پایداری:** اتصال دیگر به RPC validator وابسته نیست (lazy + fallback kingnodes → polkachu)؛ پیام‌های خطای فارسی روشن و نمایش مرحله روی دکمه.
+- **بررسی زنده:** dYdX، افق جهانی (Ostium) و آن‌چین (Velocity) روی production زنده و AVAILABLE.
+- **تست:** `test/dydx-onboarding-probe.mjs` (۱۲ بررسی) در `npm test`؛ `vite build` سبز.
+
 # ۲۰۲۶-۰۹-۲۵ — FeeRouter به هوش مصنوعی وصل شد: هر دو سطح AI حالا می‌دانند «کارمزد از قرارداد می‌گذرد یا نه»
 
 جزئیات: [2026-09-25-feerouter-ai-connection-FA.md](2026-09-25-feerouter-ai-connection-FA.md).
