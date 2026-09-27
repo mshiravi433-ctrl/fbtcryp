@@ -18,7 +18,7 @@
  *   3. the signature equals what ethers' signTypedData produced before this
  *      change — so the derived dYdX address is unchanged for every user;
  *   4. the derived dYdX address is a valid dydx1… bech32 address;
- *   5. a refused switch, a returned-unsigned wallet and a 4001 each map to
+ *   5. a refused switch, a legacy return-timeout code and a 4001 each map to
  *      the right `dydx.err.*` code; the WC wallet is put back on its chain.
  *
  * No network.
@@ -167,7 +167,7 @@ console.log('dYdX onboarding probe');
     requestDydxOnboardingSignature({ getProvider: () => c.w, address: signer.address, switchChain: c.switchChain }),
     (e) => classifyDydxError(e) === 'RETURNED_UNSIGNED'
   );
-  ok('returned without signing → RETURNED_UNSIGNED');
+  ok('legacy provider return-timeout code → RETURNED_UNSIGNED');
 
   const d = fakeWallet({ startChain: 1, reject: true });
   await assert.rejects(

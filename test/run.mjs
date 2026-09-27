@@ -60,6 +60,10 @@ import './futures-engine-probe.mjs';
    the dydx.trade shape, the signature (hence the dYdX account) is unchanged,
    and every failure is named instead of «could not coalesce error». */
 import './dydx-onboarding-probe.mjs';
+/* Isolate the virtual clock from the other probes in this process. */
+execFileSync(process.execPath, ['--test', 'test/dydx-wallet-return.test.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
 /* The central brain's turn probe: every §42 scenario (A–J) against the real
    engines with only the external boundary faked. It belongs in `npm test`
    because the failure it catches — a confident answer built on unread data — is a

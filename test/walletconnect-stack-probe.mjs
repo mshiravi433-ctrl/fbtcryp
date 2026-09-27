@@ -1660,11 +1660,9 @@ export default async function run() {
     }
 
     {
-      /* THE RETURN WITHOUT AN ANSWER («وقتی می‌زنی که امضا کنی و برمی‌گردی
-         بدون انجام کار، هنوز منتظر می‌ماند»): the document hides (the wallet
-         came to the front), then shows again (the user pressed Back) and no
-         response ever arrives. The wait must collapse to the grace window and
-         end with a code that names the return — not run out the full budget. */
+      /* A return is not a rejection: a wallet may already have signed while
+         the relay is still recovering. No answer still hits the original
+         bounded wait, but it must not claim the user left without signing. */
       const provider = makeProvider();
       provider.request = () => new Promise(() => {});
       const listeners = new Set();
@@ -1674,7 +1672,7 @@ export default async function run() {
         removeEventListener: (name, fn) => { listeners.delete(fn); }
       };
       const fire = (state) => { doc.visibilityState = state; for (const fn of listeners) fn(); };
-      const guarded = guardEip1193(provider, { timeoutMs: 5_000, hardCapMs: 10_000, returnGraceMs: 40, doc });
+      const guarded = guardEip1193(provider, { timeoutMs: 150, hardCapMs: 1_000, doc });
       const started = Date.now();
       const pending = guarded.request({ method: 'eth_sendTransaction', params: [] }).then(
         () => null, (error) => error
@@ -1685,15 +1683,14 @@ export default async function run() {
       fire('visible');
       const thrown = await pending;
       const took = Date.now() - started;
-      t('coming back from the wallet without an answer ends the wait quickly', took < 1_000);
-      t('and the failure names the return, not a network guess',
-        thrown?.code === SIGN_ERRORS.RETURNED_UNSIGNED && thrown?.signError === true);
+      t('an unanswered return keeps the original bounded wait', took >= 150 && took < 1_000);
+      t('and reports a missing response, not an unsigned claim',
+        thrown?.code === SIGN_ERRORS.NO_RESPONSE && thrown?.signError === true);
       t('the visibility listener is removed once the request settles', listeners.size === 0);
     }
 
     {
-      /* A tab switch on a request that never left the page (desktop QR) must
-         NOT shorten anything: only the hide→show pair counts as a return. */
+      /* A stray visible event on a desktop request must not affect it. */
       const provider = makeProvider();
       provider.request = () => new Promise((resolve) => setTimeout(() => resolve('0xok'), 120));
       const listeners = new Set();
@@ -1702,7 +1699,7 @@ export default async function run() {
         addEventListener: (name, fn) => { if (name === 'visibilitychange') listeners.add(fn); },
         removeEventListener: (name, fn) => { listeners.delete(fn); }
       };
-      const guarded = guardEip1193(provider, { timeoutMs: 5_000, hardCapMs: 10_000, returnGraceMs: 20, doc });
+      const guarded = guardEip1193(provider, { timeoutMs: 5_000, hardCapMs: 10_000, doc });
       const pending = guarded.request({ method: 'eth_sendTransaction', params: [] });
       await new Promise((r) => setTimeout(r, 10));
       for (const fn of listeners) fn(); /* a stray visible→visible event */

@@ -224,11 +224,8 @@ export function pauseBound(
     /**
      * SHORTEN the remaining budget — the mirror of `extend()`.
      *
-     * Used when the document comes BACK from a wallet without an answer: the
-     * user pressed Back out of the wallet instead of approving or rejecting.
-     * Nothing will ever settle that request from the wallet side, so the wait
-     * must end soon, with a code the UI can name («you came back without
-     * signing»), instead of running out the full three-minute budget.
+     * An explicit caller deadline may shrink a wait. Wallet visibility is
+     * NOT such a deadline: approval and cancellation both return focus.
      *
      * Only ever shrinks — a `ms` larger than the current remainder is a no-op,
      * so calling it from a visibility handler can never grant time.

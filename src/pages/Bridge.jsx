@@ -242,10 +242,9 @@ export default function Bridge() {
    * Reported: «وقتی می‌زنی که امضا کنی و برمی‌گردی بدون انجام کار، هنوز منتظر
    * می‌ماند بدون اینکه بفهمد لغو شده». Two things fix it:
    *
-   *   1. The signing boundary (lib/wc/signing.js) now collapses the wait to a
-   *      short grace window the moment this document comes BACK from the
-   *      wallet, and ends it with WALLET_RETURNED_UNSIGNED — a sentence, not a
-   *      three-minute spinner.
+   *   1. The signing boundary keeps the original bounded request alive on
+   *      return, so a delayed approval is not discarded while the relay
+   *      recovers. Visibility alone cannot distinguish approval from Back.
    *   2. This page never trusts the wallet alone. `runToken` names the attempt
    *      in flight; a «لغو انتظار» button bumps it, so whatever the abandoned
    *      promise eventually resolves to is ignored, and the button is the
