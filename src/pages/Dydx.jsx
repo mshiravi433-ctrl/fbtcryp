@@ -14,6 +14,7 @@ import '../styles/derivatives-glass.css';
 import {
   DYDX_BUILDER_ADDRESS,
   DYDX_BUILDER_FEE_PPM,
+  classifyDydxError,
   connectDydx,
   disconnectDydx,
   dydxFeeUsd,
@@ -134,21 +135,42 @@ export default function Dydx() {
     setAccountLive(r.live);
   };
 
+  /* Which step of the connect is on screen: switching the wallet to
+     Ethereum, waiting for the signature, or deriving the dYdX key. */
+  const [connectStage, setConnectStage] = useState(null);
+
   const connect = async () => {
     if (!wallet.isConnected) return setConnectOpen(true);
     setBusy(true);
     setError(null);
+    setConnectStage(null);
     try {
-      const signer = wallet.getSigner?.();
-      const connected = await connectDydx(signer);
+      /*
+       * The onboarding typed data is bound to Ethereum mainnet (domain
+       * chainId 1). A wallet sitting on BNB Chain — this app's default —
+       * refuses or silently drops it, which is the reported
+       * WALLET_RETURNED_UNSIGNED. connectDydx moves the wallet to Ethereum
+       * first, exactly like dydx.trade does. The in-app vault signs locally
+       * and has no active chain to disagree with, so it is not switched.
+       */
+      const isLocal = wallet.mode === 'local';
+      const connected = await connectDydx({
+        getProvider: () => wallet.getEip1193Provider?.() || null,
+        address: wallet.address,
+        switchChain: wallet.switchChain,
+        requireChain: !isLocal,
+        restoreChain: wallet.mode === 'wc',
+        onStage: setConnectStage
+      });
       setDydxAddress(connected.address);
       await refreshAccount(connected.address);
       haptic?.('success');
     } catch (e) {
-      setError(/reject|denied|cancel/i.test(String(e?.message)) ? 'REJECTED' : (e?.message || 'CONNECT_FAILED'));
+      setError(classifyDydxError(e));
       haptic?.('error');
     } finally {
       setBusy(false);
+      setConnectStage(null);
     }
   };
 
@@ -224,7 +246,7 @@ export default function Dydx() {
           {dydxAddress ? (
             <button className="btn btn-ghost btn-sm" onClick={() => { disconnectDydx(); setDydxAddress(null); setAccount(null); }}>{t('wallet.disconnect')}</button>
           ) : (
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={connect}>{busy ? t('common.loading') : t('dydx.connect')}</button>
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={connect}>{busy ? (connectStage ? t(`dydx.stage.${connectStage}`, { defaultValue: t('common.loading') }) : t('common.loading')) : t('dydx.connect')}</button>
           )}
         </div>
         {dydxAddress && (

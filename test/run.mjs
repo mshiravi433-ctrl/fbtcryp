@@ -55,6 +55,11 @@ import './shop-revenue-probe.mjs';
    engine's liquidation model, the router's "never on FBT revenue" law, the
    tx state machine and the server encoder pinned to the SDK golden vectors. */
 import './futures-engine-probe.mjs';
+/* dYdX onboarding («اتصال dYdX → WALLET_RETURNED_UNSIGNED»): the wallet is
+   moved to Ethereum before the chain-1 typed data is requested, the payload is
+   the dydx.trade shape, the signature (hence the dYdX account) is unchanged,
+   and every failure is named instead of «could not coalesce error». */
+import './dydx-onboarding-probe.mjs';
 /* The central brain's turn probe: every §42 scenario (A–J) against the real
    engines with only the external boundary faked. It belongs in `npm test`
    because the failure it catches — a confident answer built on unread data — is a
