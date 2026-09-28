@@ -133,8 +133,12 @@ export function candidateWallets(events = [], limit = 4) {
 export async function discoverLiveTraders({ now = Date.now(), chains = 3, perChain = 8, source = bsRecentStableSwappers } = {}) {
   if (!DISCOVERY_CHAINS.length) return [];
   const slot = Math.floor(now / REFRESH_AFTER_MS);
-  const picked = Array.from({ length: Math.min(chains, DISCOVERY_CHAINS.length) },
-    (_, i) => DISCOVERY_CHAINS[(slot + i) % DISCOVERY_CHAINS.length]);
+  // Ethereum anchors every cycle (deepest, most reliable indexer); the other
+  // slots rotate so successive cycles widen coverage across L2s.
+  const anchor = DISCOVERY_CHAINS.includes(1) ? [1] : [];
+  const rest = DISCOVERY_CHAINS.filter((c) => !anchor.includes(c));
+  const picked = [...anchor, ...Array.from({ length: Math.max(0, Math.min(chains, DISCOVERY_CHAINS.length) - anchor.length) },
+    (_, i) => rest[(slot + i) % rest.length])].filter((c, i, a) => c != null && a.indexOf(c) === i);
   // Up to two USD stablecoins per chain (e.g. USDC + USDT): a single token's
   // latest page is dominated by pool↔router hops, the second doubles yield.
   const reads = picked.flatMap((chain) => USD_QUOTES[chain].slice(0, 2).map((quote) => ({ chain, quote })));
