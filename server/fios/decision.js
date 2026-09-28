@@ -27,7 +27,7 @@ import { resolveExecutionAuthority, limitsFromContext } from './executionAuthori
 
 export const DECISION_RECORD_SCHEMA = 'fbt.fi.decision.v1';
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 
 export function createDecisionEngine({ collections, evidence, traceStore, confidenceEngine, observability = null, log = () => {}, now = () => Date.now() } = {}) {
   /**
@@ -191,8 +191,12 @@ export function createDecisionEngine({ collections, evidence, traceStore, confid
     if (crossAsset?.regime?.regime && ['RISK_OFF', 'RISK_OFF_LEANING'].includes(crossAsset.regime.regime)) {
       conditions.push(`cross-asset regime is ${crossAsset.regime.regime.replace(/_/g, ' ').toLowerCase()} (${crossAsset.observedClasses.join(', ')} observed)`);
     }
-    if (globalContext?.smartMoneyNetUsd !== null && globalContext?.smartMoneyNetUsd !== undefined && Math.abs(globalContext.smartMoneyNetUsd) >= 1_000_000 && globalContext.smartMoneyNetUsd < 0) {
-      conditions.push('smart money is net distributing over the last window (observation, not a veto)');
+    const verifiedGlobal = globalIntel?.domains?.smart_money?.data?.verifiedStatus === 'observed';
+    const verifiedDigest = smartMoney?.signals?.verifiedStatus === 'observed';
+    if ((verifiedGlobal || verifiedDigest) && globalContext?.smartMoneyNetUsd !== null
+      && globalContext?.smartMoneyNetUsd !== undefined && Math.abs(globalContext.smartMoneyNetUsd) >= 1_000_000
+      && globalContext.smartMoneyNetUsd < 0) {
+      conditions.push('verified paired swaps show net distribution in the sampled window (observation, not a veto)');
     }
     /* First-class smart-money conditions from the dedicated intel digest —
        these are the same observations the Intelligence page shows, now inside

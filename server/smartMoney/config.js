@@ -21,6 +21,7 @@ const env = process.env;
 /* ── Time windows (milliseconds) ───────────────────────────────────────── */
 
 export const WINDOWS = {
+  M30: 30 * 60_000,
   H1: 60 * 60_000,
   H4: 4 * 60 * 60_000,
   H24: 24 * 60 * 60_000,
@@ -49,6 +50,7 @@ export const DEX_SLUGS = {
 };
 
 export const WINDOW_KEYS = {
+  '30m': WINDOWS.M30,
   '1h': WINDOWS.H1,
   '4h': WINDOWS.H4,
   '24h': WINDOWS.H24,
@@ -103,6 +105,8 @@ export const DISTRIBUTION = {
 /* ── Smart Money Score (wallet-level, 0–100) ───────────────────────────── */
 
 export const SMART_MONEY_SCORE = {
+  // Kept for the legacy descriptive scorer; it must never confer a verified
+  // SMART_MONEY identity. performance.js is the only qualification path.
   weights: {
     profitability: 0.26,
     consistency: 0.18,
@@ -110,7 +114,19 @@ export const SMART_MONEY_SCORE = {
     riskAdjustedReturn: 0.16,
     liquidityAwareness: 0.12,
     holdingQuality: 0.12
-  }
+  },
+  // Only factors backed by paired on-chain swap fills enter this score.
+  // Missing evidence lowers coverage; <5 closes / incomplete pages produce
+  // score:null, never an attractive number from age or wallet size alone.
+  verifiedWeights: Object.freeze({
+    profitability: 0.25,
+    winRate: 0.20,
+    earlyEntryAccuracy: 0.15,
+    exitTiming: 0.15,
+    consistency: 0.10,
+    capitalEfficiency: 0.10,
+    riskAdjustedPerformance: 0.05
+  })
 };
 
 /* ── Reputation Score (wallet-level, 0–100) ────────────────────────────── */
@@ -148,7 +164,7 @@ export const WALLET_RISK = {
 
 export const CLASSIFY = {
   /** Minimum realised win rate to be tagged a profitable trader. */
-  profitableWinRate: 0.55,
+  profitableWinRate: 55, // percent, same units as walletIntel.pnl.winRate
   profitableMinTrades: 5,
   /** Buying within the first N days of a token's first observed DEX pool. */
   earlyBuyerMaxAgeDays: 7,
@@ -201,7 +217,10 @@ export const ALERTS = {
     'NEW_TOKEN',
     'LIQUIDITY_MOVEMENT',
     'ACCUMULATION',
-    'DISTRIBUTION'
+    'DISTRIBUTION',
+    'CONSENSUS_BUY',
+    'CONSENSUS_SELL',
+    'NETFLOW_REVERSAL'
   ])
 };
 

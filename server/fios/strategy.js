@@ -30,7 +30,7 @@ export const STRATEGY_KINDS = Object.freeze([
   'CROSS_CHAIN_CONSOLIDATE', 'RISK_REDUCTION'
 ]);
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 const ev = (source, { observedAt, sampleSize = null, quality = null, assumptions = [] } = {}) => ({ source, observedAt, sampleSize, quality, assumptions });
 
 export function createStrategyEngine({ collections, evidence = null, genome = null, observability = null, priceSeries = null, log = () => {}, now = () => Date.now() } = {}) {
@@ -103,13 +103,14 @@ export function createStrategyEngine({ collections, evidence = null, genome = nu
     const smEvidence = [];
     if (smartMoney && Array.isArray(smartMoney.strategyEvidence) && smartMoney.strategyEvidence.length) {
       smEvidence.push(...smartMoney.strategyEvidence);
-    } else if (globalContext?.smartMoneyNetUsd != null || globalContext?.whaleEventCount != null) {
-      const smSamples = globalContext.whaleEventCount || 1;
-      smEvidence.push(ev('smart-money:global', {
+    } else if (globalContext?.whaleEventCount != null) {
+      // Preserve descriptive whale coverage, but do not turn a count of
+      // transfers into a directional or profitability-qualified SM signal.
+      smEvidence.push(ev('whale-transfers:global-context', {
         observedAt: at,
-        sampleSize: smSamples,
-        quality: smSamples >= 5 ? 0.65 : 0.4,
-        assumptions: ['labelled on-chain flow', 'observation not advice']
+        sampleSize: globalContext.whaleEventCount,
+        quality: 0.3,
+        assumptions: ['transfer proxy only', 'not verified paired swaps']
       }));
     }
 
@@ -359,11 +360,9 @@ export function buildGlobalContext({ globalIntel = null, crossAsset = null, smar
   /* Prefer the dedicated smart-money intel digest (richer) over the global
      snapshot leaf when both exist; never invent a net from nothing. */
   const smNetFromIntel = hasSm ? (num(smartMoney.signals?.netFlowUsd) ?? null) : null;
-  const smNetFromGlobal = sm
-    ? (num(sm.accumulationUsd) !== null && num(sm.distributionUsd) !== null
-      ? num(sm.accumulationUsd) - num(sm.distributionUsd)
-      : num(sm.netFlowUsd))
-    : null;
+  // The global leaf may be a whale-transfer summary from an older provider.
+  // Do not promote its directional proxy into strategy or decision context.
+  const smNetFromGlobal = sm?.verifiedStatus === 'observed' ? num(sm.netFlowUsd) : null;
   return {
     at,
     regime: crossAsset?.regime?.regime || null,

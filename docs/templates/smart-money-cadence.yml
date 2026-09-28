@@ -1,0 +1,36 @@
+# Optional higher-cadence trigger for the existing read-only intelligence +
+# alert endpoint. Vercel Hobby cron expressions MUST remain daily. GitHub
+# scheduled workflows run only from the default branch after merge; schedules
+# are best-effort and can be delayed, so no real-time delivery is promised.
+name: Smart Money sampled index and alerts
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: smart-money-cadence
+  cancel-in-progress: false
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Evaluate indexed consensus and subscribed alerts
+        env:
+          CRON_SECRET: ${{ secrets.FBT_SMART_MONEY_CRON_SECRET }}
+          CRON_URL: ${{ vars.FBT_SMART_MONEY_CRON_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo 'Not enabled: configure FBT_SMART_MONEY_CRON_SECRET in repository Actions secrets.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          URL="${CRON_URL:-https://fbtswap.ir/api/cron/smart-money}"
+          case "$URL" in
+            https://*/api/cron/smart-money) ;;
+            *) echo 'Cron URL must be HTTPS and end in /api/cron/smart-money' >&2; exit 1 ;;
+          esac
+          curl --fail --silent --show-error --max-time 75 --retry 1 \
+            -H "Authorization: Bearer $CRON_SECRET" "$URL" > /tmp/smart-money-result.json
+          node -e 'const x=require("/tmp/smart-money-result.json"); console.log(JSON.stringify({checked:x.checked,fired:x.fired,delivered:x.delivered,verifiedStatus:x.verifiedStatus,intelligence:x.intelligence?.status}));'

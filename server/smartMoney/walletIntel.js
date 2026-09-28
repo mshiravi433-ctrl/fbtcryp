@@ -33,9 +33,9 @@ import {
   solBalance,
   solTokenBalances
 } from './dataSources.js';
-import { tokenMarkets, historicalPriceFn, normByLog } from './pricing.js';
+import { tokenMarkets, historicalPriceFn } from './pricing.js';
+import { analyzePerformance } from './performance.js';
 import {
-  calculateSmartMoneyScore,
   calculateReputation,
   calculateWalletRisk,
   classifyWallet
@@ -69,11 +69,13 @@ function classifyAction({ chainId, direction, counterparty, token, txHash, metho
       ? { type: 'EXCHANGE_DEPOSIT', label: `Exchange deposit → ${cex.exchange}`, cex: cex.exchange }
       : { type: 'EXCHANGE_WITHDRAWAL', label: `Exchange withdrawal ← ${cex.exchange}`, cex: cex.exchange };
   }
-  // DEX swaps: an ERC-20 moving to a router = selling; from a router = buying.
+  // A single router transfer is NOT a trade. Keep the legacy event type for
+  // existing watch filters, but mark both directions as *unverified proxies*.
+  // Only performance.js pairs the quote and token legs into a verified swap.
   if (dex || m.includes('swap') || m.includes('swapeth')) {
     return direction === 'out'
-      ? { type: 'LARGE_SELL', label: `Sold ${token?.symbol || 'token'} on ${dex?.dex || 'DEX'}`, dex: dex?.dex || null }
-      : { type: 'LARGE_BUY', label: `Bought ${token?.symbol || 'token'} on ${dex?.dex || 'DEX'}`, dex: dex?.dex || null };
+      ? { type: 'LARGE_SELL', label: `Possible sell · router transfer (${token?.symbol || 'token'})`, dex: dex?.dex || null, verification: 'router-transfer-proxy' }
+      : { type: 'LARGE_BUY', label: `Possible buy · router transfer (${token?.symbol || 'token'})`, dex: dex?.dex || null, verification: 'router-transfer-proxy' };
   }
   if (counterpartyKind === 'bridge') {
     return { type: 'TRANSFER', label: `${direction === 'out' ? 'Bridged out' : 'Bridged in'} ${token?.symbol || 'tokens'}`, bridge: counterpartyLabel || 'bridge' };
@@ -258,70 +260,40 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
   }
   activity.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-  // 5. P&L — realised per-token FIFO using tx-time prices (majors via cg
-  //    history); unrealised = current holdings at current price valued vs the
-  //    flowing cost. Tokens without history simply don't enter closed trades.
-  const cgIds = [...new Set([...priceMap.values()].map((p) => p.cgId).filter(Boolean))].slice(0, 12);
-  const histFns = new Map();
-  await Promise.all(cgIds.map(async (id) => {
-    try {
-      histFns.set(id, await historicalPriceFn(id, 90));
-    } catch {
-      histFns.set(id, () => null); // no history for this major: fall back to spot
-    }
-  }));
-  // group transfers by token, only tokens with a pricing path
-  const closed = [];
-  const positions = new Map(); // token → {qty, cost, firstInAt}
-  for (const tr of transfers) {
-    const taddr = tr.token?.address;
-    if (!taddr || tr.amount == null) continue;
-    const info = priceMap.get(taddr) || {};
-    const cgId = info.cgId || cgIdForToken(chainId, taddr);
-    const histPx = cgId ? histFns.get(cgId)?.(tr.timestamp) : null;
-    const curPx = info.usd;
-    const pxAtTx = histPx ?? curPx ?? null;
-    if (pxAtTx == null) continue;
-    const flow = tr.direction === 'in' ? tr.amount : -tr.amount;
-    const usdFlow = flow * pxAtTx;
-    const pos = positions.get(taddr) || { qty: 0, cost: 0, symbol: tr.token?.symbol, firstInAt: null };
-    if (flow > 0) {
-      if (pos.qty <= 0 && tr.timestamp) pos.firstInAt = pos.firstInAt ?? tr.timestamp;
-      pos.qty += flow;
-      pos.cost += usdFlow;
-    } else {
-      // closing part of a position: realised P&L pro-rata
-      if (pos.qty > 0) {
-        const avgCost = pos.qty !== 0 ? pos.cost / pos.qty : 0;
-        const closedQty = Math.min(-flow, pos.qty);
-        const pnl = (pxAtTx - avgCost) * closedQty;
-        if (Number.isFinite(pnl)) closed.push({ symbol: pos.symbol || tr.token?.symbol, pnlUsd: pnl });
-        pos.qty -= closedQty;
-        pos.cost -= avgCost * closedQty;
-      }
-    }
-    positions.set(taddr, pos);
+  // 5. Proven performance. A transfer's current spot price is NEVER used as
+  // its historic execution price. Only paired token↔USD-quote legs with a
+  // real tx hash, direction and method contribute to the ledger. A partial
+  // indexer page cannot invent cost basis for sells predating our oldest buy.
+  const auditInput = {
+    chain: chainId, address, transfers,
+    transactions: bsTxRes.dataStatus === 'live' ? bsTxRes.rows : nativeTxRows,
+    prices: priceMap, balances, historyLive: transfersRes.dataStatus === 'live',
+    historyTruncated: !!transfersRes.hasMore
+  };
+  let audit = analyzePerformance(auditInput);
+  // Exit timing needs an independently observed *later* price, never the
+  // present price applied retrospectively. Only curated CoinGecko ids offer
+  // a bounded daily history; everything else keeps exitTiming:null.
+  const oldExits = audit.closed.filter((c) => Date.now() - c.at >= 7 * WINDOWS.H24);
+  if (oldExits.length >= 2) {
+    const ids = [...new Set(oldExits.map((c) => priceMap.get(c.token)?.cgId).filter(Boolean))].slice(0, 12);
+    const pricesAfter = new Map();
+    await Promise.all(ids.map(async (id) => {
+      try { pricesAfter.set(id, await historicalPriceFn(id, 90)); }
+      catch { /* a missing price is not a neutral exit */ }
+    }));
+    audit = analyzePerformance({
+      ...auditInput,
+      postExitPriceAt: (token, ts) => pricesAfter.get(priceMap.get(token)?.cgId)?.(ts) ?? null
+    });
   }
-  // unrealised = still-open positions at current price
-  let unrealizedUsd = 0;
-  let hasUnrealized = false;
-  for (const [taddr, pos] of positions) {
-    if (pos.qty > 0.0000001) {
-      const px = priceMap.get(taddr)?.usd;
-      if (px != null) {
-        unrealizedUsd += pos.qty * px - pos.cost;
-        hasUnrealized = true;
-      }
-    }
-  }
-  const pnl = summarizePnl(closed, hasUnrealized ? Math.round(unrealizedUsd) : null);
-
-  // Holding quality: the median age of the positions the wallet still holds.
-  // Real arithmetic on observed transfers, not a stand-in for wallet age.
-  const heldDays = [...positions.values()]
-    .filter((p) => p.qty > 0.0000001 && p.firstInAt)
-    .map((p) => (Date.now() - p.firstInAt) / WINDOWS.H24)
-    .sort((a, b) => a - b);
+  const { pnl, smartMoney: smart, performance } = audit;
+  const heldDays = audit.positions
+    .filter((p) => p.amount > 0 && p.token)
+    .map((p) => {
+      const entry = audit.swaps.find((s) => s.token === p.token && s.side === 'BUY')?.timestamp;
+      return entry ? (Date.now() - entry) / WINDOWS.H24 : null;
+    }).filter((d) => d != null).sort((x, y) => x - y);
   const medianHoldingDays = heldDays.length ? Math.round(heldDays[Math.floor(heldDays.length / 2)]) : null;
 
   // 6. Risk evidence
@@ -355,56 +327,40 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
     longTermHolding: ageMs != null ? ageMs > WINDOWS.D30 : null
   });
 
-  // 7. Smart-money / reputation inputs
-  const trades = closed.length + activity.filter((a) => a.type === 'LARGE_BUY' || a.type === 'LARGE_SELL').length;
-  const winRate01 = pnl.winRate != null ? pnl.winRate / 100 : null;
-  const dexCount = activity.filter((a) => a.dex).length;
-  const volume30d = activity.reduce((s, a) => s + (a.valueUsd || 0), 0);
-  /*
-   * An EARLY entry is arithmetic, not a vibe: the buy happened within
-   * CLASSIFY.earlyBuyerMaxAgeDays of the token's deepest DEX pair being
-   * created — the same rule the tag engine documents. Pair
-   * creation is a chain fact (DexScreener); a buy with no pair age we can
-   * read is simply not counted, never counted generously.
-   */
-  const earlyEntries = activity.filter((a) => {
-    if (a.type !== 'LARGE_BUY') return false;
-    const createdAt = priceMap.get(a.tokenAddress)?.pairCreatedAt;
-    if (!createdAt || !a.timestamp) return false;
-    return a.timestamp - createdAt >= 0 && a.timestamp - createdAt <= CLASSIFY.earlyBuyerMaxAgeDays * WINDOWS.H24;
+  // 7. Historical labels and reputation cannot arise from age, capital or
+  // the router-transfer proxy. These are separate axes: WHALE is volume;
+  // SMART_MONEY is sufficiently sampled and profitable *paired* trades.
+  const verifiedBuys = audit.swaps.filter((s) => s.side === 'BUY');
+  const earlyEntries = verifiedBuys.filter((s) => {
+    const createdAt = priceMap.get(s.token)?.pairCreatedAt;
+    return Number.isFinite(createdAt) && s.timestamp >= createdAt
+      && s.timestamp - createdAt <= CLASSIFY.earlyBuyerMaxAgeDays * WINDOWS.H24;
   }).length;
-  const hasPairAges = activity.some((a) => a.type === 'LARGE_BUY' && priceMap.get(a.tokenAddress)?.pairCreatedAt);
-
-  const smart = calculateSmartMoneyScore({
-    profitability: pnl.totalUsd != null ? normByLog(pnl.totalUsd, 1_000_000) : null,
-    consistency: trades >= 10 ? 0.6 + Math.min(0.4, winRate01 || 0) * 0.4 : trades >= 3 ? 0.4 : trades > 0 ? 0.15 : null,
-    earlyEntries: hasPairAges ? Math.min(1, earlyEntries / 5) : null,
-    riskAdjustedReturn: winRate01 != null ? winRate01 * (1 - risk.score / 200) : null,
-    liquidityAwareness: priceMap.size ? (lowLiqShare < 0.1 ? 0.9 : lowLiqShare < 0.3 ? 0.5 : 0.2) : null,
-    holdingQuality: medianHoldingDays != null ? Math.max(0.2, Math.min(0.9, medianHoldingDays / 90)) : null
-  });
-
+  const dexCount = activity.filter((a) => a.dex).length;
+  const volume30d = activity.reduce((sum, a) => sum + (a.valueUsd || 0), 0);
   const reputation = calculateReputation({
-    historicalPerformance: pnl.totalUsd != null ? normByLog(pnl.totalUsd, 1_000_000) : null,
-    tradingConsistency: trades >= 10 ? 0.7 : trades >= 3 ? 0.4 : null,
-    realizedPnl: pnl.realizedUsd != null ? normByLog(pnl.realizedUsd, 500_000) : null,
-    winRate: winRate01,
-    holdingDuration: ageMs ? Math.min(1, ageMs / (365 * WINDOWS.H24)) : null,
-    liquidityAwareness: priceMap.size ? (lowLiqShare < 0.1 ? 0.9 : lowLiqShare < 0.3 ? 0.5 : 0.2) : null,
-    tokenSelection: winRate01 != null ? winRate01 : null,
-    counterpartyRisk: historyLive ? Math.min(1, scamHits + bridgeHits / 5) : null,
-    scamExposure: historyLive ? scamHits : null
+    historicalPerformance: smart.factors.profitability,
+    tradingConsistency: smart.factors.consistency,
+    realizedPnl: smart.factors.profitability,
+    winRate: smart.factors.winRate,
+    holdingDuration: performance.averageHoldingDays != null ? Math.min(1, performance.averageHoldingDays / 90) : null,
+    liquidityAwareness: null,
+    tokenSelection: smart.factors.earlyEntryAccuracy,
+    counterpartyRisk: null,
+    scamExposure: null // no dedicated scam feed: absence of a hit is NOT a clean bill
   });
-
   const tags = classifyWallet({
     portfolioUsd,
     realizedPnlUsd: pnl.realizedUsd,
     winRate: pnl.winRate,
-    trades,
+    trades: performance.closedTrades,
     earlyEntries,
     medianHoldingDays,
     volume30dUsd: volume30d,
-    dexTradeShare: activity.length ? dexCount / activity.length : null
+    dexTradeShare: activity.length ? dexCount / activity.length : null,
+    verifiedScore: smart.score,
+    verifiedCoverage: smart.coverage,
+    verifiedClosedTrades: performance.closedTrades
   });
 
   /* Transaction count: the indexer's own number when it answered, otherwise
@@ -429,6 +385,9 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
     holdings: holdings.slice(0, 30),
     activity: activity.slice(0, 40),
     pnl,
+    performance,
+    verifiedSwaps: audit.swaps.slice(-60).map((s) => ({ ...s, pairCreatedAt: priceMap.get(s.token)?.pairCreatedAt ?? null })),
+    closedTrades: audit.closed,
     smartMoney: smart,
     reputation,
     risk,
@@ -514,7 +473,7 @@ async function analyzeSolana(address) {
   }));
 
   const risk = calculateWalletRisk({
-    scamInteraction: 0,
+    scamInteraction: null, // no Solana scam-address feed: unknown is not safe
     suspiciousContracts: null,
     extremeConcentration: holdings.length > 1 ? Math.min(1, (holdings[0].valueUsd || 0) / Math.max(1, portfolioUsd)) : (solValue != null ? 0.8 : null),
     bridgeExposure: null,
@@ -524,14 +483,14 @@ async function analyzeSolana(address) {
     longTermHolding: (ageMs || 0) > WINDOWS.D30
   });
 
-  const smart = calculateSmartMoneyScore({
-    profitability: null,
-    consistency: sigRows.length > 20 ? 0.5 : null,
-    earlyEntries: null,
-    riskAdjustedReturn: null,
-    liquidityAwareness: splMarkets.size ? 0.5 : null,
-    holdingQuality: ageMs ? Math.min(1, ageMs / (365 * WINDOWS.H24)) : null
-  });
+  // Solana signatures and balances do not contain decoded USD-quoted swaps.
+  // Until a Solana swap decoder exists, *no* profitability or Smart Money
+  // qualification can be deduced from age, capital, holdings or tx count.
+  const smart = {
+    score: null, coverage: 0, factors: {}, status: 'UNAVAILABLE', qualified: false,
+    sample: { swaps: 0, closedTrades: 0 },
+    note: 'Decoded Solana swaps and executed quote prices are not available; no behavioural score is assigned.'
+  };
   const reputation = calculateReputation({
     historicalPerformance: null,
     tradingConsistency: sigRows.length > 20 ? 0.4 : null,
@@ -558,6 +517,8 @@ async function analyzeSolana(address) {
     holdings,
     activity,
     pnl: summarizePnl([], null),
+    performance: null,
+    verifiedSwaps: [],
     smartMoney: smart,
     reputation,
     risk,

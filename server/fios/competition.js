@@ -49,7 +49,7 @@ const VOTE_WEIGHT = Object.freeze({
   YIELD_ANALYST: 0.8, TRADING_ANALYST: 0.7, SMART_MONEY_ANALYST: 0.75, EXTERNAL_AGENT: 0.4
 });
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 
 /** Normalise simulations input: array from simulateAllStrategies OR map/object. */
 function simulationList(simulations) {
@@ -84,7 +84,10 @@ export function createStrategyCompetition({ collections, evidence = null, agents
     const ceiling = RISK_CEILING[profile] ?? RISK_CEILING.MODERATE;
     const capitalUsd = num(financial?.computed?.netWorthUsd ?? financial?.netWorthUsd ?? financial?.computed?.availableCapitalUsd);
     const regime = crossAsset?.regime?.regime || rows.find((s) => s?.globalContext?.regime)?.globalContext?.regime || null;
-    const smNet = num(smartMoney?.signals?.netFlowUsd ?? rows.find((s) => s?.smartMoney?.netFlowUsd != null)?.smartMoney?.netFlowUsd);
+    // Never recover direction from a proposal's unverified smartMoney field.
+    // The measured digest is the sole authority for competition bias.
+    const smNet = smartMoney?.status === 'observed' && smartMoney?.signals?.verifiedStatus === 'observed'
+      ? num(smartMoney.signals.netFlowUsd) : null;
     const sims = simulationList(simulations);
     const simById = new Map(sims.filter((s) => s?.strategyId).map((s) => [s.strategyId, s]));
 
@@ -149,7 +152,8 @@ export function createStrategyCompetition({ collections, evidence = null, agents
         reasoning: net == null
           ? 'Smart-money window was partial; no net flow to align against.'
           : `Observed net flow $${Math.round(net / 1000)}k (${net >= 0 ? 'accumulation-leaning' : 'distribution-leaning'}); ${pick ? `posture aligns most with ${pick.id}` : 'no kind bias applied'}. Observation only — not a trade signal.`,
-        confidence: smartMoney.status === 'observed' ? 0.55 : 0.3,
+        confidence: net == null ? 0 : 0.55,
+        excluded: net == null,
         dissent: false
       }));
     }

@@ -407,6 +407,9 @@ export async function bsTokenTransfers(chainId, address, { limit = 50 } = {}) {
     return {
       dataStatus: 'live',
       rows,
+      // Blockscout only returns ONE page. A next-page cursor or local slice
+      // means we cannot certify complete cost basis / lifetime profitability.
+      hasMore: !!j?.next_page_params || items.length > Math.max(1, limit),
       // oldest timestamp of the page = lower bound on first activity
       oldestAt: rows.length ? Math.min(...rows.map((r) => r.timestamp || Date.now())) : null
     };

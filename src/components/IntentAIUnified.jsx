@@ -1038,6 +1038,26 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   });
   const seasons = useMemo(() => seasonsFromHistory({ history: histData }), [histData]);
   const [monitorInitial, setMonitorInitial] = useState(null);
+  const smHandoffRef = useRef(null);
+  useEffect(() => {
+    const query = new URLSearchParams(location.search || '');
+    const mode = query.get('smMonitor');
+    const chain = Number(query.get('smChain'));
+    const token = String(query.get('smToken') || '').toLowerCase();
+    if (!['buyers', 'sell', 'reversal'].includes(mode)
+      || ![1, 56, 137, 42161, 8453, 10, 43114].includes(chain)
+      || !/^0x[a-f0-9]{40}$/.test(token)) return;
+    const key = `${mode}:${chain}:${token}`;
+    if (smHandoffRef.current === key) return;
+    smHandoffRef.current = key;
+    setMonitorInitial({ asset: { symbol: String(query.get('smSymbol') || 'TOKEN').slice(0, 12) },
+      metric: mode === 'buyers' ? 'SMART_MONEY_BUYERS' : mode === 'sell' ? 'SMART_MONEY_NET' : 'SMART_MONEY_REVERSAL',
+      operator: mode === 'sell' ? 'BELOW' : 'ABOVE',
+      threshold: mode === 'buyers' ? 3 : mode === 'sell' ? -3000000 : 1,
+      smartTarget: { chain, token }, intervalMinutes: 30 });
+    setAiTab('chat');
+    setMonitorDraftOpen(true);
+  }, [location.search]);
   const [orderInitial, setOrderInitial] = useState(null);
   const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
   const contextHandlerRef = useRef(null);
@@ -5373,6 +5393,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [locale, refreshMonitors, pushTurn, appendOp]);
 
   const monitorOpportunityRow = useCallback(async (o) => {
+    if (o?.kind === 'SMART_MONEY' && o.address && o.chainId) {
+      // An opportunity is evidence, not a forecast or permission to trade.
+      // Let the user review the exact contract and threshold before creating
+      // a real, persistent Intent monitor on that same verified index.
+      const selling = o.signal === 'DISTRIBUTION';
+      setMonitorInitial({ asset: { symbol: o.symbol || 'TOKEN' },
+        smartTarget: { chain: o.chainId, token: o.address },
+        metric: selling ? 'SMART_MONEY_NET' : 'SMART_MONEY_BUYERS',
+        operator: selling ? 'BELOW' : 'ABOVE',
+        threshold: selling ? -3000000 : 3, intervalMinutes: 30 });
+      setMonitorDraftOpen(true);
+      return;
+    }
     if (o?.apy != null) {
       await handleMonitorCreate({
         type: 'GOAL',
@@ -6575,7 +6608,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         onSpawnAgent={spawnFleetAgent}
       />
       <MonitorDraftForm
-        key={monitorDraftOpen ? `mon-${monitorInitial ? `${monitorInitial.asset?.symbol || ''}${monitorInitial.metric || ''}` : 'open'}` : 'mon-closed'}
+        key={monitorDraftOpen ? `mon-${monitorInitial ? `${monitorInitial.asset?.symbol || ''}${monitorInitial.metric || ''}${monitorInitial.smartTarget?.chain || ''}${monitorInitial.smartTarget?.token || ''}` : 'open'}` : 'mon-closed'}
         open={monitorDraftOpen}
         onClose={() => setMonitorDraftOpen(false)}
         initial={monitorInitial}

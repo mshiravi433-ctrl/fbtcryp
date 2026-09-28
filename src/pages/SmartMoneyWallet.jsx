@@ -9,6 +9,8 @@ import {
 } from '../lib/smartMoneyClient';
 import { isTracked, trackWallet, untrackWallet } from '../lib/smartMoneyWatch';
 import { useTelegram } from '../context/TelegramContext';
+import { openUrl } from '../lib/browser';
+import '../styles/smart-money-intelligence.css';
 
 function ScoreRing({ value, color = '#7c7dff', label }) {
   const v = value ?? 0;
@@ -41,7 +43,8 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
   const { haptic } = useTelegram();
   const params = useParams();
   const chain = chainProp || params.chain;
-  const address = (addressProp || params.address || '').toLowerCase();
+  const address = chain === 'solana' ? (addressProp || params.address || '')
+    : (addressProp || params.address || '').toLowerCase();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +77,7 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
   }, [address]);
 
   useEffect(() => { if (address) load(chainId); }, [address, chainId, load]);
+  useEffect(() => { setTracked(isTracked(chainId, address)); }, [chainId, address]);
 
   const goBack = () => (onBack ? onBack() : navigate(-1));
   const chainMeta = CHAIN_OPTIONS.find((c) => String(c.id) === String(chainId));
@@ -174,6 +178,23 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
             )}
 
             <motion.div variants={riseIn} initial="hidden" animate="show">
+              <section className="sm-section smi-wallet-identity" aria-label={t('sm.engine.walletVerdict')}>
+                <span className="smi-eyebrow">{t('sm.engine.verifiedBoard')}</span>
+                <h3>{data.smartMoney?.qualified ? t('sm.engine.walletQualified') : t('sm.engine.walletUnqualified')}</h3>
+                <p>{data.smartMoney?.qualified
+                  ? t('sm.engine.walletQualifiedNote', { n: data.smartMoney.sample?.closedTrades ?? pnl?.closedTrades ?? 0 })
+                  : t('sm.engine.walletUnqualifiedNote')}</p>
+                {data.smartMoney?.coverage > 0 && <div className="smi-wallet-factors">
+                  <span>{t('sm.engine.score')}: <b>{data.smartMoney.score ?? '—'}/100</b></span>
+                  <span>{t('sm.engine.coverageShort')}: <b>{Math.round(data.smartMoney.coverage * 100)}%</b></span>
+                  <span>{t('sm.engine.closes')}: <b>{data.smartMoney.sample?.closedTrades ?? pnl?.closedTrades ?? '—'}</b></span>
+                </div>}
+                {data.identity && <div className="smi-wallet-label">
+                  <span>{t('sm.engine.sourcedIdentity')}: <b>{data.identity.label} · {data.identity.kind}</b></span>
+                  {data.identity.sourceUrl && <button type="button" onClick={() => openUrl(data.identity.sourceUrl)}>{t('sm.engine.source')} ↗</button>}
+                  <small>{t('sm.engine.identityNotScore')}</small>
+                </div>}
+              </section>
               {data.tags?.length > 0 && (
                 <div className="sm-tags">
                   {data.tags.map((tag) => (

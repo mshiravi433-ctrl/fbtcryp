@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +38,7 @@ import { useLearningTelemetry } from '../hooks/telemetry';
 import useLearningParams from '../hooks/useLearningParams';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { fetchOverview, fetchToken } from '../lib/smartMoneyClient';
+import { verifiedSignals } from '../lib/smartMoneyEvidence';
 import { getSignalPulse, getSignalWhy } from '../lib/signalApi';
 import { swapUrlFor, swapTargetFor } from '../lib/coinToSwap';
 import {
@@ -733,7 +734,8 @@ function EarlySection({ early, embedded = false }) {
 
 function SmartMoneySection({ sm, embedded = false }) {
   const { t } = useTranslation();
-  if (!sm || !sm.tokenActivity?.length) {
+  const navigate = useNavigate();
+  if (!sm) {
     return (
       <section className={embedded ? 'sic-embedded-section' : ''}>
         {!embedded && <div className="sic-section-head"><span className="cap"><IconSmartMoney /></span><div className="title">{t('signals.intel.smartMoney.title')}</div></div>}
@@ -742,6 +744,8 @@ function SmartMoneySection({ sm, embedded = false }) {
     );
   }
   const m = sm.metrics || {};
+  const verified = verifiedSignals(sm);
+  const proxyRows = Array.isArray(sm.tokenActivity) ? sm.tokenActivity : [];
   return (
     <section className={embedded ? 'sic-embedded-section' : ''}>
       {!embedded && (
@@ -753,6 +757,18 @@ function SmartMoneySection({ sm, embedded = false }) {
           </div>
         </div>
       )}
+      <div className="sic-sm-verified">
+        <div className="sic-sm-verified-head"><strong>{t('sm.engine.consensus')}</strong>
+          <button type="button" onClick={() => navigate('/smart-money?tab=intelligence')}>{t('sm.engine.open')} ↗</button></div>
+        {!verified.rows.length && <p>{t('sm.engine.emptyTitle')}</p>}
+        {verified.rows.slice(0, 4).map((r) => <button className="sic-sm-verified-token" type="button" key={`${r.chain}:${r.token}`}
+          onClick={() => navigate(`/smart-money/token/${r.chain}/${r.token}`)}>
+          <span>{r.symbol} · {r.chain}</span><b className={r.signal === 'ACCUMULATION' ? 'up' : 'down'}>
+            {r.netFlowUsd >= 0 ? '+' : '−'}${fmtCompact(Math.abs(r.netFlowUsd))}</b>
+          <small>{r.independentVotes} {t('sm.engine.groups')} · {r.confidence}/100</small>
+        </button>)}
+      </div>
+      <div className="sic-sm-proxy-title">{t('sm.engine.proxyLabel')}</div>
       <div className="sic-history-grid">
         <div className="sic-stat"><div className="k">{t('signals.intel.smartMoney.whaleActivity')}</div><div className="v">{m.whaleActivity?.value ?? '—'}</div></div>
         <div className="sic-stat"><div className="k">{t('signals.intel.smartMoney.accumulation')}</div><div className="v up">{m.accumulation?.valueUsd != null ? `$${fmtCompact(m.accumulation.valueUsd)}` : '—'}</div></div>
@@ -761,7 +777,7 @@ function SmartMoneySection({ sm, embedded = false }) {
       </div>
       <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, margin: '14px 0 8px' }}>{t('signals.intel.smartMoney.tokenTitle')}</div>
       <div className="sic-rows">
-        {sm.tokenActivity.slice(0, 6).map((r) => (
+        {proxyRows.slice(0, 6).map((r) => (
           <div key={`${r.chainId}:${r.symbol}`} className="sic-row">
             <div className="main">
               <div className="s">{r.symbol}</div>
@@ -774,7 +790,7 @@ function SmartMoneySection({ sm, embedded = false }) {
           </div>
         ))}
       </div>
-      <div className="sic-note">{t('signals.intel.smartMoney.note')}</div>
+      <div className="sic-note">{t('sm.engine.proxyNote')} {t('signals.intel.smartMoney.note')}</div>
     </section>
   );
 }
@@ -1527,30 +1543,20 @@ export default function Signals() {
   }, [coin?.id, analysis?.score, i18n.language, horizon.days]);
   useEffect(() => { setScanning(true); const id = setTimeout(() => setScanning(false), 850); return () => clearTimeout(id); }, [activeId]);
 
-  /* ── smart-money symbol index (real tokenActivity from the flow engine) ── */
-  /* Reported after the page already had safeCalc + SectionGuard everywhere:
-     «در صفحه سیگنال هنوز وقتی میزنی گاهی میزنه مشکلی پیش امده». The overview
-     payload is CDN-cached (s-maxage=60, stale-while-revalidate=300), so a
-     proxy or a stale edge entry can hand back an overview whose tokenActivity
-     is NOT an array — an object, a number, a boolean. That row is truthy, so
-     `?? []` kept it, and the bare `for…of` threw «is not iterable» HERE, in
-     the page body — outside every SectionGuard, straight into RouteBoundary:
-     the whole screen became the crash card. «گاهی», because only responses
-     served from the stale cache carry the drifted shape; the live server
-     always sends an array. So the page's own law applies one read deeper:
-     the field is coerced to an array first, and the whole index computation
-     is a safeCalc — one bad field costs an empty symbol index (cards simply
-     lose their smart-money line), never the route. */
-  const smBySymbol = useMemo(() => safeCalc(() => {
-    const m = new Map();
-    const tokenRows = Array.isArray(sm?.tokenActivity) ? sm.tokenActivity : [];
-    for (const r of tokenRows) {
-      if (!r?.symbol) continue;
-      const prev = m.get(r.symbol);
-      if (!prev || Math.abs(r.netUsd ?? 0) > Math.abs(prev.netUsd ?? 0)) m.set(r.symbol, r);
-    }
-    return m;
-  }, new Map()), [sm]);
+  /* A ticker is NOT an identity: several chains can mint the same symbol.
+   * Only join verified consensus to a CoinGecko asset via our curated swap
+   * contract (chain AND address); the old whale symbol index remains in the
+   * descriptive SmartMoneySection below, never in card scoring. */
+  const smByContract = useMemo(() => safeCalc(() => new Map(
+    verifiedSignals(sm).rows.map((r) => [`${r.chain}:${r.token.toLowerCase()}`,
+      { ...r, classification: 'verified-paired-swaps' }])
+  ), new Map()), [sm]);
+  const smForCoin = useCallback((c) => {
+    if (!c?.id) return null;
+    const target = swapTargetFor(c.id);
+    if (target?.kind !== 'evm' || !target.token?.address) return null;
+    return smByContract.get(`${target.chainId}:${target.token.address.toLowerCase()}`) || null;
+  }, [smByContract]);
 
   /* ── Global signal cards (deterministic engine over real market data) ── */
   const globalSignals = useMemo(() => {
@@ -1561,10 +1567,10 @@ export default function Signals() {
       const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n) && n > 0);
       const a = series.length >= 30 ? analyze(series, c) : null;
       if (!a) return null;
-      return computeSignalCard({ coin: c, series, analysis: a, solanaIntel: null, smToken: smBySymbol.get(c.symbol), pulse, now: Date.now() });
+      return computeSignalCard({ coin: c, series, analysis: a, solanaIntel: null, smToken: smForCoin(c), pulse, now: Date.now() });
     })).filter(Boolean);
     return safeCalc(() => rankSignals(list), list);
-  }, [coins, pulse, smBySymbol]);
+  }, [coins, pulse, smForCoin]);
 
   /* One picker, one active token. Bitcoin stays first and selected by default
      in the global view; Solana stays first in the Solana view. */
@@ -1650,6 +1656,14 @@ export default function Signals() {
     return () => { onchainReqId.current += 1; clearTimeout(timer); ctrl.abort(); };
   }, [onchainTarget]);
 
+  const verifiedForTarget = useMemo(() => safeCalc(() => {
+    const row = tokenOnchain?.verified?.consensus;
+    if (!row || !onchainTarget || onchainTarget.chain === 'solana') return null;
+    const matches = verifiedSignals({ verified: { ...tokenOnchain.verified, consensus: [row] }, window: '24h' }).rows;
+    return matches.find((r) => r.chain === onchainTarget.chain
+      && r.token === onchainTarget.address.toLowerCase()) || null;
+  }, null), [tokenOnchain, onchainTarget]);
+
   /*
    * The measured on-chain rows, built ONCE and shared by the detail lab and
    * the Why-modal. Two surfaces reading the same asset used to be able to
@@ -1683,18 +1697,16 @@ export default function Signals() {
     if (Number.isFinite(Number(tokenOnchain?.liquidityUsd)) && Number(tokenOnchain.liquidityUsd) > 0) {
       push('liquidityObserved', `$${fmtCompact(tokenOnchain.liquidityUsd)}`, '', null);
     }
+    if (verifiedForTarget) {
+      const net = verifiedForTarget.netFlowUsd;
+      push('smartMoneyNet', `${net >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(net))}`,
+        net > 0 ? 'up' : 'down', net > 0 ? 'up' : 'down');
+      push('dexActivity', t(`signals.onchain.pressure.${net > 0 ? 'buy' : 'sell'}`),
+        net > 0 ? 'up' : 'down', net > 0 ? 'up' : 'down');
+    }
     if (flow?.netUsd != null && Number.isFinite(Number(flow.netUsd))) {
       const net = Number(flow.netUsd);
-      push(
-        'smartMoneyNet',
-        `${net >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(net))}`,
-        net > 0 ? 'up' : net < 0 ? 'down' : 'warn',
-        net > 0 ? 'up' : net < 0 ? 'down' : null
-      );
-    }
-    if (Number.isFinite(Number(flow?.buyUsd)) && Number.isFinite(Number(flow?.sellUsd)) && (Number(flow.buyUsd) + Number(flow.sellUsd)) > 0) {
-      const buying = Number(flow.buyUsd) >= Number(flow.sellUsd);
-      push('dexActivity', t(`signals.onchain.pressure.${buying ? 'buy' : 'sell'}`), buying ? 'up' : 'down', buying ? 'up' : 'down');
+      push('smartMoneyFlowProxy', `${net >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(net))}`, '', null);
     }
 
     /* The Solana intel keeps its own measured fields; they join the same list
@@ -1718,7 +1730,7 @@ export default function Signals() {
       push('dexActivity', t(`signals.onchain.pressure.${intel.dexActivity.pressure}`), buy ? 'up' : 'down', buy ? 'up' : 'down');
     }
     return rows;
-  }, []), [tokenOnchain, intel, t]);
+  }, []), [tokenOnchain, verifiedForTarget, intel, t]);
 
   /* On-chain row for the detail lab: shown only when at least one metric was
      actually measured — failing closed exactly like the existing page did. */
@@ -1735,11 +1747,11 @@ export default function Signals() {
       series: priceSeries,
       analysis,
       solanaIntel: intel,
-      smToken: smBySymbol.get(coin.symbol),
+      smToken: smForCoin(coin),
       pulse,
       now: Date.now()
     });
-  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smBySymbol, pulse]);
+  }), [tab, globalSignals, coinId, coin, analysis, priceSeries, intel, smForCoin, pulse]);
 
   const portfolioImpactData = useMemo(
     () => (selectedSignal?.status === 'READY'
@@ -1754,9 +1766,9 @@ export default function Signals() {
     return (coins ?? []).slice(0, 24).map((c) => safeCalc(() => {
       const series = (c.sparkline ?? []).filter((n) => Number.isFinite(n));
       const a = series.length >= 30 ? analyze(series, c) : null;
-      return a ? { coin: c, series, analysis: a, smToken: smBySymbol.get(c.symbol) } : null;
+      return a ? { coin: c, series, analysis: a, smToken: smForCoin(c) } : null;
     })).filter(Boolean);
-  }, [coins, smBySymbol]);
+  }, [coins, smForCoin]);
   const early = useMemo(() => safeCalc(() => computeEarlySignals({ entries: earlyEntries }), []), [earlyEntries]);
 
   /* ── history learning loop: record + settle against real prices ───────── */
@@ -1833,16 +1845,12 @@ export default function Signals() {
      * ever part of this payload.
      */
     const holders = tokenOnchain?.holders;
-    const flow = tokenOnchain?.smartMoneyFlow;
-    if (Number.isFinite(Number(holders?.top10Share))) ev.topHolderPct = Number(holders.top10Share);
-    else if (Number.isFinite(Number(intel?.topHolderPct))) ev.topHolderPct = Number(intel.topHolderPct);
-    if (Number.isFinite(Number(tokenOnchain?.liquidityUsd))) ev.liquidityUsd = Math.round(Number(tokenOnchain.liquidityUsd));
-    if (Number.isFinite(Number(flow?.netUsd))) ev.smartMoneyNetUsd = Math.round(Number(flow.netUsd));
-    if (
-      Number.isFinite(Number(flow?.buyUsd)) && Number.isFinite(Number(flow?.sellUsd))
-      && (Number(flow.buyUsd) + Number(flow.sellUsd)) > 0
-    ) {
-      ev.dexPressure = Number(flow.buyUsd) >= Number(flow.sellUsd) ? 'buy' : 'sell';
+    if (holders?.top10Share != null && Number.isFinite(Number(holders.top10Share))) ev.topHolderPct = Number(holders.top10Share);
+    else if (intel?.topHolderPct != null && Number.isFinite(Number(intel.topHolderPct))) ev.topHolderPct = Number(intel.topHolderPct);
+    if (tokenOnchain?.liquidityUsd != null && Number.isFinite(Number(tokenOnchain.liquidityUsd))) ev.liquidityUsd = Math.round(Number(tokenOnchain.liquidityUsd));
+    if (verifiedForTarget) {
+      ev.smartMoneyNetUsd = Math.round(verifiedForTarget.netFlowUsd);
+      ev.dexPressure = verifiedForTarget.signal === 'ACCUMULATION' ? 'buy' : 'sell';
     }
     if (intel?.whaleFlow?.direction && !ev.whaleFlow) ev.whaleFlow = intel.whaleFlow.direction;
     if (intel?.holderTrend?.change && !ev.holderTrend) ev.holderTrend = intel.holderTrend.change;

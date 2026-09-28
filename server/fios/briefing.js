@@ -199,20 +199,18 @@ export function buildBriefingItems({
   if (domains) {
     const sm = domains.smart_money?.status === 'OK' ? domains.smart_money.data : null;
     if (sm) {
-      const net = num(sm.accumulationUsd) !== null && num(sm.distributionUsd) !== null
-        ? num(sm.accumulationUsd) - num(sm.distributionUsd)
-        : null;
+      const net = sm.verifiedStatus === 'observed' ? num(sm.netFlowUsd) : null;
       if (net !== null && Math.abs(net) >= 1_000_000) {
         const accumulating = net > 0;
         push({
           id: itemId('smart_money'), kind: 'smart_money', priority: 'normal',
           title: accumulating ? 'Smart money is accumulating' : 'Smart money is distributing',
           titleFa: accumulating ? 'پول هوشمند در حال انباشت است' : 'پول هوشمند در حال توزیع است',
-          detail: `labelled flow over the last ${sm.window || '24h'}: $${Math.abs(Math.round(net / 1000))}k ${accumulating ? 'net accumulation' : 'net distribution'} (whale activity ${num(sm.whaleActivity?.count) ?? '—'} events)`,
-          detailFa: `جریان برچسب‌خورده در ${sm.window || '24h'} گذشته: $${Math.abs(Math.round(net / 1000))} هزار ${accumulating ? 'انباشت خالص' : 'توزیع خالص'} (فعالیت نهنگ‌ها: ${num(sm.whaleActivity?.count) ?? '—'} رویداد)`,
-          evidence: [{ source: 'smartMoney:overview', at: domains.smart_money.at }],
-          action: { type: 'navigate', to: '/smart-money' },
-          source: 'smartMoney:overview', at: domains.smart_money.at,
+          detail: `Qualified paired swaps over ${sm.window || '24h'}: $${Math.abs(Math.round(net / 1000))}k net ${accumulating ? 'buys' : 'sells'}; sampled index, not a price forecast.`,
+          detailFa: `معاملات جفت‌شدهٔ واجد شرایط در ${sm.window || '24h'}: $${Math.abs(Math.round(net / 1000))} هزار خالص ${accumulating ? 'خرید' : 'فروش'}؛ ایندکس نمونه‌ای، نه پیش‌بینی قیمت.`,
+          evidence: [{ source: 'smartMoney:verified-index', at: sm.indexedAt }],
+          action: { type: 'navigate', to: '/smart-money?tab=intelligence' },
+          source: 'smartMoney:verified-index', at: sm.indexedAt,
           confidence: accumulating ? 0.65 : 0.65, untrusted: false
         });
       }
@@ -220,13 +218,13 @@ export function buildBriefingItems({
       if (topToken) {
         push({
           id: itemId('smart_money'), kind: 'smart_money', priority: 'info',
-          title: `Strongest labelled flow: ${topToken.symbol}`,
-          titleFa: `قوی‌ترین جریان برچسب‌خورده: ${topToken.symbol}`,
-          detail: `${topToken.flow || 'flow'} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)}k` : ''} on ${topToken.chain || 'chain'}`,
-          detailFa: `${faFlow(topToken.flow)} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)} هزار` : ''} در ${topToken.chain || 'زنجیره'}`.trim(),
-          evidence: [{ source: 'smartMoney:overview', at: domains.smart_money.at }],
-          action: { type: 'navigate', to: '/smart-money' },
-          source: 'smartMoney:overview', at: domains.smart_money.at, confidence: 0.55
+          title: `Verified wallet consensus: ${topToken.symbol}`,
+          titleFa: `اجماع کیف‌پول‌های تأییدشده: ${topToken.symbol}`,
+          detail: `${topToken.flow || 'flow'} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)}k` : ''} · ${topToken.independentVotes} independent groups`,
+          detailFa: `${faFlow(topToken.flow)} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)} هزار` : ''} · ${topToken.independentVotes} گروه مستقل`.trim(),
+          evidence: [{ source: 'smartMoney:verified-index', at: sm.indexedAt }],
+          action: { type: 'navigate', to: '/smart-money?tab=intelligence' },
+          source: 'smartMoney:verified-index', at: sm.indexedAt, confidence: topToken.confidence / 100
         });
       }
     }

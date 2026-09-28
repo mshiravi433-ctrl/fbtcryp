@@ -179,7 +179,10 @@ export function classifyWallet(stats = {}) {
     medianHoldingDays = null,
     volume30dUsd = 0,
     dexTradeShare = null,
-    firstEntryBeforeAgeDays = null
+    firstEntryBeforeAgeDays = null,
+    verifiedScore = null,
+    verifiedCoverage = 0,
+    verifiedClosedTrades = 0
   } = stats;
 
   if (portfolioUsd >= 5_000_000 || volume30dUsd >= CLASSIFY.highVolume30dUsd) tags.push('WHALE');
@@ -199,14 +202,18 @@ export function classifyWallet(stats = {}) {
   if (volume30dUsd >= CLASSIFY.highVolume30dUsd) tags.push('HIGH_VOLUME');
   if (dexTradeShare != null && dexTradeShare >= CLASSIFY.dexTraderShare) tags.push('DEX_TRADER');
 
-  // Smart Money = profitable AND early AND reasonably active.
+  // Capital, age and a suggestive router transfer cannot certify a trader.
+  // The verifier supplies the score only after pairing actual swap legs with
+  // a cost basis and enough closed trades. An early-only wallet stays EARLY_BUYER.
   const profitable = tags.includes('PROFITABLE_TRADER');
   const early = tags.includes('EARLY_BUYER');
-  if (profitable && early) tags.unshift('SMART_MONEY');
-  else if (profitable || early) tags.unshift('SMART_MONEY');
+  if (profitable && verifiedClosedTrades >= CLASSIFY.profitableMinTrades &&
+      Number.isFinite(verifiedScore) && verifiedScore >= 70 && verifiedCoverage >= 0.75) {
+    tags.unshift('SMART_MONEY');
+  }
 
-  // Insider-LIKE behaviour (never "insider"): early entries that then
-  // materially outperformed. Behavioural resemblance only.
+  // Insider-LIKE behaviour (never "insider"): even a verified early entry
+  // proves timing, not access to non-public information.
   if (early && profitable && earlyEntries >= 3) tags.push('INSIDER_LIKE_BEHAVIOR');
 
   return [...new Set(tags)];

@@ -38,6 +38,8 @@ const { parseStooqCsv, parseYahooChart, parseFredJson, changesFromSeries } = awa
 const OWNER = 'dev:phase211';
 const now = Date.now();
 const DAY = 24 * 3600 * 1000;
+const { verifiedFixture, TOKEN } = await import('../fixtures/verifiedSmartMoney.mjs');
+const verified = verifiedFixture({ now }).snapshot;
 
 /* ═════════════════════════════════════════════════════════════════════════ */
 /* The provider-shaped world (sections) + injected providers                  */
@@ -84,6 +86,7 @@ const SECTIONS = {
 const PROVIDERS = {
   smartMoney: async () => ({
     schema: 'fbt.smart-money-overview.v2', at: now, window: '24h', dataStatus: 'live', partial: false,
+    verified,
     metrics: {
       whaleActivity: { value: 14, changePct: 25 },
       accumulation: { valueUsd: 2_400_000, changePct: 10, events: 9 },
@@ -162,11 +165,14 @@ const snapshot = await fi.globalIntelFor(OWNER, { refresh: true });
 t('global-intel: the snapshot carries the Phase 211 schema and all nine domains',
   snapshot.schema === 'fbt.fi.global-intelligence.v1' && GLOBAL_DOMAINS.every((d) => d in snapshot.domains));
 
-t('global-intel: smart money is normalized with accumulation/distribution/net flow',
+t('global-intel: verified swaps are directional, transfer aggregates are proxy only',
   snapshot.domains.smart_money.status === 'OK'
-  && snapshot.domains.smart_money.data.accumulationUsd === 2_400_000
-  && snapshot.domains.smart_money.data.distributionUsd === 900_000
-  && snapshot.domains.smart_money.data.netFlowUsd === -800_000);
+  && snapshot.domains.smart_money.data.accumulationUsd === null
+  && snapshot.domains.smart_money.data.distributionUsd === 3_600_000
+  && snapshot.domains.smart_money.data.netFlowUsd === -3_600_000
+  && snapshot.domains.smart_money.data.topTokens[0].token === TOKEN
+  && snapshot.domains.smart_money.data.whaleTransferProxy.accumulationUsd === 2_400_000
+  && snapshot.domains.smart_money.data.whaleTransferProxy.netFlowUsd === -800_000);
 
 t('global-intel: whales events are bounded, priced and source-labelled',
   snapshot.domains.whales.status === 'OK'
@@ -494,8 +500,9 @@ t('briefing: the proactive briefing is built and schema-labelled',
 t('briefing: items are priority-sorted with kinds, sources and navigation actions',
   briefing.items.every((i) => i.id && i.kind && ['critical', 'high', 'normal', 'info'].includes(i.priority) && i.source && i.action?.to?.startsWith('/'))
   && ['critical', 'high', 'normal', 'info'].some((p) => briefing.items.some((i) => i.priority === p)));
-t('briefing: the smart-money item quotes the real accumulation/distribution numbers',
-  briefing.items.some((i) => i.kind === 'smart_money' && i.title.includes('accumulat') && String(i.detail).includes('$')));
+t('briefing: smart-money direction uses verified distribution and indexed evidence',
+  briefing.items.some((i) => i.kind === 'smart_money' && i.title.includes('distribut')
+    && String(i.detail).includes('$3600k') && i.source === 'smartMoney:verified-index'));
 t('briefing: the macro item cites its topic counts from classified real headlines',
   briefing.items.some((i) => i.kind === 'macro' && i.untrusted === true && i.source === 'macro:classifier'));
 t('briefing: the macro INDICATORS item quotes the real dollar/gold/crude moves (the data side of macro)',

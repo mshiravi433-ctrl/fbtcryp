@@ -20,6 +20,7 @@ import { OpsCardIcon, OpsCategoryIcon } from './OpsIcons.jsx';
  * bare 'en' while the live locale is 'en-US' — see opsPanelStrings.js.
  */
 import { opsText, opsPhrase, intlLocale } from '../lib/intent-ai/os/opsPanelStrings.js';
+import { CHAIN_OPTIONS } from '../lib/smartMoneyClient.js';
 
 /* ------------------------------------------------------------------------- */
 /* helpers                                                                    */
@@ -421,76 +422,105 @@ export function MonitorDraftForm({ open, onClose, onCreate, initial = null, busy
   const [operator, setOperator] = useState(initial?.operator || 'ABOVE');
   const [threshold, setThreshold] = useState(initial?.threshold ?? '');
   const [intervalMinutes, setIntervalMinutes] = useState(initial?.intervalMinutes || 60);
+  const [smChain, setSmChain] = useState(initial?.smartTarget?.chain || 1);
+  const [smToken, setSmToken] = useState(initial?.smartTarget?.token || '');
+  const [fromUsd, setFromUsd] = useState(initial?.reversal?.fromUsd ?? '5000000');
+  const [toUsd, setToUsd] = useState(initial?.reversal?.toUsd ?? '-3000000');
+  const [error, setError] = useState(null);
 
   if (!open) return null;
+  const isVerified = ['SMART_MONEY_BUYERS', 'SMART_MONEY_NET', 'SMART_MONEY_REVERSAL'].includes(metric);
+  const isReversal = metric === 'SMART_MONEY_REVERSAL';
   const L = {
-    title: opsText('mon.title', locale),
-    asset: opsText('mon.asset', locale),
-    metric: opsText('mon.metric', locale),
-    operator: opsText('mon.operator', locale),
-    threshold: opsText('mon.threshold', locale),
-    interval: opsText('mon.interval', locale),
-    create: opsText('mon.create', locale),
-    cancel: opsText('mon.cancel', locale),
+    title: opsText('mon.title', locale), asset: opsText('mon.asset', locale),
+    metric: opsText('mon.metric', locale), operator: opsText('mon.operator', locale),
+    threshold: opsText('mon.threshold', locale), interval: opsText('mon.interval', locale),
+    create: opsText('mon.create', locale), cancel: opsText('mon.cancel', locale),
     note: opsText('mon.note', locale)
   };
-
+  const number = (raw) => {
+    const cleaned = String(raw || '').trim().replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+      .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/,/g, '');
+    if (!/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:[kK])?$/.test(cleaned)) return null;
+    const value = parseFloat(cleaned) * (/[kK]$/.test(cleaned) ? 1000 : 1);
+    return Number.isFinite(value) ? value : null;
+  };
+  const selectMetric = (value) => {
+    setMetric(value); setError(null);
+    if (value.startsWith('SMART_MONEY_')) {
+      setOperator('ABOVE');
+      setIntervalMinutes(30);
+      setThreshold(value === 'SMART_MONEY_BUYERS' ? '3' : value === 'SMART_MONEY_NET' ? '1000000' : '1');
+    } else { setIntervalMinutes(60); setThreshold(''); }
+  };
   const submit = (e) => {
     e.preventDefault();
-    const t = Number(String(threshold).replace(/[kK,]/g, ''));
-    if (!asset || !Number.isFinite(t) || t <= 0) return;
-    onCreate({
-      type: 'ASSET',
-      asset: { symbol: asset },
-      metric,
-      operator,
-      threshold: metric === 'PERCENT_CHANGE' ? t : t,
-      intervalMinutes
+    setError(null);
+    const t = number(threshold);
+    if (isVerified && (!/^[0-9]+$/.test(String(smChain)) || !/^0x[a-fA-F0-9]{40}$/.test(smToken.trim()))) {
+      setError(opsText('mon.sm.badTarget', locale)); return;
+    }
+    const from = number(fromUsd); const to = number(toUsd);
+    if (!asset || (!isReversal && (t == null || (metric === 'SMART_MONEY_NET' ? t === 0 : t <= 0)))
+      || (metric === 'SMART_MONEY_BUYERS' && (!Number.isInteger(t) || t < 3))
+      || (isReversal && !(from > 0 && to < 0))) {
+      setError(L.threshold); return;
+    }
+    onCreate({ type: 'ASSET', asset: { symbol: String(asset).trim().toUpperCase().slice(0, 12) },
+      metric, operator: metric === 'SMART_MONEY_BUYERS' ? 'ABOVE' : operator,
+      threshold: isReversal ? 1 : t, intervalMinutes,
+      ...(isVerified ? { smartTarget: { chain: Number(smChain), token: smToken.trim().toLowerCase() } } : {}),
+      ...(isReversal ? { reversal: { fromUsd: from, toUsd: to } } : {})
     });
   };
 
   return (
     <div className="iaos-panel-overlay" role="dialog" aria-modal="true" aria-label={L.title}>
       <form className="iaos-panel iaos-form-panel" onSubmit={submit}>
-        <div className="iaos-panel-head">
-          <h2>{L.title}</h2>
-          <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        <label className="iaos-field">
-          <span>{L.asset}</span>
+        <div className="iaos-panel-head"><h2>{L.title}</h2>
+          <button type="button" className="iaos-close" onClick={onClose} aria-label="Close">✕</button></div>
+        <label className="iaos-field"><span>{L.metric}</span>
+          <select value={metric} onChange={(e) => selectMetric(e.target.value)}>
+            <option value="PRICE">PRICE (USD)</option><option value="PERCENT_CHANGE">% CHANGE</option>
+            <option value="SMART_MONEY_BUYERS">{opsText('mon.sm.buyers', locale)}</option>
+            <option value="SMART_MONEY_NET">{opsText('mon.sm.net', locale)}</option>
+            <option value="SMART_MONEY_REVERSAL">{opsText('mon.sm.reversal', locale)}</option>
+          </select></label>
+        {isVerified ? <>
+          <label className="iaos-field"><span>{opsText('mon.sm.chain', locale)}</span>
+            <select value={smChain} onChange={(e) => setSmChain(Number(e.target.value))}>
+              {CHAIN_OPTIONS.filter((c) => c.id !== 'solana').map((c) => <option value={c.id} key={c.id}>{c.name}</option>)}
+            </select></label>
+          <label className="iaos-field"><span>{opsText('mon.sm.target', locale)}</span>
+            <input value={smToken} onChange={(e) => setSmToken(e.target.value)} placeholder="0x…" spellCheck="false" autoComplete="off" dir="ltr" /></label>
+          <label className="iaos-field"><span>{opsText('mon.sm.symbol', locale)}</span>
+            <input value={asset} onChange={(e) => setAsset(e.target.value)} placeholder="TOKEN" maxLength={12} dir="ltr" /></label>
+        </> : <label className="iaos-field"><span>{L.asset}</span>
           <select value={asset} onChange={(e) => setAsset(e.target.value)}>
             {MONITOR_ASSETS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </label>
-        <label className="iaos-field">
-          <span>{L.metric}</span>
-          <select value={metric} onChange={(e) => setMetric(e.target.value)}>
-            <option value="PRICE">PRICE (USD)</option>
-            <option value="PERCENT_CHANGE">% CHANGE</option>
-          </select>
-        </label>
-        <label className="iaos-field">
-          <span>{L.operator}</span>
+          </select></label>}
+        {!isReversal && metric !== 'SMART_MONEY_BUYERS' && <label className="iaos-field"><span>{L.operator}</span>
           <select value={operator} onChange={(e) => setOperator(e.target.value)}>
-            <option value="ABOVE">≥</option>
-            <option value="BELOW">≤</option>
-          </select>
-        </label>
-        <label className="iaos-field">
-          <span>{L.threshold}</span>
-          <input value={threshold} onChange={(e) => setThreshold(e.target.value)} inputMode="decimal" placeholder={metric === 'PERCENT_CHANGE' ? '5' : '100000'} />
-        </label>
-        <label className="iaos-field">
-          <span>{L.interval}</span>
+            <option value="ABOVE">≥</option><option value="BELOW">≤</option>
+          </select></label>}
+        {isReversal ? <>
+          <label className="iaos-field"><span>{opsText('mon.sm.from', locale)}</span>
+            <input value={fromUsd} onChange={(e) => setFromUsd(e.target.value)} inputMode="decimal" placeholder="5000000" /></label>
+          <label className="iaos-field"><span>{opsText('mon.sm.to', locale)}</span>
+            <input value={toUsd} onChange={(e) => setToUsd(e.target.value)} inputMode="decimal" placeholder="-3000000" /></label>
+        </> : <label className="iaos-field"><span>{L.threshold}{metric === 'SMART_MONEY_BUYERS' ? ' (≥3)' : ''}</span>
+          <input value={threshold} onChange={(e) => setThreshold(e.target.value)} inputMode="decimal"
+            placeholder={metric === 'PERCENT_CHANGE' ? '5' : metric === 'SMART_MONEY_BUYERS' ? '3' : '100000'} /></label>}
+        <label className="iaos-field"><span>{L.interval}</span>
           <select value={intervalMinutes} onChange={(e) => setIntervalMinutes(Number(e.target.value))}>
             {[15, 30, 60, 360, 720, 1440].map((m) => <option key={m} value={m}>{m} min</option>)}
-          </select>
-        </label>
+          </select></label>
+        {error && <p role="alert" className="iaos-panel-note" style={{ color: '#ff8b98' }}>{error}</p>}
         <div className="iaos-panel-actions">
           <button type="submit" className="iaos-btn iss-solid" disabled={busy}>{busy ? '…' : L.create}</button>
           <button type="button" className="iaos-btn iss-ghost" onClick={onClose}>{L.cancel}</button>
         </div>
-        <p className="iaos-panel-note">{L.note}</p>
+        <p className="iaos-panel-note">{isVerified ? opsText('mon.sm.note', locale) : L.note}</p>
       </form>
     </div>
   );
@@ -573,7 +603,10 @@ export function MonitorCard({ monitor, onAction, locale = 'fa' }) {
         <span className={`iaos-pill iaos-pill-${pill.tone}`}>{pill.label}</span>
       </div>
       <div className="iaos-monitor-card-body">
-        <span>{monitor?.asset?.symbol || '—'} · {monitor?.metric} {monitor?.operator} {fmtNum(monitor?.threshold)}</span>
+        <span>{monitor?.asset?.symbol || '—'} · {monitor?.metric} {monitor?.metric === 'SMART_MONEY_REVERSAL'
+          ? `${fmtNum(monitor?.reversal?.fromUsd)} → ${fmtNum(monitor?.reversal?.toUsd)} USD`
+          : `${monitor?.operator} ${fmtNum(monitor?.threshold)}`}</span>
+        {monitor?.smartTarget && <small>{monitor.smartTarget.chain} · {monitor.smartTarget.token.slice(0, 10)}…{monitor.smartTarget.token.slice(-5)} · {opsText('mon.sm.card', locale)}</small>}
         {monitor?.lastEvent ? <small>⏱ {monitor.lastEvent.message}</small> : null}
         {monitor?.lastCheckAt ? <small>{opsText('monitor.checked', locale)}: {new Date(monitor.lastCheckAt).toLocaleString(intlLocale(locale))}</small> : null}
       </div>
@@ -603,14 +636,18 @@ export function OpportunityList({ rows, onMonitor, goal = null, locale = 'fa' })
         <div key={o.id} className="iaos-opp-row">
           <strong>{o.symbol || o.name} <small>{o.kind}</small></strong>
           <span>
-            {o.expectedReturnPct != null ? `${fmtNum(o.expectedReturnPct, 1)}%` : '—'}
-            <small>{o.basis === 'apy' ? (String(locale || '').startsWith('fa') ? 'بازدهی سالانه (APY)' : 'APY') : '7d/2'}</small>
+            {o.kind === 'SMART_MONEY' ? `${o.netFlowUsd >= 0 ? '+' : '−'}$${fmtNum(Math.abs(o.netFlowUsd), 0)}`
+              : o.expectedReturnPct != null ? `${fmtNum(o.expectedReturnPct, 1)}%` : '—'}
+            <small>{o.kind === 'SMART_MONEY' ? opsText('opp.sm.evidence', locale)
+              : o.basis === 'apy' ? (String(locale || '').startsWith('fa') ? 'بازدهی سالانه (APY)' : 'APY') : '7d/2'}</small>
           </span>
           <span className="iaos-opp-meta">
-            {o.probabilityPct != null ? `${opsText('opp.histRate', locale)} ${fmtNum(o.probabilityPct, 0)}%` : '—'}
+            {o.kind === 'SMART_MONEY' ? `${o.independentVotes} ${opsText('opp.sm.groups', locale)} · ${o.evidenceScore}/100`
+              : o.probabilityPct != null ? `${opsText('opp.histRate', locale)} ${fmtNum(o.probabilityPct, 0)}%` : '—'}
             {o.potentialDrawdownPct != null ? ` · DD ${fmtNum(o.potentialDrawdownPct, 0)}%` : ''}
           </span>
-          <span className={`iaos-pill iaos-pill-${o.risk === 'high' ? 'bad' : o.risk === 'medium' ? 'warn' : 'ok'}`}>{o.risk.toUpperCase()}</span>
+          <span className={`iaos-pill iaos-pill-${o.risk === 'high' ? 'bad' : o.risk === 'low' ? 'ok' : 'warn'}`}>
+            {o.risk === 'unknown' ? opsText('opp.sm.risk', locale) : String(o.risk || 'unknown').toUpperCase()}</span>
           <button type="button" className="iaos-opp-monitor" onClick={() => onMonitor(o)}>{opsText('opp.monitor', locale)}</button>
         </div>
       ))}

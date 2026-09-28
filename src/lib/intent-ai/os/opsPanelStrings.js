@@ -86,6 +86,23 @@ export const OPS_PANEL_STRINGS = {
     ar: 'تُقرأ جميع القيم من خدمات حيّة. لا يوجد هنا أي رقم محاكى.'
   },
 
+  /* ---- Verified Smart Money monitor draft (display-only contract identity) */
+  'mon.sm.target': { fa: 'قرارداد توکن (EVM)', en: 'Token contract (EVM)', ar: 'عقد الرمز (EVM)' },
+  'mon.sm.chain': { fa: 'شبکهٔ قرارداد', en: 'Contract chain', ar: 'شبكة العقد' },
+  'mon.sm.symbol': { fa: 'نماد نمایشی', en: 'Display symbol', ar: 'رمز العرض' },
+  'mon.sm.buyers': { fa: 'خریداران مستقل · ۳۰ دقیقه', en: 'Independent buyers · 30 min', ar: 'مشترون مستقلون · ٣٠ دقيقة' },
+  'mon.sm.net': { fa: 'جریان خالص تأییدشده (USD)', en: 'Verified signed net flow (USD)', ar: 'التدفق الصافي المؤكد (USD)' },
+  'mon.sm.reversal': { fa: 'بازگشت جریانِ تأییدشده', en: 'Verified flow reversal', ar: 'انعكاس التدفق المؤكد' },
+  'mon.sm.from': { fa: 'از جریان مثبت (USD)', en: 'From positive flow (USD)', ar: 'من تدفق موجب (USD)' },
+  'mon.sm.to': { fa: 'به جریان منفی (USD)', en: 'To negative flow (USD)', ar: 'إلى تدفق سالب (USD)' },
+  'mon.sm.note': {
+    fa: 'فقط معاملات جفت‌شدهٔ کیف‌پول‌های واجد شرایط با دست‌کم ۳ گروه مستقل و شواهد ≥۷۵ بررسی می‌شود. بازهٔ ۳۰ دقیقه‌ای، پایش لحظه‌ای نیست؛ اعلان به زمان‌بندی سرور و تنظیم پوش وابسته است. هیچ معامله‌ای خودکار اجرا نمی‌شود.',
+    en: 'Requires paired swaps from qualified wallets, ≥3 independent groups and evidence ≥75/100. A 30-minute window is not continuous surveillance; delivery depends on the server schedule and push setup. Never auto-trades.',
+    ar: 'يشترط تداولاً مؤكداً من محافظ مؤهلة و٣ مجموعات مستقلة على الأقل ودليلاً ≥٧٥/١٠٠. نافذة ٣٠ دقيقة ليست مراقبة مستمرة؛ يعتمد التنبيه على جدول الخادم وإعداد الإشعارات. لا توجد صفقات تلقائية.'
+  },
+  'mon.sm.badTarget': { fa: 'آدرس قرارداد ۰x معتبر و شبکه را انتخاب کنید.', en: 'Select a valid 0x contract and chain.', ar: 'اختر عقد 0x وشبكته بشكل صحيح.' },
+  'mon.sm.card': { fa: 'معاملات جفت‌شدهٔ واجد شرایط · نمونه‌ای، نه لحظه‌ای', en: 'Qualified paired swaps · sampled, not real-time', ar: 'تداولات مؤكدة من محافظ مؤهلة · عينة غير فورية' },
+
   /* ---- Monitor card ------------------------------------------------------ */
   'monitor.checked':   { fa: 'آخرین بررسی',       en: 'checked',     ar: 'آخر فحص' },
   'monitor.pause':     { fa: 'توقف',              en: 'Pause',       ar: 'إيقاف' },
@@ -101,6 +118,9 @@ export const OPS_PANEL_STRINGS = {
   },
   'opp.histRate':      { fa: 'نرخ تاریخی',        en: 'hist. rate',  ar: 'المعدل التاريخي' },
   'opp.monitor':       { fa: 'پایش کن',           en: 'Monitor',     ar: 'راقب' },
+  'opp.sm.evidence': { fa: 'اجماع تأییدشده · نه پیش‌بینی بازده', en: 'Verified consensus · not a return forecast', ar: 'إجماع مؤكّد · ليس توقعاً للعائد' },
+  'opp.sm.groups': { fa: 'گروه مستقل', en: 'independent groups', ar: 'مجموعات مستقلة' },
+  'opp.sm.risk': { fa: 'ریسک نامعلوم', en: 'Risk unknown', ar: 'المخاطر غير معروفة' },
   'opp.note': {
     fa: 'بازده و احتمال، مشاهدات تاریخی یا APY اعلام‌شده‌اند — هیچ‌گاه تضمین نیستند. اطمینان و کیفیت داده هر ردیف نمایش داده می‌شود.',
     en: 'Expected return / probability are historical observations or stated APY — never guaranteed. Confidence and data quality are shown per row.',
