@@ -10586,32 +10586,68 @@ export default function run() {
 
     /*
      * ─── "WHAT THE PAST SAYS" ON THE STOCKS SCREEN ──────────────────────────
-     * Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد».
+     * Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد», then
+     * «در طلا هم گذشته چه میگوید باید در باکس طلا و باکس جمع شونده و مدرن باشد»
+     * and «در باکس بازشونده برای هر توکن».
      *
-     * It is attached to GOLD, and that is a data constraint rather than a
-     * choice. The equity rows come from /api/solana/assets, which returns a
-     * Jupiter spot price and a 24h change — one number and a delta, no series.
-     * HistoryPanel measures support levels, range position and the largest
-     * drawdown ACROSS A WINDOW, so with no window it computes nothing and
-     * renders empty. PAXG is on CoinGecko, so a real 90-day series exists.
+     * It is attached to GOLD as a box, and that is a data constraint rather
+     * than a choice: the equity rows come from /api/solana/assets, which
+     * returns a Jupiter spot price and a 24h change — one number and a delta,
+     * no series at all. historyFacts() measures support levels, range position
+     * and the largest drawdown ACROSS A WINDOW, so with no window it computes
+     * nothing. PAXG, XAUt0 and GLDx are all on CoinGecko, so a real 90-day
+     * series exists for each.
+     *
+     * The three assertions that used to pin this section were written against
+     * the FIRST version, which was a plain HistoryPanel fed by
+     * `useChart('pax-gold', 90)`. That hook is why they had to be rewritten
+     * rather than extended: `getChart()` falls back to `offlineChart()`, which
+     * SYNTHESISES a random walk for any id it does not know — and it does not
+     * know pax-gold. A failed request therefore produced an invented $100-ish
+     * series, and the panel then reported support levels about prices that
+     * never existed. The gold history is now fetched by lib/equityChart.js,
+     * which has no synthetic fallback and returns an empty series instead, and
+     * these assertions pin THAT property rather than the old call shape.
      */
     const stocks = code(read('src/pages/Stocks.jsx'));
-    t('the stocks screen renders the history panel', /<HistoryPanel/.test(stocks));
-    t('...fed by a real gold series, not the spot-only equity rows',
-      /useChart\(goldId, 90\)/.test(stocks) && /'pax-gold'/.test(stocks));
+    const goldBox = code(read('src/components/GoldHistoryBox.jsx'));
+    const eqAnalysis = code(read('src/components/EquityAnalysis.jsx'));
+    const eqRow = code(read('src/components/EquityRow.jsx'));
+
+    t('the stocks screen renders a gold history box', /<GoldHistoryBox/.test(stocks));
+    t('...fed by the honest fetcher, not the one that synthesises a series',
+      /fetchEquityChart/.test(goldBox) && !/useChart\(/.test(stocks));
+    t('...and every gold token is measured, not averaged into one number',
+      /assets\.map\(\(a\) =>/.test(goldBox) && /<GoldFacts key=/.test(goldBox));
     /*
      * historyFacts() returns [] below 20 points, which would render an empty
      * section header with nothing under it. Gate on the data, not on hope.
      */
-    t('...and is hidden when there is not enough history',
-      /goldSeries\.length >= 20/.test(stocks));
+    t('...and a token with no usable history says so instead of inventing one',
+      /isUsableSeries/.test(goldBox) && /noHistoryOne/.test(goldBox));
     /*
-     * The id must be null unless the section is really shown — useChart polls
-     * every 60s, so an unconditional fetch would hit CoinGecko forever on the
-     * RWA tab and while the asset list is still loading.
+     * The box is a disclosure and its fetches live inside it, so closing it
+     * stops the polling — the property the old conditional id provided, now
+     * provided by the component that owns the data.
      */
-    t('...and nothing is fetched while the gold section is not on screen',
-      /commodities\.length > 0 && tab === 'equity' \? 'pax-gold' : null/.test(stocks));
+    t('...and it collapses, with nothing fetched while it is closed',
+      /aria-expanded=\{open\}/.test(goldBox) &&
+      /open && primary\?\.coingeckoId/.test(goldBox));
+    t('...and it is gold-themed rather than a generic panel',
+      /gold-box/.test(read('src/styles/equity-analysis.css')) && /--ink-amber/.test(read('src/styles/equity-analysis.css')));
+
+    /*
+     * ─── THE SAME ANALYSIS, PER EQUITY ROW ──────────────────────────────────
+     * «تحلیل مثل RWA باشد، در باکس بازشونده برای هر توکن». Each row opens its
+     * own panel; the fetch happens inside it, so twenty-two closed rows cost
+     * nothing.
+     */
+    t('every equity row can open its own analysis panel',
+      /<EquityAnalysis/.test(eqRow) && /useState\(false\)/.test(eqRow));
+    t('...fed by the same honest fetcher, never the synthesising one',
+      /fetchEquityChart/.test(eqAnalysis) && !/offlineChart|getChart/.test(eqAnalysis));
+    t('...and it withholds the history rather than filling the gap',
+      /isUsableSeries/.test(eqAnalysis) && /noHistory/.test(eqAnalysis));
 
     /*
      * ─── A SUPPORT ADDRESS ON OUR OWN DOMAIN ────────────────────────────────

@@ -7,9 +7,9 @@ import CoinLogo from '../components/CoinLogo';
 import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
+import GoldHistoryBox from '../components/GoldHistoryBox';
 import TopMovers from '../components/TopMovers';
-import HistoryPanel from '../components/HistoryPanel';
-import { useChart, useMarkets } from '../hooks/useMarket';
+import { useMarkets } from '../hooks/useMarket';
 import { getCategory } from '../lib/api';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -159,10 +159,14 @@ function initialStockTab() {
  */
 const EQUITY_SECTORS = {
   ai: ['nvdax', 'avgox', 'pltrx', 'amznx', 'msftx', 'googlx', 'metax'],
-  crypto: ['coinx', 'mstrx', 'crclx', 'hoodx'],
-  energy: ['xomx', 'cvxx']
+  crypto: ['coinx', 'mstrx', 'crclx', 'hoodx', 'strcx'],
+  energy: ['xomx', 'cvxx'],
+  /* Consumer names, added with the tickers themselves — a chip that sorts
+     nothing is worse than no chip. Apple and Tesla sit with McDonald's, Coke
+     and GM because that is what they sell to, not because of their size. */
+  consumer: ['aaplx', 'tslax', 'mcdx', 'kox', 'gmex']
 };
-const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'other'];
+const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'consumer', 'other'];
 
 /**
  * Curated fallback assets for energy sector to ensure tokens are always
@@ -515,20 +519,16 @@ export default function Stocks() {
   );
 
   /*
-   * 90 days of gold, for the "What the past says" panel below the gold rows.
+   * 90 days of gold now lives in GoldHistoryBox, which owns its own fetches.
    *
-   * The id is passed as null unless the gold section is ACTUALLY going to
-   * render — `useChart` resolves to an empty array on a null id, so nothing is
-   * requested. Fetching unconditionally would poll CoinGecko every 60 seconds
-   * for a chart nobody is looking at, including on the RWA tab and while the
-   * asset list is still loading.
+   * It used to be a `useChart('pax-gold', 90)` here, and that hook was quietly
+   * dishonest: `getChart()` falls back to `offlineChart()`, which SYNTHESISES a
+   * random walk for any id it does not know — and it does not know pax-gold.
+   * A failed request therefore produced a plausible $100-ish series, and the
+   * "what the past says" panel would then report support levels about a price
+   * that never existed. The gold box fetches through lib/equityChart.js, which
+   * has no synthetic fallback and returns an empty series instead.
    */
-  const goldId = commodities.length > 0 && tab === 'equity' ? 'pax-gold' : null;
-  const { data: goldChart } = useChart(goldId, 90);
-  const goldSeries = useMemo(
-    () => (goldChart ?? []).map((d) => d.p).filter((p) => Number.isFinite(p)),
-    [goldChart]
-  );
 
   /* The out-of-app opener went with the issuer buttons — this screen no longer
      sends anyone anywhere. Every remaining action stays inside the app: a row
@@ -779,27 +779,26 @@ export default function Stocks() {
 
               {/*
                 ─── "WHAT THE PAST SAYS", ON GOLD ────────────────────────────
-                Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد».
+                Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد» and then
+                «در طلا هم گذشته چه میگوید باید در باکس طلا و باکس جمع شونده و
+                مدرن باشد».
 
-                It is attached to GOLD specifically, and that is a data
-                constraint rather than a preference. The equity rows come from
-                /api/solana/assets, which returns a Jupiter spot price and a
-                24-hour change — one number and a delta, no series at all. The
-                panel measures support levels, range position and the largest
-                drawdown across a window, so with no window there is nothing
-                for it to compute and it would render empty.
+                Gold-specific, and that is a data constraint rather than a
+                preference. The equity rows come from /api/solana/assets, which
+                returns a Jupiter spot price and a 24-hour change — one number
+                and a delta, no series at all. The panel measures support
+                levels, range position and the largest drawdown across a window,
+                so with no window there is nothing for it to compute.
 
-                PAXG is different: it is on CoinGecko, so a real 90-day series
-                exists and every figure below is measured from it. Gold is
-                also the row where the panel earns its place — someone buying
-                gold is usually asking "is this a normal price or a spike",
-                which is exactly the question it answers.
+                PAXG, XAUt0 and GLDx are all on CoinGecko, so a real 90-day
+                series exists for each and every figure in the box is measured
+                from it. Gold is also the row where the panel earns its place —
+                someone buying gold is usually asking "is this a normal price or
+                a spike", which is exactly the question it answers.
               */}
-              {goldSeries.length >= 20 && (
-                <div style={{ marginTop: 10 }}>
-                  <HistoryPanel series={goldSeries} days={90} />
-                </div>
-              )}
+              <div style={{ marginTop: 10 }}>
+                <GoldHistoryBox assets={commodities} amountUsd={amount} />
+              </div>
             </section>
           )}
 

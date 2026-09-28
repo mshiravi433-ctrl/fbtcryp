@@ -207,7 +207,12 @@ export const EQUITY_ASSETS = [
     /* An index tracker, not a single company. Listed first deliberately: it is
        the lowest-variance way into this asset class and the one a beginner
        should see before TSLAx. */
-    kind: 'index'
+    kind: 'index',
+    /* CoinGecko lists every xStock, so a real 90-day series exists for the
+       analysis panel on the row. Without this id the panel says "no history"
+       rather than inventing one — see lib/equityChart.js for why the
+       fabricated offline snapshot is deliberately NOT used here. */
+    coingeckoId: 'sp500-xstock'
   },
   {
     id: 'qqqx',
@@ -225,7 +230,8 @@ export const EQUITY_ASSETS = [
     symbol: 'QQQx',
     name: 'Nasdaq 100',
     decimals: 8,
-    kind: 'index'
+    kind: 'index',
+    coingeckoId: 'nasdaq-xstock'
   },
   {
     id: 'nvdax',
@@ -233,7 +239,8 @@ export const EQUITY_ASSETS = [
     symbol: 'NVDAx',
     name: 'NVIDIA',
     decimals: 8,
-    kind: 'single'
+    kind: 'single',
+    coingeckoId: 'nvidia-xstock'
   },
   {
     id: 'tslax',
@@ -241,7 +248,8 @@ export const EQUITY_ASSETS = [
     symbol: 'TSLAx',
     name: 'Tesla',
     decimals: 8,
-    kind: 'single'
+    kind: 'single',
+    coingeckoId: 'tesla-xstock'
   },
   {
     id: 'aaplx',
@@ -249,7 +257,8 @@ export const EQUITY_ASSETS = [
     symbol: 'AAPLx',
     name: 'Apple',
     decimals: 8,
-    kind: 'single'
+    kind: 'single',
+    coingeckoId: 'apple-xstock'
   },
   {
     id: 'msftx',
@@ -257,35 +266,17 @@ export const EQUITY_ASSETS = [
     symbol: 'MSFTx',
     name: 'Microsoft',
     decimals: 8,
-    kind: 'single'
+    kind: 'single',
+    coingeckoId: 'microsoft-xstock'
   },
-  /*
-   * ─── SPACEX ───────────────────────────────────────────────────────────────
-   * Requested by name («شرکت های ایلان ماسک»). Worth its own note because it
-   * is the one genuinely unusual thing on this list: SpaceX is PRIVATE. There
-   * is no public share, no exchange listing, and no way for a retail investor
-   * anywhere to buy it through a broker.
-   *
-   * Backed's SPCXx is a claim on pre-IPO shares held by the issuer. That makes
-   * it more useful than the others — this is access that does not otherwise
-   * exist — and also strictly riskier, because there is no public market price
-   * to check the token against. The valuation moves on funding rounds, not on
-   * a ticker. Everything else here can be verified against a public quote;
-   * this cannot.
-   *
-   * Included because the access is real and the liquidity is there ($119k and
-   * 8,164 holders, verified). The extra risk is stated on the row rather than
-   * being smoothed over.
-   */
   {
-    id: 'spcxx',
-    mint: 'Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8',
-    symbol: 'SPCXx',
-    name: 'SpaceX',
+    id: 'amznx',
+    mint: 'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg',
+    symbol: 'AMZNx',
+    name: 'Amazon',
     decimals: 8,
     kind: 'single',
-    /* Renders the "private company, no public price" caveat on the row. */
-    privateCompany: true
+    coingeckoId: 'amazon-xstock'
   },
   {
     id: 'googlx',
@@ -293,31 +284,8 @@ export const EQUITY_ASSETS = [
     symbol: 'GOOGLx',
     name: 'Alphabet (Google)',
     decimals: 8,
-    kind: 'single'
-  },
-  {
-    id: 'mstrx',
-    mint: 'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
-    symbol: 'MSTRx',
-    name: 'MicroStrategy',
-    decimals: 8,
-    kind: 'single'
-  },
-  {
-    id: 'coinx',
-    mint: 'Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu',
-    symbol: 'COINx',
-    name: 'Coinbase',
-    decimals: 8,
-    kind: 'single'
-  },
-  {
-    id: 'crclx',
-    mint: 'XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1',
-    symbol: 'CRCLx',
-    name: 'Circle',
-    decimals: 8,
-    kind: 'single'
+    kind: 'single',
+    coingeckoId: 'alphabet-xstock'
   },
   {
     id: 'metax',
@@ -325,12 +293,84 @@ export const EQUITY_ASSETS = [
     symbol: 'METAx',
     name: 'Meta',
     decimals: 8,
+    kind: 'single',
+    coingeckoId: 'meta-xstock'
+  },
+  {
+    id: 'avgox',
+    mint: 'XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo',
+    symbol: 'AVGOx',
+    name: 'Broadcom',
+    decimals: 8,
+    kind: 'single',
+    coingeckoId: 'broadcom-xstock'
+  },
+  {
+    id: 'mstrx',
+    mint: 'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
+    symbol: 'MSTRx',
+    name: 'MicroStrategy',
+    decimals: 8,
+    kind: 'single',
+    coingeckoId: 'microstrategy-xstock'
+  },
+  {
+    id: 'strcx',
+    /*
+     * Strategy's variable-rate preferred — the largest crypto-treasury
+     * preferred in existence and the only preferred stock on this list.
+     * Verified the same three ways as the rest: Backed's own product page,
+     * an independent mint list, and a live Jupiter record carrying the SAME
+     * mint and freeze authority as every other xStock here.
+     */
+    mint: 'Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH',
+    symbol: 'STRCx',
+    name: 'Strategy PP Variable',
+    decimals: 8,
+    kind: 'single',
+    coingeckoId: 'strategy-pp-variable-xstock'
+  },
+  {
+    id: 'coinx',
+    mint: 'Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu',
+    symbol: 'COINx',
+    name: 'Coinbase',
+    decimals: 8,
+    kind: 'single',
+    coingeckoId: 'coinbase-xstock'
+  },
+  {
+    id: 'crclx',
+    mint: 'XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1',
+    symbol: 'CRCLx',
+    name: 'Circle',
+    decimals: 8,
+    kind: 'single',
+    coingeckoId: 'circle-xstock'
+  },
+  {
+    /* Listed 2021 but only reached this market recently, and the one most
+       likely to be recognised by someone who already trades crypto. */
+    id: 'hoodx',
+    mint: 'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg',
+    symbol: 'HOODx',
+    name: 'Robinhood',
+    decimals: 8,
+    kind: 'single',
+    coingeckoId: 'robinhood-xstock'
+  },
+  {
+    id: 'pltrx',
+    /* The AI defence/analytics name, and the most traded of this group. */
+    mint: 'XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4',
+    symbol: 'PLTRx',
+    name: 'Palantir',
+    decimals: 8,
     kind: 'single'
   },
-
   /*
    * ═════════════════════════════════════════════════════════════════════════
-   * ─── OIL, AI AND NEWER LISTINGS ───────────────────────────────────────────
+   * ─── OIL, AI, CONSUMER AND NEWER LISTINGS ────────────────────────────────
    * ═════════════════════════════════════════════════════════════════════════
    * Asked for oil, artificial-intelligence and newly-listed companies.
    *
@@ -379,44 +419,59 @@ export const EQUITY_ASSETS = [
     kind: 'single'
   },
 
-  /* ─── ARTIFICIAL INTELLIGENCE ──────────────────────────────────────────── */
+  /* ─── CONSUMER ─────────────────────────────────────────────────────────── */
   {
-    /* The AI defence/analytics name, and the most traded of this group. */
-    id: 'pltrx',
-    mint: 'XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4',
-    symbol: 'PLTRx',
-    name: 'Palantir',
+    id: 'mcdx',
+    mint: 'XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2',
+    symbol: 'MCDx',
+    name: "McDonald's",
     decimals: 8,
     kind: 'single'
   },
   {
-    /* The chips behind most AI infrastructure after NVIDIA. */
-    id: 'avgox',
-    mint: 'XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo',
-    symbol: 'AVGOx',
-    name: 'Broadcom',
+    id: 'kox',
+    mint: 'XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ',
+    symbol: 'KOx',
+    name: 'Coca-Cola',
     decimals: 8,
     kind: 'single'
   },
   {
-    id: 'amznx',
-    mint: 'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg',
-    symbol: 'AMZNx',
-    name: 'Amazon',
+    id: 'gmex',
+    mint: 'Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc',
+    symbol: 'GMEx',
+    name: 'GameStop',
     decimals: 8,
     kind: 'single'
   },
 
-  /* ─── RECENT LISTINGS ──────────────────────────────────────────────────── */
+  /*
+   * ─── SPACEX ───────────────────────────────────────────────────────────────
+   * Requested by name («شرکت های ایلان ماسک»). Worth its own note because it
+   * is the one genuinely unusual thing on this list: SpaceX is PRIVATE. There
+   * is no public share, no exchange listing, and no way for a retail investor
+   * anywhere to buy it through a broker.
+   *
+   * Backed's SPCXx is a claim on pre-IPO shares held by the issuer. That makes
+   * it more useful than the others — this is access that does not otherwise
+   * exist — and also strictly riskier, because there is no public market price
+   * to check the token against. The valuation moves on funding rounds, not on
+   * a ticker. Everything else here can be verified against a public quote;
+   * this cannot.
+   *
+   * Included because the access is real and the liquidity is there ($2.1m,
+   * measured), which makes it one of the deepest books on this screen.
+   */
   {
-    /* Listed 2021 but only reached this market recently, and the one most
-       likely to be recognised by someone who already trades crypto. */
-    id: 'hoodx',
-    mint: 'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg',
-    symbol: 'HOODx',
-    name: 'Robinhood',
+    id: 'spcxx',
+    mint: 'Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8',
+    symbol: 'SPCXx',
+    name: 'SpaceX',
     decimals: 8,
-    kind: 'single'
+    kind: 'single',
+    /* Renders the "private company, no public price" caveat on the row. */
+    privateCompany: true,
+    coingeckoId: 'spacex-xstocks'
   }
 ];
 
@@ -499,7 +554,8 @@ export const COMMODITY_ASSETS = [
      */
     mintAuthority: 'Ertp4yV6mJiQP5TyBaEkvza9fhh1pWo4CWtM6CdKmzfk',
     freezeAuthority: '2apBGMsS6ti9RyF5TwQTDswXBWskiJP2LD4cUEDqYJjk',
-    unit: 'ounce'
+    unit: 'ounce',
+    coingeckoId: 'pax-gold'
   },
   {
     id: 'xaut0',
@@ -509,7 +565,41 @@ export const COMMODITY_ASSETS = [
     decimals: 6,
     mintAuthority: '9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy',
     freezeAuthority: '9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy',
-    unit: 'ounce'
+    unit: 'ounce',
+    coingeckoId: 'tether-gold'
+  },
+  /*
+   * ─── GLDx — THE THIRD GOLD, AND THE ONLY ETF ─────────────────────────────
+   * Requested as «تعداد توکن‌ها هم بیشتر شود», and this is the one addition
+   * that changes what the section can answer rather than only how many rows
+   * it has.
+   *
+   * PAXG and XAUt0 are each a claim on one ounce in a vault. GLDx is the
+   * tokenized SPDR Gold Shares ETF, which holds bullion through HSBC and
+   * trades on the share price of the fund rather than the spot ounce. The
+   * difference is real and it is stated on the row: GLDx carries the ETF's
+   * own expense ratio and its own tracking error, so it drifts from the
+   * spot price slowly over years.
+   *
+   * It is also, measured, the deepest gold book on Solana ($833k against
+   * PAXG's $471k), which makes it the most tradeable of the three — and the
+   * one with a real 90-day CoinGecko series for the history panel.
+   *
+   * Same issuer authority as every other xStock, checked on every fetch.
+   */
+  {
+    id: 'gldx',
+    mint: 'Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re',
+    symbol: 'GLDx',
+    name: 'Gold (SPDR ETF)',
+    decimals: 8,
+    mintAuthority: XSTOCK_MINT_AUTHORITY,
+    freezeAuthority: XSTOCK_FREEZE_AUTHORITY,
+    /* Not 'ounce': one token is a share of the ETF, not a whole ounce. The
+       field's only job is to make the row read as a commodity rather than a
+       single company, and claiming an ounce here would be wrong. */
+    unit: 'etf',
+    coingeckoId: 'gold-xstock'
   }
 ];
 

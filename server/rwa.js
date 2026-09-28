@@ -237,6 +237,89 @@ const RWA_TOKENS = [
     standard: 'ERC-20',
     swappable: true,
     feeBps: 70
+  },
+  /*
+   * ─── THE TOKENIZED-TREASURY WAVE (added 2026-09-28) ─────────────────────
+   * Same four funds added to src/lib/rwaTokens.js in the same pass. The two
+   * lists are deliberately kept in step: the client falls back to this payload
+   * when its own marketplace fetch fails, and a token that exists on one side
+   * only disappears for the readers who hit that path.
+   *
+   * Contracts, decimals and ids were read from the live CoinGecko coin record
+   * on 2026-09-28. USYC and JTRSY accrete (price above $1.00); VBILL and
+   * THBILL target $1.00 and pay dividends as new tokens — the copy says which.
+   */
+  {
+    id: 'hashnote-usyc',
+    symbol: 'USYC',
+    name: 'Circle USYC (Hashnote)',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x136471a34f6ef19fe571effc1ca711fdb8e49f2b',
+    decimals: 6,
+    coingeckoId: 'hashnote-usyc',
+    backingFa: 'اوراق خزانه کوتاه‌مدت آمریکا و عملیات ریپو',
+    backingEn: 'Short-term US Treasury Bills & Repo',
+    backingType: 'direct_custody',
+    issuer: 'Hashnote International Short Duration Yield Fund',
+    standard: 'ERC-20',
+    swappable: true,
+    feeBps: 70
+  },
+  {
+    id: 'theo-short-duration-us-treasury-fund',
+    symbol: 'THBILL',
+    name: 'Theo Short Duration US Treasury Fund',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x5fa487bca6158c64046b2813623e20755091da0b',
+    decimals: 6,
+    coingeckoId: 'theo-short-duration-us-treasury-fund',
+    backingFa: 'اوراق خزانه کوتاه‌مدت آمریکا',
+    backingEn: 'Short-duration US Treasury Bills',
+    backingType: 'direct_custody',
+    issuer: 'Theo (theo.xyz)',
+    standard: 'ERC-20',
+    swappable: true,
+    feeBps: 70
+  },
+  {
+    id: 'vaneck-treasury-fund',
+    symbol: 'VBILL',
+    name: 'VanEck Treasury Fund',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x2255718832bc9fd3be1caf75084f4803da14ff01',
+    decimals: 6,
+    coingeckoId: 'vaneck-treasury-fund',
+    backingFa: 'نقد، اوراق خزانه آمریکا و قراردادهای ریپو با بازنده ۶۰ روزه یا کمتر',
+    backingEn: 'Cash, US Treasury Obligations & Repo — 60-day weighted maturity or less',
+    backingType: 'direct_custody',
+    issuer: 'VanEck / Securitize',
+    standard: 'ERC-20',
+    swappable: true,
+    feeBps: 70
+  },
+  {
+    id: 'janus-henderson-anemoy-treasury-fund',
+    symbol: 'JTRSY',
+    name: 'Janus Henderson Anemoy Treasury Fund',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x8c213ee79581ff4984583c6a801e5263418c4b86',
+    decimals: 6,
+    coingeckoId: 'janus-henderson-anemoy-treasury-fund',
+    backingFa: 'اوراق خزانه آمریکا با مدیریت مشترک Janus Henderson و Anemoy',
+    backingEn: 'US Treasuries, managed jointly by Janus Henderson and Anemoy',
+    backingType: 'direct_custody',
+    issuer: 'Janus Henderson / Anemoy (Centrifuge)',
+    standard: 'ERC-20',
+    swappable: true,
+    feeBps: 70
   }
 ];
 

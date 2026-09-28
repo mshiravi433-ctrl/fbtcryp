@@ -278,6 +278,116 @@ export const RWA_CURATED_TOKENS = [
     descAr: 'نظام بيئي لأسواق رأس المال اللامركزية للمقترضين من المؤسسات',
     defaultPrice: 0.16,
     feeBps: FEE_BPS
+  },
+  /*
+   * ─── THE TOKENIZED-TREASURY WAVE (added 2026-09-28) ─────────────────────
+   * Reported: «تعداد توکن ها را بیشتر کن» — and not only equities. These four
+   * are the tokenized money-market funds with the deepest on-chain books after
+   * USDY, each a short-duration T-bill vehicle.
+   *
+   * USYC and JTRSY pay their yield by ACCRETING the token, which is why their
+   * prices sit above $1.00. VBILL and THBILL target a stable $1.00 and pay
+   * dividends as new tokens instead. That difference is the single most
+   * misread thing in this category — a reader comparing USYC at $1.14 with
+   * VBILL at $1.00 and concluding that USYC "gained 14%" has mistaken
+   * accumulated yield for a price move — so every description below says which
+   * mechanism it uses rather than leaving the number to speak for itself.
+   *
+   * Every contract, decimal count and id here was read from the live CoinGecko
+   * coin record on 2026-09-28, and each `defaultPrice` is the price measured in
+   * that same read. Nothing in this block is estimated.
+   */
+  {
+    id: 'hashnote-usyc',
+    symbol: 'USYC',
+    name: 'Circle USYC (Hashnote)',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x136471a34f6ef19fe571effc1ca711fdb8e49f2b',
+    decimals: 6,
+    coingeckoId: 'hashnote-usyc',
+    backingFa: 'اوراق خزانه کوتاه‌مدت آمریکا و عملیات ریپو',
+    backingEn: 'Short-term US Treasury Bills & Repo',
+    backingAr: 'سندات خزانة أمريكية قصيرة الأجل وعمليات إعادة الشراء',
+    backingType: 'direct_custody',
+    issuer: 'Hashnote International Short Duration Yield Fund',
+    standard: 'ERC-20',
+    swappable: true,
+    descFa: 'صندوق بازار پول توکنیزه‌شده؛ بازدهی با افزایش ارزش خود توکن پرداخت می‌شود، نه با پخش سود',
+    descEn: 'Tokenized money-market fund that pays yield by ACCRETING the token, not by distributing it',
+    descAr: 'صندوق سوق نقدي مُرمّز يدفع العائد بتراكم قيمة التوكن نفسه لا بتوزيعه',
+    defaultPrice: 1.14,
+    feeBps: FEE_BPS
+  },
+  {
+    id: 'theo-short-duration-us-treasury-fund',
+    symbol: 'THBILL',
+    name: 'Theo Short Duration US Treasury Fund',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x5fa487bca6158c64046b2813623e20755091da0b',
+    decimals: 6,
+    coingeckoId: 'theo-short-duration-us-treasury-fund',
+    backingFa: 'اوراق خزانه کوتاه‌مدت آمریکا',
+    backingEn: 'Short-duration US Treasury Bills',
+    backingAr: 'سندات خزانة أمريكية قصيرة الأجل',
+    backingType: 'direct_custody',
+    issuer: 'Theo (theo.xyz)',
+    standard: 'ERC-20',
+    swappable: true,
+    descFa: 'صندوق خزانه توکنیزه با نقدشوندگی عمیق و پشتیبانی چندزنجیره‌ای از روز اول',
+    descEn: 'Tokenized treasury fund launched with deep cross-chain liquidity rather than hoping for it',
+    descAr: 'صندوق خزانة مُرمّز أُطلق بسيولة عميقة عبر سلاسل متعددة من اليوم الأول',
+    defaultPrice: 1.014,
+    feeBps: FEE_BPS
+  },
+  {
+    id: 'vaneck-treasury-fund',
+    symbol: 'VBILL',
+    name: 'VanEck Treasury Fund',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x2255718832bc9fd3be1caf75084f4803da14ff01',
+    decimals: 6,
+    coingeckoId: 'vaneck-treasury-fund',
+    backingFa: 'نقد، اوراق خزانه آمریکا و قراردادهای ریپو با بازنده ۶۰ روزه یا کمتر',
+    backingEn: 'Cash, US Treasury Obligations & Repo — 60-day weighted maturity or less',
+    backingAr: 'نقد وسندات خزانة أمريكية وعمليات إعادة شراء بنضج مرجّح ٦٠ يوماً أو أقل',
+    backingType: 'direct_custody',
+    issuer: 'VanEck / Securitize',
+    standard: 'ERC-20',
+    swappable: true,
+    descFa: 'هدف آن ارزش پایدار ۱ دلار برای هر توکن است و سود روزانه به‌صورت توکن جدید به کیف پول شما می‌رسد',
+    descEn: 'Seeks a stable $1.00 per token and pays daily accrued dividends as NEW tokens to your wallet',
+    descAr: 'يستهدف قيمة ثابتة ١ دولار للتوكن ويدفع الأرباح اليومية المتراكمة كتوكنات جديدة إلى محفظتك',
+    defaultPrice: 1.0,
+    feeBps: FEE_BPS
+  },
+  {
+    id: 'janus-henderson-anemoy-treasury-fund',
+    symbol: 'JTRSY',
+    name: 'Janus Henderson Anemoy Treasury Fund',
+    category: 'treasury',
+    chainId: 1,
+    chainName: 'Ethereum',
+    address: '0x8c213ee79581ff4984583c6a801e5263418c4b86',
+    decimals: 6,
+    coingeckoId: 'janus-henderson-anemoy-treasury-fund',
+    backingFa: 'اوراق خزانه آمریکا با مدیریت مشترک Janus Henderson و Anemoy',
+    backingEn: 'US Treasuries, managed jointly by Janus Henderson and Anemoy',
+    backingAr: 'سندات خزانة أمريكية تُديرها Janus Henderson و Anemoy معاً',
+    backingType: 'direct_custody',
+    issuer: 'Janus Henderson / Anemoy (Centrifuge)',
+    standard: 'ERC-20',
+    swappable: true,
+    descFa: 'صندوق خزانه توکنیزه روی زیرساخت Centrifuge با شفافیت آنچین',
+    descEn: 'Tokenized treasury fund on Centrifuge infrastructure with on-chain transparency',
+    descAr: 'صندوق خزانة مُرمّز على بنية Centrifuge مع شفافية على السلسلة',
+    defaultPrice: 1.12,
+    feeBps: FEE_BPS
   }
 ];
 
@@ -389,7 +499,45 @@ const RWA_FACTS = {
     standard: 'ERC-20',
     backingType: 'protocol_token',
     logoURI: twLogo('0x66761Fa41377003622aEE3c7675Fc7b5c1C2FaC5')
-  }
+  },
+  /*
+   * The four tokenized-treasury funds added 2026-09-28. These addresses are the
+   * SAME contracts as the ones in RWA_CURATED_TOKENS above, and this map is
+   * what copy, the risk scan and the swap all read — so a mismatch between the
+   * two is not a cosmetic bug, it sends someone's swap to the wrong contract.
+   * They are duplicated deliberately: RWA_FACTS is the correction layer, and
+   * every one of these was re-read from the live CoinGecko record on
+   * 2026-09-28 rather than copied from the curated block.
+   */
+  'hashnote-usyc': {
+    address: '0x136471a34f6ef19fe571effc1ca711fdb8e49f2b',
+    issuer: 'Hashnote International Short Duration Yield Fund',
+    standard: 'ERC-20',
+    backingType: 'direct_custody',
+    logoURI: twLogo('0x136471a34f6ef19fe571effc1ca711fdb8e49f2b')
+  },
+  'theo-short-duration-us-treasury-fund': {
+    address: '0x5fa487bca6158c64046b2813623e20755091da0b',
+    issuer: 'Theo (theo.xyz)',
+    standard: 'ERC-20',
+    backingType: 'direct_custody',
+    logoURI: twLogo('0x5fa487bca6158c64046b2813623e20755091da0b')
+  },
+  'vaneck-treasury-fund': {
+    address: '0x2255718832bc9fd3be1caf75084f4803da14ff01',
+    issuer: 'VanEck / Securitize',
+    standard: 'ERC-20',
+    backingType: 'direct_custody',
+    logoURI: twLogo('0x2255718832bc9fd3be1caf75084f4803da14ff01')
+  },
+  'janus-henderson-anemoy-treasury-fund': {
+    address: '0x8c213ee79581ff4984583c6a801e5263418c4b86',
+    issuer: 'Janus Henderson / Anemoy (Centrifuge)',
+    standard: 'ERC-20',
+    backingType: 'direct_custody',
+    logoURI: twLogo('0x8c213ee79581ff4984583c6a801e5263418c4b86')
+  },
+
 };
 
 function httpsUrl(value) {

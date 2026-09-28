@@ -125,6 +125,14 @@ function shape(live, asset, kind) {
      * across roughly 10,000 wallets under this same authority.
      */
     freezeAuthority: kind === 'lst' ? null : live.freezeAuthority ?? null,
+    /*
+     * The CoinGecko id the Stocks screen uses to pull a REAL 90-day price
+     * series for the analysis panel on each row. Passed through rather than
+     * re-derived on the client, because the curated entry is the only place
+     * that knows it — and an id invented anywhere else would be a fabricated
+     * history presented as a measured one.
+     */
+    ...(asset.coingeckoId ? { coingeckoId: asset.coingeckoId } : {}),
     ...(asset.unit ? { unit: asset.unit } : {}),
     ...(asset.llamaProject ? { llamaProject: asset.llamaProject, llamaSymbol: asset.llamaSymbol } : {}),
     ...(asset.protocolFeePct != null ? { protocolFeePct: asset.protocolFeePct } : {}),
@@ -148,21 +156,47 @@ export async function fetchSolanaAssets() {
     ...COMMODITY_ASSETS.map((a) => ({ asset: a, kind: 'commodity' }))
   ];
 
-  const rows = await Promise.all(
-    jobs.map(async ({ asset, kind }) => {
-      try {
-        const list = await fetchJson(`${JUP_TOKENS}?query=${encodeURIComponent(asset.mint)}`);
-        const live = Array.isArray(list) ? list.find((r) => r.id === asset.mint) : null;
-        if (!live) return { asset, kind, ok: false, why: 'notFound' };
-        if (!issuerMatches(live, asset, kind)) {
-          return { asset, kind, ok: false, why: 'issuerMismatch' };
-        }
-        return { asset, kind, ok: true, row: shape(live, asset, kind) };
-      } catch {
-        /* One unreachable mint must not take down the whole screen. */
-        return { asset, kind, ok: false, why: 'fetchFailed' };
+  /*
+   * One request per mint, but never all of them at once.
+   *
+   * There were eight of these when this function was written and `Promise.all`
+   * was the honest description. There are thirty-one now, and firing thirty-one
+   * simultaneous requests at a free public API is how a shared IP address gets
+   * rate-limited — which would empty the whole screen rather than one row. So
+   * the same per-mint isolation runs through a bounded pool instead: eight in
+   * flight, the rest queued behind them, and one failure still takes down only
+   * its own row.
+   */
+  const CONCURRENCY = 8;
+
+  const readOne = async ({ asset, kind }) => {
+    try {
+      const list = await fetchJson(`${JUP_TOKENS}?query=${encodeURIComponent(asset.mint)}`);
+      const live = Array.isArray(list) ? list.find((r) => r.id === asset.mint) : null;
+      if (!live) return { asset, kind, ok: false, why: 'notFound' };
+      if (!issuerMatches(live, asset, kind)) {
+        return { asset, kind, ok: false, why: 'issuerMismatch' };
       }
-    })
+      return { asset, kind, ok: true, row: shape(live, asset, kind) };
+    } catch {
+      /* One unreachable mint must not take down the whole screen. */
+      return { asset, kind, ok: false, why: 'fetchFailed' };
+    }
+  };
+
+  const rows = new Array(jobs.length);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < jobs.length) {
+      const index = cursor;
+      cursor += 1;
+      rows[index] = await readOne(jobs[index]);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker)
   );
 
   const good = rows.filter((r) => r.ok);

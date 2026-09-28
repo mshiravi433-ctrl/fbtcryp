@@ -27,6 +27,17 @@ import {
   liquidityVerdict
 } from '../src/lib/solanaAssets.js';
 import { MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../src/lib/solanaAssetsClient.js';
+/* The per-row / gold history measurement. Pure arithmetic, so it belongs here
+   next to the asset list it measures — the panel that renders it is checked
+   structurally in test/equity-analysis-probe.mjs. */
+import {
+  averageDailyMove,
+  dailyExtremes,
+  equityDepth,
+  equitySeriesFacts,
+  equityStats,
+  windowChange
+} from '../src/lib/equityAnalysis.js';
 import { iconCandidates } from '../src/lib/tokenIcon.jsx';
 import { pairTokens, pairSwapRoute, singleToken, singleSwapRoute, investRoute, llamaChainId, projectEarnings, rateIsUnusual, realShare, farmScore, impermanentLoss } from '../src/lib/yields.js';
 /* LST_ASSETS / EQUITY_ASSETS / COMMODITY_ASSETS are imported above (solanaAssets). */
@@ -4663,6 +4674,15 @@ export default async function run() {
      * the assets already listed, which is the check a convincing clone cannot
      * pass: it can copy a name and a ticker, it cannot be minted by Backed.
      *
+     * 31 since the «تعداد سهام توکنیزه خیلی کمه، باید خیلی بیشار» report — the
+     * equity tab carried eight companies and a reader had to be told there was
+     * nothing else. Every added name was resolved live through Jupiter's token
+     * search and matched on the same issuer authorities, and the six with no
+     * CoinGecko listing (GMEx, MCDx, KOx, PLTRx, XOMx, CVXx) are listed
+     * WITHOUT one, because a history that cannot be fetched must not be
+     * implied: see src/lib/equityChart.js and the probe in
+     * test/equity-analysis-probe.mjs.
+     *
      * 26 since the Farm's «داخل اپ» pools grew the three Solana liquid-staking
      * tokens its own yield feed already tracks — bSOL (BlazeStake), INF
      * (Sanctum Infinity) and hSOL (Helius). They are a different KIND, so they
@@ -4675,7 +4695,7 @@ export default async function run() {
      * would not merely be wrong here — it would render an empty row there.
      */
     t('every curated mint is a plausible Solana address',
-      all.length === 26 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 31 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.
@@ -4876,9 +4896,17 @@ export default async function run() {
    * defences and the same tests.
    */
   {
-    t('gold is listed', COMMODITY_ASSETS.length === 2);
-    t('...with both major issuers',
-      COMMODITY_ASSETS.map((a) => a.symbol).sort().join(',') === 'PAXG,XAUt0');
+    /*
+     * Three since the 2026-09-28 gold-history pass: GLDx is the tokenized SPDR
+     * Gold Shares ETF, minted under the same Backed/xStock authorities as the
+     * equities and therefore listed as an ETF share rather than an ounce. It is
+     * a different INSTRUMENT from a vault claim — an ETF can trade at a premium
+     * or discount to the metal it holds, and an ounce in a Brink's vault cannot
+     * — so it is labelled separately rather than folded in with the two vaults.
+     */
+    t('gold is listed', COMMODITY_ASSETS.length === 3);
+    t('...with both major vault issuers, plus the ETF',
+      COMMODITY_ASSETS.map((a) => a.symbol).sort().join(',') === 'GLDx,PAXG,XAUt0');
     /*
      * Unlike the equities there is no single shared issuer key: Paxos and
      * Tether are different companies. Each asset therefore carries its own
@@ -4887,6 +4915,14 @@ export default async function run() {
      */
     t('each gold token carries its own issuer authorities',
       COMMODITY_ASSETS.every((a) => a.mintAuthority && a.freezeAuthority));
+    /* GLDx is an xStock, so unlike Paxos and Tether it shares the equity
+       issuer key. That is the point of the per-asset authority check: the
+       check is against whatever the asset declares, so a rotated Backed key
+       takes out the ETF and the equities together and nothing else. */
+    t('the gold ETF is minted under the shared xStock authorities',
+      COMMODITY_ASSETS.find((a) => a.symbol === 'GLDx').mintAuthority === XSTOCK_MINT_AUTHORITY);
+    t('...and every gold token has a CoinGecko id, so its history is fetchable',
+      COMMODITY_ASSETS.every((a) => a.coingeckoId));
 
     const paxg = COMMODITY_ASSETS.find((a) => a.symbol === 'PAXG');
     const realPaxg = {
@@ -4922,8 +4958,8 @@ export default async function run() {
      * Gold is not an equity and the row must not label it "single company".
      * `unit` is what the UI branches on, so it has to be present.
      */
-    t('gold declares its unit so it can be labelled correctly',
-      COMMODITY_ASSETS.every((a) => a.unit === 'ounce'));
+    t('a vault claim declares its unit as an ounce, the ETF as an ETF',
+      COMMODITY_ASSETS.every((a) => a.unit === (a.symbol === 'GLDx' ? 'etf' : 'ounce')));
 
     /* Thin books, so the same depth gate must bind here too. */
     t('the depth gate applies to gold as well',
@@ -4976,6 +5012,32 @@ export default async function run() {
      * would be the only thing left and it only covers one ticker.
      */
     t('the listing floor would have excluded a $122 book', MIN_EQUITY_LIQUIDITY > 122);
+
+    /* ---- the per-row analysis arithmetic (test/equity-analysis-probe.mjs) ---- */
+    /*
+     * A hand-checked series: 100 → 110 → 99 → 121 → 100. The window change is
+     * 0%, the mean absolute step is 14.895%, the best day +22.22% and the worst
+     * −17.36%. Known answers rather than "looks plausible", because a measured
+     * panel that computes the wrong measurement is worse than no panel.
+     */
+    const known = [100, 110, 99, 121, 100];
+    t('windowChange measures first point to last', Math.abs(windowChange(known)) < 1e-9);
+    t('averageDailyMove averages the absolute step', Math.abs(averageDailyMove(known) - 14.895) < 1e-3);
+    t('dailyExtremes reports the best day and the worst day',
+      dailyExtremes(known).best > 22.2 && dailyExtremes(known).worst < -17.3);
+
+    /* Nothing may be reported about a series that cannot carry a percentage. */
+    t('a two-point series produces no facts at all', equitySeriesFacts([1, 2]).length === 0);
+    t('averageDailyMove withholds its answer below three points', averageDailyMove([1, 2]) === null);
+
+    /* And the depth half must agree with the button's gate, not approximate it. */
+    t('equityDepth refuses an order larger than the pool share gate',
+      equityDepth({ liquidity: 584_726 }, 1_000_000).ok === false &&
+      equityDepth({ liquidity: 584_726 }, 1_000_000).maxUsd > 11_000);
+    t('equityStats derives units from the live price',
+      equityStats({ usdPrice: 221.4, liquidity: 1000 }, 1000, []).units > 4.51);
+    t('equityStats reports that there is no history instead of inventing one',
+      equityStats({ usdPrice: 100, liquidity: 1000 }, 1000, []).hasHistory === false);
 
     /* SpaceX is included, and must carry its private-company caveat. */
     const spcx = EQUITY_ASSETS.find((a) => a.symbol === 'SPCXx');

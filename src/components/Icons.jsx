@@ -74,6 +74,21 @@ export const IconActivity = (p) => (
 );
 
 /*
+ * Analysis — a chart with a baseline, for the panel that opens under a row.
+ *
+ * Added rather than reusing IconActivity: that glyph is a pulse, which reads
+ * as "live monitoring". The button it labels opens a 90-day history, and a
+ * reader should be able to tell those two ideas apart before tapping.
+ */
+export const IconChart = (p) => (
+  <svg {...base} {...p}>
+    <path d="M3 3v16.5A1.5 1.5 0 0 0 4.5 21H21" />
+    <path d="M7 15.5l3.5-4.5 3 2.5 4.5-6" />
+    <circle cx="18" cy="7.5" r="1.6" />
+  </svg>
+);
+
+/*
  * Smart Money / on-chain monitoring — an eye watching the chain.
  *
  * LIVES IN THE SHARED SET, NOT IN MoreSheet.

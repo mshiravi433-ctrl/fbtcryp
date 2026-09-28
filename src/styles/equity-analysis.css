@@ -1,0 +1,409 @@
+/* ==========================================================================
+   EQUITY ANALYSIS + GOLD HISTORY  —  .eqan-*, .gold-*
+   --------------------------------------------------------------------------
+   «صفحه هر سهم تحلیل مثل تحلیل RWA باشد · مدرن · تم درست · زبان درست · فاصله
+   درست · در باکس بازشونده برای هر توکن»
+
+   ─── WHY THESE ARE TOKEN-DRIVEN AND NOT NEW COLOURS ───────────────────────
+   The app has one theme and twelve languages, and a panel that hard-codes its
+   own blues is a panel that breaks the moment the theme flips. Every surface,
+   line and text colour here comes from the same tokens the rest of the app
+   uses, so dark, light and the pre-paint fallback all work without a second
+   rule — and the only place a new hue appears is the gold box, where the
+   colour IS the information («باکس طلا»).
+
+   ─── WHY THE STAT GRID IS 2-UP ON A PHONE AND 4-UP ABOVE 420PX ────────────
+   Eight numbers at 4-up on a 390px screen is 87px per cell: the label wraps to
+   three lines and the value has to shrink below legible. Two-up keeps every
+   label on one line in Persian, which is the longest of the three complete
+   locales. The breakpoint is 420px rather than 640px because the Stocks page
+   is already a .page with 16px of side padding, so 420px of viewport is about
+   the point a 4-up cell stops wrapping.
+
+   ─── WHY NO GREEN/RED ON THE FACTS ────────────────────────────────────────
+   Same rule as .hist-panel, and it matters more here: a measurement about a
+   company's past coloured like a signal stops being a measurement. The three
+   tones stay NOTABLE / CAUTION / NEUTRAL, and none of them mean buy or sell.
+   ========================================================================== */
+
+/* ── the row's two actions, equal width on one line ─────────────────────── */
+
+.eq-actions {
+  margin-top: 11px;
+}
+
+/* `.eq-buy` carries `margin-top: 11px; width: 100%` from the .eq-* block in
+   src/index.css. Inside this row that margin would stack on top of the one
+   above and double the gap, and `width: 100%` is what `.btn-row` is here to
+   override — so both are neutralised rather than duplicated here. */
+.eq-actions .eq-buy {
+  margin-top: 0;
+}
+
+/* The analysis toggle reads as the secondary action until it is open, then it
+   takes the cyan ink so the reader can see which row they have expanded —
+   without changing the button's size, which would shift the row under the
+   finger that just tapped it. */
+.eq-analyze {
+  white-space: nowrap;
+}
+
+.eq-analyze.is-open {
+  color: var(--ink-cyan);
+  border-color: color-mix(in srgb, var(--ink-cyan) 45%, transparent);
+}
+
+/* ── the panel itself ───────────────────────────────────────────────────── */
+
+.eqan {
+  /* Height is animated by framer-motion, so the overflow has to be clipped
+     here or the collapsed state still paints its content. */
+  overflow: hidden;
+}
+
+.eqan-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+/* ── the 90-day series ──────────────────────────────────────────────────── */
+
+.eqan-chart {
+  padding: 10px 12px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.eqan-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+/* The SVG is drawn at 320px and scaled to the container, so one chart fits a
+   320px phone and a 640px tablet without a second render pass. */
+.eqan-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ── the numbers ────────────────────────────────────────────────────────── */
+
+.eqan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+
+@media (min-width: 420px) {
+  .eqan-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.eqan-stat {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.eqan-stat-k {
+  font-size: 10.5px;
+  line-height: 1.5;
+  margin-bottom: 3px;
+  /* A label that wraps to three lines breaks the grid's rhythm; one line, and
+     the ellipsis only appears on a word long enough to need it. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eqan-stat-v {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* ── what the past says ─────────────────────────────────────────────────── */
+
+.eqan-facts {
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.eqan-facts-title {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.eqan-advice {
+  margin-top: 10px;
+  font-size: 11.6px;
+}
+
+/* ── depth ──────────────────────────────────────────────────────────────── */
+
+.eqan-depth {
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--ink-amber) 32%, transparent);
+  background: color-mix(in srgb, var(--ink-amber) 6%, var(--bg-panel));
+}
+
+.eqan-depth-title {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.eqan-depth-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.eqan-depth-warn {
+  margin: 8px 0 0;
+  font-size: 11.6px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.eqan-nohist {
+  margin: 0;
+  font-size: 11.6px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+.eqan-buy {
+  width: 100%;
+  min-height: 44px;
+}
+
+/* ==========================================================================
+   GOLD HISTORY BOX  —  .gold-*
+   The one place a new hue is allowed, because «باکس طلا» names the colour as
+   part of the requirement. Everything else is tokens.
+   ========================================================================== */
+
+.gold-box {
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--ink-amber) 40%, transparent);
+  background:
+    radial-gradient(
+      130% 150% at 10% -25%,
+      color-mix(in srgb, var(--ink-amber) 18%, transparent),
+      transparent 60%
+    ),
+    var(--bg-panel);
+  overflow: hidden;
+}
+
+.gold-box.is-open {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink-amber) 12%, transparent),
+    0 8px 28px color-mix(in srgb, var(--ink-amber) 10%, transparent);
+}
+
+.gold-box-head {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 13px;
+  cursor: pointer;
+  min-height: 60px;
+}
+
+/* The orb: a metal-tinted ring around the token icon. Decoration only — the
+   icon inside is the same TokenIcon every other row uses, so a failed logo
+   degrades to a monogram rather than an empty circle. */
+.gold-box-orb {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink-amber) 45%, transparent);
+  background: radial-gradient(
+    circle at 32% 28%,
+    color-mix(in srgb, var(--ink-amber) 26%, transparent),
+    transparent 70%
+  );
+}
+
+.gold-box-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gold-box-h {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text-1);
+}
+
+.gold-box-sub {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.gold-box-px {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.gold-box-spark {
+  flex-shrink: 0;
+  display: none;
+}
+
+@media (min-width: 380px) {
+  .gold-box-spark {
+    display: block;
+  }
+}
+
+.gold-box-chevron {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  transition: transform 0.24s ease;
+}
+
+.gold-box-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+/* The chevron points the other way in the two right-to-left locales. Without
+   this it points INTO the box it is about to open. */
+[dir='rtl'] .gold-box-chevron svg {
+  transform: rotate(180deg);
+}
+
+[dir='rtl'] .gold-box-chevron.is-open {
+  transform: rotate(-90deg);
+}
+
+.gold-box-body {
+  overflow: hidden;
+}
+
+.gold-box-body-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: 0 13px 13px;
+}
+
+.gold-box-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gold-token {
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.gold-token-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.gold-token-id {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.gold-token-sym {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.gold-token-name {
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.gold-token-px {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.gold-token-facts {
+  margin-top: 9px;
+}
+
+.gold-token-nohist {
+  margin: 9px 0 0;
+  font-size: 11.4px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.gold-box-advice {
+  font-size: 11.6px;
+}
+
+.gold-box-note {
+  margin: 0;
+  font-size: 11.2px;
+  line-height: 1.8;
+}
+
+/* Reduced motion: the chevron still turns, the panels do not slide. */
+@media (prefers-reduced-motion: reduce) {
+  .gold-box-chevron {
+    transition: none;
+  }
+}
