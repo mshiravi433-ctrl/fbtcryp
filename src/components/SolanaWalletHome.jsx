@@ -6,6 +6,7 @@ import TokenIcon from '../lib/tokenIcon';
 import { shortAddress } from '../context/WalletContext';
 import { isSolanaAddress } from '../lib/solana';
 import { readSolanaPortfolio } from '../lib/solana/portfolio';
+import { solanaExitKind, solanaSellUrl } from '../lib/solanaSell';
 import { sendNativeSol, solToLamports } from '../lib/solana/transfer';
 import QrScanner, { parseScanned, scannerSupported } from './QrScanner';
 import { IconQr } from './Icons';
@@ -255,6 +256,27 @@ export default function SolanaWalletHome({
                 <span className="mono sol-wal-row-amt">
                   {row.unread || row.amount == null ? '—' : row.amount}
                 </span>
+                {/*
+                  The way OUT of every holding, on the holding itself. Before
+                  this the list was display-only: someone who had bought AAPLx
+                  from the Stocks page could see it here and had no idea how to
+                  turn it back into dollars («چطور بفروشم؟»). The link lands on
+                  the swap screen with this token already in the FROM box.
+                  SOL and the stables say «تبدیل», because «فروش» for USDC is
+                  not what happens.
+                */}
+                {!row.unread && row.amount != null && solanaSellUrl(row.mint) ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm sol-wal-row-exit"
+                    data-testid="sol-wal-exit"
+                    data-exit={solanaExitKind(row.mint)}
+                    aria-label={`${solanaExitKind(row.mint) === 'sell' ? t('trade.sell') : t('solana.wallet.swap')} ${row.symbol}`}
+                    onClick={() => { haptic?.('select'); openAppPath(solanaSellUrl(row.mint)); }}
+                  >
+                    {solanaExitKind(row.mint) === 'sell' ? t('trade.sell') : t('solana.wallet.swap')}
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>

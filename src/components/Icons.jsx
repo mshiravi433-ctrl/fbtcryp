@@ -192,6 +192,15 @@ export const IconArrowDown = (p) => (
   </svg>
 );
 
+/* «فروش» on a holding — value leaving the wallet. Same stroke language as
+   IconSwap so Buy and Sell read as a pair, not as two different icon sets. */
+export const IconArrowUpRight = (p) => (
+  <svg {...base} {...p}>
+    <path d="M7 17 17 7" />
+    <path d="M9 7h8v8" />
+  </svg>
+);
+
 export const IconCheck = (p) => (
   <svg {...base} {...p}>
     <path d="M20 6 9 17l-5-5" />

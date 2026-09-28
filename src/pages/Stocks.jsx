@@ -7,6 +7,7 @@ import CoinLogo from '../components/CoinLogo';
 import InfoBox from '../components/InfoBox';
 import Sparkline from '../components/Sparkline';
 import EquityRow from '../components/EquityRow';
+import EquityHoldings, { useSolanaEquityHoldings } from '../components/EquityHoldings';
 import GoldHistoryBox from '../components/GoldHistoryBox';
 import TopMovers from '../components/TopMovers';
 import { useMarkets } from '../hooks/useMarket';
@@ -17,6 +18,8 @@ import { IconSearch } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import { THIN_ASSETS } from '../lib/solanaAssets';
+import { solanaSellUrl } from '../lib/solanaSell';
+import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import RwaRow from '../components/RwaRow';
 import RwaDetailSheet from '../components/RwaDetailSheet';
 import {
@@ -461,6 +464,26 @@ export default function Stocks() {
   );
 
   /*
+   * ─── WHAT THE CONNECTED WALLET ALREADY HOLDS ──────────────────────────────
+   * Read from the chain and joined by mint to the lists above, so the page can
+   * say «در کیف پول شما ۰٫۴۲ AAPLx» on the row and offer a Sell. The price
+   * list handed to the join is EVERY priced row the server returned — before
+   * the liquidity floor — because a token the user already holds still needs
+   * its value and its way out even if its book has since thinned below the
+   * listing floor. The curated `equities` (which add the energy defaults) go
+   * last so their records win where a mint appears twice.
+   */
+  const pricedAssets = useMemo(
+    () => [...(assets?.equities ?? []), ...(assets?.commodities ?? []), ...equities, ...commodities],
+    [assets, equities, commodities]
+  );
+  const { address: solAddress } = useSolanaWallet();
+  /* Read only while the equity tab is showing: the RWA and futures tabs have
+     no use for it, and three RPC calls per visit is enough. Leaving the tab
+     resets the read; coming back re-reads, which is also the freshest answer. */
+  const held = useSolanaEquityHoldings(tab === 'equity' ? solAddress : null, pricedAssets);
+
+  /*
    * ─── SEARCH, SORT, THEN PAGE THE LONG LIST ────────────────────────────────
    * The equity list grew from 18 tickers to the whole tradeable xStock set, and
    * a wall of sixty rows is not an improvement over eighteen if the one you
@@ -597,6 +620,29 @@ export default function Stocks() {
     navigate(`/solana?to=${encodeURIComponent(asset.mint)}`);
   };
 
+  /*
+   * The way back out: the same swap screen with the token already in the FROM
+   * box and USDC in TO. One helper builds the link for every Sell button in
+   * the app (lib/solanaSell.js), so «فروش» here and «فروش» on the wallet row
+   * are provably the same action.
+   */
+  const sell = (asset) => {
+    const url = solanaSellUrl(asset?.mint);
+    if (!url) return;
+    haptic?.('select');
+    navigate(url);
+  };
+
+  /*
+   * The Solana wallet tab. Without a connection it is asked to come back here
+   * once one exists (`return=`), so «اتصال کیف پول» from the holdings card is
+   * connect-and-return rather than connect-and-get-lost.
+   */
+  const openSolanaWallet = () => {
+    haptic?.('select');
+    navigate(solAddress ? '/wallet?tab=solana' : `/wallet?tab=solana&return=${encodeURIComponent('/stocks')}`);
+  };
+
   return (
     <PageTransition>
       <motion.div variants={riseIn} initial="hidden" animate="show">
@@ -712,6 +758,17 @@ export default function Stocks() {
               </div>
             </motion.div>
           )}
+
+          {/*
+            ─── «سهام من», DIRECTLY ABOVE «قابل خرید» ─────────────────────────
+            What the connected wallet already holds of the tokens below, read
+            from the chain, with a Sell on every row. It sits right above the
+            buy list so the two labels answer each other — yours / available —
+            and so a buyer who comes back from the wallet finds the token they
+            just bought before they find the button they just used. The same
+            holdings also light up the matching rows in the list below.
+          */}
+          <EquityHoldings address={solAddress} held={held} onSell={sell} onOpenWallet={openSolanaWallet} />
 
           <section>
             <p className="section-label">{t('stocks.available')}</p>
@@ -847,7 +904,7 @@ export default function Stocks() {
                 animate="show"
               >
                 {visibleEquities.map((a) => (
-                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} />
+                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} holding={held.byMint.get(a.mint) ?? null} onSell={sell} />
                 ))}
               </motion.div>
             ) : (
@@ -937,7 +994,7 @@ export default function Stocks() {
                 animate="show"
               >
                 {commodities.map((a) => (
-                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} />
+                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} holding={held.byMint.get(a.mint) ?? null} onSell={sell} />
                 ))}
               </motion.div>
 
