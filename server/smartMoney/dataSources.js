@@ -473,7 +473,9 @@ export async function bsTransactions(chainId, address, { limit = 50 } = {}) {
 const SWAP_SELECTORS = new Set(['0x3593564c', '0x24856bc3', '0x5ae401dc', '0xac9650d8', '0x414bf389', '0x04e45aaf',
   '0xc04b8d59', '0xb858183f', '0x38ed1739', '0x7ff36ab5', '0x18cbafe5']);
 
-export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 1_000, limit = 12 } = {}) {
+const DEX_CONTRACT_NAME = /settler|router|swap|poolmanager|v[234]pool|pair\b|aggregat|augustus|odos|kyber|1inch|gpv2settlement|lbpair/i;
+
+export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 250, limit = 12 } = {}) {
   try {
     const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`);
     const items = Array.isArray(j?.items) ? j.items : [];
@@ -495,8 +497,12 @@ export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 1
       if (walletSide.raw?.is_scam || (walletSide.party.kind && walletSide.party.kind !== 'entity')
         || (walletSide.raw?.metadata?.tags || []).length) continue;
       const method = String(it?.method || '').toLowerCase();
+      // Aggregator settlement contracts (0x Settler, CoW, 1inch, Odos…) carry
+      // no DEX tag on Blockscout, but their verified contract name is explicit.
+      const otherName = String(walletSide.raw === it?.from ? it?.to?.name || '' : it?.from?.name || '');
       const counterpartyIsDex = walletSide.other.kind === 'dex'
-        || /swap|exact|execute|multicall|unoswap|route/i.test(method) || SWAP_SELECTORS.has(method);
+        || /swap|exact|execute|multicall|unoswap|route/i.test(method) || SWAP_SELECTORS.has(method)
+        || DEX_CONTRACT_NAME.test(otherName);
       if (!counterpartyIsDex) continue;
       const prev = out.get(walletSide.party.address);
       if (!prev || amount > prev.observedUsd) {

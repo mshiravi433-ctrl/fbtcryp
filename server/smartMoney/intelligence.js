@@ -135,11 +135,20 @@ export async function discoverLiveTraders({ now = Date.now(), chains = 3, perCha
   const slot = Math.floor(now / REFRESH_AFTER_MS);
   const picked = Array.from({ length: Math.min(chains, DISCOVERY_CHAINS.length) },
     (_, i) => DISCOVERY_CHAINS[(slot + i) % DISCOVERY_CHAINS.length]);
-  const settled = await Promise.allSettled(picked.map((chain) =>
-    withTimeout(source(chain, USD_QUOTES[chain][0], { limit: perChain }), DISCOVERY_MS, 'DISCOVERY_TIMEOUT')));
-  const out = [];
-  for (const r of settled) if (r.status === 'fulfilled') out.push(...safeArray(r.value?.rows));
-  return out.filter((r) => /^0x[a-f0-9]{40}$/.test(String(r.address || '')) && !isNonWallet(r.chain, { address: r.address }));
+  // Up to two USD stablecoins per chain (e.g. USDC + USDT): a single token's
+  // latest page is dominated by pool↔router hops, the second doubles yield.
+  const reads = picked.flatMap((chain) => USD_QUOTES[chain].slice(0, 2).map((quote) => ({ chain, quote })));
+  const settled = await Promise.allSettled(reads.map(({ chain, quote }) =>
+    withTimeout(source(chain, quote, { limit: perChain }), DISCOVERY_MS, 'DISCOVERY_TIMEOUT')));
+  const out = new Map();
+  for (const r of settled) {
+    if (r.status !== 'fulfilled') continue;
+    for (const row of safeArray(r.value?.rows)) {
+      const id = recordId(row.chain, row.address);
+      if (!out.has(id)) out.set(id, row);
+    }
+  }
+  return [...out.values()].filter((r) => /^0x[a-f0-9]{40}$/.test(String(r.address || '')) && !isNonWallet(r.chain, { address: r.address }));
 }
 
 function profileFor(wallet, registry = null, now = Date.now(), discovery = null) {
