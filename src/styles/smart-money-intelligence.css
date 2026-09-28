@@ -156,3 +156,507 @@
 @media (max-width: 380px) { .smi-feed-wallet { display: none; } }
 :root[data-theme='light'] .smi-feed-wallet { background: #f2f8f7; border-color: #cfe0e4; }
 :root[data-theme='light'] .smi-candidate .smi-board-score { color: #466c7b; }
+
+/* ── Modern Verified Wallets Grid & Cards ── */
+.smi-wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.smi-wallet-card {
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(155deg, rgba(30, 58, 82, 0.45), rgba(12, 25, 43, 0.7));
+  border: 1px solid rgba(84, 229, 182, 0.22);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.smi-wallet-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(84, 229, 182, 0.55);
+  box-shadow: 0 14px 38px rgba(84, 229, 182, 0.12);
+}
+.smi-wcard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.smi-wcard-rank {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 900;
+  color: #54e5b6;
+  background: rgba(84, 229, 182, 0.12);
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(84, 229, 182, 0.25);
+}
+.smi-wcard-info {
+  flex: 1;
+  min-width: 0;
+}
+.smi-wcard-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.smi-wcard-title strong {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+.smi-wcard-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: #54e5b6;
+  background: rgba(84, 229, 182, 0.15);
+  border: 1px solid rgba(84, 229, 182, 0.35);
+  border-radius: 6px;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+.smi-wcard-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.smi-chain-pill {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(110, 154, 203, 0.18);
+  color: #86c8f6;
+  border: 1px solid rgba(110, 154, 203, 0.3);
+}
+.smi-kind-pill {
+  font-size: 9.5px;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smi-wcard-score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.smi-wcard-score-val {
+  font-size: 20px;
+  font-weight: 900;
+  color: #54e5b6;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.smi-wcard-score-lab {
+  font-size: 8.5px;
+  opacity: 0.65;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.smi-wcard-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(14, 33, 52, 0.55);
+  border-radius: 12px;
+  border: 1px solid rgba(110, 154, 203, 0.12);
+}
+.smi-wcard-m-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.smi-wcard-m-item .k {
+  font-size: 9.5px;
+  opacity: 0.6;
+}
+.smi-wcard-m-item .v {
+  font-size: 13px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+.smi-wcard-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.smi-btn-analyze {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(84, 229, 182, 0.16);
+  border: 1px solid rgba(84, 229, 182, 0.4);
+  color: #54e5b6;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.smi-btn-analyze:hover {
+  background: rgba(84, 229, 182, 0.26);
+}
+.smi-btn-analyze:active {
+  transform: scale(0.98);
+}
+.smi-btn-explorer {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.smi-btn-explorer:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Candidate Wallets Modern Layout ── */
+.smi-candidates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.smi-candidate-box {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(14, 33, 52, 0.4);
+  border: 1px solid rgba(110, 154, 203, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.smi-candidate-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.smi-rank-pill {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 11px;
+}
+.smi-rank-pill.ok {
+  background: rgba(84, 229, 182, 0.2);
+  color: #54e5b6;
+}
+.smi-rank-pill.pending {
+  background: rgba(255, 194, 75, 0.15);
+  color: #ffc24b;
+}
+.smi-cand-name {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.smi-cand-name strong {
+  display: block;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smi-cand-name small {
+  font-size: 9.5px;
+  opacity: 0.6;
+}
+.smi-cand-score {
+  text-align: end;
+}
+.smi-cand-score b {
+  font-size: 15px;
+  color: #54e5b6;
+}
+.smi-cand-score small {
+  display: block;
+  font-size: 8.5px;
+  opacity: 0.65;
+}
+.smi-cand-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9.5px;
+  opacity: 0.75;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.smi-cand-exp {
+  margin-inline-start: auto;
+  border: 0;
+  background: none;
+  color: #54e5b6;
+  font-size: 9.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ── Token Avatars & Icons ── */
+.smi-token-avatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.smi-feed-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.smi-feed-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* ── Early Entries Grid (Entry Price vs Current Price) ── */
+.smi-early-entries-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.smi-early-entry-card {
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: linear-gradient(155deg, rgba(30, 58, 82, 0.4), rgba(12, 25, 43, 0.6));
+  border: 1px solid rgba(110, 154, 203, 0.18);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.smi-early-entry-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(84, 229, 182, 0.45);
+}
+.smi-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.smi-entry-avatar {
+  flex-shrink: 0;
+}
+.smi-entry-title {
+  flex: 1;
+  min-width: 0;
+}
+.smi-entry-title strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 850;
+}
+.smi-entry-title small {
+  font-size: 9.5px;
+  opacity: 0.65;
+}
+.smi-entry-roi {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.smi-entry-roi.up {
+  background: rgba(46, 230, 168, 0.15);
+  color: #2ee6a8;
+  border: 1px solid rgba(46, 230, 168, 0.35);
+}
+.smi-entry-roi.down {
+  background: rgba(255, 92, 122, 0.15);
+  color: #ff5c7a;
+  border: 1px solid rgba(255, 92, 122, 0.35);
+}
+.smi-entry-prices {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(14, 33, 52, 0.6);
+  border: 1px solid rgba(110, 154, 203, 0.1);
+}
+.smi-price-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.smi-price-col .k {
+  font-size: 9px;
+  opacity: 0.6;
+}
+.smi-price-col .v {
+  font-size: 12px;
+  font-weight: 800;
+}
+.smi-price-divider {
+  font-size: 13px;
+  opacity: 0.45;
+}
+
+/* ── Interactive 5-Step Visual Pipeline ── */
+.smi-pipeline-box {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.smi-pipeline-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.smi-pipeline-rail::-webkit-scrollbar {
+  display: none;
+}
+.smi-pipe-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: rgba(14, 33, 52, 0.5);
+  border: 1px solid rgba(110, 154, 203, 0.18);
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.smi-pipe-btn:hover {
+  border-color: rgba(84, 229, 182, 0.4);
+  background: rgba(14, 33, 52, 0.7);
+}
+.smi-pipe-btn.active {
+  background: linear-gradient(145deg, rgba(84, 229, 182, 0.18), rgba(0, 229, 255, 0.08));
+  border-color: #54e5b6;
+  box-shadow: 0 4px 16px rgba(84, 229, 182, 0.15);
+}
+.smi-pipe-num {
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.6;
+}
+.smi-pipe-btn.active .smi-pipe-num {
+  opacity: 1;
+  color: #54e5b6;
+}
+.smi-pipe-icon {
+  font-size: 16px;
+}
+.smi-pipe-label {
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.smi-pipe-detail {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(155deg, rgba(84, 229, 182, 0.08), rgba(0, 229, 255, 0.03));
+  border: 1px solid rgba(84, 229, 182, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.smi-pipe-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.smi-pipe-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.smi-pipe-detail-icon {
+  font-size: 20px;
+}
+.smi-pipe-detail-title strong {
+  font-size: 13.5px;
+  display: block;
+}
+.smi-pipe-detail-title small {
+  font-size: 9.5px;
+  color: #54e5b6;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.smi-pipe-step-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.8;
+}
+.smi-pipe-detail-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.85;
+}
+
+/* Light mode overrides for intelligence */
+:root[data-theme='light'] .smi-wallet-card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme='light'] .smi-wcard-metrics {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+:root[data-theme='light'] .smi-candidate-box {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+:root[data-theme='light'] .smi-early-entry-card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+:root[data-theme='light'] .smi-entry-prices {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+:root[data-theme='light'] .smi-pipe-btn {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+:root[data-theme='light'] .smi-pipe-btn.active {
+  background: #e6f9f3;
+  border-color: #00795c;
+  color: #00795c;
+}
+:root[data-theme='light'] .smi-pipe-detail {
+  background: #f0faf6;
+  border-color: rgba(0, 169, 107, 0.25);
+  color: #1e293b;
+}

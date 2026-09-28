@@ -685,3 +685,236 @@
 :root[data-theme='light'] .sm-tab.active { color: #0f172a; }
 :root[data-theme='light'] .sm-live { color: #00795c; background: rgba(0, 169, 107, 0.12); border-color: rgba(0, 169, 107, 0.35); }
 :root[data-theme='light'] .sm-live.is-off { color: #64748b; background: #f1f5f9; border-color: rgba(15, 23, 42, 0.14); }
+
+/* ── Modern Early Card Layout ── */
+.sm-early-card {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 15px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.sm-early-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 12px 32px rgba(0, 229, 255, 0.12);
+}
+.sm-early-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sm-early-token-logo {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.sm-early-token-info {
+  flex: 1;
+  min-width: 0;
+}
+.sm-early-token-info .tk {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sm-early-token-info .sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.sm-chain-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+}
+.sm-dex-tag {
+  font-size: 9.5px;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+.sm-risk-badge {
+  font-size: 10px;
+  font-weight: 850;
+  padding: 3px 8px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sm-risk-badge.sm-risk-LOW { background: rgba(46, 230, 168, 0.14); color: #2ee6a8; border: 1px solid rgba(46, 230, 168, 0.3); }
+.sm-risk-badge.sm-risk-MEDIUM { background: rgba(255, 194, 75, 0.14); color: #ffc24b; border: 1px solid rgba(255, 194, 75, 0.3); }
+.sm-risk-badge.sm-risk-HIGH { background: rgba(255, 92, 122, 0.14); color: #ff5c7a; border: 1px solid rgba(255, 92, 122, 0.3); }
+
+/* ── Fresh Wallets Modern Cards ── */
+.sm-fresh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.sm-fresh-card {
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: linear-gradient(155deg, rgba(46, 230, 168, 0.05), rgba(0, 229, 255, 0.02));
+  border: 1px solid rgba(46, 230, 168, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.sm-fresh-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(46, 230, 168, 0.45);
+  background: linear-gradient(155deg, rgba(46, 230, 168, 0.1), rgba(0, 229, 255, 0.05));
+}
+.sm-fresh-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.sm-fresh-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.12);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+}
+.sm-fresh-star {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #ffc24b;
+}
+.sm-fresh-addr {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.sm-fresh-bottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sm-fresh-cap .k, .sm-fresh-tx .k {
+  font-size: 9.5px;
+  opacity: 0.6;
+  margin-inline-end: 4px;
+}
+.sm-fresh-cap .v {
+  font-size: 13px;
+  font-weight: 900;
+}
+.sm-fresh-tx .v {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* ── Whales Tab Modern Grid ── */
+.sm-whale-grid {
+  display: grid;
+  gap: 8px;
+}
+.sm-whale-box {
+  border-radius: 16px;
+  padding: 13px 15px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.sm-whale-box:hover {
+  transform: translateY(-1.5px);
+  border-color: rgba(124, 77, 255, 0.4);
+  background: linear-gradient(155deg, rgba(124, 77, 255, 0.08), rgba(0, 229, 255, 0.03));
+}
+.sm-whale-box-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sm-whale-box-addr {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 850;
+}
+.sm-whale-risk-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.sm-whale-box-action {
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sm-whale-box-bottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sm-whale-box-bottom .k {
+  font-size: 9.5px;
+  opacity: 0.6;
+  margin-inline-end: 5px;
+}
+.sm-whale-box-bottom .v {
+  font-size: 12.5px;
+  font-weight: 850;
+}
+
+.sm-token-sym-wrap {
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* Light mode overrides for new elements */
+:root[data-theme='light'] .sm-early-card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme='light'] .sm-fresh-card {
+  background: #f8fbf9;
+  border-color: rgba(0, 169, 107, 0.2);
+}
+:root[data-theme='light'] .sm-whale-box {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+:root[data-theme='light'] .sm-fresh-bottom,
+:root[data-theme='light'] .sm-whale-box-bottom {
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
