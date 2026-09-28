@@ -203,6 +203,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W',
     symbol: 'SPYx',
     name: 'S&P 500',
+    coingeckoId: 'sp500-xstock',
     decimals: 8,
     /* An index tracker, not a single company. Listed first deliberately: it is
        the lowest-variance way into this asset class and the one a beginner
@@ -224,6 +225,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ',
     symbol: 'QQQx',
     name: 'Nasdaq 100',
+    coingeckoId: 'nasdaq-xstock',
     decimals: 8,
     kind: 'index'
   },
@@ -232,6 +234,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh',
     symbol: 'NVDAx',
     name: 'NVIDIA',
+    coingeckoId: 'nvidia-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -240,6 +243,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB',
     symbol: 'TSLAx',
     name: 'Tesla',
+    coingeckoId: 'tesla-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -248,6 +252,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp',
     symbol: 'AAPLx',
     name: 'Apple',
+    coingeckoId: 'apple-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -256,6 +261,7 @@ export const EQUITY_ASSETS = [
     mint: 'XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX',
     symbol: 'MSFTx',
     name: 'Microsoft',
+    coingeckoId: 'microsoft-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -282,6 +288,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8',
     symbol: 'SPCXx',
     name: 'SpaceX',
+    coingeckoId: 'spacex-xstocks',
     decimals: 8,
     kind: 'single',
     /* Renders the "private company, no public price" caveat on the row. */
@@ -292,6 +299,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN',
     symbol: 'GOOGLx',
     name: 'Alphabet (Google)',
+    coingeckoId: 'alphabet-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -300,6 +308,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
     symbol: 'MSTRx',
     name: 'MicroStrategy',
+    coingeckoId: 'microstrategy-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -308,6 +317,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu',
     symbol: 'COINx',
     name: 'Coinbase',
+    coingeckoId: 'coinbase-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -316,6 +326,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1',
     symbol: 'CRCLx',
     name: 'Circle',
+    coingeckoId: 'circle-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -324,6 +335,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu',
     symbol: 'METAx',
     name: 'Meta',
+    coingeckoId: 'meta-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -395,6 +407,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo',
     symbol: 'AVGOx',
     name: 'Broadcom',
+    coingeckoId: 'broadcom-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -403,6 +416,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg',
     symbol: 'AMZNx',
     name: 'Amazon',
+    coingeckoId: 'amazon-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -415,6 +429,7 @@ export const EQUITY_ASSETS = [
     mint: 'XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg',
     symbol: 'HOODx',
     name: 'Robinhood',
+    coingeckoId: 'robinhood-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -451,18 +466,13 @@ export const EQUITY_ASSETS = [
    * offered for sale — see the note on that list.
    *
    * GLDx is the one that needs its own sentence. It is NOT a claim on metal
-   * like PAXG and XAUt0; it is a share of the iShares Gold Trust ETF, so it is
-   * classified `index` and sits with the other ETFs. Same issuer, same freeze
-   * authority, same warning.
+   * like PAXG and XAUt0; it is a share of the iShares Gold Trust ETF, and it is
+   * classified `unit: 'etf'` in COMMODITY_ASSETS below rather than sitting with
+   * the equities — an ETF can trade at a premium or a discount to the metal it
+   * holds, and an ounce in a Brink's vault cannot, so the two are not the same
+   * instrument and the row must not label them the same way. Same issuer, same
+   * freeze authority, same warning.
    */
-  {
-    id: 'gldx',
-    mint: 'Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re',
-    symbol: 'GLDx',
-    name: 'Gold ETF (GLD)',
-    decimals: 8,
-    kind: 'index'
-  },
   {
     /* The original meme stock, and a real company with real revenue — the
        depth here ($435k) is larger than most of this list. */
@@ -489,6 +499,7 @@ export const EQUITY_ASSETS = [
     mint: 'Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH',
     symbol: 'STRCx',
     name: 'Strategy Preferred (STRC)',
+    coingeckoId: 'strategy-pp-variable-xstock',
     decimals: 8,
     kind: 'single'
   },
@@ -505,6 +516,7 @@ export const EQUITY_ASSETS = [
     mint: 'XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM',
     symbol: 'INTCx',
     name: 'Intel',
+    coingeckoId: 'intel-xstock',
     decimals: 8,
     kind: 'single'
   }
@@ -627,6 +639,7 @@ export const COMMODITY_ASSETS = [
     mint: '5GgRAEmv8ZxF2PR5hY72Qs5x1bnQ6UK2RbTPoqJ3wSwW',
     symbol: 'PAXG',
     name: 'Gold (Paxos)',
+    coingeckoId: 'pax-gold',
     decimals: 6,
     /*
      * Backed one-for-one by a London Good Delivery bar in a Brink's vault.
@@ -643,10 +656,32 @@ export const COMMODITY_ASSETS = [
     mint: 'AymATz4TCL9sWNEEV9Kvyz45CHVhDZ6kUgjTJPzLpU9P',
     symbol: 'XAUt0',
     name: 'Gold (Tether)',
+    coingeckoId: 'tether-gold',
     decimals: 6,
     mintAuthority: '9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy',
     freezeAuthority: '9FJsE8HkoJgxbbydk2R1Gc3hUruNJWwXR6AKYZWWY7Sy',
     unit: 'ounce'
+  },
+  {
+    /*
+     * The tokenized SPDR Gold Shares ETF — an xStock, so it is minted under the
+     * SAME two authorities as the equities rather than Paxos's or Tether's.
+     * `unit: 'etf'` is what the row branches on: this is a share of a fund that
+     * holds metal, not metal, and the freeze warning reads differently for it.
+     *
+     * Moved here from EQUITY_ASSETS on 2026-09-28, when gold gained its own
+     * history box: that box measures the three gold tokens together, and an ETF
+     * listed among twenty-three companies would have been measured on its own.
+     */
+    id: 'gldx',
+    mint: 'Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re',
+    symbol: 'GLDx',
+    name: 'Gold ETF (SPDR)',
+    coingeckoId: 'gold-xstock',
+    decimals: 8,
+    mintAuthority: XSTOCK_MINT_AUTHORITY,
+    freezeAuthority: XSTOCK_FREEZE_AUTHORITY,
+    unit: 'etf'
   }
 ];
 

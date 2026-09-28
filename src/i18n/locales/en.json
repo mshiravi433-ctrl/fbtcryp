@@ -3341,6 +3341,32 @@
       "avgChange": "Avg 24h",
       "depth": "Total depth",
       "mcap": "Combined size"
+    },
+    "eq": {
+      "price": "Price",
+      "change24h": "24h",
+      "windowChange": "{{days}}-day change",
+      "range": "{{days}}-day range",
+      "drawdown": "Worst fall",
+      "holders": "Holders",
+      "youGet": "For {{amount}}",
+      "showAnalysis": "Analysis",
+      "hideAnalysis": "Hide",
+      "window90": "Last {{days}} days",
+      "noHistory": "No price history is available for this ticker.",
+      "noHistoryBody": "This token is not listed on CoinGecko, so there is no 90-day series to measure. Everything below \u2014 depth, holders, units for your amount \u2014 is live; the history is simply not there, and this panel does not invent one.",
+      "noHistoryShort": "A 90-day series could not be loaded for this ticker right now. Everything below \u2014 depth, holders, units for your amount \u2014 is live; the history is simply not available, and this panel does not invent one.",
+      "depthTitle": "Can you get out",
+      "poolDepth": "Market depth",
+      "yourShare": "Your share of it",
+      "tooDeep": "The largest size that keeps your order inside the 2% depth gate is about {{max}}.",
+      "youWouldGet": "You would get"
+    },
+    "goldHistory": {
+      "historyTitle": "Gold \u2014 what the past says",
+      "historySub": "{{days}} days, measured per token",
+      "historyNote": "Each token is priced by a different issuer, so the three series are measured separately rather than averaged into one number.",
+      "noHistoryOne": "No 90-day history available for this token."
     }
   },
   "help": {
@@ -5517,7 +5543,12 @@
     "volumeLow": "Volume today is well below normal — moves on thin volume reverse more often.",
     "baseRate": "Over this window, {{up}} of {{samples}} days were followed by a higher price 7 days later ({{pct}}%). A description of the sample, not a forecast.",
     "thin": "Not enough history yet to say anything useful about this chart.",
-    "notAdvice": "History is not a forecast. A level that held four times can break on the fifth."
+    "notAdvice": "History is not a forecast. A level that held four times can break on the fifth.",
+    "equity": {
+      "windowChange": "Over these {{days}} days the price moved {{pct}}%.",
+      "avgDailyMove": "Its average day moved {{pct}}%. Roughly two days in three stay inside double that.",
+      "extremes": "The best day was +{{best}}% and the worst day was {{worst}}%."
+    }
   },
   "lab": {
     "title": "Lab"

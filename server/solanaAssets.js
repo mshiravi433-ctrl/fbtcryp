@@ -153,6 +153,15 @@ function shape(live, asset, kind) {
      * across roughly 10,000 wallets under this same authority.
      */
     freezeAuthority: kind === 'lst' ? null : live.freezeAuthority ?? null,
+    /*
+     * The CoinGecko id the Stocks screen uses to pull a REAL 90-day price
+     * series for the analysis panel on each row. Passed through rather than
+     * re-derived on the client, because the curated entry is the only place
+     * that knows it — and an id invented anywhere else would be a fabricated
+     * history presented as a measured one. Absent when CoinGecko does not list
+     * the ticker, which is the signal the panel reads to say so honestly.
+     */
+    ...(asset.coingeckoId ? { coingeckoId: asset.coingeckoId } : {}),
     ...(asset.unit ? { unit: asset.unit } : {}),
     ...(asset.llamaProject ? { llamaProject: asset.llamaProject, llamaSymbol: asset.llamaSymbol } : {}),
     ...(asset.protocolFeePct != null ? { protocolFeePct: asset.protocolFeePct } : {}),

@@ -1017,6 +1017,25 @@ console.log('\n▸ measuring the stocks swap banner (equity tab) in light and da
   report('stocks swap banner theme', swapBannerRows);
 }
 
+/* The tokenized-equity list and the per-row / gold history analysis.
+   Reported: «تعداد سهام توکنیزه خیلی کمه، باید خیلی بیشار» · «هیچ گزینه‌ای برای
+   اینکه ببینیم در گذشته چه شده نیست» · «تحلیل مثل RWA باشد، در باکس بازشونده
+   برای هر توکن» · «در طلا هم گذشته چه میگوید، در باکس طلای جمع شونده و مدرن».
+
+   It runs in-process with no bundling: everything it asserts about is either
+   pure arithmetic in src/lib or source text, so it needs neither jsdom nor
+   Vite. The part it spends the most assertions on is the honest one — the gold
+   panel it replaces read its series through `useChart`, which falls back to
+   `offlineChart()`, which SYNTHESISES a random walk for any id it does not
+   know, and it does not know pax-gold. A failed request therefore produced an
+   invented series and the panel reported support levels about prices that never
+   existed. The new fetch path is pinned here so that cannot come back. */
+console.log('\n▸ probing equity list + per-row and gold history analysis…');
+{
+  const { default: equityAnalysisRows } = await import('./equity-analysis-probe.mjs');
+  report('equity + gold history analysis', equityAnalysisRows);
+}
+
 /* App ↔ site parity. The website and the packaged Android app are one bundle
    built by two pipelines, which is how a fix lands on one and not the other:
    the API origin, the LI.FI fee wallet, and the wording of a quote failure.

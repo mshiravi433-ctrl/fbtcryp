@@ -1,9 +1,12 @@
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { liquidityVerdict } from '../lib/solanaAssets';
 import TokenIcon from '../lib/tokenIcon';
-import { IconSwap } from './Icons';
+import { IconChart, IconSwap } from './Icons';
+import EquityAnalysis from './EquityAnalysis';
+import '../styles/equity-analysis.css';
 
 /**
  * One tokenized equity row.
@@ -30,6 +33,16 @@ export default function EquityRow({ asset, amountUsd, onBuy }) {
 
   const verdict = liquidityVerdict(asset.liquidity, amountUsd);
   const up = (asset.change24h ?? 0) >= 0;
+
+  /*
+   * The analysis box under this row.
+   *
+   * Closed by default and mounted only while open — see the note in
+   * EquityAnalysis.jsx for why the 90-day fetch must not run for twenty-two
+   * rows at once. The title carries what is inside, so a collapsed row still
+   * says there is a history and a depth reading available rather than "more".
+   */
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   /*
    * WHAT THE CHOSEN AMOUNT ACTUALLY BUYS.
@@ -133,14 +146,41 @@ export default function EquityRow({ asset, amountUsd, onBuy }) {
         </p>
       )}
 
-      <button
-        className="btn btn-ghost eq-buy"
-        disabled={!verdict.ok}
-        onClick={() => onBuy(asset)}
-      >
-        <IconSwap width={15} height={15} />
-        {t('stocks.buyWith', { sym: asset.symbol })}
-      </button>
+      {/*
+        Buy and analysis on one line. `.btn` sets `width: 100%`, and for a flex
+        item `flex-basis: auto` resolves to that width — so a bare neighbour
+        takes the whole row and its sibling collapses to its label. `.btn-row`
+        removes `width` from the calculation; `.btn-row-minor` then gives the
+        analysis toggle two thirds of the buy button, never less than a tap
+        target. Buy stays the wider of the two because it is the action the row
+        exists for. The same trap the RWA rows document.
+      */}
+      <div className="btn-row eq-actions">
+        <button
+          type="button"
+          className="btn btn-ghost eq-buy"
+          disabled={!verdict.ok}
+          onClick={() => onBuy(asset)}
+        >
+          <IconSwap width={15} height={15} />
+          <span>{t('stocks.buyWith', { sym: asset.symbol })}</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-row-minor eq-analyze ${analysisOpen ? 'is-open' : ''}`}
+          aria-expanded={analysisOpen}
+          onClick={() => setAnalysisOpen((v) => !v)}
+        >
+          <IconChart width={15} height={15} />
+          <span>{analysisOpen ? t('stocks.eq.hideAnalysis') : t('stocks.eq.showAnalysis')}</span>
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {analysisOpen && (
+          <EquityAnalysis asset={asset} amountUsd={amountUsd} onBuy={onBuy} />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
