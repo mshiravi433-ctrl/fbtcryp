@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 /**
  * TOKEN ICONS.
@@ -97,6 +97,35 @@ const NATIVE_LOGO = {
   324: 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png' // gas coin is ETH
 };
 
+const SYMBOL_FALLBACK_LOGOS = {
+  BTC: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+  WBTC: 'https://assets.coingecko.com/coins/images/7598/small/wrapped_bitcoin_wbtc.png',
+  ETH: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+  WETH: 'https://assets.coingecko.com/coins/images/2518/small/weth.png',
+  USDT: 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
+  USDC: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
+  PEPE: 'https://assets.coingecko.com/coins/images/29850/small/pepe-token.png',
+  ONDO: 'https://assets.coingecko.com/coins/images/34682/small/ondo.png',
+  PENDLE: 'https://assets.coingecko.com/coins/images/15061/small/pendle.png',
+  AAVE: 'https://assets.coingecko.com/coins/images/12645/small/AAVE.png',
+  LINK: 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
+  UNI: 'https://assets.coingecko.com/coins/images/12504/small/uniswap-uni.png',
+  ARB: 'https://assets.coingecko.com/coins/images/16547/small/arbitrum.png',
+  AERO: 'https://assets.coingecko.com/coins/images/31745/small/aerodrome.png',
+  VIRTUAL: 'https://assets.coingecko.com/coins/images/33580/small/virtual.png',
+  TRUMP: 'https://assets.coingecko.com/coins/images/39908/small/trump.png',
+  FARTCOIN: 'https://assets.coingecko.com/coins/images/40474/small/fart.png',
+  AI16Z: 'https://assets.coingecko.com/coins/images/40679/small/ai16z.png',
+  SUI: 'https://assets.coingecko.com/coins/images/26375/small/sui.png',
+  MOG: 'https://assets.coingecko.com/coins/images/31050/small/mog.png',
+  SPX: 'https://assets.coingecko.com/coins/images/31405/small/spx.png',
+  SOL: 'https://assets.coingecko.com/coins/images/4128/small/solana.png',
+  BNB: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+  AVAX: 'https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png',
+  SHIB: 'https://assets.coingecko.com/coins/images/11939/small/shiba.png',
+  DOGE: 'https://assets.coingecko.com/coins/images/5/small/dogecoin.png'
+};
+
 /**
  * Ordered list of candidate URLs for a token.
  * Only https, because these are rendered as <img src> and a data: or
@@ -104,38 +133,18 @@ const NATIVE_LOGO = {
  */
 export function iconCandidates(token, chainId) {
   if (!token) return [];
+  const tok = typeof token === 'string'
+    ? (token.startsWith('https://') ? { logoURI: token } : { symbol: token })
+    : token;
   const out = [];
 
-  /*
-   * `icon` as well as `logoURI`.
-   *
-   * Jupiter's token API calls the field `icon`, while EVM token lists call it
-   * `logoURI`. The curated Solana assets carry the former, so reading only
-   * `logoURI` meant every tokenized equity and staking token fell through to
-   * the monogram — the exact bug this module was written to kill, reappearing
-   * because a second data source spells the field differently.
-   */
-  for (const key of ['logoURI', 'icon']) {
-    const supplied = String(token[key] ?? '').trim();
+  /* Check all common logo and icon keys */
+  for (const key of ['logoURI', 'icon', 'tokenLogo', 'logo', 'imageUrl', 'image']) {
+    const supplied = String(tok[key] ?? '').trim();
     if (supplied.startsWith('https://') && !out.includes(supplied)) out.push(supplied);
   }
 
-  /*
-   * NO EXTRA SOURCE FOR SOLANA MINTS, DELIBERATELY.
-   *
-   * The EVM path can add TrustWallet and CoinGecko because both are keyed by
-   * contract address, so a clone cannot borrow the real token's artwork. The
-   * equivalent Solana CDNs I could find are either symbol-keyed — which is
-   * exactly how a fake AAPLx would inherit Apple's logo — or unverifiable from
-   * here.
-   *
-   * So a Solana token gets the issuer's own `icon` and then the monogram. A
-   * missing picture is a cosmetic problem; a fake token wearing the real one's
-   * face is a financial one, and this app has already documented that trade-off
-   * once for EVM symbols. Same answer here.
-   */
-
-  if (token.native || !token.address) {
+  if (tok.native || !tok.address) {
     const n = NATIVE_LOGO[Number(chainId)];
     if (n) {
       out.push(n, n.replace(
@@ -145,41 +154,19 @@ export function iconCandidates(token, chainId) {
     }
   } else {
     const dir = TW_CHAIN[Number(chainId)];
-    if (dir && /^0x[a-fA-F0-9]{40}$/.test(token.address)) {
-      /*
-       * TrustWallet keys by EIP-55 checksummed address. We store mixed case
-       * already, so pass it through unchanged — lowercasing produces a 404.
-       */
-      /*
-       * Two hosts for the same file. assets-cdn is the fast CDN; the raw
-       * GitHub path is the canonical source documented in the assets repo and
-       * is the one guaranteed to exist. Trying both means a CDN change cannot
-       * blank every icon at once.
-       */
+    if (dir && /^0x[a-fA-F0-9]{40}$/.test(tok.address)) {
       out.push(
-        `https://assets-cdn.trustwallet.com/blockchains/${dir}/assets/${token.address}/logo.png`,
-        `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${dir}/assets/${token.address}/logo.png`
+        `https://assets-cdn.trustwallet.com/blockchains/${dir}/assets/${tok.address}/logo.png`,
+        `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${dir}/assets/${tok.address}/logo.png`
       );
     }
   }
 
-  /*
-   * NO CoinGecko GUESS HERE, ON PURPOSE.
-   *
-   * This used to push
-   *   `https://assets.coingecko.com/coins/images/thumb/${token.coingeckoId}.png`
-   * — but CoinGecko's image URLs are
-   *   `/coins/images/<numeric-id>/<size>/<file>.png`,
-   * and neither the numeric id nor the filename can be derived from the
-   * `coingeckoId` string ("tether" is image 325, file "tether.png"; "usd-coin"
-   * is image 2791, file "usdc.png"). The guessed URL 404'd for EVERY token,
-   * burning a network round trip before the monogram could render.
-   *
-   * Real CoinGecko artwork still reaches icons the honest way: the token
-   * lists (lib/tokenLists.js) carry a `logoURI` per entry, and that artwork
-   * is now inherited onto curated entries that share the same verified
-   * address — see merge() there.
-   */
+  /* Known curated symbol fallback */
+  const sym = String(tok.symbol || '').toUpperCase().trim();
+  if (sym && SYMBOL_FALLBACK_LOGOS[sym] && !out.includes(SYMBOL_FALLBACK_LOGOS[sym])) {
+    out.push(SYMBOL_FALLBACK_LOGOS[sym]);
+  }
 
   return out;
 }
@@ -202,6 +189,10 @@ function hueFor(symbol) {
 export default function TokenIcon({ token, chainId, size = 34 }) {
   const candidates = useMemo(() => iconCandidates(token, chainId), [token, chainId]);
   const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    setIdx(0);
+  }, [candidates]);
 
   const symbol = String(token?.symbol ?? '?');
   const src = candidates[idx];

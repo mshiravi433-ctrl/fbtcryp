@@ -17,6 +17,7 @@ import { openUrl } from '../lib/browser';
 import { useTelegram } from '../context/TelegramContext';
 import SmartMoneyWallet from './SmartMoneyWallet';
 import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../components/SmartMoneyIntelligence';
+import TokenIcon from '../lib/tokenIcon';
 
 /* import styles via side-effect */
 import '../styles/smart-money.css';
@@ -402,7 +403,13 @@ export default function SmartMoney() {
                   {data.tokenActivity?.length === 0 && <Empty>{t('sm.noActivity')}</Empty>}
                   {data.tokenActivity?.map((r) => (
                     <div key={`${r.chainId}:${r.address || r.symbol}`} className="sm-row" onClick={() => r.address && navigate(`/smart-money/token/${r.chainId}/${r.address}`)}>
-                      <div className="sym">{r.symbol.slice(0, 4)}</div>
+                      <div className="sym sm-token-sym-wrap">
+                        <TokenIcon
+                          token={{ symbol: r.symbol, address: r.address }}
+                          chainId={r.chainId}
+                          size={32}
+                        />
+                      </div>
                       <div className="mid">
                         <div className="name">{r.symbol} <span className="faint" style={{ fontSize: 10 }}>· {r.chainShort}</span></div>
                         <div className="sub">
@@ -447,13 +454,40 @@ export default function SmartMoney() {
                           <div className="sm-metric"><div className="lab">{t('sm.interesting')}</div><div className="val">{data.freshWallets.interestingWallets}</div></div>
                           <div className="sm-metric"><div className="lab">{t('sm.capital')}</div><div className="val" style={{ fontSize: 16 }}>{fmtUsd(data.freshWallets.capitalUsd)}</div></div>
                         </div>
-                        {data.freshWallets.wallets?.slice(0, 5).map((w) => (
-                          <div key={`${w.chainId}:${w.address}`} className="sm-row" onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}>
-                            <div className="sym">{w.chainShort}</div>
-                            <div className="mid"><div className="name mono">{w.short}</div><div className="sub">{w.txCount} tx</div></div>
-                            <div className="right"><div className="usd">{fmtUsd(w.capitalUsd)}</div>{w.interesting && <div className="conf sm-risk-MEDIUM">★</div>}</div>
-                          </div>
-                        ))}
+                        <div className="sm-fresh-grid">
+                          {data.freshWallets.wallets?.slice(0, 6).map((w) => (
+                            <div
+                              key={`${w.chainId}:${w.address}`}
+                              className="sm-fresh-card"
+                              onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}
+                            >
+                              <div className="sm-fresh-card-top">
+                                <span
+                                  className="sm-chain-pill"
+                                  style={{
+                                    background: w.chainColor ? `${w.chainColor}22` : undefined,
+                                    color: w.chainColor || undefined
+                                  }}
+                                >
+                                  {w.chainShort}
+                                </span>
+                                <span className="sm-fresh-tag">FRESH &lt;48h</span>
+                                {w.interesting && <span className="sm-fresh-star">★ Smart</span>}
+                              </div>
+                              <div className="sm-fresh-addr mono">{w.short}</div>
+                              <div className="sm-fresh-bottom">
+                                <div className="sm-fresh-cap">
+                                  <span className="k">{t('sm.capital', { defaultValue: 'سرمایه' })}</span>
+                                  <span className="v sm-up">{fmtUsd(w.capitalUsd)}</span>
+                                </div>
+                                <div className="sm-fresh-tx">
+                                  <span className="k">TX</span>
+                                  <span className="v">{w.txCount}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </>
                     )}
                     <div className="sm-disclaimer">{data.freshWallets.note}</div>
@@ -552,14 +586,6 @@ function EarlyGrid({ tokens, navigate, t }) {
   return (
     <div className="sm-card-grid">
       {tokens.map((tk) => {
-        /*
-         * «ارتباط با بعضی از داده‌ها وجود ندارد» — Analyze hardcoded chain 1,
-         * so a Base/BSC/Arbitrum token opened an Ethereum intel page whose
-         * pairs and holders could never match. The DexScreener slug is mapped
-         * to the real chain id; a chain we cannot serve (e.g. solana profile
-         * feed rows) opens the token's DexScreener page instead of a dead
-         * in-app page that pretends the data is missing.
-         */
         const chainId = chainIdForSlug(tk.chain);
         const open = () => {
           if (chainId) navigate(`/smart-money/token/${chainId}/${tk.address}`);
@@ -567,13 +593,31 @@ function EarlyGrid({ tokens, navigate, t }) {
         };
         return (
           <div key={`${tk.chain}:${tk.address}`} className="sm-early-card">
-            <div className="tk">{tk.symbol} <span className="faint" style={{ fontSize: 10 }}>· {tk.chain}{tk.dex ? ` · ${tk.dex}` : ''}</span></div>
+            <div className="sm-early-card-head">
+              <div className="sm-early-token-logo">
+                <TokenIcon
+                  token={{ symbol: tk.symbol, address: tk.address, tokenLogo: tk.logo || tk.icon }}
+                  chainId={chainId || 1}
+                  size={36}
+                />
+              </div>
+              <div className="sm-early-token-info">
+                <div className="tk">{tk.symbol}</div>
+                <div className="sub">
+                  <span className="sm-chain-tag">{tk.chain}</span>
+                  {tk.dex && <span className="sm-dex-tag">{tk.dex}</span>}
+                </div>
+              </div>
+              <div className={`sm-risk-badge sm-risk-${tk.risk}`}>{tk.risk}</div>
+            </div>
+
             <div className="meta">
               <div><div className="k">{t('sm.age')}</div><div className="v">{tk.ageHours}h</div></div>
               <div><div className="k">{t('sm.liquidity')}</div><div className="v">{fmtUsd(tk.liquidityUsd)}</div></div>
               <div><div className="k">{t('sm.volume24')}</div><div className="v">{fmtUsd(tk.volumeH24)}</div></div>
-              <div><div className="k">{t('sm.risk')}</div><div className={`v sm-risk-${tk.risk}`}>{tk.risk}</div></div>
+              <div><div className="k">FDV / Cap</div><div className="v">{tk.fdvUsd ? fmtUsd(tk.fdvUsd) : '—'}</div></div>
             </div>
+
             <button className="sm-btn" onClick={open}>{t('sm.analyze')}</button>
           </div>
         );
@@ -601,26 +645,45 @@ function WhalesTab({ navigate, t, smart }) {
   return (
     <div className="sm-section">
       <h3>🐋 {smart ? t('sm.smartWalletsTitle') : t('sm.whaleTracking')}</h3>
-      {rows.map((w) => (
-        <div key={`${w.chainId}:${w.address}`} className="sm-row" onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}>
-          <div className="sym" style={{ background: w.chainColor ? `${w.chainColor}33` : undefined }}>{w.chainShort}</div>
-          <div className="mid">
-            <div className="name mono">{w.short}</div>
-            <div className="sub">{w.lastAction}</div>
-          </div>
-          <div className="right">
-            <div className="usd">{fmtUsd(w.movedUsd)}</div>
-            {w.netUsd != null && w.netUsd !== 0 && (
-              <div className={`sub ${w.netUsd > 0 ? 'sm-up' : 'sm-down'}`} style={{ fontSize: 10, fontWeight: 800 }}>
-                {w.netUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(w.netUsd))} {t(w.netUsd > 0 ? 'sm.netIn' : 'sm.netOut')}
+      <div className="sm-whale-grid">
+        {rows.map((w) => (
+          <div key={`${w.chainId}:${w.address}`} className="sm-whale-box" onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}>
+            <div className="sm-whale-box-top">
+              <span
+                className="sm-chain-pill"
+                style={{
+                  background: w.chainColor ? `${w.chainColor}22` : undefined,
+                  color: w.chainColor || undefined,
+                  borderColor: w.chainColor ? `${w.chainColor}55` : undefined
+                }}
+              >
+                {w.chainShort}
+              </span>
+              <div className="sm-whale-box-addr mono">{w.short}</div>
+              <span className={`sm-whale-risk-badge sm-risk-${['LOW', 'MEDIUM', 'HIGH'].includes(w.riskBand) ? w.riskBand : 'MEDIUM'}`}>
+                {t(`sm.riskBand.${w.riskBand}`)}
+              </span>
+            </div>
+
+            <div className="sm-whale-box-action">{w.lastAction}</div>
+
+            <div className="sm-whale-box-bottom">
+              <div>
+                <span className="k">{t('sm.volume', { defaultValue: 'حجم جابه‌جایی' })}</span>
+                <span className="v">{fmtUsd(w.movedUsd)}</span>
               </div>
-            )}
-            <div className={`conf sm-risk-${['LOW', 'MEDIUM', 'HIGH'].includes(w.riskBand) ? w.riskBand : 'MEDIUM'}`}>
-              {w.behaviour && w.behaviour !== 'TRANSFER' ? `${t(`sm.behaviour.${w.behaviour}`)} · ` : ''}{t(`sm.riskBand.${w.riskBand}`)}
+              {w.netUsd != null && w.netUsd !== 0 && (
+                <div style={{ textAlign: 'end' }}>
+                  <span className="k">{t(w.netUsd > 0 ? 'sm.netIn' : 'sm.netOut')}</span>
+                  <span className={`v ${w.netUsd > 0 ? 'sm-up' : 'sm-down'}`} style={{ display: 'block', fontWeight: 800 }}>
+                    {w.netUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(w.netUsd))}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
       <div className="sm-disclaimer">{note || t('sm.whaleDisclaimer')}</div>
     </div>
   );
@@ -631,7 +694,7 @@ function TokensTab({ navigate, t, query, setQuery }) {
   const [fresh, setFresh] = useState(null);
   useEffect(() => {
     let on = true;
-    fetchEarlyTokens(20).then((d) => on && setEarly(d.tokens || [])).catch(() => on && setEarly([]));
+    fetchEarlyTokens(30).then((d) => on && setEarly(d.tokens || [])).catch(() => on && setEarly([]));
     fetchFreshWallets().then((d) => on && setFresh(d)).catch(() => setFresh(null));
     return () => { on = false; };
   }, []);
@@ -650,6 +713,37 @@ function TokensTab({ navigate, t, query, setQuery }) {
         {!early ? <Spinner /> : <EarlyGrid tokens={filtered} navigate={navigate} t={t} />}
         <div className="sm-disclaimer">{t('sm.earlyNote')}</div>
       </div>
+      {fresh?.wallets?.length > 0 && (
+        <div className="sm-section">
+          <h3>🆕 {t('sm.freshWallets')}</h3>
+          <div className="sm-fresh-grid">
+            {fresh.wallets.slice(0, 6).map((w) => (
+              <div
+                key={`${w.chainId}:${w.address}`}
+                className="sm-fresh-card"
+                onClick={() => navigate(`/smart-money/wallet/${w.chainId}/${w.address}`)}
+              >
+                <div className="sm-fresh-card-top">
+                  <span className="sm-chain-pill">{w.chainShort}</span>
+                  <span className="sm-fresh-tag">FRESH &lt;48h</span>
+                  {w.interesting && <span className="sm-fresh-star">★ Smart</span>}
+                </div>
+                <div className="sm-fresh-addr mono">{w.short}</div>
+                <div className="sm-fresh-bottom">
+                  <div className="sm-fresh-cap">
+                    <span className="k">{t('sm.capital')}</span>
+                    <span className="v sm-up">{fmtUsd(w.capitalUsd)}</span>
+                  </div>
+                  <div className="sm-fresh-tx">
+                    <span className="k">TX</span>
+                    <span className="v">{w.txCount}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

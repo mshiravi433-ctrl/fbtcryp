@@ -55,6 +55,22 @@ export function fundingClusters(profiles = [], events = []) {
   return { component: (key) => parent.has(key) ? root(key) : key, links };
 }
 
+export const TOKEN_LOGOS = Object.freeze({
+  '0x6982508145454ce325ddbe47a25d4ec3d2311933': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x6982508145454Ce325dDbE47a25d4ec3d2311933/logo.png',
+  '0x514910771af9ca656af840dff83e8264ecf986ca': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x514910771AF9Ca656af840dff83E8264EcF986CA/logo.png',
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x1f9840a85d5af5bf1d1762f925bdaddc4201f984/logo.png',
+  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9/logo.png',
+  '0x808507121b80c02388fad14726482e061b8da827': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x808507121B80c02388fAd14726482e061B8da827/logo.png',
+  '0xfaba6f8e4a5e8ab82f62fe7c39859fa577269be3': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3/logo.png',
+  '0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b': 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b/logo.png',
+  '0x940181a94a35a4569e4529a3cdfb74e38fd98631': 'https://assets-cdn.trustwallet.com/blockchains/base/assets/0x940181a94a35a4569e4529a3cdfb74e38fd98631/logo.png',
+  '0x912ce59144191c1204e64559fe8253a0e49e6548': 'https://assets-cdn.trustwallet.com/blockchains/arbitrum/info/logo.png',
+  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599/logo.png',
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/info/logo.png',
+  '0xdac17f958d2ee523a2206206994597c13d831ec7': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png',
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'https://assets-cdn.trustwallet.com/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png'
+});
+
 export function explainConsensus(row, lang = 'en') {
   if (!row || !['ACCUMULATION', 'DISTRIBUTION'].includes(row.signal)) {
     return lang === 'fa'
@@ -171,6 +187,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
         - (now - r.lastAt > WINDOWS.H24 ? 10 : 0)), 0, 90);
     const row = {
       chain: r.chain, token: r.token, symbol: r.symbol, window: win, signal, confidence,
+      tokenLogo: TOKEN_LOGOS[r.token] || null, icon: TOKEN_LOGOS[r.token] || null,
       buyers, sellers, mixed, independentBuyers: independentBuys, independentSellers: independentSells,
       independentVotes: directions.size, wallets: r.wallets.size, swaps: r.swaps,
       capitalEnteringUsd: money(r.buyUsd), capitalExitingUsd: money(r.sellUsd), netFlowUsd: money(net),
@@ -188,6 +205,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
     const totalQty = entries.reduce((sum, s) => sum + s.amount, 0);
     const success = [...wallets].map((id) => byWallet.get(id)?.winRate).filter(Number.isFinite);
     return { chain: Number(chainId), token: tokenAddr, symbol: entries[0].symbol,
+      tokenLogo: TOKEN_LOGOS[tokenAddr] || null, icon: TOKEN_LOGOS[tokenAddr] || null,
       wallets: wallets.size, averageEntryUsd: totalQty > 0 ? totalValue / totalQty : null,
       currentPriceUsd: null, changePct: null, liquidityUsd: null,
       historicalSuccessPct: success.length ? money(success.reduce((a, b) => a + b, 0) / success.length) : null,
@@ -217,7 +235,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
       completeness: 'sampled-indexer-pages',
       note: 'Only paired EVM token/allowlisted stablecoin swaps from qualified wallets. No native or Solana decoding yet. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
     consensus, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
-    observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, candidates: observed.candidates,
+    observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, windowSwaps: observed.windowSwaps, candidates: observed.candidates,
       note: 'Paired stablecoin swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
     graph: { nodes, edges: graphEdges.filter((e) => allowedNodes.has(e.from) && allowedNodes.has(e.to)).slice(0, 100),
       fundingLinks: clusters.links.slice(0, 20), note: 'A shared funding address is correlation only, never proof of shared ownership.' },
@@ -267,12 +285,21 @@ export function observedLayer({ profiles = [], swaps = [], byWallet = new Map(),
     flowMap.set(id, r);
   }
   const flow = [...flowMap.values()].map((r) => ({ chain: r.chain, token: r.token, symbol: r.symbol, window: win,
+    tokenLogo: TOKEN_LOGOS[r.token] || null, icon: TOKEN_LOGOS[r.token] || null,
     buyUsd: money(r.buyUsd), sellUsd: money(r.sellUsd), netFlowUsd: money(r.buyUsd - r.sellUsd),
+    buysUsd: money(r.buyUsd), sellsUsd: money(r.sellUsd), netUsd: money(r.buyUsd - r.sellUsd),
     swaps: r.swaps, wallets: r.wallets.size, buyers: r.buyers.size, sellers: r.sellers.size,
     qualifiedWallets: r.qualifiedWallets.size, lastAt: r.lastAt, basis: 'all-analysed-wallets' }))
     .sort((a, b) => (b.buyUsd + b.sellUsd) - (a.buyUsd + a.sellUsd)).slice(0, LIMIT);
   const recentSwaps = [...real].sort((a, b) => b.timestamp - a.timestamp).slice(0, RECENT_SWAPS).map((s) => ({
     chain: s.chain, wallet: s.wallet, token: s.token, symbol: s.symbol || '???', side: s.side,
+    tokenLogo: TOKEN_LOGOS[s.token] || null, icon: TOKEN_LOGOS[s.token] || null,
+    valueUsd: money(s.valueUsd), amount: s.amount, executionPriceUsd: Number.isFinite(s.executionPriceUsd) ? s.executionPriceUsd : null,
+    hash: s.hash, at: s.timestamp, qualified: byWallet.has(ident(s.chain, s.wallet)),
+    realizedRoiPct: Number.isFinite(s.realizedRoiPct) ? s.realizedRoiPct : null }));
+  const windowSwaps = [...inWindow].sort((a, b) => b.timestamp - a.timestamp).slice(0, RECENT_SWAPS).map((s) => ({
+    chain: s.chain, wallet: s.wallet, token: s.token, symbol: s.symbol || '???', side: s.side,
+    tokenLogo: TOKEN_LOGOS[s.token] || null, icon: TOKEN_LOGOS[s.token] || null,
     valueUsd: money(s.valueUsd), amount: s.amount, executionPriceUsd: Number.isFinite(s.executionPriceUsd) ? s.executionPriceUsd : null,
     hash: s.hash, at: s.timestamp, qualified: byWallet.has(ident(s.chain, s.wallet)),
     realizedRoiPct: Number.isFinite(s.realizedRoiPct) ? s.realizedRoiPct : null }));
@@ -290,6 +317,6 @@ export function observedLayer({ profiles = [], swaps = [], byWallet = new Map(),
   return {
     status: real.length ? 'sampled' : fresh.length ? 'analysed-no-swaps' : 'not-indexed',
     analyzedWallets: fresh.length, observedSwaps: real.length, swapsInWindow: inWindow.length,
-    flow, recentSwaps, candidates
+    flow, recentSwaps, windowSwaps, candidates
   };
 }
