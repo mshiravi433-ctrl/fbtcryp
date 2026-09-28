@@ -169,7 +169,7 @@ async function buildOverview(winKey) {
     within(freshWallets({ stream }).catch(() => null), 10_000),
     within(liquidityEvents({ windowBlocks: 8 }).catch(() => null), 12_000),
     within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), 12_000),
-    within(getVerifiedIntelligence({ window: winKey, now, includePrices: false }).catch(() => null), 3_000)
+    within(getVerifiedIntelligence({ window: winKey, now, includePrices: false, refresh: 'background' }).catch(() => null), 3_000)
   ]);
 
   /*
@@ -223,6 +223,7 @@ async function buildOverview(winKey) {
     // this branch counts verified, performance-qualified wallet swaps.
     verified: verified ? {
       dataStatus: verified.dataStatus, indexedAt: verified.indexedAt,
+      observedStatus: verified.observedStatus || null, refresh: verified.refresh || null,
       coverage: verified.coverage, consensus: verified.consensus.slice(0, 5)
     } : { dataStatus: 'unavailable', consensus: [] },
     tokenActivity,

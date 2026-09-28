@@ -8,7 +8,14 @@ import { EVM_CHAINS } from '../chainsLite.js';
 import { isNonWallet } from './moneyFlow.js';
 import { WINDOWS, WINDOW_KEYS } from './config.js';
 
-const MAX_PROFILE_AGE = 36 * WINDOWS.H1; // actual cron cadence may be daily
+/* A measured track record (≥5 paired closes over ≥2 days) does not expire
+ * in 36 hours. The old 36h cap, combined with a twice-daily cron that could
+ * re-analyse only four wallets per run, meant no more than a dozen profiles
+ * could ever be "fresh" at once — too few for three independent votes on any
+ * token. Profiles now count for the same seven days the index retains them;
+ * `updatedAt` is still shown so every reader sees how old the measurement is. */
+const MAX_PROFILE_AGE = 7 * WINDOWS.H24;
+const RECENT_SWAPS = 30;
 const LIMIT = 24;
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const ident = (chain, address) => `${chain}:${String(address || '').toLowerCase()}`;
@@ -67,7 +74,10 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   const selectedToken = validToken(token) ? String(token).toLowerCase() : null;
   const validProfiles = (Array.isArray(profiles) ? profiles : [])
     .filter((p) => p?.qualified === true && Number.isFinite(p.score) && p.score >= 70
-      && p.coverage >= 0.75 && p.closedTrades >= 5 && p.realizedUsd > 0 && p.winRate >= 55
+      // 0.6 = the five core factors measured (0.70) on a paginated explorer
+      // page (×0.9). The old 0.75 demanded an optional factor, so no real
+      // wallet could ever vote. See performance.js «UNREACHABLE».
+      && p.coverage >= 0.6 && p.closedTrades >= 5 && p.realizedUsd > 0 && p.winRate >= 55
       && p.updatedAt <= now && now - p.updatedAt <= MAX_PROFILE_AGE);
   const byWallet = new Map(validProfiles.map((p) => [ident(p.chain, p.address), p]));
   const clusters = fundingClusters(validProfiles, events);
@@ -192,18 +202,94 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   ];
   const allowedNodes = new Set(nodes.map((r) => r.id));
   const lastProfileAt = validProfiles.length ? Math.max(...validProfiles.map((p) => p.updatedAt)) : null;
+  const observed = observedLayer({ profiles, swaps, byWallet, cutoff, now, selectedChain, selectedToken, win });
   return {
     schema: 'fbt.smart-money-intelligence.v1', dataStatus: validProfiles.length && eligible.length ? 'observed' : 'insufficient-evidence',
+    // Separate from dataStatus on purpose: `observed` stays reserved for
+    // QUALIFIED evidence (FIOS/decision/strategy key off it). This says
+    // whether the real on-chain sample behind the page exists at all.
+    observedStatus: observed.status,
     at: now, indexedAt, window: win, durable, lastProfileAt,
     coverage: { classifiedWallets: validProfiles.length, sampledTrades: eligible.length,
       swapsInWindow: windowRows.length, walletsInWindow: graphWallets.size, observedSince: eligible.length ? Math.min(...eligible.map((s) => s.timestamp)) : null,
+      analyzedWallets: observed.analyzedWallets, observedSwaps: observed.observedSwaps,
+      observedSwapsInWindow: observed.swapsInWindow,
       completeness: 'sampled-indexer-pages',
       note: 'Only paired EVM token/allowlisted stablecoin swaps from qualified wallets. No native or Solana decoding yet. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
     consensus, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
+    observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, candidates: observed.candidates,
+      note: 'Paired stablecoin swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
     graph: { nodes, edges: graphEdges.filter((e) => allowedNodes.has(e.from) && allowedNodes.has(e.to)).slice(0, 100),
       fundingLinks: clusters.links.slice(0, 20), note: 'A shared funding address is correlation only, never proof of shared ownership.' },
     behaviours: behaviours.sort((a, b) => b.at - a.at).slice(0, 40),
     risk: { signalsAreTrades: true, priceForecast: false, identityVerifiedBySourceLinkOnly: true,
       note: 'No recommendation or guaranteed return. Stablecoin quote approximates USD; fees, depegs, unobserved swaps and incomplete indexer history can change P&L.' }
+  };
+}
+
+/**
+ * THE OBSERVED LAYER — every analysed wallet, qualified or not.
+ *
+ * Consensus is deliberately strict (≥3 independent performance-qualified
+ * wallets), so on most days it is empty. Before, "empty consensus" meant an
+ * empty page, which read as «not connected to real data» even when the index
+ * held dozens of real, receipt-backed swaps. This exposes that sample as what
+ * it is: paired fills with tx hashes from wallets we actually analysed, each
+ * row carrying `qualified` so nothing unqualified is ever dressed up as smart
+ * money. No votes, no confidence, no signal words here.
+ */
+export function observedLayer({ profiles = [], swaps = [], byWallet = new Map(), cutoff = 0, now = Date.now(),
+  selectedChain = null, selectedToken = null, win = '24h' } = {}) {
+  const fresh = (Array.isArray(profiles) ? profiles : [])
+    .filter((p) => p && Number.isFinite(p.updatedAt) && p.updatedAt <= now && now - p.updatedAt <= MAX_PROFILE_AGE
+      && (selectedChain == null || p.chain === selectedChain));
+  const analysed = new Map(fresh.map((p) => [ident(p.chain, p.address), p]));
+  const real = (Array.isArray(swaps) ? swaps : []).filter((s) =>
+    s?.evidence === 'paired-explorer-transfers' && validToken(s.token) && ['BUY', 'SELL'].includes(s.side)
+    && analysed.has(ident(s.chain, s.wallet))
+    && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
+    && Number.isFinite(s.valueUsd) && s.valueUsd > 0
+    && (selectedChain == null || s.chain === selectedChain)
+    && (!selectedToken || s.token === selectedToken));
+  const inWindow = real.filter((s) => s.timestamp >= cutoff);
+  const flowMap = new Map();
+  for (const s of inWindow) {
+    const id = ident(s.chain, s.token);
+    const r = flowMap.get(id) || { chain: s.chain, token: s.token, symbol: s.symbol || '???', buyUsd: 0, sellUsd: 0,
+      swaps: 0, wallets: new Set(), buyers: new Set(), sellers: new Set(), qualifiedWallets: new Set(), lastAt: 0 };
+    const w = ident(s.chain, s.wallet);
+    r[s.side === 'BUY' ? 'buyUsd' : 'sellUsd'] += s.valueUsd;
+    r.swaps++;
+    r.wallets.add(w);
+    (s.side === 'BUY' ? r.buyers : r.sellers).add(w);
+    if (byWallet.has(w)) r.qualifiedWallets.add(w);
+    r.lastAt = Math.max(r.lastAt, s.timestamp);
+    flowMap.set(id, r);
+  }
+  const flow = [...flowMap.values()].map((r) => ({ chain: r.chain, token: r.token, symbol: r.symbol, window: win,
+    buyUsd: money(r.buyUsd), sellUsd: money(r.sellUsd), netFlowUsd: money(r.buyUsd - r.sellUsd),
+    swaps: r.swaps, wallets: r.wallets.size, buyers: r.buyers.size, sellers: r.sellers.size,
+    qualifiedWallets: r.qualifiedWallets.size, lastAt: r.lastAt, basis: 'all-analysed-wallets' }))
+    .sort((a, b) => (b.buyUsd + b.sellUsd) - (a.buyUsd + a.sellUsd)).slice(0, LIMIT);
+  const recentSwaps = [...real].sort((a, b) => b.timestamp - a.timestamp).slice(0, RECENT_SWAPS).map((s) => ({
+    chain: s.chain, wallet: s.wallet, token: s.token, symbol: s.symbol || '???', side: s.side,
+    valueUsd: money(s.valueUsd), amount: s.amount, executionPriceUsd: Number.isFinite(s.executionPriceUsd) ? s.executionPriceUsd : null,
+    hash: s.hash, at: s.timestamp, qualified: byWallet.has(ident(s.chain, s.wallet)),
+    realizedRoiPct: Number.isFinite(s.realizedRoiPct) ? s.realizedRoiPct : null }));
+  const swapsByWallet = new Map();
+  for (const s of real) swapsByWallet.set(ident(s.chain, s.wallet), (swapsByWallet.get(ident(s.chain, s.wallet)) || 0) + 1);
+  const candidates = [...analysed.values()].map((p) => ({ chain: p.chain, address: p.address, label: p.label || null,
+    kind: p.kind || null, score: Number.isFinite(p.score) ? p.score : null, coverage: Number.isFinite(p.coverage) ? p.coverage : 0,
+    closedTrades: p.closedTrades || 0, realizedUsd: Number.isFinite(p.realizedUsd) ? p.realizedUsd : null,
+    winRate: Number.isFinite(p.winRate) ? p.winRate : null, status: p.status || 'UNAVAILABLE',
+    qualified: byWallet.has(ident(p.chain, p.address)), swaps: swapsByWallet.get(ident(p.chain, p.address)) || 0,
+    discovery: p.discovery || null, updatedAt: p.updatedAt }))
+    .sort((a, b) => Number(b.qualified) - Number(a.qualified) || (b.score ?? -1) - (a.score ?? -1)
+      || b.closedTrades - a.closedTrades || b.swaps - a.swaps || b.updatedAt - a.updatedAt)
+    .slice(0, 24);
+  return {
+    status: real.length ? 'sampled' : fresh.length ? 'analysed-no-swaps' : 'not-indexed',
+    analyzedWallets: fresh.length, observedSwaps: real.length, swapsInWindow: inWindow.length,
+    flow, recentSwaps, candidates
   };
 }

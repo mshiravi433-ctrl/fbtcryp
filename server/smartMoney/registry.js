@@ -82,7 +82,26 @@ export const DEX_ROUTERS = [
   /* Base */
   { chain: 8453, address: '0x2626664c2603336e57b271c5c0b26f421741e481', name: 'Uniswap V3 Router (Base)', dex: 'Uniswap' },
   /* Optimism */
-  { chain: 10, address: '0xe592427a0aece92de3edee1f18e0157c05861564', name: 'Uniswap V3 Router', dex: 'Uniswap' }
+  { chain: 10, address: '0xe592427a0aece92de3edee1f18e0157c05861564', name: 'Uniswap V3 Router', dex: 'Uniswap' },
+
+  /* Current-generation routers (2026-09-28). Most wallet swaps now go
+     through the Universal Router or 1inch v6, whose top-level method is
+     `execute` / an unnamed selector — without these rows a real paired
+     USDC↔token fill could not be proven and the verified ledger stayed empty.
+     Each address was checked against the explorer's verified contract name
+     (Blockscout «UniversalRouter» / «AggregationRouterV6», BaseScan
+     «Uniswap V4: Universal Router»). */
+  { chain: 1, address: '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad', name: 'Uniswap Universal Router v1.2', dex: 'Uniswap' },
+  { chain: 1, address: '0x66a9893cc07d91d95644aedd05d03f95e1dba8af', name: 'Uniswap V4 Universal Router', dex: 'Uniswap' },
+  { chain: 1, address: '0x111111125421ca6dc452d289314280a0f8842a65', name: '1inch Aggregation Router v6', dex: '1inch' },
+  { chain: 42161, address: '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad', name: 'Uniswap Universal Router v1.2', dex: 'Uniswap' },
+  { chain: 42161, address: '0xa51afafe0263b40edaef0df8781ea9aa03e381a3', name: 'Uniswap V4 Universal Router', dex: 'Uniswap' },
+  { chain: 42161, address: '0x111111125421ca6dc452d289314280a0f8842a65', name: '1inch Aggregation Router v6', dex: '1inch' },
+  { chain: 8453, address: '0x6ff5693b99212da76ad316178a184ab56d299b43', name: 'Uniswap V4 Universal Router', dex: 'Uniswap' },
+  { chain: 8453, address: '0x111111125421ca6dc452d289314280a0f8842a65', name: '1inch Aggregation Router v6', dex: '1inch' },
+  { chain: 10, address: '0x111111125421ca6dc452d289314280a0f8842a65', name: '1inch Aggregation Router v6', dex: '1inch' },
+  { chain: 137, address: '0x111111125421ca6dc452d289314280a0f8842a65', name: '1inch Aggregation Router v6', dex: '1inch' },
+  { chain: 56, address: '0x111111125421ca6dc452d289314280a0f8842a65', name: '1inch Aggregation Router v6', dex: '1inch' }
 ];
 
 /* Uniswap-V2-fork factories, for pairing Mint/Burn logs to a liquidity event. */

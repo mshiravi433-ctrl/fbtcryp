@@ -142,6 +142,10 @@ try {
   const exchanges = await call('/api/v1/smart-money/exchanges');
   t('exchanges registry route lists exchanges + sources', exchanges.status === 200 && Array.isArray(exchanges.body.exchanges) && exchanges.body.count > 0);
 
+  // Read-only here: the self-healing on-demand refresh would otherwise reach
+  // real explorers from the test run (covered with mocks in the live-index probe).
+  const priorOnDemand = process.env.SM_ONDEMAND_INDEX;
+  process.env.SM_ONDEMAND_INDEX = '0';
   const intelligence = await call('/api/v1/smart-money/intelligence?window=24h&prices=0');
   t('verified intelligence is a separate read-only sampled index', intelligence.status === 200
     && intelligence.body?.schema === 'fbt.smart-money-intelligence.v1'
@@ -154,6 +158,7 @@ try {
   const verifiedBoard = await call('/api/v1/smart-money/wallets/verified');
   t('performance-qualified wallets have a separate board', verifiedBoard.status === 200
     && verifiedBoard.body?.schema === 'fbt.smart-money-leaderboard.v1' && Array.isArray(verifiedBoard.body?.wallets));
+  if (priorOnDemand === undefined) delete process.env.SM_ONDEMAND_INDEX; else process.env.SM_ONDEMAND_INDEX = priorOnDemand;
   const identities = await call('/api/v1/smart-money/registry');
   t('institutional labels disclose sources separately from skill', identities.status === 200
     && identities.body?.schema === 'fbt.smart-money-registry.v1' && Array.isArray(identities.body?.rows));

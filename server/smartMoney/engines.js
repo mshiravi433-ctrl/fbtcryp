@@ -182,6 +182,7 @@ export function classifyWallet(stats = {}) {
     firstEntryBeforeAgeDays = null,
     verifiedScore = null,
     verifiedCoverage = 0,
+    verifiedQualified = null,
     verifiedClosedTrades = 0
   } = stats;
 
@@ -208,7 +209,10 @@ export function classifyWallet(stats = {}) {
   const profitable = tags.includes('PROFITABLE_TRADER');
   const early = tags.includes('EARLY_BUYER');
   if (profitable && verifiedClosedTrades >= CLASSIFY.profitableMinTrades &&
-      Number.isFinite(verifiedScore) && verifiedScore >= 70 && verifiedCoverage >= 0.75) {
+      Number.isFinite(verifiedScore) && verifiedScore >= 70
+      // One source of truth: performance.js's `qualified` gate. The legacy
+      // 0.75 coverage fallback only applies to callers that do not pass it.
+      && (verifiedQualified === true || (verifiedQualified == null && verifiedCoverage >= 0.75))) {
     tags.unshift('SMART_MONEY');
   }
 

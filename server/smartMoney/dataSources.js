@@ -309,7 +309,10 @@ export function summarizeTags(tags, { isContract = false, isScam = false, name =
     if (exchange) kind = 'exchange';
     else if (isScam || generic.has('phish--hack') || generic.has('scam')) kind = 'scam';
     else if (generic.has('mev-bot') || /^mev bot/i.test(label || '')) kind = 'mev';
-    else if (generic.has('dex') || generic.has('router') || /router|swap|aggregat/i.test(label || '')) kind = 'dex';
+    // A tagged liquidity pool is the DEX side of a swap («Uniswap V3: USDC 4»
+    // is caught by the name regex; an OLI "Liquidity Pool" tag on an unnamed
+    // pool used to fall through to plain `contract` and lose the pairing).
+    else if (generic.has('dex') || generic.has('router') || generic.has('liquidity-pool') || /router|swap|aggregat/i.test(label || '')) kind = 'dex';
     else if (generic.has('bridge') || /bridge|portal|stargate|across|layerzero/i.test(label || '')) kind = 'bridge';
     else if (isContract || generic.has('token-contract')) kind = 'contract';
     else if (label) kind = 'entity';
@@ -440,6 +443,70 @@ export async function bsTransactions(chainId, address, { limit = 50 } = {}) {
         success: it?.status === 'ok'
       };
     }).filter((r) => r.direction).slice(0, Math.max(1, limit));
+    return { dataStatus: 'live', rows };
+  } catch (e) {
+    return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
+  }
+}
+
+/**
+ * ACTIVE STABLECOIN TRADERS — live acquisition seed for the Verified
+ * Intelligence index («هوش تأییدشده اصلاً به داده‌های واقعی وصل نیست»).
+ *
+ * The verified ledger (performance.js) can only prove a trade when a wallet
+ * swaps an ERC-20 against an allowlisted USD stablecoin. The old discovery
+ * queue fed it whale transfers ≥ $100k through a handful of routers — mostly
+ * aggregators, solvers and CEX hot wallets that can never pair a swap — so the
+ * index stayed empty forever. This reads the chain's latest transfers of the
+ * stablecoin ITSELF and keeps only plain wallets (EOA, untagged, not a
+ * bridge/MEV/exchange) that sent the stablecoin to a DEX/pool contract or
+ * received it from one: people who are swapping against USD right now.
+ *
+ * Discovery only — a hit is an address worth examining, never a label, score
+ * or vote. It becomes evidence only after analyzeWallet reconstructs its own
+ * paired fills from its own history.
+ */
+/* Undecoded 4-byte selectors Blockscout prints when the contract ABI is not
+   verified: Universal Router execute (both overloads), multicall (both), V3
+   exactInput/exactInputSingle (router & router02), V2 swapExact*. A hint for
+   discovery only — reconstructSwaps still demands the paired legs. */
+const SWAP_SELECTORS = new Set(['0x3593564c', '0x24856bc3', '0x5ae401dc', '0xac9650d8', '0x414bf389', '0x04e45aaf',
+  '0xc04b8d59', '0xb858183f', '0x38ed1739', '0x7ff36ab5', '0x18cbafe5']);
+
+export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 1_000, limit = 12 } = {}) {
+  try {
+    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`);
+    const items = Array.isArray(j?.items) ? j.items : [];
+    const out = new Map();
+    for (const it of items) {
+      const decimalsRaw = Number(it?.total?.decimals ?? it?.token?.decimals);
+      const decimals = Number.isFinite(decimalsRaw) ? decimalsRaw : 6;
+      const amount = Number(it?.total?.value) / 10 ** decimals;
+      if (!Number.isFinite(amount) || amount < minUsd) continue;
+      const from = shapeParty(it?.from);
+      const to = shapeParty(it?.to);
+      // Exactly one side a plain wallet, the other a contract (pool/router).
+      const walletSide = !it?.from?.is_contract && it?.to?.is_contract ? { party: from, raw: it.from, other: to, side: 'SENT' }
+        : !it?.to?.is_contract && it?.from?.is_contract ? { party: to, raw: it.to, other: from, side: 'RECEIVED' } : null;
+      if (!walletSide || !walletSide.party.address || /^0x0{40}$/.test(walletSide.party.address)) continue;
+      // An EOA with an explorer name-tag is a solver, bridge, exchange or MEV
+      // bot far more often than an independent trader — skip, never guess.
+      // (An ENS name alone — kind 'entity' — is an ordinary user and stays.)
+      if (walletSide.raw?.is_scam || (walletSide.party.kind && walletSide.party.kind !== 'entity')
+        || (walletSide.raw?.metadata?.tags || []).length) continue;
+      const method = String(it?.method || '').toLowerCase();
+      const counterpartyIsDex = walletSide.other.kind === 'dex'
+        || /swap|exact|execute|multicall|unoswap|route/i.test(method) || SWAP_SELECTORS.has(method);
+      if (!counterpartyIsDex) continue;
+      const prev = out.get(walletSide.party.address);
+      if (!prev || amount > prev.observedUsd) {
+        out.set(walletSide.party.address, { chain: Number(chainId), address: walletSide.party.address,
+          observedUsd: Math.round(amount), side: walletSide.side,
+          txHash: it?.transaction_hash ? String(it.transaction_hash).toLowerCase() : null,
+          at: it?.timestamp ? new Date(it.timestamp).getTime() : null, basis: 'live-stablecoin-dex-transfer' });
+      }
+    }
+    const rows = [...out.values()].sort((a, b) => b.observedUsd - a.observedUsd).slice(0, Math.max(1, limit));
     return { dataStatus: 'live', rows };
   } catch (e) {
     return { dataStatus: e?.code === 'NO_INDEXER' ? 'unsupported-chain' : 'unavailable', rows: [] };
