@@ -124,6 +124,8 @@ const POOL = '0xe0554a476a092703abdb3ef35c80e0d76d32939f';
 const SETTLER = '0x666fedd4cdd4e890a5ad20e7b60975409435a64a';
 const EOA2 = '0x' + 'a'.repeat(40);
 const EOA3 = '0x' + 'b'.repeat(40);
+const EOA4 = '0x' + 'c'.repeat(40);
+const EOA5 = '0x' + 'e'.repeat(40);
 const party = (hash, { contract = false, tags = [] } = {}) => ({ hash, is_contract: contract, is_scam: false,
   metadata: tags.length ? { tags } : null, name: contract ? 'UniswapV3Pool' : null });
 const item = (from, to, usd, method = 'execute', h = '1') => ({ from, to, method, timestamp: new Date(now).toISOString(),
@@ -139,6 +141,10 @@ __setFetchForTests(async (url) => {
     // Aggregator settlement (0x Settler): untagged contract, no decoded method,
     // but an explicit verified contract name → still a DEX counterparty.
     item({ ...party(SETTLER, { contract: true }), name: 'MainnetSettler' }, party(EOA2), 4_000, null, 'f'),
+    // EIP-7702 delegated EOA (is_contract:true, proxy_type eip7702) is a wallet.
+    item({ ...party(EOA4), is_contract: true, proxy_type: 'eip7702' }, party(POOL, { contract: true }), 2_000, '0x3593564c', '2'),
+    // …and is never mistaken for the DEX counterparty.
+    item(party(EOA5), { ...party(EOA4), is_contract: true, proxy_type: 'eip7702', name: 'Simple7702Account' }, 3_000, 'swap', '3'),
     // A plain contract with no DEX name/tag/method (e.g. a lending deposit) is not.
     item(party(EOA3), { ...party('0x' + 'd'.repeat(40), { contract: true }), name: 'Pool' }, 9_000, null, '1'),
     item(party('0x' + '8'.repeat(40)), party('0x' + '9'.repeat(40)), 40_000, 'transfer', 'e')
@@ -147,17 +153,22 @@ __setFetchForTests(async (url) => {
 const live = await bsRecentStableSwappers(1, '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48');
 check('discovery keeps the untagged EOA that swapped via a pool', () => {
   assert.equal(live.dataStatus, 'live');
-  assert.deepEqual(live.rows.map((r) => r.address), [EOA, EOA2]);
+  assert.deepEqual(live.rows.map((r) => r.address), [EOA, EOA2, EOA4]);
   assert.equal(live.rows[0].basis, 'live-stablecoin-dex-transfer');
 });
 check('discovery skips solvers/bridges, contract↔contract, dust and plain transfers', () => {
-  assert.ok(!live.rows.some((r) => r.address === TAGGED || r.address === EOA3 || r.address === '0x' + '7'.repeat(40)));
+  assert.ok(!live.rows.some((r) => r.address === TAGGED || r.address === EOA3 || r.address === EOA5 || r.address === '0x' + '7'.repeat(40)));
 });
 __setFetchForTests(async () => { throw new Error('down'); });
 const down = await bsRecentStableSwappers(1, '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48');
 check('outage → unavailable, zero rows', () => { assert.equal(down.dataStatus, 'unavailable'); assert.equal(down.rows.length, 0); });
 const rotated = await discoverLiveTraders({ now, source: async (chain) => ({ rows: [{ chain, address: '0x' + String(chain % 10).repeat(40), basis: 'live-stablecoin-dex-transfer' }] }) });
 check('discovery rotates across several chains per cycle', () => { assert.ok(new Set(rotated.map((r) => r.chain)).size >= 2); });
+const later = await discoverLiveTraders({ now: now + 15 * 60_000, source: async (chain) => ({ rows: [{ chain, address: '0x' + String(chain % 10).repeat(40), basis: 'x' }] }) });
+check('Ethereum anchors every cycle while the L2 slots rotate', () => {
+  assert.ok(rotated.some((r) => r.chain === 1) && later.some((r) => r.chain === 1));
+  assert.notDeepEqual(rotated.map((r) => r.chain).sort(), later.map((r) => r.chain).sort());
+});
 const quotesRead = [];
 await discoverLiveTraders({ now, chains: 1, source: async (chain, quote) => { quotesRead.push(quote); return { rows: [{ chain, address: EOA, basis: 'x' }] }; } });
 check('discovery reads two USD stablecoins per chain, de-duplicated wallets', () => { assert.equal(new Set(quotesRead).size, 2); });

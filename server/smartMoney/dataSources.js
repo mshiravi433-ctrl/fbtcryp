@@ -323,7 +323,9 @@ export function summarizeTags(tags, { isContract = false, isScam = false, name =
 function shapeParty(party) {
   if (!party || typeof party !== 'object') return { address: null, label: null, kind: null, exchange: null, isContract: false };
   const sum = summarizeTags(party.metadata?.tags, {
-    isContract: !!party.is_contract,
+    // An EIP-7702 delegated EOA reports is_contract:true — it is still a user
+    // wallet (the delegate is code it borrows, not a deployed contract).
+    isContract: !!party.is_contract && String(party.proxy_type || '').toLowerCase() !== 'eip7702',
     isScam: !!party.is_scam,
     name: party.name || null,
     ens: party.ens_domain_name || null
@@ -473,6 +475,9 @@ export async function bsTransactions(chainId, address, { limit = 50 } = {}) {
 const SWAP_SELECTORS = new Set(['0x3593564c', '0x24856bc3', '0x5ae401dc', '0xac9650d8', '0x414bf389', '0x04e45aaf',
   '0xc04b8d59', '0xb858183f', '0x38ed1739', '0x7ff36ab5', '0x18cbafe5']);
 
+const isDelegatedEoa = (p) => String(p?.proxy_type || '').toLowerCase() === 'eip7702';
+const isWalletParty = (p) => !!p && (!p.is_contract || isDelegatedEoa(p));
+const isContractParty = (p) => !!p?.is_contract && !isDelegatedEoa(p);
 const DEX_CONTRACT_NAME = /settler|router|swap|poolmanager|v[234]pool|pair\b|aggregat|augustus|odos|kyber|1inch|gpv2settlement|lbpair/i;
 
 export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 250, limit = 12 } = {}) {
@@ -488,8 +493,9 @@ export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 2
       const from = shapeParty(it?.from);
       const to = shapeParty(it?.to);
       // Exactly one side a plain wallet, the other a contract (pool/router).
-      const walletSide = !it?.from?.is_contract && it?.to?.is_contract ? { party: from, raw: it.from, other: to, side: 'SENT' }
-        : !it?.to?.is_contract && it?.from?.is_contract ? { party: to, raw: it.to, other: from, side: 'RECEIVED' } : null;
+      // EIP-7702 delegated EOAs report is_contract:true but are user wallets.
+      const walletSide = isWalletParty(it?.from) && isContractParty(it?.to) ? { party: from, raw: it.from, other: to, side: 'SENT' }
+        : isWalletParty(it?.to) && isContractParty(it?.from) ? { party: to, raw: it.to, other: from, side: 'RECEIVED' } : null;
       if (!walletSide || !walletSide.party.address || /^0x0{40}$/.test(walletSide.party.address)) continue;
       // An EOA with an explorer name-tag is a solver, bridge, exchange or MEV
       // bot far more often than an independent trader — skip, never guess.
