@@ -14768,5 +14768,96 @@ export default function run() {
       inappAt > -1 && hubAt > inappAt && farm.split('<PositionPanel').length - 1 === 1);
   }
 
+  /* ---- 117. the way OUT of a tokenized share --------------------------- */
+  /*
+   * Reported: the Stocks page could buy AAPLx and nothing in the app showed
+   * what was bought, where it was, or how to sell it. Every Buy is now paired
+   * with a chain-read holding and a Sell that lands on the swap screen with
+   * the token already in FROM. The pieces are pinned here because each one is
+   * a plausible "cleanup" for someone who does not know the others exist —
+   * in particular the ?fromMint=&toMint= effect in SolanaSwap, which had no
+   * live producer before this and read as dead code.
+   */
+  {
+    const strip = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const sellLib = strip(read('src/lib/solanaSell.js'));
+    const stocks = strip(read('src/pages/Stocks.jsx'));
+    const row = strip(read('src/components/EquityRow.jsx'));
+    const holdings = strip(read('src/components/EquityHoldings.jsx'));
+    const walletHome = strip(read('src/components/SolanaWalletHome.jsx'));
+    const solSwap = strip(read('src/pages/SolanaSwap.jsx'));
+
+    /* one helper builds every Sell link, by mint, into USDC */
+    t('the sell handoff is built in one place, by mint',
+      /export function solanaSellUrl/.test(sellLib)
+      && /isSolanaAddress\(m\)/.test(sellLib)
+      && /\/solana\?fromMint=\$\{encodeURIComponent\(m\)\}&toMint=/.test(sellLib));
+    t('membership in «سهام من» comes from the curated list, not the price feed',
+      /EQUITY_ASSETS/.test(sellLib) && /COMMODITY_ASSETS/.test(sellLib)
+      && /curated = STOCK_MINTS/.test(sellLib));
+
+    /* the Stocks page reads the wallet, shows the card, and passes the holding to every row */
+    t('Stocks reads the connected Solana wallet\'s holdings',
+      /useSolanaWallet\(\)/.test(stocks) && /useSolanaEquityHoldings\(tab === 'equity' \? solAddress : null, pricedAssets\)/.test(stocks));
+    t('Stocks mounts «سهام من» above the buy list',
+      stocks.indexOf('<EquityHoldings') > -1
+      && stocks.indexOf('<EquityHoldings') < stocks.indexOf("t('stocks.available')"));
+    t('every EquityRow (equities and gold) receives its holding and a Sell',
+      (stocks.match(/<EquityRow[^>]*holding=\{held\.byMint\.get\(a\.mint\)[^>]*onSell=\{sell\}/g) || []).length === 2);
+    t('Stocks sells through the shared helper, never by symbol',
+      /solanaSellUrl\(asset\?\.mint\)/.test(stocks) && !/side=sell/.test(stocks));
+    t('the connect CTA comes back to the Stocks page',
+      /\/wallet\?tab=solana&return=\$\{encodeURIComponent\('\/stocks'\)\}/.test(stocks));
+
+    /* the row: held line + Sell, never gated by the buy-size verdict */
+    t('EquityRow shows the held amount and a Sell only when something is held',
+      /data-testid="eq-held"/.test(row) && /data-testid="eq-sell"/.test(row)
+      && /\{held && onSell && \(/.test(row));
+    t('the Sell button is not disabled by the buy-size gate',
+      !/eq-sell"[\s\S]{0,200}disabled=\{!verdict\.ok\}/.test(row));
+    t('a zero or unread holding never shows as held',
+      /holding\.amount > 0 \? holding : null/.test(row));
+
+    /* the card: three honest states */
+    t('«سهام من» has a disconnected state with a connect CTA',
+      /data-state=\{address \? status : 'disconnected'\}/.test(holdings)
+      && /stocks\.held\.connectCta/.test(holdings));
+    t('a failed read renders the reason and a retry, never an empty list',
+      /status === 'error'/.test(holdings)
+      && /solana\.err\.\$\{code\}/.test(holdings)
+      && /status === 'ok' && !showRows/.test(holdings));
+    t('the card re-reads when the app returns to the foreground',
+      /visibilitychange/.test(holdings));
+    t('the card states custody and the way out',
+      /stocks\.held\.trust/.test(holdings));
+
+    /* the wallet's own holdings rows carry the exit */
+    t('the Solana wallet rows carry a Sell / Swap that opens the swap by hash',
+      /data-testid="sol-wal-exit"/.test(walletHome)
+      && /openAppPath\(solanaSellUrl\(row\.mint\)\)/.test(walletHome)
+      && !/useNavigate/.test(walletHome));
+
+    /* the swap screen must keep honouring the contract every button uses */
+    t('SolanaSwap still honours ?fromMint=&toMint=',
+      /searchParams\.get\('fromMint'\)/.test(solSwap) && /searchParams\.get\('toMint'\)/.test(solSwap));
+    t('gold mints are pickable on the swap screen (the gold Buy used to land on USDC → USDC)',
+      /\.\.\.COMMODITY_ASSETS\.map\(/.test(solSwap));
+    t('a curated ?to= target is never silently replaced by USDC',
+      !/BASE_TOKENS\.find\(\(tk\) => tk\.mint === asset\.mint\) \?\? BASE_TOKENS\[1\]/.test(solSwap));
+
+    /* the copy exists in the three complete locales */
+    const heldKeys = ['title', 'pill', 'inWallet', 'sell', 'total', 'noPrice', 'readAt', 'connectBody', 'connectCta', 'readFailed', 'none', 'trust'];
+    const hasHeld = (file) => {
+      const json = JSON.parse(read(file));
+      return heldKeys.every((k) => typeof json?.stocks?.held?.[k] === 'string' && json.stocks.held[k].length > 0);
+    };
+    t('the «سهام من» copy exists in fa, en and ar',
+      hasHeld('src/i18n/locales/fa.json') && hasHeld('src/i18n/locales/en.json') && hasHeld('src/i18n/locales/ar.json'));
+    t('the vitest suite for the sell path exists',
+      existsSync('test/stocks-sell-path.test.jsx'));
+  }
+
   return rows;
 }

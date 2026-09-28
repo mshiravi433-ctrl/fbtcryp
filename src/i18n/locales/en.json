@@ -3198,6 +3198,23 @@
     "aiPowered": "Powered by AI"
   },
   "stocks": {
+    "held": {
+      "title": "My stocks",
+      "count": "{{count}} holdings",
+      "count_one": "{{count}} holding",
+      "count_other": "{{count}} holdings",
+      "pill": "In your wallet",
+      "inWallet": "In your wallet",
+      "sell": "Sell",
+      "total": "Approximate value",
+      "noPrice": "no price right now",
+      "readAt": "read from the chain at {{time}}",
+      "connectBody": "Anything you buy here lands in your own Solana wallet — not with us. Connect it to see what you hold and sell it from this page.",
+      "connectCta": "Connect Solana wallet",
+      "readFailed": "Your holdings could not be read right now, so nothing is shown rather than a false zero.",
+      "none": "Nothing from this list is in your wallet yet. Whatever you buy below appears here and can be sold from here.",
+      "trust": "These tokens stay in your own wallet; Fanous Bazaar Pishgam holds nothing. Selling is the same swap in reverse — token to USDC."
+    },
     "title": "Stocks",
     "subtitle": "Real shares and index funds, held 1:1 by a regulated custodian and traded as tokens.",
     "tab": {

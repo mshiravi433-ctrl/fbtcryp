@@ -33,7 +33,7 @@ import {
 } from '../lib/solanaWallet';
 import { solanaSwapPreflight, lamportsToSol } from '../lib/solana/swapPreflight';
 import { shortAddress } from '../context/WalletContext';
-import { EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
+import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
 import { useAppStore } from '../store/useAppStore';
 import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
@@ -79,7 +79,16 @@ const BASE_TOKENS = [
    * have to go via another page to buy it.
    */
   ...LST_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
-  ...EQUITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals }))
+  ...EQUITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
+  /*
+   * Gold (PAXG, XAUt0, GLDx) too. The Stocks page has had a Gold section with
+   * a Buy button on every row for a while, and that button hands off here by
+   * mint. Until 2026-09-28 the gold mints were NOT in this list, so the ?to=
+   * handler below could not find them and quietly fell back to USDC — the
+   * user tapped «خرید طلا» and landed on a USDC → USDC screen. A curated,
+   * issuer-verified asset that has its own Buy button must be pickable here.
+   */
+  ...COMMODITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals }))
   /*
    * `decimalsVerified: true` — these scales were read from the chain (or from
    * the issuer's own list) when the mint was added, so an amount converted with
@@ -225,7 +234,13 @@ export default function SolanaSwap({ embedded = false }) {
     if (!to) return;
     const asset = findAsset(to);
     if (asset) {
-      const target = BASE_TOKENS.find((tk) => tk.mint === asset.mint) ?? BASE_TOKENS[1];
+      /*
+       * A curated asset that is somehow not in BASE_TOKENS is still built from
+       * its own verified record — never swapped for USDC. The old `?? USDC`
+       * fallback is how every gold Buy landed on a USDC → USDC screen.
+       */
+      const target = BASE_TOKENS.find((tk) => tk.mint === asset.mint)
+        ?? { mint: asset.mint, symbol: asset.symbol, name: asset.name, decimals: asset.decimals, decimalsVerified: true };
       const usdc = BASE_TOKENS.find((tk) => tk.mint === USDC_MINT) ?? BASE_TOKENS[0];
       /*
        * `side=sell` (from a coin page's "Sell" button) flips the pair: the

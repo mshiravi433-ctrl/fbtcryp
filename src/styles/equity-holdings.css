@@ -1,0 +1,212 @@
+/* ==========================================================================
+   MY STOCKS  —  .eqh-*
+   --------------------------------------------------------------------------
+   The «سهام من» card on the Stocks page: what the connected wallet holds of
+   the listed tokens, one Sell per row.
+
+   ─── WHY IT LOOKS LIKE THE WALLET, NOT LIKE A BANNER ──────────────────────
+   Its job is to be believed. So it borrows the wallet's row anatomy (icon ·
+   name/symbol · amount · action) and the page's own cyan ink, and adds
+   nothing that reads as marketing: no gradient title, no glow, no green.
+   Cyan here means «yours», the same way it marks an expanded analysis row.
+   Everything is token-driven so the light theme needs no second set of
+   colours — only the one place a translucent white is used (the dot's halo)
+   has a light override.
+
+   ─── WHY THE ROWS ARE A GRID ──────────────────────────────────────────────
+   Name, amount and the Sell button have very different widths in Persian
+   and English. A grid with `minmax(0, 1fr)` for the name column and `auto`
+   for the other two keeps the amount and the button aligned down the list
+   whatever the language, and lets a long company name truncate instead of
+   pushing the button off the card.
+   ========================================================================== */
+
+.eqh {
+  padding: 14px 14px 12px;
+}
+
+.eqh-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.eqh-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* `.section-label` draws a trailing rule (::after). Inside a header row that
+   already has controls on the other side the rule fights the chip, so it is
+   dropped here and the label keeps only its type. */
+.eqh-title { flex: 0 0 auto; }
+.eqh-title::after { display: none; }
+
+/* A small cyan dot that lights up once the chain has answered — the same
+   "this is live" language as the network chip on the swap screen. */
+.eqh-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  opacity: 0.6;
+}
+.eqh-dot.is-live {
+  opacity: 1;
+  background: var(--ink-cyan);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-cyan) 18%, transparent);
+}
+
+.eqh-count { font-size: 10.5px; padding: 3px 8px; }
+
+.eqh-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* The address chip doubles as the link to the wallet tab. */
+.eqh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.eqh-chip:hover { color: var(--text-1); border-color: color-mix(in srgb, var(--ink-cyan) 40%, var(--line)); }
+
+.eqh-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.eqh-refresh:disabled { cursor: default; opacity: 0.7; }
+.eqh-refresh.is-busy svg { animation: eqh-spin 0.9s linear infinite; }
+@keyframes eqh-spin { to { transform: rotate(360deg); } }
+
+/* ── states ─────────────────────────────────────────────────────────────── */
+
+.eqh-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.eqh-empty-text { font-size: 12.3px; line-height: 1.75; }
+.eqh-notice { margin: 0; width: 100%; }
+
+.eqh-connect {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-cyan);
+  border-color: color-mix(in srgb, var(--ink-cyan) 45%, transparent);
+}
+
+.eqh-skel { height: 58px; border-radius: 12px; }
+
+/* ── the rows ───────────────────────────────────────────────────────────── */
+
+.eqh-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eqh-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.eqh-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.eqh-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eqh-sub { font-size: 10.8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eqh-sub-price { color: var(--text-2); }
+
+.eqh-amt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.eqh-qty { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.eqh-usd { font-size: 10.8px; white-space: nowrap; }
+
+.eqh-sell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-cyan);
+  border-color: color-mix(in srgb, var(--ink-cyan) 45%, transparent);
+  white-space: nowrap;
+}
+
+/* ── footer ─────────────────────────────────────────────────────────────── */
+
+.eqh-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.eqh-total { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.eqh-note { font-size: 11.3px; line-height: 1.7; margin-top: 8px; }
+.eqh-trust { font-size: 11.3px; line-height: 1.75; margin-top: 8px; }
+.eqh-stamp { font-size: 10.5px; }
+
+/* Very narrow phones: the amount column moves under the name so the Sell
+   button never leaves the card. */
+@media (max-width: 340px) {
+  .eqh-row { grid-template-columns: 36px minmax(0, 1fr) auto; }
+  .eqh-amt { grid-column: 2; align-items: flex-start; text-align: start; }
+  .eqh-sell { grid-column: 3; grid-row: 1 / span 2; }
+}
+
+:root[data-theme='light'] .eqh-row { background: #ffffff; }
