@@ -417,7 +417,144 @@ export const EQUITY_ASSETS = [
     name: 'Robinhood',
     decimals: 8,
     kind: 'single'
+  },
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ─── 2026-09-28 · THE DEEPEST TICKERS THAT WERE STILL MISSING ─────────────
+   * ═════════════════════════════════════════════════════════════════════════
+   * Asked for directly: «تعداد سهام تب اول خیلی کمه … افزایش بده». So the whole
+   * universe was measured instead of guessed. Method, in full, because the
+   * method is what makes the six below trustworthy:
+   *
+   *   1. 223 well-known tickers (S&P large caps + the popular names + the
+   *      ETFs) were looked up as `<TICKER>x` on Jupiter's token API, plus the
+   *      name search for "xStock" itself, which ranks by real activity.
+   *   2. 161 of them resolve to an existing Backed xStock. ONLY records whose
+   *      `mintAuthority` AND `freezeAuthority` are Backed's two keys count —
+   *      the check a clone cannot pass. 161 of 161 passed; the clones that also
+   *      matched those symbols were rejected by the same check.
+   *   3. Of those 161, TWENTY-TWO carry at least $25k of on-chain depth
+   *      (MIN_EQUITY_LIQUIDITY). Sixteen were already listed here. These are
+   *      the other six, with the depth measured at the time of writing:
+   *
+   *        GLDx   $817,439   41,094 holders   iShares Gold Trust ETF
+   *        GMEx   $435,504   21,387 holders   GameStop
+   *        MCDx   $365,276   21,740 holders   McDonald's
+   *        STRCx  $272,690    4,688 holders   Strategy's variable-rate preferred
+   *        KOx    $101,530    5,689 holders   Coca-Cola
+   *        INTCx   $72,142    3,060 holders   Intel
+   *
+   * Nothing below the floor was added: the remaining ~139 xStocks have books
+   * from $16,609 down to $0, where a $100 order is a large share of the pool.
+   * They are recorded in THIN_ASSETS below, shown for information, and never
+   * offered for sale — see the note on that list.
+   *
+   * GLDx is the one that needs its own sentence. It is NOT a claim on metal
+   * like PAXG and XAUt0; it is a share of the iShares Gold Trust ETF, so it is
+   * classified `index` and sits with the other ETFs. Same issuer, same freeze
+   * authority, same warning.
+   */
+  {
+    id: 'gldx',
+    mint: 'Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re',
+    symbol: 'GLDx',
+    name: 'Gold ETF (GLD)',
+    decimals: 8,
+    kind: 'index'
+  },
+  {
+    /* The original meme stock, and a real company with real revenue — the
+       depth here ($435k) is larger than most of this list. */
+    id: 'gmex',
+    mint: 'Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc',
+    symbol: 'GMEx',
+    name: 'GameStop',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'mcdx',
+    mint: 'XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2',
+    symbol: 'MCDx',
+    name: "McDonald's",
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    /* STRC is Strategy's variable-rate preferred stock, not the common (MSTRx
+       is that, and is listed above). Different instrument, different payoff —
+       which is why it carries its own row and its own name. */
+    id: 'strcx',
+    mint: 'Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH',
+    symbol: 'STRCx',
+    name: 'Strategy Preferred (STRC)',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'kox',
+    mint: 'XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ',
+    symbol: 'KOx',
+    name: 'Coca-Cola',
+    decimals: 8,
+    kind: 'single'
+  },
+  {
+    id: 'intcx',
+    mint: 'XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM',
+    symbol: 'INTCx',
+    name: 'Intel',
+    decimals: 8,
+    kind: 'single'
   }
+];
+
+/**
+ * ─── REAL xSTOCKS WITH NO USABLE MARKET (informational only) ─────────────────
+ * Same issuer, same two authorities, same 8 decimals as the list above — and
+ * effectively no on-chain book: every one of these is between $16,609 and ~$200
+ * of liquidity, where the largest order that respects the 2% rule is a few
+ * hundred dollars.
+ *
+ * ─── WHY THEY ARE HERE AT ALL, AND WHY THEY ARE NOT IN THE LIST ABOVE ───────
+ * Two different questions get two different answers:
+ *
+ *   · "Can I trade this here?" — no, and the Stocks screen says so. They are
+ *     deliberately NOT in EQUITY_ASSETS, which means `findAsset()` does not
+ *     know them and the `?to=<mint>` handoff on the swap screen refuses to
+ *     preselect them. A link cannot smuggle a $200 book into a swap box.
+ *   · "Does this ticker exist at all?" — yes, it is a real Backed xStock, and
+ *     saying so is more useful than letting someone conclude the app is hiding
+ *     it. The reference table on the Stocks screen answers that question for
+ *     Avantis symbols already; this answers it for the tokenized-share
+ *     universe, which is where the confusion actually lives.
+ *
+ * Measured 2026-09-28 (liquidity · holders), and every mint verified against
+ * Backed's mint + freeze authority through the same live lookup as the list
+ * above. If one of these ever grows a real book it belongs upstairs, and the
+ * pinned count in test/units.mjs is where that decision gets recorded.
+ */
+export const THIN_ASSETS = [
+  { id: 'amdx', mint: 'XsXcJ6GZ9kVnjqGsjBnktRcuwMBmvKWh8S93RefZ1rF', symbol: 'AMDx', name: 'AMD', decimals: 8 },
+  { id: 'wmtx', mint: 'Xs151QeqTCiuKtinzfRATnUESM2xTU6V9Wy8Vy538ci', symbol: 'WMTx', name: 'Walmart', decimals: 8 },
+  { id: 'unhx', mint: 'XszvaiXGPwvk2nwb3o9C1CX4K6zH8sez11E6uyup6fe', symbol: 'UNHx', name: 'UnitedHealth', decimals: 8 },
+  { id: 'llyx', mint: 'Xsnuv4omNoHozR6EEW5mXkw8Nrny5rB3jVfLqi6gKMH', symbol: 'LLYx', name: 'Eli Lilly', decimals: 8 },
+  { id: 'nflxx', mint: 'XsEH7wWfJJu2ZT3UCFeVfALnVA6CP5ur7Ee11KmzVpL', symbol: 'NFLXx', name: 'Netflix', decimals: 8 },
+  { id: 'orclx', mint: 'XsjFwUPiLofddX5cWFHW35GCbXcSu1BCUGfxoQAQjeL', symbol: 'ORCLx', name: 'Oracle', decimals: 8 },
+  { id: 'ibmx', mint: 'XspwhyYPdWVM8XBHZnpS9hgyag9MKjLRyE3tVfmCbSr', symbol: 'IBMx', name: 'IBM', decimals: 8 },
+  { id: 'pgx', mint: 'XsYdjDjNUygZ7yGKfQaB6TxLh2gC6RRjzLtLAGJrhzV', symbol: 'PGx', name: 'Procter & Gamble', decimals: 8 },
+  { id: 'linx', mint: 'XsSr8anD1hkvNMu8XQiVcmiaTP7XGvYu7Q58LdmtE8Z', symbol: 'LINx', name: 'Linde', decimals: 8 },
+  { id: 'jpmx', mint: 'XsMAqkcKsUewDrzVkait4e5u4y8REgtyS7jWgCpLV2C', symbol: 'JPMx', name: 'JPMorgan Chase', decimals: 8 },
+  { id: 'mux', mint: 'XsQLZycSZ7QnBBdBXQaTbQdiUcbRqjNJgyBGAMzhHav', symbol: 'MUx', name: 'Micron Technology', decimals: 8 },
+  { id: 'bacx', mint: 'XswsQk4duEQmCbGzfqUUWYmi7pV7xpJ9eEmLHXCaEQP', symbol: 'BACx', name: 'Bank of America', decimals: 8 },
+  { id: 'cmcsax', mint: 'XsvKCaNsxg2GN8jjUmq71qukMJr7Q1c5R2Mk9P8kcS8', symbol: 'CMCSAx', name: 'Comcast', decimals: 8 },
+  { id: 'pepx', mint: 'Xsv99frTRUeornyvCfvhnDesQDWuvns1M852Pez91vF', symbol: 'PEPx', name: 'PepsiCo', decimals: 8 },
+  { id: 'abtx', mint: 'XsHtf5RpxsQ7jeJ9ivNewouZKJHbPxhPoEy6yYvULr7', symbol: 'ABTx', name: 'Abbott', decimals: 8 },
+  { id: 'vx', mint: 'XsqgsbXwWogGJsNcVZ3TyVouy2MbTkfCFhCGGGcQZ2p', symbol: 'Vx', name: 'Visa', decimals: 8 },
+  { id: 'max', mint: 'XsApJFV9MAktqnAc6jqzsHVujxkGm9xcSUffaBoYLKC', symbol: 'MAx', name: 'Mastercard', decimals: 8 },
+  { id: 'pfex', mint: 'XsAtbqkAP1HJxy7hFDeq7ok6yM43DQ9mQ1Rh861X8rw', symbol: 'PFEx', name: 'Pfizer', decimals: 8 },
+  { id: 'honx', mint: 'XsRbLZthfABAPAfumWNEJhPyiKDW6TvDVeAeW7oKqA2', symbol: 'HONx', name: 'Honeywell', decimals: 8 }
 ];
 
 /*

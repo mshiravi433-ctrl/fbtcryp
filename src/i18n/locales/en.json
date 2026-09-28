@@ -3319,12 +3319,22 @@
       "ai": "AI",
       "crypto": "Crypto",
       "energy": "Energy",
+      "consumer": "Consumer",
       "other": "Other"
     },
+    "equitySearchPlaceholder": "Search a listed stock or ticker (NVDAx, Tesla…)",
+    "equityNoMatch": "No listed stock matches that search.",
+    "showAll": "Show all {{count}} stocks",
+    "showLess": "Show fewer",
+    "thinTitle": "Tokenized, but too thin to trade here — the {{count}} closest to being usable",
+    "thinBody": "Every one of these is a real Backed xStock: the mint and freeze authority were checked against the issuer's own keys on Solana. What they lack is depth. All of them sit below the $25,000 of liquidity this screen requires to list a share, so on a book this size a single order would move the price against you by more than the 2% ceiling the buy button enforces above. They are the closest to being usable; over a hundred more real xStocks sit further down.",
+    "thinNote": "Listed for information only — there is no buy button and no route on the swap screen. A ticker that is missing should get an answer, not a dead end.",
     "sort": {
       "mcap": "By size",
       "gainers": "Top gainers",
-      "volume": "By volume"
+      "volume": "By volume",
+      "depth": "Deepest markets",
+      "az": "A–Z"
     },
     "stats": {
       "listed": "Listed",

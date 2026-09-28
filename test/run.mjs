@@ -97,6 +97,24 @@ try {
 console.log(`── ETF + Gold provider (Alpha Vantage) ─────────────────────────────`);
 console.log(`  ${etfOk ? '✓' : '✗'} ETF + Gold provider — all assertions passed`);
 if (!etfOk) failed += 1;
+/* Solana assets — the curated list is verified in ONE batched upstream request
+   instead of one per mint. A CHILD process for the same reason as the probe
+   above: it stubs globalThis.fetch to count requests, and a stubbed fetch left
+   in place would silently hollow out every probe that runs after it. */
+let solanaAssetsOk = false;
+try {
+  execFileSync(process.execPath, ['solana-assets-batch-probe.mjs'], {
+    stdio: 'pipe',
+    cwd: new URL('.', import.meta.url).pathname
+  });
+  solanaAssetsOk = true;
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-10).join('\n');
+  if (tail) console.log(tail);
+}
+console.log(`── Solana assets (batched upstream fetch) ──────────────────────────`);
+console.log(`  ${solanaAssetsOk ? '✓' : '✗'} Solana assets — all assertions passed`);
+if (!solanaAssetsOk) failed += 1;
 /* Operations Center restoration: real monitor engine, conditional orders,
    opportunity engine, history store and the Operations catalog. */
 import './intent-ai/ops-center-probe.mjs';

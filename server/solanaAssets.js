@@ -29,6 +29,34 @@ import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS, XSTOCK_FREEZE_AUTHORITY, X
 const JUP_TOKENS = 'https://lite-api.jup.ag/tokens/v2/search';
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
 
+/*
+ * ─── ONE REQUEST, NOT ONE PER MINT ──────────────────────────────────────────
+ * Jupiter's search endpoint takes a comma-separated list of MINT ADDRESSES —
+ * "Comma-separate to ONLY search for multiple mint addresses / limit to 100
+ * mint addresses in query" (Tokens API reference, get /search). So the whole
+ * curated list fits in a single upstream call.
+ *
+ * This module used to issue ONE REQUEST PER MINT: 26 upstream calls per
+ * refresh, and the curated list has only ever grown — every ticker added made
+ * the screen slower to load and the fan-out wider, on a route that is cached
+ * for five minutes precisely because those calls are expensive. The safety
+ * property is unchanged, and that is the point of the query form: the request
+ * still names exact mint addresses. Jupiter is never asked "find me AAPLx"
+ * (which returns six clones); it is told which addresses we already trust.
+ *
+ * 100 is Jupiter's documented ceiling for the list, so it is chunked rather
+ * than assumed: a curated list longer than 100 keeps working.
+ */
+const MAX_MINTS_PER_REQUEST = 100;
+
+/** Split mint addresses into request-sized chunks. Exported for the tests. */
+export function mintBatches(mints, size = MAX_MINTS_PER_REQUEST) {
+  const list = [...new Set((mints ?? []).filter(Boolean))];
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
 async function fetchJson(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -133,13 +161,51 @@ function shape(live, asset, kind) {
 }
 
 /**
+ * Fetch live records for a list of mint addresses, in as few requests as
+ * Jupiter allows.
+ *
+ * Returns the records keyed by mint, plus the set of mints whose request
+ * FAILED — the two are different states and the caller reports them
+ * differently: a mint missing from a successful response is not the same thing
+ * as a mint we could not ask about, and collapsing them would hide an outage
+ * behind the "notFound" label.
+ */
+async function fetchTokenRecords(mints) {
+  const found = new Map();
+  const failed = new Set();
+
+  await Promise.all(
+    mintBatches(mints).map(async (batch) => {
+      const url = `${JUP_TOKENS}?query=${encodeURIComponent(batch.join(','))}`;
+      try {
+        let list;
+        try {
+          list = await fetchJson(url);
+        } catch {
+          /* One retry. A batch is now the whole screen: a single dropped
+             connection used to cost one row, and would now cost every row
+             at once. */
+          list = await fetchJson(url);
+        }
+        for (const record of Array.isArray(list) ? list : []) {
+          if (record?.id) found.set(record.id, record);
+        }
+      } catch {
+        for (const mint of batch) failed.add(mint);
+      }
+    })
+  );
+
+  return { found, failed };
+}
+
+/**
  * Fetch live data for every curated asset.
  *
- * One request per mint. That sounds wasteful and is not: there are eight of
- * them, the whole thing is cached for five minutes server-side, and the
- * alternative (Jupiter's bulk search by symbol) is what returns the seven
- * fake AAPLx tokens we are specifically avoiding. Querying BY MINT ADDRESS is
- * what makes impersonation impossible at the fetch step.
+ * Batched by mint address — see MAX_MINTS_PER_REQUEST above for why that is
+ * both cheaper AND still impersonation-proof. The issuer check then runs per
+ * asset exactly as before, so a mint that resolves to something unexpected
+ * still disappears rather than being rendered.
  */
 export async function fetchSolanaAssets() {
   const jobs = [
@@ -148,22 +214,17 @@ export async function fetchSolanaAssets() {
     ...COMMODITY_ASSETS.map((a) => ({ asset: a, kind: 'commodity' }))
   ];
 
-  const rows = await Promise.all(
-    jobs.map(async ({ asset, kind }) => {
-      try {
-        const list = await fetchJson(`${JUP_TOKENS}?query=${encodeURIComponent(asset.mint)}`);
-        const live = Array.isArray(list) ? list.find((r) => r.id === asset.mint) : null;
-        if (!live) return { asset, kind, ok: false, why: 'notFound' };
-        if (!issuerMatches(live, asset, kind)) {
-          return { asset, kind, ok: false, why: 'issuerMismatch' };
-        }
-        return { asset, kind, ok: true, row: shape(live, asset, kind) };
-      } catch {
-        /* One unreachable mint must not take down the whole screen. */
-        return { asset, kind, ok: false, why: 'fetchFailed' };
-      }
-    })
-  );
+  const { found, failed } = await fetchTokenRecords(jobs.map((j) => j.asset.mint));
+
+  const rows = jobs.map(({ asset, kind }) => {
+    if (failed.has(asset.mint)) return { asset, kind, ok: false, why: 'fetchFailed' };
+    const live = found.get(asset.mint);
+    if (!live) return { asset, kind, ok: false, why: 'notFound' };
+    if (!issuerMatches(live, asset, kind)) {
+      return { asset, kind, ok: false, why: 'issuerMismatch' };
+    }
+    return { asset, kind, ok: true, row: shape(live, asset, kind) };
+  });
 
   const good = rows.filter((r) => r.ok);
 
