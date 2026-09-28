@@ -4171,7 +4171,10 @@ app.get('/api/v1/smart-money/wallets/verified', async (_req, res) => {
   try {
     const out = await smartMoney.getVerifiedIntelligence({ window: '7d' });
     return smJson(res, { schema: 'fbt.smart-money-leaderboard.v1', dataStatus: out.dataStatus,
-      at: out.at, coverage: out.coverage, wallets: out.leaderboard }, { sMax: 60 });
+      at: out.at, indexedAt: out.indexedAt, refresh: out.refresh, coverage: out.coverage, wallets: out.leaderboard,
+      // Every analysed wallet with its MEASURED stats, qualified or not —
+      // "under evaluation", never promoted into the leaderboard above.
+      candidates: (out.observed?.candidates || []).filter((c) => !c.qualified).slice(0, 12) }, { sMax: 60 });
   } catch { return res.status(502).json({ error: 'LEADERBOARD_UNAVAILABLE' }); }
 });
 
@@ -4227,12 +4230,17 @@ app.get('/api/v1/smart-money/token/:chain/:address', async (req, res) => {
       smartMoney.analyzeToken(req.params.address, chainId),
       smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h')).catch(() => null),
       supportsVerified ? smartMoney.getVerifiedIntelligence({ window: req.query.window || '24h', chain: chainId,
-        token: addr }).catch(() => null) : null
+        token: addr, refresh: 'background' }).catch(() => null) : null
     ]);
     res.set('cache-control', 'public, max-age=30, s-maxage=90, stale-while-revalidate=600');
     return res.json({ ...intel, smartMoneyFlow: signals,
       verified: verified ? { dataStatus: verified.dataStatus, indexedAt: verified.indexedAt,
-        coverage: verified.coverage, consensus: verified.consensus.find((r) => r.chain === chainId && r.token === addr) || null }
+        coverage: verified.coverage, consensus: verified.consensus.find((r) => r.chain === chainId && r.token === addr) || null,
+        // Paired swaps of THIS token by analysed wallets (qualified or not):
+        // real receipts, explicitly not consensus. Lets the card show the
+        // sample instead of a bare «insufficient» when nobody qualified yet.
+        observed: verified.observed?.flow?.find((r) => r.chain === chainId && r.token === addr) || null,
+        receipts: (verified.observed?.recentSwaps || []).filter((r) => r.chain === chainId && r.token === addr).slice(0, 5) }
         : { dataStatus: supportsVerified ? 'unavailable' : 'not-covered', consensus: null } });
   } catch (err) {
     if (err?.code === 'BAD_ADDRESS') return res.status(400).json({ error: 'BAD_ADDRESS' });

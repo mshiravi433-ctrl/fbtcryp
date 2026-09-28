@@ -178,7 +178,7 @@ export async function runAlertCycle(deliver, { now = Date.now(), events: injecte
     .filter((e) => (e.timestamp || 0) >= since) : [];
   let intel = injectedIntel;
   if (needsVerified && !intel) {
-    try { intel = await getVerifiedIntelligence({ window: '30m', now }); }
+    try { intel = await getVerifiedIntelligence({ window: '30m', now, refresh: 'never' }); }
     catch { intel = { dataStatus: 'unavailable', consensus: [] }; }
   }
   const existing = await storeGet(ALERT_KEY, []);

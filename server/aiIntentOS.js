@@ -1688,7 +1688,7 @@ router.post('/chat', async (req, res) => {
       }, context, at: nowMs() });
     }
     const wantsEarly = /early|entry|before|زود|قبل|ورود/i.test(message);
-    const intel = await getVerifiedIntelligence({ window: '24h', includePrices: wantsEarly })
+    const intel = await getVerifiedIntelligence({ window: '24h', includePrices: wantsEarly, refresh: 'background' })
       .catch(() => ({ dataStatus: 'unavailable', consensus: [], coverage: null }));
     const narrated = narrateIntelligence(intel, { message, lang: locale || 'fa' });
     const fa = String(locale || 'fa').startsWith('fa');

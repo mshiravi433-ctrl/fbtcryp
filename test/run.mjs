@@ -209,6 +209,11 @@ process.env.INTENT_OS_OPEN_MODE = process.env.INTENT_OS_OPEN_MODE || '0';
    activation default is off for the whole run. The phase-status probe lifts
    this pin locally (and restores it) to prove the owner-activated release. */
 process.env.INTENT_OS_ACTIVATION = process.env.INTENT_OS_ACTIVATION || '0';
+/* The Verified Intelligence index heals itself on read in production (it
+   runs a bounded on-chain refresh when stale). Every HTTP probe in this run is
+   offline and deterministic, so reads stay read-only here; the self-healing
+   path is exercised with mocked explorers in smart-money-live-index-probe. */
+process.env.SM_ONDEMAND_INDEX = process.env.SM_ONDEMAND_INDEX || '0';
 /*
  * The same trap, one budget over: the intent probe walks the full
  * claim/dispute/adjudication/cross-chain lifecycle and exceeds the
@@ -1964,6 +1969,23 @@ console.log('\n▸ probing verified Smart Money → Intent OS…');
     console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
   }
   report('verified Smart Money → Intent OS', [['paired swaps, clustering, alerts and Opportunity Engine', ok]]);
+}
+
+/* «هوش تأییدشده به داده‌های واقعی وصل نیست» — the verified index must be
+ * reachable by real wallets, discoverable from live chain data and able to
+ * rebuild itself on read. Separate process: it resets the shared store. */
+console.log('\n▸ probing Verified Intelligence live index…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-live-index-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Verified Intelligence live index', [['real-wallet qualification, live discovery, observed layer, self-healing read', ok]]);
 }
 
 /*

@@ -209,13 +209,34 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
   // falls. We never cost a sell whose entry is outside the loaded page.
   const coverage = measuredCoverage * (historyTruncated ? 0.9 : 1);
   const sampleDays = closed.length > 1 ? (closed.at(-1).at - closed[0].at) / DAY : 0;
-  const sufficient = closed.length >= 5 && sampleDays >= 2 && coverage >= 0.7;
+  /*
+   * QUALIFICATION WAS MATHEMATICALLY UNREACHABLE — the root of
+   * «هوش تأییدشده اصلاً به داده‌های واقعی وصل نیست».
+   *
+   * With ≥5 closes the five core factors (profitability, win rate,
+   * consistency, capital efficiency, risk-adjusted) always measure, which is
+   * 0.70 of the weight. Early-entry accuracy and exit timing are OPTIONAL
+   * extras (they need a young pool or a curated CoinGecko id). The gate used
+   * to compare the *truncation-penalised* figure against 0.70 — and every
+   * active trader's explorer page is paginated, so 0.70 × 0.9 = 0.63 failed
+   * the gate for every real wallet, and `qualified` then demanded ≥0.75,
+   * i.e. an optional factor. Only the synthetic test fixture (which happens
+   * to carry an early-entry pool) could ever qualify.
+   *
+   * Sufficiency is now judged on MEASURED breadth — all core factors present
+   * over ≥5 real closes spanning ≥2 days — while the reported `coverage`
+   * still carries the pagination penalty so the UI keeps telling the truth
+   * about how complete the sample is.
+   */
+  const coreMeasured = measuredCoverage >= 0.7 - 1e-9;
+  const sufficient = closed.length >= 5 && sampleDays >= 2 && coreMeasured;
   const score = historyLive && sufficient
     ? Math.round(100 * covered.reduce((sum, [key]) => sum + factors[key] * weights[key], 0) / measuredCoverage) : null;
   const smartMoney = {
     score, coverage: round(coverage), factors,
     status: !historyLive ? 'UNAVAILABLE' : sufficient ? 'SCORED' : 'INSUFFICIENT_EVIDENCE',
-    qualified: score != null && score >= 70 && realized > 0 && winRate >= 55 && coverage >= 0.75,
+    qualified: score != null && score >= 70 && realized > 0 && winRate >= 55 && coreMeasured,
+    measuredCoverage: round(measuredCoverage),
     weights, sample: { swaps: swaps.length, closedTrades: closed.length, matchedExits: closed.length,
       unmatchedExits, observedDays: round(sampleDays, 1), historyTruncated, quote: 'allowlisted USD stablecoin ≈ $1' },
     note: 'Behavioural evidence score, not a probability of profit. No score without ≥5 paired closed swaps over ≥2 days; paginated history lowers coverage and unmatched cost basis is excluded.'

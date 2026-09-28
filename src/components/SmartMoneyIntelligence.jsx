@@ -8,6 +8,18 @@ import { openUrl } from '../lib/browser';
 const WINDOWS = ['30m', '24h', '7d'];
 const badge = (signal) => signal === 'ACCUMULATION' ? 'up' : signal === 'DISTRIBUTION' ? 'down' : 'idle';
 const chainName = (id) => CHAIN_OPTIONS.find((c) => String(c.id) === String(id))?.short || String(id);
+const EXPLORERS = { 1: 'https://etherscan.io', 56: 'https://bscscan.com', 137: 'https://polygonscan.com', 42161: 'https://arbiscan.io', 8453: 'https://basescan.org', 10: 'https://optimistic.etherscan.io', 43114: 'https://snowtrace.io' };
+const txUrl = (chain, hash) => (EXPLORERS[chain] && /^0x[a-fA-F0-9]{64}$/.test(String(hash || ''))) ? `${EXPLORERS[chain]}/tx/${hash}` : null;
+const pct = (v) => (v == null || !Number.isFinite(Number(v)) ? '—' : `${Math.round(Number(v))}%`);
+
+/** «در حال به‌روزرسانی از زنجیره» / last-attempt honesty for the index stamp. */
+function refreshNote(t, data) {
+  const st = data?.refresh?.status;
+  if (st === 'refreshing' || st === 'refreshed') return t('sm.engine.refreshing');
+  const last = data?.lastCycle;
+  if (last && last.status && last.status !== 'sampled') return t('sm.engine.lastAttemptFailed', { ago: timeAgo(last.at) });
+  return null;
+}
 
 /** Honest top-of-overview handoff: this uses the overview's indexed evidence;
  * no extra RPC calls or fake prices while the user reads the whale feed. */
@@ -19,7 +31,9 @@ export function IntelligenceTeaser({ verified, onOpen }) {
       <div className="smi-teaser-mark" aria-hidden="true">◇</div>
       <div className="smi-teaser-copy">
         <strong>{t('sm.engine.title')}</strong>
-        <span>{active.length ? t('sm.engine.activeCount', { n: active.length }) : t('sm.engine.noConsensus')}</span>
+        <span>{active.length ? t('sm.engine.activeCount', { n: active.length })
+          : verified?.coverage?.analyzedWallets ? t('sm.engine.teaserSample', { wallets: verified.coverage.analyzedWallets, swaps: verified.coverage.observedSwaps ?? 0 })
+            : t('sm.engine.noConsensus')}</span>
       </div>
       <button type="button" onClick={onOpen}>{t('sm.engine.open')} <span aria-hidden="true">↗</span></button>
     </section>
@@ -42,6 +56,7 @@ export function VerifiedWallets() {
       {error && <p className="smi-sub">{t('sm.engine.unavailable')}</p>}
       {!error && !data && <div className="sm-skel" />}
       {data && !data.wallets?.length && <p className="smi-sub">{t('sm.engine.noQualified')}</p>}
+      {data && !data.wallets?.length && !data.indexedAt && <p className="smi-sub">{refreshNote(t, data) || t('sm.engine.notIndexed')}</p>}
       {(data?.wallets || []).slice(0, 12).map((w, i) => (
         <button key={`${w.chain}:${w.address}`} className="smi-board-row" type="button"
           onClick={() => navigate(`/smart-money/wallet/${w.chain}/${w.address}`)}>
@@ -50,9 +65,49 @@ export function VerifiedWallets() {
           <span className="smi-board-score">{w.score}<small>/{Math.round(w.coverage * 100)}% {t('sm.engine.coverageShort')}</small></span>
         </button>
       ))}
+      {data?.candidates?.length > 0 && <>
+        <div className="smi-subhead">{t('sm.engine.underEvaluation')}</div>
+        <CandidateRows rows={data.candidates.slice(0, 8)} />
+      </>}
       <p className="smi-footnote">{t('sm.engine.whaleNotSmart')}</p>
     </section>
   );
+}
+
+/** Analysed wallets with their MEASURED stats — never styled as a ranking. */
+function CandidateRows({ rows }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  return <div className="smi-candidates">
+    {rows.map((w) => <button key={`${w.chain}:${w.address}`} className="smi-board-row smi-candidate" type="button"
+      onClick={() => navigate(`/smart-money/wallet/${w.chain}/${w.address}`)}>
+      <span className={`smi-rank ${w.qualified ? 'ok' : ''}`}>{w.qualified ? '✓' : '·'}</span>
+      <span className="smi-board-person"><strong>{w.label || shortAddr(w.address)}</strong>
+        <small>{chainName(w.chain)} · {w.closedTrades} {t('sm.engine.closes')} · {t('sm.engine.winRate')} {pct(w.winRate)} · {w.swaps} {t('sm.engine.receiptsShort')}</small></span>
+      <span className="smi-board-score">{w.score ?? '—'}<small>{w.qualified ? t('sm.engine.qualifiedShort') : t(`sm.engine.status.${w.status}`, { defaultValue: w.status })}</small></span>
+    </button>)}
+  </div>;
+}
+
+/** Real paired fills with tx receipts, newest first. */
+function ReceiptFeed({ rows }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  if (!rows?.length) return <p className="smi-sub">{t('sm.engine.noReceipts')}</p>;
+  return <div className="smi-feed">
+    {rows.map((r) => {
+      const url = txUrl(r.chain, r.hash);
+      return <div className="smi-feed-row" key={`${r.hash}:${r.token}:${r.wallet}`}>
+        <span className={`smi-side ${r.side === 'BUY' ? 'up' : 'down'}`}>{r.side === 'BUY' ? t('sm.engine.buyShort') : t('sm.engine.sellShort')}</span>
+        <button type="button" className="smi-feed-main" onClick={() => navigate(`/smart-money/token/${r.chain}/${r.token}`)}>
+          <strong>{r.symbol} <b className={r.side === 'BUY' ? 'sm-up' : 'sm-down'}>{fmtUsd(r.valueUsd)}</b></strong>
+          <small>{chainName(r.chain)} · {timeAgo(r.at)}{r.qualified ? ` · ${t('sm.engine.qualifiedShort')}` : ''}{r.realizedRoiPct != null ? ` · ROI ${r.realizedRoiPct > 0 ? '+' : ''}${r.realizedRoiPct}%` : ''}</small>
+        </button>
+        <button type="button" className="smi-feed-wallet" onClick={() => navigate(`/smart-money/wallet/${r.chain}/${r.wallet}`)}>{shortAddr(r.wallet)}</button>
+        {url && <button type="button" className="smi-proof" onClick={() => openUrl(url)}>{t('sm.engine.proof')} ↗</button>}
+      </div>;
+    })}
+  </div>;
 }
 
 /** SVG is only a view of real graph edges. Accessible receipt rows underneath
@@ -91,11 +146,8 @@ function TokenGraph({ data, tokenRow }) {
         {points.map((p) => <div className="smi-receipt" key={`receipt:${p.from}`}>
           <button type="button" onClick={() => openWallet(p)}><strong>{p.wallet?.label || shortAddr(p.wallet?.address)}</strong><small>{chainName(p.wallet?.chain)} · {t('sm.engine.score')} {p.wallet?.score ?? '—'}</small></button>
           <span className={p.buyUsd >= p.sellUsd ? 'sm-up' : 'sm-down'}>{p.buyUsd >= p.sellUsd ? '+' : '−'}{fmtUsd(Math.abs(p.buyUsd - p.sellUsd))}</span>
-          {p.hashes?.[0] && <button type="button" className="smi-proof" onClick={() => {
-            const base = CHAIN_OPTIONS.find((c) => c.id === p.wallet?.chain);
-            const explorers = { 1: 'https://etherscan.io', 56: 'https://bscscan.com', 137: 'https://polygonscan.com', 42161: 'https://arbiscan.io', 8453: 'https://basescan.org', 10: 'https://optimistic.etherscan.io', 43114: 'https://snowtrace.io' };
-            if (base && explorers[base.id]) openUrl(`${explorers[base.id]}/tx/${p.hashes[0]}`);
-          }}>{t('sm.engine.proof')} ↗</button>}
+          {p.hashes?.[0] && txUrl(p.wallet?.chain, p.hashes[0]) && <button type="button" className="smi-proof"
+            onClick={() => openUrl(txUrl(p.wallet?.chain, p.hashes[0]))}>{t('sm.engine.proof')} ↗</button>}
         </div>)}
       </div>
       <p className="smi-footnote">{t('sm.engine.graphNote')}</p>
@@ -145,13 +197,26 @@ export default function SmartMoneyIntelligence() {
       setError(e.message); setBusy(false);
     });
   }, [win]);
+  /* Poll fast (20 s) while the server is building the index from the chain,
+     then back off to 90 s. Before, a cold index showed «not indexed» and the
+     page only asked again 90 s later — and nothing on the server would ever
+     have built it anyway. */
+  const building = !data?.indexedAt || data?.refresh?.status === 'refreshing';
   useEffect(() => {
     const ctrl = new AbortController();
     load(ctrl.signal);
-    const interval = setInterval(() => load(ctrl.signal), 90_000);
-    return () => { clearInterval(interval); ctrl.abort(); };
+    return () => ctrl.abort();
   }, [load]);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const interval = setInterval(() => load(ctrl.signal), building ? 20_000 : 90_000);
+    return () => { clearInterval(interval); ctrl.abort(); };
+  }, [load, building]);
   const rows = useMemo(() => (data?.consensus || []).filter((r) => chain === 'all' || String(r.chain) === chain), [data, chain]);
+  const flow = useMemo(() => (data?.observed?.flow || []).filter((r) => chain === 'all' || String(r.chain) === chain), [data, chain]);
+  const receipts = useMemo(() => (data?.observed?.recentSwaps || []).filter((r) => chain === 'all' || String(r.chain) === chain).slice(0, 12), [data, chain]);
+  const candidates = useMemo(() => (data?.observed?.candidates || []).filter((r) => chain === 'all' || String(r.chain) === chain).slice(0, 10), [data, chain]);
+  const note = refreshNote(t, data);
   const chosen = rows.find((r) => `${r.chain}:${r.token}` === selected) || rows[0] || null;
   const status = data?.indexedAt ? timeAgo(data.indexedAt) : t('sm.engine.notIndexed');
   const active = rows.filter((r) => r.confidence != null).length;
@@ -164,11 +229,12 @@ export default function SmartMoneyIntelligence() {
         <h2>{t('sm.engine.headline')}</h2>
         <p>{t('sm.engine.intro')}</p>
         <div className="smi-hero-stats">
+          <div><span>{t('sm.engine.analysed')}</span><strong>{data?.coverage?.analyzedWallets ?? '—'}</strong></div>
           <div><span>{t('sm.engine.qualified')}</span><strong>{data?.coverage?.classifiedWallets ?? '—'}</strong></div>
-          <div><span>{t('sm.engine.active')}</span><strong>{data ? active : '—'}</strong></div>
-          <div><span>{t('sm.engine.swaps')}</span><strong>{data?.coverage?.swapsInWindow ?? '—'}</strong></div>
+          <div><span>{t('sm.engine.swaps')}</span><strong>{data?.coverage?.observedSwapsInWindow ?? data?.coverage?.swapsInWindow ?? '—'}</strong></div>
         </div>
-        <div className="smi-stamp">{t('sm.engine.indexed')} · {status}{data && !data.durable ? ` · ${t('sm.engine.ephemeral')}` : ''}</div>
+        <div className="smi-stamp" aria-live="polite">{note && <span className="smi-live-dot" aria-hidden="true" />}{t('sm.engine.indexed')} · {status}
+          {note ? ` · ${note}` : ''}{data && !data.durable ? ` · ${t('sm.engine.ephemeral')}` : ''}</div>
       </section>
 
       <div className="smi-controls">
@@ -185,8 +251,8 @@ export default function SmartMoneyIntelligence() {
       {error && <div className="sm-section smi-error" role="alert"><span>{t('sm.engine.unavailable')}</span><button type="button" onClick={() => { const ctrl = new AbortController(); load(ctrl.signal); }}>{t('sm.retry')}</button></div>}
       {data && <>
         <section className="smi-section">
-          <div className="smi-head"><div><span className="smi-eyebrow">02 / {t('sm.engine.consensus')}</span><h3>{t('sm.engine.where')}</h3></div><span className="smi-count">{rows.length} {t('sm.engine.observed')}</span></div>
-          {!rows.length && <div className="smi-empty"><strong>{t('sm.engine.emptyTitle')}</strong><p>{t('sm.engine.emptyBody')}</p></div>}
+          <div className="smi-head"><div><span className="smi-eyebrow">02 / {t('sm.engine.consensus')}</span><h3>{t('sm.engine.where')}</h3></div><span className="smi-count">{rows.length} {t('sm.engine.observed')} · {active} {t('sm.engine.active')}</span></div>
+          {!rows.length && <div className="smi-empty"><strong>{t('sm.engine.emptyTitle')}</strong><p>{flow.length ? t('sm.engine.emptyBodySample') : t('sm.engine.emptyBody')}</p></div>}
           <div className="smi-consensus-list">
             {rows.map((r) => <button type="button" key={`${r.chain}:${r.token}`} className={`smi-consensus ${chosen === r ? 'selected' : ''}`}
               aria-pressed={chosen === r} onClick={() => setSelected(`${r.chain}:${r.token}`)}>
@@ -204,7 +270,7 @@ export default function SmartMoneyIntelligence() {
         </section>
 
         {chosen && <section className="smi-section smi-detail">
-          <div className="smi-head"><div><span className="smi-eyebrow">03 / {t('sm.engine.graph')}</span><h3>{chosen.symbol} <small>· {chainName(chosen.chain)}</small></h3></div>
+          <div className="smi-head"><div><span className="smi-eyebrow">02b / {t('sm.engine.graph')}</span><h3>{chosen.symbol} <small>· {chainName(chosen.chain)}</small></h3></div>
             <button className="smi-link" type="button" onClick={() => navigate(`/smart-money/token/${chosen.chain}/${chosen.token}`)}>{t('sm.analyze')} ↗</button></div>
           <div className="smi-detail-metrics"><div><small>{t('sm.engine.inflow')}</small><strong className="sm-up">{fmtUsd(chosen.capitalEnteringUsd)}</strong></div>
             <div><small>{t('sm.engine.outflow')}</small><strong className="sm-down">{fmtUsd(chosen.capitalExitingUsd)}</strong></div>
@@ -213,8 +279,40 @@ export default function SmartMoneyIntelligence() {
           <FollowRule key={`${chosen.chain}:${chosen.token}`} row={chosen} onIntent={monitor} />
         </section>}
 
+        <section className="smi-section" data-testid="sm-observed-flow">
+          <div className="smi-head"><div><span className="smi-eyebrow">03 / {t('sm.engine.observedLayer')}</span><h3>{t('sm.engine.observedFlowTitle')}</h3></div>
+            <span className="smi-count">{flow.length} {t('sm.engine.observed')}</span></div>
+          {!flow.length && <p className="smi-sub">{data.indexedAt ? t('sm.engine.noObservedFlow') : (note || t('sm.engine.notIndexed'))}</p>}
+          <div className="smi-consensus-list">
+            {flow.slice(0, 10).map((r) => <button type="button" key={`flow:${r.chain}:${r.token}`} className="smi-consensus"
+              onClick={() => navigate(`/smart-money/token/${r.chain}/${r.token}`)}>
+              <span className={`smi-token-glyph ${r.netFlowUsd > 0 ? 'up' : r.netFlowUsd < 0 ? 'down' : 'idle'}`}>{String(r.symbol || '?').slice(0, 1)}</span>
+              <span className="smi-token-body"><strong>{r.symbol}<small>{chainName(r.chain)} · {shortAddr(r.token)}</small></strong>
+                <span className="smi-vote-track"><i style={{ width: `${r.buyUsd + r.sellUsd ? Math.round(r.buyUsd / (r.buyUsd + r.sellUsd) * 100) : 0}%` }} /></span>
+                <span className="smi-votes">{r.buyers} {t('sm.engine.buy')} · {r.sellers} {t('sm.engine.sell')} · {r.swaps} {t('sm.engine.receiptsShort')}{r.qualifiedWallets ? ` · ${r.qualifiedWallets} ${t('sm.engine.qualifiedShort')}` : ''}</span>
+              </span>
+              <span className="smi-token-result"><b className={r.netFlowUsd >= 0 ? 'sm-up' : 'sm-down'}>{r.netFlowUsd >= 0 ? '+' : '−'}{fmtUsd(Math.abs(r.netFlowUsd))}</b>
+                <small className="smi-signal idle">{r.currentPriceUsd != null ? `$${Number(r.currentPriceUsd).toPrecision(4)}` : t('sm.engine.notConsensus')}</small>
+              </span>
+            </button>)}
+          </div>
+          <p className="smi-footnote">{t('sm.engine.observedNote')}</p>
+        </section>
+
+        <section className="smi-section" data-testid="sm-receipts">
+          <div className="smi-head"><div><span className="smi-eyebrow">04 / {t('sm.engine.ledger')}</span><h3>{t('sm.engine.receiptsTitle')}</h3></div></div>
+          <ReceiptFeed rows={receipts} />
+          <p className="smi-footnote">{t('sm.engine.receiptsNote')}</p>
+        </section>
+
+        {candidates.length > 0 && <section className="smi-section" data-testid="sm-candidates">
+          <div className="smi-head"><div><span className="smi-eyebrow">05 / {t('sm.engine.evidence')}</span><h3>{t('sm.engine.underEvaluation')}</h3></div></div>
+          <CandidateRows rows={candidates} />
+          <p className="smi-footnote">{t('sm.engine.candidatesNote')}</p>
+        </section>}
+
         <section className="smi-section">
-          <div className="smi-head"><div><span className="smi-eyebrow">04 / {t('sm.engine.discovery')}</span><h3>{t('sm.engine.early')}</h3></div></div>
+          <div className="smi-head"><div><span className="smi-eyebrow">06 / {t('sm.engine.discovery')}</span><h3>{t('sm.engine.early')}</h3></div></div>
           {!data.earlyEntries?.length && <p className="smi-sub">{t('sm.engine.noEarly')}</p>}
           <div className="smi-early-list">{(data.earlyEntries || []).map((e) => <button key={`${e.chain}:${e.token}`} type="button"
             onClick={() => navigate(`/smart-money/token/${e.chain}/${e.token}`)}>
@@ -226,7 +324,7 @@ export default function SmartMoneyIntelligence() {
           <p className="smi-footnote">{t('sm.engine.earlyNote')}</p>
         </section>
 
-        <section className="smi-section smi-method"><span className="smi-eyebrow">05 / {t('sm.engine.method')}</span><h3>{t('sm.engine.methodTitle')}</h3>
+        <section className="smi-section smi-method"><span className="smi-eyebrow">07 / {t('sm.engine.method')}</span><h3>{t('sm.engine.methodTitle')}</h3>
           <div className="smi-pipeline">{['chain', 'ledger', 'score', 'consensus', 'intent'].map((step) => <span key={step}>{t(`sm.engine.pipeline.${step}`)}</span>)}</div>
           <p>{t('sm.engine.methodNote')}</p>
           <div className="smi-method-pills"><span>{t('sm.engine.identityCaveat')}</span><span>{t('sm.engine.noAutoTrade')}</span><span>{t('sm.engine.notRealtime')}</span></div>

@@ -360,6 +360,7 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
     dexTradeShare: activity.length ? dexCount / activity.length : null,
     verifiedScore: smart.score,
     verifiedCoverage: smart.coverage,
+    verifiedQualified: smart.qualified === true,
     verifiedClosedTrades: performance.closedTrades
   });
 

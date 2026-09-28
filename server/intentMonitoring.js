@@ -621,7 +621,7 @@ export async function evaluateMonitor(row, {
       const window = row.metric === 'SMART_MONEY_BUYERS' ? '30m' : '24h';
       const intel = typeof fetchSmartMoney === 'function'
         ? await fetchSmartMoney({ window, chain: target.chain, token: target.token, verified: true })
-        : await (await import('./smartMoney/index.js')).getVerifiedIntelligence({ window, chain: target.chain, token: target.token, now });
+        : await (await import('./smartMoney/index.js')).getVerifiedIntelligence({ window, chain: target.chain, token: target.token, now, refresh: 'background' });
       // Same gate as Signals/FIOS: paired swaps, ≥3 independent qualified
       // groups, confidence ≥75 and a non-stale indexed sample. One wallet's
       // large transfer can never arm a reversal or trigger an Intent alert.

@@ -199,6 +199,12 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
               {t(`sm.engine.signal.${verifiedRow.signal}`)} · {verifiedRow.confidence}/100 · {verifiedRow.netFlowUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(verifiedRow.netFlowUsd))}
             </span><small>{t('sm.engine.verifiedGroups', { n: verifiedRow.independentVotes, swaps: verifiedRow.swaps })}</small></>
               : <p>{t('sm.engine.tokenInsufficient')}</p>}
+            {/* Real paired swaps of this contract by analysed wallets —
+                receipts, explicitly NOT consensus. */}
+            {!verifiedRow && data?.verified?.observed?.swaps > 0 && <small data-testid="sm-token-observed">
+              {t('sm.engine.tokenObserved', { swaps: data.verified.observed.swaps, wallets: data.verified.observed.wallets,
+                net: `${data.verified.observed.netFlowUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(data.verified.observed.netFlowUsd))}` })}
+            </small>}
           </div>
           {/* Legacy router/market flow is useful context, not verified trades. */}
           <div className="sm-coverage" data-testid="sm-token-window-note">
