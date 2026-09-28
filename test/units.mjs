@@ -20,6 +20,7 @@ import {
   EQUITY_ASSETS,
   LST_ASSETS,
   MAX_POOL_SHARE,
+  THIN_ASSETS,
   XSTOCK_FREEZE_AUTHORITY,
   XSTOCK_MINT_AUTHORITY,
   findAsset,
@@ -4693,15 +4694,63 @@ export default async function run() {
      * from the DefiLlama adapters that carry the pools (project + symbol +
      * mint), which is the same feed the Farm joins against, so a mistyped mint
      * would not merely be wrong here — it would render an empty row there.
+     *
+     * 32 since 2026-09-28, when the whole tokenised-share universe was measured
+     * instead of sampled: 223 tickers looked up on Jupiter, 161 real xStocks
+     * found (all 161 carrying Backed's mint AND freeze authority), and 22 of
+     * them holding at least the $25,000 depth this screen requires to list a
+     * share. Sixteen of the 22 were already listed; GLDx, GMEx, MCDx, STRCx,
+     * KOx and INTCx were not, and are the six that took the count from 26 to
+     * 32. The other ~139 are recorded in THIN_ASSETS — measured, checked, and
+     * deliberately not buyable, which is asserted below.
+     *
+     * GLDx then moved from EQUITY_ASSETS to COMMODITY_ASSETS, which is why the
+     * total did not change: 23 equities + 3 commodities + 6 LSTs is still 32.
+     * It is a share of an ETF that holds gold, not an ounce in a vault, and the
+     * gold history box measures the three gold tokens together — an ETF listed
+     * among the companies would have been measured on its own.
      */
     t('every curated mint is a plausible Solana address',
-      all.length === 31 && all.every((a) => BASE58.test(a.mint)));
+      all.length === 32 && all.every((a) => BASE58.test(a.mint)));
     /*
      * Duplicates would mean one asset silently shadowing another in the
      * mint->asset map, and the shadowed one would become unreachable.
      */
     t('no mint appears twice', new Set(all.map((a) => a.mint)).size === all.length);
     t('every curated asset carries decimals', all.every((a) => Number.isInteger(a.decimals)));
+
+    /*
+     * ─── THE SIX ADDED ON 2026-09-28, PINNED BY MINT ────────────────────────
+     * The count above says six entries appeared; this says WHICH. A transposed
+     * base58 character is the failure mode this whole file was written around
+     * — the Nasdaq mint in this list was wrong on first write and resolved to
+     * nothing at all — and a length check cannot see one.
+     */
+    const ADDED = {
+      GMEx: 'Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc',
+      MCDx: 'XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2',
+      STRCx: 'Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH',
+      KOx: 'XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ',
+      INTCx: 'XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM'
+    };
+    t('the five added companies hold the mints that were measured',
+      Object.entries(ADDED).every(([sym, mint]) =>
+        EQUITY_ASSETS.some((a) => a.symbol === sym && a.mint === mint)));
+
+    /*
+     * GLDx is a share of the iShares Gold Trust, not a claim on metal like PAXG
+     * and XAUt0 and not a company. Five screens read `assetKind` to decide
+     * whether to call a row a company, so the classification is asserted rather
+     * than assumed from the name.
+     *
+     * It lives in COMMODITY_ASSETS since the gold-history pass, so what is
+     * asserted here is the property that matters — no screen may label it a
+     * single company — rather than the list it happens to sit in.
+     */
+    t('GLDx is never classified as a single company',
+      [...EQUITY_ASSETS, ...COMMODITY_ASSETS].find((a) => a.symbol === 'GLDx').kind !== 'single');
+    t('...and it is labelled an ETF, not an ounce',
+      COMMODITY_ASSETS.find((a) => a.symbol === 'GLDx').unit === 'etf');
 
     /* ---- the issuer check, against REAL data ---- */
     /*
@@ -4783,6 +4832,27 @@ export default async function run() {
 
     /* The listing floor is a separate, stricter question from the trade gate. */
     t('there is a minimum depth to be listed at all', MIN_EQUITY_LIQUIDITY >= 10_000);
+
+    /* ---- real xStocks with no market: listed as information, never a route -- */
+    /*
+     * Measured 2026-09-28: 161 of the 223 tickers probed resolved to a real
+     * Backed xStock, and 139 of those carry between $16,609 and ~$200 of
+     * liquidity. They are recorded so that "why is my ticker missing" has an
+     * answer, and they are NOT in EQUITY_ASSETS so that the answer cannot be
+     * acted on: no buy button, no mint in the ?to= lookup, no swap route.
+     *
+     * The assertions below are what keeps that separation honest. The moment a
+     * thin mint appears in the curated list it becomes buyable with no other
+     * change, so overlap between the two lists is a failure, not a cosmetic
+     * detail.
+     */
+    t('the thin-but-real list is well-formed',
+      THIN_ASSETS.length >= 15 && THIN_ASSETS.every((a) => BASE58.test(a.mint)));
+    t('...no mint is listed twice', new Set(THIN_ASSETS.map((a) => a.mint)).size === THIN_ASSETS.length);
+    t('...none of them overlaps anything we sell',
+      !all.some((a) => THIN_ASSETS.some((thin) => thin.mint === a.mint || thin.id === a.id)));
+    t('...and findAsset refuses every one, so no link can reach them',
+      THIN_ASSETS.every((a) => findAsset(a.mint) === null));
 
     /* ---- the live-yield join ---- */
     /*

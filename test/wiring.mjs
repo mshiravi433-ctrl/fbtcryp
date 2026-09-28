@@ -3947,6 +3947,53 @@ export default function run() {
     t('Stocks applies the listing floor', /MIN_EQUITY_LIQUIDITY/.test(stocks));
 
     /*
+     * ─── A LONGER LIST NEEDS A WAY THROUGH IT ───────────────────────────────
+     * The curated set grew from 18 tickers to the whole tradeable xStock list.
+     * Sixty rows with no search box is not an improvement on eighteen: the row
+     * you want is the last one. All three controls are views over the SAME
+     * verified rows — none of them can add, remove or re-identify an asset, and
+     * the buy path still travels as a mint address.
+     */
+    t('the equity list can be searched by symbol or name',
+      /eqSearch/.test(stocks) && /stocks\.equitySearchPlaceholder/.test(stocks));
+    t('...and re-sorted without touching the data',
+      /EQ_SORTS/.test(stocks) && /eqSort/.test(stocks) && /eqSort === 'gainers'/.test(stocks));
+    t('...and paged rather than rendered whole',
+      /EQ_PAGE/.test(stocks) && /visibleEquities/.test(stocks) && /stocks\.showAll/.test(stocks));
+
+    /*
+     * ─── AND THE TICKERS THAT EXIST BUT CANNOT BE TRADED HERE ───────────────
+     * ~139 more real Backed xStocks carry books from $16,609 down to ~$200.
+     * They are answered, not hidden — a collapsed explanation listing the
+     * tickers, with no row, no mint and no button, so "we know about it and it
+     * is not safe to trade" cannot be mistaken for a broken buy flow.
+     */
+    {
+      const thinAt = stocks.indexOf('stocks.thinTitle');
+      const rowsAt = stocks.indexOf('<EquityRow');
+      t('the thin-but-real xStocks are explained on the screen',
+        thinAt > -1 && /THIN_ASSETS/.test(stocks));
+      t('...below the buyable rows, never among them', rowsAt > -1 && thinAt > rowsAt);
+      t('...and as a collapsed box with no default open',
+        /id="stocks-thin"/.test(stocks) && !/id="stocks-thin"[^>]*defaultOpen/.test(stocks));
+    }
+
+    /*
+     * The fetch itself. One request per curated mint was the shape that made
+     * the list expensive to grow; Jupiter takes up to 100 commas of MINT
+     * ADDRESSES per call, which is the same impersonation-proof query form
+     * (never a symbol search) at a fraction of the fan-out.
+     */
+    {
+      const verifier = read('server/solanaAssets.js');
+      t('the verifier batches its upstream requests', /MAX_MINTS_PER_REQUEST\s*=\s*100/.test(verifier));
+      t('...by mint address, comma-separated',
+        /mintBatches/.test(verifier) && /query=\$\{encodeURIComponent\(batch\.join\(','\)\)\}/.test(verifier));
+      t('...and still reports a failed request differently from a missing one',
+        /failed\.has\(asset\.mint\)/.test(verifier) && /'fetchFailed'/.test(verifier));
+    }
+
+    /*
      * The issuer authority is the one check a clone cannot pass. If this
      * constant ever stops being compared, the whole defence is decoration.
      */

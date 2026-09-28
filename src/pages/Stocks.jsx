@@ -16,6 +16,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { IconSearch } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
+import { THIN_ASSETS } from '../lib/solanaAssets';
 import RwaRow from '../components/RwaRow';
 import RwaDetailSheet from '../components/RwaDetailSheet';
 import {
@@ -158,15 +159,22 @@ function initialStockTab() {
  * buy flow all live below this layer and never read it.
  */
 const EQUITY_SECTORS = {
-  ai: ['nvdax', 'avgox', 'pltrx', 'amznx', 'msftx', 'googlx', 'metax'],
+  ai: ['nvdax', 'avgox', 'pltrx', 'amznx', 'msftx', 'googlx', 'metax', 'aaplx', 'intcx'],
   crypto: ['coinx', 'mstrx', 'crclx', 'hoodx', 'strcx'],
   energy: ['xomx', 'cvxx'],
-  /* Consumer names, added with the tickers themselves — a chip that sorts
-     nothing is worse than no chip. Apple and Tesla sit with McDonald's, Coke
-     and GM because that is what they sell to, not because of their size. */
-  consumer: ['aaplx', 'tslax', 'mcdx', 'kox', 'gmex']
+  consumer: ['tslax', 'mcdx', 'kox', 'gmex']
 };
+/*
+ * Only sectors that actually have members get a chip. A chip that always
+ * answers "nothing here" is worse than no chip: it teaches the reader that the
+ * filter is broken. `index` is not in the map because sectorOf() derives it
+ * from the asset kind, which the server sets — an index tracker is a
+ * materially different risk from a single company, not a tag somebody chose.
+ */
 const SECTOR_ORDER = ['all', 'index', 'ai', 'crypto', 'energy', 'consumer', 'other'];
+
+/** How the equity list is ordered. Depth first — see the memo in the screen. */
+const EQ_SORTS = ['depth', 'gainers', 'az'];
 
 /**
  * Curated fallback assets for energy sector to ensure tokens are always
@@ -452,13 +460,57 @@ export default function Stocks() {
     [assets]
   );
 
-  /* Sector-filtered equities, and the top-gainers carousel above them. The
-     carousel always shows the whole list's movers — filtering to "Energy"
-     must not shrink the highlight reel to two cards. */
-  const filteredEquities = useMemo(
-    () => (equities ?? []).filter((a) => eqSector === 'all' || sectorOf(a) === eqSector),
-    [equities, eqSector]
-  );
+  /*
+   * ─── SEARCH, SORT, THEN PAGE THE LONG LIST ────────────────────────────────
+   * The equity list grew from 18 tickers to the whole tradeable xStock set, and
+   * a wall of sixty rows is not an improvement over eighteen if the one you
+   * want is the last one. Three small controls fix that, and each is a view
+   * over the SAME verified rows — none of them can add, remove or re-identify
+   * an asset, exactly like the sector chips above them.
+   *
+   *   · search matches symbol or company name, in either case
+   *   · sort defaults to DEPTH, because on this screen liquidity is the fact
+   *     that decides whether an order is safe, not the 24h move
+   *   · the list renders 24 rows and asks before rendering the rest
+   *
+   * The top-gainers carousel above is deliberately NOT affected by any of it:
+   * it always shows the whole list's movers, so filtering to "Energy" must not
+   * shrink the highlight reel to two cards.
+   */
+  const [eqSearch, setEqSearch] = useState('');
+  const [eqSort, setEqSort] = useState('depth');
+  const [eqShowAll, setEqShowAll] = useState(false);
+  const EQ_PAGE = 24;
+
+  const filteredEquities = useMemo(() => {
+    const q = eqSearch.trim().toLowerCase();
+    const rows = (equities ?? []).filter((a) => {
+      if (eqSector !== 'all' && sectorOf(a) !== eqSector) return false;
+      if (!q) return true;
+      return (
+        String(a.symbol ?? '').toLowerCase().includes(q) ||
+        String(a.name ?? '').toLowerCase().includes(q)
+      );
+    });
+
+    const sorted = [...rows];
+    if (eqSort === 'gainers') {
+      sorted.sort((a, b) => (Number(b.change24h) ?? -Infinity) - (Number(a.change24h) ?? -Infinity));
+    } else if (eqSort === 'az') {
+      sorted.sort((a, b) => String(a.symbol ?? '').localeCompare(String(b.symbol ?? '')));
+    } else {
+      sorted.sort((a, b) => (Number(b.liquidity) || 0) - (Number(a.liquidity) || 0));
+    }
+    return sorted;
+  }, [equities, eqSector, eqSearch, eqSort]);
+
+  /* A filter change collapses the list again — otherwise "show all" from a
+     previous search would expand the next one to sixty rows on the first tap. */
+  useEffect(() => {
+    setEqShowAll(false);
+  }, [eqSector, eqSearch, eqSort]);
+
+  const visibleEquities = eqShowAll ? filteredEquities : filteredEquities.slice(0, EQ_PAGE);
 
   const topEquities = useMemo(
     () =>
@@ -712,23 +764,81 @@ export default function Stocks() {
               <p className="notice">{t('stocks.noneTradeable')}</p>
             )}
 
-            {/* Sector chips — a view over the verified list, never a new list. */}
+            {/* Search + sort — views over the verified list, never a new list. */}
             {!assetsLoading && !assetsError && equities.length > 0 && (
-              <div className="tag-scroll" style={{ marginTop: 10 }}>
-                {SECTOR_ORDER.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`tag ${eqSector === s ? 'active' : ''}`}
-                    onClick={() => { haptic?.('select'); setEqSector(s); }}
+              <>
+                <div style={{ position: 'relative', marginTop: 10 }}>
+                  <input
+                    type="text"
+                    value={eqSearch}
+                    onChange={(e) => setEqSearch(e.target.value)}
+                    placeholder={t('stocks.equitySearchPlaceholder')}
+                    spellCheck={false}
+                    autoComplete="off"
+                    enterKeyHint="search"
+                    aria-label={t('stocks.equitySearchPlaceholder')}
+                    style={{
+                      width: '100%',
+                      fontSize: 12.5,
+                      /*
+                       * Styled here rather than by a class: this repo's other
+                       * search fields are inline too, and a plain <input> picks
+                       * up the browser's white box, which is a hole in the dark
+                       * theme. The 36px on the icon side is the clear space for
+                       * the glyph below — measured, not guessed.
+                       */
+                      padding: isRTL ? '10px 36px 10px 12px' : '10px 12px 10px 36px',
+                      background: 'var(--bg-raised)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 12,
+                      color: 'inherit'
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      [isRTL ? 'right' : 'left']: 12,
+                      pointerEvents: 'none',
+                      color: 'var(--muted)',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
                   >
-                    {t(`stocks.sector.${s}`)}
-                  </button>
-                ))}
-              </div>
+                    <IconSearch width={14} height={14} />
+                  </span>
+                </div>
+
+                <div className="tag-scroll" style={{ marginTop: 8 }}>
+                  {EQ_SORTS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`tag ${eqSort === s ? 'active' : ''}`}
+                      onClick={() => { haptic?.('select'); setEqSort(s); }}
+                    >
+                      {t(`stocks.sort.${s}`)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="tag-scroll" style={{ marginTop: 6 }}>
+                  {SECTOR_ORDER.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`tag ${eqSector === s ? 'active' : ''}`}
+                      onClick={() => { haptic?.('select'); setEqSector(s); }}
+                    >
+                      {t(`stocks.sector.${s}`)}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
-            {filteredEquities.length > 0 ? (
+            {visibleEquities.length > 0 ? (
               <motion.div
                 className="stack"
                 style={{ gap: 10, marginTop: 8 }}
@@ -736,17 +846,71 @@ export default function Stocks() {
                 initial="hidden"
                 animate="show"
               >
-                {filteredEquities.map((a) => (
+                {visibleEquities.map((a) => (
                   <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} />
                 ))}
               </motion.div>
             ) : (
               !assetsLoading && !assetsError && equities.length > 0 && (
-                <p className="notice" style={{ marginTop: 8 }}>{t('market.sectorEmpty')}</p>
+                <p className="notice" style={{ marginTop: 8 }}>
+                  {eqSearch.trim() ? t('stocks.equityNoMatch') : t('market.sectorEmpty')}
+                </p>
               )
             )}
 
+            {filteredEquities.length > EQ_PAGE && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: 10 }}
+                onClick={() => { haptic?.('select'); setEqShowAll((v) => !v); }}
+              >
+                {eqShowAll
+                  ? t('stocks.showLess')
+                  : t('stocks.showAll', { count: filteredEquities.length })}
+              </button>
+            )}
+
             <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('stocks.verifyNote')}</p>
+
+            {/*
+              ─── THE xSTOCKS NOBODY CAN EXIT YET ──────────────────────────────
+              Asked for directly: «تعداد سهام تب اول خیلی کمه». It is, and the
+              reason is not effort — the whole universe was measured (see the
+              note in lib/solanaAssets.js: 223 tickers probed, 161 real xStocks
+              found, 22 with a book worth trading). OF THOSE 22, SIXTEEN WERE
+              ALREADY LISTED ABOVE. These are the other ~139.
+
+              They are NOT rows with a disabled button, deliberately. A list of
+              sixty disabled rows is a wall the reader has to scroll past, and
+              the honest way to answer "why is my ticker missing" is a fold-out
+              that lists the ticker and says why. No button, no mint, no price:
+              `THIN_ASSETS` is not in `EQUITY_ASSETS`, so `findAsset()` cannot
+              resolve these mints and the ?to= handoff refuses them.
+
+              InfoBox because this is an explanation, not a warning about the
+              tap in front of you — the distinction InfoBox's own header draws.
+            */}
+            {THIN_ASSETS.length > 0 && (
+              <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
+                <InfoBox
+                  title={t('stocks.thinTitle', { count: THIN_ASSETS.length })}
+                  tone="info"
+                  id="stocks-thin"
+                >
+                  <p>{t('stocks.thinBody')}</p>
+                  <div className="stack" style={{ gap: 5, marginTop: 8 }}>
+                    {THIN_ASSETS.map((a) => (
+                      <div key={a.id} className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
+                        <span className="mono" style={{ fontSize: 12 }}>{a.symbol}</span>
+                        <span className="faint" style={{ fontSize: 12 }}>{a.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }}>{t('stocks.thinNote')}</p>
+                </InfoBox>
+              </motion.div>
+            )}
           </section>
 
           {/*

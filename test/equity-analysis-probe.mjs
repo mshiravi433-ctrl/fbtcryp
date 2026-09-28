@@ -54,13 +54,35 @@ const noComments = (s) =>
 
 const all = [...LST_ASSETS, ...EQUITY_ASSETS, ...COMMODITY_ASSETS];
 
-check('the curated list grew to 31 assets', all.length === 31);
-check('22 tokenized equities are listed', EQUITY_ASSETS.length === 22);
+check('the curated list holds 32 assets', all.length === 32);
+check('23 tokenized equities are listed', EQUITY_ASSETS.length === 23);
 check('every mint is unique — no asset listed twice', new Set(all.map((a) => a.mint)).size === all.length);
 check('every id is unique — the lookup cannot resolve two assets', new Set(all.map((a) => a.id)).size === all.length);
 check(
-  '19 of them carry a CoinGecko id, so their history is real and fetchable',
-  all.filter((a) => a.coingeckoId).length === 19
+  '20 of them carry a CoinGecko id, so their history is real and fetchable',
+  all.filter((a) => a.coingeckoId).length === 20
+);
+/* LSTs are excluded: they render in their own section, which has never shown a
+   price history, so they carry no id rather than an unused one. */
+check(
+  'the six equities without an id are named, not silently missing',
+  [...EQUITY_ASSETS, ...COMMODITY_ASSETS]
+    .filter((a) => !a.coingeckoId)
+    .map((a) => a.symbol)
+    .sort()
+    .join(',') === 'CVXx,GMEx,KOx,MCDx,PLTRx,XOMx'
+);
+check(
+  'GLDx is a commodity with the ETF unit, so the gold box measures it with the metal',
+  COMMODITY_ASSETS.find((a) => a.symbol === 'GLDx')?.unit === 'etf' &&
+    COMMODITY_ASSETS.length === 3
+);
+check(
+  'INTCx was added with the rest and its CoinGecko id was verified against its mint',
+  (() => {
+    const intc = EQUITY_ASSETS.find((a) => a.symbol === 'INTCx');
+    return intc?.coingeckoId === 'intel-xstock' && intc?.mint === 'XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM';
+  })()
 );
 
 /* Every entry the previous pass verified live against Jupiter's xStock
