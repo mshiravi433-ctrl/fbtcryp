@@ -55,7 +55,8 @@ const ds = await import('../server/smartMoney/dataSources.js');
 
   // Classification: never bare "insider"
   const tags = engines.classifyWallet({ portfolioUsd: 20_000_000, realizedPnlUsd: 2_000_000, winRate: 72, trades: 40, earlyEntries: 6, volume30dUsd: 40_000_000, dexTradeShare: 0.9 });
-  t('classified wallet carries SMART_MONEY + WHALE tags', tags.includes('SMART_MONEY') && tags.includes('WHALE'));
+  t('large size can confer WHALE, not SMART_MONEY without paired-trade qualification',
+    tags.includes('WHALE') && !tags.includes('SMART_MONEY'));
   t('never asserts INSIDER — only INSIDER_LIKE_BEHAVIOR', tags.every((x) => x !== 'INSIDER' && x !== 'INSIDER_TRADER'));
 
   // Registry discipline
@@ -141,6 +142,24 @@ try {
   const exchanges = await call('/api/v1/smart-money/exchanges');
   t('exchanges registry route lists exchanges + sources', exchanges.status === 200 && Array.isArray(exchanges.body.exchanges) && exchanges.body.count > 0);
 
+  const intelligence = await call('/api/v1/smart-money/intelligence?window=24h&prices=0');
+  t('verified intelligence is a separate read-only sampled index', intelligence.status === 200
+    && intelligence.body?.schema === 'fbt.smart-money-intelligence.v1'
+    && Array.isArray(intelligence.body?.consensus) && Array.isArray(intelligence.body?.graph?.edges));
+  const badFilter = await call('/api/v1/smart-money/intelligence?chain=solana');
+  t('verified intelligence rejects an unsupported chain filter', badFilter.status === 400 && badFilter.body?.error === 'BAD_FILTER');
+  const graph = await call('/api/v1/smart-money/graph?chain=1');
+  t('wallet→token graph is contract-filterable', graph.status === 200
+    && graph.body?.schema === 'fbt.smart-money-graph.v1' && Array.isArray(graph.body?.graph?.nodes));
+  const verifiedBoard = await call('/api/v1/smart-money/wallets/verified');
+  t('performance-qualified wallets have a separate board', verifiedBoard.status === 200
+    && verifiedBoard.body?.schema === 'fbt.smart-money-leaderboard.v1' && Array.isArray(verifiedBoard.body?.wallets));
+  const identities = await call('/api/v1/smart-money/registry');
+  t('institutional labels disclose sources separately from skill', identities.status === 200
+    && identities.body?.schema === 'fbt.smart-money-registry.v1' && Array.isArray(identities.body?.rows));
+  const deniedIdentity = await call('/api/v1/smart-money/registry', { method: 'POST', body: '{}'});
+  t('public caller cannot mint an institutional identity', deniedIdentity.status === 401);
+
   const liq = await call('/api/v1/smart-money/liquidity');
   t('liquidity route responds with events array', liq.status === 200 && Array.isArray(liq.body.events));
 
@@ -194,10 +213,10 @@ try {
         quoteToken: { address: USDC, symbol: 'USDC' },
         priceUsd: '4', liquidity: { usd: 40_000 }, volume: { h24: 80_000 }, pairCreatedAt: at(3) }
     ];
-    /* Daily history is what turns a spot price into a realised number: DAI was
-       1 when it was bought and 2 when it was sold, so the round-trip of 100 DAI
-       is exactly +100 USD. WBTC was 3 at entry and is 4 now, so the open 50-unit
-       position carries +50 unrealised. */
+    /* A price chart alone does not prove execution price or cost basis. The
+       fixture deliberately offers DAI/WBTC router transfers with no paired
+       USDC leg in the SAME tx: activity/holdings remain observable, but P&L
+       and Smart Money skill must stay unknown. */
     const histories = {
       dai: [[at(9), 1], [at(4), 2], [at(1), 1.5]],
       bitcoin: [[at(6), 3], [at(1), 3.5]]
@@ -245,16 +264,18 @@ try {
       t('activity is classified from the router and the labelled exchange', (w.activity || []).length === 4
         && w.activity.some((a) => a.type === 'LARGE_BUY')
         && w.activity.some((a) => a.type === 'EXCHANGE_DEPOSIT'));
-      t('realised P&L is computed for a token the wallet no longer holds', w.pnl?.dataStatus === 'live' && w.pnl.realizedUsd === 100, JSON.stringify(w.pnl));
-      t('unrealised P&L prices the position still open', w.pnl?.unrealizedUsd === 50);
-      t('total P&L is realised plus unrealised', w.pnl?.totalUsd === 150);
-      t('win rate comes from the closed round-trips', w.pnl?.winRate === 100 && w.pnl?.closedTrades === 1);
+      t('unpaired router transfers cannot invent realised P&L', w.pnl?.realizedUsd === null && w.pnl?.closedTrades === 0);
+      t('an open transfer without verified cost basis has no unrealised P&L', w.pnl?.unrealizedUsd === null);
+      t('unpaired transfers cannot invent total P&L', w.pnl?.totalUsd === null);
+      t('win rate needs actual closed paired fills', w.pnl?.winRate === null && !w.smartMoney?.qualified);
       t('holdings are priced from the deepest pair', w.holdings?.[0]?.symbol === 'WBTC' && w.holdings[0].valueUsd === 200);
       t('portfolio value is the sum of priced holdings', w.portfolioUsd === 200);
       t('txCount comes from the indexer counters when they answered', w.txCount === 41 && w.txCountSource === 'indexer');
       t('wallet age is the first observed activity', w.ageMs > 299 * DAY && w.ageMs < 301 * DAY);
       t('per-section source status is exposed for honest empty states', Object.keys(w.sources || {}).length >= 4 && w.sources.history === 'live');
-      t('scores carry coverage instead of a fabricated certainty', w.smartMoney?.coverage > 0 && w.smartMoney?.coverage <= 1);
+      t('unpaired history cannot produce a skill score or a SMART_MONEY identity',
+        w.smartMoney?.score === null && w.smartMoney?.qualified === false
+        && w.smartMoney?.status === 'INSUFFICIENT_EVIDENCE');
       t('low-liquidity holding raises the risk score with a reason', w.risk?.score > 0 && (w.risk?.reasons?.minus || []).length >= 1);
     } finally {
       globalThis.fetch = realFetch;

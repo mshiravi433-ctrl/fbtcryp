@@ -210,6 +210,7 @@ import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
 import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
 import { evaluateAllMonitors, monitorEngineStatus } from './intentMonitoring.js';
+import { runSmartMoneyCadence } from './smartMoney/cadence.js';
 import {
   addFcmToken,
   addSubscription,
@@ -4085,6 +4086,66 @@ const smJson = (res, value, { sMax = 60, maxAge = 20 } = {}) => {
   return res.json(value);
 };
 
+/* Verified Intelligence — separate from the legacy whale/transfer overview.
+ * The graph, consensus and early entries all read the SAME paired-swap index.
+ * No client can POST a score or an unverified trade into this index. */
+app.get('/api/v1/smart-money/intelligence', async (req, res) => {
+  const window = ['30m', '1h', '4h', '24h', '7d', '30d'].includes(String(req.query.window)) ? String(req.query.window) : '24h';
+  const chain = req.query.chain == null ? null : Number(req.query.chain);
+  const token = req.query.token == null ? null : String(req.query.token).toLowerCase();
+  if ((chain != null && ![1, 56, 137, 42161, 8453, 10, 43114].includes(chain))
+    || (token != null && !/^0x[a-f0-9]{40}$/.test(token))) return res.status(400).json({ error: 'BAD_FILTER' });
+  try {
+    const out = await smartMoney.getVerifiedIntelligence({ window, chain, token, includePrices: req.query.prices !== '0' });
+    return smJson(res, out, { sMax: 45, maxAge: 20 });
+  } catch (err) {
+    return res.status(502).json({ error: 'INTELLIGENCE_UNAVAILABLE', detail: String(err.message).slice(0, 120) });
+  }
+});
+
+app.get('/api/v1/smart-money/graph', async (req, res) => {
+  const chain = req.query.chain == null ? null : Number(req.query.chain);
+  const token = req.query.token == null ? null : String(req.query.token).toLowerCase();
+  if ((chain != null && ![1, 56, 137, 42161, 8453, 10, 43114].includes(chain))
+    || (token != null && !/^0x[a-f0-9]{40}$/.test(token))) return res.status(400).json({ error: 'BAD_FILTER' });
+  try {
+    const out = await smartMoney.getVerifiedIntelligence({ window: req.query.window, chain, token });
+    return smJson(res, { schema: 'fbt.smart-money-graph.v1', dataStatus: out.dataStatus,
+      at: out.at, coverage: out.coverage, graph: out.graph, consensus: out.consensus }, { sMax: 45 });
+  } catch (err) {
+    return res.status(502).json({ error: 'GRAPH_UNAVAILABLE', detail: String(err.message).slice(0, 120) });
+  }
+});
+
+app.get('/api/v1/smart-money/registry', async (_req, res) => {
+  try { return smJson(res, smartMoney.publicRegistry(await smartMoney.readWalletRegistry()), { sMax: 120 }); }
+  catch { return res.status(502).json({ error: 'REGISTRY_UNAVAILABLE' }); }
+});
+
+// Editing public identity claims is operator-only and DISABLED unless a
+// separate secret is configured. A push identity or developer read key cannot
+// assert that a wallet belongs to a VC, fund or market maker.
+function registryAuthorized(req) {
+  const secret = String(process.env.SM_REGISTRY_SECRET || '');
+  const provided = String(req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!secret || !provided) return false;
+  const a = Buffer.from(secret); const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+app.post('/api/v1/smart-money/registry', async (req, res) => {
+  if (!registryAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  try { return res.json(await smartMoney.putWalletIdentity(req.body || {})); }
+  catch (err) {
+    const reason = String(err.message || 'BAD_REGISTRY_ROW');
+    return res.status(/^BAD_|NON_WALLET/.test(reason) ? 400 : 502).json({ error: reason.slice(0, 80) });
+  }
+});
+app.delete('/api/v1/smart-money/registry/:chain/:address', async (req, res) => {
+  if (!registryAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+  try { return res.json(await smartMoney.removeWalletIdentity(req.params.chain, req.params.address)); }
+  catch { return res.status(502).json({ error: 'REGISTRY_UNAVAILABLE' }); }
+});
+
 /* Overview — headline metrics, flows, token accumulation ranking, early feed. */
 app.get('/api/v1/smart-money/overview', async (req, res) => {
   const window = ['1h', '4h', '24h', '7d', '30d'].includes(String(req.query.window)) ? String(req.query.window) : '24h';
@@ -4105,6 +4166,15 @@ app.get('/api/v1/smart-money/whales', async (req, res) => {
   }
 });
 
+/* The genuine measured leaderboard; distinct from the legacy whale board. */
+app.get('/api/v1/smart-money/wallets/verified', async (_req, res) => {
+  try {
+    const out = await smartMoney.getVerifiedIntelligence({ window: '7d' });
+    return smJson(res, { schema: 'fbt.smart-money-leaderboard.v1', dataStatus: out.dataStatus,
+      at: out.at, coverage: out.coverage, wallets: out.leaderboard }, { sMax: 60 });
+  } catch { return res.status(502).json({ error: 'LEADERBOARD_UNAVAILABLE' }); }
+});
+
 /* Smart wallets (alias of the whale board filtered toward tagged smart money
    when wallet intel is requested — same source, no parallel endpoint). */
 app.get('/api/v1/smart-money/wallets', async (req, res) => {
@@ -4122,7 +4192,7 @@ app.get('/api/v1/smart-money/wallets', async (req, res) => {
 app.get('/api/v1/smart-money/wallet/:chain/:address', async (req, res) => {
   try {
     const chain = req.params.chain === 'solana' ? 'solana' : Number(req.params.chain);
-    const out = await smartMoney.analyzeWallet(req.params.address, chain);
+    const out = await smartMoney.getWalletWithIdentity(req.params.address, chain);
     res.set('cache-control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=600');
     return res.json(out);
   } catch (err) {
@@ -4134,7 +4204,7 @@ app.get('/api/v1/smart-money/wallet/:chain/:address', async (req, res) => {
 /* Back-compat: wallet lookup without a chain in the path (auto-detects). */
 app.get('/api/v1/smart-money/wallet/:address', async (req, res) => {
   try {
-    const out = await smartMoney.analyzeWallet(req.params.address, req.query.chain || null);
+    const out = await smartMoney.getWalletWithIdentity(req.params.address, req.query.chain || null);
     res.set('cache-control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=600');
     return res.json(out);
   } catch (err) {
@@ -4150,12 +4220,20 @@ app.get('/api/v1/smart-money/token/:chain/:address', async (req, res) => {
        Solana mints, and coercing the slug to 1 would analyze an Ethereum
        contract with a base58 address — BAD_ADDRESS for every Solana token. */
     const chainId = req.params.chain === 'solana' ? 'solana' : Number(req.params.chain) || 1;
-    const [intel, signals] = await Promise.all([
+    const addr = String(req.params.address).toLowerCase();
+    const supportsVerified = chainId !== 'solana' && [1, 56, 137, 42161, 8453, 10, 43114].includes(chainId)
+      && /^0x[a-f0-9]{40}$/.test(addr);
+    const [intel, signals, verified] = await Promise.all([
       smartMoney.analyzeToken(req.params.address, chainId),
-      smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h')).catch(() => null)
+      smartMoney.tokenSignals(req.params.address, chainId, String(req.query.window || '24h')).catch(() => null),
+      supportsVerified ? smartMoney.getVerifiedIntelligence({ window: req.query.window || '24h', chain: chainId,
+        token: addr }).catch(() => null) : null
     ]);
     res.set('cache-control', 'public, max-age=30, s-maxage=90, stale-while-revalidate=600');
-    return res.json({ ...intel, smartMoneyFlow: signals });
+    return res.json({ ...intel, smartMoneyFlow: signals,
+      verified: verified ? { dataStatus: verified.dataStatus, indexedAt: verified.indexedAt,
+        coverage: verified.coverage, consensus: verified.consensus.find((r) => r.chain === chainId && r.token === addr) || null }
+        : { dataStatus: supportsVerified ? 'unavailable' : 'not-covered', consensus: null } });
   } catch (err) {
     if (err?.code === 'BAD_ADDRESS') return res.status(400).json({ error: 'BAD_ADDRESS' });
     return res.status(502).json({ error: 'TOKEN_INTEL_UNAVAILABLE', detail: String(err.message).slice(0, 160) });
@@ -4286,12 +4364,19 @@ app.delete('/api/v1/smart-money/watchlist/:id', async (req, res) => {
    Still triggerable by hand when a whale sweep is worth waiting for:
        curl -H "Authorization: Bearer $CRON_SECRET" \
             https://fbtswap.ir/api/cron/smart-money */
+// Keep the existing delivery callback; only the ordering and bounded cadence
+// change. A slow index must not prevent subscribed alerts from being checked.
+async function smartMoneyCadence(send) {
+  return runSmartMoneyCadence({
+    alerts: () => smartMoney.runAlertCycle(async (endpoint, lang, payload) => send(endpoint, lang, payload)),
+    intelligence: () => smartMoney.runIntelligenceCycle(),
+    durable: storeDurable
+  });
+}
 app.get('/api/cron/smart-money', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
-  const out = await smartMoney.runAlertCycle(async (endpoint, lang, payload) => {
-    return deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang });
-  });
-  return res.json(out);
+  return res.json(await smartMoneyCadence((endpoint, lang, payload) =>
+    deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang })));
 });
 
 /*
@@ -7063,8 +7148,8 @@ app.get('/api/cron/daily', async (req, res) => {
     sendDailyFcm(),
     runWatchCycle(sendWatchAlert),
     evaluateAllMonitors({ send: deliverMonitorPush }),
-    smartMoney.runAlertCycle(async (endpoint, _lang, payload) =>
-      deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag })),
+    smartMoneyCadence((endpoint, lang, payload) =>
+      deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang })),
     sweepCertifications(),
     getReputationSnapshot({ force: true }),
     runSelfProbe({}),

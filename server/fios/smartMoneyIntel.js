@@ -1,10 +1,9 @@
 /**
  * FBT FINANCIAL INTELLIGENCE OS — Smart Money Intelligence for AI decisions.
  * ---------------------------------------------------------------------------
- * The Smart Money page already observes whales, flows, accumulation and
- * distribution. Until this module, those observations stopped at the page /
- * global-intel snapshot: they never entered strategy scoring, competition
- * ranking or the decision record as first-class inputs.
+ * Verified paired-swap consensus drives strategy alignment. The older whale
+ * transfers and labelled exchange flows remain visible as descriptive context
+ * ONLY — their sign is not proof of a buy/sell or a profitable wallet.
  *
  * This module:
  *   1. Reads the REAL smart-money overview (server/smartMoney) — same source
@@ -23,15 +22,16 @@
  *   · never executes, never grants permission, never claims insider knowledge
  */
 import { smartMoneyEvidence } from '../../src/lib/intent-ai/smartMoneyAdapter.js';
+import { verifiedSignals } from '../../src/lib/smartMoneyEvidence.js';
 
 export const SMART_MONEY_INTEL_SCHEMA = 'fbt.fi.smart-money-intel.v1';
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 
-/** Convert overview tokenActivity + flow windows into the adapter's event shape. */
+/** Back-compat aggregate descriptions, NOT transaction-level whale events.
+ * There is no tx timestamp or known exchange in a window aggregate. */
 export function overviewToWhaleEvents(overview = {}) {
   const rows = [];
-  const at = overview?.at || Date.now();
   for (const r of overview?.tokenActivity || []) {
     const usd = Math.abs(num(r.netUsd) || 0);
     if (usd <= 0) continue;
@@ -42,7 +42,7 @@ export function overviewToWhaleEvents(overview = {}) {
       chainId: r.chainId ?? null,
       fromLabel: null,
       toLabel: null,
-      timestamp: at
+      timestamp: null, classification: 'whale-transfer-window-aggregate'
     });
   }
   const windows = overview?.flows?.windows || {};
@@ -54,8 +54,8 @@ export function overviewToWhaleEvents(overview = {}) {
         valueUsd: num(f.inflowUsd),
         token: { symbol: 'CEX' },
         fromLabel: null,
-        toLabel: 'binance',
-        timestamp: at
+        toLabel: null,
+        timestamp: null, classification: 'exchange-window-aggregate'
       });
     }
     if (num(f.outflowUsd) > 0) {
@@ -63,9 +63,9 @@ export function overviewToWhaleEvents(overview = {}) {
         kind: 'outflow',
         valueUsd: num(f.outflowUsd),
         token: { symbol: 'CEX' },
-        fromLabel: 'binance',
+        fromLabel: null,
         toLabel: null,
-        timestamp: at
+        timestamp: null, classification: 'exchange-window-aggregate'
       });
     }
   }
@@ -93,7 +93,8 @@ export function buildSmartMoneyIntel(overview = null, { now = Date.now(), minUsd
   }
 
   const dataStatus = overview.dataStatus || overview.streamStatus || 'unavailable';
-  if (dataStatus === 'unavailable' && !(overview.tokenActivity || []).length && !overview.metrics) {
+  if (dataStatus === 'unavailable' && !(overview.tokenActivity || []).length && !overview.metrics
+    && !overview.verified?.consensus?.length) {
     return {
       schema: SMART_MONEY_INTEL_SCHEMA,
       status: 'unavailable',
@@ -113,9 +114,10 @@ export function buildSmartMoneyIntel(overview = null, { now = Date.now(), minUsd
   const accumulationUsd = num(m.accumulation?.valueUsd);
   const distributionUsd = num(m.distribution?.valueUsd);
   const whaleCount = num(m.whaleActivity?.value);
-  const exchangeInUsd = num(win?.inflowUsd ?? m.exchangeInflow?.value);
-  const exchangeOutUsd = num(win?.outflowUsd ?? m.exchangeOutflow?.value);
-  const netFlowUsd = num(win?.netUsd ?? m.netFlow?.value)
+  const labelledFlowObserved = (num(m.flowEvents ?? win?.events) ?? 0) > 0;
+  const exchangeInUsd = labelledFlowObserved ? num(win?.inflowUsd ?? m.exchangeInflow?.value) : null;
+  const exchangeOutUsd = labelledFlowObserved ? num(win?.outflowUsd ?? m.exchangeOutflow?.value) : null;
+  const whaleTransferNetUsd = num(win?.netUsd ?? m.netFlow?.value)
     ?? (accumulationUsd != null && distributionUsd != null ? accumulationUsd - distributionUsd : null);
 
   /* CEX → DEX is typically exchange outflow (coins leaving CEX to wallets/DEX).
@@ -128,6 +130,24 @@ export function buildSmartMoneyIntel(overview = null, { now = Date.now(), minUsd
     else if (inn > out * 1.15) cexDexDirection = 'DEX_TO_CEX';
     else cexDexDirection = 'BALANCED';
   }
+
+  // Only the explicit VERIFIED branch of the overview can influence strategy.
+  // The net is meaningful as a broad bias only when *every* qualified token
+  // agrees in direction; opposing token flows remain per-token observations.
+  const verified = verifiedSignals(overview, { now, window: overview.window || '24h' });
+  const verifiedRows = verified.rows;
+  const netFlowUsd = verified.netFlowUsd;
+  const strategyEvidence = verifiedRows.map((r) => ({
+    source: 'smart-money:verified-paired-swaps', chain: r.chain, token: r.token,
+    observedAt: r.lastAt, sampleSize: r.swaps, independentVotes: r.independentVotes,
+    netFlowUsd: r.netFlowUsd, quality: Math.min(0.9, r.confidence / 100),
+    assumptions: ['performance-qualified-history', 'paired-swap-receipts', 'sampled-indexer-coverage', 'not-price-forecast']
+  }));
+  const verifiedTokens = verifiedRows.map((r) => ({
+    symbol: r.symbol, chain: r.chain, token: r.token, netUsd: r.netFlowUsd,
+    signal: r.signal, confidence: r.confidence, wallets: r.wallets,
+    independentVotes: r.independentVotes, swaps: r.swaps, classification: 'verified-paired-swaps'
+  }));
 
   const tokens = (overview.tokenActivity || []).slice(0, 10).map((r) => ({
     symbol: r.symbol,
@@ -166,22 +186,26 @@ export function buildSmartMoneyIntel(overview = null, { now = Date.now(), minUsd
     accumulationUsd,
     distributionUsd,
     netFlowUsd,
+    whaleTransferNetUsd,
+    verifiedStatus: verified.dataStatus,
+    verifiedTokens,
     exchangeInflowUsd: exchangeInUsd,
     exchangeOutflowUsd: exchangeOutUsd,
     cexDexDirection,
     flowStatus: m.flowStatus || win?.dataStatus || null,
     flowEvents: num(m.flowEvents ?? win?.events),
-    topTokens: tokens,
+    topTokens: verifiedTokens,
+    whaleTokenActivity: tokens,
     whales,
     earlyTokenCount: Array.isArray(early) ? early.length : 0,
     freshWalletCount: Array.isArray(fresh) ? fresh.length : 0,
     liquidityEventCount: Array.isArray(liquidity) ? liquidity.length : 0,
     coverage: overview.coverage || null,
     streamStatus: overview.streamStatus || null,
-    interpretation: 'Descriptive on-chain behaviour only — not advice, not a prediction, not insider detection.'
+    interpretation: 'Only verified paired swaps may influence strategy alignment. Whale/router transfers and CEX flows are descriptive proxies, never proof of a trade or a future return.'
   };
 
-  /* Alignment score in [-1, +1]: net accumulation vs distribution, scaled. */
+  /* Alignment is unavailable for transfer-only data or conflicting tokens. */
   let alignment = null;
   if (netFlowUsd != null) {
     const scale = Math.max(Math.abs(netFlowUsd), 1_000_000);
@@ -192,42 +216,41 @@ export function buildSmartMoneyIntel(overview = null, { now = Date.now(), minUsd
   if (netFlowUsd != null && Math.abs(netFlowUsd) >= 1_000_000) {
     decisionConditions.push(
       netFlowUsd < 0
-        ? `smart money net distributing ~$${Math.round(Math.abs(netFlowUsd) / 1000)}k over the last window (observation, not a veto)`
-        : `smart money net accumulating ~$${Math.round(netFlowUsd / 1000)}k over the last window (observation, not a signal to buy)`
+        ? `verified paired-swap distribution ~$${Math.round(Math.abs(netFlowUsd) / 1000)}k across sampled tokens (observation, not a veto)`
+        : `verified paired-swap accumulation ~$${Math.round(netFlowUsd / 1000)}k across sampled tokens (observation, not a signal to buy)`
     );
   }
   if (cexDexDirection === 'DEX_TO_CEX' && (exchangeInUsd || 0) >= 500_000) {
-    decisionConditions.push('exchange inflow dominates (DEX→CEX) — coins moving toward venues, observation only');
+    decisionConditions.push('labelled exchange inflows dominate — destination before exchange is unverified');
   } else if (cexDexDirection === 'CEX_TO_DEX' && (exchangeOutUsd || 0) >= 500_000) {
-    decisionConditions.push('exchange outflow dominates (CEX→DEX) — coins leaving venues, observation only');
+    decisionConditions.push('labelled exchange outflows dominate — destination after exchange is unverified');
   }
   if (whaleCount != null && whaleCount >= 20) {
     decisionConditions.push(`elevated whale activity: ${whaleCount} large transfers in window`);
   }
   const hotDist = tokens.filter((t) => t.signal === 'DISTRIBUTION').slice(0, 3);
   if (hotDist.length) {
-    decisionConditions.push(`distribution-labelled tokens: ${hotDist.map((t) => t.symbol).join(', ')}`);
+    decisionConditions.push(`whale-transfer distribution proxies (NOT verified sells): ${hotDist.map((t) => t.symbol).join(', ')}`);
   }
   const hotAcc = tokens.filter((t) => t.signal === 'ACCUMULATION').slice(0, 3);
   if (hotAcc.length) {
-    decisionConditions.push(`accumulation-labelled tokens: ${hotAcc.map((t) => t.symbol).join(', ')}`);
+    decisionConditions.push(`whale-transfer accumulation proxies (NOT verified buys): ${hotAcc.map((t) => t.symbol).join(', ')}`);
   }
 
   return {
     schema: SMART_MONEY_INTEL_SCHEMA,
-    status: adapter.status === 'observed' || (whaleCount != null && whaleCount > 0) || netFlowUsd != null
-      ? 'observed'
-      : 'partial',
+    status: verifiedRows.length ? 'observed' : 'partial',
     dataStatus: dataStatus === 'live' ? 'live' : dataStatus,
     at: overview.at || now,
     signals,
-    strategyEvidence: adapter.strategyEvidence || [],
+    strategyEvidence,
+    whaleEvidence: adapter.strategyEvidence || [],
     adapter,
     decisionConditions,
     alignment,
     executes: false,
     adviceOnly: true,
-    note: 'Feeds Strategy + Decision as evidence. Never triggers execution.'
+    note: verifiedRows.length ? 'Only measured paired swaps feed strategy bias; whale transfers remain separate context.' : 'Insufficient verified consensus: whale and CEX transfers remain context and do not score strategy direction.'
   };
 }
 
@@ -285,7 +308,7 @@ export function enrichStrategiesWithSmartMoney(strategies = [], intel = null) {
   if (net != null) {
     notes.push(`smart-money net flow $${Math.round(net / 1000)}k (${net >= 0 ? 'accumulation-leaning' : 'distribution-leaning'})`);
   }
-  if (direction) notes.push(`flow direction ${direction.replace(/_/g, '→')}`);
+  if (direction) notes.push(`labelled exchange flow proxy ${direction.replace(/_/g, '→')} (destination unverified)`);
   if (intel.signals?.whaleActivity != null) notes.push(`${intel.signals.whaleActivity} whale events in window`);
 
   return (Array.isArray(strategies) ? strategies : []).map((s) => {
@@ -326,7 +349,8 @@ export function enrichStrategiesWithSmartMoney(strategies = [], intel = null) {
  * Returns a small additive score in roughly [-3, +3] or null when unknown.
  */
 export function smartMoneyKindBias(kind, intel = null) {
-  if (!intel || intel.alignment === null || intel.alignment === undefined) return null;
+  if (!intel || intel.status !== 'observed' || intel.signals?.verifiedStatus !== 'observed'
+    || intel.alignment === null || intel.alignment === undefined || !Number.isFinite(intel.signals?.netFlowUsd)) return null;
   const a = Number(intel.alignment);
   if (!Number.isFinite(a)) return null;
   const k = String(kind || '').toUpperCase();

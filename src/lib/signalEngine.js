@@ -24,6 +24,8 @@
  *     evidence items are observed.
  */
 
+import { verifiedSignals } from './smartMoneyEvidence.js';
+
 export const CLASS = Object.freeze({
   STRONG_BUY: 'STRONG_BUY',
   BUY: 'BUY',
@@ -86,6 +88,7 @@ export const MIN_EVIDENCE = 3;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
 const clampf = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 };
@@ -186,7 +189,8 @@ export function computePulseLocal({ global = null, markets = [], smartMoney: sm 
   const mcap = num(global?.mcap);
   const volume = num(global?.volume);
   const turnover = mcap > 0 && volume != null ? (volume / mcap) * 100 : null;
-  const smNet = num(sm?.metrics?.netFlow?.value);
+  const verified = verifiedSignals(sm, { now });
+  const smNet = verified.netFlowUsd;
 
   const sentimentScore = clampf(
     (mcapChange != null ? 50 + mcapChange * 6 : 50) + (avgChange != null ? avgChange * 2.5 : 0) + (breadth != null ? (breadth - 0.5) * 30 : 0),
@@ -216,7 +220,9 @@ export function computePulseLocal({ global = null, markets = [], smartMoney: sm 
     volatility: { score: Math.round(volatilityScore), label: volatilityScore >= 66 ? 'high' : volatilityScore >= 34 ? 'moderate' : 'low' },
     liquidity: { score: Math.round(liquidityScore), label: liquidityScore >= 66 ? 'strong' : liquidityScore >= 34 ? 'adequate' : 'thin', turnoverPct: turnover != null ? Math.round(turnover * 10) / 10 : null },
     breadth: { up, total: priced.length, avgChange: avgChange != null ? Math.round(avgChange * 100) / 100 : null },
-    smartMoney: sm ? { dataStatus: sm.dataStatus, netFlowUsd: smNet } : null,
+    smartMoney: sm ? { dataStatus: verified.dataStatus, netFlowUsd: smNet,
+      whaleTransferProxy: { netFlowUsd: sm.metrics?.netFlow?.value ?? null,
+        note: 'Labelled transfers are not confirmed wallet trades.' } } : null,
     lastUpdate: now
   };
 }
@@ -277,8 +283,8 @@ export function buildEvidence({
     else if (pressure === 'sell') push('dexSell', -1, null, 'onchain', 'dexSell');
   }
 
-  if (smToken?.signal === 'ACCUMULATION') push('smartMoneyAccum', 1, null, 'onchain', 'smartMoneyAccum');
-  else if (smToken?.signal === 'DISTRIBUTION') push('smartMoneyDistrib', -1, null, 'onchain', 'smartMoneyDistrib');
+  if (smToken?.classification === 'verified-paired-swaps' && smToken?.signal === 'ACCUMULATION') push('smartMoneyAccum', 1, null, 'onchain', 'smartMoneyAccum');
+  else if (smToken?.classification === 'verified-paired-swaps' && smToken?.signal === 'DISTRIBUTION') push('smartMoneyDistrib', -1, null, 'onchain', 'smartMoneyDistrib');
 
   if (pulse?.sentiment?.label === 'bullish') push('marketSentimentUp', 0.5, null, 'sentiment', 'marketSentimentUp');
   else if (pulse?.sentiment?.label === 'bearish') push('marketSentimentDown', -0.5, null, 'sentiment', 'marketSentimentDown');
@@ -440,7 +446,8 @@ export function computeSignalCard({
       pct: c24 != null ? Math.round(c24 * 100) / 100 : null
     },
     volumeChange: turnoverPct != null ? Math.round(turnoverPct * 100) / 100 : null,
-    smartMoney: smToken?.signal ? (smToken.signal === 'ACCUMULATION' ? 'bullish' : 'bearish') : null,
+    smartMoney: smToken?.classification === 'verified-paired-swaps' && smToken?.signal
+      ? (smToken.signal === 'ACCUMULATION' ? 'bullish' : 'bearish') : null,
     whale: solanaIntel?.whaleFlow?.direction ?? null,
     liquidity: turnoverPct != null ? (turnoverPct >= 6 ? 'strong' : turnoverPct >= 2 ? 'adequate' : 'thin') : null,
     horizons: horizonRisks,
@@ -492,8 +499,8 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
       if (intel?.dexActivity?.pressure === 'buy') { flags.push('dexBuy'); strength += 1; }
       if (intel?.dexActivity?.pressure === 'sell') { flags.push('dexSell'); strength -= 1; }
     }
-    if (e?.smToken?.signal === 'ACCUMULATION') { flags.push('smartMoneyAccum'); strength += 1; }
-    else if (e?.smToken?.signal === 'DISTRIBUTION') { flags.push('smartMoneyDistrib'); strength -= 1; }
+    if (e?.smToken?.classification === 'verified-paired-swaps' && e?.smToken?.signal === 'ACCUMULATION') { flags.push('smartMoneyAccum'); strength += 1; }
+    else if (e?.smToken?.classification === 'verified-paired-swaps' && e?.smToken?.signal === 'DISTRIBUTION') { flags.push('smartMoneyDistrib'); strength -= 1; }
 
     const t = e.coin.mcap > 0 ? (e.coin.volume / e.coin.mcap) * 100 : null;
     if (t != null && t >= 6) { flags.push('volumeTurnover'); strength += 0.5; }

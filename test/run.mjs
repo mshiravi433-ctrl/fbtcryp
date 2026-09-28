@@ -50,7 +50,13 @@ import './notification-sound-probe.mjs';
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the
    single brand slug shared by the outbound URL and the inbound link. */
-import './shop-revenue-probe.mjs';
+/* This probe swaps globalThis.fetch while doing asynchronous provider reads.
+ * Static ESM imports evaluate concurrently with other top-level-await probes,
+ * so another probe can see its mocked fetch and make its call-count assertions
+ * fail. A child process preserves the checks while isolating the boundary. */
+execFileSync(process.execPath, ['test/shop-revenue-probe.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
 /* Futures Engine v3: provider status derivation, the fee ceiling, the risk
    engine's liquidation model, the router's "never on FBT revenue" law, the
    tx state machine and the server encoder pinned to the SDK golden vectors. */
@@ -1073,9 +1079,10 @@ report('connect sheet (mounted)', await runWcSheet(document.getElementById('r'))
    depending on somebody having run `npm run build` first. */
 if (process.env.FBT_TEST_PREBUILT === '1') {
   // On a 4 GB host the runner plus Rollup can exceed physical memory even
-  // though EACH build succeeds alone. For that case, first run `npm run build`
-  // `NODE_OPTIONS=--max-old-space-size=3072 npx vite build -c test/vite.iife.mjs`,
-  // then build VITE_ENABLE_SPECULATION=false and true with --outDir
+  // though EACH build succeeds alone. For that case, first build the STORE
+  // variant into dist (`VITE_ENABLE_SPECULATION=false npm run build`), then run
+  // `NODE_OPTIONS=--max-old-space-size=3072 npx vite build -c test/vite.iife.mjs`.
+  // Build VITE_ENABLE_SPECULATION=false and true with --outDir
   // test/.out/store-ci and test/.out/spec-ci respectively, using the same heap;
   // finally run FBT_TEST_PREBUILT=1 npm test. This opt-in never pretends missing
   // artifacts are a green build; the operator must rebuild after source edits.
@@ -1343,6 +1350,13 @@ npx(['vite', 'build', '-c', 'test/vite.tokensmartmoney.mjs', '--logLevel', 'erro
 installDom();
 const { run: runTokenSmartMoney } = await import('./.out/tokensmartmoney/token-smart-money-probe.js');
 report('token smart-money card (collapse · rail fit · real identity)', await runTokenSmartMoney(document.getElementById('r')));
+
+/* Exact-contract monitor draft handoff; legacy PRICE remains available. */
+console.log('\n▸ building the verified Smart Money monitor form suite…');
+npx(['vite', 'build', '-c', 'test/vite.intentmonitor.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runIntentSmMonitor } = await import('./.out/intentmonitor/intent-sm-monitor-probe.js');
+report('Intent verified Smart Money monitor form', await runIntentSmMonitor(document.getElementById('r')));
 
 /* ------------------ 4c. Intent AI panel, driven like a user ------------------ */
 /*
@@ -1933,6 +1947,23 @@ console.log('\n▸ probing the Smart Money live pipeline…');
 {
   const rows = (await import('./smart-money-live-probe.mjs')).default;
   report('smart money live pipeline', rows);
+}
+
+/* Verified receipts, profitability qualification, shared consensus gate and
+ * Intent/Opportunity handoffs run in a separate process to isolate the
+ * monitor/watchlist test store from the rest of the suite. */
+console.log('\n▸ probing verified Smart Money → Intent OS…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-intelligence-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('verified Smart Money → Intent OS', [['paired swaps, clustering, alerts and Opportunity Engine', ok]]);
 }
 
 /*

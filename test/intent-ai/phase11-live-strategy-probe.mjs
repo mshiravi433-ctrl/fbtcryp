@@ -54,6 +54,8 @@ try {
   } = await import('../../server/intentMonitoring.js');
 
   const now = Date.now();
+  const { verifiedFixture, TOKEN } = await import('../fixtures/verifiedSmartMoney.mjs');
+  const verified = verifiedFixture({ now }).snapshot;
   const OWNER = 'dev:phase11-live';
 
   /* ── 1. Route simulator is a connected provider ──────────────────────── */
@@ -155,6 +157,7 @@ try {
   const collections = createCollections({});
   const competition = createStrategyCompetition({ collections });
   const smIntel = buildSmartMoneyIntel({
+    verified,
     at: now,
     window: '24h',
     dataStatus: 'live',
@@ -275,9 +278,14 @@ try {
   check('VOLUME monitor normalises', volMon.monitor?.metric === 'VOLUME');
 
   const smMon = normalizeMonitor({
-    metric: 'SMART_MONEY_NET', operator: 'ABOVE', threshold: 1_000_000
+    metric: 'SMART_MONEY_NET', operator: 'BELOW', threshold: -100_000,
+    smartTarget: { chain: 1, token: TOKEN }
   }, { now });
-  check('SMART_MONEY_NET monitor normalises', smMon.monitor?.metric === 'SMART_MONEY_NET');
+  check('SMART_MONEY_NET monitor normalises with a signed threshold and exact contract',
+    smMon.monitor?.metric === 'SMART_MONEY_NET' && smMon.monitor?.smartTarget?.token === TOKEN
+    && smMon.monitor?.threshold === -100_000);
+  check('SMART_MONEY_NET refuses unscoped legacy alerts',
+    normalizeMonitor({ metric: 'SMART_MONEY_NET', operator: 'ABOVE', threshold: 1_000_000 }).error === 'BAD_SM_TARGET');
 
   check('whale condition hits on observed count',
     evaluateCondition({ metric: 'WHALE', operator: 'ABOVE', threshold: 10, value: 22 }).hit === true);

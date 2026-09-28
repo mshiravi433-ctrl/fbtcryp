@@ -29,33 +29,40 @@ export function getTracked() {
   return read();
 }
 
-export function isTracked(chain, address) {
-  const a = String(address || '').toLowerCase();
-  return read().some((r) => String(r.chain) === String(chain) && String(r.address).toLowerCase() === a);
+const canonical = (chain, address) => chain === 'solana'
+  ? String(address || '') : String(address || '').toLowerCase(); // base58 is case-sensitive
+
+export function isTracked(chain, address, target = 'wallet') {
+  const a = canonical(chain, address);
+  return read().some((r) => r.target === target && String(r.chain) === String(chain) && canonical(chain, r.address) === a);
 }
 
 export function trackWallet({ chain, address, label = null, target = 'wallet', types = null, condition = null }) {
   const rows = read();
-  const addr = String(address || '').toLowerCase();
-  if (rows.some((r) => String(r.chain) === String(chain) && r.address === addr)) return rows;
-  rows.push({
-    id: `${chain}:${addr}`,
+  const addr = canonical(chain, address);
+  const existing = rows.findIndex((r) => String(r.chain) === String(chain) && r.address === addr && r.target === target);
+  const next = {
+    id: existing >= 0 ? rows[existing].id : `${chain}:${addr}${target === 'token' ? ':token' : ''}`,
     chain,
     address: addr,
     label,
     target,
-    types: types || ['LARGE_BUY', 'LARGE_SELL', 'EXCHANGE_DEPOSIT', 'EXCHANGE_WITHDRAWAL', 'LIQUIDITY_MOVEMENT', 'ACCUMULATION', 'DISTRIBUTION'],
+    types: types || (target === 'token'
+      ? ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL']
+      : ['LARGE_BUY', 'LARGE_SELL', 'EXCHANGE_DEPOSIT', 'EXCHANGE_WITHDRAWAL', 'LIQUIDITY_MOVEMENT', 'ACCUMULATION', 'DISTRIBUTION']),
     condition,
-    createdAt: Date.now()
-  });
+    createdAt: existing >= 0 ? rows[existing].createdAt : Date.now()
+  };
+  if (existing >= 0) rows[existing] = next;
+  else rows.push(next);
   write(rows);
   void syncTracked().catch(() => {});
   return rows;
 }
 
-export function untrackWallet(chain, address) {
-  const addr = String(address || '').toLowerCase();
-  const rows = read().filter((r) => !(String(r.chain) === String(chain) && r.address === addr));
+export function untrackWallet(chain, address, target = 'wallet') {
+  const addr = canonical(chain, address);
+  const rows = read().filter((r) => !(String(r.chain) === String(chain) && r.address === addr && r.target === target));
   write(rows);
   void syncTracked().catch(() => {});
   return rows;

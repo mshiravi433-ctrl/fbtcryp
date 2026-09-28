@@ -16,11 +16,13 @@ import { trackWallet } from '../lib/smartMoneyWatch';
 import { openUrl } from '../lib/browser';
 import { useTelegram } from '../context/TelegramContext';
 import SmartMoneyWallet from './SmartMoneyWallet';
+import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../components/SmartMoneyIntelligence';
 
 /* import styles via side-effect */
 import '../styles/smart-money.css';
+import '../styles/smart-money-intelligence.css';
 
-const TABS = ['overview', 'whales', 'wallets', 'tokens', 'flows', 'alerts'];
+const TABS = ['overview', 'intelligence', 'whales', 'wallets', 'tokens', 'flows', 'alerts'];
 
 /*
  * THE TIME-WINDOW RAIL — «تب روز، هفته و ماه کار نمیده».
@@ -109,7 +111,7 @@ export default function SmartMoney() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const { haptic } = useTelegram();
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(() => TABS.includes(params.get('tab')) ? params.get('tab') : 'overview');
   /*
    * Named `winKey`, NEVER `window`. It used to be `const [window, setWindow]`,
    * which shadows the global inside this component: every `window.open(...)`
@@ -159,6 +161,22 @@ export default function SmartMoney() {
    * so a tap on «۷ روز» never piles up history entries the back button has to
    * walk through.
    */
+  const selectTab = useCallback((id) => {
+    if (!TABS.includes(id)) return;
+    haptic?.('light');
+    setTab(id);
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', id);
+      return next;
+    }, { replace: true });
+  }, [haptic, setParams]);
+
+  useEffect(() => {
+    const fromUrl = params.get('tab');
+    if (TABS.includes(fromUrl)) setTab(fromUrl);
+  }, [params]);
+
   const selectWindow = useCallback((win) => {
     if (!WINDOWS.includes(win)) return;
     haptic?.('light');
@@ -204,10 +222,10 @@ export default function SmartMoney() {
         : `https://etherscan.io/tx/${c.address}`);
     } else if (c.kind === 'symbol') {
       // Search token through early-token + token activity list
-      setTab('tokens');
+      selectTab('tokens');
       setQuery(c.query);
     } else {
-      setTab('tokens');
+      selectTab('tokens');
     }
   };
 
@@ -274,7 +292,7 @@ export default function SmartMoney() {
               aria-selected={tab === id}
               ref={(el) => { tabRefs.current[id] = el; }}
               className={`sm-tab ${tab === id ? 'active' : ''}`}
-              onClick={() => { haptic?.('light'); setTab(id); }}
+              onClick={() => selectTab(id)}
             >
               {t(`sm.tabs.${id}`)}
             </button>
@@ -328,6 +346,7 @@ export default function SmartMoney() {
 
             {data && (
               <>
+                <IntelligenceTeaser verified={data.verified} onOpen={() => selectTab('intelligence')} />
                 {/*
                   Every tile states what it is based on. A window with no
                   labelled event shows «—», never «$0»: zero labelled flow
@@ -406,7 +425,7 @@ export default function SmartMoney() {
 
                 {/* Money flow quick view — hidden while offline: a 0/0 bar
                     reads as "no flow", which is exactly what we are NOT sure of. */}
-                {!streamDown && <FlowSummary flows={data.flows} window={winKey} onMore={() => setTab('flows')} t={t} />}
+                {!streamDown && <FlowSummary flows={data.flows} window={winKey} onMore={() => selectTab('flows')} t={t} />}
 
                 {/* Early detection */}
                 <div className="sm-section">
@@ -472,10 +491,12 @@ export default function SmartMoney() {
         )}
 
         {/* WHALES */}
+        {tab === 'intelligence' && <SmartMoneyIntelligence />}
         {tab === 'whales' && <WhalesTab navigate={navigate} t={t} />}
 
-        {/* SMART WALLETS (reuse whale board, emphasises track action) */}
-        {tab === 'wallets' && <WhalesTab navigate={navigate} t={t} smart />}
+        {/* Verified, profitability-backed registry first. Keep the historical
+            whale-transfer ranking as explicitly separate context below. */}
+        {tab === 'wallets' && <><VerifiedWallets /><WhalesTab navigate={navigate} t={t} smart /></>}
 
         {/* TOKEN INTELLIGENCE */}
         {tab === 'tokens' && <TokensTab navigate={navigate} t={t} query={query} setQuery={setQuery} />}
@@ -767,7 +788,7 @@ function AlertsTab({ navigate, t }) {
           key={a.id}
           className="sm-alert"
           style={a.chain && a.address ? { cursor: 'pointer' } : undefined}
-          onClick={() => a.chain && a.address && navigate(`/smart-money/wallet/${a.chain}/${a.address}`)}
+          onClick={() => a.chain && a.address && navigate(`/smart-money/${a.target === 'token' || a.evidence?.classification === 'verified-paired-swaps' || a.watchId?.endsWith(':token') ? 'token' : 'wallet'}/${a.chain}/${a.address}`)}
         >
           <div className="ico">🐋</div>
           <div className="body">

@@ -89,6 +89,9 @@ export const fetchLiquidity = (minUsd = 200_000, signal) => getJson(`/liquidity?
 export const fetchExchanges = (signal) => getJson('/exchanges', { signal });
 export const fetchEarlyTokens = (limit = 12, signal) => getJson(`/early-tokens?limit=${limit}`, { signal });
 export const fetchFreshWallets = (signal) => getJson('/fresh-wallets', { signal });
+export const fetchIntelligence = (window = '24h', signal, { includePrices = true } = {}) =>
+  getJson(`/intelligence?window=${encodeURIComponent(window)}${includePrices ? '' : '&prices=0'}`, { signal, timeout: 25_000 });
+export const fetchVerifiedWallets = (signal) => getJson('/wallets/verified', { signal });
 
 export function fetchWallet(chain, address, signal) {
   const c = chain === 'solana' ? 'solana' : chain;

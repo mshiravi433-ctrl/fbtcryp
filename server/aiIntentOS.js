@@ -87,6 +87,8 @@ import { ingestClientData as centralIngestClientData, setPage as centralSetPage 
 import { normalizePageContext } from './central/contextEngine.js';
 import { aiConfigured, classifyIntentWithModel } from './ai.js';
 import { fetchSimplePrices } from './providers.js';
+import { narrateIntelligence, smartMoneyMonitorHandoff } from './smartMoney/narration.js';
+import { getVerifiedIntelligence } from './smartMoney/intelligence.js';
 import { fetchYields } from './yields.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { ownerFromRequest, listGoals, createGoal, parseGoalFromText } from './financialGoals.js';
@@ -1661,6 +1663,52 @@ router.post('/chat', async (req, res) => {
       },
       context,
       at: nowMs()
+    });
+  }
+
+  /* Smart Money queries read the independent VERIFIED engine, not the whale
+   * transfer overview or an LLM's guess. This branch is read-only and leaves
+   * the existing conditional/strategy execution paths above untouched. */
+  if (/\bsmart[ -]?money\b|اسمارت[ ‌-]?مانی|پول[ ‌-]?هوشمند/i.test(message)) {
+    const handoff = smartMoneyMonitorHandoff(message);
+    if (handoff) {
+      const fa = String(locale || 'fa').startsWith('fa');
+      const text = handoff.ready
+        ? fa ? 'پیش‌نویس هشدار برای همین شبکه و آدرس قرارداد آماده است. شرط و پنجرهٔ نمونه‌برداری را در فرم بررسی و تأیید کنید؛ هیچ معامله‌ای اجرا نمی‌شود.'
+          : 'A draft alert is ready for this exact chain and contract. Review and confirm its sampled-window condition; no trade is executed.'
+        : fa ? 'برای ساخت هشدار پول هوشمندِ قابل‌اعتماد، شبکه و آدرس قرارداد 0x را مشخص کنید؛ نماد به‌تنهایی کافی نیست. همچنین می‌توانید از کارت اجماع تأییدشده پایش را باز کنید.'
+          : 'Specify the chain and 0x token contract for a verified Smart Money alert; a ticker alone is ambiguous. You can also open a monitor from a verified consensus card.';
+      return res.json({ ok: true, schema: 'fbt.ai-chat.v1', reply: {
+        text, message: text, intent: { type: 'SMART_MONEY_MONITOR_DRAFT', entities: { chain: handoff.chain, token: handoff.address } },
+        confidence: null, contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
+        ui: { type: 'TEXT' }, card: null, pendingIntent: null,
+        actions: [{ id: 'smart-money-monitor-draft', route: handoff.route || '/smart-money?tab=intelligence',
+          label: fa ? 'بررسی شرط پایش' : 'Review monitor condition' }],
+        suggestions: [], executed: false, broadcasts: false, requiresUserSignature: false
+      }, context, at: nowMs() });
+    }
+    const wantsEarly = /early|entry|before|زود|قبل|ورود/i.test(message);
+    const intel = await getVerifiedIntelligence({ window: '24h', includePrices: wantsEarly })
+      .catch(() => ({ dataStatus: 'unavailable', consensus: [], coverage: null }));
+    const narrated = narrateIntelligence(intel, { message, lang: locale || 'fa' });
+    const fa = String(locale || 'fa').startsWith('fa');
+    const text = stripInternalLeaks(narrated.text);
+    return res.json({
+      ok: true, schema: 'fbt.ai-chat.v1',
+      reply: {
+        text, message: text,
+        intent: { type: 'SMART_MONEY', entities: u4.entities || {} },
+        confidence: narrated.dataStatus === 'observed' ? 0.8 : null,
+        contract: { version: INTENT_OS_PROMPT_VERSION, executionChain: EXECUTION_CHAIN },
+        ui: { type: 'TEXT' },
+        card: null, pendingIntent: null,
+        actions: [{ id: 'smart-money-evidence', route: '/smart-money?tab=intelligence',
+          label: fa ? 'مشاهدهٔ گراف و رسیدهای زنجیره‌ای' : 'View graph and on-chain receipts' }],
+        suggestions: [],
+        smartMoneyEvidence: narrated.evidence,
+        executed: false, broadcasts: false, requiresUserSignature: false
+      },
+      context, at: nowMs()
     });
   }
 

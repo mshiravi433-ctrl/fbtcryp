@@ -21,6 +21,8 @@
  */
 
 import { baseRate, maxDrawdown } from '../../history.js';
+import { fetchIntelligence } from '../../smartMoneyClient.js';
+import { verifiedSignals } from '../../smartMoneyEvidence.js';
 /* api.js is browser-bundled (extensionless imports) so it is loaded lazily:
    Node probes always inject fetchers and never trigger this import. */
 const loadMarketApi = () => import('../../api.js');
@@ -28,6 +30,7 @@ const loadMarketApi = () => import('../../api.js');
 export const OPPORTUNITY_ENGINE_SCHEMA = 'fbt.opportunity-engine.v2';
 
 const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
@@ -155,6 +158,19 @@ export async function runOpportunityEngine({
   const started = Date.now();
   const sources = [];
   const errors = [];
+  // Start the bounded indexed read alongside the market scans. Node probes
+  // inject it explicitly; ordinary browser scans use the read-only API.
+  const intelTask = (async () => {
+    if (!overrides.fetchVerifiedIntelligence && typeof window === 'undefined') return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5_000);
+    try {
+      return overrides.fetchVerifiedIntelligence
+        ? await overrides.fetchVerifiedIntelligence({ window: '24h', signal: ctrl.signal })
+        : await fetchIntelligence('24h', ctrl.signal, { includePrices: false });
+    } catch { return null; }
+    finally { clearTimeout(timer); }
+  })();
 
   /* 1 — market scan (real, source-tagged). */
   let markets = [];
@@ -230,6 +246,25 @@ export async function runOpportunityEngine({
   }));
   scanned.push(...yieldOpportunities(lendPools, 'LENDING'));
 
+  const indexed = await intelTask;
+  const consensus = verifiedSignals(indexed);
+  sources.push({ name: 'smart-money.verified', ok: consensus.rows.length > 0,
+    rows: consensus.rows.length, status: consensus.dataStatus,
+    note: 'Paired-swap evidence only. No expected return or probability is inferred.' });
+  const verifiedOpportunities = consensus.rows.slice(0, 2).map((r) => ({
+    id: `sm:${r.chain}:${r.token}`, kind: 'SMART_MONEY',
+    symbol: r.symbol, name: `${r.symbol} · verified wallet activity`,
+    chainId: r.chain, address: r.token, signal: r.signal,
+    netFlowUsd: r.netFlowUsd, independentBuyers: r.independentBuyers,
+    independentSellers: r.independentSellers, independentVotes: r.independentVotes,
+    swaps: r.swaps, evidenceScore: r.confidence,
+    expectedReturnPct: null, probabilityPct: null, apy: null, priceUsd: null,
+    potentialDrawdownPct: null, risk: 'unknown',
+    confidence: r.confidence / 100, dataQuality: 'SAMPLED',
+    source: 'smart-money:verified-paired-swaps', basis: 'evidence-not-forecast',
+    guaranteed: false, disclaimer: 'sampled-paired-swaps-not-trading-advice'
+  }));
+
   /* 3 — combine, risk-filter, rank. */
   const combined = [...marketOpportunities(markets, ohlcById), ...scanned];
 
@@ -261,11 +296,12 @@ export async function runOpportunityEngine({
       holdings: (portfolio?.holdings || []).length,
       dataStatus: portfolio?.dataStatus || 'unavailable'
     },
-    opportunities: ranked.slice(0, limit),
-    scanned: ranked.length,
+    opportunities: [...verifiedOpportunities, ...ranked.slice(0, Math.max(0, limit - verifiedOpportunities.length))].slice(0, limit),
+    scanned: ranked.length + verifiedOpportunities.length,
     dataQuality,
-    dataStatus: ranked.length ? 'live' : (liveSources.length ? 'empty' : 'unavailable'),
-    confidence: ranked.length ? Math.min(0.9, 0.35 + ranked.length * 0.05) : 0.3,
+    dataStatus: ranked.length || verifiedOpportunities.length ? 'live' : (liveSources.length ? 'empty' : 'unavailable'),
+    confidence: ranked.length || verifiedOpportunities.length
+      ? Math.min(0.9, 0.35 + (ranked.length + verifiedOpportunities.length) * 0.05) : 0.3,
     sources,
     errors,
     guaranteed: false,

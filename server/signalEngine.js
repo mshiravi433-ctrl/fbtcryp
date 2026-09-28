@@ -37,12 +37,14 @@
 import { withCache, memoryStore } from './cache.js';
 import { fetchGlobal, fetchMarkets } from './providers.js';
 import * as smartMoney from './smartMoney/index.js';
+import { verifiedSignals } from '../src/lib/smartMoneyEvidence.js';
 import { fetchSolanaIntel } from './solanaIntel.js';
 import { anyAiConfigured, getActiveProviderIds, parallelMultiProviderChat } from './aiGateway.js';
 import { withPersistentCache } from './blobCache.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number(v) || 0));
 const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : null;
 };
@@ -211,7 +213,8 @@ async function computePulse() {
   const mcap = num(global?.mcap);
   const volume = num(global?.volume);
   const turnover = mcap > 0 && volume != null ? (volume / mcap) * 100 : null;
-  const smNet = num(sm?.metrics?.netFlow?.value);
+  const verified = verifiedSignals(sm);
+  const smNet = verified.netFlowUsd;
   const liquidityScore = clamp(
     (turnover != null ? turnover * 8 : 25)
       + (smNet != null && smNet !== 0 ? Math.sign(smNet) * 8 : 0),
@@ -235,12 +238,12 @@ async function computePulse() {
   /* ── AI confidence: measured agreement of independent evidence groups
         (sentiment vs breadth vs flow), never an arbitrary number. ────────── */
   const agrees = [
-    sentimentLabel === 'bullish' ? (mcapChange > 0) : sentimentLabel === 'bearish' ? (mcapChange < 0) : true,
-    breadth != null ? (sentimentLabel === 'bullish' ? breadth >= 0.5 : sentimentLabel === 'bearish' ? breadth <= 0.5 : true) : true,
-    smNet != null ? (sentimentLabel === 'bullish' ? smNet >= 0 : sentimentLabel === 'bearish' ? smNet <= 0 : true) : true
+    mcapChange != null ? (sentimentLabel === 'bullish' ? mcapChange > 0 : sentimentLabel === 'bearish' ? mcapChange < 0 : true) : null,
+    breadth != null ? (sentimentLabel === 'bullish' ? breadth >= 0.5 : sentimentLabel === 'bearish' ? breadth <= 0.5 : true) : null,
+    smNet != null ? (sentimentLabel === 'bullish' ? smNet >= 0 : sentimentLabel === 'bearish' ? smNet <= 0 : true) : null
   ].filter((v) => typeof v === 'boolean');
   const agreement = agrees.length ? agrees.filter(Boolean).length / agrees.length : 0.5;
-  const dataFresh = markets.length >= 10 && (global != null || sm != null);
+  const dataFresh = markets.length >= 10 && (global != null || verified.rows.length > 0);
   const aiConfidence = Math.round(clamp(45 + agreement * 40 + (dataFresh ? 8 : 0), 5, 95));
 
   return {
@@ -250,7 +253,8 @@ async function computePulse() {
     dataProvenance: {
       global: global ? (global.source || 'coingecko') : 'unavailable',
       markets: markets.length ? 'coingecko' : 'unavailable',
-      smartMoney: sm?.dataStatus || 'unavailable'
+      smartMoney: verified.dataStatus,
+      whaleTransfers: sm?.streamStatus || 'unavailable'
     },
     sentiment: { score: Math.round(sentimentScore), label: sentimentLabel },
     risk: { score: Math.round(riskScore), label: riskLabel },
@@ -261,11 +265,21 @@ async function computePulse() {
     breadth: { up, total: priced.length, avgChange: avgChange != null ? Math.round(avgChange * 100) / 100 : null },
     smartMoney: sm
       ? {
-          dataStatus: sm.dataStatus,
-          whaleActivity: sm.metrics?.whaleActivity?.value ?? null,
-          netFlowUsd: sm.metrics?.netFlow?.value ?? null,
-          accumulationUsd: sm.metrics?.accumulation?.valueUsd ?? null,
-          distributionUsd: sm.metrics?.distribution?.valueUsd ?? null
+          dataStatus: verified.dataStatus,
+          indexedAt: sm.verified?.indexedAt || null,
+          netFlowUsd: smNet,
+          accumulationUsd: verified.rows.some((r) => r.signal === 'ACCUMULATION' && num(r.capitalEnteringUsd) != null)
+            ? verified.rows.filter((r) => r.signal === 'ACCUMULATION').reduce((total, r) => total + (num(r.capitalEnteringUsd) ?? 0), 0) : null,
+          distributionUsd: verified.rows.some((r) => r.signal === 'DISTRIBUTION' && num(r.capitalExitingUsd) != null)
+            ? verified.rows.filter((r) => r.signal === 'DISTRIBUTION').reduce((total, r) => total + (num(r.capitalExitingUsd) ?? 0), 0) : null,
+          consensus: verified.rows.slice(0, 5).map((r) => ({ chain: r.chain, token: r.token, symbol: r.symbol,
+            signal: r.signal, confidence: r.confidence, independentVotes: r.independentVotes, netFlowUsd: r.netFlowUsd })),
+          whaleTransferProxy: {
+            dataStatus: sm.streamStatus || 'unavailable',
+            whaleActivity: sm.metrics?.whaleActivity?.value ?? null,
+            labelledExchangeNetUsd: sm.metrics?.netFlow?.value ?? null,
+            note: 'Large and labelled transfers do not prove trades or Smart Money.'
+          }
         }
       : null,
     lastUpdate: Date.now()

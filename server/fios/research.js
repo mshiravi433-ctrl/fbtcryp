@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { confidenceFromEvidence } from './evidence.js';
 import { round } from '../../src/lib/central/schema.js';
+import { verifiedSignals } from '../../src/lib/smartMoneyEvidence.js';
 
 export const RESEARCH_SCHEMA = 'fbt.fi.research.v1';
 
@@ -268,29 +269,48 @@ export function createResearchEngine({ collections, evidence, observability = nu
       }
 
       if (wanted.includes('global') && g.smartMoney && typeof g.smartMoney === 'object') {
-        evidenceInput.push({ type: 'smart_money', source: 'global-intel:smart-money', value: g.smartMoney, at, ttlMs: 5 * 60_000 });
-        signals.push({ name: 'SMART_MONEY_GLOBAL', direction: (Number(g.smartMoney.netFlowUsd) || 0) > 0 ? 'accumulation' : 'distribution', value: g.smartMoney.netFlowUsd ?? null, source: 'global-intel:smart-money', confidence: 0.6 });
-        sources.push({ name: 'global-intel:smart-money', at, status: 'ok' });
+        // The legacy global leaf may carry only whale-transfer aggregates.
+        // Preserve those as descriptive evidence; it cannot cast a trade vote.
+        const verified = g.smartMoney.verifiedStatus === 'observed' && Number.isFinite(g.smartMoney.netFlowUsd);
+        if (verified) {
+          evidenceInput.push({ type: 'smart_money', source: 'global-intel:verified-paired-swaps', value: g.smartMoney, at, ttlMs: 5 * 60_000 });
+          signals.push({ name: 'SMART_MONEY_GLOBAL', direction: g.smartMoney.netFlowUsd > 0 ? 'accumulation' : g.smartMoney.netFlowUsd < 0 ? 'distribution' : 'neutral', value: g.smartMoney.netFlowUsd, source: 'global-intel:verified-paired-swaps', confidence: 0.75 });
+          sources.push({ name: 'global-intel:smart-money', at, status: 'ok' });
+        } else {
+          const proxy = g.smartMoney.whaleTransferProxy || g.smartMoney;
+          evidenceInput.push({ type: 'whale', source: 'global-intel:whale-transfer-proxy', value: { ...proxy, classification: 'not-verified-trades' }, at, ttlMs: 5 * 60_000 });
+          sources.push({ name: 'global-intel:smart-money', at, status: 'proxy-only' });
+        }
       }
     }
 
     /* ── smart money ───────────────────────────────────────────────────── */
     if (wanted.includes('smart_money')) {
       const sm = market.smartMoney;
-      if (sm && typeof sm === 'object') {
-        evidenceInput.push({ type: 'smart_money', source: 'smart-money', value: sm, at, ttlMs: 5 * 60_000 });
-        signals.push({ name: 'SMART_MONEY_FLOW', direction: sm.netFlowUsd > 0 ? 'accumulation' : sm.netFlowUsd < 0 ? 'distribution' : 'neutral', value: sm.netFlowUsd ?? null, source: 'smart-money', confidence: 0.5 });
-        sources.push({ name: 'smart-money', at, status: 'ok' });
-      } else {
-        /* Fall back to the real service rather than declaring the signal dead. */
-        const out = await call('smartMoney', 'getOverview', 'smart-money');
-        if (out.ok) {
-          evidenceInput.push({ type: 'smart_money', source: 'smart-money', value: out.value, at, ttlMs: 5 * 60_000 });
+      const inWorld = sm && typeof sm === 'object' ? { ok: true, value: sm } : null;
+      const read = inWorld && (sm.verifiedStatus === 'observed' || sm.verified?.consensus?.length)
+        ? inWorld : (await call('smartMoney', 'getOverview', 'smart-money'));
+      // If the provider fails but the world carries a legacy transfer digest,
+      // retain it as proxy context; never re-label it as paired-swap evidence.
+      const evidenceRead = read.ok ? read : inWorld || read;
+      if (evidenceRead.ok) {
+        const source = evidenceRead.value;
+        const verified = source.verifiedStatus === 'observed' && Number.isFinite(source.netFlowUsd)
+          ? { netFlowUsd: source.netFlowUsd, rows: source.topTokens || [] }
+          : verifiedSignals(source, { now: at });
+        if (verified.netFlowUsd !== null && verified.rows.length) {
+          evidenceInput.push({ type: 'smart_money', source: 'smart-money:verified-paired-swaps', value: verified, at, ttlMs: 5 * 60_000 });
+          signals.push({ name: 'SMART_MONEY_FLOW', direction: verified.netFlowUsd > 0 ? 'accumulation' : 'distribution', value: verified.netFlowUsd, source: 'smart-money:verified-paired-swaps', confidence: 0.75 });
           sources.push({ name: 'smart-money', at, status: 'ok' });
         } else {
-          missing.push(`smart_money:${out.reason}`);
-          sources.push({ name: 'smart-money', at, status: 'unavailable', reason: out.reason });
+          evidenceInput.push({ type: 'whale', source: 'smart-money:whale-transfer-proxy', value: { window: source.window || '24h',
+            metrics: source.whaleTransferProxy || source.metrics || null, classification: 'not-verified-trades' }, at, ttlMs: 5 * 60_000 });
+          missing.push('smart_money:INSUFFICIENT_VERIFIED_CONSENSUS');
+          sources.push({ name: 'smart-money', at, status: 'proxy-only' });
         }
+      } else {
+        missing.push(`smart_money:${read.reason}`);
+        sources.push({ name: 'smart-money', at, status: 'unavailable', reason: read.reason });
       }
     }
 

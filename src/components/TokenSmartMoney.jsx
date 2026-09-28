@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { fetchToken, fmtUsd, shortAddr } from '../lib/smartMoneyClient';
+import { verifiedToken } from '../lib/smartMoneyEvidence';
 import { EVM_CHAINS } from '../lib/chains';
 import { FlowBar } from '../pages/SmartMoney';
 import SegIndicator from './SegIndicator';
+import '../styles/smart-money-intelligence.css';
 
 /*
  * «تب ۱ ساعت / ۴ ساعت / روز / هفته روی این باکس کار نمی‌کند»
@@ -89,12 +91,12 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
    */
   const chainName = chain === 'solana' ? 'Solana' : (EVM_CHAINS[chain]?.name ?? String(chain));
   const resolvedSymbol = data?.symbol || null;
-  const netUsd = Number(flow?.netUsd);
-  const headSummary = loading
-    ? null
-    : Number.isFinite(netUsd) && netUsd !== 0
-      ? `${netUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(netUsd))}`
-      : t('sm.tokenSummaryFlat');
+  const verifiedRow = verifiedToken({ verified: { ...data?.verified,
+    consensus: data?.verified?.consensus ? [data.verified.consensus] : [] }, window: win },
+  chain, address, { window: win });
+  const headSummary = loading ? null : verifiedRow
+    ? `${verifiedRow.netFlowUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(verifiedRow.netFlowUsd))}`
+    : t('sm.engine.insufficient');
 
   return (
     <motion.div
@@ -191,9 +193,17 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
             <div className="sm-empty" style={{ padding: '8px 0' }}>{t('sm.tokenNoDex')}</div>
           )}
 
-          {/* Buying / selling / net — these three follow the selected window. */}
+          <div className="smi-token-verdict" data-testid="sm-verified-token">
+            <strong>{t('sm.engine.tokenVerified')}</strong>
+            {verifiedRow ? <><span className={verifiedRow.signal === 'ACCUMULATION' ? 'sm-up' : 'sm-down'}>
+              {t(`sm.engine.signal.${verifiedRow.signal}`)} · {verifiedRow.confidence}/100 · {verifiedRow.netFlowUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(verifiedRow.netFlowUsd))}
+            </span><small>{t('sm.engine.verifiedGroups', { n: verifiedRow.independentVotes, swaps: verifiedRow.swaps })}</small></>
+              : <p>{t('sm.engine.tokenInsufficient')}</p>}
+          </div>
+          {/* Legacy router/market flow is useful context, not verified trades. */}
           <div className="sm-coverage" data-testid="sm-token-window-note">
-            {t('sm.tokenWindowNote', { window: t(`sm.windows.${win}`) })}
+            <strong>{t('sm.engine.proxyLabel')}</strong> · {t('sm.tokenWindowNote', { window: t(`sm.windows.${win}`) })}
+            <div>{t('sm.engine.proxyNote')}</div>
           </div>
           <div className="sm-metrics" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
             <div className="sm-metric">

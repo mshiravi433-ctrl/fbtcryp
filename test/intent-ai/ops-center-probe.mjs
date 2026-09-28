@@ -126,8 +126,12 @@ try {
   check('WHALE metric is accepted without a priced asset', whaleMon.monitor?.metric === 'WHALE' && !whaleMon.error);
   const volMon = normalizeMonitor({ metric: 'VOLUME', operator: 'ABOVE', threshold: 1e9 }, { now: NOW });
   check('VOLUME metric is accepted', volMon.monitor?.metric === 'VOLUME');
-  const smNetMon = normalizeMonitor({ metric: 'SMART_MONEY_NET', operator: 'ABOVE', threshold: 1e6 }, { now: NOW });
-  check('SMART_MONEY_NET metric is accepted', smNetMon.monitor?.metric === 'SMART_MONEY_NET');
+  const smNetMon = normalizeMonitor({ metric: 'SMART_MONEY_NET', operator: 'ABOVE', threshold: 1e6,
+    smartTarget: { chain: 1, token: `0x${'1'.repeat(40)}` } }, { now: NOW });
+  check('SMART_MONEY_NET metric is accepted with a contract-scoped target',
+    smNetMon.monitor?.metric === 'SMART_MONEY_NET' && smNetMon.monitor?.smartTarget?.chain === 1);
+  check('SMART_MONEY_NET refuses proxy-only legacy monitors',
+    normalizeMonitor({ metric: 'SMART_MONEY_NET', threshold: 1e6 }).error === 'BAD_SM_TARGET');
   check('whale count zero is a valid observation',
     evaluateCondition({ metric: 'WHALE', operator: 'ABOVE', threshold: 10, value: 0 }).ok === true
     && evaluateCondition({ metric: 'WHALE', operator: 'ABOVE', threshold: 10, value: 22 }).hit === true);

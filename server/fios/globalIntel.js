@@ -5,7 +5,7 @@
  * portfolio, goals, risk, market. Phase 211 widens the lens to the GLOBAL
  * world the owner's money actually lives in — the nine intelligence domains:
  *
- *   smart_money  whale-flow-labelled accumulation/distribution (smartMoney)
+ *   smart_money  qualified paired-swap consensus; whale transfers are separate descriptive context
  *   whales       large on-chain transfer events (whales scanner)
  *   onchain      chain-intel source health + real activity ring
  *   news         the merged news feed (state store first, feed fallback)
@@ -43,6 +43,7 @@
  * key (§50 — the invariant Phase 210 asserted, kept here).
  */
 import { randomUUID } from 'node:crypto';
+import { verifiedSignals } from '../../src/lib/smartMoneyEvidence.js';
 import { round } from '../../src/lib/central/schema.js';
 
 export const GLOBAL_INTEL_SCHEMA = 'fbt.fi.global-intelligence.v1';
@@ -129,38 +130,53 @@ const unavailableDomain = (reason, source, extra = {}) => ({
   status: 'UNAVAILABLE', reason: String(reason || 'UNAVAILABLE').slice(0, 160), source, at: Date.now(), confidence: 0, data: null, ...extra
 });
 
-/** smart_money: the labelled flow overview. A stream that never came up is
- *  UNAVAILABLE; a partial stream is PARTIAL with its coverage note. */
+/** The verified branch is directional; the historical transfer overview is
+ * still returned for descriptive context, never as an alternate vote. */
 export function normalizeSmartMoney(overview, at = Date.now()) {
   if (!overview || typeof overview !== 'object') return unavailableDomain('NO_SMART_MONEY_DATA', 'smartMoney:overview');
   const metrics = overview.metrics || {};
+  const verified = verifiedSignals(overview, { now: at, window: overview.window });
   const live = overview.dataStatus === 'live';
-  if (!live && !overview.partial && metrics.whaleActivity?.value == null) {
+  if (!live && !overview.partial && metrics.whaleActivity?.value == null && !verified.rows.length) {
     return unavailableDomain('SMART_MONEY_STREAM_DOWN', 'smartMoney:overview');
   }
   const tokenRows = Array.isArray(overview.tokenActivity) ? overview.tokenActivity : [];
+  const buyRows = verified.rows.filter((r) => r.signal === 'ACCUMULATION' && num(r.capitalEnteringUsd) != null);
+  const sellRows = verified.rows.filter((r) => r.signal === 'DISTRIBUTION' && num(r.capitalExitingUsd) != null);
   return okDomain({
     window: str(overview.window, 8) || '24h',
-    dataStatus: str(overview.dataStatus, 16) || 'stale',
-    whaleActivity: { count: num(metrics.whaleActivity?.value), changePct: num(metrics.whaleActivity?.changePct) },
-    accumulationUsd: num(metrics.accumulation?.valueUsd),
-    distributionUsd: num(metrics.distribution?.valueUsd),
-    exchangeInflowUsd: num(metrics.exchangeInflow),
-    exchangeOutflowUsd: num(metrics.exchangeOutflow),
-    netFlowUsd: num(metrics.netFlow),
-    topTokens: tokenRows.slice(0, 6).map((t) => ({
-      symbol: str(t.symbol, 24), chain: str(t.chainShort, 16),
-      flow: str(t.flow || t.direction || t.signal, 16),
-      valueUsd: num(t.valueUsd ?? t.value ?? t.netUsd ?? t.totalUsd),
-      netUsd: num(t.netUsd),
-      exchangeOutflowUsd: num(t.exchangeOutflowUsd ?? t.cexOut ?? t.exchangeOutflow),
-      exchangeInflowUsd: num(t.exchangeInflowUsd ?? t.cexIn ?? t.exchangeInflow),
-      signal: str(t.signal, 20)
-    })).filter((t) => t.symbol),
+    dataStatus: verified.dataStatus,
+    verifiedStatus: verified.dataStatus,
+    indexedAt: num(overview.verified?.indexedAt),
+    netFlowUsd: verified.netFlowUsd,
+    accumulationUsd: buyRows.length ? buyRows.reduce((total, r) => total + r.capitalEnteringUsd, 0) : null,
+    distributionUsd: sellRows.length ? sellRows.reduce((total, r) => total + r.capitalExitingUsd, 0) : null,
+    topTokens: verified.rows.slice(0, 6).map((r) => ({
+      symbol: str(r.symbol, 24), chain: r.chain, token: r.token,
+      flow: r.signal, valueUsd: Math.abs(r.netFlowUsd), netUsd: r.netFlowUsd,
+      independentVotes: r.independentVotes, confidence: r.confidence,
+      signal: r.signal, classification: 'verified-paired-swaps'
+    })),
+    whaleTransferProxy: {
+      whaleActivity: { count: num(metrics.whaleActivity?.value), changePct: num(metrics.whaleActivity?.changePct) },
+      accumulationUsd: num(metrics.accumulation?.valueUsd),
+      distributionUsd: num(metrics.distribution?.valueUsd),
+      exchangeInflowUsd: num(metrics.exchangeInflow?.value ?? metrics.exchangeInflow),
+      exchangeOutflowUsd: num(metrics.exchangeOutflow?.value ?? metrics.exchangeOutflow),
+      netFlowUsd: num(metrics.netFlow?.value ?? metrics.netFlow),
+      topTokens: tokenRows.slice(0, 6).map((t) => ({
+        symbol: str(t.symbol, 24), chain: str(t.chainShort, 16),
+        flow: str(t.flow || t.direction || t.signal, 16),
+        valueUsd: num(t.valueUsd ?? t.value ?? t.netUsd ?? t.totalUsd)
+      })).filter((t) => t.symbol),
+      note: 'Transfer aggregates and exchange labels are proxies, not paired trades.'
+    },
     coverage: overview.coverage && typeof overview.coverage === 'object' ? {
       events: num(overview.coverage.events), windowCoverage: num(overview.coverage.windowCoverage), comparable: overview.coverage.comparable === true
     } : null
-  }, 'smartMoney:overview', live ? 0.85 : 0.55, { at, partial: overview.partial === true || !live });
+  }, verified.rows.length ? 'smartMoney:verified-index' : 'smartMoney:overview',
+  verified.rows.length ? 0.8 : 0.3,
+  { at, partial: overview.partial === true || !live || !verified.rows.length });
 }
 
 /** whales: raw transfer events → bounded, priced events only. */

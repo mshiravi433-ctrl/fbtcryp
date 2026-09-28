@@ -227,7 +227,7 @@ const networkOverviewTool = {
 const smartMoneyOverviewTool = {
   name: 'fbt_get_smart_money_overview',
   title: 'Smart-money overview',
-  description: 'Aggregate smart-money flow overview (tracked wallets, net flows) from the on-chain intelligence engine.' + ADVISORY,
+  description: 'Observed whale transfers and labelled CEX flows (NOT verified wallet profitability or a buy recommendation); inspect the separate verified intelligence tool for scored-wallet consensus.' + ADVISORY,
   scope: 'public',
   routes: ['GET /api/v1/smart-money/overview'],
   inputSchema: obj({}),
@@ -237,11 +237,52 @@ const smartMoneyOverviewTool = {
 const smartMoneyFlowsTool = {
   name: 'fbt_get_smart_money_flows',
   title: 'Smart-money flows',
-  description: 'Recent smart-money flows from the on-chain intelligence engine.' + ADVISORY,
+  description: 'Recent labelled exchange and whale-transfer flows (not verified smart-wallet swaps); source coverage is supplied by the server.' + ADVISORY,
   scope: 'public',
   routes: ['GET /api/v1/smart-money/flows'],
   inputSchema: obj({}),
   run: (client) => client.get('/api/v1/smart-money/flows')
+};
+
+const smartMoneyIntelligenceTool = {
+  name: 'fbt_get_smart_money_intelligence',
+  title: 'Verified smart-money consensus',
+  description: 'Performance-qualified wallet consensus, evidence coverage, early observed entries and risk from paired on-chain ERC-20/stablecoin swaps. Empty means insufficient evidence, never a buy signal. Other chains may be unavailable.' + ADVISORY,
+  scope: 'public',
+  routes: ['GET /api/v1/smart-money/intelligence'],
+  inputSchema: obj({
+    window: str('Observed window: 30m, 1h, 4h, 24h, 7d, 30d', { enum: ['30m', '1h', '4h', '24h', '7d', '30d'] }),
+    chain: int('Optional EVM chain ID', { enum: [1, 56, 137, 42161, 8453, 10, 43114] }),
+    token: str('Optional token contract (not ticker); must be on selected chain', { pattern: '^0x[a-fA-F0-9]{40}$' })
+  }),
+  run: (client, args) => client.get('/api/v1/smart-money/intelligence', { query: args })
+};
+
+const smartMoneyGraphTool = {
+  name: 'fbt_get_smart_money_graph',
+  title: 'Verified wallet-token relationship graph',
+  description: 'Wallet/token edges with transaction hashes for paired swaps; shared-funder correlations are not identity proof. No fabricated graph nodes or trade calls.' + ADVISORY,
+  scope: 'public',
+  routes: ['GET /api/v1/smart-money/graph'],
+  inputSchema: obj({
+    window: str('Observed window', { enum: ['30m', '1h', '4h', '24h', '7d', '30d'] }),
+    chain: int('Optional EVM chain ID', { enum: [1, 56, 137, 42161, 8453, 10, 43114] }),
+    token: str('Optional token contract address', { pattern: '^0x[a-fA-F0-9]{40}$' })
+  }),
+  run: (client, args) => client.get('/api/v1/smart-money/graph', { query: args })
+};
+
+const smartMoneyWalletTool = {
+  name: 'fbt_get_smart_money_wallet',
+  title: 'Wallet performance evidence',
+  description: 'Read-only wallet history, sampled paired-swap realised P&L, score with missing-data coverage and sourced identity label (when available). A whale is not inherently smart.' + ADVISORY,
+  scope: 'public',
+  routes: ['GET /api/v1/smart-money/wallet/:chain/:address'],
+  inputSchema: obj({
+    chain: str('EVM chain ID or solana'),
+    address: str('Wallet address on that chain')
+  }, ['chain', 'address']),
+  run: (client, { chain, address }) => client.get(`/api/v1/smart-money/wallet/${encodeURIComponent(chain)}/${encodeURIComponent(address)}`)
 };
 
 /* -------------------------------------------------------------------------- */
@@ -567,6 +608,9 @@ export const TOOLS = Object.freeze([
   networkOverviewTool,
   smartMoneyOverviewTool,
   smartMoneyFlowsTool,
+  smartMoneyIntelligenceTool,
+  smartMoneyGraphTool,
+  smartMoneyWalletTool,
   /* Intent OS */
   intentCapabilitiesTool,
   intentStatusTool,

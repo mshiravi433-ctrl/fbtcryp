@@ -22,6 +22,10 @@ import { analyzeWallet } from './walletIntel.js';
 import { analyzeToken } from './tokenIntel.js';
 import { registryManifest } from './registry.js';
 import { detectAccumulation, detectDistribution, pctChange } from './engines.js';
+import { readWalletRegistry } from './walletRegistry.js';
+import { getVerifiedIntelligence } from './intelligence.js';
+export { readWalletRegistry, putWalletIdentity, removeWalletIdentity, publicRegistry } from './walletRegistry.js';
+export { getVerifiedIntelligence, runIntelligenceCycle } from './intelligence.js';
 import {
   readWatchlist, putWatchlist, deleteWatch, readAlerts, runAlertCycle, markAlertsRead
 } from './watchlist.js';
@@ -160,11 +164,12 @@ async function buildOverview(winKey) {
     };
   }).sort((a, b) => (Math.abs(b.netUsd) - Math.abs(a.netUsd)) || (b.totalUsd - a.totalUsd)).slice(0, 10);
 
-  const [early, fresh, liquidity, whales] = await Promise.all([
+  const [early, fresh, liquidity, whales, verified] = await Promise.all([
     within(earlyTokens({ limit: 8 }).catch(() => null), 10_000),
     within(freshWallets({ stream }).catch(() => null), 10_000),
     within(liquidityEvents({ windowBlocks: 8 }).catch(() => null), 12_000),
-    within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), 12_000)
+    within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), 12_000),
+    within(getVerifiedIntelligence({ window: winKey, now, includePrices: false }).catch(() => null), 3_000)
   ]);
 
   /*
@@ -214,6 +219,12 @@ async function buildOverview(winKey) {
       flowEvents: flowWin.events
     },
     flows,
+    // Deliberately separate from whale/router-transfer proxies above. Only
+    // this branch counts verified, performance-qualified wallet swaps.
+    verified: verified ? {
+      dataStatus: verified.dataStatus, indexedAt: verified.indexedAt,
+      coverage: verified.coverage, consensus: verified.consensus.slice(0, 5)
+    } : { dataStatus: 'unavailable', consensus: [] },
     tokenActivity,
     earlyTokens: early,
     freshWallets: fresh,
@@ -241,6 +252,18 @@ export {
   runAlertCycle,
   registryManifest
 };
+
+/** Wallet detail with the operator's sourced identity kept distinct from
+ * the independently measured smart-money qualification. */
+export async function getWalletWithIdentity(address, chain = null) {
+  const wallet = await analyzeWallet(address, chain);
+  const rows = await readWalletRegistry().catch(() => []);
+  const match = rows.find((r) => r.chain === wallet.chain && r.address === String(wallet.address).toLowerCase());
+  return { ...wallet, identity: match ? {
+    label: match.label, kind: match.kind, sourceUrl: match.sourceUrl,
+    provenance: match.provenance, updatedAt: match.updatedAt
+  } : null };
+}
 
 /** Exchanges registry (transparent sourcing for the UI). */
 export async function getExchanges() {
