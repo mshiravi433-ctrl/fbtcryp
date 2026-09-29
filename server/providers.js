@@ -104,14 +104,14 @@ function normalizeGlobalCg(raw = {}) {
 
 /* -------------------------------- endpoints ------------------------------- */
 
-/** CoinLore first (no key, richer fields), CoinGecko as the fallback. */
+/** CoinGecko primary (richer fields with API key), CoinLore as the fallback. */
 export async function fetchGlobal() {
   try {
-    const raw = await req(`${COINLORE_BASE}/global/`);
-    return normalizeGlobalLore(Array.isArray(raw) ? raw[0] : raw);
-  } catch {
     const raw = await req(cgUrl('/global'));
     return normalizeGlobalCg(raw);
+  } catch {
+    const raw = await req(`${COINLORE_BASE}/global/`);
+    return normalizeGlobalLore(Array.isArray(raw) ? raw[0] : raw);
   }
 }
 
