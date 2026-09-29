@@ -77,6 +77,14 @@ const normaliseMarket = (m) => ({
   raw: m
 });
 
+/** Resolve an exact active dYdX market; never substitute another pair for a
+ *  requested (but unavailable) ticker. Fallback is only for the no-ticker
+ *  landing route. */
+export function chooseActiveDydxMarket(markets, ticker, { allowFallback = true } = {}) {
+  const active = (Array.isArray(markets) ? markets : []).filter((market) => market?.status === 'ACTIVE');
+  return active.find((market) => market.ticker === ticker) || (allowFallback ? active[0] || null : null);
+}
+
 /** Public market metadata through our same-origin CORS proxy. */
 export async function getDydxMarkets() {
   try {

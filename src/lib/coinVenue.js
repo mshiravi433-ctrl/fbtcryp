@@ -64,6 +64,80 @@ const API_BASE = apiBase();
  * otherwise re-ask on every tap.
  */
 const memo = new Map();
+const pendingVenueIds = new Map();
+const MAX_BATCH_IDS = 100;
+
+const normaliseId = (value) => String(value ?? '').trim().toLowerCase();
+const validId = (id) => id.length > 0 && id.length <= 100 && /^[a-z0-9][a-z0-9._-]*$/.test(id);
+const normaliseVenue = (data) => ({
+  chains: data.chains && typeof data.chains === 'object' ? data.chains : {},
+  solana: typeof data.solana === 'string' ? data.solana : null,
+  tradeable: Boolean(data.tradeable)
+});
+
+function requestVenueBatch(ids, timeout) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  const params = new URLSearchParams({ ids: ids.join(',') });
+  let task;
+  task = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/coin-venues?${params.toString()}`, {
+        signal: ctrl.signal,
+        headers: { accept: 'application/json' }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data?.venues)) throw new Error('BAD_SHAPE');
+      for (const row of data.venues) {
+        const id = normaliseId(row?.id);
+        if (!ids.includes(id) || !validId(id)) continue;
+        memo.set(id, normaliseVenue(row));
+      }
+    } catch {
+      /* A failed discovery read is not a "not tradeable" answer. */
+    } finally {
+      clearTimeout(timer);
+      for (const id of ids) {
+        if (pendingVenueIds.get(id) === task) pendingVenueIds.delete(id);
+      }
+    }
+  })();
+  for (const id of ids) pendingVenueIds.set(id, task);
+  return task;
+}
+
+/**
+ * Resolve many CoinGecko ids with one request against the server's cached
+ * platform index. This keeps the Market list fast while still exposing
+ * address-backed routes for non-curated rows.
+ */
+export async function getCoinVenues(coinIds, { timeout = 45000 } = {}) {
+  const ids = [...new Set((Array.isArray(coinIds) ? coinIds : [coinIds])
+    .map(normaliseId).filter(validId))];
+  if (!ids.length) return new Map();
+
+  const pending = new Set();
+  const missing = [];
+  for (const id of ids) {
+    if (memo.has(id)) continue;
+    const request = pendingVenueIds.get(id);
+    if (request) pending.add(request);
+    else missing.push(id);
+  }
+
+  for (let start = 0; start < missing.length; start += MAX_BATCH_IDS) {
+    const batch = missing.slice(start, start + MAX_BATCH_IDS);
+    pending.add(requestVenueBatch(batch, timeout));
+  }
+  if (pending.size) await Promise.all([...pending]);
+
+  const result = new Map();
+  for (const id of ids) {
+    if (memo.has(id)) result.set(id, memo.get(id));
+  }
+  return result;
+}
 
 /**
  * Resolve the venues for one coin.
@@ -75,9 +149,14 @@ const memo = new Map();
  *          timed out is the same false negative this module exists to remove.
  */
 export async function getCoinVenue(coinId, { timeout = 12000 } = {}) {
-  const id = String(coinId ?? '').trim().toLowerCase();
-  if (!id) return null;
+  const id = normaliseId(coinId);
+  if (!validId(id)) return null;
   if (memo.has(id)) return memo.get(id);
+  const batchRequest = pendingVenueIds.get(id);
+  if (batchRequest) {
+    await batchRequest;
+    return memo.get(id) ?? null;
+  }
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
@@ -90,11 +169,7 @@ export async function getCoinVenue(coinId, { timeout = 12000 } = {}) {
     const data = await res.json();
     if (!data || typeof data !== 'object' || data.error) return null;
 
-    const out = {
-      chains: data.chains && typeof data.chains === 'object' ? data.chains : {},
-      solana: typeof data.solana === 'string' ? data.solana : null,
-      tradeable: Boolean(data.tradeable)
-    };
+    const out = normaliseVenue(data);
     /*
      * Only a SUCCESSFUL answer is cached. Caching a failure would mark the
      * coin unresolvable for the rest of the session over one bad request —
@@ -130,7 +205,8 @@ export async function getCoinVenue(coinId, { timeout = 12000 } = {}) {
 export function venueRoute(venue, { side = 'buy' } = {}) {
   if (!venue) return null;
 
-  if (venue.solana) {
+  const solanaMint = typeof venue.solana === 'string' ? venue.solana.trim() : '';
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(solanaMint)) {
     /*
      * The Solana screen takes `?to=<mint>` and restricts it to its CURATED
      * assets, precisely so a crafted link cannot preselect a scam token. A
@@ -140,26 +216,27 @@ export function venueRoute(venue, { side = 'buy' } = {}) {
     return {
       kind: 'solana',
       chainId: null,
-      address: venue.solana,
-      href: `/solana?toMint=${encodeURIComponent(venue.solana)}&side=${side}`
+      address: solanaMint,
+      href: `/solana?toMint=${encodeURIComponent(solanaMint)}&side=${side}`
     };
   }
 
-  const entries = Object.entries(venue.chains ?? {});
-  if (!entries.length) return null;
-
-  /* Same preference order as coinToSwap.js: cheapest chain first.
-     MUST cover every chain in EVM_CHAIN_ORDER — a chain missing here makes
-     `entries.find(...)` return null for a coin whose ONLY contract lives on
-     that chain, and the coin page prints "not swappable" for a coin the swap
-     screen can trade. Scroll (534352) and zkSync Era (324) were missing
-     while already live in chains.js — that is precisely the failure this
-     comment warns about. */
+  /* Same preference order as coinToSwap.js: cheapest supported chain first.
+     Filter malformed addresses here as a second boundary: a discovery result
+     can nominate a token, but an invalid address must never become a route. */
   const PREFERENCE = [56, 8453, 42161, 137, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663, 1];
+  const entries = Object.entries(venue.chains ?? {})
+    .filter(([cid, address]) => (
+      PREFERENCE.includes(Number(cid))
+      && typeof address === 'string'
+      && /^0x[0-9a-f]{40}$/i.test(address.trim())
+    ));
+  if (!entries.length) return null;
   entries.sort(
     (a, b) => PREFERENCE.indexOf(Number(a[0])) - PREFERENCE.indexOf(Number(b[0]))
   );
-  const [chainId, address] = entries.find(([cid]) => PREFERENCE.includes(Number(cid))) ?? [];
+  const [chainId, rawAddress] = entries[0];
+  const address = rawAddress.trim();
   if (!chainId || !address) return null;
 
   return {
@@ -173,4 +250,5 @@ export function venueRoute(venue, { side = 'buy' } = {}) {
 /** Reset, for tests. */
 export function _clearVenueCache() {
   memo.clear();
+  pendingVenueIds.clear();
 }

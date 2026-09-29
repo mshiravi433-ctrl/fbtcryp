@@ -183,21 +183,44 @@ export async function getVenueIndex(now = Date.now()) {
  * error — most of CoinGecko genuinely is not reachable from here, and the coin
  * page needs to be able to say so without treating it as a failure.
  */
-export async function resolveVenue(coinId) {
-  const id = String(coinId ?? '').trim().toLowerCase();
-  if (!id || id.length > 100 || !/^[a-z0-9][a-z0-9._-]*$/.test(id)) {
-    return { error: 'BAD_ID' };
-  }
+const validCoinId = (value) => (
+  typeof value === 'string'
+  && value.length > 0
+  && value.length <= 100
+  && /^[a-z0-9][a-z0-9._-]*$/.test(value)
+);
 
-  const idx = await getVenueIndex();
-  const hit = idx.byCoin.get(id);
-
+function venueResult(id, hit, updatedAt) {
   return {
     id,
     chains: hit?.chains ?? {},
     solana: hit?.solana ?? null,
     tradeable: Boolean(hit),
-    updatedAt: new Date(idx.at).toISOString()
+    updatedAt
+  };
+}
+
+export async function resolveVenue(coinId) {
+  const id = String(coinId ?? '').trim().toLowerCase();
+  if (!validCoinId(id)) return { error: 'BAD_ID' };
+
+  const idx = await getVenueIndex();
+  return venueResult(id, idx.byCoin.get(id), new Date(idx.at).toISOString());
+}
+
+/** Resolve a bounded market-list batch against the same already-cached index. */
+export async function resolveVenues(input) {
+  const raw = Array.isArray(input) ? input : String(input ?? '').split(',');
+  const ids = [...new Set(raw.map((value) => String(value ?? '').trim().toLowerCase()).filter(Boolean))];
+  if (!ids.length || ids.length > 100 || ids.some((id) => !validCoinId(id))) {
+    return { error: ids.length > 100 ? 'TOO_MANY_IDS' : 'BAD_IDS' };
+  }
+
+  const idx = await getVenueIndex();
+  const updatedAt = new Date(idx.at).toISOString();
+  return {
+    venues: ids.map((id) => venueResult(id, idx.byCoin.get(id), updatedAt)),
+    updatedAt
   };
 }
 

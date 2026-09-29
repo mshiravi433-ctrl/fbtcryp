@@ -35,12 +35,12 @@ import {
   readMintInfoAcross,
   readSwapBalancesAcross
 } from '../src/lib/solana/chainReads.js';
+import { jupiterTokenHeaders, jupiterTokenUrl } from './jupiterTokenApi.js';
 
 export const SOLANA_BALANCES_SCHEMA = 'fbt.solana-balances.v1';
 export const SOLANA_TOKEN_INFO_SCHEMA = 'fbt.solana-token-info.v1';
 
 /** Jupiter's token list — used only for a symbol and a name, never for a scale. */
-const JUP_TOKENS = 'https://lite-api.jup.ag/tokens/v2/search';
 
 const RPC_TIMEOUT_MS = Number(process.env.SOLANA_RPC_TIMEOUT_MS || 8000);
 
@@ -153,9 +153,9 @@ async function jupiterTokenMeta(mint) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const res = await fetch(`${JUP_TOKENS}?query=${encodeURIComponent(mint)}`, {
+    const res = await fetch(jupiterTokenUrl('search', { query: mint }), {
       signal: ctrl.signal,
-      headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' }
+      headers: jupiterTokenHeaders()
     });
     if (!res.ok) return null;
     const list = await res.json().catch(() => null);

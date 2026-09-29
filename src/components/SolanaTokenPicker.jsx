@@ -5,6 +5,7 @@ import TokenIcon from '../lib/tokenIcon';
 import { isSolanaAddress } from '../lib/solana';
 import {
   searchSolanaTokenMeta,
+  discoverSolanaTokenMeta,
   fetchSolanaTokenSentiment,
   fetchSolanaTokensMeta
 } from '../lib/solanaTokenMeta';
@@ -86,7 +87,7 @@ function TokenRow({ token, onPick, selected = false, testid }) {
         <span className="stp-badges">
           {token.verified ? (
             <span className="stp-badge stp-badge-verified">✓ {t('solana.picker.verified')}</span>
-          ) : token.imported || token.known === false ? (
+          ) : token.imported || token.known === false || token.discovered ? (
             <span className="stp-badge stp-badge-unverified">{t('solana.picker.unverified')}</span>
           ) : null}
           {selected ? <span className="stp-badge stp-badge-current">{t('solana.picker.selected')}</span> : null}
@@ -182,6 +183,9 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
   const [deferred, setDeferred] = useState('');
   const [remoteRows, setRemoteRows] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [discoveryRows, setDiscoveryRows] = useState([]);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [popularVisibleCount, setPopularVisibleCount] = useState(24);
   /* Enrichment: mint → { icon, usdPrice, ... } for the curated rows. */
   const [metaMap, setMetaMap] = useState(new Map());
   const reqSeq = useRef(0);
@@ -202,6 +206,30 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  /*
+   * A live Top Traded list makes discovery useful before the user knows a
+   * ticker or mint. It is a mainnet catalogue only; devnet never shows a
+   * mainnet asset as if it could be quoted there. Prices/volume are discovery
+   * hints only — the swap screen still requires an exact mint and fresh quote.
+   */
+  useEffect(() => {
+    if (!open) return undefined;
+    if (devnet) {
+      setDiscoveryRows([]);
+      setDiscoveryLoading(false);
+      return undefined;
+    }
+    let alive = true;
+    setDiscoveryLoading(true);
+    discoverSolanaTokenMeta({ category: 'toptraded', interval: '24h', limit: 100 })
+      .then((rows) => { if (alive) setDiscoveryRows(rows); })
+      .catch(() => { if (alive) setDiscoveryRows([]); })
+      .finally(() => { if (alive) setDiscoveryLoading(false); });
+    return () => { alive = false; };
+  }, [open, devnet]);
+
+  useEffect(() => setPopularVisibleCount(24), [onlyVerified]);
 
   /* Remote search — a word, or a pasted mint; the endpoint treats both.
      The seq guard keeps a slow stale answer from overwriting a newer one. */
@@ -254,6 +282,14 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
     return tokens.filter((tk) => tk.imported);
   }, [tokens, q]);
 
+  const popularMatches = useMemo(() => {
+    if (q || devnet) return [];
+    const localMints = new Set(tokens.map((tk) => tk.mint));
+    return discoveryRows.filter((row) => (
+      !localMints.has(row.mint) && (!onlyVerified || row.verified === true)
+    ));
+  }, [q, devnet, discoveryRows, tokens, onlyVerified]);
+
   /* The single-mint case: exactly what the import flow wants. */
   const mintQuery = useMemo(() => (deferred && isSolanaAddress(deferred) ? deferred : null), [deferred]);
   const mintLocal = useMemo(() => (mintQuery ? tokens.find((tk) => tk.mint === mintQuery) : null), [tokens, mintQuery]);
@@ -279,13 +315,14 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
   };
 
   const importMint = (meta = null) => {
-    if (!mintQuery) return;
+    const mint = typeof meta?.mint === 'string' ? meta.mint : mintQuery;
+    if (!mint || !isSolanaAddress(mint)) return;
     onImport?.({
-      mint: mintQuery,
-      /* Jupiter's symbol/name when the index knows this mint, the honest
-         truncated address when it does not. Either way `imported` keeps the
-         token visibly distinct from curated ones everywhere it renders. */
-      symbol: meta?.symbol || `${mintQuery.slice(0, 4)}…${mintQuery.slice(-4)}`,
+      mint,
+      /* Jupiter's symbol/name when the index knows this exact mint, the honest
+         truncated address when it does not. The row remains visibly imported
+         and unverified unless Jupiter explicitly marks it verified. */
+      symbol: meta?.symbol || `${mint.slice(0, 4)}…${mint.slice(-4)}`,
       name: meta?.name || '',
       icon: meta?.icon || null,
       decimals: Number.isInteger(meta?.decimals) ? meta.decimals : 9,
@@ -385,6 +422,57 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
             ))}
           </div>
         </>
+      )}
+
+      {!deferred && discoveryLoading && !popularMatches.length && (
+        <section className="stp-discovery" aria-label={t('solana.picker.popularSection')}>
+          <div className="stp-section">
+            <span className="stp-section-title">{t('solana.picker.popularSection')}</span>
+            <span className="stp-section-count mono">···</span>
+          </div>
+          <p className="stp-discovery-note">{t('solana.picker.popularNote')}</p>
+          <div className="stp-list" aria-hidden="true">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="coin-row stp-row stp-skeleton">
+                <span className="stp-sk-circle" />
+                <span className="stp-sk-lines">
+                  <span className="stp-sk-line" style={{ width: '42%' }} />
+                  <span className="stp-sk-line" style={{ width: '64%' }} />
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!deferred && popularMatches.length > 0 && (
+        <section className="stp-discovery" data-testid="stp-discovery-list">
+          <div className="stp-section">
+            <span className="stp-section-title">{t('solana.picker.popularSection')}</span>
+            <span className="stp-section-count mono">{popularMatches.length}</span>
+          </div>
+          <p className="stp-discovery-note">{t('solana.picker.popularNote')}</p>
+          <div className="stp-list">
+            {popularMatches.slice(0, popularVisibleCount).map((row) => (
+              <TokenRow
+                key={row.mint}
+                token={row}
+                testid={`stp-discovery-${row.mint.slice(0, 6)}`}
+                selected={selectedSet.has(row.mint)}
+                onPick={() => importMint(row)}
+              />
+            ))}
+          </div>
+          {popularVisibleCount < popularMatches.length && (
+            <button
+              type="button"
+              className="stp-discovery-more"
+              onClick={() => setPopularVisibleCount((count) => count + 24)}
+            >
+              {t('solana.picker.showMore', { count: popularMatches.length - popularVisibleCount })}
+            </button>
+          )}
+        </section>
       )}
 
       {mintQuery && (

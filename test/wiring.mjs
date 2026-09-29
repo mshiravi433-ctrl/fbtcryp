@@ -12329,10 +12329,10 @@ export default function run() {
     const c2s = read('src/lib/coinToSwap.js');
     const sol = read('src/pages/SolanaSwap.jsx');
 
-    t('SOL resolves to a curated Solana target, offline',
+    t('SOL resolves to a curated Solana target by exact mint, offline',
       /if \(id === 'solana'\) return SOLANA_TARGET;/.test(c2s) &&
       /kind: 'solana'/.test(c2s) &&
-      /\/solana\?to=\$\{encodeURIComponent\(target\.token\.symbol\)\}&side=\$\{side\}/.test(c2s));
+      /\/solana\?to=\$\{encodeURIComponent\(target\.token\.mint \|\| SOL_MINT\)\}&side=\$\{side\}/.test(c2s));
 
     t('the Solana screen honours side=sell in every handoff',
       (sol.match(/searchParams\.get\('side'\) === 'sell'/g) || []).length >= 2);

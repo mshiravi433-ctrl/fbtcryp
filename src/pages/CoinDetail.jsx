@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AnimatedNumber from '../components/AnimatedNumber';
-import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
+import { useChart, useCoin } from '../hooks/useMarket';
 import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
@@ -22,6 +23,7 @@ import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
 import TokenRiskCard from '../components/TokenRiskCard';
 import TokenSmartMoney from '../components/TokenSmartMoney';
 import '../styles/smart-money.css';
+import '../styles/coin-swap-dock.css';
 
 /**
  * Chain names for the resolved-venue line.
@@ -67,14 +69,15 @@ function Metric({ label, value, tone }) {
 export default function CoinDetail() {
   const { id } = useParams();
   const { t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [range, setRange] = useState(RANGES[1]);
 
-  // Fetch the coin by id rather than hunting for it inside the paged markets
-  // list — that lookup is what produced "coin not found" for anything outside
-  // the top 60 by market cap, which looked like a broken API but never was.
-  const { data: coins } = useMarkets(60);
+  // Reuse the exact market row passed on navigation for an instant first
+  // paint. The exact-id detail fetch refreshes its fields; direct deep links
+  // remain supported without a duplicate useMarkets(60) poll.
+  const navigationCoin = location.state?.coin?.id === id ? location.state.coin : null;
   const { data: fetched, loading: coinLoading, refresh: refreshCoin } = useCoin(id);
   const { data: series, loading } = useChart(id, range.days);
 
@@ -163,6 +166,19 @@ export default function CoinDetail() {
   }, [id, fetched, coinLoading, refreshCoin]);
 
   const resolvedRoute = useMemo(() => venueRoute(venue), [venue]);
+  const resolvedSellRoute = useMemo(() => venueRoute(venue, { side: 'sell' }), [venue]);
+  const hasSwapDock = Boolean(realSwap || resolvedRoute);
+  const displaySymbol = fetched?.symbol || navigationCoin?.symbol || realSwap?.token?.symbol || id;
+  const swapChain = realSwap?.chainName || (
+    resolvedRoute?.kind === 'solana'
+      ? 'Solana'
+      : CHAIN_LABEL[resolvedRoute?.chainId] || String(resolvedRoute?.chainId || '')
+  );
+  const swapDockNetworkKey = realSwap?.kind === 'thor'
+    ? 'coin.thorSwapDockNetwork'
+    : realSwap ? 'coin.swapDockNetwork' : 'coin.checkRouteDockNetwork';
+  const buyHref = realSwap ? swapUrlFor(coinGeckoId, 'buy') : resolvedRoute?.href;
+  const sellHref = realSwap ? swapUrlFor(coinGeckoId, 'sell') : resolvedSellRoute?.href;
 
   /*
    * ─── THE WEEKLY / MONTHLY VERDICT LIVES ON /signals NOW ────────────────────
@@ -188,12 +204,8 @@ export default function CoinDetail() {
   const toggleFavorite = useAppStore((s) => s.toggleFavorite);
   const isFav = favorites.includes(id);
 
-  // Prefer the direct fetch; fall back to the list row so the header paints
-  // instantly when the user tapped through from the market table.
-  const coin = useMemo(
-    () => fetched ?? (coins ?? []).find((c) => c.id === id) ?? null,
-    [fetched, coins, id]
-  );
+  // The server's exact-id response wins; route state is only a fast fallback.
+  const coin = useMemo(() => fetched ?? navigationCoin ?? null, [fetched, navigationCoin]);
 
   const chartData = series ?? [];
 
@@ -253,7 +265,7 @@ export default function CoinDetail() {
   }
 
   return (
-    <PageTransition>
+    <PageTransition className={`page coin-detail-page${hasSwapDock ? ' coin-detail-page--dock' : ''}`}>
       <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
         <button className="icon-btn" onClick={() => navigate(-1)}>
           ‹
@@ -431,40 +443,20 @@ export default function CoinDetail() {
       </motion.div>
 
       {/*
-        ─── THESE BUTTONS USED TO OPEN THE SIMULATOR ─────────────────────────
-        Both went to `/trade`, which trades virtual credits. Someone tapping
-        "Buy" on the Bitcoin page, in a wallet-connected app, reasonably
-        believes they are buying Bitcoin. They were not — they were opening a
-        practice screen, and would walk away thinking they held a position
-        they did not hold. That is the worst class of bug this app can have.
-
-        Now they go to the REAL swap with the pair pre-filled, but only when a
-        curated contract actually exists for the coin. Most CoinGecko coins
-        are not swappable here (wrong chain, or no verified contract), and for
-        those the honest answer is to say so — see `swapTargetFor`. Falling
-        back to the simulator is exactly what created this bug.
-
-        The practice screen is still one tap away, clearly labelled, for
-        anyone who wants to rehearse first.
+        ─── HONEST SWAP STATE; ACTIONS LIVE IN THE FIXED DOCK ─────────────────
+        The dock is rendered through a body portal so page transitions cannot
+        trap its fixed positioning. Curated IDs use their verified route;
+        other coins must resolve to an exact supported-chain contract address.
+        Unknown or unsupported assets never get a speculative swap button.
       */}
       <motion.div className="stack" style={{ gap: 9 }} variants={riseIn} initial="hidden" animate="show">
         {realSwap ? (
-          <>
-            <div className="row" style={{ gap: 10 }}>
-              <button className="btn btn-primary" onClick={() => navigate(swapUrlFor(coinGeckoId, 'buy'))}>
-                {t('trade.buy')}
-              </button>
-              <button className="btn btn-ghost" onClick={() => navigate(swapUrlFor(coinGeckoId, 'sell'))}>
-                {t('trade.sell')}
-              </button>
-            </div>
-            <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
-              {t(
-                realSwap.kind === 'thor' ? 'coin.thorSwapNote' : 'coin.realSwapNote',
-                { chain: realSwap.chainName, symbol: realSwap.token.symbol }
-              )}
-            </p>
-          </>
+          <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
+            {t(
+              realSwap.kind === 'thor' ? 'coin.thorSwapNote' : 'coin.realSwapNote',
+              { chain: realSwap.chainName, symbol: realSwap.token.symbol }
+            )}
+          </p>
         ) : resolvedRoute ? (
           /*
             ─── RESOLVED, NOT CURATED ────────────────────────────────────────
@@ -480,30 +472,17 @@ export default function CoinDetail() {
             where the existing unverified-token warning fires. Same honesty
             budget, spent on the thing that is actually uncertain here.
           */
-          <>
-            <div className="row" style={{ gap: 10 }}>
-              <button className="btn btn-primary" onClick={() => navigate(resolvedRoute.href)}>
-                {t('trade.buy')}
-              </button>
-              <button
-                className="btn btn-ghost"
-                onClick={() => navigate(resolvedRoute.href.replace('side=buy', 'side=sell'))}
-              >
-                {t('trade.sell')}
-              </button>
-            </div>
-            <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
-              {t(
-                resolvedRoute.kind === 'solana'
-                  ? 'coin.resolvedSolanaNote'
-                  : 'coin.resolvedEvmNote',
-                {
-                  chain: resolvedRoute.chainId ? CHAIN_LABEL[resolvedRoute.chainId] ?? resolvedRoute.chainId : 'Solana',
-                  address: `${resolvedRoute.address.slice(0, 6)}…${resolvedRoute.address.slice(-4)}`
-                }
-              )}
-            </p>
-          </>
+          <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
+            {t(
+              resolvedRoute.kind === 'solana'
+                ? 'coin.resolvedSolanaNote'
+                : 'coin.resolvedEvmNote',
+              {
+                chain: resolvedRoute.chainId ? CHAIN_LABEL[resolvedRoute.chainId] ?? resolvedRoute.chainId : 'Solana',
+                address: `${resolvedRoute.address.slice(0, 6)}…${resolvedRoute.address.slice(-4)}`
+              }
+            )}
+          </p>
         ) : !venueChecked ? (
           /*
             Still asking. Showing "not tradeable" during the request would be
@@ -562,6 +541,42 @@ export default function CoinDetail() {
       <InfoBox title={t('common.notAdviceTitle')} tone="warn" id="coin-notadvice">
         <p>{t('common.notAdvice')}</p>
       </InfoBox>
+
+      {typeof document !== 'undefined' && hasSwapDock && createPortal(
+        <div className="coin-swap-dock" data-testid="coin-swap-dock">
+          <div className="coin-swap-dock-inner">
+            <div className="coin-swap-dock-copy">
+              <strong>{t(realSwap ? 'coin.swapDockTitle' : 'coin.checkRouteDockTitle', { symbol: displaySymbol })}</strong>
+              <span>{t(swapDockNetworkKey, { chain: swapChain })}</span>
+            </div>
+            <div className="coin-swap-dock-actions">
+              {buyHref && (
+                <button
+                  type="button"
+                  className="coin-swap-dock-buy"
+                  data-testid="coin-swap-buy"
+                  aria-label={`${t(realSwap ? 'trade.buy' : 'coin.checkBuyRoute')} ${displaySymbol}`}
+                  onClick={() => { haptic?.('light'); navigate(buyHref); }}
+                >
+                  <span aria-hidden="true">↗</span>{t(realSwap ? 'trade.buy' : 'coin.checkBuyRoute')}
+                </button>
+              )}
+              {sellHref && (
+                <button
+                  type="button"
+                  className="coin-swap-dock-sell"
+                  data-testid="coin-swap-sell"
+                  aria-label={`${t(realSwap ? 'trade.sell' : 'coin.checkSellRoute')} ${displaySymbol}`}
+                  onClick={() => { haptic?.('light'); navigate(sellHref); }}
+                >
+                  <span aria-hidden="true">↙</span>{t(realSwap ? 'trade.sell' : 'coin.checkSellRoute')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </PageTransition>
   );
 }

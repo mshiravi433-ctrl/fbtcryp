@@ -84,31 +84,35 @@ const isBps = (v) => Number.isFinite(Number(v));
  * Leverage above the market's maximum is clamped by the same effect that
  * clamps typed input, so a link cannot push past protocol limits either.
  */
-function readPrefill() {
+function readPrefill(source = null) {
   try {
-    const raw = String(window.location.hash || window.location.search || '').split('?')[1] || '';
-    const q = new URLSearchParams(raw);
-    const side = String(q.get('side') || '').toLowerCase();
-    const collateral = Number(q.get('collateral'));
-    const leverage = Number(q.get('leverage'));
+    let q = source;
+    if (!q || typeof q !== 'object') {
+      const raw = String(window.location.hash || window.location.search || '').split('?')[1] || '';
+      q = new URLSearchParams(raw);
+    }
+    const get = (key) => (typeof q.get === 'function' ? q.get(key) : q[key]);
+    const side = String(get('side') || '').toLowerCase();
+    const collateral = Number(get('collateral'));
+    const leverage = Number(get('leverage'));
     return {
-      market: String(q.get('market') || '').toUpperCase().replace(/[^A-Z0-9/-]/g, '').slice(0, 16) || null,
+      market: String(get('market') || '').toUpperCase().replace(/[^A-Z0-9/-]/g, '').slice(0, 16) || null,
       side: side === 'long' || side === 'short' ? side : null,
       collateral: Number.isFinite(collateral) && collateral > 0 ? String(collateral) : null,
       leverage: Number.isFinite(leverage) && leverage >= 1 ? String(Math.min(leverage, 50)) : null,
-      panel: q.get('panel') === 'positions' ? 'positions' : null
+      panel: get('panel') === 'positions' ? 'positions' : null
     };
   } catch { return { market: null, side: null, collateral: null, leverage: null, panel: null }; }
 }
 
-export default function FuturesOnchain() {
+export default function FuturesOnchain({ embedded = false, initialPrefill = null } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();
   const solWallet = useSolanaWallet();
   const { haptic } = useTelegram();
   const slippagePct = useSettingsStore((s) => s.defaultSlippage);
-  const prefill = useMemo(readPrefill, []);
+  const [prefill] = useState(() => readPrefill(initialPrefill));
   /*
    * Store ACTIONS only. Subscribing to the whole store here would re-create
    * every callback each time the store changed — and the callbacks change the
@@ -124,6 +128,7 @@ export default function FuturesOnchain() {
   const [marketsState, setMarketsState] = useState({ loading: true, live: false, stale: false, code: null });
   const [category, setCategory] = useState('Crypto');
   const [marketUid, setMarketUid] = useState('');
+  const [prefillMiss, setPrefillMiss] = useState(false);
   const [search, setSearch] = useState('');
   const [side, setSide] = useState(prefill.side || 'long');
   const [collateral, setCollateral] = useState(prefill.collateral || '50');
@@ -235,18 +240,31 @@ export default function FuturesOnchain() {
     if (q) rows = markets.filter((m) => m.symbol.toLowerCase().includes(q));
     return rows;
   }, [markets, category, search]);
-  useEffect(() => {
-    if (visible.length && !visible.some((m) => m.uid === marketUid)) setMarketUid(visible[0].uid);
-  }, [visible, marketUid]);
-
   /* The hand-off market wins the first time the catalogue lists it. */
   const prefillApplied = useRef(false);
   useEffect(() => {
+    if (prefillMiss || (prefill.market && !prefillApplied.current)) return;
+    if (visible.length && !visible.some((m) => m.uid === marketUid)) setMarketUid(visible[0].uid);
+  }, [visible, marketUid, prefill.market, prefillMiss]);
+
+  useEffect(() => {
     if (prefillApplied.current || !prefill.market || !markets.length) return;
-    const want = prefill.market.replace('-', '/');
-    const hit = markets.find((m) => m.symbol === want || m.symbol === `${want}/USD` || m.symbol.split('/')[0] === want || m.marketId === prefill.market);
+    const marketRef = prefill.market.toUpperCase();
+    const baseRef = marketRef.replace(/-PERP$/, '').split('/')[0];
+    const hit = markets.find((m) => {
+      const symbol = String(m.symbol || '').toUpperCase();
+      const base = String(m.base || symbol.replace(/-PERP$/, '').split('/')[0]).toUpperCase();
+      return symbol === marketRef
+        || symbol.replace(/-PERP$/, '') === baseRef
+        || base === baseRef
+        || String(m.marketId) === marketRef;
+    });
     prefillApplied.current = true;
-    if (!hit) return;
+    if (!hit) {
+      setPrefillMiss(true);
+      return;
+    }
+    setPrefillMiss(false);
     setCategory(hit.uiCategory);
     setMarketUid(hit.uid);
   }, [markets, prefill.market]);
@@ -372,20 +390,23 @@ export default function FuturesOnchain() {
      When no Solana wallet is connected, the button walks the user to the
      wallet page's Solana tab (injected wallets, Mobile Wallet Adapter and the
      Phantom/Solflare/Backpack deeplinks all live there) and comes BACK to
-     this exact order once a wallet connects — ?return=/perp?tab=onchain&…
-     carries the market/side/collateral/leverage of the CURRENT form, not just
-     what the entry URL happened to say. The wallet page only accepts
-     same-app return paths (must start with a single '/'). */
+     this exact order once a wallet connects. Standalone mode returns to the
+     On-Chain tab; when embedded over Perpetual it returns to that same tab
+     with the execution panel reopened. In either case the market/side/
+     collateral/leverage come from the CURRENT form, not just the entry URL.
+     The wallet page only accepts same-app return paths (must start with a
+     single '/'). */
   const walletHandoffPath = useCallback(() => {
     const back = new URLSearchParams();
-    back.set('tab', 'onchain');
+    back.set('tab', embedded ? 'overview' : 'onchain');
+    if (embedded) back.set('execution', 'onchain');
     if (market?.base) back.set('market', market.base);
     if (side === 'long' || side === 'short') back.set('side', side);
     if (Number.isFinite(Number(collateral)) && Number(collateral) > 0) back.set('collateral', String(collateral));
     if (Number.isFinite(Number(leverage)) && Number(leverage) > 0) back.set('leverage', String(leverage));
     const q = new URLSearchParams({ tab: 'solana', return: `/perp?${back.toString()}` });
     return `/wallet?${q.toString()}`;
-  }, [market?.base, side, collateral, leverage]);
+  }, [market?.base, side, collateral, leverage, embedded]);
 
   const goConnectSolana = useCallback(() => {
     haptic?.('light');
@@ -691,7 +712,7 @@ export default function FuturesOnchain() {
   );
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <div className="derivatives-hall">
         <div className="derivatives-aurora" aria-hidden="true" />
 
@@ -726,6 +747,11 @@ export default function FuturesOnchain() {
             {provider?.status === 'READ_ONLY' ? t('futures.readOnlyNotice') : t('futures.unavailableNotice', { reason: reasonLabel(provider) })}
           </p>
         )}
+        {prefillMiss && (
+          <p className="notice notice-danger" style={{ marginTop: 12 }} data-testid="futures-prefill-market-missing">
+            {t('futures.err.MARKET_NOT_LISTED')}
+          </p>
+        )}
 
         {/* ── market selection ──────────────────────────────────────────── */}
         <div className="tag-scroll" style={{ gap: 8, paddingBottom: 2, marginTop: 16 }}>
@@ -755,7 +781,7 @@ export default function FuturesOnchain() {
               <div className="field-label">{t('futures.market')}</div>
               <ModernSelect
                 value={market?.uid || ''}
-                onChange={setMarketUid}
+                onChange={(uid) => { setPrefillMiss(false); setMarketUid(uid); }}
                 options={visible.map((m) => ({
                   value: m.uid,
                   label: m.symbol,

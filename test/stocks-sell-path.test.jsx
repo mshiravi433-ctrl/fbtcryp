@@ -74,6 +74,20 @@ vi.mock('../src/context/TelegramContext', () => ({ useTelegram: () => ({ haptic:
 vi.mock('../src/lib/tokenIcon', () => ({ default: ({ token }) => <i data-icon={token?.symbol} /> }));
 vi.mock('../src/lib/solana/portfolio', () => ({ readSolanaPortfolio: state.portfolio }));
 vi.mock('../src/lib/solana/portfolio.js', () => ({ readSolanaPortfolio: state.portfolio }));
+vi.mock('../src/components/SolanaTokenPicker', () => ({
+  default: ({ open, onImport, side }) => open ? (
+    <button
+      type="button"
+      data-testid="test-discovery-import"
+      onClick={() => onImport({
+        mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+        symbol: 'BONK', name: 'Bonk', decimals: 5, verified: false, imported: true
+      })}
+    >
+      Import to {side}
+    </button>
+  ) : null
+}));
 /* The swap screen: no wallet, no chain, no quotes — only the URL contract is under test. */
 vi.mock('../src/lib/solanaWallet', async (importOriginal) => ({
   ...await importOriginal(),
@@ -367,6 +381,20 @@ describe('SolanaSwap — the ?fromMint=&toMint= handoff every Sell button relies
     await waitFor(() => {
       expect(screen.getByTestId('solana-token-from').textContent).toContain('USDC');
       expect(screen.getByTestId('solana-token-to').textContent).toContain('PAXG');
+    });
+  });
+  it('imports a newly discovered mint into the side whose picker was opened', async () => {
+    const { default: SolanaSwap } = await import('../src/pages/SolanaSwap.jsx');
+    render(
+      <MemoryRouter initialEntries={['/solana']}>
+        <SolanaSwap />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByTestId('solana-token-from'));
+    fireEvent.click(await screen.findByTestId('test-discovery-import'));
+    await waitFor(() => {
+      expect(screen.getByTestId('solana-token-from').textContent).toContain('BONK');
+      expect(screen.getByTestId('solana-token-to').textContent).toContain('USDC');
     });
   });
 });

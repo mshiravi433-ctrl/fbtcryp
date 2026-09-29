@@ -21,6 +21,7 @@ import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts } from '../lib/priceAlerts';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
+import { getCoinVenues, venueRoute } from '../lib/coinVenue';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
 
@@ -229,6 +230,55 @@ export default function Market() {
     return (remoteHits ?? []).filter((c) => !have.has(c.id));
   }, [remoteHits, list, query, sector]);
 
+  /*
+   * The hand-curated swap list stays the instant/offline path. For visible
+   * non-curated rows, resolve CoinGecko's exact platform addresses in one
+   * same-origin batch, in the background. This is keyed by CoinGecko id, not
+   * ticker; the swap button only appears when an actual supported-chain
+   * address can be routed to the real swap screen.
+   */
+  const [venueById, setVenueById] = useState({});
+  const venueLookupIds = useMemo(() => [...new Set([
+    ...(list ?? []).slice(0, visibleCount).map((coin) => coin.id),
+    ...extraHits.map((coin) => coin.id)
+  ])], [list, visibleCount, extraHits]);
+  useEffect(() => {
+    if (!venueLookupIds.length) return undefined;
+    let alive = true;
+    const timer = setTimeout(() => {
+      getCoinVenues(venueLookupIds)
+        .then((venues) => {
+          if (!alive) return;
+          setVenueById((previous) => {
+            let changed = false;
+            const next = { ...previous };
+            for (const [id, venue] of venues) {
+              if (next[id] !== venue) {
+                next[id] = venue;
+                changed = true;
+              }
+            }
+            return changed ? next : previous;
+          });
+        })
+        .catch(() => {});
+    }, 500);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [venueLookupIds]);
+
+  const swapActionForCoin = (coin) => {
+    const curated = isSwappable(coin.id) ? swapUrlFor(coin.id, 'buy') : null;
+    if (curated) return { href: curated, kind: 'curated' };
+    const venue = venueById[coin.id];
+    if (!venue?.tradeable) return null;
+    const route = venueRoute(venue, { side: 'buy' });
+    return route?.href ? { href: route.href, kind: 'resolved' } : null;
+  };
+
+  const openCoin = (coin) => {
+    navigate(`/coin/${coin.id}`, { state: { coin } });
+  };
+
   const hero = coins?.[0];
   /*
    * The 7-day shape of the total, built from the rows already in memory —
@@ -346,7 +396,7 @@ export default function Market() {
           variants={riseIn}
           initial="hidden"
           animate="show"
-          onClick={() => navigate(`/coin/${hero.id}`)}
+          onClick={() => openCoin(hero)}
           style={{ cursor: 'pointer' }}
         >
           <div className="row-between">
@@ -384,7 +434,7 @@ export default function Market() {
                 key={c.id}
                 className="tag"
                 whileTap={{ scale: 0.94 }}
-                onClick={() => navigate(`/coin/${c.id}`)}
+                onClick={() => openCoin(c)}
               >
                 <CoinLogo
                   coin={c}
@@ -470,29 +520,23 @@ export default function Market() {
         ) : (
           <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
             {list.slice(0, visibleCount).map((c, i) => {
-              const swappable = isSwappable(c.id);
-              const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
+              const swapAction = swapActionForCoin(c);
               return (
                 <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <CoinRow coin={c} rank={c.rank || i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
-                    <div className="market-row-stats mono" aria-label={`${t('market.volume24h')}: ${c.volume ?? '—'}`}>
-                      <span>{t('market.volume24h')}: {c.volume != null && c.volume > 0 ? fmtCompact(c.volume) : '—'}</span>
-                      <span>{t('market.low24h')}: {c.low24h != null && c.low24h > 0 ? fmtUsd(c.low24h) : '—'}</span>
-                      <span>{t('market.high24h')}: {c.high24h != null && c.high24h > 0 ? fmtUsd(c.high24h) : '—'}</span>
-                    </div>
+                    <CoinRow coin={c} rank={c.rank || i + 1} onClick={() => openCoin(c)} />
                   </div>
-                  {swappable && swapUrl && (
+                  {swapAction && (
                     <button
                       className="tag"
                       style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(swapUrl);
+                        navigate(swapAction.href);
                       }}
-                      title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
+                      title={t(swapAction.kind === 'curated' ? 'market.swapOnCorrectNetwork' : 'market.checkRouteOnCorrectNetwork', { symbol: c.symbol })}
                     >
-                      {t('market.swap')}
+                      {t(swapAction.kind === 'curated' ? 'market.swap' : 'market.checkRoute')}
                     </button>
                   )}
                 </div>
@@ -509,13 +553,12 @@ export default function Market() {
               <>
                 <p className="section-label" style={{ marginTop: 8 }}>{t('market.moreResults')}</p>
                 {extraHits.map((c) => {
-                  const swappable = isSwappable(c.id);
-                  const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
+                  const swapAction = swapActionForCoin(c);
                   return (
                     <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
                       <button
                         className="coin-row"
-                        onClick={() => navigate(`/coin/${c.id}`)}
+                        onClick={() => openCoin(c)}
                         style={{ flex: 1, minWidth: 0, textAlign: 'start' }}
                       >
                         <CoinLogo coin={c} />
@@ -525,13 +568,14 @@ export default function Market() {
                         </div>
                         {c.rank > 0 && <span className="faint mono" style={{ fontSize: 11 }}>#{c.rank}</span>}
                       </button>
-                      {swappable && swapUrl && (
+                      {swapAction && (
                         <button
                           className="tag"
                           style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
-                          onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
+                          onClick={(e) => { e.stopPropagation(); navigate(swapAction.href); }}
+                          title={t(swapAction.kind === 'curated' ? 'market.swapOnCorrectNetwork' : 'market.checkRouteOnCorrectNetwork', { symbol: c.symbol })}
                         >
-                          {t('market.swap')}
+                          {t(swapAction.kind === 'curated' ? 'market.swap' : 'market.checkRoute')}
                         </button>
                       )}
                     </div>
