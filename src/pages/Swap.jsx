@@ -1194,11 +1194,22 @@ export default function Swap() {
       }
 
       if (ok) {
-        // Candidate locator only: the chat verifies the wallet's sender, both
-        // ERC-20 Transfer events, chain, input amount and block time from its
-        // own provider. Native outputs cannot be proven by those logs and
-        // deliberately stay unconfirmed in a staged strategy.
-        if (fromToken?.symbol === 'USDC' && toToken?.address && !toToken.native) {
+        /*
+         * Candidate locator only: the chat verifies the wallet's sender, the
+         * USDC Transfer, the delivered amount, chain, input amount and block
+         * time from its own provider.
+         *
+         * NATIVE OUTPUTS ARE INCLUDED NOW. The gate used to require a token
+         * contract address, so a staged plan that buys the chain's own coin
+         * («۱۰۰۰ دلار، ۲۰٪ در ۲۰ روز» on Base) never wrote a locator — and the
+         * chat, having nothing to look up, could only ask the user whether the
+         * swap had happened. That is the reported loop: the user returns from a
+         * completed swap and the same question is there again. The verifier
+         * proves a native output from the balance the chain reports at the
+         * settlement block (see verifyStrategySwap), so the locator is worth
+         * writing for it too.
+         */
+        if (fromToken?.symbol === 'USDC' && toToken?.symbol) {
           recordStrategyReceiptHint({
             strategyId: searchParams.get('strategyId'),
             stageId: searchParams.get('stageId'),

@@ -29,7 +29,19 @@ const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLower
 
 function findAction(record, stageId, actionIndex) {
   const stage = record?.strategy?.stages?.find((s) => s.id === stageId);
-  if (!stage?.movesFunds || record?.runtime?.stageProgress?.[stageId]?.state !== 'RUNNING') return null;
+  const state = record?.runtime?.stageProgress?.[stageId]?.state;
+  /*
+   * CONFIRMED counts as «was handed off», and it is not a relaxation.
+   *
+   * A saved CONFIRMED money stage is deliberately demoted to RUNNING in memory
+   * on every reload so the provider re-verifies it before anything else trusts
+   * it — but at that moment the STORE still says CONFIRMED, and the old check
+   * accepted only RUNNING. Reconciliation therefore refused its own re-check
+   * with RUNNING_STAGE_AND_WALLET_REQUIRED, and the stage could never be
+   * re-proved. CONFIRMED implies the hand-off happened (that is how it got
+   * there), so it is the stronger of the two facts, never the weaker.
+   */
+  if (!stage?.movesFunds || (state !== 'RUNNING' && state !== 'CONFIRMED')) return null;
   const action = stage.actions?.[actionIndex];
   return action?.requiresSignature ? action : null;
 }
@@ -46,9 +58,23 @@ export function strategyActionRoute(action, { strategyId, stageId, actionIndex }
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-/** Only the swap screen's curated USDC→ERC-20 route is reconcilable from
- * standard logs. Native-coin output, cross-chain swaps, unlisted addresses
- * and arbitrary stock/forex links have no token Transfer to prove acquisition. */
+/**
+ * The swap screen's curated USDC→token route, reconciled from the chain.
+ *
+ * A NATIVE output (ETH on Base/Arbitrum/OP, BNB on BSC…) is included, and the
+ * reason is the report behind this fix: «۱۰۰۰ دلار، ۲۰٪ در ۲۰ روز» compiles to
+ * a single BUY of a native coin on Base. With native outputs excluded, that
+ * plan's only money stage was permanently unreconcilable — the card said
+ * «مرحله آغاز نشد» and the whole plan stopped after preflight, which reads to
+ * the user as "the stages never run".
+ *
+ * A native output has no ERC-20 Transfer to read, so its acquisition is proven
+ * differently (see verifyStrategySwap): the successful transaction from this
+ * wallet must debit the exact planned USDC amount AND raise the wallet's native
+ * balance inside the block it settled in. Cross-chain swaps, unlisted
+ * addresses and arbitrary stock/forex links still have no such proof and stay
+ * unreconcilable on purpose.
+ */
 function swapSpec(action) {
   if (action?.capabilityId !== 'swap.quote' || action?.operation !== 'BUY'
     || !action?.route?.startsWith('/swap?')) return null;
@@ -63,7 +89,10 @@ function swapSpec(action) {
     || (route.searchParams.has('amount') && Number(route.searchParams.get('amount')) !== Number(action.params.amountUsd))) return null;
   const tokens = TOKENS[chainId] || [];
   const usdc = tokens.find((t) => t.symbol === 'USDC' && ADDRESS.test(t.address || '') && !t.native);
-  const bought = tokens.find((t) => t.symbol.toUpperCase() === target && ADDRESS.test(t.address || '') && !t.native);
+  const listed = tokens.find((t) => t.symbol.toUpperCase() === target);
+  const bought = listed && (listed.native
+    ? { symbol: listed.symbol.toUpperCase(), native: true, decimals: Number(listed.decimals) || 18 }
+    : (ADDRESS.test(listed.address || '') ? listed : null));
   return usdc && bought ? { chainId, usdc, bought } : null;
 }
 
@@ -96,6 +125,22 @@ function readHints(store) {
     const parsed = JSON.parse(store?.getItem(STRATEGY_RECEIPT_HINTS_KEY) || '[]');
     return Array.isArray(parsed) ? parsed.slice(-24) : [];
   } catch { return []; }
+}
+
+/**
+ * Does a stage hold a transaction candidate to LOOK UP?
+ *
+ * The venue writes one hint per successful signature, so a hint means "a
+ * transaction for this stage may exist"; no hint means the user has not been
+ * through the venue yet. The return turn uses that difference to decide
+ * whether to reconcile against the chain or to ask the user what happened —
+ * asking someone who never left is noise, and reconciling a stage nobody
+ * touched can only fail. A hint is never evidence: the read provider still
+ * has to verify it.
+ */
+export function hasStrategyReceiptHint({ strategyId, stageId, store = defaultStorage() } = {}) {
+  if (!strategyId || !stageId) return false;
+  return readHints(store).some((r) => r.strategyId === strategyId && r.stageId === stageId);
 }
 
 /** Write ONLY after the venue got a successful receipt. This remains an
@@ -237,11 +282,35 @@ export async function verifyStrategySwap({ action, txHash, owner, provider, star
         const decoded = ERC20_EVENTS.parseLog(log);
         if (decoded?.name !== 'Transfer') continue;
         if (same(log.address, spec.usdc.address) && same(decoded.args.from, owner)) paidWei += decoded.args.value;
-        if (same(log.address, spec.bought.address) && same(decoded.args.to, owner)) acquiredWei += decoded.args.value;
+        if (!spec.bought.native && same(log.address, spec.bought.address) && same(decoded.args.to, owner)) {
+          acquiredWei += decoded.args.value;
+        }
       } catch { /* another event from a token contract */ }
     }
     if (!matchingAmount(paidWei, action.params.amountUsd, spec.usdc.decimals)) {
       return { ok: false, code: 'SWAP_INPUT_MISMATCH' };
+    }
+    if (spec.bought.native) {
+      /*
+       * No Transfer event exists for a chain's own coin, so acquisition is read
+       * from the balance the chain itself reports: the wallet's native balance
+       * at the settlement block minus the block before it. A router that paid
+       * this wallet inside that transaction makes the delta positive; a swap
+       * that only took the USDC (or sent the output elsewhere) does not. Both
+       * reads are pinned to a historical block, so a later deposit cannot
+       * retroactively satisfy an earlier stage.
+       */
+      if (typeof provider.getBalance !== 'function' || !Number.isInteger(Number(receipt.blockNumber)) || Number(receipt.blockNumber) < 1) {
+        return { ok: false, code: 'NATIVE_BLOCK_UNAVAILABLE' };
+      }
+      const block = Number(receipt.blockNumber);
+      const [before, after] = await Promise.all([
+        provider.getBalance(owner, block - 1),
+        provider.getBalance(owner, block)
+      ]);
+      const delta = BigInt(after) - BigInt(before);
+      if (delta <= 0n) return { ok: false, code: 'SWAP_OUTPUT_MISSING' };
+      acquiredWei = delta;
     }
     if (acquiredWei <= 0n) return { ok: false, code: 'SWAP_OUTPUT_MISSING' };
     const time = await checkStageBlock(provider, receipt, startedAt);
@@ -250,8 +319,11 @@ export async function verifyStrategySwap({ action, txHash, owner, provider, star
       txHash: txHash.toLowerCase(), chainId: spec.chainId, blockNumber: Number(receipt.blockNumber),
       asset: spec.bought.symbol, amountWei: String(paidWei), acquiredWei: String(acquiredWei),
       wallet: owner.toLowerCase() };
-  } catch {
-    return { ok: false, code: 'PROVIDER_UNAVAILABLE' };
+  } catch (err) {
+    /* Named, not swallowed: «the transaction is not there» and «I could not
+       look» are different answers, and the user's next step depends on which
+       one it is. */
+    return { ok: false, code: 'PROVIDER_UNAVAILABLE', detail: String(err?.message || err).slice(0, 120) };
   }
 }
 
@@ -296,9 +368,13 @@ export async function reconcileStrategyReceipts({ strategy, stageId, owner, getP
       const provider = await getProvider(chainId);
       const verify = support === 'erc20-swap' ? verifyStrategySwap : verifyAaveStrategySupply;
       proof = await verify({ action, txHash: hint.txHash, owner, provider, startedAt });
-    } catch { proof = { ok: false, code: 'PROVIDER_UNAVAILABLE' }; }
+    } catch (err) {
+      proof = { ok: false, code: 'PROVIDER_UNAVAILABLE', detail: String(err?.message || err).slice(0, 120) };
+    }
     if (proof.ok) proofs.push(proof);
-    else missing.push({ actionIndex: index, code: proof.code });
+    /* The verifier's own reason travels with the gap: «provider unreachable»
+       and «no matching Transfer» are different answers. */
+    else missing.push({ actionIndex: index, code: proof.code, ...(proof.detail ? { detail: proof.detail } : {}) });
   }
   if (missing.length) return { ok: false, code: 'AWAITING_VERIFIED_RECEIPTS',
     verifiedCount: proofs.length, requiredCount: signed.length, missing };

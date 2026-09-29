@@ -84,8 +84,17 @@ describe('strategy venue receipt reconciliation', () => {
     expect(strategyReceiptSupport({ ...base, route: base.route.replace('amount=250', 'amount=2500') })).toBeNull();
     expect(strategyReceiptSupport(swap)).toBe('erc20-swap');
     expect(strategyReceiptSupport({ ...swap, route: swap.route.replace('amount=250', 'amount=2500') })).toBeNull();
+    /*
+     * A NATIVE OUTPUT IS SUPPORTED (the fix behind «۱۰۰۰ دلار، ۲۰٪ در ۲۰ روز»:
+     * that plan's only money stage buys the chain's own coin). The token
+     * registry decides — ETH on Ethereum/Base is a listed native coin, so the
+     * reconciler must be able to prove it from the balance at the settlement
+     * block. A symbol with no curated token on that chain stays unsupported.
+     */
     expect(strategyReceiptSupport({ ...swap, route: swap.route.replace('LINK', 'ETH'),
-      params: { ...swap.params, asset: 'ETH' } })).toBeNull();
+      params: { ...swap.params, asset: 'ETH' } })).toBe('erc20-swap');
+    expect(strategyReceiptSupport({ ...swap, route: swap.route.replace('LINK', 'PEPE'),
+      params: { ...swap.params, asset: 'PEPE' } })).toBeNull();
     expect(strategyReceiptSupport({ ...base, capabilityId: 'bridge.quote', route: '/bridge' })).toBeNull();
   });
 
@@ -147,8 +156,32 @@ describe('strategy venue receipt reconciliation', () => {
     expect((await check(makeSwapProvider({ acquired: 0n }))).code).toBe('SWAP_OUTPUT_MISSING');
     expect((await check(makeSwapProvider({ from: '0x2222222222222222222222222222222222222222' }))).ok).toBe(false);
     expect((await check(makeSwapProvider({ chainId: 8453 }))).ok).toBe(false);
-    expect((await check(makeSwapProvider(), { ...swap, route: swap.route.replace('LINK', 'ETH'),
-      params: { ...swap.params, asset: 'ETH' } })).code).toBe('UNSUPPORTED_ACTION');
+    /*
+     * A native output has no ERC-20 Transfer, so its acquisition is read from
+     * the chain itself: the wallet's balance at the settlement block minus the
+     * block before it. A provider that cannot answer historical balances must
+     * refuse honestly rather than infer the result, and a provider that shows
+     * the coin arriving proves the acquisition.
+     */
+    const ethAction = { ...swap, route: swap.route.replace('LINK', 'ETH'),
+      params: { ...swap.params, asset: 'ETH' } };
+    expect((await check(makeSwapProvider(), ethAction)).code).toBe('NATIVE_BLOCK_UNAVAILABLE');
+    const nativeProvider = (before, after) => ({
+      getNetwork: async () => ({ chainId: 1n }),
+      getTransaction: async () => ({ hash: hash('c'), from: owner, to: '0x3333333333333333333333333333333333333333', data: '0xaabbccdd' }),
+      getTransactionReceipt: async () => ({ status: 1, hash: hash('c'), blockNumber: 5300, from: owner,
+        to: '0x3333333333333333333333333333333333333333',
+        logs: [{ address: TOKENS[1].find((t) => t.symbol === 'USDC').address,
+          ...transfer.encodeEventLog(transfer.getEvent('Transfer'),
+            [owner, '0x3333333333333333333333333333333333333333', parseUnits('250', 6)]) }] }),
+      getBalance: async (_addr, block) => (block >= 5300 ? after : before),
+      getBlock: async () => ({ timestamp: Math.floor(Date.now() / 1000) })
+    });
+    /* Nothing arrived in the block the transaction settled in: not a delivery. */
+    expect((await check(nativeProvider(100n, 100n), ethAction)).code).toBe('SWAP_OUTPUT_MISSING');
+    /* 0.08 ETH appeared in exactly that block: proven, and the amount travels. */
+    expect(await check(nativeProvider(100n, 100n + parseUnits('0.08', 18)), ethAction))
+      .toMatchObject({ ok: true, asset: 'ETH', acquiredWei: String(parseUnits('0.08', 18)) });
   });
 
   it('records the swap only under its planned output and re-reads real logs after return', async () => {
@@ -220,20 +253,36 @@ describe('strategy venue receipt reconciliation', () => {
       stageId: 'deploy-yield', owner, store, getProvider: async () => makeProvider() });
     const before = await read();
     const resumed = createStrategyRuntime(hydrateRuntimeArgs(loadStrategyPlan(plan.strategyId, { store })));
-    expect(resumed.nextStage().stage.id).toBe('preflight');
-    resumed.advance();
-    expect(resumed.confirmStage('preflight', { receipt: { ok: true, kind: 'fresh-check' } }).ok).toBe(true);
+    /*
+     * THE STAGE IN FLIGHT IS SETTLED FIRST, AND THAT ORDER IS LOad-BEARING.
+     *
+     * The preflight is re-opened on every reload (below, and kept: localStorage
+     * is not evidence), but a money stage that was handed off must be resolved
+     * BEFORE anything else — `confirmStage` only accepts the stage `nextStage()`
+     * names, so reporting the freshly re-opened preflight here made the pending
+     * transaction impossible to settle. The user returned from a completed swap
+     * to watch the plan start over, which is the reported «مرحله جلو نمی‌ره».
+     */
     expect(resumed.nextStage()).toMatchObject({ ok: false, code: 'AWAITING_RECEIPT', stageId: 'deploy-yield' });
     saveStrategyPlan({ strategy: plan, runtime: resumed.state(), store });
     const checked = await read();
     expect(checked.ok).toBe(true);
     expect(resumed.confirmStage('deploy-yield', { receipt: checked.receipt }).ok).toBe(true);
+    /* …and the preflight is STILL re-checked, right after the in-flight stage. */
+    expect(resumed.nextStage().stage.id).toBe('preflight');
+    resumed.advance();
+    expect(resumed.confirmStage('preflight', { receipt: { ok: true, kind: 'fresh-check' } }).ok).toBe(true);
     saveStrategyPlan({ strategy: plan, runtime: resumed.state(), store });
     const secondReload = createStrategyRuntime(hydrateRuntimeArgs(loadStrategyPlan(plan.strategyId, { store })));
-    expect(secondReload.nextStage().stage.id).toBe('preflight');
-    secondReload.advance();
-    secondReload.confirmStage('preflight', { receipt: { ok: true, kind: 'fresh-check' } });
+    /* The saved CONFIRMED money stage is demoted to RUNNING so the provider can
+       re-verify it — and, being a money stage with a signature behind it, it is
+       what the runtime reports next. */
     expect(secondReload.nextStage()).toMatchObject({ ok: false, code: 'AWAITING_RECEIPT', stageId: 'deploy-yield' });
+    const rechecked = await read();
+    expect(rechecked.ok, JSON.stringify(rechecked)).toBe(true);
+    expect(secondReload.confirmStage('deploy-yield', { receipt: rechecked.receipt }).ok).toBe(true);
+    /* …and only then is the preflight re-opened for a fresh wallet read. */
+    expect(secondReload.nextStage().stage.id).toBe('preflight');
     expect(before.ok).toBe(true);
   });
 });
