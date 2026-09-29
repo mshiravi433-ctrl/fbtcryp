@@ -5,19 +5,22 @@
  * and — crucially — keeps the CoinGecko / Kraken keys server-side. The browser
  * never sees an API key.
  *
- * If the backend is unreachable (e.g. you opened `npm run dev` without the
- * server), we degrade to the public CoinGecko endpoints and finally to a
- * deterministic offline dataset so the UI is never a blank screen.
+ * If the backend is unreachable, the client tries public CoinGecko, then the
+ * independent public CoinLore ticker feed for USD markets, and finally a
+ * deterministic offline dataset. Offline prices are visibly labelled.
  */
 
 import { offlineGlobal, offlineMarkets, offlineTrending, offlineChart } from './offlineData';
 import { apiBase } from './apiBase';
+import { normalizeCoinLoreMarket } from './coinLore';
 
 // `apiBase()` is deliberately resolved at request time. In the Capacitor
 // shell the page origin is https://localhost, so a relative `/api` would hit
 // the WebView's asset server instead of the deployed backend. The helper also
 // keeps the ordinary browser same-origin path unchanged.
 const PUBLIC_CG = 'https://api.coingecko.com/api/v3';
+const PUBLIC_COINLORE = 'https://api.coinlore.net/api';
+const COINLORE_MAX_PAGE_SIZE = 100;
 
 const memo = new Map();
 
@@ -77,7 +80,7 @@ async function fetchJson(url, { timeout = 12000, withMeta = false } = {}) {
  */
 const EMPTY_TTL_MS = 4000;
 
-/** Try the backend, then the public API, then the offline snapshot. */
+/** Try our backend, then live public providers, then the offline snapshot. */
 async function resilient(key, { backend, direct, fallback, ttl = 30000 }) {
   const cached = memo.get(key);
   if (cached) {
@@ -197,11 +200,30 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
       return withProvenance(data, stale ? 'stale' : 'live');
     },
     direct: async () => {
-      const raw = await fetchJson(
-        `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&order=market_cap_desc&per_page=${perPage}` +
-          `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`
-      );
-      return withProvenance(raw.map(normalizeCoin), 'live');
+      let coinGeckoError;
+      try {
+        const raw = await fetchJson(
+          `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&order=market_cap_desc&per_page=${perPage}` +
+            `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`
+        );
+        if (Array.isArray(raw) && raw.length) {
+          return withProvenance(raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' })), 'live');
+        }
+        coinGeckoError = new Error('CoinGecko returned no market rows');
+      } catch (err) {
+        coinGeckoError = err;
+      }
+
+      // CoinLore quotes USD only; do not mislabel dollars for a legacy currency.
+      if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
+      const requestedPerPage = Math.max(1, Math.min(250, Math.floor(Number(perPage) || 50)));
+      const limit = Math.min(COINLORE_MAX_PAGE_SIZE, requestedPerPage);
+      const start = (Math.max(1, Math.floor(Number(page) || 1)) - 1) * requestedPerPage;
+      const raw = await fetchJson(`${PUBLIC_COINLORE}/tickers/?start=${start}&limit=${limit}`);
+      if (!Array.isArray(raw?.data)) throw coinGeckoError;
+      const rows = raw.data.map(normalizeCoinLoreMarket).filter(Boolean);
+      if (raw.data.length && !rows.length) throw coinGeckoError;
+      return withProvenance(rows, 'live');
     },
     // The deterministic snapshot keeps the ordinary market screen useful
     // offline, but the Intelligence tab must never relabel it as a live fact.
@@ -323,42 +345,55 @@ export function getCoin(id, vs = 'usd') {
     ttl: 30000,
     backend: () => fetchJson(`${apiBase()}/coin/${encodeURIComponent(id)}`),
     direct: async () => {
-      // The markets endpoint gives us sparkline + 1h/7d changes in one call,
-      // which is exactly the shape the detail screen renders.
-      const rows = await fetchJson(
-        `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&ids=${encodeURIComponent(id)}` +
-          `&sparkline=true&price_change_percentage=1h,24h,7d`
-      );
-      if (Array.isArray(rows) && rows[0]) return normalizeCoin(rows[0]);
+      let coinGeckoError;
+      try {
+        // The markets endpoint gives us sparkline + 1h/7d changes in one call,
+        // which is exactly the shape the detail screen renders.
+        const rows = await fetchJson(
+          `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&ids=${encodeURIComponent(id)}` +
+            `&sparkline=true&price_change_percentage=1h,24h,7d`
+        );
+        if (Array.isArray(rows) && rows[0]) return { ...normalizeCoin(rows[0]), marketProvider: 'coingecko' };
 
-      // Some ids only resolve on the detail endpoint (delisted, or an id that
-      // came from /search rather than /markets).
-      const raw = await fetchJson(
-        `${PUBLIC_CG}/coins/${encodeURIComponent(id)}?localization=false&tickers=false` +
-          `&market_data=true&community_data=false&developer_data=false`
-      );
-      const md = raw.market_data ?? {};
-      return {
-        id: raw.id,
-        symbol: (raw.symbol || '').toUpperCase(),
-        name: raw.name,
-        image: raw.image?.large ?? raw.image?.small,
-        price: md.current_price?.[vs] ?? 0,
-        change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
-        change24h: md.price_change_percentage_24h ?? null,
-        change7d: md.price_change_percentage_7d ?? 0,
-        mcap: md.market_cap?.[vs] ?? 0,
-        volume: md.total_volume?.[vs] ?? 0,
-        rank: raw.market_cap_rank ?? 0,
-        high24h: md.high_24h?.[vs] ?? 0,
-        low24h: md.low_24h?.[vs] ?? 0,
-        ath: md.ath?.[vs] ?? 0,
-        athChange: md.ath_change_percentage?.[vs] ?? 0,
-        supply: md.circulating_supply ?? 0,
-        description: raw.description?.en?.slice(0, 700) || '',
-        homepage: raw.links?.homepage?.[0] || null,
-        sparkline: md.sparkline_7d?.price ?? []
-      };
+        // Some ids only resolve on the detail endpoint (delisted, or an id that
+        // came from /search rather than /markets).
+        const raw = await fetchJson(
+          `${PUBLIC_CG}/coins/${encodeURIComponent(id)}?localization=false&tickers=false` +
+            `&market_data=true&community_data=false&developer_data=false`
+        );
+        const md = raw.market_data ?? {};
+        return {
+          id: raw.id,
+          symbol: (raw.symbol || '').toUpperCase(),
+          name: raw.name,
+          image: raw.image?.large ?? raw.image?.small,
+          price: md.current_price?.[vs] ?? 0,
+          change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
+          change24h: md.price_change_percentage_24h ?? null,
+          change7d: md.price_change_percentage_7d ?? 0,
+          mcap: md.market_cap?.[vs] ?? 0,
+          volume: md.total_volume?.[vs] ?? 0,
+          rank: raw.market_cap_rank ?? 0,
+          high24h: md.high_24h?.[vs] ?? 0,
+          low24h: md.low_24h?.[vs] ?? 0,
+          ath: md.ath?.[vs] ?? 0,
+          athChange: md.ath_change_percentage?.[vs] ?? 0,
+          supply: md.circulating_supply ?? 0,
+          description: raw.description?.en?.slice(0, 700) || '',
+          homepage: raw.links?.homepage?.[0] || null,
+          sparkline: md.sparkline_7d?.price ?? [],
+          marketProvider: 'coingecko'
+        };
+      } catch (err) {
+        coinGeckoError = err;
+      }
+
+      if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
+      const raw = await fetchJson(`${PUBLIC_COINLORE}/tickers/?start=0&limit=${COINLORE_MAX_PAGE_SIZE}`);
+      if (!Array.isArray(raw?.data)) throw coinGeckoError;
+      const coin = raw.data.map(normalizeCoinLoreMarket).find((row) => row?.id === id);
+      if (!coin) throw coinGeckoError;
+      return { ...coin, description: '', homepage: null };
     },
     fallback: () => offlineMarkets(250).find((c) => c.id === id) ?? null
   });

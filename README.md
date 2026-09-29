@@ -378,11 +378,12 @@ real names are the single most common way people get drained.
 ### Data flow
 
 Every request goes to your own `/api` first, so the CoinGecko key never
-reaches the browser and the TTL cache absorbs the free tier's rate limit. If
-the backend is down the client falls back to public CoinGecko; if that also
-fails it renders a deterministic offline snapshot and shows an
-"offline data" banner. The server behaves the same way — a failed upstream
-serves the last good cached copy rather than a 500.
+reaches the browser and the TTL cache absorbs the free tier's rate limit. For
+USD spot markets, the server and client try CoinGecko first and then the
+independent live CoinLore ticker feed. Only if both live providers fail does
+the app render a deterministic offline snapshot and show the "offline data"
+banner. Historical charts remain CoinGecko-only. The server also serves a
+last-good cache when an upstream refresh fails.
 
 ### Design system
 
