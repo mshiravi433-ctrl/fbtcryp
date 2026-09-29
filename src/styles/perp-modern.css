@@ -465,10 +465,21 @@
    without the rail becoming three loud buttons. */
 .perp-rail-tab.is-active {
   color: var(--text-1);
+}
+/*
+ * The active cell is carried by the shared SegIndicator pill now, so the
+ * highlight slides between venues exactly like every other tab control in
+ * the app (and appears instantly on native / reduced-motion, where the
+ * shared component already drops the slide). The pill paints at z-index -1
+ * inside the button's isolated stacking context, and the icon + label sit
+ * above it.
+ */
+.perp-rail-tab .seg-indicator {
+  border-radius: 12px;
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--rgb-1) 16%, transparent),
-    color-mix(in srgb, var(--rgb-2) 12%, transparent)
+    color-mix(in srgb, var(--rgb-1) 26%, transparent),
+    color-mix(in srgb, var(--rgb-2) 20%, transparent)
   );
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rgb-1) 34%, transparent),
     0 8px 20px -14px color-mix(in srgb, var(--rgb-1) 80%, transparent);
@@ -477,6 +488,14 @@
   background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
   color: #04121a;
   box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--rgb-1) 85%, transparent);
+}
+:root[data-theme='light'] .perp-rail-tab .seg-indicator {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 229, 255, 0.20),
+    rgba(124, 92, 255, 0.16)
+  );
+  box-shadow: inset 0 0 0 1px rgba(0, 150, 180, 0.28);
 }
 
 /* ─────────────────────────── PREDICT CTA ──────────────────────────────── */
@@ -585,6 +604,345 @@
 :dir(rtl) .perp-cta-arrow svg { transform: scaleX(-1); }
 :dir(rtl) .perp-cta:hover .perp-cta-arrow { transform: translateX(-2px); }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE PAIR-TRADING TERMINAL
+   Requested: the perpetual tab becomes a live, exchange-grade pair terminal
+   («ترمینال معاملاتی جفت‌توکنی») instead of comparison charts plus outbound
+   links. Scope rules unchanged: everything sits under `.perp-modern`, logical
+   properties only (Persian-first RTL), dark glass by default.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── the pair strip ──────────────────────────────────────────────────────── */
+/*
+ * Each pair is a small glass card, not a bare pill: icon + symbol on top,
+ * live dollar price, 24h change, and a 7-day sparkline. The `.tag` base is
+ * kept (it is the app's scrolling-chip idiom) and restyled from here with a
+ * higher-specificity selector so the strip cannot inherit the pill's active
+ * gradient — the active pair is marked by a neon border instead, which stays
+ * legible over the price content.
+ */
+.perp-modern .perp-pairs {
+  gap: 8px;
+  padding-block: 2px;
+}
+.perp-modern .tag.perp-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 128px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--perp-accent-a) 4%, transparent), transparent 60%),
+    var(--bg-panel);
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.perp-modern .tag.perp-pair:active { transform: scale(0.97); }
+.perp-modern .tag.perp-pair.active {
+  border-color: color-mix(in srgb, var(--perp-accent-a) 55%, transparent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--perp-accent-a) 12%, transparent), transparent 62%),
+    var(--bg-panel);
+  box-shadow: 0 10px 26px -16px color-mix(in srgb, var(--perp-accent-a) 85%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--perp-accent-a) 22%, transparent);
+}
+.perp-pair-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.perp-pair-sym {
+  font-weight: 800;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+.perp-pair-price {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.perp-pair-chg {
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.perp-pair-chg.up { color: var(--up); }
+.perp-pair-chg.down { color: var(--down); }
+.perp-pair-spark {
+  display: block;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 4px;
+  opacity: 0.9;
+}
+.perp-pair-spark svg { display: block; width: 58px; height: 16px; }
+.perp-pair-nodata {
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.perp-pair-skel {
+  height: 34px;
+  border-radius: 8px;
+}
+
+/* ── the two-column terminal on wide screens ─────────────────────────────── */
+/*
+ * On a phone the terminal is one honest stack. From the app's desktop
+ * breakpoint it becomes what a pair terminal is everywhere else: the chart
+ * on one side, the ticket on the other, so sizing an order does not scroll
+ * the price out of view.
+ */
+.perp-desk-grid,
+.perp-desk-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+@media (min-width: 900px) {
+  .perp-modern .perp-desk-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* ── the chart card ──────────────────────────────────────────────────────── */
+.perp-modern .perp-chart {
+  border-radius: 20px;
+  padding: 12px;
+}
+/* The "no candles for this pair" state keeps the frame but drops the glow —
+   an unavailable chart must not look festive (same rule as the hero). */
+.perp-modern .perp-chart-none {
+  padding: 16px;
+  background: var(--bg-panel);
+}
+
+/* ── the order ticket ────────────────────────────────────────────────────── */
+/*
+ * The money card: glass over a soft accent bloom, with the shared
+ * dir-switch / lev-chip controls from derivatives-glass.css inside. The
+ * blur is a BROWSER nicety — native shells turn it off (bottom of this
+ * block) the same way .swap-ticket does, because a Capacitor WebView
+ * composites blur through the host GPU.
+ */
+.perp-modern .perp-ticket {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 16px;
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--perp-accent-a) 7%, transparent), transparent 45%),
+    color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.perp-modern .perp-ticket::before {
+  content: '';
+  position: absolute;
+  inset-block-end: -80px;
+  inset-inline-end: -60px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--perp-accent-b) 13%, transparent),
+    transparent 68%
+  );
+  pointer-events: none;
+}
+:root[data-native='true'] .perp-modern .perp-ticket {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--bg-panel);
+}
+.perp-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.perp-ticket-head .section-label { margin: 0; }
+.perp-ticket-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--perp-accent-a);
+  background: color-mix(in srgb, var(--perp-accent-a) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--perp-accent-a) 26%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.perp-ticket .dir-switch { margin-bottom: 12px; }
+
+.perp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block: 10px;
+}
+.perp-collateral-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.perp-collateral-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.perp-asset-chips {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+.perp-asset-chip {
+  border: 0;
+  border-radius: 9px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+.perp-asset-chip.active {
+  color: var(--perp-accent-a);
+  background: color-mix(in srgb, var(--perp-accent-a) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--perp-accent-a) 30%, transparent);
+}
+.perp-field-err {
+  color: var(--down);
+  font-size: 11px;
+  font-weight: 600;
+}
+.perp-lev-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.perp-lev-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--perp-accent-a);
+  font-variant-numeric: tabular-nums;
+}
+.perp-lev-slider {
+  accent-color: var(--rgb-1);
+}
+
+/* The live ticket math: size, entry, liquidation price and its distance. */
+.perp-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block-start: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
+  font-size: 12.5px;
+}
+.perp-summary-strong { font-weight: 800; }
+/* The liquidation price is coloured by the DIRECTION it hurts: a long dies
+   to the downside (red), a short dies to the upside. */
+.perp-liq-long { color: var(--down); }
+.perp-liq-short { color: var(--down); }
+.perp-liq-note {
+  margin: 8px 2px 0;
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+.perp-slip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+.perp-slip input {
+  width: 74px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.perp-submit {
+  width: 100%;
+  margin-block-start: 12px;
+  min-height: 46px;
+  font-size: 14px;
+}
+.perp-wallet-line {
+  margin: 8px 2px 0;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ── the fee breakdown card ──────────────────────────────────────────────── */
+.perp-modern .perp-fees {
+  border-radius: 20px;
+  padding: 15px;
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--perp-accent-b) 6%, transparent), transparent 55%),
+    var(--bg-panel);
+}
+.perp-fee-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12.5px;
+}
+.perp-fee-total {
+  border-top: 1px solid var(--line);
+  padding-block-start: 8px;
+  margin-block-start: 3px;
+}
+.perp-fee-note {
+  margin: 9px 2px 0;
+  font-size: 10.5px;
+  line-height: 1.8;
+}
+
+/* ── the review sheet's route card ───────────────────────────────────────── */
+/*
+ * The line that says WHERE the order executes and WHO earns the fee share.
+ * It is a card of its own because it is the one part of the ticket no
+ * exchange-style screen may bury in a tooltip.
+ */
+.perp-route {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+}
+.perp-route-ico {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--perp-accent-a);
+  background: color-mix(in srgb, var(--perp-accent-a) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--perp-accent-a) 26%, transparent);
+}
+
 /* ─────────────────────────── LIGHT THEME ──────────────────────────────── */
 /*
  * The variables already flip for light mode; what must not survive the flip
@@ -612,14 +970,50 @@
 :root[data-theme='light'] .perp-cta:hover {
   box-shadow: 0 14px 28px -18px rgba(15, 23, 42, 0.45);
 }
+/* Terminal pieces on the light canvas: the glows are re-tuned and the glass
+   leans on the theme variables rather than white alpha. */
+:root[data-theme='light'] .perp-modern .tag.perp-pair {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(13, 16, 32, 0.08);
+}
+:root[data-theme='light'] .perp-modern .tag.perp-pair.active {
+  border-color: rgba(0, 150, 180, 0.45);
+  background: linear-gradient(160deg, rgba(0, 229, 255, 0.10), rgba(255, 255, 255, 0.8));
+  box-shadow: 0 10px 22px -16px rgba(0, 150, 180, 0.5);
+}
+:root[data-theme='light'] .perp-modern .perp-ticket {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(13, 16, 32, 0.08);
+}
+:root[data-theme='light'] .perp-modern .perp-ticket::before {
+  background: radial-gradient(circle, rgba(0, 150, 180, 0.10), transparent 70%);
+}
+:root[data-theme='light'] .perp-modern .perp-fees {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(13, 16, 32, 0.08);
+}
+:root[data-theme='light'] .perp-modern .perp-summary {
+  background: rgba(13, 16, 32, 0.04);
+}
+:root[data-theme='light'] .perp-modern .perp-asset-chip.active {
+  color: #0369a1;
+  background: rgba(0, 229, 255, 0.14);
+}
+:root[data-theme='light'] .perp-modern .perp-lev-value,
+:root[data-theme='light'] .perp-modern .perp-ticket-pair,
+:root[data-theme='light'] .perp-modern .perp-route-ico {
+  color: #0369a1;
+}
 
 /* Reduced motion: the live dot and hover lifts are decoration, not signal. */
 @media (prefers-reduced-motion: reduce) {
   .perp-modern .perp-hero-live i { animation: none; }
   .perp-modern .perp-venue,
   .perp-modern .perp-venue-go,
+  .perp-modern .tag.perp-pair,
   .perp-cta,
   .perp-cta-arrow { transition: none; }
   .perp-modern .perp-venue:hover,
+  .perp-modern .tag.perp-pair:active,
   .perp-cta:hover { transform: none; }
 }
