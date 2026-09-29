@@ -1810,7 +1810,61 @@
       "p4": "Liquidation is automatic. If the market moves far enough against you, the position closes and the money is gone — there is no margin call and nobody to appeal to."
     },
     "venuesTitle": "Who runs these markets?",
-    "marketDataUnavailable": "Market data temporarily unavailable. No saved price is shown on a leverage screen."
+    "marketDataUnavailable": "Market data temporarily unavailable. No saved price is shown on a leverage screen.",
+    "marketDataUnavailableShort": "Market data unavailable",
+    "terminal": {
+      "pairsAria": "Choose a trading pair",
+      "ticketTitle": "Order ticket",
+      "long": "Long / up",
+      "longSub": "Buy — expecting the price to rise",
+      "short": "Short / down",
+      "shortSub": "Sell — expecting the price to fall",
+      "collateral": "Collateral (stablecoin USD)",
+      "collateralAsset": "Collateral stablecoin",
+      "minCollateral": "Minimum collateral is ${{min}}.",
+      "leverage": "Leverage",
+      "notional": "Position size (notional)",
+      "entry": "Entry price (index)",
+      "liqPrice": "Liquidation price",
+      "liqDistance": "Distance to liquidation",
+      "liqNote": "Conservative preview using the full-collateral model; the venue's real maintenance margin usually liquidates a little sooner. The final number is shown at review.",
+      "riskControls": "Risk controls: take profit, stop loss and slippage",
+      "takeProfit": "Take profit (optional)",
+      "stopLoss": "Stop loss (optional)",
+      "slippageLabel": "Max slippage: {{value}}%",
+      "slippageAria": "Maximum slippage",
+      "slippageNote": "This is the app-wide trading setting; it applies to every trading screen.",
+      "review": "Review & confirm trade",
+      "connect": "Connect wallet",
+      "connectedAs": "Wallet connected: {{address}}",
+      "walletHint": "Connect a wallet to place the trade — no capital is frozen.",
+      "chartPairUnavailable": "No in-app candle chart for this pair — nothing is drawn rather than a fake series. The live spot index above is real; the major pairs carry the live candle chart.",
+      "market": "Market",
+      "direction": "Direction",
+      "tpSl": "Take profit / stop loss",
+      "reviewTitle": "Review & confirm trade",
+      "reviewRisk": "This is a leveraged trade. Liquidation is automatic and the loss can be your entire collateral.",
+      "confirmInApp": "Confirm & build order",
+      "confirmAvantis": "Confirm & continue on Avantis",
+      "route": {
+        "inApp": "Execution route: the on-chain tab of this page. The order is rebuilt there with these exact numbers, fees and risk are re-checked by the backend, and signing happens only in your own wallet; the builder fee goes to FBT.",
+        "avantis": "Execution route: Avantis on Base with the registered referral code {{code}} — no capital lock-up, no KYC."
+      },
+      "fee": {
+        "title": "Transparent fee breakdown",
+        "protocol": "Protocol fee",
+        "protocolLater": "set at execution",
+        "network": "Network fee",
+        "networkLater": "estimated at review",
+        "fbt": "FBT fee share",
+        "fbtLater": "computed at review",
+        "total": "Total fees",
+        "totalLater": "final at review",
+        "treasury": "The FBT fee share of this trade is paid straight to the FBT treasury address ({{address}}) at execution.",
+        "discount": "This route carries the registered referral code {{code}}: you get a {{pct}}% fee discount and the referral share goes to FBT.",
+        "unavailable": "Live fee preview is unavailable right now — nothing is invented. You will see the final numbers at review."
+      }
+    }
   },
   "farm": {
     "title": "Farm",
@@ -3372,8 +3426,8 @@
       "hideAnalysis": "Hide",
       "window90": "Last {{days}} days",
       "noHistory": "No price history is available for this ticker.",
-      "noHistoryBody": "This token is not listed on CoinGecko, so there is no 90-day series to measure. Everything below \u2014 depth, holders, units for your amount \u2014 is live; the history is simply not there, and this panel does not invent one.",
-      "noHistoryShort": "A 90-day series could not be loaded for this ticker right now. Everything below \u2014 depth, holders, units for your amount \u2014 is live; the history is simply not available, and this panel does not invent one.",
+      "noHistoryBody": "This token is not listed on CoinGecko, so there is no 90-day series to measure. Everything below — depth, holders, units for your amount — is live; the history is simply not there, and this panel does not invent one.",
+      "noHistoryShort": "A 90-day series could not be loaded for this ticker right now. Everything below — depth, holders, units for your amount — is live; the history is simply not available, and this panel does not invent one.",
       "depthTitle": "Can you get out",
       "poolDepth": "Market depth",
       "yourShare": "Your share of it",
@@ -3381,7 +3435,7 @@
       "youWouldGet": "You would get"
     },
     "goldHistory": {
-      "historyTitle": "Gold \u2014 what the past says",
+      "historyTitle": "Gold — what the past says",
       "historySub": "{{days}} days, measured per token",
       "historyNote": "Each token is priced by a different issuer, so the three series are measured separately rather than averaged into one number.",
       "noHistoryOne": "No 90-day history available for this token."
@@ -4667,8 +4721,8 @@
     "full": "Fully translated",
     "proxy": {
       "title": "One thing before you start",
-      "body": "Most of what this app does \u2014 live prices, swaps, cross-chain bridges and the AI assistant \u2014 runs on servers outside your country. Turn on a proxy or VPN before you go on, so every part of it opens quickly and completely.",
-      "note": "Without one, some sections open slowly or not at all. That is the network, not the app \u2014 and it never puts your funds at risk.",
+      "body": "Most of what this app does — live prices, swaps, cross-chain bridges and the AI assistant — runs on servers outside your country. Turn on a proxy or VPN before you go on, so every part of it opens quickly and completely.",
+      "note": "Without one, some sections open slowly or not at all. That is the network, not the app — and it never puts your funds at risk.",
       "cta": "Got it"
     }
   },
@@ -10712,7 +10766,7 @@
       "relayHost": "the app's own relay",
       "serverHost": "the app’s own server",
       "serverTried": "The app’s own server was asked too, and it could not read the market either.",
-        "showMore": "Show {{n}} more"
+      "showMore": "Show {{n}} more"
     },
     "wallet": {
       "title": "The wallet did not open for signing",
@@ -10742,7 +10796,7 @@
     "simRevertRaw": "raw revert text"
   },
   "sm": {
-    "engine":     {
+    "engine": {
       "label": "VERIFIED ON-CHAIN INTELLIGENCE",
       "title": "Intelligence engine",
       "headline": "Follow the evidence. Not the size of a wallet.",

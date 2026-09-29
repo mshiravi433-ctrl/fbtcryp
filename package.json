@@ -113,6 +113,7 @@
     "test:fios:autonomy": "node test/fios/fios-autonomy-probe.mjs",
     "test:fios:intelligence": "node test/fios/fios-intelligence-probe.mjs",
     "test:fios:api": "node test/fios/fios-api-probe.mjs",
+    "test:perp": "vitest run test/perp-terminal.test.jsx",
     "test:futures": "node test/futures-engine-probe.mjs && node test/futures-bff-run.mjs && node test/futures-velocity-trade-probe.mjs",
     "test:futures-onchain": "node test/futures-onchain-run.mjs",
     "test:dydx-onboarding": "node test/dydx-onboarding-probe.mjs && node --test test/dydx-wallet-return.test.mjs",
