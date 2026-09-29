@@ -6,10 +6,14 @@
  * expects, so the client doesn't care which source answered.
  */
 
+import { normalizeCoinLoreMarket } from '../src/lib/coinLore.js';
+
 const CG_BASE = process.env.COINGECKO_BASE || 'https://api.coingecko.com/api/v3';
 const CG_PRO_BASE = 'https://pro-api.coingecko.com/api/v3';
 const GT_BASE = 'https://api.geckoterminal.com/api/v2';
+
 const COINLORE_BASE = 'https://api.coinlore.net/api';
+const COINLORE_MAX_PAGE_SIZE = 100;
 
 const CG_KEY = process.env.COINGECKO_API_KEY || '';
 const CG_IS_PRO = process.env.COINGECKO_PLAN === 'pro';
@@ -111,18 +115,60 @@ export async function fetchGlobal() {
   }
 }
 
+async function fetchCoinLoreMarkets({ page = 1, perPage = 50 } = {}) {
+  const requestedPerPage = Math.max(1, Math.min(250, Math.floor(Number(perPage) || 50)));
+  const limit = Math.min(COINLORE_MAX_PAGE_SIZE, requestedPerPage);
+  const start = (Math.max(1, Math.floor(Number(page) || 1)) - 1) * requestedPerPage;
+  const qs = new URLSearchParams({ start: String(start), limit: String(limit) });
+  const raw = await req(`${COINLORE_BASE}/tickers/?${qs.toString()}`);
+  if (!Array.isArray(raw?.data)) throw new Error('CoinLore returned an invalid market response');
+
+  const rows = raw.data.map(normalizeCoinLoreMarket).filter(Boolean);
+  if (raw.data.length > 0 && rows.length === 0) {
+    throw new Error('CoinLore returned no usable market prices');
+  }
+  return rows;
+}
+
+/**
+ * CoinGecko is the primary feed; CoinLore is an independent live backup for
+ * USD markets. This is deliberately server-side so one upstream 403/429 does
+ * not send every browser to a fake snapshot or fan out across user IPs.
+ * CoinLore allows up to 100 tickers per request, so the fallback keeps that
+ * cap even when the market screen asks for 250 rows.
+ */
 export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
-  const raw = await req(
-    cgUrl('/coins/markets', {
-      vs_currency: vs,
-      order: 'market_cap_desc',
-      per_page: String(Math.min(250, perPage)),
-      page: String(page),
-      sparkline: 'true',
-      price_change_percentage: '1h,24h,7d'
-    })
-  );
-  return raw.map(normalizeCoin);
+  const currency = String(vs || 'usd').toLowerCase();
+  try {
+    const raw = await req(
+      cgUrl('/coins/markets', {
+        vs_currency: currency,
+        order: 'market_cap_desc',
+        per_page: String(Math.min(250, perPage)),
+        page: String(page),
+        sparkline: 'true',
+        price_change_percentage: '1h,24h,7d'
+      })
+    );
+    if (!Array.isArray(raw)) throw new Error('CoinGecko returned an invalid market response');
+    if (raw.length) return raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' }));
+    /* An empty USD market page can also be a provider-side block page. */
+    if (currency !== 'usd') return [];
+  } catch (coinGeckoError) {
+    /*
+     * CoinLore quotes USD only. Do not relabel its dollar values as another
+     * currency if a legacy client asks for EUR/IRT/etc.
+     */
+    if (currency !== 'usd') throw coinGeckoError;
+  }
+
+  try {
+    return await fetchCoinLoreMarkets({ page, perPage });
+  } catch {
+    /* Do not leak a provider URL (or its API key query parameter) in an error
+       payload. The client can still use its own direct-provider/offline chain. */
+    throw new Error('MARKET_DATA_UNAVAILABLE: CoinGecko and CoinLore returned no usable market data');
+  }
 }
 
 export async function fetchTrending() {
@@ -208,6 +254,7 @@ export async function fetchDexPools(network = 'bsc') {
  * only fall back to the heavier detail endpoint for ids it does not cover.
  */
 export async function fetchCoinDetail(id, vs = 'usd') {
+  let coinGeckoError = null;
   try {
     const rows = await req(
       cgUrl('/coins/markets', {
@@ -217,43 +264,62 @@ export async function fetchCoinDetail(id, vs = 'usd') {
         price_change_percentage: '1h,24h,7d'
       })
     );
-    if (Array.isArray(rows) && rows[0]) return normalizeCoin(rows[0]);
-  } catch {
-    /* fall through to the detail endpoint */
+    if (Array.isArray(rows) && rows[0]) return { ...normalizeCoin(rows[0]), marketProvider: 'coingecko' };
+  } catch (err) {
+    coinGeckoError = err;
   }
 
-  const raw = await req(
-    cgUrl(`/coins/${encodeURIComponent(id)}`, {
-      localization: 'false',
-      tickers: 'false',
-      market_data: 'true',
-      community_data: 'false',
-      developer_data: 'false'
-    })
-  );
-  const md = raw.market_data || {};
-  return {
-    id: raw.id,
-    symbol: (raw.symbol || '').toUpperCase(),
-    name: raw.name,
-    image: raw.image?.large ?? raw.image?.small,
-    description: raw.description?.en?.slice(0, 700) || '',
-    homepage: raw.links?.homepage?.[0] || null,
-    price: md.current_price?.[vs] ?? 0,
-    change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
-    change24h: md.price_change_percentage_24h ?? null,
-    change7d: md.price_change_percentage_7d ?? 0,
-    mcap: md.market_cap?.[vs] ?? 0,
-    volume: md.total_volume?.[vs] ?? 0,
-    rank: raw.market_cap_rank ?? 0,
-    high24h: md.high_24h?.[vs] ?? 0,
-    low24h: md.low_24h?.[vs] ?? 0,
-    ath: md.ath?.[vs] ?? 0,
-    atl: md.atl?.[vs] ?? 0,
-    athChange: md.ath_change_percentage?.[vs] ?? 0,
-    supply: md.circulating_supply ?? 0,
-    sparkline: md.sparkline_7d?.price ?? []
-  };
+  try {
+    const raw = await req(
+      cgUrl(`/coins/${encodeURIComponent(id)}`, {
+        localization: 'false',
+        tickers: 'false',
+        market_data: 'true',
+        community_data: 'false',
+        developer_data: 'false'
+      })
+    );
+    const md = raw.market_data || {};
+    return {
+      id: raw.id,
+      symbol: (raw.symbol || '').toUpperCase(),
+      name: raw.name,
+      image: raw.image?.large ?? raw.image?.small,
+      description: raw.description?.en?.slice(0, 700) || '',
+      homepage: raw.links?.homepage?.[0] || null,
+      price: md.current_price?.[vs] ?? 0,
+      change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
+      change24h: md.price_change_percentage_24h ?? null,
+      change7d: md.price_change_percentage_7d ?? 0,
+      mcap: md.market_cap?.[vs] ?? 0,
+      volume: md.total_volume?.[vs] ?? 0,
+      rank: raw.market_cap_rank ?? 0,
+      high24h: md.high_24h?.[vs] ?? 0,
+      low24h: md.low_24h?.[vs] ?? 0,
+      ath: md.ath?.[vs] ?? 0,
+      atl: md.atl?.[vs] ?? 0,
+      athChange: md.ath_change_percentage?.[vs] ?? 0,
+      supply: md.circulating_supply ?? 0,
+      sparkline: md.sparkline_7d?.price ?? [],
+      marketProvider: 'coingecko'
+    };
+  } catch (err) {
+    coinGeckoError = err;
+  }
+
+  if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
+
+  /* CoinLore's ticker endpoint lacks single-coin lookup by slug; resolve the
+     requested id against its capped top-100 live list instead of showing an
+     unrelated offline seed price on the coin detail page. */
+  try {
+    const rows = await fetchCoinLoreMarkets({ page: 1, perPage: COINLORE_MAX_PAGE_SIZE });
+    const coin = rows.find((row) => row.id === id);
+    if (coin) return { ...coin, description: '', homepage: null };
+  } catch {
+    /* Return one safe failure below; never serve a CoinGecko API key in it. */
+  }
+  throw new Error('COIN_DETAIL_UNAVAILABLE: CoinGecko and CoinLore did not return this coin');
 }
 
 /** Universe-wide coin search by name or ticker. */
