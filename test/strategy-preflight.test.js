@@ -36,4 +36,58 @@ describe('strategy local preflight is not a quote or receipt', () => {
     expect(check({ portfolio: { ...portfolio, partial: true } }).code).toBe('PORTFOLIO_NOT_LIVE');
     expect(check({ wallet: { ...wallet, canSign: false } }).code).toBe('WALLET_CANNOT_SIGN');
   });
+
+  /*
+   * The reported live failure, as a test: «پیش‌پرواز تأیید نشد (WALLET_REQUIRED).
+   * کیف پول را وصل کن» shown to a user whose in-app wallet was attached but
+   * LOCKED — address on screen, lease alive, password missing. Attached is not
+   * "no wallet"; it is a signer problem, and its remedy is unlocking. A
+   * snapshot with no session at all still gets WALLET_REQUIRED.
+   */
+  it('calls a locked but attached wallet a signer problem, not a missing wallet', () => {
+    const locked = { ...wallet, connected: false, isConnected: false, attached: true, locked: true, canSign: false };
+    expect(check({ wallet: locked })).toMatchObject({
+      ok: false, code: 'WALLET_CANNOT_SIGN', remedy: 'UNLOCK_WALLET'
+    });
+    expect(check({ wallet: { ...locked, attached: false } })).toMatchObject({
+      ok: false, code: 'WALLET_REQUIRED', remedy: 'CONNECT_WALLET'
+    });
+  });
+
+  /*
+   * A chain the plan never touches cannot invalidate its capital. The reader
+   * polls sixteen networks; on a phone one of them is always slow, and the
+   * whole-book `partial` flag used to refuse a Base-only plan for it — the
+   * report «هیچ مرحله‌ای اجرا یا تأیید نشد» with the wallet connected and the
+   * money sitting right there on the signer chain.
+   */
+  it('judges completeness on the plan\'s own chains when the read names them', () => {
+    const scoped = {
+      ...portfolio, partial: true, totalValueUsd: 1500,
+      chains: [
+        { chainId: 8453, failed: false, stale: false, unpriced: 0 },
+        { chainId: 137, failed: true, stale: false, unpriced: 0 }
+      ],
+      holdings: [
+        { symbol: 'USDC', chainId: 8453, valueUsd: 1200 },
+        { symbol: 'POL', chainId: 137, valueUsd: 300 }
+      ]
+    };
+    /* The app's own shape: `dataStatus` is 'partial' because ONE unrelated
+       chain failed, while every chain the plan uses read completely. */
+    expect(check({ portfolio: { ...scoped, dataStatus: 'partial' } }))
+      .toMatchObject({ ok: true, availableUsd: 1200 });
+    /* A read still running, or failed everywhere, is never scoped away. */
+    expect(check({ portfolio: { ...scoped, dataStatus: 'pending' } })).toMatchObject({ ok: false, code: 'PORTFOLIO_NOT_LIVE' });
+    expect(check({ portfolio: { ...scoped, dataStatus: 'error' } })).toMatchObject({ ok: false, code: 'PORTFOLIO_NOT_LIVE' });
+    /* The plan's OWN chain is the one that failed — now it must refuse. */
+    expect(check({ portfolio: { ...scoped, chains: [
+      { chainId: 8453, failed: true, stale: false, unpriced: 0 },
+      { chainId: 137, failed: false, stale: false, unpriced: 0 }
+    ] } })).toMatchObject({ ok: false, code: 'PORTFOLIO_NOT_LIVE' });
+    /* An unpriced non-zero row on the plan chain is a gap too. */
+    expect(check({ portfolio: { ...scoped, chains: [
+      { chainId: 8453, failed: false, stale: false, unpriced: 1 }
+    ] } })).toMatchObject({ ok: false, code: 'PORTFOLIO_NOT_LIVE' });
+  });
 });

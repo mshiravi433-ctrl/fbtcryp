@@ -100,7 +100,9 @@ import { StrategyPlanCard } from './StrategyPlanCard.jsx';
 import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
 import { resolveGoalTurn } from '../lib/strategyBrain/goalTurn.js';
 import { evaluateStrategyPreflight } from '../lib/strategyBrain/strategyPreflight.js';
-import { reconcileStrategyReceipts, strategyActionRoute, strategyReceiptSupport } from '../lib/strategyBrain/strategyReceipts.js';
+import { fetchOverview as fetchSmartMoneyOverview, fetchWallet as fetchSmartMoneyWallet } from '../lib/smartMoneyClient.js';
+import { formatSmartMoneyWalletReport } from '../lib/smartMoneyWalletReport.js';
+import { reconcileStrategyReceipts, strategyActionRoute, strategyReceiptSupport, hasStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
 import {
   saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs, linkRevision
 } from '../lib/strategyBrain/strategyStore.js';
@@ -168,6 +170,7 @@ import { setCentralWalletState, snapshotFromAppWallet, getCentralWalletState } f
 import { patchSharedState } from '../lib/intent-ai/os/sharedState.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent-ai/os/suggestionEngine.js';
 import { opsCardPrompt } from '../lib/intent-ai/os/opsCardPrompts.js';
+import { venueSwapReceipt } from '../lib/intent-ai/os/venueReceipt.js';
 import { useRadioStore } from '../store/useRadioStore.js';
 import { getLastActiveTask, getActiveTasks, updateTaskStatus } from '../lib/intent-ai/os/taskContinuity.js';
 import {
@@ -558,6 +561,7 @@ export const ConversationRow = memo(function ConversationRow({
   onStrategyExecute,
   onStrategyMonitor,
   onStrategyRevise,
+  onStrategyFix,
   strategyLive,
   autonomyEngine,
   autonomyStrategies,
@@ -694,6 +698,9 @@ export const ConversationRow = memo(function ConversationRow({
             onMonitor={onStrategyMonitor ? (strategy) => onStrategyMonitor(m, strategy) : null}
             onRevise={onStrategyRevise ? (strategy) => onStrategyRevise(m, strategy) : null}
             live={m.strategyPlan?.strategyId ? (strategyLive?.[m.strategyPlan.strategyId] || null) : null}
+            progress={m.strategyProgress || null}
+            blocked={m.strategyBlock || null}
+            onFix={onStrategyFix ? (blocked) => onStrategyFix(m, blocked) : null}
           />
         ) : null}
         {m.autonomyRequest ? (
@@ -1603,6 +1610,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       wallet: {
         connected: walletConnected,
         isConnected: walletConnected,
+        /* A session is ATTACHED when it has an account — including the in-app
+           vault, which attaches locked on purpose (address on screen, signer
+           held back until the password). Reading the locked state as "no
+           wallet" is what made a connected user see «WALLET_REQUIRED … کیف
+           پول را وصل کن»; `canSign` is the flag that owns the lock. */
+        attached: Boolean(wallet?.address) || solanaConnected,
+        locked: wallet?.locked === true,
         canSign: walletCanSign,
         address: wallet?.address || null,
         chainId: wallet?.chainId || null,
@@ -1628,6 +1642,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         rowsCount,
         chainCount: Array.isArray(multi?.chains) ? multi.chains.length : 0,
         failedChains,
+        /* Per-chain evidence behind `partial`: which networks answered
+           completely, which kept a previous read, which have a non-zero row
+           with no price. The strategy preflight judges a plan on the chains it
+           signs on, not on all sixteen. */
+        chains: Array.isArray(multi?.chainReads) ? multi.chainReads : [],
         partial: multi?.partial === true
       },
       balances,
@@ -1685,6 +1704,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * moved. Neither guard depends on an upstream hook behaving well: the loop
    * is structurally impossible even if some other dependency churns again.
    */
+  /*
+   * The latest `aiContext` for code that must READ AFTER an await.
+   * A callback captures the render it was created in, so a retry loop that
+   * awaited a portfolio refresh would re-check the SAME stale snapshot and
+   * refuse again with the same code — the refusal appears "broken" to the user
+   * while the fresh read sits unread in state. The ref always holds the newest.
+   */
+  const aiContextRef = useRef(aiContext);
+  useEffect(() => { aiContextRef.current = aiContext; }, [aiContext]);
+
   const aiContextSig = useMemo(() => JSON.stringify({
     addr: wallet?.address || null,
     chain: wallet?.chainId ?? null,
@@ -3350,227 +3379,569 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     } catch { return false; }
   }, []);
 
-  const runStrategyStage = useCallback(async (message, strategy) => {
-    if (!strategy?.ok) return;
-    let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
-    if (!runtime) {
-      /* Resume from the store when there is a saved plan: a strategy built
-         for a 4-month horizon that restarts at stage one on every reload
-         would re-run stages the user already signed. */
-      let hydrate = null;
-      try {
-        const saved = loadStrategyPlan(strategy.strategyId);
-        hydrate = saved ? hydrateRuntimeArgs(saved)?.hydrate || null : null;
-      } catch { hydrate = null; }
-      runtime = createChatStrategyRuntime({
-        strategy,
-        spec: message.strategySpec || null,
-        context: aiContext,
-        wallet: wallet || null,
-        portfolio: aiContext.portfolio || null,
-        hydrate
-      });
-      strategyRuntimesRef.current.set(strategy.strategyId, runtime);
-    }
-    const next = runtime.nextStage();
-    const fa = locale.startsWith('fa');
-    if (!next.ok) {
-      if (next.code === 'AWAITING_RECEIPT') {
-        const read = await reconcileStrategyReceipts({
-          strategy, stageId: next.stageId, owner: aiContext.wallet?.address,
-          getProvider: wallet?.getReadProvider ? (chainId) => wallet.getReadProvider(chainId) : null
-        });
-        if (read.ok) {
-          const confirmed = runtime.confirmStage(next.stageId, { receipt: read.receipt });
-          if (confirmed.ok) {
-            if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
-              strategyRuntimesRef.current.delete(strategy.strategyId);
-              setMessages((prev) => [...prev, {
-                id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-                content: fa
-                  ? 'تراکنش‌ها روی زنجیره تطبیق شدند، اما ثبت تأیید مرحله در این دستگاه انجام نشد. رسید را نگه دار؛ پس از رفع مشکل ذخیره‌سازی، دوباره «ادامه» را بزن تا بدون امضای مجدد بررسی شود.'
-                  : 'Transactions were verified on-chain, but this device could not save the stage confirmation. Keep the receipts; fix storage and retry Continue to reconcile without signing again.'
-              }]);
-              return;
-            }
-            setMessages((prev) => [...prev, {
-              id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
-              content: fa
-                ? `رسیدهای ${read.receipt.actions.length} اقدام «${next.stageId}» روی زنجیره و با حساب تو تطبیق داده شدند. مرحله بعد فقط با تأیید تازه تو شروع می‌شود.`
-                : `The ${read.receipt.actions.length} receipts for “${next.stageId}” matched on-chain transactions from your wallet. The next stage starts only with your fresh confirmation.`
-            }]);
-            return;
-          }
-        }
-        // A missing local hint or an unrelated receipt is NOT evidence that
-        // the transaction failed. Do not re-open the venue automatically:
-        // re-signing before inspecting the wallet can send the same amount twice.
-        const missing = read.missing?.map((r) => `${r.actionIndex + 1}: ${r.code}`).join('، ') || read.code;
-        setMessages((prev) => [...prev, {
-          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-          content: fa
-            ? `مرحله «${next.stageId}» هنوز قطعی نیست (${missing}). ${read.verifiedCount || 0} از ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} اقدام تطبیق شد. قبل از هر امضای دوباره، وضعیت تراکنش در کیف پول/صفحه مقصد را بررسی کن؛ مرحله بعد قفل است.`
-            : `Stage “${next.stageId}” is not settled (${missing}). ${read.verifiedCount || 0} of ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} actions reconciled. Inspect the wallet/venue before signing again; later stages stay locked.`
-        }]);
-        return;
+  /* The runtime's own stage truth, mirrored onto the message so the card can
+     draw it. Never computed here: a stage counts as done only when the runtime
+     (backed by a verified receipt for money stages) says CONFIRMED. */
+  const strategyProgressOf = useCallback((runtime) => {
+    try {
+      const st = runtime?.state?.();
+      if (!st?.stageProgress) return null;
+      return { ...st.stageProgress, curve: st.curve || null, fundsMoved: st.fundsMoved === true };
+    } catch { return null; }
+  }, []);
+
+  /**
+   * How much money the NEXT stage of this plan will actually need, so a
+   * capital refusal can name the number instead of leaving the user to
+   * subtract a fee from the venue themselves.
+   */
+  const expectedUsdOf = useCallback((strategy) => {
+    const stages = (strategy?.stages || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    let total = 0;
+    let seenMoney = false;
+    for (const stage of stages) {
+      for (const action of stage.actions || []) {
+        if (action.requiresSignature !== true) continue;
+        const usd = Number(action.params?.amountUsd);
+        if (!Number.isFinite(usd) || usd <= 0) continue;
+        seenMoney = true;
+        total += usd;
       }
+    }
+    return seenMoney ? Math.round(total * 100) / 100 : null;
+  }, []);
+
+  const patchStrategyMessage = useCallback((messageId, patch) => {
+    if (!messageId) return;
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, ...patch } : m)));
+  }, []);
+
+  /*
+   * A leftover request to continue a stage once the wallet can sign again.
+   * Opening the connect sheet and then doing nothing is how «کیف پول را وصل
+   * کن» became a dead end: the user connected, nothing resumed, and the same
+   * sentence appeared on the next tap. The pending request is bound to the
+   * message and the strategy, expires, and is consumed exactly once.
+   */
+  const pendingStageResumeRef = useRef(null);
+
+  /** The reasons a stage cannot start, in the user's words, with the remedy. */
+  const preflightMessage = useCallback((check, fa) => {
+    const words = {
+      WALLET_REQUIRED: fa ? 'کیف پول متصل و آدرس قابل‌خواندن لازم است.' : 'A connected wallet with a readable address is required.',
+      WALLET_CANNOT_SIGN: fa ? 'کیف پول وصل است اما اجازهٔ امضا ندارد (قفل است).' : 'The wallet is connected but cannot sign (locked).',
+      PORTFOLIO_NOT_LIVE: fa ? 'خواندن موجودی زنده کامل نشد.' : 'The live balance read is not complete.',
+      PRICE_NOT_LIVE: fa ? 'قیمت دلاری دارایی‌ها زنده نیست، پس موجودی ارزش تأییدشده ندارد.' : 'USD prices are not live, so the balance has no verified dollar value.',
+      PORTFOLIO_STALE: fa ? 'دادهٔ کیف پول کهنه است.' : 'The wallet read is stale.',
+      CAPITAL_NOT_VERIFIED: fa ? 'موجودی خوانده‌شده سرمایهٔ هدف را پوشش نمی‌دهد.' : 'The read balance does not cover the stated capital.',
+      WALLET_CHAIN_DIFFERS_REBUILD: fa ? 'زنجیرهٔ کیف پول با شبکه‌های برنامه نمی‌خواند.' : 'The wallet chain does not match the plan’s networks.',
+      SOURCE_CHAIN_CAPITAL_NOT_VERIFIED: fa ? 'سرمایه روی زنجیرهٔ امضاکننده کافی نیست.' : 'Not enough capital on the signer’s chain.',
+      BRIDGE_USDC_NOT_VERIFIED: fa ? 'برای بریج، USDC کافی روی زنجیرهٔ مبدأ لازم است.' : 'The bridge leg needs enough USDC on the source chain.',
+      RISK_LIMIT: fa ? 'طرح از بودجهٔ ریسک خودش می‌گذرد.' : 'The plan exceeds its own risk budget.',
+      PLAN_REQUIRED: fa ? 'این طرح سرمایهٔ تأییدشده ندارد.' : 'This plan has no verified capital target.'
+    };
+    return words[check?.code] || (fa ? 'طرح را دوباره بررسی کن.' : 'Review the plan.');
+  }, []);
+
+  /**
+   * Turn a preflight refusal into the ONE next step. The remedy is data from
+   * evaluateStrategyPreflight; this decides which real control performs it.
+   */
+  const handlePreflightRefusal = useCallback(async ({ message, strategy, runtime, check, fa }) => {
+    const code = String(check?.code || 'PLAN_REQUIRED');
+    const why = preflightMessage(check, fa);
+    const detail = check?.detail ? (fa ? '' : ` (${check.detail})`) : '';
+    const block = {
+      code,
+      remedy: check?.remedy || null,
+      message: `${why}${detail}`
+    };
+
+    /* A read problem is not a capital problem: refresh the portfolio once and
+       re-run the SAME gate against the fresh snapshot instead of asking the
+       user to do the reading themselves. */
+    if (check?.remedy === 'REFRESH_PORTFOLIO') {
+      let refreshed = false;
+      try { refreshed = Boolean(await multi?.refresh?.()); } catch { refreshed = false; }
+      if (refreshed) {
+        /* A re-read has to actually LAND before it is judged: the first loop
+           ran 1.5s and then refused a read that was still going, so retrying
+           the same stage produced the same sentence. Wait for the snapshot to
+           stop being `pending` (bounded), then re-run the same gate. */
+        const until = Date.now() + 10_000;
+        for (let i = 0; i < 48; i += 1) {
+          await new Promise((r) => setTimeout(r, 250));
+          const ctx = aiContextRef.current || aiContext;
+          if (ctx?.portfolio?.dataStatus === 'pending' && Date.now() < until) continue;
+          const again = evaluateStrategyPreflight({ strategy, wallet: ctx?.wallet, portfolio: ctx?.portfolio });
+          if (again.ok) return { retry: true, check: again };
+          if (again.remedy !== 'REFRESH_PORTFOLIO') { check = again; break; }
+        }
+      }
+      patchStrategyMessage(message.id, { strategyBlock: block });
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
         content: fa
-          ? `مرحله بعد اجرا نمی‌شود: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. چیزی به عنوان موفق گزارش نمی‌شود.`
-          : `The next stage will not run: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. Nothing is reported as a success.`
+          ? `پیش‌پرواز هنوز نگذشت (${code}). ${why} خواندن دوبارهٔ کیف پول را اجرا کردم؛ اگر خوانش همچنان ناقص است، اتصال شبکه را بررسی کن و دوباره «ادامه» را بزن. هیچ مرحله‌ای اجرا یا تأیید نشد.`
+          : `The preflight still has not passed (${code}). ${why} I ran a fresh wallet read; if it is still incomplete, check the network and press Continue again. No stage was run or confirmed.`
       }]);
-      return;
+      return { retry: false };
     }
-    if (next.done) {
+
+    /* A signer problem: open the wallet sheet AND remember that this stage is
+       waiting for it, so connecting resumes the plan instead of leaving the
+       user to find the card again. */
+    if (check?.remedy === 'CONNECT_WALLET' || check?.remedy === 'UNLOCK_WALLET') {
+      pendingStageResumeRef.current = { at: Date.now(), message, strategy };
+      patchStrategyMessage(message.id, { strategyBlock: block });
       setMessages((prev) => [...prev, {
-        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
-        content: fa ? 'همه‌ی مراحل اجرا شده‌اند. از این‌جا پایش ادامه دارد.' : 'Every stage has run. From here it is monitoring.'
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'CONNECT_WALLET' },
+        content: fa
+          ? `پیش‌پرواز به امضاکننده نیاز دارد (${code}). ${why} کیف پول را وصل کن — همین‌جا، بدون اینکه از صفحه بیرون بروی؛ بعد از اتصال، همین مرحله خودکار از سر گرفته می‌شود.`
+          : `The preflight needs a signer (${code}). ${why} Connect the wallet here — the same stage resumes automatically once it is connected.`
       }]);
-      return;
+      try { openWalletSheet(message.content, 'STRATEGY_PLAN'); } catch { /* sheet is best-effort */ }
+      return { retry: false };
     }
-    /* Run preflight IN chat, against a fresh, complete wallet snapshot. A
-       disconnect, unknown capital, partial portfolio or out-of-band risk is a
-       refusal — it cannot be recorded as a completed check. Gas, approvals and
-       the final quote still belong to each venue before its wallet signature. */
-    if (next.stage?.id === 'preflight') {
-      const check = evaluateStrategyPreflight({
-        strategy, wallet: aiContext.wallet, portfolio: aiContext.portfolio
-      });
-      if (!check.ok) {
-        const hints = {
-          WALLET_REQUIRED: fa ? 'کیف پول را وصل کن.' : 'Connect a wallet.',
-          WALLET_CANNOT_SIGN: fa ? 'کیف پول را باز کن.' : 'Unlock your wallet.',
-          PORTFOLIO_NOT_LIVE: fa ? 'خواندن پرتفوی را تازه کن.' : 'Refresh the portfolio read.',
-          PRICE_NOT_LIVE: fa ? 'قیمت دلاری دارایی‌ها زنده نیست؛ بازار را تازه کن.' : 'Refresh the live USD market prices.',
-          PORTFOLIO_STALE: fa ? 'داده کیف پول کهنه است؛ دوباره بخوان.' : 'Refresh the wallet data.',
-          CAPITAL_NOT_VERIFIED: fa ? 'موجودی خوانده‌شده سرمایه هدف را پوشش نمی‌دهد.' : 'The read balance does not cover your stated capital.',
-          SOURCE_CHAIN_CAPITAL_NOT_VERIFIED: fa ? 'سرمایه کافی روی زنجیره کیف پول فعلی نیست؛ من موجودی زنجیره دیگر را قابل خرج اینجا نمی‌دانم.' : 'Not enough capital on the current wallet chain; capital on another chain is not spendable here.',
-          BRIDGE_USDC_NOT_VERIFIED: fa ? 'برای بریج باید روی زنجیره مبدأ USDC کافی داشته باشی؛ تبدیل دارایی نیازمند قیمت تازه و امضای جداست.' : 'The source chain needs enough USDC to bridge; conversion needs a fresh quote and a separate wallet signature.',
-          WALLET_CHAIN_DIFFERS_REBUILD: fa ? 'زنجیره کیف پول با برنامه نمی‌خواند؛ با کیف پول وصل‌شده برنامه را بازسازی کن.' : 'The wallet chain differs from the plan; rebuild with the connected wallet.',
-          RISK_LIMIT: fa ? 'طرح از محدودیت ریسک می‌گذرد؛ برنامه را بازسازی کن.' : 'The plan exceeds the risk limit; rebuild it.'
-        };
-        setMessages((prev) => [...prev, {
-          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-          content: fa
-            ? `پیش‌پرواز تأیید نشد (${check.code}). ${hints[check.code] || 'طرح را دوباره بررسی کن.'} هیچ مرحله‌ای اجرا یا تأیید نشد.`
-            : `Preflight did not pass (${check.code}). ${hints[check.code] || 'Review the plan.'} No stage was run or confirmed.`,
-          actions: check.code === 'BRIDGE_USDC_NOT_VERIFIED'
-            ? [{ id: 'prepare-usdc', label: fa ? 'تبدیل به USDC در سواپ' : 'Convert to USDC in Swap',
-              route: `/swap?chain=${encodeURIComponent(String(aiContext.wallet?.chainId || ''))}&to=USDC` }]
-            : []
-        }]);
-        return;
-      }
-      runtime.advance();
-      const verified = runtime.confirmStage('preflight', {
-        receipt: { ok: true, kind: 'local-wallet-risk-check', checkedAt: check.checkedAt,
-          availableUsd: check.availableUsd, unverified: check.unverified }
-      });
-      if (!verified.ok) return;
-      if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
-        strategyRuntimesRef.current.delete(strategy.strategyId);
-        setMessages((prev) => [...prev, {
-          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-          content: fa ? 'پیش‌پرواز بررسی شد ولی ذخیره نشد؛ قبل از هر مرحلهٔ مالی دوباره تلاش کن.'
-            : 'Preflight was checked but could not be saved; retry before any financial stage.'
-        }]);
-        return;
-      }
+
+    /* Capital below the plan: the honest move is a plan built on the balance
+       that was actually read, not a refusal loop. */
+    if (check?.remedy === 'REBUILD_WITH_BALANCE' && Number(check?.availableUsd) > 0) {
+      const readUsd = Math.round(Number(check.availableUsd));
+      patchStrategyMessage(message.id, { strategyBlock: block });
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
         content: fa
-          ? `پیش‌پرواز محلی گذشت: موجودی خوانده‌شده $${check.availableUsd.toLocaleString('en-US')}، سقف ریسک بررسی شد. گاز، مجوز توکن و قیمت هنوز تأیید نشده‌اند؛ صفحه مقصد قبل از امضای هر تراکنش دوباره بررسی‌شان می‌کند. با دکمه مرحله بعد ادامه بده.`
-          : `Local preflight passed: read balance $${check.availableUsd.toLocaleString('en-US')} and risk budget checked. Gas, token approval and live quote are NOT verified yet; review each at the venue before signing. Continue with the next stage button.`
+          ? `پیش‌پرواز نگذشت (${code}): موجودی خوانده‌شده $${readUsd.toLocaleString('en-US')} است و طرح روی $${Math.round(check.capitalUsd || 0).toLocaleString('en-US')} بسته شده. با دکمه پایین، تحلیل را با همین موجودی واقعی بازسازی می‌کنم.`
+          : `The preflight did not pass (${code}): the read balance is $${readUsd.toLocaleString('en-US')} and the plan was built on $${Math.round(check.capitalUsd || 0).toLocaleString('en-US')}. With the button below I rebuild the analysis on the balance that actually exists.`,
+        choices: [
+          { id: 'rebuild-with-balance', label: fa ? `بازسازی با $${readUsd.toLocaleString('en-US')}` : `Rebuild with $${readUsd.toLocaleString('en-US')}` },
+          { id: 'review-only', label: fa ? 'فقط طرح را نگه دار' : 'Keep the plan as it is' }
+        ],
+        choiceKind: 'STRATEGY_PREFLIGHT_FIX',
+        choicePayload: { messageId: message.id, strategyId: strategy.strategyId, capitalUsd: readUsd }
       }]);
-      return;
+      return { retry: false };
     }
-    if (next.stage?.id === 'monitor') {
-      // Observing without a real portfolio is a refusal, not a completed stage.
-      const result = monitorStrategy(message, strategy);
-      if (result?.ok) {
+
+    patchStrategyMessage(message.id, { strategyBlock: block });
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+      content: fa
+        ? `پیش‌پرواز تأیید نشد (${code}). ${why} هیچ مرحله‌ای اجرا یا تأیید نشد.`
+        : `Preflight did not pass (${code}). ${why} No stage was run or confirmed.`
+    }]);
+    return { retry: false };
+  }, [aiContext, multi, openWalletSheet, patchStrategyMessage, preflightMessage]);
+
+  /*
+   * The LAST stage. It moves no funds, and the runtime will only confirm it
+   * with real evidence — so the evidence has to be created: the plan's watch
+   * conditions become durable server monitors (live prices and live yields),
+   * and the stage is confirmed with their ids. A plan that ends in a button
+   * that cannot finish is the "phases never reach 100%" report, verbatim.
+   */
+  const armStrategyMonitors = useCallback(async ({ strategy, fa }) => {
+    const sleeves = Array.isArray(strategy?.sleeves) ? strategy.sleeves : [];
+    const marketSleeves = sleeves.filter((s) => ['crypto', 'rwa', 'equity', 'commodity'].includes(s.family));
+    const yieldSleeves = sleeves.filter((s) => ['lending', 'staking', 'farm', 'lp'].includes(s.family));
+    const drafts = [];
+    for (const s of marketSleeves.slice(0, 3)) {
+      drafts.push({
+        type: 'ASSET', metric: 'PERCENT_CHANGE', operator: 'BELOW', threshold: 12,
+        asset: { symbol: String(s.asset || '').toUpperCase() },
+        label: `${String(s.asset || '').toUpperCase()} −12% (${fa ? 'سبد قیمتی طرح' : 'plan market sleeve'})`,
+        goalText: `${strategy.strategyId} market sleeve drawdown watch`, intervalMinutes: 60
+      });
+    }
+    const bestYield = yieldSleeves.map((s) => Number(s.returnPctAnnual)).filter((n) => Number.isFinite(n) && n > 0);
+    if (bestYield.length) {
+      const floor = Math.max(1, Math.round(Math.min(...bestYield) * 0.7 * 10) / 10);
+      drafts.push({
+        type: 'GOAL', metric: 'OPPORTUNITY', operator: 'ABOVE', threshold: floor,
+        asset: { symbol: 'YIELD' },
+        label: `${fa ? 'بازدهی زنده ≥ ' : 'live yield ≥ '}${floor}%`,
+        goalText: `${strategy.strategyId} yield decay watch`, intervalMinutes: 360
+      });
+    }
+    /* No sleeve can be watched with a real feed → do NOT fabricate a monitor
+       and do NOT confirm the stage. */
+    if (!drafts.length) return { ok: false, code: 'NO_WATCHABLE_SLEEVE' };
+    const made = [];
+    const failures = [];
+    for (const draft of drafts) {
+      let out = null;
+      try { out = await apiCreateMonitor(draft); } catch { out = { ok: false, error: 'UNAVAILABLE' }; }
+      if (out?.ok === false) { failures.push(`${draft.label}: ${out.error || out.status || 'FAILED'}`); continue; }
+      const id = out?.monitor?.id || out?.id || null;
+      if (!id) { failures.push(`${draft.label}: NO_ID`); continue; }
+      made.push({ id, label: draft.label, metric: draft.metric, threshold: draft.threshold });
+    }
+    if (!made.length) return { ok: false, code: failures[0] || 'MONITOR_CREATE_FAILED', failures };
+    return { ok: true, monitors: made, failures };
+  }, []);
+
+  const runStrategyStage = useCallback(async (message, strategy, depth = 0, opts = {}) => {
+    if (!strategy?.ok || !message?.id) return;
+    if (depth > 4) return; // no plan has more than a handful of non-money stages
+    const fa = locale.startsWith('fa');
+    /* Every exit — refusal, failure, thrown error — has to release the button
+       and publish the runtime's state. A stuck `busy` flag made all three
+       card buttons dead, permanently, which is exactly what was reported. */
+    let block = null;
+    patchStrategyMessage(message.id, { strategyBusy: true, strategyBlock: null });
+    try {
+      let runtime = strategyRuntimesRef.current.get(strategy.strategyId);
+      if (!runtime) {
+        /* Resume from the store when there is a saved plan: a strategy built
+           for a 4-month horizon that restarts at stage one on every reload
+           would re-run stages the user already signed. */
+        let hydrate = null;
+        try {
+          const saved = loadStrategyPlan(strategy.strategyId);
+          hydrate = saved ? hydrateRuntimeArgs(saved)?.hydrate || null : null;
+        } catch { hydrate = null; }
+        runtime = createChatStrategyRuntime({
+          strategy,
+          spec: message.strategySpec || null,
+          context: aiContext,
+          wallet: wallet || null,
+          portfolio: aiContext.portfolio || null,
+          hydrate
+        });
+        strategyRuntimesRef.current.set(strategy.strategyId, runtime);
+      }
+      let next = runtime.nextStage();
+      /*
+       * ─── COMING BACK FROM A VENUE IS NOT THE SAME AS STARTING OVER ───────
+       *
+       * Hydration deliberately re-opens the preflight on every reload, so
+       * `nextStage()` answers «preflight» — which is why a user who returned
+       * from a completed swap watched the plan re-run its first stage and never
+       * settle the one they had just signed. The reported loop, exactly: «سواپ
+       * را زدم و برگشتم، مرحله جلو نرفت».
+       *
+       * The caller that KNOWS which stage the user left for passes its id; if
+       * that stage is still RUNNING, reconciliation is the only thing that may
+       * happen next. A user "done" still cannot confirm it — only the chain can.
+       */
+      const forcedStageId = opts?.stageId
+        && runtime.state().stageProgress?.[opts.stageId]?.state === 'RUNNING' ? opts.stageId : null;
+      if (forcedStageId) {
+        const stage = (strategy.stages || []).find((st) => st.id === forcedStageId);
+        next = { ok: false, code: 'AWAITING_RECEIPT', stageId: forcedStageId,
+          actions: stage?.actions || [], movesFunds: Boolean(stage?.movesFunds),
+          detail: 'Reconcile the stage the user left for.' };
+      }
+      if (!next.ok) {
+        if (next.code === 'AWAITING_RECEIPT') {
+          /* We are back from a venue (or the stage started earlier): the ONLY
+             thing that may settle it is a verified provider receipt.
+             A SIGNATURE IS NOT INSTANTLY MINEABLE. The first read used to
+             decide everything, so a user who pressed Continue seconds after
+             signing was told the stage «هنوز قطعی نیست» — and the natural next
+             tap is the venue button again, which is how one action gets sent
+             twice. Re-reading a few times, read-only, settles the honest cases
+             (the transaction lands while we wait) and changes nothing for the
+             dishonest ones: a missing receipt stays missing. */
+          let read = await reconcileStrategyReceipts({
+            strategy, stageId: next.stageId, owner: aiContext.wallet?.address,
+            getProvider: wallet?.getReadProvider ? (chainId) => wallet.getReadProvider(chainId) : null
+          });
+          for (let attempt = 0; attempt < 3 && !read.ok; attempt += 1) {
+            const stillPending = (read.missing || []).some((r) => r?.code === 'TX_NOT_FOUND' || r?.code === 'LOGS_NOT_FOUND');
+            if (!stillPending) break;
+            await new Promise((r) => setTimeout(r, 1500));
+            read = await reconcileStrategyReceipts({
+              strategy, stageId: next.stageId, owner: aiContext.wallet?.address,
+              getProvider: wallet?.getReadProvider ? (chainId) => wallet.getReadProvider(chainId) : null
+            });
+          }
+          if (read.ok) {
+            const confirmed = runtime.confirmStage(next.stageId, { receipt: read.receipt });
+            if (confirmed.ok) {
+              if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+                strategyRuntimesRef.current.delete(strategy.strategyId);
+                setMessages((prev) => [...prev, {
+                  id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+                  content: fa
+                    ? 'تراکنش‌ها روی زنجیره تطبیق شدند، اما ثبت تأیید مرحله در این دستگاه انجام نشد. رسید را نگه دار؛ پس از رفع مشکل ذخیره‌سازی، دوباره «ادامه» را بزن تا بدون امضای مجدد بررسی شود.'
+                    : 'Transactions were verified on-chain, but this device could not save the stage confirmation. Keep the receipts; fix storage and retry Continue to reconcile without signing again.'
+                }]);
+                return;
+              }
+              const after = runtime.nextStage();
+              patchStrategyMessage(message.id, {
+                strategyBlock: null, strategyProgress: strategyProgressOf(runtime)
+              });
+              setMessages((prev) => [...prev, {
+                id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+                content: fa
+                  ? `رسیدهای ${read.receipt.actions.length} اقدام مرحلهٔ «${next.stageId}» روی زنجیره و با حساب تو تطبیق داده شد و مرحله تأیید شد. ${after?.done ? 'همهٔ مراحل تمام شد — برنامه ۱۰۰٪ مستقر است.' : 'مرحلهٔ بعد فقط با تأیید تازهٔ تو شروع می‌شود؛ همین‌جا در چت می‌مانی و جایی نمی‌روی.'}`
+                  : `The ${read.receipt.actions.length} receipt(s) for stage “${next.stageId}” matched on-chain transactions from your wallet and the stage is confirmed. ${after?.done ? 'Every stage is done — the plan is 100% deployed.' : 'The next stage starts only with your fresh confirmation; you stay in this chat.'}`,
+                choices: after?.done ? [] : [
+                  { id: 'strategy-next', label: fa ? 'مرحلهٔ بعد را ببر' : 'Take the next stage' }
+                ],
+                choiceKind: after?.done ? null : 'STRATEGY_NEXT',
+                choicePayload: { strategyId: strategy.strategyId }
+              }]);
+              /*
+               * A CONFIRMED MONEY STAGE IS NOT THE END OF THE ROAD.
+               *
+               * The stages after it (the last one arms real watches) move no
+               * funds and ask no signature, so demanding another tap is how a
+               * plan that had actually finished its first leg still sat at
+               * "0 of 1 stage confirmed" on the card — the report «مرحله‌ها تا
+               * آخر نمی‌روند». No signature means no new authority is needed,
+               * so the only stages this continues into are ones that cannot
+               * move money. A money stage still waits for the user's own tap.
+               */
+              if (after?.ok && !after.done && after.stage && !after.movesFunds) {
+                await runStrategyStage(message, strategy, depth + 1);
+              }
+              return;
+            }
+          }
+          // A missing local hint or an unrelated receipt is NOT evidence that
+          // the transaction failed. Do not re-open the venue automatically:
+          // re-signing before inspecting the wallet can send the same amount twice.
+          const missing = read.missing?.map((r) => `${r.actionIndex + 1}: ${r.code}`).join('، ') || read.code;
+          block = {
+            code: read.code || 'AWAITING_VERIFIED_RECEIPTS',
+            remedy: null,
+            message: fa
+              ? `مرحلهٔ «${next.stageId}» هنوز قطعی نیست (${missing}). ${read.verifiedCount || 0} از ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} اقدام تطبیق شد.${read.missing?.some((r) => r?.detail) ? ` علت خوانش: ${read.missing.find((r) => r?.detail)?.detail}.` : ''} اگر تراکنش را همین حالا فرستادی، چند لحظه بعد دوباره «ادامه» را بزن؛ اگر نرفتی، دکمهٔ مقصد را در همین رشته بزن.`
+              : `Stage “${next.stageId}” is not settled (${missing}). ${read.verifiedCount || 0} of ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} actions reconciled. If you just sent the transaction, press Continue again in a moment; if you did not go, the venue button is in this thread.`
+          };
+          setMessages((prev) => [...prev, {
+            id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+            content: fa
+              ? `مرحله «${next.stageId}» هنوز قطعی نیست (${missing}). ${read.verifiedCount || 0} از ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} اقدام تطبیق شد.${read.missing?.some((r) => r?.detail) ? ` علت خوانش: ${read.missing.find((r) => r?.detail)?.detail}.` : ''} قبل از هر امضای دوباره، وضعیت تراکنش را در کیف پول/صفحه مقصد بررسی کن؛ مرحلهٔ بعد قفل است.`
+              : `Stage “${next.stageId}” is not settled (${missing}). ${read.verifiedCount || 0} of ${read.requiredCount || (next.actions || []).filter((a) => a.requiresSignature).length} actions reconciled. Inspect the wallet/venue before signing again; later stages stay locked.`,
+            actions: (next.actions || []).map((action, index) => ({ action, index }))
+              .filter(({ action }) => action.route).map(({ action, index }) => ({
+                id: `stage-${next.stageId}-${index}`, route: action.route,
+                label: `${index + 1}. ${action.operation || action.module} ${action.params?.asset || ''}`.trim()
+              }))
+          }]);
+          return;
+        }
+        block = { code: next.code || 'BLOCKED', remedy: null, message: next.detail || next.code };
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa
+            ? `مرحله بعد اجرا نمی‌شود: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. چیزی به عنوان موفق گزارش نمی‌شود.`
+            : `The next stage will not run: ${next.code}${next.stageId ? ` (${next.stageId})` : ''}. Nothing is reported as a success.`
+        }]);
+        return;
+      }
+      if (next.done) {
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+          content: fa
+            ? 'همه‌ی مراحل این طرح اجرا و تأیید شده‌اند — ۱۰۰٪. از این‌جا پایش ادامه دارد؛ هر تغییر را با «برنامه را با وضعیت واقعی بسنج» می‌سنجم.'
+            : 'Every stage of this plan has run and been confirmed — 100%. From here it is monitoring; use “Check the plan against reality” to measure any change.'
+        }]);
+        return;
+      }
+      /* Run preflight IN chat, against a fresh, complete wallet snapshot. A
+         disconnect, unknown capital, partial portfolio or out-of-band risk is a
+         refusal — it cannot be recorded as a completed check. Gas, approvals and
+         the final quote still belong to each venue before its wallet signature. */
+      if (next.stage?.id === 'preflight') {
+        /*
+         * WAIT FOR THE READ, DO NOT REFUSE A READ IN PROGRESS.
+         *
+         * This runs the moment a stage is taken — including automatically, on
+         * the return turn. A sixteen-chain portfolio read takes seconds, so the
+         * gate was grading a snapshot whose `dataStatus` was still `pending`
+         * and refusing with PORTFOLIO_NOT_LIVE: «خواندن موجودی زنده کامل نشد»
+         * for a read that was simply not finished yet, which is the other half
+         * of «هیچ مرحله‌ای اجرا یا تأیید نشد». A read still in flight is a
+         * REASON TO WAIT; only a read that has stopped (live, error, partial,
+         * unavailable) is evidence.
+         */
+        const settle = async (limitMs = 12_000) => {
+          const started = Date.now();
+          for (;;) {
+            const ctx = aiContextRef.current || aiContext;
+            if (!ctx?.wallet?.connected || ctx?.portfolio?.dataStatus !== 'pending') return ctx;
+            if (Date.now() - started > limitMs) return ctx;
+            await new Promise((r) => setTimeout(r, 250));
+          }
+        };
+        const liveCtx = await settle();
+        let check = evaluateStrategyPreflight({
+          strategy, wallet: liveCtx?.wallet, portfolio: liveCtx?.portfolio
+        });
+        /* The gate knows the plan's capital; the user's words carry the number
+           the venue will ask for (amount + fee). Naming both turns «موجودی
+           کافی نیست» into something the user can act on. */
+        const expectedUsd = expectedUsdOf(strategy);
+        if (expectedUsd != null) check = { ...check, expectedUsd };
+        if (!check.ok) {
+          const outcome = await handlePreflightRefusal({ message, strategy, runtime, check, fa });
+          if (!outcome?.retry) { block = { code: check.code, remedy: check.remedy, message: preflightMessage(check, fa) }; return; }
+          check = outcome.check;
+        }
         runtime.advance();
-        runtime.confirmStage('monitor', { receipt: { ok: true, kind: 'portfolio-observation', checkedAt: Date.now() } });
+        const verified = runtime.confirmStage('preflight', {
+          receipt: { ok: true, kind: 'local-wallet-risk-check', checkedAt: check.checkedAt,
+            availableUsd: check.availableUsd, unverified: check.unverified }
+        });
+        if (!verified.ok) return;
         if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
           strategyRuntimesRef.current.delete(strategy.strategyId);
           setMessages((prev) => [...prev, {
             id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-            content: fa ? 'پایش انجام شد اما ثبت مرحله روی دستگاه شکست خورد؛ برای ادامهٔ قابل‌اتکا دوباره تلاش کن.'
-              : 'The monitoring read ran, but this device could not save its stage; retry before treating it as persistent.'
+            content: fa ? 'پیش‌پرواز بررسی شد ولی ذخیره نشد؛ قبل از هر مرحلهٔ مالی دوباره تلاش کن.'
+              : 'Preflight was checked but could not be saved; retry before any financial stage.'
           }]);
+          return;
         }
+        pendingStageResumeRef.current = null;
+        patchStrategyMessage(message.id, { strategyProgress: strategyProgressOf(runtime) });
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+          content: fa
+            ? `پیش‌پرواز گذشت: موجودی خوانده‌شده $${Number(check.availableUsd).toLocaleString('en-US')}، سقف ریسک بررسی شد. گاز، مجوز توکن و قیمت هنوز تأیید نشده‌اند؛ صفحهٔ مقصد قبل از امضای هر تراکنش دوباره بررسی‌شان می‌کند. با دکمهٔ «مرحلهٔ بعد» ادامه بده — همین‌جا در چت می‌مانی.`
+            : `Preflight passed: read balance $${Number(check.availableUsd).toLocaleString('en-US')} and risk budget checked. Gas, token approval and live quote are NOT verified yet; the venue checks each before signing. Continue with the next-stage button — you stay in this chat.`,
+          choices: [{ id: 'strategy-next', label: fa ? 'مرحلهٔ بعد را ببر' : 'Take the next stage' }],
+          choiceKind: 'STRATEGY_NEXT',
+          choicePayload: { strategyId: strategy.strategyId }
+        }]);
+        /* A passed preflight is not a place to stop when what follows needs no
+           signature: the plan walks its own no-funds stages to the end instead
+           of parking the user on a button that does the same check again. A
+           money stage still waits for the user's own tap. */
+        const afterPreflight = runtime.nextStage();
+        if (afterPreflight?.ok && !afterPreflight.done && afterPreflight.stage
+          && !afterPreflight.movesFunds) {
+          await runStrategyStage(message, strategy, depth + 1);
+        }
+        return;
       }
-      return;
-    }
-    if (next.movesFunds && (!walletConnected || !walletCanSign)) { openWalletSheet(message.content, 'STRATEGY_PLAN'); return; }
-    const firstIndex = next.actions?.findIndex((a) => a.requiresSignature && a.route) ?? -1;
-    const first = firstIndex >= 0 ? next.actions[firstIndex] : null;
-    const actionRoute = (action, index) => strategyActionRoute(action, {
-      strategyId: strategy.strategyId, stageId: next.stage.id, actionIndex: index
-    });
-    if (next.movesFunds && (!first || next.actions.some((a) => a.requiresSignature && !a.route))) {
-      setMessages((prev) => [...prev, {
-        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-        content: fa ? 'یکی از اقدام‌ها صفحهٔ اجرای معتبر ندارد؛ مرحله شروع نشد. طرح را بازسازی کن.'
-          : 'An action has no execution venue; this stage was not started. Rebuild the plan.'
-      }]);
-      return;
-    }
-    const unverifiable = next.movesFunds
-      ? next.actions.map((a, i) => ({ action: a, index: i }))
-        .filter(({ action }) => action.requiresSignature && !strategyReceiptSupport(action)) : [];
-    if (unverifiable.length) {
-      // The venue itself remains available, but do not send a user to sign an
-      // action whose result this strategy can never attribute or reconcile.
-      // The preview routes below are deliberately NOT stage-labelled.
-      setMessages((prev) => [...prev, {
-        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-        content: fa
-          ? `مرحله «${next.stage.title}» آغاز نشد: برای ${unverifiable.map(({ index }) => index + 1).join('، ')} رسید قابل‌تطبیق خودکار ندارم. صفحه‌های مقصد مستقلاً قابل استفاده‌اند، اما انجامشان را به این طرح منتسب یا مرحله بعد را باز نمی‌کنم. برای ادامهٔ مرحله‌ای، طرح قابل‌تأیید دیگری بساز.`
-          : `Stage “${next.stage.title}” was not started: action(s) ${unverifiable.map(({ index }) => index + 1).join(', ')} lack independent receipt reconciliation. You can use their venues separately, but I cannot attribute them to this plan or unlock later stages. Rebuild a verifiable plan to continue in stages.`,
-        actions: unverifiable.map(({ action, index }) => ({
-          id: `standalone-${next.stage.id}-${index}`, label: `${index + 1}. ${action.operation} · ${action.route}`,
-          route: action.route
-        }))
-      }]);
-      return;
-    }
-    /*
-     * Only now is the stage really leaving this surface, so only now is it
-     * marked RUNNING and written back. Marking it earlier would record a
-     * hand-off that never happened when the wallet gate turns the user away.
-     *
-     * RUNNING is the honest ceiling here: the signature happens at the venue.
-     * On return, chat asks the provider for the transaction and protocol event;
-     * only a matching proof can mark this stage CONFIRMED.
-     */
-    runtime.advance();
-    if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
-      // Do not navigate to a wallet after losing the only pending-stage key.
-      // Drop the in-memory advance so retry can hydrate the last saved state.
-      strategyRuntimesRef.current.delete(strategy.strategyId);
-      setMessages((prev) => [...prev, {
-        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
-        content: fa
-          ? 'ذخیرهٔ مرحله در دستگاه ممکن نشد؛ هیچ صفحهٔ امضایی باز نکردم. فضای ذخیره‌سازی مرورگر را بررسی کن و دوباره تلاش کن.'
-          : 'Could not save the pending stage on this device; no signing page was opened. Check browser storage and retry.'
-      }]);
-      return;
-    }
-    setMessages((prev) => [...prev, {
-      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
-      content: fa
-        ? `مرحله «${next.stage.title}»: ${next.stage.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم.`
-        : `Stage "${next.stage.title}": ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat.`,
-      actions: (next.actions || []).map((action, i) => ({ action, index: i }))
-        .filter(({ action }) => action.route).map(({ action, index }) => ({
-          id: `stage-${next.stage.id}-${index}`, route: actionRoute(action, index),
-          label: `${index + 1}. ${action.operation || action.module} ${action.params?.asset || action.params?.token || ''}`.trim()
-        }))
-    }]);
-    if (first?.route) {
-      /* Identify the exact pending action for receipt lookup on return;
-         the handoff itself neither confirms nor skips a money stage. */
+      if (next.stage?.id === 'monitor') {
+        /* The last stage. It is the one that used to be a dead end: a
+           comparison that needs receipts, invoked as if it were a setup step.
+           Arm the real, durable watches instead, then confirm on their ids. */
+        const armed = await armStrategyMonitors({ strategy, fa });
+        if (!armed.ok) {
+          block = { code: armed.code, remedy: 'REFRESH_PORTFOLIO',
+            message: fa ? 'برای پایش واقعی، حداقل یک دارایی یا بازدهی قابل‌پایش در طرح لازم است.'
+              : 'A real watch needs at least one watchable asset or live yield in the plan.' };
+          setMessages((prev) => [...prev, {
+            id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+            content: fa
+              ? `پایش ساخته نشد (${armed.code}) و به‌جایش چیزی تأیید نمی‌کنم. پایش سطح-برنامه (افت و شتاب) از دکمهٔ «برنامه را با وضعیت واقعی بسنج» انجام می‌شود و به رسید و موقعیت‌های قابل‌انتساب نیاز دارد.`
+              : `No monitor was created (${armed.code}), so nothing was confirmed in its place. Plan-level monitoring (drawdown and pace) stays on “Check the plan against reality”, which needs receipts and attributable positions.`
+          }]);
+          return;
+        }
+        runtime.advance();
+        const confirmed = runtime.confirmStage('monitor', {
+          receipt: { ok: true, kind: 'durable-monitors-created', checkedAt: Date.now(),
+            monitorIds: armed.monitors.map((m) => m.id) }
+        });
+        if (!confirmed.ok) return;
+        if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+          strategyRuntimesRef.current.delete(strategy.strategyId);
+          setMessages((prev) => [...prev, {
+            id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+            content: fa ? 'پایش ساخته شد اما ثبت مرحله روی دستگاه شکست خورد؛ برای ادامهٔ قابل‌اتکا دوباره تلاش کن.'
+              : 'The monitors were created, but this device could not save the stage; retry before treating it as persistent.'
+          }]);
+          return;
+        }
+        const doneAll = runtime.nextStage();
+        patchStrategyMessage(message.id, { strategyProgress: strategyProgressOf(runtime) });
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+          content: fa
+            ? `${armed.monitors.length} پایش زنده ساخته و مرحلهٔ آخر تأیید شد${doneAll?.done ? ' — کل برنامه ۱۰۰٪' : ''}. ${armed.monitors.map((m) => m.label).join(' · ')}${armed.failures?.length ? ` (ساخته نشد: ${armed.failures.join('؛ ')})` : ''}`
+            : `${armed.monitors.length} live monitor(s) created and the final stage confirmed${doneAll?.done ? ' — the plan is 100%' : ''}. ${armed.monitors.map((m) => m.label).join(' · ')}${armed.failures?.length ? ` (not created: ${armed.failures.join('; ')})` : ''}`,
+          actions: [{ id: 'open-ops', route: '/intent?tab=ops', label: fa ? 'همهٔ پایش‌ها' : 'All monitors' }]
+        }]);
+        return;
+      }
+      if (next.movesFunds && (!walletConnected || !walletCanSign)) {
+        pendingStageResumeRef.current = { at: Date.now(), message, strategy };
+        block = { code: 'WALLET_REQUIRED', remedy: 'CONNECT_WALLET',
+          message: fa ? 'این مرحله امضا لازم دارد.' : 'This stage needs a signature.' };
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'CONNECT_WALLET' },
+          content: fa
+            ? 'این مرحله با امضای کیف پول تو انجام می‌شود؛ کیف پول را وصل کن و همین مرحله خودکار از سر گرفته می‌شود.'
+            : 'This stage runs with your wallet’s signature; connect it and the same stage resumes automatically.'
+        }]);
+        try { openWalletSheet(message.content, 'STRATEGY_PLAN'); } catch { /* best-effort */ }
+        return;
+      }
+      const firstIndex = next.actions?.findIndex((a) => a.requiresSignature && a.route) ?? -1;
+      const first = firstIndex >= 0 ? next.actions[firstIndex] : null;
+      const actionRoute = (action, index) => strategyActionRoute(action, {
+        strategyId: strategy.strategyId, stageId: next.stage.id, actionIndex: index
+      });
+      if (next.movesFunds && (!first || next.actions.some((a) => a.requiresSignature && !a.route))) {
+        block = { code: 'NO_VENUE_FOR_ACTION', remedy: 'RESTART_PLAN',
+          message: fa ? 'یکی از اقدام‌ها صفحهٔ اجرای معتبر ندارد.' : 'An action has no execution venue.' };
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa ? 'یکی از اقدام‌ها صفحهٔ اجرای معتبر ندارد؛ مرحله شروع نشد. طرح را بازسازی کن.'
+            : 'An action has no execution venue; this stage was not started. Rebuild the plan.'
+        }]);
+        return;
+      }
+      const unverifiable = next.movesFunds
+        ? next.actions.map((a, i) => ({ action: a, index: i }))
+          .filter(({ action }) => action.requiresSignature && !strategyReceiptSupport(action)) : [];
+      if (unverifiable.length) {
+        // The venue itself remains available, but do not send a user to sign an
+        // action whose result this strategy can never attribute or reconcile.
+        // The preview routes below are deliberately NOT stage-labelled.
+        block = { code: 'ACTION_NOT_VERIFIABLE', remedy: 'RESTART_PLAN',
+          message: fa ? 'برای بعضی اقدام‌ها رسید قابل‌تطبیق خودکار وجود ندارد.' : 'Some actions have no automatically reconcilable receipt.' };
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa
+            ? `مرحله «${next.stage.title}» آغاز نشد: برای ${unverifiable.map(({ index }) => index + 1).join('، ')} رسید قابل‌تطبیق خودکار ندارم. صفحه‌های مقصد مستقلاً قابل استفاده‌اند، اما انجامشان را به این طرح منتسب یا مرحله بعد را باز نمی‌کنم. برای ادامهٔ مرحله‌ای، طرح قابل‌تأیید دیگری بساز.`
+            : `Stage “${next.stage.title}” was not started: action(s) ${unverifiable.map(({ index }) => index + 1).join(', ')} lack independent receipt reconciliation. You can use their venues separately, but I cannot attribute them to this plan or unlock later stages. Rebuild a verifiable plan to continue in stages.`,
+          actions: unverifiable.map(({ action, index }) => ({
+            id: `standalone-${next.stage.id}-${index}`, label: `${index + 1}. ${action.operation} · ${action.route}`,
+            route: action.route
+          }))
+        }]);
+        return;
+      }
+      /*
+       * Only now is the stage really leaving the wallet's hands, so only now is
+       * it marked RUNNING and written back. Marking it earlier would record a
+       * hand-off that never happened when the wallet gate turns the user away.
+       *
+       * RUNNING is the honest ceiling here: the signature happens at the venue.
+       * On return, chat asks the provider for the transaction and protocol event;
+       * only a matching proof can mark this stage CONFIRMED.
+       *
+       * THE VENUE IS OFFERED, NOT FORCED. The old version called
+       * `navigate(actionRoute(...))` right here, so every tap on «اجرای مرحله
+       * بعد» threw the user out of the chat to the same swap screen again —
+       * including the tap that had just confirmed a stage. The report «دوباره
+       * خودکار میره صفحه سواپ، دیگه نمی‌پرسه انجام دادی یا نه» is that line.
+       * Now the hand-off is a button in this thread; going is the user's tap.
+       */
+      runtime.advance();
+      if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
+        // Do not hand off after losing the only pending-stage key. Drop the
+        // in-memory advance so retry can hydrate the last saved state.
+        strategyRuntimesRef.current.delete(strategy.strategyId);
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: fa
+            ? 'ذخیرهٔ مرحله در دستگاه ممکن نشد؛ هیچ صفحهٔ امضایی باز نکردم. فضای ذخیره‌سازی مرورگر را بررسی کن و دوباره تلاش کن.'
+            : 'Could not save the pending stage on this device; no signing page was opened. Check browser storage and retry.'
+        }]);
+        return;
+      }
       try {
         writePendingHandoff({
           route: actionRoute(first, firstIndex),
@@ -3581,10 +3952,58 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           actionIndex: firstIndex,
           seasonId: seasonIdRef.current
         });
-      } catch {}
-      navigate(actionRoute(first, firstIndex));
+      } catch { /* the hand-off still works without the return hint */ }
+      const progressNow = strategyProgressOf(runtime);
+      const confirmedCount = Object.values(progressNow || {}).filter((s) => s?.state === 'CONFIRMED').length;
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: fa
+          ? `مرحله «${next.stage.title}» آماده است: ${next.stage.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم. (${confirmedCount} مرحله از این طرح تا این‌جا تأیید شده؛ بعد از برگشت، خودم رسید زنجیره را می‌خوانم و می‌پرسم کار تمام شد یا نه.)`
+          : `Stage “${next.stage.title}” is ready: ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat. (${confirmedCount} stage(s) of this plan confirmed so far; when you come back I read the chain receipt myself and ask how it went.)`,
+        actions: (next.actions || []).map((action, i) => ({ action, index: i }))
+          .filter(({ action }) => action.route).map(({ action, index }) => ({
+            id: `stage-${next.stage.id}-${index}`, route: actionRoute(action, index),
+            label: `${index + 1}. ${action.operation || action.module} ${action.params?.asset || action.params?.token || ''}`.trim()
+          }))
+      }]);
+    } catch (err) {
+      /* A thrown handler used to be an unhandled rejection: silently nothing.
+         The user's report is exactly "the button does nothing", so the catch
+         says what failed instead of leaving the card frozen. */
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+        content: fa
+          ? `اجرای مرحله با خطای غیرمنتظره متوقف شد: ${String(err?.message || err).slice(0, 140)}. هیچ چیزی تأیید نشد؛ دوباره تلاش کن.`
+          : `The stage stopped on an unexpected error: ${String(err?.message || err).slice(0, 140)}. Nothing was confirmed; retry.`
+      }]);
+    } finally {
+      patchStrategyMessage(message.id, {
+        strategyBusy: false,
+        strategyBlock: block,
+        strategyProgress: strategyProgressOf(strategyRuntimesRef.current.get(strategy.strategyId))
+      });
     }
-  }, [aiContext, wallet, locale, walletConnected, walletCanSign, openWalletSheet, navigate, persistStrategyRuntime]);
+  }, [aiContext, wallet, locale, walletConnected, walletCanSign, openWalletSheet,
+    persistStrategyRuntime, patchStrategyMessage, preflightMessage, handlePreflightRefusal,
+    armStrategyMonitors, strategyProgressOf, expectedUsdOf, multi]);
+
+  /*
+   * Resume the stage that was waiting for a wallet. The sheet returns as soon
+   * as the session is granted; the preflight needs the wallet FACTS to have
+   * landed in `aiContext`, so the resume waits for the snapshot (not just the
+   * flag) before running the same stage again. Consumed once, and only within
+   * five minutes — a stale request must not fire after an unrelated connection.
+   */
+  useEffect(() => {
+    const pending = pendingStageResumeRef.current;
+    if (!pending) return;
+    if (!(walletConnected && walletCanSign)) return;
+    if (Date.now() - Number(pending.at || 0) > 5 * 60 * 1000) { pendingStageResumeRef.current = null; return; }
+    if (aiContext.wallet?.hydrating) return;
+    if (!aiContext.wallet?.canSign) return;
+    pendingStageResumeRef.current = null;
+    void runStrategyStage(pending.message, pending.strategy);
+  }, [walletConnected, walletCanSign, aiContext, runStrategyStage]);
 
   /*
    * ─── STRATEGY BRAIN: monitoring and revision ────────────────────────────
@@ -3722,6 +4141,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       : m)));
     setStrategyLiveVersion((v) => v + 1);
   }, [locale, persistStrategyRuntime, strategyRuntimeFor]);
+
+  /*
+   * The control behind a blocked stage. It is deliberately NOT a new decision
+   * path: every remedy maps onto work this file already knows how to do —
+   * re-run the same stage (the wallet sheet and the portfolio refresh live
+   * inside it) or rebuild the plan. Nothing here signs, quotes or spends.
+   */
+  const fixStrategyStage = useCallback(async (message, blocked) => {
+    const strategy = message?.strategyPlan || null;
+    if (!strategy?.ok) return;
+    const remedy = String(blocked?.remedy || '');
+    if (remedy === 'RESTART_PLAN' || remedy === 'SWITCH_CHAIN_OR_REBUILD' || remedy === 'REBUILD_WITH_BALANCE') {
+      await reviseStrategy(message, strategy);
+      return;
+    }
+    await runStrategyStage(message, strategy);
+  }, [reviseStrategy, runStrategyStage]);
 
   /**
    * Execute one goal option for real. The steps are the venue actions the
@@ -4184,7 +4620,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
   }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet, conversationId, multi]);
 
-  const chooseOption = useCallback((msg, choice) => {
+  const chooseOption = useCallback(async (msg, choice) => {
     if (!choice) return;
     /* A navigation return is not a settlement receipt. Neither "cancelled"
        nor "done" changes a money stage without independent reconciliation. */
@@ -4222,11 +4658,82 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         void runStrategyStage(planMsg, plan);
         return;
       }
+      /*
+       * A plain venue trip (swap, bridge, farm…) that the user reports as done.
+       * Their words are still not a chain receipt: nothing here claims the
+       * transaction settled. What changes is that the execution card stops
+       * offering the SAME trip again — the report «برمی‌گردیم، دوباره میره
+       * صفحهٔ سواپ» is a stale pending card pointing at a venue the user has
+       * already been to. The intent is closed as USER_REPORTED, the truth stays
+       * in the wallet/history, and the next step is the user's to start.
+       */
+      const pendingExec = pendingExecutionRef.current;
+      if (pendingExec?.intentId) {
+        try { lifecycleRef.current?.updateStatus(pendingExec.intentId, INTENT_LIFECYCLE.COMPLETED); } catch { /* lifecycle is telemetry */ }
+      }
+      setPendingExecution(null);
       say(faLoc
-        ? `متوجه شدم — به «${handoff.label || ''}» رفتی. نتیجه را بدون رسید تأییدشده قطعی ثبت نمی‌کنم.`
-        : `Noted: you visited "${handoff.label || ''}". I cannot mark an outcome final without a verified receipt.`);
+        ? `ثبت کردم که «${handoff.label || ''}» را انجام دادی — به‌عنوان گزارش خودت، نه رسید زنجیره. کارت اجرا دیگر همان سفر را پیشنهاد نمی‌دهد؛ اگر تراکنش واقعاً رفت، تاریخچهٔ کیف پول آن را نشان می‌دهد.`
+        : `Recorded that you used “${handoff.label || ''}” — as your report, not as a chain receipt. The execution card will not offer the same trip again; if the transaction really went through, your wallet history shows it.`,
+      { actions: [{ id: 'open-history', route: '/intent?tab=history', label: faLoc ? 'تاریخچه' : 'History' }] });
       return;
     }
+    /*
+     * A preflight that failed on capital is answered with a plan built on the
+     * balance that was READ — not by refusing the same way twice. The rebuild
+     * is the existing revision path (fresh ecosystem read), and the goal's
+     * capital is replaced with the verified number.
+     */
+    if (msg?.choiceKind === 'STRATEGY_PREFLIGHT_FIX') {
+      const faLoc = locale.startsWith('fa');
+      setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, responded: true, selectedChoiceLabel: choice?.label || '' } : m)));
+      const planMsg = (messagesRef.current || []).find((m) => m.id === msg?.choicePayload?.messageId);
+      const plan = planMsg?.strategyPlan || null;
+      if (String(choice?.id) === 'rebuild-with-balance' && plan) {
+        const readUsd = Number(msg?.choicePayload?.capitalUsd);
+        if (Number.isFinite(readUsd) && readUsd > 0) {
+          try {
+            const runtime = strategyRuntimeFor(planMsg, plan);
+            const result = await runtime?.revise?.({
+              reason: 'USER_REQUESTED',
+              goal: { ...(plan.goal || {}), capitalUsd: readUsd }
+            });
+            if (result?.ok) {
+              try {
+                saveStrategyPlan({ strategy: result.strategy, goal: planMsg.strategySpec || null, runtime: runtime.state() });
+              } catch { /* persistence never blocks the rebuild */ }
+              setMessages((prev) => prev.map((m) => (m.id === planMsg.id
+                ? { ...m, strategyPlan: result.strategy, strategyBlock: null, strategyBusy: false }
+                : m)));
+              setMessages((prev) => [...prev, {
+                id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+                content: faLoc
+                  ? `تحلیل با موجودی واقعی $${readUsd.toLocaleString('en-US')} بازسازی شد. با دکمهٔ مرحلهٔ بعد پیش برو.`
+                  : `The analysis was rebuilt on the real balance of $${readUsd.toLocaleString('en-US')}. Continue with the next-stage button.`
+              }]);
+              return;
+            }
+            setMessages((prev) => [...prev, {
+              id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+              content: faLoc ? `بازسازی انجام نشد: ${result?.code || 'REVISION_FAILED'}` : `The rebuild did not happen: ${result?.code || 'REVISION_FAILED'}`
+            }]);
+            return;
+          } catch (err) {
+            setMessages((prev) => [...prev, {
+              id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+              content: faLoc ? `بازسازی خطا داد: ${String(err?.message || err).slice(0, 120)}` : `The rebuild failed: ${String(err?.message || err).slice(0, 120)}`
+            }]);
+            return;
+          }
+        }
+      }
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: faLoc ? 'باشه — طرح دست‌نخورده ماند.' : 'Fine — the plan stays as it is.'
+      }]);
+      return;
+    }
+
     /*
      * Agent creation answers (slot chips, the «بسازم؟» confirm, suggested
      * agents). Handled by the agent loop below via ref — see agentOpsRef.
@@ -4238,7 +4745,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     if (msg?.choiceKind === 'STRATEGY_NEXT') {
       const faLoc = locale.startsWith('fa');
       setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, responded: true, selectedChoiceLabel: choice?.label || '' } : m)));
-      const planMsg = (messagesRef.current || []).find((m) => m.strategyPlan?.strategyId === String(choice?.value || ''));
+      const wantedId = String(choice?.value || msg?.choicePayload?.strategyId || '');
+      const planMsg = (messagesRef.current || []).find((m) => m.strategyPlan?.strategyId === wantedId);
       if (planMsg?.strategyPlan) {
         runStrategyStage(planMsg, planMsg.strategyPlan);
       } else {
@@ -4910,6 +5418,46 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     try { clearPendingHandoff(); } catch {}
     const faLoc = locale.startsWith('fa');
     const label = pending.label || routeFaLabel(pending.route);
+    /*
+     * THE VENUE MAY HAVE ALREADY ANSWERED.
+     *
+     * A plain trip to /swap or /solana is not a strategy stage, so there is no
+     * chain reconciliation for it — but there IS a device ledger the venue
+     * itself wrote: the swap screens record every attempt and confirm it with
+     * the hash/signature the wallet returned. When that ledger holds a
+     * confirmed swap for THIS venue, after THIS hand-off, asking «خروجی چی
+     * شد؟» is asking the user a question the app can answer itself — the exact
+     * loop the user reported («سواپ رو زدم و برگشتم، دوباره می‌پرسه انجام دادی
+     * یا نه»).
+     *
+     * The words below are chosen to claim no more than a device record: not a
+     * chain receipt, not a settled transaction, and never a strategy stage.
+     */
+    const venueReceipt = pending.kind === 'strategy-stage'
+      ? null
+      : venueSwapReceipt({ route: pending.route, since: pending.at });
+    if (venueReceipt) {
+      const pendingExec = pendingExecutionRef.current;
+      if (pendingExec?.intentId) {
+        try { lifecycleRef.current?.updateStatus(pendingExec.intentId, INTENT_LIFECYCLE.COMPLETED); } catch { /* lifecycle is telemetry */ }
+      }
+      setPendingExecution(null);
+      setMessages((prev) => [...prev, {
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+        content: faLoc
+          ? `${label} را باز کرده بودی و سواپ همان صفحه ثبت شد (${venueReceipt.fromSymbol || '?'} → ${venueReceipt.toSymbol || '?'}). این گزارش خودِ صفحهٔ سواپ روی دستگاه است، نه تأیید زنجیره‌ای؛ تأیید شبکه را در تاریخچهٔ کیف پول یا کاوشگر ببین. نتیجه را از تو نمی‌پرسم — خودم دیدم.`
+          : `You had opened ${label}, and its swap screen recorded the swap (${venueReceipt.fromSymbol || '?'} → ${venueReceipt.toSymbol || '?'}). That is the venue's own record on this device, not a chain confirmation; the explorer or wallet history is where settlement shows. I am not asking you for the outcome — I saw it.`,
+        handoff: { route: pending.route, label, kind: pending.kind || 'route', outcome: 'VENUE_RECORDED' },
+        actions: [{ id: 'venue-history', route: '/intent?tab=history', label: faLoc ? 'تاریخچه' : 'History' }]
+      }]);
+      appendOp({
+        kind: 'VENUE_SWAP_RECORDED', status: 'COMPLETED',
+        title: faLoc ? 'سواپ در صفحهٔ مقصد ثبت شد' : 'Swap recorded at the venue',
+        detail: `${pending.route} · ${venueReceipt.txHash}`.slice(0, 120),
+        ref: venueReceipt.id || null, refKind: 'swap'
+      });
+      return true;
+    }
     setMessages((prev) => [...prev, {
       id: makeId(),
       role: 'ai',
@@ -4935,14 +5483,64 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       choiceKind: 'HANDOFF_OUTCOME'
     }]);
     return true;
-  }, [locale]);
+  }, [locale, appendOp]);
 
-  // Fire the return turn on mount — /intent unmounts on every navigation, so
-  // every arrival back is a fresh mount and the one place to ask.
+  /*
+   * ─── THE RETURN TURN ──────────────────────────────────────────────────────
+   * /intent unmounts on every navigation, so an arrival back is a fresh mount
+   * and the one place to ask «انجام دادی یا نه؟».
+   *
+   * For a STRATEGY STAGE the honest first move is not the question but the
+   * chain: the plan's RUNNING stage already carries a receipt hint, and the
+   * provider can say whether that transaction settled. So the return turn
+   * tries reconciliation first; only when the chain cannot settle it does the
+   * chat ask the user. The user's own words never confirm a money stage.
+   */
+  const [returnChecked, setReturnChecked] = useState(false);
+  /* The reconnect window. A returning user's wallet re-attaches from its lease
+     a moment after mount, and reconciliation without the signer's address
+     cannot read anything — see the wait below. */
+  const [returnTick, setReturnTick] = useState(0);
+  const returnWaitRef = useRef(Date.now());
   useEffect(() => {
+    if (returnChecked) return undefined;
+    let pending = null;
+    try { pending = readPendingHandoff(); } catch { pending = null; }
+    if (pending?.kind === 'strategy-stage' && pending.strategyId && pending.stageId
+      && hasStrategyReceiptHint({ strategyId: pending.strategyId, stageId: pending.stageId })) {
+      const planMsg = (messagesRef.current || []).find((m) => m.strategyPlan?.strategyId === pending.strategyId);
+      const plan = planMsg?.strategyPlan || null;
+      if (planMsg && plan) {
+        /*
+         * WAIT FOR THE WALLET BEFORE READING THE CHAIN.
+         *
+         * The owner of the transaction is the connected account, and on a
+         * return mount that account re-attaches from its lease a beat later.
+         * Reconciling immediately ran with `owner: null` and reported
+         * RUNNING_STAGE_AND_WALLET_REQUIRED — the stage stayed open and the
+         * user saw the same «هنوز قطعی نیست» line they had seen before
+         * leaving. So the hand-off is kept on the device until the snapshot
+         * carries an address (or ten seconds pass, after which the honest
+         * move is to ask rather than to guess).
+         */
+        const ready = Boolean((aiContextRef.current || aiContext)?.wallet?.address);
+        if (!ready && Date.now() - returnWaitRef.current < 10_000) {
+          const timer = setTimeout(() => setReturnTick((n) => n + 1), 600);
+          return () => clearTimeout(timer);
+        }
+        setReturnChecked(true);
+        try { clearPendingHandoff(); } catch { /* the lookup below is idempotent */ }
+        if (ready) {
+          void runStrategyStage(planMsg, plan, 0, { stageId: pending.stageId });
+          return undefined;
+        }
+      }
+    }
+    setReturnChecked(true);
     try { maybeShowHandoffOutcome(seasonIdRef.current); } catch {}
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [runStrategyStage, returnTick, aiContext.wallet?.address]);
 
   /*
    * `?tab=` also has to work when the user arrives from somewhere else in the
@@ -5442,6 +6040,159 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     });
   }, [handleMonitorCreate, pushTurn, locale]);
 
+  /*
+   * ── SMART MONEY ON THE WALLET IN USE ──────────────────────────────────────
+   * The intelligence layer already answers "who is smart money?" on its own
+   * page; what was missing is the same answer about the wallet the user is
+   * connected with. One read path (the same client the page uses), fail-closed:
+   * an unavailable service is reported as unavailable, never as zeros.
+   */
+  const smartMoneyWalletTurn = useCallback(async ({ address, chainId, source } = {}) => {
+    const fa = locale.startsWith('fa');
+    const addr = address || aiContext.wallet?.address || null;
+    if (!addr) {
+      openWalletSheet(source || (fa ? 'تحلیل اسمارت مانی کیف پول' : 'Smart-money analysis of the wallet'), 'SMART_MONEY');
+      pushTurn({
+        id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'CONNECT_WALLET' },
+        content: fa
+          ? 'برای تحلیل اسمارت مانی، آدرس کیف پول لازم است. بدون آدرس عددی نمی‌سازم — کیف پول را وصل کن.'
+          : 'A smart-money analysis needs a wallet address. Without one I will not produce numbers — connect the wallet.'
+      });
+      return { ok: false, code: 'WALLET_REQUIRED' };
+    }
+    const cid = chainId || aiContext.wallet?.chainId || null;
+    setThinkingState('working');
+    const [walletRes, overviewRes] = await Promise.allSettled([
+      fetchSmartMoneyWallet(cid || 1, addr),
+      fetchSmartMoneyOverview('24h')
+    ]);
+    setThinkingState('idle');
+    const intel = walletRes.status === 'fulfilled' ? walletRes.value : null;
+    const overview = overviewRes.status === 'fulfilled' ? overviewRes.value : null;
+    const errCode = walletRes.status === 'rejected'
+      ? String(walletRes.reason?.message || 'SMART_MONEY_UNAVAILABLE').slice(0, 60) : null;
+    const report = formatSmartMoneyWalletReport({ intel, overview, address: addr, chainId: cid, locale, error: errCode });
+    pushTurn({
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+      content: report.content,
+      actions: report.chips,
+      rows: report.rows,
+      smartMoney: { address: addr, chainId: cid, dataStatus: report.dataStatus || null, ok: report.ok }
+    });
+    appendOp({
+      kind: 'SMART_MONEY_WALLET', status: report.ok ? 'COMPLETED' : 'FAILED',
+      title: fa ? 'تحلیل اسمارت مانی کیف پول' : 'Smart-money wallet analysis',
+      detail: report.dataStatus ? `dataStatus=${report.dataStatus}` : (errCode || 'unavailable'),
+      ref: addr, refKind: 'address'
+    });
+    return { ok: report.ok, code: report.code };
+  }, [aiContext, locale, openWalletSheet, pushTurn, appendOp]);
+
+  /*
+   * ── QUESTIONS ABOUT THE PLAN THE USER ALREADY HAS ───────────────────────
+   *
+   * The analysis card offers follow-ups («ریسک این هدف را بررسی کن», «وضعیت
+   * طرح», «قدم بعدی؟»). Every one of them used to fall into the intent
+   * classifier, where the word «هدف» outscores «ریسک» — so the answer to a
+   * question about the plan the card had just built was «چه مقدار سود را هدف
+   * گرفته‌ای؟», asking again for the numbers the user had typed two turns
+   * earlier. That is what «دکمه‌های زیر کادر کار نمی‌کنند» actually looked
+   * like: buttons that answered, but answered a different question.
+   *
+   * A question about the live plan is answered from the live plan — its own
+   * risk model, its own stage progress, its own next step. No new read is
+   * invented for it, and nothing here claims a fact the plan does not carry.
+   */
+  const liveStrategyPlan = useCallback(() => {
+    const list = messagesRef.current || [];
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (list[i]?.strategyPlan?.ok === true) return { message: list[i], plan: list[i].strategyPlan };
+    }
+    return null;
+  }, []);
+
+  const strategyQuestionTurn = useCallback((text) => {
+    const fa = locale.startsWith('fa');
+    const held = liveStrategyPlan();
+    if (!held) return { handled: false };
+    const plan = held.plan;
+    const planRef = /(این|همین|آن)\s*(هدف|طرح|برنامه|استراتژی)|(هدف|طرح|برنامه|استراتژی)\s*(من|مون)|my\s+(plan|goal|strategy)|this\s+(plan|goal|strategy)/i.test(text);
+    const riskAsk = /(ریسک|خطر|افت\s*سرمایه|drawdown|risk)/i.test(text);
+    const statusAsk = /(چقدر\s*(پیش|جلو)|پیشرفت|چند\s*مرحله|وضعیت\s*(طرح|برنامه|استراتژی|هدف)|status|progress)/i.test(text);
+    const nextAsk = /(قدم\s*بعدی|مرحله\s*بعدی|next\s*step|what\s*next)/i.test(text);
+    if (!(riskAsk && planRef) && !statusAsk && !nextAsk) return { handled: false };
+
+    const runtime = strategyRuntimesRef.current.get(plan.strategyId) || null;
+    let state = null;
+    try { state = runtime?.state?.() || null; } catch { state = null; }
+    const progress = state?.stageProgress || held.message.strategyProgress || {};
+    const stages = plan.stages || [];
+    const confirmed = stages.filter((s) => progress[s.id]?.state === 'CONFIRMED').length;
+    const percent = stages.length ? Math.round((confirmed / stages.length) * 100) : 0;
+    const pending = stages.find((s) => !['CONFIRMED', 'SKIPPED'].includes(progress[s.id]?.state)) || null;
+    const blocked = held.message.strategyBlock || null;
+    const n = (v, d = 1) => (Number.isFinite(Number(v)) ? Number(v).toFixed(d) : '—');
+
+    const lines = [];
+    if (riskAsk) {
+      const risk = plan.risk || {};
+      lines.push(fa
+        ? `ریسک همین طرح: باند «${risk.band || '—'}»، افت برآوردی ${n(risk.estimatedDrawdownPct)}٪ در برابر بودجهٔ ${n(risk.drawdownBudgetPct, 0)}٪.`
+        : `This plan's own risk model: band “${risk.band || '—'}”, estimated drawdown ${n(risk.estimatedDrawdownPct)}% against a ${n(risk.drawdownBudgetPct, 0)}% budget.`);
+      const breaches = Array.isArray(risk.breaches) ? risk.breaches : [];
+      if (breaches.length) {
+        lines.push(fa
+          ? `مواردی که خودِ طرح علامت زده: ${breaches.map((b) => `${b.code}${b.detail ? ` (${b.detail})` : ''}`).join('، ')}.`
+          : `Flagged by the plan itself: ${breaches.map((b) => `${b.code}${b.detail ? ` (${b.detail})` : ''}`).join(', ')}.`);
+      }
+      lines.push(fa
+        ? 'این اعداد مدل خودِ طرح روی دادهٔ خوانده‌شده است، نه پیش‌بینی بازار. برای سنجش با وضعیت واقعی، دکمهٔ «برنامه را با وضعیت واقعی بسنج» روی کارت بالاست.'
+        : 'These are the plan’s own model on the data that was read — not a market forecast. To measure it against reality, use “Check the plan against reality” on the card above.');
+    }
+    if (statusAsk || (!riskAsk && !nextAsk)) {
+      lines.push(fa
+        ? `${confirmed} از ${stages.length} مرحله تأیید شده (${percent}٪).`
+        : `${confirmed} of ${stages.length} stage(s) confirmed (${percent}%).`);
+      if (pending) {
+        lines.push(fa
+          ? `مرحلهٔ در دست: «${pending.title || pending.id}» — ${pending.objective || ''}`
+          : `The stage in hand: “${pending.title || pending.id}” — ${pending.objective || ''}`);
+      } else {
+        lines.push(fa ? 'همهٔ مراحل تمام شده است — ۱۰۰٪.' : 'Every stage is done — 100%.');
+      }
+    }
+    if (nextAsk && pending) {
+      lines.push(fa
+        ? `قدم بعدی همین مرحله است («${pending.title || pending.id}»).`
+        : `The next step is this stage (“${pending.title || pending.id}”).`);
+    }
+    if (blocked?.code) {
+      lines.push(fa
+        ? `آخرین وضعیت: ${blocked.code}${blocked.message ? ` — ${blocked.message}` : ''}`
+        : `Last state: ${blocked.code}${blocked.message ? ` — ${blocked.message}` : ''}`);
+    }
+
+    setMessages((prev) => [...prev, {
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+      content: lines.join('\n\n'),
+      strategyPlanQuestion: { strategyId: plan.strategyId, kind: riskAsk ? 'risk' : (nextAsk ? 'next' : 'status') },
+      /* The routes of the next stage, so «show me» is one tap and stays in the
+         same flow the card uses. */
+      actions: (pending?.actions || []).filter((a) => a?.route).map((a, i) => ({
+        id: `plan-q-${pending.id}-${i}`, route: strategyActionRoute(a, {
+          strategyId: plan.strategyId, stageId: pending.id, actionIndex: i
+        }),
+        label: `${i + 1}. ${a.operation || a.module} ${a.params?.asset || ''}`.trim()
+      }))
+    }]);
+    appendOp({
+      kind: 'STRATEGY_PLAN_QUESTION', status: 'COMPLETED',
+      title: fa ? 'پرسش دربارهٔ طرح' : 'Question about the plan',
+      detail: riskAsk ? 'risk' : (nextAsk ? 'next' : 'status'), ref: plan.strategyId, refKind: 'strategy'
+    });
+    return { handled: true };
+  }, [locale, liveStrategyPlan, appendOp]);
+
   const handleContextTurn = useCallback(async (message) => {
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
@@ -5508,6 +6259,29 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         if (/بررسی کن|چک کن|check|status/i.test(lower)) { await handleMonitorAction(m, 'evaluate'); return { handled: true }; }
       }
     }
+
+    /*
+     * ── SMART MONEY ABOUT A WALLET ──
+     * «تحلیل وال اسمارت مانی» / «کیف پول من را تحلیل کن» / an address: the
+     * same live intelligence the /smart-money page reads, answered here with
+     * the wallet the user is actually using. A definition question («اسمارت
+     * مانی چیست؟») is not hijacked into an address analysis.
+     */
+    const smartMoneyWord = /(اسمارت\s*مانی|اسمارت‌مانی|پول هوشمند|smart[\s-]*money|نهنگ‌ها|نهنگ|whales?)/i.test(text);
+    const definitionAsk = /(چیست|چیه|چه کار می‌کند|what is|how does|معنی)/i.test(lower);
+    const walletWord = /(کیف\s*پول|wallet|وال\b|پرتفوی|portfolio|دارایی|holdings|آدرس|address|اشتراکی|من\b)/i.test(text);
+    const addressMatch = text.match(/0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44}/);
+    if (smartMoneyWord && !definitionAsk && (walletWord || addressMatch)) {
+      const asked = addressMatch ? addressMatch[0] : null;
+      await smartMoneyWalletTurn({
+        address: asked || null,
+        source: asked ? null : (locale.startsWith('fa') ? 'تحلیل اسمارت مانی کیف پول' : 'Smart-money analysis of the wallet')
+      });
+      return { handled: true };
+    }
+
+    const planQuestion = strategyQuestionTurn(text);
+    if (planQuestion.handled) return planQuestion;
 
     const monitorIntent = /پایش|بپای|نظارت|watch|monitor|خبر بده|اطلاع بده|alert/i.test(text)
       && !/توقف|متوقف|لغو/i.test(text);
@@ -5640,7 +6414,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
 
     return { handled: false };
-  }, [pendingDraft, activeContext, monitors, locale, pushTurn, handleMonitorCreate, handleOrderCreate, handleMonitorAction, runOpportunity, advanceAgentDraft]);
+  }, [pendingDraft, activeContext, monitors, locale, pushTurn, handleMonitorCreate, handleOrderCreate, handleMonitorAction, runOpportunity, advanceAgentDraft, strategyQuestionTurn]);
 
   contextHandlerRef.current = handleContextTurn;
 
@@ -5926,6 +6700,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onStrategyExecute={runStrategyStage}
                 onStrategyMonitor={monitorStrategy}
                 onStrategyRevise={reviseStrategy}
+                onStrategyFix={fixStrategyStage}
                 strategyLive={strategyLive}
                 autonomyEngine={autonomyEngine}
                 autonomyStrategies={autonomyStrategies}

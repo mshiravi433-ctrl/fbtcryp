@@ -178,6 +178,29 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
   /** The next stage that may run, and its handoff actions. */
   function nextStage() {
     if (halted) return { ok: false, code: 'HALTED', detail: halted.reason };
+    /*
+     * ─── A HANDED-OFF MONEY STAGE IS SETTLED BEFORE ANYTHING ELSE ──────────
+     *
+     * RUNNING means the venue was opened and the user may already have signed;
+     * it is the only state in which a transaction can be in flight. Hydration
+     * re-opens the preflight on every reload (by design — localStorage is not
+     * evidence), and that reset made `nextStage()` answer «preflight» even
+     * while a money stage was waiting for reconciliation. So a user who
+     * returned from a completed swap was walked back to stage one, the pending
+     * stage could never be settled — `confirmStage` refuses a stage that is not
+     * the one `nextStage()` names — and the plan sat at 0% forever. That is the
+     * reported loop, verbatim: «سواپ را زدم و برگشتم، مرحله جلو نمی‌ره».
+     *
+     * Order is otherwise untouched: the preflight still runs (and is still
+     * re-checked after a reload) as soon as the in-flight stage is resolved.
+     */
+    const inFlight = stageOrder.find((stage) => stageProgress[stage.id]?.state === 'RUNNING'
+      && stage.movesFunds);
+    if (inFlight) {
+      return { ok: false, code: 'AWAITING_RECEIPT', stageId: inFlight.id,
+        actions: inFlight.actions || [], movesFunds: true,
+        detail: 'Reconcile the pending action before starting another stage.' };
+    }
     for (const stage of stageOrder) {
       const progress = stageProgress[stage.id];
       if (!progress || progress.state === 'CONFIRMED' || progress.state === 'SKIPPED') continue;
@@ -319,7 +342,12 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
    * not as a fallback: a revision that re-uses stale rates is the exact
    * failure this module exists to prevent.
    */
-  async function revise({ reason = 'MANUAL', observation = null } = {}) {
+  /*
+   * `goal` lets a caller rebuild against a goal the user just corrected —
+   * typically the capital, after a preflight showed the plan was built on more
+   * than the wallet actually holds. Omitted, the plan's own goal is re-used.
+   */
+  async function revise({ reason = 'MANUAL', observation = null, goal: revisedGoal = null } = {}) {
     if (typeof readEcosystem !== 'function') {
       return { ok: false, code: 'NO_ECOSYSTEM_READER', detail: 'a revision needs a fresh read; none is bound' };
     }
@@ -328,7 +356,10 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
       return { ok: false, code: 'REVISION_LIMIT', detail: `${revisions.length}/${max} revisions used — a human decides from here` };
     }
     const freshState = await readEcosystem();
-    const next = buildPortfolioStrategy({ goal: goal || current.goal, state: freshState, now: now() });
+    const effectiveGoal = revisedGoal && typeof revisedGoal === 'object'
+      ? { ...(goal || current.goal || {}), ...revisedGoal }
+      : (goal || current.goal);
+    const next = buildPortfolioStrategy({ goal: effectiveGoal, state: freshState, now: now() });
     if (!next.ok) {
       return { ok: false, code: next.code, detail: next.detail || 're-plan refused', previousStrategyId: current.strategyId };
     }

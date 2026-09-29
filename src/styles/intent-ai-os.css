@@ -5069,3 +5069,58 @@ body:has(.iaos-page-v6) {
   line-height: 1.5;
   color: #fcd34d;
 }
+
+/* ── STRATEGY STAGE PROGRESS + BLOCKED REASON ────────────────────────────────
+   The plan's own runtime truth, drawn: every stage with the state the runtime
+   recorded, the confirmed percentage, and — when the next stage cannot start —
+   the exact missing fact with the single control that can fix it. Without this
+   the card looked identical before and after a tap, which is what «هیچ‌کدام
+   کار نمی‌ده» describes. */
+.isp-progress { display: flex; flex-direction: column; gap: 8px; }
+.isp-progress-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-size: 11px; font-weight: 700; color: #cbd5e1;
+}
+.isp-progress-head span { font-variant-numeric: tabular-nums; color: #94a3b8; }
+.isp-progress-bar {
+  height: 6px; border-radius: 999px; overflow: hidden;
+  background: rgba(148, 163, 184, 0.18);
+}
+.isp-progress-bar i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #34d399, #6366f1);
+  transition: width 0.25s ease;
+}
+.isp-progress-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.isp-progress-steps li {
+  display: flex; align-items: center; gap: 8px; font-size: 11px; color: #cbd5e1;
+}
+.isp-stage-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isp-stage-state { font-size: 10px; color: #94a3b8; white-space: nowrap; }
+.isp-progress-steps li[data-state='RUNNING'] .isp-stage-state { color: #fcd34d; }
+.isp-progress-steps li[data-state='CONFIRMED'] .isp-stage-state { color: #6ee7b7; }
+.isp-progress-steps li[data-state='FAILED'] .isp-stage-state { color: #fca5a5; }
+.isp-stage-dot {
+  width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto;
+  background: rgba(148, 163, 184, 0.45);
+}
+.isp-stage-dot.is-ready { background: #818cf8; }
+.isp-stage-dot.is-running { background: #fbbf24; box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18); }
+.isp-stage-dot.is-confirmed { background: #34d399; }
+.isp-stage-dot.is-failed { background: #f87171; }
+.isp-stage-dot.is-skipped { background: rgba(148, 163, 184, 0.35); }
+
+.isp-blocked {
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  background: rgba(245, 158, 11, 0.10);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.isp-blocked b { font-size: 12px; color: #fcd34d; }
+.isp-blocked p { margin: 0; font-size: 11px; line-height: 1.7; color: #e2e8f0; }
+.isp-blocked .isp-btn { align-self: flex-start; }
+.isp-blocked code { font-size: 10px; color: #94a3b8; }
+:root[data-theme='light'] .isp-blocked p { color: #0f172a; }
+:root[data-theme='light'] .isp-progress-steps li { color: #334155; }
+:root[data-theme='light'] .isp-progress-head { color: #0f172a; }

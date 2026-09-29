@@ -155,10 +155,29 @@ async function pooledMap(items, limit, worker) {
   return out;
 }
 
-/** Price one row against the market map. `null` when the market has no price for it. */
+/**
+ * Price one row against the market map. `null` when the market has no price.
+ *
+ * ─── A ZERO BALANCE NEEDS NO PRICE ──────────────────────────────────────────
+ * The sixteen-chain read keeps a native row for every network once its
+ * balance answered, including networks where the user holds nothing. Those
+ * zero rows have no market quote unless the chain's gas coin happens to sit in
+ * the top-250 list, and `value == null` was counted as UNPRICED — which set
+ * `partial: true` for the whole book. The strategy preflight reads `partial`
+ * as «the total is a floor, do not trust it» and refused every plan with it:
+ * the report «پیش‌پرواز … هیچ مرحله‌ای اجرا یا تأیید نشد» from a wallet whose
+ * money was fully priced.
+ *
+ * A zero balance is worth zero at any price — the value does not depend on a
+ * quote we do not have. Only a NON-ZERO, unpriced row is a coverage gap, and
+ * only that one still counts as partial.
+ */
 function priceRow(row, priceMap) {
   const quote = row.coingeckoId ? priceMap?.[row.coingeckoId] : null;
   const numeric = quote?.price != null && Number.isFinite(Number(quote.price)) ? Number(quote.price) : null;
+  if (numeric == null && Number(row.amount) === 0) {
+    return { price: null, value: 0, priceProvenance: 'zero-balance' };
+  }
   return { price: numeric, value: numeric == null ? null : row.amount * numeric,
     priceProvenance: quote?.dataProvenance || 'unavailable' };
 }
@@ -344,6 +363,7 @@ export function useMultiChainPortfolio(wallet) {
 
     const totalValue = byChain.reduce((s, c) => s + (c.totalValue || 0), 0);
     const pricedCount = byChain.reduce((s, c) => s + c.pricedCount, 0);
+    const unpricedValueRows = byChain.reduce((n, c) => n + c.rows.filter((r) => r.value == null).length, 0);
     const totalCount = byChain.reduce((s, c) => s + c.rows.length, 0);
     const failures = byChain.filter((c) => c.error).map((c) => c.chainShort);
     // The market screen intentionally displays offline/stale snapshots. A
@@ -359,8 +379,25 @@ export function useMultiChainPortfolio(wallet) {
       if (b.value == null) return -1;
       return b.value - a.value;
     });
+    /*
+     * What each chain's read actually produced, in one small array.
+     *
+     * The strategy preflight must judge a plan on the networks it uses — one
+     * slow public RPC among sixteen must not refuse a Base-only plan — and it
+     * cannot see that from a single boolean. `partial` stays what the UI shows;
+     * this is the evidence behind it.
+     */
+    const chainReads = byChain.map((c) => ({
+      chainId: c.chainId,
+      failed: Boolean(c.error),
+      stale: Boolean(c.stale),
+      unpriced: c.rows.filter((r) => r.value == null).length,
+      rows: c.rows.length,
+      totalValue: c.totalValue
+    }));
     return {
       chains: byChain,
+      chainReads,
       totalValue,
       pricedCount,
       totalCount,
@@ -368,7 +405,9 @@ export function useMultiChainPortfolio(wallet) {
       /* `partial` now also covers a chain whose rows are the previous read:
          the total is still the best number we have, but the coverage badge is
          not allowed to call it fresh. */
-      partial: failures.length > 0 || pricedCount < totalCount || byChain.some((c) => c.stale)
+      /* `pricedCount < totalCount` counted ZERO balances as unpriced coverage
+         gaps — see priceRow. Only a non-zero row without a quote is a gap. */
+      partial: failures.length > 0 || unpricedValueRows > 0 || byChain.some((c) => c.stale)
         || priceDataStatus !== 'live',
       priceDataStatus,
       staleChains: byChain.filter((c) => c.stale).map((c) => c.chainShort),
@@ -400,6 +439,7 @@ export function useMultiChainPortfolio(wallet) {
    */
   return useMemo(() => ({
     chains: aggregated.chains,
+    chainReads: aggregated.chainReads,
     rows: aggregated.allRows,
     totalValue: aggregated.totalValue,
     pricedCount: aggregated.pricedCount,
@@ -425,7 +465,7 @@ export function useMultiChainPortfolio(wallet) {
     updatedAt,
     refresh: load
   }), [
-    aggregated.chains, aggregated.allRows, aggregated.totalValue, aggregated.pricedCount,
+    aggregated.chains, aggregated.chainReads, aggregated.allRows, aggregated.totalValue, aggregated.pricedCount,
     aggregated.totalCount, aggregated.partial, aggregated.priceDataStatus, aggregated.staleChains, aggregated.failures,
     activeChainId, busy, loaded, fromSnapshot, marketsLoading, error, updatedAt, load
   ]);

@@ -21,8 +21,23 @@ async function call(path, { method = 'GET', body = null } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
+    /*
+     * Owner scope. The server files every monitor under the device identity in
+     * `x-fbt-device`, and until now this client only READ that key: on a fresh
+     * install nothing had written it yet, the POST came back
+     * DEVICE_SCOPE_REQUIRED, and «بازار را بپای» looked broken while the
+     * gateway was fine. Mint it here the same way the AI gateway client does,
+     * so both halves of the app share one identity.
+     */
     const device = (() => {
-      try { return window.localStorage.getItem('fbt.ai.device.v1') || ''; } catch { return ''; }
+      try {
+        let id = window.localStorage.getItem('fbt.ai.device.v1');
+        if (!id) {
+          id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+          window.localStorage.setItem('fbt.ai.device.v1', id);
+        }
+        return id;
+      } catch { return ''; }
     })();
     const res = await fetch(`${base()}${path}`, {
       method,

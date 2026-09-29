@@ -132,6 +132,109 @@ function triggerFa(t) {
   return `${id}: ${d}`;
 }
 
+/*
+ * ─── STAGE PROGRESS ─────────────────────────────────────────────────────────
+ * Reported from the live app: «یه دکمه پایینش هست … هیچ‌کدام کار نمی‌ده و مرحله
+ * بعد نمی‌ره». The runtime DID record stage truth (PENDING → READY → RUNNING →
+ * CONFIRMED) and the plan DID have a last stage (monitor), but the card showed
+ * none of it: every tap produced a chat line somewhere above and a card that
+ * looked exactly as it did a second earlier. A staged plan whose stages cannot
+ * be seen is indistinguishable from a broken button.
+ *
+ * So the card draws the plan's own progress: every stage, its state, and the
+ * percentage the runtime has actually confirmed. `progress` is the runtime's
+ * `stageProgress` map (never a number the card computed) — a stage counts
+ * toward the bar only after the runtime confirmed it, and a money stage only
+ * after a verified receipt.
+ */
+const STAGE_STATE_LABEL = Object.freeze({
+  PENDING: { fa: 'در انتظار', en: 'pending' },
+  READY: { fa: 'آماده', en: 'ready' },
+  RUNNING: { fa: 'در جریان — منتظر رسید', en: 'running — awaiting receipt' },
+  CONFIRMED: { fa: 'تأییدشده', en: 'confirmed' },
+  FAILED: { fa: 'ناموفق', en: 'failed' },
+  SKIPPED: { fa: 'ردشده', en: 'skipped' }
+});
+const STAGE_STATE_ORDER = Object.freeze(['PENDING', 'READY', 'RUNNING', 'CONFIRMED', 'FAILED', 'SKIPPED']);
+
+export function stageProgressSummary(stages = [], stageProgress = {}) {
+  const rows = (Array.isArray(stages) ? stages : []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const states = rows.map((s) => {
+    const raw = String(stageProgress?.[s.id]?.state || (s.order === 0 ? 'READY' : 'PENDING')).toUpperCase();
+    return { id: s.id, title: s.title, order: Number(s.order ?? 0), movesFunds: Boolean(s.movesFunds),
+      state: STAGE_STATE_ORDER.includes(raw) ? raw : 'PENDING' };
+  });
+  const confirmed = states.filter((s) => s.state === 'CONFIRMED').length;
+  return {
+    states,
+    confirmed,
+    total: states.length,
+    percent: states.length ? Math.round((confirmed / states.length) * 100) : 0,
+    next: states.find((s) => s.state !== 'CONFIRMED' && s.state !== 'SKIPPED') || null
+  };
+}
+
+function StageProgress({ strategy, progress, fa }) {
+  if (!progress || !Array.isArray(progress.states) || !progress.states.length) return null;
+  if (!(strategy.stages || []).length) return null;
+  const { states, confirmed, total, percent } = progress;
+  return (
+    <div className="isp-progress" data-testid="strategy-progress" data-percent={percent}
+      data-confirmed={confirmed} data-total={total}>
+      <div className="isp-progress-head">
+        <b>{fa ? 'پیشرفت مراحل' : 'Stage progress'}</b>
+        <span dir="ltr">{confirmed} / {total} · {percent}%</span>
+      </div>
+      <div className="isp-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+        <i style={{ width: `${percent}%` }} />
+      </div>
+      <ol className="isp-progress-steps">
+        {states.map((s) => (
+          <li key={s.id} data-stage={s.id} data-state={s.state}>
+            <span className={`isp-stage-dot is-${s.state.toLowerCase()}`} aria-hidden="true" />
+            <span className="isp-stage-name">{s.title || s.id}{s.movesFunds ? '*' : ''}</span>
+            <span className="isp-stage-state">{STAGE_STATE_LABEL[s.state]?.[fa ? 'fa' : 'en'] || s.state}</span>
+          </li>
+        ))}
+      </ol>
+      <small className="isp-note">
+        {fa
+          ? '* مرحله‌ی مالی: فقط با رسید تأییدشده روی زنجیره تأیید می‌شود. مرحله‌ی بعد قفل می‌ماند تا قبلی تمام شود.'
+          : '* A money stage is confirmed only by a verified on-chain receipt. The next stage stays locked until then.'}
+      </small>
+    </div>
+  );
+}
+
+/** Why the next stage cannot start, and the one control that can unblock it. */
+const REMEDY_LABEL = Object.freeze({
+  CONNECT_WALLET: { fa: 'اتصال کیف پول', en: 'Connect wallet' },
+  UNLOCK_WALLET: { fa: 'باز کردن قفل کیف پول', en: 'Unlock the wallet' },
+  REFRESH_PORTFOLIO: { fa: 'خواندن دوبارهٔ کیف پول', en: 'Re-read the wallet' },
+  REBUILD_WITH_BALANCE: { fa: 'بازسازی با موجودی خوانده‌شده', en: 'Rebuild with the read balance' },
+  SWITCH_CHAIN_OR_REBUILD: { fa: 'تغییر شبکه / بازسازی', en: 'Switch network / rebuild' },
+  FUND_BRIDGE_SOURCE: { fa: 'تأمین USDC روی زنجیرهٔ مبدأ', en: 'Fund USDC on the source chain' },
+  RESTART_PLAN: { fa: 'ساخت دوبارهٔ برنامه', en: 'Rebuild the plan' }
+});
+
+function BlockedBanner({ blocked, fa, onFix }) {
+  if (!blocked?.code) return null;
+  const label = REMEDY_LABEL[blocked.remedy] || null;
+  return (
+    <div className="isp-blocked" data-testid="strategy-blocked" data-code={blocked.code}
+      data-remedy={blocked.remedy || 'NONE'}>
+      <b>{fa ? 'مرحلهٔ بعد الان شروع نمی‌شود' : 'The next stage cannot start yet'}</b>
+      <p dir={fa ? 'rtl' : 'ltr'}>{blocked.message || blocked.code}</p>
+      {label && onFix ? (
+        <button type="button" className="isp-btn is-solid" onClick={() => onFix(blocked)}
+          data-testid="strategy-fix">
+          {fa ? label.fa : label.en}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /* ── sub-blocks ──────────────────────────────────────────────────────────── */
 
 function CoverageRow({ strategy, fa }) {
@@ -346,11 +449,19 @@ function MonitorList({ monitors, fa }) {
 export function StrategyPlanCard({
   plan, spec = null, busy = false, error = null, locale = 'fa',
   onOpenRoute = null, onExecuteStage = null, onSwitchPlan = null,
-  onMonitor = null, onRevise = null, live = null
+  onMonitor = null, onRevise = null, live = null,
+  /* Runtime truth + the reason the next stage is blocked, both produced by the
+     chat (never guessed here). `onFix` is the single control that turns a
+     refusal into the next real step. */
+  progress = null, blocked = null, onFix = null
 }) {
   const fa = String(locale).startsWith('fa');
   const [picked, setPicked] = useState(null);
   const effective = useMemo(() => plan || null, [plan]);
+  const progressSummary = useMemo(
+    () => stageProgressSummary(effective?.stages || [], progress || effective?.stageProgress || {}),
+    [effective, progress]
+  );
 
   if (error) {
     return (
@@ -458,6 +569,7 @@ export function StrategyPlanCard({
         <>
           <SleeveList sleeves={effective.sleeves} fa={fa} onOpenRoute={onOpenRoute} />
           <StageList stages={effective.stages} strategyId={effective.strategyId} fa={fa} onOpenRoute={onOpenRoute} />
+          <StageProgress strategy={effective} progress={progressSummary} fa={fa} />
           <MonitorList monitors={effective.monitors} fa={fa} />
 
           <div className="isp-risk" data-testid="strategy-risk">
@@ -509,6 +621,8 @@ export function StrategyPlanCard({
               ) : null}
             </div>
           ) : null}
+
+          <BlockedBanner blocked={blocked} fa={fa} onFix={onFix} />
 
           {/*
             The monitoring verdict, once the plan has been measured against
