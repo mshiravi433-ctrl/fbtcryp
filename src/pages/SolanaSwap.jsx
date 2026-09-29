@@ -232,7 +232,7 @@ export default function SolanaSwap({ embedded = false }) {
   useEffect(() => {
     const to = searchParams.get('to');
     if (!to) return;
-    const asset = findAsset(to);
+    const asset = findAsset(to) ?? (to === SOL_MINT ? BASE_TOKENS.find((tk) => tk.mint === SOL_MINT) : null);
     if (asset) {
       /*
        * A curated asset that is somehow not in BASE_TOKENS is still built from

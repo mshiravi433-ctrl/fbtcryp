@@ -98,9 +98,12 @@
       "meme": "Memecoins",
       "rwa": "Real assets",
       "ai": "AI",
-      "gaming": "Gaming"
+      "gaming": "Gaming",
+      "solana": "Solana"
     },
-    "sectorEmpty": "Nothing to show for this sector right now.",
+    "sectorEmpty": "Sector data is unavailable right now. Try again shortly.",
+    "showMore": "Show more ({{count}} remaining)",
+    "loadingSector": "Loading sector…",
     "swap": "Swap",
     "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network",
     "trendTitle": "Total market cap · {{days}} days",

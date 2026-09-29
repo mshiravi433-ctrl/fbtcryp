@@ -25,6 +25,7 @@ import {
   fetchSimplePrices,
   fetchTrending,
 } from './providers.js';
+import { MARKET_CATEGORIES } from '../src/lib/marketSectors.js';
 import { telegramAuth, verifyInitData, normalizeBotToken, extractInitData } from './telegramAuth.js';
 import { telegramBotIdentity, tokenDiagnostics } from './telegramIdentity.js';
 import { fetchAudio } from './audio.js';
@@ -4808,7 +4809,7 @@ app.get('/api/signals/solana/radar', async (req, res) => {
  */
 app.get('/api/category/:slug', (req, res) => {
   const slug = String(req.params.slug || '').slice(0, 60);
-  if (!/^[a-z0-9-]+$/.test(slug)) return res.status(400).json({ error: 'BAD_CATEGORY' });
+  if (!Object.values(MARKET_CATEGORIES).includes(slug)) return res.status(400).json({ error: 'BAD_CATEGORY' });
   const perPage = Math.min(100, Math.max(1, Number(req.query.per_page) || 50));
   const vs = /^[a-z]{2,5}$/.test(String(req.query.vs || '')) ? String(req.query.vs) : 'usd';
   return serve(res, 300_000)(

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { fmtPct, fmtPrice } from '../lib/format';
+import { fmtPct, fmtUsd } from '../lib/format';
 import Sparkline from './Sparkline';
 import CoinLogo from './CoinLogo';
 import { riseIn } from './PageTransition';
@@ -12,7 +12,6 @@ export default function CoinRow({ coin, onClick, showSpark = true, rank }) {
       variants={riseIn}
       whileTap={{ scale: 0.985 }}
       onClick={() => onClick?.(coin)}
-      layout
     >
       {rank != null && (
         <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', width: 16 }}>
@@ -32,7 +31,7 @@ export default function CoinRow({ coin, onClick, showSpark = true, rank }) {
 
       <div className="coin-right">
         <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-          ${fmtPrice(coin.price)}
+          {fmtUsd(coin.price)}
         </div>
         <div className={`mono ${up ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
           {fmtPct(coin.change24h, 2)}

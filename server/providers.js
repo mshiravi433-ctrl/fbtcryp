@@ -10,6 +10,7 @@ import { fetchCoinLoreTickers, COINLORE_BASE, COINLORE_MAX_PAGE_SIZE } from '../
 import { hydrateCoinRows, mergeVisuals, rememberVisuals } from '../src/lib/marketVisuals.js';
 import { attachVenueSparklines } from '../src/lib/venueSparklines.js';
 import { attachIndexLogos } from '../src/lib/coinLogoIndex.js';
+import { MARKET_CATEGORIES, sectorFromRows } from '../src/lib/marketSectors.js';
 
 const CG_BASE = process.env.COINGECKO_BASE || 'https://api.coingecko.com/api/v3';
 const CG_PRO_BASE = 'https://pro-api.coingecko.com/api/v3';
@@ -458,12 +459,15 @@ export async function fetchCoinDetail(id, vs = 'usd') {
 
   if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
 
-  /* CoinLore's ticker endpoint lacks single-coin lookup by slug; resolve the
-     requested id against its capped top-100 live list instead of showing an
-     unrelated offline seed price on the coin detail page. */
+  /* CoinLore cannot look up a slug directly. Scan the same 250 live rows
+     the home page shows, not only its first 100. */
   try {
-    const rows = await fetchCoinLoreMarkets({ page: 1, perPage: COINLORE_MAX_PAGE_SIZE });
-    const coin = rows.find((row) => row.id === id);
+    const rows = await fetchCoinLoreMarkets({ page: 1, perPage: 250 });
+    let coin = rows.find((row) => row.id === id);
+    if (!coin && rows.length === 250) {
+      const next = await fetchCoinLoreMarkets({ page: 2, perPage: 250 });
+      coin = next.find((row) => row.id === id);
+    }
     if (coin) {
       /* Same visual enrichment as the market list: the detail page's header
          artwork and its 7d sparkline come from CoinGecko's unthrottled
@@ -491,24 +495,50 @@ export async function fetchSearch(query) {
 }
 
 
-/**
- * Coins in one CoinGecko sector.
- *
- * The slug is validated by the route before it reaches here; this function
- * only builds the request. Kept next to the other market fetchers so the key
- * handling (`cgUrl`) is shared rather than reimplemented.
- */
+/** Reuse one backup ticker read across sector tabs on an instance. */
+const sectorBackups = new Map();
+async function backupSectorRows(page = 1) {
+  let entry = sectorBackups.get(page);
+  if (!entry || Date.now() - entry.at > 30_000) {
+    const promise = fetchCoinLoreMarkets({ page, perPage: 250 });
+    entry = { at: Date.now(), promise };
+    sectorBackups.set(page, entry);
+    promise.catch(() => { if (sectorBackups.get(page)?.promise === promise) sectorBackups.delete(page); });
+  }
+  return entry.promise;
+}
+
+/** A blocked CoinGecko category must not turn an entire sector into a blank tab.
+ * Backup rows are real USD quotes, selected by an explicit CoinGecko ID list.
+ * CoinLore has no EUR quotes or 24h extrema, so never synthesize either. */
 export async function fetchCategory(slug, { perPage = 50, vs = 'usd' } = {}) {
-  const raw = await cgReq(
-    cgUrl('/coins/markets', {
-      vs_currency: vs,
-      category: slug,
-      order: 'market_cap_desc',
-      per_page: perPage,
-      page: 1,
-      sparkline: true,
-      price_change_percentage: '1h,24h,7d'
-    })
-  );
-  return Array.isArray(raw) ? raw.map(normalizeCoin) : [];
+  const sector = Object.keys(MARKET_CATEGORIES).find((key) => MARKET_CATEGORIES[key] === slug);
+  if (!sector) throw new Error('BAD_CATEGORY');
+  try {
+    const raw = await cgReq(
+      cgUrl('/coins/markets', {
+        vs_currency: vs, category: slug, order: 'market_cap_desc',
+        per_page: Math.min(100, perPage), page: 1, sparkline: true,
+        price_change_percentage: '1h,24h,7d'
+      })
+    );
+    if (Array.isArray(raw) && raw.length) {
+      const rows = raw.map(normalizeCoin);
+      rememberVisuals(rows);
+      return rows;
+    }
+    // An empty category can also mean a changed upstream slug. Try the
+    // independent ID-curated ticker feed before declaring the sector empty.
+  } catch (err) {
+    if (String(vs).toLowerCase() !== 'usd') throw err;
+  }
+  if (String(vs).toLowerCase() !== 'usd') throw new Error('CATEGORY_DATA_UNAVAILABLE');
+  const first = await backupSectorRows();
+  let matches = sectorFromRows(sector, first).slice(0, perPage);
+  if (!matches.length && first.length === 250) {
+    matches = sectorFromRows(sector, await backupSectorRows(2)).slice(0, perPage);
+  }
+  if (!matches.length) throw new Error('CATEGORY_DATA_UNAVAILABLE');
+  // Visuals are best-effort; never block quotes for the full 6s market budget.
+  return fillFallbackVisuals(matches, 'usd', { deadlineMs: 2500 });
 }
