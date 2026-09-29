@@ -349,9 +349,22 @@ try {
   const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
   if (tail) console.log(tail);
 }
+/* Same isolation for the visual-enrichment layer (it mocks fetch too). */
+let marketVisualsOk = false;
+try {
+  execFileSync(process.execPath, ['test/market-visuals-probe.mjs'], {
+    stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+  });
+  marketVisualsOk = true;
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+  if (tail) console.log(tail);
+}
 console.log(`── Market provider failover ───────────────────────────────────────`);
 console.log(`  ${marketProviderOk ? '✓' : '✗'} live CoinLore failover — 403 recovery, schema and safe offline boundary`);
+console.log(`  ${marketVisualsOk ? '✓' : '✗'} fallback visuals — budgeted CoinGecko chart/logo hydration, honest gaps`);
 if (!marketProviderOk) failed += 1;
+if (!marketVisualsOk) failed += 1;
 
 // Silence React's act() advice and framer-motion's SSR useLayoutEffect notice;
 // neither indicates a problem and both drown out real output.

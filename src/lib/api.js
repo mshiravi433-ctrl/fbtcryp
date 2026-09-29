@@ -8,11 +8,17 @@
  * If the backend is unreachable, the client tries public CoinGecko, then the
  * independent public CoinLore ticker feed for USD markets, and finally a
  * deterministic offline dataset. Offline prices are visibly labelled.
+ *
+ * CoinLore tickers carry no artwork and no price history, so fallback rows are
+ * enriched (lib/marketVisuals.js) with CoinGecko logos and sparklines from the
+ * endpoints CoinGecko does NOT throttle — never with invented shapes. Global
+ * stats follow the same order: backend, CoinGecko, CoinLore, offline.
  */
 
 import { offlineGlobal, offlineMarkets, offlineTrending, offlineChart } from './offlineData';
 import { apiBase } from './apiBase';
 import { normalizeCoinLoreMarket } from './coinLore';
+import { hydrateCoinRows, rememberVisuals } from './marketVisuals';
 
 // `apiBase()` is deliberately resolved at request time. In the Capacitor
 // shell the page origin is https://localhost, so a relative `/api` would hit
@@ -150,9 +156,15 @@ export function clearApiCache() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Global market stats (CoinLore shape)                                        */
+/* Global market stats                                                         */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * CoinGecko `/global` first — the same feed the market rows use, so the
+ * summary strip and the rows can never disagree about the day. The CoinLore
+ * ticker stays as the live last resort, and the offline snapshot as the final
+ * answer. `normalizeGlobal` accepts BOTH raw shapes.
+ */
 export function getGlobal() {
   return resilient('global', {
     ttl: 45000,
@@ -161,24 +173,42 @@ export function getGlobal() {
       return { ...data, dataProvenance: stale ? 'stale' : 'live' };
     },
     direct: async () => {
-      const raw = await fetchJson('https://api.coinlore.net/api/global/');
+      try {
+        const raw = await fetchJson(`${PUBLIC_CG}/global`);
+        return { ...normalizeGlobal(raw), dataProvenance: 'live' };
+      } catch {
+        /* Fall through to the independent live backup below. */
+      }
+      const raw = await fetchJson(`${PUBLIC_COINLORE}/global/`);
       return { ...normalizeGlobal(Array.isArray(raw) ? raw[0] : raw), dataProvenance: 'live' };
     },
     fallback: () => ({ ...offlineGlobal(), dataProvenance: 'offline' })
   });
 }
 
+/**
+ * Normalize BOTH provider shapes into one:
+ *   CoinLore `/global/` ticker: { coins_count, active_markets, total_mcap, … }
+ *   CoinGecko `/global`:        { data: { active_cryptocurrencies, markets,
+ *                                    total_market_cap: { usd }, … } }
+ * A field missing from a provider stays 0 rather than being invented.
+ */
 export function normalizeGlobal(g = {}) {
+  const d = g && typeof g.data === 'object' && g.data !== null ? g.data : g;
+  const objOrNum = (v, key) => {
+    if (v && typeof v === 'object') return Number(v[key]) || 0;
+    return Number(v) || 0;
+  };
   return {
-    coins: Number(g.coins_count) || 0,
-    markets: Number(g.active_markets) || 0,
-    mcap: Number(g.total_mcap) || 0,
-    volume: Number(g.total_volume) || 0,
-    btcDominance: Number(g.btc_d) || 0,
-    ethDominance: Number(g.eth_d) || 0,
-    mcapChange: Number(g.mcap_change) || 0,
-    volumeChange: Number(g.volume_change) || 0,
-    avgChange: Number(g.avg_change_percent) || 0
+    coins: Number(d.coins_count) || Number(d.active_cryptocurrencies) || 0,
+    markets: Number(d.active_markets) || Number(d.markets) || 0,
+    mcap: Number(d.total_mcap) || objOrNum(d.total_market_cap, 'usd'),
+    volume: objOrNum(d.total_volume, 'usd'),
+    btcDominance: Number(d.btc_d) || Number(d.market_cap_percentage?.btc) || 0,
+    ethDominance: Number(d.eth_d) || Number(d.market_cap_percentage?.eth) || 0,
+    mcapChange: Number(d.mcap_change) || Number(d.market_cap_change_percentage_24h_usd) || 0,
+    volumeChange: Number(d.volume_change) || Number(d.volume_change_percentage_24h_usd) || 0,
+    avgChange: Number(d.avg_change_percent) || 0
   };
 }
 
@@ -207,7 +237,9 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
             `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`
         );
         if (Array.isArray(raw) && raw.length) {
-          return withProvenance(raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' })), 'live');
+          const rows = raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' }));
+          rememberVisuals(rows);
+          return withProvenance(rows, 'live');
         }
         coinGeckoError = new Error('CoinGecko returned no market rows');
       } catch (err) {
@@ -223,7 +255,14 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
       if (!Array.isArray(raw?.data)) throw coinGeckoError;
       const rows = raw.data.map(normalizeCoinLoreMarket).filter(Boolean);
       if (raw.data.length && !rows.length) throw coinGeckoError;
-      return withProvenance(rows, 'live');
+      // Logos and sparklines restored from CoinGecko's unthrottled endpoints —
+      // the tickers stay CoinLore's, the screen stops looking broken.
+      const enriched = await hydrateCoinRows(rows, {
+        fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 8000 }),
+        cgBase: PUBLIC_CG,
+        vs
+      });
+      return withProvenance(enriched, 'live');
     },
     // The deterministic snapshot keeps the ordinary market screen useful
     // offline, but the Intelligence tab must never relabel it as a live fact.
@@ -353,7 +392,11 @@ export function getCoin(id, vs = 'usd') {
           `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&ids=${encodeURIComponent(id)}` +
             `&sparkline=true&price_change_percentage=1h,24h,7d`
         );
-        if (Array.isArray(rows) && rows[0]) return { ...normalizeCoin(rows[0]), marketProvider: 'coingecko' };
+        if (Array.isArray(rows) && rows[0]) {
+          const coin = { ...normalizeCoin(rows[0]), marketProvider: 'coingecko' };
+          rememberVisuals([coin]);
+          return coin;
+        }
 
         // Some ids only resolve on the detail endpoint (delisted, or an id that
         // came from /search rather than /markets).
@@ -362,7 +405,7 @@ export function getCoin(id, vs = 'usd') {
             `&market_data=true&community_data=false&developer_data=false`
         );
         const md = raw.market_data ?? {};
-        return {
+        const coin = {
           id: raw.id,
           symbol: (raw.symbol || '').toUpperCase(),
           name: raw.name,
@@ -384,6 +427,8 @@ export function getCoin(id, vs = 'usd') {
           sparkline: md.sparkline_7d?.price ?? [],
           marketProvider: 'coingecko'
         };
+        rememberVisuals([coin]);
+        return coin;
       } catch (err) {
         coinGeckoError = err;
       }
@@ -393,7 +438,14 @@ export function getCoin(id, vs = 'usd') {
       if (!Array.isArray(raw?.data)) throw coinGeckoError;
       const coin = raw.data.map(normalizeCoinLoreMarket).find((row) => row?.id === id);
       if (!coin) throw coinGeckoError;
-      return { ...coin, description: '', homepage: null };
+      const [enriched] = await hydrateCoinRows([{ ...coin, description: '', homepage: null }], {
+        fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 8000 }),
+        cgBase: PUBLIC_CG,
+        vs: 'usd',
+        chartBudget: 1,
+        logoBudget: 1
+      });
+      return enriched;
     },
     fallback: () => offlineMarkets(250).find((c) => c.id === id) ?? null
   });
