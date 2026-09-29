@@ -398,11 +398,16 @@ export async function run(container) {
       check('the returned swap reconciles against the chain and confirms the stage',
         states3['deploy-market'] === 'CONFIRMED'
         || /تطبیق داده شد|matched on-chain|confirmed/.test(text3));
+      /*
+       * STATE ONLY. These two once accepted a text fallback (`/۱۰۰٪|100%/`),
+       * which the plan card itself can satisfy with a sentence like «Add the
+       * 100% that has price risk» — a check that passes on prose proves
+       * nothing about the runtime. The store is the claim.
+       */
       check('the plan walks its remaining no-signature stages by itself (no extra tap for the watch)',
-        states3.monitor === 'CONFIRMED' || /۱۰۰٪|100%/.test(text3));
+        states3.monitor === 'CONFIRMED');
       check('the plan reports its final state honestly',
-        Object.values(states3).every((st) => st === 'CONFIRMED' || st === 'SKIPPED')
-        || /۱۰۰٪|100%/.test(text3));
+        Object.values(states3).every((st) => st === 'CONFIRMED' || st === 'SKIPPED'));
     }
   }
 
