@@ -13,7 +13,7 @@ import { getCoinVenue, venueRoute } from '../lib/coinVenue';
 import TradingChart from '../components/TradingChart';
 import CoinLogo from '../components/CoinLogo';
 import { useOhlc } from '../hooks/useMarket';
-import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtTime } from '../lib/format';
+import { fmtCompact, fmtNum, fmtPct, fmtPrice, fmtUsd, fmtTime } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import SegIndicator from '../components/SegIndicator';
@@ -294,9 +294,9 @@ export default function CoinDetail() {
           </div>
           <div style={{ textAlign: 'end' }}>
             <div className="faint">{t('coin.high24h')}</div>
-            <div className="mono" style={{ fontSize: 12 }}>${fmtPrice(coin?.high24h)}</div>
+            <div className="mono" style={{ fontSize: 12 }}>{coin?.high24h > 0 ? fmtUsd(coin.high24h) : '—'}</div>
             <div className="faint" style={{ marginTop: 4 }}>{t('coin.low24h')}</div>
-            <div className="mono" style={{ fontSize: 12 }}>${fmtPrice(coin?.low24h)}</div>
+            <div className="mono" style={{ fontSize: 12 }}>{coin?.low24h > 0 ? fmtUsd(coin.low24h) : '—'}</div>
           </div>
         </div>
 

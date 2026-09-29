@@ -46,7 +46,6 @@ export default function Sparkline({ data = [], width = 74, height = 30, up = tru
           animation: 'spark-draw 1.1s ease-out'
         }}
       />
-      <style>{`@keyframes spark-draw { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }`}</style>
     </svg>
   );
 }

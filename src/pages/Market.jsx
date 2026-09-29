@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -12,8 +12,12 @@ import Sparkline from '../components/Sparkline';
 import TrendChart from '../components/TrendChart';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
-import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
-import { MARKET_CATEGORIES, getCategory } from '../lib/api';
+import { fmtCompact, fmtNum, fmtPct, fmtUsd } from '../lib/format';
+import { vsOf } from '../lib/currency';
+import { useSettingsStore } from '../store/useSettingsStore';
+import { getCategory, getMarkets, onMarketVisualsReady } from '../lib/api';
+import { MARKET_CATEGORIES, sectorFromRows } from '../lib/marketSectors';
+import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts } from '../lib/priceAlerts';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
@@ -54,12 +58,16 @@ export default function Market() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const favorites = useAppStore((s) => s.favorites);
+  const vs = vsOf(useSettingsStore((s) => s.currency));
 
   const { data: global } = useGlobalStats();
   // 250 rows instead of 60: the old page made most coins untappable, because
   // the detail screen looked the id up in THIS list and said "not found" when
   // it wasn't there.
-  const { data: coins, loading } = useMarkets(250);
+  const { data: marketCoins, loading } = useMarkets(250);
+  const [visualVersion, setVisualVersion] = useState(0);
+  useEffect(() => onMarketVisualsReady(() => setVisualVersion((v) => v + 1)), []);
+  const coins = useMemo(() => (marketCoins ?? []).map(mergeVisuals), [marketCoins, visualVersion]);
   const { data: trending } = useTrending();
 
   /*
@@ -129,6 +137,31 @@ export default function Market() {
   const [sector, setSector] = useState(null);
   const [sectorCoins, setSectorCoins] = useState([]);
   const [sectorLoading, setSectorLoading] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(40);
+  const [secondPage, setSecondPage] = useState({ vs, rows: [] });
+  const currentVs = useRef(vs);
+  currentVs.current = vs;
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageDone, setPageDone] = useState(false);
+  const loadNextPage = async () => {
+    if (pageLoading || pageDone) return;
+    setPageLoading(true);
+    try {
+      const rows = await getMarkets({ page: 2, perPage: 250, vs });
+      if (currentVs.current !== vs) return;
+      const known = new Set(coins.map((row) => row.id));
+      const newRows = (rows ?? []).filter((row) => !known.has(row.id));
+      setSecondPage({ vs, rows: newRows });
+      setPageDone(true); // cap at 500; the next page is deliberately on demand
+      setVisibleCount((n) => n + 40);
+    } catch {
+      // A failed page must remain retryable, never cached as a successful empty page.
+    } finally {
+      setPageLoading(false);
+    }
+  };
+  useEffect(() => setVisibleCount(40), [sector, filter, query]);
+  useEffect(() => { setSecondPage({ vs, rows: [] }); setPageDone(false); }, [vs]);
 
   useEffect(() => {
     if (!sector) {
@@ -136,15 +169,16 @@ export default function Market() {
       return undefined;
     }
     let alive = true;
+    setSectorCoins([]);
     setSectorLoading(true);
-    getCategory(sector)
+    getCategory(sector, { vs })
       .then((rows) => alive && setSectorCoins(rows ?? []))
       .catch(() => alive && setSectorCoins([]))
       .finally(() => alive && setSectorLoading(false));
     return () => {
       alive = false;
     };
-  }, [sector]);
+  }, [sector, vs]);
 
   // Anything not in the loaded page is found by querying the full universe.
   const { results: remoteHits, searching } = useCoinSearch(query);
@@ -157,7 +191,10 @@ export default function Market() {
      * the main list and are visually deselected while a sector is active.
      */
     if (sector) {
-      const rows = sectorCoins;
+      // Do not blank the tab while the category endpoint is warming or down.
+      // The fallback only uses ID-verified members with quotes from the main
+      // feed; it is not a symbol/name search or fabricated category price.
+      const rows = sectorCoins.length ? sectorCoins : sectorFromRows(sector, coins);
       if (!query.trim()) return rows;
       const q = query.trim().toLowerCase();
       return rows.filter(
@@ -165,7 +202,7 @@ export default function Market() {
       );
     }
 
-    let out = coins ?? [];
+    let out = [...(coins ?? []), ...(secondPage.vs === vs ? secondPage.rows : [])];
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       out = out.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
@@ -182,15 +219,15 @@ export default function Market() {
       default:
         return out;
     }
-  }, [coins, filter, query, favorites, sector, sectorCoins]);
+  }, [coins, secondPage, vs, filter, query, favorites, sector, sectorCoins]);
 
   // Coins the search found that aren't in the loaded page. Shown separately so
   // it's obvious they came from a wider lookup, and tappable like any other.
   const extraHits = useMemo(() => {
-    if (!query.trim()) return [];
+    if (!query.trim() || sector) return [];
     const have = new Set((list ?? []).map((c) => c.id));
     return (remoteHits ?? []).filter((c) => !have.has(c.id));
-  }, [remoteHits, list, query]);
+  }, [remoteHits, list, query, sector]);
 
   const hero = coins?.[0];
   /*
@@ -317,12 +354,12 @@ export default function Market() {
               <CoinLogo coin={hero} />
               <div>
                 <div style={{ fontWeight: 700 }}>{hero.name}</div>
-                <div className="faint">{hero.symbol} / USD</div>
+                <div className="faint">{hero.symbol} / {vs.toUpperCase()}</div>
               </div>
             </div>
             <div style={{ textAlign: 'end' }}>
               <div className="stat-mini">
-                <AnimatedNumber value={hero.price} format={(v) => `$${fmtNum(v, 2)}`} />
+                <AnimatedNumber value={hero.price} format={(v) => fmtUsd(v)} />
               </div>
               <div className={`mono ${hero.change24h >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
                 {fmtPct(hero.change24h)}
@@ -412,14 +449,14 @@ export default function Market() {
             <button
               key={sec}
               className={`tag ${sector === sec ? 'active' : ''}`}
-              onClick={() => setSector(sector === sec ? null : sec)}
+              onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
             >
               {t(`market.sector.${sec}`)}
             </button>
           ))}
         </div>
 
-        {loading ? (
+        {loading && !list.length ? (
           <div className="stack">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="skel" style={{ height: 58 }} />
@@ -428,17 +465,22 @@ export default function Market() {
         ) : list.length === 0 && extraHits.length === 0 ? (
           <div className="empty">
             <span className="empty-icon">🔍</span>
-            {searching ? t('market.searching') : t('market.noResults')}
+            {sectorLoading ? t('market.loadingSector') : sector ? t('market.sectorEmpty') : searching ? t('market.searching') : t('market.noResults')}
           </div>
         ) : (
           <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
-            {list.map((c, i) => {
+            {list.slice(0, visibleCount).map((c, i) => {
               const swappable = isSwappable(c.id);
               const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
               return (
                 <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <CoinRow coin={c} rank={i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
+                    <CoinRow coin={c} rank={c.rank || i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
+                    <div className="market-row-stats mono" aria-label={`${t('market.volume24h')}: ${c.volume ?? '—'}`}>
+                      <span>{t('market.volume24h')}: {c.volume != null && c.volume > 0 ? fmtCompact(c.volume) : '—'}</span>
+                      <span>{t('market.low24h')}: {c.low24h != null && c.low24h > 0 ? fmtUsd(c.low24h) : '—'}</span>
+                      <span>{t('market.high24h')}: {c.high24h != null && c.high24h > 0 ? fmtUsd(c.high24h) : '—'}</span>
+                    </div>
                   </div>
                   {swappable && swapUrl && (
                     <button
@@ -457,6 +499,12 @@ export default function Market() {
               );
             })}
 
+            {(list.length > visibleCount || (!sector && filter === 'all' && !query && !pageDone && coins.length >= 250)) && (
+              <button type="button" className="tag" disabled={pageLoading}
+                onClick={() => list.length > visibleCount ? setVisibleCount((n) => n + 40) : loadNextPage()}>
+                {pageLoading ? t('market.loadingSector') : t('market.showMore', { count: Math.max(0, list.length - visibleCount) || 250 })}
+              </button>
+            )}
             {extraHits.length > 0 && (
               <>
                 <p className="section-label" style={{ marginTop: 8 }}>{t('market.moreResults')}</p>

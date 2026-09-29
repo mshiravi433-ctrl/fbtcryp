@@ -35,6 +35,8 @@
 
 import { EVM_CHAINS, TOKENS } from './chains.js';
 import { getTokensSync } from './tokenLists.js';
+import { EQUITY_ASSETS, COMMODITY_ASSETS, LST_ASSETS } from './solanaAssets.js';
+import { SOL_MINT } from './solana.js';
 
 /**
  * Chain preference when a coin exists on several.
@@ -93,6 +95,16 @@ export const THOR_NATIVE = {
   dogecoin: { asset: 'DOGE.DOGE', symbol: 'DOGE', name: 'Dogecoin', coingeckoId: 'dogecoin' }
 };
 
+// Only issuer-curated mints with an explicit CoinGecko ID may appear in the
+// market's one-tap swap action. Never resolve a mint by a duplicated symbol.
+const SOLANA_CURATED = new Map(
+  [...EQUITY_ASSETS, ...COMMODITY_ASSETS,
+    ...LST_ASSETS.filter((asset) => ['jitosol', 'msol'].includes(asset.id))
+      .map((asset) => ({ ...asset, coingeckoId: asset.id === 'jitosol' ? 'jito-staked-sol' : 'marinade-staked-sol' }))]
+    .filter((asset) => asset.coingeckoId && asset.mint)
+    .map((asset) => [asset.coingeckoId, asset])
+);
+
 const THOR_COUNTER = 'ETH.ETH';
 
 export function thorTargetFor(coingeckoId) {
@@ -130,6 +142,8 @@ export function swapTargetFor(coingeckoId) {
       return { kind: 'evm', chainId, token, chainName: EVM_CHAINS[chainId]?.name ?? String(chainId) };
     }
   }
+  const asset = SOLANA_CURATED.get(id);
+  if (asset) return { kind: 'solana', chainId: null, chainName: 'Solana', token: asset };
   return null;
 }
 
@@ -154,10 +168,10 @@ export function swapUrlFor(coingeckoId, side = 'buy') {
   if (!target) return null;
 
   /* Solana native coin — land on the Solana swap screen directly. The
-     screen resolves ?to=SOL against its curated assets, so no mint is ever
-     taken from a URL (see src/pages/SolanaSwap.jsx). */
+     screen resolves ?to=<verified SOL mint> against its curated assets,
+     so no arbitrary mint is ever taken from a URL (see src/pages/SolanaSwap.jsx). */
   if (target.kind === 'solana') {
-    return `/solana?to=${encodeURIComponent(target.token.symbol)}&side=${side}`;
+    return `/solana?to=${encodeURIComponent(target.token.mint || SOL_MINT)}&side=${side}`;
   }
 
   if (target.kind === 'thor') {

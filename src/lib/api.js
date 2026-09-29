@@ -29,6 +29,7 @@ import { apiBase } from './apiBase.js';
 import { fetchCoinLoreTickers, normalizeCoinLoreMarket, COINLORE_MAX_PAGE_SIZE } from './coinLore.js';
 import { hydrateCoinRows, mergeVisuals, needsVisuals, rememberVisuals } from './marketVisuals.js';
 import { attachVenueSparklines } from './venueSparklines.js';
+import { MARKET_CATEGORIES } from './marketSectors.js';
 
 // `apiBase()` is deliberately resolved at request time. In the Capacitor
 // shell the page origin is https://localhost, so a relative `/api` would hit
@@ -107,7 +108,7 @@ async function resilient(key, { backend, direct, fallback, ttl = 30000 }) {
      * legitimately empty successful response, and treating a real empty list
      * as a failure would re-request it forever.
      */
-    const maxAge = cached.empty ? Math.min(EMPTY_TTL_MS, ttl) : ttl;
+    const maxAge = cached.empty ? Math.min(EMPTY_TTL_MS, ttl) : cached.stale ? Math.min(15000, ttl) : ttl;
     if (Date.now() - cached.at < maxAge) return cached.data;
   }
 
@@ -252,12 +253,17 @@ export function normalizeGlobal(g = {}) {
  *   • a failure cools the whole thing down, so a blocked user pays one failed
  *     request every few minutes instead of one per poll.
  */
-const VISUAL_RESCUE_WAIT_MS = 2200;
+const VISUAL_RESCUE_WAIT_MS = 250;
 const VISUAL_RESCUE_TIMEOUT_MS = 8000;
 const VISUAL_RESCUE_COOLDOWN_MS = 5 * 60 * 1000;
 
 let visualRescueBlockedUntil = 0;
 let visualRescueInFlight = null;
+const visualListeners = new Set();
+export function onMarketVisualsReady(listener) {
+  visualListeners.add(listener);
+  return () => visualListeners.delete(listener);
+}
 
 /** One in-flight bulk read per client, however many screens ask for it. */
 function startVisualRescue({ vs, perPage, page }) {
@@ -272,6 +278,7 @@ function startVisualRescue({ vs, perPage, page }) {
     /* Remembered, not spliced: the same call also seeds the memory that gets
        the coin detail screen and the next poll its logos and lines. */
     rememberVisuals(raw.map((coin) => normalizeCoin(coin)));
+    for (const listener of visualListeners) listener();
   })()
     .then(() => {
       visualRescueBlockedUntil = 0;
@@ -415,17 +422,9 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
  * CoinGecko's category slugs are not guessable ("meme-token", not "memes";
  * "tokenized-gold", not "gold"). A wrong slug returns an empty array rather
  * than an error, which would render as a blank screen with no explanation.
- * The slugs below were each checked against the live API.
+ * The map in marketSectors.js is shared with the server allowlist.
  */
-export const MARKET_CATEGORIES = {
-  gold: 'tokenized-gold',
-  meme: 'meme-token',
-  rwa: 'real-world-assets-rwa',
-  ai: 'artificial-intelligence',
-  gaming: 'gaming'
-};
-
-export function getCategory(category, { perPage = 50, vs = 'usd' } = {}) {
+export function getCategory(category, { perPage = 100, vs = 'usd' } = {}) {
   const slug = MARKET_CATEGORIES[category];
   if (!slug) return Promise.resolve([]);
 
@@ -446,6 +445,7 @@ export function getCategory(category, { perPage = 50, vs = 'usd' } = {}) {
           `&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=true` +
           `&price_change_percentage=1h,24h,7d`
       );
+      if (!Array.isArray(raw) || !raw.length) throw new Error('Empty category response');
       return raw.map((coin) => ({ ...normalizeCoin(coin), dataProvenance: 'live' }));
     },
     /*
@@ -562,7 +562,17 @@ export function getCoin(id, vs = 'usd') {
       if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
       const raw = await fetchJson(`${PUBLIC_COINLORE}/tickers/?start=0&limit=${COINLORE_MAX_PAGE_SIZE}`);
       if (!Array.isArray(raw?.data)) throw coinGeckoError;
-      const coin = raw.data.map(normalizeCoinLoreMarket).find((row) => row?.id === id);
+      let coin = raw.data.map(normalizeCoinLoreMarket).find((row) => row?.id === id);
+      for (let page = 2; !coin && page <= 5; page += 1) {
+        // CoinLore caps each request at 100. Scan only until this coin is
+        // found or the provider returns its last page (market can show 500).
+        const rest = await fetchCoinLoreTickers({
+          fetchJson: (url) => fetchJson(url), base: PUBLIC_COINLORE,
+          page, perPage: 100, maxPages: 1
+        });
+        coin = rest.find((row) => row.id === id);
+        if (rest.length < 100) break;
+      }
       if (!coin) throw coinGeckoError;
       /*
        * The detail screen renders the SAME row shape as the list, so it wants
