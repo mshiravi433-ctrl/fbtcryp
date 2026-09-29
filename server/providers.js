@@ -7,6 +7,7 @@
  */
 
 import { normalizeCoinLoreMarket } from '../src/lib/coinLore.js';
+import { hydrateCoinRows, rememberVisuals } from '../src/lib/marketVisuals.js';
 
 const CG_BASE = process.env.COINGECKO_BASE || 'https://api.coingecko.com/api/v3';
 const CG_PRO_BASE = 'https://pro-api.coingecko.com/api/v3';
@@ -20,7 +21,37 @@ const CG_IS_PRO = process.env.COINGECKO_PLAN === 'pro';
 
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
 
-async function req(url, { headers = {}, timeout = TIMEOUT_MS } = {}) {
+/*
+ * RETRY POLICY — what is transient and what is not.
+ *
+ * 429 and 5xx are the two answers worth asking again: a rate-limit window on
+ * CoinGecko's free tier lasts seconds, and upstream 502s clear on their own.
+ * A 403 is NOT transient — it is an IP/plan block that the same request will
+ * receive again, and burning seconds of mobile attention to rediscover it
+ * delays the live CoinLore backup that exists for exactly this case. Timeouts
+ * are also not retried: the attempt already spent its whole budget.
+ */
+const RETRY_ATTEMPTS = Number(process.env.UPSTREAM_RETRY_ATTEMPTS || 3);
+const RETRY_BASE_MS = 700;
+const RETRY_MAX_WAIT_MS = 4000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isTransient(err) {
+  const s = err?.status;
+  return s === 429 || (Number.isFinite(s) && s >= 500) || (s == null && err?.name !== 'AbortError');
+}
+
+function retryWaitMs(err, attempt) {
+  /* Honour Retry-After when the upstream states one; otherwise back off with
+     jitter so parallel routes don't retry in lockstep. */
+  const stated = Number(err?.retryAfterMs);
+  const backoff = RETRY_BASE_MS * 2 ** attempt;
+  const wait = Number.isFinite(stated) && stated > 0 ? stated : backoff;
+  return Math.min(RETRY_MAX_WAIT_MS, wait) * (0.75 + Math.random() * 0.5);
+}
+
+async function reqOnce(url, { headers, timeout }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
@@ -32,6 +63,8 @@ async function req(url, { headers = {}, timeout = TIMEOUT_MS } = {}) {
       const body = await res.text().catch(() => '');
       const err = new Error(`Upstream ${res.status} for ${url}: ${body.slice(0, 160)}`);
       err.status = res.status;
+      const retryAfter = Number(res.headers.get('retry-after'));
+      if (Number.isFinite(retryAfter) && retryAfter > 0) err.retryAfterMs = retryAfter * 1000;
       throw err;
     }
     return await res.json();
@@ -39,6 +72,28 @@ async function req(url, { headers = {}, timeout = TIMEOUT_MS } = {}) {
     clearTimeout(timer);
   }
 }
+
+async function req(url, { headers = {}, timeout = TIMEOUT_MS, retry = false } = {}) {
+  const attempts = retry ? Math.max(1, RETRY_ATTEMPTS) : 1;
+  let lastErr = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) await sleep(retryWaitMs(lastErr, attempt - 1));
+    try {
+      return await reqOnce(url, { headers, timeout });
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err)) break;
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * CoinGecko reads are the PRIMARY rail and get the retry budget; the CoinLore
+ * backup and third-party feeds stay single-shot so the fallback chain cannot
+ * multiply its latency.
+ */
+const cgReq = (url, opts = {}) => req(url, { ...opts, retry: true });
 
 function cgUrl(path, params = {}) {
   const base = CG_IS_PRO ? CG_PRO_BASE : CG_BASE;
@@ -107,7 +162,7 @@ function normalizeGlobalCg(raw = {}) {
 /** CoinGecko primary (richer fields with API key), CoinLore as the fallback. */
 export async function fetchGlobal() {
   try {
-    const raw = await req(cgUrl('/global'));
+    const raw = await cgReq(cgUrl('/global'));
     return normalizeGlobalCg(raw);
   } catch {
     const raw = await req(`${COINLORE_BASE}/global/`);
@@ -136,11 +191,17 @@ async function fetchCoinLoreMarkets({ page = 1, perPage = 50 } = {}) {
  * not send every browser to a fake snapshot or fan out across user IPs.
  * CoinLore allows up to 100 tickers per request, so the fallback keeps that
  * cap even when the market screen asks for 250 rows.
+ *
+ * The backup rows are visually enriched before they leave this layer — logos
+ * and sparklines restored from CoinGecko's unthrottled endpoints or from the
+ * last healthy CoinGecko read — so a throttle window no longer strips the
+ * market screen of artwork and charts. Numbers stay exactly what CoinLore
+ * said; only the two visual fields are ever filled in.
  */
 export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
   const currency = String(vs || 'usd').toLowerCase();
   try {
-    const raw = await req(
+    const raw = await cgReq(
       cgUrl('/coins/markets', {
         vs_currency: currency,
         order: 'market_cap_desc',
@@ -151,7 +212,11 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
       })
     );
     if (!Array.isArray(raw)) throw new Error('CoinGecko returned an invalid market response');
-    if (raw.length) return raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' }));
+    if (raw.length) {
+      const rows = raw.map((coin) => ({ ...normalizeCoin(coin), marketProvider: 'coingecko' }));
+      rememberVisuals(rows);
+      return rows;
+    }
     /* An empty USD market page can also be a provider-side block page. */
     if (currency !== 'usd') return [];
   } catch (coinGeckoError) {
@@ -163,7 +228,12 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
   }
 
   try {
-    return await fetchCoinLoreMarkets({ page, perPage });
+    const rows = await fetchCoinLoreMarkets({ page, perPage });
+    return await hydrateCoinRows(rows, {
+      fetchJson: (url, { timeoutMs } = {}) => req(url, { timeout: timeoutMs || 5000 }),
+      cgBase: CG_BASE,
+      vs: currency
+    });
   } catch {
     /* Do not leak a provider URL (or its API key query parameter) in an error
        payload. The client can still use its own direct-provider/offline chain. */
@@ -172,7 +242,7 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
 }
 
 export async function fetchTrending() {
-  const raw = await req(cgUrl('/search/trending'));
+  const raw = await cgReq(cgUrl('/search/trending'));
   return (raw.coins || []).slice(0, 10).map(({ item }) => ({
     id: item.id,
     symbol: (item.symbol || '').toUpperCase(),
@@ -184,7 +254,7 @@ export async function fetchTrending() {
 }
 
 export async function fetchChart(id, days = 1, vs = 'usd') {
-  const raw = await req(cgUrl(`/coins/${encodeURIComponent(id)}/market_chart`, { vs_currency: vs, days: String(days) }));
+  const raw = await cgReq(cgUrl(`/coins/${encodeURIComponent(id)}/market_chart`, { vs_currency: vs, days: String(days) }));
   return (raw.prices || []).map(([t, p]) => ({ t, p }));
 }
 
@@ -211,7 +281,7 @@ export async function fetchChart(id, days = 1, vs = 'usd') {
  * get four-day-old-looking data and assume the feed was broken.
  */
 export async function fetchOhlc(id, days = 30, vs = 'usd') {
-  const raw = await req(cgUrl(`/coins/${encodeURIComponent(id)}/ohlc`, { vs_currency: vs, days: String(days) }));
+  const raw = await cgReq(cgUrl(`/coins/${encodeURIComponent(id)}/ohlc`, { vs_currency: vs, days: String(days) }));
   if (!Array.isArray(raw)) return [];
   return raw
     .map(([t, o, h, l, c]) => ({ t, o, h, l, c }))
@@ -256,7 +326,7 @@ export async function fetchDexPools(network = 'bsc') {
 export async function fetchCoinDetail(id, vs = 'usd') {
   let coinGeckoError = null;
   try {
-    const rows = await req(
+    const rows = await cgReq(
       cgUrl('/coins/markets', {
         vs_currency: vs,
         ids: id,
@@ -264,13 +334,17 @@ export async function fetchCoinDetail(id, vs = 'usd') {
         price_change_percentage: '1h,24h,7d'
       })
     );
-    if (Array.isArray(rows) && rows[0]) return { ...normalizeCoin(rows[0]), marketProvider: 'coingecko' };
+    if (Array.isArray(rows) && rows[0]) {
+      const coin = { ...normalizeCoin(rows[0]), marketProvider: 'coingecko' };
+      rememberVisuals([coin]);
+      return coin;
+    }
   } catch (err) {
     coinGeckoError = err;
   }
 
   try {
-    const raw = await req(
+    const raw = await cgReq(
       cgUrl(`/coins/${encodeURIComponent(id)}`, {
         localization: 'false',
         tickers: 'false',
@@ -280,7 +354,7 @@ export async function fetchCoinDetail(id, vs = 'usd') {
       })
     );
     const md = raw.market_data || {};
-    return {
+    const coin = {
       id: raw.id,
       symbol: (raw.symbol || '').toUpperCase(),
       name: raw.name,
@@ -303,6 +377,8 @@ export async function fetchCoinDetail(id, vs = 'usd') {
       sparkline: md.sparkline_7d?.price ?? [],
       marketProvider: 'coingecko'
     };
+    rememberVisuals([coin]);
+    return coin;
   } catch (err) {
     coinGeckoError = err;
   }
@@ -315,7 +391,20 @@ export async function fetchCoinDetail(id, vs = 'usd') {
   try {
     const rows = await fetchCoinLoreMarkets({ page: 1, perPage: COINLORE_MAX_PAGE_SIZE });
     const coin = rows.find((row) => row.id === id);
-    if (coin) return { ...coin, description: '', homepage: null };
+    if (coin) {
+      /* Same visual enrichment as the market list: the detail page's header
+         artwork and its 7d sparkline come from CoinGecko's unthrottled
+         endpoints (or the last healthy read), while every number on screen
+         stays the live CoinLore quote. */
+      const [enriched] = await hydrateCoinRows([{ ...coin, description: '', homepage: null }], {
+        fetchJson: (url, { timeoutMs } = {}) => req(url, { timeout: timeoutMs || 5000 }),
+        cgBase: CG_BASE,
+        vs: 'usd',
+        chartBudget: 1,
+        logoBudget: 1
+      });
+      return enriched;
+    }
   } catch {
     /* Return one safe failure below; never serve a CoinGecko API key in it. */
   }
@@ -324,7 +413,7 @@ export async function fetchCoinDetail(id, vs = 'usd') {
 
 /** Universe-wide coin search by name or ticker. */
 export async function fetchSearch(query) {
-  const raw = await req(cgUrl('/search', { query }));
+  const raw = await cgReq(cgUrl('/search', { query }));
   return (raw.coins || []).slice(0, 25).map((c) => ({
     id: c.id,
     symbol: (c.symbol || '').toUpperCase(),
@@ -343,7 +432,7 @@ export async function fetchSearch(query) {
  * handling (`cgUrl`) is shared rather than reimplemented.
  */
 export async function fetchCategory(slug, { perPage = 50, vs = 'usd' } = {}) {
-  const raw = await req(
+  const raw = await cgReq(
     cgUrl('/coins/markets', {
       vs_currency: vs,
       category: slug,

@@ -5,6 +5,20 @@
  * live fallback, so every browser eventually rendered the synthetic snapshot.
  * The server must now fail over to real CoinLore tickers without relabeling
  * USD values, inventing unavailable fields, or leaking provider credentials.
+ *
+ * ─── CONTRACT UNDER TEST (since the visual-enrichment fix) ──────────────────
+ * CoinLore tickers carry no artwork and no history, which is how the market
+ * screen lost its logos and sparklines. The fallback rows may now carry
+ * visuals restored from CoinGecko's UNTHROTTLED endpoints (`/market_chart`,
+ * `/search`) or remembered from the last healthy CoinGecko read — labelled
+ * `sparklineSource` / `imageSource`. What is still forbidden:
+ *
+ *   • numbers invented from the visuals layer — `high24h`, `ath`, `supply`
+ *     stay exactly what the ticker said, including null;
+ *   • a sparkline synthesized from percent changes — a line is either real
+ *     CoinGecko history or absent (`[]`);
+ *   • logos matched by symbol instead of exact coin id;
+ *   • retries on a hard 403 block (429/5xx are retried; 403 fails over fast).
  */
 import assert from 'node:assert/strict';
 
@@ -14,10 +28,11 @@ delete process.env.COINGECKO_API_KEY;
 delete process.env.COINGECKO_PLAN;
 delete process.env.COINGECKO_BASE;
 const { fetchCoinDetail, fetchMarkets } = await import('../server/providers.js');
+const { clearVisualMemory } = await import('../src/lib/marketVisuals.js');
 
-const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), {
+const jsonResponse = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), {
   status,
-  headers: { 'content-type': 'application/json' }
+  headers: { 'content-type': 'application/json', ...headers }
 });
 
 const coinLoreRows = [
@@ -42,6 +57,12 @@ const coinLoreRows = [
     price_usd: 'N/A', rank: 100
   }
 ];
+
+/* Which calls are PRICE attempts (provider failover budget) versus VISUAL
+   enrichment attempts (logos/sparklines, never fail the response). */
+const isVisualFetch = (url) =>
+  url.pathname.endsWith('/market_chart') || url.pathname === '/api/v3/search';
+const isPriceFetch = (url) => !isVisualFetch(url);
 
 async function withFetch(mock, run) {
   const original = globalThis.fetch;
@@ -85,15 +106,22 @@ await check('CoinGecko 403 falls back to real CoinLore prices with truthful miss
     const url = new URL(String(input));
     calls.push(url);
     if (url.hostname === 'api.coingecko.com') return new Response('forbidden', { status: 403 });
-    assert.equal(url.hostname, 'api.coinlore.net');
     return jsonResponse({ data: coinLoreRows, info: { coins_num: 14993, time: 1790669282 } });
   }, () => fetchMarkets({ page: 1, perPage: 250, vs: 'usd' }));
 
-  assert.equal(calls.length, 2, 'the backup is requested once after the primary fails');
+  assert.equal(calls.filter(isPriceFetch).length, 2,
+    'the backup is requested once after the primary fails (403 is not retried)');
   assert.equal(calls[1].pathname, '/api/tickers/');
   assert.equal(calls[1].searchParams.get('start'), '0');
   assert.equal(calls[1].searchParams.get('limit'), '100', 'CoinLore page size is capped at 100');
   assert.equal(rows.length, 3, 'rows with missing or invalid prices are discarded');
+
+  /* Visual enrichment is attempted but the mocked CoinGecko visuals endpoints
+     are dead too — the rows must stay exactly as honest as the ticker. */
+  const visualCalls = calls.filter(isVisualFetch);
+  assert.ok(visualCalls.length <= 12, 'visual hydration is budgeted, never a fan-out');
+  assert.ok(visualCalls.every((url) => url.hostname === 'api.coingecko.com'),
+    'visuals are only ever fetched from CoinGecko');
 
   const bitcoin = rows.find((row) => row.symbol === 'BTC');
   assert.equal(bitcoin.id, 'bitcoin');
@@ -135,7 +163,7 @@ await check('coin detail also fails over to the live backup, not the offline see
     return jsonResponse({ data: coinLoreRows });
   }, () => fetchCoinDetail('bitcoin'));
 
-  assert.equal(calls.filter((url) => url.hostname === 'api.coingecko.com').length, 2,
+  assert.equal(calls.filter((url) => url.hostname === 'api.coingecko.com' && isPriceFetch(url)).length, 2,
     'CoinGecko markets and detail endpoints are both attempted before failover');
   assert.equal(coin.id, 'bitcoin');
   assert.equal(coin.price, 84046.86);
@@ -171,4 +199,137 @@ await check('no usable live provider fails closed with a safe diagnostic', async
   });
 });
 
-console.log(`  ${checks}/6 market provider checks passed`);
+/* ── retry policy: 429/5xx transient, 403 hard ──────────────────────────── */
+
+await check('a transient 429 is retried and CoinGecko still wins the row', async () => {
+  clearVisualMemory();
+  const calls = [];
+  const rows = await withFetch(async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    assert.equal(url.hostname, 'api.coingecko.com', 'the backup must not be consulted after a 429');
+    if (calls.length === 1) return new Response('rate limited', { status: 429, headers: { 'retry-after': '0.01' } });
+    return jsonResponse([{
+      id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', current_price: 84100,
+      price_change_percentage_24h: 1.1, market_cap: 1.6e12, total_volume: 2.8e10
+    }]);
+  }, () => fetchMarkets({ page: 1, perPage: 50, vs: 'usd' }));
+
+  assert.equal(calls.length, 2, 'exactly one retry after a 429');
+  assert.equal(rows[0].marketProvider, 'coingecko');
+  assert.equal(rows[0].price, 84100);
+});
+
+await check('the retry budget is bounded, then the live backup serves', async () => {
+  clearVisualMemory();
+  const calls = [];
+  const rows = await withFetch(async (input) => {
+    const url = new URL(String(input));
+    calls.push(url);
+    if (url.hostname === 'api.coingecko.com') {
+      return new Response('rate limited', { status: 429, headers: { 'retry-after': '0.01' } });
+    }
+    return jsonResponse({ data: coinLoreRows.slice(0, 1) });
+  }, () => fetchMarkets({ page: 1, perPage: 50, vs: 'usd' }));
+
+  assert.equal(calls.filter(isPriceFetch).length, 4,
+    '3 bounded CoinGecko attempts (initial + 2 retries), then one CoinLore read');
+  assert.equal(rows[0].marketProvider, 'coinlore');
+  assert.equal(rows[0].price, 84046.86);
+});
+
+/* ── visual enrichment: real CoinGecko lines and logos on fallback rows ──── */
+
+await check('fallback rows are hydrated with real CoinGecko charts and logos', async () => {
+  clearVisualMemory();
+  const chartPrices = Array.from({ length: 48 }, (_, i) => [1790600000000 + i * 3600000, 83000 + i]);
+  const rows = await withFetch(async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'api.coinlore.net') {
+      return jsonResponse({ data: coinLoreRows.slice(0, 1) });
+    }
+    if (url.pathname.endsWith('/market_chart')) {
+      assert.equal(url.pathname, '/api/v3/coins/bitcoin/market_chart');
+      assert.equal(url.searchParams.get('days'), '7');
+      return jsonResponse({ prices: chartPrices });
+    }
+    if (url.pathname === '/api/v3/search') {
+      /* The impostor must never win: `/search?query=BTC` returns clones. */
+      return jsonResponse({ coins: [
+        { id: 'bitcoin-cash', symbol: 'BCH', name: 'Bitcoin Cash', thumb: 'https://coin-images.coingecko.com/coins/images/780/thumb/bitcoin-cash-circle.png' },
+        { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', thumb: 'https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png' }
+      ] });
+    }
+    return new Response('forbidden', { status: 403 });
+  }, () => fetchMarkets({ page: 1, perPage: 50, vs: 'usd' }));
+
+  const bitcoin = rows.find((row) => row.id === 'bitcoin');
+  assert.equal(bitcoin.marketProvider, 'coinlore', 'prices still come from the live backup');
+  assert.equal(bitcoin.price, 84046.86);
+  assert.equal(bitcoin.high24h, null, 'numbers are never back-filled from the visuals layer');
+  assert.deepEqual(bitcoin.sparkline, chartPrices.map(([, p]) => p),
+    'the line is real market_chart history, not a synthesized shape');
+  assert.equal(bitcoin.sparklineSource, 'coingecko-chart');
+  assert.equal(bitcoin.image, 'https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png',
+    'logos attach only on an EXACT CoinGecko id match');
+  assert.equal(bitcoin.imageSource, 'coingecko-search');
+});
+
+await check('visuals remembered from a healthy read survive the throttle window', async () => {
+  clearVisualMemory();
+  const goodRow = {
+    id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', price: 84200, change24h: 1,
+    image: 'https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png',
+    sparkline: [1, 2, 3, 4]
+  };
+
+  /* Read 1: healthy CoinGecko — the visuals are remembered. */
+  await withFetch(async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/api/v3/coins/markets') return jsonResponse([{
+      id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', current_price: 84200,
+      price_change_percentage_24h: 1, image: goodRow.image, sparkline_in_7d: { price: goodRow.sparkline }
+    }]);
+    throw new Error(`unexpected ${url}`);
+  }, () => fetchMarkets({ page: 1, perPage: 50, vs: 'usd' }));
+
+  /* Read 2: CoinGecko throttled AND its visual endpoints dead. The row must
+     still carry the remembered artwork and line beside the fresh quote. */
+  const rows = await withFetch(async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'api.coingecko.com') return new Response('forbidden', { status: 403 });
+    return jsonResponse({ data: [{ ...coinLoreRows[0], price_usd: '85000.00' }] });
+  }, () => fetchMarkets({ page: 1, perPage: 50, vs: 'usd' }));
+
+  const bitcoin = rows[0];
+  assert.equal(bitcoin.price, 85000, 'the fresh live quote wins');
+  assert.equal(bitcoin.marketProvider, 'coinlore');
+  assert.equal(bitcoin.image, goodRow.image);
+  assert.equal(bitcoin.imageSource, 'coingecko-markets');
+  assert.deepEqual(bitcoin.sparkline, goodRow.sparkline);
+  assert.equal(bitcoin.sparklineSource, 'coingecko');
+});
+
+await check('coin detail fallback is enriched the same way as the list', async () => {
+  clearVisualMemory();
+  const coin = await withFetch(async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'api.coinlore.net') return jsonResponse({ data: coinLoreRows.slice(0, 1) });
+    if (url.pathname.endsWith('/market_chart')) {
+      return jsonResponse({ prices: [[0, 1], [1, 2], [2, 3]] });
+    }
+    if (url.pathname === '/api/v3/search') {
+      return jsonResponse({ coins: [{ id: 'bitcoin', thumb: 'https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png' }] });
+    }
+    return new Response('forbidden', { status: 403 });
+  }, () => fetchCoinDetail('bitcoin'));
+
+  assert.equal(coin.marketProvider, 'coinlore');
+  assert.equal(coin.price, 84046.86);
+  assert.deepEqual(coin.sparkline, [1, 2, 3]);
+  assert.equal(coin.sparklineSource, 'coingecko-chart');
+  assert.ok(coin.image.includes('/coins/images/1/'));
+  assert.equal(coin.high24h, null);
+});
+
+console.log(`  ${checks} market provider checks passed`);

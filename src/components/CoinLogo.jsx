@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { coinHue, coinImage, tickerLogo } from '../lib/coinImage';
+import { symbolSvg } from './AssetIcon';
 
 /**
  * ONE COIN AVATAR, USED EVERYWHERE.
@@ -63,7 +64,35 @@ export default function CoinLogo({
   /* The box is sized by CSS unless the caller pins it (Ticker, tag chips). */
   const box = px ? { width: px, height: px, ...style } : style;
 
+  /*
+   * TIER 2 — the vendored brand artwork in lib/assetIconData.js.
+   *
+   * When the feed supplies no `image` (CoinLore tickers, the offline
+   * snapshot), the monogram used to be the only answer — and the market
+   * screen filled with grey letters where the logos used to be. `symbolSvg`
+   * already holds exact brand marks (BTC, ETH, USDT, SOL, … 125 symbols) as
+   * inline SVG: no request, no CDN, no wrong-coin risk beyond what the feed's
+   * own symbol claims, same trust level as AssetIcon's curated lists. The
+   * monogram remains the last resort, never an empty box.
+   */
   if (!src || failed) {
+    const svg = symbolSvg(coin?.symbol ?? ticker);
+    if (svg) {
+      /* The vendored tiles carry only a viewBox; pin width/height so the SVG
+         fills the avatar box instead of falling back to intrinsic sizing. */
+      const filled = /^<svg(?![^>]*\swidth=)/.test(svg)
+        ? svg.replace('<svg ', '<svg width="100%" height="100%" ')
+        : svg;
+      return (
+        <span
+          className={className}
+          style={{ ...box, display: 'block', background: 'none', padding: 0 }}
+          /* Vendored strings only — never user or API input. */
+          dangerouslySetInnerHTML={{ __html: filled }}
+          aria-hidden="true"
+        />
+      );
+    }
     const hue = coinHue(coin?.symbol);
     return (
       <span
