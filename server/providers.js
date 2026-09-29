@@ -6,15 +6,14 @@
  * expects, so the client doesn't care which source answered.
  */
 
-import { normalizeCoinLoreMarket } from '../src/lib/coinLore.js';
-import { hydrateCoinRows, rememberVisuals } from '../src/lib/marketVisuals.js';
+import { fetchCoinLoreTickers, COINLORE_BASE, COINLORE_MAX_PAGE_SIZE } from '../src/lib/coinLore.js';
+import { hydrateCoinRows, mergeVisuals, rememberVisuals } from '../src/lib/marketVisuals.js';
+import { attachVenueSparklines } from '../src/lib/venueSparklines.js';
+import { attachIndexLogos } from '../src/lib/coinLogoIndex.js';
 
 const CG_BASE = process.env.COINGECKO_BASE || 'https://api.coingecko.com/api/v3';
 const CG_PRO_BASE = 'https://pro-api.coingecko.com/api/v3';
 const GT_BASE = 'https://api.geckoterminal.com/api/v2';
-
-const COINLORE_BASE = 'https://api.coinlore.net/api';
-const COINLORE_MAX_PAGE_SIZE = 100;
 
 const CG_KEY = process.env.COINGECKO_API_KEY || '';
 const CG_IS_PRO = process.env.COINGECKO_PLAN === 'pro';
@@ -170,19 +169,20 @@ export async function fetchGlobal() {
   }
 }
 
+/*
+ * The paging itself lives in the shared adapter (src/lib/coinLore.js) so the
+ * server and the browser fallback cannot page differently: CoinLore answers
+ * 100 tickers per request, the market screen asks for 250, and the difference
+ * used to be a page that arrived a hundred rows short.
+ */
 async function fetchCoinLoreMarkets({ page = 1, perPage = 50 } = {}) {
-  const requestedPerPage = Math.max(1, Math.min(250, Math.floor(Number(perPage) || 50)));
-  const limit = Math.min(COINLORE_MAX_PAGE_SIZE, requestedPerPage);
-  const start = (Math.max(1, Math.floor(Number(page) || 1)) - 1) * requestedPerPage;
-  const qs = new URLSearchParams({ start: String(start), limit: String(limit) });
-  const raw = await req(`${COINLORE_BASE}/tickers/?${qs.toString()}`);
-  if (!Array.isArray(raw?.data)) throw new Error('CoinLore returned an invalid market response');
-
-  const rows = raw.data.map(normalizeCoinLoreMarket).filter(Boolean);
-  if (raw.data.length > 0 && rows.length === 0) {
-    throw new Error('CoinLore returned no usable market prices');
-  }
-  return rows;
+  return fetchCoinLoreTickers({
+    fetchJson: (url) => req(url),
+    base: COINLORE_BASE,
+    page,
+    perPage,
+    maxPages: 3
+  });
 }
 
 /**
@@ -198,6 +198,83 @@ async function fetchCoinLoreMarkets({ page = 1, perPage = 50 } = {}) {
  * market screen of artwork and charts. Numbers stay exactly what CoinLore
  * said; only the two visual fields are ever filled in.
  */
+/**
+ * ─── EVERY ROW, NOT THE FIRST SIX ───────────────────────────────────────────
+ *   «در صفحه بازار فقط ۶ توکن اول لوگو و نمودار دارن»
+ *
+ * The fallback rows are live tickers and nothing else, so their artwork and
+ * their 7-day line have to come from somewhere after the fact. Doing that per
+ * coin against CoinGecko is what produced the "first six" screen: one chart
+ * and one logo lookup per row, on a tier that answers a few dozen calls a
+ * minute, with a per-call budget that only ever covered the top of the list.
+ *
+ * Three sources, cheapest first, all of them real and all of them labelled:
+ *
+ *   1. ARTWORK IN BULK — one keyless coin-list request carries thousands of
+ *      tickers with their image URLs, so every row that can be verified by
+ *      ticker AND name gets a face for the cost of one call. (lib/coinLogoIndex.js)
+ *   2. THE 7-DAY LINE FROM A VENUE — one kline call per pair covers a row's
+ *      whole week, and venues allow hundreds of those a minute, so the WHOLE
+ *      page fills in one pass instead of trickling in six rows at a time.
+ *      (lib/venueSparklines.js)
+ *   3. COINGECKO FOR THE REST — coins no venue lists, and the exact-id logo
+ *      check as a backstop. Budgeted, memory-first, so each poll advances
+ *      until nothing is missing.
+ *
+ * Every step is fail-silent: a source that is unreachable, blocked or just
+ * wrong about a ticker leaves the rows exactly as honest as they arrived, and
+ * the price the user sees is never touched by any of it.
+ *
+ * The whole pass is deadline-bounded, and so is every stage inside it: this
+ * runs in a request a phone is waiting on, so "try everything" has to still
+ * mean "and then answer". Each stage's cap is clamped to whatever time is
+ * left of the pass, so a slow first source cannot starve the ones behind it
+ * — nor hold the response open behind a fetch nobody asked for. Whatever the
+ * deadline cuts off is simply not known yet: the next poll picks it up, from
+ * the top of the list, until the page is covered.
+ */
+async function fillFallbackVisuals(rows, vs = 'usd', { deadlineMs = 6000 } = {}) {
+  const started = Date.now();
+  const left = () => Math.max(0, deadlineMs - (Date.now() - started));
+  const stage = (cap) => Math.max(200, Math.min(cap, left()));
+  const fetchJson = (url, { timeoutMs } = {}) => req(url, { timeout: timeoutMs || 5000 });
+
+  let out = rows;
+
+  /* 1 — bulk artwork. One request, remembered for a day. */
+  if (left() > 400) {
+    try {
+      out = await attachIndexLogos(out, { fetchJson, timeoutMs: stage(4000) });
+    } catch {
+      /* no artwork from here; the per-coin logo lookup below still can */
+    }
+  }
+
+  /* 2 — the venue's own 7-day line for every pair it trades. */
+  if (left() > 400) {
+    try {
+      const budget = stage(3500);
+      out = await attachVenueSparklines(out, { fetchJson, vs, timeoutMs: budget, deadlineMs: budget });
+    } catch {
+      /* the per-coin charts below remain the source of last resort */
+    }
+  }
+
+  /* 3 — CoinGecko, for whatever the two bulk sources could not answer. */
+  if (left() > 300) {
+    out = await hydrateCoinRows(out, { fetchJson, cgBase: CG_BASE, vs, deadlineMs: stage(2000) });
+  }
+
+  /*
+   * Memory last, and unconditionally. Whatever earlier polls fetched — and
+   * whatever the two bulk passes above could only partly finish — belongs on
+   * these rows too, and merging it costs nothing. Without this the deadline
+   * could cut the pass short and hand back a page that DROPPED visuals it
+   * already had.
+   */
+  return out.map(mergeVisuals);
+}
+
 export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
   const currency = String(vs || 'usd').toLowerCase();
   try {
@@ -229,11 +306,7 @@ export async function fetchMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) 
 
   try {
     const rows = await fetchCoinLoreMarkets({ page, perPage });
-    return await hydrateCoinRows(rows, {
-      fetchJson: (url, { timeoutMs } = {}) => req(url, { timeout: timeoutMs || 5000 }),
-      cgBase: CG_BASE,
-      vs: currency
-    });
+    return await fillFallbackVisuals(rows, currency);
   } catch {
     /* Do not leak a provider URL (or its API key query parameter) in an error
        payload. The client can still use its own direct-provider/offline chain. */
@@ -396,13 +469,7 @@ export async function fetchCoinDetail(id, vs = 'usd') {
          artwork and its 7d sparkline come from CoinGecko's unthrottled
          endpoints (or the last healthy read), while every number on screen
          stays the live CoinLore quote. */
-      const [enriched] = await hydrateCoinRows([{ ...coin, description: '', homepage: null }], {
-        fetchJson: (url, { timeoutMs } = {}) => req(url, { timeout: timeoutMs || 5000 }),
-        cgBase: CG_BASE,
-        vs: 'usd',
-        chartBudget: 1,
-        logoBudget: 1
-      });
+      const [enriched] = await fillFallbackVisuals([{ ...coin, description: '', homepage: null }]);
       return enriched;
     }
   } catch {

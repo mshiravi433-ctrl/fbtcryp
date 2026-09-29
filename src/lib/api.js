@@ -9,16 +9,26 @@
  * independent public CoinLore ticker feed for USD markets, and finally a
  * deterministic offline dataset. Offline prices are visibly labelled.
  *
- * CoinLore tickers carry no artwork and no price history, so fallback rows are
- * enriched (lib/marketVisuals.js) with CoinGecko logos and sparklines from the
- * endpoints CoinGecko does NOT throttle — never with invented shapes. Global
- * stats follow the same order: backend, CoinGecko, CoinLore, offline.
+ * CoinLore tickers carry no artwork and no price history, and CoinGecko's bulk
+ * endpoint — the one call that used to carry both for every row — is blocked
+ * from the datacenter IP the backend runs on. So the visuals are rebuilt from
+ * three real sources, cheapest first, and never invented (see the rescue
+ * section below and lib/marketVisuals.js):
+ *
+ *   1. this browser, asking CoinGecko directly — one bulk request, all rows;
+ *   2. a venue's own klines for its own USDT pairs, which covers a whole week
+ *      per call (lib/venueSparklines.js);
+ *   3. CoinGecko's per-coin endpoints for whatever is left, budgeted and
+ *      memory-first so coverage advances instead of stopping at six rows.
+ *
+ * Global stats follow the same order: backend, CoinGecko, CoinLore, offline.
  */
 
-import { offlineGlobal, offlineMarkets, offlineTrending, offlineChart } from './offlineData';
-import { apiBase } from './apiBase';
-import { normalizeCoinLoreMarket } from './coinLore';
-import { hydrateCoinRows, rememberVisuals } from './marketVisuals';
+import { offlineGlobal, offlineMarkets, offlineTrending, offlineChart } from './offlineData.js';
+import { apiBase } from './apiBase.js';
+import { fetchCoinLoreTickers, normalizeCoinLoreMarket, COINLORE_MAX_PAGE_SIZE } from './coinLore.js';
+import { hydrateCoinRows, mergeVisuals, needsVisuals, rememberVisuals } from './marketVisuals.js';
+import { attachVenueSparklines } from './venueSparklines.js';
 
 // `apiBase()` is deliberately resolved at request time. In the Capacitor
 // shell the page origin is https://localhost, so a relative `/api` would hit
@@ -26,7 +36,6 @@ import { hydrateCoinRows, rememberVisuals } from './marketVisuals';
 // keeps the ordinary browser same-origin path unchanged.
 const PUBLIC_CG = 'https://api.coingecko.com/api/v3';
 const PUBLIC_COINLORE = 'https://api.coinlore.net/api';
-const COINLORE_MAX_PAGE_SIZE = 100;
 
 const memo = new Map();
 
@@ -213,6 +222,92 @@ export function normalizeGlobal(g = {}) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Bulk visual rescue for fallback rows                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ─── WHY THIS IS IN THE BROWSER AT ALL ──────────────────────────────────────
+ *   «فقط ۶ توکن اول لوگو و نمودار دارن»
+ *
+ * The rows come from our backend, and when CoinGecko's bulk endpoint is
+ * blocked from the DATACENTER the backend can only hand over live tickers:
+ * price, change, no artwork, no history. The visual enrichment behind it is
+ * per coin and budgeted, so it reaches the top of the list first and the
+ * remainder a few rows per poll.
+ *
+ * The user's own connection does not share that block. CoinGecko's
+ * `/coins/markets` — ONE request carrying the image AND the 7-day sparkline
+ * for all 250 rows — is exactly the call this screen used to make directly,
+ * and from a phone or a home connection it usually answers. So the client asks
+ * for it once, merges the VISUALS into the rows the backend sent, and the
+ * page looks the way it looked before the datacenter IP got throttled.
+ *
+ * Rules this follows, all of them the same rules the server layer follows:
+ *   • gap-fill only — the price, the changes and every other number on the
+ *     row stay exactly what the live backend said;
+ *   • the merge is by CoinGecko id, never by ticker;
+ *   • it must not hold the screen open. The rescue gets a short window to
+ *     answer; if it misses it, it keeps running in the background and the
+ *     NEXT poll picks the visuals up from memory;
+ *   • a failure cools the whole thing down, so a blocked user pays one failed
+ *     request every few minutes instead of one per poll.
+ */
+const VISUAL_RESCUE_WAIT_MS = 2200;
+const VISUAL_RESCUE_TIMEOUT_MS = 8000;
+const VISUAL_RESCUE_COOLDOWN_MS = 5 * 60 * 1000;
+
+let visualRescueBlockedUntil = 0;
+let visualRescueInFlight = null;
+
+/** One in-flight bulk read per client, however many screens ask for it. */
+function startVisualRescue({ vs, perPage, page }) {
+  if (visualRescueInFlight) return visualRescueInFlight;
+  visualRescueInFlight = (async () => {
+    const raw = await fetchJson(
+      `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&order=market_cap_desc&per_page=${Math.min(250, perPage)}` +
+        `&page=${page}&sparkline=true&price_change_percentage=1h,24h,7d`,
+      { timeout: VISUAL_RESCUE_TIMEOUT_MS }
+    );
+    if (!Array.isArray(raw) || !raw.length) throw new Error('CoinGecko returned no market rows');
+    /* Remembered, not spliced: the same call also seeds the memory that gets
+       the coin detail screen and the next poll its logos and lines. */
+    rememberVisuals(raw.map((coin) => normalizeCoin(coin)));
+  })()
+    .then(() => {
+      visualRescueBlockedUntil = 0;
+    })
+    .catch(() => {
+      visualRescueBlockedUntil = Date.now() + VISUAL_RESCUE_COOLDOWN_MS;
+    })
+    .finally(() => {
+      visualRescueInFlight = null;
+    });
+  return visualRescueInFlight;
+}
+
+async function rescueMissingVisuals(rows, ctx) {
+  const list = Array.isArray(rows) ? rows : [];
+  /*
+   * `needsVisuals` consults the visual memory, so a row whose artwork or line
+   * was already fetched — by this screen, by another screen, by the server —
+   * completes here with NO request at all. That is the steady state: the
+   * backend keeps sending bare tickers and the page keeps rendering them
+   * complete, which is why the merge below is unconditional. Only the fetch
+   * is conditional.
+   */
+  const missing = list.some(needsVisuals);
+  if (missing && Date.now() >= visualRescueBlockedUntil) {
+    await Promise.race([
+      startVisualRescue(ctx),
+      new Promise((resolve) => setTimeout(resolve, VISUAL_RESCUE_WAIT_MS))
+    ]);
+  }
+  /* A rescue that lands AFTER the wait window still fills the next poll,
+     because it wrote to the memory above rather than to this array. */
+  return list.map(mergeVisuals);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Coin markets                                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -227,7 +322,10 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
       // The server may fall back to an expired in-memory cache on failure.
       // Its x-data-stale header must survive this client layer; a stale quote
       // is useful for browsing but is not an executable strategy observation.
-      return withProvenance(data, stale ? 'stale' : 'live');
+      // The rescue then fills whatever artwork and history the backend could
+      // not (see above) — numbers untouched, gaps only.
+      const rows = await rescueMissingVisuals(data, { vs, perPage, page });
+      return withProvenance(rows, stale ? 'stale' : 'live');
     },
     direct: async () => {
       let coinGeckoError;
@@ -248,19 +346,47 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
 
       // CoinLore quotes USD only; do not mislabel dollars for a legacy currency.
       if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
-      const requestedPerPage = Math.max(1, Math.min(250, Math.floor(Number(perPage) || 50)));
-      const limit = Math.min(COINLORE_MAX_PAGE_SIZE, requestedPerPage);
-      const start = (Math.max(1, Math.floor(Number(page) || 1)) - 1) * requestedPerPage;
-      const raw = await fetchJson(`${PUBLIC_COINLORE}/tickers/?start=${start}&limit=${limit}`);
-      if (!Array.isArray(raw?.data)) throw coinGeckoError;
-      const rows = raw.data.map(normalizeCoinLoreMarket).filter(Boolean);
-      if (raw.data.length && !rows.length) throw coinGeckoError;
-      // Logos and sparklines restored from CoinGecko's unthrottled endpoints —
-      // the tickers stay CoinLore's, the screen stops looking broken.
-      const enriched = await hydrateCoinRows(rows, {
-        fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 8000 }),
+      /* Paged by the shared adapter: 250 rows is three requests, in order. */
+      let rows;
+      try {
+        rows = await fetchCoinLoreTickers({
+          fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 12000 }),
+          base: PUBLIC_COINLORE,
+          page,
+          perPage,
+          maxPages: 3
+        });
+      } catch {
+        throw coinGeckoError;
+      }
+      /*
+       * The backend is unreachable and CoinGecko's bulk endpoint just failed
+       * here too, so the visuals are rebuilt from what this browser CAN reach:
+       * a venue's klines for the whole week at a time (one call per pair, so
+       * the page is covered in one pass), then CoinGecko's per-coin endpoints
+       * for the leftovers — logos, and coins no venue lists. Both are
+       * fail-silent and both are deadline-bounded, because the prices above
+       * are already a complete answer.
+       */
+      const jsonFetch = (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 8000 });
+      let enriched = rows;
+      try {
+        enriched = await attachVenueSparklines(enriched, {
+          fetchJson: jsonFetch,
+          vs,
+          timeoutMs: 5000,
+          deadlineMs: 5000
+        });
+      } catch {
+        /* per-coin charts below remain the fallback */
+      }
+      enriched = await hydrateCoinRows(enriched, {
+        fetchJson: jsonFetch,
         cgBase: PUBLIC_CG,
-        vs
+        vs,
+        chartBudget: 24,
+        logoBudget: 24,
+        deadlineMs: 4000
       });
       return withProvenance(enriched, 'live');
     },
@@ -438,12 +564,30 @@ export function getCoin(id, vs = 'usd') {
       if (!Array.isArray(raw?.data)) throw coinGeckoError;
       const coin = raw.data.map(normalizeCoinLoreMarket).find((row) => row?.id === id);
       if (!coin) throw coinGeckoError;
-      const [enriched] = await hydrateCoinRows([{ ...coin, description: '', homepage: null }], {
-        fetchJson: (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 8000 }),
+      /*
+       * The detail screen renders the SAME row shape as the list, so it wants
+       * the same two things: a line and a face. A venue gets the line for the
+       * whole week in one call (reachable where CoinGecko's bulk endpoint is
+       * not), and CoinGecko's per-coin endpoints cover whatever is left — the
+       * logo, and coins the venue does not trade. Both fail silent.
+       */
+      const jsonFetch = (url, opts) => fetchJson(url, { timeout: opts?.timeoutMs || 8000 });
+      let candidate = { ...coin, description: '', homepage: null };
+      try {
+        [candidate] = await attachVenueSparklines([candidate], {
+          fetchJson: jsonFetch,
+          vs: 'usd',
+          timeoutMs: 5000,
+          deadlineMs: 5000
+        });
+      } catch {
+        /* the per-coin hydration below remains the fallback */
+      }
+      const [enriched] = await hydrateCoinRows([candidate], {
+        fetchJson: jsonFetch,
         cgBase: PUBLIC_CG,
         vs: 'usd',
-        chartBudget: 1,
-        logoBudget: 1
+        deadlineMs: 4000
       });
       return enriched;
     },

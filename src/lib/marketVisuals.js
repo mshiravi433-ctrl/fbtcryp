@@ -37,6 +37,15 @@
  *
  * Shared by `server/providers.js` and the browser fallback in `src/lib/api.js`
  * so the two paths cannot drift.
+ *
+ * ─── LATER LAYERS, SAME RULES ───────────────────────────────────────────────
+ * Per-coin CoinGecko reads are the LAST thing tried now, not the first: they
+ * are rate limited to a few dozen calls a minute, which is what made a
+ * 250-row page un-fillable from here. `lib/coinLogoIndex.js` answers the
+ * artwork question for every row in one request, `lib/venueSparklines.js`
+ * answers the 7-day line for every pair a venue trades, and this module
+ * spends its remaining budget only on the rows those two could not cover. A
+ * row's own data and the memory always win; a missing number stays missing.
  */
 
 /** A 7-day line is hourly (~168 points) on CoinGecko; keep the same shape. */
@@ -44,20 +53,53 @@ const MAX_SPARK_POINTS = 168;
 
 /**
  * How long a remembered sparkline stays usable.
- * An hour: long enough to survive a throttle window, short enough that a
- * "7d" line is never months of lies.
+ *
+ * ─── WHY THREE HOURS AND NOT ONE ────────────────────────────────────────────
+ * The market screen asks for 250 rows and this layer refills whatever is
+ * missing on every poll, so this TTL is the real cost driver: at one hour a
+ * warm instance re-fetched 250 charts an hour — every hour — which is the
+ * CoinGecko rate limit we are trying to stay under. Three hours divides that
+ * by three and is still invisible on the screen: the series is a 7-DAY line
+ * whose last point is up to nine hours old (the venue reads are hourly), and
+ * the sparkline carries no axis to contradict. Prices, changes and market
+ * caps are never taken from here — they stay live on every row.
  */
-const SPARK_TTL_MS = 60 * 60 * 1000;
+const SPARK_TTL_MS = 3 * 60 * 60 * 1000;
 
 /**
- * Default per-call hydration budget. The market screen asks for 250 rows;
- * refetching 250 charts would re-create the rate limit we are hiding from.
- * The FIRST rows are the hero, the visible list and the global-trend
- * aggregation — hydrate those now, and the rest on later polls as the budget
- * window advances (hydrated rows are served from memory afterwards).
+ * ─── THE BUDGET IS PER CALL; THE COVERAGE IS PER ROW ────────────────────────
+ *   «در صفحه بازار فقط ۶ توکن اول قیمت و لوگو و نمودار دارن، بقیه فقط قیمت»
+ *
+ * That report is exactly a budget of six with the slots handed to the FIRST
+ * six rows of every response: rows 7…250 were never reached, so they stayed
+ * as bare as the ticker they came from. Two things fix it and both matter:
+ *
+ *   1. SLOTS GO TO ROWS THAT STILL NEED ONE. The incoming CoinLore row never
+ *      carries an image or a line, so the old loop re-spent its whole budget
+ *      on the same first six rows every poll (their fetches were skipped by
+ *      the memory, but the SLOTS were already gone). Now a row is merged from
+ *      memory first and only the rows still missing something consume budget,
+ *      so every poll advances the frontier down the list until the page is
+ *      covered — and then costs nothing at all.
+ *   2. THE BUDGET IS BIG ENOUGH TO MAKE PROGRESS. Six per poll against a 250
+ *      row page was 40+ polls. Forty-eight per poll covers the page in a few
+ *      polls, and the fetch runs with bounded concurrency so the wall-clock
+ *      cost stays around a second instead of forty round trips.
+ *
+ * The budget is still bounded on purpose: a response must never fan out to
+ * 250 upstream calls, and the caller (server route or browser) must never
+ * hold a screen open for a fetch it did not ask for.
  */
-export const DEFAULT_CHART_BUDGET = 6;
-export const DEFAULT_LOGO_BUDGET = 6;
+export const DEFAULT_CHART_BUDGET = 48;
+export const DEFAULT_LOGO_BUDGET = 48;
+
+/**
+ * Upstream calls in flight at once. Unbounded `Promise.all` on a 250-row page
+ * is a socket storm on a phone; one at a time is a minute of latency. Twelve
+ * is the same number the venue readers use and keeps a full page's worth of
+ * hydration inside a second or two on a warm connection.
+ */
+export const DEFAULT_CONCURRENCY = 12;
 
 /** id → { image, imageSource, imageAt, sparkline, sparklineSource, sparklineAt } */
 const visuals = new Map();
@@ -191,8 +233,55 @@ async function fillLogo(id, symbol, { fetchJson, cgBase, timeoutMs }) {
 }
 
 /**
+ * Does this row still have a gap the visuals layer could fill?
+ *
+ * Reads MEMORY as well as the row itself, which is the distinction that makes
+ * the budget advance: a CoinLore row arrives bare every single poll, but once
+ * its line has been fetched it is not missing anything any more — it only
+ * looks that way to a check that ignores the memory.
+ */
+export function needsVisuals(row) {
+  if (!row || !row.id || row.offline || !hydratable(row.id)) return false;
+  const merged = mergeVisuals(row);
+  return !hasSpark(merged) || !merged.image;
+}
+
+/**
+ * Run jobs with a hard cap on how many are in flight at once, and an optional
+ * wall-clock cap on the pass as a whole.
+ *
+ * The concurrency cap is what keeps a 250-row page from opening 250 sockets;
+ * the deadline is what keeps a slow upstream from holding the response open
+ * behind a fetch nobody asked for. Jobs already running finish, nothing new
+ * starts once the deadline passes.
+ */
+async function runLimited(jobs, limit, deadlineMs = Infinity) {
+  const width = Math.max(1, Math.floor(Number(limit) || 1));
+  const deadline = Number.isFinite(deadlineMs) ? nowMs() + deadlineMs : Infinity;
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      if (nowMs() > deadline) return;
+      const job = jobs[next];
+      next += 1;
+      try {
+        await job();
+      } catch {
+        /* A dead upstream leaves the row exactly as honest as it was. */
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(width, jobs.length) }, worker));
+}
+
+/**
  * Best-effort enrichment of fallback rows. Never throws: the rows are already
  * a valid live answer — visuals are a bonus on top, not a gate in front.
+ *
+ * The two upstream permissions are budgeted separately because they come from
+ * different endpoints with different costs, and because a row can need one
+ * without the other (a remembered logo with an expired line, a CoinGecko logo
+ * on a row whose chart only a venue can supply).
  *
  * @param {Array<object>} rows      normalized market rows (CoinLore or mixed)
  * @param {object} opts
@@ -201,6 +290,8 @@ async function fillLogo(id, symbol, { fetchJson, cgBase, timeoutMs }) {
  * @param {string} [opts.vs]        display currency for the chart fetch
  * @param {number} [opts.chartBudget]  max charts fetched this call
  * @param {number} [opts.logoBudget]   max logos fetched this call
+ * @param {number} [opts.concurrency]  upstream calls in flight at once
+ * @param {number} [opts.deadlineMs]   wall-clock cap for the whole pass
  * @param {number} [opts.timeoutMs]    per upstream call
  * @returns {Promise<Array<object>>}   rows with visuals merged in
  */
@@ -212,29 +303,44 @@ export async function hydrateCoinRows(rows = [], opts = {}) {
     vs = 'usd',
     chartBudget = DEFAULT_CHART_BUDGET,
     logoBudget = DEFAULT_LOGO_BUDGET,
+    concurrency = DEFAULT_CONCURRENCY,
+    deadlineMs = Infinity,
     timeoutMs
   } = opts;
 
+  /*
+   * Memory first, budget second — in that order, for every row.
+   * `pending` holds the rows as the memory alone can draw them; `jobs` only
+   * receives the gaps that remain, and only until the budgets run out. The
+   * rows are re-merged after the fetches so the ones whose work just finished
+   * come back complete in THIS response rather than the next one.
+   */
+  const pending = [];
+  const jobs = [];
   if (typeof fetchJson === 'function' && cgBase) {
     const ctx = { fetchJson, cgBase, timeoutMs };
-    const work = [];
+    let chartSlots = 0;
+    let logoSlots = 0;
     for (const row of list) {
-      if (!row?.id || !hydratable(row.id)) continue;
-      if (work.filter((w) => w.kind === 'chart').length < chartBudget && !hasSpark(row)) {
-        work.push({ kind: 'chart', p: fillChart(row.id, vs, ctx) });
+      const merged = mergeVisuals(row);
+      if (!row?.id || row.offline || !hydratable(row.id)) {
+        pending.push(merged);
+        continue;
       }
-      if (work.filter((w) => w.kind === 'logo').length < logoBudget && !row.image) {
-        work.push({ kind: 'logo', p: fillLogo(row.id, row.symbol, ctx) });
+      if (chartSlots < chartBudget && !hasSpark(merged)) {
+        chartSlots += 1;
+        jobs.push(() => fillChart(row.id, vs, ctx));
       }
+      if (logoSlots < logoBudget && !merged.image) {
+        logoSlots += 1;
+        jobs.push(() => fillLogo(row.id, row.symbol, ctx));
+      }
+      pending.push(merged);
     }
-    await Promise.all(
-      work.map((w) =>
-        w.p.catch(() => {
-          /* A dead upstream leaves the row exactly as honest as it was. */
-        })
-      )
-    );
+    await runLimited(jobs, concurrency, deadlineMs);
+  } else {
+    for (const row of list) pending.push(mergeVisuals(row));
   }
 
-  return list.map(mergeVisuals);
+  return pending.map(mergeVisuals);
 }
