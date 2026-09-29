@@ -432,3 +432,153 @@
 :root[data-theme='light'] .stp-ai {
   background: #f7f8fc;
 }
+
+
+/* ── live, active Solana token discovery ─────────────────────────────────── */
+.stp-discovery {
+  margin-block-start: 12px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 19%, var(--line));
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--rgb-1) 8%, transparent), transparent 62%),
+    color-mix(in srgb, var(--bg-raised) 42%, transparent);
+}
+.stp-discovery .stp-section { margin-top: 2px; }
+.stp-discovery-note {
+  margin: 0 2px 8px;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.65;
+}
+.stp-discovery .stp-list { max-height: 40dvh; }
+.stp-discovery-more {
+  display: block;
+  margin: 9px auto 1px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.stp-discovery-more:hover {
+  border-color: color-mix(in srgb, var(--rgb-1) 46%, var(--line));
+  color: var(--text-1);
+}
+:root[data-theme='light'] .stp-discovery {
+  border-color: rgba(0, 150, 180, 0.18);
+  background: radial-gradient(circle at 0% 0%, rgba(0, 150, 180, 0.045), transparent 62%), #f9fbff;
+}
+:root[data-theme='light'] .stp-discovery-more { background: rgba(255, 255, 255, 0.9); }
+
+/* ── two-line token identity and a more composed swap ticket ─────────────── */
+.sol-token-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  gap: 2px;
+  line-height: 1.15;
+}
+.sol-token-symbol {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sol-token-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sol-swap-ticket {
+  gap: 0;
+  border-radius: 22px;
+  border-color: color-mix(in srgb, var(--rgb-1) 13%, var(--line));
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--rgb-2) 8%, transparent), transparent 48%),
+    var(--bg-panel);
+}
+.sol-swap-ticket .sol-swap-box {
+  border-color: color-mix(in srgb, var(--rgb-1) 15%, var(--line));
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-raised) 74%, transparent), color-mix(in srgb, var(--bg-panel) 90%, transparent));
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.sol-swap-ticket .sol-swap-box:focus-within {
+  border-color: color-mix(in srgb, var(--rgb-1) 48%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 9%, transparent);
+}
+.sol-swap-box .sol-token-btn {
+  flex: 0 1 58%;
+  max-width: 58%;
+  min-height: 54px;
+  gap: 7px;
+  padding: 7px 9px;
+  text-align: start;
+}
+.sol-swap-box .sol-token-btn .stp-caret { flex: 0 0 auto; }
+.sol-swap-box-head { font-size: 11px; }
+.sol-swap-flip-row { position: relative; z-index: 1; margin-block: 7px !important; }
+.sol-swap-flip-btn {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 25%, var(--line));
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  color: var(--rgb-1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+  font-size: 18px;
+  transition: transform .17s ease, border-color .17s ease, background .17s ease;
+}
+.sol-swap-flip-btn:hover {
+  transform: rotate(180deg);
+  border-color: var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 9%, var(--bg-panel));
+}
+.sol-swap-submit {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 15px;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+:root[data-theme='light'] .sol-swap-ticket {
+  border-color: rgba(15, 23, 42, 0.09);
+  background: radial-gradient(circle at 100% 0%, rgba(124, 108, 255, 0.045), transparent 48%), #fff;
+}
+:root[data-theme='light'] .sol-swap-ticket .sol-swap-box {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: linear-gradient(145deg, #f7f9fd, #fbfcff);
+}
+:root[data-theme='light'] .sol-swap-flip-btn {
+  background: #fff;
+  color: #047a93;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+}
+@media (max-width: 390px) {
+  .sol-swap-box-body { gap: 8px; }
+  .sol-swap-box .sol-token-btn { max-width: 58%; padding-inline: 7px; gap: 5px; }
+  .sol-swap-box .sol-token-btn .tok-icon { width: 25px !important; height: 25px !important; }
+  .sol-token-name { max-width: 88px; font-size: 8.5px; }
+  .sol-swap-box input, .sol-swap-box .sol-swap-out { font-size: clamp(16px, 5vw, 19px); }
+  :lang(fa) .sol-swap-box input,
+  :lang(fa) .sol-swap-box .sol-swap-out { font-size: clamp(15px, 4.5vw, 18px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sol-swap-ticket .sol-swap-box,
+  .sol-swap-flip-btn { transition: none; }
+  .sol-swap-flip-btn:hover { transform: none; }
+}

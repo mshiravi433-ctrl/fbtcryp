@@ -25,8 +25,7 @@
  */
 
 import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS, XSTOCK_FREEZE_AUTHORITY, XSTOCK_MINT_AUTHORITY } from '../src/lib/solanaAssets.js';
-
-const JUP_TOKENS = 'https://lite-api.jup.ag/tokens/v2/search';
+import { jupiterTokenHeaders, jupiterTokenUrl } from './jupiterTokenApi.js';
 const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 12000);
 
 /*
@@ -63,7 +62,7 @@ async function fetchJson(url) {
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' }
+      headers: jupiterTokenHeaders()
     });
     if (!res.ok) throw new Error(`Upstream ${res.status} for ${url}`);
     return await res.json();
@@ -185,7 +184,7 @@ async function fetchTokenRecords(mints) {
 
   await Promise.all(
     mintBatches(mints).map(async (batch) => {
-      const url = `${JUP_TOKENS}?query=${encodeURIComponent(batch.join(','))}`;
+      const url = jupiterTokenUrl('search', { query: batch.join(',') });
       try {
         let list;
         try {

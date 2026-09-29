@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
@@ -14,6 +15,7 @@ import '../styles/derivatives-glass.css';
 import {
   DYDX_BUILDER_ADDRESS,
   DYDX_BUILDER_FEE_PPM,
+  chooseActiveDydxMarket,
   classifyDydxError,
   connectDydx,
   disconnectDydx,
@@ -28,6 +30,8 @@ import ModernSelect from '../components/ModernSelect';
 
 export default function Dydx() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const wallet = useWallet();
   const { haptic } = useTelegram();
   /*
@@ -49,7 +53,15 @@ export default function Dydx() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [markets, setMarkets] = useState([]);
   const [live, setLive] = useState(false);
-  const [ticker, setTicker] = useState('BTC-USD');
+  const initialTicker = (() => {
+    try {
+      const params = new URLSearchParams(location.search || '');
+      if (!params.has('ticker')) return 'BTC-USD';
+      const requested = params.get('ticker') || '';
+      return /^[A-Z0-9]+-[A-Z0-9]+$/.test(requested) ? requested : '';
+    } catch { return ''; }
+  })();
+  const [ticker, setTicker] = useState(initialTicker);
   const [side, setSide] = useState('buy');
   const [size, setSize] = useState('');
   const [slippage, setSlippage] = useState('0.5');
@@ -117,10 +129,42 @@ export default function Dydx() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const market = markets.find((m) => m.ticker === ticker) || markets[0];
+  const activeMarkets = useMemo(() => markets.filter((m) => m.status === 'ACTIVE'), [markets]);
+  const hasTickerParam = useMemo(
+    () => new URLSearchParams(location.search || '').has('ticker'),
+    [location.search]
+  );
+  const market = useMemo(
+    () => chooseActiveDydxMarket(activeMarkets, ticker, { allowFallback: !hasTickerParam }),
+    [activeMarkets, ticker, hasTickerParam]
+  );
   useEffect(() => {
-    if (market && !markets.some((m) => m.ticker === ticker)) setTicker(market.ticker);
-  }, [market, markets, ticker]);
+    if (market && market.ticker !== ticker) {
+      setTicker(market.ticker);
+      const params = new URLSearchParams(location.search || '');
+      params.set('ticker', market.ticker);
+      navigate({ pathname: location.pathname || '/perp', search: `?${params.toString()}` }, { replace: true });
+    }
+  }, [market, ticker, location.pathname, location.search, navigate]);
+
+  const selectTicker = (nextTicker) => {
+    setTicker(nextTicker);
+    const params = new URLSearchParams(location.search || '');
+    params.set('ticker', nextTicker);
+    navigate({ pathname: location.pathname || '/perp', search: `?${params.toString()}` }, { replace: true });
+  };
+
+  useEffect(() => {
+    try {
+      const requested = new URLSearchParams(location.search || '').get('ticker');
+      if (
+        requested
+        && /^[A-Z0-9]+-[A-Z0-9]+$/.test(requested)
+        && activeMarkets.some((item) => item.ticker === requested)
+        && requested !== ticker
+      ) setTicker(requested);
+    } catch { /* ignore malformed external URLs */ }
+  }, [location.search, activeMarkets, ticker]);
 
   const notional = Number(size || 0) * Number(market?.oraclePrice || 0);
   const fee = dydxFeeUsd(notional);
@@ -150,8 +194,9 @@ export default function Dydx() {
        * chainId 1). A wallet sitting on BNB Chain — this app's default —
        * refuses or silently drops it, which is the reported
        * WALLET_RETURNED_UNSIGNED. connectDydx moves the wallet to Ethereum
-       * first, exactly like dydx.trade does. The in-app vault signs locally
-       * and has no active chain to disagree with, so it is not switched.
+       * first, matching the wallet's expected network for the signing request.
+       * The in-app vault signs locally and has no active chain to disagree
+       * with, so it is not switched.
        */
       const isLocal = wallet.mode === 'local';
       const connected = await connectDydx({
@@ -175,6 +220,7 @@ export default function Dydx() {
   };
 
   const submit = async () => {
+    if (!canReview || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -258,14 +304,15 @@ export default function Dydx() {
         <p className="faint" style={{ marginTop: 9 }}>{t('dydx.connectNote')}</p>
       </motion.section>
 
-      {!markets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
+      {!activeMarkets.length ? <p className="notice" style={{ marginTop: 16 }}>{t('dydx.marketUnavailable')}</p> : (
         <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16, width: '100%', boxSizing: 'border-box' }}>
           {!live && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
+          {hasTickerParam && !market && <p className="notice" style={{ marginBottom: 12 }}>{t('dydx.marketUnavailable')}</p>}
           <div className="field-label">{t('dydx.market')}</div>
           <ModernSelect
             value={market?.ticker || ''}
-            onChange={setTicker}
-            options={markets.filter((m) => m.status === 'ACTIVE').map((m) => {
+            onChange={selectTicker}
+            options={activeMarkets.map((m) => {
               const [base, quote] = m.ticker.split('-');
               return {
                 value: m.ticker,
@@ -278,7 +325,7 @@ export default function Dydx() {
               };
             })}
             title={t('dydx.market')}
-            placeholder={market?.ticker || 'BTC-USD'}
+            placeholder={market?.ticker || (hasTickerParam ? t('dydx.marketUnavailable') : 'BTC-USD')}
             searchable
             testId="dydx-market-select"
           />
@@ -453,7 +500,7 @@ export default function Dydx() {
           <div className="row-between"><span className="faint">{t('dydx.builderFee')}</span><span className="mono">{fmtUsd(fee)}</span></div>
         </div>
         <p className="notice notice-danger" style={{ marginTop: 10 }}>{t('dydx.confirmRisk')}</p>
-        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
+        <div className="row" style={{ gap: 10, marginTop: 12 }}><button className="btn btn-ghost" onClick={() => setReviewing(false)}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={!canReview || busy} onClick={submit}>{busy ? t('common.loading') : t('common.confirm')}</button></div>
       </Sheet>
       </div>
     </PageTransition>

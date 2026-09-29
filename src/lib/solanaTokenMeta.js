@@ -37,6 +37,7 @@ function normalizeRow(r) {
     icon: typeof r.icon === 'string' ? r.icon : null,
     decimals: Number.isInteger(r.decimals) ? r.decimals : null,
     verified: r.verified === true,
+    discovered: r.discovered === true,
     usdPrice: Number.isFinite(r.usdPrice) ? r.usdPrice : null,
     liquidity: Number.isFinite(r.liquidity) ? r.liquidity : null,
     holders: Number.isFinite(r.holders) ? r.holders : null,
@@ -70,11 +71,41 @@ export async function searchSolanaTokenMeta(query) {
     });
     if (res.ok) {
       const body = await res.json().catch(() => null);
-      if (body?.ok && Array.isArray(body.rows)) rows = body.rows.map(normalizeRow).filter(Boolean);
+      if (body?.ok && Array.isArray(body.rows)) rows = body.rows.map(normalizeRow).filter(Boolean).map((row) => ({ ...row, discovered: true }));
     }
   } catch { /* the empty array IS the error path — see the contract above */ }
 
   searchCache.set(key, { at: Date.now(), rows });
+  return rows;
+}
+
+const discoveryCache = new Map();
+const DISCOVERY_TTL_MS = 120_000;
+
+/** Browse Jupiter's active top-traded list, independent of any search query. */
+export async function discoverSolanaTokenMeta({ category = 'toptraded', interval = '24h', limit = 100 } = {}) {
+  const kind = ['toptraded', 'toptrending'].includes(category) ? category : 'toptraded';
+  const span = ['5m', '1h', '6h', '24h'].includes(interval) ? interval : '24h';
+  const count = Math.max(1, Math.min(100, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : 100));
+  const key = `${kind}:${span}:${count}`;
+  const hit = discoveryCache.get(key);
+  if (hit && Date.now() - hit.at < DISCOVERY_TTL_MS) return hit.rows;
+
+  let rows = [];
+  try {
+    const params = new URLSearchParams({ category: kind, interval: span, limit: String(count) });
+    const res = await fetch(`${apiBase()}/solana/token-discovery?${params.toString()}`, {
+      headers: { accept: 'application/json' }
+    });
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (body?.ok && Array.isArray(body.rows)) {
+        rows = body.rows.map(normalizeRow).filter(Boolean).map((row) => ({ ...row, discovered: true }));
+      }
+    }
+  } catch { /* discovery is optional; the curated picker remains available */ }
+
+  if (rows.length) discoveryCache.set(key, { at: Date.now(), rows });
   return rows;
 }
 
@@ -148,5 +179,6 @@ export async function fetchSolanaTokenSentiment(mint, { lang = 'fa' } = {}) {
     back to a clean slate without re-importing the world. */
 export function _resetSolanaTokenMetaClientCaches() {
   searchCache.clear();
+  discoveryCache.clear();
   sentimentCache.clear();
 }

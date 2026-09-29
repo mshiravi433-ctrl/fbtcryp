@@ -1,0 +1,131 @@
+/*
+ * Fixed, glassy swap actions on the detail screen. Rendered through a portal
+ * because route/page motion wrappers transform their contents and would turn
+ * position:fixed into a page-relative child. The dock rests just above the
+ * floating app navigation and keeps enough page padding beneath the final card.
+ */
+.coin-detail-page--dock {
+  padding-bottom: calc(205px + env(safe-area-inset-bottom, 0px));
+}
+
+.coin-swap-dock {
+  position: fixed;
+  z-index: 38;
+  inset-inline: 0;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  padding-inline: 12px;
+  pointer-events: none;
+}
+
+.coin-swap-dock-inner {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: min(100%, 620px);
+  min-height: 76px;
+  margin-inline: auto;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 25%, var(--line));
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 58%),
+    linear-gradient(145deg, rgba(16, 20, 32, 0.86), rgba(12, 16, 26, 0.76));
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.30),
+    0 0 0 1px rgba(255, 255, 255, 0.035) inset;
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  backdrop-filter: blur(22px) saturate(1.45);
+  pointer-events: auto;
+}
+
+.coin-swap-dock-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+.coin-swap-dock-copy strong {
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coin-swap-dock-copy span {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coin-swap-dock-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.coin-swap-dock-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 78px;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform .15s ease, filter .15s ease, border-color .15s ease;
+}
+.coin-swap-dock-actions button:active { transform: scale(.97); }
+.coin-swap-dock-actions button:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
+.coin-swap-dock-buy {
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  box-shadow: 0 8px 22px -12px color-mix(in srgb, var(--rgb-1) 72%, transparent);
+}
+.coin-swap-dock-sell {
+  border-color: color-mix(in srgb, var(--text-1) 14%, transparent) !important;
+  background: color-mix(in srgb, var(--bg-raised) 72%, transparent);
+  color: var(--text-1) !important;
+}
+.coin-swap-dock-actions button:hover { filter: brightness(1.08); }
+
+:root[data-theme='light'] .coin-swap-dock-inner {
+  border-color: rgba(13, 16, 32, 0.10);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(0, 150, 180, 0.08), transparent 58%),
+    rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(13, 16, 32, 0.035) inset;
+}
+:root[data-theme='light'] .coin-swap-dock-copy strong { color: #101828; }
+:root[data-theme='light'] .coin-swap-dock-copy span { color: #667085; }
+:root[data-theme='light'] .coin-swap-dock-sell {
+  border-color: rgba(13, 16, 32, 0.10) !important;
+  background: rgba(13, 16, 32, 0.045);
+}
+
+@media (max-width: 420px) {
+  .coin-swap-dock { padding-inline: 9px; }
+  .coin-swap-dock-inner { gap: 8px; min-height: 72px; padding: 9px; border-radius: 18px; }
+  .coin-swap-dock-copy { gap: 4px; }
+  .coin-swap-dock-copy strong { font-size: 12px; }
+  .coin-swap-dock-copy span { font-size: 9px; }
+  .coin-swap-dock-actions { gap: 6px; }
+  .coin-swap-dock-actions button { min-width: 68px; min-height: 42px; padding-inline: 9px; font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coin-swap-dock-actions button { transition: none; }
+}

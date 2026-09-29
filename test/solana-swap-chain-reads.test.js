@@ -542,7 +542,7 @@ describe('server/solanaChainReads — the second door', () => {
     const fetchMock = vi.fn(async (url, init) => {
       const body = JSON.parse(String(init?.body || '{}'));
       const target = String(url);
-      if (/lite-api\.jup\.ag/.test(target)) {
+      if (/api\.jup\.ag\/tokens\/v2/.test(target)) {
         return new Response(JSON.stringify([{ id: MEME_MINT, symbol: 'BONK', name: 'Bonk', decimals: 6, isVerified: true }]), { status: 200 });
       }
       /* Every public node throttles; the configured private node answers. */
@@ -596,7 +596,7 @@ describe('server/solanaChainReads — the second door', () => {
     let hits = 0;
     vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       const body = JSON.parse(String(init?.body || '{}'));
-      if (/lite-api/.test(String(url))) return new Response('[]', { status: 200 });
+      if (/api\.jup\.ag\/tokens\/v2/.test(String(url))) return new Response('[]', { status: 200 });
       hits += 1;
       if (body.method === 'getBalance') return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { value: 1 } }), { status: 200 });
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { value: [] } }), { status: 200 });
@@ -629,7 +629,7 @@ describe('server/solanaChainReads — the second door', () => {
     vi.resetModules();
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       const target = String(url);
-      if (/lite-api\.jup\.ag/.test(target)) {
+      if (/api\.jup\.ag\/tokens\/v2/.test(target)) {
         return new Response(JSON.stringify([{ id: MEME_MINT, symbol: 'BONK', name: 'Bonk', decimals: 6 }]), { status: 200 });
       }
       return new Response('blocked', { status: 403 });

@@ -992,7 +992,7 @@ export default function SolanaSwap({ embedded = false }) {
    * The SYMBOL keeps its phishing discipline: when the mint is NOT in the
    * index, the truncated address renders, never a name nobody verified.
    */
-  const importMint = (meta = null) => {
+  const importMint = (meta = null, { side = 'to' } = {}) => {
     const mint = String(typeof meta === 'object' && meta !== null ? meta.mint : customMint).trim();
     setCustomErr(null);
     if (!isSolanaAddress(mint)) {
@@ -1016,7 +1016,8 @@ export default function SolanaSwap({ embedded = false }) {
       usdPrice: known ? (meta.usdPrice ?? null) : null
     };
     setExtraTokens((prev) => [...prev, tk]);
-    setToToken(tk);
+    if (side === 'from') setFromToken(tk);
+    else setToToken(tk);
     setCustomMint('');
     haptic?.('success');
   };
@@ -1221,7 +1222,7 @@ export default function SolanaSwap({ embedded = false }) {
       </motion.section>
 
       {/* ----------------------------- ticket ---------------------------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card sol-swap-ticket" variants={riseIn} initial="hidden" animate="show">
         <div className="sol-swap-box">
           <div className="sol-swap-box-head">
             <span className="faint" style={{ fontSize: 11.5 }}>{t('swap.from')}</span>
@@ -1233,11 +1234,15 @@ export default function SolanaSwap({ embedded = false }) {
             <button
               type="button"
               className="sol-token-btn"
+              aria-label={`${t('swap.from')}: ${fromToken.name || fromToken.symbol} (${fromToken.symbol})`}
               onClick={() => { haptic?.('select'); setPickerSide('from'); }}
               data-testid="solana-token-from"
             >
-              <TokenIcon token={fromToken} size={26} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fromToken.symbol}</span>
+              <TokenIcon token={fromToken} size={30} />
+              <span className="sol-token-copy">
+                <span className="sol-token-symbol">{fromToken.symbol}</span>
+                <span className="sol-token-name">{fromToken.name || t('solana.importedToken')}</span>
+              </span>
               {fromToken.imported ? (
                 <span className={`sol-token-imported-chip ${fromToken.verified ? 'verified' : 'unverified'}`}>
                   {fromToken.verified ? '✓' : '!'}
@@ -1261,8 +1266,8 @@ export default function SolanaSwap({ embedded = false }) {
           </div>
         </div>
 
-        <div className="row" style={{ justifyContent: 'center', margin: '10px 0' }}>
-          <button className="icon-btn" onClick={flip} aria-label={t('swap.flip')}>⇅</button>
+        <div className="row sol-swap-flip-row" style={{ justifyContent: 'center', margin: '10px 0' }}>
+          <button type="button" className="icon-btn sol-swap-flip-btn" onClick={flip} aria-label={t('swap.flip')}>⇅</button>
         </div>
 
         <div className="sol-swap-box">
@@ -1273,11 +1278,15 @@ export default function SolanaSwap({ embedded = false }) {
             <button
               type="button"
               className="sol-token-btn"
+              aria-label={`${t('swap.to')}: ${toToken.name || toToken.symbol} (${toToken.symbol})`}
               onClick={() => { haptic?.('select'); setPickerSide('to'); }}
               data-testid="solana-token-to"
             >
-              <TokenIcon token={toToken} size={26} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toToken.symbol}</span>
+              <TokenIcon token={toToken} size={30} />
+              <span className="sol-token-copy">
+                <span className="sol-token-symbol">{toToken.symbol}</span>
+                <span className="sol-token-name">{toToken.name || t('solana.importedToken')}</span>
+              </span>
               {toToken.imported ? (
                 <span className={`sol-token-imported-chip ${toToken.verified ? 'verified' : 'unverified'}`}>
                   {toToken.verified ? '✓' : '!'}
@@ -1342,7 +1351,7 @@ export default function SolanaSwap({ embedded = false }) {
           button permanently: a working integration with a dead button.
         */}
         <button
-          className="btn btn-primary"
+          className="btn btn-primary sol-swap-submit"
           style={{ marginTop: 14 }}
           disabled={devnet || !address || !order?.outAmount || busy}
           onClick={swap}
@@ -1423,7 +1432,7 @@ export default function SolanaSwap({ embedded = false }) {
         selectedMints={[fromToken.mint, toToken.mint]}
         onClose={() => setPickerSide(null)}
         onPick={(tk) => { pickToken(pickerSide || 'to', tk); setPickerSide(null); }}
-        onImport={(tk) => { importMint(tk); setPickerSide(null); }}
+        onImport={(tk) => { importMint(tk, { side: pickerSide || 'to' }); setPickerSide(null); }}
       />
 
       {/* --------------------- import any mint (memecoins) ---------------------

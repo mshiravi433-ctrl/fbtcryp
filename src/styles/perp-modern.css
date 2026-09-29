@@ -943,6 +943,150 @@
   border: 1px solid color-mix(in srgb, var(--perp-accent-a) 26%, transparent);
 }
 
+/* ── live dYdX discovery catalogue (separate from the overview ticket) ──── */
+.perp-live-catalogue {
+  margin-block: 12px 20px;
+  padding: 15px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--perp-accent-b) 18%, var(--line));
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--perp-accent-b) 8%, transparent), transparent 52%),
+    var(--bg-panel);
+}
+.perp-live-catalogue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-block-end: 13px;
+}
+.perp-live-catalogue-subtitle {
+  margin-block-start: 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.perp-live-search {
+  flex: 0 1 220px;
+  min-width: 145px;
+}
+.perp-live-search input {
+  width: 100%;
+  min-height: 38px;
+  padding-inline: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-raised) 78%, transparent);
+  color: var(--text-1);
+  font-size: 12px;
+}
+.perp-live-search input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--perp-accent-b) 60%, transparent);
+  outline-offset: 1px;
+}
+.perp-live-catalogue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 1fr));
+  gap: 8px;
+}
+.perp-live-market {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 62px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-raised) 62%, transparent);
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.perp-live-market:hover {
+  border-color: color-mix(in srgb, var(--perp-accent-b) 40%, var(--line));
+  background: color-mix(in srgb, var(--perp-accent-b) 7%, var(--bg-raised));
+  transform: translateY(-1px);
+}
+.perp-live-market-main,
+.perp-live-market-data,
+.perp-live-market-names {
+  display: flex;
+  min-width: 0;
+}
+.perp-live-market-main { align-items: center; gap: 9px; }
+.perp-live-market-data,
+.perp-live-market-names {
+  flex-direction: column;
+  gap: 3px;
+}
+.perp-live-market-data { align-items: flex-end; text-align: end; }
+.perp-live-market-names strong,
+.perp-live-market-data strong {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.perp-live-market-names small,
+.perp-live-market-data small {
+  overflow: hidden;
+  max-width: 150px;
+  color: var(--text-3);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.perp-live-market-data small.up { color: var(--up); }
+.perp-live-market-data small.down { color: var(--down); }
+.perp-live-market-badge {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--perp-accent-b) 25%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--perp-accent-b) 12%, var(--bg-panel));
+  color: var(--perp-accent-b);
+  font-size: 13px;
+  font-weight: 800;
+}
+.perp-live-catalogue-skeleton {
+  min-height: 62px;
+  border-radius: 14px;
+}
+.perp-live-catalogue-empty {
+  margin: 0;
+  padding: 13px 4px 7px;
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+}
+.perp-live-more {
+  display: block;
+  margin: 12px auto 0;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  cursor: pointer;
+}
+.perp-live-more:hover { color: var(--perp-accent-b); border-color: var(--perp-accent-b); }
+@media (max-width: 560px) {
+  .perp-live-catalogue { padding: 12px; }
+  .perp-live-catalogue-head { align-items: stretch; flex-direction: column; gap: 10px; }
+  .perp-live-search { flex: 1 1 auto; min-width: 0; }
+  .perp-live-catalogue-grid { grid-template-columns: 1fr; }
+}
+
 /* ─────────────────────────── LIGHT THEME ──────────────────────────────── */
 /*
  * The variables already flip for light mode; what must not survive the flip
@@ -1003,6 +1147,86 @@
 :root[data-theme='light'] .perp-modern .perp-ticket-pair,
 :root[data-theme='light'] .perp-modern .perp-route-ico {
   color: #0369a1;
+}
+
+:root[data-theme='light'] .perp-live-catalogue {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(0, 150, 180, 0.06), transparent 52%),
+    rgba(255, 255, 255, 0.85);
+  border-color: rgba(13, 16, 32, 0.09);
+}
+:root[data-theme='light'] .perp-live-market {
+  background: rgba(13, 16, 32, 0.025);
+}
+:root[data-theme='light'] .perp-live-market:hover {
+  background: rgba(0, 150, 180, 0.06);
+}
+:root[data-theme='light'] .perp-live-market-badge { color: #0369a1; }
+
+/* The executable ticket opens over (rather than replacing) the Perpetual tab.
+   It is portalled to body so the route's animated transform cannot trap the
+   fixed layer; the underlying selected tab therefore never changes. */
+.perp-execution-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  overflow: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: max(8px, env(safe-area-inset-top)) 0 max(8px, env(safe-area-inset-bottom));
+  background: rgba(3, 7, 18, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+.perp-execution-panel {
+  box-sizing: border-box;
+  width: min(100%, 820px);
+  min-height: 100%;
+  margin-inline: auto;
+  padding: 0 clamp(12px, 3vw, 22px) 24px;
+  color: var(--text-1);
+  background: var(--bg-panel, #0b1020);
+  border-inline: 1px solid color-mix(in srgb, var(--line, #fff) 38%, transparent);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.38);
+}
+.perp-execution-toolbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  margin-inline: calc(-1 * clamp(12px, 3vw, 22px));
+  padding: 4px clamp(12px, 3vw, 22px);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--bg-panel, #0b1020) 88%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line, #fff) 44%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.perp-execution-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 34%, transparent);
+  border-radius: 12px;
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--rgb-1) 9%, var(--bg-panel, #0b1020));
+  font: inherit;
+  cursor: pointer;
+}
+.perp-execution-back:hover {
+  border-color: color-mix(in srgb, var(--rgb-1) 60%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 15%, var(--bg-panel, #0b1020));
+}
+@media (prefers-reduced-motion: reduce) {
+  .perp-execution-overlay { scroll-behavior: auto; }
 }
 
 /* Reduced motion: the live dot and hover lifts are decoration, not signal. */

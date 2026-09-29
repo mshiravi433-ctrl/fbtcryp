@@ -15,11 +15,12 @@
  *   GET /api/solana/token-search?query=<symbol|name|mint>   (meta + sentiment)
  *   GET /api/solana/token-sentiment?mint=<mint>&lang=fa     (single, + AI line)
  *
- * Keyless upstream (lite-api.jup.ag), read from the SERVER for the same three
- * reasons every other upstream is: no key can leak, no CORS question exists,
- * and one shared cache turns N user searches into one upstream call. Cached
- * hard — a token list is browsing data, not a price the user signs against;
- * the swap's own quote still comes from the live order endpoints.
+ * Jupiter Tokens API v2, read from the SERVER for the same three reasons
+ * every other upstream is: no key can leak, no CORS question exists, and one
+ * shared cache turns N user searches into one upstream call. The same API key
+ * configured for swap reads is attached server-side. Cached hard — a token
+ * list is browsing data, not a price the user signs against; the swap's own
+ * quote still comes from the live order endpoints.
  *
  * ─── THE SENTIMENT HALF, AND ITS HONESTY CONTRACT ───────────────────────────
  * «هوش مصنوعی برای توکن» was the request. What is honest to ship:
@@ -43,8 +44,7 @@
 
 import { withCache } from './cache.js';
 import { aiConfigured, chat } from './ai.js';
-
-const JUP_SEARCH = String(process.env.JUP_TOKEN_SEARCH_URL || 'https://lite-api.jup.ag/tokens/v2/search');
+import { jupiterTokenHeaders, jupiterTokenUrl } from './jupiterTokenApi.js';
 
 const SEARCH_TIMEOUT_MS = Number(process.env.SOLANA_TOKEN_META_TIMEOUT_MS || 7000);
 
@@ -62,7 +62,11 @@ export function isSolanaMintShape(value) {
 }
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
-const numOrNull = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const numOrNull = (v) => {
+  if (v == null || (typeof v === 'string' && !v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 const strOrNull = (v, max = 64) => {
   const s = String(v ?? '').trim();
   return s ? s.slice(0, max) : null;
@@ -205,13 +209,13 @@ export function deriveSentiment(tk, { now = Date.now() } = {}) {
 
 /* ── upstream ──────────────────────────────────────────────────────────────── */
 
-async function jupSearchRaw(query) {
+async function jupTokenRaw(endpoint, params = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS);
   try {
-    const res = await fetch(`${JUP_SEARCH}?query=${encodeURIComponent(query)}`, {
+    const res = await fetch(jupiterTokenUrl(endpoint, params), {
       signal: ctrl.signal,
-      headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' }
+      headers: jupiterTokenHeaders()
     });
     if (!res.ok) return { ok: false, status: res.status, rows: [] };
     const body = await res.json().catch(() => null);
@@ -223,6 +227,8 @@ async function jupSearchRaw(query) {
     clearTimeout(timer);
   }
 }
+
+const jupSearchRaw = (query) => jupTokenRaw('search', { query });
 
 /** Search rows → normalised + scored, best first (Jupiter already ranks). */
 function decorate(rows) {
@@ -246,6 +252,41 @@ export async function searchSolanaTokens({ query } = {}) {
       const up = await jupSearchRaw(q);
       if (!up.ok) return { ok: false, code: 'UPSTREAM_FAILED', status: up.status, detail: up.detail || null, rows: [] };
       return { ok: true, query: q, rows: decorate(up.rows.slice(0, 30)), at: Date.now() };
+    }, { swr: true });
+    return { ...value, cached, stale: stale || undefined };
+  } catch (err) {
+    return { ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 140) };
+  }
+}
+
+/**
+ * Curated browse catalogue for the Solana picker. These records are discovery
+ * only: the picker marks them unverified unless Jupiter explicitly verifies
+ * them, and the swap screen still needs a fresh Jupiter quote before signing.
+ */
+export async function discoverSolanaTokens({ category = 'toptraded', interval = '24h', limit = 100 } = {}) {
+  const safeCategory = String(category || 'toptraded');
+  const safeInterval = String(interval || '24h');
+  const numericLimit = Number(limit);
+  if (
+    !['toptraded', 'toptrending'].includes(safeCategory)
+    || !['5m', '1h', '6h', '24h'].includes(safeInterval)
+    || !Number.isFinite(numericLimit)
+    || numericLimit < 1
+  ) return { ok: false, code: 'BAD_QUERY' };
+  const safeLimit = Math.min(100, Math.floor(numericLimit));
+  const cacheKey = `solana:tkdiscovery:${safeCategory}:${safeInterval}:${safeLimit}`;
+  try {
+    const { value, cached, stale } = await withCache(cacheKey, SEARCH_TTL_MS, async () => {
+      const up = await jupTokenRaw(`${safeCategory}/${safeInterval}`, { limit: safeLimit });
+      if (!up.ok) return { ok: false, code: 'UPSTREAM_FAILED', status: up.status, rows: [] };
+      return {
+        ok: true,
+        category: safeCategory,
+        interval: safeInterval,
+        rows: decorate(up.rows.slice(0, safeLimit)),
+        at: Date.now()
+      };
     }, { swr: true });
     return { ...value, cached, stale: stale || undefined };
   } catch (err) {

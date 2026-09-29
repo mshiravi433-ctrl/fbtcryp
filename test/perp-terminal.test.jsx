@@ -130,6 +130,11 @@ vi.mock('../src/lib/futuresClient', () => ({
   getFuturesFeePreview: async (q) => { FEE_FOR_CALLS.push(q); return FEE_ANSWER; }
 }));
 
+let DYDX_MARKETS = [];
+vi.mock('../src/lib/dydx', () => ({
+  getDydxMarkets: async () => ({ markets: DYDX_MARKETS, live: DYDX_MARKETS.length > 0 })
+}));
+
 /* The chart engine is lazy and canvas-bound; the terminal's contract with it
    is only "mount it for the selected venue market with these props". */
 vi.mock('../src/components/FuturesMarketChart', () => ({
@@ -139,7 +144,11 @@ vi.mock('../src/components/FuturesMarketChart', () => ({
 /* The two lazy venue tabs: real pages, but this probe tests the OVERVIEW and
    the hand-off URL — not their internals. */
 vi.mock('../src/pages/Dydx', () => ({ default: () => <div data-testid="stub-dydx" /> }));
-vi.mock('../src/pages/FuturesOnchain', () => ({ default: () => <div data-testid="stub-onchain" /> }));
+vi.mock('../src/pages/FuturesOnchain', () => ({
+  default: ({ embedded = false, initialPrefill = null } = {}) => (
+    <div data-testid="stub-onchain" data-embedded={String(embedded)} data-initial-market={initialPrefill?.market || ''} />
+  )
+}));
 
 /* FundingPanel's own network client — it has its own honest states. */
 vi.mock('../src/lib/perp', () => ({
@@ -156,8 +165,8 @@ const LocationProbe = () => {
   return <div data-testid="loc-probe">{loc.pathname}?{loc.search}</div>;
 };
 
-const mount = () => render(
-  <MemoryRouter initialEntries={['/perp']}>
+const mount = (initialPath = '/perp') => render(
+  <MemoryRouter initialEntries={[initialPath]}>
     <LocationProbe />
     <Routes>
       <Route path="/perp" element={<Perp />} />
@@ -188,6 +197,15 @@ beforeEach(() => {
     }
   };
   FEE_FOR_CALLS.length = 0;
+  DYDX_MARKETS = Array.from({ length: 25 }, (_, index) => ({
+    ticker: `ALT${String(index).padStart(2, '0')}-USD`,
+    status: 'ACTIVE',
+    oraclePrice: 10 + index,
+    priceChange24H: index % 2 ? 0.25 : -0.1,
+    volume24H: 25 - index
+  })).concat([{
+    ticker: 'DELISTED-USD', status: 'CANCEL_ONLY', oraclePrice: 1, priceChange24H: 0, volume24H: 99
+  }]);
   OPENED.length = 0;
 });
 
@@ -195,6 +213,47 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the perpetual overview terminal', () => {
+  it('keeps a deep-linked On-Chain tab in sync when the user manually returns to Perpetual', async () => {
+    const { container } = mount('/perp?tab=onchain&market=BTC-PERP&side=long&collateral=100&leverage=5');
+    await screen.findByTestId('stub-onchain');
+    fireEvent.click(container.querySelector('.perp-rail-tab'));
+    await screen.findByTestId('perp-ticket');
+    await waitFor(() => {
+      const url = screen.getByTestId('loc-probe').textContent;
+      expect(url).not.toContain('tab=onchain');
+      expect(url).toContain('market=BTC-PERP');
+      expect(url).toContain('side=long');
+    });
+    expect(screen.queryByTestId('stub-onchain')).toBeNull();
+  });
+
+  it('shows only active live dYdX markets and opens the selected ticker in its own tab', async () => {
+    const { container } = mount();
+    await screen.findByText('ALT00-USD');
+    expect(screen.queryByText('DELISTED-USD')).toBeNull();
+    expect(screen.queryByText('ALT24-USD')).toBeNull();
+    fireEvent.click(container.querySelector('.perp-live-more'));
+    const lastMarket = await screen.findByText('ALT24-USD');
+    fireEvent.click(lastMarket.closest('button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('stub-dydx')).toBeTruthy();
+      const url = screen.getByTestId('loc-probe').textContent;
+      expect(url).toContain('tab=dydx');
+      expect(url).toContain('ticker=ALT24-USD');
+    });
+    expect(container.querySelector('.perp-live-market')).toBeNull();
+  });
+
+  it('does not offer a misleading load-more button when a market search has one result', async () => {
+    const { container } = mount();
+    await screen.findByText('ALT00-USD');
+    expect(container.querySelector('.perp-live-more')).not.toBeNull();
+    fireEvent.change(container.querySelector('.perp-live-search input'), { target: { value: 'ALT00' } });
+    await screen.findByText('ALT00-USD');
+    expect(screen.queryByText('ALT01-USD')).toBeNull();
+    expect(container.querySelector('.perp-live-more')).toBeNull();
+  });
+
   it('renders all twelve pairs with a live price, a change and a sparkline', async () => {
     mount();
     const strip = await screen.findByTestId('perp-pair-strip');
@@ -269,9 +328,17 @@ describe('the perpetual overview terminal', () => {
     expect(fees.textContent).toContain('0xaf5C…24d6');
   });
 
-  it('offers connect-wallet when no wallet is connected, and the review flow when one is', async () => {
+  it('keeps an in-app Solana route on its own wallet flow and still gates external orders on wallet connection', async () => {
     mount();
     await screen.findByTestId('perp-ticket');
+    expect(screen.getByTestId('perp-submit').textContent).toContain('بازبینی و تأیید معامله');
+    expect(screen.getByText(/کیف پول سولانا/)).toBeTruthy();
+
+    cleanup();
+    mount();
+    await screen.findByTestId('perp-ticket');
+    fireEvent.click(screen.getAllByRole('tab').find((el) => /PEPE-PERP/.test(el.textContent)));
+    await waitFor(() => expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy());
     expect(screen.getByTestId('perp-connect').textContent).toContain('اتصال کیف پول');
     expect(screen.queryByTestId('perp-submit')).toBeNull();
 
@@ -279,7 +346,8 @@ describe('the perpetual overview terminal', () => {
     WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
     mount();
     expect(screen.getByTestId('perp-submit').textContent).toContain('بازبینی و تأیید معامله');
-    expect(screen.getByTestId('perp-wallet-row').textContent).toContain('0x1111…1111');
+    expect(screen.queryByTestId('perp-wallet-row')).toBeNull();
+    expect(screen.getByText(/کیف پول سولانا/)).toBeTruthy();
     fireEvent.click(screen.getByTestId('perp-submit'));
     const review = await screen.findByTestId('perp-review');
     expect(review.textContent).toContain('BTC-PERP');
@@ -288,7 +356,7 @@ describe('the perpetual overview terminal', () => {
     expect(review.textContent).toContain('$500');
   });
 
-  it('confirms an in-app pair by handing the exact ticket to the venue tab', async () => {
+  it('opens the exact in-app ticket in an overlay without switching away from Perpetual', async () => {
     WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
     mount();
     await screen.findByTestId('perp-ticket');
@@ -297,14 +365,28 @@ describe('the perpetual overview terminal', () => {
     fireEvent.click(screen.getByTestId('perp-review-confirm'));
     await waitFor(() => {
       const probe = screen.getByTestId('loc-probe').textContent;
-      expect(probe).toContain('tab=onchain');
+      expect(probe).toContain('tab=overview');
+      expect(probe).toContain('execution=onchain');
       expect(probe).toContain('market=BTC-PERP');
       expect(probe).toContain('side=long');
       expect(probe).toContain('collateral=100');
       expect(probe).toContain('leverage=5');
     });
-    await waitFor(() => expect(screen.getByTestId('stub-onchain')).toBeTruthy());
+    const execution = await screen.findByTestId('stub-onchain');
+    expect(execution.dataset.embedded).toBe('true');
+    expect(execution.dataset.initialMarket).toBe('BTC-PERP');
+    expect(screen.getByTestId('perp-execution-overlay')).toBeTruthy();
+    expect(screen.getByTestId('perp-ticket')).toBeTruthy();
+    expect(document.querySelector('.perp-rail-tab[aria-selected="true"]')?.textContent).toContain('پرپچوال');
     expect(OPENED.length).toBe(0);
+
+    fireEvent.click(screen.getByTestId('perp-execution-close'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('stub-onchain')).toBeNull();
+      expect(screen.getByTestId('perp-ticket')).toBeTruthy();
+      expect(screen.getByTestId('loc-probe').textContent).not.toContain('execution=onchain');
+      expect(screen.getByTestId('loc-probe').textContent).not.toContain('tab=onchain');
+    });
   });
 
   it('confirms a venue-only pair through the registered Avantis referral code', async () => {
@@ -313,6 +395,7 @@ describe('the perpetual overview terminal', () => {
     await screen.findByTestId('perp-ticket');
     fireEvent.click(screen.getAllByRole('tab').find((el) => /PEPE-PERP/.test(el.textContent)));
     await waitFor(() => expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy());
+    expect(screen.getByTestId('perp-wallet-row').textContent).toContain('0x1111…1111');
     /* the fee card names the referral arrangement for this route */
     expect(screen.getByTestId('perp-fee-breakdown').textContent).toContain('fbtswap');
     expect(screen.getByTestId('perp-fee-breakdown').textContent).toContain('5٪');

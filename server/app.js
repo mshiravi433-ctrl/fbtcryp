@@ -55,7 +55,7 @@ import {
 } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
-import { resolveVenue } from './coinVenue.js';
+import { resolveVenue, resolveVenues } from './coinVenue.js';
 import {
   checkBuySellEligibility,
   createBuySellCheckout,
@@ -107,7 +107,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
-import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail } from './solanaTokenMeta.js';
+import { searchSolanaTokens, searchSolanaTokensByMints, discoverSolanaTokens, solanaSentimentDetail } from './solanaTokenMeta.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
@@ -5514,6 +5514,17 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
  * Not wrapped in `serve()` for the same reason as /api/coin-id: the response
  * depends on the path parameter, and that helper caches per fixed key.
  */
+app.get('/api/coin-venues', async (req, res) => {
+  try {
+    const out = await resolveVenues(req.query.ids);
+    if (out.error) return res.status(400).json(out);
+    res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
 app.get('/api/coin-venue/:id', async (req, res) => {
   try {
     const out = await resolveVenue(req.params.id);
@@ -5953,6 +5964,25 @@ app.get('/api/solana/token-search', async (req, res) => {
  * is configured — one labelled LLM sentence that can never move the score.
  * Missing data answers `unknown`; it never invents a green badge.
  */
+app.get('/api/solana/token-discovery', async (req, res) => {
+  try {
+    const out = await discoverSolanaTokens({
+      category: req.query.category,
+      interval: req.query.interval,
+      limit: req.query.limit
+    });
+    if (!out.ok) {
+      const status = out.code === 'BAD_QUERY' ? 400 : 502;
+      res.set('cache-control', 'no-store');
+      return res.status(status).json(out);
+    }
+    res.set('cache-control', 'public, max-age=60, s-maxage=180, stale-while-revalidate=600');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
+});
+
 app.get('/api/solana/token-sentiment', async (req, res) => {
   try {
     const out = await solanaSentimentDetail({

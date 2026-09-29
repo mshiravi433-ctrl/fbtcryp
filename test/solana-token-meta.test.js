@@ -16,11 +16,12 @@
  *   · every label travels with the numbers that produced it, so the UI can
  *     show WHY and a translation key can change without re-scoring.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ageInDays,
   deriveSentiment,
+  discoverSolanaTokens,
   normalizeJupiterToken,
   searchSolanaTokensByMints
 } from '../server/solanaTokenMeta.js';
@@ -100,6 +101,12 @@ describe('normalizeJupiterToken', () => {
     expect(tk.icon).toBeNull();
   });
 
+  it('keeps missing numeric metadata null rather than turning null into zero', () => {
+    const tk = normalizeJupiterToken({ ...HEALTHY, usdPrice: null, liquidity: null });
+    expect(tk.usdPrice).toBeNull();
+    expect(tk.liquidity).toBeNull();
+  });
+
   it('keeps unreported audit booleans as null (tri-state), not false', () => {
     const tk = normalizeJupiterToken(USDC);
     expect(tk.mintAuthorityDisabled).toBeNull();
@@ -150,6 +157,37 @@ describe('ageInDays', () => {
     expect(ageInDays(new Date(Date.now() - 2 * 86_400_000).toISOString())).toBeCloseTo(2, 0);
     expect(ageInDays('not-a-date')).toBeNull();
     expect(ageInDays(null)).toBeNull();
+  });
+});
+
+describe('discoverSolanaTokens', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('uses the live Top Traded endpoint through the server-side Jupiter base and normalises mint rows', async () => {
+    vi.stubEnv('JUPITER_TOKEN_API_BASE', 'https://jupiter.test/tokens/v2');
+    vi.stubEnv('JUPITER_API_KEY', 'server-only-test-key');
+    const request = vi.fn(async () => ({ ok: true, status: 200, json: async () => [HEALTHY] }));
+    vi.stubGlobal('fetch', request);
+
+    const out = await discoverSolanaTokens({ category: 'toptraded', interval: '24h', limit: 17 });
+    expect(out.ok).toBe(true);
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]).toMatchObject({ mint: HEALTHY.id, symbol: 'BONK', verified: true });
+    const url = new URL(request.mock.calls[0][0]);
+    expect(url.origin + url.pathname).toBe('https://jupiter.test/tokens/v2/toptraded/24h');
+    expect(url.searchParams.get('limit')).toBe('17');
+    expect(request.mock.calls[0][1].headers['x-api-key']).toBe('server-only-test-key');
+  });
+
+  it('rejects unsupported category values before making a request', async () => {
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    const out = await discoverSolanaTokens({ category: 'by-symbol' });
+    expect(out).toMatchObject({ ok: false, code: 'BAD_QUERY' });
+    expect(request).not.toHaveBeenCalled();
   });
 });
 

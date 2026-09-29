@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -12,7 +13,7 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import FuturesMarketChart from '../components/FuturesMarketChart';
 import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
-import { IconActivity, IconChevronRight, IconExternal, IconRoute, IconShield, IconSparkle, IconTrend, IconWallet } from '../components/Icons';
+import { IconActivity, IconChevronLeft, IconChevronRight, IconExternal, IconRoute, IconShield, IconSparkle, IconTrend, IconWallet } from '../components/Icons';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -23,6 +24,8 @@ import { SPECULATION_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
 import { velocityPerpIndex } from '../lib/velocityMarkets';
+import { getDydxMarkets } from '../lib/dydx';
+import { lockBodyScroll } from '../lib/scrollLock';
 import lazyRetry from '../lib/lazyRetry';
 import '../styles/perp-modern.css';
 import '../styles/derivatives-glass.css';
@@ -121,6 +124,28 @@ const PERP_PAIRS = [
 const MAX_LEVERAGE = 50;
 const LEVERAGE_PRESETS = [2, 5, 10, 20, 50];
 const MIN_COLLATERAL_USD = 5;
+
+/** A Perpetual hand-off stays on the Perpetual route and opens execution in a
+ *  modal. Keep the draft in the URL so Wallet → connect → return restores the
+ *  exact ticket without changing the selected tab. */
+function readEmbeddedExecution(search) {
+  try {
+    const params = new URLSearchParams(search || '');
+    if (params.get('execution') !== 'onchain') return null;
+    const market = String(params.get('market') || '').toUpperCase().replace(/[^A-Z0-9/-]/g, '').slice(0, 16);
+    if (!market) return null;
+    const rawCollateral = Number(params.get('collateral'));
+    const rawLeverage = Number(params.get('leverage'));
+    const side = String(params.get('side') || '').toLowerCase();
+    return {
+      market,
+      side: side === 'long' || side === 'short' ? side : 'long',
+      collateral: Number.isFinite(rawCollateral) && rawCollateral >= MIN_COLLATERAL_USD ? String(rawCollateral) : '100',
+      leverage: Number.isFinite(rawLeverage) && rawLeverage >= 1 ? String(Math.min(rawLeverage, MAX_LEVERAGE)) : '5'
+    };
+  } catch { return null; }
+}
+
 /* Both referral venues discount the referred trader's fees by 5% — documented
    in lib/venueReferral.js, which is the single source of truth for this. */
 const REFERRAL_DISCOUNT_PCT = 5;
@@ -140,27 +165,28 @@ export default function Perp() {
   const slippagePct = useSettingsStore((s) => s.defaultSlippage);
   const setSlippage = useSettingsStore((s) => s.setSlippage);
 
-  /*
-   * Deep link: /perp?tab=onchain (the Intent OS hands futures_* drafts here
-   * and names the tab). Unknown values fall back to the overview.
-   */
+  /* Deep links from the Intent OS and in-app handoffs share one URL contract. */
   const initialTab = (() => {
     try {
-      const raw = String(window.location.hash || '').split('?')[1] || '';
-      const wanted = new URLSearchParams(raw).get('tab');
+      const wanted = new URLSearchParams(location.search || '').get('tab');
       return SPECULATION_ENABLED && ['dydx', 'onchain'].includes(wanted) ? wanted : 'overview';
     } catch { return 'overview'; }
   })();
   const [perpTab, setPerpTab] = useState(initialTab);
+  const embeddedExecution = useMemo(() => readEmbeddedExecution(location.search), [location.search]);
+  const [dydxMarkets, setDydxMarkets] = useState([]);
+  const [dydxMarketsLoading, setDydxMarketsLoading] = useState(true);
+  const [dydxSearch, setDydxSearch] = useState('');
+  const [dydxVisibleCount, setDydxVisibleCount] = useState(18);
   const PERP_TABS = SPECULATION_ENABLED ? ['overview', 'dydx', 'onchain'] : ['overview'];
 
   /*
    * ─── THE TERMINAL'S OWN STATE ─────────────────────────────────────────────
    * A real ticket, sized in a real stablecoin, with the same honest arithmetic
    * every other leveraged screen in this app uses. Nothing here signs
-   * anything: the confirm button routes the order to an EXECUTABLE, EARNING
-   * path — the venue tab in this app for pairs it lists, or Avantis on Base
-   * with the registered `fbtswap` referral code for the rest.
+   * anything: the confirm button routes the order to an EXECUTABLE path — an
+   * in-place venue execution panel for pairs it lists, or Avantis on Base with
+   * the registered `fbtswap` referral code for the rest.
    */
   const [selected, setSelected] = useState('bitcoin');
   const [side, setSide] = useState('long');
@@ -210,12 +236,58 @@ export default function Perp() {
     return () => { alive = false; };
   }, []);
 
+  /*
+   * The original overview ticket covers 12 selected assets. Keep its order
+   * path intact, and surface dYdX's separate live, ACTIVE instrument catalogue
+   * as a discovery directory. A click opens the dYdX tab with that exact venue
+   * ticker; it never makes the market executable through another venue.
+   */
+  useEffect(() => {
+    if (!SPECULATION_ENABLED) {
+      setDydxMarketsLoading(false);
+      return undefined;
+    }
+    let alive = true;
+    getDydxMarkets()
+      .then((result) => {
+        if (!alive) return;
+        setDydxMarkets(Array.isArray(result?.markets) ? result.markets : []);
+        setDydxMarketsLoading(false);
+      })
+      .catch(() => {
+        if (alive) {
+          setDydxMarkets([]);
+          setDydxMarketsLoading(false);
+        }
+      });
+    return () => { alive = false; };
+  }, []);
+
+  const activeDydxMarkets = useMemo(() => dydxMarkets
+    .filter((market) => (
+      market?.status === 'ACTIVE'
+      && /^[A-Z0-9]+-[A-Z0-9]+$/.test(String(market.ticker || ''))
+      && Number.isFinite(Number(market.oraclePrice))
+      && Number(market.oraclePrice) > 0
+    ))
+    .sort((a, b) => Number(b.volume24H || 0) - Number(a.volume24H || 0)), [dydxMarkets]);
+  const filteredDydxMarkets = useMemo(() => {
+    const query = dydxSearch.trim().toUpperCase();
+    return query
+      ? activeDydxMarkets.filter((market) => String(market.ticker).includes(query))
+      : activeDydxMarkets;
+  }, [activeDydxMarkets, dydxSearch]);
+  const visibleDydxMarkets = useMemo(
+    () => filteredDydxMarkets.slice(0, dydxVisibleCount),
+    [filteredDydxMarkets, dydxVisibleCount]
+  );
+
   const venueMarket = useMemo(
     () => venueMarkets.find((m) => String(m.base || '').toUpperCase() === pair.symbol) || null,
     [venueMarkets, pair.symbol]
   );
   /* Executable in this app? Live feed first, catalogue fallback second. */
-  const routeInApp = Boolean(venueMarket) || velocityPerpIndex(pair.symbol) != null;
+  const routeInApp = SPECULATION_ENABLED && (Boolean(venueMarket) || velocityPerpIndex(pair.symbol) != null);
 
   /* ─── ticket arithmetic — pure, live, transparent ─────────────────────── */
   const collateralNum = Number(collateral);
@@ -246,7 +318,7 @@ export default function Perp() {
   /*
    * ─── FEE PREVIEW — backend numbers only, debounced ─────────────────────
    * The breakdown is computed by the shared engine inside the BFF from the
-   * venue's own fee parameters, exactly like the venue tab's preview. Nothing
+   * venue's own fee parameters, exactly like the execution panel's preview. Nothing
    * is derived client-side, and an unreachable backend leaves the rows as
    * honest "shown at review" placeholders rather than invented dollars.
    */
@@ -278,22 +350,52 @@ export default function Perp() {
     else window.open(target, '_blank', 'noopener,noreferrer');
   };
 
+  useEffect(() => {
+    if (!embeddedExecution) return undefined;
+    return lockBodyScroll();
+  }, [embeddedExecution]);
+
   /*
-   * ─── IN-PAGE HAND-OFF TO THE EXECUTABLE TAB ────────────────────────────
-   * The router only parses the hash on mount, so a navigation from THIS page
-   * to `/perp?tab=onchain&…` would change the query without switching the
-   * tab. The effect keeps the mounted tab in step with the URL (the Intent OS
-   * hand-off benefits too), and `confirmOrder` sets the state directly as
-   * well, so handing the SAME order over twice still switches tabs even when
-   * the query string is identical.
+   * URL -> tab synchronization is navigation-only. Manual tab clicks write the
+   * matching URL below; depending on `perpTab` here would replay a stale
+   * `?tab=onchain` after the user intentionally chooses the overview.
    */
   useEffect(() => {
     if (!SPECULATION_ENABLED) return;
     try {
       const want = new URLSearchParams(location.search || '').get('tab');
-      if ((want === 'onchain' || want === 'dydx') && want !== perpTab) setPerpTab(want);
-    } catch { /* a malformed query is not worth breaking the page over */ }
-  }, [location.search, perpTab]);
+      const next = ['onchain', 'dydx'].includes(want) ? want : 'overview';
+      setPerpTab((current) => (current === next ? current : next));
+    } catch { /* malformed search strings should not break the terminal */ }
+  }, [location.search]);
+
+  const selectPerpTab = (nextTab) => {
+    setPerpTab(nextTab);
+    const params = new URLSearchParams(location.search || '');
+    if (nextTab === 'overview') params.delete('tab');
+    else params.set('tab', nextTab);
+    const query = params.toString();
+    const search = query ? `?${query}` : '';
+    if (search !== (location.search || '')) {
+      navigate({ pathname: location.pathname || '/perp', search }, { replace: true });
+    }
+  };
+
+  const openDydxMarket = (ticker) => {
+    const params = new URLSearchParams(location.search || '');
+    params.set('tab', 'dydx');
+    params.set('ticker', ticker);
+    setPerpTab('dydx');
+    navigate({ pathname: location.pathname || '/perp', search: `?${params.toString()}` });
+  };
+
+  const closeEmbeddedExecution = () => {
+    const params = new URLSearchParams(location.search || '');
+    ['execution', 'market', 'side', 'collateral', 'leverage'].forEach((key) => params.delete(key));
+    if (params.get('tab') === 'overview') params.delete('tab');
+    const query = params.toString();
+    navigate({ pathname: location.pathname || '/perp', search: query ? `?${query}` : '' }, { replace: true });
+  };
 
   const canConfirm = notional != null;
 
@@ -307,7 +409,9 @@ export default function Perp() {
    */
   const startReview = () => {
     haptic?.('light');
-    if (!wallet.isConnected) { setWalletOpen(true); return; }
+    /* The in-app perpetual venue signs through its own Solana wallet flow;
+       do not divert that order through the EVM wallet sheet. */
+    if (!wallet.isConnected && !routeInApp) { setWalletOpen(true); return; }
     setReviewing(true);
   };
 
@@ -315,11 +419,10 @@ export default function Perp() {
    * Confirm routes the order to an executable, earning path — never a dead
    * end and never a free exit:
    *
-   *   · pairs the in-app venue lists → the venue tab of THIS page, prefilled
-   *     with the exact ticket (market/side/collateral/leverage). There the
-   *     backend rebuilds the order, shows its own fee breakdown and risk
-   *     verdict, and the user signs in their own wallet. The FBT builder fee
-   *     and the venue referrer share are attached by that path.
+   *   · pairs the in-app venue lists → an in-place execution panel over the
+   *     Perpetual tab, prefilled with the exact ticket. There the backend
+   *     rebuilds the order, shows its own fee breakdown and risk verdict, and
+   *     the user signs in the venue's wallet. The Perpetual tab stays selected.
    *
    *   · every other pair → Avantis on Base through the REGISTERED referral
    *     code `fbtswap` (withReferral rewrites to the /referral attribution
@@ -331,14 +434,15 @@ export default function Perp() {
     setReviewing(false);
     if (routeInApp) {
       const params = new URLSearchParams({
-        tab: 'onchain',
+        tab: 'overview',
+        execution: 'onchain',
         market: `${pair.symbol}-PERP`,
         side,
         collateral: String(collateralNum),
         leverage: String(Math.min(leverageNum, MAX_LEVERAGE))
       });
-      setPerpTab('onchain');
-      navigate(`/perp?${params.toString()}`);
+      setPerpTab('overview');
+      navigate({ pathname: location.pathname || '/perp', search: `?${params.toString()}` });
     } else {
       openVenue('avantis', AVANTIS.url);
     }
@@ -377,7 +481,7 @@ export default function Perp() {
               aria-selected={active}
               className={`perp-rail-tab ${active ? 'is-active' : ''}`}
               style={{ isolation: 'isolate' }}
-              onClick={() => setPerpTab(k)}
+              onClick={() => selectPerpTab(k)}
             >
               {active && <SegIndicator id="perp-tab" />}
               <span className="perp-rail-ico" aria-hidden="true">
@@ -399,6 +503,79 @@ export default function Perp() {
         </Suspense>
       ) : (
         <div className="perp-modern">
+
+      {SPECULATION_ENABLED && (
+        <section className="perp-live-catalogue card card-tight" aria-labelledby="perp-live-catalogue-title">
+          <div className="perp-live-catalogue-head">
+            <div>
+              <div className="eyebrow" id="perp-live-catalogue-title">{t('perp.terminal.liveMarkets')}</div>
+              <div className="perp-live-catalogue-subtitle">
+                {t('perp.terminal.liveMarketsSubtitle', { count: activeDydxMarkets.length })}
+              </div>
+            </div>
+            <label className="perp-live-search">
+              <span className="sr-only">{t('perp.terminal.liveMarketsSearch')}</span>
+              <input
+                type="search"
+                value={dydxSearch}
+                onChange={(event) => { setDydxSearch(event.target.value); setDydxVisibleCount(18); }}
+                placeholder={t('perp.terminal.liveMarketsSearch')}
+                aria-label={t('perp.terminal.liveMarketsSearch')}
+              />
+            </label>
+          </div>
+          {dydxMarketsLoading ? (
+            <div className="perp-live-catalogue-grid" aria-label={t('perp.terminal.liveMarketsLoading')}>
+              {Array.from({ length: 6 }, (_, index) => <span className="skel perp-live-catalogue-skeleton" key={index} />)}
+            </div>
+          ) : visibleDydxMarkets.length ? (
+            <div className="perp-live-catalogue-grid">
+              {visibleDydxMarkets.map((market) => {
+                const [base, quote] = market.ticker.split('-');
+                const change = Number(market.priceChange24H) / Number(market.oraclePrice) * 100;
+                return (
+                  <button
+                    type="button"
+                    className="perp-live-market"
+                    key={market.ticker}
+                    onClick={() => openDydxMarket(market.ticker)}
+                    aria-label={`${t('perp.terminal.liveMarketsOpen')} ${market.ticker}`}
+                  >
+                    <span className="perp-live-market-main">
+                      <span className="perp-live-market-badge">{base.slice(0, 1)}</span>
+                      <span className="perp-live-market-names">
+                        <strong>{market.ticker}</strong>
+                        <small>{t('perp.terminal.liveMarketVolume', { value: fmtUsd(market.volume24H) })}</small>
+                      </span>
+                    </span>
+                    <span className="perp-live-market-data">
+                      <strong className="mono">${fmtPrice(market.oraclePrice)}</strong>
+                      <small className={Number.isFinite(change) && change >= 0 ? 'up' : 'down'}>
+                        {Number.isFinite(change) ? fmtPct(change) : '—'} · {quote}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="perp-live-catalogue-empty">
+              {activeDydxMarkets.length
+                ? t('perp.terminal.liveMarketsEmpty')
+                : t('perp.terminal.liveMarketsUnavailable')}
+            </p>
+          )}
+          {!dydxMarketsLoading && visibleDydxMarkets.length < filteredDydxMarkets.length && (
+            <button
+              type="button"
+              className="perp-live-more"
+              onClick={() => setDydxVisibleCount((count) => count + 18)}
+            >
+              {t('perp.terminal.liveMarketsMore', { count: filteredDydxMarkets.length - visibleDydxMarkets.length })}
+            </button>
+          )}
+        </section>
+      )}
 
       {/*
         ─── THE RISK NOTICE STAYS VISIBLE; THE EXPLAINER FOLDS ───────────────
@@ -687,11 +864,12 @@ export default function Perp() {
 
         {/*
           ─── THE FINAL BUTTON ──────────────────────────────────────────────
-          Not connected → «اتصال کیف پول»: nothing signs without a wallet.
-          Connected → the review sheet: the whole ticket, the fee split and
-          the earning route, named, before a single confirmation.
+          External route + no EVM wallet → connect first. In-app Solana pairs
+          use the venue's own wallet flow in the execution panel, so they can
+          reach review without an unrelated EVM connection. Every route and fee
+          is named before the user confirms.
         */}
-        {wallet.isConnected ? (
+        {wallet.isConnected || routeInApp ? (
           <button
             type="button"
             className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'} perp-submit`}
@@ -712,13 +890,15 @@ export default function Perp() {
             {t('perp.terminal.connect')}
           </button>
         )}
-        {wallet.isConnected && wallet.address ? (
+        {!routeInApp && wallet.isConnected && wallet.address ? (
           <p className="faint perp-wallet-line" data-testid="perp-wallet-row">
             <IconShield width={13} height={13} style={{ display: 'inline', marginInlineEnd: 4, verticalAlign: '-2px' }} />
             {t('perp.terminal.connectedAs', { address: shortAddress(wallet.address) })}
           </p>
         ) : (
-          <p className="faint perp-wallet-line">{t('perp.terminal.walletHint')}</p>
+          <p className="faint perp-wallet-line">
+            {t(routeInApp ? 'perp.terminal.venueWalletHint' : 'perp.terminal.walletHint')}
+          </p>
         )}
       </motion.section>
 
@@ -931,8 +1111,8 @@ export default function Perp() {
         ─── THE REVIEW & CONFIRM SHEET ──────────────────────────────────────
         The whole ticket in one place, the fee split, and the route the order
         will take — named before the user confirms anything. Confirm either
-        hands the exact numbers to the venue tab of this page (which rebuilds
-        and re-checks everything server-side before any signature) or opens
+        opens an in-place venue execution panel (which rebuilds and re-checks
+        everything server-side before any signature) or opens
         Avantis with the registered referral code attached. No route out of
         this sheet is unmonetised.
       */}
@@ -990,7 +1170,7 @@ export default function Perp() {
 
           {/*
             The route line — the part a "looks like an exchange" screen must
-            never hide. Either the order is executed by the in-app venue tab
+            never hide. Either the order is executed by the in-app panel
             (rebuilt and risk-checked by the backend before any signature),
             or it goes to Avantis on Base with the `fbtswap` code attached.
           */}
@@ -1026,6 +1206,28 @@ export default function Perp() {
 
       <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
         </div>
+      )}
+      {embeddedExecution && typeof document !== 'undefined' && createPortal(
+        <div className="perp-execution-overlay" role="dialog" aria-modal="true" aria-labelledby="perp-execution-title" data-testid="perp-execution-overlay">
+          <div className="perp-execution-panel">
+            <div className="perp-execution-toolbar">
+              <button
+                type="button"
+                className="perp-execution-back"
+                onClick={() => { haptic?.('light'); closeEmbeddedExecution(); }}
+                data-testid="perp-execution-close"
+              >
+                <IconChevronLeft width={16} height={16} />
+                {t('common.back')}
+              </button>
+              <span id="perp-execution-title">{t('perp.tab.perpetual')}</span>
+            </div>
+            <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
+              {LazyOnchain && <LazyOnchain embedded initialPrefill={embeddedExecution} />}
+            </Suspense>
+          </div>
+        </div>,
+        document.body
       )}
     </PageTransition>
   );

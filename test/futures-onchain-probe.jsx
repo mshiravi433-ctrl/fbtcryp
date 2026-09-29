@@ -119,7 +119,10 @@ function rwaProvider(status) {
 
 export async function run(container) {
   const out = [];
-  const t = (name, ok) => { out.push([name, Boolean(ok)]); console.log((ok ? '✓ ' : '✗ ') + name); };
+  const t = (name, ok, detail = '') => {
+    out.push([name, Boolean(ok)]);
+    console.log((ok ? '✓ ' : '✗ ') + name + (!ok && detail ? ` — ${detail}` : ''));
+  };
   const realError = console.error;
   const errors = [];
   console.error = (...a) => {
@@ -239,7 +242,7 @@ export async function run(container) {
   const q = (sel) => container.querySelector(sel);
   const qa = (sel) => [...container.querySelectorAll(sel)];
   const byId = (id) => q(`[data-testid="${id}"]`);
-  const tabs = () => qa('[role="tablist"][aria-label] [role="tab"]');
+  const tabs = () => qa('.perp-rail[role="tablist"] [role="tab"]');
 
   let root = null;
   try {
@@ -482,6 +485,30 @@ export async function run(container) {
     t('the requested market is selected: BTC/USDT', pickerValue('futures-market-select') === 'BTC/USDT');
     t('side, collateral and leverage are pre-filled from the draft', q('.dir-btn.short')?.classList.contains('active') === true && byId('futures-collateral')?.value === '120' && byId('futures-leverage')?.value === '7');
     t('a deep link builds and signs NOTHING by itself', bff.prepares === preparesBefore && !document.querySelector('[data-testid="futures-confirm"]'));
+
+    /* The Perpetual ticket opens the same live execution form as a portalled
+       panel, without selecting the separate On-Chain tab. */
+    await mountAt('#/perp?tab=overview&execution=onchain&market=BTC-PERP&side=short&collateral=120&leverage=7');
+    await act(async () => { await sleep(900); });
+    t('Perpetual opens the execution panel while its own tab remains selected',
+      !!document.querySelector('[data-testid="perp-execution-overlay"]') && tabs()[0]?.getAttribute('aria-selected') === 'true');
+    const embeddedValues = {
+      market: pickerValue('futures-market-select'),
+      shortActive: document.querySelector('.perp-execution-overlay .dir-btn.short')?.classList.contains('active') === true,
+      collateral: document.querySelector('[data-testid="futures-collateral"]')?.value,
+      leverage: document.querySelector('[data-testid="futures-leverage"]')?.value
+    };
+    t('the embedded panel resolves the exact BTC market and ticket values',
+      embeddedValues.market === 'BTC/USDT' && embeddedValues.shortActive
+        && embeddedValues.collateral === '120' && embeddedValues.leverage === '7',
+      JSON.stringify(embeddedValues));
+    t('opening the execution panel alone still does not prepare an order', bff.prepares === preparesBefore);
+    act(() => { click(document.querySelector('[data-testid="perp-execution-close"]')); });
+    await act(async () => { await sleep(300); });
+    t('closing execution returns to Perpetual and clears only the draft parameters',
+      !!q('.perp-liq') && !document.querySelector('[data-testid="perp-execution-overlay"]') && !String(window.location.hash).includes('execution=onchain'));
+    await mountAt('#/perp?tab=onchain');
+    await act(async () => { await sleep(400); });
 
     /* ═══════ F. Persian: RTL strings for the tab ═══════ */
     const faOk = await setLanguage('fa');

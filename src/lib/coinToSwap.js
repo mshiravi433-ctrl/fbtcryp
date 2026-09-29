@@ -1,5 +1,5 @@
 /**
- * COIN → REAL SWAP, or an honest "not here".
+ * COIN → CURATED SWAP TARGET, or an honest "not here".
  * ---------------------------------------------------------------------------
  * ─── THE BUG THIS FIXES ─────────────────────────────────────────────────────
  * Every coin page had "Buy" and "Sell" buttons that went to `/trade` — the
@@ -147,7 +147,8 @@ export function swapTargetFor(coingeckoId) {
   return null;
 }
 
-/** Can this coin be bought or sold for real, in this app, right now? */
+/** Is there a curated token target for this coin? The swap screen still needs
+ *  to return a fresh executable quote for the chosen amount. */
 export const isSwappable = (coingeckoId) => swapTargetFor(coingeckoId) !== null;
 
 /**
