@@ -2464,8 +2464,33 @@
         "USER_REJECTED": "Kamu menolak tanda tangan di dompet. Tidak ada yang dikirim.",
         "QUOTE_EXPIRED": "Kuotasi kedaluwarsa. Tutup lalu bangun ulang ordernya.",
         "RISK_BLOCKED": "Mesin risiko menolak order ini. Tidak ada yang dikirim.",
-        "MARKET_NOT_LISTED": "Venue ini tidak mencantumkan pasangan itu. Pilih yang lain.",
+        "MARKET_NOT_LISTED": "Pasangan ini belum dibuka untuk diperdagangkan di app ini. Tidak ada yang dikirim dan tidak ada dana yang berpindah — pilih pasangan lain dari daftar.",
         "PROVIDER_UNAVAILABLE": "Venue tidak menjawab. Tidak ada yang dikirim — coba lagi sebentar."
+      },
+      "trade": "Trade",
+      "pairPerp": "Perpetual",
+      "inApp": "di app ini",
+      "route": {
+        "notListed": "Pasangan ini tidak punya pasar di app ini, jadi tidak bisa diperdagangkan di sini. Tidak ada yang keluar dari wallet Anda."
+      }
+    },
+    "how": {
+      "sub": "Leverage, likuidasi, dan funding — 30 detik",
+      "what": {
+        "t": "Perpetual tidak pernah kedaluwarsa",
+        "d": "Mengikuti harga koin: AndaPertar arah harga, bukan membeli koinnya. Itu sebabnya Anda bisa long atau short pada pair yang sama."
+      },
+      "liquidate": {
+        "t": "Leverage bisa menghabiskan posisi",
+        "d": "Makin leverage, makin kecil gerakan berlawanan yang menutup posisi Anda. Harga pasti selalu ditampilkan sebelum konfirmasi — itu angka yang harus dibaca, bukan pengatur leverage."
+      },
+      "funding": {
+        "t": "Menahan posisi punya biaya",
+        "d": "Perpetual Breakthrough结算 pendanaan antara long dan short setiap beberapa jam. Jika sisi Anda yang populer, Anda membayar; jika yang padat, Anda menerima. Biasanya kecil, tapi bertambah setiap jam."
+      },
+      "fees": {
+        "t": "Anda membayar biaya masuk dan keluar",
+        "d": "Rincian biaya ditampilkan sebelum konfirmasi, dan seluruh order dibangun dan diperiksa risikonya oleh app ini — lalu ditandatangani wallet Anda sendiri. App ini tidak pernah menyimpan dana atau kunci Anda."
       }
     }
   }

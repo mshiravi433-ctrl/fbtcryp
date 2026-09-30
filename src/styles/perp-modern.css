@@ -1018,106 +1018,326 @@
   .perp-cta:hover { transform: none; }
 }
 
-/* ==========================================================================
-   THE PAIR STRIP AT SCALE
-   ==========================================================================
-   «کلا جفت توکن های پرپچوال خیلی کمه با دقت فراوان درستش کن خیلی مهمه»
+/* ═══════════════════════════════════════════════════════════════════
+   THE PERPETUAL TAB, REDESIGNED: A LIST, AND A TICKET OVER IT
+   ═══════════════════════════════════════════════════════════════════
+   This page used to be a terminal. A hundred-pair strip, a price hero, a
+   chart, a ticket, a fee table and a liquidation table shared one scroll,
+   so the only thing the screen exists to do — find a pair, see what it is
+   worth, act on it — was the thing you could not do. The fee table and
+   the venue list were the least actionable pixels on the page: they
+   answered questions nobody had asked yet.
 
-   The strip grew from twelve cells to a catalogue, which changes three
-   things and only three things. Everything else about the cell is untouched,
-   so a cell the user already recognises does not become a different control
-   because there are now a hundred of them.
+   So the list became the page, and the ticket moved behind one tap. Not
+   one line of the order path changed — same state, same arithmetic, same
+   backend prepare/sign/verify — it just stopped competing with the list
+   for attention. A screen can only be uncluttered if what it hides is
+   still one tap away; everything removed here is.
+   ═══════════════════════════════════════════════════════════════════ */
 
-     1. a HEAD — the count, stated, and a search box. A strip that holds a
-        hundred pairs has to be findable; without this the user scrolls to
-        the end, sees the same dozen majors, and concludes nothing changed;
-     2. a MARK on the cells the app can actually settle. This is the fact
-        the strip could not show before, and it is the difference between a
-        watchlist and a catalogue you can trade from;
-     3. an EMPTY state, because a search with no hits must say so rather than
-        rendering a bare strip with nothing in it.
-   ========================================================================== */
+/* ─── the explainer, folded ──────────────────────────────────────────
+   One tap away, zero taps of clutter. The text is the only part of this
+   screen that explains a risk, so it is the part that gets a title and
+   a paragraph instead of a tooltip. */
+.perp-how {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 13px 14px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: linear-gradient(140deg, rgba(var(--rgb-1-rgb), 0.13), rgba(var(--rgb-2-rgb), 0.05));
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s ease;
+}
+.perp-how-ico { flex: none; display: grid; place-items: center; color: var(--rgb-1); }
+.perp-how-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.perp-how-title { font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; }
+.perp-how-sub {
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.perp-how-chev {
+  flex: none;
+  color: var(--faint);
+  transition: transform 0.22s ease;
+}
+.perp-how[aria-expanded='true'] { border-color: rgba(var(--rgb-1-rgb), 0.4); }
+.perp-how[aria-expanded='true'] .perp-how-chev { transform: rotate(180deg); }
+.perp-how-body {
+  display: grid;
+  gap: 14px;
+  padding: 4px 14px 15px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.perp-how-row { display: grid; gap: 4px; }
+.perp-how-row-t { font-size: 12.5px; font-weight: 650; }
+.perp-how-row-d {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .perp-how-chev { transition: none; }
+}
 
+/* ─── the list header: the count, and the search ────────────────────── */
 .perp-pair-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  margin: 12px 0 8px;
-  min-width: 0;
+  margin-bottom: 10px;
 }
-
-.perp-pair-search {
-  position: relative;
-  flex: 0 1 190px;
-  min-width: 0;
-}
+.perp-pair-head .section-label { flex: 1; margin: 0; }
+.perp-pair-search { position: relative; flex: none; width: 132px; }
 .perp-pair-search input {
   width: 100%;
-  min-height: 38px;
-  padding: 8px 32px 8px 12px;
-  border-radius: 12px;
+  height: 34px;
+  padding: 0 26px 0 12px;
+  border-radius: 11px;
+  background: var(--card);
   border: 1px solid var(--line);
-  background: rgba(127, 127, 157, 0.08);
-  color: var(--text-1);
-  font: 600 12.5px/1.2 var(--font-display);
-  transition: border-color .18s ease, background .18s ease;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
 }
-.perp-pair-search input::placeholder { color: var(--text-3); }
 .perp-pair-search input:focus {
   outline: none;
-  border-color: rgba(var(--rgb-r, 0), .5);
-  background: rgba(127, 127, 157, 0.13);
+  border-color: rgba(var(--rgb-1-rgb), 0.5);
 }
+.perp-pair-search input::placeholder { color: var(--faint); }
 .perp-pair-search-clear {
   position: absolute;
   inset-inline-end: 6px;
   top: 50%;
-  translate: 0 -50%;
-  width: 24px;
-  height: 24px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
-  border: none;
+  border: 0;
   border-radius: 50%;
-  background: rgba(127, 127, 157, 0.22);
-  color: var(--text-2);
-  font-size: 15px;
+  background: var(--bg-2);
+  color: var(--muted);
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
 }
-.perp-pair-search-clear:hover { background: rgba(127, 127, 157, 0.34); }
-
 .perp-pair-empty {
-  margin: 0 0 10px;
-  padding: 16px;
+  margin: 0;
+  padding: 34px 12px;
   text-align: center;
-  font-size: 12px;
-  border: 1px dashed var(--line);
-  border-radius: 14px;
+  font-size: 13px;
 }
 
-/* The in-app-settle mark. A 5px dot, not a badge: a hundred badges would be
-   a wall of text, and this has to be scannable at a glance while the strip is
-   moving. It sits after the ticker so the eye reads "BTC-PERP, and this one
-   is tradeable here" in that order. */
-.perp-modern .perp-pair-live {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--up, #00e69e);
-  box-shadow: 0 0 0 2px rgba(0, 230, 158, 0.16);
-  flex: 0 0 auto;
-  align-self: center;
+/* ─── THE LIST ───────────────────────────────────────────────────────
+   A fixed price column is the whole trick. An unaligned price column
+   is what makes a list of numbers feel cheap, because the eye cannot
+   compare two values it has to find first. */
+.perp-rows { display: grid; gap: 7px; }
+.perp-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  transition: transform 0.15s ease, border-color 0.15s ease;
 }
-:root[data-theme='light'] .perp-modern .perp-pair-live { background: #0f9d76; }
-
-/* The signed-order receipt. Deliberately a `notice`, not a celebration: the
-   user has just opened a leveraged position and the next thing they should
-   do is read it, not enjoy it. */
-.perp-tx-notice { margin: 10px 0 0; }
-.perp-tx-notice a { color: var(--rgb-1); }
-
+.perp-row:active { transform: scale(0.988); }
+.perp-row-id { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.perp-row-sym {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.perp-row-quote { font-size: 11px; font-weight: 500; color: var(--faint); }
+.perp-row-name {
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.perp-row-spark { flex: none; display: grid; place-items: center; width: 58px; }
+.perp-row-spark svg { display: block; }
+.perp-row-nums {
+  flex: none;
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  min-width: 84px;
+  text-align: end;
+}
+.perp-row-price {
+  font-size: 13.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.perp-row-chg {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.perp-row-chg.up { color: var(--success); }
+.perp-row-chg.down { color: var(--danger); }
+.perp-row-nodata { font-size: 13px; }
+.perp-row-go {
+  flex: none;
+  min-width: 68px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(var(--rgb-1-rgb), 0.34);
+  background: rgba(var(--rgb-1-rgb), 0.13);
+  color: var(--rgb-1);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.14s ease, background 0.14s ease;
+}
+.perp-row-go:active {
+  transform: scale(0.94);
+  background: rgba(var(--rgb-1-rgb), 0.22);
+}
 @media (prefers-reduced-motion: reduce) {
-  .perp-pair-search input { transition: none; }
+  .perp-row,
+  .perp-row-go { transition: none; }
 }
+
+/* ─── THE TICKET, OVER THE WHOLE SCREEN ─────────────────────────────
+   `perp-sheet-full` removes the sheet's card edges: a leveraged ticket
+   is not a quick confirmation, it is a chart you read, a number you
+   change, a liquidation distance you check and then a signature. A
+   dialog too small to show all of that gets confirmed without being
+   read, and on this screen reading IS the safety mechanism. */
+.sheet.perp-sheet-full {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  max-height: 100dvh;
+  border-radius: 0;
+  padding: 0;
+  border: 0;
+}
+.sheet.perp-sheet-full .sheet-body {
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+.perp-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(14px, env(safe-area-inset-top)) 16px
+    calc(20px + env(safe-area-inset-bottom));
+}
+.perp-sheet-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.perp-sheet-id { flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px; }
+.perp-sheet-sym {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.perp-sheet-tag {
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--rgb-1);
+  background: rgba(var(--rgb-1-rgb), 0.13);
+}
+.perp-sheet-venue {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--faint);
+  min-width: 0;
+}
+.perp-sheet-wallet { font-family: var(--mono, monospace); }
+.perp-sheet-price {
+  flex: none;
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.perp-sheet-chart {
+  flex: none;
+  height: 216px;
+  margin: 0 -4px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.perp-chart-none {
+  display: grid;
+  place-items: center;
+  padding: 22px 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.perp-sheet-go {
+  flex: none;
+  width: 100%;
+  height: 54px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.perp-sheet-go.long { background: var(--success); color: var(--bg); }
+.perp-sheet-go.short { background: var(--danger); color: var(--bg); }
+.perp-sheet-go svg { vertical-align: -3px; }
+.perp-sheet-close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+}
+.perp-sheet-close:active { transform: scale(0.93); }

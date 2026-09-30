@@ -1,41 +1,42 @@
 // @vitest-environment jsdom
 /**
- * PERPETUAL OVERVIEW — the pair-trading terminal render probe.
+ * PERPETUAL OVERVIEW — the pair list and the ticket behind it.
  *
- * The wiring audit pins the SOURCES (tabs, referral links, honesty flags).
- * This file proves what only a rendered tree can: that the overview really is
- * a trading terminal, that every number it shows comes from a real feed or
- * renders as an honest placeholder, that the pair catalogue is a catalogue,
- * and — the contract this file exists for now — that signing happens ON THE
- * PERPETUAL TAB and never throws the user onto another one.
+ * The wiring audit pins the SOURCES (tabs, referral library, honesty flags).
+ * This file proves what only a rendered tree can: that the overview is a
+ * LIST of pairs rather than a terminal, that every number it shows comes
+ * from a real feed or renders as an honest placeholder, that the catalogue
+ * is a catalogue, and — the contract this file exists for — that signing
+ * happens ON THE PERPETUAL TAB and never throws the user onto another one
+ * or out to another site.
  *
  *   «وقتی در صفحه فیوجرز تب پرپچوال میخایی امضا کنی میپره تب ان چین»
  *   «کلا جفت توکن های پرپچوال خیلی کمه»
+ *   «وقتی روی [توکن] زدی یک پاپ‌آپ که کل صفحه را بگیرد … صفحه را شلوغ نکن»
  *
- *   • the pair strip: a BUILT catalogue (featured + the venue's own list +
- *     the live market table), live price + 24h change + sparkline, the honest
- *     "unavailable" text on offline rows, a working search, and a mark on the
- *     cells this app can actually settle;
- *   • the ticket: long/short switch, stablecoin collateral, the 2/5/10/20/50
- *     chips, notional = collateral × leverage, and the liquidation preview
- *     from the shared pure engine;
- *   • the fee box: protocol / network / FBT rows from the backend preview,
- *     with placeholders when the backend does not answer;
- *   • the final button: the SOLANA connect door when the route settles on
- *     Solana, the review sheet when a wallet is connected, then IN TAB —
- *     prepare → show what was built → sign, with NO query change and NO tab
- *     change at any point;
- *   • the venue-less pair still leaves through Avantis with the registered
- *     `fbtswap` referral code, and still does not touch the tab;
+ *   • the pair list: a BUILT catalogue (featured + the venue's own list +
+ *     the live market table), one row per pair with its own live price, 24h
+ *     change, sparkline and a trade button, the honest "unavailable" text on
+ *     offline rows, a working search, and the count STATED;
+ *   • the ticket, behind a full-screen sheet: long/short switch, stablecoin
+ *     collateral, the 2/5/10/20/50 chips, notional = collateral × leverage,
+ *     and the liquidation preview from the shared pure engine;
+ *   • the fee numbers, from the backend preview, with placeholders when the
+ *     backend does not answer — inside the sheet, not on the list;
+ *   • the final button: the wallet's truth — connect when there is no
+ *     wallet, the trade when there is one — then IN TAB: prepare → show what
+ *     was built → sign, with NO query change and NO tab change at any point;
+ *   • a pair with no in-app market says so, and NOTHING leaves the app: no
+ *     outbound link is opened, for any pair, at any point;
  *   • i18n: the Persian bundle renders every new key, no raw keys on screen.
  *
  * Only framework plumbing and network clients are stubbed (i18n, wallets,
  * framer-motion, the futures BFF client, the venue SDK and the chart engine).
- * The page, the pair merge, the ticket arithmetic, the referral library and
- * the risk engine are real.
+ * The page, the pair merge, the ticket arithmetic and the risk engine are
+ * real.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import fa from '../src/i18n/locales/fa.json';
 import en from '../src/i18n/locales/en.json';
@@ -82,10 +83,9 @@ vi.mock('../src/context/WalletContext', () => ({
 
 /*
   ── the SOLANA wallet ──────────────────────────────────────────────────────
-  The in-app venue settles on Solana, so THIS is the wallet that signs. A
-  user with only an EVM wallet connected must be offered the Solana door, not
-  a button whose signature can never arrive — which is exactly the pairing
-  that made the old flow feel broken.
+  The in-app venue settles on Solana, so this is the wallet that PREFERS to
+  sign. It is a preference, not a gate: a connected EVM wallet is still a
+  wallet, and the screen must not tell someone they have none.
 */
 let SOL_WALLET = { address: null, isConnected: false };
 vi.mock('../src/hooks/useSolanaWallet', () => ({
@@ -102,7 +102,11 @@ vi.mock('../src/lib/velocityTrade.js', () => ({
   }
 }));
 
-/* ── the opened outbound links, so the referral route can be asserted ───── */
+/* ── every outbound link the page could possibly open ────────────────────
+   The redesign removed the venue links, so this array must stay empty for the
+   whole suite. It is kept as a tripwire, not as a feature: a regression that
+   re-introduces an external hand-off has to fail HERE, loudly, rather than
+   ship a button that leaves the app. */
 const OPENED = [];
 vi.mock('../src/context/TelegramContext', () => ({
   useTelegram: () => ({
@@ -177,8 +181,8 @@ vi.mock('../src/lib/futuresClient', () => ({
   verifyFutures: async (v) => { VERIFY_CALLS.push(v); return { ok: true, data: { state: 'PENDING' } }; }
 }));
 
-/* The chart engine is lazy and canvas-bound; the terminal's contract with it
-   is only "mount it for the selected venue market with these props". */
+/* The chart engine is lazy and canvas-bound; the page's contract with it is
+   only "mount it for the tapped venue market with these props". */
 vi.mock('../src/components/FuturesMarketChart', () => ({
   default: (p) => <div data-testid={p.testId} data-provider={p.provider} data-market={String(p.market)}>{p.symbol}</div>
 }));
@@ -212,13 +216,20 @@ const mount = () => render(
   </MemoryRouter>
 );
 
-/** The cells of the strip, in render order. */
-const pairCells = () => Array.from(document.querySelectorAll('[data-testid^="perp-pair-"]'))
-  .filter((el) => el.tagName === 'BUTTON');
+/** The rows of the list, in render order. */
+const pairCells = () => Array.from(document.querySelectorAll('[data-testid^="perp-row-"]'))
+  .filter((el) => /^perp-row-[A-Z0-9]+$/.test(el.dataset.testid));
 
 const connectWallets = () => {
   WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
   SOL_WALLET = { address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', isConnected: true };
+};
+
+/** Open the ticket for a pair, the way a user does: one tap on its row. */
+const openTicket = async (symbol) => {
+  await waitFor(() => expect(screen.getByTestId(`perp-row-open-${symbol}`)).toBeTruthy());
+  fireEvent.click(screen.getByTestId(`perp-row-open-${symbol}`));
+  await waitFor(() => expect(screen.getByTestId('perp-trade-sheet')).toBeTruthy());
 };
 
 beforeEach(() => {
@@ -309,126 +320,167 @@ describe('the perpetual pair catalogue', () => {
 
   it('renders the whole catalogue, states the count, and searches it', async () => {
     mount();
-    const strip = await screen.findByTestId('perp-pair-strip');
-    const cells = pairCells();
-    expect(cells.length).toBeGreaterThan(40);
-    expect(strip.textContent).toContain('BTC-PERP');
-    expect(strip.textContent).toContain('APT-PERP');
-    /* the count is STATED, not implied — a hundred cells with no number
-       reads as "still broken" when the user reaches the end */
+    const list = await screen.findByTestId('perp-pair-strip');
+    await waitFor(() => expect(pairCells().length).toBeGreaterThan(40));
+    expect(list.textContent).toContain('BTC');
+    expect(list.textContent).toContain('APT');
+    /* the count is STATED, not implied — a hundred rows with no number reads
+       as "still broken" when the user reaches the end */
     expect(screen.getByText(/جفت توکن/)).toBeTruthy();
 
     /* search narrows it without reordering: the majors stay first */
     fireEvent.change(screen.getByTestId('perp-pair-search'), { target: { value: 'pudgy' } });
-    await waitFor(() => expect(pairCells().length).toBeGreaterThanOrEqual(0));
-    fireEvent.change(screen.getByTestId('perp-pair-search'), { target: { value: 'zzz-no-such-pair' } });
     await waitFor(() => expect(screen.getByTestId('perp-pair-empty')).toBeTruthy());
     fireEvent.change(screen.getByTestId('perp-pair-search'), { target: { value: 'btc' } });
-    await waitFor(() => expect(screen.getByTestId('perp-pair-BTC')).toBeTruthy());
-    expect(document.querySelector('[data-testid="perp-pair-ETH"]')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('perp-row-BTC')).toBeTruthy());
+    expect(document.querySelector('[data-testid="perp-row-ETH"]')).toBeNull();
   });
 
-  it('marks the cells the app can settle, and shows a live row honestly', async () => {
+  it('gives every row its own price, change, sparkline and trade button', async () => {
     mount();
-    const strip = await screen.findByTestId('perp-pair-strip');
-    expect(strip.textContent).toContain('$1');
-    /* SOL/BTC are in the venue feed fixture; PEPE is not */
-    expect(document.querySelector('[data-testid="perp-pair-SOL"] .perp-pair-live')).toBeTruthy();
-    expect(document.querySelector('[data-testid="perp-pair-PEPE"] .perp-pair-live')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('perp-row-BTC')).toBeTruthy());
+    const cells = pairCells().slice(0, 12);
+    for (const cell of cells) {
+      /* a row priced by the feed carries its own numbers, and one tap from
+         that row to that pair's ticket */
+      if (cell.querySelector('.perp-row-price')) {
+        expect(cell.querySelector('.perp-row-chg')).toBeTruthy();
+      } else {
+        /* a pair the feed cannot price says so — it is never dropped, and it
+           is never given a number from somewhere else */
+        expect(cell.querySelector('.perp-row-nodata')).toBeTruthy();
+      }
+      expect(cell.querySelector('[data-testid^="perp-row-open-"]')).toBeTruthy();
+    }
+    /* and at least the majors are live and sparklined */
+    const btc = screen.getByTestId('perp-row-BTC');
+    expect(btc.querySelector('.perp-row-spark')).toBeTruthy();
+    expect(btc.querySelector('.perp-row-price').textContent).toContain('$100');
+    expect(btc.querySelector('.perp-row-chg').textContent).toContain('-1.25%');
+    /* the rows the venue can actually settle are marked, and only those */
+    expect(document.querySelector('[data-testid="perp-row-SOL"] .perp-pair-live')).toBeTruthy();
+    expect(document.querySelector('[data-testid="perp-row-PEPE"] .perp-pair-live')).toBeNull();
   });
 
   it('shows the honest unavailable sentence for offline rows, never a snapshot price', async () => {
     FEED.offline = true;
     mount();
-    const strip = await screen.findByTestId('perp-pair-strip');
-    await waitFor(() => expect(strip.querySelectorAll('.perp-pair-nodata').length).toBeGreaterThan(0));
+    const list = await screen.findByTestId('perp-pair-strip');
+    await waitFor(() => expect(list.querySelectorAll('.perp-row-nodata').length).toBeGreaterThan(0));
     /* the offline snapshot price must not leak into a live-price slot */
-    expect(strip.querySelectorAll('.perp-pair-price').length).toBe(0);
+    expect(list.querySelectorAll('.perp-row-price').length).toBe(0);
+    /* and the ticket says the same thing, in the place the user acts */
+    await openTicket('BTC');
     expect(screen.getByTestId('perp-index-unavailable')).toBeTruthy();
     expect(screen.getByText('داده بازار موقتاً در دسترس نیست. در صفحه اهرم هیچ قیمت ذخیره‌شده‌ای نمایش داده نمی‌شود.')).toBeTruthy();
   });
 
   it('mounts the shared candle chart for a venue pair and the honest note for the rest', async () => {
     mount();
-    await waitFor(() => expect(screen.getByTestId('perp-terminal-chart')).toBeTruthy());
+    await openTicket('BTC');
     expect(screen.getByTestId('perp-terminal-chart').dataset.provider).toBe('drift');
     expect(screen.getByTestId('perp-terminal-chart').dataset.market).toBe('1');
     /* switch to a pair the venue does not list */
-    fireEvent.click(screen.getByTestId('perp-pair-PEPE'));
-    await waitFor(() => expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('perp-sheet-close'));
+    await waitFor(() => expect(screen.queryByTestId("perp-trade-sheet")).toBeNull());
+    await openTicket('PEPE');
+    expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy();
     expect(screen.queryByTestId('perp-terminal-chart')).toBeNull();
   });
 });
 
-describe('the perpetual ticket', () => {
+describe('the ticket behind the trade button', () => {
   it('computes notional and the liquidation preview live from the ticket inputs', async () => {
     mount();
-    await screen.findByTestId('perp-ticket');
+    await openTicket('BTC');
     const summary = screen.getByTestId('perp-summary');
     /* default: 100 × 5 = 500, liquidation at the full-collateral bound = 20% */
     expect(summary.textContent).toContain('$500');
-    expect(summary.textContent).toContain('−20.00%');
+    expect(screen.getByTestId('perp-sheet-liq').textContent).toContain('20.00%');
     /* 10× leverage halves the distance */
     fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent.trim() === '10×'));
-    await waitFor(() => expect(screen.getByTestId('perp-summary').textContent).toContain('−10.00%'));
-    expect(screen.getByTestId('perp-summary').textContent).toContain('$1,000');
+    await waitFor(() => expect(screen.getByTestId('perp-sheet-liq').textContent).toContain('10.00%'));
+    expect(screen.getByTestId('perp-sheet-size').textContent).toContain('$1,000');
     /* the chips are exactly the requested presets */
     for (const n of ['2×', '5×', '10×', '20×', '50×']) {
       expect(screen.getAllByRole('button').some((b) => b.textContent.trim() === n)).toBe(true);
     }
     /* the direction switch flips which side the liquidation price sits on:
        a 10× short entered at $100 liquidates at $110, above the entry */
-    fireEvent.click(screen.getAllByRole('button').find((b) => /شورت/.test(b.textContent)));
+    fireEvent.click(screen.getByTestId('perp-sheet-short'));
     await waitFor(() => expect(screen.getByTestId('perp-summary').textContent).toContain('$110'));
+    /* and the distance is signed by direction, so a short never reads as a
+       long's fall — the two are opposite risks and must not look alike */
+    expect(screen.getByTestId('perp-sheet-liq').textContent).toContain('+10.00%');
     /* stablecoin choice */
     expect(screen.getAllByRole('button').some((b) => b.textContent === 'USDC')).toBe(true);
     expect(screen.getAllByRole('button').some((b) => b.textContent === 'USDT')).toBe(true);
   });
 
-  it('shows the backend fee breakdown with honest placeholders, and who the share goes to', async () => {
+  it('shows the backend fee numbers in the review, with honest placeholders', async () => {
+    connectWallets();
     mount();
-    const fees = await screen.findByTestId('perp-fee-breakdown');
+    await openTicket('BTC');
     await waitFor(() => expect(FEE_FOR_CALLS.length).toBeGreaterThan(0));
+    /* priced against the market this ticket is actually for */
     expect(FEE_FOR_CALLS[0].market).toBe('1');
-    expect(fees.textContent).toContain('کارمزد پروتکل');
-    await waitFor(() => expect(fees.textContent).toContain('$0.25'));
-    expect(fees.textContent).toContain('0.35');
-    expect(fees.textContent).toContain('7 bps');
+
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
+    const review = await screen.findByTestId('perp-review');
+    /* the protocol fee the backend answered with, and our share of it */
+    expect(review.textContent).toContain('کارمزد پروتکل');
+    expect(review.textContent).toContain('$0.25');
+    expect(review.textContent).toContain('0.35');
+    expect(review.textContent).toContain('7 bps');
     /* the network fee is unknown → the placeholder sentence, not a zero */
-    expect(fees.textContent).toContain('برآورد در مرحلهٔ تأیید');
-    /* the treasury line names the recipient */
-    expect(fees.textContent).toContain('0xaf5C…24d6');
+    expect(review.textContent).toContain('برآورد در مرحلهٔ تأیید');
+    /* the treasury line names the recipient, because that is the arrangement */
+    expect(review.textContent).toContain('0xaf5C…24d6');
   });
 });
 
 describe('signing happens on the perpetual tab, not on another one', () => {
-  it('asks for the SOLANA wallet when the route settles on Solana', async () => {
-    /* An EVM wallet alone must not be enough: it cannot produce the
-       signature the venue needs, and a button that promises one anyway is
-       the dead end this screen used to have. */
+  it('offers connect, and keeps the ticket, when there is no wallet at all', async () => {
+    mount();
+    await openTicket('BTC');
+    expect(screen.queryByTestId('perp-sheet-confirm')).toBeNull();
+    const connect = screen.getByTestId('perp-sheet-connect');
+    expect(connect.textContent).toContain('اتصال کیف پول');
+    /* it opens the connect sheet IN PLACE: the amount the user typed is the
+       thing a navigation used to cost them */
+    fireEvent.change(screen.getByTestId('perp-sheet-amount'), { target: { value: '250' } });
+    fireEvent.click(connect);
+    await waitFor(() => expect(screen.getByTestId('perp-trade-sheet')).toBeTruthy());
+    expect(screen.getByTestId('perp-sheet-amount').value).toBe('250');
+    expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
+  });
+
+  it('accepts an EVM-only wallet as a wallet, and says which address it is', async () => {
+    /* The old gate demanded a Solana address and called everyone else
+       disconnected. A connected wallet is a connected wallet; which signer
+       runs is decided by what /prepare returns, not by a guess made here. */
     WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
     mount();
-    await screen.findByTestId('perp-ticket');
-    expect(screen.queryByTestId('perp-submit')).toBeNull();
-    const connect = screen.getByTestId('perp-connect');
-    expect(connect.textContent).toContain('اتصال کیف پول سولانا');
-    fireEvent.click(connect);
-    /* it hands off to the wallet page's Solana tab, WITH the ticket intact */
-    await waitFor(() => {
-      const probe = screen.getByTestId('loc-probe').textContent;
-      expect(probe).toContain('/wallet');
-      expect(probe).toContain('tab=solana');
-      expect(probe).toContain('return=');
-    });
+    await openTicket('BTC');
+    expect(screen.queryByTestId('perp-sheet-connect')).toBeNull();
+    expect(screen.getByTestId('perp-sheet-confirm')).toBeTruthy();
+    expect(screen.getByTestId('perp-sheet-wallet').textContent).toContain('0x1111');
+  });
+
+  it('prefers the Solana address when both are attached', async () => {
+    connectWallets();
+    mount();
+    await openTicket('BTC');
+    /* the venue settles on Solana, so that is whose signature is coming */
+    expect(screen.getByTestId('perp-sheet-wallet').textContent).toContain('7xKXtg');
   });
 
   it('builds, shows and signs the order in this tab — no tab change, no navigation', async () => {
     connectWallets();
     mount();
-    await screen.findByTestId('perp-ticket');
-    expect(screen.getByTestId('perp-wallet-row').textContent).toContain('7xKXtg');
+    await openTicket('BTC');
 
-    fireEvent.click(screen.getByTestId('perp-submit'));
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
     const review = await screen.findByTestId('perp-review');
     expect(review.textContent).toContain('BTC-PERP');
     expect(review.textContent).toContain('لانگ / صعودی');
@@ -463,7 +515,8 @@ describe('signing happens on the perpetual tab, not on another one', () => {
     expect(VERIFY_CALLS[0]).toMatchObject({ executionId: 'exec-1', txHash: '5Gm7SignatureFromTheVenueSdk' });
 
     /* AND THE POINT OF THE WHOLE FIX: the tab never moved, the URL never
-       changed, and the on-chain tab was never mounted. */
+       changed, the on-chain tab was never mounted, and nothing left the
+       app through a link. */
     expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
     expect(screen.queryByTestId('stub-onchain')).toBeNull();
     expect(OPENED.length).toBe(0);
@@ -474,8 +527,8 @@ describe('signing happens on the perpetual tab, not on another one', () => {
     connectWallets();
     PREPARE_ANSWER = { ok: false, error: { code: 'RISK_BLOCKED' } };
     mount();
-    await screen.findByTestId('perp-ticket');
-    fireEvent.click(screen.getByTestId('perp-submit'));
+    await openTicket('BTC');
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
     await screen.findByTestId('perp-review');
     fireEvent.click(screen.getByTestId('perp-review-confirm'));
     await waitFor(() => expect(screen.getByTestId('perp-exec-error')).toBeTruthy());
@@ -491,8 +544,8 @@ describe('signing happens on the perpetual tab, not on another one', () => {
        nothing to be idempotent about. */
     connectWallets();
     mount();
-    await screen.findByTestId('perp-ticket');
-    fireEvent.click(screen.getByTestId('perp-submit'));
+    await openTicket('BTC');
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
     await screen.findByTestId('perp-review');
     fireEvent.click(screen.getByTestId('perp-review-confirm'));
     await waitFor(() => expect(screen.getByTestId('perp-prepared')).toBeTruthy());
@@ -501,25 +554,23 @@ describe('signing happens on the perpetual tab, not on another one', () => {
     expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
   });
 
-  it('sends a venue-less pair through the registered Avantis referral code, in place', async () => {
+  it('says a venue-less pair cannot be traded here, and never opens a link for it', async () => {
+    /* The old fallback handed the position to an external venue, which meant
+       the size and leverage the user confirmed were placed on a different
+       book at a different price. There is no fallback now. */
     connectWallets();
     mount();
-    await screen.findByTestId('perp-ticket');
-    fireEvent.click(screen.getByTestId('perp-pair-PEPE'));
-    await waitFor(() => expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy());
-    /* the fee card names the referral arrangement for this route */
-    expect(screen.getByTestId('perp-fee-breakdown').textContent).toContain('fbtswap');
-    expect(screen.getByTestId('perp-fee-breakdown').textContent).toContain('5٪');
-    fireEvent.click(screen.getByTestId('perp-submit'));
+    await openTicket('PEPE');
+    expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
     const review = await screen.findByTestId('perp-review');
-    expect(review.textContent).toContain('fbtswap');
+    expect(review.textContent).toContain('بازار ندارد');
     fireEvent.click(screen.getByTestId('perp-review-confirm'));
-    await waitFor(() => expect(OPENED.length).toBe(1));
-    /* withReferral's output for Avantis: attribution happens on /referral?code= */
-    expect(OPENED[0]).toBe('https://www.avantisfi.com/referral?code=fbtswap');
-    /* an outbound route is a route, not a tab change */
-    expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
+    /* it refuses, in the app, and opens nothing */
+    await waitFor(() => expect(screen.getByTestId('perp-exec-error')).toBeTruthy());
+    expect(OPENED.length).toBe(0);
     expect(PREPARE_CALLS.length).toBe(0);
+    expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
   });
 
   it('renders no raw i18n keys in either language', async () => {
@@ -528,7 +579,8 @@ describe('signing happens on the perpetual tab, not on another one', () => {
       cleanup();
       connectWallets();
       const { container } = mount();
-      await screen.findByTestId('perp-ticket');
+      await waitFor(() => expect(screen.getByTestId('perp-row-BTC')).toBeTruthy());
+      await openTicket('BTC');
       const raw = container.textContent.match(/perp\.[a-z.]+/i);
       expect(raw, `raw key leaked in ${lang}`).toBeNull();
       cleanup();
