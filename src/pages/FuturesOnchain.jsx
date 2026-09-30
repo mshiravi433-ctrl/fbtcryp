@@ -101,7 +101,15 @@ function readPrefill() {
   } catch { return { market: null, side: null, collateral: null, leverage: null, panel: null }; }
 }
 
-export default function FuturesOnchain() {
+/**
+ * `embedded` — hosted by the Perpetual page, which has already drawn the one
+ * `.page` box (16px of side padding) and animated the screen. Without it this
+ * tab built a SECOND `.page` inside the first: 32px in from each edge of a
+ * phone, which is exactly the «صفحه انگار از چپ و راست جمع شده» the board was
+ * reported for. `.derivatives-hall` cancels ONE page's padding, not two.
+ * The standalone route (/dydx) still renders its own page.
+ */
+export default function FuturesOnchain({ embedded = false } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const wallet = useWallet();
@@ -691,7 +699,7 @@ export default function FuturesOnchain() {
   );
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <div className="derivatives-hall">
         <div className="derivatives-aurora" aria-hidden="true" />
 

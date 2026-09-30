@@ -1870,7 +1870,10 @@
       "route": {
         "inApp": "Execution route: the on-chain tab of this page. The order is rebuilt there with these exact numbers, fees and risk are re-checked by the backend, and signing happens only in your own wallet; the builder fee goes to FBT.",
         "avantis": "Execution route: Avantis on Base with the registered referral code {{code}} — no capital lock-up, no KYC.",
-        "notListed": "This pair has no market in this app, so it cannot be traded here. Nothing leaves your wallet."
+        "notListed": "This pair has no market in this app, so it cannot be traded here. Nothing leaves your wallet.",
+        "velocity": "Route: this page, on {{chain}} with {{asset}}. The order is built and risk-checked with these exact numbers and signed only in your own wallet; the builder fee goes to FBT.",
+        "ostium": "Route: this page, on {{chain}} with {{asset}}. The order is built and risk-checked with these exact numbers and signed only in your own wallet; the builder fee goes to FBT.",
+        "dydx": "Route: this page, on {{chain}} with {{asset}}. The order is signed and placed directly by the dYdX account derived from your wallet; the builder fee (0.1%) goes to FBT."
       },
       "fee": {
         "title": "Transparent fee breakdown",
@@ -1905,11 +1908,32 @@
         "QUOTE_EXPIRED": "The quote expired. Close this and build the order again.",
         "RISK_BLOCKED": "The risk engine refused this order. Nothing was sent.",
         "MARKET_NOT_LISTED": "This pair is not open for trading in this app yet. Nothing was sent, and no funds moved — pick another pair from the list.",
-        "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent — try again in a moment."
+        "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent — try again in a moment.",
+        "UNKNOWN": "Unknown error. Nothing was sent; please try again.",
+        "TX_TOO_LARGE": "The transaction built for signing is not valid. Nothing was sent.",
+        "CANNOT_SIGN": "The connected wallet cannot sign this transaction. Connect a different wallet.",
+        "NO_SIGNATURE": "No signature was received. Nothing was sent.",
+        "NO_POSITION": "No position was found to close.",
+        "BROADCAST_FAILED": "Broadcasting the transaction failed. Nothing was charged; try again.",
+        "SIGN_FAILED": "Signing failed. Nothing was sent.",
+        "SOLANA_CONNECT_FAILED": "Could not connect the Solana wallet. Open the wallet app and try again."
       },
       "trade": "Trade",
       "pairPerp": "Perpetual",
-      "inApp": "in this app"
+      "inApp": "in this app",
+      "goSub": "Final review, then sign with {{wallet}}",
+      "routeNote": "Executes inside this app on {{chain}} with {{asset}} collateral — signed with your {{wallet}} wallet.",
+      "family": {
+        "solana": "Solana",
+        "evm": "EVM"
+      },
+      "needsWallet": "Trading this pair on {{chain}} needs a {{wallet}} wallet. Your current wallet doesn't support that network; the button below connects the right one.",
+      "noRouteBtn": "This pair is not tradable in the app",
+      "activateDydx": "Activate dYdX account",
+      "dydxEquity": "dYdX account balance",
+      "dydxUnfunded": "Your dYdX account ({{address}}) holds less than this order's collateral. dYdX has no in-app deposit; fund the account with USDC first or the order will be rejected.",
+      "confirmDydx": "Confirm, sign and place order",
+      "tpSlUnsupported": "Take-profit and stop-loss are written into the order only on the Ostium route. On this route they are not placed — don't count on them."
     }
   },
   "farm": {
@@ -13093,7 +13117,8 @@
       "60": "1h",
       "240": "4h",
       "1D": "1d"
-    }
+    },
+    "chartSpot": "Market index chart (this pair's venue candles were unavailable)"
   },
   "profileBadge": {
     "title": "Notifications",

@@ -14,6 +14,25 @@
      tones the glows down (the CSS variables already adapt the colours).
    ========================================================================== */
 
+/*
+  The skin below was written against colour tokens that do not exist in this
+  app's stylesheet (--success, --danger, --faint, --muted, --card, --bg): every
+  `var(--danger)` resolved to nothing, so the up/down colours, the dim text and
+  — worst — the Long/Short signing button drew with no background at all. They
+  are aliased here, to the app's real tokens, for this skin and its trade sheet
+  only (the same names are used with fallbacks elsewhere and must not shift).
+*/
+.perp-modern,
+.perp-sheet-full,
+.perp-sheet {
+  --success: var(--up);
+  --danger: var(--down);
+  --faint: var(--text-3);
+  --muted: var(--text-2);
+  --card: var(--bg-panel);
+  --bg: var(--bg-panel-solid);
+}
+
 .perp-modern {
   /* The accent the hero leans on: cyan → violet, the same pair the app's
      RGB identity uses (var(--rgb-1)/var(--rgb-2)). */
@@ -1306,32 +1325,108 @@
   text-align: end;
 }
 .perp-sheet-chart {
+  /* The chart's own height — resolution bar, canvas and footer. A fixed box
+     with `overflow: hidden` cut the bottom third off («نصفش پیداست»). */
   flex: none;
-  height: 216px;
-  margin: 0 -4px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
   border-radius: 16px;
-  overflow: hidden;
 }
 .perp-chart-none {
   display: grid;
   place-items: center;
   padding: 22px 18px;
-  background: var(--card);
+  background: var(--bg-panel);
   border: 1px solid var(--line);
   text-align: center;
 }
+.perp-route-note {
+  flex: none;
+  margin: -2px 2px 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+/*
+  THE LONG / SHORT BUTTON. It read --success / --danger / --bg, none of which
+  exist anywhere in the stylesheet — so the colour, the text colour and the
+  gradient all resolved to nothing and the signing button drew as an empty,
+  near-invisible bar. It now uses the app's real tokens (--up / --down, the
+  same pair the .btn-success / .btn-danger buttons use).
+*/
 .perp-sheet-go {
   flex: none;
   width: 100%;
-  height: 54px;
+  min-height: 58px;
   border-radius: 16px;
   font-size: 16px;
   font-weight: 700;
-  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 0;
 }
-.perp-sheet-go.long { background: var(--success); color: var(--bg); }
-.perp-sheet-go.short { background: var(--danger); color: var(--bg); }
-.perp-sheet-go svg { vertical-align: -3px; }
+.perp-sheet-go.long {
+  background: linear-gradient(90deg, #00ff9d, #00e5ff);
+  color: #00110a;
+  border-color: transparent;
+  box-shadow: 0 6px 22px rgba(0, 255, 157, 0.22);
+}
+.perp-sheet-go.short {
+  background: linear-gradient(90deg, #ff3b6b, #ff2d95);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 22px rgba(255, 59, 107, 0.26);
+}
+.perp-sheet-go.is-off { opacity: 0.55; cursor: not-allowed; }
+.perp-sheet-go:disabled { opacity: 0.6; }
+.perp-go-ico {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.16);
+}
+.perp-sheet-go.short .perp-go-ico { background: rgba(255, 255, 255, 0.2); }
+.perp-go-text { display: grid; gap: 1px; text-align: start; line-height: 1.25; min-width: 0; }
+.perp-go-main { font-size: 16px; font-weight: 750; }
+.perp-go-sub {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Pinned to the bottom of the scrolling ticket so the button is always within
+   reach of the numbers it acts on. The negative margins cancel the ticket's own
+   padding so the bar spans the sheet edge to edge and its fade covers whatever
+   scrolls under it. */
+.perp-sheet-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  flex: none;
+  margin: 2px -16px calc(-20px - env(safe-area-inset-bottom));
+  padding: 16px 16px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent 0, var(--bg-panel-solid) 16px);
+}
+/* The funding table, once opened, sits inside the box that opened it: its own
+   card chrome would be a card in a card. */
+.perp-funding-box .fnd-panel,
+.perp-funding-box > .card {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .perp-sheet-close {
   flex: none;
   width: 34px;
@@ -1340,8 +1435,8 @@
   place-items: center;
   border-radius: 50%;
   border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
+  background: var(--bg-panel);
+  color: var(--text-2);
   cursor: pointer;
 }
 .perp-sheet-close:active { transform: scale(0.93); }

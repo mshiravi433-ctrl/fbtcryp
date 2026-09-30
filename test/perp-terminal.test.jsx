@@ -148,6 +148,25 @@ let VENUE_MARKETS = [
   { marketId: '2', base: 'ETH', symbol: 'ETH/USDT', mid: 3010 },
   { marketId: '0', base: 'SOL', symbol: 'SOL/USDT', mid: 150 }
 ];
+/* Ostium (Arbitrum, EVM wallets): the crypto rows the BFF lists, plus a forex
+   row that must never be matched to a coin by symbol. */
+let OSTIUM_MARKETS = [
+  { marketId: '0', base: 'BTC', symbol: 'BTC/USD', category: 'crypto', mid: 60100, maxLeverage: 50 },
+  { marketId: '1', base: 'ETH', symbol: 'ETH/USD', category: 'crypto', mid: 3005, maxLeverage: 50 },
+  { marketId: '9', base: 'LINK', symbol: 'LINK/USD', category: 'crypto', mid: 17, maxLeverage: 25 },
+  { marketId: '40', base: 'EUR', symbol: 'EUR/USD', category: 'forex', mid: 1.08, maxLeverage: 100 }
+];
+/* dYdX: empty until a test says the indexer answered (an empty list = feed
+   down = nothing is hidden from the catalogue). */
+let DYDX_MARKETS = [];
+const dydxMarket = (base, price, imf = '0.05') => ({
+  ticker: `${base}-USD`, status: 'ACTIVE', oraclePrice: price, priceChange24H: 0, volume24H: 1, openInterest: 1,
+  nextFundingRate: 0, atomicResolution: -6, quantumConversionExponent: -9, stepBaseQuantums: 1000,
+  subticksPerTick: 1, clobPairId: '1', raw: { ticker: `${base}-USD`, initialMarginFraction: imf }
+});
+const DYDX_ORDERS = [];
+let DYDX_SESSION = null;
+let DYDX_EQUITY = 1000;
 let FEE_ANSWER = {
   ok: true,
   data: {
@@ -174,12 +193,30 @@ let PREPARE_ANSWER = {
   }
 };
 vi.mock('../src/lib/futuresClient', () => ({
-  getFuturesMarkets: async () => ({ ok: true, data: { markets: VENUE_MARKETS } }),
+  getFuturesMarkets: async (provider) => ({
+    ok: true,
+    data: { markets: provider === 'ostium' ? OSTIUM_MARKETS : VENUE_MARKETS }
+  }),
   getFuturesCandles: async () => ({ ok: false }),
   getFuturesFeePreview: async (q) => { FEE_FOR_CALLS.push(q); return FEE_ANSWER; },
   prepareFutures: async (order) => { PREPARE_CALLS.push(order); return PREPARE_ANSWER; },
   verifyFutures: async (v) => { VERIFY_CALLS.push(v); return { ok: true, data: { state: 'PENDING' } }; }
 }));
+
+/* dYdX: the catalogue, the derived-account session and the order itself are
+   stubbed; the size arithmetic, routing and error mapping around them are
+   the real ones. */
+vi.mock('../src/lib/dydx', async () => {
+  const actual = await vi.importActual('../src/lib/dydx');
+  return {
+    ...actual,
+    getDydxMarkets: async () => ({ markets: DYDX_MARKETS, live: DYDX_MARKETS.length > 0 }),
+    getDydxSubaccount: async () => ({ account: { subaccount: { equity: String(DYDX_EQUITY) } }, live: true }),
+    dydxSessionAddress: () => DYDX_SESSION,
+    connectDydx: async () => { DYDX_SESSION = 'dydx1derivedaccountaddress'; return { address: DYDX_SESSION }; },
+    placeDydxOrder: async (o) => { DYDX_ORDERS.push(o); return { hash: 'DYDXHASH', clientId: 7 }; }
+  };
+});
 
 /* The chart engine is lazy and canvas-bound; the page's contract with it is
    only "mount it for the tapped venue market with these props". */
@@ -266,6 +303,16 @@ beforeEach(() => {
       risk: { blocked: false }
     }
   };
+  OSTIUM_MARKETS = [
+    { marketId: '0', base: 'BTC', symbol: 'BTC/USD', category: 'crypto', mid: 60100, maxLeverage: 50 },
+    { marketId: '1', base: 'ETH', symbol: 'ETH/USD', category: 'crypto', mid: 3005, maxLeverage: 50 },
+    { marketId: '9', base: 'LINK', symbol: 'LINK/USD', category: 'crypto', mid: 17, maxLeverage: 25 },
+    { marketId: '40', base: 'EUR', symbol: 'EUR/USD', category: 'forex', mid: 1.08, maxLeverage: 100 }
+  ];
+  DYDX_MARKETS = [];
+  DYDX_ORDERS.length = 0;
+  DYDX_SESSION = null;
+  DYDX_EQUITY = 1000;
   FEE_FOR_CALLS.length = 0;
   PREPARE_CALLS.length = 0;
   VERIFY_CALLS.length = 0;
@@ -376,6 +423,7 @@ describe('the perpetual pair catalogue', () => {
   });
 
   it('mounts the shared candle chart for a venue pair and the honest note for the rest', async () => {
+    SOL_WALLET = { address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', isConnected: true };
     mount();
     await openTicket('BTC');
     expect(screen.getByTestId('perp-terminal-chart').dataset.provider).toBe('drift');
@@ -384,8 +432,18 @@ describe('the perpetual pair catalogue', () => {
     fireEvent.click(screen.getByTestId('perp-sheet-close'));
     await waitFor(() => expect(screen.queryByTestId("perp-trade-sheet")).toBeNull());
     await openTicket('PEPE');
-    expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy();
-    expect(screen.queryByTestId('perp-terminal-chart')).toBeNull();
+    /* no venue lists PEPE, but the pair still has a chart: the market feed's
+       own OHLC (the chart component labels it as an index chart) */
+    expect(screen.getByTestId('perp-terminal-chart').dataset.provider).toBe('spot');
+    expect(screen.getByTestId('perp-terminal-chart').dataset.market).toBe('pepe');
+  });
+
+  it('draws the chart from the venue that settles the pair: Ostium for an EVM wallet', async () => {
+    WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
+    mount();
+    await openTicket('LINK');
+    expect(screen.getByTestId('perp-terminal-chart').dataset.provider).toBe('ostium');
+    expect(screen.getByTestId('perp-terminal-chart').dataset.market).toBe('9');
   });
 });
 
@@ -412,9 +470,10 @@ describe('the ticket behind the trade button', () => {
     /* and the distance is signed by direction, so a short never reads as a
        long's fall — the two are opposite risks and must not look alike */
     expect(screen.getByTestId('perp-sheet-liq').textContent).toContain('+10.00%');
-    /* stablecoin choice */
-    expect(screen.getAllByRole('button').some((b) => b.textContent === 'USDC')).toBe(true);
-    expect(screen.getAllByRole('button').some((b) => b.textContent === 'USDT')).toBe(true);
+    /* the collateral is the asset the route really spends — one chip, not a
+       toggle that changed a label and nothing else */
+    expect(screen.getByTestId('perp-sheet-asset').textContent).toBe('USDC');
+    expect(screen.queryAllByRole('button').some((b) => b.textContent === 'USDT')).toBe(false);
   });
 
   it('shows the backend fee numbers in the review, with honest placeholders', async () => {
@@ -484,7 +543,7 @@ describe('signing happens on the perpetual tab, not on another one', () => {
     const review = await screen.findByTestId('perp-review');
     expect(review.textContent).toContain('BTC-PERP');
     expect(review.textContent).toContain('لانگ / صعودی');
-    expect(review.textContent).toContain('$100 USDC');
+    expect(review.textContent).toContain('$100 USDT'); /* Velocity spends USDT */
     expect(review.textContent).toContain('$500');
     /* the route line says the signature happens here */
     expect(review.textContent).toContain('همین صفحه');
@@ -557,20 +616,118 @@ describe('signing happens on the perpetual tab, not on another one', () => {
   it('says a venue-less pair cannot be traded here, and never opens a link for it', async () => {
     /* The old fallback handed the position to an external venue, which meant
        the size and leverage the user confirmed were placed on a different
-       book at a different price. There is no fallback now. */
+       book at a different price. There is no fallback now: the ticket says
+       so, the button is inert, and nothing is built or opened. */
     connectWallets();
     mount();
     await openTicket('PEPE');
-    expect(screen.getByTestId('perp-chart-unavailable')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
-    const review = await screen.findByTestId('perp-review');
-    expect(review.textContent).toContain('بازار ندارد');
-    fireEvent.click(screen.getByTestId('perp-review-confirm'));
-    /* it refuses, in the app, and opens nothing */
-    await waitFor(() => expect(screen.getByTestId('perp-exec-error')).toBeTruthy());
+    expect(screen.getByTestId('perp-no-route').textContent).toContain('بازار ندارد');
+    const btn = screen.getByTestId('perp-sheet-unavailable');
+    expect(btn.disabled).toBe(true);
+    expect(screen.queryByTestId('perp-sheet-confirm')).toBeNull();
+    fireEvent.click(btn);
+    expect(screen.queryByTestId('perp-review')).toBeNull();
     expect(OPENED.length).toBe(0);
     expect(PREPARE_CALLS.length).toBe(0);
     expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
+  });
+
+  it('routes an EVM-only wallet to Ostium on Arbitrum and builds the order there', async () => {
+    /* «با وجود کیف پول داخلی وصل شده میگه کیف پول وصل کن» — an EVM wallet
+       used to be sent to the Solana-only venue and called disconnected. */
+    WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
+    mount();
+    await openTicket('BTC');
+    expect(screen.queryByTestId('perp-sheet-connect')).toBeNull();
+    expect(screen.getByTestId('perp-route-note').textContent).toContain('Arbitrum');
+    expect(screen.getByTestId('perp-sheet-asset').textContent).toBe('USDC');
+    /* TP/SL are real on this route */
+    expect(screen.queryByTestId('perp-tpsl-note')).toBeNull();
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
+    await screen.findByTestId('perp-review');
+    fireEvent.click(screen.getByTestId('perp-review-confirm'));
+    await waitFor(() => expect(PREPARE_CALLS.length).toBe(1));
+    expect(PREPARE_CALLS[0]).toMatchObject({
+      provider: 'ostium', market: '0', side: 'long', collateralUsd: 100, leverage: 5,
+      wallet: '0x1111111111111111111111111111111111111111'
+    });
+  });
+
+  it('tells a Solana-only user which wallet an EVM-only pair needs — never «connect a wallet»', async () => {
+    SOL_WALLET = { address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', isConnected: true };
+    mount();
+    await openTicket('LINK');
+    const note = screen.getByTestId('perp-needs-wallet');
+    expect(note.textContent).toContain('Arbitrum');
+    expect(screen.getByTestId('perp-sheet-connect')).toBeTruthy();
+    expect(screen.queryByTestId('perp-sheet-confirm')).toBeNull();
+    /* and a pair Velocity lists is a plain trade for the same user */
+    fireEvent.click(screen.getByTestId('perp-sheet-close'));
+    await waitFor(() => expect(screen.queryByTestId('perp-trade-sheet')).toBeNull());
+    await openTicket('SOL');
+    expect(screen.queryByTestId('perp-needs-wallet')).toBeNull();
+    expect(screen.getByTestId('perp-sheet-confirm')).toBeTruthy();
+  });
+
+  it('keeps take-profit / stop-loss out of a route that cannot carry them', async () => {
+    connectWallets();
+    mount();
+    await openTicket('BTC'); /* both wallets → Velocity (Solana) */
+    fireEvent.click(screen.getByText(fa.perp.terminal.riskControls));
+    expect(await screen.findByTestId('perp-tpsl-note')).toBeTruthy();
+  });
+
+  it('once dYdX answers, lists only pairs some venue settles — and trades them through dYdX', async () => {
+    DYDX_MARKETS = [dydxMarket('PEPE', 0.00001), dydxMarket('BTC', 60000), dydxMarket('SUI', 2)];
+    WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
+    mount();
+    await waitFor(() => expect(pairCells().length).toBeGreaterThan(0));
+    /* PEPE is now listed (dYdX); a coin no venue lists (APT) is no longer a row */
+    await waitFor(() => expect(document.querySelector('[data-testid="perp-row-PEPE"]')).toBeTruthy());
+    expect(document.querySelector('[data-testid="perp-row-APT"]')).toBeNull();
+
+    await openTicket('PEPE');
+    expect(screen.getByTestId('perp-terminal-chart').dataset.provider).toBe('dydx');
+    expect(screen.getByTestId('perp-terminal-chart').dataset.market).toBe('PEPE-USD');
+    /* the account must be activated first, in place, with one tap */
+    expect(screen.queryByTestId('perp-sheet-confirm')).toBeNull();
+    fireEvent.click(screen.getByTestId('perp-sheet-activate'));
+    await waitFor(() => expect(screen.getByTestId('perp-sheet-confirm')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
+    await screen.findByTestId('perp-review');
+    fireEvent.click(screen.getByTestId('perp-review-confirm'));
+    await waitFor(() => expect(DYDX_ORDERS.length).toBe(1));
+    /* $100 × 5 = $500 notional ÷ $0.00001 = 50,000,000 PEPE, on the step grid */
+    expect(DYDX_ORDERS[0]).toMatchObject({ side: 'buy', size: 50000000 });
+    expect(DYDX_ORDERS[0].market.ticker).toBe('PEPE-USD');
+    await waitFor(() => expect(screen.getByTestId('perp-tx')).toBeTruthy());
+    /* nothing went to the futures BFF, nothing opened, nothing navigated */
+    expect(PREPARE_CALLS.length).toBe(0);
+    expect(OPENED.length).toBe(0);
+    expect(screen.getByTestId('loc-probe').textContent).toBe('/perp?');
+  });
+
+  it('refuses a dYdX order from an unfunded account, in the app, before signing anything', async () => {
+    DYDX_MARKETS = [dydxMarket('PEPE', 0.00001)];
+    DYDX_SESSION = 'dydx1derivedaccountaddress';
+    DYDX_EQUITY = 3;
+    WALLET = { isConnected: true, address: '0x1111111111111111111111111111111111111111' };
+    mount();
+    await openTicket('PEPE');
+    fireEvent.click(screen.getByTestId('perp-sheet-confirm'));
+    await screen.findByTestId('perp-review');
+    fireEvent.click(screen.getByTestId('perp-review-confirm'));
+    await waitFor(() => expect(screen.getByTestId('perp-exec-error')).toBeTruthy());
+    expect(DYDX_ORDERS.length).toBe(0);
+    expect(screen.getByTestId('perp-exec-error').textContent).not.toMatch(/dydx\.err|perp\.terminal/);
+  });
+
+  it('holds its pair list when the venues answer with nothing, instead of emptying the page', async () => {
+    VENUE_MARKETS = [];
+    OSTIUM_MARKETS = [];
+    mount();
+    await waitFor(() => expect(pairCells().length).toBeGreaterThan(40));
   });
 
   it('renders no raw i18n keys in either language', async () => {

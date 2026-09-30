@@ -83,7 +83,9 @@ vi.mock('../src/lib/venueReferral', () => ({ anyVenueEarns: () => true, withRefe
 
 /* The venue feed: BTC is executable here, the other two are not. */
 vi.mock('../src/lib/futuresClient', () => ({
-  getFuturesMarkets: async () => MARKETS,
+  getFuturesMarkets: async (provider) => (provider === 'ostium'
+    ? { ok: true, data: { markets: [{ base: 'BTC', marketId: '0', category: 'crypto', mid: 60000, maxLeverage: 50 }] } }
+    : MARKETS),
   getFuturesFeePreview: async () => ({ ok: true, data: { fee: { protocol: { feeUsd: 0.6, known: true } } } }),
   prepareFutures: async () => ({ ok: false, code: 'UNUSED' }),
   verifyFutures: async () => ({ ok: false, code: 'UNUSED' })

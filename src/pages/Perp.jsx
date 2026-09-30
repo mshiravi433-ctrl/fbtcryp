@@ -12,7 +12,7 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import FuturesMarketChart from '../components/FuturesMarketChart';
 import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
-import { IconActivity, IconRoute, IconShield, IconSparkle, IconTrend, IconWallet } from '../components/Icons';
+import { IconActivity, IconRoute, IconShield, IconSparkle, IconTrend } from '../components/Icons';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
@@ -21,7 +21,15 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { SPECULATION_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
-import { velocityPerpIndex } from '../lib/velocityMarkets';
+import {
+  ROUTE, ROUTE_META, PERP_OWN_ERRORS, indexVenueMarkets, pickRoute, leverageCeiling,
+  dydxOrderSize, classifyDydxOrderError
+} from '../lib/perpRoutes';
+import { FUTURES_ERRORS, mapFuturesError } from '../lib/futures-engine/errors';
+import {
+  classifyDydxError, connectDydx, disconnectDydx, dydxFeeUsd, dydxSessionAddress, getDydxMarkets, getDydxSubaccount,
+  placeDydxOrder, DYDX_BUILDER_ADDRESS, DYDX_BUILDER_FEE_PPM
+} from '../lib/dydx';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { publicAppUrl } from '../lib/solanaWallet.js';
 import lazyRetry from '../lib/lazyRetry';
@@ -248,13 +256,22 @@ export function buildPerpPairs({ coins = [], venueMarkets = [], featured = FEATU
   return out;
 }
 
-/* Product policy, same ceiling the futures engine enforces (hardMaxLeverage). */
-const MAX_LEVERAGE = 50;
+/* Product policy: the 50× ceiling the futures engine enforces lives in
+   lib/perpRoutes.js (HARD_MAX_LEVERAGE) and is lowered per venue market. */
 const LEVERAGE_PRESETS = [2, 5, 10, 20, 50];
 const MIN_COLLATERAL_USD = 5;
 /* Both referral venues discount the referred trader's fees by 5% — documented
    in lib/venueReferral.js, which is the single source of truth for this. */
 const REFERRAL_DISCOUNT_PCT = 5;
+
+/** Any thrown thing → a code the ticket has a sentence for. The engine's own
+ *  codes and the flow's own codes pass through; everything else is mapped
+ *  (never shown raw, never a hex revert string). */
+const errorCode = (err) => {
+  const raw = String(err?.code ?? '');
+  if (FUTURES_ERRORS[raw] || PERP_OWN_ERRORS.includes(raw)) return raw;
+  return mapFuturesError(err).code;
+};
 
 /** A feed row is LIVE only when the provider says so — the offline snapshot
  *  must never sit under a live-price label on a leveraged screen. */
@@ -297,12 +314,12 @@ export default function Perp() {
    * every other leveraged screen in this app uses.
    *
    * Nothing is ever signed by THIS screen's own key or held by the app: the
-   * order is built by the backend, risk-checked there, and signed by the
-   * user's own wallet — in this tab, where they asked to be.
+   * order is built by the backend (or, for dYdX, by the client session), risk
+   * -checked, and signed by the user's own wallet — in this tab, where they
+   * asked to be.
    */
   const [side, setSide] = useState('long');
   const [collateral, setCollateral] = useState('100');
-  const [collateralAsset, setCollateralAsset] = useState('USDC');
   const [leverage, setLeverage] = useState('5');
   const [takeProfit, setTakeProfit] = useState('');
   const [stopLoss, setStopLoss] = useState('');
@@ -310,33 +327,48 @@ export default function Perp() {
   const [walletOpen, setWalletOpen] = useState(false);
 
   /*
-   * ─── THE VENUE FEED (one read, no polling) ──────────────────────────────
-   * Powers three decisions, all of which must come from the live venue rather
-   * than a guess: (a) does the in-app executable route list this pair, (b)
-   * does the shared FuturesMarketChart have candles for it, and (c) which
-   * pairs the strip has to offer at all. When the feed is down the static
-   * Velocity index table is the conservative fallback for ROUTING only — the
-   * chart then says "unavailable" on its own and never draws a flat line.
+   * ─── THE VENUE FEEDS (three reads, refreshed every 30s) ──────────────────
+   *   «بیشتر جفت توکن ها اصلا نمیشه معامله کرد … باید داخل اپ خودمون انجام شود»
+   *
+   * This used to read ONE venue — Velocity, four markets — and call every other
+   * pair «not listed». The app already settles orders inside itself on three
+   * venues (Velocity on Solana, Ostium on Arbitrum, dYdX), and together they
+   * list every pair in this catalogue. So the page reads all three, merges
+   * them by base symbol (lib/perpRoutes.js), and each pair is routed to a venue
+   * whose wallet the user actually has.
+   *
+   * A venue that is down keeps its LAST good list rather than emptying the
+   * page: a flaky read must not make a tradable pair vanish mid-ticket. The
+   * static Velocity index stays as the conservative ROUTING fallback only —
+   * the chart says «unavailable» on its own and never draws a flat line.
    */
-  const [venueMarkets, setVenueMarkets] = useState([]);
+  const [venues, setVenues] = useState({ velocity: [], ostium: [], dydx: [], dydxLoaded: false });
   useEffect(() => {
     let alive = true;
-    getFuturesMarkets('drift')
-      .then((r) => {
-        if (alive && r?.ok && Array.isArray(r.data?.markets)) setVenueMarkets(r.data.markets);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
+    const load = async () => {
+      const [v, o, d] = await Promise.allSettled([
+        getFuturesMarkets('drift'),
+        getFuturesMarkets('ostium'),
+        getDydxMarkets()
+      ]);
+      if (!alive) return;
+      const bff = (r) => (r.status === 'fulfilled' && r.value?.ok && Array.isArray(r.value.data?.markets) ? r.value.data.markets : null);
+      const dydxRows = d.status === 'fulfilled' && Array.isArray(d.value?.markets) && d.value.markets.length ? d.value.markets : null;
+      setVenues((cur) => ({
+        velocity: bff(v) ?? cur.velocity,
+        ostium: bff(o) ?? cur.ostium,
+        dydx: dydxRows ?? cur.dydx,
+        dydxLoaded: cur.dydxLoaded || Boolean(dydxRows)
+      }));
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const venueMarketByBase = useMemo(() => {
-    const m = new Map();
-    for (const row of venueMarkets ?? []) {
-      const base = String(row?.base ?? '').toUpperCase();
-      if (base && !m.has(base)) m.set(base, row);
-    }
-    return m;
-  }, [venueMarkets]);
+  /** base symbol → { velocity?, ostium?, dydx? } */
+  const routeIndex = useMemo(() => indexVenueMarkets(venues), [venues]);
+  const venueBases = useMemo(() => [...routeIndex.keys()].map((base) => ({ base })), [routeIndex]);
 
   const byId = useMemo(() => {
     const m = new Map();
@@ -346,7 +378,7 @@ export default function Perp() {
 
   /*
    * ─── THE PAIR UNIVERSE, BUILT ───────────────────────────────────────────
-   * Featured + whatever the venue lists + the live market table, merged
+   * Featured + whatever the venues list + the live market table, merged
    * (see buildPerpPairs). The selection is kept by SYMBOL rather than by
    * coin id, because a venue-listed pair the market feed has never heard of
    * has no id at all — keying on one would make it unselectable, which is
@@ -380,18 +412,30 @@ export default function Perp() {
   const closeTrade = useCallback(() => setTradeOpen(false), []);
 
   const allPairs = useMemo(
-    () => buildPerpPairs({ coins: coins ?? [], venueMarkets: venueMarkets ?? [] }),
-    [coins, venueMarkets]
+    () => buildPerpPairs({ coins: coins ?? [], venueMarkets: venueBases }),
+    [coins, venueBases]
   );
 
-  /* The search box exists because a hundred-plus cells in a horizontal strip
-     cannot be browsed. It filters by ticker OR by the coin's own name, and it
-     never re-orders: the featured majors stay first whatever is typed. */
+  /*
+   * Once the broad catalogue (dYdX) has answered, the list offers ONLY pairs a
+   * venue settles. A row whose trade button could only ever say «not open» is
+   * not a pair, it is a promise — and this screen was full of them. Until the
+   * catalogue answers (first paint, or every feed down) nothing is hidden, so
+   * a slow network never shows an empty page.
+   */
+  const listPairs = useMemo(
+    () => (venues.dydxLoaded ? allPairs.filter((p) => routeIndex.has(p.symbol)) : allPairs),
+    [allPairs, routeIndex, venues.dydxLoaded]
+  );
+
+  /* The search box exists because a hundred-plus cells cannot be browsed. It
+     filters by ticker OR by the coin's own name, and it never re-orders: the
+     featured majors stay first whatever is typed. */
   const stripPairs = useMemo(() => {
-    const rows = allPairs.map((p) => ({
+    const rows = listPairs.map((p) => ({
       ...p,
       coin: p.id ? byId.get(p.id) ?? null : null,
-      venueMarket: venueMarketByBase.get(p.symbol) ?? null
+      routes: routeIndex.get(p.symbol) ?? null
     }));
     const q = pairQuery.trim().toLowerCase();
     if (!q) return rows;
@@ -399,7 +443,7 @@ export default function Perp() {
       (p) => p.symbol.toLowerCase().includes(q)
         || String(p.coin?.name ?? '').toLowerCase().includes(q)
     );
-  }, [allPairs, byId, venueMarketByBase, pairQuery]);
+  }, [listPairs, byId, routeIndex, pairQuery]);
 
   const pair = useMemo(
     () => allPairs.find((p) => p.symbol === selectedSymbol) ?? allPairs[0] ?? { symbol: 'BTC', id: 'bitcoin' },
@@ -418,24 +462,78 @@ export default function Perp() {
    */
   const indexOffline = coin?.offline === true || coin?.dataProvenance === 'offline';
 
-  const venueMarket = venueMarketByBase.get(pair.symbol) ?? null;
-  /* Executable in this app? Live feed first, catalogue fallback second. */
-  const routeInApp = Boolean(venueMarket) || velocityPerpIndex(pair.symbol) != null;
+  /*
+   * ─── WHICH WALLET SIGNS — AND WHICH ROUTE FITS IT ────────────────────────
+   *   «با وجود کیف پول داخلی وصل شده میگه کیف پول وصل کن»
+   *
+   * The reported bug, exactly: the ticket took whichever address existed
+   * (Solana first, else the EVM one) and sent it to the Solana-only venue. The
+   * in-app wallet is an EVM wallet, so a perfectly connected user was handed an
+   * order that could only be signed on Solana, and the signer answered «wallet
+   * not connected» — true of the WRONG chain, and untrue to the person reading.
+   *
+   * So the route is chosen FROM the wallets the user has (pickRoute): an
+   * EVM-only user trading BTC lands on Ostium or dYdX, a Solana-only user on
+   * Velocity. When the only venue for a pair needs a wallet family the user
+   * does not have, the button says WHICH one — it never says «connect a
+   * wallet» to somebody who has one.
+   *
+   * "Connected" is read from the ADDRESS rather than from whatever boolean the
+   * context exposes: the address is what gets signed and what the fee is
+   * charged against. `isConnected` is still honoured when present, because the
+   * real context sets it false while a session is LOCKED — an address with a
+   * locked session cannot sign, and pretending otherwise moves the failure from
+   * the button that starts it into the signing dialog.
+   */
+  const evmReady = Boolean(wallet.address) && wallet.isConnected !== false;
+  const solReady = Boolean(solWallet.address);
+  const pairRoutes = routeIndex.get(pair.symbol) ?? null;
+  const pick = useMemo(() => pickRoute(pairRoutes, { solana: solReady, evm: evmReady }), [pairRoutes, solReady, evmReady]);
+  const route = pick.route;
+  const routeEntry = route ? pairRoutes[route] : null;
+  const meta = route ? ROUTE_META[route] : null;
+  /* «needs a X wallet» is only said to someone who HAS a wallet (of the wrong
+     family). With none at all the button just says «connect wallet». */
+  const needsFamily = pick.reason === 'NEEDS_WALLET' && (evmReady || solReady) ? pick.needs : null;
+  const tradingAddress = !meta ? null : meta.family === 'solana' ? (solWallet.address ?? null) : (evmReady ? wallet.address : null);
+  const tradingConnected = Boolean(tradingAddress);
+  const routeInApp = Boolean(route);
+  const supportsTpSl = route === ROUTE.OSTIUM;
+  /* The candles come from the venue that settles the pair, so the chart and the
+     fill are the same book. No route → the market feed's own OHLC, if it has
+     an id for the coin. */
+  const chartCfg = route === ROUTE.VELOCITY ? { provider: 'drift', market: routeEntry.marketId }
+    : route === ROUTE.OSTIUM ? { provider: 'ostium', market: routeEntry.marketId }
+    : route === ROUTE.DYDX ? { provider: 'dydx', market: routeEntry.marketId }
+    : pair.id ? { provider: 'spot', market: pair.id } : null;
 
   /* ─── ticket arithmetic — pure, live, transparent ─────────────────────── */
+  const maxLeverage = leverageCeiling(routeEntry);
+  const minCollateral = meta?.minCollateralUsd ?? MIN_COLLATERAL_USD;
   const collateralNum = Number(collateral);
   const leverageNum = Number(leverage);
-  const collateralOk = Number.isFinite(collateralNum) && collateralNum >= MIN_COLLATERAL_USD;
-  const leverageOk = Number.isFinite(leverageNum) && leverageNum >= 1 && leverageNum <= MAX_LEVERAGE;
+  const collateralOk = Number.isFinite(collateralNum) && collateralNum >= minCollateral;
+  const leverageOk = Number.isFinite(leverageNum) && leverageNum >= 1 && leverageNum <= maxLeverage;
   const notional = collateralOk && leverageOk ? collateralNum * leverageNum : null;
+
+  /* The venue's own cap: a leverage it would refuse is clamped here, not
+     discovered as LEVERAGE_TOO_HIGH after the user has read the review. */
+  useEffect(() => {
+    if (Number(leverage) > maxLeverage) setLeverage(String(maxLeverage));
+  }, [maxLeverage, leverage]);
+  const leveragePresets = useMemo(() => {
+    const base = LEVERAGE_PRESETS.filter((n) => n <= maxLeverage);
+    if (maxLeverage < LEVERAGE_PRESETS[LEVERAGE_PRESETS.length - 1] && !base.includes(maxLeverage)) base.push(maxLeverage);
+    return base;
+  }, [maxLeverage]);
 
   /*
    * Entry reference: the live spot index (polled every 30s) when the feed is
-   * live, else the venue's own mid from the one-shot read. Both offline →
-   * null → every dependent number renders "—" instead of a guess.
+   * live, else the venue's own mid from the venue read. Both offline → null →
+   * every dependent number renders "—" instead of a guess.
    */
   const liveSpot = coinIsLive(coin) && Number(coin?.price) > 0 ? Number(coin.price) : null;
-  const venueMid = Number(venueMarket?.mid) > 0 ? Number(venueMarket.mid) : null;
+  const venueMid = Number(routeEntry?.mid) > 0 ? Number(routeEntry.mid) : null;
   const entryPrice = liveSpot ?? venueMid;
 
   /*
@@ -450,24 +548,36 @@ export default function Perp() {
 
   /*
    * ─── FEE PREVIEW — backend numbers only, debounced ─────────────────────
-   * The breakdown is computed by the shared engine inside the BFF from the
-   * venue's own fee parameters, exactly like the venue tab's preview. Nothing
-   * is derived client-side, and an unreachable backend leaves the rows as
-   * honest "shown at review" placeholders rather than invented dollars.
+   * Velocity and Ostium: computed by the shared engine inside the BFF from the
+   * venue's own fee parameters. dYdX is client-signed, so its one number that
+   * is known exactly — our builder fee, which is INSIDE the signed order — is
+   * stated from the same constant the order carries; its protocol fee stays an
+   * honest placeholder. An unreachable backend leaves the rows as «shown at
+   * review» instead of invented dollars.
    */
   const [fee, setFee] = useState(null);
   useEffect(() => {
-    const marketId = venueMarket?.marketId ?? null;
-    if (!marketId || !collateralOk || !leverageOk) { setFee(null); return undefined; }
+    if (!route || !routeEntry || !collateralOk || !leverageOk) { setFee(null); return undefined; }
+    if (route === ROUTE.DYDX) {
+      const feeUsd = dydxFeeUsd(notional);
+      setFee(feeUsd == null ? null : {
+        notionalUsd: notional,
+        protocol: { known: false },
+        network: { known: false },
+        fbt: { bps: DYDX_BUILDER_FEE_PPM / 100, feeUsd, recipient: DYDX_BUILDER_ADDRESS },
+        totalFeeUsd: null,
+        complete: false
+      });
+      return undefined;
+    }
     let alive = true;
     const timer = setTimeout(() => {
-      getFuturesFeePreview({ provider: 'drift', market: String(marketId), collateralUsd: collateralNum, leverage: leverageNum })
+      getFuturesFeePreview({ provider: meta.providerId, market: String(routeEntry.marketId), collateralUsd: collateralNum, leverage: leverageNum })
         .then((r) => { if (alive) setFee(r?.ok ? (r.data?.fee ?? null) : null); })
         .catch(() => { if (alive) setFee(null); });
     }, 450);
     return () => { alive = false; clearTimeout(timer); };
-  }, [venueMarket?.marketId, collateralOk, leverageOk, collateralNum, leverageNum]);
-
+  }, [route, routeEntry?.marketId, meta?.providerId, collateralOk, leverageOk, collateralNum, leverageNum, notional]);
 
   /*
    * ─── THE TAB STILL FOLLOWS THE URL (the Intent OS hand-off) ─────────────
@@ -475,11 +585,11 @@ export default function Perp() {
    * the query have to agree — otherwise a hand-off would change the URL and
    * leave the same screen mounted.
    *
-   * What it no longer does is MOVE THE USER. That was the bug: signing in the
-   * Perpetual tab used to `setPerpTab('onchain')` and navigate, so pressing
+   * What it no longer does is MOVE THE USER. That was the bug: signing in
+   * the Perpetual tab used to `setPerpTab('onchain')` and navigate, so pressing
    * the button the user had just been looking at silently threw them onto a
    * different tab with a different layout. The order is now built, risk
-   * checked and signed on this screen — see `prepareOrder` / `signOrder`.
+   * checked and signed on this screen — see `confirmOrder` / `signOrder`.
    */
   useEffect(() => {
     if (!SPECULATION_ENABLED) return;
@@ -490,27 +600,16 @@ export default function Perp() {
   }, [location.search, perpTab]);
 
   /*
-   * ─── WHICH WALLET SIGNS ────────────────────────────────────────────────
-   * The in-app venue settles on Solana (Velocity), so a Solana address is
-   * the preferred signer and the one whose balance matters. But the screen
-   * must not pretend a connected wallet is absent just because it is on the
-   * other chain: WHICH signer actually runs is decided later, by what
-   * `/prepare` returns (`clientSign.buildsInTab`), not by a guess made here.
-   *
-   * So the ticket asks the only question it can answer honestly — «is there
-   * a wallet in this app that can act for me?» — and takes whichever
-   * address there is, Solana first.
-   *
-   * "Connected" is read from the ADDRESS rather than from whatever boolean
-   * the context exposes: the address is what gets signed and what the fee is
-   * charged against. `isConnected` is still honoured when present, because
-   * the real context sets it false while a session is LOCKED — an address
-   * with a locked session cannot sign, and pretending otherwise moves the
-   * failure from the button that starts it into the signing dialog.
+   * The two venue tabs are BOARDS (five measured columns, a depth chart, an
+   * order book), so while one is on screen the app column gets the same ~48px
+   * of extra width the derivatives hall asks for — and gives it back after.
+   * See `body.hall-wide` in styles/derivatives-glass.css.
    */
-  const evmReady = Boolean(wallet.address) && wallet.isConnected !== false;
-  const tradingAddress = solWallet.address ?? wallet.address ?? null;
-  const tradingConnected = Boolean(solWallet.address) || evmReady;
+  useEffect(() => {
+    if (perpTab === 'overview') return undefined;
+    document.body.classList.add('hall-wide');
+    return () => { document.body.classList.remove('hall-wide'); };
+  }, [perpTab]);
 
   const [prepared, setPrepared] = useState(null);
   const [preparing, setPreparing] = useState(false);
@@ -518,82 +617,188 @@ export default function Perp() {
   const [execError, setExecError] = useState(null);
   const [lastTx, setLastTx] = useState(null);
 
+  /* ─── the dYdX session ─────────────────────────────────────────────────
+     dYdX has no server-built order: the key is derived IN MEMORY from one
+     EIP-712 signature of the user's EVM wallet (connectDydx), and the order is
+     signed by that session. «Activate» is that one signature. */
+  const [dydxAddress, setDydxAddress] = useState(() => dydxSessionAddress());
+  const [dydxEquity, setDydxEquity] = useState(null);
+  const [dydxStage, setDydxStage] = useState(null);
+  const [activating, setActivating] = useState(false);
+
+  /* A session belongs to ONE wallet: switching the EVM account must not leave
+     the previous account's dYdX key signing for the new one. */
+  const lastEvm = useRef(wallet.address ?? null);
+  useEffect(() => {
+    const now = wallet.address ?? null;
+    if (lastEvm.current && now !== lastEvm.current) { disconnectDydx(); setDydxAddress(null); setDydxEquity(null); }
+    lastEvm.current = now;
+  }, [wallet.address]);
+
+  useEffect(() => {
+    if (!dydxAddress || route !== ROUTE.DYDX || !tradeOpen) return undefined;
+    let alive = true;
+    getDydxSubaccount(dydxAddress)
+      .then((r) => {
+        if (!alive) return;
+        const eq = Number(r?.account?.subaccount?.equity);
+        setDydxEquity({ live: Boolean(r?.live), usd: Number.isFinite(eq) ? eq : 0 });
+      })
+      .catch(() => { if (alive) setDydxEquity(null); });
+    return () => { alive = false; };
+  }, [dydxAddress, route, tradeOpen]);
+
   /* A pair change invalidates an order built for the previous one. Silently
      keeping it would sign a ticket the screen no longer shows. */
   useEffect(() => { setPrepared(null); setExecError(null); }, [pair.symbol, side, collateral, leverage, takeProfit, stopLoss]);
 
   const canConfirm = notional != null;
 
+  /** One sentence for every code the flow can produce — never a raw code. */
+  const errText = useCallback((code) => {
+    const c = String(code || 'UNKNOWN');
+    if (c.startsWith('dydx:')) {
+      return t(`dydx.err.${c.slice(5)}`, { defaultValue: t('perp.terminal.err.UNKNOWN') });
+    }
+    /* Solana's balance / gas sentences name USDT and SOL, not «collateral» and ETH. */
+    const key = route === ROUTE.VELOCITY && (c === 'INSUFFICIENT_BALANCE' || c === 'NO_GAS') ? `${c}_SOLANA` : c;
+    return t(`perp.terminal.err.${key}`, {
+      defaultValue: t(`futures.err.${key}`, { defaultValue: t('perp.terminal.err.UNKNOWN') })
+    });
+  }, [t, route]);
+
+  /*
+   * THE CONNECT BUTTON — by the family the route needs.
+   *
+   * An EVM route opens the wallet sheet IN PLACE, on top of the ticket (it used
+   * to navigate to the wallet page, which cost the user the amount they had
+   * typed and the pair they had chosen). A Solana route asks the Solana wallet
+   * directly; its failure comes back as a named code, not as silence.
+   */
+  const connectSolana = useCallback(async () => {
+    setExecError(null);
+    try {
+      const res = await solWallet.connect?.();
+      if (res && typeof res === 'object' && res.ok === false) setExecError('SOLANA_CONNECT_FAILED');
+    } catch { setExecError('SOLANA_CONNECT_FAILED'); }
+  }, [solWallet]);
+  const connectFor = useCallback((family) => {
+    if (family === 'solana') connectSolana();
+    else setWalletOpen(true);
+  }, [connectSolana]);
+
+  const activateDydx = async () => {
+    haptic?.('light');
+    if (!evmReady) { setWalletOpen(true); return; }
+    setActivating(true);
+    setExecError(null);
+    try {
+      /* The onboarding typed data is bound to Ethereum mainnet (domain chainId
+         1); connectDydx moves a wallet-connected wallet there first. The in-app
+         vault signs locally and has no active chain to disagree with. */
+      const isLocal = wallet.mode === 'local';
+      const connected = await connectDydx({
+        getProvider: () => wallet.getEip1193Provider?.() || null,
+        address: wallet.address,
+        switchChain: wallet.switchChain,
+        requireChain: !isLocal,
+        restoreChain: wallet.mode === 'wc',
+        onStage: setDydxStage
+      });
+      setDydxAddress(connected.address);
+      haptic?.('success');
+    } catch (err) {
+      setExecError(`dydx:${classifyDydxError(err)}`);
+      haptic?.('error');
+    } finally {
+      setActivating(false);
+      setDydxStage(null);
+    }
+  };
+
   /*
    * THE FINAL BUTTON — «بازبینی و تأیید معامله».
    *
-   * No wallet connected → the button becomes the connect button: nothing can
-   * be signed without one. It opens the connect sheet IN PLACE, on top of the
-   * ticket. It used to navigate to the wallet page, which cost the user the
-   * amount they had typed and the pair they had chosen — a price they can no
-   * longer verify, retyped into a form that is not the one they set. The
-   * ticket stays exactly where it is and the wallet sheet is dismissed back
-   * into it. Connected → the review sheet, which names the route and the fee
-   * share BEFORE anything is confirmed.
+   * Connected to the wallet the ROUTE needs → the review sheet, which names the
+   * route and the fee share BEFORE anything is confirmed. Not connected → the
+   * connect button for that family, in place.
    */
-  const connectWallet = useCallback(() => setWalletOpen(true), []);
-
   const startReview = () => {
     haptic?.('light');
-    if (!tradingConnected) { connectWallet(); return; }
+    if (!route) return;
+    if (!tradingConnected) { connectFor(meta.family); return; }
     setReviewing(true);
+  };
+
+  /*
+   * ─── dYdX: THE ORDER IS BUILT AND SIGNED IN THE CLIENT SESSION ───────────
+   * Size = notional ÷ oracle, rounded DOWN to the market's step (an order the
+   * venue has to round is an order the user did not review). The account's own
+   * equity is read first: an unfunded dYdX account is the one failure this
+   * route has that nothing else can explain, so it is named, not discovered as
+   * a rejected transaction.
+   */
+  const placeOnDydx = async () => {
+    const market = routeEntry?.row;
+    if (!market?.raw) throw Object.assign(new Error('MARKET_NOT_LISTED'), { code: 'MARKET_NOT_LISTED' });
+    if (!dydxSessionAddress()) {
+      setDydxAddress(null);
+      throw Object.assign(new Error('NOT_CONNECTED'), { code: 'dydx:NOT_CONNECTED' });
+    }
+    const acct = await getDydxSubaccount(dydxSessionAddress());
+    const equity = Number(acct?.account?.subaccount?.equity);
+    if (acct?.live && !(equity >= collateralNum)) {
+      throw Object.assign(new Error('NO_COLLATERAL'), { code: 'dydx:NO_COLLATERAL' });
+    }
+    const size = dydxOrderSize({ notionalUsd: notional, price: market.oraclePrice, market });
+    if (!size) throw Object.assign(new Error('BELOW_MIN'), { code: 'BELOW_MIN' });
+    const slip = Math.min(10, Math.max(0.1, Number(slippagePct) || 0.5));
+    const order = await placeDydxOrder({ market, side: side === 'long' ? 'buy' : 'sell', size, slippagePct: slip });
+    setLastTx({ hash: order?.hash || String(order?.clientId ?? ''), chain: 'dydx' });
+    setPrepared(null);
+    setReviewing(false);
+    haptic?.('success');
   };
 
   /*
    * ─── CONFIRM: BUILD, RISK-CHECK, AND WAIT FOR A SIGNATURE — HERE ────────
    *   «وقتی در صفحه فیوجرز تب پرپچوال میخایی امضا کنی میپره تب ان چین»
    *
-   * The reported bug, and what used to happen: confirm navigated to
-   * `/perp?tab=onchain`, so the Perpetual tab the user was standing in
-   * disappeared and a different screen with a different ticket took its
-   * place. The signature — the thing they came for — was somewhere else.
+   * `/prepare` is the backend endpoint every venue tab uses, with the same
+   * idempotency key, the same risk verdict and the same fee split; what is gone
+   * is the navigation. The order is built for THIS ticket, shown in THIS sheet,
+   * and signed by THIS wallet while the user is still looking at the numbers
+   * they set. dYdX skips the build step — there is nothing server-side to
+   * build — and places the order on the confirming tap.
    *
-   * So the work moves here instead. `/prepare` is the same backend endpoint,
-   * with the same idempotency key, the same risk verdict and the same fee
-   * split the venue tab used; what is gone is the navigation. The order is
-   * built for THIS ticket, shown in THIS sheet, and signed by THIS wallet
-   * while the user is still looking at the numbers they set.
-   *
-   * Pairs the venue does not list still leave for Avantis on Base through the
-   * REGISTERED referral code `fbtswap` — a real route that earns, rather than
-   * a dead end.
+   * A pair no venue lists says so, in this app. There is no second venue to
+   * fall back to: handing a position the user had sized and levered to a
+   * different order book was a worse promise than not offering the pair.
    */
   const confirmOrder = async () => {
     haptic?.('medium');
     if (!routeInApp) {
-      /*
-        There is no second venue to fall back to. This used to open
-        Avantis in a new tab, which meant the position the user had just
-        sized, levered and checked was placed on a DIFFERENT order book at
-        a DIFFERENT price — the numbers they confirmed were not the numbers
-        they got, and they were not watching when it filled.
-
-        So an unlisted pair says so, here, in this app. That is a smaller
-        promise than a link that quietly does not keep, and it is the only
-        one this screen is allowed to make.
-      */
       setExecError('MARKET_NOT_LISTED');
       haptic?.('error');
       return;
     }
-    if (!tradingAddress) { setReviewing(false); connectWallet(); return; }
+    if (!tradingAddress) { setReviewing(false); connectFor(meta.family); return; }
 
     setExecError(null);
     setPreparing(true);
     try {
+      if (route === ROUTE.DYDX) {
+        await placeOnDydx();
+        return;
+      }
       const res = await prepareFutures({
-        provider: 'drift',
-        market: venueMarket?.marketId ?? velocityPerpIndex(pair.symbol),
+        provider: meta.providerId,
+        market: routeEntry.marketId,
         side,
         collateralUsd: collateralNum,
-        leverage: Math.min(leverageNum, MAX_LEVERAGE),
-        takeProfit: tp,
-        stopLoss: sl,
+        leverage: Math.min(leverageNum, maxLeverage),
+        takeProfit: supportsTpSl ? tp : null,
+        stopLoss: supportsTpSl ? sl : null,
         slippageBps: Math.round(Number(slippagePct) * 100),
         wallet: tradingAddress
       });
@@ -601,7 +806,7 @@ export default function Perp() {
       if (res.data?.risk?.blocked) throw Object.assign(new Error('RISK_BLOCKED'), { code: 'RISK_BLOCKED' });
       setPrepared(res.data);
     } catch (err) {
-      setExecError(err?.code || 'PROVIDER_UNAVAILABLE');
+      setExecError(route === ROUTE.DYDX ? classifyDydxOrderError(err) : errorCode(err));
       haptic?.('error');
     } finally {
       setPreparing(false);
@@ -613,10 +818,11 @@ export default function Perp() {
    * Two shapes, decided by what `/prepare` returned, and never by a guess:
    *
    *   · `clientSign.buildsInTab` — the Solana venue. The order is built and
-   *     signed HERE with the user's own wallet through the venue SDK. FBT
-   *     never holds a key and never touches the funds.
+   *     signed HERE with the user's own Solana wallet through the venue SDK.
+   *     FBT never holds a key and never touches the funds.
    *   · otherwise — server-built unsigned calldata, signed by the EVM wallet
-   *     and reported to the ledger by hash.
+   *     ON THE VENUE'S OWN CHAIN (the wallet is moved there first) and
+   *     reported to the ledger by hash.
    *
    * Both report the hash to `/verify` before the UI claims anything, so the
    * success line is a statement about the chain rather than about a promise
@@ -624,13 +830,8 @@ export default function Perp() {
    */
   const signOrder = async () => {
     if (!prepared) return;
-    /*
-     * Which chain the hash belongs to, decided by the wallet that will
-     * produce it — not by a constant. The success line links the explorer
-     * for this chain, so a wrong answer here sends the user to an explorer
-     * that will never find their transaction.
-     */
-    const signChain = solWallet.address ? 'solana' : 'evm';
+    /* Which chain the hash belongs to, decided by the route that produced it. */
+    const signChain = route === ROUTE.VELOCITY ? 'solana' : 'evm';
     setSigning(true);
     setExecError(null);
     try {
@@ -640,7 +841,7 @@ export default function Perp() {
 
       if (prepared.clientSign?.buildsInTab) {
         const { openVelocityPosition } = await import('../lib/velocityTrade.js');
-        const marketIndex = prepared.market?.marketIndex ?? velocityPerpIndex(pair.symbol);
+        const marketIndex = prepared.market?.marketIndex ?? routeEntry?.marketId;
         if (marketIndex == null) throw Object.assign(new Error('MARKET_NOT_LISTED'), { code: 'MARKET_NOT_LISTED' });
         const result = await openVelocityPosition({
           wallet: tradingAddress,
@@ -661,11 +862,17 @@ export default function Perp() {
         return;
       }
 
-      /* Server-built calldata, signed by the EVM wallet. */
+      /* Server-built calldata, signed by the EVM wallet on the venue's chain. */
+      const txs = prepared.transactions ?? [];
+      const want = Number(txs[0]?.chainId ?? meta?.chainId);
+      if (Number.isFinite(want) && want > 0 && wallet.chainId !== want) {
+        const moved = await wallet.switchChain?.(want);
+        if (!moved) throw Object.assign(new Error('WRONG_NETWORK'), { code: 'WRONG_NETWORK' });
+      }
       const signer = (await wallet.ensureSigner?.()) || wallet.getSigner?.();
       if (!signer) throw Object.assign(new Error('WALLET_NOT_CONNECTED'), { code: 'WALLET_NOT_CONNECTED' });
       let hash = null;
-      for (const tx of prepared.transactions ?? []) {
+      for (const tx of txs) {
         const sent = await signer.sendTransaction({
           to: tx.to,
           data: tx.data,
@@ -681,7 +888,7 @@ export default function Perp() {
       setReviewing(false);
       haptic?.('success');
     } catch (err) {
-      const code = /reject|denied|cancel|4001/i.test(String(err?.message || '')) ? 'USER_REJECTED' : (err?.code || 'SIGN_FAILED');
+      const code = /reject|denied|cancel|4001/i.test(String(err?.message || '')) ? 'USER_REJECTED' : errorCode(err);
       setExecError(code);
       if (code === 'USER_REJECTED' && prepared?.executionId) {
         await verifyFutures({ executionId: prepared.executionId, status: 'REJECTED' });
@@ -743,11 +950,11 @@ export default function Perp() {
 
       {perpTab === 'dydx' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
-          {LazyDydx && <LazyDydx />}
+          {LazyDydx && <LazyDydx embedded />}
         </Suspense>
       ) : perpTab === 'onchain' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
-          {LazyOnchain && <LazyOnchain />}
+          {LazyOnchain && <LazyOnchain embedded />}
         </Suspense>
       ) : (
         <div className="perp-modern">
@@ -802,7 +1009,7 @@ export default function Perp() {
       {/* ---------- the search, and the count ---------- */}
       <div className="perp-pair-head">
         <span className="section-label" style={{ margin: 0 }}>
-          {t('perp.terminal.pairsCount', { count: allPairs.length })}
+          {t('perp.terminal.pairsCount', { count: listPairs.length })}
         </span>
         <div className="perp-pair-search">
           <input
@@ -835,7 +1042,7 @@ export default function Perp() {
         <div className="perp-rows" role="list" aria-label={t('perp.terminal.pairsAria')} data-testid="perp-pair-strip">
           {stripPairs.map((p) => {
             const live = coinIsLive(p.coin);
-            const tradeable = Boolean(p.venueMarket) || velocityPerpIndex(p.symbol) != null;
+            const tradeable = Boolean(p.routes);
             return (
               <div className="perp-row" role="listitem" key={p.symbol} data-testid={`perp-row-${p.symbol}`}>
                 <TokenIcon token={{ symbol: p.symbol, image: p.coin?.image }} size={34} />
@@ -886,16 +1093,32 @@ export default function Perp() {
         </div>
       )}
 
-        </div>
-      )}
       {/*
-        ─── THE COST OF HOLDING, BEFORE ANYTHING ELSE ──────────────────────
-        Placed directly under the terminal, because it is the only thing on
-        this screen that a trader cannot get elsewhere in one glance: the same
-        position costs several percent a year more at one venue than another,
-        and no interface lines them up.
+        ─── THE COST OF HOLDING — IN A BOX THAT OPENS ──────────────────────
+        «هزینهٔ نگه‌داشتن پوزیشن، در هر صرافی — این باید داخل باکس بازشونده
+        باشد»
+
+        It is the only thing on this screen a trader cannot get elsewhere in one
+        glance — the same position costs several percent a year more at one
+        venue than another — but it is a TABLE, and a table the size of a phone
+        screen sat between the pair list and the end of the page whether or not
+        anyone had asked the question. Its title is the question; one tap
+        answers it. It is also only mounted once opened, so the rate feed is not
+        polled for a box nobody looked inside.
+
+        It lives in the Perpetual tab only: it used to sit below the tab switch,
+        so it was printed under the dYdX and On-Chain boards too.
       */}
-      <FundingPanel />
+      <InfoBox
+        title={t('perp.fundingTitle')}
+        tone="info"
+        id="perp-funding"
+        icon={<IconActivity width={16} height={16} />}
+      >
+        <div className="perp-funding-box" data-testid="perp-funding-box">
+          <FundingPanel />
+        </div>
+      </InfoBox>
 
       {/*
         ─── WHY WE DON'T RUN THE ENGINE, FOLDED ────────────────────────────
@@ -910,6 +1133,9 @@ export default function Perp() {
       >
         <p>{t('perp.honestBody')}</p>
       </InfoBox>
+
+        </div>
+      )}
 
       {/*
         ─── THE TRADE SHEET ─────────────────────────────────────────────────
@@ -945,7 +1171,7 @@ export default function Perp() {
               <div>
                 <div className="perp-sheet-sym">
                   {pair.symbol}-PERP
-                  {venueMarket && <span className="perp-sheet-tag">{t('perp.terminal.inApp')}</span>}
+                  {route && <span className="perp-sheet-tag" data-testid="perp-sheet-tag">{meta.chain}</span>}
                 </div>
                 <div className="perp-sheet-venue">
                   {coin?.name ?? t('perp.terminal.pairPerp')}
@@ -988,12 +1214,25 @@ export default function Perp() {
           )}
 
           {/* ---- the chart ---- */}
-          {venueMarket ? (
+          {/*
+            The box used to be a fixed 216px with `overflow: hidden`, and the
+            chart inside it (resolution bar + 250px canvas + footer) is ~340px —
+            so the bottom third was cut off. «نمودار شمعی کامل نیست … نصفش
+            پیداست». The wrapper now takes the chart's own height.
+
+            Every pair has a chart: the venue's own candles first (Velocity and
+            Ostium through the BFF, dYdX through its indexer), and — only if the
+            venue never answers — the market feed's OHLC, labelled as an index
+            chart. A pair with no venue and no feed id is the one honest blank.
+          */}
+          {chartCfg ? (
             <div className="perp-sheet-chart" data-testid="perp-sheet-chart">
               <FuturesMarketChart
-                provider="drift"
-                market={String(venueMarket.marketId)}
+                key={`${chartCfg.provider}:${chartCfg.market}`}
+                provider={chartCfg.provider}
+                market={String(chartCfg.market)}
                 symbol={`${pair.symbol}-PERP`}
+                spotId={pair.id || null}
                 testId="perp-terminal-chart"
               />
             </div>
@@ -1003,6 +1242,27 @@ export default function Perp() {
                 {t('perp.terminal.chartPairUnavailable')}
               </p>
             </div>
+          )}
+
+          {/* ---- where it settles, and with which wallet ---- */}
+          {route ? (
+            <p className="perp-route-note" data-testid="perp-route-note">
+              {t('perp.terminal.routeNote', {
+                chain: meta.chain,
+                asset: meta.collateral,
+                wallet: t(`perp.terminal.family.${meta.family}`)
+              })}
+            </p>
+          ) : (
+            <p className="notice" data-testid="perp-no-route">{t('perp.terminal.route.notListed')}</p>
+          )}
+          {needsFamily && (
+            <p className="notice" data-testid="perp-needs-wallet">
+              {t('perp.terminal.needsWallet', {
+                chain: meta.chain,
+                wallet: t(`perp.terminal.family.${needsFamily}`)
+              })}
+            </p>
           )}
 
           {/* ---- direction ---- */}
@@ -1049,21 +1309,14 @@ export default function Perp() {
                 aria-label={t('perp.terminal.collateral')}
                 data-testid="perp-sheet-amount"
               />
+              {/* The asset the order ACTUALLY spends on this route. It used to be a
+                  USDC/USDT toggle that changed a label and nothing else. */}
               <div className="perp-asset-chips" role="group" aria-label={t('perp.terminal.collateralAsset')}>
-                {['USDC', 'USDT'].map((a2) => (
-                  <button
-                    key={a2}
-                    type="button"
-                    className={`perp-asset-chip ${collateralAsset === a2 ? 'active' : ''}`}
-                    onClick={() => { haptic?.('light'); setCollateralAsset(a2); }}
-                  >
-                    {a2}
-                  </button>
-                ))}
+                <span className="perp-asset-chip active" data-testid="perp-sheet-asset">{meta?.collateral ?? 'USDC'}</span>
               </div>
             </div>
             {!collateralOk && collateral !== '' && (
-              <span className="perp-field-err">{t('perp.terminal.minCollateral', { min: MIN_COLLATERAL_USD })}</span>
+              <span className="perp-field-err">{t('perp.terminal.minCollateral', { min: minCollateral })}</span>
             )}
           </div>
 
@@ -1076,7 +1329,7 @@ export default function Perp() {
               </span>
             </div>
             <div className="lev-row">
-              {LEVERAGE_PRESETS.map((n) => (
+              {leveragePresets.map((n) => (
                 <button
                   key={n}
                   type="button"
@@ -1090,9 +1343,9 @@ export default function Perp() {
             <input
               type="range"
               min="1"
-              max={MAX_LEVERAGE}
+              max={maxLeverage}
               step="0.5"
-              value={leverageOk ? Math.min(leverageNum, MAX_LEVERAGE) : 1}
+              value={leverageOk ? Math.min(leverageNum, maxLeverage) : 1}
               onChange={(e) => setLeverage(e.target.value)}
               className="perp-lev-slider"
               style={{ width: '100%', marginTop: 8, accentColor: 'var(--rgb-1)' }}
@@ -1136,21 +1389,43 @@ export default function Perp() {
                 {fee?.protocol?.known ? fmtUsd(fee.protocol.feeUsd) : t('perp.terminal.fee.protocolLater')}
               </span>
             </div>
+            {route === ROUTE.DYDX && dydxAddress && (
+              <div className="row-between">
+                <span className="faint">{t('perp.terminal.dydxEquity')}</span>
+                <span className="mono" data-testid="perp-dydx-equity">
+                  {dydxEquity ? fmtUsd(dydxEquity.usd) : '—'}
+                </span>
+              </div>
+            )}
           </div>
+          {route === ROUTE.DYDX && dydxAddress && dydxEquity?.live && collateralOk && dydxEquity.usd < collateralNum && (
+            <p className="notice" data-testid="perp-dydx-unfunded">
+              {t('perp.terminal.dydxUnfunded', { address: shortAddress(dydxAddress) })}
+            </p>
+          )}
           <p className="faint perp-liq-note">{t('perp.terminal.liqNote')}</p>
 
           {/* ---- risk controls, folded ---- */}
+          {/* Take-profit / stop-loss are written INTO the order only on the venue
+              whose calldata carries them. On the others the fields are shown
+              inert with the reason — an input that is silently ignored is a
+              stop-loss the user thinks they have and do not. */}
           <InfoBox title={t('perp.terminal.riskControls')} tone="info" id="perp-terminal-risk">
             <div className="row" style={{ gap: 10 }}>
               <label style={{ flex: 1 }}>
                 <span className="faint">{t('perp.terminal.takeProfit')}</span>
-                <input type="text" inputMode="decimal" placeholder="0" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} />
+                <input type="text" inputMode="decimal" placeholder="0" value={supportsTpSl ? takeProfit : ''} disabled={!supportsTpSl} onChange={(e) => setTakeProfit(e.target.value)} />
               </label>
               <label style={{ flex: 1 }}>
                 <span className="faint">{t('perp.terminal.stopLoss')}</span>
-                <input type="text" inputMode="decimal" placeholder="0" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} />
+                <input type="text" inputMode="decimal" placeholder="0" value={supportsTpSl ? stopLoss : ''} disabled={!supportsTpSl} onChange={(e) => setStopLoss(e.target.value)} />
               </label>
             </div>
+            {!supportsTpSl && (
+              <p className="faint" style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.8 }} data-testid="perp-tpsl-note">
+                {t('perp.terminal.tpSlUnsupported')}
+              </p>
+            )}
           </InfoBox>
 
           {/*
@@ -1170,32 +1445,83 @@ export default function Perp() {
             </div>
           )}
 
-          {/* ---- THE ONE BUTTON ---- */}
-          {tradingConnected && tradingAddress ? (
-            <button
-              type="button"
-              className={`btn perp-sheet-go ${side}`}
-              disabled={!canConfirm || preparing || signing}
-              onClick={startReview}
-              data-testid="perp-sheet-confirm"
-            >
-              {preparing || signing
-                ? t('perp.terminal.preparing')
-                : side === 'long'
-                  ? t('perp.terminal.long')
-                  : t('perp.terminal.short')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-primary perp-sheet-go"
-              onClick={() => setWalletOpen(true)}
-              data-testid="perp-sheet-connect"
-            >
-              <IconWallet width={16} height={16} style={{ display: 'inline', marginInlineEnd: 6 }} />
-              {t('perp.terminal.connect')}
-            </button>
+          {execError && !reviewing && (
+            <p className="notice notice-danger" data-testid="perp-exec-error" role="alert">
+              {errText(execError)}
+            </p>
           )}
+
+          {/*
+            ─── THE ONE BUTTON — STICKY, AND IT SAYS WHAT IT DOES ──────────────
+            «دکمه صعودی یا نزولی پایین پاپ اپ که نشان دهنده امضا هست را درست
+            کن»
+
+            It was the last thing in a long scroll, a flat green/red bar with one
+            word on it, and nothing on it said that pressing it leads to a
+            SIGNATURE. It is now pinned to the bottom of the sheet (so it is
+            always within reach of the numbers it acts on), carries the
+            direction as an arrow, and names what happens next and with whose
+            wallet. The wallet glyph that used to sit beside «connect wallet» is
+            gone: the words are the button.
+
+            Which button it is is still the wallet's truth — never «trade» for a
+            user who cannot sign, and never «connect a wallet» for one who has a
+            wallet of the wrong family (the sentence above names the right one).
+          */}
+          <div className="perp-sheet-foot">
+            {!route ? (
+              <button type="button" className="btn perp-sheet-go is-off" disabled data-testid="perp-sheet-unavailable">
+                {t('perp.terminal.noRouteBtn')}
+              </button>
+            ) : !tradingConnected ? (
+              <button
+                type="button"
+                className="btn btn-primary perp-sheet-go"
+                onClick={() => { haptic?.('light'); connectFor(meta.family); }}
+                data-testid="perp-sheet-connect"
+              >
+                {meta.family === 'solana' ? t('perp.terminal.connectSolana') : t('perp.terminal.connect')}
+              </button>
+            ) : route === ROUTE.DYDX && !dydxAddress ? (
+              <button
+                type="button"
+                className="btn btn-primary perp-sheet-go"
+                onClick={activateDydx}
+                disabled={activating}
+                data-testid="perp-sheet-activate"
+              >
+                {activating
+                  ? (dydxStage ? t(`dydx.stage.${dydxStage}`, { defaultValue: t('common.loading') }) : t('common.loading'))
+                  : t('perp.terminal.activateDydx')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={`btn perp-sheet-go ${side}`}
+                disabled={!canConfirm || preparing || signing}
+                onClick={startReview}
+                data-testid="perp-sheet-confirm"
+              >
+                <span className="perp-go-ico" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                    {side === 'long'
+                      ? <><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></>
+                      : <><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></>}
+                  </svg>
+                </span>
+                <span className="perp-go-text">
+                  <span className="perp-go-main">
+                    {preparing || signing
+                      ? t('perp.terminal.preparing')
+                      : `${side === 'long' ? t('perp.terminal.long') : t('perp.terminal.short')} · ${pair.symbol}`}
+                  </span>
+                  <span className="perp-go-sub">
+                    {t('perp.terminal.goSub', { wallet: shortAddress(tradingAddress) })}
+                  </span>
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       </Sheet>
 
@@ -1234,7 +1560,7 @@ export default function Perp() {
             </div>
             <div className="row-between">
               <span className="faint">{t('perp.terminal.collateral')}</span>
-              <span className="mono">{collateralOk ? `${fmtUsd(collateralNum)} ${collateralAsset}` : '—'}</span>
+              <span className="mono">{collateralOk ? `${fmtUsd(collateralNum)} ${meta?.collateral ?? 'USDC'}` : '—'}</span>
             </div>
             <div className="row-between">
               <span className="faint">{t('perp.terminal.leverage')}</span>
@@ -1253,7 +1579,7 @@ export default function Perp() {
               <span className="mono">
                 {liq.liquidationPrice == null
                   ? '—'
-                  : `$${fmtPrice(liq.liquidationPrice)} (−${liq.distancePct.toFixed(2)}%)`}
+                  : `$${fmtPrice(liq.liquidationPrice)} (${side === 'long' ? '−' : '+'}${liq.distancePct.toFixed(2)}%)`}
               </span>
             </div>
             <div className="row-between">
@@ -1315,17 +1641,21 @@ export default function Perp() {
 
           {/*
             The route line — the part a "looks like an exchange" screen must
-            never hide. There is only one route now: built here, risk-checked
-            here, signed here, from the user's own wallet. A pair this app
-            cannot execute says so on the ticket instead of being routed
-            somewhere else.
+            never hide. Every route is settled inside this app: built here,
+            risk-checked here, signed here, from the user's own wallet — and the
+            line names WHICH chain and WHICH wallet, because those are what the
+            user has to have funds and a connection on. A pair this app cannot
+            execute says so on the ticket instead of being routed somewhere
+            else.
           */}
           <div className="card card-tight perp-route" data-testid="perp-review-route">
             <span className="perp-route-ico" aria-hidden="true">
               <IconRoute width={18} height={18} />
             </span>
             <p style={{ margin: 0, lineHeight: 1.7 }}>
-              {routeInApp ? t('perp.terminal.route.inApp') : t('perp.terminal.route.notListed')}
+              {route
+                ? t(`perp.terminal.route.${route}`, { chain: meta.chain, asset: meta.collateral })
+                : t('perp.terminal.route.notListed')}
             </p>
           </div>
 
@@ -1359,7 +1689,7 @@ export default function Perp() {
 
           {execError && (
             <p className="notice notice-danger" data-testid="perp-exec-error" role="alert">
-              {t(`perp.terminal.err.${execError}`, { defaultValue: execError })}
+              {errText(execError)}
             </p>
           )}
 
@@ -1380,9 +1710,9 @@ export default function Perp() {
                 ? t('perp.terminal.signing')
                 : prepared
                   ? t('perp.terminal.signNow')
-                  : routeInApp
-                    ? t('perp.terminal.confirmInApp')
-                    : t('perp.terminal.confirmAvantis')}
+                  : route === ROUTE.DYDX
+                    ? t('perp.terminal.confirmDydx')
+                    : t('perp.terminal.confirmInApp')}
             </button>
           </div>
         </div>

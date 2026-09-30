@@ -13398,7 +13398,7 @@ export default function run() {
     t('the tab labels are i18n keys, not literals',
       /onchain: 'perp\.tab\.onchain'/.test(perp) && /overview: 'perp\.tab\.perpetual'/.test(perp) && !/'آن‌چین'|"On-Chain"/.test(perp));
     t('the On-Chain tab is lazy-loaded behind the same speculation flag as dYdX',
-      /LazyOnchain = SPECULATION_ENABLED \? lazyRetry\(\(\) => import\('\.\/FuturesOnchain'\)\)/.test(perp) && /<LazyOnchain \/>/.test(perp));
+      /LazyOnchain = SPECULATION_ENABLED \? lazyRetry\(\(\) => import\('\.\/FuturesOnchain'\)\)/.test(perp) && /<LazyOnchain( embedded)? \/>/.test(perp));
     t('the tab labels exist in English and Persian',
       hasKey(enL, 'perp.tab.onchain') && hasKey(enL, 'perp.tab.perpetual') && faL.perp.tab.onchain === 'آن‌چین' && faL.perp.tab.perpetual === 'پرپچوال');
 
