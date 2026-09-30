@@ -2464,8 +2464,33 @@
         "USER_REJECTED": "Você rejeitou a assinatura. Nada foi enviado.",
         "QUOTE_EXPIRED": "A cotação expirou. Feche e crie o pedido de novo.",
         "RISK_BLOCKED": "O motor de risco recusou a ordem. Nada foi enviado.",
-        "MARKET_NOT_LISTED": "Esta venue não lista esse par. Escolha outro na faixa.",
+        "MARKET_NOT_LISTED": "Este par ainda não está aberto para negociação neste app. Nada foi enviado e nenhum fundo foi movimentado — escolha outro par na lista.",
         "PROVIDER_UNAVAILABLE": "A venue não respondeu. Nada foi enviado — tente em instantes."
+      },
+      "trade": "Negociar",
+      "pairPerp": "Perpétuo",
+      "inApp": "neste app",
+      "route": {
+        "notListed": "Este par não tem mercado neste app, então não pode ser negociado aqui. Nada sai da sua carteira."
+      }
+    },
+    "how": {
+      "sub": "Alavancagem, liquidação e financiamento — em 30 segundos",
+      "what": {
+        "t": "Um perpétuo nunca expira",
+        "d": "Acompanha o preço da moeda: você aposta na direção do preço, não compra a moeda. Por isso pode ficar longo ou curto no mesmo par."
+      },
+      "liquidate": {
+        "t": "A alavancagem pode zerar a posição",
+        "d": "Quanto maior a alavancagem, menor é o movimento contrário que fecha sua posição. O preço exato é sempre mostrado antes de confirmar — esse é o número a ler, não o controle de alavancagem."
+      },
+      "funding": {
+        "t": "Manter a posição tem um custo",
+        "d": "Os perpétuos liquidam financiamento entre comprados e vendidos a cada poucas horas. Se o seu lado for o popular, você paga; se for o congestionado, recebe. Normalmente é pouco, mas acumula a cada hora."
+      },
+      "fees": {
+        "t": "Paga taxas na entrada e na saída",
+        "d": "A divisão exata aparece antes de confirmar, e a ordem é montada e verificada por este app — depois assinada pela sua carteira. Este app nunca guarda seus fundos ou chaves."
       }
     }
   }

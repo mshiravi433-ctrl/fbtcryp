@@ -2464,8 +2464,33 @@
         "USER_REJECTED": "Cüzdanında imzayı reddettin. Hiçbir şey gönderilmedi.",
         "QUOTE_EXPIRED": "Fiyat teklifinin süresi doldu. Kapatıp emri yeniden oluşturun.",
         "RISK_BLOCKED": "Risk motoru bu emri reddetti. Hiçbir şey gönderilmedi.",
-        "MARKET_NOT_LISTED": "Bu borsa o çifti listelemiyor. Şeritten başka bir çift seçin.",
+        "MARKET_NOT_LISTED": "Bu çift bu uygulamada henüz işleme açık değil. Hiçbir şey gönderilmedi ve varlık hareket etmedi — listeden başka bir çift seçin.",
         "PROVIDER_UNAVAILABLE": "Borsa yanıt vermedi. Hiçbir şey gönderilmedi — birazdan tekrar deneyin."
+      },
+      "trade": "İşlem",
+      "pairPerp": "Sürekli",
+      "inApp": "uygulama içinde",
+      "route": {
+        "notListed": "Bu çiftin bu uygulamada piyasası yok, dolayısıyla burada işlem görülemez. Cüzdanınızdan hiçbir şey çıkmaz."
+      }
+    },
+    "how": {
+      "sub": "Kaldıraç, likidasyon ve fonlama — 30 saniyede",
+      "what": {
+        "t": "Sürekli sözleşmenin süresi bitmez",
+        "d": "Token fiyatını takip eder; yani belirleyen fiyatın nereye gittiğidir, tokenin kendisi değil. Bu yüzden aynı çiftte hem long hem short açabilirsiniz."
+      },
+      "liquidate": {
+        "t": "Kaldıraç pozisyonu sıfırlayabilir",
+        "d": "Kaldıraç ne kadar yüksekse, pozisyonunu kapatan ters hareketin o kadar küçük olması gerekir. Kesin fiyat, onaydan önce işlem ekranında her zaman gösterilir — okuman gereken sayı odur, kaldıraç kaydırıcısı değil."
+      },
+      "funding": {
+        "t": "Pozisyonu açık tutmanın bir maliyeti var",
+        "d": "Kalıcı sözleşmelerde fonlama, long ve short yatırımcılar arasında birkaç saatte bir mutabakatlaştırılır. Yönün popüler olan buysa ödersin, sıkışık olan buysa alırsın. Genelde küçüktür — ama pozisyonu her saat tuttuğun için birikir."
+      },
+      "fees": {
+        "t": "Girişte ve çıkışta ücret ödersiniz",
+        "d": "Kesin bölünme onaydan önce gösterilir ve emir tamamen bu uygulama içinde oluşturulup risk kontrolünden geçirilir — sonra kendi cüzdanınla imzalanır. Bu uygulama paranı veya anahtarlarını asla saklamaz."
       }
     }
   }

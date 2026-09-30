@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
@@ -12,13 +12,12 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import FuturesMarketChart from '../components/FuturesMarketChart';
 import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
-import { IconActivity, IconChevronRight, IconExternal, IconRoute, IconShield, IconSparkle, IconTrend, IconWallet } from '../components/Icons';
+import { IconActivity, IconRoute, IconShield, IconSparkle, IconTrend, IconWallet } from '../components/Icons';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { anyVenueEarns, withReferral, AVANTIS_CODE } from '../lib/venueReferral';
 import { SPECULATION_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
@@ -51,51 +50,21 @@ const TAB_LABEL_KEY = { overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx',
 const TAB_ICON = { overview: IconTrend, dydx: IconActivity, onchain: IconShield };
 
 /*
- * ─── THE OVERVIEW SENDS PEOPLE OUT OF THE APP AS LITTLE AS POSSIBLE ─────────
+ * ─── THERE IS NO EXTERNAL VENUE ON THIS PAGE ANY MORE ─────────────────────
+ *   «بخش لینک معامله در فیوجرز خارجی را حذف کن»
  *
- * This list used to hold four venues. ApolloX and dYdX are gone.
+ * This table used to hold four outbound venues, and every button on it left
+ * the app: the user read a price here, and was handed to somebody else's
+ * order book to act on it. That is a worse product than not offering the
+ * pair, because the quote and the fill belong to different books — the
+ * number on this screen is not the number they get.
  *
- * The rule applied, and it is a revenue rule rather than a taste one:
- * a button that leaves the app has to pay for the user it takes. Checked
- * against lib/venueReferral.js, which is the single source of truth for this:
- *
- *   apx      earns: false   reason: NO_PROGRAMME      → removed
- *   dydx     earns: false   reason: VOLUME_REQUIRED   → removed
- *   gmx      earns: true    permissionless Tier 1     → kept
- *   avantis  earns: true    code `fbtswap` registered → kept
- *
- * dYdX in particular did not even need the link. It is a full tab on this same
- * screen (`PERP_TABS`) running against our own same-origin proxy with a
- * builder fee attached — an outbound button next to it was cannibalising the
- * one integration here that actually earns.
- *
- * The two survivors both discount the referred trader's fees, so those links
- * are better for the user than the bare URL — and either way the notice below
- * says which case we are in, driven by the same flag that attaches the code.
+ * So the table is gone, along with the code that opened it. What replaces it
+ * is not a redirect: it is the in-app route, which builds, risk-checks and
+ * signs the order against the same venue feed this list is priced from. A
+ * pair the in-app venue does not list is now SAYS SO on its own row instead
+ * of being a promise made by a link.
  */
-const VENUES = [
-  {
-    id: 'gmx',
-    url: 'https://app.gmx.io/#/trade',
-    pairs: '20+',
-    leverage: '50x',
-    color: 'var(--rgb-2)'
-  },
-  {
-    /*
-     * Permissionless referral AND non-crypto markets — forex, metals,
-     * commodities, indices, equities. Registered on Base with the code
-     * `fbtswap`, so the fee share of every referred trade settles to the
-     * FBT treasury address with no capital of ours frozen anywhere.
-     */
-    id: 'avantis',
-    url: 'https://www.avantisfi.com/trade',
-    pairs: '60+',
-    leverage: '500x',
-    color: 'var(--rgb-4)'
-  }
-];
-const AVANTIS = VENUES.find((v) => v.id === 'avantis');
 
 /*
  * ─── THE PAIR UNIVERSE OF THE TERMINAL ──────────────────────────────────────
@@ -293,9 +262,8 @@ const coinIsLive = (c) => Boolean(c) && c.offline !== true && c.dataProvenance !
 
 export default function Perp() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const location = useLocation();
-  const { haptic, tg } = useTelegram();
+  const { haptic } = useTelegram();
   const wallet = useWallet();
   const solWallet = useSolanaWallet();
   /*
@@ -386,6 +354,30 @@ export default function Perp() {
    */
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const [pairQuery, setPairQuery] = useState('');
+  /*
+   * ─── THE TRADE SHEET IS WHERE THE TICKET LIVES NOW ───────────────────────
+   *   «وقتی روی [توکن] زدی یک پاپ‌آپ که کل صفحه را بگیرد … نباید صفحه شلوغ
+   *    شود»
+   *
+   * The page was a terminal: a hundred-pair strip, a hero, a chart, a ticket, a
+   * fee table and a liquidation table, all at once, on one scroll. Every one of
+   * those is real, and together they meant the user could not see the LIST —
+   * which is the only thing this screen is for. So the list is the page, and
+   * everything else moved into a full-height sheet that one tap opens on the
+   * pair that was actually tapped.
+   *
+   * The ticket's state was NOT reset on close. Amount, leverage, side and the
+   * take-profit/stop-loss a user typed are theirs; reopening the sheet to find
+   * a cleared form is how a ticket gets abandoned half-filled.
+   */
+  const [tradeOpen, setTradeOpen] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
+
+  const openTrade = useCallback((symbol) => {
+    if (symbol) setSelectedSymbol(symbol);
+    setTradeOpen(true);
+  }, []);
+  const closeTrade = useCallback(() => setTradeOpen(false), []);
 
   const allPairs = useMemo(
     () => buildPerpPairs({ coins: coins ?? [], venueMarkets: venueMarkets ?? [] }),
@@ -476,20 +468,6 @@ export default function Perp() {
     return () => { alive = false; clearTimeout(timer); };
   }, [venueMarket?.marketId, collateralOk, leverageOk, collateralNum, leverageNum]);
 
-  /*
-   * ─── THESE LINKS USED TO EARN NOTHING ───────────────────────────────────
-   * `withReferral` returns the URL UNCHANGED until a code is configured, so
-   * this is safe to ship before the owner registers anything.
-   *
-   * And the referred trader gets a fee discount, so the link is better for
-   * them than the bare one — but they are told either way, below.
-   */
-  const openVenue = (venueId, url) => {
-    haptic?.('light');
-    const target = withReferral(venueId, url);
-    if (tg?.openLink) tg.openLink(target);
-    else window.open(target, '_blank', 'noopener,noreferrer');
-  };
 
   /*
    * ─── THE TAB STILL FOLLOWS THE URL (the Intent OS hand-off) ─────────────
@@ -513,18 +491,26 @@ export default function Perp() {
 
   /*
    * ─── WHICH WALLET SIGNS ────────────────────────────────────────────────
-   * The in-app venue settles on Solana (Velocity), so the SOLANA wallet is
-   * the one that signs and the one whose balance matters. The EVM wallet
-   * still owns the connect sheet for the pairs this venue cannot take, and
-   * for the EVM calldata path a future venue may add.
+   * The in-app venue settles on Solana (Velocity), so a Solana address is
+   * the preferred signer and the one whose balance matters. But the screen
+   * must not pretend a connected wallet is absent just because it is on the
+   * other chain: WHICH signer actually runs is decided later, by what
+   * `/prepare` returns (`clientSign.buildsInTab`), not by a guess made here.
    *
-   * `venueChain` is decided by the SAME answer the route decision uses, so
-   * the button and the execution can never disagree about whose signature
-   * they are waiting for.
+   * So the ticket asks the only question it can answer honestly — «is there
+   * a wallet in this app that can act for me?» — and takes whichever
+   * address there is, Solana first.
+   *
+   * "Connected" is read from the ADDRESS rather than from whatever boolean
+   * the context exposes: the address is what gets signed and what the fee is
+   * charged against. `isConnected` is still honoured when present, because
+   * the real context sets it false while a session is LOCKED — an address
+   * with a locked session cannot sign, and pretending otherwise moves the
+   * failure from the button that starts it into the signing dialog.
    */
-  const venueChain = 'solana';
-  const tradingAddress = venueChain === 'solana' ? solWallet.address : wallet.address;
-  const tradingConnected = venueChain === 'solana' ? Boolean(solWallet.address) : Boolean(wallet.isConnected);
+  const evmReady = Boolean(wallet.address) && wallet.isConnected !== false;
+  const tradingAddress = solWallet.address ?? wallet.address ?? null;
+  const tradingConnected = Boolean(solWallet.address) || evmReady;
 
   const [prepared, setPrepared] = useState(null);
   const [preparing, setPreparing] = useState(false);
@@ -542,26 +528,19 @@ export default function Perp() {
    * THE FINAL BUTTON — «بازبینی و تأیید معامله».
    *
    * No wallet connected → the button becomes the connect button: nothing can
-   * be signed without one. For the in-app (Solana) venue that is the wallet
-   * page's Solana tab, with `?return=` so the ticket is exactly where the
-   * user left it. Connected → the review sheet, which names the route and the
-   * fee share BEFORE anything is confirmed.
+   * be signed without one. It opens the connect sheet IN PLACE, on top of the
+   * ticket. It used to navigate to the wallet page, which cost the user the
+   * amount they had typed and the pair they had chosen — a price they can no
+   * longer verify, retyped into a form that is not the one they set. The
+   * ticket stays exactly where it is and the wallet sheet is dismissed back
+   * into it. Connected → the review sheet, which names the route and the fee
+   * share BEFORE anything is confirmed.
    */
-  const connectSolana = useCallback(() => {
-    const back = new URLSearchParams(location.search || '');
-    back.set('tab', 'overview');
-    const q = new URLSearchParams({ tab: 'solana', return: `/perp?${back.toString()}` });
-    navigate(`/wallet?${q.toString()}`);
-  }, [navigate, location.search]);
+  const connectWallet = useCallback(() => setWalletOpen(true), []);
 
   const startReview = () => {
     haptic?.('light');
-    if (routeInApp) {
-      if (!tradingConnected) { connectSolana(); return; }
-      setReviewing(true);
-      return;
-    }
-    if (!wallet.isConnected) { setWalletOpen(true); return; }
+    if (!tradingConnected) { connectWallet(); return; }
     setReviewing(true);
   };
 
@@ -587,11 +566,22 @@ export default function Perp() {
   const confirmOrder = async () => {
     haptic?.('medium');
     if (!routeInApp) {
-      setReviewing(false);
-      openVenue('avantis', AVANTIS.url);
+      /*
+        There is no second venue to fall back to. This used to open
+        Avantis in a new tab, which meant the position the user had just
+        sized, levered and checked was placed on a DIFFERENT order book at
+        a DIFFERENT price — the numbers they confirmed were not the numbers
+        they got, and they were not watching when it filled.
+
+        So an unlisted pair says so, here, in this app. That is a smaller
+        promise than a link that quietly does not keep, and it is the only
+        one this screen is allowed to make.
+      */
+      setExecError('MARKET_NOT_LISTED');
+      haptic?.('error');
       return;
     }
-    if (!tradingAddress) { setReviewing(false); connectSolana(); return; }
+    if (!tradingAddress) { setReviewing(false); connectWallet(); return; }
 
     setExecError(null);
     setPreparing(true);
@@ -634,6 +624,13 @@ export default function Perp() {
    */
   const signOrder = async () => {
     if (!prepared) return;
+    /*
+     * Which chain the hash belongs to, decided by the wallet that will
+     * produce it — not by a constant. The success line links the explorer
+     * for this chain, so a wrong answer here sends the user to an explorer
+     * that will never find their transaction.
+     */
+    const signChain = solWallet.address ? 'solana' : 'evm';
     setSigning(true);
     setExecError(null);
     try {
@@ -656,7 +653,7 @@ export default function Perp() {
         });
         const hash = result?.signature;
         if (!hash) throw Object.assign(new Error('BROADCAST_FAILED'), { code: 'BROADCAST_FAILED' });
-        setLastTx({ hash, chain: venueChain });
+        setLastTx({ hash, chain: signChain });
         if (prepared.executionId) await verifyFutures({ executionId: prepared.executionId, txHash: hash });
         setPrepared(null);
         setReviewing(false);
@@ -756,21 +753,53 @@ export default function Perp() {
         <div className="perp-modern">
 
       {/*
-        ─── THE RISK NOTICE STAYS VISIBLE; THE EXPLAINER FOLDS ───────────────
-        `perp.riskNotice` is what leverage will do to this user's money, and
-        it stays a plain inline `.notice`. Anything describing what the button
-        is about to do must never be one tap away.
+        ─── THE PAGE IS A LIST. THAT IS THE WHOLE REDESIGN ──────────────────
+        «الان باید فقط توکن را نشان دهد و نمودار را با دکمه معامله، وقتی روی آن
+        زدی یک پاپ‌آپ که کل صفحه را بگیرد … صفحه را شلوغ نکن»
+
+        This tab was a terminal. A hundred-pair strip, a price hero, a chart, a
+        ticket, a fee table and a liquidation table all sat on one scroll, so the
+        thing the screen exists to do — let you FIND a pair — was the one thing
+        you could not do. Worse, the fee table and the venue list are the least
+        actionable pixels on the page: they answer questions nobody had yet.
+
+        So: the list is the page, and one tap on a row takes the whole ticket
+        over the whole screen. Nothing was thrown away — the same state, the
+        same arithmetic, the same backend prepare/sign path — it just stopped
+        competing with the list for attention.
       */}
-      <p className="notice notice-danger">{t('perp.riskNotice')}</p>
 
-      {/* ─────────────── THE PAIR STRIP ───────────────
-          Every pair of the terminal side by side: icon, live dollar price,
-          a small sparkline and the 24h change. Offline rows show a dash —
-          the snapshot price must never pass for a live one.
+      {/* ---------- the explainer, folded ---------- */}
+      <button
+        type="button"
+        className={`perp-how ${howOpen ? 'is-open' : ''}`}
+        onClick={() => { haptic?.('light'); setHowOpen((v) => !v); }}
+        aria-expanded={howOpen}
+        data-testid="perp-how-toggle"
+      >
+        <span className="perp-how-ico" aria-hidden="true"><IconSparkle width={16} height={16} /></span>
+        <span className="perp-how-text">
+          <span className="perp-how-title">{t('perp.how.title')}</span>
+          {!howOpen && <span className="perp-how-sub">{t('perp.how.sub')}</span>}
+        </span>
+        <span className="perp-how-chev" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+      {howOpen && (
+        <div className="perp-how-body" data-testid="perp-how-body">
+          {['what', 'liquidate', 'funding', 'fees'].map((k) => (
+            <div className="perp-how-row" key={k}>
+              <span className="perp-how-row-t">{t(`perp.how.${k}.t`)}</span>
+              <span className="perp-how-row-d">{t(`perp.how.${k}.d`)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-          The COUNT is stated rather than implied. A strip that used to hold
-          twelve cells and now holds a hundred has to say so, or the user
-          scrolls it, finds the end, and concludes the app is still broken. */}
+      {/* ---------- the search, and the count ---------- */}
       <div className="perp-pair-head">
         <span className="section-label" style={{ margin: 0 }}>
           {t('perp.terminal.pairsCount', { count: allPairs.length })}
@@ -802,389 +831,63 @@ export default function Perp() {
           {t('perp.terminal.noPairMatch')}
         </p>
       ) : (
-      <div className="tag-scroll perp-pairs" role="tablist" aria-label={t('perp.terminal.pairsAria')} data-testid="perp-pair-strip">
-        {stripPairs.map((p) => {
-          const active = p.symbol === pair.symbol;
-          const live = coinIsLive(p.coin);
-          /* The venue's own list, marked on the cell. This is the one fact
-             the strip could not show before: which of these pairs this app
-             can actually settle, as opposed to which ones are famous. */
-          const tradeable = Boolean(p.venueMarket) || velocityPerpIndex(p.symbol) != null;
-          return (
-            <button
-              key={p.symbol}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`tag perp-pair ${active ? 'active' : ''}`}
-              onClick={() => { haptic?.('light'); setSelectedSymbol(p.symbol); }}
-              data-testid={`perp-pair-${p.symbol}`}
-            >
-              <span className="perp-pair-top">
-                <TokenIcon token={{ symbol: p.symbol, image: p.coin?.image }} size={24} />
-                <span className="perp-pair-sym">{p.symbol}-PERP</span>
-                {tradeable && <span className="perp-pair-live" aria-hidden="true" title={t('perp.terminal.pairInApp')} />}
-              </span>
-              {loading ? (
-                <span className="skel perp-pair-skel" />
-              ) : p.coin && live ? (
-                <>
-                  <span className="mono perp-pair-price">${fmtPrice(p.coin.price)}</span>
-                  <span className={`perp-pair-chg ${p.coin.change24h >= 0 ? 'up' : 'down'}`}>
-                    {fmtPct(p.coin.change24h)}
+        /* ---------- THE LIST ---------- */
+        <div className="perp-rows" role="list" aria-label={t('perp.terminal.pairsAria')} data-testid="perp-pair-strip">
+          {stripPairs.map((p) => {
+            const live = coinIsLive(p.coin);
+            const tradeable = Boolean(p.venueMarket) || velocityPerpIndex(p.symbol) != null;
+            return (
+              <div className="perp-row" role="listitem" key={p.symbol} data-testid={`perp-row-${p.symbol}`}>
+                <TokenIcon token={{ symbol: p.symbol, image: p.coin?.image }} size={34} />
+                <div className="perp-row-id">
+                  <span className="perp-row-sym">
+                    {p.symbol}
+                    <span className="perp-row-quote">/USDC</span>
+                    {tradeable && <span className="perp-pair-live" aria-hidden="true" />}
                   </span>
-                  {Array.isArray(p.coin.sparkline) && p.coin.sparkline.length > 1 && (
-                    <span className="perp-pair-spark" aria-hidden="true">
-                      <Sparkline data={p.coin.sparkline} up={p.coin.change24h >= 0} width={58} height={16} strokeWidth={1.4} />
-                    </span>
+                  <span className="perp-row-name">{p.coin?.name ?? t('perp.terminal.pairPerp')}</span>
+                </div>
+                <span className="perp-row-spark" aria-hidden="true">
+                  {loading ? (
+                    <span className="skel" style={{ width: 58, height: 22 }} />
+                  ) : Array.isArray(p.coin?.sparkline) && p.coin.sparkline.length > 1 ? (
+                    <Sparkline data={p.coin.sparkline} up={p.coin.change24h >= 0} width={58} height={22} strokeWidth={1.5} />
+                  ) : null}
+                </span>
+                <div className="perp-row-nums">
+                  {loading ? (
+                    <span className="skel" style={{ width: 66, height: 13 }} />
+                  ) : p.coin && live ? (
+                    <>
+                      <span className="mono perp-row-price">${fmtPrice(p.coin.price)}</span>
+                      <span className={`perp-row-chg ${p.coin.change24h >= 0 ? 'up' : 'down'}`}>
+                        {fmtPct(p.coin.change24h)}
+                      </span>
+                    </>
+                  ) : (
+                    /* honest, and it is honest HERE rather than in a second
+                       line under the price — one number per row, or the list
+                       becomes a wall. */
+                    <span className="faint perp-row-nodata">—</span>
                   )}
-                </>
-              ) : (
-                <span className="faint perp-pair-nodata">{t('perp.marketDataUnavailableShort')}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-      )}
-
-      <div className="perp-desk-grid">
-        <div className="perp-desk-col">
-
-      {/* ---------- live index price ---------- */}
-      {loading ? (
-        <div className="skel" style={{ height: 150 }} />
-      ) : coin && indexOffline ? (
-        <motion.section className="card perp-hero perp-hero-offline" variants={riseIn} initial="hidden" animate="show" data-testid="perp-index-unavailable">
-          <div className="faint">{pair.symbol}-PERP · {t('perp.indexPrice')}</div>
-          <p className="notice" style={{ marginTop: 8 }}>{t('perp.marketDataUnavailable')}</p>
-        </motion.section>
-      ) : coin ? (
-        <motion.section className="card card-rgb perp-hero" variants={riseIn} initial="hidden" animate="show">
-          <div className="sheen" />
-          <div className="perp-hero-top">
-            <div className="perp-hero-price">
-              <div className="perp-hero-tag">
-                <TokenIcon token={{ symbol: pair.symbol, image: coin.image }} size={22} />
-                <span className="perp-hero-sym">{pair.symbol}-PERP</span>
-                <span className="perp-hero-live" aria-hidden="true"><i /></span>
-                <span className="faint">{t('perp.indexPrice')}</span>
-              </div>
-              <div className="stat-value perp-hero-value">
-                <AnimatedNumber value={coin.price} format={(v) => `$${fmtPrice(v)}`} />
-              </div>
-              <span className={`pill ${coin.change24h >= 0 ? 'pill-up' : 'pill-down'}`}>
-                {fmtPct(coin.change24h)}
-              </span>
-            </div>
-            <div className="perp-hero-range">
-              <div className="perp-hero-range-cell">
-                <span className="faint">{t('coin.high24h')}</span>
-                <span className="mono perp-hero-range-high">${fmtPrice(coin.high24h)}</span>
-              </div>
-              <div className="perp-hero-range-cell">
-                <span className="faint">{t('coin.low24h')}</span>
-                <span className="mono perp-hero-range-low">${fmtPrice(coin.low24h)}</span>
-              </div>
-            </div>
-          </div>
-          <div className="perp-hero-spark">
-            <Sparkline data={coin.sparkline ?? []} up={coin.change24h >= 0} width={440} height={56} strokeWidth={2} />
-          </div>
-          <p className="faint perp-hero-note">{t('perp.indexNote')}</p>
-        </motion.section>
-      ) : null}
-
-      {/* ─────────────── THE LIVE CANDLE CHART ───────────────
-          The shared FuturesMarketChart against the venue's own candle feed:
-          real 15m/1h/4h/1d candles, or its honest "unavailable" — never a
-          fabricated series. Pairs the venue does not list get an honest note
-          instead of a chart pretending to be one. */}
-      {venueMarket ? (
-        <motion.section className="card card-rgb perp-chart" variants={riseIn} initial="hidden" animate="show">
-          <div className="sheen" />
-          <FuturesMarketChart
-            provider="drift"
-            market={String(venueMarket.marketId)}
-            symbol={`${pair.symbol}-PERP`}
-            testId="perp-terminal-chart"
-          />
-        </motion.section>
-      ) : (
-        <motion.section className="card perp-chart perp-chart-none" variants={riseIn} initial="hidden" animate="show" data-testid="perp-chart-unavailable">
-          <p className="faint" style={{ margin: 0, lineHeight: 1.8 }}>{t('perp.terminal.chartPairUnavailable')}</p>
-        </motion.section>
-      )}
-
-        </div>
-        <div className="perp-desk-col">
-
-      {/* ─────────────── THE ORDER TICKET ───────────────
-          A real exchange ticket: direction, stablecoin collateral, leverage
-          chips + slider, and the two numbers a leveraged trader must see
-          before confirming — position size and the distance to liquidation. */}
-      <motion.section className="card card-rgb perp-ticket" variants={riseIn} initial="hidden" animate="show" data-testid="perp-ticket">
-        <div className="sheen" />
-        <div className="perp-ticket-head">
-          <span className="section-label">{t('perp.terminal.ticketTitle')}</span>
-          <span className="perp-ticket-pair">
-            <TokenIcon token={{ symbol: pair.symbol, image: coin?.image }} size={18} />
-            {pair.symbol}-PERP
-          </span>
-        </div>
-
-        {/* direction — the app's standard long/short switch */}
-        <div className="dir-switch">
-          <button
-            type="button"
-            className={`dir-btn long ${side === 'long' ? 'active' : ''}`}
-            onClick={() => { haptic?.('light'); setSide('long'); }}
-          >
-            <span className="dir-ico" aria-hidden="true">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
-              </svg>
-            </span>
-            {t('perp.terminal.long')}
-            <span className="dir-sub">{t('perp.terminal.longSub')}</span>
-          </button>
-          <button
-            type="button"
-            className={`dir-btn short ${side === 'short' ? 'active' : ''}`}
-            onClick={() => { haptic?.('light'); setSide('short'); }}
-          >
-            <span className="dir-ico" aria-hidden="true">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 5v14" /><path d="m19 12-7 7-7-7" />
-              </svg>
-            </span>
-            {t('perp.terminal.short')}
-            <span className="dir-sub">{t('perp.terminal.shortSub')}</span>
-          </button>
-        </div>
-
-        {/* collateral — stablecoin amount + asset */}
-        <div className="perp-field">
-          <span className="field-label">{t('perp.terminal.collateral')}</span>
-          <div className="perp-collateral-row">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={collateral}
-              onChange={(e) => setCollateral(e.target.value)}
-              aria-label={t('perp.terminal.collateral')}
-              data-testid="perp-collateral"
-            />
-            <div className="perp-asset-chips" role="group" aria-label={t('perp.terminal.collateralAsset')}>
-              {['USDC', 'USDT'].map((a) => (
+                </div>
                 <button
-                  key={a}
                   type="button"
-                  className={`perp-asset-chip ${collateralAsset === a ? 'active' : ''}`}
-                  onClick={() => { haptic?.('light'); setCollateralAsset(a); }}
+                  className="perp-row-go"
+                  onClick={() => { haptic?.('light'); openTrade(p.symbol); }}
+                  aria-label={t('perp.terminal.trade', { symbol: p.symbol })}
+                  data-testid={`perp-row-open-${p.symbol}`}
                 >
-                  {a}
+                  {t('perp.terminal.trade')}
                 </button>
-              ))}
-            </div>
-          </div>
-          {!collateralOk && collateral !== '' && (
-            <span className="perp-field-err">{t('perp.terminal.minCollateral', { min: MIN_COLLATERAL_USD })}</span>
-          )}
+              </div>
+            );
+          })}
         </div>
-
-        {/* leverage — chips + slider, capped at the product policy */}
-        <div className="perp-field">
-          <div className="perp-lev-head">
-            <span className="field-label">{t('perp.terminal.leverage')}</span>
-            <span className="mono perp-lev-value" data-testid="perp-leverage">{leverageOk ? `${Number(leverageNum.toFixed(2))}×` : '—'}</span>
-          </div>
-          <div className="lev-row">
-            {LEVERAGE_PRESETS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`lev-chip ${leverageOk && leverageNum === n ? 'active' : ''}`}
-                onClick={() => { haptic?.('light'); setLeverage(String(n)); }}
-              >
-                {n}×
-              </button>
-            ))}
-          </div>
-          <input
-            type="range"
-            min="1"
-            max={MAX_LEVERAGE}
-            step="0.5"
-            value={leverageOk ? Math.min(leverageNum, MAX_LEVERAGE) : 1}
-            onChange={(e) => setLeverage(e.target.value)}
-            className="perp-lev-slider"
-            style={{ width: '100%', marginTop: 8, accentColor: 'var(--rgb-1)' }}
-            aria-label={t('perp.terminal.leverage')}
-          />
-        </div>
-
-        {/* live ticket math — the two numbers that decide the trade */}
-        <div className="perp-summary" data-testid="perp-summary">
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.notional')}</span>
-            <span className="mono perp-summary-strong">
-              {notional == null ? '—' : fmtUsd(notional)}
-            </span>
-          </div>
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.entry')}</span>
-            <span className="mono">{entryPrice == null ? '—' : `$${fmtPrice(entryPrice)}`}</span>
-          </div>
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.liqPrice')}</span>
-            <span className={`mono ${side === 'long' ? 'perp-liq-long' : 'perp-liq-short'}`}>
-              {liq.liquidationPrice == null ? '—' : `$${fmtPrice(liq.liquidationPrice)}`}
-            </span>
-          </div>
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.liqDistance')}</span>
-            <span className="mono">
-              {liq.distancePct == null ? '—' : `−${liq.distancePct.toFixed(2)}%`}
-            </span>
-          </div>
-        </div>
-        <p className="faint perp-liq-note">{t('perp.terminal.liqNote')}</p>
-
-        {/*
-          ─── RISK CONTROLS, FOLDED ─────────────────────────────────────────
-          Take profit, stop loss and the slippage ceiling are optional
-          refinements, so they live behind one tap — but the slippage value is
-          the app-wide setting, written through the same store action every
-          other trading screen uses, never a second copy of the number.
-        */}
-        <InfoBox title={t('perp.terminal.riskControls')} tone="info" id="perp-terminal-risk">
-          <div className="row" style={{ gap: 10 }}>
-            <label style={{ flex: 1 }}>
-              <span className="faint">{t('perp.terminal.takeProfit')}</span>
-              <input type="text" inputMode="decimal" placeholder="0" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} />
-            </label>
-            <label style={{ flex: 1 }}>
-              <span className="faint">{t('perp.terminal.stopLoss')}</span>
-              <input type="text" inputMode="decimal" placeholder="0" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} />
-            </label>
-          </div>
-          <label className="perp-slip">
-            <span className="faint">{t('perp.terminal.slippageLabel', { value: slippagePct })}</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={String(slippagePct)}
-              onChange={(e) => setSlippage(e.target.value)}
-              aria-label={t('perp.terminal.slippageAria')}
-            />
-          </label>
-          <p>{t('perp.terminal.slippageNote')}</p>
-        </InfoBox>
-
-        {/*
-          ─── THE FINAL BUTTON ──────────────────────────────────────────────
-          Which wallet is asked for is decided by the ROUTE, not by whichever
-          one happens to be connected: the in-app venue settles on Solana, so
-          a user with only an EVM wallet is told to connect the Solana one
-          rather than pressing a button that cannot produce a signature.
-
-          Connected → the review sheet: the whole ticket, the fee split and
-          the earning route, named, before a single confirmation. The order is
-          then built and signed ON THIS SCREEN.
-        */}
-        {tradingConnected ? (
-          <button
-            type="button"
-            className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'} perp-submit`}
-            disabled={!canConfirm || preparing || signing}
-            onClick={startReview}
-            data-testid="perp-submit"
-          >
-            {preparing || signing ? t('perp.terminal.preparing') : t('perp.terminal.review')}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary perp-submit"
-            onClick={startReview}
-            data-testid="perp-connect"
-          >
-            <IconWallet width={16} height={16} style={{ display: 'inline', marginInlineEnd: 6 }} />
-            {routeInApp ? t('perp.terminal.connectSolana') : t('perp.terminal.connect')}
-          </button>
-        )}
-        {tradingConnected && tradingAddress ? (
-          <p className="faint perp-wallet-line" data-testid="perp-wallet-row">
-            <IconShield width={13} height={13} style={{ display: 'inline', marginInlineEnd: 4, verticalAlign: '-2px' }} />
-            {t('perp.terminal.connectedAs', { address: shortAddress(tradingAddress) })}
-          </p>
-        ) : (
-          <p className="faint perp-wallet-line">{t('perp.terminal.walletHint')}</p>
-        )}
-
-        {/* ─── THE RESULT, BEFORE ANYTHING ELSE IS CLAIMED ────────────────
-            The hash is on screen because the backend's ledger recorded it, not
-            because the client says so. A leverage ticket that silently
-            vanished after a signature is the failure this closes. */}
-        {lastTx?.hash && (
-          <div className="notice perp-tx-notice" data-testid="perp-tx" role="status">
-            <p style={{ margin: 0 }}>{t('perp.terminal.signed')}</p>
-            <a
-              className="mono"
-              style={{ display: 'block', marginTop: 6, fontSize: 11, wordBreak: 'break-all' }}
-              href={lastTx.chain === 'solana'
-                ? `https://solscan.io/tx/${lastTx.hash}`
-                : `https://etherscan.io/tx/${lastTx.hash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {lastTx.hash}
-            </a>
-          </div>
-        )}
-      </motion.section>
-
-      {/* ─────────────── THE FEE BREAKDOWN ───────────────
-          Protocol, network and the FBT share, from the backend's shared
-          engine when the in-app route serves this pair — and honest
-          placeholders otherwise. The last line always states WHO the fee
-          share goes to, because that is the arrangement being made. */}
-      <motion.section className="card perp-fees" variants={riseIn} initial="hidden" animate="show" data-testid="perp-fee-breakdown">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('perp.terminal.fee.title')}</p>
-        <div className="perp-fee-rows">
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.fee.protocol')}</span>
-            <span className="mono">{fee?.protocol?.known ? fmtUsd(fee.protocol.feeUsd) : t('perp.terminal.fee.protocolLater')}</span>
-          </div>
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.fee.network')}</span>
-            <span className="mono">{fee?.network?.known ? fmtUsd(fee.network.feeUsd) : t('perp.terminal.fee.networkLater')}</span>
-          </div>
-          <div className="row-between">
-            <span className="faint">{t('perp.terminal.fee.fbt')}</span>
-            <span className="mono">
-              {fee ? `${fmtUsd(fee.fbt.feeUsd)} · ${fee.fbt.bps} bps` : t('perp.terminal.fee.fbtLater')}
-            </span>
-          </div>
-          <div className="row-between perp-fee-total">
-            <strong>{t('perp.terminal.fee.total')}</strong>
-            <strong className="mono">{fee?.complete ? fmtUsd(fee.totalFeeUsd) : t('perp.terminal.fee.totalLater')}</strong>
-          </div>
-        </div>
-        <p className="faint perp-fee-note">
-          {routeInApp
-            ? t('perp.terminal.fee.treasury', {
-                address: fee?.fbt?.recipient ? shortAddress(fee.fbt.recipient) : '—'
-              })
-            : t('perp.terminal.fee.discount', { code: AVANTIS_CODE, pct: REFERRAL_DISCOUNT_PCT })}
-        </p>
-        {!fee && routeInApp && <p className="faint perp-fee-note">{t('perp.terminal.fee.unavailable')}</p>}
-      </motion.section>
+      )}
 
         </div>
-      </div>
-
+      )}
       {/*
         ─── THE COST OF HOLDING, BEFORE ANYTHING ELSE ──────────────────────
         Placed directly under the terminal, because it is the only thing on
@@ -1209,146 +912,292 @@ export default function Perp() {
       </InfoBox>
 
       {/*
-        ─── HOW PERPETUALS ACTUALLY WORK ──────────────────────────────────
-        Someone arriving here does not know what funding is, what liquidation
-        price means, or why 100x is a way to lose everything on a 1% move —
-        and the ticket above is one tap away from venues where all three
-        apply with real money. Explaining it after the terminal is deliberate:
-        the tool first, the school right under it.
+        ─── THE TRADE SHEET ─────────────────────────────────────────────────
+        The whole terminal, over the whole screen, for one pair.
+
+        Why full-height and not a dialog: a leveraged ticket has a chart, a
+        price, a number to change, a leverage control and a button that costs
+        money. A dialog that has to scroll three times to show the liquidation
+        distance is a dialog that gets confirmed without reading it — and this
+        is the one place in the app where reading is the safety mechanism. The
+        sheet is sized to the viewport and the button sits within reach of
+        everything it acts on.
+
+        The button is the wallet's truth, not a preference. A user with no
+        wallet gets «اتصال کیف پول» and nothing that looks like a trade; a
+        user with one gets the trade. Showing «خرید» to someone with no wallet
+        only moves the surprise one tap later, into the signing flow.
       */}
-      <motion.section className="card perp-learn" variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 10 }}>{t('perp.learnTitle')}</p>
-        <div className="stack" style={{ gap: 12 }}>
-          {['what', 'funding', 'liquidation', 'leverage', 'costs'].map((k, i) => (
-            <div key={k} className="perp-learn-item">
-              <div className="perp-learn-q">
-                <span className="perp-learn-num" aria-hidden="true">{i + 1}</span>
-                {t(`perp.learn.${k}.q`)}
+      {/* No `title`: the ticket draws its own header, and a sheet title bar
+          above it would print the pair name twice. */}
+      <Sheet
+        open={tradeOpen}
+        onClose={closeTrade}
+        size="lg"
+        className="perp-sheet-full"
+        testId="perp-trade-sheet"
+      >
+        <div className="perp-sheet" data-testid="perp-trade-body">
+          {/* ---- header: price and change, live ---- */}
+          <div className="perp-sheet-head">
+            <div className="perp-sheet-id">
+              <TokenIcon token={{ symbol: pair.symbol, image: coin?.image }} size={40} />
+              <div>
+                <div className="perp-sheet-sym">
+                  {pair.symbol}-PERP
+                  {venueMarket && <span className="perp-sheet-tag">{t('perp.terminal.inApp')}</span>}
+                </div>
+                <div className="perp-sheet-venue">
+                  {coin?.name ?? t('perp.terminal.pairPerp')}
+                  {tradingConnected && tradingAddress && (
+                    <span className="perp-sheet-wallet" data-testid="perp-sheet-wallet">
+                      {shortAddress(tradingAddress)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="muted perp-learn-a">
-                {t(`perp.learn.${k}.a`)}
+            </div>
+            <div className="perp-sheet-price" data-testid="perp-sheet-price">
+              {entryPrice == null ? '—' : `$${fmtPrice(entryPrice)}`}
+              {coin && coinIsLive(coin) && (
+                <span className={`perp-row-chg ${coin.change24h >= 0 ? 'up' : 'down'}`}>
+                  {fmtPct(coin.change24h)}
+                </span>
+              )}
+            </div>
+            {/* The sheet fills the screen, so the way out has to be IN it — a
+                full-bleed overlay with no visible dismiss is a trap on mobile,
+                where there is no back gesture to fall back on. */}
+            <button
+              type="button"
+              className="perp-sheet-close"
+              onClick={closeTrade}
+              aria-label={t('common.close')}
+              data-testid="perp-sheet-close"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {indexOffline && (
+            <p className="notice" data-testid="perp-index-unavailable">
+              {t('perp.marketDataUnavailable')}
+            </p>
+          )}
+
+          {/* ---- the chart ---- */}
+          {venueMarket ? (
+            <div className="perp-sheet-chart" data-testid="perp-sheet-chart">
+              <FuturesMarketChart
+                provider="drift"
+                market={String(venueMarket.marketId)}
+                symbol={`${pair.symbol}-PERP`}
+                testId="perp-terminal-chart"
+              />
+            </div>
+          ) : (
+            <div className="perp-sheet-chart perp-chart-none" data-testid="perp-chart-unavailable">
+              <p className="faint" style={{ margin: 0, lineHeight: 1.8 }}>
+                {t('perp.terminal.chartPairUnavailable')}
               </p>
             </div>
-          ))}
-        </div>
+          )}
 
-        {/*
-          The liquidation table. An abstract warning about leverage does not
-          land; a column showing that 50x liquidates on a 2% move does.
-        */}
-        <p className="section-label" style={{ margin: '14px 0 8px' }}>{t('perp.liqTitle')}</p>
-        <div className="perp-liq-wrap">
-          <table className="perp-liq">
-            <thead>
-              <tr>
-                <th>{t('perp.liqLeverage')}</th>
-                <th>{t('perp.liqMove')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[2, 5, 10, 25, 50, 100].map((x) => (
-                <tr key={x} className={x >= 25 ? 'perp-liq-danger' : ''}>
-                  <td className="mono"><span className="perp-liq-x">{x}×</span></td>
-                  {/* 100/x, the actual arithmetic — not a rounded illustration. */}
-                  <td className="mono" style={{ color: x >= 25 ? 'var(--down)' : 'var(--text-2)' }}>
-                    {(100 / x).toFixed(x >= 50 ? 1 : 0)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7 }}>
-          {t('perp.liqNote')}
-        </p>
-      </motion.section>
-
-      {/* ---------- venues ---------- */}
-      <section>
-        <p className="section-label">{t('perp.venues')}</p>
-        <motion.div className="perp-venues" variants={stagger} initial="hidden" animate="show">
-          {VENUES.map((v) => (
-            <motion.button
-              key={v.id}
-              className="perp-venue"
-              style={{ '--perp-venue-accent': v.color }}
-              variants={riseIn}
-              whileTap={{ scale: 0.985 }}
-              onClick={() => openVenue(v.id, v.url)}
+          {/* ---- direction ---- */}
+          <div className="dir-switch">
+            <button
+              type="button"
+              className={`dir-btn long ${side === 'long' ? 'active' : ''}`}
+              onClick={() => { haptic?.('light'); setSide('long'); }}
+              data-testid="perp-sheet-long"
             >
-              <span className="perp-venue-badge">
-                {t(`perp.venue.${v.id}.short`)}
+              <span className="dir-ico" aria-hidden="true">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
+                </svg>
               </span>
-              <span className="perp-venue-body">
-                <span className="perp-venue-name">
-                  {t(`perp.venue.${v.id}.name`)}
-                </span>
-                <span className="set-row-sub perp-venue-desc">{t(`perp.venue.${v.id}.desc`)}</span>
-                <span className="perp-venue-pills">
-                  <span className="pill pill-neutral">{v.pairs} {t('perp.pairs')}</span>
-                  <span className="pill pill-rgb">{t('perp.upTo')} {v.leverage}</span>
-                </span>
+              {t('perp.terminal.long')}
+              <span className="dir-sub">{t('perp.terminal.longSub')}</span>
+            </button>
+            <button
+              type="button"
+              className={`dir-btn short ${side === 'short' ? 'active' : ''}`}
+              onClick={() => { haptic?.('light'); setSide('short'); }}
+              data-testid="perp-sheet-short"
+            >
+              <span className="dir-ico" aria-hidden="true">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14" /><path d="m19 12-7 7-7-7" />
+                </svg>
               </span>
-              <span className="perp-venue-go" aria-hidden="true">
-                <IconExternal width={16} height={16} />
-              </span>
-            </motion.button>
-          ))}
-        </motion.div>
-      </section>
+              {t('perp.terminal.short')}
+              <span className="dir-sub">{t('perp.terminal.shortSub')}</span>
+            </button>
+          </div>
 
-      {/*
-        ─── THE NOTICE HAS TO TRACK REALITY ──────────────────────────────────
-        `perp.thirdPartyNotice` says we "earn nothing from them". The same
-        flag that decides whether to ATTACH a referral code decides which
-        sentence is shown, so they cannot disagree.
-      */}
-      <InfoBox title={t('perp.venuesTitle')} tone="warn" id="perp-venues">
-        <p>
-          {anyVenueEarns(VENUES.map((v) => v.id))
-            ? t('perp.thirdPartyNoticeEarning')
-            : t('perp.thirdPartyNotice')}
-        </p>
-      </InfoBox>
+          {/* ---- the amount ---- */}
+          <div className="perp-field">
+            <span className="field-label">{t('perp.terminal.collateral')}</span>
+            <div className="perp-collateral-row">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={collateral}
+                onChange={(e) => setCollateral(e.target.value)}
+                aria-label={t('perp.terminal.collateral')}
+                data-testid="perp-sheet-amount"
+              />
+              <div className="perp-asset-chips" role="group" aria-label={t('perp.terminal.collateralAsset')}>
+                {['USDC', 'USDT'].map((a2) => (
+                  <button
+                    key={a2}
+                    type="button"
+                    className={`perp-asset-chip ${collateralAsset === a2 ? 'active' : ''}`}
+                    onClick={() => { haptic?.('light'); setCollateralAsset(a2); }}
+                  >
+                    {a2}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {!collateralOk && collateral !== '' && (
+              <span className="perp-field-err">{t('perp.terminal.minCollateral', { min: MIN_COLLATERAL_USD })}</span>
+            )}
+          </div>
 
-      {/*
-        ─── THE "PRACTICE WITH VIRTUAL CREDIT" DOORWAY ─────────────────────
-        Same destination, same copy keys, same honesty (it still says the
-        credit is virtual) — a real card with an icon tile and a chevron.
-      */}
-      <motion.button
-        className="card card-rgb perp-cta"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        whileTap={{ scale: 0.985 }}
-        onClick={() => navigate('/predict')}
-        style={{ textAlign: 'start', cursor: 'pointer' }}
-      >
-        <div className="sheen" />
-        <div className="perp-cta-row">
-          <span className="perp-cta-ico" aria-hidden="true"><IconSparkle width={18} height={18} /></span>
-          <span className="perp-cta-copy">
-            <span className="perp-cta-title">{t('perp.tryPredict')}</span>
-            <span className="perp-cta-sub">{t('perp.tryPredictSub')}</span>
-          </span>
-          <span className="perp-cta-arrow" aria-hidden="true">
-            <IconChevronRight width={16} height={16} />
-          </span>
+          {/* ---- leverage ---- */}
+          <div className="perp-field">
+            <div className="perp-lev-head">
+              <span className="field-label">{t('perp.terminal.leverage')}</span>
+              <span className="mono perp-lev-value" data-testid="perp-leverage">
+                {leverageOk ? `${Number(leverageNum.toFixed(2))}×` : '—'}
+              </span>
+            </div>
+            <div className="lev-row">
+              {LEVERAGE_PRESETS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={`lev-chip ${leverageOk && leverageNum === n ? 'active' : ''}`}
+                  onClick={() => { haptic?.('light'); setLeverage(String(n)); }}
+                >
+                  {n}×
+                </button>
+              ))}
+            </div>
+            <input
+              type="range"
+              min="1"
+              max={MAX_LEVERAGE}
+              step="0.5"
+              value={leverageOk ? Math.min(leverageNum, MAX_LEVERAGE) : 1}
+              onChange={(e) => setLeverage(e.target.value)}
+              className="perp-lev-slider"
+              style={{ width: '100%', marginTop: 8, accentColor: 'var(--rgb-1)' }}
+              aria-label={t('perp.terminal.leverage')}
+            />
+          </div>
+
+          {/* ---- the numbers that decide it ---- */}
+          <div className="perp-summary" data-testid="perp-summary">
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.notional')}</span>
+              <span className="mono perp-summary-strong" data-testid="perp-sheet-size">
+                {notional == null ? '—' : fmtUsd(notional)}
+              </span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.liqPrice')}</span>
+              <span className={`mono ${side === 'long' ? 'perp-liq-long' : 'perp-liq-short'}`}>
+                {liq.liquidationPrice == null ? '—' : `$${fmtPrice(liq.liquidationPrice)}`}
+              </span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.liqDistance')}</span>
+              {/*
+                The distance is a MAGNITUDE — 20% either way — but it is
+                signed by direction, because a long is closed by a fall and
+                a short by a rise. Printing an unsigned «20%» for both sides
+                would be the most dangerous single number on this screen:
+                it would read as "safe" to a short who needs a 20% rally to
+                survive, and as a loss to a long who needs a 20% drop.
+              */}
+              <span className="mono" data-testid="perp-sheet-liq">
+                {liq.distancePct == null
+                  ? '—'
+                  : `${side === 'long' ? '▼' : '▲'} ${side === 'long' ? '−' : '+'}${liq.distancePct.toFixed(2)}%`}
+              </span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.fee.title')}</span>
+              <span className="mono">
+                {fee?.protocol?.known ? fmtUsd(fee.protocol.feeUsd) : t('perp.terminal.fee.protocolLater')}
+              </span>
+            </div>
+          </div>
+          <p className="faint perp-liq-note">{t('perp.terminal.liqNote')}</p>
+
+          {/* ---- risk controls, folded ---- */}
+          <InfoBox title={t('perp.terminal.riskControls')} tone="info" id="perp-terminal-risk">
+            <div className="row" style={{ gap: 10 }}>
+              <label style={{ flex: 1 }}>
+                <span className="faint">{t('perp.terminal.takeProfit')}</span>
+                <input type="text" inputMode="decimal" placeholder="0" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} />
+              </label>
+              <label style={{ flex: 1 }}>
+                <span className="faint">{t('perp.terminal.stopLoss')}</span>
+                <input type="text" inputMode="decimal" placeholder="0" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} />
+              </label>
+            </div>
+          </InfoBox>
+
+          {/*
+            ─── THE RISK NOTICE, AT THE POINT OF THE BUTTON ───────────────────
+            It used to sit above a hundred pairs, where it was one more thing
+            between the user and the list. Here it is one thing above the thing
+            it is about — which is the only place a warning can do any work.
+          */}
+          <p className="notice notice-danger" data-testid="perp-risk-note">{t('perp.riskNotice')}</p>
+
+          {lastTx?.hash && (
+            <div className="notice perp-tx-notice" data-testid="perp-tx" role="status">
+              <p style={{ margin: 0 }}>{t('perp.terminal.signed')}</p>
+              <span className="mono" style={{ display: 'block', marginTop: 6, fontSize: 11, wordBreak: 'break-all' }}>
+                {lastTx.hash}
+              </span>
+            </div>
+          )}
+
+          {/* ---- THE ONE BUTTON ---- */}
+          {tradingConnected && tradingAddress ? (
+            <button
+              type="button"
+              className={`btn perp-sheet-go ${side}`}
+              disabled={!canConfirm || preparing || signing}
+              onClick={startReview}
+              data-testid="perp-sheet-confirm"
+            >
+              {preparing || signing
+                ? t('perp.terminal.preparing')
+                : side === 'long'
+                  ? t('perp.terminal.long')
+                  : t('perp.terminal.short')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary perp-sheet-go"
+              onClick={() => setWalletOpen(true)}
+              data-testid="perp-sheet-connect"
+            >
+              <IconWallet width={16} height={16} style={{ display: 'inline', marginInlineEnd: 6 }} />
+              {t('perp.terminal.connect')}
+            </button>
+          )}
         </div>
-      </motion.button>
-
-      {/*
-        ─── HOW FUTURES WORK — the education box ────────────────────────────
-        Kept as the folded explainer it has always been; the terminal above
-        is the tool, this is the manual.
-      */}
-      <InfoBox title={t('perp.how.title')} tone="info" id="perp-how">
-        <p>{t('perp.how.p1')}</p>
-        <p>{t('perp.how.p2')}</p>
-        <p>{t('perp.how.p3')}</p>
-        <p>{t('perp.how.p4')}</p>
-      </InfoBox>
+      </Sheet>
 
       {/*
         ─── THE REVIEW & SIGN SHEET ─────────────────────────────────────────
@@ -1413,26 +1262,70 @@ export default function Perp() {
                 {tp == null ? '—' : `$${fmtPrice(tp)}`} / {sl == null ? '—' : `$${fmtPrice(sl)}`}
               </span>
             </div>
+            {/*
+              The whole fee split, here, in the one place the user reads
+              before they sign. It used to sit on the page as its own table,
+              which meant it was visible while browsing and gone by the time
+              the money was actually being spent — the exact inverse of what
+              a fee disclosure is for.
+
+              Each leg reads defensively: a preview the backend did not
+              complete shows the placeholder sentence, never a zero. A zero
+              here would read as "this trade is free".
+            */}
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.fee.protocol')}</span>
+              <span className="mono">
+                {fee?.protocol?.known ? fmtUsd(fee.protocol.feeUsd) : t('perp.terminal.fee.protocolLater')}
+              </span>
+            </div>
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.fee.network')}</span>
+              <span className="mono">
+                {fee?.network?.known ? fmtUsd(fee.network.feeUsd) : t('perp.terminal.fee.networkLater')}
+              </span>
+            </div>
             <div className="row-between">
               <span className="faint">{t('perp.terminal.fee.fbt')}</span>
-              <span className="mono">{fee ? `${fmtUsd(fee.fbt.feeUsd)} · ${fee.fbt.bps} bps` : t('perp.terminal.fee.fbtLater')}</span>
+              <span className="mono">
+                {Number.isFinite(Number(fee?.fbt?.feeUsd))
+                  ? `${fmtUsd(fee.fbt.feeUsd)} · ${fee.fbt.bps} bps`
+                  : t('perp.terminal.fee.fbtLater')}
+              </span>
             </div>
+            <div className="row-between">
+              <span className="faint">{t('perp.terminal.fee.total')}</span>
+              <span className="mono">
+                {fee?.complete ? fmtUsd(fee.totalFeeUsd) : t('perp.terminal.fee.totalLater')}
+              </span>
+            </div>
+            {/*
+              And WHO the share goes to. This is an arrangement, not an
+              implementation detail, and the line that discloses it belongs
+              next to the number rather than in a table nobody opens.
+            */}
+            {routeInApp && (
+              <p className="faint" style={{ margin: 0, fontSize: 11, lineHeight: 1.7 }}>
+                {t('perp.terminal.fee.treasury', {
+                  address: fee?.fbt?.recipient ? shortAddress(fee.fbt.recipient) : '—'
+                })}
+              </p>
+            )}
           </div>
 
           {/*
             The route line — the part a "looks like an exchange" screen must
-            never hide. The in-app route now also says the two things that
-            matter about it: it settles from the user's own wallet, and the
-            signature happens HERE, on this screen.
+            never hide. There is only one route now: built here, risk-checked
+            here, signed here, from the user's own wallet. A pair this app
+            cannot execute says so on the ticket instead of being routed
+            somewhere else.
           */}
           <div className="card card-tight perp-route" data-testid="perp-review-route">
             <span className="perp-route-ico" aria-hidden="true">
-              {routeInApp ? <IconRoute width={18} height={18} /> : <IconExternal width={16} height={16} />}
+              <IconRoute width={18} height={18} />
             </span>
             <p style={{ margin: 0, lineHeight: 1.7 }}>
-              {routeInApp
-                ? t('perp.terminal.route.inApp')
-                : t('perp.terminal.route.avantis', { code: AVANTIS_CODE })}
+              {routeInApp ? t('perp.terminal.route.inApp') : t('perp.terminal.route.notListed')}
             </p>
           </div>
 
@@ -1496,8 +1389,6 @@ export default function Perp() {
       </Sheet>
 
       <WalletConnectSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
-        </div>
-      )}
     </PageTransition>
   );
 }

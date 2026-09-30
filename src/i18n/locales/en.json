@@ -1811,7 +1811,24 @@
       "p1": "A perpetual future is a contract that tracks an asset’s price without ever expiring. You are not buying the coin — you are taking a position on where its price goes, and you can do that in either direction.",
       "p2": "Leverage means the exchange lends you exposure. At 10x, $100 of your own money controls $1,000 of position. A 10% move in your favour doubles your money; a 10% move against you erases it entirely. That second sentence is the one that matters and it is why most accounts using high leverage end at zero.",
       "p3": "Because the contract never expires, a \"funding rate\" keeps its price tied to the real market. Every few hours, whichever side is crowded pays the other. Hold a position long enough and funding alone can cost more than the price move you were right about.",
-      "p4": "Liquidation is automatic. If the market moves far enough against you, the position closes and the money is gone — there is no margin call and nobody to appeal to."
+      "p4": "Liquidation is automatic. If the market moves far enough against you, the position closes and the money is gone — there is no margin call and nobody to appeal to.",
+      "sub": "Leverage, liquidation and funding — in 30 seconds",
+      "what": {
+        "t": "A perpetual never expires",
+        "d": "It tracks the price of the coin, so you are taking a position on where the price goes — not buying the coin itself. That is why you can go long or short on the same pair."
+      },
+      "liquidate": {
+        "t": "Leverage can wipe out the position",
+        "d": "The more leverage, the smaller the opposite move that closes your position. The exact price is always shown on the trade screen before you confirm — that is the number to read, not the leverage slider."
+      },
+      "funding": {
+        "t": "Holding costs a little",
+        "d": "Perpetuals settle funding between long and short traders every few hours. If your side is the popular one you pay; if it is the crowded one you receive it. It is usually small — but it accrues every hour you hold."
+      },
+      "fees": {
+        "t": "You pay fees on entry and exit",
+        "d": "The exact split is shown before you confirm, and the whole order is built and risk-checked by this app — then signed by your own wallet. This app never holds your funds or your keys."
+      }
     },
     "venuesTitle": "Who runs these markets?",
     "marketDataUnavailable": "Market data temporarily unavailable. No saved price is shown on a leverage screen.",
@@ -1852,7 +1869,8 @@
       "confirmAvantis": "Confirm & continue on Avantis",
       "route": {
         "inApp": "Execution route: the on-chain tab of this page. The order is rebuilt there with these exact numbers, fees and risk are re-checked by the backend, and signing happens only in your own wallet; the builder fee goes to FBT.",
-        "avantis": "Execution route: Avantis on Base with the registered referral code {{code}} — no capital lock-up, no KYC."
+        "avantis": "Execution route: Avantis on Base with the registered referral code {{code}} — no capital lock-up, no KYC.",
+        "notListed": "This pair has no market in this app, so it cannot be traded here. Nothing leaves your wallet."
       },
       "fee": {
         "title": "Transparent fee breakdown",
@@ -1886,9 +1904,12 @@
         "USER_REJECTED": "You rejected the signature in your wallet. Nothing was sent.",
         "QUOTE_EXPIRED": "The quote expired. Close this and build the order again.",
         "RISK_BLOCKED": "The risk engine refused this order. Nothing was sent.",
-        "MARKET_NOT_LISTED": "This venue does not list that pair. Pick another one from the strip.",
+        "MARKET_NOT_LISTED": "This pair is not open for trading in this app yet. Nothing was sent, and no funds moved — pick another pair from the list.",
         "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent — try again in a moment."
-      }
+      },
+      "trade": "Trade",
+      "pairPerp": "Perpetual",
+      "inApp": "in this app"
     }
   },
   "farm": {

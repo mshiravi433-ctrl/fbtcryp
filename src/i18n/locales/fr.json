@@ -2464,8 +2464,33 @@
         "USER_REJECTED": "Vous avez refusé la signature. Rien n’a été envoyé.",
         "QUOTE_EXPIRED": "Le devis a expiré. Fermez et reconstruisez l’ordre.",
         "RISK_BLOCKED": "Le moteur de risque a refusé cet ordre. Rien n’a été envoyé.",
-        "MARKET_NOT_LISTED": "Cette plateforme ne liste pas cette paire. Choisissez-en une autre.",
+        "MARKET_NOT_LISTED": "Cette paire n’est pas encore ouverte au trading dans cette application. Rien n’a été envoyé, aucun fonds n’a bougé : choisissez une autre paire dans la liste.",
         "PROVIDER_UNAVAILABLE": "La plateforme n’a pas répondu. Rien n’a été envoyé — réessayez dans un instant."
+      },
+      "trade": "Trader",
+      "pairPerp": "Perpétuel",
+      "inApp": "dans cette app",
+      "route": {
+        "notListed": "Cette paire n’a pas de marché dans cette application : elle ne peut pas être négociée ici. Rien ne quitte votre portefeuille."
+      }
+    },
+    "how": {
+      "sub": "Effet de levier, liquidation et financement — en 30 secondes",
+      "what": {
+        "t": "Un perpétuel n’arrive jamais à échéance",
+        "d": "Il suit le prix de la pièce : vous prenez position sur la direction du prix, pas sur la pièce. C’est pourquoi vous pouvez être long ou short sur la même paire."
+      },
+      "liquidate": {
+        "t": "L’effet de levier peut liquider la position",
+        "d": "Plus l’effet de levier est élevé, plus le mouvement adverse qui ferme votre position est faible. Le prix exact est toujours affiché avant confirmation : c’est ce chiffre qu’il faut lire, pas le curseur."
+      },
+      "funding": {
+        "t": "Garder la position a un coût",
+        "d": "Les perpétuels règlent le financement entre longs et shorts toutes les quelques heures. Si votre côté est le plus prisé, vous payez ; s’il est le plus encombré, vous recevez. C’est généralement faible, mais cela s’accumule chaque heure."
+      },
+      "fees": {
+        "t": "Vous payez des frais à l’entrée et à la sortie",
+        "d": "La répartition exacte est affichée avant confirmation, et l’ordre est construit et vérifié par cette application — puis signé par votre portefeuille. Cette application ne conserve jamais vos fonds ni vos clés."
       }
     }
   }

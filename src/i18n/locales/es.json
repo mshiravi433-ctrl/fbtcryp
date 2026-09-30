@@ -2464,8 +2464,33 @@
         "USER_REJECTED": "Rechazaste la firma en tu wallet. No se envió nada.",
         "QUOTE_EXPIRED": "La cotización caducó. Ciérrala y vuelve a crear la orden.",
         "RISK_BLOCKED": "El motor de riesgo rechazó la orden. No se envió nada.",
-        "MARKET_NOT_LISTED": "Este venue no lista ese par. Elige otro en la barra.",
+        "MARKET_NOT_LISTED": "Este par aún no está disponible para operar en esta app. No se envió nada ni se movieron fondos: elige otro par de la lista.",
         "PROVIDER_UNAVAILABLE": "El venue no respondió. No se envió nada: inténtalo en un momento."
+      },
+      "trade": "Operar",
+      "pairPerp": "Perpetuo",
+      "inApp": "en esta app",
+      "route": {
+        "notListed": "Este par no tiene mercado en esta app, así que no se puede operar aquí. No sale nada de tu wallet."
+      }
+    },
+    "how": {
+      "sub": "Apalancamiento, liquidación y financiación — en 30 segundos",
+      "what": {
+        "t": "Un perpetuo nunca caduca",
+        "d": "Sigue el precio de la moneda: apostas por hacia dónde va el precio, no compras la moneda. Por eso puedes ir largo o corto en el mismo par."
+      },
+      "liquidate": {
+        "t": "El apalancamiento puede liquidar la posición",
+        "d": "Cu más apalancamiento, menor es el movimiento contrario que cierra tu posición. El precio exacto se muestra siempre antes de confirmar: ese es el número que debes leer, no el deslizador."
+      },
+      "funding": {
+        "t": "Mantener la posición tiene un coste",
+        "d": "Los perpetuos liquidan financiación entre largos y cortos cada pocas horas. Si tu lado es el popular, pagas; si es el saturado, recibes. Suele ser poco, pero se acumula cada hora que mantienes."
+      },
+      "fees": {
+        "t": "Pagas comisión al entrar y al salir",
+        "d": "El desglose exacto se muestra antes de confirmar, y la orden la construye y revisa esta misma app — luego la firmas con tu wallet. Esta app nunca custodia tus fondos ni tus claves."
       }
     }
   }
