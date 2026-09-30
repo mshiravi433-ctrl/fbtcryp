@@ -52,6 +52,7 @@ import { langMeta } from '../i18n/languages';
    lease.js directly — that module imports nothing, while the barrel beside it
    pulls the WalletConnect SDK in. */
 import { WALLET_SESSION_CHOICES } from '../lib/wc/lease.js';
+import { describeLeaseMinutes } from '../lib/walletSessionPolicy.js';
 import { currencyOf } from '../lib/currency';
 import LanguagePicker from '../components/LanguagePicker';
 import UsernameField from '../components/UsernameField';
@@ -1368,7 +1369,13 @@ export default function Settings() {
           options={WALLET_SESSION_CHOICES.map((m) => ({
             value: m,
             label: m === 0 ? '∞' : String(m),
-            sub: m === 0 ? t('settings.sessionUntilDisconnect') : t('settings.minutesShort', 'min')
+            /* A raw «43200» told the user nothing. The label stays the number
+               they recognise; the sub-line now says what it MEANS, so «a month»
+               is legible without arithmetic — and «43200» is what the lease
+               actually stores, so nothing was ever wrong but the explanation. */
+            sub: m === 0
+              ? t('settings.sessionUntilDisconnect')
+              : (describeLeaseMinutes(m) ?? t('settings.minutesShort', 'min'))
           }))}
         />
       </Field>

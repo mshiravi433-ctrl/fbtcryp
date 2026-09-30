@@ -4,6 +4,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-d
 import { useTranslation } from 'react-i18next';
 import { TelegramProvider } from './context/TelegramContext';
 import { WalletProvider } from './context/WalletContext';
+import SolanaConnectionKeeper from './components/SolanaConnectionKeeper';
 import { CentralBrainProvider } from './context/CentralBrainContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
@@ -763,6 +764,7 @@ export default function App() {
 
   return (
     <TelegramProvider>
+      <SolanaConnectionKeeper />
       <WalletProvider>
         {/*
           THE CENTRAL BRAIN, MOUNTED ONCE, ABOVE THE ROUTER — and that position is

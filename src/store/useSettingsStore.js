@@ -12,6 +12,12 @@ import { currencyOf } from '../lib/currency';
 import { setDisplaySymbol, setHideBalances } from '../lib/format';
 import { isStandalone } from '../lib/platform';
 import { setNativeSystemBarTheme } from '../lib/nativeShell';
+import {
+  MAX_LEASE_MINUTES,
+  SETTINGS_STORAGE_KEY,
+  WALLET_LEASE_DEFAULT_MINUTES,
+  walletLeaseMinutes
+} from '../lib/walletSessionPolicy.js';
 
 export const useSettingsStore = create(
   persist(
@@ -63,12 +69,20 @@ export const useSettingsStore = create(
        * so this is also the number that says how long a returning user is
        * re-attached silently before the wallet has to be approved again.
        *
-       * 0 is «تا قطع دستی»: never expires by itself. The picker offers
-       * 15 / 30 / 60 / 180 / 0 (see WALLET_SESSION_CHOICES in lib/wc/lease.js);
-       * an out-of-range or corrupted value is clamped by the setter below, so a
-       * bad sync can never turn a 60-minute window into a permanent one.
+       * 0 is «تا قطع دستی»: never expires by itself. The picker offers short
+       * AND long windows (see WALLET_SESSION_CHOICES in lib/walletSessionPolicy.js):
+       * 15 minutes / 1 hour / 1 day / 1 week / 1 month / forever. An
+       * out-of-range or corrupted value is clamped by the setter below, so a
+       * bad sync can never turn a short window into a permanent one.
+       *
+       * A MONTH, not 60 minutes, and not by accident. The report was explicit —
+       * «با رفرش نباید بره … حداقل یک ماه باشه» — and an hour meant a wallet
+       * the user had done nothing wrong to was gone before they came back.
+       * The lease is a convenience record (a public address and a deadline,
+       * never a key), it expires on its own, it is shown with its remaining
+       * time in Settings, and one tap disconnects.
        */
-      walletSessionMinutes: 60,
+      walletSessionMinutes: WALLET_LEASE_DEFAULT_MINUTES,
       hideBalances: false,
       txConfirmations: true,
       expertMode: false,
@@ -172,8 +186,7 @@ export const useSettingsStore = create(
        * connection that is already up (WalletContext re-issues the lease).
        */
       setWalletSessionMinutes(minutes) {
-        const n = Number(minutes);
-        set({ walletSessionMinutes: Number.isFinite(n) && n > 0 ? Math.min(24 * 60, Math.round(n)) : 0 });
+        set({ walletSessionMinutes: walletLeaseMinutes(minutes, WALLET_LEASE_DEFAULT_MINUTES) });
       },
       enableBiometric(credentialId) {
         set({ biometricEnabled: true, biometricCredentialId: credentialId });
@@ -258,7 +271,43 @@ export const useSettingsStore = create(
       }
     }),
     {
-      name: 'fbt-settings-v1',
+      name: SETTINGS_STORAGE_KEY,
+      version: 2,
+      /**
+       * WHY A MIGRATION, AND WHY IT IS SAFE TO CHANGE A USER'S CHOICE
+       * ---------------------------------------------------------------
+       * Changing the DEFAULT only helps a fresh install. Every device that had
+       * already connected had 60 written into its own storage, and would keep
+       * it forever — so the behaviour the report asked for would have shipped
+       * and appeared to do nothing.
+       *
+       * So the 60 is rewritten once, to the month-long default. Three things
+       * make this defensible rather than presumptuous:
+       *
+       *   • it only ever touches the exact value the old default wrote. A user
+       *     who deliberately chose 0, or 15, or 180 is left alone, because
+       *     none of those equal 60;
+       *   • it is visible and changeable — Settings shows the chosen window and
+       *     the time remaining, and the picker offers 15 minutes and «تا قطع
+       *     دستی» for anyone who wants the old behaviour back;
+       *   • the lease was never an approval. A first connection still needs the
+       *     wallet's own approval, whatever this value says.
+       *
+       * Bumping the version again is what re-runs this, so it happens once.
+       */
+      migrate: (persisted) => {
+        const next = { ...(persisted ?? {}) };
+        if (Number(next.walletSessionMinutes) === 60) {
+          next.walletSessionMinutes = WALLET_LEASE_DEFAULT_MINUTES;
+        }
+        /* A record that predates the versioned key still lives under the old
+           one; carrying the value across is the difference between «keep the
+           user's session across the update» and «log everyone out on upgrade». */
+        if (Number(next.walletSessionMinutes) > MAX_LEASE_MINUTES) {
+          next.walletSessionMinutes = MAX_LEASE_MINUTES;
+        }
+        return next;
+      },
       // 2FA secret stays out of the synced payload by construction
       partialize: (s) => {
         const { twoFactorSecret, ...rest } = s;

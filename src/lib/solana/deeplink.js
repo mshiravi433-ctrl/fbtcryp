@@ -58,6 +58,8 @@ import {
   stripDeeplinkReturn
 } from './deeplinkUri.js';
 
+import { chosenLeaseMinutes } from '../walletSessionPolicy.js';
+
 const SESSION_KEY = 'fbt:solana:session:v1';
 const PENDING_KEY = 'fbt:solana:pending:v1';
 const RESULT_PREFIX = 'fbt:solana:result:';
@@ -332,21 +334,22 @@ async function openBox(payloadBase58, nonceBase58, key) {
 /**
  * The lease the user chose for wallet connections, read at call time.
  *
- * Deliberately the SAME setting the EVM WalletConnect session uses: a user
- * who asked to be re-connected silently for 60 minutes meant it for their
- * wallets, not for one of the two namespaces. `0` means "until I disconnect",
- * which is what the security screen offers as the strict option.
+ * ─── THE BUG THIS REPLACES ───────────────────────────────────────────────
+ * This used to read `readJson('fbt-settings')` and fall back to `60`. The
+ * settings store has written `fbt-settings-v1` since it was versioned, so
+ * `readJson` returned null EVERY TIME and the fallback won every time. The
+ * preference a user set in Settings → Security therefore never reached a
+ * Solana session at all — not for a month, not for an hour they had chosen,
+ * not for `0`. Solana always got 60 minutes while the EVM wallet on the same
+ * device honoured the setting, which is precisely the «it used to work, now
+ * it doesn't» that only reproduced on one of the two wallets.
+ *
+ * The value now comes from the shared policy module, which reads the live
+ * store first and the persisted record second, and which is the same module
+ * the EVM lease imports. There is no third copy to forget to update.
  */
 function leaseMinutes() {
-  try {
-    /* eslint-disable-next-line global-require */
-    const raw = readJson('fbt-settings');
-    const n = Number(raw?.state?.walletSessionMinutes ?? raw?.walletSessionMinutes);
-    if (Number.isFinite(n) && n >= 0) return n;
-  } catch {
-    /* fall through to the default */
-  }
-  return 60;
+  return chosenLeaseMinutes();
 }
 
 function sessionValid(session, now = Date.now()) {

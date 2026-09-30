@@ -51,12 +51,27 @@
  * page refresh would be a connection nobody ever approved.
  */
 
+/*
+ * The duration policy is NOT decided here. It lives in
+ * lib/walletSessionPolicy.js because TWO wallets have to agree on it, and they
+ * used to disagree in a way nobody could see: the EVM lease honoured the
+ * preference from Settings and the Solana deeplink session read a storage key
+ * that had been renamed out from under it, so it always fell back to 60. Same
+ * device, same preference, one wallet remembered and one forgot.
+ *
+ * These re-exports keep every existing import site working.
+ */
+export {
+  WALLET_LEASE_DEFAULT_MINUTES,
+  WALLET_SESSION_CHOICES,
+  MONTH_MINUTES as WALLET_LEASE_MONTH_MINUTES,
+  walletLeaseMinutes
+} from '../walletSessionPolicy.js';
+
+import { walletLeaseMinutes } from '../walletSessionPolicy.js';
+
 /** Where the lease lives. Bumping the version abandons old shapes. */
 export const WALLET_LEASE_KEY = 'fbt-wallet-session-v1';
-
-/** What the picker in Settings offers, and what a fresh install starts with. */
-export const WALLET_LEASE_DEFAULT_MINUTES = 60;
-export const WALLET_SESSION_CHOICES = Object.freeze([15, 30, 60, 180, 0]);
 
 /** The three transports the lease can describe (WalletContext's modes). */
 export const WALLET_LEASE_MODES = Object.freeze(['injected', 'wc', 'local']);
@@ -74,20 +89,6 @@ function storeOf(storage) {
 /** A hex EVM address, and nothing else — never a label, a name or a topic. */
 export function isLeaseAddress(value) {
   return typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value);
-}
-
-/**
- * Normalise the settings value.
- *
- * Anything unparseable falls back to the default rather than to 0: a corrupted
- * preference must not silently turn into «never expires», because that is the
- * one value that cannot be corrected by waiting.
- */
-export function walletLeaseMinutes(value, fallback = WALLET_LEASE_DEFAULT_MINUTES) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  if (n === 0) return 0;
-  return Math.min(24 * 60, Math.round(n));
 }
 
 /**

@@ -422,6 +422,62 @@ export function mwaAccountInfo() {
   return mwaAccount ?? null;
 }
 
+/**
+ * The address the MWA wallet is ALREADY authorized for, or null.
+ *
+ * ─── WHY THIS EXISTS ──────────────────────────────────────────────────────
+ *   «با رفرش نباید بره» — and on Android Chrome, where nothing is injected,
+ *   a refresh used to disconnect Solana completely.
+ *
+ * `mwaAddress` is a module variable, so it dies with the document. But MWA
+ * installs a PERSISTENT authorization cache (see `registerMwa` below), which
+ * means after a refresh the wallet is still authorized and still lists the
+ * account in its `accounts` array — the grant survived, and only our own
+ * bookkeeping was thrown away. So the answer is asked of the WALLET, which is
+ * the thing that actually remembers.
+ *
+ * This also rehydrates `mwaAddress`/`mwaAccount`, so a signing path that needs
+ * the full account object (`signAndSendSolana`) gets a working one after a
+ * refresh too, instead of null.
+ */
+export function mwaWalletAccountAddress() {
+  const mwa = getMwaWallet();
+  if (!mwa) return null;
+  const account = mwaAccount ?? mwa.accounts?.[0] ?? null;
+  const address = account?.address;
+  if (!address) return null;
+  /* Keep the module view in step with what the wallet says, so the two can
+     never disagree about who is connected. */
+  mwaAddress = address;
+  mwaAccount = account;
+  return address;
+}
+
+/**
+ * The MWA wallet's own answer, or `undefined` when it has none to give.
+ *
+ * The three-way answer is the point. Returning `undefined` for «MWA is not
+ * registered here» is what lets `solanaAddress()` tell two very different
+ * situations apart:
+ *
+ *   • the wallet is registered and lists an account  → it is connected;
+ *   • the wallet is registered and lists NONE         → the user revoked it in
+ *     the wallet, and our own memory of it must be CLEARED rather than
+ *     believed. Trusting `mwaAddress` here would show a connected wallet the
+ *     user just removed from the other app — and an address to send to;
+ *   • the wallet is not registered here at all       → we have no opinion, and
+ *     whatever this document knows stands.
+ */
+function mwaAuthoritativeAddress() {
+  const mwa = getMwaWallet();
+  if (!mwa) return undefined;
+  const account = mwa.accounts?.[0] ?? null;
+  const address = account?.address ?? null;
+  mwaAddress = address;
+  mwaAccount = account;
+  return address;
+}
+
 export async function connectSolana() {
   const provider = getSolanaProvider();
 
@@ -501,14 +557,25 @@ export async function disconnectSolana() {
 /**
  * The currently connected address, or null.
  *
- * The injected provider is authoritative when present. `mwaAddress` is the
- * fallback for an Android Chrome session, where no provider object exists at
- * all and the address is only known from the connect response.
+ * The injected provider is authoritative when present. The MWA wallet is asked
+ * directly, because on Android Chrome the authorization it granted OUTLIVES
+ * this document while a module variable does not — reading only `mwaAddress`
+ * meant every refresh disconnected Solana even though the wallet still had us
+ * authorized. A deeplink session is the last source: it is the only connection
+ * that exists inside the APK and on a phone whose wallet was never opened in
+ * our page.
  */
 export function solanaAddress() {
   const p = getSolanaProvider();
+  const injected = p?.publicKey?.toString?.();
+  if (injected) return injected;
+
+  /* The wallet, when it has an opinion, outranks anything this document
+     remembers — including a revocation the user performed in the wallet app. */
+  const fromWallet = mwaAuthoritativeAddress();
+  if (fromWallet !== undefined) return fromWallet;
+
   return (
-    p?.publicKey?.toString?.() ??
     mwaAddress ??
     /* A deeplink session — the only connection that exists inside the APK and
        on a phone whose wallet was never opened in our page. Without this the
@@ -517,6 +584,38 @@ export function solanaAddress() {
     deeplinkSessionAddress() ??
     null
   );
+}
+
+/**
+ * Re-attach an existing Solana connection after a page load.
+ *
+ * ─── WHY THIS IS NOT JUST `solanaAddress()` ───────────────────────────────
+ * MWA is not registered the moment the bundle evaluates. `registerMwa` has to
+ * run first, and it is ASYNC (it imports two packages and installs the
+ * Wallet Standard registry). Until it has, `getMwaWallet()` returns null and
+ * `solanaAddress()` has no way to ask the wallet anything.
+ *
+ * That made the restore depend on WHICH screen happened to mount: the Wallet
+ * tab and Futures-on-chain registered on their own effect, and a user whose
+ * first screen after a refresh was the Solana swap page found no adapter, no
+ * answer, and «وصل نیست» for a connection the wallet still held. So the
+ * registration has to be part of the restore, and the restore has to be
+ * callable from anywhere rather than from a screen's mount.
+ *
+ * Safe to call more than once: `registerMwa` is guarded, and a device that
+ * cannot use MWA simply gets `false` and falls through to the other sources.
+ *
+ * @returns {Promise<string|null>} the address, or null when there is none
+ */
+export async function restoreSolanaConnection(appUrl) {
+  const immediate = solanaAddress();
+  if (immediate) return immediate;
+  try {
+    await registerMobileWalletAdapter(appUrl ?? publicAppUrl('/'));
+  } catch {
+    /* no adapter on this device — the deeplink/injected paths still apply */
+  }
+  return solanaAddress();
 }
 
 /**

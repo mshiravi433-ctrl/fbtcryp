@@ -189,9 +189,27 @@ if (has('ensure')) {
   ].map(normalizeFingerprint).filter(Boolean);
 
   if (wanted.length === 0) {
-    console.log('· assetlinks.json: no signing fingerprint available in this environment — nothing written.');
-    console.log('  (A guessed fingerprint verifies nothing. Set FBT_ANDROID_SHA256 — Play App');
-    console.log('   Signing key if Play distributes the APK — to have the build generate it.)');
+    /*
+     * This used to print two lines and exit 0, which is why the file was
+     * never there: a build that cannot know the fingerprint has no business
+     * failing, but a build that then ships a 404 in silence is worse. The
+     * 404 is what Phantom reads before it will show an MWA connect prompt, so
+     * the user is told «این دامنه تایید نشده» and no popup ever appears —
+     * and the build log said nothing worth reading.
+     *
+     * So the absence is now a WARNING the summary renders, printed in the
+     * shape of a failure, with the exact symptom it causes. Still exit 0:
+     * an unavailable secret must not turn into a red deployment, and this is
+     * the one gap in the build that is not ours to close from here.
+     */
+    console.warn('');
+    console.warn('  ✗ /.well-known/assetlinks.json WILL NOT EXIST IN THIS BUILD');
+    console.warn('    Phantom fetches this file before it will show an MWA connect prompt.');
+    console.warn('    Without it a user on Android Chrome gets «دامنه تایید نشده» and no popup.');
+    console.warn('    A guessed fingerprint verifies nothing, so none is written.');
+    console.warn('    Fix: set FBT_ANDROID_SHA256 (the PLAY APP SIGNING key if Play distributes');
+    console.warn('    the APK — Play Console → Protected with Play → Manage Play app signing).');
+    console.warn('');
     process.exit(0);
   }
   let document = [];
