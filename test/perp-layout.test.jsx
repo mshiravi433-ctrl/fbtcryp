@@ -170,8 +170,10 @@ describe('what the page actually looks like', () => {
     /* the amount and the leverage are before the summary that depends on them */
     expect(at('perp-field')).toBeGreaterThan(at('dir-switch'));
     expect(at('perp-summary')).toBeGreaterThan(at('perp-field'));
-    /* and the button is last, after everything it acts on */
-    expect(order.at(-1).split(/\s+/)).toContain('perp-sheet-go');
+    /* and the button is last, after everything it acts on — in the sticky
+       action bar that keeps it within reach of the numbers */
+    expect(order.at(-1).split(/\s+/)).toContain('perp-sheet-foot');
+    expect(body.lastElementChild.querySelector('.perp-sheet-go')).toBeTruthy();
   });
 
   it('renders in English as well, with no raw key and no empty string', async () => {
@@ -184,5 +186,50 @@ describe('what the page actually looks like', () => {
     expect(screen.getByText(/How do perpetual futures work/)).toBeTruthy();
     const btc = screen.getByTestId('perp-row-BTC');
     expect(btc.querySelector('.perp-row-go').textContent.trim()).toBe('Trade');
+  });
+});
+
+/* ── the stylesheet + embedding contracts behind the reported layout bugs ── */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+describe('the reported trade-sheet and tab layout bugs stay fixed', () => {
+  const css = readFileSync(resolve(__dirname, '../src/styles/perp-modern.css'), 'utf8');
+  const src = (f) => readFileSync(resolve(__dirname, '..', f), 'utf8');
+
+  it('does not clip the chart: the chart box has no fixed height and no overflow clip', () => {
+    const block = (css.match(/\.perp-sheet-chart \{[^}]*\}/)?.[0] ?? '').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(block).not.toBe('');
+    expect(block).not.toMatch(/\bheight\s*:\s*\d/);
+    expect(block).not.toMatch(/overflow\s*:\s*hidden/);
+  });
+
+  it('gives the signing button real colours (the old tokens did not exist) and a sticky bar', () => {
+    expect(css).toMatch(/\.perp-sheet-go\.long \{[^}]*linear-gradient/);
+    expect(css).toMatch(/\.perp-sheet-go\.short \{[^}]*linear-gradient/);
+    expect(css).toMatch(/\.perp-sheet-foot \{[^}]*position:\s*sticky/);
+    expect(css).toMatch(/--success:\s*var\(--up\)/);
+    expect(css).toMatch(/--danger:\s*var\(--down\)/);
+  });
+
+  it('hosts the dYdX and On-Chain tabs WITHOUT a second page box', () => {
+    for (const f of ['src/pages/Dydx.jsx', 'src/pages/FuturesOnchain.jsx']) {
+      expect(src(f), f).toMatch(/\{ embedded = false \}/);
+      expect(src(f), f).toContain('<PageTransition embedded={embedded}>');
+    }
+    const perp = src('src/pages/Perp.jsx');
+    expect(perp).toContain('<LazyDydx embedded />');
+    expect(perp).toContain('<LazyOnchain embedded />');
+  });
+
+  it('keeps the holding-cost table inside a collapsible box, in the Perpetual tab only', () => {
+    const perp = src('src/pages/Perp.jsx');
+    const at = perp.indexOf('<FundingPanel />');
+    expect(at).toBeGreaterThan(-1);
+    expect(perp.indexOf('<FundingPanel />', at + 1)).toBe(-1);
+    const box = perp.lastIndexOf('<InfoBox', at);
+    expect(perp.slice(box, at)).toContain("t('perp.fundingTitle')");
+    /* and the box sits before the overview branch closes, i.e. inside it */
+    expect(perp.lastIndexOf("perpTab === 'overview'", at)).toBeGreaterThan(-1);
   });
 });

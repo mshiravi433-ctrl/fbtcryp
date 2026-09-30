@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getFuturesCandles } from '../lib/futuresClient';
+import { getDydxCandles } from '../lib/dydx';
+import { getOhlc } from '../lib/api';
 import { fmtPrice } from '../lib/format';
 
 /**
@@ -34,42 +36,86 @@ const RESOLUTIONS = [
 
 const LIMIT_FOR = { '15': 96, '60': 96, '240': 90, '1D': 60 };
 
-export default function FuturesMarketChart({ provider, market, symbol, height = 250, testId = 'futures-market-chart' }) {
+/* dYdX's indexer speaks its own resolution vocabulary. */
+const DYDX_RES = { '15': '15MINS', '60': '1HOUR', '240': '4HOURS', '1D': '1DAY' };
+/* CoinGecko's OHLC granularity is chosen by `days` (1–2 → 30m, 3–30 → 4h,
+   31+ → 4d), so each button asks for the window whose candle size is closest. */
+const SPOT_DAYS = { '15': 1, '60': 2, '240': 14, '1D': 90 };
+
+/**
+ * One read, whichever venue the pair settles on. Returns candles in the
+ * engine's `{ startedAt, open, high, low, close }` shape, oldest first.
+ *
+ *   velocity / ostium → the BFF (`/api/v1/futures/candles`)
+ *   dydx              → the dYdX indexer proxy
+ *   spot              → the market feed's own OHLC (the LAST resort, below)
+ */
+async function readCandles({ provider, market, resolution }) {
+  if (provider === 'dydx') {
+    const r = await getDydxCandles(market, DYDX_RES[resolution] || '1HOUR', LIMIT_FOR[resolution] || 96);
+    return { rows: r?.candles || [], symbol: r?.ticker || null };
+  }
+  if (provider === 'spot') {
+    const raw = await getOhlc(market, SPOT_DAYS[resolution] || 2);
+    return {
+      rows: (Array.isArray(raw) ? raw : []).map((d) => ({ startedAt: d.t, open: d.o, high: d.h, low: d.l, close: d.c })),
+      symbol: null
+    };
+  }
+  const r = await getFuturesCandles({ provider, market, resolution, limit: LIMIT_FOR[resolution] || 96 });
+  return { rows: r?.ok ? (r.data?.candles || []) : [], symbol: r?.ok ? (r.data?.symbol || null) : null };
+}
+
+export default function FuturesMarketChart({ provider, market, symbol, height = 250, testId = 'futures-market-chart', spotId = null }) {
   const { t } = useTranslation();
   const [resolution, setResolution] = useState('60');
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState(null);
 
+  /* `spot` is set when the venue's own candles never arrived and the market
+     feed's OHLC is drawn instead — and the chart SAYS so (see the footer):
+     an index chart under a venue label would be a claim about the wrong book. */
+  const [spot, setSpot] = useState(false);
+
   useEffect(() => {
+    setSpot(false);
     if (!provider || !market) { setCandles([]); return undefined; }
     let alive = true;
     let retryTimer = null;
     let attempt = 0;
     /* Two bounded retries, like the dYdX chart: a cold serverless instance or
-       a transient upstream blip should heal itself before the chart gives up
-       honestly. */
+       a transient upstream blip should heal itself before the chart falls
+       back. The fallback (when the caller supplies a spot id) means the chart
+       is never blank for a pair that has a price — «اصلا نمودار شمعی ندارند». */
     const run = async () => {
       setLoading(true);
       try {
-        const r = await getFuturesCandles({ provider, market, resolution, limit: LIMIT_FOR[resolution] || 96 });
+        const r = await readCandles({ provider, market, resolution });
         if (!alive) return;
-        const rows = r?.ok ? (r.data?.candles || []) : [];
-        if (rows.length > 1) {
-          setCandles(rows);
-          setSource(r.data?.symbol || null);
+        if (r.rows.length > 1) {
+          setCandles(r.rows);
+          setSource(r.symbol);
           setLoading(false);
           return;
         }
       } catch { /* handled below like an empty read */ }
       if (!alive) return;
       if (attempt < 2) { attempt += 1; retryTimer = setTimeout(run, 3_500); return; }
+      if (spotId && provider !== 'spot') {
+        try {
+          const r = await readCandles({ provider: 'spot', market: spotId, resolution });
+          if (!alive) return;
+          if (r.rows.length > 1) { setCandles(r.rows); setSource(null); setSpot(true); setLoading(false); return; }
+        } catch { /* the honest empty state below */ }
+        if (!alive) return;
+      }
       setCandles([]);
       setLoading(false);
     };
     run();
     return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
-  }, [provider, market, resolution]);
+  }, [provider, market, resolution, spotId]);
 
   /* TradingChart takes { t, o, h, l, c } in milliseconds (getOhlc's shape). */
   const data = useMemo(
@@ -112,7 +158,7 @@ export default function FuturesMarketChart({ provider, market, symbol, height = 
 
       {has ? (
         <Suspense fallback={<div className="skel" style={{ height }} />}>
-          <TradingChart key={`${provider}:${market}:${resolution}:${candles.length}`} data={data} symbol={label} height={height} />
+          <TradingChart key={`${provider}:${market}:${resolution}:${candles.length}:${spot ? 's' : 'v'}`} data={data} symbol={label} height={height} />
         </Suspense>
       ) : loading ? (
         <div className="skel" style={{ height }} />
@@ -129,6 +175,7 @@ export default function FuturesMarketChart({ provider, market, symbol, height = 
           <span className={`mono ${change >= 0 ? 'up' : 'down'}`}>
             {change >= 0 ? '+' : ''}{change.toFixed(2)}%
           </span>
+          {spot && <span className="faint" data-testid="futures-chart-spot">{t('futures.chartSpot', { defaultValue: 'Index price chart' })}</span>}
           <span className="faint mono">${fmtPrice(candles[candles.length - 1].close)}</span>
         </div>
       )}

@@ -26,7 +26,15 @@ import {
 import TrendChart from '../components/TrendChart';
 import ModernSelect from '../components/ModernSelect';
 
-export default function Dydx() {
+/**
+ * `embedded` — hosted by the Perpetual page, which has already drawn the one
+ * `.page` box (16px of side padding) and animated the screen. Without it this
+ * tab built a SECOND `.page` inside the first: 32px in from each edge of a
+ * phone, which is exactly the «صفحه انگار از چپ و راست جمع شده» the board was
+ * reported for. `.derivatives-hall` cancels ONE page's padding, not two.
+ * The standalone route (/dydx) still renders its own page.
+ */
+export default function Dydx({ embedded = false } = {}) {
   const { t } = useTranslation();
   const wallet = useWallet();
   const { haptic } = useTelegram();
@@ -195,7 +203,7 @@ export default function Dydx() {
   const canReview = dydxAddress && market?.status === 'ACTIVE' && Number(size) > 0 && notional > 0 && (orderType === 'market' || (orderType === 'limit' && Number(limitPrice) > 0));
 
   return (
-    <PageTransition>
+    <PageTransition embedded={embedded}>
       <div className="derivatives-hall">
         <div className="derivatives-aurora" aria-hidden="true" />
         <motion.section className="derivatives-hero" variants={riseIn} initial="hidden" animate="show">
