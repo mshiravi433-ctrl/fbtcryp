@@ -275,7 +275,8 @@
     "supply": "Arz",
     "fromAth": "ATH'den",
     "notFoundHelp": "Bu coin yüklü listede yoktu ve doğrudan sorgu da yanıt vermedi. Genellikle veri sağlayıcı istekleri sınırlıyordur — birazdan tekrar deneyin.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "{{symbol}} satın al"
   },
   "swap": {
     "title": "Takas",
@@ -2434,6 +2435,38 @@
       "copied": "Kopyalandı",
       "copy": "Adresi kopyala",
       "badAddress": "Bu bir Solana adresi değil."
+    },
+    "picker": {
+      "popular": "Popüler tokenlar",
+      "universeCount": "{{count}} token mevcut"
+    },
+    "universe": {
+      "unavailable": "Token listesi yüklenemedi. Yine de takas etmek için bir mint adresi yapıştırın."
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} çift",
+      "pairSearch": "Çift ara",
+      "pairInApp": "Bu uygulamada işlem görür",
+      "noPairMatch": "Bu aramayla eşleşen çift yok.",
+      "connectSolana": "Solana cüzdanı bağla",
+      "preparing": "Emir hazırlanıyor…",
+      "prepared": "Sunucu tarafından oluşturuldu",
+      "preparedNotional": "Emir büyüklüğü",
+      "preparedSlippage": "Maks. kayma",
+      "preparedVenue": "Piyasa",
+      "signHere": "Bir sonraki dokunuş BU siparişi tam olarak kendi cüzdanınıza imzalatır, burada bu ekranda. Uygulama hiçbir varlığı tutmaz.",
+      "signNow": "İmzala ve gönder",
+      "signing": "İmzanız bekleniyor…",
+      "signed": "Emir gönderildi. Aşağıdaki hash kayda geçti:",
+      "err": {
+        "USER_REJECTED": "Cüzdanında imzayı reddettin. Hiçbir şey gönderilmedi.",
+        "QUOTE_EXPIRED": "Fiyat teklifinin süresi doldu. Kapatıp emri yeniden oluşturun.",
+        "RISK_BLOCKED": "Risk motoru bu emri reddetti. Hiçbir şey gönderilmedi.",
+        "MARKET_NOT_LISTED": "Bu borsa o çifti listelemiyor. Şeritten başka bir çift seçin.",
+        "PROVIDER_UNAVAILABLE": "Borsa yanıt vermedi. Hiçbir şey gönderilmedi — birazdan tekrar deneyin."
+      }
     }
   }
 }

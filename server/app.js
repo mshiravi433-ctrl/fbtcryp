@@ -55,7 +55,7 @@ import {
 } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
-import { resolveVenue } from './coinVenue.js';
+import { resolveVenue, resolveVenues } from './coinVenue.js';
 import {
   checkBuySellEligibility,
   createBuySellCheckout,
@@ -107,7 +107,7 @@ import { dlnCreateTx, dlnQuote, dlnStatus } from './dln.js';
 import { gaslessPrice, gaslessQuote, gaslessStatus, gaslessSubmit } from './gasless.js';
 import { jupiterConfigured, referralAccount, solanaExecute, solanaOrder } from './solana.js';
 import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
-import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail } from './solanaTokenMeta.js';
+import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail, solanaTokenUniverse } from './solanaTokenMeta.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
@@ -5525,6 +5525,31 @@ app.get('/api/coin-venue/:id', async (req, res) => {
   }
 });
 
+/*
+ * GET /api/coin-venues?ids=a,b,c — the same index, for a whole page of coins.
+ *
+ * Reported: «تعداد توکن های صفحه بازار خیلی کمه، بیشترشم قابل سواپ نیست».
+ * The market list asked nothing at all and decided from a 46-entry curated
+ * table, so a 250-row screen showed a swap button on maybe a dozen of them.
+ * Resolving per row would have meant 250 round trips against an index the
+ * server already holds in memory; this asks once for the visible page.
+ *
+ * The comma-joined body is the right shape here (GET, cacheable, no request
+ * body to lose to a proxy) and it is the same "id, never symbol" contract the
+ * single-coin route keeps — see server/coinVenue.js.
+ */
+app.get('/api/coin-venues', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',');
+    const out = await resolveVenues(ids);
+    if (out.error) return res.status(400).json(out);
+    res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
 /* ------------------- EXPLORE + SECURITY CENTER (v1) ------------------------ */
 /* Mounted here — right after the market/token read routes they share data
  * sources with — so both groups inherit the same rate limiting and error
@@ -5943,6 +5968,29 @@ app.get('/api/solana/token-search', async (req, res) => {
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 200) });
+  }
+});
+
+/*
+ * GET /api/solana/tokens — the swap screen's browsable token catalogue.
+ *
+ * Reported: «تعداد توکن ها کم است» on the Solana swap page. The screen offered
+ * three hand-written rows and expected a pasted mint for everything else, on
+ * the one chain where browsing IS the trade.
+ *
+ * Served from our origin for the same three reasons as the search above: no
+ * key in the client, no CORS question, one shared cache instead of N
+ * identical upstream calls. It is BROWSE data — names, logos, liquidity, the
+ * 24h move — and never the price a signature is placed against.
+ */
+app.get('/api/solana/tokens', async (_req, res) => {
+  try {
+    const out = await solanaTokenUniverse();
+    if (!out.ok) return res.status(502).json(out);
+    res.set('cache-control', 'public, max-age=300, s-maxage=900, stale-while-revalidate=7200');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ ok: false, code: 'UPSTREAM_FAILED', detail: String(err.message || err).slice(0, 200) });
   }
 });
 

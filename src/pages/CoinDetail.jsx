@@ -10,6 +10,8 @@ import { useChart, useCoin, useMarkets } from '../hooks/useMarket';
 import { EVM_CHAINS } from '../lib/chains';
 import { swapTargetFor, swapUrlFor } from '../lib/coinToSwap';
 import { getCoinVenue, venueRoute } from '../lib/coinVenue';
+import { cachedCoinVenue, rememberCoinVenues } from '../lib/coinVenues';
+import SwapDock from '../components/SwapDock';
 import TradingChart from '../components/TradingChart';
 import CoinLogo from '../components/CoinLogo';
 import { useOhlc } from '../hooks/useMarket';
@@ -74,8 +76,29 @@ export default function CoinDetail() {
   // Fetch the coin by id rather than hunting for it inside the paged markets
   // list — that lookup is what produced "coin not found" for anything outside
   // the top 60 by market cap, which looked like a broken API but never was.
-  const { data: coins } = useMarkets(60);
+  /*
+    ─── WHY THE LIST IS NO LONGER REQUESTED ON EVERY OPEN ───────────────────
+      «سرعت لود ... صفحه اختصاصی هر توکن را بیشتر کن»
+
+    This screen used to fire FOUR requests on every open: the coin, its chart,
+    its OHLC, AND a 60-row markets list whose only job was to have a spare copy
+    of the row the first request was already fetching. On a phone that is a
+    quarter of the page's data spent duplicating its own header — and it
+    competes with the two requests that actually decide what the user sees.
+
+    The list is now a FALLBACK, requested only if the direct fetch came back
+    empty. Same guarantee (the header still paints from somewhere), a quarter
+    of the traffic on the happy path, and none at all for the coins a user
+    reaches by tapping the market list — because that list's own answer is in
+    the api layer's cache, and `getCoin` reads through it.
+  */
   const { data: fetched, loading: coinLoading, refresh: refreshCoin } = useCoin(id);
+  const [needsListFallback, setNeedsListFallback] = useState(false);
+  useEffect(() => {
+    if (!coinLoading && !fetched) setNeedsListFallback(true);
+    if (fetched) setNeedsListFallback(false);
+  }, [coinLoading, fetched]);
+  const { data: coins } = useMarkets(needsListFallback ? 60 : null);
   const { data: series, loading } = useChart(id, range.days);
 
   /*
@@ -117,12 +140,34 @@ export default function CoinDetail() {
       setVenueChecked(true);
       return undefined;
     }
+
+    /*
+      ─── THE LIST ALREADY ASKED ───────────────────────────────────────────
+      The market screen resolves the contracts of every row it shows, in one
+      batch, and hands the answers to a shared cache (lib/coinVenues.js).
+      Someone who taps a row has that answer in memory before this effect
+      runs, so the round trip below is skipped entirely.
+
+      This is the second half of «سرعت لود صفحه اختصاصی هر توکن را بیشتر کن»:
+      a coin opened from the list used to pay for its own venue lookup on
+      every single visit, and the answer had been sitting in memory the whole
+      time.
+    */
+    const known = cachedCoinVenue(coinGeckoId);
+    if (known) {
+      setVenue(known);
+      setVenueChecked(true);
+      return undefined;
+    }
+
     let alive = true;
     setVenue(null);
     setVenueChecked(false);
     getCoinVenue(coinGeckoId)
       .then((v) => {
         if (!alive) return;
+        /* Publish it for the NEXT visit of this coin, and for the dock. */
+        if (v) rememberCoinVenues(coinGeckoId, v);
         setVenue(v);
         setVenueChecked(true);
       })
@@ -532,6 +577,18 @@ export default function CoinDetail() {
           ⚖️ {t('coin.compare')}
         </button>
       </motion.div>
+
+      {/*
+        ─── THE STICKY SWAP DOCK ───────────────────────────────────────────
+        «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود … مثل یونی سواپ»
+
+        The second copy of the trade action, pinned to the bottom edge once the
+        one above has scrolled away. It is gated on the SAME resolution the
+        in-page buttons use — curated contract, else the resolved venue — and
+        it renders NOTHING when neither exists, so the dock can never be a
+        button that leads to a swap screen which then refuses the route.
+      */}
+      <SwapDock coin={coin} />
 
       {realSwap?.kind !== 'thor' && realSwap?.token?.address && (
         <TokenRiskCard

@@ -275,7 +275,8 @@
     "supply": "सप्लाई",
     "fromAth": "ATH से",
     "notFoundHelp": "यह सिक्का लोड की गई सूची में नहीं था और सीधा अनुरोध भी विफल रहा। आमतौर पर डेटा सेवा दर सीमित कर रही होती है — थोड़ी देर बाद फिर कोशिश करें।",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "{{symbol}} खरीदें"
   },
   "swap": {
     "title": "स्वैप",
@@ -2434,6 +2435,38 @@
       "copied": "कॉपी हो गया",
       "copy": "पता कॉपी करें",
       "badAddress": "यह Solana पता नहीं है।"
+    },
+    "picker": {
+      "popular": "लोकप्रिय टोकन",
+      "universeCount": "{{count}} टोकन उपलब्ध"
+    },
+    "universe": {
+      "unavailable": "टोकन सूची लोड नहीं हो सकी। स्वैप करने के लिए मिंट पता पेस्ट करें।"
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} जोड़े",
+      "pairSearch": "जोड़े खोजें",
+      "pairInApp": "इस ऐप में ही व्यापार होता है",
+      "noPairMatch": "इस खोज से कोई जोड़ा नहीं मिला।",
+      "connectSolana": "Solana वॉलेट जोड़ें",
+      "preparing": "ऑर्डर तैयार हो रहा है…",
+      "prepared": "सर्वर द्वारा बनाया गया",
+      "preparedNotional": "ऑर्डर का आकार",
+      "preparedSlippage": "अधिकतम स्लिपेज",
+      "preparedVenue": "वेन्यू मार्केट",
+      "signHere": "अगला टैप आपके वॉलेट से इसी ऑर्डर पर यहीं इसी स्क्रीन पर हस्ताक्षर माँगेगा। ऐप कुछ भी अपने पास नहीं रखता।",
+      "signNow": "हस्ताक्षर करें और भेजें",
+      "signing": "आपके हस्ताक्षर की प्रतीक्षा…",
+      "signed": "ऑर्डर भेजा गया। नीचे का हैश लेजर में दर्ज है:",
+      "err": {
+        "USER_REJECTED": "आपने वॉलेट में हस्ताक्षर अस्वीकार कर दिया। कुछ नहीं भेजा गया।",
+        "QUOTE_EXPIRED": "कोटेशन समाप्त हो गया। बंद करें और ऑर्डर फिर से बनाएँ।",
+        "RISK_BLOCKED": "रिस्क इंजन ने यह ऑर्डर अस्वीकार कर दिया। कुछ नहीं भेजा गया।",
+        "MARKET_NOT_LISTED": "यह वेन्यू वह जोड़ा नहीं देता। स्ट्रिप से दूसरा चुनें।",
+        "PROVIDER_UNAVAILABLE": "वेन्यू ने जवाब नहीं दिया। कुछ नहीं भेजा — थोड़ी देर बाद कोशिश करें।"
+      }
     }
   }
 }

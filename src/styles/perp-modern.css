@@ -1017,3 +1017,107 @@
   .perp-modern .tag.perp-pair:active,
   .perp-cta:hover { transform: none; }
 }
+
+/* ==========================================================================
+   THE PAIR STRIP AT SCALE
+   ==========================================================================
+   «کلا جفت توکن های پرپچوال خیلی کمه با دقت فراوان درستش کن خیلی مهمه»
+
+   The strip grew from twelve cells to a catalogue, which changes three
+   things and only three things. Everything else about the cell is untouched,
+   so a cell the user already recognises does not become a different control
+   because there are now a hundred of them.
+
+     1. a HEAD — the count, stated, and a search box. A strip that holds a
+        hundred pairs has to be findable; without this the user scrolls to
+        the end, sees the same dozen majors, and concludes nothing changed;
+     2. a MARK on the cells the app can actually settle. This is the fact
+        the strip could not show before, and it is the difference between a
+        watchlist and a catalogue you can trade from;
+     3. an EMPTY state, because a search with no hits must say so rather than
+        rendering a bare strip with nothing in it.
+   ========================================================================== */
+
+.perp-pair-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0 8px;
+  min-width: 0;
+}
+
+.perp-pair-search {
+  position: relative;
+  flex: 0 1 190px;
+  min-width: 0;
+}
+.perp-pair-search input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 32px 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.08);
+  color: var(--text-1);
+  font: 600 12.5px/1.2 var(--font-display);
+  transition: border-color .18s ease, background .18s ease;
+}
+.perp-pair-search input::placeholder { color: var(--text-3); }
+.perp-pair-search input:focus {
+  outline: none;
+  border-color: rgba(var(--rgb-r, 0), .5);
+  background: rgba(127, 127, 157, 0.13);
+}
+.perp-pair-search-clear {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(127, 127, 157, 0.22);
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.perp-pair-search-clear:hover { background: rgba(127, 127, 157, 0.34); }
+
+.perp-pair-empty {
+  margin: 0 0 10px;
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}
+
+/* The in-app-settle mark. A 5px dot, not a badge: a hundred badges would be
+   a wall of text, and this has to be scannable at a glance while the strip is
+   moving. It sits after the ticker so the eye reads "BTC-PERP, and this one
+   is tradeable here" in that order. */
+.perp-modern .perp-pair-live {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--up, #00e69e);
+  box-shadow: 0 0 0 2px rgba(0, 230, 158, 0.16);
+  flex: 0 0 auto;
+  align-self: center;
+}
+:root[data-theme='light'] .perp-modern .perp-pair-live { background: #0f9d76; }
+
+/* The signed-order receipt. Deliberately a `notice`, not a celebration: the
+   user has just opened a leveraged position and the next thing they should
+   do is read it, not enjoy it. */
+.perp-tx-notice { margin: 10px 0 0; }
+.perp-tx-notice a { color: var(--rgb-1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .perp-pair-search input { transition: none; }
+}

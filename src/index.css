@@ -15021,4 +15021,49 @@ button.settings-quick-action {
 
 /* One animation rule for the whole market list, not a <style> per coin. */
 @keyframes spark-draw { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }
-.market-row-stats { display: flex; flex-wrap: wrap; gap: 3px 12px; padding: 0 8px 5px 32px; color: var(--text-3); font-size: 10px; }
+
+/*
+  ─── THE MARKET ROW'S SWAP BUTTON ───────────────────────────────────────────
+  «بیشترشم قابل سواپ نیست» (the market screen). Once a row can resolve a real
+  contract, the button is on almost every row — which makes its styling part
+  of the row's read, not a detail.
+
+  It is deliberately NOT a `.tag` with inline styles any more: the gradient,
+  the minimum tap target and the pressed state live here so every row looks
+  identical and the markup carries no presentation.
+*/
+.market-swap-btn {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #fff;
+  font: 800 11px/1.2 var(--font-display);
+  letter-spacing: .01em;
+  cursor: pointer;
+  transition: transform .12s ease, filter .18s ease, box-shadow .18s ease;
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, .6);
+}
+.market-swap-btn:hover { filter: brightness(1.08); }
+.market-swap-btn:active { transform: scale(.94); }
+:root[data-theme='light'] .market-swap-btn { color: #fff; }
+
+/* ─── THE STICKY SWAP DOCK TAKES THE NAV'S PLACE ──────────────────────────
+   The dock and the nav are never both on screen (useSwapDockStore), so the
+   nav only has to leave. A short, eased fade rather than a slide: the dock is
+   arriving in the same place, and two moving bars read as a glitch.
+
+   This lives here and not in styles/swap-dock.css on purpose. The shell sets
+   the class for EVERY route, so the rule that can HIDE the nav has to ship
+   with every route — otherwise a screen that mounts a dock without the route
+   stylesheet would leave the user with no way to navigate. */
+.bottom-nav {
+  transition: opacity .22s ease, translate .22s ease;
+}
+.app-shell--dock-active .bottom-nav {
+  opacity: 0;
+  translate: -50% 26px;
+  pointer-events: none;
+}

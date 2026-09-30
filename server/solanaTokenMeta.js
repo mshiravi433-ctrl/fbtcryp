@@ -247,7 +247,9 @@ export async function searchSolanaTokens({ query } = {}) {
       if (!up.ok) return { ok: false, code: 'UPSTREAM_FAILED', status: up.status, detail: up.detail || null, rows: [] };
       return { ok: true, query: q, rows: decorate(up.rows.slice(0, 30)), at: Date.now() };
     }, { swr: true });
-    return { ...value, cached, stale: stale || undefined };
+    /* `ok: true` is part of the contract the route checks. Without it the
+       only honest 200 is unreachable and the endpoint answers 502 forever. */
+    return { ok: true, ...value, cached, stale: stale || undefined };
   } catch (err) {
     return { ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 140) };
   }
@@ -280,7 +282,186 @@ export async function searchSolanaTokensByMints({ mints } = {}) {
       if (!up.ok) return { ok: false, code: 'UPSTREAM_FAILED', status: up.status, rows: [] };
       return { ok: true, rows: decorate(up.rows), at: Date.now() };
     }, { swr: true });
-    return { ...value, cached, stale: stale || undefined };
+    /* `ok: true` is part of the contract the route checks. Without it the
+       only honest 200 is unreachable and the endpoint answers 502 forever. */
+    return { ok: true, ...value, cached, stale: stale || undefined };
+  } catch (err) {
+    return { ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 140) };
+  }
+}
+
+/* ── the token UNIVERSE ────────────────────────────────────────────────────── */
+
+/**
+ * GET /api/solana/tokens — the swap screen's browsable catalogue.
+ * ---------------------------------------------------------------------------
+ *   «تعداد توکن ها کم است» — on the Solana swap page.
+ *
+ * The screen shipped with three hand-written rows (SOL, USDC, USDT) plus the
+ * liquid-staking and tokenized-equity mints, and everything else arrived only
+ * if the user already knew a mint address to paste. On the one chain where
+ * the trade IS the browse, that is the wrong default: the deep end of Solana
+ * — Jito, Raydium, ORCA, W, PYTH, the whole meme complex — is what people come
+ * to this app for, and none of it was one tap away.
+ *
+ * ─── WHAT THE LIST IS, AND WHAT IT IS NOT ──────────────────────────────────
+ * It is BROWSE data: names, logos, liquidity, the 24h move, and whether
+ * Jupiter's own index marks the token verified. It is never the price
+ * anything is signed against — that still comes from the live order endpoint
+ * at quote time, exactly as before.
+ *
+ * The upstream is the SAME keyless index the search already uses, read
+ * through its ranked "top" listings rather than a query, so this costs no new
+ * dependency, no key, and no new class of failure. The curated mints this app
+ * already ships are merged in FIRST and are never displaced by a remote row,
+ * so the assets Stocks and the gold screen hand off by mint keep their
+ * identity even if the upstream renames something.
+ *
+ * A failed upstream is NOT an error page: the curated list still answers, and
+ * the response says `source: 'curated'` so the client can say so honestly.
+ */
+const UNIVERSE_LIMIT = 60;
+
+/** Short, stable digest for a cache key. Not security — de-duplication. */
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/** Ranked endpoints, most trusted first. A dead one costs a smaller list. */
+const JUP_UNIVERSE_PATHS = [
+  'https://lite-api.jup.ag/tokens/v2/toporganicscore/24h',
+  'https://lite-api.jup.ag/tokens/v2/toptraded/24h',
+  'https://lite-api.jup.ag/tokens/v2/topliquidity/24h'
+];
+
+/**
+ * Longer than a search. The ranking of a token list moves over hours, not
+ * seconds, and this is the payload behind the swap screen's first paint.
+ */
+const UNIVERSE_TTL_MS = Number(process.env.SOLANA_TOKEN_UNIVERSE_TTL_MS || 10 * 60_000);
+
+/**
+ * A fetch seam the test suite overrides. Production reads the global; the
+ * tests hand in a fake that returns canned Jupiter envelopes so the ranking,
+ * the normalization and the CACHE are asserted without spending a request.
+ */
+let jupFetchImpl = (url, opts) => globalThis.fetch(url, opts);
+
+/** Test-only fetch override. Restored with `__setJupFetchForTests(null)`. */
+export function __setJupFetchForTests(fn) {
+  jupFetchImpl = fn || ((url, opts) => globalThis.fetch(url, opts));
+}
+
+/**
+ * One ranked listing, as a plain array of raw Jupiter rows.
+ *
+ * ─── WHY THE ENVELOPE HANDLING IS LOAD-BEARING ───────────────────────────
+ * Jupiter's three ranked endpoints do NOT agree on a shape:
+ *
+ *     toporganicscore/24h → { data: [...] }
+ *     toptraded/24h       → { data: [...] }
+ *     topliquidity/24h    → [ ... ]            (older build)
+ *
+ * Reading only `Array.isArray(body)` therefore worked against the liquidity
+ * list and silently returned ZERO rows from the other two — which is precisely
+ * the reported symptom, a short token list with no error anywhere. Accepting
+ * all three costs three lines and is the difference between ~20 tokens and a
+ * real catalogue.
+ */
+async function jupListRaw(path, limit) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT_MS * 2);
+  try {
+    const res = await jupFetchImpl(`${path}?limit=${Math.max(10, Math.min(100, limit))}`, {
+      signal: ctrl.signal,
+      headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' }
+    });
+    if (!res?.ok) return [];
+    const body = await res.json().catch(() => null);
+    return unwrapList(body);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Every envelope Jupiter is known to answer a ranked list with. */
+export function unwrapList(body) {
+  if (Array.isArray(body)) return body;
+  for (const key of ['data', 'tokens', 'rows', 'results']) {
+    if (Array.isArray(body?.[key])) return body[key];
+  }
+  return [];
+}
+
+/**
+ * Rank the catalogue the way a trader reads it: liquidity first for anything
+ * the user could actually get filled on, then the organic-score rows the
+ * upstream already ranked. A token with no liquidity at all is dropped — a
+ * swap into it cannot quote, and offering it is a dead button.
+ */
+export function rankUniverse(rows, { limit = UNIVERSE_LIMIT, minLiquidity = 500 } = {}) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((r) => r && r.mint && Number(r.liquidity ?? 0) >= minLiquidity)
+    .sort((a, b) => {
+      const la = Number(a.liquidity ?? 0);
+      const lb = Number(b.liquidity ?? 0);
+      if (la !== lb) return lb - la;
+      return (b.organicScore ?? 0) - (a.organicScore ?? 0);
+    })
+    .slice(0, limit);
+}
+
+/**
+ * The browsable catalogue for the swap screen.
+ *
+ * `curated` is used to EXCLUDE, never to inject. The client owns the curated
+ * table — it carries the verified decimals, the trust marks and the artwork
+ * the Stocks and gold screens hand off by mint — and it merges curated FIRST,
+ * so a remote row never displaces a curated identity. Excluding them here
+ * also stops the rank budget being spent on rows the client will drop.
+ *
+ * @param {Array<{mint:string, symbol?:string, name?:string}>} curated
+ * @returns {Promise<{ok:true, rows:Array, source:'curated'|'jupiter', cached:boolean}
+ *                  |{ok:false, code:string, detail?:string}>}
+ */
+export async function solanaTokenUniverse({ curated = [], limit = UNIVERSE_LIMIT } = {}) {
+  const curatedMints = new Set(curated.map((t) => t.mint).filter(Boolean));
+  /* The cache key MUST include the exclusion set. The rows depend on it, so
+     keying on the path alone would let one caller's answer — with its own
+     curated mints already filtered out — be served to a caller that asked
+     for a different set. */
+  const key = `solana:token-universe:v2:${fnv1a([...curatedMints].sort().join(','))}`;
+  try {
+    const { value, cached, stale } = await withCache(
+      key,
+      UNIVERSE_TTL_MS,
+      async () => {
+        const seen = new Set(curatedMints);
+        const rows = [];
+        for (const path of JUP_UNIVERSE_PATHS) {
+          if (rows.length >= limit) break;
+          for (const raw of await jupListRaw(path, limit)) {
+            const tk = normalizeJupiterToken(raw);
+            if (!tk || seen.has(tk.mint)) continue;
+            seen.add(tk.mint);
+            rows.push(tk);
+            if (rows.length >= limit) break;
+          }
+        }
+        return { rows: rankUniverse(rows, { limit }), at: Date.now(), source: rows.length ? 'jupiter' : 'curated' };
+      },
+      { swr: true }
+    );
+    /* `ok: true` is part of the contract the route checks. Without it the
+       only honest 200 is unreachable and the endpoint answers 502 forever. */
+    return { ok: true, ...value, cached, stale: stale || undefined };
   } catch (err) {
     return { ok: false, code: 'UPSTREAM_FAILED', detail: String(err?.message || err).slice(0, 140) };
   }

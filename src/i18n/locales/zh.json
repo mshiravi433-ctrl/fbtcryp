@@ -275,7 +275,8 @@
     "supply": "流通量",
     "fromAth": "距历史高点",
     "notFoundHelp": "该币种不在已加载的列表中，直接查询也没有返回。通常是数据服务正在限流——请稍后重试。",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "买入 {{symbol}}"
   },
   "swap": {
     "title": "兑换",
@@ -2427,6 +2428,38 @@
       "copied": "已复制",
       "copy": "复制地址",
       "badAddress": "这不是 Solana 地址。"
+    },
+    "picker": {
+      "popular": "热门代币",
+      "universeCount": "可用代币 {{count}} 个"
+    },
+    "universe": {
+      "unavailable": "无法加载代币列表。粘贴铸币地址仍可直接兑换。"
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} 个币对",
+      "pairSearch": "搜索币对",
+      "pairInApp": "可直接在本应用交易",
+      "noPairMatch": "没有符合搜索的币对。",
+      "connectSolana": "连接 Solana 钱包",
+      "preparing": "正在准备订单…",
+      "prepared": "由服务器构建",
+      "preparedNotional": "订单规模",
+      "preparedSlippage": "最大滑点",
+      "preparedVenue": "合约市场",
+      "signHere": "下一次点击将在这里、在本屏幕上请求用你自己的钱包签署这笔订单，应用不托管任何资产。",
+      "signNow": "签名并发送",
+      "signing": "等待你的签名…",
+      "signed": "订单已发送。下面的哈希已记入账本：",
+      "err": {
+        "USER_REJECTED": "你在钱包里拒绝了签名。没有发送任何东西。",
+        "QUOTE_EXPIRED": "报价已过期。关闭并重新构建订单。",
+        "RISK_BLOCKED": "风控引擎拒绝了该订单。没有发送任何东西。",
+        "MARKET_NOT_LISTED": "该场所不提供这个币对。请从横条中另选一个。",
+        "PROVIDER_UNAVAILABLE": "场所没有响应。没有发送任何内容——稍后重试。"
+      }
     }
   }
 }

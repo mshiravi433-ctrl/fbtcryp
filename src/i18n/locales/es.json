@@ -275,7 +275,8 @@
     "supply": "Suministro",
     "fromAth": "Desde máx. histórico",
     "notFoundHelp": "Esta moneda no estaba en la página cargada y la consulta directa tampoco respondió. Suele significar que el proveedor de datos está limitando peticiones: inténtalo en un momento.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "Comprar {{symbol}}"
   },
   "swap": {
     "title": "Intercambiar",
@@ -2434,6 +2435,38 @@
       "copied": "Copiado",
       "copy": "Copiar dirección",
       "badAddress": "Esa no es una dirección de Solana."
+    },
+    "picker": {
+      "popular": "Tokens populares",
+      "universeCount": "{{count}} tokens disponibles"
+    },
+    "universe": {
+      "unavailable": "No se pudo cargar la lista. Pega una dirección mint para cambiarla igual."
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} pares",
+      "pairSearch": "Buscar pares",
+      "pairInApp": "Se puede operar en esta app",
+      "noPairMatch": "Ningún par coincide con esa búsqueda.",
+      "connectSolana": "Conectar wallet de Solana",
+      "preparing": "Preparando la orden…",
+      "prepared": "Construida por el servidor",
+      "preparedNotional": "Tamaño de la orden",
+      "preparedSlippage": "Deslizamiento máx.",
+      "preparedVenue": "Mercado del venue",
+      "signHere": "El siguiente toque pide a TU wallet que firme esta orden exacta, aquí en esta pantalla. La app no custodia nada.",
+      "signNow": "Firmar y enviar",
+      "signing": "Esperando tu firma…",
+      "signed": "Orden enviada. El hash siguiente quedó registrado en el libro:",
+      "err": {
+        "USER_REJECTED": "Rechazaste la firma en tu wallet. No se envió nada.",
+        "QUOTE_EXPIRED": "La cotización caducó. Ciérrala y vuelve a crear la orden.",
+        "RISK_BLOCKED": "El motor de riesgo rechazó la orden. No se envió nada.",
+        "MARKET_NOT_LISTED": "Este venue no lista ese par. Elige otro en la barra.",
+        "PROVIDER_UNAVAILABLE": "El venue no respondió. No se envió nada: inténtalo en un momento."
+      }
     }
   }
 }

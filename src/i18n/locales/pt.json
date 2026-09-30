@@ -275,7 +275,8 @@
     "supply": "Fornecimento",
     "fromAth": "Desde o máximo",
     "notFoundHelp": "Esta moeda não estava na página carregada e a consulta direta também não respondeu. Normalmente o fornecedor de dados está a limitar pedidos — tente de novo daqui a pouco.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "Comprar {{symbol}}"
   },
   "swap": {
     "title": "Trocar",
@@ -2434,6 +2435,38 @@
       "copied": "Copiado",
       "copy": "Copiar endereço",
       "badAddress": "Esse não é um endereço Solana."
+    },
+    "picker": {
+      "popular": "Tokens populares",
+      "universeCount": "{{count}} tokens disponíveis"
+    },
+    "universe": {
+      "unavailable": "Não foi possível carregar a lista. Cole um endereço mint para trocar mesmo assim."
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} pares",
+      "pairSearch": "Buscar pares",
+      "pairInApp": "Negociável neste app",
+      "noPairMatch": "Nenhum par corresponde a essa busca.",
+      "connectSolana": "Conectar carteira Solana",
+      "preparing": "Preparando a ordem…",
+      "prepared": "Criada pelo servidor",
+      "preparedNotional": "Tamanho da ordem",
+      "preparedSlippage": "Slippage máx.",
+      "preparedVenue": "Mercado da venue",
+      "signHere": "O próximo toque pede que a SUA carteira assine exatamente esta ordem, aqui nesta tela. O app não custodia nada.",
+      "signNow": "Assinar e enviar",
+      "signing": "Aguardando sua assinatura…",
+      "signed": "Ordem enviada. O hash abaixo foi registrado no livro-razão:",
+      "err": {
+        "USER_REJECTED": "Você rejeitou a assinatura. Nada foi enviado.",
+        "QUOTE_EXPIRED": "A cotação expirou. Feche e crie o pedido de novo.",
+        "RISK_BLOCKED": "O motor de risco recusou a ordem. Nada foi enviado.",
+        "MARKET_NOT_LISTED": "Esta venue não lista esse par. Escolha outro na faixa.",
+        "PROVIDER_UNAVAILABLE": "A venue não respondeu. Nada foi enviado — tente em instantes."
+      }
     }
   }
 }

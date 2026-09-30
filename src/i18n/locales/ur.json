@@ -278,7 +278,8 @@
     "supply": "سپلائی",
     "fromAth": "ATH سے",
     "notFoundHelp": "یہ سکہ لوڈ شدہ فہرست میں نہیں تھا اور براہ راست درخواست بھی ناکام رہی۔ عام طور پر ڈیٹا سروس درخواستیں محدود کر رہی ہوتی ہے — تھوڑی دیر بعد کوشش کریں۔",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "{{symbol}} خریدیں"
   },
   "swap": {
     "title": "سویپ",
@@ -2430,6 +2431,38 @@
       "copied": "کاپی ہو گیا",
       "copy": "پتہ کاپی کریں",
       "badAddress": "یہ سولانا کا پتہ نہیں ہے۔"
+    },
+    "picker": {
+      "popular": "مقبول ترین ٹوکن",
+      "universeCount": "{{count}} ٹوکن دستیاب"
+    },
+    "universe": {
+      "unavailable": "ٹوکن لسٹ لوڈ نہیں ہو سکی۔ اسے بدلنے کے لیے مِنٹ ایڈریس پیسٹ کریں۔"
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} جوڑے",
+      "pairSearch": "جوڑے تلاش کریں",
+      "pairInApp": "اسی ایپ میں قابل تجارت ہے",
+      "noPairMatch": "اس تلاش سے کوئی جوڑا نہیں ملا۔",
+      "connectSolana": "سولانا والیٹ جوڑیں",
+      "preparing": "آرڈر تیار کیا جا رہا ہے…",
+      "prepared": "سرور کے ذریعے تیار کردہ",
+      "preparedNotional": "آرڈر کا حجم",
+      "preparedSlippage": "زیادہ سے زیادہ سلیپیج",
+      "preparedVenue": "ونیو مارکیٹ",
+      "signHere": "اگلا tap آپ کے والیٹ سے اسی آرڈر کی دستخط یہیں اسی اسکرین پر مانگے گا۔ ایپ کچھ بھی اپنے پاس نہیں رکھتا۔",
+      "signNow": "دستخط کریں اور بھیجیں",
+      "signing": "آپ کے دستخط کا انتظار…",
+      "signed": "آرڈر بھیج دیا گیا۔ نیچے دیا ہیش لیجر میں درج ہے:",
+      "err": {
+        "USER_REJECTED": "آپ نے والیٹ میں دستخط مسترد کر دیا۔ کچھ نہیں بھیجا گیا۔",
+        "QUOTE_EXPIRED": "قیمت کی میعاد ختم ہو گئی۔ بند کریں اور آرڈر دوبارہ بنائیں۔",
+        "RISK_BLOCKED": "رسک انجن نے یہ آرڈر مسترد کر دیا۔ کچھ نہیں بھیجا گیا۔",
+        "MARKET_NOT_LISTED": "یہ ایکسچنج وہ جوڑا نہیں کھلاتا۔ اسٹرپ سے کوئی اور منتخب کریں۔",
+        "PROVIDER_UNAVAILABLE": "ایکسچنج نے جواب نہیں دیا۔ کچھ نہیں بھیجا — کچھ دیر بعد کوشش کریں۔"
+      }
     }
   }
 }

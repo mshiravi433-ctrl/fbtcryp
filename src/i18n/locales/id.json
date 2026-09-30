@@ -275,7 +275,8 @@
     "supply": "Pasokan",
     "fromAth": "Dari ATH",
     "notFoundHelp": "Koin ini tidak ada di halaman yang dimuat dan permintaan langsung juga tidak menjawab. Biasanya penyedia data sedang membatasi — coba lagi sebentar.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "Beli {{symbol}}"
   },
   "swap": {
     "title": "Tukar",
@@ -2434,6 +2435,38 @@
       "copied": "Tersalin",
       "copy": "Salin alamat",
       "badAddress": "Ini bukan alamat Solana."
+    },
+    "picker": {
+      "popular": "Token populer",
+      "universeCount": "{{count}} token tersedia"
+    },
+    "universe": {
+      "unavailable": "Daftar token gagal dimuat. Tempel alamat mint untuk tetap menukarnya."
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} pasangan",
+      "pairSearch": "Cari pasangan",
+      "pairInApp": "Dapat diperdagangkan di app ini",
+      "noPairMatch": "Tidak ada pasangan yang cocok dengan pencarian itu.",
+      "connectSolana": "Hubungkan dompet Solana",
+      "preparing": "Menyiapkan order…",
+      "prepared": "Dibangun oleh server",
+      "preparedNotional": "Ukuran order",
+      "preparedSlippage": "Slippage maks.",
+      "preparedVenue": "Pasar venue",
+      "signHere": "Ketukan berikutnya meminta dompet ANDA menandatangani order ini tepat di layar ini. Aplikasi tidak menyimpan aset apa pun.",
+      "signNow": "Tandatangani dan kirim",
+      "signing": "Menunggu tanda tangan Anda…",
+      "signed": "Order terkirim. Hash di bawah tercatat di ledger:",
+      "err": {
+        "USER_REJECTED": "Kamu menolak tanda tangan di dompet. Tidak ada yang dikirim.",
+        "QUOTE_EXPIRED": "Kuotasi kedaluwarsa. Tutup lalu bangun ulang ordernya.",
+        "RISK_BLOCKED": "Mesin risiko menolak order ini. Tidak ada yang dikirim.",
+        "MARKET_NOT_LISTED": "Venue ini tidak mencantumkan pasangan itu. Pilih yang lain.",
+        "PROVIDER_UNAVAILABLE": "Venue tidak menjawab. Tidak ada yang dikirim — coba lagi sebentar."
+      }
     }
   }
 }

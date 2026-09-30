@@ -21,8 +21,22 @@ import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts } from '../lib/priceAlerts';
 import { isSwappable, swapUrlFor } from '../lib/coinToSwap';
+import { venueRoute } from '../lib/coinVenue';
+import { rememberCoinVenues } from '../lib/coinVenues';
+import { useCoinVenues } from '../hooks/useCoinVenues';
 
 const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
+
+/**
+ * HOW MANY TOKENS THE FIRST PAGE HOLDS.
+ *
+ * 60 made most coins untappable (the detail screen looked the id up in this
+ * list and said "not found"); 250 was still a page a trader calls short.
+ * CoinGecko's bulk endpoint answers 250 per call, so 500 is two calls — and
+ * 500 is exactly the batch ceiling the venue resolver is specified for, so
+ * "resolve every row on screen" stays a single request however the list grows.
+ */
+const MARKET_PAGE_SIZE = 500;
 
 /**
  * SECTOR TABS — gold, memecoins, RWA, AI, gaming.
@@ -61,10 +75,21 @@ export default function Market() {
   const vs = vsOf(useSettingsStore((s) => s.currency));
 
   const { data: global } = useGlobalStats();
-  // 250 rows instead of 60: the old page made most coins untappable, because
-  // the detail screen looked the id up in THIS list and said "not found" when
-  // it wasn't there.
-  const { data: marketCoins, loading } = useMarkets(250);
+  /*
+   * ─── HOW MANY TOKENS THIS PAGE SHOWS ───────────────────────────────────
+   *   «تعداد توکن های صفحه بازار خیلی کمه»
+   *
+   * 60 made most coins untappable (the detail screen looked the id up in
+   * THIS list), then 250 was still a page a trader calls short. CoinGecko's
+   * bulk endpoint answers 250 per call, so 500 is two — and this screen
+   * already loads the second page on demand below, which is where the rest
+   * comes from.
+   *
+   * 500 is also the ceiling the batch venue resolver is specified for
+   * (lib/coinVenues.js), so "ask about everything on screen" stays exactly
+   * one request.
+   */
+  const { data: marketCoins, loading } = useMarkets(MARKET_PAGE_SIZE);
   const [visualVersion, setVisualVersion] = useState(0);
   useEffect(() => onMarketVisualsReady(() => setVisualVersion((v) => v + 1)), []);
   const coins = useMemo(() => (marketCoins ?? []).map(mergeVisuals), [marketCoins, visualVersion]);
@@ -137,7 +162,15 @@ export default function Market() {
   const [sector, setSector] = useState(null);
   const [sectorCoins, setSectorCoins] = useState([]);
   const [sectorLoading, setSectorLoading] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(40);
+  /*
+   * 60 rows a page, up from 40. Each one is a card with a sparkline and a
+   * swap button; forty of them filled two screens and a half on a phone, and
+   * the complaint was that the market had too few tokens. The number is a
+   * RENDER budget, not a data budget — the list still only ever holds the
+   * rows a user has scrolled near, because the resolver below asks about the
+   * visible slice alone.
+   */
+  const [visibleCount, setVisibleCount] = useState(60);
   const [secondPage, setSecondPage] = useState({ vs, rows: [] });
   const currentVs = useRef(vs);
   currentVs.current = vs;
@@ -152,15 +185,15 @@ export default function Market() {
       const known = new Set(coins.map((row) => row.id));
       const newRows = (rows ?? []).filter((row) => !known.has(row.id));
       setSecondPage({ vs, rows: newRows });
-      setPageDone(true); // cap at 500; the next page is deliberately on demand
-      setVisibleCount((n) => n + 40);
+      setPageDone(true); // cap at 750; the next page is deliberately on demand
+      setVisibleCount((n) => n + 60);
     } catch {
       // A failed page must remain retryable, never cached as a successful empty page.
     } finally {
       setPageLoading(false);
     }
   };
-  useEffect(() => setVisibleCount(40), [sector, filter, query]);
+  useEffect(() => setVisibleCount(60), [sector, filter, query]);
   useEffect(() => { setSecondPage({ vs, rows: [] }); setPageDone(false); }, [vs]);
 
   useEffect(() => {
@@ -220,6 +253,27 @@ export default function Market() {
         return out;
     }
   }, [coins, secondPage, vs, filter, query, favorites, sector, sectorCoins]);
+
+  /*
+   * ─── SWAPPABILITY FOR EVERY ROW, IN ONE REQUEST ────────────────────────
+   * The rows used to decide their own swap button from the 46-entry curated
+   * table alone, which is why a 250-row list showed a button on a dozen of
+   * them and answered «cannot swap» for coins this app trades every day.
+   * `useCoinVenues` asks the server for the whole visible page's real
+   * contracts in ONE call; curated still wins per row, so nothing that
+   * already worked can get worse.
+   *
+   * Only the rows actually ON SCREEN are asked about: a coin nobody can see
+   * has no button to light up, and asking about all 500 would be a request
+   * whose answer is thrown away.
+   */
+  const visibleCoins = useMemo(() => (list ?? []).slice(0, visibleCount), [list, visibleCount]);
+  const { venues } = useCoinVenues(visibleCoins.map((c) => c.id));
+  useEffect(() => {
+    /* Hand the answers to the per-coin cache, so opening a row is instant
+       and the coin page never re-asks for what this list just learned. */
+    for (const [id, venue] of venues) rememberCoinVenues(id, venue);
+  }, [venues]);
 
   // Coins the search found that aren't in the loaded page. Shown separately so
   // it's obvious they came from a wider lookup, and tappable like any other.
@@ -470,27 +524,37 @@ export default function Market() {
         ) : (
           <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
             {list.slice(0, visibleCount).map((c, i) => {
-              const swappable = isSwappable(c.id);
-              const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
+              /*
+                ─── ONE TAP, TWO ANSWERS ───────────────────────────────────
+                The curated answer (`isSwappable`) is INSTANT and offline: a
+                hand-checked contract on our cheapest chain. The resolved
+                answer comes from CoinGecko's own platform map and is what
+                makes a Solana memecoin or a long-tail Base token swappable
+                at all — see lib/coinVenues.js.
+
+                Curated is asked first and always wins, because it carries a
+                counter-token and a verified contract. Resolved is the
+                fallback that turns «cannot swap» into a real route for the
+                majority of the list.
+              */
+              const curated = isSwappable(c.id);
+              const venue = curated ? null : venues.get(c.id);
+              const resolved = !curated && venue?.tradeable ? venueRoute({ ...venue }) : null;
+              const swapUrl = curated ? swapUrlFor(c.id, 'buy') : resolved?.href ?? null;
               return (
                 <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <CoinRow coin={c} rank={c.rank || i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
-                    <div className="market-row-stats mono" aria-label={`${t('market.volume24h')}: ${c.volume ?? '—'}`}>
-                      <span>{t('market.volume24h')}: {c.volume != null && c.volume > 0 ? fmtCompact(c.volume) : '—'}</span>
-                      <span>{t('market.low24h')}: {c.low24h != null && c.low24h > 0 ? fmtUsd(c.low24h) : '—'}</span>
-                      <span>{t('market.high24h')}: {c.high24h != null && c.high24h > 0 ? fmtUsd(c.high24h) : '—'}</span>
-                    </div>
                   </div>
-                  {swappable && swapUrl && (
+                  {swapUrl && (
                     <button
-                      className="tag"
-                      style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
+                      className="tag market-swap-btn"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate(swapUrl);
                       }}
                       title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
+                      data-testid={`market-swap-${c.id}`}
                     >
                       {t('market.swap')}
                     </button>
@@ -499,9 +563,9 @@ export default function Market() {
               );
             })}
 
-            {(list.length > visibleCount || (!sector && filter === 'all' && !query && !pageDone && coins.length >= 250)) && (
+            {(list.length > visibleCount || (!sector && filter === 'all' && !query && !pageDone && coins.length >= MARKET_PAGE_SIZE)) && (
               <button type="button" className="tag" disabled={pageLoading}
-                onClick={() => list.length > visibleCount ? setVisibleCount((n) => n + 40) : loadNextPage()}>
+                onClick={() => (list.length > visibleCount ? setVisibleCount((n) => n + 60) : loadNextPage())}>
                 {pageLoading ? t('market.loadingSector') : t('market.showMore', { count: Math.max(0, list.length - visibleCount) || 250 })}
               </button>
             )}
@@ -509,8 +573,10 @@ export default function Market() {
               <>
                 <p className="section-label" style={{ marginTop: 8 }}>{t('market.moreResults')}</p>
                 {extraHits.map((c) => {
-                  const swappable = isSwappable(c.id);
-                  const swapUrl = swappable ? swapUrlFor(c.id, 'buy') : null;
+                  const curated = isSwappable(c.id);
+                  const venue = curated ? null : venues.get(c.id);
+                  const resolved = !curated && venue?.tradeable ? venueRoute({ ...venue }) : null;
+                  const swapUrl = curated ? swapUrlFor(c.id, 'buy') : resolved?.href ?? null;
                   return (
                     <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
                       <button
@@ -525,10 +591,9 @@ export default function Market() {
                         </div>
                         {c.rank > 0 && <span className="faint mono" style={{ fontSize: 11 }}>#{c.rank}</span>}
                       </button>
-                      {swappable && swapUrl && (
+                      {swapUrl && (
                         <button
-                          className="tag"
-                          style={{ flexShrink: 0, minHeight: 36, padding: '6px 10px', borderRadius: 10, background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', border: 'none', fontWeight: 800, fontSize: 11 }}
+                          className="tag market-swap-btn"
                           onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
                         >
                           {t('market.swap')}

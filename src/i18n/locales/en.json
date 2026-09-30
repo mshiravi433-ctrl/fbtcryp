@@ -137,7 +137,8 @@
     "tempUnavailableHelp": "The price service is busy right now, so this coin's data has not arrived yet. It is almost always back within a few seconds — we are retrying automatically.",
     "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
     "compare": "Compare",
-    "tvHint": "Drag to pan · pinch to zoom"
+    "tvHint": "Drag to pan · pinch to zoom",
+    "swapDockAria": "Buy {{symbol}}"
   },
   "trade": {
     "title": "Trade",
@@ -1866,6 +1867,27 @@
         "treasury": "The FBT fee share of this trade is paid straight to the FBT treasury address ({{address}}) at execution.",
         "discount": "This route carries the registered referral code {{code}}: you get a {{pct}}% fee discount and the referral share goes to FBT.",
         "unavailable": "Live fee preview is unavailable right now — nothing is invented. You will see the final numbers at review."
+      },
+      "pairsCount": "{{count}} pairs",
+      "pairSearch": "Search pairs",
+      "pairInApp": "Can be traded in this app",
+      "noPairMatch": "No pair matches that search.",
+      "connectSolana": "Connect Solana wallet",
+      "preparing": "Preparing the order…",
+      "prepared": "Built by the backend",
+      "preparedNotional": "Order size",
+      "preparedSlippage": "Max slippage",
+      "preparedVenue": "Venue market",
+      "signHere": "The next tap asks YOUR wallet to sign this exact order, here on this screen. Nothing is held by the app.",
+      "signNow": "Sign and send",
+      "signing": "Waiting for your signature…",
+      "signed": "Order sent. The hash below is recorded in the ledger:",
+      "err": {
+        "USER_REJECTED": "You rejected the signature in your wallet. Nothing was sent.",
+        "QUOTE_EXPIRED": "The quote expired. Close this and build the order again.",
+        "RISK_BLOCKED": "The risk engine refused this order. Nothing was sent.",
+        "MARKET_NOT_LISTED": "This venue does not list that pair. Pick another one from the strip.",
+        "PROVIDER_UNAVAILABLE": "The venue did not answer. Nothing was sent — try again in a moment."
       }
     }
   },
@@ -5533,7 +5555,9 @@
       "selected": "In use",
       "unknownToken": "Unknown token — not indexed anywhere",
       "importNote": "This address is not in Jupiter's index yet; you can still import it. Its scale and balance are read straight from the chain, and every swap is simulated before it is sent.",
-      "noResults": "Nothing found. You can paste the token's full contract (mint) address to import it directly."
+      "noResults": "Nothing found. You can paste the token's full contract (mint) address to import it directly.",
+      "popular": "Popular tokens",
+      "universeCount": "{{count}} tokens available"
     },
     "sentiment": {
       "aiTitle": "Token AI",
@@ -5586,6 +5610,9 @@
       "copied": "Copied",
       "copy": "Copy address",
       "badAddress": "That is not a Solana address."
+    },
+    "universe": {
+      "unavailable": "Could not load the token list. Paste a mint address to swap it anyway."
     }
   },
   "install": {

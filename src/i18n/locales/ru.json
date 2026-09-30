@@ -275,7 +275,8 @@
     "supply": "Предложение",
     "fromAth": "От максимума",
     "notFoundHelp": "Этой монеты не было в загруженной странице, и прямой запрос тоже не ответил. Обычно это значит, что поставщик данных ограничивает запросы — попробуйте через минуту.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "Купить {{symbol}}"
   },
   "swap": {
     "title": "Обмен",
@@ -2438,6 +2439,38 @@
       "copied": "Скопировано",
       "copy": "Копировать адрес",
       "badAddress": "Это не адрес Solana."
+    },
+    "picker": {
+      "popular": "Популярные токены",
+      "universeCount": "Доступно токенов: {{count}}"
+    },
+    "universe": {
+      "unavailable": "Не удалось загрузить список токенов. Вставьте адрес mint, чтобы обменять его в любом случае."
+    }
+  },
+  "perp": {
+    "terminal": {
+      "pairsCount": "{{count}} пар",
+      "pairSearch": "Поиск пар",
+      "pairInApp": "Торгуется в этом приложении",
+      "noPairMatch": "Нет пар, подходящих под этот запрос.",
+      "connectSolana": "Подключить кошелёк Solana",
+      "preparing": "Готовим ордер…",
+      "prepared": "Собрано сервером",
+      "preparedNotional": "Размер ордера",
+      "preparedSlippage": "Макс. проскальзывание",
+      "preparedVenue": "Рынок площадки",
+      "signHere": "Следующее нажатие попросит подписать именно этот ордер вашим кошельком — здесь, на этом экране. Приложение ничего не хранит.",
+      "signNow": "Подписать и отправить",
+      "signing": "Ожидаем вашу подпись…",
+      "signed": "Ордер отправлен. Хеш ниже записан в реестре:",
+      "err": {
+        "USER_REJECTED": "Вы отклонили подпись. Ничего не отправлено.",
+        "QUOTE_EXPIRED": "Котировка истекла. Закройте и соберите ордер заново.",
+        "RISK_BLOCKED": "Риск-движок отклонил ордер. Ничего не отправлено.",
+        "MARKET_NOT_LISTED": "Эта площадка не листирует эту пару. Выберите другую в ленте.",
+        "PROVIDER_UNAVAILABLE": "Площадка не ответила. Ничего не отправлено — попробуйте чуть позже."
+      }
     }
   }
 }

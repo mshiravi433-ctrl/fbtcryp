@@ -131,11 +131,24 @@ export function buildVenueIndex(rows, slugs = PLATFORM_SLUGS) {
   return byCoin;
 }
 
+/**
+ * A fetch seam the test suite overrides (same pattern as solanaIntel.js).
+ * Production reads the global; the tests hand in canned `/coins/list` rows so
+ * the validation and the batch answer are asserted without a 17,000-row
+ * download and without spending a CoinGecko credit.
+ */
+let cgFetch = (url, opts) => globalThis.fetch(url, opts);
+
+/** Test-only fetch override. Restored with `__setVenueFetchForTests(null)`. */
+export function __setVenueFetchForTests(fn) {
+  cgFetch = fn || ((url, opts) => globalThis.fetch(url, opts));
+}
+
 async function fetchVenueIndex() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(cgUrl('/coins/list', { include_platform: 'true', status: 'active' }), {
+    const res = await cgFetch(cgUrl('/coins/list', { include_platform: 'true', status: 'active' }), {
       signal: ctrl.signal,
       headers: { accept: 'application/json', 'user-agent': 'fbt-swap-app/1.0' }
     });
@@ -199,6 +212,53 @@ export async function resolveVenue(coinId) {
     tradeable: Boolean(hit),
     updatedAt: new Date(idx.at).toISOString()
   };
+}
+
+/**
+ * THE SAME ANSWER, FOR A WHOLE PAGE OF COINS.
+ *
+ * ─── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ *   «تعداد توکن های صفحه بازار خیلی کمه، بیشترشم قابل سواپ نیست»
+ *
+ * The coin page resolves ONE id at a time, which is right for one coin and
+ * absurd for a list: the market screen holds 250 rows, and asking the server
+ * 250 times to learn what the ONE index it already has in memory could have
+ * answered in a single request is 250 round trips, 250 abort controllers and
+ * a phone battery gone by the time the user scrolls.
+ *
+ * The upstream cost is unchanged — it is the same `/coins/list` download, the
+ * same six-hour cache, the same map. Only the fan-out goes away.
+ *
+ * Coins with no reachable platform are returned as an EXPLICIT
+ * `tradeable: false` rather than being omitted. A list that silently drops
+ * rows is a list the UI cannot distinguish from a failed request, and the
+ * honest answer for a Cardano asset is "we cannot reach it", not "no data".
+ */
+export async function resolveVenues(coinIds = []) {
+  const ids = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(coinIds) ? coinIds : []) {
+    const id = String(raw ?? '').trim().toLowerCase();
+    if (!id || id.length > 100 || !/^[a-z0-9][a-z0-9._-]*$/.test(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    /* 500 is a whole market page; more than that is a client bug, not a user. */
+    if (ids.length >= 500) break;
+  }
+  if (!ids.length) return { error: 'BAD_ID' };
+
+  const idx = await getVenueIndex();
+  const venues = {};
+  for (const id of ids) {
+    const hit = idx.byCoin.get(id);
+    venues[id] = {
+      chains: hit?.chains ?? {},
+      solana: hit?.solana ?? null,
+      tradeable: Boolean(hit)
+    };
+  }
+  return { venues, count: ids.length, updatedAt: new Date(idx.at).toISOString() };
 }
 
 /** Reset, for tests. */

@@ -13,6 +13,7 @@ import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
 import InstallPrompt from './components/InstallPrompt';
 import RadioDock from './components/RadioDock';
+import { useSwapDockStore } from './store/useSwapDockStore';
 import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
 /*
  * ─── EVERY ROUTE LOADS THROUGH lazyRetry, NOT React.lazy ────────────────────
@@ -325,8 +326,26 @@ function prefetchLikelyRoutes() {
 function AppChrome() {
   const { pathname } = useLocation();
   const headerless = pathname === '/intent' || pathname.startsWith('/pay');
+  /*
+    ─── THE BOTTOM EDGE BELONGS TO WHOEVER NEEDS IT MOST ───────────────────
+    «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود» — on a coin page
+    that has scrolled past its own trade buttons, the sticky swap dock takes
+    the nav's place. Two fixed, blurred bars at the bottom of a phone is a
+    layout accident, so they are never both mounted.
+
+    This is a FACT ABOUT THE SCREEN, published by the screen (see
+    store/useSwapDockStore.js) — not a route special case. Any page can grow
+    a dock later without this file learning what a dock is.
+  */
+  const dockActive = useSwapDockStore((s) => s.active);
+  /* Leaving a screen that had a dock must release it even if the page
+     unmounted without a chance to clean up. */
+  useEffect(() => {
+    return () => useSwapDockStore.getState().reset();
+  }, [pathname]);
+
   return (
-    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}`}>
+    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
       {!headerless && <Header />}
       <PullToRefresh>
         <AnimatedRoutes />

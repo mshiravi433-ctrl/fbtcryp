@@ -34,11 +34,13 @@ import {
 import { solanaSwapPreflight, lamportsToSol } from '../lib/solana/swapPreflight';
 import { shortAddress } from '../context/WalletContext';
 import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
+import { loadSolanaUniverse, mergeSolanaUniverse } from '../lib/solanaUniverse';
 import { useAppStore } from '../store/useAppStore';
 import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
 import SolanaConnectSheet from '../components/SolanaConnectSheet';
 import SolanaTokenPicker from '../components/SolanaTokenPicker';
+import SolanaTokenChip from '../components/SolanaTokenChip';
 import TokenIcon from '../lib/tokenIcon';
 import { warmDeeplinkRequest } from '../lib/solana/deeplink.js';
 import { POINT_VALUES } from '../lib/ranks';
@@ -485,7 +487,71 @@ export default function SolanaSwap({ embedded = false }) {
     }
   }, [extraTokens, resolveTokenScale]);
 
-  const tokens = useMemo(() => [...BASE_TOKENS, ...extraTokens], [extraTokens]);
+  /*
+   * ─── THE TOKEN UNIVERSE ────────────────────────────────────────────────
+   *   «تعداد توکن ها کم است» (this screen).
+   *
+   * It used to be exactly three hand-written rows plus a paste-a-mint field.
+   * On the one chain where browsing IS the trade, that is the wrong default:
+   * the deep end of Solana is what people open this app for, and none of it
+   * was one tap away.
+   *
+   * The order is deliberate and it is the speed budget:
+   *
+   *   1. `BASE_TOKENS` — the curated set, already in memory, painted on the
+   *      first frame with no request and no cache read. The screen is usable
+   *      the instant it mounts, offline included.
+   *   2. The remembered catalogue (lib/solanaUniverse.js) merges in from
+   *      localStorage on the next tick, so a returning user sees the full
+   *      list essentially immediately.
+   *   3. The network refresh lands last and only ever ADDS rows.
+   *
+   * A failure at any step leaves exactly what was already there. The screen
+   * loses breadth; it never loses the ability to swap a token whose mint the
+   * user knows.
+   */
+  const [universe, setUniverse] = useState([]);
+  const [universeLive, setUniverseLive] = useState(false);
+  /* The curated mints, as a set — the quick rail needs to know which rows
+     came from the app itself, because those have no liquidity figure in the
+     catalogue and must not be sorted out of existence by a numeric filter. */
+  const curatedMints = useMemo(
+    () => new Set(BASE_TOKENS.map((tk) => tk.mint)),
+    []
+  );
+  useEffect(() => {
+    let alive = true;
+    loadSolanaUniverse((rows) => {
+      if (!alive) return;
+      setUniverse(rows);
+      setUniverseLive(true);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const tokens = useMemo(
+    () => mergeSolanaUniverse(BASE_TOKENS, [...universe, ...extraTokens]),
+    [universe, extraTokens]
+  );
+
+  /*
+   * The quick-pick rail. Highest LIQUIDITY first, not highest rank: the
+   * upstream already ranked its three lists, and the only fact that decides
+   * whether a chip is useful is whether a quote comes back for it. The
+   * server drops sub-$500-liquidity rows for exactly this reason.
+   *
+   * The two legs already on the ticket are excluded — a chip that would flip
+   * the pair the user is mid-way through setting up is a trap, and both are
+   * already visible in the boxes above.
+   */
+  const popular = useMemo(
+    () => tokens
+      .filter((tk) => tk && tk.mint && tk.mint !== fromToken.mint && tk.mint !== toToken.mint)
+      .filter((tk) => (Number(tk.liquidity ?? 0) > 0) || curatedMints.has(tk.mint))
+      .sort((a, b) => (Number(b.liquidity ?? 0) - Number(a.liquidity ?? 0)))
+      .slice(0, 14),
+    [tokens, fromToken.mint, toToken.mint]
+  );
 
   /*
    * Follow the Solana connection made from the Wallet page. The provider is
@@ -1230,21 +1296,11 @@ export default function SolanaSwap({ embedded = false }) {
             </span>
           </div>
           <div className="sol-swap-box-body">
-            <button
-              type="button"
-              className="sol-token-btn"
+            <SolanaTokenChip
+              token={fromToken}
               onClick={() => { haptic?.('select'); setPickerSide('from'); }}
-              data-testid="solana-token-from"
-            >
-              <TokenIcon token={fromToken} size={26} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fromToken.symbol}</span>
-              {fromToken.imported ? (
-                <span className={`sol-token-imported-chip ${fromToken.verified ? 'verified' : 'unverified'}`}>
-                  {fromToken.verified ? '✓' : '!'}
-                </span>
-              ) : null}
-              <span className="stp-caret" aria-hidden="true">▼</span>
-            </button>
+              testId="solana-token-from"
+            />
             <input
               className="swap-amount-input mono"
               type="text"
@@ -1270,26 +1326,55 @@ export default function SolanaSwap({ embedded = false }) {
             <span className="faint" style={{ fontSize: 11.5 }}>{t('swap.to')}</span>
           </div>
           <div className="sol-swap-box-body">
-            <button
-              type="button"
-              className="sol-token-btn"
+            <SolanaTokenChip
+              token={toToken}
               onClick={() => { haptic?.('select'); setPickerSide('to'); }}
-              data-testid="solana-token-to"
-            >
-              <TokenIcon token={toToken} size={26} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toToken.symbol}</span>
-              {toToken.imported ? (
-                <span className={`sol-token-imported-chip ${toToken.verified ? 'verified' : 'unverified'}`}>
-                  {toToken.verified ? '✓' : '!'}
-                </span>
-              ) : null}
-              <span className="stp-caret" aria-hidden="true">▼</span>
-            </button>
+              testId="solana-token-to"
+            />
             <span className="mono sol-swap-out">
               {quoting ? t('swap.quoting') : (outAmount ?? '—')}
             </span>
           </div>
         </div>
+
+        {/*
+          ─── ONE TAP TO THE DEEP END ──────────────────────────────────────
+          «تعداد توکن ها کم است».
+
+          A catalogue nobody has to scroll to is worth more than a longer one
+          behind a search box: these are the highest-liquidity mints the
+          catalogue knows, offered directly. Tapping one puts it on the TO
+          side, which is the direction people arrive wanting — they have the
+          stablecoin and they know what they want next.
+
+          Deliberately NOT shown when the list failed to load, and deliberately
+          capped: an empty rail under the ticket reads as a broken component,
+          and sixty chips is a list, not a rail. The picker still holds
+          everything, and a pasted mint still works — this is a shortcut, not
+          a gate.
+        */}
+        {popular.length > 0 && (
+          <div className="sol-quick" data-testid="sol-quick-picks">
+            <div className="sol-quick-head">
+              <span className="faint">{t('solana.picker.popular')}</span>
+              <span className="faint mono">{t('solana.picker.universeCount', { count: tokens.length })}</span>
+            </div>
+            <div className="tag-scroll sol-quick-rail">
+              {popular.map((tk) => (
+                <button
+                  key={tk.mint}
+                  type="button"
+                  className={`sol-quick-chip${toToken.mint === tk.mint ? ' is-active' : ''}`}
+                  onClick={() => pickToken('to', tk)}
+                  title={tk.name || tk.symbol}
+                >
+                  <TokenIcon token={tk} size={18} />
+                  <span className="sol-quick-sym">{tk.symbol}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {quoteErr && (
           <div className="stack" style={{ gap: 8, marginTop: 11 }}>

@@ -1,0 +1,160 @@
+/* ==========================================================================
+   THE STICKY SWAP DOCK — a coin's trade button, pinned to the bottom edge.
+   ==========================================================================
+   «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود … مثل یونی سواپ»
+
+   It sits exactly where `.bottom-nav` sits, with the same geometry, so the
+   two swap places for one another instead of stacking. Three rules govern
+   the whole file:
+
+     1. It is a BAR, not a card. No border-radius of its own beyond the pill
+        the button carries, no shadow that reads as a second surface.
+     2. The number is the anchor. The coin's live price sits left of the
+        button and the button is the only bright thing in the bar, so the eye
+        goes to the action without the bar competing with the price above it.
+     3. Motion is compositor-only — `translate` and `opacity`, never a
+        property that would re-layout the page underneath it.
+   ========================================================================== */
+
+.swap-dock {
+  position: fixed;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  left: 50%;
+  /* `translate`, not `transform`: the entrance animation below owns
+     `transform`, and centring parked there would have to be repeated inside
+     the keyframes. Same reason `.bottom-nav` does it this way. */
+  translate: -50% 0;
+  width: calc(100% - 28px);
+  max-width: 440px;
+  z-index: 45;
+  padding: 10px 12px;
+  border-radius: 24px;
+  background: rgba(10, 11, 18, .88);
+  backdrop-filter: blur(26px) saturate(1.6);
+  -webkit-backdrop-filter: blur(26px) saturate(1.6);
+  border: 1px solid var(--line);
+  box-shadow:
+    0 18px 46px -14px rgba(0, 0, 0, .85),
+    0 0 0 1px rgba(255, 255, 255, .04) inset;
+  pointer-events: auto;
+  will-change: transform, opacity;
+}
+
+/* A single soft wash of the accent across the bar's top edge. It is one
+   pseudo-element with no animation, so it costs nothing per frame and is
+   dropped entirely in the reduced-motion / lite builds below. */
+.swap-dock-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(120deg, rgba(var(--rgb-r, 0), .16), transparent 42%);
+  opacity: .9;
+}
+
+.swap-dock-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.swap-dock-coin {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.swap-dock-coin .tok-icon { flex: 0 0 auto; }
+
+.swap-dock-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.swap-dock-sym {
+  font: 800 13px/1.1 var(--font-display);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swap-dock-price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.swap-dock-price i { font-style: normal; font-weight: 700; }
+.swap-dock-price i.up { color: var(--up, #00e69e); }
+.swap-dock-price i.down { color: var(--down, #ff3b6b); }
+
+/* The action. The only saturated element in the bar, and sized to a real
+   thumb: 44px of height, 15px of side padding, and a gradient rather than a
+   flat fill so it reads as a primary action against the blurred chrome. */
+.swap-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
+  color: #fff;
+  font: 800 13.5px/1 var(--font-display);
+  letter-spacing: .01em;
+  cursor: pointer;
+  box-shadow: 0 8px 22px -10px rgba(0, 0, 0, .8);
+  transition: transform .12s ease, filter .18s ease, box-shadow .18s ease;
+}
+.swap-dock-btn:hover { filter: brightness(1.08); }
+.swap-dock-btn:active { transform: scale(.96); }
+.swap-dock-btn-ico { display: inline-flex; opacity: .92; }
+
+:root[data-theme='light'] .swap-dock {
+  background: rgba(255, 255, 255, .92);
+  box-shadow:
+    0 18px 40px -18px rgba(16, 20, 40, .35),
+    0 0 0 1px rgba(16, 20, 40, .05) inset;
+}
+:root[data-theme='light'] .swap-dock-btn { color: #fff; }
+
+/* Narrow phones: the price row and the button must not fight for the same
+   24px. The price is the first thing to go — the token's ticker and the
+   action are what the dock is FOR. */
+@media (max-width: 360px) {
+  .swap-dock { padding: 9px 10px; }
+  .swap-dock-btn { padding: 0 14px; font-size: 12.5px; }
+  .swap-dock-price { display: none; }
+}
+
+/* The nav-yield rule lives in src/index.css, NOT here, and that is deliberate:
+   this file is a ROUTE chunk. A rule that hides the bottom nav must be
+   reachable from every route — if a future screen mounts a dock without
+   importing this stylesheet, the nav would fade to `opacity: 0` and never
+   come back. Hiding something is only safe where the unhide is guaranteed. */
+
+/* No animation, no blur: the two most expensive things this bar could do on
+   a low-end phone, and neither is load-bearing. */
+@media (prefers-reduced-motion: reduce) {
+  .swap-dock { transition: none; }
+  .swap-dock-btn { transition: none; }
+}
+
+:root[data-lite='true'] .swap-dock {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(10, 11, 18, .97);
+}
+:root[data-lite='true'][data-theme='light'] .swap-dock { background: rgba(255, 255, 255, .99); }

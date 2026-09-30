@@ -85,7 +85,24 @@ export const useGlobalStats = () => usePoll(() => getGlobal(), [], 45000);
  */
 export const useMarkets = (perPage = 50) => {
   const vs = vsOf(useSettingsStore((s) => s.currency));
-  return usePoll(() => getMarkets({ perPage, vs }), [perPage, vs], 30000);
+  /*
+    ─── `null` / `0` MEANS "NOT YET", NOT "ZERO ROWS" ──────────────────────
+    The coin screen used to request a 60-row markets list on every open purely
+    to have a spare copy of the row it was already fetching — a quarter of
+    that page's data spent duplicating its own header. It now requests the
+    list only as a FALLBACK, when the direct coin fetch came back empty.
+
+    A hook cannot be called conditionally, so "not yet" is expressed in the
+    argument: `useMarkets(null)` mounts a poll that resolves to `null` and
+    never touches the network, and passing a real number later re-runs the
+    same effect with a real request. The rows are otherwise identical.
+  */
+  const enabled = Number(perPage) > 0;
+  return usePoll(
+    () => (enabled ? getMarkets({ perPage, vs }) : Promise.resolve(null)),
+    [perPage, vs],
+    30000
+  );
 };
 export const useTrending = () => usePoll(() => getTrending(), [], 120000);
 /**

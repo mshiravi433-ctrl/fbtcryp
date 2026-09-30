@@ -1,0 +1,251 @@
+/* ==========================================================================
+   THE SOLANA TOKEN BUTTON
+   ==========================================================================
+   «باکس توکن بهتر که اسم توکن مشخص باشد … عرض و اندازه درست و ظاهر خیلی
+   مدرن و بی نهایت زیبا باشد»
+
+   Three rules, and everything else follows from them:
+
+     1. THE NAME IS SHOWN. Not as a tooltip, not in the picker only — on the
+        button, in the place the user is looking when they choose a token.
+        Solana tickers collide, and a bare truncated ticker renders two
+        different tokens as the same string.
+     2. THE TICKER NEVER TRUNCATES. The name is the string allowed to clip.
+        One of the two has to give, and it must never be the one the user
+        says out loud when they check their balance.
+     3. IT IS SIZED, NOT SQUEEZED. `flex: 1 1 auto` + `min-width: 0` on the
+        text column, so the control takes the space it needs and gives the
+        rest to the amount — the opposite of the old `max-width: 54%` +
+        `flex: 0 0 auto`, which ellipsised the ticker before a name could be
+        rendered at all.
+   ========================================================================== */
+
+.sol-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 52px;
+  padding: 7px 12px 7px 8px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(140deg, rgba(127, 127, 157, 0.14), rgba(127, 127, 157, 0.05));
+  color: var(--text-1);
+  text-align: start;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .2s ease, background .2s ease, transform .12s ease, box-shadow .2s ease;
+}
+
+/* A single hairline of accent along the leading edge. It is what makes the
+   control read as a SELECTOR rather than as a label, and it is one
+   box-shadow rather than a pseudo-element so there is nothing to animate and
+   nothing extra in the layer tree. */
+.sol-chip::before {
+  content: '';
+  position: absolute;
+  inset-block: 10px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--rgb-1), var(--rgb-2));
+  opacity: .75;
+  transition: opacity .2s ease;
+}
+
+.sol-chip:hover {
+  border-color: var(--line-strong);
+  background: linear-gradient(140deg, rgba(127, 127, 157, 0.2), rgba(127, 127, 157, 0.08));
+  box-shadow: 0 6px 18px -12px rgba(0, 0, 0, .7);
+}
+.sol-chip:hover::before { opacity: 1; }
+.sol-chip:active { transform: scale(.985); }
+
+.sol-chip .tok-icon { flex: 0 0 auto; }
+
+.sol-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* The load-bearing declaration on this control. Without it a flex child
+     refuses to shrink below its content width, and the ticker ellipsises
+     instead of the name. */
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sol-chip-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sol-chip-sym {
+  font: 800 15px/1.15 var(--font-display);
+  letter-spacing: .01em;
+  /* The one string guaranteed to survive a 320px viewport. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.sol-chip-name {
+  font: 500 10.5px/1.25 var(--font-display);
+  color: var(--text-3);
+  /* The name clips; the ticker does not. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.sol-chip-name:empty { display: none; }
+
+.sol-chip-caret {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--text-3);
+  transition: transform .2s ease, color .2s ease;
+}
+.sol-chip:hover .sol-chip-caret { color: var(--text-1); transform: translateY(1px); }
+
+/* The unverified mark sits INSIDE the top line, beside the ticker, so the
+   trust state survives the picker closing. A name can be spoofed; a badge
+   beside it cannot be un-seen. */
+.sol-chip .sol-token-imported-chip {
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.sol-chip .sol-token-imported-chip.verified {
+  background: rgba(0, 230, 158, 0.12);
+  color: var(--up, #00e69e);
+}
+.sol-chip .sol-token-imported-chip.unverified {
+  background: rgba(255, 176, 32, 0.1);
+  color: #e8a13c;
+}
+
+/* ── inside the ticket box ─────────────────────────────────────────────── */
+
+.sol-swap-box .sol-chip {
+  /* The amount on the right is what the user is about to type, so the chip
+     takes what it needs and the number takes the rest — never the reverse. */
+  flex: 1 1 168px;
+  max-width: 60%;
+}
+.sol-swap-box .sol-chip-name { max-width: 100%; }
+
+/* A short ticker with a long name (Jito Staked SOL, tokenized equities) on a
+   narrow phone: the name has room for about ten characters before it starts
+   clipping, which is enough to tell two tokens apart. Below 360px the icon
+   shrinks a step rather than the text column. */
+@media (max-width: 360px) {
+  .sol-chip { padding: 6px 9px 6px 7px; gap: 7px; min-height: 48px; }
+  .sol-chip-sym { font-size: 14px; }
+  .sol-chip .tok-icon { width: 28px !important; height: 28px !important; }
+}
+
+:root[data-theme='light'] .sol-chip {
+  background: linear-gradient(140deg, rgba(15, 23, 42, .04), rgba(15, 23, 42, .015));
+  border-color: rgba(15, 23, 42, .1);
+}
+:root[data-theme='light'] .sol-chip:hover {
+  background: linear-gradient(140deg, rgba(15, 23, 42, .07), rgba(15, 23, 42, .03));
+  border-color: rgba(15, 23, 42, .18);
+}
+:root[data-theme='light'] .sol-chip .sol-token-imported-chip.unverified { color: #9a6b12; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sol-chip,
+  .sol-chip::before,
+  .sol-chip-caret { transition: none; }
+}
+
+/* ==========================================================================
+   THE QUICK-PICK RAIL
+   ==========================================================================
+   «تعداد توکن ها کم است» — a catalogue nobody has to scroll to is worth more
+   than a longer one behind a search box. These are the deepest-liquidity mints
+   the catalogue knows, one tap from the ticket.
+
+   It is a RAIL and not a grid on purpose: it sits directly under two boxes
+   that are already full width, and a grid of fourteen cards would push the
+   quote and the swap button below the fold. Chips are 30px tall; a grid of
+   cards is 80. That difference is the whole reason this is here at all.
+   ========================================================================== */
+
+.sol-quick {
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.sol-quick-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+.sol-quick-head .mono { font-size: 10.5px; flex: 0 0 auto; }
+
+.sol-quick-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.sol-quick-rail::-webkit-scrollbar { display: none; }
+
+.sol-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 4px 11px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(127, 127, 157, 0.08);
+  color: var(--text-1);
+  font: 700 12px/1.2 var(--font-display);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .12s ease;
+}
+.sol-quick-chip:hover {
+  border-color: var(--line-strong);
+  background: rgba(127, 127, 157, 0.15);
+}
+.sol-quick-chip:active { transform: scale(.94); }
+
+/* Already on the TO side: the chip says so instead of quietly doing nothing
+   useful if the pair would flip. */
+.sol-quick-chip.is-active {
+  border-color: rgba(var(--rgb-r, 0), .45);
+  background: linear-gradient(135deg, rgba(var(--rgb-r, 0), .16), rgba(127, 127, 157, 0.06));
+}
+.sol-quick-chip .tok-icon { flex: 0 0 auto; }
+.sol-quick-sym { overflow: hidden; text-overflow: ellipsis; max-width: 96px; }
+
+:root[data-theme='light'] .sol-quick-chip {
+  background: rgba(15, 23, 42, .04);
+  border-color: rgba(15, 23, 42, .1);
+}
+:root[data-theme='light'] .sol-quick-chip:hover { background: rgba(15, 23, 42, .07); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sol-quick-chip { transition: none; }
+}

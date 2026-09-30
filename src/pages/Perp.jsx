@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -20,9 +20,11 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { anyVenueEarns, withReferral, AVANTIS_CODE } from '../lib/venueReferral';
 import { SPECULATION_ENABLED } from '../lib/features';
-import { getFuturesFeePreview, getFuturesMarkets } from '../lib/futuresClient';
+import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
 import { velocityPerpIndex } from '../lib/velocityMarkets';
+import { useSolanaWallet } from '../hooks/useSolanaWallet';
+import { publicAppUrl } from '../lib/solanaWallet.js';
 import lazyRetry from '../lib/lazyRetry';
 import '../styles/perp-modern.css';
 import '../styles/derivatives-glass.css';
@@ -97,25 +99,185 @@ const AVANTIS = VENUES.find((v) => v.id === 'avantis');
 
 /*
  * ─── THE PAIR UNIVERSE OF THE TERMINAL ──────────────────────────────────────
- * Requested explicitly: the majors first (BTC/ETH/SOL/BNB/XRP/DOGE), then the
- * popular DeFi and L1 names (AVAX/LINK/NEAR/PEPE/SUI/APT). `id` is the market
- * feed's coin id, `symbol` is both the strip label and the key the executable
- * routes match on (the venue tab resolves `BTC-PERP` by base symbol).
+ *   «کلا جفت توکن های پرپچوال خیلی کمه با دقت فراوان درستش کن خیلی مهمه»
+ *
+ * This used to be TWELVE hard-coded pairs. Twelve is not a perpetuals
+ * catalogue, it is a watchlist: every pair missing from it was unreachable
+ * from the terminal no matter how liquid it was, and the user had to leave
+ * the app to trade it.
+ *
+ * The list is now BUILT, in three passes, and the order is the argument:
+ *
+ *   1. FEATURED — the majors, first and in the order a trader expects to see
+ *      them. Hard-coded because the first four cells of the strip are the
+ *      page's headline, not a ranking result.
+ *   2. THE VENUE CATALOGUE — whatever the in-app venue actually lists, read
+ *      from the same live feed that decides whether the pair is executable.
+ *      A pair the venue trades is a pair this terminal must offer; leaving it
+ *      out is how a liquid market ends up looking empty.
+ *   3. THE LIVE MARKET — the rest of the market-cap table the screen already
+ *      polls, so the strip is as deep as the data it is quoting. Every added
+ *      row carries the feed's own price, change and sparkline, which is the
+ *      same rule the rest of this page obeys: a leveraged screen shows a live
+ *      number or an honest dash, never a guess.
+ *
+ * `id` is the market feed's coin id and `symbol` is the key the executable
+ * routes match on. A venue row with no coin in the feed still appears — its
+ * price is honestly unavailable rather than invented.
  */
-const PERP_PAIRS = [
+export const FEATURED_PAIRS = [
+  /* the majors, in the order a trader expects to see them */
   { id: 'bitcoin', symbol: 'BTC' },
   { id: 'ethereum', symbol: 'ETH' },
   { id: 'solana', symbol: 'SOL' },
   { id: 'binancecoin', symbol: 'BNB' },
+  { id: 'hyperliquid', symbol: 'HYPE' },
   { id: 'ripple', symbol: 'XRP' },
   { id: 'dogecoin', symbol: 'DOGE' },
   { id: 'avalanche-2', symbol: 'AVAX' },
+  { id: 'sui', symbol: 'SUI' },
   { id: 'chainlink', symbol: 'LINK' },
+  { id: 'cardano', symbol: 'ADA' },
+  { id: 'tron', symbol: 'TRX' },
+  { id: 'aptos', symbol: 'APT' },
   { id: 'near', symbol: 'NEAR' },
   { id: 'pepe', symbol: 'PEPE' },
-  { id: 'sui', symbol: 'SUI' },
-  { id: 'aptos', symbol: 'APT' }
+  { id: 'shiba-inu', symbol: 'SHIB' },
+  { id: 'litecoin', symbol: 'LTC' },
+  /* L1s and the DeFi majors */
+  { id: 'arbitrum', symbol: 'ARB' },
+  { id: 'optimism', symbol: 'OP' },
+  { id: 'polkadot', symbol: 'DOT' },
+  { id: 'uniswap', symbol: 'UNI' },
+  { id: 'aave', symbol: 'AAVE' },
+  { id: 'injective-protocol', symbol: 'INJ' },
+  { id: 'the-open-network', symbol: 'TON' },
+  { id: 'stellar', symbol: 'XLM' },
+  { id: 'hedera-hashgraph', symbol: 'HBAR' },
+  { id: 'cosmos', symbol: 'ATOM' },
+  { id: 'internet-computer', symbol: 'ICP' },
+  { id: 'sei-network', symbol: 'SEI' },
+  { id: 'celestia', symbol: 'TIA' },
+  { id: 'bittensor', symbol: 'TAO' },
+  { id: 'render-token', symbol: 'RENDER' },
+  { id: 'virtual-protocol', symbol: 'VIRTUAL' },
+  { id: 'fetch-ai', symbol: 'FET' },
+  { id: 'ai16z', symbol: 'AI16Z' },
+  { id: 'kaspa', symbol: 'KAS' },
+  { id: 'filecoin', symbol: 'FIL' },
+  { id: 'algorand', symbol: 'ALGO' },
+  { id: 'eos', symbol: 'EOS' },
+  { id: 'curve-dao-token', symbol: 'CRV' },
+  { id: 'maker', symbol: 'MKR' },
+  { id: 'pancakeswap-token', symbol: 'CAKE' },
+  { id: 'gala', symbol: 'GALA' },
+  { id: 'immutable-x', symbol: 'IMX' },
+  { id: 'the-graph', symbol: 'GRT' },
+  { id: 'fantom', symbol: 'FTM' },
+  { id: 'mantle', symbol: 'MNT' },
+  { id: 'ondo-finance', symbol: 'ONDO' },
+  { id: 'wrapped-bitcoin', symbol: 'WBTC' },
+  { id: 'bitcoin-cash', symbol: 'BCH' },
+  /* Solana's own order flow and memes — the deep end of this venue */
+  { id: 'jupiter-exchange-solana', symbol: 'JUP' },
+  { id: 'bonk', symbol: 'BONK' },
+  { id: 'dogwifcoin', symbol: 'WIF' },
+  { id: 'pudgy-penguins', symbol: 'PENGU' },
+  { id: 'popcat', symbol: 'POPCAT' },
+  { id: 'floki', symbol: 'FLOKI' },
+  { id: 'fartcoin', symbol: 'FARTCOIN' },
+  { id: 'spx6900', symbol: 'SPX' },
+  { id: 'official-trump', symbol: 'TRUMP' }
 ];
+
+/** How many live-feed rows may join the strip. A strip is a browser, not a dump. */
+const MAX_FEED_PAIRS = 140;
+
+/**
+ * Merge the three sources into ONE list.
+ *
+ * ─── WHY A CURATED ID CAN BE OVERRIDDEN BY THE FEED ─────────────────────────
+ * A CoinGecko id is a string in a table, and this repo refuses to guess at
+ * them for MONEY (see lib/coinToSwap.js: never resolve a contract by symbol).
+ * This merge is not that. An id here selects which live row draws a price and
+ * a sparkline on a strip cell — the tradeable target is resolved separately,
+ * from the venue catalogue, by symbol and market id.
+ *
+ * So when a curated id is absent from the feed, and the feed happens to carry
+ * a coin under that SYMBOL, the feed's id is adopted: the strip then quotes a
+ * real, current price instead of showing an honest-but-empty cell forever over
+ * a typo in a table. A curated id the feed confirms is never overridden.
+ *
+ * First writer wins on the symbol, sources in priority order.
+ */
+export function buildPerpPairs({ coins = [], venueMarkets = [], featured = FEATURED_PAIRS, max = MAX_FEED_PAIRS } = {}) {
+  const feed = Array.isArray(coins) ? coins : [];
+  const feedById = new Map();
+  const feedBySymbol = new Map();
+  for (const c of feed) {
+    if (!c) continue;
+    if (c.id) feedById.set(String(c.id), c);
+    const sym = String(c.symbol || '').trim().toUpperCase();
+    if (sym && !feedBySymbol.has(sym)) feedBySymbol.set(sym, c);
+  }
+
+  /* Which feed rows are already spoken for by a CURATED id. A ticker clone
+     ranked above the real token must never be adopted as its price — so a
+     feed id is only ever borrowed by a curated symbol that no other curated
+     entry already claims. */
+  const claimedFeedIds = new Set(
+    featured.map((p) => p.id).filter((id) => id && feedById.has(String(id)))
+  );
+
+  const out = [];
+  const seen = new Set();
+  const push = (symbol, id) => {
+    const sym = String(symbol || '').trim().toUpperCase();
+    if (!sym || seen.has(sym)) return;
+    seen.add(sym);
+
+    if (!id) {
+      /* no curated id (a venue-listed pair): take the feed's row for it */
+      out.push({ symbol: sym, id: feedBySymbol.get(sym)?.id ?? null });
+      return;
+    }
+    if (feedById.has(String(id))) {
+      claimedFeedIds.add(String(id));
+      out.push({ symbol: sym, id });
+      return;
+    }
+    /* The curated id is not in the loaded page. If the feed happens to carry
+       this SYMBOL under an id no curated entry owns, adopt it — a typo in a
+       curated table must not strand a liquid pair with a permanently blank
+       cell. Otherwise the curated id stands and the cell says "no data",
+       which is the honest outcome and never a wrong number. */
+    const bySym = feedBySymbol.get(sym);
+    if (bySym?.id && !claimedFeedIds.has(String(bySym.id))) {
+      claimedFeedIds.add(String(bySym.id));
+      out.push({ symbol: sym, id: String(bySym.id) });
+      return;
+    }
+    out.push({ symbol: sym, id });
+  };
+
+  /* 1. featured — the headline cells, in curated order. */
+  for (const p of featured) push(p.symbol, p.id);
+
+  /* 2. what the venue actually lists. An executable pair outranks a merely
+        famous one, because it is the only kind this terminal can settle. */
+  for (const m of venueMarkets ?? []) {
+    const base = String(m?.base ?? m?.symbol ?? '').split('/')[0];
+    if (base) push(base, null);
+  }
+
+  /* 3. the live market table, in the market-cap order the feed returned. */
+  for (const c of feed) {
+    if (out.length - featured.length >= max) break;
+    push(c?.symbol, c?.id ?? null);
+  }
+
+  return out;
+}
 
 /* Product policy, same ceiling the futures engine enforces (hardMaxLeverage). */
 const MAX_LEVERAGE = 50;
@@ -135,8 +297,15 @@ export default function Perp() {
   const location = useLocation();
   const { haptic, tg } = useTelegram();
   const wallet = useWallet();
-  /* Top 100 by market cap comfortably contains every pair in PERP_PAIRS. */
-  const { data: coins, loading } = useMarkets(100);
+  const solWallet = useSolanaWallet();
+  /*
+    250 by market cap, not 100. The strip is built from this feed (see
+    buildPerpPairs), so the depth of the table is the depth of the catalogue —
+    100 rows could only ever offer the 100th-largest coin, which is the
+    complaint the expansion was filed against. It is the same request shape
+    the market screen already makes, so it costs the app nothing new.
+  */
+  const { data: coins, loading } = useMarkets(250);
   const slippagePct = useSettingsStore((s) => s.defaultSlippage);
   const setSlippage = useSettingsStore((s) => s.setSlippage);
 
@@ -157,12 +326,12 @@ export default function Perp() {
   /*
    * ─── THE TERMINAL'S OWN STATE ─────────────────────────────────────────────
    * A real ticket, sized in a real stablecoin, with the same honest arithmetic
-   * every other leveraged screen in this app uses. Nothing here signs
-   * anything: the confirm button routes the order to an EXECUTABLE, EARNING
-   * path — the venue tab in this app for pairs it lists, or Avantis on Base
-   * with the registered `fbtswap` referral code for the rest.
+   * every other leveraged screen in this app uses.
+   *
+   * Nothing is ever signed by THIS screen's own key or held by the app: the
+   * order is built by the backend, risk-checked there, and signed by the
+   * user's own wallet — in this tab, where they asked to be.
    */
-  const [selected, setSelected] = useState('bitcoin');
   const [side, setSide] = useState('long');
   const [collateral, setCollateral] = useState('100');
   const [collateralAsset, setCollateralAsset] = useState('USDC');
@@ -172,32 +341,14 @@ export default function Perp() {
   const [reviewing, setReviewing] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
 
-  const byId = useMemo(() => {
-    const m = new Map();
-    for (const c of coins ?? []) m.set(c.id, c);
-    return m;
-  }, [coins]);
-  const pair = PERP_PAIRS.find((p) => p.id === selected) ?? PERP_PAIRS[0];
-  const coin = byId.get(pair.id) ?? null;
-  /*
-   * ─── THE INDEX CARD IS REAL OR IT SAYS SO ──────────────────────────────
-   * `getMarkets` keeps the ordinary Market screen usable offline with a
-   * deterministic snapshot, and marks every such row `offline` /
-   * `dataProvenance: 'offline'`. That snapshot must never sit under a
-   * "-PERP · Index price" label with a sparkline: a leveraged screen shows a
-   * live number or an honest "market data temporarily unavailable" — never a
-   * synthetic price that looks like one (Futures Engine v3 rule).
-   */
-  const indexOffline = coin?.offline === true || coin?.dataProvenance === 'offline';
-
   /*
    * ─── THE VENUE FEED (one read, no polling) ──────────────────────────────
-   * Powers two decisions, both of which must come from the live venue rather
-   * than a guess: (a) does the in-app executable route list this pair, and
-   * (b) does the shared FuturesMarketChart have candles for it. When the feed
-   * is down the static Velocity index table is the conservative fallback for
-   * ROUTING only — the chart then says "unavailable" on its own and never
-   * draws a flat line.
+   * Powers three decisions, all of which must come from the live venue rather
+   * than a guess: (a) does the in-app executable route list this pair, (b)
+   * does the shared FuturesMarketChart have candles for it, and (c) which
+   * pairs the strip has to offer at all. When the feed is down the static
+   * Velocity index table is the conservative fallback for ROUTING only — the
+   * chart then says "unavailable" on its own and never draws a flat line.
    */
   const [venueMarkets, setVenueMarkets] = useState([]);
   useEffect(() => {
@@ -210,10 +361,72 @@ export default function Perp() {
     return () => { alive = false; };
   }, []);
 
-  const venueMarket = useMemo(
-    () => venueMarkets.find((m) => String(m.base || '').toUpperCase() === pair.symbol) || null,
-    [venueMarkets, pair.symbol]
+  const venueMarketByBase = useMemo(() => {
+    const m = new Map();
+    for (const row of venueMarkets ?? []) {
+      const base = String(row?.base ?? '').toUpperCase();
+      if (base && !m.has(base)) m.set(base, row);
+    }
+    return m;
+  }, [venueMarkets]);
+
+  const byId = useMemo(() => {
+    const m = new Map();
+    for (const c of coins ?? []) m.set(c.id, c);
+    return m;
+  }, [coins]);
+
+  /*
+   * ─── THE PAIR UNIVERSE, BUILT ───────────────────────────────────────────
+   * Featured + whatever the venue lists + the live market table, merged
+   * (see buildPerpPairs). The selection is kept by SYMBOL rather than by
+   * coin id, because a venue-listed pair the market feed has never heard of
+   * has no id at all — keying on one would make it unselectable, which is
+   * exactly the class of pair this screen most needs to offer.
+   */
+  const [selectedSymbol, setSelectedSymbol] = useState('BTC');
+  const [pairQuery, setPairQuery] = useState('');
+
+  const allPairs = useMemo(
+    () => buildPerpPairs({ coins: coins ?? [], venueMarkets: venueMarkets ?? [] }),
+    [coins, venueMarkets]
   );
+
+  /* The search box exists because a hundred-plus cells in a horizontal strip
+     cannot be browsed. It filters by ticker OR by the coin's own name, and it
+     never re-orders: the featured majors stay first whatever is typed. */
+  const stripPairs = useMemo(() => {
+    const rows = allPairs.map((p) => ({
+      ...p,
+      coin: p.id ? byId.get(p.id) ?? null : null,
+      venueMarket: venueMarketByBase.get(p.symbol) ?? null
+    }));
+    const q = pairQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (p) => p.symbol.toLowerCase().includes(q)
+        || String(p.coin?.name ?? '').toLowerCase().includes(q)
+    );
+  }, [allPairs, byId, venueMarketByBase, pairQuery]);
+
+  const pair = useMemo(
+    () => allPairs.find((p) => p.symbol === selectedSymbol) ?? allPairs[0] ?? { symbol: 'BTC', id: 'bitcoin' },
+    [allPairs, selectedSymbol]
+  );
+  const coin = pair.id ? byId.get(pair.id) ?? null : null;
+
+  /*
+   * ─── THE INDEX CARD IS REAL OR IT SAYS SO ──────────────────────────────
+   * `getMarkets` keeps the ordinary Market screen usable offline with a
+   * deterministic snapshot, and marks every such row `offline` /
+   * `dataProvenance: 'offline'`. That snapshot must never sit under a
+   * "-PERP · Index price" label with a sparkline: a leveraged screen shows a
+   * live number or an honest "market data temporarily unavailable" — never a
+   * synthetic price that looks like one (Futures Engine v3 rule).
+   */
+  const indexOffline = coin?.offline === true || coin?.dataProvenance === 'offline';
+
+  const venueMarket = venueMarketByBase.get(pair.symbol) ?? null;
   /* Executable in this app? Live feed first, catalogue fallback second. */
   const routeInApp = Boolean(venueMarket) || velocityPerpIndex(pair.symbol) != null;
 
@@ -279,13 +492,16 @@ export default function Perp() {
   };
 
   /*
-   * ─── IN-PAGE HAND-OFF TO THE EXECUTABLE TAB ────────────────────────────
-   * The router only parses the hash on mount, so a navigation from THIS page
-   * to `/perp?tab=onchain&…` would change the query without switching the
-   * tab. The effect keeps the mounted tab in step with the URL (the Intent OS
-   * hand-off benefits too), and `confirmOrder` sets the state directly as
-   * well, so handing the SAME order over twice still switches tabs even when
-   * the query string is identical.
+   * ─── THE TAB STILL FOLLOWS THE URL (the Intent OS hand-off) ─────────────
+   * Deep links still name their tab (`/perp?tab=onchain&…`), so the rail and
+   * the query have to agree — otherwise a hand-off would change the URL and
+   * leave the same screen mounted.
+   *
+   * What it no longer does is MOVE THE USER. That was the bug: signing in the
+   * Perpetual tab used to `setPerpTab('onchain')` and navigate, so pressing
+   * the button the user had just been looking at silently threw them onto a
+   * different tab with a different layout. The order is now built, risk
+   * checked and signed on this screen — see `prepareOrder` / `signOrder`.
    */
   useEffect(() => {
     if (!SPECULATION_ENABLED) return;
@@ -295,60 +511,199 @@ export default function Perp() {
     } catch { /* a malformed query is not worth breaking the page over */ }
   }, [location.search, perpTab]);
 
+  /*
+   * ─── WHICH WALLET SIGNS ────────────────────────────────────────────────
+   * The in-app venue settles on Solana (Velocity), so the SOLANA wallet is
+   * the one that signs and the one whose balance matters. The EVM wallet
+   * still owns the connect sheet for the pairs this venue cannot take, and
+   * for the EVM calldata path a future venue may add.
+   *
+   * `venueChain` is decided by the SAME answer the route decision uses, so
+   * the button and the execution can never disagree about whose signature
+   * they are waiting for.
+   */
+  const venueChain = 'solana';
+  const tradingAddress = venueChain === 'solana' ? solWallet.address : wallet.address;
+  const tradingConnected = venueChain === 'solana' ? Boolean(solWallet.address) : Boolean(wallet.isConnected);
+
+  const [prepared, setPrepared] = useState(null);
+  const [preparing, setPreparing] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [execError, setExecError] = useState(null);
+  const [lastTx, setLastTx] = useState(null);
+
+  /* A pair change invalidates an order built for the previous one. Silently
+     keeping it would sign a ticket the screen no longer shows. */
+  useEffect(() => { setPrepared(null); setExecError(null); }, [pair.symbol, side, collateral, leverage, takeProfit, stopLoss]);
+
   const canConfirm = notional != null;
 
   /*
    * THE FINAL BUTTON — «بازبینی و تأیید معامله».
    *
    * No wallet connected → the button becomes the connect button: nothing can
-   * be signed without one, and the sheet is our standard wallet connection
-   * flow, not a new one. Connected → the review sheet, which names the route
-   * and the fee share BEFORE anything is confirmed.
+   * be signed without one. For the in-app (Solana) venue that is the wallet
+   * page's Solana tab, with `?return=` so the ticket is exactly where the
+   * user left it. Connected → the review sheet, which names the route and the
+   * fee share BEFORE anything is confirmed.
    */
+  const connectSolana = useCallback(() => {
+    const back = new URLSearchParams(location.search || '');
+    back.set('tab', 'overview');
+    const q = new URLSearchParams({ tab: 'solana', return: `/perp?${back.toString()}` });
+    navigate(`/wallet?${q.toString()}`);
+  }, [navigate, location.search]);
+
   const startReview = () => {
     haptic?.('light');
+    if (routeInApp) {
+      if (!tradingConnected) { connectSolana(); return; }
+      setReviewing(true);
+      return;
+    }
     if (!wallet.isConnected) { setWalletOpen(true); return; }
     setReviewing(true);
   };
 
   /*
-   * Confirm routes the order to an executable, earning path — never a dead
-   * end and never a free exit:
+   * ─── CONFIRM: BUILD, RISK-CHECK, AND WAIT FOR A SIGNATURE — HERE ────────
+   *   «وقتی در صفحه فیوجرز تب پرپچوال میخایی امضا کنی میپره تب ان چین»
    *
-   *   · pairs the in-app venue lists → the venue tab of THIS page, prefilled
-   *     with the exact ticket (market/side/collateral/leverage). There the
-   *     backend rebuilds the order, shows its own fee breakdown and risk
-   *     verdict, and the user signs in their own wallet. The FBT builder fee
-   *     and the venue referrer share are attached by that path.
+   * The reported bug, and what used to happen: confirm navigated to
+   * `/perp?tab=onchain`, so the Perpetual tab the user was standing in
+   * disappeared and a different screen with a different ticket took its
+   * place. The signature — the thing they came for — was somewhere else.
    *
-   *   · every other pair → Avantis on Base through the REGISTERED referral
-   *     code `fbtswap` (withReferral rewrites to the /referral attribution
-   *     page that Avantis actually reads). No FBT capital is frozen anywhere
-   *     and the fee share settles straight to the registered treasury.
+   * So the work moves here instead. `/prepare` is the same backend endpoint,
+   * with the same idempotency key, the same risk verdict and the same fee
+   * split the venue tab used; what is gone is the navigation. The order is
+   * built for THIS ticket, shown in THIS sheet, and signed by THIS wallet
+   * while the user is still looking at the numbers they set.
+   *
+   * Pairs the venue does not list still leave for Avantis on Base through the
+   * REGISTERED referral code `fbtswap` — a real route that earns, rather than
+   * a dead end.
    */
-  const confirmOrder = () => {
+  const confirmOrder = async () => {
     haptic?.('medium');
-    setReviewing(false);
-    if (routeInApp) {
-      const params = new URLSearchParams({
-        tab: 'onchain',
-        market: `${pair.symbol}-PERP`,
-        side,
-        collateral: String(collateralNum),
-        leverage: String(Math.min(leverageNum, MAX_LEVERAGE))
-      });
-      setPerpTab('onchain');
-      navigate(`/perp?${params.toString()}`);
-    } else {
+    if (!routeInApp) {
+      setReviewing(false);
       openVenue('avantis', AVANTIS.url);
+      return;
+    }
+    if (!tradingAddress) { setReviewing(false); connectSolana(); return; }
+
+    setExecError(null);
+    setPreparing(true);
+    try {
+      const res = await prepareFutures({
+        provider: 'drift',
+        market: venueMarket?.marketId ?? velocityPerpIndex(pair.symbol),
+        side,
+        collateralUsd: collateralNum,
+        leverage: Math.min(leverageNum, MAX_LEVERAGE),
+        takeProfit: tp,
+        stopLoss: sl,
+        slippageBps: Math.round(Number(slippagePct) * 100),
+        wallet: tradingAddress
+      });
+      if (!res?.ok) throw Object.assign(new Error(res?.error?.code || 'PROVIDER_UNAVAILABLE'), { code: res?.error?.code || 'PROVIDER_UNAVAILABLE' });
+      if (res.data?.risk?.blocked) throw Object.assign(new Error('RISK_BLOCKED'), { code: 'RISK_BLOCKED' });
+      setPrepared(res.data);
+    } catch (err) {
+      setExecError(err?.code || 'PROVIDER_UNAVAILABLE');
+      haptic?.('error');
+    } finally {
+      setPreparing(false);
     }
   };
 
+  /*
+   * ─── THE SIGNATURE ────────────────────────────────────────────────────
+   * Two shapes, decided by what `/prepare` returned, and never by a guess:
+   *
+   *   · `clientSign.buildsInTab` — the Solana venue. The order is built and
+   *     signed HERE with the user's own wallet through the venue SDK. FBT
+   *     never holds a key and never touches the funds.
+   *   · otherwise — server-built unsigned calldata, signed by the EVM wallet
+   *     and reported to the ledger by hash.
+   *
+   * Both report the hash to `/verify` before the UI claims anything, so the
+   * success line is a statement about the chain rather than about a promise
+   * the client made.
+   */
+  const signOrder = async () => {
+    if (!prepared) return;
+    setSigning(true);
+    setExecError(null);
+    try {
+      if (Date.now() > (prepared.expiresAt ?? 0)) {
+        throw Object.assign(new Error('QUOTE_EXPIRED'), { code: 'QUOTE_EXPIRED' });
+      }
+
+      if (prepared.clientSign?.buildsInTab) {
+        const { openVelocityPosition } = await import('../lib/velocityTrade.js');
+        const marketIndex = prepared.market?.marketIndex ?? velocityPerpIndex(pair.symbol);
+        if (marketIndex == null) throw Object.assign(new Error('MARKET_NOT_LISTED'), { code: 'MARKET_NOT_LISTED' });
+        const result = await openVelocityPosition({
+          wallet: tradingAddress,
+          marketIndex: Number(marketIndex),
+          side: prepared.order?.side ?? side,
+          notionalUsd: prepared.order?.notionalUsd ?? notional,
+          oraclePrice: prepared.market?.mid ?? entryPrice,
+          slippageBps: prepared.order?.slippageBps ?? Math.round(Number(slippagePct) * 100),
+          depositQuote: collateralNum
+        });
+        const hash = result?.signature;
+        if (!hash) throw Object.assign(new Error('BROADCAST_FAILED'), { code: 'BROADCAST_FAILED' });
+        setLastTx({ hash, chain: venueChain });
+        if (prepared.executionId) await verifyFutures({ executionId: prepared.executionId, txHash: hash });
+        setPrepared(null);
+        setReviewing(false);
+        haptic?.('success');
+        return;
+      }
+
+      /* Server-built calldata, signed by the EVM wallet. */
+      const signer = (await wallet.ensureSigner?.()) || wallet.getSigner?.();
+      if (!signer) throw Object.assign(new Error('WALLET_NOT_CONNECTED'), { code: 'WALLET_NOT_CONNECTED' });
+      let hash = null;
+      for (const tx of prepared.transactions ?? []) {
+        const sent = await signer.sendTransaction({
+          to: tx.to,
+          data: tx.data,
+          value: tx.value && tx.value !== '0x0' ? tx.value : undefined
+        });
+        if (tx.kind === 'approve') { await sent.wait(); continue; }
+        hash = sent.hash;
+      }
+      if (!hash) throw Object.assign(new Error('BROADCAST_FAILED'), { code: 'BROADCAST_FAILED' });
+      setLastTx({ hash, chain: 'evm' });
+      if (prepared.executionId) await verifyFutures({ executionId: prepared.executionId, txHash: hash });
+      setPrepared(null);
+      setReviewing(false);
+      haptic?.('success');
+    } catch (err) {
+      const code = /reject|denied|cancel|4001/i.test(String(err?.message || '')) ? 'USER_REJECTED' : (err?.code || 'SIGN_FAILED');
+      setExecError(code);
+      if (code === 'USER_REJECTED' && prepared?.executionId) {
+        await verifyFutures({ executionId: prepared.executionId, status: 'REJECTED' });
+      }
+      haptic?.('error');
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  /* Close the sheet without stranding a built order in memory. */
+  const closeReview = useCallback(() => {
+    setReviewing(false);
+    setPrepared(null);
+    setExecError(null);
+  }, []);
+
   const tp = Number(takeProfit) > 0 ? Number(takeProfit) : null;
   const sl = Number(stopLoss) > 0 ? Number(stopLoss) : null;
-
-  /* ── the strip: every pair, its live dollar price, a sparkline, 24h ── */
-  const stripPairs = PERP_PAIRS.map((p) => ({ ...p, coin: byId.get(p.id) ?? null }));
 
   return (
     <PageTransition>
@@ -411,23 +766,64 @@ export default function Perp() {
       {/* ─────────────── THE PAIR STRIP ───────────────
           Every pair of the terminal side by side: icon, live dollar price,
           a small sparkline and the 24h change. Offline rows show a dash —
-          the snapshot price must never pass for a live one. */}
+          the snapshot price must never pass for a live one.
+
+          The COUNT is stated rather than implied. A strip that used to hold
+          twelve cells and now holds a hundred has to say so, or the user
+          scrolls it, finds the end, and concludes the app is still broken. */}
+      <div className="perp-pair-head">
+        <span className="section-label" style={{ margin: 0 }}>
+          {t('perp.terminal.pairsCount', { count: allPairs.length })}
+        </span>
+        <div className="perp-pair-search">
+          <input
+            type="text"
+            value={pairQuery}
+            onChange={(e) => setPairQuery(e.target.value)}
+            placeholder={t('perp.terminal.pairSearch')}
+            aria-label={t('perp.terminal.pairSearch')}
+            data-testid="perp-pair-search"
+          />
+          {pairQuery && (
+            <button
+              type="button"
+              className="perp-pair-search-clear"
+              onClick={() => setPairQuery('')}
+              aria-label={t('common.clear')}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      </div>
+
+      {stripPairs.length === 0 ? (
+        <p className="faint perp-pair-empty" data-testid="perp-pair-empty">
+          {t('perp.terminal.noPairMatch')}
+        </p>
+      ) : (
       <div className="tag-scroll perp-pairs" role="tablist" aria-label={t('perp.terminal.pairsAria')} data-testid="perp-pair-strip">
         {stripPairs.map((p) => {
-          const active = p.id === pair.id;
+          const active = p.symbol === pair.symbol;
           const live = coinIsLive(p.coin);
+          /* The venue's own list, marked on the cell. This is the one fact
+             the strip could not show before: which of these pairs this app
+             can actually settle, as opposed to which ones are famous. */
+          const tradeable = Boolean(p.venueMarket) || velocityPerpIndex(p.symbol) != null;
           return (
             <button
-              key={p.id}
+              key={p.symbol}
               type="button"
               role="tab"
               aria-selected={active}
               className={`tag perp-pair ${active ? 'active' : ''}`}
-              onClick={() => { haptic?.('light'); setSelected(p.id); }}
+              onClick={() => { haptic?.('light'); setSelectedSymbol(p.symbol); }}
+              data-testid={`perp-pair-${p.symbol}`}
             >
               <span className="perp-pair-top">
                 <TokenIcon token={{ symbol: p.symbol, image: p.coin?.image }} size={24} />
                 <span className="perp-pair-sym">{p.symbol}-PERP</span>
+                {tradeable && <span className="perp-pair-live" aria-hidden="true" title={t('perp.terminal.pairInApp')} />}
               </span>
               {loading ? (
                 <span className="skel perp-pair-skel" />
@@ -450,6 +846,7 @@ export default function Perp() {
           );
         })}
       </div>
+      )}
 
       <div className="perp-desk-grid">
         <div className="perp-desk-col">
@@ -687,19 +1084,24 @@ export default function Perp() {
 
         {/*
           ─── THE FINAL BUTTON ──────────────────────────────────────────────
-          Not connected → «اتصال کیف پول»: nothing signs without a wallet.
+          Which wallet is asked for is decided by the ROUTE, not by whichever
+          one happens to be connected: the in-app venue settles on Solana, so
+          a user with only an EVM wallet is told to connect the Solana one
+          rather than pressing a button that cannot produce a signature.
+
           Connected → the review sheet: the whole ticket, the fee split and
-          the earning route, named, before a single confirmation.
+          the earning route, named, before a single confirmation. The order is
+          then built and signed ON THIS SCREEN.
         */}
-        {wallet.isConnected ? (
+        {tradingConnected ? (
           <button
             type="button"
             className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'} perp-submit`}
-            disabled={!canConfirm}
+            disabled={!canConfirm || preparing || signing}
             onClick={startReview}
             data-testid="perp-submit"
           >
-            {t('perp.terminal.review')}
+            {preparing || signing ? t('perp.terminal.preparing') : t('perp.terminal.review')}
           </button>
         ) : (
           <button
@@ -709,16 +1111,37 @@ export default function Perp() {
             data-testid="perp-connect"
           >
             <IconWallet width={16} height={16} style={{ display: 'inline', marginInlineEnd: 6 }} />
-            {t('perp.terminal.connect')}
+            {routeInApp ? t('perp.terminal.connectSolana') : t('perp.terminal.connect')}
           </button>
         )}
-        {wallet.isConnected && wallet.address ? (
+        {tradingConnected && tradingAddress ? (
           <p className="faint perp-wallet-line" data-testid="perp-wallet-row">
             <IconShield width={13} height={13} style={{ display: 'inline', marginInlineEnd: 4, verticalAlign: '-2px' }} />
-            {t('perp.terminal.connectedAs', { address: shortAddress(wallet.address) })}
+            {t('perp.terminal.connectedAs', { address: shortAddress(tradingAddress) })}
           </p>
         ) : (
           <p className="faint perp-wallet-line">{t('perp.terminal.walletHint')}</p>
+        )}
+
+        {/* ─── THE RESULT, BEFORE ANYTHING ELSE IS CLAIMED ────────────────
+            The hash is on screen because the backend's ledger recorded it, not
+            because the client says so. A leverage ticket that silently
+            vanished after a signature is the failure this closes. */}
+        {lastTx?.hash && (
+          <div className="notice perp-tx-notice" data-testid="perp-tx" role="status">
+            <p style={{ margin: 0 }}>{t('perp.terminal.signed')}</p>
+            <a
+              className="mono"
+              style={{ display: 'block', marginTop: 6, fontSize: 11, wordBreak: 'break-all' }}
+              href={lastTx.chain === 'solana'
+                ? `https://solscan.io/tx/${lastTx.hash}`
+                : `https://etherscan.io/tx/${lastTx.hash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {lastTx.hash}
+            </a>
+          </div>
         )}
       </motion.section>
 
@@ -928,15 +1351,23 @@ export default function Perp() {
       </InfoBox>
 
       {/*
-        ─── THE REVIEW & CONFIRM SHEET ──────────────────────────────────────
+        ─── THE REVIEW & SIGN SHEET ─────────────────────────────────────────
         The whole ticket in one place, the fee split, and the route the order
-        will take — named before the user confirms anything. Confirm either
-        hands the exact numbers to the venue tab of this page (which rebuilds
-        and re-checks everything server-side before any signature) or opens
-        Avantis with the registered referral code attached. No route out of
-        this sheet is unmonetised.
+        will take — named before the user confirms anything.
+
+        This sheet has TWO steps, and the second one is the fix:
+        «وقتی در صفحه فیوجرز تب پرپچوال میخایی امضا کنی میپره تب ان چین».
+        Confirming used to close this sheet, change the query and switch the
+        rail to the On-Chain tab, so the signature — the one thing the user
+        came for — happened on a screen they had to find first.
+
+        Now confirm BUILDS the order here (the same backend /prepare, the same
+        idempotency key, the same risk verdict), the sheet shows what was
+        built, and the same button becomes the signature. No tab changes, no
+        navigation, and the numbers the user confirmed are the numbers that
+        get signed.
       */}
-      <Sheet open={reviewing} onClose={() => setReviewing(false)} title={t('perp.terminal.reviewTitle')}>
+      <Sheet open={reviewing} onClose={closeReview} title={t('perp.terminal.reviewTitle')}>
         <div className="stack" style={{ gap: 10 }} data-testid="perp-review">
           <div className="card card-tight stack" style={{ gap: 8 }}>
             <div className="row-between">
@@ -990,9 +1421,9 @@ export default function Perp() {
 
           {/*
             The route line — the part a "looks like an exchange" screen must
-            never hide. Either the order is executed by the in-app venue tab
-            (rebuilt and risk-checked by the backend before any signature),
-            or it goes to Avantis on Base with the `fbtswap` code attached.
+            never hide. The in-app route now also says the two things that
+            matter about it: it settles from the user's own wallet, and the
+            signature happens HERE, on this screen.
           */}
           <div className="card card-tight perp-route" data-testid="perp-review-route">
             <span className="perp-route-ico" aria-hidden="true">
@@ -1005,20 +1436,60 @@ export default function Perp() {
             </p>
           </div>
 
+          {/* Step two. Everything above is what the user asked for; this is
+              what the backend built from it, which is the only thing that
+              will actually be signed. */}
+          {prepared && (
+            <div className="card card-tight stack" style={{ gap: 7 }} data-testid="perp-prepared">
+              <p className="section-label" style={{ margin: 0 }}>{t('perp.terminal.prepared')}</p>
+              <div className="row-between">
+                <span className="faint">{t('perp.terminal.preparedNotional')}</span>
+                <span className="mono">
+                  {prepared.order?.notionalUsd != null ? fmtUsd(prepared.order.notionalUsd) : '—'}
+                </span>
+              </div>
+              <div className="row-between">
+                <span className="faint">{t('perp.terminal.preparedSlippage')}</span>
+                <span className="mono">
+                  {prepared.order?.slippageBps != null ? `${prepared.order.slippageBps} bps` : '—'}
+                </span>
+              </div>
+              <div className="row-between">
+                <span className="faint">{t('perp.terminal.preparedVenue')}</span>
+                <span className="mono">{prepared.market?.symbol ?? `${pair.symbol}-PERP`}</span>
+              </div>
+              <p className="faint" style={{ margin: 0, fontSize: 11, lineHeight: 1.7 }}>
+                {t('perp.terminal.signHere')}
+              </p>
+            </div>
+          )}
+
+          {execError && (
+            <p className="notice notice-danger" data-testid="perp-exec-error" role="alert">
+              {t(`perp.terminal.err.${execError}`, { defaultValue: execError })}
+            </p>
+          )}
+
           <p className="notice notice-danger">{t('perp.terminal.reviewRisk')}</p>
 
           <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setReviewing(false)}>
+            <button className="btn btn-ghost" style={{ flex: 1 }} onClick={closeReview} disabled={signing}>
               {t('common.cancel')}
             </button>
             <button
               className={`btn ${side === 'long' ? 'btn-success' : 'btn-danger'}`}
               style={{ flex: 1 }}
-              disabled={!canConfirm}
-              onClick={confirmOrder}
+              disabled={!canConfirm || preparing || signing}
+              onClick={prepared ? signOrder : confirmOrder}
               data-testid="perp-review-confirm"
             >
-              {routeInApp ? t('perp.terminal.confirmInApp') : t('perp.terminal.confirmAvantis')}
+              {preparing || signing
+                ? t('perp.terminal.signing')
+                : prepared
+                  ? t('perp.terminal.signNow')
+                  : routeInApp
+                    ? t('perp.terminal.confirmInApp')
+                    : t('perp.terminal.confirmAvantis')}
             </button>
           </div>
         </div>

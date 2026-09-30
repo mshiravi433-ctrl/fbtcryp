@@ -102,7 +102,8 @@
     "notFoundHelp": "لم تكن هذه العملة ضمن الصفحة المحمّلة ولم يستجب الجلب المباشر أيضاً. غالباً بسبب تقييد مزوّد البيانات مؤقتاً — أعد المحاولة بعد قليل.",
     "resolvedEvmNote": "مبادلة حقيقية على {{chain}}، العقد {{address}}. محفظتك أنت هي التي توقّع والعملات ملكك — هذه ليست محاكاة. هذه العملة ليست ضمن قائمتنا الموثّقة، لذا تحقّق من العقد ومن المبلغ الذي ستستلمه في شاشة المبادلة قبل التأكيد.",
     "resolvedSolanaNote": "مبادلة حقيقية على سولانا، العملة {{address}}. محفظتك أنت هي التي توقّع والعملات ملكك — هذه ليست محاكاة. هذه العملة ليست ضمن قائمتنا الموثّقة، لذا تحقّق من عنوانها ومن المبلغ الذي ستستلمه في شاشة المبادلة قبل التأكيد.",
-    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it."
+    "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
+    "swapDockAria": "شراء {{symbol}}"
   },
   "trade": {
     "title": "تداول",
@@ -1092,7 +1093,30 @@
       "p4": "التصفية تلقائية. إذا تحرك السوق ضدك بما يكفي يُغلق المركز ويذهب المال — لا نداء هامش ولا جهة تستأنف لديها."
     },
     "venuesTitle": "من يدير هذه الأسواق؟",
-    "marketDataUnavailable": "بيانات السوق غير متاحة مؤقتًا. لا يُعرض أي سعر محفوظ في شاشة الرافعة المالية."
+    "marketDataUnavailable": "بيانات السوق غير متاحة مؤقتًا. لا يُعرض أي سعر محفوظ في شاشة الرافعة المالية.",
+    "terminal": {
+      "pairsCount": "{{count}} زوج",
+      "pairSearch": "ابحث عن زوج",
+      "pairInApp": "قابل التداول داخل التطبيق",
+      "noPairMatch": "لا يوجد زوج مطابق لهذا البحث.",
+      "connectSolana": "ربط محفظة سولانا",
+      "preparing": "جارٍ تجهيز الأمر…",
+      "prepared": "أُنشئ بواسطة الخادم",
+      "preparedNotional": "حجم الأمر",
+      "preparedSlippage": "أقصى انزلاق",
+      "preparedVenue": "سوق المنصة",
+      "signHere": "اللمسة التالية تطلب من محفظتك أنت توقيع هذا الأمر بالضبط، هنا على هذه الشاشة. لا يحتفظ التطبيق بأي أصول.",
+      "signNow": "وقّع وأرسل",
+      "signing": "بانتظار توقيعك…",
+      "signed": "تم إرسال الأمر. الهاش أدناه مسجّل في السجل:",
+      "err": {
+        "USER_REJECTED": "رفضت التوقيع في محفظتك. لم يُرسل شيء.",
+        "QUOTE_EXPIRED": "انتهت صلاحية السعر. أغلق وأعد بناء الأمر.",
+        "RISK_BLOCKED": "رفض محرك المخاطر هذا الأمر. لم يُرسل شيء.",
+        "MARKET_NOT_LISTED": "هذه المنصة لا تدرج هذا الزوج. اختر زوجًا آخر من الشريط.",
+        "PROVIDER_UNAVAILABLE": "لم تستجب المنصة. لم يُرسل شيء — أعد المحاولة بعد قليل."
+      }
+    }
   },
   "farm": {
     "title": "المزرعة",
@@ -3606,6 +3630,13 @@
       "copied": "تم النسخ",
       "copy": "نسخ العنوان",
       "badAddress": "هذا ليس عنوان سولانا."
+    },
+    "picker": {
+      "popular": "الرموز الشائعة",
+      "universeCount": "{{count}} رمز متاح"
+    },
+    "universe": {
+      "unavailable": "تعذّر تحميل قائمة الرموز. الصق عنوان المينت للمبادلة على أي حال."
     }
   },
   "install": {
@@ -6439,7 +6470,7 @@
       "relayHost": "مُرحِّل التطبيق نفسه",
       "serverHost": "خادم التطبيق نفسه",
       "serverTried": "سُئل خادم التطبيق نفسه أيضًا، ولم يستطع قراءة السوق.",
-        "showMore": "عرض {{n}} أخرى"
+      "showMore": "عرض {{n}} أخرى"
     },
     "wallet": {
       "title": "لم تُفتح المحفظة للتوقيع",
