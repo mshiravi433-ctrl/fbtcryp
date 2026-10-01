@@ -62,10 +62,11 @@ export const OPS_PANEL_STRINGS = {
   'ops.title':         { fa: 'مرکز عملیات',       en: 'Operations Center', ar: 'مركز العمليات' },
   'ops.walletNeeded':  { fa: 'نیاز به کیف پول',   en: 'Wallet needed', ar: 'يتطلب محفظة' },
   'ops.unavailable':   { fa: 'در دسترس نیست',     en: 'Unavailable', ar: 'غير متاح' },
+  'ops.openPage': { fa: 'صفحهٔ مرتبط', en: 'Related page', ar: 'الصفحة ذات الصلة' },
   'ops.note': {
-    fa: 'هر کارت یک عملیات واقعی است؛ کارت‌هایی که کیف پول می‌خواهند دلیل غیرفعال بودن را نشان می‌دهند.',
-    en: 'Every card is a real operation. Cards needing a connected wallet show why they are disabled.',
-    ar: 'كل بطاقة عملية حقيقية. البطاقات التي تحتاج محفظة متصلة توضّح سبب تعطيلها.'
+    fa: 'دکمهٔ اصلی تحلیل، استعلام یا فرم عملیاتی را اجرا می‌کند؛ صفحهٔ مرتبط جداست. عملیات مالی فقط با تأیید شما و امضای کیف پول انجام می‌شود.',
+    en: 'The primary button runs analysis, a quote, or an operation form; the related page is separate. Financial execution requires your confirmation and wallet signature.',
+    ar: 'الزر الأساسي يشغّل التحليل أو عرض السعر أو نموذج العملية؛ الصفحة ذات الصلة منفصلة. التنفيذ المالي يتطلب تأكيدك وتوقيع المحفظة.'
   },
 
   /* ---- History panel ----------------------------------------------------- */

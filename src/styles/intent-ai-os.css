@@ -5124,3 +5124,15 @@ body:has(.iaos-page-v6) {
 :root[data-theme='light'] .isp-blocked p { color: #0f172a; }
 :root[data-theme='light'] .isp-progress-steps li { color: #334155; }
 :root[data-theme='light'] .isp-progress-head { color: #0f172a; }
+
+/* Intent OS options own their descriptions; a choice carries a real action. */
+.iaos-os-chip:has(small) { display: flex; flex-direction: column; align-items: stretch; text-align: start; gap: 6px; flex: 1 1 220px; }
+.iaos-os-chip small { font-size: 0.78rem; line-height: 1.7; opacity: 0.8; font-weight: 400; }
+.iaos-os-chip[data-selected='true'] { border-color: var(--accent, #2dd4bf); }
+.iaos-os-chip:disabled { cursor: default; opacity: 0.58; }
+.iaos-os-chip[data-selected='true']:disabled { opacity: 1; }
+.iaos-os-speaker { margin-inline-end: 0.4em; }
+
+.iaos-ops-card-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.iaos-ops-card-group .iaos-ops-card { flex: 1; width: 100%; }
+.iaos-ops-page { align-self: flex-end; border: 0; background: transparent; color: var(--accent, #2dd4bf); font-size: 0.78rem; cursor: pointer; padding: 6px 10px; }

@@ -1455,6 +1455,14 @@ installDom();
 const { run: runOpsHandoff } = await import('./.out/opshandoff/ops-handoff-probe.js');
 report('ops hand-off (/intent?tab=ops opens the real operations panel)', await runOpsHandoff(document.getElementById('r')));
 
+/* Keep context-bound option clicks, localized canonical plans and real pause
+ * controls in the default regression gate. A child process isolates the
+ * upstream fixtures/DOM and releases the large chat module between suites. */
+execFileSync('npm', ['run', 'test:intent-os-repair'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
+
+
 /*
  * Typing a goal into the REAL page must produce a goal card. Every link is
  * covered elsewhere — the parser, the human layer, the compiler, the card —

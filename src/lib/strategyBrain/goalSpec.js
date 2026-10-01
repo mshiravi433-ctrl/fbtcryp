@@ -209,7 +209,7 @@ export function readRiskProfile({ text = '', entities = {} } = {}) {
   if (has(/هرچی شد بشه|yolo|all in|بترکونم|ریسک خیلی بالا|very high risk/i) || pref === 'aggressive') {
     return { profile: 'aggressive', source: pref ? 'parser' : 'sentence' };
   }
-  if (has(/ریسک بالا|پرریسک|high risk|aggressive|ریسک زیاد/i) || pref === 'high') {
+  if (has(/ریسک بالا|پرریسک|تهاجمی|high risk|aggressive|ریسک زیاد/i) || pref === 'high') {
     return { profile: 'aggressive', source: pref ? 'parser' : 'sentence' };
   }
   if (has(/ریسک متوسط|ریسک متعادل|متوسط|متعادل|moderate|medium risk|balanced/i) || pref === 'moderate') {

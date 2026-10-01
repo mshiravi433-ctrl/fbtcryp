@@ -32,6 +32,7 @@ import { detectPlanConflicts } from '../os/upgrade7/planner.js';
 import { DEFAULT_POLICY_CAPS } from '../permissions.js';
 import { MAX_ESCROW_USD } from '../agentEscrow.js';
 import { APPEAL_WINDOW_MS } from '../agentDispute.js';
+import { RISK_PROFILES } from '../../strategyBrain/strategyEngine.js';
 
 export const NEGOTIATION_CHAT_SCHEMA = 'fbt.chat-negotiation.v1';
 
@@ -76,7 +77,7 @@ const AGREEMENT_RE = /(توافق|سازش|قرارداد|قرار\s*بگذار|
 const EXTERNAL_RE = /(ایجنت\s*خارجی|ایجنتِ\s*خارجی|external\s*agent|نظر\s*دوم|second\s*opinion|نظر\s*مستقل)/i;
 const AGENT_AGENT_RE = /(ایجنت\s*(?:به|با|و|↔)\s*ایجنت|ایجنت\s*ها?\s*(?:با\s*هم|باهم|مذاکره)|شورای\s*ایجنت|رأی\s*شورا|agent\s*(?:to|2|↔)\s*agent|agent\s*council)/i;
 const HUMAN_HUMAN_RE = /(انسان\s*(?:به|تا|با|↔)\s*انسان|دو\s*طرف|طرفین|طرف\s*دیگر|دو\s*نفر|قرارداد\s*بین|توافق\s*دو\s*طرفه|human\s*(?:to|2|↔)\s*human|two\s*parties|both\s*sides|counterparty)/i;
-const HUMAN_AGENT_RE = /(مذاکره\s*با\s*(?:هوش|ایجنت|fbt)|با\s*ایجنت|با\s*هوش\s*مصنوعی\s*مذاکره|negotiat\w*\s*with\s*(?:the\s*)?(?:agent|ai)|human\s*to\s*agent)/i;
+const HUMAN_AGENT_RE = /(مذاکره\s*با\s*(?:هوش|ایجنت|fbt)|با\s*ایجنت|با\s*هوش\s*مصنوعی\s*مذاکره|انسان\s*(?:به|با|↔)\s*ایجنت|ایجنت\s*(?:به|با|↔)\s*انسان|negotiat\w*\s*with\s*(?:the\s*)?(?:agent|ai)|human[\s-]*(?:to|2|↔)[\s-]*agent|agent[\s-]*(?:to|2|↔)[\s-]*human)/i;
 const NEGOTIATE_RE = /(مذاکره|چانه|negotiat|bargain)/i;
 
 /** Strip the command words so the subject is what is left, not the verb. */
@@ -132,50 +133,44 @@ function proposalFromContext(context = {}) {
     chainId: context.chainId ?? null,
     risk: context.risk || null,
     goal: context.goal || null,
-    evidenceComplete: context.evidenceComplete !== false
+    evidenceComplete: context.evidenceComplete === true
   };
 }
 
 function money(v, locale) {
-  const n = Number(v);
+  const n = v == null || v === '' ? NaN : Number(v);
   if (!Number.isFinite(n)) return '—';
   return isFa(locale) ? `${n.toLocaleString('en-US')} دلار` : `$${n.toLocaleString('en-US')}`;
 }
 
 function optionSet(context = {}, locale = 'fa') {
   const fa = isFa(locale);
-  const given = Array.isArray(context.options) ? context.options.filter((o) => o && (o.label || o.id)) : [];
+  const given = Array.isArray(context.options) ? context.options.filter((o) => o && ['conservative', 'balanced', 'aggressive'].includes(o.riskProfile || o.id)) : [];
   if (given.length) {
     return given.slice(0, 3).map((o, i) => ({
-      id: String(o.id || `opt_${i + 1}`),
+      id: String(o.riskProfile || o.id),
       label: String(o.label || o.id),
       tradeoff: o.tradeoff ? String(o.tradeoff) : null
     }));
   }
-  const caps = DEFAULT_POLICY_CAPS;
-  return [
-    {
-      id: 'conservative',
-      label: fa ? 'محافظه‌کارانه — کوچک و کم‌ریسک' : 'Conservative — small and low risk',
+  // Describe the actual strategy bands, not invented slippage or stake limits.
+  return ['conservative', 'balanced', 'aggressive'].map((id) => {
+    const band = RISK_PROFILES[id];
+    const label = {
+      conservative: { fa: 'محافظه‌کارانه — حفظ سرمایه', en: 'Conservative — capital preservation' },
+      balanced: { fa: 'متعادل — رشد با ریسک میانه', en: 'Balanced — medium-risk growth' },
+      aggressive: { fa: 'تهاجمی — پذیرش ریسک بالاتر', en: 'Aggressive — higher-risk exposure' }
+    }[id];
+    return {
+      id, label: fa ? label.fa : label.en,
+      riskProfile: id,
+      drawdownBudgetPct: band.drawdownBudgetPct,
+      allowsLeverage: band.allowsLeverage,
       tradeoff: fa
-        ? `هر تراکنش تا ${Math.min(caps.maxTransactionUsd, 5000).toLocaleString('en-US')} دلار، لغزش حداکثر ${Math.min(caps.maxSlippagePct, 1)}٪`
-        : `up to $${Math.min(caps.maxTransactionUsd, 5000).toLocaleString('en-US')} per trade, slippage ≤ ${Math.min(caps.maxSlippagePct, 1)}%`
-    },
-    {
-      id: 'balanced',
-      label: fa ? 'متعادل — تقسیم‌شده روی چند مرحله' : 'Balanced — split across stages',
-      tradeoff: fa
-        ? `اجرا در چند مرحله با سقف هر تراکنش ${caps.maxTransactionUsd.toLocaleString('en-US')} دلار و کارمزد حداکثر ${(caps.maxFeeBps / 100).toFixed(2)}٪`
-        : `staged, max $${caps.maxTransactionUsd.toLocaleString('en-US')} per trade, fee cap ${(caps.maxFeeBps / 100).toFixed(2)}%`
-    },
-    {
-      id: 'aggressive',
-      label: fa ? 'تهاجمی — با اهرم محدود' : 'Aggressive — capped leverage',
-      tradeoff: fa
-        ? `اهرم حداکثر ${caps.maxLeverage}× و ریسک بالاتر؛ همچنان نیازمند تأیید تو`
-        : `leverage ≤ ${caps.maxLeverage}× and higher risk; still requires your approval`
-    }
-  ];
+        ? `بودجه افت برآوردی ${band.drawdownBudgetPct}٪، حداکثر ${band.maxSleeves} بخش${band.allowsLeverage ? `؛ اهرم فقط پس از بررسی و تا سقف ${DEFAULT_POLICY_CAPS.maxLeverage}×` : '، بدون اهرم'}. این بودجه تضمینِ محدود شدن ضرر نیست.`
+        : `Estimated drawdown budget ${band.drawdownBudgetPct}%, up to ${band.maxSleeves} sleeves${band.allowsLeverage ? `; leverage only after review, capped at ${DEFAULT_POLICY_CAPS.maxLeverage}×` : ', no leverage'}. This budget is not a guaranteed loss limit.`
+    };
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -217,6 +212,7 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
   const proposal = proposalFromContext({ ...context, goal: subject || context.goal });
   result.subject = subject || null;
   result.proposal = proposal;
+  result.goal = context.goal || null;
 
   /* ── emergency: a stop PLAN, never a stop ─────────────────────────────── */
   if (mode === NEGOTIATION_MODES.EMERGENCY) {
@@ -269,8 +265,8 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
     result.outcome = NEGOTIATION_OUTCOMES.AGREEMENT;
     result.transcript = [
       line('fbt-ai', 'request', fa
-        ? `درخواست تحلیل به ایجنت خارجی «${context.externalAgent.label || context.externalAgent.id}» داده شد.`
-        : `Analysis requested from external agent "${context.externalAgent.label || context.externalAgent.id}".`),
+        ? `نظر ثبت‌شدهٔ ایجنت خارجی «${context.externalAgent.label || context.externalAgent.id}» بررسی شد؛ اینجا پیامی ارسال نشده است.`
+        : `Recorded analysis from external agent "${context.externalAgent.label || context.externalAgent.id}".`),
       line('external-agent', 'analysis', fa
         ? (context.externalView || 'نظر مستقل: فقط تحلیل، بدون هیچ اختیار اجرایی.')
         : (context.externalView || 'Independent view: analysis only, with no execution authority.')),
@@ -299,6 +295,7 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
       return result;
     }
     const contextForCouncil = {
+      ...context,
       riskDecision: context.riskDecision || null,
       guardianApproved: context.guardianApproved !== false,
       evidenceComplete: proposal.evidenceComplete !== false
@@ -309,17 +306,17 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
       votes: context.votes || {},
       context: contextForCouncil,
       highValue: Number(proposal.amountUsd) >= 10_000,
-      highRisk: ['HIGH', 'EXTREME', 'high'].includes(String(proposal.risk || '').toUpperCase()) || String(proposal.risk || '').toLowerCase() === 'high'
+      highRisk: ['HIGH', 'EXTREME', 'AGGRESSIVE'].includes(String(proposal.risk || '').toUpperCase())
     });
     const conflicts = detectPlanConflicts(Array.isArray(context.plans) ? context.plans : []);
 
     result.transcript = [
       line('fbt-strategy', 'proposal', fa
-        ? `پیشنهاد: ${proposal.action}${proposal.asset ? ` روی ${proposal.asset}` : ''}${proposal.amountUsd != null ? ` با ${money(proposal.amountUsd, locale)}` : ''}.`
+        ? `پیشنهاد: ${actionLabel(proposal.action)}${proposal.asset ? ` روی ${proposal.asset}` : ''}${proposal.amountUsd != null ? ` با ${money(proposal.amountUsd, locale)}` : ''}.`
         : `Proposal: ${proposal.action}${proposal.asset ? ` on ${proposal.asset}` : ''}${proposal.amountUsd != null ? ` with ${money(proposal.amountUsd, locale)}` : ''}.`),
       line('fbt-execution', challenge.challenged ? 'challenge' : 'agree', fa
         ? (challenge.challenged
-          ? `چالش مستقل: ${challenge.disagreements.map((d) => d.code).join(', ')} — قبل از تأیید باید بازمحاسبه شود.`
+          ? `چالش مستقل: ${challenge.disagreements.map((d) => CHALLENGE_FA[d.code] || d.code).join('، ')} — قبل از تأیید باید بازمحاسبه شود.`
           : 'چالش مستقلی پیدا نشد.')
         : (challenge.challenged
           ? `Independent challenge: ${challenge.disagreements.map((d) => d.code).join(', ')} — recalculate before authorization.`
@@ -327,10 +324,10 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
       ...(council.ok ? council.votes.map((vote) => line(
         vote.role === 'guardian' ? 'fbt-guardian' : vote.role === 'execution' ? 'fbt-execution' : 'fbt-council',
         'vote',
-        fa ? `رأی «${vote.role}»: ${vote.decision}` : `Vote "${vote.role}": ${vote.decision}`
+        fa ? `رأی «${councilRoleLabel(vote.role)}»: ${decisionLabel(vote.decision)} — ${councilReasonFa(vote)}` : `Vote "${vote.role}": ${vote.decision} — ${vote.reason}`
       )) : []),
       line('fbt-council', 'decision', fa
-        ? `تصمیم شورا: ${council.decision}. اجرا مجاز نیست (${council.canExecute ? 'canExecute' : 'canExecute=false'}) و به تأیید تو نیاز دارد.`
+        ? `تصمیم شورا: ${decisionLabel(council.decision)}. شورا اجازهٔ اجرا نمی‌دهد؛ بررسی ریسک، تأیید و امضای تو همچنان لازم است.`
         : `Council decision: ${council.decision}. Execution is not granted (canExecute=false) and needs your authorization.`)
     ];
 
@@ -350,10 +347,11 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
         ? 'تضادها پنهان نشدند — تا وقتی رفع نشوند این مسیر پیش نمی‌رود. آپشن‌های اصلاح را از پایین انتخاب کن.'
         : 'The conflicts were not hidden — this path will not advance until they are resolved. Choose a repair option below.');
     }
+    result.notes.push(fa ? 'این شورا بررسی قاعده‌محورِ نقش‌های داخلی است؛ ادعای تماس با مدل‌های زندهٔ مستقل نداریم.' : 'This council runs rule-based internal role checks; it does not claim calls to independent live models.');
     result.notes.push(fa
       ? 'مذاکره اجازه اجرا نمی‌دهد؛ هر اجرایی بعد از این، مسیر تأیید و امضای خودت را دارد.'
       : 'A negotiation grants no execution; anything that runs afterwards goes through your own confirmation and signature.');
-    result.chips = council.decision === 'APPROVE'
+    result.chips = result.outcome === NEGOTIATION_OUTCOMES.AGREEMENT
       ? [{ id: 'a2a-plan', label: fa ? 'پلن اجرایی‌اش را بساز' : 'Build the execution plan', prompt: fa ? 'پلن اجرایی این پیشنهاد را بساز' : 'build the execution plan for this proposal' }]
       : [
         { id: 'a2a-revise', label: fa ? 'بازمحاسبه کن' : 'Recalculate', prompt: fa ? 'پیشنهاد را با ملاحظات شورا بازمحاسبه کن' : 'recalculate the proposal with the council notes' },
@@ -382,7 +380,7 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
       { key: 'parties', value: fa
         ? `تو${party ? ` و «${party}»` : ' و طرف مقابل'}`
         : `you${party ? ` and "${party}"` : ' and the counterparty'}` },
-      { key: 'subject', value: `${proposal.action}${proposal.asset ? ` · ${proposal.asset}` : ''}${proposal.amountUsd != null ? ` · ${money(proposal.amountUsd, locale)}` : ''}` },
+      { key: 'subject', value: `${fa ? actionLabel(proposal.action) : proposal.action}${proposal.asset ? ` · ${proposal.asset}` : ''}${proposal.amountUsd != null ? ` · ${money(proposal.amountUsd, locale)}` : ''}` },
       { key: 'custody', value: fa ? 'FBT دارایی نگه نمی‌دارد؛ کلید و امضا فقط دست صاحبان است.' : 'FBT takes no custody; keys and signatures stay with the owners.' },
       { key: 'escrow', value: fa
         ? `اگر کار از طریق ایجنت پرداخت شود: وجه در escrow می‌ماند (سقف ${MAX_ESCROW_USD.toLocaleString('en-US')} دلار) و فقط با تحویل تأییدشده آزاد می‌شود.`
@@ -394,20 +392,21 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
         ? (fa ? `${deadlineDays} روز` : `${deadlineDays} days`)
         : (fa ? 'تعیین نشده — باید توافق شود' : 'not set — must be agreed') }
     ];
+    if (context.additionalTerm) rows.push({ key: 'additional', value: String(context.additionalTerm).slice(0, 400) });
     result.terms = rows;
     result.transcript = [
       line('fbt-ai', 'terms', fa
         ? `برگه شرایط ساخته شد (${rows.length} بند). هنوز هیچ‌چیز امضا نشده و هیچ پیامی برای طرف مقابل فرستاده نشده.`
         : `Terms sheet built (${rows.length} clauses). Nothing is signed and no message was sent to the counterparty.`),
-      ...rows.map((row) => line('fbt-council', 'term', `${row.key}: ${row.value}`)),
+      ...rows.map((row) => line('fbt-council', 'term', `${fa ? termLabel(row.key) : row.key}: ${row.value}`)),
       line('fbt-guardian', 'constraint', fa
         ? 'این توافق فقط با تأیید صریح دو طرف قابل اجراست؛ یک تأیید کافی نیست.'
         : 'This agreement only runs with the explicit confirmation of both sides; one confirmation is not enough.')
     ];
     result.outcome = NEGOTIATION_OUTCOMES.AWAITING_COUNTERPARTY;
     result.notes.push(fa
-      ? 'من نه پیامی از طرف تو فرستادم و نه جای کسی را تأیید کردم. وقتی طرف مقابل هم تأیید کرد، اجرا شروع می‌شود.'
-      : 'I neither sent a message on your behalf nor confirmed for anybody else. Execution starts once both sides confirm.');
+      ? 'من نه پیامی از طرف تو فرستادم و نه جای کسی را تأیید کردم. تأیید طرف مقابل باید جداگانه راستی‌آزمایی شود؛ این برگه خودش اجرای مالی نمی‌کند.'
+      : 'I neither sent a message on your behalf nor confirmed for anybody else. Counterparty confirmation must be separately verified; this sheet cannot execute a financial action.');
     result.chips = [
       { id: 'h2h-confirm', label: fa ? 'از طرف خودم تأیید می‌کنم' : 'I confirm for my side', prompt: fa ? 'از طرف خودم این شرایط را تأیید می‌کنم' : 'I confirm these terms for my side' },
       { id: 'h2h-edit', label: fa ? 'بندها را اصلاح کن' : 'Edit the clauses', prompt: fa ? 'بندهای برگه شرایط را اصلاح کن' : 'edit the clauses of the terms sheet' }
@@ -424,11 +423,12 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
   }
   result.outcome = NEGOTIATION_OUTCOMES.AWAITING_USER;
   result.options = options;
+  result.question = fa ? 'کدام سطح ریسک را برای پلن انتخاب می‌کنی؟' : 'Which risk band should the plan use?';
   result.transcript = [
     line('fbt-ai', 'offer', fa
       ? `سه گزینه روی میز است؛ همه با سقف‌های واقعی همین سیستم ساخته شده‌اند${proposal ? ` و موضوع «${subject || proposal.action}»` : ''}.`
       : `Three options are on the table, all constrained by this system's real caps${proposal ? ` for "${subject || proposal.action}"` : ''}.`),
-    ...options.map((o) => line('fbt-strategy', 'option', `${o.label}${o.tradeoff ? ` — ${o.tradeoff}` : ''}`)),
+
     line('fbt-guardian', 'constraint', fa
       ? `سقف سخت: هر تراکنش حداکثر ${DEFAULT_POLICY_CAPS.maxTransactionUsd.toLocaleString('en-US')} دلار، اهرم حداکثر ${DEFAULT_POLICY_CAPS.maxLeverage}× — انتخاب نهایی با توست.`
       : `Hard caps: max $${DEFAULT_POLICY_CAPS.maxTransactionUsd.toLocaleString('en-US')} per trade, leverage ≤ ${DEFAULT_POLICY_CAPS.maxLeverage}× — the final choice is yours.`)
@@ -436,13 +436,28 @@ export function runChatNegotiation({ mode, intent = 'NEGOTIATE', subject = '', c
   result.notes.push(fa
     ? 'هیچ‌کدام از این گزینه‌ها اجرا نشده است؛ با انتخاب تو، فقط پلن پیشنهادی ساخته می‌شود.'
     : 'None of these options ran; your choice only builds a proposed plan.');
-  result.chips = options.map((o) => ({ id: `pick_${o.id}`, label: o.label, prompt: o.label }));
+  result.chips = options.map((o) => ({ id: `pick_${o.id}`, label: o.label, prompt: o.label, action: 'SELECT_RISK', value: o.riskProfile || o.id }));
   return result;
 }
 
 /* -------------------------------------------------------------------------- */
 /*  RENDER                                                                     */
 /* -------------------------------------------------------------------------- */
+
+const ROLE_FA = { research: 'پژوهش', strategy: 'استراتژی', risk: 'ریسک', liquidity: 'نقدینگی', market: 'بازار', fee: 'کارمزد', portfolio: 'پرتفوی', hedge: 'پوشش ریسک', guardian: 'نگهبان', execution: 'اجرا', exit: 'خروج', auditor: 'حسابرسی' };
+const DECISION_FA = { APPROVE: 'قابل بررسی', REVISE: 'نیازمند بازبینی', REJECT: 'رد شده' };
+const TERM_FA = { parties: 'طرفین', subject: 'موضوع', custody: 'نگهداری دارایی', escrow: 'سپرده امانی', dispute: 'اعتراض', deadline: 'مهلت', additional: 'بند پیشنهادی جدید' };
+const ACTION_FA = { rebalance: 'متعادل‌سازی', review: 'بازبینی', 'risk-review': 'بازبینی ریسک', agreement: 'توافق', swap: 'سواپ', buy: 'خرید', sell: 'فروش', bridge: 'بریج' };
+const councilRoleLabel = (role) => ROLE_FA[role] || role;
+const decisionLabel = (decision) => DECISION_FA[decision] || decision;
+const termLabel = (term) => TERM_FA[term] || term;
+const actionLabel = (action) => ACTION_FA[String(action).toLowerCase()] || action;
+const CHALLENGE_FA = { EVIDENCE_INCOMPLETE: 'داده کافی نیست', LIQUIDITY_INSUFFICIENT: 'نقدینگی کافی نیست', SLIPPAGE_ABOVE_POLICY: 'لغزش از سقف بیشتر است', LEVERAGE_ABOVE_POLICY: 'اهرم از سقف بیشتر است', REQUIRED_CAPABILITY_UNAVAILABLE: 'ابزار لازم در دسترس نیست', EVENT_RISK_HIGH: 'ریسک رویداد بالاست', COST_INCOMPLETE: 'هزینه کامل خوانده نشده', DRAWDOWN_ABOVE_BUDGET: 'افت برآوردی بیش از بودجه است', QUOTE_STALE: 'نرخ تازه نیست' };
+function councilReasonFa(vote) {
+  if (vote.evidence?.length) return vote.evidence.map((code) => CHALLENGE_FA[code] || 'نیاز به بررسی مستقل').join('، ');
+  if (vote.decision === 'REJECT') return 'محدودیت ایمنی مانع است';
+  return vote.decision === 'REVISE' ? 'پیشنهاد باید با دادهٔ معتبر بازبینی شود' : 'در بررسی‌های موجود مانعی پیدا نشد؛ این رأی تضمین سود نیست';
+}
 
 const SPEAKER_LABELS = Object.freeze({
   user: { fa: 'کاربر', en: 'You' },
@@ -516,13 +531,15 @@ export function negotiationToChatMessage(result, { locale = 'fa' } = {}) {
   const title = fa
     ? `${modeLabel} — ${outcomeLabel}`
     : `${modeLabel} — ${outcomeLabel}`;
+  const id = `neg_${globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`}`;
   return {
-    id: `neg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+    id,
     role: 'ai',
     kind: 'os',
     content: [title, ...renderNegotiationLines(result, locale)].join('\n'),
     ui: { type: 'TEXT' },
     osEvent: {
+      id,
       schema: NEGOTIATION_CHAT_SCHEMA,
       kind: kindMap[outcome] || 'NEGOTIATION',
       title,
@@ -532,6 +549,9 @@ export function negotiationToChatMessage(result, { locale = 'fa' } = {}) {
       chips: result?.chips || [],
       payload: {
         mode: result?.mode || null,
+        subject: result?.subject || null,
+        proposal: result?.proposal || null,
+        goal: result?.goal || null,
         intent: result?.intent || null,
         outcome,
         decision: result?.decision || null,

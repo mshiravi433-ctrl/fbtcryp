@@ -155,6 +155,19 @@ export function createAutonomyEngine({
   function start() { current.running = true; current.startedAt = clock(); log({ type: 'STARTED' }); persist(); return { ok: true }; }
   function stop() { current.running = false; log({ type: 'STOPPED' }); persist(); return { ok: true }; }
 
+  /** Explicit emergency consent only. Revoke queued proposals and local
+   * control, but never close positions or claim an on-chain cancellation. */
+  function haltControls() {
+    current.running = false;
+    for (const automation of current.automations) { automation.active = false; automation.mode = AUTONOMY_MODES.PAPER; }
+    current.mode = AUTONOMY_MODES.PAPER;
+    const cancelled = current.pendingRuns.map((r) => r.id);
+    current.pendingRuns = [];
+    log({ type: 'CONTROLS_HALTED', cancelled, signed: false, fundsMoved: false });
+    persist();
+    return { ok: true, cancelledPending: cancelled.length, fundsMoved: false, tradesClosed: false, signed: false };
+  }
+
   /* ── protections ─────────────────────────────────────────────────────── */
 
   function protectionVerdict({ now, equity }) {
@@ -590,7 +603,7 @@ export function createAutonomyEngine({
 
   return {
     schema: AUTONOMY_SCHEMA,
-    arm, disarm, setMode, start, stop, tick, status, profit, snapshot, restore, reset,
+    arm, disarm, setMode, start, stop, haltControls, tick, status, profit, snapshot, restore, reset,
     resolvePendingRun,
     get state() { return current; },
     get rules() { return rules; }

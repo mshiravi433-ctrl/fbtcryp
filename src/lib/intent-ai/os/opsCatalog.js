@@ -47,7 +47,7 @@ export const OPERATIONS = Object.freeze([
   /* -------------------------------- Wallet ------------------------------ */
   { id: 'wallet_analysis', category: 'wallet', icon: '🔍', title: 'Wallet Analysis', desc: 'Read the connected EVM + Solana wallet state', action: 'read', capabilityId: 'wallet.getBalances', route: '/wallet', requiresWallet: true },
   { id: 'wallet_balances', category: 'wallet', icon: '💳', title: 'Balances', desc: 'Real balances per chain from the multi-chain hook', action: 'read', capabilityId: 'wallet.getBalances', route: '/wallet', requiresWallet: true },
-  { id: 'wallet_transactions', category: 'wallet', icon: '🧾', title: 'Transactions', desc: 'Intent OS transaction history (this device)', action: 'read', capabilityId: 'transactions.history', route: '/wallet' },
+  { id: 'wallet_transactions', category: 'wallet', icon: '🧾', title: 'Transactions', desc: 'Intent OS transaction history (this device)', action: 'read', capabilityId: 'transactions.history', route: '/intent?tab=history&section=operations' },
   { id: 'wallet_evm', category: 'wallet', icon: '🟦', title: 'EVM Wallet', desc: 'Manage EVM wallet / switch network', action: 'navigate', capabilityId: 'wallet.evm', route: '/wallet' },
   { id: 'wallet_solana', category: 'wallet', icon: '🟣', title: 'Solana Wallet', desc: 'Solana balance and swap surface', action: 'navigate', capabilityId: 'wallet.solana', route: '/solana' },
 
@@ -64,10 +64,10 @@ export const OPERATIONS = Object.freeze([
   { id: 'bridge_execute', category: 'bridge', icon: '🚀', title: 'Bridge Execute', desc: 'Prepare → simulate → confirm → sign → verify', action: 'quote', capabilityId: 'bridge.execute', route: '/bridge', requiresWallet: true },
 
   /* ------------------------------- Lending ------------------------------- */
-  { id: 'lending_lend', category: 'lending', icon: '🏦', title: 'Lend', desc: 'Supply to real lending markets (Morpho/Aave style)', action: 'navigate', capabilityId: 'lending.supply', route: '/loan', requiresWallet: true },
-  { id: 'lending_borrow', category: 'lending', icon: '🪙', title: 'Borrow', desc: 'Borrow against supplied collateral', action: 'navigate', capabilityId: 'lending.borrow', route: '/loan', requiresWallet: true },
-  { id: 'lending_repay', category: 'lending', icon: '↩️', title: 'Repay', desc: 'Repay a borrow position', action: 'navigate', capabilityId: 'lending.repay', route: '/loan', requiresWallet: true },
-  { id: 'lending_withdraw', category: 'lending', icon: '📤', title: 'Withdraw', desc: 'Withdraw supplied assets', action: 'navigate', capabilityId: 'lending.withdraw', route: '/loan', requiresWallet: true },
+  { id: 'lending_lend', category: 'lending', icon: '🏦', title: 'Lend', desc: 'Supply to real lending markets (Morpho/Aave style)', action: 'navigate', capabilityId: 'lending.supply', route: '/loan?tab=supply', requiresWallet: true },
+  { id: 'lending_borrow', category: 'lending', icon: '🪙', title: 'Borrow', desc: 'Borrow against supplied collateral', action: 'navigate', capabilityId: 'lending.borrow', route: '/loan?tab=borrow', requiresWallet: true },
+  { id: 'lending_repay', category: 'lending', icon: '↩️', title: 'Repay', desc: 'Repay a borrow position', action: 'navigate', capabilityId: 'lending.repay', route: '/loan?tab=positions', requiresWallet: true },
+  { id: 'lending_withdraw', category: 'lending', icon: '📤', title: 'Withdraw', desc: 'Withdraw supplied assets', action: 'navigate', capabilityId: 'lending.withdraw', route: '/loan?tab=positions', requiresWallet: true },
   { id: 'lending_analysis', category: 'lending', icon: '📈', title: 'Position Analysis', desc: 'Lending markets: supply/borrow APY and risk', action: 'read', capabilityId: 'lending.markets', route: '/loan' },
 
   /* --------------------------------- Farm -------------------------------- */
@@ -78,6 +78,11 @@ export const OPERATIONS = Object.freeze([
   { id: 'farm_claim', category: 'farm', icon: '🎁', title: 'Claim', desc: 'Claim farm rewards', action: 'navigate', capabilityId: 'farming.claim', route: '/farm', requiresWallet: true },
   { id: 'farm_compound', category: 'farm', icon: '🔁', title: 'Compound', desc: 'Re-invest farm rewards', action: 'navigate', capabilityId: 'farming.compound', route: '/farm', requiresWallet: true },
 
+  // Supported in-app products: live APY/product reads at the native venue.
+  { id: 'farm_eth', category: 'farm', icon: 'Ξ', title: 'ETH Staking', desc: 'Read live Ethereum staking products; deposits still need a wallet review', action: 'navigate', capabilityId: 'staking.eth', route: '/farm?tab=inapp&focus=eth' },
+  { id: 'farm_sol', category: 'farm', icon: '◎', title: 'SOL Staking', desc: 'Read live Solana staking products; no invented APY', action: 'navigate', capabilityId: 'staking.sol', route: '/farm?tab=inapp&focus=sol' },
+  { id: 'farm_gold', category: 'farm', icon: '◇', title: 'Tokenized Gold', desc: 'Gold product prices and actual buy routes; gold has no native yield', action: 'navigate', capabilityId: 'rwa.gold', route: '/farm?tab=inapp&focus=gold' },
+
   /* ------------------------------ Liquidity ------------------------------ */
   { id: 'lp_analysis', category: 'liquidity', icon: '💧', title: 'Pool Analysis', desc: 'Liquidity pools: APY, TVL, IL risk', action: 'read', capabilityId: 'liquidity.pools', route: '/farm' },
   { id: 'lp_add', category: 'liquidity', icon: '➕', title: 'Add Liquidity', desc: 'Add to a pool (venue page, wallet signs)', action: 'navigate', capabilityId: 'liquidity.add', route: '/farm', requiresWallet: true },
@@ -86,12 +91,12 @@ export const OPERATIONS = Object.freeze([
   { id: 'lp_unstake', category: 'liquidity', icon: '🔓', title: 'Unstake LP', desc: 'Unstake LP tokens', action: 'navigate', capabilityId: 'liquidity.unstake', route: '/farm', requiresWallet: true },
 
   /* ------------------------------- Futures ------------------------------- */
-  { id: 'futures_analysis', category: 'futures', icon: '📉', title: 'Futures Analysis', desc: 'On-chain perp markets: funding, OI, risk', action: 'read', capabilityId: 'futures.analysis', route: '/perp' },
-  { id: 'futures_position', category: 'futures', icon: '📍', title: 'Position', desc: 'Open positions and liquidation prices', action: 'read', capabilityId: 'futures.positions', route: '/perp' },
+  { id: 'futures_analysis', category: 'futures', icon: '📉', title: 'Futures Analysis', desc: 'On-chain perp markets: funding, OI, risk', action: 'read', capabilityId: 'futures.analysis', route: '/perp?tab=onchain' },
+  { id: 'futures_position', category: 'futures', icon: '📍', title: 'Position', desc: 'Open positions and liquidation prices', action: 'read', capabilityId: 'futures.positions', route: '/perp?tab=onchain' },
   { id: 'futures_open', category: 'futures', icon: '🟢', title: 'Open', desc: 'Open a perp position (venue page, real quote)', action: 'navigate', capabilityId: 'futures.open', route: '/perp?tab=onchain', requiresWallet: true },
   { id: 'futures_close', category: 'futures', icon: '🔴', title: 'Close', desc: 'Close a perp position', action: 'navigate', capabilityId: 'futures.close', route: '/perp?tab=onchain&panel=positions', requiresWallet: true },
-  { id: 'futures_reduce', category: 'futures', icon: '✂️', title: 'Reduce', desc: 'Reduce position size', action: 'navigate', capabilityId: 'futures.reduce', route: '/perp', requiresWallet: true },
-  { id: 'futures_risk', category: 'futures', icon: '🛡️', title: 'Risk Analysis', desc: 'Liquidation/leverage risk for perp markets', action: 'read', capabilityId: 'futures.risk', route: '/perp' },
+  { id: 'futures_reduce', category: 'futures', icon: '✂️', title: 'Reduce', desc: 'Reduce position size', action: 'navigate', capabilityId: 'futures.reduce', route: '/perp?tab=onchain', requiresWallet: true },
+  { id: 'futures_risk', category: 'futures', icon: '🛡️', title: 'Risk Analysis', desc: 'Liquidation/leverage risk for perp markets', action: 'read', capabilityId: 'futures.risk', route: '/perp?tab=onchain' },
 
   /* --------------------------------- dYdX -------------------------------- */
   { id: 'dydx_market', category: 'dydx', icon: '📊', title: 'Market', desc: 'dYdX markets: funding, volume, spread', action: 'read', capabilityId: 'dydx.markets', route: '/dydx' },
@@ -101,11 +106,11 @@ export const OPERATIONS = Object.freeze([
   { id: 'dydx_risk', category: 'dydx', icon: '🛡️', title: 'Risk', desc: 'dYdX risk levels', action: 'read', capabilityId: 'dydx.risk', route: '/dydx' },
 
   /* ---------------------------- Global markets --------------------------- */
-  { id: 'markets_stocks', category: 'markets', icon: '📈', title: 'Stocks', desc: 'Live stock data (source: real feed)', action: 'navigate', capabilityId: 'stocks.list', route: '/stocks' },
-  { id: 'markets_etf', category: 'markets', icon: '📦', title: 'ETF', desc: 'ETF coverage', action: 'navigate', capabilityId: 'stocks.etf', route: '/stocks' },
-  { id: 'markets_funds', category: 'markets', icon: '💰', title: 'Funds', desc: 'Funds coverage', action: 'navigate', capabilityId: 'stocks.funds', route: '/stocks' },
-  { id: 'markets_forex', category: 'markets', icon: '💱', title: 'Forex', desc: 'FX pairs (افق جهانی on /stocks)', action: 'navigate', capabilityId: 'horizon.forex', route: '/stocks' },
-  { id: 'markets_commodities', category: 'markets', icon: '🛢️', title: 'Commodities', desc: 'Gold, metals and commodities on /stocks', action: 'navigate', capabilityId: 'horizon.commodities', route: '/stocks' },
+  { id: 'markets_stocks', category: 'markets', icon: '📈', title: 'Stocks', desc: 'Live stock data (source: real feed)', action: 'navigate', capabilityId: 'stocks.list', route: '/stocks?tab=equity' },
+  { id: 'markets_etf', category: 'markets', icon: '📦', title: 'ETF', desc: 'ETF coverage', action: 'navigate', capabilityId: 'stocks.etf', route: '/stocks?tab=equity' },
+  { id: 'markets_funds', category: 'markets', icon: '💰', title: 'Funds', desc: 'Funds coverage', action: 'navigate', capabilityId: 'stocks.funds', route: '/stocks?tab=rwa' },
+  { id: 'markets_forex', category: 'markets', icon: '💱', title: 'Forex', desc: 'FX pairs (افق جهانی on /stocks)', action: 'navigate', capabilityId: 'horizon.forex', route: '/stocks?tab=ostium' },
+  { id: 'markets_commodities', category: 'markets', icon: '🛢️', title: 'Commodities', desc: 'Gold, metals and commodities on /stocks', action: 'navigate', capabilityId: 'horizon.commodities', route: '/stocks?tab=ostium' },
   { id: 'markets_rwa', category: 'markets', icon: '🏛️', title: 'RWA', desc: 'Real-world-asset tokens (PAXG/XAUt are swappable)', action: 'read', capabilityId: 'rwa.tokens', route: '/market' },
   { id: 'markets_tokenized', category: 'markets', icon: '🔖', title: 'Tokenized Assets', desc: 'Tokenized gold and staked assets', action: 'read', capabilityId: 'rwa.tokenized', route: '/market' },
 
@@ -124,10 +129,10 @@ export const OPERATIONS = Object.freeze([
      staged Portfolio Strategy instead of a link to one venue. `read` because
      what it does is send a request the assistant answers with a plan card. */
   { id: 'strategy_build', category: 'goals', icon: '🧭', title: 'Portfolio Strategy', desc: 'Reads every module at once and builds a staged cross-module plan for your capital, target and risk', action: 'read', capabilityId: 'strategy.build', route: '/intent' },
-  { id: 'goals_create', category: 'goals', icon: '🎯', title: 'Financial Goal', desc: 'Create a real, durable financial goal (Financial OS) — real markets: /stocks /perp', action: 'navigate', capabilityId: 'goals.create', route: '/stocks' },
-  { id: 'goals_profit', category: 'goals', icon: '📈', title: 'Profit Plan', desc: 'Risk-aware plan toward your profit target — opens real trading: Horizon (افق جهانی), Perp (فیوچرز), Stocks (سهام)', action: 'navigate', capabilityId: 'profit_plan.build', route: '/stocks' },
-  { id: 'goals_forecast', category: 'goals', icon: '🔮', title: 'Forecast', desc: 'Historical scenario range for a goal (no guarantees) — real data from /stocks', action: 'navigate', capabilityId: 'goals.forecast', route: '/stocks' },
-  { id: 'goals_whatif', category: 'goals', icon: '🧮', title: 'What-if', desc: 'What-if simulation on real portfolio data — real markets only', action: 'navigate', capabilityId: 'goals.whatif', route: '/stocks' },
+  { id: 'goals_create', category: 'goals', icon: '🎯', title: 'Financial Goal', desc: 'Collect your capital, target, horizon and risk for a locally saved staged strategy', action: 'navigate', capabilityId: 'goals.create', route: '/intent' },
+  { id: 'goals_profit', category: 'goals', icon: '📈', title: 'Profit Plan', desc: 'Build a risk-aware staged plan using your target, not an example amount', action: 'navigate', capabilityId: 'profit_plan.build', route: '/intent' },
+  { id: 'goals_forecast', category: 'goals', icon: '🔮', title: 'Forecast', desc: 'Build goal scenarios from live rates and explicitly labeled stress proxies, not a profit forecast', action: 'navigate', capabilityId: 'goals.forecast', route: '/intent' },
+  { id: 'goals_whatif', category: 'goals', icon: '🧮', title: 'What-if', desc: 'Collect changed goal parameters and compare a new plan without overwriting previous receipts', action: 'navigate', capabilityId: 'goals.whatif', route: '/intent' },
   { id: 'goals_progress', category: 'goals', icon: '📊', title: 'Progress', desc: 'Real progress toward existing goals — portfolio view', action: 'read', capabilityId: 'goals.progress', route: '/portfolio' },
   { id: 'goals_rebalance', category: 'goals', icon: '⚖️', title: 'Rebalance', desc: 'Align portfolio with the goal plan', action: 'quote', capabilityId: 'portfolio.rebalance', route: '/portfolio', requiresWallet: true },
 
@@ -141,15 +146,15 @@ export const OPERATIONS = Object.freeze([
   { id: 'auto_conditional', category: 'automation', icon: '🎯', title: 'Conditional Buy', desc: '«Buy when BTC reaches X» → real order on /orders', action: 'order', capabilityId: 'orders.create', route: '/orders' },
 
   /* ------------------------------ Monitoring ----------------------------- */
-  { id: 'monitor_list', category: 'monitoring', icon: '📋', title: 'Active Monitoring', desc: 'All running monitors with real status', action: 'monitor', capabilityId: 'monitor.list', route: '/intent' },
+  { id: 'monitor_list', category: 'monitoring', icon: '📋', title: 'Active Monitoring', desc: 'All running monitors with real status', action: 'monitor', capabilityId: 'monitor.list', route: '/intent?tab=history&section=monitoring' },
   { id: 'monitor_opportunity', category: 'monitoring', icon: '🎯', title: 'Opportunity Monitor', desc: 'Watch for opportunities toward your goal', action: 'opportunity', capabilityId: 'opportunity.monitor', route: '/intent' },
-  { id: 'monitor_portfolio', category: 'monitoring', icon: '📊', title: 'Portfolio Monitor', desc: 'Watch portfolio risk/change', action: 'monitor', capabilityId: 'portfolio.monitor', route: '/intent' },
+  { id: 'monitor_portfolio', category: 'monitoring', icon: '📊', title: 'Portfolio Monitor', desc: 'Read portfolio risk; configure an explicit alert condition separately', action: 'read', capabilityId: 'portfolio.monitor', route: '/intent' },
 
   /* -------------------------------- Rewards ------------------------------ */
-  { id: 'rewards_dashboard', category: 'rewards', icon: '🏆', title: 'FBT Rewards', desc: 'Points, missions and referrals (real rewards engine)', action: 'navigate', capabilityId: 'rewards.dashboard', route: '/rewards' },
-  { id: 'rewards_missions', category: 'rewards', icon: '🎖️', title: 'Missions', desc: 'Complete missions and earn points', action: 'navigate', capabilityId: 'rewards.missions', route: '/rewards' },
-  { id: 'rewards_points', category: 'rewards', icon: '⭐', title: 'Points', desc: 'Track points balance', action: 'navigate', capabilityId: 'rewards.points', route: '/rewards' },
-  { id: 'rewards_referral', category: 'rewards', icon: '🤝', title: 'Referral', desc: 'Invite friends and earn rewards', action: 'navigate', capabilityId: 'rewards.referral', route: '/rewards' }
+  { id: 'rewards_dashboard', category: 'rewards', icon: '🏆', title: 'FBT Rewards', desc: 'Points, missions and referrals (real rewards engine)', action: 'navigate', capabilityId: 'rewards.dashboard', route: '/rewards?tab=earn' },
+  { id: 'rewards_missions', category: 'rewards', icon: '🎖️', title: 'Missions', desc: 'Complete missions and earn points', action: 'navigate', capabilityId: 'rewards.missions', route: '/rewards?tab=earn' },
+  { id: 'rewards_points', category: 'rewards', icon: '⭐', title: 'Points', desc: 'Track points balance', action: 'navigate', capabilityId: 'rewards.points', route: '/rewards?tab=ranking' },
+  { id: 'rewards_referral', category: 'rewards', icon: '🤝', title: 'Referral', desc: 'Invite friends and earn rewards', action: 'navigate', capabilityId: 'rewards.referral', route: '/rewards?tab=earn' }
 ]);
 
 export function categoriesForCard(card) {

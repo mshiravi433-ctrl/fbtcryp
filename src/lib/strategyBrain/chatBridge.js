@@ -31,7 +31,6 @@ import { parseGoalSpec } from './goalSpec.js';
 import { num, r2 } from './numeric.js';
 import { createEcosystemReader, DOMAIN_IDS } from './ecosystemState.js';
 import { buildPortfolioStrategy, RISK_PROFILES } from './strategyEngine.js';
-import { localizeStrategy } from './strategyLocales.js';
 import { createStrategyRuntime } from './strategyRuntime.js';
 import { FEE_BPS } from '../feeBps.js';
 import { SPECULATION_ENABLED } from '../features.js';
@@ -358,20 +357,36 @@ export function pearson(a = [], b = []) {
  */
 export async function buildStrategyFromChat({
   text = '', entities = {}, context = {}, results = {}, wallet = null, portfolio = null,
-  only = null, budget = {}, now = Date.now()
+  only = null, budget = {}, now = Date.now(), preferredBlueprintId = null, forceFresh = false, goalInput = null
 } = {}) {
+  if (forceFresh) {
+    resetSharedReads();
+    const { clearApiCache } = await import('../api');
+    clearApiCache();
+  }
   const readers = createChatEcosystemReaders({ context, results, wallet, portfolio });
   const pf = portfolio || context.portfolio || results.portfolio || null;
   const walletState = wallet || context.walletState || context.wallet || null;
 
-  const spec = parseGoalSpec({ text, entities, portfolio: pf, wallet: walletState, balances: context.balances });
+  const parsed = parseGoalSpec({ text, entities, portfolio: pf, wallet: walletState, balances: context.balances });
+  // A card continuation has canonical provenance as well as numbers. Re-
+  // rendering/rewording a wallet-derived plan must not turn its capital into
+  // a supposedly user-stated amount or discard a separately recorded floor.
+  const sameGoal = goalInput && num(goalInput.capitalUsd) === parsed.capitalUsd
+    && num(goalInput.targetPct) === parsed.targetPct && num(goalInput.horizonDays) === parsed.horizonDays
+    && goalInput.riskProfile === parsed.riskProfile;
+  const spec = { ...parsed,
+    ...(sameGoal ? { capitalSource: goalInput.capitalSource || parsed.capitalSource,
+      riskSource: goalInput.riskSource || parsed.riskSource,
+      floorPct: num(goalInput.floorPct) > 0 && num(goalInput.floorPct) <= parsed.targetPct ? num(goalInput.floorPct) : null } : {}),
+    ...(preferredBlueprintId ? { selectedBlueprintId: preferredBlueprintId } : {}) };
   if (!spec.ok) {
     return { ok: false, code: 'GOAL_INCOMPLETE', missing: spec.missing, spec, detail: `missing: ${spec.missing.join(', ')}` };
   }
 
   const reader = createEcosystemReader({ readers, ...budget });
   const state = await reader.read({ only: only || Object.keys(readers).filter((id) => DOMAIN_IDS.includes(id)) });
-  const strategy = buildPortfolioStrategy({ goal: spec, state, now });
+  const strategy = buildPortfolioStrategy({ goal: spec, state, now, preferredBlueprintId });
   return { ok: strategy.ok, spec, state, strategy, code: strategy.code || null };
 }
 

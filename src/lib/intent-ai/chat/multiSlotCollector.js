@@ -18,6 +18,9 @@
  */
 
 import { normalizeDigits, foldText } from './questionLedger.js';
+import { DEFAULT_POLICY_CAPS } from '../permissions.js';
+import { INTENT_LIMITS } from '../intentLimits.js';
+import { num } from '../../strategyBrain/numeric.js';
 
 export const MULTI_SLOT_SCHEMA = 'fbt.multi-slot-form.v1';
 export const MULTI_SLOT_KEY = 'fbt.chat.multi-slot-form.v1';
@@ -132,35 +135,37 @@ const SCALE_RE = [
 ];
 
 function parseAmount(text) {
-  const raw = normalizeDigits(String(text || ''));
+  const raw = normalizeDigits(String(text || '')).replace(/٫/g, '.');
   const cleaned = raw.replace(/[٬،,](?=\d{3}(\D|$))/g, '');
-  // 100 دلار / $100 / 100 usd / 100
-  const m = cleaned.match(/(\d+(?:\.\d+)?)\s*(هزار|میلیون|thousand|million|k|m)?\s*(?:دلار|تتر|usd|usdt|usdc|\$)?/i);
+  // A slot answer is one positive amount, not the first number in a new order.
+  const m = cleaned.trim().match(/^(?:سرمایه\s*[:：]?\s*)?\$?\s*(\d+(?:\.\d+)?)\s*(هزار|میلیون|thousand|million|k|m)?\s*(?:دلار|تتر|dollars?|usd|usdt|usdc|\$)?$/i);
   if (!m) return null;
   const base = Number(m[1]);
   if (!Number.isFinite(base) || base <= 0) return null;
   const scaleWord = m[2] || '';
   const scale = SCALE_RE.find((s) => s.re.test(scaleWord || ' '))?.factor || 1;
-  return Math.round(base * scale * 100) / 100;
+  const usd = Math.round(base * scale * 100) / 100;
+  return usd <= DEFAULT_POLICY_CAPS.maxCapitalUsd ? usd : null;
 }
 
 function parsePercent(text) {
-  const raw = normalizeDigits(String(text || ''));
-  const m = raw.match(/(\d+(?:\.\d+)?)\s*(?:٪|%|درصد|percent)?/i);
+  const raw = normalizeDigits(String(text || '')).replace(/٫/g, '.');
+  const m = raw.trim().match(/^(?:هدف\s*سود\s*[:：]?\s*)?(?:(?:حداقل|at least|minimum)\s*)?(\d+(?:\.\d+)?)\s*(?:٪|%|درصد|percent)?$/i);
   if (!m) return null;
   const v = Number(m[1]);
-  if (!Number.isFinite(v) || v <= 0 || v > 100000) return null;
+  if (!Number.isFinite(v) || v <= 0 || v > INTENT_LIMITS.maxGoalPct) return null;
   return v;
 }
 
 function parseDuration(text) {
-  const raw = normalizeDigits(String(text || ''));
-  const folded = foldText(raw);
+  const raw = normalizeDigits(String(text || '')).replace(/٫/g, '.');
+  const folded = raw.trim().toLowerCase();
+  if (/-\s*\d/.test(folded) || (folded.match(/\d+(?:\.\d+)?/g) || []).length !== 1) return null;
   let days = null;
-  const month = folded.match(/(\d+(?:\.\d+)?)\s*(?:ماه|month|months|mo)/);
-  const week = folded.match(/(\d+(?:\.\d+)?)\s*(?:هفته|week|weeks|wk|wks)/);
-  const day = folded.match(/(\d+(?:\.\d+)?)\s*(?:روز|day|days|d)/);
-  const year = folded.match(/(\d+(?:\.\d+)?)\s*(?:سال|year|years)/);
+  const month = folded.match(/^(\d+(?:\.\d+)?)\s*(?:ماه|months?|mo)$/i);
+  const week = folded.match(/^(\d+(?:\.\d+)?)\s*(?:هفته|weeks?|wks?)$/i);
+  const day = folded.match(/^(\d+(?:\.\d+)?)\s*(?:روز|days?|d)$/i);
+  const year = folded.match(/^(\d+(?:\.\d+)?)\s*(?:سال|years?)$/i);
   if (month) { days = Math.round(Number(month[1]) * 30); }
   else if (week) { days = Math.round(Number(week[1]) * 7); }
   else if (day) { days = Math.round(Number(day[1])); }
@@ -175,21 +180,24 @@ function parseDuration(text) {
 
 function parseChoice(text, options) {
   const folded = foldText(text);
-  if (!Array.isArray(options)) return null;
-  // اول با labelها چک کن
-  for (const opt of options) {
-    if (foldText(opt.labelFa || '').split(' ').some(w => w && folded.includes(w))) return opt.id;
-    if (foldText(opt.labelEn || '').split(' ').some(w => w && folded.includes(w))) return opt.id;
-    if (opt.id && folded.includes(opt.id)) return opt.id;
-  }
-  // تشخیص کلمات کلیدی ریسک
-  if (/محافظه|کم\s*ریسک|کمترین|low|conservative|safe|حفظ\s*اصل/i.test(folded)) return 'conservative';
-  if (/تهاجمی|بالا\s*ریسک|پرریسک|زیاد|high|aggressive|yolo|هرچی/i.test(folded)) return 'aggressive';
-  if (/متوسط|متعادل|medium|moderate|balanced|معمولی/i.test(folded)) return 'balanced';
-  return null;
+  if (!folded || !Array.isArray(options)) return null;
+  // Whole labels/ids first. Shared tokens such as "/" used to select LOW for
+  // every label (including "🟡 متوسط / متعادل"). Never match label fragments.
+  const exact = options.find((opt) => [opt.id, opt.labelFa, opt.labelEn]
+    .some((label) => label && foldText(label) === folded));
+  if (exact) return exact.id;
+  const index = folded.match(/^(?:(?:گزینه|option)\s*)?([1-3])$/);
+  if (index) return options[Number(index[1]) - 1]?.id || null;
+  const hits = [];
+  if (/محافظه|کم\s*ریسک|کمترین|\blow\b|conservative|\bsafe\b|حفظ\s*اصل|^کم$/i.test(folded)) hits.push('conservative');
+  if (/متوسط|متعادل|\bmedium\b|\bmoderate\b|\bbalanced\b|معمولی/i.test(folded)) hits.push('balanced');
+  if (/تهاجمی|ریسک\s*بالا|بالا\s*ریسک|پرریسک|ریسک\s*زیاد|\bhigh\b|aggressive|yolo|^بالا$/i.test(folded)) hits.push('aggressive');
+  // Conflicting or negated risk is not silently converted to a risk grant.
+  if (hits.length !== 1 || /نیست|نمی|\bnot\b|\bno\b/i.test(folded)) return null;
+  return options.some((opt) => opt.id === hits[0]) ? hits[0] : null;
 }
 
-function parseValueForSlot(text, slot) {
+export function parseValueForSlot(text, slot) {
   const type = slot.expectedType;
   if (type === 'amount') return parseAmount(text);
   if (type === 'percent') return parsePercent(text);
@@ -205,32 +213,46 @@ function parseValueForSlot(text, slot) {
  * شروع یک فرم جدید. اگر قبلاً فرم ناتمامی بود و فرم جدید همان type است،
  * آن را ادامه می‌دهد تا پاسخ‌های کاربر از بین نرود.
  */
-export function startForm({ formId = 'STRATEGY_GOAL', conversationId = null, locale = 'fa', now = Date.now() } = {}) {
+function validatedInitialValues(values = {}) {
+  const clean = {};
+  for (const key of ['capitalUsd', 'targetPct', 'horizonDays']) {
+    const value = num(key === 'horizonDays' ? values[key]?.days ?? values[key] : values[key]);
+    const limit = key === 'capitalUsd' ? DEFAULT_POLICY_CAPS.maxCapitalUsd : key === 'targetPct' ? INTENT_LIMITS.maxGoalPct : Infinity;
+    if (value != null && value > 0 && value <= limit && (key !== 'horizonDays' || Math.round(value) > 0)) {
+      clean[key] = key === 'horizonDays' ? { days: Math.round(value), source: 'user' } : value;
+    }
+  }
+  if (['conservative', 'balanced', 'aggressive'].includes(values.riskProfile)) clean.riskProfile = values.riskProfile;
+  if (num(values.floorPct) > 0 && num(values.floorPct) <= INTENT_LIMITS.maxGoalPct) clean.floorPct = num(values.floorPct);
+  return clean;
+}
+
+export function startForm({ formId = 'STRATEGY_GOAL', conversationId = null, locale = 'fa', initialValues = {}, restart = false, now = Date.now() } = {}) {
   const def = FORMS[formId];
   if (!def) return { ok: false, error: 'UNKNOWN_FORM' };
   const store = readStore();
   const existing = store[conversationId || 'default'];
-  if (existing && existing.formId === formId && existing.status === 'COLLECTING' && now - Number(existing.startedAt || 0) < FORM_TTL_MS) {
-    // همان فرم ناتمام را ادامه بده
-    return { ok: true, resumed: true, form: existing };
-  }
+  const resumed = !restart && existing?.formId === formId && existing.status === 'COLLECTING'
+    && now - Number(existing.startedAt || 0) < FORM_TTL_MS;
+  const collected = { ...(resumed ? existing.collected : {}), ...validatedInitialValues(initialValues) };
+  const firstMissing = def.slots.findIndex((slot) => collected[slot.key] == null);
+  const complete = firstMissing === -1;
   const form = {
+    ...(resumed ? existing : {}),
     schema: MULTI_SLOT_SCHEMA,
-    id: newId('mf'),
-    formId,
-    conversationId,
+    id: resumed ? existing.id : newId('mf'),
+    formId, conversationId,
     locale: String(locale || 'fa').slice(0, 5),
-    status: 'COLLECTING',
-    startedAt: now,
+    status: complete ? 'COMPLETE' : 'COLLECTING',
+    startedAt: resumed ? existing.startedAt : now,
     updatedAt: now,
-    currentSlotIndex: 0,
-    collected: {},
-    history: [],
-    completedAt: null
+    currentSlotIndex: complete ? def.slots.length - 1 : firstMissing,
+    collected,
+    history: resumed ? existing.history : [],
+    completedAt: complete ? now : null
   };
-  const next = { ...store, [conversationId || 'default']: form };
-  writeStore(next);
-  return { ok: true, resumed: false, form };
+  writeStore({ ...store, [conversationId || 'default']: form });
+  return { ok: true, resumed, complete, form, ...(complete ? { data: buildFinalData(form) } : {}) };
 }
 
 /** فرم فعال فعلی (اگر در بازه TTL باشد). */
@@ -267,7 +289,7 @@ export function getCurrentSlot({ conversationId = null, locale = 'fa', now = Dat
     placeholder: fa ? (slot.placeholderFa || '') : (slot.placeholderEn || ''),
     slotIndex: form.currentSlotIndex,
     totalSlots: def.slots.length,
-    collectedCount: Object.keys(form.collected).length,
+    collectedCount: def.slots.filter((s) => form.collected[s.key] != null).length,
     collectedLabels: def.slots
       .filter((s) => form.collected[s.key] != null)
       .map((s) => {
@@ -338,10 +360,11 @@ export function submitAnswer({ text, conversationId = null, locale = 'fa', now =
   }
 
   const store = readStore();
-  const collected = { ...form.collected, [slot.key]: value };
+  const collected = { ...form.collected, [slot.key]: value,
+    ...(slot.key === 'targetPct' && /حداقل|at least|minimum/i.test(String(text)) ? { floorPct: value } : {}) };
   const history = [...(form.history || []), { slot: slot.key, raw: String(text).slice(0, 200), value, at: now }];
-  const nextIndex = form.currentSlotIndex + 1;
-  const isComplete = nextIndex >= def.slots.length;
+  const nextIndex = def.slots.findIndex((s) => collected[s.key] == null);
+  const isComplete = nextIndex === -1;
 
   const updated = {
     ...form,
@@ -396,6 +419,7 @@ function buildFinalData(form) {
     targetPct: Number(c.targetPct) || null,
     horizonDays: Number(c.horizonDays?.days ?? c.horizonDays) || null,
     riskProfile: c.riskProfile || 'balanced',
+    floorPct: num(c.floorPct),
     formId: form.formId,
     startedAt: form.startedAt,
     completedAt: form.completedAt
@@ -424,10 +448,17 @@ export function detectFormTrigger(text) {
   const t = foldText(String(text || ''));
   if (!t) return null;
   // کلمات کلیدی هدف‌گذاری و سرمایه‌گذاری (فارسی و انگلیسی)
-  if (/(?:استراتژ|برنامه\s*سرمایه|هدف\s*.*سود|چقدر\s*سرمایه|سرمایه\s*.*سود|سود\s*.*سرمایه|سرمایه\s*گذار|می\s*خو?ا?م\s*.*سرمایه|سرمایه\s*می\s*خو?ا?م|قصد\s*سرمایه|چطور.*سرمایه|چگونه.*سرمایه|investment\s*plan|strategy|i\s*want\s*to\s*(?:invest|make)|how\s*much\s*(?:should|to)\s*invest|build\s*me\s*a\s*plan)/i.test(t)) {
+  if (/(?:استراتژ|برنامه\s*سرمایه|هدف\s*.*سود|هدف\s*مالی|چقدر\s*سرمایه|سرمایه\s*.*سود|سود\s*.*سرمایه|سرمایه\s*گذار|می\s*خو?ا?م\s*.*سرمایه|سرمایه\s*می\s*خو?ا?م|قصد\s*سرمایه|چطور.*سرمایه|چگونه.*سرمایه|investment\s*plan|strategy|i\s*want\s*to\s*(?:invest|make)|how\s*much\s*(?:should|to)\s*invest|build\s*me\s*a\s*plan)/i.test(t)) {
     return 'STRATEGY_GOAL';
   }
   return null;
 }
 
 export { FORMS };
+
+export function isFormInterruption(text = '') {
+  const folded = foldText(text);
+  return /اضطرار|توقف|متوقف|فریز|\b(?:emergency|stop|pause|freeze)\b/i.test(folded)
+    || /(?:تحلیل|بررسی|نشان|نمایش|باز کن|جستجو|بخر|بفروش|سرچ|\b(?:analy[sz]e|show|open|search|buy|sell|swap)\b)/i.test(folded)
+      && /بازار|پرتفوی|کیف پول|اخبار|بیت|اتریوم|btc|eth|wallet|portfolio|market|news|سواپ|مرکز عملیات|ایجنت/i.test(folded);
+}

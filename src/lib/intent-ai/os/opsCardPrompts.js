@@ -35,12 +35,11 @@ const PROMPTS = Object.freeze({
   portfolio_risk: { fa: 'ریسک پرتفوی من را بررسی کن', en: 'check my portfolio risk' },
   portfolio_allocation: { fa: 'توزیع دارایی‌های من را نشان بده', en: 'show my asset allocation' },
 
-  /* Goals — the strategy brain. The prompt has to carry the three numbers the
-     brain needs (capital, target, horizon) or the card only produces a
-     question; the amounts are placeholders the user edits in the chat. */
+  /* Goals: collect the user's values; never substitute example capital,
+     return targets or a risk band for their actual choices. */
   strategy_build: {
-    fa: 'برای ۱۰ هزار دلار یک استراتژی پرتفوی بساز با ۱۵ درصد سود در ۶ ماه و ریسک متوسط',
-    en: 'build a portfolio strategy for 10000 dollars with 15 percent profit in 6 months and medium risk'
+    fa: 'برای هدفم یک استراتژی پرتفوی بساز',
+    en: 'build a staged portfolio strategy for my goal'
   },
 
   /* Wallet */
@@ -104,12 +103,12 @@ const PROMPTS = Object.freeze({
   goals_create: { fa: 'می‌خواهم یک هدف مالی بسازم', en: 'I want to create a financial goal' },
 
   /* Automation shortcuts used by the order flow */
-  auto_recurring: { fa: 'هر هفته ۱۰۰ دلار بیت‌کوین بخر', en: 'buy $100 of bitcoin every week' },
-  auto_scheduled: { fa: 'هر هفته ۱۰۰ دلار بیت‌کوین بخر', en: 'buy $100 of bitcoin every week' },
+  auto_recurring: { fa: 'می‌خواهم خرید دوره‌ای بیت‌کوین تنظیم کنم؛ مبلغ و زمان‌بندی را از من بپرس', en: 'set up a recurring bitcoin purchase; ask me for the amount and schedule' },
+  auto_scheduled: { fa: 'می‌خواهم خرید دوره‌ای بیت‌کوین تنظیم کنم؛ مبلغ و زمان‌بندی را از من بپرس', en: 'set up a recurring bitcoin purchase; ask me for the amount and schedule' },
 
   /* Monitoring */
   monitor_list: { fa: 'پایش‌های فعال من را نشان بده', en: 'show my active monitors' },
-  monitor_portfolio: { fa: 'پرتفوی من را پایش کن', en: 'monitor my portfolio' }
+  monitor_portfolio: { fa: 'ریسک پرتفوی من را تحلیل کن', en: 'analyze my portfolio risk' }
 });
 
 /** 'fa-IR' → 'fa'. Arabic deliberately reuses the English prompt (see header). */

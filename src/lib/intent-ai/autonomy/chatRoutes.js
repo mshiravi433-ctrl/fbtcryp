@@ -74,6 +74,10 @@ export function resolveChatRoute(route, { currentPathname = '/intent' } = {}) {
   const { pathname, params } = splitRoute(route);
   const samePage = pathname === currentPathname;
 
+  if (samePage && params.tab === 'history' && ['seasons', 'conversations', 'operations', 'monitoring'].includes(params.section)) {
+    return { kind: 'panel', panel: 'history', section: params.section };
+  }
+
   if (samePage && params.tab) {
     const target = INTENT_TAB_TARGETS[String(params.tab).toLowerCase()];
     if (!target) return { kind: 'unknown', reason: 'UNKNOWN_TAB', tab: params.tab };
