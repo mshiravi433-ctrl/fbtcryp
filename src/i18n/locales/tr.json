@@ -429,6 +429,16 @@
     "partial": "Kısmi çeviri",
     "full": "Tam çeviri"
   },
+  "connectivityAlert": {
+    "offlineTitle": "İnternet bağlantısı yok",
+    "weakTitle": "İnternet bağlantınız zayıf",
+    "offlineBody": "Cihazınız çevrimdışı görünüyor. Wi-Fi veya mobil veriyi kontrol edin. Bağlantı yeniden kurulduğunda bu uyarı kapanır.",
+    "weakBody": "Bağlantı yavaş veya kararsız görünüyor. Canlı fiyatlar ve bazı çevrimiçi özellikler düzgün yüklenmeyebilir. Wi-Fi veya mobil veriyi kontrol edin ve bağlantı kararlı olduğunda devam edin.",
+    "transactionNote": "İşlem güncellemeleri gecikebilir. Bir işlemi yeni gönderdiyseniz tekrar denemeden önce durumunu kontrol edin.",
+    "acknowledge": "Anladım",
+    "offlineBadge": "ÇEVRİMDIŞI",
+    "weakBadge": "ZAYIF BAĞLANTI"
+  },
   "onboarding": {
     "next": "Devam",
     "skip": "Atla",

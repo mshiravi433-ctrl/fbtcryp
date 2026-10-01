@@ -4796,6 +4796,16 @@
       "cta": "Got it"
     }
   },
+  "connectivityAlert": {
+    "offlineTitle": "No internet connection",
+    "weakTitle": "Your internet connection is weak",
+    "offlineBody": "Your device seems to be offline. Check your Wi-Fi or mobile data. This alert will close when the connection is restored.",
+    "weakBody": "The connection seems slow or unstable. Live prices and some online features may not load correctly. Check your Wi-Fi or mobile data, then continue when it is stable.",
+    "transactionNote": "Transaction updates may be delayed. If you have just sent one, check its status before trying again.",
+    "acknowledge": "I understand",
+    "offlineBadge": "OFFLINE",
+    "weakBadge": "WEAK CONNECTION"
+  },
   "profile": {
     "username": "Display name",
     "usernameLabel": "Display name (optional)",

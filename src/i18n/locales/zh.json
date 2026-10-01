@@ -429,6 +429,16 @@
     "partial": "部分翻译",
     "full": "完整翻译"
   },
+  "connectivityAlert": {
+    "offlineTitle": "没有互联网连接",
+    "weakTitle": "网络连接较弱",
+    "offlineBody": "您的设备似乎已断网。请检查 Wi-Fi 或移动数据；网络恢复后，此提示会自动关闭。",
+    "weakBody": "网络连接较慢或不稳定，实时价格和部分在线功能可能无法正常加载。请检查 Wi-Fi 或移动数据，待连接稳定后再继续。",
+    "transactionNote": "交易状态更新可能会延迟。如果您刚刚发送了交易，请先确认交易状态，再尝试操作。",
+    "acknowledge": "我知道了",
+    "offlineBadge": "已断网",
+    "weakBadge": "网络较弱"
+  },
   "onboarding": {
     "next": "继续",
     "skip": "跳过",

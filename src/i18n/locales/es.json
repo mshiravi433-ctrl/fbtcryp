@@ -429,6 +429,16 @@
     "partial": "Traducción parcial",
     "full": "Traducción completa"
   },
+  "connectivityAlert": {
+    "offlineTitle": "Sin conexión a Internet",
+    "weakTitle": "La conexión a Internet es débil",
+    "offlineBody": "Parece que tu dispositivo no tiene conexión. Comprueba el Wi-Fi o los datos móviles. Esta alerta desaparecerá cuando se restablezca la conexión.",
+    "weakBody": "La conexión parece lenta o inestable. Es posible que los precios en vivo y algunas funciones no se carguen bien. Comprueba el Wi-Fi o los datos móviles y continúa cuando la conexión se estabilice.",
+    "transactionNote": "Las actualizaciones de las transacciones pueden retrasarse. Si acabas de enviar una, comprueba su estado antes de volver a intentarlo.",
+    "acknowledge": "Entendido",
+    "offlineBadge": "SIN CONEXIÓN",
+    "weakBadge": "CONEXIÓN DÉBIL"
+  },
   "onboarding": {
     "next": "Continuar",
     "skip": "Omitir",

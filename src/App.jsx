@@ -12,6 +12,7 @@ import BottomNav from './components/BottomNav';
 import ScreenshotSharePrompt from './components/ScreenshotSharePrompt.jsx';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
+import ConnectivityAlert from './components/ConnectivityAlert';
 import InstallPrompt from './components/InstallPrompt';
 import RadioDock from './components/RadioDock';
 import { useSwapDockStore } from './store/useSwapDockStore';
@@ -794,6 +795,7 @@ export default function App() {
           </div>
         )}
         {screen}
+        <ConnectivityAlert />
         <Toasts />
         {/*
           Outside `screen` on purpose: the install offer must survive route
