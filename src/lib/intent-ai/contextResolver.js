@@ -56,9 +56,40 @@ const DUST_UNITS = 1e-9;
 
 const upper = (v) => String(v ?? '').trim().toUpperCase();
 const numOrNull = (v) => {
+  if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
+
+const CHAIN_ALIASES = Object.freeze({
+  ETHEREUM: 1, 'ETHEREUM MAINNET': 1, MAINNET: 1,
+  OPTIMISM: 10, OP: 10,
+  BSC: 56, BNB: 56, 'BNB CHAIN': 56, 'BNB SMART CHAIN': 56,
+  POLYGON: 137, MATIC: 137, POL: 137,
+  SONIC: 146,
+  BASE: 8453,
+  ARBITRUM: 42161, 'ARBITRUM ONE': 42161,
+  AVALANCHE: 43114, AVAX: 43114,
+  LINEA: 59144,
+  SOLANA: SOLANA_CHAIN_ID
+});
+
+export function normalizeChainId(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = numOrNull(value);
+  if (numeric != null) return numeric;
+  return CHAIN_ALIASES[upper(value)] ?? null;
+}
+
+function liveUnitPrice(row) {
+  if (row?.priceProvenance !== 'live') return null;
+  const priceUsd = numOrNull(row?.priceUsd);
+  if (priceUsd != null && priceUsd > 0) return priceUsd;
+  if (row?.balanceFreshness === 'stale') return null;
+  const amount = numOrNull(row?.amount);
+  const valueUsd = numOrNull(row?.valueUsd);
+  return amount != null && amount > 0 && valueUsd != null && valueUsd > 0 ? valueUsd / amount : null;
+}
 
 export function chainName(chainId) {
   const id = numOrNull(chainId);
@@ -99,7 +130,7 @@ export function unifyBalances(context = {}) {
     const amount = numOrNull(b?.amount);
     const valueUsd = numOrNull(b?.valueUsd ?? b?.value);
     if ((amount == null || amount <= DUST_UNITS) && (valueUsd == null || valueUsd <= 0)) continue;
-    const chainId = numOrNull(b?.chainId ?? (String(b?.chain).toLowerCase() === 'solana' ? SOLANA_CHAIN_ID : b?.chain));
+    const chainId = normalizeChainId(b?.chainId ?? b?.chain);
     rows.push({
       symbol,
       chainId,
@@ -107,6 +138,10 @@ export function unifyBalances(context = {}) {
       kind: chainKindFor(chainId, symbol),
       amount,
       valueUsd,
+      priceUsd: numOrNull(b?.priceUsd),
+      priceProvenance: String(b?.priceProvenance || b?.priceDataStatus || b?.dataProvenance || 'unavailable').toLowerCase(),
+      decimals: b?.decimals != null && Number.isInteger(Number(b.decimals)) && Number(b.decimals) >= 0 ? Number(b.decimals) : null,
+      address: b?.address || b?.mint || null,
       dataStatus: b?.dataStatus || 'client'
     });
   }
@@ -172,11 +207,27 @@ export function resolveWallet(intent = {}, wallets = []) {
  * "ETH بخر"          → the stablecoins in the wallet are the only sane source.
  *                      One usable stable → auto-select. Two → ask once.
  */
-export function resolveSourceAsset({ requested = null, target = null, balances = [] } = {}) {
+export function resolveSourceAsset({ requested = null, requestedChainId = null, target = null, balances = [] } = {}) {
   const want = upper(requested);
+  const chainId = normalizeChainId(requestedChainId);
   if (want) {
-    const rows = balances.filter((b) => b.symbol === want);
-    if (!rows.length) return { status: 'NO_BALANCE', asset: want, options: [] };
+    const matchingSymbol = balances.filter((b) => b.symbol === want);
+    const rows = chainId == null
+      ? matchingSymbol
+      : matchingSymbol.filter((b) => Number(b.chainId) === chainId);
+    if (!rows.length) {
+      return {
+        status: 'NO_BALANCE',
+        asset: want,
+        requestedChainId: chainId,
+        /* Keep alternatives as evidence for a precise explanation, never as
+           candidates: a user-named network must not silently change. */
+        availableOnOtherChains: chainId == null ? [] : matchingSymbol.map((row) => ({
+          symbol: row.symbol, chainId: row.chainId, chain: row.chain, amount: row.amount
+        })),
+        options: []
+      };
+    }
     if (rows.length === 1) return { status: 'RESOLVED', row: rows[0], options: rows };
     return { status: 'NEEDS_SELECTION', row: null, options: rows };
   }
@@ -203,7 +254,7 @@ const ALL = /(\ball of\b|\ball my\b|\beverything\b|\bmax\b|همه|تمام|کل\
 const PERCENT = /(\d{1,3})\s*(?:%|درصد|percent)/i;
 /* "100 USDC" · "$100" · "۱۰۰ دلار" */
 const AMOUNT_WITH_SYMBOL = /(\d[\d,]*\.?\d*)\s*(?:\$|dollars?|دلار)?\s*([A-Za-z]{2,8})?/;
-const DOLLARS = /(?:\$\s*(\d[\d,]*\.?\d*))|(?:(\d[\d,]*\.?\d*)\s*(?:dollars?|دلار|usd))/i;
+const DOLLARS = /(?:\$\s*(\d[\d,]*\.?\d*))|(?:(\d[\d,]*\.?\d*)\s*(?:dollars?|دلار|usd\b))/i;
 
 const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 function latinDigits(text) {
@@ -216,31 +267,50 @@ function latinDigits(text) {
  * Fractions ("نصف", "همه", "۳۰٪") are computed from the real balance — the
  * user is never asked to restate a number the wallet already knows (§7).
  */
-export function resolveAmount({ message = '', sourceRow = null, explicitAmount = null } = {}) {
+export function resolveAmount({
+  message = '',
+  sourceRow = null,
+  explicitAmount = null,
+  explicitAmountUnit = null
+} = {}) {
   const text = latinDigits(message);
-  const haveUnits = sourceRow?.amount ?? null;
-  const haveUsd = sourceRow?.valueUsd ?? null;
-  const unitPrice = haveUnits && haveUsd ? haveUsd / haveUnits : null;
+  const haveUnits = numOrNull(sourceRow?.amount);
+  const haveUsd = numOrNull(sourceRow?.valueUsd);
+  const unitPrice = liveUnitPrice(sourceRow);
+  const liveBalanceUsd = sourceRow?.priceProvenance === 'live' && sourceRow?.balanceFreshness !== 'stale' ? haveUsd : null;
 
   const fromFraction = (fraction) => {
     if (haveUnits == null && haveUsd == null) return { status: 'NEEDS_AMOUNT', reason: 'NO_BALANCE_READ' };
     return {
       status: 'RESOLVED',
       source: 'fraction',
+      amountUnit: sourceRow?.symbol || null,
       fraction,
       amount: haveUnits != null ? haveUnits * fraction : null,
-      amountUsd: haveUsd != null ? haveUsd * fraction : null
+      amountUsd: liveBalanceUsd != null ? liveBalanceUsd * fraction : null
     };
   };
 
   const explicit = numOrNull(explicitAmount);
   if (explicit != null && explicit > 0) {
-    return {
-      status: 'RESOLVED',
-      source: 'explicit',
-      amount: explicit,
-      amountUsd: unitPrice != null ? explicit * unitPrice : explicit
-    };
+    const unit = upper(explicitAmountUnit);
+    if (unit === 'USD') {
+      if (!(unitPrice > 0)) return { status: 'NEEDS_AMOUNT', reason: 'USD_CONVERSION_UNAVAILABLE' };
+      return { status: 'RESOLVED', source: 'usd', amount: explicit / unitPrice, amountUsd: explicit, amountUnit: 'USD' };
+    }
+    if (unit && unit === upper(sourceRow?.symbol)) {
+      return {
+        status: 'RESOLVED',
+        source: 'explicit',
+        amount: explicit,
+        amountUsd: unitPrice != null ? explicit * unitPrice : null,
+        amountUnit: unit
+      };
+    }
+    /* A numeric hint without its unit is not enough to choose between USD and
+       source-token units. The user-facing parser may still resolve an explicit
+       amount from their sentence below. */
+    if (unit) return { status: 'NEEDS_AMOUNT', reason: 'AMOUNT_UNIT_MISMATCH' };
   }
 
   const pctMatch = PERCENT.exec(text);
@@ -255,12 +325,8 @@ export function resolveAmount({ message = '', sourceRow = null, explicitAmount =
   if (dollars) {
     const usd = Number(String(dollars[1] || dollars[2]).replace(/,/g, ''));
     if (Number.isFinite(usd) && usd > 0) {
-      return {
-        status: 'RESOLVED',
-        source: 'usd',
-        amountUsd: usd,
-        amount: unitPrice != null && unitPrice > 0 ? usd / unitPrice : (sourceRow && isStable(sourceRow.symbol) ? usd : null)
-      };
+      if (!(unitPrice > 0)) return { status: 'NEEDS_AMOUNT', reason: 'USD_CONVERSION_UNAVAILABLE' };
+      return { status: 'RESOLVED', source: 'usd', amountUsd: usd, amount: usd / unitPrice, amountUnit: 'USD' };
     }
   }
 
@@ -275,30 +341,45 @@ export function resolveAmount({ message = '', sourceRow = null, explicitAmount =
           status: 'RESOLVED',
           source: 'explicit',
           amount,
-          amountUsd: unitPrice != null ? amount * unitPrice : (isStable(sourceRow.symbol) ? amount : null)
+          amountUsd: unitPrice != null ? amount * unitPrice : null,
+          amountUnit: upper(sourceRow.symbol)
         };
       }
     }
   }
 
-  /* A bare number with no symbol at all: "100 دارم، ETH می‌خواهم" */
+  /* A bare numeral is deliberately ambiguous: it might mean dollars or units.
+     Require an explicit currency/token unit rather than silently choosing. */
   const bare = AMOUNT_WITH_SYMBOL.exec(text);
-  if (bare && !bare[2]) {
-    const amount = Number(bare[1].replace(/,/g, ''));
-    if (Number.isFinite(amount) && amount > 0) {
-      return {
-        status: 'RESOLVED',
-        source: 'bare',
-        amount,
-        amountUsd: unitPrice != null ? amount * unitPrice : (sourceRow && isStable(sourceRow.symbol) ? amount : null)
-      };
-    }
-  }
+  if (bare && !bare[2]) return { status: 'NEEDS_AMOUNT', reason: 'AMOUNT_UNIT_REQUIRED' };
 
   return { status: 'NEEDS_AMOUNT', reason: 'NOT_INFERABLE' };
 }
 
 /* ---------------------------- 5. target asset ----------------------------- */
+
+const FIAT_UNITS = Object.freeze(['USD', '$', 'DOLLAR', 'DOLLARS', 'TOMAN', 'IRT', 'IRR']);
+const mentionedTokens = (message) => {
+  const text = latinDigits(message).toUpperCase();
+  return KNOWN_TARGETS.filter((sym) => new RegExp(`(^|[^A-Z])${sym}([^A-Z]|$)`).test(text));
+};
+
+/**
+ * Which asset does the amount's unit name as the one being spent?
+ *   swap/convert/bridge  → the unit asset ("swap 100 USDC to ETH" → USDC)
+ *   buy                  → only a stablecoin unit beside ANOTHER named asset
+ *                          ("buy ETH with 100 USDC" → USDC); "buy 0.5 ETH" is
+ *                          written in the target's units and derives nothing
+ *   anything else        → nothing (the resolver asks instead of guessing)
+ */
+export function sourceFromAmountUnit({ kind = 'SWAP', message = '', unit = null } = {}) {
+  const symbol = upper(unit);
+  if (!symbol || FIAT_UNITS.includes(symbol) || !/^[A-Z0-9]{2,10}$/.test(symbol)) return null;
+  const others = mentionedTokens(message).filter((sym) => sym !== symbol);
+  if (kind === 'BUY') return isStable(symbol) && others.length ? symbol : null;
+  if (['SWAP', 'CONVERT', 'BRIDGE'].includes(kind)) return symbol;
+  return null;
+}
 
 const KNOWN_TARGETS = Object.freeze([
   'ETH', 'BTC', 'WBTC', 'SOL', 'USDC', 'USDT', 'DAI', 'ARB', 'OP', 'MATIC', 'AVAX', 'BNB', 'LINK', 'UNI', 'AAVE', 'JUP', 'BONK'
@@ -368,11 +449,23 @@ export function buildActionPlan({
   }
 
   const strongTarget = hints.targetAsset || hints.to || (kind === 'BUY' && hints.asset ? hints.asset : null);
-  const strongSource = hints.sourceAsset || hints.from || (kind === 'SELL' && hints.asset ? hints.asset : null);
+  /* The asset the user wrote their amount in is the asset they are giving up
+     ("swap 100 USDC to ETH", "bridge 10 USDC…"; "buy ETH with 100 USDC" when
+     the unit is a stablecoin next to another named asset). It is read from the
+     amount's own unit, never from a parser's from/to guess. A BUY written in
+     the target's units ("buy 0.5 ETH") deliberately derives nothing. */
+  const statedSource = hints.sourceAsset || hints.from || (kind === 'SELL' && hints.asset ? hints.asset : null);
+  const strongSource = statedSource || sourceFromAmountUnit({ kind, message, unit: hints.amountUnit });
+  const hintedChains = Array.isArray(hints.chainIds) ? hints.chainIds : [];
+  const strongSourceChainId = normalizeChainId(
+    hints.sourceChainId ?? hints.fromChainId ?? hints.fromChain
+      ?? (hintedChains.length ? hintedChains[0] : null)
+      ?? hints.network ?? hints.chainId
+  );
 
   /* Destination first: "ETH بخر" names the destination, not the source. */
   let target = resolveTargetAsset({ message, hinted: strongTarget, sourceSymbol: strongSource });
-  let source = resolveSourceAsset({ requested: strongSource, target: target.symbol, balances });
+  let source = resolveSourceAsset({ requested: strongSource, requestedChainId: strongSourceChainId, target: target.symbol, balances });
 
   /* Only when the sentence itself leaves a gap do the orchestrator's guesses
      get a vote — they are frequently inverted, so they may never overrule what
@@ -381,13 +474,13 @@ export function buildActionPlan({
     const guess = weakHints.targetAsset || weakHints.to || (kind === 'BUY' ? weakHints.asset : null);
     if (guess && upper(guess) !== upper(source.row?.symbol)) {
       target = { status: 'RESOLVED', symbol: upper(guess) };
-      source = resolveSourceAsset({ requested: strongSource, target: target.symbol, balances });
+      source = resolveSourceAsset({ requested: strongSource, requestedChainId: strongSourceChainId, target: target.symbol, balances });
     }
   }
   if (!strongSource && source.status === 'NEEDS_SELECTION') {
     const guess = weakHints.sourceAsset || weakHints.from || (kind === 'SELL' ? weakHints.asset : null);
     if (guess && upper(guess) !== upper(target.symbol)) {
-      const narrowed = resolveSourceAsset({ requested: upper(guess), target: target.symbol, balances });
+      const narrowed = resolveSourceAsset({ requested: upper(guess), requestedChainId: strongSourceChainId, target: target.symbol, balances });
       if (narrowed.status === 'RESOLVED') source = narrowed;
     }
   }
@@ -409,7 +502,14 @@ export function buildActionPlan({
   };
 
   if (source.status === 'NO_BALANCE') {
-    return { ...base, status: 'NO_BALANCE', missing: 'SOURCE_BALANCE', options: balances.slice(0, 4) };
+    return {
+      ...base,
+      status: 'NO_BALANCE',
+      missing: source.requestedChainId != null ? 'SOURCE_NETWORK_BALANCE' : 'SOURCE_BALANCE',
+      requestedSourceChainId: source.requestedChainId ?? null,
+      unavailableOnOtherChains: source.availableOnOtherChains || [],
+      options: source.requestedChainId == null ? balances.slice(0, 4) : []
+    };
   }
   if (source.status === 'NEEDS_SELECTION') {
     return { ...base, status: 'NEEDS_ASSET_SELECTION', missing: 'SOURCE_ASSET', options: source.options };
@@ -434,13 +534,24 @@ export function buildActionPlan({
     return { ...base, status: 'NEEDS_TARGET_ASSET', missing: 'TARGET_ASSET', wallet: walletPick.wallet, source: sourceLeg(row, null) };
   }
 
+  const explicitAmount = hints.amount ?? hints.amountUsd ?? null;
+  const explicitAmountUnit = hints.amountUnit
+    || (hints.amountUsd != null && hints.amount == null ? 'USD' : null);
   const amount = resolveAmount({
     message,
     sourceRow: row,
-    explicitAmount: hints.amount ?? (hints.amountExpression ? null : null)
+    explicitAmount,
+    explicitAmountUnit
   });
-  if (amount.status !== 'RESOLVED' || (amount.amount == null && amount.amountUsd == null)) {
-    return { ...base, status: 'NEEDS_AMOUNT', missing: 'AMOUNT', wallet: walletPick.wallet, source: sourceLeg(row, null) };
+  if (amount.status !== 'RESOLVED' || amount.amount == null) {
+    return {
+      ...base,
+      status: 'NEEDS_AMOUNT',
+      missing: amount.reason === 'USD_CONVERSION_UNAVAILABLE' ? 'AMOUNT_PRICE_UNAVAILABLE' : 'AMOUNT',
+      amountReason: amount.reason || null,
+      wallet: walletPick.wallet,
+      source: sourceLeg(row, null)
+    };
   }
 
   /* Never plan more than the wallet holds. */
@@ -463,6 +574,7 @@ export function buildActionPlan({
     to: target.symbol || null,
     asset: target.symbol || row.symbol,
     amount: leg.amount,
+    amountUnit: row.symbol,
     amountUsd: leg.amountUsd,
     chainId: row.chainId,
     walletAddress: walletPick.wallet.address,
@@ -487,13 +599,30 @@ function sourceLeg(row, amount) {
     chain: row.chain,
     chainId: row.chainId,
     token: row.symbol,
-    amount: amount?.amount != null ? String(round(amount.amount)) : null,
+    amount: amount?.amount != null ? tokenAmountString(amount.amount, row.decimals) : null,
+    amountUnit: row.symbol,
     amountUsd: amount?.amountUsd != null ? round(amount.amountUsd) : null,
     fraction: amount?.fraction ?? null,
-    balanceAmount: row.amount,
-    balanceUsd: row.valueUsd,
+    balanceAmount: row.balanceFreshness === 'stale' ? null : row.amount,
+    balanceUsd: row.priceProvenance === 'live' && row.balanceFreshness !== 'stale' ? row.valueUsd : null,
+    balanceFreshness: row.balanceFreshness || 'unknown',
+    priceProvenance: row.priceProvenance,
+    decimals: row.decimals,
+    address: row.address,
     walletKind: row.kind
   };
+}
+
+function tokenAmountString(value, decimals) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  const d = Number.isInteger(decimals) && decimals >= 0 ? Math.min(decimals, 18) : (n >= 1 ? 6 : 9);
+  const fixed = n.toFixed(Math.min(22, d + 4));
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(fixed);
+  if (!match) return String(n);
+  const whole = match[1];
+  const fraction = (match[2] || '').slice(0, d).replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : whole;
 }
 
 function round(n) {

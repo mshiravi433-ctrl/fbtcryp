@@ -49,7 +49,10 @@ function venueForPool(pool) {
   if (chainId === 501) return pool.kind === 'perp' ? 'perp-velocity' : 'equity-solana';
   if (chainId === 8453 && sym === 'USDC' && (protocol.includes('aave') || pool.kind === 'lending')) return 'aave-base-usdc';
   if (pool.kind === 'lending' || protocol.includes('aave')) return 'lend-aave';
-  return 'lend-aave';
+  /* Any other pool (an LP/farm position, a vault) has NO verified executor.
+     It used to default to 'lend-aave', which would have deposited the asset
+     into Aave while the card promised a different pool's yield. */
+  return null;
 }
 
 /**

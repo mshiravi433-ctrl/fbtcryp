@@ -113,6 +113,14 @@ async function main() {
   check('honesty text travels with it', typeof plan?.honesty === 'string' && plan.honesty.length > 10, plan?.honesty?.slice(0, 60));
   check('options are offered', Array.isArray(plan?.options) && plan.options.length > 0, plan?.options?.length);
   check('every option carries executable actions', (plan?.options || []).every((o) => Array.isArray(o.actions) && o.actions.length > 0));
+  check('an LP/farm pool is never offered as a runnable option (no verified executor)',
+    !(plan?.options || []).some((o) => o.kind === 'farm' || (o.actions || []).some((a) => ['FARM', 'DEPOSIT', 'YIELD_SWEEP'].includes(String(a.type).toUpperCase()))),
+    JSON.stringify((plan?.options || []).map((o) => `${o.kind}:${(o.actions || []).map((a) => a.type).join('+')}`)));
+  check('the farm rows were still read — they inform the best observed rate',
+    Number(plan?.bestAvailableApyPct) === 18.4, plan?.bestAvailableApyPct);
+  check('the Aave lending option stays executable as a supply on its own venue',
+    (plan?.options || []).some((o) => o.kind === 'lending' && o.actions.length === 1 && o.actions[0].type === 'SUPPLY' && o.actions[0].venue === 'aave-base-usdc'),
+    JSON.stringify((plan?.options || []).map((o) => `${o.kind}:${o.actions?.[0]?.type}:${o.actions?.[0]?.venue}`)));
 
   /* ── 5. The seam the bug lived in: empty results still refuse honestly ── */
   const empty = await planFromIntent({ intent, context: { portfolio: { totalValueUsd: 10000 } }, results: {}, locale: 'fa' });

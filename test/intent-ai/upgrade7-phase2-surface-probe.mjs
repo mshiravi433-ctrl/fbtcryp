@@ -143,7 +143,9 @@ clearPlans(); resetIntentOS();
   const stamps = (adapters.match(/fetchedAt/g) || []).length;
   t('every live adapter carries a timestamp', stamps >= 12, `${stamps} stamps`);
   t('sources cover rpc · api · onchain · aggregator · cache · portfolio',
-    ['rpc', 'api', 'onchain', 'aggregator', 'cache', 'portfolio'].every((s) => adapters.includes(`source: '${s}'`)));
+    /* A protocol-specific label ("aave-rpc") is still an RPC source: the
+       lending adapters name WHICH protocol the on-chain read came from. */
+    ['rpc', 'api', 'onchain', 'aggregator', 'cache', 'portfolio'].every((s) => new RegExp(`source: '(?:[a-z]+-)?${s}'`).test(adapters)));
 
   const panel = readFileSync(join(repoRoot, 'src/components/IntentAIUnified.jsx'), 'utf8');
   t('the UI balance override stamps live reads', panel.includes("source: 'rpc'") && panel.includes('fetchedAt'));

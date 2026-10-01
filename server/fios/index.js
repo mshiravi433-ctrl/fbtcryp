@@ -413,7 +413,7 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
    *      already parsed (symbols array OR prices/changes24hPct maps).
    *   2. stocks/forex/commodities: when a class's brain feed answered
    *      nothing, the macro desk's REAL daily series (stooq → yahoo — SPX,
-   *      DXY, GOLD, WTI) stand in as named fallbacks. Narrower, real, and
+   *      DXY and the five commodity series) stand in as named fallbacks. Narrower, real, and
    *      labelled on the class (`fallbackSource`) — never passed off as the
    *      primary feed. rwa has no honest fallback and stays missing.
    *   3. the AI commentary (crossNarrative.js) synthesizes the bounded
@@ -484,7 +484,7 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
       const fallback = (rows) => (rows.length ? { instruments: rows, source: `macroData:${String(rows[0].qsource || 'stooq').split(':')[0]}` } : null);
       const stocks = fallback(rowsFor(['equity']));
       const forex = fallback(rowsFor(['currency']));
-      const commodities = fallback(rowsFor(['safe_haven', 'energy']));
+      const commodities = fallback(rowsFor(['safe_haven', 'energy', 'industrial_metal']));
       value = Object.fromEntries([['stocks', stocks], ['forex', forex], ['commodities', commodities]].filter(([, v]) => v));
       if (!Object.keys(value).length) value = null;
     }

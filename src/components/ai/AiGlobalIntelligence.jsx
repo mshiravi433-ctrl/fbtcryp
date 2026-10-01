@@ -116,6 +116,19 @@ const STYLES = `
   .aig-insight-value { position:relative; z-index:1; margin-top:4px; font-size:var(--fs-sm); font-weight:900; }
   .aig-insight-meta { position:relative; z-index:1; margin-top:3px; font-size:10px; color:var(--text-2); line-height:1.35; overflow-wrap:anywhere; }
   .aig-insight-empty { position:relative; z-index:1; margin-top:9px; color:var(--text-3); font-size:11px; line-height:1.45; }
+  .aig-market-list { list-style:none; margin:8px 0 0; padding:0; }
+  .aig-market-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; padding:9px 0; border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent); }
+  .aig-market-name { min-width:0; font-size:var(--fs-xs); font-weight:800; color:var(--text-1); overflow-wrap:anywhere; }
+  .aig-market-meta { margin-top:3px; font-size:10px; line-height:1.4; color:var(--text-3); overflow-wrap:anywhere; }
+  .aig-market-values { min-width:0; display:flex; flex-direction:column; align-items:flex-end; gap:2px; text-align:end; }
+  .aig-market-usd { font-size:var(--fs-xs); font-weight:900; color:var(--text-1); white-space:nowrap; direction:ltr; }
+  .aig-market-toman { font-size:10px; font-weight:800; color:var(--rgb-2); white-space:nowrap; }
+  .aig-market-tag { display:inline-flex; align-items:center; margin-inline-start:5px; padding:1px 5px; border-radius:6px; font-size:9px; font-weight:800; color:var(--rgb-5); background:color-mix(in srgb,var(--rgb-5) 11%,transparent); vertical-align:1px; }
+  .aig-market-tag.stale { color:var(--down); background:color-mix(in srgb,var(--down) 10%,transparent); }
+  .aig-market-banner { margin-top:10px; padding:9px 10px; border-radius:10px; border:1px solid color-mix(in srgb,var(--rgb-2) 22%,var(--line)); background:color-mix(in srgb,var(--rgb-2) 6%,var(--bg-raised)); font-size:10px; line-height:1.5; color:var(--text-2); overflow-wrap:anywhere; }
+  .aig-market-banner.stale { border-color:color-mix(in srgb,var(--down) 26%,var(--line)); background:color-mix(in srgb,var(--down) 5%,var(--bg-raised)); }
+  .aig-market-status { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; margin-top:6px; font-size:10px; color:var(--text-2); }
+  .aig-market-count { font-weight:800; color:var(--text-1); }
   /* ── icons + direction markers ─────────────────────────────────────────── */
   .aig-icon { flex:0 0 auto; display:inline-block; vertical-align:-3px; }
   .aig-dir { flex:0 0 auto; display:inline-block; vertical-align:-1px; }
@@ -450,7 +463,7 @@ const AIG_MACRO_NAME = {
   GOLD: { fa: 'طلا (دلار/اونس)', en: 'Gold (USD/oz)' },
   XAU: { fa: 'طلا (دلار/اونس)', en: 'Gold (USD/oz)' },
   WTI: { fa: 'نفت خام', en: 'Crude (WTI)' },
-  SPX: { fa: 'شاخص اس‌اندپی ۵۰۰', en: 'S&P 500 futures' },
+  SPX: { fa: 'قرارداد آتی ای‌مینی اس‌اندپی ۵۰۰', en: 'S&P 500 E-mini futures' },
   NDX: { fa: 'شاخص نزدک ۱۰۰', en: 'Nasdaq 100' },
   US10Y: { fa: 'بازده ۱۰ سالهٔ آمریکا', en: 'US 10Y yield' },
   US2S10S: { fa: 'اختلاف ۲ و ۱۰ ساله', en: '2y vs 10y spread' }
@@ -466,6 +479,206 @@ const AIG_FLOW = {
   distribution: { fa: 'توزیع', en: 'distribution' }
 };
 const macroName = (q, isPersian) => (isPersian ? AIG_MACRO_NAME[q?.symbol]?.fa : AIG_MACRO_NAME[q?.symbol]?.en) || q?.name || '';
+
+const COMMODITY_ORDER = Object.freeze(['GOLD', 'SILVER', 'WTI', 'BRENT', 'COPPER']);
+const COMMODITY_INFO = Object.freeze({
+  GOLD: { en: 'Gold', fa: 'طلا', unit: 'USD/troy oz' },
+  SILVER: { en: 'Silver', fa: 'نقره', unit: 'USD/troy oz' },
+  WTI: { en: 'WTI crude', fa: 'نفت خام WTI', unit: 'USD/barrel' },
+  BRENT: { en: 'Brent crude', fa: 'نفت برنت', unit: 'USD/barrel' },
+  COPPER: { en: 'Copper', fa: 'مس', unit: 'USD/lb' }
+});
+const COMMODITY_SYMBOLS = Object.freeze({
+  GOLD: 'GOLD', XAU: 'GOLD', XAUUSD: 'GOLD',
+  SILVER: 'SILVER', XAG: 'SILVER', XAGUSD: 'SILVER',
+  WTI: 'WTI', CL: 'WTI', CLF: 'WTI', USOIL: 'WTI', WTIUSD: 'WTI',
+  BRENT: 'BRENT', BRN: 'BRENT', BRNF: 'BRENT', BZF: 'BRENT', UKOIL: 'BRENT',
+  COPPER: 'COPPER', HG: 'COPPER', HGF: 'COPPER', XCU: 'COPPER'
+});
+const finiteMarketNumber = (value) => (
+  value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+    ? Number(value)
+    : null
+);
+const marketEpoch = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric < 100_000_000_000 ? numeric * 1000 : numeric;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const commoditySymbol = (value) => {
+  const key = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return COMMODITY_SYMBOLS[key] || null;
+};
+
+function collectCommodityQuotes(cross, domains) {
+  const rows = new Map();
+  const add = (quote, envelope = {}, origin = 'feed') => {
+    const symbol = commoditySymbol(quote?.symbol);
+    const priceUsd = finiteMarketNumber(quote?.priceUsd);
+    if (!symbol || priceUsd === null || priceUsd <= 0 || rows.has(symbol)) return;
+    const at = marketEpoch(quote?.at) ?? marketEpoch(envelope.at);
+    const stale = quote?.stale === true || envelope.stale === true
+      || (at !== null && Date.now() - at > 48 * 60 * 60_000);
+    rows.set(symbol, {
+      symbol,
+      sourceSymbol: String(quote?.symbol || symbol).slice(0, 24),
+      name: COMMODITY_INFO[symbol].en,
+      nameFa: COMMODITY_INFO[symbol].fa,
+      unit: String(quote?.unit || COMMODITY_INFO[symbol].unit),
+      priceUsd,
+      change1dPct: finiteMarketNumber(quote?.change1dPct ?? quote?.change24hPct),
+      source: String(quote?.source || envelope.source || 'unknown').slice(0, 60),
+      at,
+      stale,
+      origin
+    });
+  };
+
+  /* Macro daily-series reads carry exact units and are preferred. The global
+     commodities domain fills only instruments absent from that desk; duplicate
+     symbols never overwrite the source already selected for this pass. */
+  for (const quote of Array.isArray(cross?.macro?.indicators) ? cross.macro.indicators : []) {
+    if (COMMODITY_ORDER.includes(commoditySymbol(quote?.symbol))) add(quote, {}, 'macro');
+  }
+  const domain = domains?.commodities;
+  if (domain?.status === 'OK') {
+    const domainData = domain.data || {};
+    for (const quote of Array.isArray(domainData.instruments) ? domainData.instruments : []) {
+      if (COMMODITY_ORDER.includes(commoditySymbol(quote?.symbol))) {
+        add(quote, { source: domain.source, at: domain.at, stale: domainData.stale === true }, 'commodities-domain');
+      }
+    }
+  }
+  return COMMODITY_ORDER.map((symbol) => rows.get(symbol)).filter(Boolean);
+}
+
+function inspectTomanReference(payload, now = Date.now()) {
+  if (payload?.schema !== 'fbt.iran-buy-rate.v1' || payload?.available !== true) {
+    return { status: 'unavailable', value: null, at: null, source: null };
+  }
+  const value = finiteMarketNumber(payload.buyPrice);
+  const at = marketEpoch(payload.at);
+  if (value === null || value <= 0 || at === null) return { status: 'unavailable', value: null, at: null, source: null };
+  const ageMs = now - at;
+  if (ageMs < -60_000 || ageMs > 120_000) return { status: 'stale', value: null, at, source: payload.source || null };
+  return { status: 'fresh', value, at, source: payload.source || null };
+}
+
+function CommodityQuotes({ rows, rate, domains, L, isPersian, isRTL }) {
+  const missing = COMMODITY_ORDER.filter((symbol) => !rows.some((row) => row.symbol === symbol));
+  const missingReason = domains?.commodities?.reason || null;
+  return (
+    <section className="aig-section" aria-label={L('قیمت‌های کالاهای جهانی', 'Global commodity prices')}>
+      <div className="aig-section-title">
+        <AigIcon name="drop" /> {L('کالاهای جهانی · قیمت مشاهده‌شده', 'Global commodities · observed prices')}
+        <span className="aig-market-count">{isPersian ? `${faNum(rows.length)}/۵` : `${rows.length}/5`}</span>
+      </div>
+      {rows.length ? (
+        <ul className="aig-market-list">
+          {rows.map((row) => (
+            <li className="aig-market-row aig-commodity-row" key={row.symbol}>
+              <div>
+                <div className="aig-market-name">
+                  {row.symbol} <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>{isPersian ? row.nameFa : row.name}</span>
+                  {row.stale ? <span className="aig-market-tag stale">{L('قدیمی', 'stale')}</span> : null}
+                </div>
+                <div className="aig-market-meta">
+                  {row.sourceSymbol !== row.symbol ? `${row.sourceSymbol} · ` : ''}{sourceLabel(row.source, isPersian)}
+                  {row.at !== null ? ` · ${timeAgo(row.at, isRTL)}` : ''}
+                  {row.change1dPct !== null ? ` · ${pctText(row.change1dPct, isPersian)} ${L('۲۴س', '1d')}` : ''}
+                </div>
+              </div>
+              <div className="aig-market-values">
+                <span className="aig-market-usd">${numText(row.priceUsd, false, row.priceUsd >= 100 ? 2 : 4)} <small>USD/{row.unit.replace(/^USD\/?/i, '')}</small></span>
+                {isPersian && rate.status === 'fresh' ? (
+                  <span className="aig-market-toman" dir="rtl">≈ {numText(Math.round(row.priceUsd * rate.value), true, 0)} تومان</span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="aig-empty">{L('در این دور قیمت کالای قابل‌تأییدی خوانده نشد.', 'No verifiable commodity price was read in this pass.')}</div>
+      )}
+      {missing.length ? (
+        <div className="aig-note">
+          {L('خوانده‌نشده: ', 'Not read: ')}{missing.map((symbol) => `${symbol} (${isPersian ? COMMODITY_INFO[symbol].fa : COMMODITY_INFO[symbol].en})`).join(isPersian ? '، ' : ', ')}
+          {missingReason ? ` · ${reasonLabel(missingReason, isPersian)}` : ''}
+        </div>
+      ) : null}
+      {isPersian ? (
+        <div className={`aig-market-banner ${rate.status === 'stale' ? 'stale' : ''}`}>
+          {rate.status === 'fresh'
+            ? <><b>۱ USDT ≈ {numText(rate.value, true, 0)} تومان</b> · {L('مرجع عمومی USDT/TMN از والکس', 'public Wallex USDT/TMN reference')} · {timeAgo(rate.at, true)}.</>
+            : rate.status === 'stale'
+              ? L('نرخ مرجع USDT/TMN قدیمی است؛ تبدیل تومانی پنهان شد و فقط قیمت دلاری نمایش داده می‌شود.', 'The USDT/TMN reference is stale; toman conversions are hidden and only USD values are shown.')
+              : L('نرخ تازهٔ عمومی USDT/TMN در دسترس نیست؛ تبدیل تومانی نمایش داده نمی‌شود.', 'A fresh public USDT/TMN reference is unavailable; no toman conversion is shown.')}
+          <div style={{ marginTop: 4 }}>{L('معادل تومان تقریبی است (قیمت USD × نرخ مرجع USDT/TMN)؛ نرخ اجرایی USD/TMN یا قیمت سفارش نیست.', 'Toman values are indicative (USD price × public USDT/TMN reference), not an executable USD/TMN or order quote.')}</div>
+        </div>
+      ) : null}
+      <div className="aig-note">{L('دادهٔ مشاهده‌شده و فقط‌خواندنی است؛ قیمت‌های روزانه ممکن است مربوط به آخرین بسته‌شدن بازار باشند.', 'Read-only observed data; daily series may reflect the last market close.')}</div>
+    </section>
+  );
+}
+
+function GoldEtfQuotes({ market, rate, L, isPersian, isRTL }) {
+  const rows = Array.isArray(market?.rows) ? market.rows : [];
+  return (
+    <section className="aig-section" aria-label={L('قیمت صندوق‌های قابل معامله طلا', 'Gold ETF quotes')}>
+      <div className="aig-section-title">
+        <AigIcon name="building" /> {L('ETFهای طلا · دادهٔ بازار', 'Gold ETFs · market data')}
+        <span className={`aig-market-tag ${market?.stale ? 'stale' : ''}`}>
+          {market?.available ? (market.stale ? L('قدیمی', 'stale') : L('با تأخیر', 'delayed')) : L('دسترس‌ناپذیر', 'unavailable')}
+        </span>
+      </div>
+      {rows.length ? (
+        <ul className="aig-market-list">
+          {rows.map((row) => {
+            const price = finiteMarketNumber(row.priceUsd);
+            const change = finiteMarketNumber(row.changePct);
+            return (
+              <li className="aig-market-row aig-etf-row" key={row.symbol}>
+                <div>
+                  <div className="aig-market-name">{row.symbol} <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>{row.name || ''}</span></div>
+                  <div className="aig-market-meta">
+                    {row.latestTradingDay ? `${L('آخرین روز معاملاتی: ', 'last trading day: ')}${row.latestTradingDay}` : L('روز معاملاتی نامشخص', 'trading day unavailable')}
+                    {change !== null ? ` · ${pctText(change, isPersian)}` : ''}
+                    {row.meta?.stale || market?.stale ? ` · ${L('دادهٔ قدیمی', 'stale quote')}` : ''}
+                  </div>
+                </div>
+                <div className="aig-market-values">
+                  <span className="aig-market-usd">{price === null ? '—' : `$${numText(price, false, price >= 100 ? 2 : 4)}`}</span>
+                  {isPersian && rate.status === 'fresh' && price !== null ? (
+                    <span className="aig-market-toman" dir="rtl">≈ {numText(Math.round(price * rate.value), true, 0)} تومان</span>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="aig-empty">
+          {market?.reason
+            ? `${L('قیمت ETF خوانده نشد: ', 'ETF quotes unavailable: ')}${String(market.reason).replace(/_/g, ' ').toLowerCase()}`
+            : L('در این دور قیمت زنده/با‌تأخیر ETF دریافت نشد؛ فهرست نمادها به‌عنوان نرخ نمایش داده نمی‌شود.', 'No current ETF quote was returned; a supported-symbol list is not presented as market rates.')}
+        </div>
+      )}
+      {market?.available && market.rows?.length < 5 ? (
+        <div className="aig-note">{L('فقط ', 'Only ')}{isPersian ? faNum(market.rows.length) : market.rows.length}{L(' از ۵ قیمت ETF در این دور خوانده شد؛ بقیه بدون قیمت‌اند.', ' of 5 ETF quotes were read in this pass; the rest remain unpriced.')}</div>
+      ) : null}
+      <div className="aig-note">{L('منبع آلفا ونتیج؛ داده با تأخیر، فقط‌خواندنی و غیرقابل‌اجرا از این پنل.', 'Alpha Vantage source; delayed, read-only market data, not executable from this panel.')}</div>
+      {isPersian && rate.status !== 'fresh' ? (
+        <div className={`aig-market-banner ${rate.status === 'stale' ? 'stale' : ''}`}>
+          {rate.status === 'stale'
+            ? L('نرخ USDT/TMN قدیمی است؛ تبدیل ETF به تومان پنهان شد.', 'The USDT/TMN reference is stale; ETF toman conversions are hidden.')
+            : L('نرخ مرجع تازهٔ USDT/TMN موجود نیست؛ قیمت ETF فقط به USD نمایش داده می‌شود.', 'No fresh USDT/TMN reference; ETF prices remain in USD only.')}
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    ONE CARD: the movement chart AND the per-class readings
@@ -808,7 +1021,7 @@ function AiGlobalIntelligenceInner() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
   const [tab, setTab] = useState('briefing');
-  const [data, setData] = useState({ intelligence: null, briefing: null, cross: null, providers: null });
+  const [data, setData] = useState({ intelligence: null, briefing: null, cross: null, providers: null, tomanRate: null, goldEtfs: null });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
@@ -830,6 +1043,40 @@ function AiGlobalIntelligenceInner() {
       if (!payload?.ok) throw new Error(payload?.error || 'INVALID_RESPONSE');
       return payload;
     };
+    const readTomanRate = async () => {
+      if (language !== 'fa') return null;
+      try {
+        const response = await fetch(`${apiBase()}/iran/buy/rate`, { headers: { Accept: 'application/json' } });
+        if (!response.ok) return { schema: 'fbt.iran-buy-rate.v1', available: false };
+        const payload = await response.json();
+        return payload?.schema === 'fbt.iran-buy-rate.v1'
+          ? payload
+          : { schema: 'fbt.iran-buy-rate.v1', available: false };
+      } catch {
+        return { schema: 'fbt.iran-buy-rate.v1', available: false };
+      }
+    };
+    const readGoldEtfs = async () => {
+      try {
+        const response = await fetch(`${apiBase()}/etf?category=gold`, {
+          headers: { Accept: 'application/json' }, cache: 'default'
+        });
+        const payload = await response.json().catch(() => null);
+        const rows = payload?.ok === true && Array.isArray(payload.rows)
+          ? payload.rows.filter((row) => row?.symbol && finiteMarketNumber(row.priceUsd) > 0).slice(0, 5)
+          : [];
+        return {
+          available: rows.length > 0,
+          rows,
+          stale: payload?.meta?.stale === true || rows.some((row) => row.meta?.stale === true)
+            || response.headers?.get?.('x-data-stale') === '1',
+          at: marketEpoch(payload?.meta?.fetchedAt),
+          reason: rows.length ? null : String(payload?.error || payload?.code || 'ETF_QUOTES_UNAVAILABLE').slice(0, 80)
+        };
+      } catch {
+        return { available: false, rows: [], stale: false, at: null, reason: 'ETF_QUOTES_UNAVAILABLE' };
+      }
+    };
     try {
       if (refresh) setRefreshing(true);
       setConnectionError(null);
@@ -838,14 +1085,18 @@ function AiGlobalIntelligenceInner() {
         readJson(`/ai/global/intelligence${qs}`),
         readJson(`/ai/global/briefing${qs}`),
         readJson(`/ai/global/cross-asset${qs}`),
-        readJson('/ai/global/providers')
+        readJson('/ai/global/providers'),
+        readTomanRate(),
+        readGoldEtfs()
       ]);
       if (id !== requestId.current) return;
-      const [intelRes, briefRes, crossRes, providerRes] = results;
+      const [intelRes, briefRes, crossRes, providerRes, rateRes, etfRes] = results;
       const intel = intelRes.status === 'fulfilled' ? intelRes.value : null;
       const brief = briefRes.status === 'fulfilled' ? briefRes.value : null;
       const crossAsset = crossRes.status === 'fulfilled' ? crossRes.value : null;
       const providerState = providerRes.status === 'fulfilled' ? providerRes.value : null;
+      const tomanRate = rateRes.status === 'fulfilled' ? rateRes.value : null;
+      const goldEtfs = etfRes.status === 'fulfilled' ? etfRes.value : null;
 
       if (!intel && !brief && !crossAsset && !providerState) {
         throw (intelRes.reason || briefRes.reason || crossRes.reason || providerRes.reason || new Error('NETWORK_ERROR'));
@@ -855,7 +1106,9 @@ function AiGlobalIntelligenceInner() {
         intelligence: intel?.globalIntelligence || null,
         briefing: brief?.briefing || null,
         cross: crossAsset || null,
-        providers: providerState?.providers || intel?.globalIntelligence?.providers || null
+        providers: providerState?.providers || intel?.globalIntelligence?.providers || null,
+        tomanRate,
+        goldEtfs
       });
     } catch (error) {
       if (id === requestId.current) setConnectionError(error?.message || 'NETWORK_ERROR');
@@ -876,6 +1129,8 @@ function AiGlobalIntelligenceInner() {
   const domains = useMemo(() => data.intelligence?.domains || null, [data.intelligence]);
   const briefingItems = useMemo(() => data.briefing?.items || [], [data.briefing]);
   const cross = data.cross?.crossAsset || null;
+  const commodityRows = useMemo(() => collectCommodityQuotes(cross, domains), [cross, domains]);
+  const tomanReference = useMemo(() => inspectTomanReference(data.tomanRate), [data.tomanRate]);
 
   const statusColor = (status) => (status === 'OK' ? '#22c55e' : status === 'PARTIAL' ? '#eab308' : '#6b7280');
   const regimeClass = cross?.regime?.regime ? String(cross.regime.regime).toLowerCase() : 'partial';
@@ -1189,6 +1444,8 @@ function AiGlobalIntelligenceInner() {
               ) : null}
             </div>
           )}
+          <CommodityQuotes rows={commodityRows} rate={tomanReference} domains={domains} L={L} isPersian={isPersian} isRTL={isRTL} />
+          <GoldEtfQuotes market={data.goldEtfs} rate={tomanReference} L={L} isPersian={isPersian} isRTL={isRTL} />
         </div>
       )}
 

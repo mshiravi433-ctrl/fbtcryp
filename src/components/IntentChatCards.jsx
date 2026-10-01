@@ -18,12 +18,14 @@
  * All are presentational only: no fetches, no wallet access, no signing.
  */
 
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { EVM_CHAINS } from '../lib/chains.js';
 
+const hasFiniteValue = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const nf = (v, digits = 2) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n.toLocaleString('en-US', { maximumFractionDigits: digits });
+  if (!hasFiniteValue(v)) return null;
+  return Number(v).toLocaleString('en-US', { maximumFractionDigits: digits });
 };
 
 export function fmtPrice(v) {
@@ -46,11 +48,11 @@ export function fmtCompact(v) {
   return `$${nf(n, 2)}`;
 }
 
-const pctLabel = (v) => (Number.isFinite(Number(v)) ? `${Number(v) >= 0 ? '+' : ''}${Math.round(Number(v) * 100) / 100}%` : '—');
+const pctLabel = (v) => (hasFiniteValue(v) ? `${Number(v) >= 0 ? '+' : ''}${Math.round(Number(v) * 100) / 100}%` : '—');
 
 function ChangeChip({ label, value }) {
   const n = Number(value);
-  const has = Number.isFinite(n);
+  const has = hasFiniteValue(value);
   const tone = !has ? 'na' : n >= 0 ? 'up' : 'down';
   return (
     <span className={`icc-chip icc-chip-${tone}`}>
@@ -179,39 +181,240 @@ export function TokenMarketCard({ card, locale = 'fa', onOpenRoute }) {
   );
 }
 
-export function PortfolioChatCard({ card, locale = 'fa', onOpenRoute }) {
+function portfolioCurrency(value, locale) {
+  const n = Number(value);
+  if (value == null || value === '' || !Number.isFinite(n) || n < 0) return null;
+  const digits = n > 0 && n < 0.01 ? 6 : n > 0 && n < 1 ? 4 : 2;
+  try {
+    return new Intl.NumberFormat(locale || 'en', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: digits
+    }).format(n);
+  } catch {
+    return `$${n.toLocaleString('en-US', { maximumFractionDigits: digits })}`;
+  }
+}
+
+function portfolioAmount(value, locale) {
+  const n = Number(value);
+  if (value == null || value === '' || !Number.isFinite(n)) return '—';
+  try { return new Intl.NumberFormat(locale || 'en', { maximumFractionDigits: 6 }).format(n); }
+  catch { return n.toLocaleString('en-US', { maximumFractionDigits: 6 }); }
+}
+
+function portfolioPercent(value, locale) {
+  const n = Number(value);
+  if (value == null || !Number.isFinite(n)) return null;
+  try { return new Intl.NumberFormat(locale || 'en', { style: 'percent', maximumFractionDigits: 1 }).format(n / 100); }
+  catch { return `${Math.round(n * 10) / 10}%`; }
+}
+
+function portfolioNetwork(chainId, locale) {
+  const id = Number(chainId);
+  if (Number.isFinite(id) && EVM_CHAINS[id]) {
+    const chain = EVM_CHAINS[id];
+    return { name: chain.name, short: chain.short || chain.name };
+  }
+  if (String(chainId) === '501' || String(chainId).toLowerCase() === 'solana') return { name: 'Solana', short: 'SOL' };
+  if (chainId != null && String(chainId).trim()) return { name: String(chainId), short: String(chainId) };
+  return { name: locale?.startsWith?.('fa') ? 'شبکه نامشخص' : 'Unknown network', short: '—' };
+}
+
+export function PortfolioChatCard({ card, locale = 'fa', onOpenRoute, onQuickPrompt }) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState('assets');
+  const [showAll, setShowAll] = useState(false);
   if (!card || card.kind !== 'PORTFOLIO') return null;
-  const fa = String(locale || 'fa').startsWith('fa');
-  const rows = (card.rows || []).filter((r) => r && r.symbol);
-  const maxPct = rows.reduce((m, r) => Math.max(m, Number(r.pct) || 0), 0) || 100;
+  const lang = String(locale || 'en');
+  const copy = (key, vars = {}) => t(`intentAIOS.portfolioCard.${key}`, vars);
+  const rtl = /^(fa|ar|ur)(-|$)/i.test(lang);
+  const rows = (Array.isArray(card.rows) ? card.rows : []).filter((row) => row && row.symbol);
+  const networks = (Array.isArray(card.networks) ? card.networks : []).filter(Boolean);
+  const statusKey = ['live', 'partial', 'stale', 'pending', 'unavailable', 'empty'].includes(card.status) ? card.status : 'partial';
+  const statusText = copy(`status.${statusKey}`);
+  const totalValue = portfolioCurrency(card.totalValueUsd, lang);
+  const stablecoinValue = portfolioCurrency(card.stablecoinValueUsd, lang);
+  const stablecoinPct = portfolioPercent(card.stablecoinPct, lang);
+  const concentrationPct = portfolioPercent(card.concentrationPct, lang);
+  const initialRows = showAll ? rows : rows.slice(0, 4);
+  const initialNetworks = showAll ? networks : networks.slice(0, 4);
+  const fetchedAt = Number(card.fetchedAt);
+  const updatedAt = Number.isFinite(fetchedAt) && fetchedAt > 0
+    ? new Date(fetchedAt).toLocaleString(lang, { dateStyle: 'short', timeStyle: 'short' })
+    : null;
+  const prompts = [
+    { id: 'portfolio-risk', label: copy('action.risk'), prompt: copy('prompt.risk') },
+    { id: 'portfolio-allocation', label: copy('action.allocation'), prompt: copy('prompt.allocation') },
+    { id: 'portfolio-rebalance', label: copy('action.rebalance'), prompt: copy('prompt.rebalance') }
+  ];
+
   return (
-    <div className="icc-portfolio" data-testid="intent-ai-portfolio-card">
-      <div className="icc-portfolio-head">
-        <span>{card.title || (fa ? 'پرتفوی من' : 'My portfolio')}</span>
-        <b>{fmtPrice(card.totalValueUsd) || (fa ? 'ارزش N/A' : 'value N/A')}</b>
-      </div>
-      {rows.map((r) => (
-        <div key={r.symbol} className="icc-holding">
-          <div className="icc-holding-line">
-            <strong>{r.symbol}</strong>
-            <span>{r.amount != null ? nf(r.amount, 6) : ''}</span>
-            <b>{fmtPrice(r.valueUsd) || '—'}</b>
+    <section className={`icc-portfolio icc-portfolio-v2 icc-portfolio-${statusKey}`} dir={rtl ? 'rtl' : 'ltr'} data-testid="intent-ai-portfolio-card">
+      <header className="icc-portfolio-topline">
+        <div className="icc-portfolio-title-wrap">
+          <span className="icc-portfolio-mark" aria-hidden="true">◈</span>
+          <div className="icc-portfolio-title-copy">
+            <strong>{copy('title')}</strong>
+            <small>{updatedAt ? copy('asOf', { time: updatedAt }) : copy('subtitle')}</small>
           </div>
-          <div className="icc-holding-bar">
-            <i style={{ width: `${Math.max(3, ((Number(r.pct) || 0) / maxPct) * 100)}%` }} />
-          </div>
-          {r.pct != null ? <small>{Math.round(r.pct * 10) / 10}%</small> : null}
         </div>
-      ))}
-      {card.unpricedCount > 0 ? (
-        <p className="icc-unpriced">{fa ? `${card.unpricedCount} دارایی بدون قیمت معتبر (N/A)` : `${card.unpricedCount} holding(s) without a live price`}</p>
-      ) : null}
-      {onOpenRoute ? (
-        <button type="button" className="icc-open" onClick={() => onOpenRoute('/portfolio')}>
-          {fa ? 'پرتفوی کامل ↗' : 'Full portfolio ↗'}
+        <span className={`icc-portfolio-status icc-portfolio-status-${statusKey}`} role="status">
+          <i aria-hidden="true" />{statusText}
+        </span>
+      </header>
+
+      <div className="icc-portfolio-value-block">
+        <small>{copy(card.displayedValueKind === 'total' ? 'metric.total' : 'metric.pricedValue')}</small>
+        <strong dir="ltr">{totalValue || '—'}</strong>
+        {['partial', 'stale', 'pending', 'unavailable'].includes(statusKey) ? <span>{copy('note.pricedSubtotal')}</span> : null}
+      </div>
+
+      <div className="icc-portfolio-metrics">
+        <div className="icc-portfolio-metric">
+          <small>{copy('metric.stablecoins')}</small>
+          <strong dir="ltr">{stablecoinValue == null ? '—' : `${stablecoinValue}${stablecoinPct ? ` · ${stablecoinPct}` : card.stablecoinPct === 0 ? ` · ${portfolioPercent(0, lang)}` : ''}`}</strong>
+          <span>{copy('metric.pricedOnly')}</span>
+        </div>
+        <div className="icc-portfolio-metric">
+          <small>{copy('metric.concentration')}</small>
+          <strong>{card.concentrationSymbol && concentrationPct ? `${card.concentrationSymbol} · ${concentrationPct}` : '—'}</strong>
+          <span>{copy('metric.pricedOnly')}</span>
+        </div>
+      </div>
+
+      <div className="icc-portfolio-unavailable" aria-label={copy('metric.notComputed')}>
+        <div>
+          <span>{copy('metric.pnl')}</span>
+          <strong>{copy('metric.notAvailable')}</strong>
+          <small>{copy('metric.noCostBasis')}</small>
+        </div>
+        <div>
+          <span>{copy('metric.riskScore')}</span>
+          <strong data-testid="intent-ai-portfolio-mix-score">
+            {card.portfolioMixScore == null
+              ? copy('metric.notAvailable')
+              : `${Math.round(Number(card.portfolioMixScore))}/100${card.portfolioMixBand ? ` · ${copy(`riskBand.${card.portfolioMixBand}`)}` : ''}`}
+          </strong>
+          <small>{copy(card.portfolioMixScore == null ? 'metric.riskUnavailable' : 'metric.riskBasis')}</small>
+        </div>
+      </div>
+      <p className="icc-portfolio-disclaimer">{copy('note.risk')}</p>
+
+      <div className="icc-portfolio-tabs" role="tablist" aria-label={copy('title')}>
+        <button type="button" role="tab" aria-selected={tab === 'assets'} className={tab === 'assets' ? 'is-active' : ''} onClick={() => { setTab('assets'); setShowAll(false); }}>
+          {copy('tab.assets')} <span>{rows.length}</span>
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'networks'} className={tab === 'networks' ? 'is-active' : ''} onClick={() => { setTab('networks'); setShowAll(false); }}>
+          {copy('tab.networks')} <span>{networks.length}</span>
+        </button>
+      </div>
+
+      {tab === 'assets' ? (
+        rows.length ? (
+          <div className="icc-portfolio-list" role="tabpanel" data-testid="intent-ai-portfolio-assets">
+            {initialRows.map((row, index) => {
+              const network = portfolioNetwork(row.chainId, lang);
+              const value = portfolioCurrency(row.valueUsd, lang);
+              const pct = portfolioPercent(row.allocationPct, lang);
+              const rowKey = row.key || `${row.chainId || 'unknown'}:${row.symbol}:${index}`;
+              return (
+                <div key={rowKey} className={`icc-portfolio-row ${row.valueUsd == null ? 'is-unpriced' : ''}`}>
+                  <div className="icc-portfolio-row-head">
+                    <div className="icc-portfolio-asset-name">
+                      <strong>{row.symbol}</strong>
+                      <span title={network.name}>{network.short}</span>
+                    </div>
+                    <div className="icc-portfolio-status-stack">
+                      {row.networkStatus && row.networkStatus !== 'live' ? (
+                        <span className={`icc-portfolio-mini-status is-${row.networkStatus}`}>{copy(`network.${row.networkStatus}`)}</span>
+                      ) : null}
+                      {row.networkStale && row.networkStatus === 'failed' ? (
+                        <span className="icc-portfolio-mini-status is-stale">{copy('network.stale')}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="icc-portfolio-row-data">
+                    <span dir="ltr">{portfolioAmount(row.amount, lang)} {row.symbol}</span>
+                    <strong dir="ltr">{value || copy('row.priceUnavailable')}</strong>
+                  </div>
+                  {pct ? (
+                    <div className="icc-portfolio-row-share">
+                      <div><i style={{ width: `${Math.max(1, Math.min(100, Number(row.allocationPct) || 0))}%` }} /></div>
+                      <small>{pct}</small>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            {rows.length > 4 ? (
+              <button type="button" className="icc-portfolio-show-more" onClick={() => setShowAll((value) => !value)}>
+                {showAll ? copy('action.showLess') : copy('action.showAll', { count: rows.length })}
+              </button>
+            ) : null}
+          </div>
+        ) : <div className="icc-portfolio-empty" role="tabpanel">{copy('row.noHoldings')}</div>
+      ) : (
+        networks.length ? (
+          <div className="icc-portfolio-list" role="tabpanel" data-testid="intent-ai-portfolio-networks">
+            {initialNetworks.map((network, index) => {
+              const title = portfolioNetwork(network.chainId, lang);
+              const value = portfolioCurrency(network.valueUsd, lang);
+              const pct = portfolioPercent(network.allocationPct, lang);
+              const networkKey = `${network.chainId || 'unknown'}:${index}`;
+              return (
+                <div key={networkKey} className={`icc-portfolio-row icc-portfolio-network-row is-${network.status || 'live'}`}>
+                  <div className="icc-portfolio-row-head">
+                    <div className="icc-portfolio-asset-name">
+                      <strong>{title.name}</strong>
+                      <span>{title.short}</span>
+                    </div>
+                    <div className="icc-portfolio-status-stack">
+                      <span className={`icc-portfolio-mini-status is-${network.status || 'live'}`}>
+                        {copy(`network.${network.status || 'live'}`)}
+                      </span>
+                      {network.stale && network.status === 'failed' ? (
+                        <span className="icc-portfolio-mini-status is-stale">{copy('network.stale')}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="icc-portfolio-row-data">
+                    <span>{copy('network.assetCount', { count: network.holdingCount || 0 })}</span>
+                    <strong dir="ltr">{value || copy('row.priceUnavailable')}</strong>
+                  </div>
+                  {pct ? <small className="icc-portfolio-network-share">{pct} {copy('metric.pricedOnly')}</small> : null}
+                  {network.unpricedCount > 0 ? <small className="icc-portfolio-unpriced-note">{copy('note.unpricedCount', { count: network.unpricedCount })}</small> : null}
+                </div>
+              );
+            })}
+            {networks.length > 4 ? (
+              <button type="button" className="icc-portfolio-show-more" onClick={() => setShowAll((value) => !value)}>
+                {showAll ? copy('action.showLess') : copy('action.showAll', { count: networks.length })}
+              </button>
+            ) : null}
+          </div>
+        ) : <div className="icc-portfolio-empty" role="tabpanel">{copy('network.noNetworks')}</div>
+      )}
+
+      {card.unpricedCount > 0 || card.failedNetworks > 0 || card.staleNetworks > 0 ? (
+        <div className="icc-portfolio-coverage">
+          {card.unpricedCount > 0 ? <span>{copy('note.unpricedCount', { count: card.unpricedCount })}</span> : null}
+          {card.failedNetworks > 0 ? <span>{copy('note.failedCount', { count: card.failedNetworks })}</span> : null}
+          {card.staleNetworks > 0 ? <span>{copy('note.staleCount', { count: card.staleNetworks })}</span> : null}
+        </div>
       ) : null}
-    </div>
+
+      <div className="icc-portfolio-actions">
+        {onQuickPrompt ? prompts.map((action) => (
+          <button type="button" key={action.id} onClick={() => onQuickPrompt(action)}>{action.label}</button>
+        )) : null}
+        {onOpenRoute ? (
+          <button type="button" className="icc-portfolio-open" onClick={() => onOpenRoute('/portfolio')}>
+            {copy('action.fullPortfolio')} ↗
+          </button>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

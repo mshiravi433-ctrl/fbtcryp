@@ -143,6 +143,19 @@ t('the destination is never used as the funding source', () => {
   assert.notEqual(r.row?.symbol, 'USDC');
 });
 
+t('a requested source network is never replaced with a different balance network', () => {
+  const plan = buildActionPlan({
+    type: 'SWAP',
+    message: '100 USDC on Ethereum to ETH',
+    hints: { sourceAsset: 'USDC', targetAsset: 'ETH', sourceChainId: 1 },
+    context: evmOnly
+  });
+  assert.equal(plan.status, 'NO_BALANCE');
+  assert.equal(plan.missing, 'SOURCE_NETWORK_BALANCE');
+  assert.equal(plan.requestedSourceChainId, 1);
+  assert.equal(plan.unavailableOnOtherChains[0]?.chainId, 8453);
+});
+
 /* -------------------------- 4. amount resolution -------------------------- */
 
 const usdcRow = { symbol: 'USDC', amount: 800, valueUsd: 800 };
@@ -167,9 +180,15 @@ t('"100 USDC" is read literally', () => {
 });
 
 t('a dollar figure converts through the unit price', () => {
-  const r = resolveAmount({ message: '$100 از ETH بخر', sourceRow: { symbol: 'ETH', amount: 2, valueUsd: 6000 } });
+  const r = resolveAmount({ message: '$100 از ETH بخر', sourceRow: { symbol: 'ETH', amount: 2, valueUsd: 6000, priceUsd: 3000, priceProvenance: 'live' } });
   assert.equal(r.amountUsd, 100);
   assert.ok(Math.abs(r.amount - 100 / 3000) < 1e-9);
+});
+
+t('USD-to-token conversion fails closed without explicit live price provenance', () => {
+  const r = resolveAmount({ message: '$100 ETH بخر', sourceRow: { symbol: 'ETH', amount: 2, valueUsd: 6000, priceUsd: 3000 } });
+  assert.equal(r.status, 'NEEDS_AMOUNT');
+  assert.equal(r.reason, 'USD_CONVERSION_UNAVAILABLE');
 });
 
 t('an uninferable amount is the ONLY case that asks', () => {
@@ -238,7 +257,7 @@ t('a selected asset hint completes the intent without restating it', () => {
     type: 'BUY',
     message: 'ETH بخر',
     context: twoStables,
-    hints: { sourceAsset: 'USDC', amount: 200 }
+    hints: { sourceAsset: 'USDC', amount: 200, amountUnit: 'USDC' }
   });
   assert.ok(isExecutionReady(answered));
   assert.equal(answered.source.token, 'USDC');

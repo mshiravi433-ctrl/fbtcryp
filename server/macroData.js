@@ -6,8 +6,8 @@
  * headline happened to mention the Fed, the domain reported
  * NO_MACRO_HEADLINES_IN_WINDOW and the whole «global → macro» connection was
  * silently down. This module is the other half of the fix: REAL macro quotes
- * — the dollar index, gold, crude, the equity index, the 10-year yield and
- * the 2s10s curve — with their 1-day and 7-day changes, so the macro domain
+ * — the dollar index, five commodities, the equity index, the 10-year yield
+ * and the 2s10s curve — with their 1-day and 7-day changes, so the macro domain
  * (and the cross-asset economic outlook) has numbers to read even when the
  * news desks are quiet.
  *
@@ -15,11 +15,10 @@
  * Three upstreams in priority order, all keyless:
  *   1. stooq   daily CSV history (no key, no account)
  *   2. yahoo   the chart endpoint (no key)
- *   3. FRED    only when FRED_API_KEY is configured (real Treasury series:
- *              T10YIE the 10y yield, T10Y2Y the 2s10s spread — the classic
- *              recession indicator)
+ *   3. FRED    only when FRED_API_KEY is configured (daily rates/commodities
+ *              where available: DGS10, T10Y2Y, DCOILWTICO, DCOILBRENTEU)
  * A source is ACCEPTED only when it returns ≥3 usable instruments — one
- * survivor among six is an outage with a survivor, not a data source. If
+ * survivor among nine is an outage with a survivor, not a data source. If
  * every source fails, fetchMacroQuotes THROWS; the caller (the global intel
  * engine) turns the throw into the honest UNAVAILABLE it always has.
  *
@@ -38,16 +37,19 @@ const CACHE_TTL_MS = 10 * 60_000;
 const MIN_ACCEPTABLE_INSTRUMENTS = 3;
 const DAY = 86_400_000;
 
-/** The six instruments the macro domain and the economic outlook read.
- *  `kind` is the outlook's signal vocabulary (dollar pressure, safe-haven
- *  bid, energy/inflation, equity risk, rates, the curve). */
+/** The macro domain reads nine market series, including five commodity
+ *  contracts. `unit` is carried with each observation so the UI can label a
+ *  USD value without guessing whether it is per ounce, barrel, or pound. */
 export const MACRO_SYMBOLS = Object.freeze([
-  { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', stooq: 'DX.F', yahoo: 'DX-Y.NYB', fred: 'DTXBGS' },
-  { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', stooq: 'GC.F', yahoo: 'GC=F', fred: 'GOLDPMGBD228NLBM' },
-  { symbol: 'WTI', name: 'WTI Crude (USD/bbl)', kind: 'energy', stooq: 'CL.F', yahoo: 'CL=F', fred: 'DCOILWTICO' },
-  { symbol: 'SPX', name: 'S&P 500 futures', kind: 'equity', stooq: 'ES.F', yahoo: '^GSPC', fred: 'SP500' },
-  { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', stooq: null, yahoo: '^TNX', fred: 'T10YIE' },
-  { symbol: 'US2S10S', name: 'US 2s10s spread (pct)', kind: 'curve', stooq: null, yahoo: null, fred: 'T10Y2Y' }
+  { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', unit: 'index points', stooq: 'DX.F', yahoo: 'DX-Y.NYB', fred: null },
+  { symbol: 'GOLD', name: 'Gold (USD/troy oz)', kind: 'safe_haven', unit: 'USD/troy oz', stooq: 'GC.F', yahoo: 'GC=F', fred: 'GOLDPMGBD228NLBM' },
+  { symbol: 'SILVER', name: 'Silver (USD/troy oz)', kind: 'industrial_metal', unit: 'USD/troy oz', stooq: 'SI.F', yahoo: 'SI=F', fred: null },
+  { symbol: 'WTI', name: 'WTI Crude (USD/bbl)', kind: 'energy', unit: 'USD/barrel', stooq: 'CL.F', yahoo: 'CL=F', fred: 'DCOILWTICO' },
+  { symbol: 'BRENT', name: 'Brent Crude (USD/bbl)', kind: 'energy', unit: 'USD/barrel', stooq: 'BRN.F', yahoo: 'BZ=F', fred: 'DCOILBRENTEU' },
+  { symbol: 'COPPER', name: 'Copper (USD/lb)', kind: 'industrial_metal', unit: 'USD/lb', stooq: 'HG.F', yahoo: 'HG=F', fred: null },
+  { symbol: 'SPX', name: 'S&P 500 E-mini futures', kind: 'equity', unit: 'index points', stooq: 'ES.F', yahoo: 'ES=F', fred: null },
+  { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', unit: '%', stooq: null, yahoo: '^TNX', fred: 'DGS10' },
+  { symbol: 'US2S10S', name: 'US 2s10s spread (pct)', kind: 'curve', unit: 'percentage points', stooq: null, yahoo: null, fred: 'T10Y2Y' }
 ]);
 
 const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -123,6 +125,7 @@ function quoteFrom(entry, series, provider) {
     symbol: entry.symbol,
     name: entry.name,
     kind: entry.kind,
+    unit: entry.unit || null,
     priceUsd: ch.priceUsd,
     change1dPct: ch.change1dPct,
     change7dPct: ch.change7dPct,

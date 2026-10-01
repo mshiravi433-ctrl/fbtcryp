@@ -691,7 +691,10 @@ export async function readReserve({ provider, chainId, asset }) {
     const decimals = config?.decimals ?? (verifiedDecimals != null ? Number(verifiedDecimals) : registryDecimals);
     const decimalsSource = config?.decimals != null ? 'reserve-configuration'
         : verifiedDecimals != null ? 'token-contract' : 'registry';
-    const totalDebtWei = (variableDebtWei ?? 0n) + (stableDebtWei ?? 0n);
+    /* Unknown debt-token reads are not zero debt. A partial RPC read cannot
+       prove borrowable liquidity, so preserve null and withhold that capacity. */
+    const debtReadable = variableDebtWei != null && stableDebtWei != null;
+    const totalDebtWei = debtReadable ? variableDebtWei + stableDebtWei : null;
     const capScale = 10n ** BigInt(Number.isInteger(decimals) && decimals >= 0 ? decimals : registryDecimals);
 
     return {
@@ -709,14 +712,14 @@ export async function readReserve({ provider, chainId, asset }) {
 
       /* §20 — protocol liquidity, from the protocol's own tokens */
       totalSupplyWei: totalSupplyWei != null ? totalSupplyWei.toString() : null,
-      totalDebtWei: totalSupplyWei != null ? totalDebtWei.toString() : null,
-      availableLiquidityWei: totalSupplyWei != null
+      totalDebtWei: totalDebtWei != null ? totalDebtWei.toString() : null,
+      availableLiquidityWei: totalSupplyWei != null && totalDebtWei != null
         ? (totalSupplyWei > totalDebtWei ? totalSupplyWei - totalDebtWei : 0n).toString()
         : null,
-      utilizationPct: (totalSupplyWei != null && totalSupplyWei > 0n)
+      utilizationPct: (totalSupplyWei != null && totalDebtWei != null && totalSupplyWei > 0n)
         ? Number((totalDebtWei * 10000n) / totalSupplyWei) / 100
         : null,
-      liquidityRead: totalSupplyWei != null,
+      liquidityRead: totalSupplyWei != null && totalDebtWei != null,
 
       /* §13 — risk parameters, per reserve, from the protocol */
       ltvPct: config?.ltvBps != null ? config.ltvBps / 100 : null,
@@ -741,7 +744,7 @@ export async function readReserve({ provider, chainId, asset }) {
       decimals,
       decimalsSource,
       decimalsMatch: verifiedDecimals == null ? null : Number(verifiedDecimals) === registryDecimals,
-      dataStatus: totalSupplyWei != null && config?.readable ? 'live' : 'partial'
+      dataStatus: totalSupplyWei != null && totalDebtWei != null && config?.readable ? 'live' : 'partial'
     };
   } catch (error) {
     return { ok: false, listed: null, reason: 'RESERVE_READ_FAILED', detail: String(error?.message || error).slice(0, 160) };

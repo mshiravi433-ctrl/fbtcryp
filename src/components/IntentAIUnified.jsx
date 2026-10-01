@@ -56,7 +56,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
 import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
-import { solanaAddress, solanaWalletAvailable, connectSolana, getSolanaBalance } from '../lib/solanaWallet';
+import { solanaAddress, solanaWalletAvailable, connectSolana } from '../lib/solanaWallet';
 import {
   aiChat,
   aiExecute,
@@ -94,6 +94,7 @@ import { humanizeError } from '../lib/intent-ai/errorHumanizer.js';
 import { runExecutionPlan, runRebalance } from '../lib/intent-ai/executionRuntime.js';
 import { resolveChatRoute } from '../lib/intent-ai/autonomy/chatRoutes.js';
 import { buildAutonomyDrivers, warmAutonomyDrivers } from '../lib/intent-ai/autonomy/browserDrivers.js';
+import { LENDING_REVIEW_TTL_MS } from '../lib/intent-ai/autonomy/venueExecutors.js';
 import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
 import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
 import { localizeStrategy, strategyOperationLabel } from '../lib/strategyBrain/strategyLocales.js';
@@ -144,9 +145,46 @@ async function fetchCandlesFor(asset, { days = 30 } = {}) {
     .filter((r) => Number.isFinite(r.close) && Number.isFinite(r.high) && Number.isFinite(r.low));
 }
 
-const usdFmt = (v) => (Number.isFinite(Number(v))
+const usdFmt = (v) => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
   ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
   : '—');
+
+/* `Number(null)` is 0, not a price. Portfolio data crosses several adapters
+   as nullable numeric fields, so keep the null check at the boundary instead
+   of letting an absent quote masquerade as a zero-dollar asset. */
+const finitePortfolioNumber = (value) => (
+  value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+    ? Number(value)
+    : null
+);
+const hasPortfolioBalance = (row) => {
+  const amount = finitePortfolioNumber(row?.amount);
+  const value = finitePortfolioNumber(row?.valueUsd ?? row?.value);
+  return (amount != null && amount > 1e-9) || (value != null && value > 0) || row?.unread === true;
+};
+
+function enrichSolanaHoldings(rows = [], marketRows = []) {
+  const prices = new Map((Array.isArray(marketRows) ? marketRows : [])
+    .filter((row) => row?.id)
+    .map((row) => [String(row.id), row]));
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const quote = row?.coingeckoId ? prices.get(String(row.coingeckoId)) : null;
+    const amount = finitePortfolioNumber(row?.amount);
+    const priceUsd = finitePortfolioNumber(quote?.price);
+    const valueUsd = finitePortfolioNumber(row?.valueUsd)
+      ?? (amount != null && priceUsd != null && priceUsd > 0 ? amount * priceUsd : null);
+    return {
+      ...row,
+      chain: 501,
+      chainId: 501,
+      address: row?.mint || row?.address || null,
+      amount,
+      priceUsd,
+      valueUsd,
+      priceDataStatus: priceUsd == null ? 'unavailable' : (quote?.dataProvenance || 'unknown')
+    };
+  });
+}
 
 /* A monitor is "live" while it is still watching the market: ready (ACTIVE),
    deliberately held (PAUSED) or already matched (TRIGGERED). Terminal states
@@ -157,7 +195,7 @@ const usdFmt = (v) => (Number.isFinite(Number(v))
 const LIVE_MONITOR_STATUSES = new Set(['ACTIVE', 'PAUSED', 'TRIGGERED']);
 const isMonitorLive = (m) => LIVE_MONITOR_STATUSES.has(String(m?.status || '').toUpperCase());
 const countLiveMonitors = (list) => (Array.isArray(list) ? list.filter(isMonitorLive).length : 0);
-import { buildBrowserHooks } from '../lib/intent-ai/browserExecution.js';
+import { buildBrowserHooks, getSwapQuoteReview } from '../lib/intent-ai/browserExecution.js';
 import '../styles/intent-ai-os.css';
 /*
  * Trench-agent skin: pure-black, minimal, tabbed (chat / agents / activity /
@@ -246,6 +284,8 @@ import {
 import { EcosystemPanel } from './IntentEcosystemPanel.jsx';
 import { opsText } from '../lib/intent-ai/os/opsPanelStrings.js';
 import { TokenMarketCard, PortfolioChatCard, ConditionalAllocationCard } from './IntentChatCards.jsx';
+import IntentSwapQuoteReview, { quoteReviewSummary } from './IntentSwapQuoteReview.jsx';
+import { LendingMarketsCard, LendingActionReviewCard } from './IntentLendingReview.jsx';
 
 // UPGRADE 6 — New modules
 import {
@@ -516,6 +556,13 @@ function isRebalanceKind(type) {
   return t === 'REBALANCE' || t === 'REBALANCE_PORTFOLIO';
 }
 
+function isSwapQuoteAction(action) {
+  const type = String(action?.type || action?.kind || '').toUpperCase();
+  return ['SWAP', 'BUY', 'SELL', 'CONVERT'].includes(type)
+    && Boolean(action?.from || action?.fromSymbol)
+    && Boolean(action?.to || action?.toSymbol);
+}
+
 /* Phase 2 surface — pure mappers for the intelligence block the OS already
  * attaches to every turn. No network, no state, safe to call during render. */
 function mapPlanStepsForTimeline(steps) {
@@ -565,6 +612,7 @@ export const ConversationRow = memo(function ConversationRow({
   onFeedback,
   onOpenRoute,
   onOsChip,
+  onPortfolioPrompt,
   onGoalExecute,
   onStrategyExecute,
   onStrategyMonitor,
@@ -652,8 +700,9 @@ export const ConversationRow = memo(function ConversationRow({
           <TokenMarketCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
         ) : null}
         {m.card?.kind === 'PORTFOLIO' ? (
-          <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} />
+          <PortfolioChatCard card={m.card} locale={locale} onOpenRoute={onOpenRoute} onQuickPrompt={onPortfolioPrompt} />
         ) : null}
+        {m.yieldMarkets ? <LendingMarketsCard data={m.yieldMarkets} locale={locale} /> : null}
         {/* Phase 217 — a cross-asset conditional instruction («اگر طلا ۵٪ اصلاح
             کرد و BTC بالای X بود، ۱۰٪ سرمایه را به طلا اختصاص بده»). The
             conditions, what each one read, and the allocation — so a misread
@@ -913,7 +962,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const [convState, setConvState] = useState(() => convStateRef.current);
 
-  const canReadPortfolio = Boolean(wallet?.isConnected && wallet?.address && !wallet?.locked);
+  // Portfolio reads are public read-only RPC calls; an attached but locked
+  // in-app signer still has a verifiable address and must not stay hydrating.
+  const canReadPortfolio = Boolean(wallet?.address);
   const multi = useMultiChainPortfolio(canReadPortfolio ? wallet : null);
 
   // Messages backed by persistent ConversationState (§1), with the device-local
@@ -973,6 +1024,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pendingExecution, setPendingExecution] = useState(null);
   const [executing, setExecuting] = useState(false);
+  const [quoteRefreshing, setQuoteRefreshing] = useState(false);
+  const [quoteClock, setQuoteClock] = useState(() => Date.now());
   const [progress, setProgress] = useState(null);
   const [walletSheetOpen, setWalletSheetOpen] = useState(false);
   const [memorySummary, setMemorySummary] = useState('');
@@ -981,6 +1034,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
      cards on the AGENTS tab, which needs no collapsed/expanded mode. */
   const [solanaTick, setSolanaTick] = useState(0);
   const [solanaRows, setSolanaRows] = useState([]);
+  const [solanaRead, setSolanaRead] = useState({ status: 'unavailable', loading: false, failed: false, partial: false, fetchedAt: null, rows: 0 });
+  const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
+  const solanaAddressLive = solana.address || solanaAddress();
+  // `address` also represents an attached-but-locked local wallet. It remains
+  // readable, but walletCanSign separately prevents any signature attempt.
+  const evmConnected = Boolean(wallet?.address);
+  const solanaConnected = Boolean(solanaAddressLive);
+  const walletConnected = evmConnected || solanaConnected;
+  const walletCanSign = Boolean((wallet?.isConnected && wallet?.address && !wallet?.locked) || solanaConnected);
+  const solanaReadPending = solanaConnected && (solanaRead.loading || solanaRead.status === 'unavailable');
   const [conversationId] = useState(() => {
     try {
       const saved = localStorage.getItem(CONVERSATION_KEY);
@@ -1345,49 +1408,117 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [navigate, currentPage]);
 
   const liveModuleServices = useMemo(() => {
-    const holdings = (multi?.rows || []).map((r) => ({
+    const evmBalances = evmConnected ? (multi?.rows || []).map((r) => ({
       symbol: r.symbol,
-      chainId: r.chainId,
-      valueUsd: Number.isFinite(Number(r.value)) ? Number(r.value) : null,
-      amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
-      address: r.address || null
+      name: r.name || null,
+      chainId: r.chainId ?? null,
+      valueUsd: finitePortfolioNumber(r.value),
+      amount: finitePortfolioNumber(r.amount),
+      address: r.address || null,
+      key: r.key || null,
+      dataStatus: r.dataStatus || 'client'
+    })) : [];
+    const solanaBalances = enrichSolanaHoldings(solanaRows, multi?.marketRows).map((row) => ({
+      symbol: row.symbol,
+      name: row.name || null,
+      chainId: 501,
+      chain: 501,
+      valueUsd: finitePortfolioNumber(row.valueUsd),
+      amount: finitePortfolioNumber(row.amount),
+      address: row.mint || row.address || null,
+      mint: row.mint || null,
+      key: row.key || row.mint || null,
+      unread: row.unread === true,
+      dataStatus: row.dataStatus || 'client',
+      priceDataStatus: row.priceDataStatus || 'unavailable'
     }));
-    const balances = holdings.map((h) => ({ ...h, value: h.valueUsd }));
+    const balances = [...solanaBalances, ...evmBalances].map((h) => ({ ...h, value: h.valueUsd }));
+    const holdings = balances.filter(hasPortfolioBalance);
+    const priced = holdings.filter((h) => finitePortfolioNumber(h.valueUsd) != null && Number(h.valueUsd) > 0);
+    const pricedValue = priced.reduce((sum, row) => sum + Number(row.valueUsd), 0);
+    const unpricedCount = holdings.length - priced.length;
+    const evmReads = evmConnected && Array.isArray(multi?.chainReads) ? multi.chainReads : [];
+    const evmFailed = evmConnected && Array.isArray(multi?.failedChains) ? multi.failedChains : [];
+    const evmStale = evmConnected && Array.isArray(multi?.staleChains) ? multi.staleChains : [];
+    const solanaChainRead = solanaConnected ? {
+      chainId: 501,
+      failed: solanaRead.failed === true,
+      stale: false,
+      rows: Number(solanaRead.rows) || 0,
+      unpriced: solanaBalances.filter((row) => !(finitePortfolioNumber(row.valueUsd) > 0) && Number(row.amount) > 1e-9).length,
+      partial: solanaRead.partial === true,
+      fetchedAt: solanaRead.fetchedAt || null
+    } : null;
+    const chainReads = [...evmReads, ...(solanaChainRead ? [solanaChainRead] : [])];
+    const failedChains = [...evmFailed, ...(solanaChainRead?.failed ? ['Solana'] : [])];
+    const staleChains = [...evmStale];
+    const hasFailedRead = failedChains.length > 0 || chainReads.some((read) => read?.failed === true);
+    const hasStaleRead = staleChains.length > 0 || chainReads.some((read) => read?.stale === true);
+    const balanceReadPending = Boolean((evmConnected && multi?.loading) || solanaReadPending);
+    const fromSnapshot = Boolean(evmConnected && multi?.fromSnapshot);
+    const partial = Boolean((evmConnected && multi?.partial) || unpricedCount > 0 || hasFailedRead || hasStaleRead
+      || fromSnapshot || (solanaConnected && solanaRead.partial === true));
+    const readComplete = Boolean(walletConnected && !balanceReadPending && !hasFailedRead && !hasStaleRead
+      && !fromSnapshot && !(solanaConnected && solanaRead.partial));
+    const freshestReadAt = Math.max(
+      evmConnected && !multi?.fromSnapshot ? finitePortfolioNumber(multi?.updatedAt) || 0 : 0,
+      solanaRead.fetchedAt || 0
+    );
     const walletSnap = {
-      connected: Boolean(wallet?.isConnected && wallet?.address),
-      isConnected: Boolean(wallet?.isConnected && wallet?.address),
-      canSign: Boolean(wallet?.address && !wallet?.locked),
-      address: wallet?.address || null,
-      chainId: wallet?.chainId || null,
+      connected: walletConnected,
+      isConnected: walletConnected,
+      canSign: walletCanSign,
+      address: wallet?.address || solanaAddressLive || null,
+      chainId: wallet?.address ? (wallet?.chainId || null) : (solanaConnected ? 501 : null),
       balances,
-      evmAddresses: wallet?.address ? [wallet.address] : []
+      evmAddresses: wallet?.address ? [wallet.address] : [],
+      solanaAddresses: solanaAddressLive ? [solanaAddressLive] : []
     };
     const portfolioSnap = {
-      dataStatus: multi?.loading ? 'pending' : multi?.partial ? 'partial'
-        : (holdings.length ? 'live' : (walletSnap.connected ? 'empty' : 'unavailable')),
-      // Only a priced, provider-backed read is capital evidence. The market
-      // layer can show offline prices while the wallet's RPC read succeeds.
+      dataStatus: balanceReadPending ? 'pending'
+        : holdings.length ? (partial ? 'partial' : 'live')
+          : walletConnected ? (hasFailedRead ? 'error' : readComplete ? 'empty' : 'partial')
+            : 'unavailable',
+      // A balance read and its price read are separate. Unknown/stale prices
+      // make valuation partial; they never erase a confirmed token balance.
       priceDataStatus: multi?.priceDataStatus || 'unavailable',
-      ...(!multi?.loading && !multi?.fromSnapshot && multi?.priceDataStatus === 'live'
-        && Number(multi?.updatedAt) > 0 && walletSnap.connected
-        ? { fetchedAt: Number(multi.updatedAt), source: 'portfolio' } : {}),
-      freshness: multi?.loading ? 'PENDING' : 'FRESH',
-      hydrating: Boolean(walletSnap.connected && multi?.loading),
-      totalValueUsd: Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null,
+      ...(!balanceReadPending && freshestReadAt > 0 && multi?.priceDataStatus === 'live'
+        && !multi?.fromSnapshot && !solanaRead.failed && !solanaRead.partial && walletConnected
+        ? { fetchedAt: freshestReadAt, source: 'portfolio' } : {}),
+      freshness: balanceReadPending ? 'PENDING'
+        : (fromSnapshot || hasStaleRead) ? 'STALE'
+          : partial ? 'PARTIAL' : 'FRESH',
+      hydrating: balanceReadPending,
+      totalValueUsd: pricedValue > 0 ? pricedValue : (readComplete && !holdings.length ? 0 : null),
       holdings,
-      partial: multi?.partial === true
+      rowsCount: holdings.length,
+      chainCount: (evmConnected && Array.isArray(multi?.chains) ? multi.chains.length : 0) + (solanaConnected ? 1 : 0),
+      failedChains,
+      staleChains,
+      chains: chainReads,
+      fromSnapshot,
+      balanceUpdatedAt: freshestReadAt || null,
+      partial
     };
-    const real = createRealServices({ wallet: walletSnap, portfolio: portfolioSnap });
+    const real = createRealServices({
+      wallet: walletSnap,
+      portfolio: portfolioSnap,
+      getReadProvider: typeof wallet?.getReadProvider === 'function'
+        ? (chainId) => wallet.getReadProvider(chainId)
+        : null
+    });
     real.walletService = {
       ...real.walletService,
       getContext: async () => walletSnap,
       getBalances: async () => {
-        const balStatus = multi?.loading ? 'pending' : (balances.length ? 'live' : (walletSnap.connected ? 'pending' : 'unavailable'));
+        const balanceDataStatus = balanceReadPending ? 'pending'
+          : !walletConnected ? 'unavailable'
+            : hasFailedRead || hasStaleRead ? 'partial' : 'live';
         return {
           ok: true,
           balances,
-          dataStatus: balStatus,
-          ...(balStatus === 'live' ? { fetchedAt: Date.now(), source: 'rpc' } : {})
+          dataStatus: balanceDataStatus,
+          ...(!balanceReadPending && freshestReadAt > 0 ? { fetchedAt: freshestReadAt, source: 'rpc' } : {})
         };
       }
     };
@@ -1395,23 +1526,35 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       ...real.portfolioService,
       getSummary: async () => portfolioSnap,
       analyze: async ({ holdings: h } = {}) => {
-        const list = h || holdings;
-        const priced = (list || []).filter((x) => Number.isFinite(Number(x.valueUsd)));
-        const total = priced.reduce((s, x) => s + Number(x.valueUsd), 0);
-        const sorted = [...(list || [])].sort((a, b) => (Number(b.valueUsd) || 0) - (Number(a.valueUsd) || 0));
+        const source = Array.isArray(h) ? h : holdings;
+        const list = source.filter(hasPortfolioBalance);
+        const pricedRows = list.filter((row) => finitePortfolioNumber(row.valueUsd) != null && Number(row.valueUsd) > 0);
+        const totalValueUsd = pricedRows.reduce((sum, row) => sum + Number(row.valueUsd), 0);
+        const tokenTotals = new Map();
+        for (const row of pricedRows) {
+          const symbol = String(row.symbol || '—').toUpperCase();
+          tokenTotals.set(symbol, (tokenTotals.get(symbol) || 0) + Number(row.valueUsd));
+        }
+        const largestToken = [...tokenTotals.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+        const largest = largestToken ? { symbol: largestToken[0], valueUsd: largestToken[1], aggregatedAcrossNetworks: true } : null;
+        const concentration = largest && totalValueUsd > 0 ? (Number(largest.valueUsd) / totalValueUsd) * 100 : null;
+        const missingPrices = list.length - pricedRows.length;
         return {
           ok: true,
-          totalValueUsd: priced.length ? total : null,
+          totalValueUsd: totalValueUsd > 0 ? totalValueUsd : null,
           holdings: list,
-          largest: sorted[0] || null,
-          concentration: sorted[0] && total ? (Number(sorted[0].valueUsd) / total) * 100 : null,
-          dataStatus: list?.length ? 'live' : 'unavailable',
-          ...(list?.length ? { fetchedAt: Date.now(), source: 'portfolio' } : {})
+          largest,
+          concentration,
+          concentrationBand: concentration == null ? null : concentration > 60 ? 'high' : concentration > 40 ? 'medium' : 'low',
+          pricedCount: pricedRows.length,
+          unpricedCount: missingPrices,
+          dataStatus: !pricedRows.length ? 'unavailable' : (missingPrices || portfolioSnap.partial ? 'partial' : 'live'),
+          ...(portfolioSnap.fetchedAt ? { fetchedAt: portfolioSnap.fetchedAt, source: 'portfolio' } : {})
         };
       }
     };
     return real;
-  }, [wallet, multi]);
+  }, [wallet, multi, solanaRows, solanaRead, solanaAddressLive, solanaConnected, solanaReadPending, walletConnected, walletCanSign, evmConnected]);
 
   const intentOS = useMemo(() => {
     const os = getIntentOS({
@@ -1504,8 +1647,6 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     return os;
   }, [liveModuleServices, navigate, locale, currentPage]);
 
-  const solana = useMemo(() => ({ available: solanaWalletAvailable(), address: solanaAddress() }), [solanaTick]);
-
   /*
    * ── VENUE DRIVERS ──────────────────────────────────────────────────────
    * The execution runtime used to receive swap-shaped hooks for every action,
@@ -1556,6 +1697,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         await warmAutonomyDrivers();
         if (cancelled) return;
         autonomyDriversRef.current = buildAutonomyDrivers({
+          // Pass WalletContext's public shape unchanged. The driver boundary
+          // normalizes `isConnected` (with `connected` as a legacy fallback),
+          // and requires an address before reporting an EVM connection.
           wallet,
           solana: { connected: Boolean(solana?.address), address: solana?.address || null },
           /* A lending plan is several signatures; the chat shows which one is
@@ -1573,54 +1717,95 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [wallet, solana?.address, solana?.available, solanaTick]);
 
 
-  const solanaAddressLive = solana.address || solanaAddress();
-  const evmConnected = Boolean(wallet?.isConnected && wallet?.address);
-  const solanaConnected = Boolean(solanaAddressLive);
-  const walletConnected = evmConnected || solanaConnected;
-  const walletCanSign = Boolean((evmConnected && !wallet?.locked) || solanaConnected);
-
   const aiContext = useMemo(() => {
-    const rows = Array.isArray(multi?.rows) ? multi.rows : [];
-    const evmRows = rows.map((r) => ({
+    const rows = evmConnected && Array.isArray(multi?.rows) ? multi.rows : [];
+    const evmRows = rows.map((r) => {
+      const read = Array.isArray(multi?.chainReads)
+        ? multi.chainReads.find((item) => Number(item?.chainId) === Number(r.chainId))
+        : null;
+      const balanceFreshness = multi?.fromSnapshot || read?.stale || read?.failed ? 'stale' : 'live';
+      return {
+        key: r.key || null,
+        symbol: r.symbol,
+        name: r.name || null,
+        chain: r.chainId ?? null,
+        chainId: r.chainId ?? null,
+        address: r.address || null,
+        amount: finitePortfolioNumber(r.amount),
+        valueUsd: finitePortfolioNumber(r.value),
+        priceUsd: finitePortfolioNumber(r.price),
+        priceProvenance: r.priceProvenance || 'unavailable',
+        balanceFreshness,
+        decimals: r.decimals ?? null,
+        dataStatus: 'client'
+      };
+    });
+    const solRows = enrichSolanaHoldings(solanaRows, multi?.marketRows).map((r) => ({
+      key: r.key || r.mint || null,
       symbol: r.symbol,
-      chain: r.chainId ?? null,
-      chainId: r.chainId ?? null,
-      amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
-      valueUsd: Number.isFinite(Number(r.value)) ? Number(r.value) : null,
-      dataStatus: 'client'
-    }));
-    const solRows = (solanaRows || []).map((r) => ({
-      symbol: r.symbol,
-      chain: r.chainId ?? null,
-      chainId: r.chainId ?? null,
-      amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null,
-      valueUsd: r.valueUsd != null && Number.isFinite(Number(r.valueUsd)) ? Number(r.valueUsd) : null,
-      dataStatus: 'client'
+      name: r.name || null,
+      chain: 501,
+      chainId: 501,
+      address: r.mint || r.address || null,
+      mint: r.mint || null,
+      amount: finitePortfolioNumber(r.amount),
+      valueUsd: finitePortfolioNumber(r.valueUsd),
+      priceUsd: finitePortfolioNumber(r.priceUsd),
+      priceProvenance: r.priceDataStatus || 'unavailable',
+      balanceFreshness: solanaRead.failed ? 'stale' : solanaRead.partial ? 'partial' : 'live',
+      decimals: r.decimals ?? null,
+      unread: r.unread === true,
+      dataStatus: r.dataStatus || 'client'
     }));
     const balances = [...solRows, ...evmRows];
-    const holdings = [
-      ...solRows.map((r) => ({ symbol: r.symbol, chainId: r.chainId ?? null, valueUsd: r.valueUsd, amount: r.amount })),
-      ...rows.map((r) => ({
-        symbol: r.symbol,
-        chainId: r.chainId ?? null,
-        valueUsd: Number.isFinite(Number(r.value)) ? Number(r.value) : null,
-        amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : null
-      }))
-    ];
-    const evmTotal = Number.isFinite(Number(multi?.totalValue)) ? Number(multi.totalValue) : null;
-    const solTotal = solRows.reduce((s, r) => s + (Number(r.valueUsd) || 0), 0);
-    const hydrating = Boolean(walletConnected && Boolean(multi?.loading));
-    /* Zero rows can mean «empty wallet» OR «every chain read failed» — the
-       AI must be able to tell those apart, so the per-chain failure list
-       travels with the portfolio snapshot (and a fully-failed read is
-       reported as an ERROR, never as a fresh empty book). */
-    const failedChains = Array.isArray(multi?.failedChains) ? multi.failedChains : [];
+    const holdings = balances.filter(hasPortfolioBalance).map((r) => ({
+      key: r.key,
+      symbol: r.symbol,
+      name: r.name,
+      address: r.address,
+      chain: r.chain,
+      chainId: r.chainId,
+      valueUsd: r.valueUsd,
+      amount: r.amount,
+      priceUsd: r.priceUsd,
+      priceProvenance: r.priceProvenance,
+      balanceFreshness: r.balanceFreshness,
+      decimals: r.decimals,
+      unread: r.unread === true,
+      dataStatus: r.dataStatus
+    }));
+    const pricedTotal = holdings.reduce((sum, row) => (
+      sum + (finitePortfolioNumber(row.valueUsd) != null && Number(row.valueUsd) > 0 ? Number(row.valueUsd) : 0)
+    ), 0);
+    const evmReads = evmConnected && Array.isArray(multi?.chainReads) ? multi.chainReads : [];
+    const evmFailures = evmConnected && Array.isArray(multi?.failedChains) ? multi.failedChains : [];
+    const evmStale = evmConnected && Array.isArray(multi?.staleChains) ? multi.staleChains : [];
+    const solanaChainRead = solanaConnected ? {
+      chainId: 501,
+      failed: solanaRead.failed === true,
+      stale: false,
+      rows: Number(solanaRead.rows) || 0,
+      unpriced: solRows.filter((row) => !(finitePortfolioNumber(row.valueUsd) > 0) && (row.unread || Number(row.amount) > 1e-9)).length,
+      partial: solanaRead.partial === true,
+      fetchedAt: solanaRead.fetchedAt || null
+    } : null;
+    const chainReads = [...evmReads, ...(solanaChainRead ? [solanaChainRead] : [])];
+    const failedChains = [...evmFailures, ...(solanaChainRead?.failed ? ['Solana'] : [])];
+    const staleChains = [...evmStale];
+    const hasFailedRead = failedChains.length > 0 || chainReads.some((read) => read?.failed === true);
+    const hasStaleRead = staleChains.length > 0 || chainReads.some((read) => read?.stale === true);
+    const hydrating = Boolean((evmConnected && multi?.loading) || solanaReadPending);
     const rowsCount = holdings.length;
-    const readFailed = Boolean(
-      walletConnected
-      && !hydrating
-      && rowsCount === 0
-      && (failedChains.length > 0 || (Array.isArray(multi?.chains) && multi.chains.length > 0))
+    const hasUnpriced = holdings.some((row) => !(finitePortfolioNumber(row.valueUsd) != null && Number(row.valueUsd) > 0));
+    const fromSnapshot = Boolean(evmConnected && multi?.fromSnapshot);
+    const partial = Boolean((evmConnected && multi?.partial) || hasUnpriced || hasFailedRead || hasStaleRead
+      || fromSnapshot || (solanaConnected && solanaRead.partial === true));
+    const readFailed = Boolean(walletConnected && !hydrating && rowsCount === 0 && hasFailedRead);
+    const readComplete = Boolean(walletConnected && !hydrating && !hasFailedRead && !hasStaleRead && !fromSnapshot
+      && !(solanaConnected && solanaRead.partial));
+    const freshestReadAt = Math.max(
+      evmConnected && !multi?.fromSnapshot ? finitePortfolioNumber(multi?.updatedAt) || 0 : 0,
+      solanaRead.fetchedAt || 0
     );
     return {
       wallet: {
@@ -1634,8 +1819,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         attached: Boolean(wallet?.address) || solanaConnected,
         locked: wallet?.locked === true,
         canSign: walletCanSign,
-        address: wallet?.address || null,
-        chainId: wallet?.chainId || null,
+        address: wallet?.address || solanaAddressLive || null,
+        chainId: wallet?.address ? (wallet?.chainId || null) : (solanaConnected ? 501 : null),
         hydrating,
         connectionStatus: hydrating ? 'HYDRATING' : (walletConnected ? 'CONNECTED' : 'DISCONNECTED'),
         evmAddresses: wallet?.address ? [wallet.address] : [],
@@ -1643,27 +1828,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       },
       portfolio: {
         dataStatus: hydrating ? 'pending' : readFailed ? 'error'
-          : canReadPortfolio ? (multi?.partial || solanaRows.length ? 'partial' : 'live')
-            : (solanaRows.length ? 'partial' : 'unavailable'),
-        // Solana's on-chain SOL amount has no independently priced USD value
-        // here; a bare balance must never make the combined USD book "live".
+          : rowsCount ? (partial ? 'partial' : 'live')
+            : walletConnected ? (hasFailedRead ? 'error' : readComplete ? 'empty' : 'partial') : 'unavailable',
         priceDataStatus: multi?.priceDataStatus || 'unavailable',
-        ...((canReadPortfolio || solanaRows.length) && !hydrating && !multi?.fromSnapshot
-          && multi?.priceDataStatus === 'live' && Number(multi?.updatedAt) > 0
-          ? { fetchedAt: Number(multi.updatedAt), source: 'portfolio' } : {}),
-        freshness: hydrating ? 'PENDING' : 'FRESH',
+        ...(readComplete && freshestReadAt > 0 && multi?.priceDataStatus === 'live' && !solanaRead.failed && !solanaRead.partial
+          ? { fetchedAt: freshestReadAt, source: 'portfolio' } : {}),
+        freshness: hydrating ? 'PENDING'
+          : (fromSnapshot || hasStaleRead) ? 'STALE'
+            : partial ? 'PARTIAL' : 'FRESH',
         hydrating,
-        totalValueUsd: evmTotal != null ? evmTotal + solTotal : (solTotal || null),
+        totalValueUsd: pricedTotal > 0 ? pricedTotal : (readComplete && rowsCount === 0 ? 0 : null),
         holdings,
         rowsCount,
-        chainCount: Array.isArray(multi?.chains) ? multi.chains.length : 0,
+        chainCount: (evmConnected && Array.isArray(multi?.chains) ? multi.chains.length : 0) + (solanaConnected ? 1 : 0),
         failedChains,
-        /* Per-chain evidence behind `partial`: which networks answered
-           completely, which kept a previous read, which have a non-zero row
-           with no price. The strategy preflight judges a plan on the chains it
-           signs on, not on all sixteen. */
-        chains: Array.isArray(multi?.chainReads) ? multi.chainReads : [],
-        partial: multi?.partial === true
+        staleChains,
+        fromSnapshot,
+        balanceUpdatedAt: freshestReadAt || null,
+        chains: chainReads,
+        partial
       },
       balances,
       openOrders: [],
@@ -1677,26 +1860,58 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       currentTab: getCurrentPageContext(currentPage)?.tab || 'overview',
       currentModule: getCurrentPageContext(currentPage)?.page || null
     };
-  }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, walletConnected, walletCanSign, currentPage]);
+  }, [wallet, multi, canReadPortfolio, solanaAddressLive, automations, memorySummary, solanaRows, solanaRead, solanaConnected, solanaReadPending, evmConnected, walletConnected, walletCanSign, currentPage]);
 
-  const portfolioContextForOs8 = useMemo(() => ({
-    totalValue: aiContext.portfolio?.totalValueUsd ?? null,
-    concentrationPct: (() => {
-      const holdings = Array.isArray(aiContext.portfolio?.holdings) ? aiContext.portfolio.holdings : [];
-      const total = Number(aiContext.portfolio?.totalValueUsd) || 0;
-      if (!holdings.length || total <= 0) return null;
-      const biggest = Math.max(...holdings.map((row) => Number(row?.valueUsd) || 0));
-      return biggest > 0 ? Number(((biggest / total) * 100).toFixed(2)) : null;
-    })(),
-    positions: (aiContext.portfolio?.holdings || []).map((row) => ({
-      symbol: row.symbol,
-      valueUsd: row.valueUsd,
-      amount: row.amount,
-      weightPct: Number(aiContext.portfolio?.totalValueUsd) > 0 && Number.isFinite(Number(row?.valueUsd))
-        ? Number((((Number(row.valueUsd) || 0) / Number(aiContext.portfolio.totalValueUsd)) * 100).toFixed(2))
-        : null
-    }))
-  }), [aiContext]);
+  const portfolioContextForOs8 = useMemo(() => {
+    const holdings = Array.isArray(aiContext.portfolio?.holdings) ? aiContext.portfolio.holdings : [];
+    const priced = holdings.filter((row) => finitePortfolioNumber(row?.valueUsd) != null && Number(row.valueUsd) > 0);
+    const pricedTotal = priced.reduce((sum, row) => sum + Number(row.valueUsd), 0);
+    const tokenTotals = new Map();
+    for (const row of priced) {
+      const symbol = String(row.symbol || '—').toUpperCase();
+      tokenTotals.set(symbol, (tokenTotals.get(symbol) || 0) + Number(row.valueUsd));
+    }
+    const largestTokenValue = Math.max(0, ...tokenTotals.values());
+    const portfolio = aiContext.portfolio || {};
+    const unpricedCount = Math.max(0, holdings.length - priced.length);
+    const hasFailedRead = (Array.isArray(portfolio.failedChains) && portfolio.failedChains.length > 0)
+      || (Array.isArray(portfolio.chains) && portfolio.chains.some((read) => read?.failed === true));
+    const hasStaleRead = (Array.isArray(portfolio.staleChains) && portfolio.staleChains.length > 0)
+      || (Array.isArray(portfolio.chains) && portfolio.chains.some((read) => read?.stale === true));
+    const completeRead = portfolio.dataStatus === 'live'
+      && portfolio.priceDataStatus === 'live'
+      && portfolio.partial !== true
+      && portfolio.fromSnapshot !== true
+      && !hasFailedRead && !hasStaleRead && unpricedCount === 0;
+    const dataStatus = portfolio.fromSnapshot || hasStaleRead ? 'stale'
+      : completeRead ? 'live'
+        : (portfolio.dataStatus || 'unavailable');
+    return {
+      // Never pass a priced subtotal as total capital to the planner. Keep it
+      // separately labeled so analysis can describe coverage without sizing
+      // a strategy against an incomplete wallet.
+      totalValue: completeRead && pricedTotal > 0 ? pricedTotal : null,
+      pricedSubtotal: pricedTotal > 0 ? pricedTotal : null,
+      dataStatus,
+      complete: completeRead,
+      concentrationBasis: 'largest-token-share-of-priced-holdings',
+      concentrationPct: pricedTotal > 0 && largestTokenValue > 0
+        ? Number(((largestTokenValue / pricedTotal) * 100).toFixed(2))
+        : null,
+      pricedCount: priced.length,
+      unpricedCount,
+      failedRead: hasFailedRead,
+      staleRead: hasStaleRead,
+      positions: holdings.map((row) => ({
+        symbol: row.symbol,
+        valueUsd: row.valueUsd,
+        amount: row.amount,
+        weightPct: pricedTotal > 0 && finitePortfolioNumber(row?.valueUsd) != null && Number(row.valueUsd) > 0
+          ? Number(((Number(row.valueUsd) / pricedTotal) * 100).toFixed(2))
+          : null
+      }))
+    };
+  }, [aiContext]);
 
   /*
    * ─── A STABLE SIGNATURE, BECAUSE THIS EFFECT POSTS ──────────────────────
@@ -1732,7 +1947,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const aiContextSig = useMemo(() => JSON.stringify({
     addr: wallet?.address || null,
-    chain: wallet?.chainId ?? null,
+    chain: wallet?.address ? (wallet?.chainId ?? null) : (solanaConnected ? 501 : null),
     sol: solanaAddressLive || null,
     sign: walletCanSign === true,
     hydrating: aiContext.wallet?.hydrating === true,
@@ -1750,8 +1965,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     lastIngestSigRef.current = aiContextSig;
     try { centralIngest(aiContext); } catch {}
     try {
-      setCentralWalletState(snapshotFromAppWallet(wallet, {
+      const contextChainId = wallet?.address ? wallet.chainId : (solanaConnected ? 501 : null);
+      setCentralWalletState(snapshotFromAppWallet({ ...wallet, chainId: contextChainId }, {
         solanaAddress: solanaAddressLive,
+        chainId: contextChainId,
         tokenBalances: aiContext.balances,
         hydrating: aiContext.wallet?.hydrating,
         canSign: walletCanSign,
@@ -1765,7 +1982,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setConvState((prev) => {
         const next = setConvWallet(prev, createWalletSnapshot({
           address: wallet?.address,
-          chainId: wallet?.chainId,
+          chainId: wallet?.address ? wallet?.chainId : (solanaConnected ? 501 : null),
           balances: aiContext.balances,
           canSign: walletCanSign,
           solanaAddress: solanaAddressLive
@@ -1779,13 +1996,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         return sameWalletFacts(prev?.walletSnapshot, next?.walletSnapshot) ? prev : next;
       });
     } catch {}
-  }, [aiContextSig, aiContext, wallet, solanaAddressLive, walletCanSign]);
+  }, [aiContextSig, aiContext, wallet, solanaAddressLive, solanaConnected, walletCanSign]);
 
   useEffect(() => {
     const walletContextForOs8 = {
       address: aiContext.wallet?.address || aiContext.wallet?.evmAddresses?.[0] || aiContext.wallet?.solanaAddresses?.[0] || null,
       chainId: aiContext.wallet?.chainId || null,
-      chainType: aiContext.wallet?.solanaAddresses?.length ? 'solana' : 'evm',
+      chainType: aiContext.wallet?.evmAddresses?.length ? 'evm' : (aiContext.wallet?.solanaAddresses?.length ? 'solana' : null),
       connected: aiContext.wallet?.connected === true,
       canSign: aiContext.wallet?.canSign === true,
       lastUpdated: Date.now()
@@ -2425,8 +2642,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         canSign: walletCanSign,
         balances: aiContext.balances,
         tokenBalances: aiContext.balances,
-        chains: wallet?.chainId ? [wallet.chainId] : [],
-        chainId: wallet?.chainId || null,
+        chains: wallet?.address && wallet?.chainId ? [wallet.chainId] : (solanaConnected ? [501] : []),
+        chainId: wallet?.address ? (wallet?.chainId || null) : (solanaConnected ? 501 : null),
         hydrating: aiContext.wallet?.hydrating,
         connectionStatus: aiContext.wallet?.connectionStatus,
         nativeBalance: wallet?.nativeBalance ?? null
@@ -2509,6 +2726,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setThinkingState('solving');
 
       const osIntentType = osResult.intent?.type || null;
+      const localBridgeUnavailable = osResult.execution?.unavailable === 'BRIDGE_EXECUTE_UNAVAILABLE';
       const needsFinancialConfirmation = Boolean(
         osResult.requiresConfirmation
         || osResult.human?.requiresConfirmation
@@ -2539,6 +2757,77 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         osIntentType === 'PLAY_MUSIC' ||
         (osResult.plan?.readOnly === true)
       );
+
+      /*
+       * LIVE LENDING REVIEW (supply / borrow). The local human layer read the
+       * reserve, the protocol oracle and — for a borrow — the account's
+       * collateral and health factor, and built a review whose action carries
+       * exactly those reviewed terms. That review IS the confirmation card:
+       * routing it to the server fallback would replace it with a generic card
+       * that has no live terms, and the venue executor (rightly) refuses to
+       * sign anything that was not reviewed. So it becomes the pending
+       * execution here, and Confirm takes the same /execute → approval digest →
+       * runtime → venue-executor path as every other financial action. Nothing
+       * is signed until the user confirms AND the wallet signs.
+       */
+      const lendingReviewAction = osResult.ok === true
+        && osResult.human?.card?.kind === 'LENDING_REVIEW'
+        && osResult.human?.requiresConfirmation === true
+        && Array.isArray(osResult.human.actions) && osResult.human.actions.length === 1
+        && osResult.human.actions[0]?.parameters?.requireLiveRateReview === true
+        && ['LEND', 'BORROW'].includes(String(osResult.human.actions[0]?.type || '').toUpperCase())
+        ? osResult.human.actions[0]
+        : null;
+      if (lendingReviewAction) {
+        setActivitySteps((prev) => prev.map((s) => s.id === 'analyze' ? { ...s, status: 'completed' } : s.id === 'response' ? { ...s, status: 'active' } : s));
+        setThinkingState('composing');
+        const reviewHuman = osResult.human;
+        const reviewMessage = {
+          id: makeId(),
+          role: 'ai',
+          content: visibleText(reviewHuman, osResult.message),
+          kind: 'assistant',
+          ui: reviewHuman.ui || { type: 'ACTION_CARD' },
+          card: reviewHuman.card,
+          actions: null,
+          statusCode: reviewHuman.code || null,
+          intentType: osResult.intent?.type || lendingReviewAction.type,
+          detectedIntent: osResult.intent?.primaryIntent || osResult.intent?.type || lendingReviewAction.type,
+          suggestions: [],
+          intentId: convStateRef.current.intentId,
+          confidence: osResult.confidence || null
+        };
+        setMessages((prev) => [...prev, reviewMessage]);
+        const reviewSnapshot = walletMgrRef.current.takeSnapshot(walletState);
+        setConvState((prev) => {
+          let next = appendConvMessage(prev, reviewMessage);
+          if (osResult.intent) next = setConvIntent(next, osResult.intent, { status: INTENT_STATUS.READY });
+          next = setMissingSlots(next, []);
+          next = setConvWallet(next, reviewSnapshot);
+          return setConvPending(next, { action: lendingReviewAction, intentId: null, snapshot: reviewSnapshot });
+        });
+        setSuggestions([]);
+        setPredictedNext([]);
+        setPendingExecution({
+          action: lendingReviewAction,
+          actions: [lendingReviewAction],
+          message,
+          card: reviewHuman.card,
+          sourceMessageId: reviewMessage.id,
+          rebalance: null,
+          actionPlan: null,
+          intentId: null,
+          intentType: String(lendingReviewAction.type).toUpperCase(),
+          osPlan: osResult.plan || null,
+          walletSnapshot: reviewSnapshot
+        });
+        addL1Message(reviewMessage);
+        busV6.emit(EVENTS_V6.AI_RESPONSE, { message: reviewMessage.content, intentType: reviewMessage.intentType });
+        setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        setThinkingState('idle');
+        stateMachineRef.current.transition(STATES.READY, { reason: 'lending_review_ready' });
+        return true;
+      }
 
       if (isLocalHandled) {
         setActivitySteps((prev) => prev.map((s) => s.id === 'analyze' ? { ...s, status: 'completed' } : s.id === 'response' ? { ...s, status: 'active' } : s));
@@ -2636,6 +2925,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           kind: 'assistant',
           ui: osResult.human?.ui || osResult.ui || { type: 'TEXT' },
           card: osResult.human?.card || osResult.card || null,
+          /* Live lending/borrowing rates (or an honest unavailable/stale
+             state) the human layer read from the Aave reserves this turn. */
+          yieldMarkets: osResult.human?.yieldMarkets || null,
           /* Route chips, opportunity rows and holdings the human layer built
              from real tool output — the bubble renderer turns these into
              buttons/lists instead of dropping them. */
@@ -2672,7 +2964,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           intentId: convStateRef.current.intentId,
           confidence: osResult.confidence || null,
           aggregated: orchestrationResult?.aggregated || null,
-          upgrade7: trimUpgrade7ForMessage(osResult?.upgrade7)
+          upgrade7: localBridgeUnavailable ? null : trimUpgrade7ForMessage(osResult?.upgrade7)
         };
 
         /* ─── SELF-HEALING PORTFOLIO READ ───────────────────────────────────
@@ -2682,6 +2974,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
            leaving the user stuck with the retry notice. */
         if ((osResult.human?.refresh || osResult.human?.pendingRefresh) && !opts.isAutoRetry) {
           try { if (typeof multi?.refresh === 'function') multi.refresh(); } catch { /* refresh is best-effort */ }
+          if (solanaAddressLive) setSolanaTick((tick) => tick + 1);
           setTimeout(() => {
             if (busyRef.current) return;
             void sendMessage(message, { ...opts, skipUserBubble: true, isAutoRetry: true });
@@ -2725,12 +3018,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             next = setConvQuestion(next, nextMessage.missingInfo, { questionId: qId, expectedType: osResult.intent?.missingInformation?.[0] || 'text' });
             obsRef.current.log({ intentId: prev.intentId, type: 'QUESTION_ASKED', payload: { question: nextMessage.missingInfo, questionId: qId } });
           } else {
-            // No missing info → ready or completed
-            next = updateIntentStatus(next, INTENT_STATUS.COMPLETED);
+            // An explicit unavailable result is not a completed operation.
+            // In particular, a missing bridge executor must never emit the
+            // success notice or increment successful-intent telemetry.
+            const terminalStatus = localBridgeUnavailable ? INTENT_STATUS.FAILED : INTENT_STATUS.COMPLETED;
+            next = updateIntentStatus(next, terminalStatus);
             next = setConvOffer(next, null);
-            lifecycleRef.current.updateStatus(next.intentId, INTENT_LIFECYCLE.COMPLETED);
-            busV6.emit(EVENTS_V6.INTENT_COMPLETED, { intentId: next.intentId });
-            metricsRef.current.recordIntent(true);
+            lifecycleRef.current.updateStatus(
+              next.intentId,
+              localBridgeUnavailable ? INTENT_LIFECYCLE.FAILED : INTENT_LIFECYCLE.COMPLETED
+            );
+            if (localBridgeUnavailable) {
+              metricsRef.current.recordIntent(false);
+            } else {
+              busV6.emit(EVENTS_V6.INTENT_COMPLETED, { intentId: next.intentId });
+              metricsRef.current.recordIntent(true);
+            }
           }
           return next;
         });
@@ -2741,11 +3044,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         addL1Message(nextMessage);
         busV6.emit(EVENTS_V6.AI_RESPONSE, { message: finalMessage, intentType: osResult.intent?.type });
 
-        setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        if (localBridgeUnavailable) setActivitySteps([]);
+        else setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
         setThinkingState('idle');
-        setTimeout(() => setActivitySteps([]), 2000);
+        if (!localBridgeUnavailable) setTimeout(() => setActivitySteps([]), 2000);
 
-        stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'local_handled' });
+        stateMachineRef.current.transition(
+          localBridgeUnavailable ? STATES.FAILED : STATES.COMPLETED,
+          { reason: localBridgeUnavailable ? 'bridge_executor_unavailable' : 'local_handled' }
+        );
 
         return true;
       }
@@ -2843,8 +3150,55 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         return true;
       }
 
-      const reply = res.reply || {};
-      const uiType = reply.ui?.type || 'TEXT';
+      let reply = res.reply || {};
+      let uiType = reply.ui?.type || 'TEXT';
+      let quoteReview = null;
+      let quoteReviewBaseContent = null;
+      const quoteAction = Array.isArray(reply.actions) ? reply.actions[0] : null;
+      if (uiType === 'ACTION_CARD' && isSwapQuoteAction(quoteAction)) {
+        setActivitySteps((prev) => {
+          const existing = prev.some((step) => step.id === 'quote_review');
+          const next = prev.map((step) => step.id === 'response'
+            ? { ...step, status: 'completed' }
+            : step);
+          return existing ? next.map((step) => step.id === 'quote_review' ? { ...step, status: 'active' } : step)
+            : [...next, { id: 'quote_review', label: 'گرفتن نرخ زنده', labelEn: 'Getting a live quote', status: 'active', orbState: 'searching' }];
+        });
+        let quoteResult = null;
+        try { quoteResult = await getSwapQuoteReview(quoteAction, wallet); } catch { quoteResult = { ok: false, code: 'QUOTE_FAILED' }; }
+        if (quoteResult?.ok === true && quoteResult.review) {
+          quoteReview = quoteResult.review;
+          const quoteLine = quoteReviewSummary(quoteReview, locale, t);
+          const priorText = visibleText(reply, t('intentAIOS.noReply'));
+          quoteReviewBaseContent = priorText;
+          reply = {
+            ...reply,
+            message: `${priorText}\n\n${quoteLine}`,
+            text: `${priorText}\n\n${quoteLine}`,
+            card: { ...(reply.card || {}), review: quoteReview },
+            quoteReview
+          };
+          setActivitySteps((prev) => prev.map((step) => step.id === 'quote_review' ? { ...step, status: 'completed' } : step));
+        } else {
+          const failure = humanizeError(quoteResult?.code || 'QUOTE_FAILED', { locale });
+          const failureText = locale.startsWith('fa')
+            ? `${failure.message}\n\nنرخ اجراییِ قابل‌تأیید دریافت نشد؛ کارت اجرا ساخته نشد و چیزی امضا یا ارسال نشد.`
+            : `${failure.message}\n\nNo verifiable executable quote was returned. The execution card was withheld; nothing was signed or sent.`;
+          reply = {
+            ...reply,
+            message: failureText,
+            text: failureText,
+            ui: { type: 'TEXT' },
+            card: null,
+            actions: [],
+            actionPlan: null,
+            pendingIntent: null,
+            requiresUserSignature: false
+          };
+          uiType = 'TEXT';
+          setActivitySteps((prev) => prev.map((step) => step.id === 'quote_review' ? { ...step, status: 'failed' } : step));
+        }
+      }
       const thanks = opts.resume ? formatConnectThanks(locale) : '';
       const body = visibleText(reply, t('intentAIOS.noReply'));
       const nextMessage = {
@@ -2854,6 +3208,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         kind: uiType === 'CONNECT_WALLET' ? 'connect' : (uiType === 'RESULT_CARD' ? 'result' : 'assistant'),
         ui: reply.ui || { type: 'TEXT' },
         card: reply.card || null,
+        quoteReview: quoteReview || reply.quoteReview || null,
+        quoteReviewBaseContent,
         actions: Array.isArray(reply.actions) ? reply.actions : [],
         rebalance: reply.rebalance || null,
         strategyRequest: reply.strategyRequest || null,
@@ -2994,6 +3350,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           actions: reply.actions || osResult.plan?.actions || [],
           message,
           card: reply.card || osResult.human?.card,
+          quoteReview: quoteReview || reply.quoteReview || null,
+          sourceMessageId: nextMessage.id,
           rebalance: reply.rebalance,
           actionPlan: reply.actionPlan || osResult.plan || null,
           intentId: reply.intentId || null,
@@ -3161,7 +3519,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           canSign: walletCanSign,
           address: wallet?.address || null,
           evmAddresses: aiContext.wallet?.evmAddresses,
-          chainId: wallet?.chainId || defaultChainId
+          solanaAddress: solanaAddressLive || null,
+          solanaAddresses: aiContext.wallet?.solanaAddresses || [],
+          solana: { connected: solanaConnected, address: solanaAddressLive || null },
+          chainId: wallet?.address ? (wallet?.chainId || defaultChainId) : (solanaConnected ? 501 : defaultChainId)
         },
         drivers: autonomyDriversRef.current
       }),
@@ -4278,7 +4639,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           canSign: walletCanSign,
           address: wallet?.address || null,
           evmAddresses: aiContext.wallet?.evmAddresses,
-          chainId: wallet?.chainId || defaultChainId
+          solanaAddress: solanaAddressLive || null,
+          solanaAddresses: aiContext.wallet?.solanaAddresses || [],
+          solana: { connected: solanaConnected, address: solanaAddressLive || null },
+          chainId: wallet?.address ? (wallet?.chainId || defaultChainId) : (solanaConnected ? 501 : defaultChainId)
         },
         drivers: autonomyDriversRef.current
       });
@@ -4290,9 +4654,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ? (fa
             ? `انجام شد. ${result.txHashes?.length || 1} تراکنش با رسید روی زنجیره تأیید شد.${result.txHash ? `\n${result.txHash}` : ''}`
             : `Done. ${result.txHashes?.length || 1} transaction(s) confirmed with a receipt on chain.${result.txHash ? `\n${result.txHash}` : ''}`)
-          : (fa
-            ? `اجرا نشد: ${result?.error?.code || result?.status || 'FAILED'}${result?.error?.message && result.error.message !== result.error.code ? ` — ${result.error.message}` : ''}. هیچ چیزی به عنوان موفق گزارش نمی‌شود.`
-            : `Not executed: ${result?.error?.code || result?.status || 'FAILED'}${result?.error?.message && result.error.message !== result.error.code ? ` — ${result.error.message}` : ''}. Nothing is being reported as a success.`),
+          : `${formatExecResult({ result, locale }).message}\n\n${fa
+            ? 'هیچ چیزی به عنوان موفق گزارش نمی‌شود.'
+            : 'Nothing is being reported as a success.'}`,
         kind: ok ? 'result' : 'error',
         ui: { type: 'RESULT_CARD' },
         card: ok && result.txHash ? { txHash: result.txHash } : null
@@ -4326,8 +4690,47 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const confirmExecution = useCallback(async () => {
     if (!pendingExecution || executing) return;
-    const { action, message, actions, rebalance, intentType, walletSnapshot } = pendingExecution;
+    const { action, message, actions, rebalance, intentType, walletSnapshot, quoteReview } = pendingExecution;
     const type = String(intentType || action?.type || '').toUpperCase();
+    if (isSwapQuoteAction(action) && (!quoteReview || !Number.isFinite(Number(quoteReview.expiresAt)) || Number(quoteReview.expiresAt) <= Date.now())) {
+      const content = quoteReview
+        ? t('intentAIOS.quoteReview.expired')
+        : humanizeError('QUOTE_REVIEW_REQUIRED', { locale }).message;
+      setMessages((prev) => [...prev, { id: makeId(), role: 'ai', content, kind: 'error', ui: { type: 'TEXT' } }]);
+      return;
+    }
+    /*
+     * Lending actions are executable ONLY from a live review: exact token
+     * amount and unit, oracle price, variable rate (and, for a borrow, the
+     * projected health factor), all read from the pool and shown on the card.
+     * A lending card that did not come from one (a generic server card, an old
+     * pending item) is refused here, before anything reaches the wallet — and
+     * a review older than its TTL is rebuilt from fresh reads rather than
+     * signed on stale numbers.
+     */
+    if (['LEND', 'BORROW'].includes(type)) {
+      const review = action?.parameters || {};
+      if (review.requireLiveRateReview !== true) {
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
+          content: humanizeError('LENDING_REVIEW_REQUIRED', { locale }).message
+        }]);
+        setPendingExecution(null);
+        return;
+      }
+      const reviewedAt = Number(review.reviewedAt);
+      if (!Number.isFinite(reviewedAt) || Date.now() - reviewedAt > LENDING_REVIEW_TTL_MS) {
+        setMessages((prev) => [...prev, {
+          id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+          content: `${humanizeError('LENDING_REVIEW_EXPIRED', { locale }).message}\n\n${locale.startsWith('fa')
+            ? 'بررسی تازه را همین حالا از زنجیره می‌خوانم.'
+            : 'I am reading a fresh review from the chain now.'}`
+        }]);
+        setPendingExecution(null);
+        if (message) void sendMessage(message, { skipUserBubble: true });
+        return;
+      }
+    }
     if (!walletConnected) {
       openWalletSheet(message, type);
       return;
@@ -4541,7 +4944,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         canSign: walletCanSign,
         address: wallet?.address || null,
         evmAddresses: aiContext.wallet.evmAddresses,
-        chainId: wallet?.chainId || defaultChainId
+        solanaAddress: solanaAddressLive || null,
+        solanaAddresses: aiContext.wallet.solanaAddresses || [],
+        solana: { connected: solanaConnected, address: solanaAddressLive || null },
+        chainId: wallet?.address ? (wallet?.chainId || defaultChainId) : (solanaConnected ? 501 : defaultChainId)
       };
       const plannedActions = (prepared?.actionPlan?.actions?.length
         ? prepared.actionPlan.actions
@@ -4578,6 +4984,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           return;
         }
       }
+      const executionActions = (plannedActions || []).map((planned, index) => {
+        if (index !== 0 || !quoteReview || !isSwapQuoteAction(planned)) return planned;
+        return {
+          ...planned,
+          amountUnit: planned.amountUnit || planned.from,
+          quoteReview,
+          requiresQuoteReview: true
+        };
+      });
       setActivitySteps((prev) => prev.map((s) => s.id === 'risk_check' ? { ...s, status: 'completed' } : s.id === 'executing' ? { ...s, status: 'active' } : s));
 
       let result;
@@ -4592,7 +5007,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         });
       } else {
         result = await runExecutionPlan({
-          actions: plannedActions,
+          actions: executionActions,
           hooks,
           wallet: walletSnap,
           /* Without this every non-swap step fails as VENUE_DRIVER_MISSING —
@@ -4705,7 +5120,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setProgress(null);
       setThinkingState('idle');
     }
-  }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet, conversationId, multi]);
+  }, [pendingExecution, executing, aiContext, wallet, walletConnected, walletCanSign, defaultChainId, locale, t, openWalletSheet, conversationId, multi, sendMessage]);
 
   const chooseOption = useCallback(async (msg, choice) => {
     if (!choice) return;
@@ -4892,15 +5307,61 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   useEffect(() => {
     if (!solanaAddressLive) {
       setSolanaRows([]);
+      setSolanaRead({ status: 'unavailable', loading: false, failed: false, partial: false, fetchedAt: null, rows: 0 });
       return undefined;
     }
     let cancelled = false;
+    setSolanaRows([]);
+    setSolanaRead({ status: 'pending', loading: true, failed: false, partial: false, fetchedAt: null, rows: 0 });
     void (async () => {
       try {
-        const sol = await getSolanaBalance(solanaAddressLive);
-        if (!cancelled) setSolanaRows([{ symbol: 'SOL', chainId: 501, amount: sol, valueUsd: null, dataStatus: 'live' }]);
-      } catch {
-        if (!cancelled) setSolanaRows([]);
+        const [portfolioModule, assetsModule, solanaModule] = await Promise.all([
+          import('../lib/solana/portfolio.js'),
+          import('../lib/solanaAssets.js'),
+          import('../lib/solana.js')
+        ]);
+        const result = await portfolioModule.readSolanaPortfolio(solanaAddressLive);
+        if (cancelled) return;
+        const findAsset = assetsModule.findAsset;
+        const { SOL_MINT, USDC_MINT, USDT_MINT } = solanaModule;
+        const holdings = (Array.isArray(result?.holdings) ? result.holdings : []).map((row) => {
+          const asset = findAsset?.(row?.mint);
+          const coingeckoId = asset?.coingeckoId
+            || (row?.mint === SOL_MINT ? 'solana'
+              : row?.mint === USDC_MINT ? 'usd-coin'
+                : row?.mint === USDT_MINT ? 'tether' : null);
+          return {
+            ...row,
+            chain: 501,
+            chainId: 501,
+            address: row?.mint || null,
+            coingeckoId,
+            valueUsd: null,
+            dataStatus: result?.ok && !result?.partial ? 'live' : 'partial'
+          };
+        });
+        setSolanaRows(holdings);
+        setSolanaRead({
+          status: result?.ok ? (result.partial ? 'partial' : 'live') : 'failed',
+          loading: false,
+          failed: result?.ok !== true,
+          partial: result?.ok !== true || result?.partial === true,
+          fetchedAt: result?.ok ? Date.now() : null,
+          rows: holdings.length,
+          code: result?.code || null
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setSolanaRows([]);
+        setSolanaRead({
+          status: 'failed',
+          loading: false,
+          failed: true,
+          partial: true,
+          fetchedAt: null,
+          rows: 0,
+          code: error?.code || 'SOLANA_READ_FAILED'
+        });
       }
     })();
     return () => { cancelled = true; };
@@ -5109,6 +5570,41 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
   }, [conversationId]);
 
+  const refreshPendingSwapQuote = useCallback(async () => {
+    const pending = pendingExecutionRef.current || pendingExecution;
+    if (!pending || !isSwapQuoteAction(pending.action) || quoteRefreshing) return;
+    setQuoteRefreshing(true);
+    try {
+      const quoted = await getSwapQuoteReview(pending.action, wallet).catch(() => ({ ok: false, code: 'QUOTE_FAILED' }));
+      if (quoted?.ok !== true || !quoted.review) {
+        const failure = humanizeError(quoted?.code || 'QUOTE_FAILED', { locale });
+        pushTurn({ id: makeId(), role: 'ai', content: failure.message, kind: 'error', ui: { type: 'TEXT' } });
+        return;
+      }
+      const review = quoted.review;
+      setPendingExecution((current) => {
+        if (!current || (pending.sourceMessageId
+          ? current.sourceMessageId !== pending.sourceMessageId
+          : current !== pending)) return current;
+        return { ...current, quoteReview: review, card: { ...(current.card || {}), review } };
+      });
+      if (pending.sourceMessageId) {
+        setMessages((prev) => prev.map((message) => {
+          if (message.id !== pending.sourceMessageId) return message;
+          const base = message.quoteReviewBaseContent;
+          return {
+            ...message,
+            ...(base != null ? { content: `${base}\n\n${quoteReviewSummary(review, locale, t)}` } : {}),
+            quoteReview: review,
+            card: { ...(message.card || {}), review }
+          };
+        }));
+      }
+    } finally {
+      setQuoteRefreshing(false);
+    }
+  }, [pendingExecution, quoteRefreshing, wallet, locale, t, pushTurn]);
+
   const toggleAutomation = useCallback(async (row) => {
     if (!row) return;
     const fa = locale.startsWith('fa');
@@ -5217,7 +5713,17 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     : null;
 
   const card = pendingExecution?.card || null;
+  const quoteReviewCard = pendingExecution?.quoteReview || card?.review || null;
+  const quoteReviewExpired = quoteReviewCard?.schema === 'fbt.ai-swap-quote-review.v1'
+    && Number(quoteReviewCard.expiresAt) <= Math.max(quoteClock, Date.now());
 
+  useEffect(() => {
+    if (quoteReviewCard?.schema !== 'fbt.ai-swap-quote-review.v1') return undefined;
+    const expiresAt = Number(quoteReviewCard.expiresAt);
+    if (!Number.isFinite(expiresAt)) return undefined;
+    const timer = window.setTimeout(() => setQuoteClock(Date.now()), Math.max(0, expiresAt - Date.now()) + 1);
+    return () => window.clearTimeout(timer);
+  }, [quoteReviewCard?.schema, quoteReviewCard?.expiresAt]);
 
   const persistedCountRef = useRef(0);
   useEffect(() => {
@@ -6859,6 +7365,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onFeedback={sendFeedback}
                 onOpenRoute={openBubbleRoute}
                 onOsChip={sendSuggested}
+                onPortfolioPrompt={sendSuggested}
                 onGoalExecute={executeGoalOption}
                 onStrategyExecute={runStrategyStage}
                 onStrategyMonitor={monitorStrategy}
@@ -6907,6 +7414,27 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                   {card?.title || t('intentAIOS.readyTitle')}
                 </div>
                 {card?.headline ? <div className="iaos-exec-line">{card.headline}</div> : null}
+                {quoteReviewCard?.schema === 'fbt.ai-swap-quote-review.v1' ? (
+                  <IntentSwapQuoteReview
+                    review={quoteReviewCard}
+                    locale={locale}
+                    expired={quoteReviewExpired}
+                    refreshing={quoteRefreshing}
+                    refreshDisabled={executing}
+                    onRefresh={refreshPendingSwapQuote}
+                    t={t}
+                  />
+                ) : isSwapQuoteAction(pendingExecution?.action) ? (
+                  <section className="iaos-quote-review" data-testid="intent-ai-quote-review-unavailable">
+                    <p className="iaos-quote-warning">{humanizeError('QUOTE_REVIEW_REQUIRED', { locale }).message}</p>
+                    <button type="button" className="iaos-quote-refresh" onClick={refreshPendingSwapQuote} disabled={quoteRefreshing || executing} aria-busy={quoteRefreshing}>
+                      {quoteRefreshing ? t('intentAIOS.quoteReview.refreshing') : t('intentAIOS.quoteReview.refresh')}
+                    </button>
+                  </section>
+                ) : null}
+                {card?.kind === 'LENDING_REVIEW' ? (
+                  <LendingActionReviewCard review={card.review || quoteReviewCard || {}} locale={locale} />
+                ) : null}
                 {Array.isArray(card?.rows) && card.rows.length ? (
                   <div className="iaos-alloc" data-testid="intent-ai-allocation">
                     {card.rows.map((row) => (

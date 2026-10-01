@@ -11312,6 +11312,34 @@
     "drawerNote": "These buttons are only shortcuts; the assistant works without them.",
     "solanaConnect": "Connect Solana wallet",
     "readyTitle": "Ready to execute",
+    "quoteReview": {
+      "title": "Swap quote review",
+      "quotedAt": "Quoted at {{time}}",
+      "expiresAt": "Review expires at {{time}}",
+      "expired": "This quote has expired. Refresh it before confirming.",
+      "from": "You pay",
+      "to": "Estimated output",
+      "minimum": "Minimum received",
+      "network": "Network",
+      "route": "Route provider",
+      "sourcesCompared": "{{count}} quote sources compared",
+      "hops": "{{count}} route hops",
+      "platformFee": "Platform fee",
+      "slippage": "Max slippage",
+      "gas": "Estimated network gas",
+      "priceImpact": "Price impact",
+      "notReported": "Not reported",
+      "mev": "MEV protection",
+      "mevUnknown": "Not independently verified",
+      "tokenAddresses": "Token contract addresses",
+      "inputToken": "Input token",
+      "outputToken": "Output token",
+      "nativeAsset": "Native asset (no token contract)",
+      "warning": "Quotes can move between review and signing. Before any signature, the app obtains a fresh quote. If the input, route, fee or slippage changes, or the fresh minimum output is below the amount shown here, execution stops and requires a new review.",
+      "refresh": "Refresh quote",
+      "refreshing": "Refreshing quote…",
+      "summary": "A live quote is ready to review: minimum {{minimum}} {{to}} on {{network}}. MEV protection is not independently verified; the quote will be checked again before signing."
+    },
     "working": "Working…",
     "confirm": "Confirm",
     "edit": "Edit",
@@ -11322,7 +11350,75 @@
     "executionFailed": "That did not go through. The transaction was not completed.",
     "connectWallet": "Connect wallet",
     "voiceInput": "Speak your request",
-    "listening": "Listening…"
+    "listening": "Listening…",
+    "portfolioCard": {
+      "title": "Portfolio intelligence",
+      "subtitle": "Balances from supported networks; price coverage can vary.",
+      "asOf": "Balances as of {{time}}",
+      "status": {
+        "live": "Balances and prices current",
+        "partial": "Partial portfolio read",
+        "stale": "Some balances or prices may be stale",
+        "pending": "Refreshing wallet data",
+        "unavailable": "Portfolio data unavailable",
+        "empty": "Empty (verified)"
+      },
+      "metric": {
+        "total": "Portfolio value",
+        "pricedValue": "Priced holdings subtotal",
+        "stablecoins": "Recognized USD stablecoins",
+        "concentration": "Largest token share",
+        "pricedOnly": "Among priced holdings only",
+        "pnl": "Unrealized P&L",
+        "riskScore": "Wallet-mix heuristic score",
+        "notAvailable": "Not available",
+        "noCostBasis": "Cost basis and purchase history are not connected.",
+        "riskUnavailable": "Requires a complete, current read with at least one priced holding.",
+        "notComputed": "Portfolio metrics",
+        "riskBasis": "Heuristic: priced-token concentration, stablecoin share, holding rows and networks; higher means more exposure."
+      },
+      "note": {
+        "pricedSubtotal": "Only holdings with a valid price are included in this value.",
+        "risk": "This wallet-mix score is a heuristic, not a comprehensive risk score. It uses priced holdings, recognized stablecoins, holding rows and networks; it excludes market volatility, liabilities, cost basis and assets outside this wallet.",
+        "unpricedCount": "{{count}} holding(s) without a valid price",
+        "failedCount": "{{count}} network read(s) not confirmed",
+        "staleCount": "{{count}} network(s) may be stale"
+      },
+      "tab": {
+        "assets": "Assets",
+        "networks": "Networks"
+      },
+      "row": {
+        "priceUnavailable": "Price unavailable",
+        "noHoldings": "No non-zero balances are available in this snapshot."
+      },
+      "network": {
+        "failed": "Read failed",
+        "stale": "Stale snapshot",
+        "live": "Balance read current",
+        "assetCount": "{{count}} asset(s)",
+        "noNetworks": "No network balances to display.",
+        "partial": "Partial read"
+      },
+      "action": {
+        "risk": "Ask about risk",
+        "allocation": "Ask about allocation",
+        "rebalance": "Preview rebalance",
+        "fullPortfolio": "Open full portfolio",
+        "showAll": "Show all {{count}}",
+        "showLess": "Show fewer"
+      },
+      "prompt": {
+        "risk": "Analyze my portfolio risk. State what is measured and what is missing; do not present concentration as a complete risk score.",
+        "allocation": "Show my current portfolio allocation by token and network.",
+        "rebalance": "Help me choose a target allocation and prepare a rebalance preview with amounts. Ask for my target first; do not execute anything."
+      },
+      "riskBand": {
+        "low": "Lower exposure",
+        "medium": "Moderate exposure",
+        "high": "Higher exposure"
+      }
+    }
   },
   "lab2": {
     "title": "Lab",

@@ -188,7 +188,10 @@ export function classifyQuestionType(text) {
   }
 
   // 4. Recommendation request ("به نظرت بیت بخرم؟", "چی بخرم؟", "پیشنهادت چیه؟")
-  if (/(نظرت|پیشنهاد|چی بخرم|کدوم ارز|به نظرت|should i buy|what to buy|recommend)/i.test(norm)) {
+  // Lending questions must stay analysis, not accidentally become a supply
+  // order just because they contain the word "lend" or "borrow".
+  if (/(should i|can i|could i|would you|recommend|نظرت|پیشنهاد|به نظرت|آیا|بهتر).*(lend|borrow|supply|deposit|وام|قرض|لند|سپرده)|(?:lend|borrow|supply|deposit|وام|قرض|لند|سپرده).*(بهتر|چطور|آیا|نظرت)/i.test(norm)
+    || /(نظرت|پیشنهاد|چی بخرم|کدوم ارز|به نظرت|should i buy|what to buy|recommend)/i.test(norm)) {
     return QUESTION_TYPES.RECOMMENDATION;
   }
 
@@ -207,8 +210,10 @@ export function classifyQuestionType(text) {
     return QUESTION_TYPES.GOAL_PLANNING;
   }
 
-  // 8. Explicit execution request ("بخر", "بفروش", "سواپ کن", "ارسال کن")
-  if (/(بخر|خرید کن|بفروش|فروش|سواپ|تبدیل کن|بفرست|انتقال بده|buy\b|sell\b|swap\b|send\b|transfer\b)/i.test(norm)) {
+  // 8. Explicit execution request ("بخر", "بفروش", "سواپ کن", "ارسال کن").
+  // These verbs only classify the utterance; the caller still requires a
+  // positive amount, an asset, a live plan and an explicit confirmation.
+  if (/(بخر|خرید کن|بفروش|فروش|سواپ|تبدیل کن|بفرست|انتقال بده|buy\b|sell\b|swap\b|send\b|transfer\b|supply\b|lend\b|deposit\b|borrow\b|سپرده[‌\s]*(?:کن|بگذار|بذار)|وام[‌\s]*بده|لند[‌\s]*کن|واریز[‌\s]*کن)/i.test(norm)) {
     return QUESTION_TYPES.EXECUTION;
   }
 

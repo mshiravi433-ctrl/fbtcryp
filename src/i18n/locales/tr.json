@@ -2404,6 +2404,34 @@
     "drawerNote": "Bu düğmeler yalnızca kısayol; asistan onlarsız da çalışır.",
     "solanaConnect": "Solana cüzdanını bağla",
     "readyTitle": "Çalıştırmaya hazır",
+    "quoteReview": {
+      "title": "Swap kotasyonu incelemesi",
+      "quotedAt": "Kotasyon zamanı: {{time}}",
+      "expiresAt": "İnceleme {{time}} saatinde sona erer",
+      "expired": "Bu kotasyonun süresi doldu. Onaylamadan önce yenileyin.",
+      "from": "Ödeyeceğiniz",
+      "to": "Tahmini çıktı",
+      "minimum": "Alınacak minimum miktar",
+      "network": "Ağ",
+      "route": "Rota sağlayıcısı",
+      "sourcesCompared": "{{count}} kotasyon kaynağı karşılaştırıldı",
+      "hops": "Rotada {{count}} adım",
+      "platformFee": "Platform ücreti",
+      "slippage": "Maksimum kayma",
+      "gas": "Tahmini ağ gas ücreti",
+      "priceImpact": "Fiyat etkisi",
+      "notReported": "Bildirilmedi",
+      "mev": "MEV koruması",
+      "mevUnknown": "Bağımsız olarak doğrulanmadı",
+      "tokenAddresses": "Token sözleşme adresleri",
+      "inputToken": "Girdi tokeni",
+      "outputToken": "Çıktı tokeni",
+      "nativeAsset": "Ağın yerel varlığı (token sözleşmesi yok)",
+      "warning": "Kotasyon, inceleme ile imza arasında değişebilir. Herhangi bir imzadan önce uygulama güncel kotasyon alır. Girdi tutarı, rota, ücret veya kayma değişirse ya da güncel minimum çıktı burada gösterilenden düşükse işlem durdurulur ve yeniden inceleme gerekir.",
+      "refresh": "Kotasyonu yenile",
+      "refreshing": "Kotasyon yenileniyor…",
+      "summary": "Canlı kotasyon incelemeye hazır: {{network}} ağında minimum {{minimum}} {{to}}. MEV koruması bağımsız olarak doğrulanmadı; imzadan önce kotasyon yeniden kontrol edilecek."
+    },
     "working": "Çalışıyor…",
     "confirm": "Onayla",
     "edit": "Düzenle",
@@ -2412,7 +2440,75 @@
     "executionReady": "Çalıştırmaya hazır. Cüzdan imzası için gerçek işlem ekranına yönlendiriyorum.",
     "executionBlocked": "Cüzdan’da sırada — imzan hâlâ gerekli.",
     "executionFailed": "Gerçekleşmedi. İşlem tamamlanmadı.",
-    "connectWallet": "Cüzdanı bağla"
+    "connectWallet": "Cüzdanı bağla",
+    "portfolioCard": {
+      "title": "Portföy zekâsı",
+      "subtitle": "Desteklenen ağlardaki bakiyeler; fiyat kapsamı değişebilir.",
+      "asOf": "{{time}} itibarıyla bakiyeler",
+      "status": {
+        "live": "Bakiyeler ve fiyatlar güncel",
+        "partial": "Portföy okuması kısmi",
+        "stale": "Bazı bakiyeler veya fiyatlar eski olabilir",
+        "pending": "Cüzdan verileri eşitleniyor",
+        "unavailable": "Portföy verileri kullanılamıyor",
+        "empty": "Boş (doğrulandı)"
+      },
+      "metric": {
+        "total": "Portföy değeri",
+        "pricedValue": "Fiyatı bulunan varlıkların ara toplamı",
+        "stablecoins": "Tanınan USD stablecoin’leri",
+        "concentration": "En büyük token payı",
+        "pricedOnly": "Yalnızca fiyatı bulunan varlıklarda",
+        "pnl": "Gerçekleşmemiş K/Z",
+        "riskScore": "Cüzdan dağılımı sezgisel puanı",
+        "notAvailable": "Kullanılamıyor",
+        "noCostBasis": "Maliyet esası ve satın alma geçmişi bağlı değil.",
+        "riskUnavailable": "En az bir fiyatlanmış varlık içeren eksiksiz ve güncel bir okuma gerekir.",
+        "notComputed": "Portföy metrikleri",
+        "riskBasis": "Sezgisel ölçüm: fiyatlanan token yoğunluğu, stablecoin payı ve varlık/ağ sayısı; yüksek puan bu modelde daha fazla maruziyet demektir."
+      },
+      "note": {
+        "pricedSubtotal": "Bu değere yalnızca geçerli fiyatı olan varlıklar dahildir.",
+        "risk": "Bu cüzdan dağılımı puanı sezgiseldir; kapsamlı bir risk değerlendirmesi değildir. Fiyatlanan varlıkları, tanınan stablecoinleri ve varlık/ağ sayısını kullanır; piyasa oynaklığını, yükümlülükleri, maliyet esasını veya bu cüzdan dışındaki varlıkları değerlendirmez.",
+        "unpricedCount": "Geçerli fiyatı olmayan {{count}} varlık",
+        "failedCount": "{{count}} ağ okuması doğrulanmadı",
+        "staleCount": "{{count}} ağın verileri eski olabilir"
+      },
+      "tab": {
+        "assets": "Varlıklar",
+        "networks": "Ağlar"
+      },
+      "row": {
+        "priceUnavailable": "Fiyat kullanılamıyor",
+        "noHoldings": "Bu görüntüde sıfırdan farklı bakiye yok."
+      },
+      "network": {
+        "failed": "Okuma başarısız",
+        "stale": "Eski görüntü",
+        "live": "Bakiye okuması güncel",
+        "assetCount": "{{count}} varlık",
+        "noNetworks": "Gösterilecek ağ bakiyesi yok.",
+        "partial": "Kısmi okuma"
+      },
+      "action": {
+        "risk": "Riski sor",
+        "allocation": "Dağılımı sor",
+        "rebalance": "Dengeleme önizlemesi",
+        "fullPortfolio": "Tam portföyü aç",
+        "showAll": "Tümünü göster ({{count}})",
+        "showLess": "Daha az göster"
+      },
+      "prompt": {
+        "risk": "Portföy riskimi analiz et. Nelerin ölçüldüğünü ve nelerin eksik olduğunu belirt; yoğunlaşmayı tam bir risk puanı gibi sunma.",
+        "allocation": "Mevcut portföy dağılımımı token ve ağ bazında göster.",
+        "rebalance": "Hedef dağılımı seçmeme yardım et ve tutarları içeren bir dengeleme önizlemesi hazırla. Önce hedefimi sor; hiçbir şeyi yürütme."
+      },
+      "riskBand": {
+        "low": "Daha düşük maruziyet",
+        "medium": "Orta maruziyet",
+        "high": "Daha yüksek maruziyet"
+      }
+    }
   },
   "solana": {
     "wallet": {

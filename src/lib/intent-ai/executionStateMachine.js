@@ -44,7 +44,20 @@ export const EXECUTION_FAILURES = Object.freeze([
   'PROVIDER_FAILED',
   'NETWORK_FAILED',
   'WALLET_REQUIRED',
-  'ALLOWANCE_REQUIRED'
+  'ALLOWANCE_REQUIRED',
+  'ALLOWANCE_READ_FAILED',
+  'QUOTE_REVIEW_REQUIRED',
+  'QUOTE_REVIEW_EXPIRED',
+  'QUOTE_CHANGED',
+  'BALANCE_UNVERIFIED',
+  'AMOUNT_UNIT_REQUIRED',
+  'CHAIN_MISMATCH',
+  'CHAIN_SWITCH_FAILED',
+  'UNSUPPORTED_CHAIN',
+  'TOKEN_NOT_LISTED',
+  'BRIDGE_EXECUTE_UNAVAILABLE',
+  'FARM_EXECUTOR_UNAVAILABLE',
+  'LENDING_VENUE_UNAVAILABLE'
 ]);
 
 const FORWARD = Object.freeze({
@@ -68,6 +81,10 @@ function aid() {
 }
 
 export function createExecutionAction(input = {}, { now = nowMs() } = {}) {
+  const amountUsd = input.amountUsd !== null && input.amountUsd !== undefined && input.amountUsd !== ''
+    && Number.isFinite(Number(input.amountUsd)) ? Number(input.amountUsd) : null;
+  const chainId = input.chainId !== null && input.chainId !== undefined && input.chainId !== ''
+    && Number.isFinite(Number(input.chainId)) ? Number(input.chainId) : null;
   return {
     schema: EXECUTION_ACTION_SCHEMA,
     id: input.id || aid(),
@@ -76,8 +93,16 @@ export function createExecutionAction(input = {}, { now = nowMs() } = {}) {
     to: input.to || input.toSymbol || null,
     asset: input.asset || input.to || input.from || null,
     amount: input.amount ?? null,
-    amountUsd: Number.isFinite(Number(input.amountUsd)) ? Number(input.amountUsd) : null,
-    chainId: Number.isFinite(Number(input.chainId)) ? Number(input.chainId) : null,
+    amountUnit: input.amountUnit || null,
+    amountUsd,
+    chainId,
+    venue: input.venue || null,
+    protocol: input.protocol || null,
+    market: input.market || null,
+    op: input.op || null,
+    parameters: input.parameters && typeof input.parameters === 'object' ? input.parameters : {},
+    quoteReview: input.quoteReview || null,
+    requiresQuoteReview: input.requiresQuoteReview === true,
     status: 'CREATED',
     txHash: null,
     receipt: null,

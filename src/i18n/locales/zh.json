@@ -2397,6 +2397,34 @@
     "drawerNote": "这些按钮只是快捷方式；没有它们助手也能工作。",
     "solanaConnect": "连接 Solana 钱包",
     "readyTitle": "准备执行",
+    "quoteReview": {
+      "title": "兑换报价确认",
+      "quotedAt": "报价时间：{{time}}",
+      "expiresAt": "确认有效期至 {{time}}",
+      "expired": "此报价已过期。确认前请刷新报价。",
+      "from": "支付",
+      "to": "预计获得",
+      "minimum": "最低到账",
+      "network": "网络",
+      "route": "路由提供方",
+      "sourcesCompared": "已比较 {{count}} 个报价来源",
+      "hops": "路由经过 {{count}} 跳",
+      "platformFee": "平台费",
+      "slippage": "最大滑点",
+      "gas": "预估网络 Gas 费",
+      "priceImpact": "价格影响",
+      "notReported": "未提供",
+      "mev": "MEV 保护",
+      "mevUnknown": "未经独立验证",
+      "tokenAddresses": "代币合约地址",
+      "inputToken": "输入代币",
+      "outputToken": "输出代币",
+      "nativeAsset": "网络原生资产（无代币合约）",
+      "warning": "报价可能在确认和签名之间变化。每次签名前，应用都会重新获取报价。如果输入金额、路由、费用或滑点发生变化，或最新最低到账金额低于此处显示的数值，执行将停止并要求重新确认。",
+      "refresh": "刷新报价",
+      "refreshing": "正在刷新报价…",
+      "summary": "实时报价已准备好供你确认：{{network}} 网络最低到账 {{minimum}} {{to}}。MEV 保护未经独立验证；签名前会再次检查报价。"
+    },
     "working": "处理中…",
     "confirm": "确认",
     "edit": "编辑",
@@ -2405,7 +2433,75 @@
     "executionReady": "准备执行。正在带你前往真实的执行页面以完成钱包签名。",
     "executionBlocked": "已在钱包中排队 — 仍需你的签名。",
     "executionFailed": "没有成功。交易未完成。",
-    "connectWallet": "连接钱包"
+    "connectWallet": "连接钱包",
+    "portfolioCard": {
+      "title": "投资组合智能分析",
+      "subtitle": "来自支持网络的余额；价格覆盖范围可能不同。",
+      "asOf": "余额截至 {{time}}",
+      "status": {
+        "live": "余额与价格均为最新",
+        "partial": "投资组合数据不完整",
+        "stale": "部分余额或价格可能已过期",
+        "pending": "正在同步钱包数据",
+        "unavailable": "投资组合数据不可用",
+        "empty": "空（已核验）"
+      },
+      "metric": {
+        "total": "投资组合价值",
+        "pricedValue": "已定价资产小计",
+        "stablecoins": "已识别的美元稳定币",
+        "concentration": "最大代币占比",
+        "pricedOnly": "仅按已定价资产计算",
+        "pnl": "未实现盈亏",
+        "riskScore": "钱包构成启发式评分",
+        "notAvailable": "不可用",
+        "noCostBasis": "未连接买入成本和交易历史。",
+        "riskUnavailable": "需要完整且最新的读取结果，并至少包含一项已定价持仓。",
+        "notComputed": "投资组合指标",
+        "riskBasis": "启发式指标：已定价代币的集中度、稳定币占比及持仓和网络数量；分数越高表示此模型下的敞口越大。"
+      },
+      "note": {
+        "pricedSubtotal": "该数值仅包含有有效价格的资产。",
+        "risk": "此钱包构成评分仅为启发式指标，并非完整的风险评估。它依据已定价持仓、识别出的稳定币以及持仓和网络数量；不包括市场波动、负债、成本基础或此钱包之外的资产。",
+        "unpricedCount": "{{count}} 个资产缺少有效价格",
+        "failedCount": "{{count}} 个网络的读取未确认",
+        "staleCount": "{{count}} 个网络的数据可能过期"
+      },
+      "tab": {
+        "assets": "资产",
+        "networks": "网络"
+      },
+      "row": {
+        "priceUnavailable": "价格不可用",
+        "noHoldings": "此快照中没有可用的非零余额。"
+      },
+      "network": {
+        "failed": "读取失败",
+        "stale": "旧快照",
+        "live": "余额读取为最新",
+        "assetCount": "{{count}} 个资产",
+        "noNetworks": "没有可显示的网络余额。",
+        "partial": "部分读取"
+      },
+      "action": {
+        "risk": "询问风险",
+        "allocation": "询问配置",
+        "rebalance": "预览再平衡",
+        "fullPortfolio": "打开完整投资组合",
+        "showAll": "显示全部 {{count}} 项",
+        "showLess": "收起"
+      },
+      "prompt": {
+        "risk": "分析我的投资组合风险。说明已测量和缺失的数据；不要把集中度当作完整风险评分。",
+        "allocation": "按代币和网络显示我当前的投资组合配置。",
+        "rebalance": "帮助我选择目标配置，并准备包含金额的再平衡预览。先询问我的目标，不要执行任何操作。"
+      },
+      "riskBand": {
+        "low": "较低敞口",
+        "medium": "中等敞口",
+        "high": "较高敞口"
+      }
+    }
   },
   "solana": {
     "wallet": {

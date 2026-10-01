@@ -24,7 +24,7 @@ export const PLAN_DIGEST_SCHEMA = 'fbt.plan-digest.v1';
 
 /** Fields that decide what the transaction does. Order is irrelevant. */
 export const MATERIAL_FIELDS = Object.freeze([
-  'type', 'from', 'to', 'asset', 'amount', 'amountUsd', 'chainId',
+  'type', 'from', 'to', 'asset', 'amount', 'amountUnit', 'amountUsd', 'chainId',
   'toChainId', 'side', 'leverage', 'slippage', 'slippageBps', 'slippagePct',
   'recipient', 'contractAddress', 'venue', 'protocol', 'market'
 ]);
@@ -33,7 +33,9 @@ export const MATERIAL_FIELDS = Object.freeze([
 export const MATERIAL_PARAMETERS = Object.freeze([
   'leverage', 'slippage', 'slippageBps', 'slippagePct', 'recipient',
   'targetAllocation', 'limitPrice', 'triggerPrice', 'side', 'toChainId',
-  'protocol', 'market', 'interval', 'frequency'
+  'protocol', 'market', 'interval', 'frequency', 'requireLiveRateReview',
+  'reviewedAt', 'reviewedPriceUsd', 'reviewedSupplyApyPct', 'reviewedBorrowApyPct',
+  'reviewedProjectedHealthFactor', 'reviewedAvailableBorrowsUsd'
 ]);
 
 /* ------------------------------ normalisation ----------------------------- */

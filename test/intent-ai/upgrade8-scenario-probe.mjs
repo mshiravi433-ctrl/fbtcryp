@@ -51,6 +51,10 @@ const orchestrated = await orchestrateIntent({
 });
 state = orchestrated.state;
 t('scenario: planner produces a preferred option', orchestrated.orchestration?.consensus?.preferredOption?.id === 'balanced-rotation');
+t('scenario: unverified portfolio coverage cannot produce a complete risk verdict',
+  orchestrated.orchestration?.consensus?.risk?.riskLevel === 'unknown'
+    && orchestrated.orchestration?.consensus?.risk?.complete === false
+    && orchestrated.orchestration?.consensus?.portfolio?.totalValue == null);
 t('scenario: three candidate options are retained for reference resolution', (state.agentState?.lastPresentedOptions || []).length >= 3);
 
 const ref = parseAnswerValue({ text: 'همون گزینه دوم', question: { expectedType: 'selection', options: [] }, state });

@@ -53,7 +53,7 @@ const COIN_IDS = Object.freeze({
   ADA: 'cardano', XRP: 'ripple', DOGE: 'dogecoin', TON: 'the-open-network'
 });
 
-export function createRealServices({ wallet = null, portfolio = null } = {}) {
+export function createRealServices({ wallet = null, portfolio = null, getReadProvider = null } = {}) {
   return {
     walletService: {
       getBalances: async () => {
@@ -379,14 +379,20 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
     },
 
     lendingService: {
-      getMarkets: async ({ asset } = {}) => {
+      getMarkets: async ({ asset, chainId } = {}) => {
         try {
-          const { lendingAssetsFor, lendingChains } = await import('../../lending.js');
-          let markets = lendingChains().flatMap((cid) =>
-            lendingAssetsFor(cid).map((m) => ({ ...m, chainId: cid })));
+          const { lendingAssetsFor, lendingChains, lendingVenue } = await import('../../lending.js');
+          const selected = chainId != null && Number.isFinite(Number(chainId))
+            ? [Number(chainId)]
+            : lendingChains();
+          let markets = selected.flatMap((cid) => lendingAssetsFor(cid).map((market) => ({
+            ...market,
+            chainId: cid,
+            chainName: lendingVenue(cid)?.chainName || null
+          })));
           if (asset) {
             const want = String(asset).toUpperCase();
-            markets = markets.filter((m) => String(m.symbol || '').toUpperCase() === want);
+            markets = markets.filter((market) => String(market.symbol || '').toUpperCase() === want);
           }
           // 'catalog', not 'live': this is the supported-asset list, not rates.
           return { ok: true, markets, dataStatus: 'catalog', fetchedAt: Date.now(), source: 'cache' };
@@ -394,14 +400,218 @@ export function createRealServices({ wallet = null, portfolio = null } = {}) {
           return failed(e, { markets: [] });
         }
       },
+      getLiveMarkets: async ({ asset, chainId } = {}) => {
+        const suppliedChain = chainId ?? wallet?.chainId ?? null;
+        const cid = suppliedChain != null && Number.isFinite(Number(suppliedChain))
+          ? Number(suppliedChain)
+          : null;
+        try {
+          const { lendingAssetsFor, lendingChains, lendingVenue, readReserves, readOraclePrices } = await import('../../lending.js');
+          const selectedChains = cid != null ? [cid] : lendingChains();
+          const catalog = selectedChains.flatMap((id) => lendingAssetsFor(id).map((market) => ({
+            ...market,
+            chainId: id,
+            chainName: lendingVenue(id)?.chainName || null
+          })));
+          const want = asset ? String(asset).trim().toUpperCase() : null;
+          const supportedMarkets = want
+            ? catalog.filter((market) => String(market.symbol || '').toUpperCase() === want)
+            : catalog;
+
+          // No chain is inferred from the token catalog. A catalog row is not a rate.
+          if (cid == null) {
+            return {
+              ok: true,
+              markets: [],
+              supportedMarkets,
+              dataStatus: 'unavailable',
+              reason: 'CHAIN_REQUIRED',
+              fetchedAt: Date.now(),
+              source: 'aave-rpc'
+            };
+          }
+          if (!catalog.length) {
+            return {
+              ok: true,
+              markets: [],
+              supportedMarkets,
+              dataStatus: 'unavailable',
+              reason: 'NO_SUPPORTED_AAVE_ASSETS',
+              fetchedAt: Date.now(),
+              source: 'aave-rpc'
+            };
+          }
+          if (typeof getReadProvider !== 'function') {
+            return {
+              ok: true,
+              markets: [],
+              supportedMarkets,
+              dataStatus: 'unavailable',
+              reason: 'READ_PROVIDER_UNAVAILABLE',
+              fetchedAt: Date.now(),
+              source: 'aave-rpc'
+            };
+          }
+
+          let provider = null;
+          try { provider = await getReadProvider(cid); } catch { provider = null; }
+          if (!provider) {
+            return {
+              ok: true,
+              markets: [],
+              supportedMarkets,
+              dataStatus: 'unavailable',
+              reason: 'READ_PROVIDER_UNAVAILABLE',
+              fetchedAt: Date.now(),
+              source: 'aave-rpc'
+            };
+          }
+
+          const assets = want
+            ? catalog.filter((market) => String(market.symbol || '').toUpperCase() === want)
+            : catalog;
+          const fetchedAt = Date.now();
+          const reserves = await readReserves({ provider, chainId: cid, assets });
+          const listedAssets = assets.filter((market) => reserves?.[market.id]?.listed === true);
+          const oracle = listedAssets.length
+            ? await readOraclePrices({ provider, chainId: cid, assets: listedAssets, reserves })
+            : { ok: false, status: 'unavailable', prices: {}, source: null };
+
+          const markets = assets.map((market) => {
+            const reserve = reserves?.[market.id] || { ok: false, listed: null, reason: 'RESERVE_READ_FAILED' };
+            const rowOracle = oracle?.prices?.[market.id] || null;
+            const lastUpdateSeconds = Number(reserve.lastUpdateTimestamp);
+            const ageSeconds = Number.isFinite(lastUpdateSeconds) && lastUpdateSeconds > 0
+              ? Math.floor(fetchedAt / 1000) - lastUpdateSeconds
+              : null;
+            const rateStale = ageSeconds != null && ageSeconds > 3600;
+            const rateClockValid = ageSeconds != null && ageSeconds >= -60 && ageSeconds <= 3600;
+            const reserveActive = reserve.listed === true && reserve.status === 'active';
+            const supplyRate = reserve.supplyApyPct != null && reserve.supplyApyPct !== ''
+              && Number.isFinite(Number(reserve.supplyApyPct)) ? Number(reserve.supplyApyPct) : null;
+            const borrowRate = reserve.borrowApyPct != null && reserve.borrowApyPct !== ''
+              && Number.isFinite(Number(reserve.borrowApyPct)) ? Number(reserve.borrowApyPct) : null;
+            const rateReadable = reserve.ok === true && reserveActive && supplyRate != null;
+            const rateStatus = !rateReadable ? 'unavailable'
+              : rateStale ? 'stale'
+                : (reserve.dataStatus === 'live' && rateClockValid ? 'live' : 'partial');
+            const borrowRateStatus = !rateReadable || borrowRate == null || reserve.borrowingEnabled !== true
+              ? 'unavailable'
+              : rateStatus;
+            let positiveLiquidity = false;
+            try { positiveLiquidity = BigInt(String(reserve.availableLiquidityWei)) > 0n; } catch { positiveLiquidity = false; }
+            const priceStatus = rowOracle?.stale ? 'stale'
+              : rowOracle?.valid === true && oracle?.status !== 'anomaly' ? 'live'
+                : 'unavailable';
+            const priceUsd = priceStatus === 'live' && Number.isFinite(Number(rowOracle?.priceUsd))
+              && Number(rowOracle.priceUsd) > 0 ? Number(rowOracle.priceUsd) : null;
+            const rowStatus = reserve.listed === false ? 'empty'
+              : reserve.ok === true && reserve.dataStatus === 'live' ? 'live'
+                : reserve.ok === true && reserve.listed === true ? 'partial' : 'unavailable';
+            return {
+              id: market.id,
+              symbol: market.symbol,
+              name: market.name || market.symbol,
+              address: market.address,
+              decimals: Number(market.decimals),
+              chainId: cid,
+              chainName: lendingVenue(cid)?.chainName || null,
+              protocol: 'Aave V3',
+              venue: cid === 8453 && String(market.symbol).toUpperCase() === 'USDC'
+                ? 'aave-base-usdc' : 'lend-aave',
+              supplyApyPct: supplyRate,
+              borrowApyPct: borrowRate,
+              rateStatus,
+              borrowRateStatus,
+              dataStatus: rowStatus,
+              available: rateStatus === 'live' && reserveActive,
+              borrowAvailable: borrowRateStatus === 'live' && reserveActive
+                && reserve.borrowingEnabled === true && positiveLiquidity,
+              borrowingEnabled: reserve.borrowingEnabled === true,
+              reserveStatus: reserve.status || null,
+              reserveAddress: market.address,
+              poolAddress: lendingVenue(cid)?.pool || null,
+              availableLiquidityWei: reserve.availableLiquidityWei ?? null,
+              totalDebtWei: reserve.totalDebtWei ?? null,
+              supplyCapWhole: reserve.supplyCapWhole ?? null,
+              borrowCapWhole: reserve.borrowCapWhole ?? null,
+              utilizationPct: reserve.utilizationPct ?? null,
+              ltvPct: reserve.ltvPct ?? null,
+              liquidationThresholdPct: reserve.liquidationThresholdPct ?? null,
+              priceUsd,
+              priceStatus,
+              priceSource: priceStatus === 'live' ? 'protocol-oracle' : null,
+              source: 'aave-rpc',
+              fetchedAt,
+              lastUpdateTimestamp: Number.isFinite(lastUpdateSeconds) && lastUpdateSeconds > 0 ? lastUpdateSeconds : null,
+              reserveUpdatedAt: Number.isFinite(lastUpdateSeconds) && lastUpdateSeconds > 0 ? lastUpdateSeconds * 1000 : null,
+              reason: reserve.reason || (rateStale ? 'RATE_STALE' : null)
+            };
+          });
+          const liveRateRows = markets.filter((market) => market.rateStatus === 'live').length;
+          const partialRows = markets.filter((market) => market.rateStatus === 'partial').length;
+          const responded = markets.some((market) => market.dataStatus === 'live' || market.dataStatus === 'empty');
+          const dataStatus = liveRateRows
+            ? (partialRows ? 'partial' : 'live')
+            : partialRows ? 'partial' : responded ? 'empty' : 'unavailable';
+          return {
+            ok: true,
+            markets,
+            supportedMarkets,
+            dataStatus,
+            fetchedAt,
+            source: 'aave-rpc',
+            oracleStatus: oracle?.status || 'unavailable'
+          };
+        } catch (e) {
+          return failed(e, { markets: [], supportedMarkets: [] });
+        }
+      },
       getPositions: async ({ address, chainId } = {}) => {
-        if (!address) return { ok: false, dataStatus: 'unavailable', reason: 'WALLET_REQUIRED', lending: [], borrowing: [] };
+        if (!address) return { ok: false, dataStatus: 'unavailable', reason: 'WALLET_REQUIRED' };
+        const cid = chainId != null && Number.isFinite(Number(chainId)) ? Number(chainId) : null;
+        if (cid == null) return { ok: false, dataStatus: 'unavailable', reason: 'CHAIN_REQUIRED' };
+        if (typeof getReadProvider !== 'function') return { ok: false, dataStatus: 'unavailable', reason: 'READ_PROVIDER_UNAVAILABLE' };
         try {
           const { readUserAccount } = await import('../../lending.js');
-          const account = await readUserAccount({ user: address, chainId });
-          return { ok: true, dataStatus: 'live', ...account, fetchedAt: Date.now(), source: 'rpc' };
+          const provider = await getReadProvider(cid);
+          if (!provider) return { ok: false, dataStatus: 'unavailable', reason: 'READ_PROVIDER_UNAVAILABLE' };
+          const account = await readUserAccount({ provider, user: address, chainId: cid });
+          if (account?.ok !== true) return { ...account, ok: false, dataStatus: 'unavailable', source: 'aave-rpc' };
+          return { ...account, ok: true, dataStatus: 'live', fetchedAt: Date.now(), source: 'aave-rpc' };
         } catch (e) {
-          return failed(e, { lending: [], borrowing: [] });
+          return failed(e);
+        }
+      },
+      getAssetPosition: async ({ address, chainId, asset } = {}) => {
+        if (!address) return { ok: false, dataStatus: 'unavailable', reason: 'WALLET_REQUIRED' };
+        const cid = chainId != null && Number.isFinite(Number(chainId)) ? Number(chainId) : null;
+        if (cid == null) return { ok: false, dataStatus: 'unavailable', reason: 'CHAIN_REQUIRED' };
+        if (typeof getReadProvider !== 'function') return { ok: false, dataStatus: 'unavailable', reason: 'READ_PROVIDER_UNAVAILABLE' };
+        try {
+          const { lendingAssetsFor, readReserve, readAssetPosition } = await import('../../lending.js');
+          const supported = lendingAssetsFor(cid);
+          const selected = supported.find((row) => String(row.symbol).toUpperCase() === String(asset || '').toUpperCase());
+          if (!selected) return { ok: false, dataStatus: 'unavailable', reason: 'ASSET_NOT_LISTED' };
+          const provider = await getReadProvider(cid);
+          if (!provider) return { ok: false, dataStatus: 'unavailable', reason: 'READ_PROVIDER_UNAVAILABLE' };
+          const reserve = await readReserve({ provider, chainId: cid, asset: selected });
+          if (reserve?.ok !== true || reserve?.listed !== true) {
+            return { ok: false, dataStatus: 'unavailable', reason: reserve?.reason || 'RESERVE_UNAVAILABLE' };
+          }
+          const position = await readAssetPosition({ provider, chainId: cid, asset: selected, user: address, reserve });
+          if (position?.ok !== true) return { ...position, ok: false, dataStatus: 'unavailable', source: 'aave-rpc' };
+          return {
+            ...position,
+            ok: true,
+            dataStatus: 'live',
+            asset: selected,
+            chainId: cid,
+            fetchedAt: Date.now(),
+            source: 'aave-rpc'
+          };
+        } catch (e) {
+          return failed(e);
         }
       }
     },

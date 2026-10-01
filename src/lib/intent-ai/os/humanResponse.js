@@ -8,6 +8,8 @@ import { SPECULATIVE_VOCABULARY_PRESENT } from '../speculativeLexicon.js';
 import { pageName } from './moduleRouter.js';
 import { resolveChatRoute } from '../autonomy/chatRoutes.js';
 import { parseGoalSpec } from '../../strategyBrain/goalSpec.js';
+import { portfolioRiskScore } from '../commandCenter.js';
+import { normalizeChainId } from '../contextResolver.js';
 
 const LEAK_PATTERNS = [
   /Prepared\s+\d+\s+real\s+action\(s\)\.?/gi,
@@ -165,8 +167,8 @@ function moneyCompact(n) {
 }
 
 function pct(n) {
+  if (!hasNumber(n)) return 'N/A';
   const v = Number(n);
-  if (!Number.isFinite(v)) return 'N/A';
   return `${Math.round(v * 10) / 10}%`;
 }
 
@@ -191,17 +193,27 @@ function collectHoldings(context = {}, results = {}) {
   return { portfolio, analysis, holdings: Array.isArray(holdings) ? holdings : [] };
 }
 
+const hasNumber = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+const positiveUsd = (value) => hasNumber(value) && Number(value) > 0;
+
+function hasPortfolioHolding(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (positiveUsd(row.valueUsd)) return true;
+  if (!hasNumber(row.amount)) return true;
+  return Number(row.amount) > 1e-9;
+}
+
 function allocationLines(holdings, total) {
-  const priced = holdings.filter((h) => Number.isFinite(Number(h.valueUsd)) && Number(h.valueUsd) > 0);
-  const den = Number.isFinite(Number(total)) && Number(total) > 0
-    ? Number(total)
-    : priced.reduce((s, h) => s + Number(h.valueUsd), 0);
+  const priced = holdings.filter((h) => positiveUsd(h.valueUsd));
+  const pricedTotal = priced.reduce((s, h) => s + Number(h.valueUsd), 0);
+  const den = pricedTotal > 0 ? pricedTotal : (positiveUsd(total) ? Number(total) : 0);
   return holdings.slice(0, 8).map((h) => {
-    const value = Number.isFinite(Number(h.valueUsd)) ? money(h.valueUsd) : null;
+    const value = positiveUsd(h.valueUsd) ? money(h.valueUsd) : null;
     const share = value && den > 0 ? pct((Number(h.valueUsd) / den) * 100) : null;
-    const amount = h.amount != null ? String(h.amount) : '';
-    if (!value) return `${h.symbol || '—'}${amount ? `  ${amount}` : ''}   N/A`;
-    return `${String(h.symbol || '—').padEnd(8)} ${value}   ${share || ''}`.trim();
+    const amount = hasNumber(h.amount) ? String(h.amount) : '';
+    const network = h.chainName || h.network || (h.chainId != null ? String(h.chainId) : '');
+    if (!value) return `${h.symbol || '—'}${network ? ` (${network})` : ''}${amount ? `  ${amount}` : ''}   N/A`;
+    return `${String(h.symbol || '—')}${network ? ` (${network})` : ''} ${value}   ${share || ''}`.trim();
   });
 }
 
@@ -209,35 +221,577 @@ function toolsRan(results = {}) {
   return Array.isArray(results.toolsUsed) && results.toolsUsed.length > 0;
 }
 
+function amountUnits(amount, decimals) {
+  const dec = Number(decimals);
+  const text = String(amount ?? '').trim().replace(/,/g, '');
+  if (!/^\d+(?:\.\d+)?$/.test(text) || !Number.isInteger(dec) || dec < 0 || dec > 36) return null;
+  const [whole, fraction = ''] = text.split('.');
+  if (fraction.length > dec) return null;
+  try { return BigInt(`${whole}${(fraction + '0'.repeat(dec)).slice(0, dec)}`); }
+  catch { return null; }
+}
+
+function formatAmountUnits(raw, decimals) {
+  const dec = Number(decimals);
+  if (!Number.isInteger(dec) || dec < 0 || dec > 36) return null;
+  let value;
+  try { value = BigInt(raw); } catch { return null; }
+  const base = 10n ** BigInt(dec);
+  const whole = (value / base).toString();
+  const fraction = dec ? (value % base).toString().padStart(dec, '0').replace(/0+$/, '') : '';
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
+function decimalScaled(value, decimals = 8) {
+  const text = String(value ?? '').trim().replace(/,/g, '');
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
+  const [whole, fraction = ''] = text.split('.');
+  if (fraction.length > decimals) return null;
+  try { return BigInt(`${whole}${(fraction + '0'.repeat(decimals)).slice(0, decimals)}`); }
+  catch { return null; }
+}
+
+function usdToTokenAmount(usd, priceUsd, decimals) {
+  const usdScaled = decimalScaled(usd, 8);
+  const priceScaled = decimalScaled(Number(priceUsd).toFixed(8), 8);
+  const dec = Number(decimals);
+  if (usdScaled == null || priceScaled == null || priceScaled <= 0n
+    || !Number.isInteger(dec) || dec < 0 || dec > 36) return null;
+  const raw = (usdScaled * (10n ** BigInt(dec))) / priceScaled;
+  return raw > 0n ? formatAmountUnits(raw, dec) : null;
+}
+
+function lendingChainId(intent = {}, context = {}, scan = {}) {
+  const entities = intent?.entities || {};
+  return normalizeChainId(
+    entities.chainIds?.[0]
+      ?? entities.network
+      ?? entities.chainId
+      ?? scan.chainId
+      ?? context.wallet?.chainId
+  );
+}
+
+function lendingReviewResponse({ type, intent = {}, context = {}, results = {}, lang = 'fa' } = {}) {
+  const fa = lang === 'fa';
+  const scan = results.yieldOpportunities || {};
+  const side = type === 'BORROW' ? 'borrow' : 'supply';
+  const entities = intent.entities || {};
+  const chainId = lendingChainId(intent, context, scan);
+  const rawAssetUnit = String(entities.amountSymbol || '').toUpperCase();
+  const asset = rawAssetUnit && !['USD', '$', 'TOMAN'].includes(rawAssetUnit)
+    ? rawAssetUnit
+    : String(entities.token || entities.asset || '').toUpperCase() || null;
+  const rows = (Array.isArray(scan.lendingMarkets) ? scan.lendingMarkets : [])
+    .filter((row) => chainId == null || Number(row?.chainId) === Number(chainId));
+  const supportedMarkets = (Array.isArray(scan.supportedLendingMarkets) ? scan.supportedLendingMarkets : [])
+    .filter((row) => chainId == null || Number(row?.chainId) === Number(chainId));
+  const displayData = {
+    status: scan.lendingDataStatus || scan.dataStatus || 'unavailable',
+    operation: side,
+    chainId,
+    source: scan.lendingSource || 'aave-rpc',
+    fetchedAt: scan.lendingFetchedAt || scan.updatedAt || null,
+    markets: rows,
+    supportedMarkets
+  };
+  const raw = String(intent.raw || context.lastMessage || '').trim();
+  const questionMark = /[?؟]\s*$/.test(raw);
+  const questionType = String(intent.questionType || '').toUpperCase();
+  const command = side === 'supply'
+    ? /(\bsupply\b|\blend\b|\bdeposit\b|سپرده[‌\s]*(?:کن|بگذار|بذار|گذار|گذاری)|وام[‌\s]*بده|لند[‌\s]*کن|واریز[‌\s]*کن)/i.test(raw)
+    : /(\bborrow\b|\btake\s+out\s+(?:a\s+)?loan\b|وام[‌\s]*بگیر|قرض[‌\s]*بگیر|اعتبار[‌\s]*بگیر)/i.test(raw);
+  const questionOnly = questionMark || ['RECOMMENDATION', 'INFORMATION', 'MARKET_QUERY', 'BALANCE_QUERY'].includes(questionType);
+  const actionRequested = !questionOnly && (intent.executionRequested === true || command);
+  const noAction = (message, code, missingInfo = null, ui = { type: 'TEXT' }) => ({
+    message,
+    ui,
+    code,
+    handledLocally: true,
+    missingInfo,
+    yieldMarkets: displayData,
+    requiresConfirmation: false,
+    actions: []
+  });
+
+  if (type === 'FARM') {
+    const farmRows = (Array.isArray(scan.opportunities) ? scan.opportunities : [])
+      .filter((row) => row?.kind === 'farm' && ['live', 'partial'].includes(String(row.rateStatus || row.dataStatus || '').toLowerCase()));
+    const observed = farmRows.length
+      ? (fa
+        ? `\n\nدادهٔ قابل‌خواندن برای ${farmRows.length} فرصت فارم/LP در کارت فرصت‌ها آمده است؛ این نرخ‌ها مشاهده‌شده‌اند و تضمین سود نیستند.`
+        : `\n\n${farmRows.length} readable farm/LP opportunity row(s) are shown below; observed rates are not guaranteed returns.`)
+      : '';
+    return {
+      message: (fa
+        ? 'برای FARM، اتصال زنده و قابل‌تأییدِ استخر LP/فارم در این چت موجود نیست. سپردهٔ تک‌دارایی Aave با فارم LP یکی نیست؛ نرخ Aave را به‌عنوان فارم معرفی نمی‌کنم. هیچ کارت اجرا یا تراکنشی ساخته نشده است. صفحهٔ فارم را فقط برای بررسی گزینه‌های موجود می‌توانی باز کنی.'
+        : 'This chat has no verified live LP/farm execution adapter. A single-asset Aave supply is not LP farming, so I will not label an Aave rate as farm yield. No execution card or transaction was created. Open the farm page only to inspect available options.') + observed,
+      ui: { type: 'TEXT' },
+      code: farmRows.length ? 'FARM_EXECUTOR_UNAVAILABLE' : 'FARM_DATA_UNAVAILABLE',
+      handledLocally: true,
+      opportunities: farmRows,
+      requiresConfirmation: false,
+      actions: [{ id: 'inspect-farm', route: '/farm', label: fa ? 'بررسی صفحهٔ فارم' : 'Inspect farm page' }]
+    };
+  }
+
+  if (!actionRequested) {
+    const relevant = rows.filter((row) => {
+      const rate = side === 'borrow' ? row.borrowApyPct : row.supplyApyPct;
+      const status = side === 'borrow' ? row.borrowRateStatus : row.rateStatus;
+      return rate != null || ['stale', 'unavailable', 'partial'].includes(String(status || '').toLowerCase());
+    });
+    const live = relevant.filter((row) => ['live', 'partial'].includes(String(side === 'borrow' ? row.borrowRateStatus : row.rateStatus).toLowerCase())
+      && (side === 'borrow' ? row.borrowApyPct : row.supplyApyPct) != null);
+    let message;
+    if (live.length) {
+      message = fa
+        ? `نرخ‌های ${side === 'borrow' ? 'هزینهٔ وام‌گیری' : 'تأمین نقدینگی'} را از خواندن مستقیم reserveهای Aave V3 روی زنجیره می‌بینی. مقادیر APY متغیرند، تضمین سود نیستند و به‌تنهایی دستور اجرا نیستند؛ برای هر عملیات مالی، بررسی تازه، تأیید و امضای کیف پول لازم است.`
+        : `These ${side === 'borrow' ? 'borrowing-cost' : 'supply'} rates come from direct Aave V3 reserve reads on the selected chain. APY is variable, not guaranteed, and not an execution instruction; any financial action needs a fresh review, your confirmation and a wallet signature.`;
+    } else if (relevant.some((row) => row.rateStatus === 'stale' || row.borrowRateStatus === 'stale')) {
+      message = fa
+        ? 'نرخ‌های قابل‌نمایش تازه نیستند؛ به همین دلیل هیچ APY فعالی اعلام نمی‌کنم. فهرست دارایی‌های پشتیبانی‌شده، اگر باشد، فقط رجیستری است و نرخ زنده نیست.'
+        : 'The available rates are stale, so I am not presenting an active APY. Any supported-asset list is only a registry, not a live rate.';
+    } else if (supportedMarkets.length) {
+      message = fa
+        ? 'رجیستری این شبکه دارایی‌های پشتیبانی‌شده را نشان می‌دهد، اما خواندن زندهٔ نرخ reserve در دسترس نیست. فهرست پشتیبانی را نرخ زنده حساب نکن.'
+        : 'The registry lists supported assets on this network, but a live reserve-rate read is unavailable. The supported list is not a live rate.';
+    } else {
+      message = fa
+        ? 'برای این درخواست، شبکهٔ مشخصی همراه کیف پول یا متن پیام پیدا نشد. شبکه را مشخص کن یا کیف پول EVM را وصل کن؛ شبکه‌ای را حدس نمی‌زنم.'
+        : 'No chain was specified or available from the connected wallet. Name a network or connect an EVM wallet; I will not guess one.';
+    }
+    return {
+      message,
+      ui: { type: 'TEXT' },
+      handledLocally: true,
+      yieldMarkets: displayData,
+      requiresConfirmation: false,
+      actions: []
+    };
+  }
+
+  if (!asset) {
+    const question = fa ? 'کدام دارایی و نماد دقیق را می‌خواهی؟ (مثلاً USDC)' : 'Which exact asset symbol do you want to use? (for example, USDC)';
+    return noAction(`${fa ? 'برای ساختن بررسی وام، نماد دارایی را حدس نمی‌زنم.' : 'I will not guess the asset for a lending action.'}\n\n${question}`, 'LENDING_ASSET_REQUIRED', question);
+  }
+  if (chainId == null) {
+    const question = fa ? 'روی کدام شبکه؟ (مثلاً Base یا Arbitrum)' : 'Which network? (for example, Base or Arbitrum)';
+    return noAction(`${fa ? 'شبکهٔ پیش‌فرضی انتخاب نمی‌کنم.' : 'I will not choose a default chain.'}\n\n${question}`, 'LENDING_CHAIN_REQUIRED', question);
+  }
+  if (!isConnected(context, results) || !(context.wallet?.address || context.wallet?.evmAddresses?.[0])) {
+    const message = fa
+      ? 'برای ادامهٔ این بررسی باید کیف پول EVM وصل باشد تا موجودی یا ظرفیت وام‌گیری روی همان شبکه خوانده شود. هنوز هیچ عملیات یا امضایی انجام نشده است.'
+      : 'Connect an EVM wallet so I can read the token balance or borrowing capacity on that chain. Nothing has been submitted or signed.';
+    return noAction(message, 'WALLET_REQUIRED', null, { type: 'CONNECT_WALLET' });
+  }
+
+  const amountRaw = entities.amountUsd ?? entities.amount ?? null;
+  const amountNumber = Number(amountRaw);
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    const question = fa ? 'مبلغ دقیق را با واحدش بنویس (مثلاً «100 USDC» یا «$100 USDC»).' : 'Give an exact amount and unit (for example, “100 USDC” or “$100 USDC”).';
+    return noAction(`${fa ? 'برای بررسی قابل‌تأیید، مبلغ لازم است.' : 'An exact amount is needed for a verifiable review.'}\n\n${question}`, 'LENDING_AMOUNT_REQUIRED', question);
+  }
+
+  const market = rows.find((row) => String(row.symbol || '').toUpperCase() === asset
+    && Number(row.chainId) === Number(chainId));
+  const supported = supportedMarkets.some((row) => String(row.symbol || '').toUpperCase() === asset
+    && Number(row.chainId) === Number(chainId));
+  if (!market) {
+    const message = supported
+      ? (fa
+        ? `دارایی ${asset} در رجیستری این شبکه هست، اما reserve زنده برای بررسی نرخ و اجرا دریافت نشد. کارت اجرا ساخته نشد.`
+        : `${asset} is in the supported-asset registry for this chain, but no live reserve was read for a rate and execution review. No action card was created.`)
+      : (fa
+        ? `${asset} در رجیستری دارایی‌های پشتیبانی‌شدهٔ این شبکه نیست؛ عملیات را متوقف می‌کنم.`
+        : `${asset} is not in the supported-asset registry on this chain; the action is withheld.`);
+    return noAction(message, supported ? 'LENDING_RATE_UNAVAILABLE' : 'ASSET_NOT_LISTED');
+  }
+
+  const rateStatus = side === 'borrow' ? market.borrowRateStatus : market.rateStatus;
+  const rate = side === 'borrow' ? market.borrowApyPct : market.supplyApyPct;
+  const active = market.reserveStatus === 'active';
+  const available = side === 'borrow' ? market.borrowAvailable === true : market.available === true;
+  if (rateStatus !== 'live' || !hasNumber(rate) || !active || !available) {
+    const stale = rateStatus === 'stale';
+    const message = fa
+      ? `${asset} در این reserve نرخ ${side === 'borrow' ? 'وام‌گیری' : 'سپرده‌گذاری'} تازه و قابل‌تأیید ندارد${stale ? '؛ آخرین نرخ stale است' : ''}. کارت اجرا ساخته نشد.`
+      : `${asset} has no fresh, verifiable ${side} rate in this reserve${stale ? '; the last rate is stale' : ''}. No action card was created.`;
+    return noAction(message, stale ? 'LENDING_RATE_STALE' : 'LENDING_RATE_UNAVAILABLE');
+  }
+  if (market.priceStatus !== 'live' || !hasNumber(market.priceUsd) || Number(market.priceUsd) <= 0) {
+    const message = fa
+      ? 'قیمت معتبر Aave Oracle برای تبدیل و ارزیابی دلاری در دسترس نیست. مقدار را به دلار یا دارایی تبدیل نمی‌کنم و کارت اجرا نمی‌سازم.'
+      : 'A valid Aave protocol-oracle price is unavailable. I will not convert or value the amount in USD, and no execution card is created.';
+    return noAction(message, 'ORACLE_PRICE_UNAVAILABLE');
+  }
+
+  const decimals = Number(market.decimals);
+  const amountUnit = String(entities.amountUnit || rawAssetUnit || '').toUpperCase();
+  /* "100 USDC" is 100 token units. The parser fills `amountUsd` (and a generic
+     USD `amountUnit`) for any stablecoin amount, so those fields are NOT proof
+     that the user wrote dollars — only a written dollar marker ("$100",
+     "100 dollars", "100 USD", "۱۰۰ دلار") or the absence of any token symbol
+     is. Treating a typed token amount as USD silently re-scaled it through the
+     oracle price and then truncated it. */
+  const writtenAsDollars = /\$\s*[\d۰-۹]|[\d۰-۹][\d۰-۹.,]*\s*(?:dollars?|usd\b|دلار)/i.test(raw);
+  const writtenAsToken = Boolean(rawAssetUnit) && !['USD', '$', 'TOMAN'].includes(rawAssetUnit);
+  const usdInput = writtenAsDollars
+    || (!writtenAsToken && (amountUnit === 'USD' || amountUnit === '$' || entities.amountUsd != null));
+  const tokenAmount = usdInput
+    ? usdToTokenAmount(amountNumber, market.priceUsd, decimals)
+    : String(entities.amount ?? '').trim().replace(/,/g, '');
+  const amountWei = amountUnits(tokenAmount, decimals);
+  if (!tokenAmount || amountWei == null || amountWei <= 0n) {
+    const message = fa
+      ? `مبلغ با دقت ${decimals} رقم اعشار ${asset} قابل‌نمایش نیست. مقدار را با دقت معتبر توکن دوباره بنویس؛ آن را بی‌صدا گرد نمی‌کنم.`
+      : `The amount cannot be represented at ${decimals} decimal places for ${asset}. Re-enter it with supported token precision; I will not silently round it.`;
+    return noAction(message, 'AMOUNT_PRECISION_INVALID');
+  }
+
+  const normalizedAmount = formatAmountUnits(amountWei, decimals);
+  const priceUsd = Number(market.priceUsd);
+  const amountUsd = Number(normalizedAmount) * priceUsd;
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return noAction(
+    fa ? 'ارزش‌گذاری مبلغ از روی Aave Oracle معتبر نیست؛ کارت اجرا ساخته نشد.' : 'The amount could not be valued from the Aave oracle; no action card was created.',
+    'ORACLE_PRICE_UNAVAILABLE'
+  );
+
+  const fetchedAt = Number(market.fetchedAt || scan.lendingFetchedAt || scan.updatedAt);
+  if (!Number.isFinite(fetchedAt) || Date.now() - fetchedAt > 120_000 || fetchedAt > Date.now() + 60_000) {
+    return noAction(
+      fa ? 'خواندن نرخ یا قیمت قدیمی است؛ برای تأیید مالی باید درخواست را دوباره بفرستی تا بررسی تازه شود.'
+        : 'The rate or price read is too old for financial confirmation. Send the request again for a fresh review.',
+      'LENDING_REVIEW_EXPIRED'
+    );
+  }
+
+  let projectedHealthFactor = null;
+  let availableBorrowsUsd = null;
+  let walletBalance = null;
+  const lendingPosition = results.lendingPosition || null;
+  if (side === 'supply') {
+    const assetPosition = results.lendingAssetPosition || null;
+    let balanceWei = null;
+    try { balanceWei = assetPosition?.walletWei != null ? BigInt(assetPosition.walletWei) : null; } catch { balanceWei = null; }
+    if (assetPosition?.ok !== true || assetPosition?.dataStatus !== 'live' || balanceWei == null) {
+      return noAction(
+        fa ? `موجودی ${asset} از زنجیره تأیید نشد؛ سپرده‌گذاری بررسی یا آماده نمی‌شود.`
+          : `The ${asset} balance could not be verified from the chain; supply is not prepared.`,
+        'BALANCE_UNVERIFIED'
+      );
+    }
+    if (balanceWei < amountWei) {
+      return noAction(
+        fa ? `موجودی زنجیره‌ای ${asset} برای ${normalizedAmount} کافی نیست؛ هیچ تراکنشی آماده نشده است.`
+          : `The on-chain ${asset} balance is below ${normalizedAmount}; no transaction was prepared.`,
+        'INSUFFICIENT_FUNDS'
+      );
+    }
+    walletBalance = formatAmountUnits(balanceWei, decimals);
+  } else {
+    if (lendingPosition?.ok !== true || lendingPosition?.dataStatus !== 'live') {
+      return noAction(
+        fa ? 'دادهٔ وثیقه و بدهی Aave از کیف پول خوانده نشد؛ ظرفیت وام را حدس نمی‌زنم و کارت اجرا نمی‌سازم.'
+          : 'Aave collateral and debt data could not be read for this wallet. I will not guess borrowing capacity or prepare an action.',
+        'RISK_DATA_UNAVAILABLE'
+      );
+    }
+    const collateralUsd = Number(lendingPosition.totalCollateralUsd);
+    const debtUsd = Number(lendingPosition.totalDebtUsd);
+    const available = Number(lendingPosition.availableBorrowsUsd);
+    const liquidationThresholdPct = Number(lendingPosition.liquidationThresholdPct);
+    if (![collateralUsd, debtUsd, available, liquidationThresholdPct].every(Number.isFinite)
+      || collateralUsd <= 0 || available <= 0 || liquidationThresholdPct <= 0) {
+      return noAction(
+        fa ? 'وثیقه، بدهی یا ظرفیت وام‌گیری از pool قابل‌تأیید نیست؛ هیچ کارت اجرایی ساخته نشد.'
+          : 'Collateral, debt, or available borrowing capacity is not verifiable from the pool; no action card was created.',
+        'BORROW_CAPACITY_UNAVAILABLE'
+      );
+    }
+    availableBorrowsUsd = available;
+    if (amountUsd > available * 0.99) {
+      return noAction(
+        fa ? `مبلغ تقریبی ${moneyOrNa(amountUsd)} از ظرفیت امنِ فعلی بیشتر است. ظرفیت خوانده‌شده ${moneyOrNa(available)} است؛ از حاشیهٔ ۱٪ برای تغییرات تا ثبت تراکنش استفاده می‌کنم.`
+          : `The estimated amount ${moneyOrNa(amountUsd)} exceeds 99% of current capacity (${moneyOrNa(available)}). I keep a 1% margin for changes before inclusion.`,
+        'BORROW_LIMIT_EXCEEDED'
+      );
+    }
+    projectedHealthFactor = (collateralUsd * (liquidationThresholdPct / 100)) / (debtUsd + amountUsd);
+    if (!Number.isFinite(projectedHealthFactor) || projectedHealthFactor < 1.2) {
+      return noAction(
+        fa ? `برآورد محافظه‌کارانهٔ Health Factor پس از وام ${Number.isFinite(projectedHealthFactor) ? projectedHealthFactor.toFixed(2) : 'نامعلوم'} است؛ حداقل این بررسی 1.20 است. هیچ کارت اجرا ساخته نشد.`
+          : `The conservative projected health factor after borrowing is ${Number.isFinite(projectedHealthFactor) ? projectedHealthFactor.toFixed(2) : 'unknown'}; this review requires at least 1.20. No action card was created.`,
+        'HEALTH_FACTOR_TOO_LOW'
+      );
+    }
+  }
+
+  const parameters = {
+    requireLiveRateReview: true,
+    reviewedAt: fetchedAt,
+    reviewedPriceUsd: priceUsd,
+    reviewedSupplyApyPct: side === 'supply' ? Number(rate) : null,
+    reviewedBorrowApyPct: side === 'borrow' ? Number(rate) : null,
+    reviewedProjectedHealthFactor: projectedHealthFactor,
+    reviewedAvailableBorrowsUsd: availableBorrowsUsd
+  };
+  const action = {
+    type,
+    asset,
+    amount: normalizedAmount,
+    amountUnit: asset,
+    amountUsd,
+    chainId: Number(chainId),
+    venue: side === 'supply' ? (market.venue || 'lend-aave') : 'lend-aave',
+    protocol: market.protocol || 'Aave V3',
+    market: market.reserveAddress || market.id,
+    parameters
+  };
+  const review = {
+    schema: 'fbt.ai-lending-review.v1',
+    side,
+    symbol: asset,
+    amount: normalizedAmount,
+    amountUsd,
+    priceUsd,
+    priceSource: market.priceSource || 'protocol-oracle',
+    ratePct: Number(rate),
+    rateStatus,
+    rateSource: market.source || 'aave-rpc',
+    protocol: market.protocol || 'Aave V3',
+    chainId: Number(chainId),
+    chainName: market.chainName || market.chain || String(chainId),
+    reserveAddress: market.reserveAddress || null,
+    fetchedAt,
+    decimals,
+    walletBalance,
+    availableBorrowsUsd,
+    projectedHealthFactor
+  };
+  const message = fa
+    ? `بررسی زندهٔ ${side === 'borrow' ? 'وام‌گیری' : 'سپرده‌گذاری'} ${normalizedAmount} ${asset} در ${review.protocol} روی ${review.chainName} آماده است. نرخ APY متغیر است، تضمین نیست؛ در صورت تأیید، ابتدا برنامه و نرخ دوباره بررسی می‌شوند و سپس کیف پول برای امضای تو باز می‌شود. هیچ چیزی بدون تأیید تو امضا یا ارسال نمی‌شود.`
+    : `A live review for ${side === 'borrow' ? 'borrowing' : 'supplying'} ${normalizedAmount} ${asset} on ${review.protocol} (${review.chainName}) is ready. APY is variable, not guaranteed; the plan and rate are revalidated before the wallet requests your signature. Nothing is signed or sent without your confirmation.`;
+  return {
+    message,
+    ui: { type: 'ACTION_CARD' },
+    card: {
+      kind: 'LENDING_REVIEW',
+      title: fa ? '✦ بررسی نهایی وام' : '✦ Lending review',
+      headline: `${normalizedAmount} ${asset} · ${review.protocol} · ${review.chainName}`,
+      confirmLabel: fa ? 'تأیید و امضا با کیف پول' : 'Confirm & sign with wallet',
+      editLabel: fa ? 'ویرایش' : 'Edit',
+      review
+    },
+    actions: [action],
+    handledLocally: true,
+    yieldMarkets: displayData,
+    requiresConfirmation: true
+  };
+}
+
 /*
  * ─── STRUCTURED CARDS ────────────────────────────────────────────────────────
- * The chat surface renders these as real UI (allocation bars, price charts,
- * 24h high/low ranges) instead of prose. Numbers only travel inside the card
- * when a tool actually produced them — the card never invents a field.
+ * The chat surface renders these as real UI. Portfolio values are deliberately
+ * calculated from priced, non-zero holdings only: `Number(null) === 0` is not
+ * evidence that an unpriced token is worthless. The card exposes the known
+ * stablecoin and concentration measurements; a separate wallet-mix heuristic
+ * is shown only on a complete live snapshot. It never presents that heuristic
+ * as an overall risk score, and P&L stays unavailable without cost basis.
  */
-function portfolioCard(total, sortedHoldings, pricedCount, unpricedCount, lang) {
-  const den = Number.isFinite(Number(total)) && Number(total) > 0 ? Number(total) : null;
-  const rows = (sortedHoldings || []).slice(0, 8).map((h) => {
-    const value = Number.isFinite(Number(h.valueUsd)) ? Number(h.valueUsd) : null;
+function portfolioCard(sortedHoldings, lang, portfolio = {}, analysis = {}) {
+  const sourceRows = (sortedHoldings || []).filter(hasPortfolioHolding);
+  const readRows = Array.isArray(portfolio.chains) ? portfolio.chains : [];
+  const readByChain = new Map(readRows.map((read) => [String(read?.chainId ?? ''), read]));
+  const rows = sourceRows.map((h, index) => {
+    const chainId = h.chainId ?? h.chain ?? null;
+    const read = readByChain.get(String(chainId ?? '')) || null;
+    const amount = hasNumber(h.amount) ? Number(h.amount) : null;
+    const value = positiveUsd(h.valueUsd) ? Number(h.valueUsd) : null;
     return {
+      key: `${chainId ?? 'unknown'}:${String(h.address || h.symbol || 'asset').toLowerCase()}:${index}`,
       symbol: h.symbol || '—',
-      amount: Number.isFinite(Number(h.amount)) ? Number(h.amount) : null,
+      name: h.name || null,
+      address: h.address || null,
+      amount,
       valueUsd: value,
-      pct: value != null && den ? (value / den) * 100 : null
+      chainId,
+      chainName: h.chainName || null,
+      allocationPct: null,
+      networkStatus: read?.failed ? 'failed' : read?.stale ? 'stale'
+        : read?.partial || (!read && portfolio.partial === true) ? 'partial' : 'live',
+      networkStale: Boolean(read?.stale || (read?.failed && Number(read?.rows) > 0))
     };
   });
+
+  const pricedRows = rows.filter((row) => positiveUsd(row.valueUsd));
+  const knownValue = pricedRows.reduce((sum, row) => sum + Number(row.valueUsd), 0);
+  for (const row of rows) {
+    row.allocationPct = positiveUsd(row.valueUsd) && knownValue > 0
+      ? (Number(row.valueUsd) / knownValue) * 100
+      : null;
+  }
+
+  const tokenTotals = new Map();
+  const networkTotals = new Map();
+  const stablecoins = new Set([
+    'USDC', 'USDT', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDE', 'USDS',
+    'PYUSD', 'GUSD', 'USDP', 'LUSD', 'FRAX', 'USDD'
+  ]);
+  for (const row of rows) {
+    const networkKey = String(row.chainId ?? 'unknown');
+    const network = networkTotals.get(networkKey) || {
+      chainId: row.chainId,
+      valueUsd: 0,
+      pricedCount: 0,
+      unpricedCount: 0,
+      holdingCount: 0,
+      failed: row.networkStatus === 'failed',
+      stale: row.networkStale,
+      status: row.networkStatus
+    };
+    network.holdingCount += 1;
+    if (positiveUsd(row.valueUsd)) {
+      network.valueUsd += Number(row.valueUsd);
+      network.pricedCount += 1;
+    } else {
+      network.unpricedCount += 1;
+    }
+    if (row.networkStatus === 'failed') network.status = 'failed';
+    else if (row.networkStatus === 'stale' && network.status !== 'failed') network.status = 'stale';
+    network.failed = Boolean(network.failed || row.networkStatus === 'failed');
+    network.stale = Boolean(network.stale || row.networkStale);
+    networkTotals.set(networkKey, network);
+
+    if (positiveUsd(row.valueUsd)) {
+      const symbol = String(row.symbol || '—').toUpperCase();
+      tokenTotals.set(symbol, (tokenTotals.get(symbol) || 0) + Number(row.valueUsd));
+    }
+  }
+
+  /* A failed/stale network with no rows is still evidence. Include it as
+     unavailable rather than fabricating a zero balance for that chain. */
+  for (const read of readRows) {
+    const chainId = read?.chainId ?? null;
+    const key = String(chainId ?? 'unknown');
+    if (networkTotals.has(key) || (!read?.failed && !read?.stale
+      && !(Number(read?.unpriced) > 0) && read?.partial !== true)) continue;
+    networkTotals.set(key, {
+      chainId,
+      valueUsd: null,
+      pricedCount: 0,
+      unpricedCount: Number(read?.unpriced) || 0,
+      holdingCount: Number(read?.rows) > 0 ? Number(read.rows) : 0,
+      failed: Boolean(read?.failed),
+      stale: Boolean(read?.stale || (read?.failed && Number(read?.rows) > 0)),
+      status: read?.failed ? 'failed' : read?.stale ? 'stale' : read?.partial ? 'partial' : 'live'
+    });
+  }
+  // Detailed chainReads already represent the same failures by chainId; the
+  // short-name lists are only a fallback for adapters without per-chain data.
+  if (!readRows.length) {
+    for (const [list, status] of [
+      [portfolio.failedChains, 'failed'],
+      [portfolio.staleChains, 'stale']
+    ]) {
+      for (const networkLabel of Array.isArray(list) ? list : []) {
+        const key = String(networkLabel || '').trim();
+        if (!key || networkTotals.has(key)) continue;
+        networkTotals.set(key, {
+          chainId: key,
+          valueUsd: null,
+          pricedCount: 0,
+          unpricedCount: 0,
+          holdingCount: 0,
+          failed: status === 'failed',
+          stale: status === 'stale',
+          status
+        });
+      }
+    }
+  }
+
+  const networks = [...networkTotals.values()].map((network) => ({
+    ...network,
+    valueUsd: network.pricedCount > 0 ? network.valueUsd : null,
+    allocationPct: network.pricedCount > 0 && knownValue > 0
+      ? (network.valueUsd / knownValue) * 100
+      : null
+  })).sort((a, b) => {
+    if (a.valueUsd == null && b.valueUsd == null) return String(a.chainId).localeCompare(String(b.chainId));
+    if (a.valueUsd == null) return 1;
+    if (b.valueUsd == null) return -1;
+    return b.valueUsd - a.valueUsd;
+  });
+
+  const unpricedCount = rows.filter((row) => !positiveUsd(row.valueUsd)).length;
+  const stablecoinValueUsd = pricedRows.reduce((sum, row) => (
+    stablecoins.has(String(row.symbol || '').toUpperCase()) ? sum + Number(row.valueUsd) : sum
+  ), 0);
+  const biggestToken = [...tokenTotals.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+  const concentrationPct = biggestToken && knownValue > 0 ? (biggestToken[1] / knownValue) * 100 : null;
+  const priceDataStatus = String(portfolio.priceDataStatus || '').toLowerCase();
+  const anyStaleNetwork = networks.some((network) => network.stale === true);
+  const hasFailedNetwork = networks.some((network) => network.failed === true || network.status === 'failed');
+  const hasPartialNetwork = readRows.some((read) => read?.partial === true);
+  const sourceStatus = String(portfolio.dataStatus || '').toLowerCase();
+  const verifiedEmpty = sourceStatus === 'empty' && rows.length === 0 && !portfolio.partial
+    && !portfolio.fromSnapshot && !anyStaleNetwork && !hasFailedNetwork && !hasPartialNetwork;
+  const status = sourceStatus === 'pending' || portfolio.hydrating
+    ? 'pending'
+    : verifiedEmpty
+      ? 'empty'
+      : (priceDataStatus === 'stale' || anyStaleNetwork || portfolio.fromSnapshot === true)
+        ? 'stale'
+        : (sourceStatus === 'live' && priceDataStatus === 'live' && !portfolio.partial
+          && !hasPartialNetwork && unpricedCount === 0 && !hasFailedNetwork)
+          ? 'live'
+          : 'partial';
+  // The mix model is shown only when both balances and prices are verified
+  // current and complete. It is a wallet-composition heuristic, not an
+  // all-in risk score (market volatility, liabilities, and off-wallet assets
+  // are not inputs here).
+  const portfolioMix = status === 'live'
+    ? portfolioRiskScore({ holdings: pricedRows, stablecoinSymbols: stablecoins })
+    : null;
+  const portfolioMixScore = portfolioMix?.dataStatus === 'computed'
+    && portfolioMix.score != null && Number.isFinite(Number(portfolioMix.score))
+    ? Number(portfolioMix.score)
+    : null;
+
   return {
     kind: 'PORTFOLIO',
-    title: lang === 'fa' ? 'پرتفوی من' : 'My portfolio',
-    totalValueUsd: den,
-    pricedCount,
+    title: lang === 'fa' ? 'هوش پرتفوی' : 'Portfolio intelligence',
+    totalValueUsd: knownValue > 0 ? knownValue : verifiedEmpty ? 0 : null,
+    displayedValueKind: status === 'live' || verifiedEmpty ? 'total' : 'priced-subtotal',
+    status,
+    priceDataStatus: priceDataStatus || 'unavailable',
+    pricedCount: pricedRows.length,
     unpricedCount,
+    stablecoinValueUsd: knownValue > 0 ? stablecoinValueUsd : verifiedEmpty ? 0 : null,
+    stablecoinPct: knownValue > 0 ? (stablecoinValueUsd / knownValue) * 100 : verifiedEmpty ? 0 : null,
+    concentrationSymbol: biggestToken?.[0] || null,
+    concentrationPct,
+    /* Cost basis / transaction lots and a full risk model are not part of this
+       wallet snapshot. Null is intentional: it means unknown, not zero. The
+       separate composition heuristic is available only on a complete live read. */
+    pnlUsd: null,
+    overallRiskScore: null,
+    portfolioMixScore,
+    portfolioMixBand: portfolioMixScore == null ? null : (portfolioMix?.label || null),
+    portfolioMixModel: portfolioMixScore == null ? null : 'wallet-composition-heuristic-v1',
+    networks,
+    failedNetworks: networks.filter((network) => network.failed === true || network.status === 'failed').length,
+    staleNetworks: networks.filter((network) => network.stale === true || network.status === 'stale').length,
     rows,
+    fetchedAt: hasNumber(portfolio.fetchedAt) ? Number(portfolio.fetchedAt)
+      : hasNumber(analysis.fetchedAt) ? Number(analysis.fetchedAt) : null,
+    source: portfolio.source || analysis.source || null,
     at: Date.now()
   };
 }
 
-const numOr = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+const numOr = (v) => (hasNumber(v) ? Number(v) : null);
 
 /**
  * Build the TOKEN card that powers the chat chart UI: sparkline series,
@@ -308,6 +862,10 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         : 'That module (Horizon / perpetuals / dYdX) is not enabled in this build — its page does not exist in this version. I can help with swap, farm, lending or markets instead.',
       ui: { type: 'TEXT' }
     };
+  }
+
+  if (['FARM', 'LEND', 'BORROW'].includes(type)) {
+    return lendingReviewResponse({ type, intent, context, results, lang });
   }
 
   /*
@@ -496,6 +1054,27 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
     };
   }
 
+  /*
+   * A bridge is not a single-chain swap. Until this build has a verifiable
+   * bridge adapter, keep a bridge request text-only and in chat. The optional
+   * route is a user-chosen inspection link, not an execution or quote handoff.
+   */
+  if (type === 'BRIDGE' && !results.route && !results.handoff) {
+    return {
+      message: lang === 'fa'
+        ? 'مسیریاب سواپ تک‌زنجیره‌ای این چت برای بریج کافی نیست و اتصال اجرای بریجِ قابل‌تأیید فعال نیست. هیچ نرخ یا تراکنش ساختگی نشان نمی‌دهم و چیزی اجرا نمی‌شود. می‌توانید صفحهٔ بریج را برای بررسی گزینه‌های در دسترس باز کنید.'
+        : 'This chat’s single-chain swap router is not a bridge, and no verifiable bridge executor is connected. I will not invent a route or transaction; nothing is executed. You can open the bridge page to inspect currently available options.',
+      ui: { type: 'TEXT' },
+      code: 'BRIDGE_EXECUTE_UNAVAILABLE',
+      requiresConfirmation: false,
+      actions: [{
+        id: 'open-bridge-page',
+        route: '/bridge',
+        label: lang === 'fa' ? 'بررسی صفحهٔ بریج' : 'Inspect bridge options'
+      }]
+    };
+  }
+
   if (results.route || results.handoff || type === 'NAVIGATION' || type === 'NEWS_SEARCH') {
     const route = results.route || plan?.actions?.[0]?.input?.route || intent?.navigation?.route;
     if (route) {
@@ -652,10 +1231,12 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
         pendingRefresh: true
       };
     }
-    const { portfolio, analysis, holdings } = collectHoldings(context, results);
-    const total = analysis.totalValueUsd ?? portfolio.totalValueUsd ?? context.totalValueUsd ?? null;
-    const priced = holdings.filter((h) => Number.isFinite(Number(h.valueUsd)));
-    const unpriced = holdings.filter((h) => !Number.isFinite(Number(h.valueUsd)));
+    const { portfolio, analysis, holdings: rawHoldings } = collectHoldings(context, results);
+    /* Native-token rows with a zero balance are not holdings. Keeping them in
+       this answer made an empty wallet look like a portfolio full of $0 rows.
+       Positive amounts remain visible even when their USD price is unknown. */
+    const holdings = rawHoldings.filter(hasPortfolioHolding);
+    const unpriced = holdings.filter((h) => !positiveUsd(h.valueUsd));
 
     if (!connected) {
       return {
@@ -677,10 +1258,28 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
      * as failed reads, a refresh is requested, and only a read that truly
      * completed with zero rows is allowed to say «empty».
      */
-    const failedChains = Array.isArray(portfolio?.failedChains) ? portfolio.failedChains : [];
-    const readFailed = failedChains.length > 0
+    const failedReadRows = Array.isArray(portfolio?.chains)
+      ? portfolio.chains.filter((read) => read?.failed === true)
+      : [];
+    const reportedFailedChains = Array.isArray(portfolio?.failedChains) ? portfolio.failedChains : [];
+    const failedChains = reportedFailedChains.length
+      ? reportedFailedChains
+      : failedReadRows.map((read) => read.chainId).filter((chainId) => chainId != null);
+    const reportedStaleChains = Array.isArray(portfolio?.staleChains) ? portfolio.staleChains : [];
+    const staleReadRows = Array.isArray(portfolio?.chains)
+      ? portfolio.chains.filter((read) => read?.stale === true)
+      : [];
+    const staleChains = reportedStaleChains.length
+      ? reportedStaleChains
+      : staleReadRows.map((read) => read.chainId).filter((chainId) => chainId != null);
+    const readFailed = failedChains.length > 0 || failedReadRows.length > 0
       || portfolio?.dataStatus === 'error'
       || (portfolio?.dataStatus === 'unavailable' && Boolean(context.wallet?.connected ?? connected));
+    const sourceStatus = String(portfolio?.dataStatus || '').toLowerCase();
+    const readIncomplete = staleChains.length > 0 || staleReadRows.length > 0
+      || portfolio?.fromSnapshot === true || portfolio?.freshness === 'STALE'
+      || sourceStatus === 'partial' || sourceStatus === 'stale'
+      || (portfolio?.partial === true && sourceStatus !== 'empty');
 
     if (!holdings.length) {
       if (readFailed) {
@@ -693,6 +1292,18 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
           refresh: true,
           pendingRefresh: true,
           failedChains
+        };
+      }
+      if (readIncomplete) {
+        return {
+          message: lang === 'fa'
+            ? 'خواندن پرتفوی کامل و به‌روز نیست، بنابراین خالی‌بودن کیف پول را تأیید نمی‌کنم. بخشی از پوشش زنجیره یا داده‌ها ناقص/قدیمی است؛ خواندن دوباره انجام می‌شود و تا تأیید کامل، موجودی نامعلوم می‌ماند.'
+            : 'The portfolio read is stale or incomplete, so I cannot confirm that the wallet is empty. Some chain coverage or data is missing or out of date; I am refreshing the read, and the balance remains unknown until it is verified.',
+          ui: { type: 'TEXT' },
+          code: 'PORTFOLIO_READ_INCOMPLETE',
+          refresh: true,
+          pendingRefresh: true,
+          staleChains
         };
       }
       const empty = portfolio?.dataStatus === 'empty' || (!hydrating && portfolio?.freshness === 'FRESH');
@@ -720,56 +1331,96 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       };
     }
 
-    const den = Number.isFinite(Number(total)) && Number(total) > 0
-      ? Number(total)
-      : priced.reduce((s, h) => s + Number(h.valueUsd), 0);
-    const sorted = [...holdings].sort((a, b) => (Number(b.valueUsd) || 0) - (Number(a.valueUsd) || 0));
-    const largest = sorted.find((h) => Number.isFinite(Number(h.valueUsd))) || sorted[0] || null;
-    const largestPct = largest && den > 0 && Number.isFinite(Number(largest.valueUsd))
-      ? (Number(largest.valueUsd) / den) * 100
-      : null;
-    const lines = allocationLines(sorted, den);
-    const totalLabel = money(den);
+    const sorted = [...holdings].sort((a, b) => {
+      const av = positiveUsd(a.valueUsd) ? Number(a.valueUsd) : -1;
+      const bv = positiveUsd(b.valueUsd) ? Number(b.valueUsd) : -1;
+      return bv - av;
+    });
+    const card = portfolioCard(sorted, lang, portfolio, analysis);
+    const knownValue = card.totalValueUsd;
+    const lines = allocationLines(sorted, knownValue);
+    const totalLabel = money(knownValue);
+    const failedNetworkNames = Array.isArray(portfolio.failedChains) && portfolio.failedChains.length
+      ? portfolio.failedChains
+      : card.networks
+        .filter((network) => network.status === 'failed')
+        .map((network) => network.chainId)
+        .filter((chainId) => chainId != null);
     if (lang === 'fa') {
       const parts = [];
-      if (toolsRan(results) || holdings.length) parts.push('پرتفوی را از کیف پول و قیمت‌های جاری خواندم.');
+      if (toolsRan(results) || holdings.length) parts.push('موجودی‌های قابل‌خواندن کیف پول را با قیمت‌های موجود بررسی کردم.');
       parts.push('');
-      parts.push(totalLabel ? `ارزش تقریبی پرتفوی: ${totalLabel}` : 'ارزش دلاری کامل در دسترس نیست (برخی قیمت‌ها N/A هستند).');
+      parts.push(totalLabel
+        ? (card.status === 'live'
+          ? `ارزش تقریبی دارایی‌های قیمت‌گذاری‌شده: ${totalLabel}`
+          : `جمعِ دارایی‌های قیمت‌گذاری‌شده (ناقص): ${totalLabel}`)
+        : 'ارزش دلاریِ دارایی‌های قیمت‌گذاری‌شده در دسترس نیست.');
       parts.push('');
-      parts.push('دارایی‌ها:');
+      parts.push('دارایی‌ها (موجودی و شبکه در کارت):');
       parts.push(...lines);
-      if (largest && largestPct != null) {
+      if (card.concentrationSymbol && card.concentrationPct != null) {
         parts.push('');
-        parts.push(`بیشترین سهم: ${largest.symbol} — ${pct(largestPct)}`);
-      } else if (largest) {
-        parts.push('');
-        parts.push(`بیشترین سهم: ${largest.symbol} — N/A`);
+        parts.push(`تمرکز روی بزرگ‌ترین داراییِ قیمت‌گذاری‌شده: ${card.concentrationSymbol} — ${pct(card.concentrationPct)} از ارزش قیمت‌گذاری‌شده.`);
       }
       if (unpriced.length) {
         parts.push('');
-        parts.push(`${unpriced.length} دارایی بدون قیمت معتبر (N/A) — صفر حساب نشد.`);
+        parts.push(`${unpriced.length} دارایی قیمت معتبر ندارد؛ در جمع ارزش، صفر فرض نشده است.`);
       }
-      if (portfolio?.freshness && portfolio.freshness !== 'FRESH') {
+      if (card.status === 'partial' || card.status === 'stale') {
         parts.push('');
-        parts.push(`تازگی داده: ${portfolio.freshness}`);
+        parts.push(card.status === 'stale'
+          ? 'برخی موجودی‌ها یا قیمت‌ها ممکن است از آخرین خواندن باشند؛ مبلغ بالا فقط جمع دارایی‌های قیمت‌گذاری‌شده است.'
+          : 'این خواندن کامل نیست؛ مبلغ بالا فقط جمع دارایی‌های قیمت‌گذاری‌شده را نشان می‌دهد.');
       }
+      if (failedNetworkNames.length) {
+        parts.push('');
+        parts.push(`خواندن این شبکه‌ها تأیید نشد: ${failedNetworkNames.join('، ')}.`);
+      }
+      parts.push('');
+      if (card.portfolioMixScore == null) {
+        parts.push('امتیاز ترکیب کیف پول نمایش داده نشد؛ همه موجودی‌ها و قیمت‌ها به‌صورت زنده و کامل تأیید نشده‌اند.');
+      } else {
+        parts.push(`امتیاز ترکیب کیف پول (مدل اکتشافی): ${card.portfolioMixScore} از ۱۰۰؛ بر پایه تمرکز دارایی‌های قیمت‌گذاری‌شده، سهم استیبل‌کوین‌های شناخته‌شده و تعداد دارایی‌ها و شبکه‌هاست. امتیاز بالاتر یعنی مواجهه بیشتر در این مدل، نه ارزیابی جامع ریسک. نوسان بازار، بدهی و دارایی‌های خارج از این کیف را پوشش نمی‌دهد.`);
+      }
+      parts.push('سود/زیان به‌دلیل نبود بهای تمام‌شده و تاریخچه خرید محاسبه نشده است.');
       return {
         message: parts.join('\n'),
         ui: { type: 'PORTFOLIO_CARD' },
         portfolio,
-        card: portfolioCard(den, sorted, priced.length, unpriced.length, lang),
+        card,
         actions: [{ id: 'open-lending', label: lang === 'fa' ? 'فرصت‌های وام' : 'Lending', route: '/loan' }]
       };
     }
-    const parts = ['Read the portfolio from the wallet and current prices.', ''];
-    parts.push(totalLabel ? `Approx. value: ${totalLabel}` : 'Full USD value unavailable (some prices are N/A).');
-    parts.push('', 'Assets:', ...lines);
-    if (largest && largestPct != null) parts.push('', `Largest share: ${largest.symbol} — ${pct(largestPct)}`);
+    const parts = ['I read the wallet balances and the prices currently available.', ''];
+    parts.push(totalLabel
+      ? (card.status === 'live'
+        ? `Approximate priced portfolio value: ${totalLabel}`
+        : `Priced holdings subtotal (partial): ${totalLabel}`)
+      : 'USD value for the priced holdings is unavailable.');
+    parts.push('', 'Holdings (balance and network are shown in the card):', ...lines);
+    if (card.concentrationSymbol && card.concentrationPct != null) {
+      parts.push('', `Largest priced-token concentration: ${card.concentrationSymbol} — ${pct(card.concentrationPct)} of priced value.`);
+    }
+    if (unpriced.length) {
+      parts.push('', `${unpriced.length} holding(s) have no valid price; they were not counted as zero.`);
+    }
+    if (card.status === 'partial' || card.status === 'stale') {
+      parts.push('', card.status === 'stale'
+        ? 'Some balances or prices may be from the last available read; the figure above is only the sum of priced holdings.'
+        : 'This read is partial; the figure above is only the sum of priced holdings.');
+    }
+    if (failedNetworkNames.length) parts.push('', `Reads for these networks were not confirmed: ${failedNetworkNames.join(', ')}.`);
+    if (card.portfolioMixScore == null) {
+      parts.push('', 'The wallet-mix score is withheld because a complete live balance-and-price read was not verified.');
+    } else {
+      parts.push('', `Wallet-mix heuristic: ${card.portfolioMixScore}/100. It reflects priced-token concentration, recognized stablecoin share, holding rows, and supported networks; a higher score means more exposure under this model, not a comprehensive risk score. It excludes market volatility, liabilities, and assets outside this wallet.`);
+    }
+    parts.push('', 'P&L is not calculated without cost basis and purchase history.');
     return {
       message: parts.join('\n'),
       ui: { type: 'PORTFOLIO_CARD' },
       portfolio,
-      card: portfolioCard(den, sorted, priced.length, unpriced.length, lang)
+      card
     };
   }
 
@@ -819,7 +1470,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
       };
     }
     const lines = list.slice(0, 12).map((b) => {
-      const usd = Number.isFinite(Number(b.valueUsd ?? b.value)) ? money(b.valueUsd ?? b.value) : null;
+      const usd = hasNumber(b.valueUsd ?? b.value) ? money(b.valueUsd ?? b.value) : null;
       return `${b.symbol}: ${b.amount ?? '—'}${usd ? ` (${usd})` : ' (N/A)'}`;
     });
     return {
@@ -868,7 +1519,7 @@ export function buildHumanResponse({ intent, context = {}, results = {}, plan = 
 
     if (best.length) {
       const lines = best.map((o, i) => {
-        const apy = Number.isFinite(Number(o.apy)) ? `${Number(o.apy).toFixed(1)}%` : 'N/A';
+        const apy = hasNumber(o.apy) ? `${Number(o.apy).toFixed(1)}%` : 'N/A';
         const risk = o.risk || 'n/a';
         return `${i + 1}. ${o.protocol || o.symbol || 'pool'} — ${apy} APY\n   Risk: ${risk}${o.ilRisk ? ` · IL: ${o.ilRisk}` : ''}`;
       });

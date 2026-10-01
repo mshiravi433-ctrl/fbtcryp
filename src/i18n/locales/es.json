@@ -2404,6 +2404,34 @@
     "drawerNote": "Estos botones son solo atajos; el asistente funciona sin ellos.",
     "solanaConnect": "Conectar cartera Solana",
     "readyTitle": "Listo para ejecutar",
+    "quoteReview": {
+      "title": "Revisión de cotización del intercambio",
+      "quotedAt": "Cotización obtenida a las {{time}}",
+      "expiresAt": "La revisión vence a las {{time}}",
+      "expired": "Esta cotización venció. Actualízala antes de confirmar.",
+      "from": "Pagas",
+      "to": "Salida estimada",
+      "minimum": "Mínimo que recibirás",
+      "network": "Red",
+      "route": "Proveedor de ruta",
+      "sourcesCompared": "Se compararon {{count}} fuentes de cotización",
+      "hops": "{{count}} saltos en la ruta",
+      "platformFee": "Comisión de plataforma",
+      "slippage": "Deslizamiento máximo",
+      "gas": "Gas de red estimado",
+      "priceImpact": "Impacto en el precio",
+      "notReported": "No informado",
+      "mev": "Protección MEV",
+      "mevUnknown": "No verificada de forma independiente",
+      "tokenAddresses": "Direcciones de contratos de tokens",
+      "inputToken": "Token de entrada",
+      "outputToken": "Token de salida",
+      "nativeAsset": "Activo nativo (sin contrato de token)",
+      "warning": "Las cotizaciones pueden cambiar entre la revisión y la firma. Antes de cualquier firma, la aplicación obtiene una cotización nueva. Si cambia el importe de entrada, la ruta, la comisión o el deslizamiento, o si el mínimo de salida actualizado queda por debajo de lo mostrado aquí, la ejecución se detiene y exige una nueva revisión.",
+      "refresh": "Actualizar cotización",
+      "refreshing": "Actualizando cotización…",
+      "summary": "Cotización en vivo lista para revisar: mínimo {{minimum}} {{to}} en {{network}}. La protección MEV no se ha verificado de forma independiente; la cotización se comprobará de nuevo antes de firmar."
+    },
     "working": "Procesando…",
     "confirm": "Confirmar",
     "edit": "Editar",
@@ -2412,7 +2440,75 @@
     "executionReady": "Listo para ejecutar. Te llevo a la pantalla real de ejecución para la firma de la cartera.",
     "executionBlocked": "Está en cola en Cartera — todavía hace falta tu firma.",
     "executionFailed": "No se completó. La transacción no terminó.",
-    "connectWallet": "Conectar cartera"
+    "connectWallet": "Conectar cartera",
+    "portfolioCard": {
+      "title": "Inteligencia de cartera",
+      "subtitle": "Saldos de redes compatibles; la cobertura de precios puede variar.",
+      "asOf": "Saldos a {{time}}",
+      "status": {
+        "live": "Saldos y precios actualizados",
+        "partial": "Lectura parcial de la cartera",
+        "stale": "Algunos saldos o precios pueden estar desactualizados",
+        "pending": "Actualizando datos de la cartera",
+        "unavailable": "Datos de cartera no disponibles",
+        "empty": "Vacía (verificada)"
+      },
+      "metric": {
+        "total": "Valor de la cartera",
+        "pricedValue": "Subtotal de activos con precio",
+        "stablecoins": "Stablecoins USD reconocidas",
+        "concentration": "Mayor participación por token",
+        "pricedOnly": "Solo entre activos con precio",
+        "pnl": "Ganancia/pérdida no realizada",
+        "riskScore": "Índice heurístico de composición",
+        "notAvailable": "No disponible",
+        "noCostBasis": "No hay historial de compras ni costo base conectado.",
+        "riskUnavailable": "Requiere una lectura completa y actual con al menos una posición valorada.",
+        "notComputed": "Métricas de cartera",
+        "riskBasis": "Heurística: concentración de tokens valorados, proporción de stablecoins y número de posiciones y redes; un valor mayor implica más exposición."
+      },
+      "note": {
+        "pricedSubtotal": "Este valor solo incluye activos con un precio válido.",
+        "risk": "Este índice de composición es heurístico, no una evaluación de riesgo completa. Usa posiciones valoradas, stablecoins reconocidas y el número de posiciones y redes; no incluye volatilidad de mercado, pasivos, costo base ni activos fuera de esta cartera.",
+        "unpricedCount": "{{count}} activo(s) sin precio válido",
+        "failedCount": "No se confirmó la lectura de {{count}} red(es)",
+        "staleCount": "Los datos de {{count}} red(es) pueden estar desactualizados"
+      },
+      "tab": {
+        "assets": "Activos",
+        "networks": "Redes"
+      },
+      "row": {
+        "priceUnavailable": "Precio no disponible",
+        "noHoldings": "No hay saldos distintos de cero disponibles en esta vista."
+      },
+      "network": {
+        "failed": "Lectura fallida",
+        "stale": "Datos anteriores",
+        "live": "Saldo actualizado",
+        "assetCount": "{{count}} activo(s)",
+        "noNetworks": "No hay saldos de redes para mostrar.",
+        "partial": "Lectura parcial"
+      },
+      "action": {
+        "risk": "Consultar riesgo",
+        "allocation": "Consultar distribución",
+        "rebalance": "Previsualizar rebalanceo",
+        "fullPortfolio": "Abrir cartera completa",
+        "showAll": "Mostrar los {{count}}",
+        "showLess": "Mostrar menos"
+      },
+      "prompt": {
+        "risk": "Analiza el riesgo de mi cartera. Indica qué se mide y qué falta; no presentes la concentración como una puntuación de riesgo completa.",
+        "allocation": "Muestra mi distribución actual por token y red.",
+        "rebalance": "Ayúdame a elegir una distribución objetivo y prepara una vista previa del rebalanceo con importes. Pregúntame primero el objetivo y no ejecutes nada."
+      },
+      "riskBand": {
+        "low": "Menor exposición",
+        "medium": "Exposición moderada",
+        "high": "Mayor exposición"
+      }
+    }
   },
   "solana": {
     "wallet": {

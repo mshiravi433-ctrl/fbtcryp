@@ -70,7 +70,7 @@ export const INSTRUMENTS = Object.freeze([
     aliases: ['silver', 'xag', 'spot silver',
       'نقره', 'انس نقره', 'اونس نقره',
       'فضة'],
-    read: R.global('commodities', 'commodities')
+    read: R.macro('SILVER'), alsoRead: R.global('commodities', 'commodities')
   },
   {
     symbol: 'WTI', assetClass: 'commodities', unit: 'USD/bbl',
@@ -84,13 +84,13 @@ export const INSTRUMENTS = Object.freeze([
     name: { en: 'Brent Crude', fa: 'نفت برنت', ar: 'نفط برنت' },
     aliases: ['brent', 'brent crude', 'brn',
       'برنت', 'نفت برنت'],
-    read: R.global('commodities', 'commodities')
+    read: R.macro('BRENT'), alsoRead: R.global('commodities', 'commodities')
   },
   {
     symbol: 'COPPER', assetClass: 'commodities', unit: 'USD/lb',
     name: { en: 'Copper', fa: 'مس', ar: 'النحاس' },
     aliases: ['copper', 'hg', 'مس', 'نحاس'],
-    read: R.global('commodities', 'commodities')
+    read: R.macro('COPPER'), alsoRead: R.global('commodities', 'commodities')
   },
 
   /* ─── stocks ──────────────────────────────────────────────────────────── */
