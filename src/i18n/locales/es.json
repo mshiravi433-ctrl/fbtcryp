@@ -2518,7 +2518,27 @@
         "medium": "Exposición moderada",
         "high": "Mayor exposición"
       }
-    }
+    },
+    "conditional": {
+      "title": "Asignación condicional",
+      "conditions": "Condiciones",
+      "met": "cumplida",
+      "notMet": "no cumplida",
+      "arming": "fijando la línea base",
+      "unreadable": "no se puede leer",
+      "allocation": "Asignación",
+      "ofCapital": "del capital",
+      "units": "unidades",
+      "analysisOnly": "solo análisis — no hay bróker configurado para esta clase de activo",
+      "aboveRail": "supera el límite del {{pct}}% — requiere tu confirmación explícita",
+      "watch": "Vigilar esta condición",
+      "declines": "una caída del {{pct}}%",
+      "rises": "una subida del {{pct}}%",
+      "above": "por encima de {{value}}",
+      "below": "por debajo de {{value}}"
+    },
+    "voiceInput": "Dicta tu solicitud",
+    "listening": "Escuchando…"
   },
   "solana": {
     "wallet": {

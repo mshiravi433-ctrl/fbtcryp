@@ -2518,7 +2518,27 @@
         "medium": "Exposition modérée",
         "high": "Exposition plus élevée"
       }
-    }
+    },
+    "conditional": {
+      "title": "Allocation conditionnelle",
+      "conditions": "Conditions",
+      "met": "remplie",
+      "notMet": "non remplie",
+      "arming": "enregistrement du niveau de référence",
+      "unreadable": "illisible",
+      "allocation": "Allocation",
+      "ofCapital": "du capital",
+      "units": "unités",
+      "analysisOnly": "analyse uniquement — aucun courtier configuré pour cette classe d’actifs",
+      "aboveRail": "au-dessus du plafond de {{pct}} % — nécessite votre confirmation explicite",
+      "watch": "Surveiller cette condition",
+      "declines": "une baisse de {{pct}} %",
+      "rises": "une hausse de {{pct}} %",
+      "above": "au-dessus de {{value}}",
+      "below": "en dessous de {{value}}"
+    },
+    "voiceInput": "Dictez votre demande",
+    "listening": "Écoute en cours…"
   },
   "solana": {
     "wallet": {

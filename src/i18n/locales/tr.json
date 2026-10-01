@@ -2518,7 +2518,27 @@
         "medium": "Orta maruziyet",
         "high": "Daha yüksek maruziyet"
       }
-    }
+    },
+    "conditional": {
+      "title": "Koşullu tahsis",
+      "conditions": "Koşullar",
+      "met": "sağlandı",
+      "notMet": "sağlanmadı",
+      "arming": "başlangıç değeri kaydediliyor",
+      "unreadable": "okunamıyor",
+      "allocation": "Tahsis",
+      "ofCapital": "sermaye",
+      "units": "birim",
+      "analysisOnly": "yalnızca analiz — bu varlık sınıfı için yapılandırılmış aracı kurum yok",
+      "aboveRail": "%{{pct}} sınırının üzerinde — açık onayınız gerekir",
+      "watch": "Bu koşulu izle",
+      "declines": "%{{pct}} düşüş",
+      "rises": "%{{pct}} artış",
+      "above": "{{value}} üzerinde",
+      "below": "{{value}} altında"
+    },
+    "voiceInput": "İsteğinizi söyleyin",
+    "listening": "Dinleniyor…"
   },
   "solana": {
     "wallet": {

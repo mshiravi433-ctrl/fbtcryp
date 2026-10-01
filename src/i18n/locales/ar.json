@@ -6798,7 +6798,27 @@
         "medium": "تعرّض متوسط",
         "high": "تعرّض أعلى"
       }
-    }
+    },
+    "conditional": {
+      "title": "التخصيص الشرطي",
+      "conditions": "الشروط",
+      "met": "متحقق",
+      "notMet": "غير متحقق",
+      "arming": "جارٍ تسجيل خط الأساس",
+      "unreadable": "تعذّرت القراءة",
+      "allocation": "التخصيص",
+      "ofCapital": "من رأس المال",
+      "units": "وحدة",
+      "analysisOnly": "تحليل فقط — لا يوجد وسيط مُهيَّأ لهذه الفئة",
+      "aboveRail": "أعلى من حد {{pct}}٪ — يتطلب تأكيدك الصريح",
+      "watch": "راقب هذا الشرط",
+      "declines": "انخفاض بنسبة {{pct}}٪",
+      "rises": "ارتفاع بنسبة {{pct}}٪",
+      "above": "أعلى من {{value}}",
+      "below": "أقل من {{value}}"
+    },
+    "voiceInput": "تحدّث بطلبك",
+    "listening": "جارٍ الاستماع…"
   },
   "futures": {
     "onchain": {

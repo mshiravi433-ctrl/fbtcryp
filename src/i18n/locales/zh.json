@@ -2511,7 +2511,27 @@
         "medium": "中等敞口",
         "high": "较高敞口"
       }
-    }
+    },
+    "conditional": {
+      "title": "条件配置",
+      "conditions": "条件",
+      "met": "已满足",
+      "notMet": "未满足",
+      "arming": "正在记录基准值",
+      "unreadable": "无法读取",
+      "allocation": "配置金额",
+      "ofCapital": "的资金",
+      "units": "单位",
+      "analysisOnly": "仅分析 — 此资产类别未配置经纪商",
+      "aboveRail": "超过 {{pct}}% 上限 — 需要您明确确认",
+      "watch": "关注此条件",
+      "declines": "下跌 {{pct}}%",
+      "rises": "上涨 {{pct}}%",
+      "above": "高于 {{value}}",
+      "below": "低于 {{value}}"
+    },
+    "voiceInput": "说出您的请求",
+    "listening": "正在聆听…"
   },
   "solana": {
     "wallet": {

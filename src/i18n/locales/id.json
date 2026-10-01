@@ -2518,7 +2518,27 @@
         "medium": "Eksposur sedang",
         "high": "Eksposur lebih tinggi"
       }
-    }
+    },
+    "conditional": {
+      "title": "Alokasi bersyarat",
+      "conditions": "Kondisi",
+      "met": "terpenuhi",
+      "notMet": "belum terpenuhi",
+      "arming": "mencatat garis dasar",
+      "unreadable": "tidak terbaca",
+      "allocation": "Alokasi",
+      "ofCapital": "dari modal",
+      "units": "unit",
+      "analysisOnly": "hanya analisis — belum ada broker yang dikonfigurasi untuk kelas aset ini",
+      "aboveRail": "melebihi batas {{pct}}% — memerlukan konfirmasi eksplisit Anda",
+      "watch": "Pantau kondisi ini",
+      "declines": "penurunan {{pct}}%",
+      "rises": "kenaikan {{pct}}%",
+      "above": "di atas {{value}}",
+      "below": "di bawah {{value}}"
+    },
+    "voiceInput": "Ucapkan permintaan Anda",
+    "listening": "Mendengarkan…"
   },
   "solana": {
     "wallet": {
