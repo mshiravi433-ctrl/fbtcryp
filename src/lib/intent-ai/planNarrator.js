@@ -177,13 +177,18 @@ export function narrateMissingInformation(plan, { locale = 'fa' } = {}) {
     const bal = plan?.source?.balanceAmount != null
       ? `${qty(plan.source.balanceAmount)} ${token}`
       : money(plan?.source?.balanceUsd);
+    const priceMissing = plan?.missing === 'AMOUNT_PRICE_UNAVAILABLE';
     return {
       message: lang === 'fa'
-        ? `چه مقدار${token ? ` ${token}` : ''} می‌خواهید تبدیل کنم؟${bal ? `\n\nموجودی فعلی: ${bal}` : ''}`
-        : `How much${token ? ` ${token}` : ''} should I convert?${bal ? `\n\nAvailable: ${bal}` : ''}`,
+        ? (priceMissing
+          ? `برای تبدیل مبلغ دلاری به ${token || 'دارایی مبدأ'} قیمت زنده و قابل‌اتکا ندارم. لطفاً مقدار را برحسب ${token || 'توکن مبدأ'} وارد کنید.`
+          : `چه مقدار${token ? ` ${token}` : ''} می‌خواهید تبدیل کنم؟${bal ? `\n\nموجودی فعلی: ${bal}` : ''}`)
+        : (priceMissing
+          ? `I do not have a trustworthy live price to convert USD into ${token || 'the source asset'}. Enter the amount in ${token || 'source-token'} units instead.`
+          : `How much${token ? ` ${token}` : ''} should I convert?${bal ? `\n\nAvailable: ${bal}` : ''}`),
       ui: { type: 'CHOICE' },
       choiceKind: 'AMOUNT',
-      choices: [
+      choices: priceMissing ? [] : [
         { id: 'half', label: lang === 'fa' ? 'نصف' : 'Half', value: '50%' },
         { id: 'all', label: lang === 'fa' ? 'همه' : 'All', value: '100%' }
       ]
@@ -191,6 +196,19 @@ export function narrateMissingInformation(plan, { locale = 'fa' } = {}) {
   }
 
   if (status === 'NO_BALANCE') {
+    if (plan?.missing === 'SOURCE_NETWORK_BALANCE') {
+      const network = chainName(plan?.requestedSourceChainId) || 'the requested network';
+      const alternatives = Array.isArray(plan?.unavailableOnOtherChains)
+        ? plan.unavailableOnOtherChains.map((row) => `${row.symbol} on ${row.chain || chainName(row.chainId)}`).join(', ')
+        : '';
+      return {
+        message: lang === 'fa'
+          ? `موجودی مبدأ روی شبکهٔ درخواستی (${network}) پیدا نشد. شبکه را عوض نمی‌کنم${alternatives ? `؛ ${alternatives} فقط روی شبکه‌های دیگری دیده می‌شود` : ''}.`
+          : `I could not verify the source balance on the requested network (${network}). I will not silently switch networks${alternatives ? `; the asset is only visible on ${alternatives}` : ''}.`,
+        ui: { type: 'TEXT' },
+        choices: []
+      };
+    }
     if (plan?.missing === 'INSUFFICIENT_BALANCE') {
       return {
         message: lang === 'fa'

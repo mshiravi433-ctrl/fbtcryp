@@ -805,6 +805,12 @@ console.log('▸ probing FBT Intent OS — human layer · pending resume · rece
   if (Array.isArray(humanRows)) report('intent-os human layer', humanRows);
 }
 
+console.log('▸ probing FBT Intent AI — lending review (live reads · fail-closed review · FARM is not Aave)…');
+{
+  const { default: lendingReviewRows } = await import('./intent-ai/lending-review-probe.mjs');
+  if (Array.isArray(lendingReviewRows)) report('intent-ai lending review', lendingReviewRows);
+}
+
 console.log('▸ probing FBT Intent OS — execution flow (context → resolve → ONE confirmation → confirm-by-id)…');
 {
   const { default: flowRows } = await import('./intent-ai/intent-os-execution-flow-probe.mjs');

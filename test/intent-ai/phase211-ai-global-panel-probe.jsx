@@ -17,7 +17,7 @@
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { MemoryRouter } from 'react-router-dom';
-import '../../src/i18n/index.js';
+import i18n, { setLanguage } from '../../src/i18n/index.js';
 import AiGlobalIntelligence from '../../src/components/ai/AiGlobalIntelligence.jsx';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -38,7 +38,13 @@ const INTEL = {
       macro: { status: 'OK', reason: null, source: 'macro:classifier', at: Date.now(), confidence: 0.7, data: { attention: 2, byTopic: { FED: 1, POLITICS: 1 }, items: [{ topic: 'FED', title: 'Fed signals patience', url: 'u', at: Date.now(), matched: 'Fed' }], instruments: [{ symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F' }, { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F' }], curve: { symbol: 'US2S10S', spreadPct: -0.21, source: 'fred:T10Y2Y' }, untrusted: true } },
       stocks: { status: 'OK', reason: null, source: 'brain:stocks', at: Date.now(), confidence: 0.75, data: { venue: 'avantis', readOnly: true, instruments: [{ symbol: 'AAPL', priceUsd: 214.3, change24hPct: 1.2 }, { symbol: 'TSLA', priceUsd: 242.1, change24hPct: -2.1 }] } },
       forex: { status: 'OK', reason: null, source: 'brain:forex', at: Date.now(), confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [{ symbol: 'EURUSD', priceUsd: 1.084, change24hPct: 0.3 }] } },
-      commodities: { status: 'OK', reason: null, source: 'brain:commodities', at: Date.now(), confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [{ symbol: 'XAU', priceUsd: 2352.5, change24hPct: 0.9 }] } },
+      commodities: { status: 'OK', reason: null, source: 'brain:commodities', at: Date.now(), confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [
+        { symbol: 'GOLD', priceUsd: 2352.5, change24hPct: 0.9, category: 'commodities' },
+        { symbol: 'SILVER', priceUsd: 31.2, change24hPct: 0.4, category: 'commodities' },
+        { symbol: 'WTI', priceUsd: 78.4, change24hPct: -0.2, category: 'commodities' },
+        { symbol: 'BRENT', priceUsd: 81.2, change24hPct: 0.1, category: 'commodities' },
+        { symbol: 'COPPER', priceUsd: 4.5, change24hPct: 0.3, category: 'commodities' }
+      ] } },
       rwa: { status: 'OK', reason: null, source: 'brain:rwa', at: Date.now(), confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [{ symbol: 'XAU', priceUsd: 2352.5, change24hPct: 0.9, category: 'commodities' }] } }
     },
     providers: {
@@ -70,9 +76,15 @@ const CROSS = {
     macro: {
       status: 'OK', untrusted: true,
       indicators: [
-        { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F' },
-        { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F' },
-        { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:T10YIE' }
+        { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', unit: 'index points', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F', at: Date.now() - 60_000 },
+        { symbol: 'GOLD', name: 'Gold (USD/troy oz)', kind: 'safe_haven', unit: 'USD/troy oz', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F', at: Date.now() - 60_000 },
+        { symbol: 'SILVER', name: 'Silver (USD/troy oz)', kind: 'industrial_metal', unit: 'USD/troy oz', priceUsd: 31.2, change1dPct: 0.7, change7dPct: 1.8, source: 'stooq:SI.F', at: Date.now() - 60_000 },
+        { symbol: 'WTI', name: 'WTI Crude (USD/bbl)', kind: 'energy', unit: 'USD/barrel', priceUsd: 78.4, change1dPct: -0.6, change7dPct: -1.8, source: 'stooq:CL.F', at: Date.now() - 60_000 },
+        { symbol: 'BRENT', name: 'Brent Crude (USD/bbl)', kind: 'energy', unit: 'USD/barrel', priceUsd: 81.2, change1dPct: -0.3, change7dPct: -1.1, source: 'stooq:BRN.F', at: Date.now() - 60_000 },
+        { symbol: 'COPPER', name: 'Copper (USD/lb)', kind: 'industrial_metal', unit: 'USD/lb', priceUsd: 4.5, change1dPct: 0.2, change7dPct: 0.6, source: 'stooq:HG.F', at: Date.now() - 60_000 },
+        { symbol: 'SPX', name: 'S&P 500 E-mini futures', kind: 'equity', unit: 'index points', priceUsd: 5480.25, change1dPct: 0.4, change7dPct: 0.9, source: 'stooq:ES.F', at: Date.now() - 60_000 },
+        { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', unit: '%', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:DGS10', at: Date.now() - 60_000 },
+        { symbol: 'US2S10S', name: 'US 2s10s spread (pct)', kind: 'curve', unit: 'percentage points', priceUsd: -0.21, change1dPct: null, change7dPct: -0.3, source: 'fred:T10Y2Y', at: Date.now() - 60_000 }
       ],
       curve: { symbol: 'US2S10S', spreadPct: -0.21, change7dPct: -0.3, source: 'fred:T10Y2Y' }
     },
@@ -107,14 +119,39 @@ export async function run(container) {
   };
 
   /* ── 1. mount with a live API ──────────────────────────────────────────── */
-  global.fetch = async (url) => ({
-    ok: true,
-    json: async () => {
-      if (String(url).includes('/global/briefing')) return BRIEFING;
-      if (String(url).includes('/global/cross-asset')) return CROSS;
-      return INTEL;
+  let rateAvailable = true;
+  const goldEtfRows = [
+    ['GLD', 312.4], ['IAU', 57.8], ['GLDM', 65.1], ['SGOL', 31.6], ['BAR', 34.2]
+  ].map(([symbol, priceUsd]) => ({
+    symbol, name: `${symbol} Gold ETF`, priceUsd, changePct: 0.4,
+    latestTradingDay: '2026-10-01', meta: { stale: false }
+  }));
+  await act(async () => { await i18n.changeLanguage('en'); });
+  global.fetch = async (url) => {
+    const path = String(url);
+    if (path.includes('/iran/buy/rate')) {
+      return { ok: true, json: async () => ({
+        schema: 'fbt.iran-buy-rate.v1', available: rateAvailable,
+        buyPrice: rateAvailable ? '500000' : null,
+        source: 'wallex-public-markets', at: new Date().toISOString()
+      }) };
     }
-  });
+    if (path.includes('/etf?category=gold')) {
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => ({ ok: true, rows: goldEtfRows, meta: { stale: false, fetchedAt: Date.now() } })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => {
+        if (path.includes('/global/briefing')) return BRIEFING;
+        if (path.includes('/global/cross-asset')) return CROSS;
+        return INTEL;
+      }
+    };
+  };
 
   let root = createRoot(container);
   await act(async () => {
@@ -163,6 +200,26 @@ export async function run(container) {
     text().includes('DXY') && text().includes('GOLD') && text().includes('US10Y')
     && /\+0\.8% 1d/.test(text()) && /\+2\.1% 7d/.test(text())
     && /2s10s/i.test(text()) && /inverted|وارون/i.test(text()));
+  check('panel: five distinct commodity quotes are rendered from observed USD feeds',
+    all('.aig-commodity-row').length === 5
+    && ['GOLD', 'SILVER', 'WTI', 'BRENT', 'COPPER'].every((symbol) => text().includes(symbol))
+    && /USD\/troy oz/.test(text()) && /USD\/barrel/.test(text()));
+  check('panel: ETF cards contain only the five priced gold ETF rows returned by the quote endpoint',
+    all('.aig-etf-row').length === 5 && ['GLD', 'IAU', 'GLDM', 'SGOL', 'BAR'].every((symbol) => text().includes(symbol)));
+
+  /* The toman conversion is locale-aware and fails closed when the public
+     USDT/TMN reference is missing or stale. */
+  await act(async () => { await setLanguage('fa'); await sleep(40); });
+  const crossTabFa = all('button').find((b) => (b.textContent || '').includes('🔀'));
+  await act(async () => { crossTabFa?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(20); });
+  check('panel: Persian market values show a fresh USDT/TMN-based toman estimate with a non-executable disclaimer',
+    all('.aig-commodity-row .aig-market-toman').length === 5
+    && /USDT\/TMN/.test(text()) && /نرخ اجرایی USD\/TMN/.test(text()) && /تومان/.test(text()));
+  rateAvailable = false;
+  await act(async () => { all('.aig-refresh')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(40); });
+  check('panel: missing USDT/TMN data hides toman conversions instead of retaining a stale number',
+    all('.aig-commodity-row .aig-market-toman').length === 0
+    && /نرخ تازهٔ عمومی USDT\/TMN در دسترس نیست/.test(text()));
 
   /* switch to providers */
   const provTab = all('button').find((b) => (b.textContent || '').includes('🔌'));
@@ -174,6 +231,7 @@ export async function run(container) {
     (/whale scanner unavailable|اسکنر نهنگ در دسترس نیست/.test(text())));
 
   await act(async () => { root.unmount(); });
+  await act(async () => { await setLanguage('en'); });
 
   /* ── 2. mount against a DEAD API — the screen must render its empty state ─ */
   global.fetch = async () => ({ ok: false, json: async () => ({ ok: false }) });

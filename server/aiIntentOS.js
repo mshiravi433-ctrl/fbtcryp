@@ -163,7 +163,7 @@ const DEVICE_HEADER = 'x-fbt-device';
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const SALT = process.env.FINANCIAL_GOALS_SALT || process.env.CRON_SECRET || 'fbt-ai-intent-os';
 const RAW_SECRET_RE = /(?:private[\s-]?key|seed[\s-]?phrase|mnemonic|master[\s-]?password|api[\s-]?secret|raw[\s-]?secret|passphrase)/i;
-const ACTION_TYPES = new Set(['SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'FUTURES', 'FARM', 'LEND', 'STOCK', 'DCA', 'GOAL', 'REBALANCE', 'DEPOSIT', 'YIELD_SWEEP', 'AUTOMATION_CREATE', 'STABLE_SHIELD', 'REVOKE_APPROVAL', 'STOP_LOSS', 'ANALYZE']);
+const ACTION_TYPES = new Set(['SWAP', 'BRIDGE', 'SEND', 'BUY', 'SELL', 'FUTURES', 'FARM', 'LEND', 'BORROW', 'STOCK', 'DCA', 'GOAL', 'REBALANCE', 'DEPOSIT', 'YIELD_SWEEP', 'AUTOMATION_CREATE', 'STABLE_SHIELD', 'REVOKE_APPROVAL', 'STOP_LOSS', 'ANALYZE']);
 /* Plan actions use the older command-center names; the AI OS normalises them
    to the public AIAction schema before validation and routing. */
 const ACTION_ALIASES = Object.freeze({
@@ -341,12 +341,23 @@ function sanitizeBalances(value) {
     const amount = Number(b?.amount);
     const symbol = token(b?.symbol);
     if (!symbol || !Number.isFinite(amount) || amount < 0) return null;
+    const valueUsd = b?.valueUsd != null && b.valueUsd !== '' && Number.isFinite(Number(b.valueUsd))
+      ? Math.max(0, Number(b.valueUsd)) : null;
+    const priceUsd = b?.priceUsd != null && b.priceUsd !== '' && Number.isFinite(Number(b.priceUsd))
+      ? Math.max(0, Number(b.priceUsd)) : null;
+    const decimals = b?.decimals != null && Number.isInteger(Number(b.decimals)) && Number(b.decimals) >= 0
+      ? Number(b.decimals) : null;
     return {
       symbol,
       chain: safe(b?.chain || b?.chainId || null, 32),
-      chainId: Number.isFinite(Number(b?.chainId)) ? Number(b.chainId) : null,
+      chainId: b?.chainId != null && Number.isFinite(Number(b.chainId)) ? Number(b.chainId) : null,
       amount,
-      valueUsd: Number.isFinite(Number(b?.valueUsd)) ? Math.max(0, Number(b.valueUsd)) : null,
+      valueUsd,
+      priceUsd,
+      priceProvenance: safe(b?.priceProvenance || b?.dataProvenance || 'unavailable', 24).toLowerCase(),
+      balanceFreshness: safe(b?.balanceFreshness || 'unknown', 16).toLowerCase(),
+      decimals,
+      address: safe(b?.address || b?.mint || null, 80),
       dataStatus: b?.dataStatus || 'client'
     };
   });
@@ -683,6 +694,20 @@ function suggestionsFor({ message = '', intent = 'GENERAL', context = {} } = {})
 
 /* ------------------------------ execution path ---------------------------- */
 
+/**
+ * The unit the user wrote their amount in. "100 USDC" is 100 USDC (a token
+ * unit), not "$100": the parser's generic `amountUnit` says USD for it, but
+ * `amountSymbol` carries the token the user actually typed. Only a fiat word
+ * ("$100", "100 دلار", "۵ میلیون تومان") means a fiat amount.
+ */
+const FIAT_UNIT_WORDS = new Set(['USD', '$', 'DOLLAR', 'DOLLARS', 'TOMAN', 'IRT', 'IRR', 'دلار', 'تومان']);
+function statedAmountUnit(entities = {}) {
+  const symbol = String(entities.amountSymbol || '').trim().toUpperCase();
+  if (symbol && !FIAT_UNIT_WORDS.has(symbol)) return symbol;
+  const unit = String(entities.amountUnit || symbol || '').trim().toUpperCase();
+  return unit || null;
+}
+
 function routeForAction(type, chainId) {
   switch (String(type || '').toUpperCase()) {
     case 'SWAP':
@@ -698,6 +723,7 @@ function routeForAction(type, chainId) {
     case 'FARM':
       return '/farm';
     case 'LEND':
+    case 'BORROW':
       return '/loan';
     case 'STOCK':
       return '/stocks';
@@ -724,7 +750,14 @@ function validateAction(shaped, context = {}) {
     return { ok: false, reason: 'CHAIN_UNSUPPORTED', detail: `chain ${chainId}` };
   }
   const amount = num(shaped?.amount);
+  /* `num(null)` is 0, so an ABSENT USD value must be recognised before it is
+     coerced: an amount whose USD value could not be proven (no live price)
+     carries `amountUsd: null` and is not "a zero-dollar amount". */
+  const amountUsd = shaped?.amountUsd === null || shaped?.amountUsd === undefined || shaped?.amountUsd === ''
+    ? null
+    : num(shaped.amountUsd);
   if (amount != null && amount <= 0) return { ok: false, reason: 'AMOUNT_INVALID' };
+  if (amountUsd != null && amountUsd <= 0) return { ok: false, reason: 'AMOUNT_INVALID' };
   const wallet = context.wallet || { connected: false };
   const needsWallet = !['GOAL', 'DCA'].includes(type);
   if (needsWallet && !wallet.connected) return { ok: false, reason: 'WALLET_REQUIRED' };
@@ -743,6 +776,8 @@ function validateAction(shaped, context = {}) {
     chainId,
     asset,
     amount,
+    amountUsd,
+    amountUnit: shaped?.amountUnit || null,
     parameters: shaped?.parameters && typeof shaped.parameters === 'object' ? shaped.parameters : {},
     requiresConfirmation: true,
     handoffRoute: routeForAction(type, chainId)
@@ -1759,7 +1794,23 @@ router.post('/chat', async (req, res) => {
     resumed,
     suggestions,
     intentId,
-    resolvedHints: req.body?.hints && typeof req.body.hints === 'object' ? req.body.hints : null
+    resolvedHints: {
+      /* What the SENTENCE states — the amount, the unit it was written in and
+         the network the user named. The parser's from/to token guesses are
+         deliberately NOT forwarded: they are frequently inverted ("100 USDC
+         → ETH" read as "ETH → USDC"), and the resolver derives the asset
+         the amount is denominated in from the unit instead. */
+      ...(u4?.entities && typeof u4.entities === 'object' ? {
+        amount: u4.entities.amount ?? null,
+        amountUsd: u4.entities.amountUsd ?? null,
+        amountUnit: statedAmountUnit(u4.entities),
+        sourceChainId: u4.entities.fromChain ?? u4.entities.network ?? u4.entities.chainIds?.[0] ?? null,
+        fromChain: u4.entities.fromChain ?? null,
+        toChain: u4.entities.toChain ?? null,
+        chainIds: Array.isArray(u4.entities.chainIds) ? u4.entities.chainIds.slice(0, 2) : []
+      } : {}),
+      ...(req.body?.hints && typeof req.body.hints === 'object' ? req.body.hints : {})
+    }
   });
   logInternal('chat', {
     intent: human.intent,
@@ -1861,6 +1912,9 @@ router.post('/chat', async (req, res) => {
   const collaborationWanted = isCollaborativeIntent
     && !human.pendingIntent
     && !['ACTION_CARD', 'CONNECT_WALLET', 'CHOICE'].includes(human.ui?.type)
+    /* A deliberate fail-closed answer («no verified executor», «no live
+       reads on this path») is the answer — a model may not talk over it. */
+    && human.intent?.status !== 'UNAVAILABLE'
     && u5.level >= 2
     && !socialTurn.handled;
 
@@ -2299,11 +2353,17 @@ router.post('/execute', async (req, res) => {
       from: a.from || null,
       to: a.to || null,
       amount: a.amount != null ? String(a.amount) : (validator.amount != null ? String(validator.amount) : null),
-      amountUsd: a.amountUsd ?? validator.amount,
+      amountUnit: a.amountUnit || validator.amountUnit || null,
+      /* Never the TOKEN amount standing in for dollars: an unpriced amount is
+         reported as having no USD value, not as a USD value of its own size. */
+      amountUsd: a.amountUsd ?? validator.amountUsd ?? null,
       chainId: a.chainId ?? validator.chainId,
+      venue: a.venue || null,
+      protocol: a.protocol || null,
+      market: a.market || null,
       parameters: a.parameters || validator.parameters
     })),
-    capitalUsd: validator.amount
+    capitalUsd: validator.amountUsd ?? null
   };
   const verdict = validateExecution(synthesizedPlan, {
     aiControl: sanitizeAiControl(body.aiControl || AI_CONTROL_DEFAULTS),
@@ -2416,7 +2476,9 @@ router.post('/confirm', async (req, res) => {
     ...(stored.actionPlan?.ready ? {
       sourceAsset: stored.actionPlan.source?.token || null,
       targetAsset: stored.actionPlan.destination?.token || null,
-      amount: stored.actionPlan.source?.amount ?? null
+      sourceChainId: stored.actionPlan.source?.chainId ?? null,
+      amount: stored.actionPlan.source?.amount ?? null,
+      amountUnit: stored.actionPlan.source?.amountUnit || stored.actionPlan.source?.token || null
     } : {}),
     ...(body.hints && typeof body.hints === 'object' ? body.hints : {})
   };

@@ -936,6 +936,19 @@ export function understandIntent(message, context = {}) {
   const clarification = calculateClarificationPriority({ intentType: selectedType, entities, context });
   const breakdown = calculateConfidenceBreakdown({ intentType: selectedType, entities, context, questionType });
   const nextPredictedActions = predictNextActions({ intentType: selectedType, entities, context });
+  const positiveAmount = Number(entities.amount ?? entities.amountUsd);
+  const hasPositiveAmount = Number.isFinite(positiveAmount) && positiveAmount > 0;
+  const explicitSupplyVerb = /(\bsupply\b|\blend\b|\bdeposit\b|سپرده[‌\s]*(?:کن|بگذار|بذار)|وام[‌\s]*بده|لند[‌\s]*کن|واریز[‌\s]*کن)/i.test(text);
+  const explicitBorrowVerb = /(\bborrow\b|\btake\s+out\s+(?:a\s+)?loan\b|\bborrow\s+against\b|وام[‌\s]*بگیر|قرض[‌\s]*بگیر|اعتبار[‌\s]*بگیر)/i.test(text);
+  const amountSymbol = String(entities.amountSymbol || '').toUpperCase();
+  const hasLendingAsset = Boolean(entities.token || (amountSymbol && !['USD', '$', 'TOMAN'].includes(amountSymbol)));
+  const isQuestionMark = /[?؟]\s*$/.test(String(text || '').trim());
+  const lendingActionRequested = (selectedType === 'LEND' && explicitSupplyVerb
+      || selectedType === 'BORROW' && explicitBorrowVerb)
+    && hasPositiveAmount
+    && hasLendingAsset
+    && !isQuestionMark
+    && questionType !== QUESTION_TYPES.RECOMMENDATION;
 
   return {
     ok: true,
@@ -959,12 +972,15 @@ export function understandIntent(message, context = {}) {
     priceTriggerOperator: entities.priceTriggerOperator || null,
     constraints: entities.constraints || [],
     urgency: entities.urgency || 'normal',
-    executionRequested: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE'].includes(selectedType) || /(برام.*بخر|اجرا کن|do it)/i.test(text),
+    executionRequested: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE'].includes(selectedType)
+      || lendingActionRequested
+      || /(برام.*بخر|اجرا کن|do it)/i.test(text),
     missingInformation: clarification.missingFields,
     clarificationPriority: clarification.priorityList,
     minimalQuestion: clarification.minimalQuestion,
     assumptions: [],
-    requiresConfirmation: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE', 'REBALANCE'].includes(selectedType),
+    requiresConfirmation: ['BUY', 'SELL', 'SWAP', 'SEND', 'BRIDGE', 'REBALANCE'].includes(selectedType)
+      || lendingActionRequested,
     isCorrection: Boolean(correction?.isCorrection),
     isConflict: Boolean(conflict.conflict),
     conflictDetails: conflict.conflict ? { messageFa: conflict.messageFa, messageEn: conflict.messageEn } : null,
@@ -977,7 +993,7 @@ export function understandIntent(message, context = {}) {
     readOnly: [
       'PORTFOLIO_ANALYSIS', 'MARKET_ANALYSIS', 'NEWS_SEARCH', 'MARKET_CONTEXT', 'OPEN_CALM', 'PLAY_MUSIC',
       'NAVIGATION', 'WALLET_BALANCE', 'SMART_MONEY', 'WHALE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
-      'FARM', 'LEND', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA',
+      'FARM', 'LEND', 'BORROW', 'ANALYZE_TOKEN', 'RISK_ANALYSIS', 'SIGNALS', 'STOCKS', 'HORIZON', 'FOREX', 'RWA',
       'P2P', 'DYDX', 'FUTURES', 'ORDERS', 'BTC_WALLET', 'NOTIFICATIONS', 'SETTINGS', 'REWARDS',
       'STRATEGY_PLAN',
       'INTENT_OS', 'ADD_TOKEN', 'SWITCH_NETWORK', 'WALLET_CONNECT', 'WALLET_DISCONNECT',
@@ -985,7 +1001,7 @@ export function understandIntent(message, context = {}) {
       'OPS_CENTER', 'AGENTS', 'STRATEGY', 'SYSTEM_STATUS', 'SECURITY', 'NFT', 'SHOP',
       'EXPLORE', 'LEARN', 'DOCS', 'LEADERBOARD', 'VAULT', 'CAPABILITIES', 'GOAL', 'REBALANCE'
     ].includes(selectedType),
-    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
+    handoff: !['PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN', 'RISK_ANALYSIS', 'FARM', 'LEND', 'BORROW', 'GENERAL', 'CANCEL', 'CONTINUE', 'DETAILS', 'CAPABILITIES', 'SYSTEM_STATUS', 'AGENTS', 'STRATEGY'].includes(selectedType)
   };
 }
 

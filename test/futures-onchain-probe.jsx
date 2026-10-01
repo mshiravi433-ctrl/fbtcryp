@@ -272,7 +272,7 @@ export async function run(container) {
     t('the Futures page shows three tabs in one segmented control', strip.length === 3);
     t('the tab labels are Perpetual · dYdX Orbit · On-Chain (i18n, not keys)',
       strip.map((b) => b.textContent.trim()).join('|') === 'Perpetual|dYdX Orbit|On-Chain');
-    t('the Perpetual overview still renders its funding panel and liquidation table', !!q('.perp-liq') && qa('table').length >= 1);
+    t('the Perpetual overview renders the pair list without the retired liquidation table', !!q('[data-testid="perp-row-BTC"]') && !q('.perp-liq') && qa('table').length === 0);
 
     /* ═══════ A. UNAVAILABLE — the tab says so and builds nothing ═══════ */
     await act(async () => { click(strip[2]); });
@@ -470,9 +470,10 @@ export async function run(container) {
     await act(async () => { click(strip[1]); });
     await act(async () => { await sleep(500); });
     t('the dYdX tab still mounts', /dYdX/.test(container.textContent));
-    await act(async () => { click(strip[0]); });
-    await act(async () => { await sleep(200); });
-    t('the Perpetual overview still renders after the round trip', !!q('.perp-liq'));
+    t('the on-chain deep link remains selected while its tab query is present', tabs()[2]?.getAttribute('aria-selected') === 'true');
+    await mountAt('#/perp');
+    await act(async () => { await sleep(700); });
+    t('the Perpetual pair list renders on the default route', !!q('[data-testid="perp-row-BTC"]') && !q('.perp-liq'));
 
     /* ═══════ E. Intent OS hand-off: the URL pre-fills, it never executes ═══════ */
     const preparesBefore = bff.prepares;

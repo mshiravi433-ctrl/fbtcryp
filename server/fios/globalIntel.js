@@ -274,11 +274,13 @@ export function normalizeMacro(newsDomain, macroQuotes = null, at = Date.now()) 
       symbol: str(q.symbol, 12),
       name: str(q.name, 60),
       kind: str(q.kind, 16),
+      unit: str(q.unit, 24),
       priceUsd: num(q.priceUsd),
       change24hPct: num(q.change1dPct),
       change1dPct: num(q.change1dPct),
       change7dPct: num(q.change7dPct),
-      source: str(q.source, 40)
+      source: str(q.source, 40),
+      at: num(q.at)
     }))
     .filter((q) => q.symbol && q.priceUsd !== null);
   if (!classified.length && !quotes.length) {

@@ -65,8 +65,8 @@ const CROSS_ASSET = analyzeCrossAsset({
         instruments: [
           { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F' },
           { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F' },
-          { symbol: 'SPX', name: 'S&P 500 futures', kind: 'equity', priceUsd: 5842.5, change1dPct: 0.6, change7dPct: 1.7, source: 'stooq:ES.F' },
-          { symbol: 'US10Y', name: 'US 10Y yield (%)', kind: 'rate', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:T10YIE' }
+          { symbol: 'SPX', name: 'S&P 500 E-mini futures', kind: 'equity', priceUsd: 5842.5, change1dPct: 0.6, change7dPct: 1.7, source: 'stooq:ES.F' },
+          { symbol: 'US10Y', name: 'US 10Y yield (%)', kind: 'rate', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:DGS10' }
         ],
         curve: { symbol: 'US2S10S', spreadPct: -0.21, change7dPct: -0.3, source: 'fred:T10Y2Y' },
         untrusted: true

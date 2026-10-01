@@ -478,7 +478,7 @@ function allocationFor(intent, { riskTolerance, objective } = {}) {
  * `score: null` is the only honest answer — a "0/100" on an unread wallet is a
  * green light invented out of an empty map.
  */
-export function portfolioRiskScore({ holdings = null, market = null, aiControl = null } = {}) {
+export function portfolioRiskScore({ holdings = null, market = null, aiControl = null, stablecoinSymbols = null } = {}) {
   const rows = Array.isArray(holdings) ? holdings.filter((h) => num(h?.valueUsd) != null && num(h.valueUsd) > 0) : null;
   const factors = [];
   if (!rows || rows.length === 0) {
@@ -499,7 +499,9 @@ export function portfolioRiskScore({ holdings = null, market = null, aiControl =
   }
   const largest = Math.max(...bySymbol.values());
   const concentrationPct = Math.round((largest / total) * 1000) / 10;
-  const STABLES = new Set(['USDC', 'USDT', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP', 'USDD', 'CASH']);
+  const STABLES = stablecoinSymbols instanceof Set || Array.isArray(stablecoinSymbols)
+    ? new Set([...stablecoinSymbols].map((symbol) => String(symbol).toUpperCase()))
+    : new Set(['USDC', 'USDT', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP', 'USDD', 'CASH']);
   const stableSharePct = Math.round((([...bySymbol.entries()].reduce((sum, [s, v]) => (STABLES.has(s) ? sum + v : sum), 0)) / total) * 1000) / 10;
   const chains = new Set(rows.map((r) => r.chainId ?? r.chain ?? null).filter((v) => v !== null && v !== undefined));
   const chainCount = chains.size || null;

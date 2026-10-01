@@ -12,7 +12,7 @@
 
 import { classifyUserIntent, intentIsExecutable, intentRequiresWallet } from './intentKinds.js';
 import { planRebalance, change24hFromMarket } from './rebalanceEngine.js';
-import { humanizeError } from './errorHumanizer.js';
+import { humanizeError, normalizeErrorCode } from './errorHumanizer.js';
 import { createPendingIntent } from './pendingIntent.js';
 import { buildActionPlan, isExecutionReady } from './contextResolver.js';
 import { narrateReadyPlan, narrateMissingInformation } from './planNarrator.js';
@@ -57,8 +57,12 @@ function langOf(locale) {
   return code.startsWith('en') ? 'en' : 'fa';
 }
 
+function hasFiniteValue(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+}
+
 function money(n, lang) {
-  if (!Number.isFinite(Number(n))) return lang === 'fa' ? '—' : '—';
+  if (!hasFiniteValue(n)) return lang === 'fa' ? '—' : '—';
   const abs = Math.abs(Number(n));
   const formatted = abs >= 100
     ? Math.round(abs).toLocaleString('en-US')
@@ -67,13 +71,13 @@ function money(n, lang) {
 }
 
 function pct(n) {
-  if (!Number.isFinite(Number(n))) return '—';
+  if (!hasFiniteValue(n)) return '—';
   const v = Math.round(Number(n) * 10) / 10;
   return `${v}%`;
 }
 
 function signedPct(n) {
-  if (!Number.isFinite(Number(n))) return '—';
+  if (!hasFiniteValue(n)) return '—';
   const v = Math.round(Number(n) * 10) / 10;
   const sign = v > 0 ? '+' : '';
   return `${sign}${v}%`;
@@ -234,14 +238,16 @@ function formatRebalanceMessage(plan, lang) {
 }
 
 function formatBalance(context, lang) {
-  const rows = Array.isArray(context?.balances) ? context.balances.filter((b) => Number(b.amount) > 0) : [];
+  const rows = Array.isArray(context?.balances)
+    ? context.balances.filter((b) => (hasFiniteValue(b.amount) && Number(b.amount) > 0) || (hasFiniteValue(b.valueUsd) && Number(b.valueUsd) > 0))
+    : [];
   if (!rows.length) {
     return lang === 'fa'
       ? 'موجودی خوانده‌شده‌ای ندارم. اگر کیف پول همین الان متصل شده، چند لحظه صبر کنید تا زنجیره جواب بدهد.'
       : 'I do not have a balance read yet. If the wallet just connected, give the chain a moment.';
   }
   const lines = rows.slice(0, 12).map((b) => {
-    const usd = Number.isFinite(Number(b.valueUsd)) ? ` (${money(b.valueUsd, lang)})` : '';
+    const usd = hasFiniteValue(b.valueUsd) ? ` (${money(b.valueUsd, lang)})` : '';
     return `${b.symbol} — ${b.amount}${usd}`;
   });
   return lang === 'fa'
@@ -384,6 +390,65 @@ export function formatHumanResponse({
         editLabel: lang === 'fa' ? 'ویرایش' : 'Edit'
       } : null,
       actions: kind === 'GOAL' ? [{ type: 'GOAL' }] : [],
+      suggestions: suggestionLabels(suggestions, lang)
+    });
+  }
+
+  if (kind === 'BRIDGE') {
+    return finalize({
+      message: lang === 'fa'
+        ? 'مسیریاب سواپ تک‌زنجیره‌ای این چت برای بریج کافی نیست و اتصال اجرای بریجِ قابل‌تأیید فعال نیست. هیچ نرخ یا تراکنش ساختگی نشان نمی‌دهم و چیزی اجرا نمی‌شود. می‌توانید صفحهٔ بریج را برای بررسی گزینه‌های در دسترس باز کنید.'
+        : 'This chat’s single-chain swap router is not a bridge, and no verifiable bridge executor is connected. I will not invent a route or transaction; nothing is executed. You can open the bridge page to inspect currently available options.',
+      intent: { type: kind, status: 'UNAVAILABLE' },
+      ui: { type: 'TEXT' },
+      actions: [{
+        id: 'open-bridge-page',
+        route: '/bridge',
+        label: lang === 'fa' ? 'بررسی صفحهٔ بریج' : 'Inspect bridge options'
+      }],
+      suggestions: suggestionLabels(suggestions, lang)
+    });
+  }
+
+  if (kind === 'SEND') {
+    return finalize({
+      message: lang === 'fa'
+        ? 'ارسال دارایی از این کارتِ سواپ پشتیبانی نمی‌شود. تا وقتی گیرنده و جریان امضای مخصوص ارسال به‌طور کامل بررسی نشده‌اند، دکمهٔ اجرا نشان نمی‌دهم.'
+        : 'Asset transfers are not supported by the swap confirmation flow. I will not show an execution button until the recipient and transfer-specific signing path are verified.',
+      intent: { type: kind, status: 'UNAVAILABLE' },
+      ui: { type: 'TEXT' },
+      suggestions: suggestionLabels(suggestions, lang)
+    });
+  }
+
+  /*
+   * LENDING / FARMING never go through this swap-shaped planner. A lending or
+   * borrowing review needs live reserve, oracle and account reads that only
+   * the in-app chat performs, and an LP/farm position has no verified executor
+   * at all — a single-asset Aave supply is not LP farming. Answering here with
+   * a source/destination/amount plan produced a SWAP question ("how much ETH
+   * should I convert?") for «supply 100 USDC», so these kinds answer with an
+   * honest text and an inspection route instead of a card.
+   */
+  if (kind === 'LEND' || kind === 'FARM') {
+    const farm = kind === 'FARM';
+    return finalize({
+      message: farm
+        ? (lang === 'fa'
+          ? 'اجرای فارم/LP در این مسیر پشتیبانی نمی‌شود و سپردهٔ تک‌دارایی Aave جایگزین فارم نیست. هیچ نرخ، کارت یا تراکنشی نمی‌سازم. صفحهٔ فارم را فقط برای بررسی گزینه‌ها باز کنید.'
+          : 'Farm/LP execution is not available on this path, and a single-asset Aave supply is not a substitute for it. I will not create a rate, a card or a transaction. Open the farm page only to inspect options.')
+        : (lang === 'fa'
+          ? 'بررسی سپرده‌گذاری و وام‌گیری فقط داخل چت برنامه و با خواندن زندهٔ reserve، قیمت Oracle و حساب شما ساخته می‌شود؛ این مسیر هیچ‌کدام را نمی‌خواند، پس نرخ، کارت یا دکمهٔ اجرا نشان نمی‌دهم. مبلغ و شبکه را دقیق در چت برنامه بنویسید (مثلاً «۱۰۰ USDC روی Base سپرده کن»). چیزی امضا یا ارسال نشد.'
+          : 'Supply and borrow reviews are built only inside the app chat, from live reserve, oracle and account reads. This path reads none of them, so I will not show a rate, a card or an execution button. Ask in the app chat with an exact amount and network (for example “supply 100 USDC on Base”). Nothing was signed or sent.'),
+      intent: { type: kind, status: 'UNAVAILABLE' },
+      ui: { type: 'TEXT' },
+      actions: [{
+        id: farm ? 'inspect-farm' : 'inspect-lending',
+        route: farm ? '/farm' : '/loan',
+        label: farm
+          ? (lang === 'fa' ? 'بررسی صفحهٔ فارم' : 'Inspect farm page')
+          : (lang === 'fa' ? 'بررسی صفحهٔ وام' : 'Inspect lending page')
+      }],
       suggestions: suggestionLabels(suggestions, lang)
     });
   }
@@ -562,7 +627,15 @@ export function formatExecutionResult({ result, rebalance = null, locale = 'fa' 
     });
   }
 
-  const code = result.error?.code || result.status || 'UNKNOWN';
+  let code = result.error?.code || result.status || 'UNKNOWN';
+  /* A venue that refused or failed names its own reason in `error.message`
+     (RATE_STALE, HEALTH_FACTOR_TOO_LOW, LENDING_PARTIAL…) while the runtime
+     files it under a generic stage code. When the generic stage is all that
+     the code says, speak the specific reason the venue gave. */
+  if (['PROVIDER_FAILED', 'BROADCAST_FAILED'].includes(String(code).toUpperCase())) {
+    const specific = normalizeErrorCode(result.error?.message);
+    if (specific !== 'UNKNOWN' && specific !== String(code).toUpperCase()) code = specific;
+  }
   const human = humanizeError(code, { locale: lang, detail: result.error?.message });
   return finalize({
     message: human.message,

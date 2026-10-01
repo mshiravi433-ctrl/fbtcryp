@@ -491,10 +491,12 @@ export function analyzeCrossAsset({ world = null, globalIntel = null, cryptoInst
       symbol: String(q?.symbol || '').slice(0, 12),
       name: String(q?.name || '').slice(0, 60),
       kind: String(q?.kind || '').slice(0, 16),
+      unit: String(q?.unit || '').slice(0, 24) || null,
       priceUsd: num(q?.priceUsd),
       change1dPct: num(q?.change1dPct ?? q?.change24hPct),
       change7dPct: num(q?.change7dPct),
-      source: String(q?.source || 'macroData').slice(0, 40)
+      source: String(q?.source || 'macroData').slice(0, 40),
+      at: num(q?.at)
     })).filter((q) => q.symbol && q.priceUsd !== null),
     curve: macroData?.curve && typeof macroData.curve === 'object' ? { ...macroData.curve } : null,
     untrusted: true

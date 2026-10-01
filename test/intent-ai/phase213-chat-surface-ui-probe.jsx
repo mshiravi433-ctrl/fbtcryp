@@ -26,7 +26,7 @@
  */
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { TelegramProvider } from '../../src/context/TelegramContext.jsx';
 import { WalletProvider } from '../../src/context/WalletContext.jsx';
 import IntentAIUnified from '../../src/components/IntentAIUnified.jsx';
@@ -54,6 +54,24 @@ export async function run(container) {
     let body = null;
     try { body = init?.body ? JSON.parse(init.body) : null; } catch { body = null; }
     calls.push({ url: String(url), body });
+    if (String(url).includes('/v1/ai/chat') && /\bbridge\b/i.test(String(body?.message || ''))) {
+      const text = 'No verifiable bridge executor is connected. I will not invent a route or transaction; nothing is executed.';
+      return Promise.resolve(new Response(JSON.stringify({
+        ok: true,
+        schema: 'fbt.ai-chat.v1',
+        reply: {
+          text,
+          message: text,
+          intent: { type: 'BRIDGE', status: 'UNAVAILABLE' },
+          ui: { type: 'TEXT' },
+          card: null,
+          actions: [{ id: 'open-bridge-page', route: '/bridge', label: 'Inspect bridge options' }],
+          executed: false,
+          broadcasts: false,
+          requiresUserSignature: false
+        }
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }
     return Promise.reject(new Error('offline probe'));
   };
   window.fetch = recordingFetch;
@@ -61,12 +79,19 @@ export async function run(container) {
 
   resetLedger();
 
+  let routeProbePath = '';
+  function RouteProbe() {
+    routeProbePath = useLocation().pathname;
+    return null;
+  }
+
   const root = createRoot(container);
   await act(async () => {
     root.render(
       <TelegramProvider>
         <WalletProvider>
           <MemoryRouter initialEntries={['/intent']}>
+            <RouteProbe />
             <IntentAIUnified />
           </MemoryRouter>
         </WalletProvider>
@@ -173,8 +198,31 @@ export async function run(container) {
     !/دوباره تلاش کن|NETWORK_FAILED|اتصال برقرار نشد/.test(socialBubble) && socialBubble.length > 5);
   check('the pleasantry is answered in Persian',
     /[\u0600-\u06FF]/.test(socialBubble) && /ممنون|سلام|خوش|آماده|در خدمت/.test(socialBubble));
-  check('every request this probe made was recorded as a failed call, never faked',
+  check('every request this probe made was recorded at the network boundary',
     calls.every((c) => typeof c.url === 'string' && c.url.length > 0) && calls.length > 0);
+
+  /* ── 7. AN UNWIRED BRIDGE STAYS IN CHAT AND FAILS CLOSED ─────────────── */
+  const aiBeforeBridge = qa('.iaos-msg.iaos-ai').length;
+  await send('Bridge 10 USDC from Ethereum to Base');
+  const bridgeTurn = calls.find((c) => String(c.url).includes('/v1/ai/chat') && /\bbridge\b/i.test(String(c.body?.message || '')));
+  const aiAfterBridge = qa('.iaos-msg.iaos-ai');
+  const bridgeBubble = aiAfterBridge[aiAfterBridge.length - 1] || null;
+  const bridgeText = bridgeBubble?.textContent || '';
+  const quoteOrExecutionCall = calls.some((c) => /\/(?:bridge|swap)\/(?:quote|execute)(?:[/?#]|$)/i.test(c.url));
+  check('the local BRIDGE path refuses without calling the server fallback', !bridgeTurn);
+  check('the bridge response is plain text with no invented quote, execution card, or success timeline',
+    aiAfterBridge.length > aiBeforeBridge
+      && !bridgeBubble?.querySelector('[data-testid="intent-ai-quote-review"]')
+      && !bridgeBubble?.querySelector('[data-testid="intent-ai-action-card"]')
+      && !bridgeBubble?.querySelector('[data-testid="ai-activity-timeline"]')
+      && /no verifiable bridge executor|اتصال اجرای بریج.*فعال نیست/i.test(bridgeText)
+      && /nothing is executed|چیزی اجرا نمی‌شود/i.test(bridgeText));
+  check('the local bridge refusal does not invoke generic swap or bridge quote/execute endpoints', !quoteOrExecutionCall);
+  check('the bridge request does not force navigation away from the chat', routeProbePath === '/intent');
+  check('the bridge response offers only an optional bridge-page inspection route',
+    /Inspect bridge options/i.test(bridgeBubble?.querySelector('.iaos-msg-actions button')?.textContent || '')
+      || (/بررسی صفحه/i.test(bridgeBubble?.querySelector('.iaos-msg-actions button')?.textContent || '')
+        && /بریج/i.test(bridgeBubble?.querySelector('.iaos-msg-actions button')?.textContent || '')));
 
   return rows;
 }

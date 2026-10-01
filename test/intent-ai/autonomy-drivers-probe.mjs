@@ -20,7 +20,8 @@
 import {
   warmAutonomyDrivers,
   autonomyDriverReadiness,
-  buildAutonomyDrivers
+  buildAutonomyDrivers,
+  signerOnChain
 } from '../../src/lib/intent-ai/autonomy/browserDrivers.js';
 import { VENUE_EXECUTORS } from '../../src/lib/intent-ai/autonomy/venueExecutors.js';
 
@@ -144,10 +145,61 @@ let provider = 'unset';
 try { provider = await anon.wallet.getReadProvider(8453); } catch (err) { providerThrew = err; }
 check('getReadProvider with no wallet resolves to null', providerThrew === null && provider === null, String(provider));
 
+/* WalletContext exposes `isConnected`, not `connected`. The driver boundary
+   must accept that public contract, prefer it over a conflicting legacy alias,
+   and never promote an address-only locked wallet into a signing channel. */
+const contextOnly = buildAutonomyDrivers({
+  wallet: { isConnected: true, address: '0xcontext', chainId: 1, getSigner: () => ({ fake: true }) }
+});
+check('WalletContext isConnected is normalized by the driver', contextOnly.wallets.evm === true, JSON.stringify(contextOnly.wallets));
+check('normalized WalletContext wallet is signable', contextOnly.wallets.signable.includes('evm'), JSON.stringify(contextOnly.wallets.signable));
+const staleConnectedAlias = buildAutonomyDrivers({
+  wallet: { isConnected: false, connected: true, address: '0xstale', getSigner: () => ({ fake: true }) }
+});
+check('canonical isConnected=false overrides a stale connected=true alias', staleConnectedAlias.wallets.evm === false, JSON.stringify(staleConnectedAlias.wallets));
+check('stale connected alias does not grant signing capability', staleConnectedAlias.wallets.signable.length === 0, JSON.stringify(staleConnectedAlias.wallets.signable));
+const lockedContext = buildAutonomyDrivers({
+  wallet: { isConnected: false, connected: false, address: '0xlocked', locked: true, getSigner: () => null }
+});
+check('locked address is not reported as a connected EVM signer', lockedContext.wallets.evm === false, JSON.stringify(lockedContext.wallets));
+check('locked address cannot sign', lockedContext.wallets.signable.length === 0, JSON.stringify(lockedContext.wallets.signable));
+
 /* The connected set must report the opposite. */
 check('a connected evm wallet is reported', drivers.wallets.evm === true, JSON.stringify(drivers.wallets));
 check('a connected solana wallet is reported', drivers.wallets.solana === true, JSON.stringify(drivers.wallets));
 check('the connected set hands back the wallet signer', drivers.wallet.getSigner()?.fake === true);
+
+/* ── 4b. A lending write is only ever signed on a PROVEN network ──────────
+   lib/lending.js signs against whatever network the signer happens to be on,
+   so the driver set must hand the executor a signer whose own provider says it
+   is on the reviewed chain — switching the wallet when it is not, and refusing
+   (never guessing) when it cannot be proven. */
+const netSigner = (chainId) => ({ provider: { getNetwork: async () => ({ chainId: BigInt(chainId) }) }, tag: `on-${chainId}` });
+check('the driver set exposes a chain-verifying signer', typeof drivers.wallet.getSignerForChain === 'function');
+check('the lending driver exposes the oracle, account and position readers the executor re-reads',
+  ['readOraclePrices', 'readUserAccount', 'readAssetPosition', 'readReserve', 'readAllowance'].every((k) => typeof drivers.lending[k] === 'function' || Object.keys(drivers.lending).length === 0));
+const onChain = await signerOnChain({ getSigner: () => netSigner(42161) }, 42161);
+check('a signer already on the reviewed chain is returned as-is', onChain.ok === true && onChain.signer.tag === 'on-42161', JSON.stringify(onChain));
+const noSwitch = await signerOnChain({ getSigner: () => netSigner(1) }, 42161);
+check('a wallet on another chain with no switch capability is refused (CHAIN_MISMATCH)', noSwitch.ok === false && noSwitch.code === 'CHAIN_MISMATCH', JSON.stringify(noSwitch));
+const refusedSwitch = await signerOnChain({ getSigner: () => netSigner(1), switchChain: async () => false }, 42161);
+check('a switch the wallet declines is refused (CHAIN_SWITCH_FAILED)', refusedSwitch.ok === false && refusedSwitch.code === 'CHAIN_SWITCH_FAILED', JSON.stringify(refusedSwitch));
+const rejectedSwitch = await signerOnChain({ getSigner: () => netSigner(1), switchChain: async () => { throw Object.assign(new Error('User rejected the request'), { code: 4001 }); } }, 42161);
+check('a user who rejects the network switch is reported as USER_REJECTED', rejectedSwitch.ok === false && rejectedSwitch.code === 'USER_REJECTED', JSON.stringify(rejectedSwitch));
+let liveChain = 1;
+const switching = await signerOnChain({
+  getSigner: () => netSigner(liveChain),
+  switchChain: async (target) => { liveChain = Number(target); return true; }
+}, 42161);
+check('a switch is re-verified on the signer\'s own network before it is trusted', switching.ok === true && switching.signer.tag === 'on-42161', JSON.stringify(switching));
+const liar = await signerOnChain({ getSigner: () => netSigner(1), switchChain: async () => true }, 42161);
+check('a wallet that claims it switched but still reports the old network is refused', liar.ok === false && liar.code === 'CHAIN_MISMATCH', JSON.stringify(liar));
+const unreadable = await signerOnChain({ getSigner: () => ({ provider: { getNetwork: async () => { throw new Error('rpc'); } } }) }, 42161);
+check('a signer whose network cannot be read is never assumed correct', unreadable.ok === false, JSON.stringify(unreadable));
+const noSigner = await signerOnChain({ getSigner: () => null }, 42161);
+check('no signer is reported as NO_SIGNER', noSigner.ok === false && noSigner.code === 'NO_SIGNER', JSON.stringify(noSigner));
+const badChain = await signerOnChain({ getSigner: () => netSigner(1) }, 'base');
+check('a non-numeric chain is refused rather than coerced', badChain.ok === false && badChain.code === 'UNSUPPORTED_CHAIN', JSON.stringify(badChain));
 
 /* ── 5. The risk and market readers degrade to null, never to a guess ───── */
 check('the market reader returns the injected price', (await drivers.market.priceOf('BTC')) === 100);

@@ -449,6 +449,11 @@ export function useMultiChainPortfolio(wallet) {
     staleChains: aggregated.staleChains,
     failedChains: aggregated.failures,
     activeChainId,
+    /* Shared USD market observations let /intent price supported Solana SPL
+       holdings against the same source used for EVM positions without adding
+       a second polling request. This is additive metadata; the Wallet page's
+       rendered behavior is unchanged. */
+    marketRows: Array.isArray(markets) ? markets : [],
     /* `loading` means «a balance read is in flight, or nothing has ever been
        read» — NOT «prices are refreshing». The 30-second market tick is
        `pricing`, and it no longer moves this flag, so the refresh control
@@ -467,6 +472,6 @@ export function useMultiChainPortfolio(wallet) {
   }), [
     aggregated.chains, aggregated.chainReads, aggregated.allRows, aggregated.totalValue, aggregated.pricedCount,
     aggregated.totalCount, aggregated.partial, aggregated.priceDataStatus, aggregated.staleChains, aggregated.failures,
-    activeChainId, busy, loaded, fromSnapshot, marketsLoading, error, updatedAt, load
+    activeChainId, busy, loaded, fromSnapshot, markets, marketsLoading, error, updatedAt, load
   ]);
 }

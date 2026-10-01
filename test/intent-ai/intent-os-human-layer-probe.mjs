@@ -32,6 +32,7 @@ import {
   isSuccessfulReceipt
 } from '../../src/lib/intent-ai/executionStateMachine.js';
 import { humanizeError } from '../../src/lib/intent-ai/errorHumanizer.js';
+import { createIntentOS } from '../../src/lib/intent-ai/os/index.js';
 import { createEvmAdapter, createSolanaAdapter, adapterForChain, chainKind } from '../../src/lib/intent-ai/chainAdapters.js';
 import { runAction, runExecutionPlan, runRebalance } from '../../src/lib/intent-ai/executionRuntime.js';
 
@@ -264,9 +265,111 @@ const connected = {
     emptyRb.success === false && emptyRb.error?.code === 'EMPTY_PORTFOLIO');
 }
 
+/* ---------- 6.5 BRIDGE is a text-only unavailable hand-off ---------- */
+{
+  const classification = classifyUserIntent('Bridge 10 USDC from Ethereum to Base');
+  const bridge = formatHumanResponse({
+    message: 'Bridge 10 USDC from Ethereum to Base',
+    classification,
+    context: { wallet: { connected: true, canSign: true } },
+    locale: 'en'
+  });
+  t('BRIDGE is classified as the cross-chain intent', classification.type === 'BRIDGE');
+  t('an unwired bridge produces no quote or execution card',
+    bridge.ui.type === 'TEXT' && bridge.card === null && bridge.actions.length === 1);
+  t('the bridge reply makes the unavailable route and non-execution explicit',
+    /no verifiable bridge executor/i.test(bridge.message)
+      && /will not invent a route or transaction/i.test(bridge.message)
+      && /nothing is executed/i.test(bridge.message));
+  t('the only bridge action is an optional inspection link',
+    bridge.actions[0]?.route === '/bridge' && /inspect/i.test(bridge.actions[0]?.label || ''));
+}
+
+/* ---------- 6.55 lending / farming never come back as a swap-shaped plan ---------- */
+{
+  const connected = { wallet: { connected: true, canSign: true, evmAddresses: ['0x1111111111111111111111111111111111111111'] },
+    balances: [{ symbol: 'ETH', chainId: 8453, amount: 1, valueUsd: 3000 }, { symbol: 'USDC', chainId: 8453, amount: 900, valueUsd: 900 }] };
+  for (const [message, kind] of [['borrow 500 USDC on Arbitrum', 'LEND'], ['farm 100 USDC on Base', 'FARM']]) {
+    const classification = classifyUserIntent(message);
+    const reply = formatHumanResponse({ message, classification, context: connected, locale: 'en' });
+    t(`${kind} on the server path is classified as ${kind}`, classification.type === kind, classification.type);
+    t(`${kind} on the server path builds NO action card, plan or confirmation`,
+      reply.ui.type === 'TEXT' && reply.card === null && !reply.actionPlan && reply.intent?.status === 'UNAVAILABLE', JSON.stringify(reply.ui));
+    t(`${kind} never asks a swap question («how much ETH should I convert?»)`,
+      !/convert|swap|تبدیل/i.test(reply.message), reply.message);
+    t(`${kind} offers only an inspection route and says nothing was signed or promised`,
+      reply.actions.length === 1 && ['/loan', '/farm'].includes(reply.actions[0].route)
+        && /not|no |nothing/i.test(reply.message) && !reply.actions.some((a) => a.type), JSON.stringify(reply.actions));
+  }
+  const farm = formatHumanResponse({ message: 'farm 100 USDC on Base', classification: classifyUserIntent('farm 100 USDC on Base'), context: connected, locale: 'en' });
+  t('FARM says a single-asset Aave supply is not a substitute', /not a substitute/i.test(farm.message), farm.message);
+}
+
+/* ---------- 6.6 local Intent OS BRIDGE path is closed before tool hooks ---------- */
+{
+  const serviceCalls = { bridgeQuote: 0, bridgeExecute: 0, swapQuote: 0, swapExecute: 0 };
+  const navigations = [];
+  const services = {
+    walletService: {
+      getContext: async () => ({ connected: false }),
+      getBalances: async () => ({ ok: true, balances: [], dataStatus: 'unavailable' })
+    },
+    portfolioService: { getSummary: async () => ({ holdings: [], totalValueUsd: null, dataStatus: 'unavailable' }) },
+    marketService: { getRelevantData: async () => ({ dataStatus: 'unavailable' }) },
+    historyService: { getRecent: async () => [] },
+    preferencesService: { get: async () => ({}) },
+    goalsService: { list: async () => [] },
+    bridgeService: {
+      getQuote: async () => { serviceCalls.bridgeQuote += 1; return { ok: true, quote: { amountOut: '10' } }; },
+      execute: async () => { serviceCalls.bridgeExecute += 1; return { ok: true, txHash: `0x${'ab'.repeat(32)}` }; }
+    },
+    swapService: {
+      getQuote: async () => { serviceCalls.swapQuote += 1; return { ok: true, quote: { amountOut: '10' } }; },
+      execute: async () => { serviceCalls.swapExecute += 1; return { ok: true, txHash: `0x${'cd'.repeat(32)}` }; }
+    }
+  };
+  const os = createIntentOS({
+    services,
+    locale: 'en',
+    navigation: { navigate: async (target) => { navigations.push(target); return { ok: true, route: target?.route }; } }
+  });
+  const oldWarn = console.warn;
+  const oldInfo = console.info;
+  let result;
+  try {
+    // A refused bridge is intentionally logged as a failed operation. Keep
+    // this successful probe quiet while asserting the structured result.
+    console.warn = () => {};
+    console.info = () => {};
+    result = await os.process({
+      message: 'Bridge 10 USDC from Ethereum to Base',
+      currentPage: '/intent',
+      conversationId: `bridge-fail-closed-${Date.now()}`,
+      locale: 'en'
+    });
+  } finally {
+    console.warn = oldWarn;
+    console.info = oldInfo;
+  }
+  t('local BRIDGE returns the typed unavailable result with no confirmation pending',
+    result?.intent?.type === 'BRIDGE'
+      && result?.execution?.unavailable === 'BRIDGE_EXECUTE_UNAVAILABLE'
+      && result.requiresConfirmation === false
+      && result.execution.planReady !== true);
+  t('local BRIDGE is plain text with only the optional /bridge inspection route',
+    result?.human?.ui?.type === 'TEXT'
+      && result?.human?.card == null
+      && result?.human?.actions?.length === 1
+      && result?.human?.actions?.[0]?.route === '/bridge');
+  t('local BRIDGE never calls bridge or generic swap quote/execute services',
+    Object.values(serviceCalls).every((count) => count === 0));
+  t('local BRIDGE does not auto-navigate away from /intent',
+    navigations.length === 0 && result?.navigated == null);
+}
+
 /* ---------- 7. natural-language errors ---------- */
 {
-  const codes = ['WALLET_REQUIRED', 'INSUFFICIENT_FUNDS', 'USER_REJECTED', 'CONFIRMATION_FAILED', 'PARTIAL', 'EXECUTION_FAILED'];
+  const codes = ['WALLET_REQUIRED', 'INSUFFICIENT_FUNDS', 'USER_REJECTED', 'CONFIRMATION_FAILED', 'BRIDGE_EXECUTE_UNAVAILABLE', 'PARTIAL', 'EXECUTION_FAILED'];
   for (const code of codes) {
     const h = humanizeError(code, { locale: 'fa' });
     t(`${code} humanizes without "Execution failed" / blocked wallet / raw code`,

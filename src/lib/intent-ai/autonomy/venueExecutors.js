@@ -20,7 +20,7 @@
  * venue, using the app's OWN trading primitives — never a re-implementation:
  *
  *   swap-evm     → lib/swap.js            (getQuote / needsApproval / executeSwap)
- *   lend-aave    → lib/lending.js         (supply / borrow / repay / withdraw)
+ *   lend-aave    → lib/lending.js         (reviewed supply / borrow — nothing else)
  *   aave-base    → lib/defi/aaveV3Base.js (buildSupplyPlan — the verified USDC pool)
  *   perp-velo    → lib/velocityTrade.js   (open / close / tp-sl)
  *   equity-sol   → lib/solana.js + lib/solanaAssets (the Stocks screen's own buy path)
@@ -38,16 +38,21 @@ export const VENUE_EXECUTOR_SCHEMA = 'fbt.ai-venue-executor.v1';
 /* ── helpers ────────────────────────────────────────────────────────────── */
 
 const upper = (v) => String(v ?? '').toUpperCase();
+const finiteOrNull = (value) => (
+  value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
+    ? Number(value)
+    : null
+);
 
 /** Every action the AI can emit, normalised once, read by every executor. */
 export function normalizeVenueAction(action = {}) {
   const type = upper(action.type || action.kind || action.op || 'SWAP');
   const venueHint = action.venue ? String(action.venue) : null;
-  const chainId = Number.isFinite(Number(action.chainId)) ? Number(action.chainId) : null;
+  const chainId = finiteOrNull(action.chainId);
   const symbol = action.asset || action.symbol || action.token
     || action.to || action.toSymbol || action.from || action.fromSymbol || null;
-  const amountUsd = Number.isFinite(Number(action.amountUsd)) ? Number(action.amountUsd) : null;
-  const amount = action.amount != null && Number.isFinite(Number(action.amount)) ? Number(action.amount) : null;
+  const amountUsd = finiteOrNull(action.amountUsd);
+  const amount = finiteOrNull(action.amount);
   return {
     raw: action,
     type,
@@ -56,15 +61,17 @@ export function normalizeVenueAction(action = {}) {
     symbol,
     amountUsd,
     amount,
+    amountUnit: action.amountUnit || null,
+    parameters: action.parameters && typeof action.parameters === 'object' ? action.parameters : {},
     from: action.from || action.fromSymbol || null,
     to: action.to || action.toSymbol || null,
     side: upper(action.side) === 'SHORT' ? 'short' : (action.side ? 'long' : null),
-    leverage: Number.isFinite(Number(action.leverage)) ? Number(action.leverage) : null,
-    marketIndex: Number.isFinite(Number(action.marketIndex)) ? Number(action.marketIndex) : null,
+    leverage: finiteOrNull(action.leverage),
+    marketIndex: finiteOrNull(action.marketIndex),
     mint: action.mint || null,
-    slippage: Number.isFinite(Number(action.slippage)) ? Number(action.slippage) : null,
-    stopLossPct: Number.isFinite(Number(action.stopLossPct)) ? Number(action.stopLossPct) : null,
-    takeProfitPct: Number.isFinite(Number(action.takeProfitPct)) ? Number(action.takeProfitPct) : null
+    slippage: finiteOrNull(action.slippage),
+    stopLossPct: finiteOrNull(action.stopLossPct),
+    takeProfitPct: finiteOrNull(action.takeProfitPct)
   };
 }
 
@@ -74,6 +81,17 @@ function fail(code, detail = null) {
 
 function firstAddress(wallet) {
   return wallet?.address || wallet?.evmAddresses?.[0] || null;
+}
+
+/** Native balance in integer wei, read from the chain — or null when it cannot
+ *  be proven. Never a cached UI number: the wallet context holds ether as a
+ *  float, and a gas-floor check must not run on a rounded float. */
+async function readNativeWei(provider, owner) {
+  try {
+    if (typeof provider?.getBalance !== 'function') return null;
+    const wei = BigInt(await provider.getBalance(owner));
+    return wei >= 0n ? wei : null;
+  } catch { return null; }
 }
 
 function isUserReject(err) {
@@ -124,10 +142,12 @@ function solanaReceipt(confirmed, txHash) {
 
 /* ── what a hook is allowed to read ────────────────────────────────────────
    The runtime hands every hook a NORMALISED action: executionStateMachine
-   keeps a fixed shape and therefore drops the venue fields (`op`,
-   `marketIndex`, `side`, `mint`, `leverage`). The venue planner needs them,
-   so each hook closure reads the ORIGINAL action and overlays only the fields
-   the runtime is authoritative for (amount, chain, the quote it just fetched).
+   keeps a fixed shape. It now preserves the reviewed-venue fields (`venue`,
+   `protocol`, `market`, `op`, `parameters`, `amountUnit`) — a lending review's
+   terms travel in them — but still drops the per-venue extras (`marketIndex`,
+   `side`, `mint`, `leverage`). The venue planner needs those, so each hook
+   closure reads the ORIGINAL action and overlays only the fields the runtime
+   is authoritative for (amount, chain, the quote it just fetched).
    Without this, a perp open would reach the planner with no market index and
    die as MARKET_NOT_LISTED — a correct-looking failure with a wrong cause.
    ──────────────────────────────────────────────────────────────────────── */
@@ -179,23 +199,210 @@ const swapEvmExecutor = {
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
-   EXECUTOR 2 — Aave v3 lending (supply / borrow / repay / withdraw)
+   EXECUTOR 2 — Aave v3 lending (supply / borrow), live-reviewed only
+   ══════════════════════════════════════════════════════════════════════════
+   Only the two operations the chat can REVIEW are executable here: a supply
+   (LEND/SUPPLY) and a borrow. Both refuse to sign unless the action carries
+   the review the user confirmed — exact token amount and unit, the oracle
+   price, the variable rate and, for a borrow, the projected health factor —
+   and every one of those is read AGAIN from the pool immediately before the
+   wallet is asked for a signature. A paused/frozen/partial reserve, a stale or
+   missing oracle price, an unverifiable balance, capacity, liquidity, cap or
+   health factor all fail closed with a named code; nothing is defaulted.
+
+   FARM, DEPOSIT and YIELD_SWEEP are deliberately NOT here: a single-asset Aave
+   supply is not an LP/farm position, so those never reach this venue.
+   REPAY/WITHDRAW have no reviewed chat flow yet, so they have no executor.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const LEND_OPS = Object.freeze({
   SUPPLY: 'supply',
   LEND: 'supply',
-  FARM: 'supply', // a single-asset Aave deposit IS the farm on this app
-  DEPOSIT: 'supply',
-  BORROW: 'borrow',
-  REPAY: 'repay',
-  WITHDRAW: 'withdraw',
-  UNWIND: 'withdraw'
+  BORROW: 'borrow'
 });
+
+/** How long a confirmed review stays usable. The executor re-reads live state
+ *  and compares it anyway; this only bounds how stale the user's view can be. */
+export const LENDING_REVIEW_TTL_MS = 5 * 60_000;
+const REVIEW_FUTURE_SKEW_MS = 60_000;
+const PRICE_TOLERANCE_PCT = 1;
+const MIN_PROJECTED_HEALTH_FACTOR = 1.2;
+const CAPACITY_MARGIN = 0.99;
+const RESERVE_STALE_AFTER_SECONDS = 3600;
+const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+const asBig = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  try { return BigInt(value); } catch { return null; }
+};
+
+/**
+ * The terms the user confirmed, read off the action. Anything missing means the
+ * action was never reviewed in chat, so the executor refuses rather than
+ * inventing a baseline to compare against.
+ */
+function lendingReviewTerms(norm, op, symbol, now = Date.now()) {
+  const p = norm.parameters || {};
+  if (p.requireLiveRateReview !== true) return fail('LENDING_REVIEW_REQUIRED', 'NO_REVIEW');
+  if (!norm.amountUnit || upper(norm.amountUnit) !== upper(symbol)) return fail('LENDING_REVIEW_REQUIRED', 'AMOUNT_UNIT');
+  const reviewedAt = finiteOrNull(p.reviewedAt);
+  if (reviewedAt == null || reviewedAt <= 0) return fail('LENDING_REVIEW_REQUIRED', 'REVIEWED_AT');
+  if (reviewedAt > now + REVIEW_FUTURE_SKEW_MS || now - reviewedAt > LENDING_REVIEW_TTL_MS) return fail('LENDING_REVIEW_EXPIRED');
+  const priceUsd = finiteOrNull(p.reviewedPriceUsd);
+  const ratePct = finiteOrNull(op === 'borrow' ? p.reviewedBorrowApyPct : p.reviewedSupplyApyPct);
+  if (priceUsd == null || priceUsd <= 0 || ratePct == null || ratePct < 0) return fail('LENDING_REVIEW_REQUIRED', 'REVIEWED_TERMS');
+  const terms = { ok: true, reviewedAt, priceUsd, ratePct, healthFactor: null, availableBorrowsUsd: null };
+  if (op === 'borrow') {
+    terms.healthFactor = finiteOrNull(p.reviewedProjectedHealthFactor);
+    terms.availableBorrowsUsd = finiteOrNull(p.reviewedAvailableBorrowsUsd);
+    if (terms.healthFactor == null || terms.healthFactor <= 0
+      || terms.availableBorrowsUsd == null || terms.availableBorrowsUsd <= 0) {
+      return fail('LENDING_REVIEW_REQUIRED', 'REVIEWED_RISK');
+    }
+  }
+  return terms;
+}
+
+/**
+ * Re-read everything the confirmed review depended on and refuse on any doubt.
+ * Used by BOTH lending venues, so the generic pool and the verified Base
+ * adapter are held to one bar.
+ */
+async function revalidateLendingAction({ action, norm, wallet, drivers, op, asset, chainId }) {
+  const L = drivers?.lending;
+  if (!L?.readReserve || !L?.readOraclePrices || !L?.toUnits) return fail('NO_LENDING_DRIVER');
+  const owner = firstAddress(wallet);
+  if (!owner) return fail('WALLET_REQUIRED');
+
+  const terms = lendingReviewTerms(norm, op, asset.symbol);
+  if (!terms.ok) return terms;
+  if (action?.market && EVM_ADDRESS_RE.test(String(action.market))
+    && String(action.market).toLowerCase() !== String(asset.address || '').toLowerCase()) {
+    return fail('ASSET_MISMATCH');
+  }
+
+  const provider = await drivers.wallet?.getReadProvider?.(chainId);
+  if (!provider) return fail('NO_PROVIDER');
+
+  let reserve = null;
+  try { reserve = await L.readReserve({ provider, chainId, asset }); } catch { reserve = null; }
+  if (reserve?.ok !== true || reserve.listed !== true) return fail('RESERVE_UNAVAILABLE', reserve?.reason || null);
+  if (reserve.status !== 'active') return fail(reserve.status === 'paused' ? 'RESERVE_PAUSED' : 'RESERVE_NOT_ACTIVE', reserve.status || null);
+  if (reserve.dataStatus !== 'live') return fail('RESERVE_DATA_PARTIAL');
+  const reserveAge = Math.floor(Date.now() / 1000) - Number(reserve.lastUpdateTimestamp);
+  if (!Number.isFinite(reserveAge) || reserveAge < -60 || reserveAge > RESERVE_STALE_AFTER_SECONDS) return fail('RATE_STALE');
+  const decimals = Number(reserve.decimals);
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36
+    || reserve.decimalsMatch === false || decimals !== Number(asset.decimals)) {
+    return fail('DECIMALS_UNVERIFIED');
+  }
+
+  let oracle = null;
+  try {
+    oracle = await L.readOraclePrices({ provider, chainId, assets: [asset], reserves: { [asset.id]: reserve } });
+  } catch { oracle = null; }
+  const priced = oracle?.prices?.[asset.id] || null;
+  if (oracle?.ok !== true || oracle.status !== 'ok' || priced?.valid !== true || priced?.stale === true) {
+    return fail('ORACLE_PRICE_UNAVAILABLE', oracle?.reason || priced?.reason || null);
+  }
+  const priceUsd = Number(priced.priceUsd);
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return fail('ORACLE_PRICE_UNAVAILABLE');
+  if (Math.abs(priceUsd - terms.priceUsd) / terms.priceUsd * 100 > PRICE_TOLERANCE_PCT) {
+    return fail('QUOTE_CHANGED', 'ORACLE_PRICE_MOVED');
+  }
+  const liveRate = finiteOrNull(op === 'borrow' ? reserve.borrowApyPct : reserve.supplyApyPct);
+  if (liveRate == null) return fail('LENDING_RATE_UNAVAILABLE');
+  if (Math.abs(liveRate - terms.ratePct) > Math.max(0.05, Math.abs(terms.ratePct) * 0.05)) {
+    return fail('QUOTE_CHANGED', 'LENDING_RATE_MOVED');
+  }
+  if (op === 'borrow' && reserve.borrowingEnabled !== true) return fail('BORROW_DISABLED');
+
+  /* The amount is the exact decimal string the user confirmed. `toUnits`
+     truncates extra digits, so precision is checked first — nothing is rounded. */
+  const amountText = String(action?.amount ?? '').trim();
+  if (!/^\d+(\.\d+)?$/.test(amountText)) return fail('AMOUNT_REQUIRED');
+  if ((amountText.split('.')[1] || '').length > decimals) return fail('AMOUNT_PRECISION_INVALID');
+  const amountWei = asBig(L.toUnits(amountText, decimals));
+  if (amountWei == null || amountWei <= 0n) return fail('AMOUNT_PRECISION_INVALID');
+  const amountUsd = Number(amountText) * priceUsd;
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return fail('ORACLE_PRICE_UNAVAILABLE');
+  if (norm.amountUsd != null && Math.abs(amountUsd - norm.amountUsd) > Math.max(0.01, norm.amountUsd * 0.01)) {
+    return fail('QUOTE_CHANGED', 'AMOUNT_USD_MOVED');
+  }
+
+  if (op === 'supply') {
+    let position = null;
+    try { position = await L.readAssetPosition?.({ provider, chainId, asset, user: owner, reserve }); } catch { position = null; }
+    const balanceWei = position?.ok === true ? asBig(position.walletWei) : null;
+    if (balanceWei == null) return fail('BALANCE_UNVERIFIED');
+    if (balanceWei < amountWei) return fail('INSUFFICIENT_FUNDS');
+    if (reserve.supplyCapWei != null) {
+      const cap = asBig(reserve.supplyCapWei);
+      const supplied = asBig(reserve.totalSupplyWei);
+      if (cap == null || supplied == null) return fail('SUPPLY_CAP_UNVERIFIED');
+      if (supplied + amountWei > cap) return fail('SUPPLY_CAP_EXCEEDED');
+    }
+    return { ok: true, owner, provider, reserve, decimals, priceUsd, amountText, amountWei, amountUsd, terms };
+  }
+
+  /* borrow — capacity, liquidity, caps and health factor all come from the pool */
+  let account = null;
+  try { account = await L.readUserAccount?.({ provider, chainId, user: owner }); } catch { account = null; }
+  if (account?.ok !== true) return fail('BORROW_POSITION_UNAVAILABLE');
+  const collateralUsd = finiteOrNull(account.totalCollateralUsd);
+  const debtUsd = finiteOrNull(account.totalDebtUsd);
+  const capacityUsd = finiteOrNull(account.availableBorrowsUsd);
+  const thresholdPct = finiteOrNull(account.liquidationThresholdPct);
+  if (collateralUsd == null || debtUsd == null || capacityUsd == null || thresholdPct == null
+    || collateralUsd <= 0 || debtUsd < 0 || capacityUsd <= 0 || thresholdPct <= 0) {
+    return fail('BORROW_CAPACITY_UNAVAILABLE');
+  }
+  if (amountUsd > capacityUsd * CAPACITY_MARGIN) return fail('BORROW_LIMIT_EXCEEDED');
+  const liquidityWei = asBig(reserve.availableLiquidityWei);
+  if (liquidityWei == null || liquidityWei <= 0n) return fail('BORROW_LIQUIDITY_UNAVAILABLE');
+  if (amountWei > liquidityWei) return fail('BORROW_LIQUIDITY_EXCEEDED');
+  if (reserve.borrowCapWei != null) {
+    const cap = asBig(reserve.borrowCapWei);
+    const debt = asBig(reserve.totalDebtWei);
+    if (cap == null || debt == null) return fail('BORROW_CAP_UNVERIFIED');
+    if (debt + amountWei > cap) return fail('BORROW_CAP_EXCEEDED');
+  }
+  const projectedHealthFactor = (collateralUsd * (thresholdPct / 100)) / (debtUsd + amountUsd);
+  if (!Number.isFinite(projectedHealthFactor) || projectedHealthFactor < MIN_PROJECTED_HEALTH_FACTOR) {
+    return fail('HEALTH_FACTOR_TOO_LOW');
+  }
+  if (projectedHealthFactor < terms.healthFactor - 0.05 || capacityUsd < terms.availableBorrowsUsd * 0.95) {
+    return fail('QUOTE_CHANGED', 'BORROW_RISK_MOVED');
+  }
+  return {
+    ok: true, owner, provider, reserve, decimals, priceUsd, amountText, amountWei, amountUsd, terms,
+    projectedHealthFactor, availableBorrowsUsd: capacityUsd
+  };
+}
+
+/** A signer proven to be on `chainId` (never the React chain label) — or why not. */
+async function signerOnChain(drivers, chainId) {
+  const walletApi = drivers?.wallet;
+  if (typeof walletApi?.getSignerForChain !== 'function') return { ok: false, code: 'CHAIN_UNVERIFIED' };
+  try {
+    const out = await walletApi.getSignerForChain(chainId);
+    if (!out?.ok || !out.signer) return { ok: false, code: out?.code || 'NO_SIGNER' };
+    return out;
+  } catch (err) {
+    return { ok: false, code: isUserReject(err) ? 'USER_REJECTED' : 'CHAIN_SWITCH_FAILED' };
+  }
+}
+
+/** The signer must be the account the review and the balance reads were for. */
+async function signerMatchesAccount(signer, account) {
+  let address = null;
+  try { address = typeof signer?.getAddress === 'function' ? await signer.getAddress() : signer?.address; } catch { address = null; }
+  return Boolean(address && account && String(address).toLowerCase() === String(account).toLowerCase());
+}
 
 const lendAaveExecutor = {
   id: 'lend-aave',
-  title: 'Aave v3 lending',
+  title: 'Aave v3 lending (reviewed supply / borrow)',
   kinds: Object.keys(LEND_OPS),
   chains: [1, 10, 56, 137, 8453, 42161, 43114],
   requiresEvm: true,
@@ -203,29 +410,27 @@ const lendAaveExecutor = {
 
   matches(action, norm) {
     if (norm.venue && norm.venue !== this.id) return false;
-    if (!LEND_OPS[norm.type]) return false;
-    // A swap-shaped FARM ("swap USDT into stETH") is the swap venue's job.
-    if (norm.from && norm.to && norm.from !== norm.to) return false;
-    return true;
+    return Boolean(LEND_OPS[norm.type]);
   },
 
   probe({ action, norm, wallet, drivers }) {
     const L = drivers?.lending;
     if (!L) return fail('NO_LENDING_DRIVER');
-    const chainId = norm.chainId || wallet?.chainId;
+    const chainId = norm.chainId;
+    if (chainId == null) return fail('CHAIN_REQUIRED');
     if (!L.lendingVenue?.(chainId)) return fail('VENUE_UNSUPPORTED_CHAIN', chainId);
     const assets = L.lendingAssetsFor?.(chainId) || [];
-    const asset = assets.find((a) => upper(a.symbol) === upper(norm.symbol || 'USDC'));
+    const asset = assets.find((a) => upper(a.symbol) === upper(norm.symbol));
     if (!asset) return fail('ASSET_NOT_LISTED', `${norm.symbol} on ${chainId}`);
     if (!wallet?.connected) return fail('WALLET_REQUIRED');
-    if (!(norm.amountUsd > 0) && !(norm.amount > 0)) return fail('AMOUNT_REQUIRED');
+    if (!(norm.amount > 0)) return fail('AMOUNT_REQUIRED');
     return { ok: true, code: 'READY', asset, chainId };
   },
 
   /**
-   * Real numbers from the pool before anything is proposed: the live supply
-   * APY (so the chat can say «4.3% real, not a promise»), the user's own
-   * allowance, and the exact unit conversion the contract will receive.
+   * Re-verify the confirmed review against the pool and build the exact steps.
+   * Nothing here is signed; a failure names the one thing that could not be
+   * proven, and the action goes no further.
    */
   async plan({ action, norm, wallet, drivers }) {
     const probe = this.probe({ action, norm, wallet, drivers });
@@ -234,33 +439,27 @@ const lendAaveExecutor = {
     const { asset, chainId } = probe;
     const op = LEND_OPS[norm.type];
 
-    let reserve = null;
-    try { reserve = await L.readReserve?.({ provider: await drivers.wallet?.getReadProvider?.(chainId), chainId, asset }); }
-    catch { reserve = null; }
+    const live = await revalidateLendingAction({ action, norm, wallet, drivers, op, asset, chainId });
+    if (!live.ok) return live;
 
-    const priceUsd = Number(reserve?.priceUsd ?? action.priceUsd ?? 1);
-    const amount = norm.amount != null ? norm.amount : (norm.amountUsd != null ? norm.amountUsd / (priceUsd || 1) : null);
-    if (!(amount > 0)) return fail('AMOUNT_REQUIRED');
-
-    const amountWei = L.toUnits ? L.toUnits(amount, asset.decimals) : null;
     let allowanceWei = null;
-    try {
-      allowanceWei = await L.readAllowance?.({
-        provider: await drivers.wallet?.getReadProvider?.(chainId),
-        chainId,
-        asset,
-        owner: firstAddress(wallet)
-      });
-    } catch { allowanceWei = null; }
-
-    let steps = [{ id: op, amountWei: String(amountWei ?? '') }];
-    if (L.buildLendingPlan) {
-      /* The builder is the authority on which signatures this venue needs (a
-         supply without its allowance reverts), so its refusal — AMOUNT_REQUIRED
-         in its own words — is returned, never papered over with a guess. */
-      const built = L.buildLendingPlan({ action: op, asset, amount, collateral: action.collateral ?? null, allowanceWei, decimals: asset.decimals });
-      if (built?.ok === false) return fail(built.error || 'PLAN_BUILD_FAILED');
-      steps = Array.isArray(built?.steps) && built.steps.length ? built.steps : steps;
+    if (op === 'supply') {
+      try { allowanceWei = await L.readAllowance?.({ provider: live.provider, chainId, asset, owner: live.owner }); }
+      catch { allowanceWei = null; }
+    }
+    if (typeof L.buildLendingPlan !== 'function') return fail('PLAN_BUILD_FAILED');
+    /* A borrow never adds collateral on this path: only the reviewed leg runs. */
+    const built = L.buildLendingPlan({
+      action: op, asset, amount: live.amountText, collateral: null, allowanceWei, decimals: live.decimals
+    });
+    if (!built || built.ok === false) return fail(built?.error || 'PLAN_BUILD_FAILED');
+    const steps = Array.isArray(built.steps) ? built.steps : [];
+    const allowed = op === 'supply' ? ['approve', 'supply'] : ['borrow'];
+    const finalStep = steps[steps.length - 1];
+    if (!steps.length || !steps.every((s) => allowed.includes(s?.id))
+      || finalStep?.id !== op || String(finalStep.amountWei) !== String(live.amountWei)
+      || steps.some((s) => s.id === 'approve' && String(s.amountWei) !== String(live.amountWei))) {
+      return fail('PLAN_MISMATCH');
     }
 
     return {
@@ -270,15 +469,19 @@ const lendAaveExecutor = {
       op,
       chainId,
       asset,
-      amount,
-      amountUsd: norm.amountUsd != null ? norm.amountUsd : amount * (priceUsd || 1),
-      amountWei: String(amountWei ?? ''),
-      supplyApyPct: reserve?.supplyApyPct ?? null,
-      borrowApyPct: reserve?.borrowApyPct ?? null,
-      priceUsd: priceUsd || 1,
+      amount: live.amountText,
+      amountUsd: live.amountUsd,
+      amountWei: String(live.amountWei),
+      supplyApyPct: live.reserve.supplyApyPct ?? null,
+      borrowApyPct: live.reserve.borrowApyPct ?? null,
+      priceUsd: live.priceUsd,
+      projectedHealthFactor: live.projectedHealthFactor ?? null,
       needsApproval: steps.some((s) => s.id === 'approve'),
       steps,
-      action: { ...action, venue: this.id, op, chainId, asset: asset.symbol, amount, amountUsd: norm.amountUsd ?? amount * (priceUsd || 1) }
+      action: {
+        ...action, venue: this.id, op, chainId, asset: asset.symbol,
+        amount: live.amountText, amountUnit: asset.symbol, amountUsd: live.amountUsd
+      }
     };
   },
 
@@ -309,6 +512,7 @@ const lendAaveExecutor = {
           amountWei: planned.amountWei,
           supplyApyPct: planned.supplyApyPct,
           borrowApyPct: planned.borrowApyPct,
+          projectedHealthFactor: planned.projectedHealthFactor,
           steps: planned.steps
         };
       },
@@ -318,15 +522,14 @@ const lendAaveExecutor = {
 
       /*
        * `runLendingPlan` awaits every `tx.wait()` itself and hands back only
-       * the hash, so the receipt the runtime demands is read straight from the
-       * chain here. No provider receipt means NO_RECEIPT_SOURCE and the action
-       * ends CONFIRMATION_FAILED — the venue is never allowed to attest to its
-       * own success, because lending.js reports a missing receipt as
-       * "confirmed" and that default must not become this app's proof.
+       * the hashes, so the receipt the runtime demands is read straight from
+       * the chain here. No provider receipt means NO_RECEIPT_SOURCE and the
+       * action ends CONFIRMATION_FAILED — the venue is never allowed to attest
+       * to its own success.
        */
       async waitForConfirmation(txHash) {
-        const chainId = state.planned?.chainId || norm.chainId || wallet?.chainId;
-        const provider = await drivers.wallet?.getReadProvider?.(chainId);
+        const chainId = state.planned?.chainId || norm.chainId;
+        const provider = chainId != null ? await drivers.wallet?.getReadProvider?.(chainId) : null;
         if (typeof provider?.getTransactionReceipt !== 'function') return { ok: false, code: 'NO_RECEIPT_SOURCE' };
         try {
           const receipt = await provider.getTransactionReceipt(txHash);
@@ -341,14 +544,18 @@ const lendAaveExecutor = {
       async sendTransaction(built) {
         const quote = built?.quote || state.planned;
         if (!quote?.steps?.length) return { ok: false, code: 'NO_PLAN' };
-        const signer = drivers.wallet?.getSigner?.();
-        if (!signer) return { ok: false, code: 'NO_SIGNER' };
         const account = firstAddress(wallet);
+        const signed = await signerOnChain(drivers, quote.chainId);
+        if (!signed.ok) {
+          if (signed.code === 'USER_REJECTED') throw Object.assign(new Error('USER_REJECTED'), { code: 4001 });
+          return { ok: false, code: signed.code };
+        }
+        if (!(await signerMatchesAccount(signed.signer, account))) return { ok: false, code: 'WALLET_ACCOUNT_CHANGED' };
         let result;
         try {
           result = await L.runLendingPlan?.({
             steps: quote.steps,
-            signer,
+            signer: signed.signer,
             chainId: quote.chainId,
             asset: quote.asset,
             account,
@@ -359,11 +566,23 @@ const lendAaveExecutor = {
           if (rej) throw Object.assign(new Error(rej), { code: 4001 });
           throw err;
         }
+        const completed = Array.isArray(result?.completed) ? result.completed : [];
         if (!result?.ok) {
-          if (result?.code === 'USER_REJECTED') throw Object.assign(new Error('USER_REJECTED'), { code: 4001 });
+          if (result?.code === 'USER_REJECTED' && !completed.length) throw Object.assign(new Error('USER_REJECTED'), { code: 4001 });
+          /* An approval that landed before the main step failed is real, so a
+             partial run is reported as one — never as "nothing moved". */
+          if (completed.length) {
+            return { ok: false, code: 'LENDING_PARTIAL', detail: completed.map((s) => s.id).join('+') };
+          }
           return { ok: false, code: result?.code || 'LENDING_FAILED', detail: result?.failedStep || null };
         }
-        return { txHash: result.hash || result.txHash || null, steps: result.completed || [] };
+        /* The proof is the LAST step's own hash — and that last step must be
+           the reviewed action itself, not an approval. lib/lending.js reports
+           per-step hashes in `completed`; it has no top-level `hash`. */
+        const last = completed[completed.length - 1];
+        const lastHash = last?.hash || null;
+        if (!lastHash || last.id !== quote.op) return { ok: false, code: 'NO_TX_HASH' };
+        return { txHash: lastHash, steps: completed };
       }
     };
   }
@@ -374,15 +593,17 @@ const lendAaveExecutor = {
    ══════════════════════════════════════════════════════════════════════════
    The Base USDC pool is the one pool this app has a fork probe for
    (`npm run test:aave-base-fork`, 36/36 on Base mainnet). When the user's
-   chain is Base and the asset is USDC, execution goes through that adapter's
+   chain is Base and the asset is USDC, a SUPPLY goes through that adapter's
    own plan builder rather than the generic one — the adapter asserts its pool
    address against lib/lending.js at load and refuses to load if they differ.
+   It is held to the same live-review gate as every other lending action, and
+   it only ever supplies: no FARM/DEPOSIT alias reaches it.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const aaveBaseExecutor = {
   id: 'aave-base-usdc',
   title: 'Aave v3 USDC on Base (verified adapter)',
-  kinds: ['SUPPLY', 'LEND', 'FARM', 'DEPOSIT', 'WITHDRAW'],
+  kinds: ['SUPPLY', 'LEND'],
   chains: [8453],
   requiresEvm: true,
   /** Wins over lend-aave when both match — most specific venue first. */
@@ -391,18 +612,17 @@ const aaveBaseExecutor = {
 
   matches(action, norm) {
     if (norm.venue && norm.venue !== this.id) return false;
-    const chainId = norm.chainId || Number(action.chainId) || null;
-    if (chainId != null && chainId !== 8453) return false;
-    const sym = upper(norm.symbol || 'USDC');
-    if (sym !== 'USDC') return false;
+    /* Base is chosen only when the action NAMES Base — never assumed. */
+    if (norm.chainId !== 8453) return false;
+    if (upper(norm.symbol) !== 'USDC') return false;
     return this.kinds.includes(norm.type);
   },
 
   probe({ action, norm, wallet, drivers }) {
-    const A = drivers?.aaveBase;
-    if (!A) return fail('NO_AAVE_BASE_DRIVER');
+    if (!drivers?.aaveBase?.buildSupplyPlan) return fail('NO_AAVE_BASE_DRIVER');
+    if (!drivers?.lending) return fail('NO_LENDING_DRIVER');
     if (!wallet?.connected) return fail('WALLET_REQUIRED');
-    if (!(norm.amountUsd > 0)) return fail('AMOUNT_REQUIRED');
+    if (!(norm.amount > 0)) return fail('AMOUNT_REQUIRED');
     return { ok: true, code: 'READY' };
   },
 
@@ -410,61 +630,104 @@ const aaveBaseExecutor = {
     const probe = this.probe({ action, norm, wallet, drivers });
     if (!probe.ok) return probe;
     const A = drivers.aaveBase;
-    const provider = await drivers.wallet?.getReadProvider?.(8453);
-    if (!provider) return fail('NO_PROVIDER');
-    const owner = firstAddress(wallet);
-    let status = null;
+    const L = drivers.lending;
+    const asset = (L.lendingAssetsFor?.(8453) || []).find((row) => upper(row.symbol) === 'USDC');
+    if (!asset) return fail('ASSET_NOT_LISTED', 'USDC on 8453');
+
+    const live = await revalidateLendingAction({ action, norm, wallet, drivers, op: 'supply', asset, chainId: 8453 });
+    if (!live.ok) return live;
+
     let built = null;
-    try { status = await A.getReserveStatus?.(provider); } catch { status = null; }
     try {
-      built = await A.buildSupplyPlan?.({ provider, owner, amountUsdc: norm.amountUsd });
+      /* `nativeBalance` is integer wei read from the chain; the adapter's own
+         gas-floor check refuses to build without it. */
+      built = await A.buildSupplyPlan({
+        provider: live.provider,
+        owner: live.owner,
+        amountUsdc: live.amountText,
+        nativeBalance: await readNativeWei(live.provider, live.owner)
+      });
     } catch (err) {
       return fail('PLAN_BUILD_FAILED', String(err?.message || '').slice(0, 160));
     }
-    if (!built || built.ok === false) return fail(built?.code || 'PLAN_BUILD_FAILED', built?.reason || null);
+    const blocked = Array.isArray(built?.checks?.blocked) ? built.checks.blocked : [];
+    if (!built || built.ok === false || blocked.length || !Array.isArray(built.steps) || !built.steps.length) {
+      return fail(blocked[0] || built?.code || 'PLAN_BUILD_FAILED', built?.reason || null);
+    }
+    /* The adapter must have planned the SAME amount the user confirmed, and
+       every step may only touch the USDC token or the Aave pool. */
+    const plannedWei = asBig(built.checks?.amountWei);
+    if (plannedWei == null || plannedWei !== live.amountWei) return fail('PLAN_MISMATCH', 'AMOUNT');
+    const known = new Set([A.AAVE_V3_BASE?.usdc, A.AAVE_V3_BASE?.pool]
+      .filter(Boolean).map((address) => String(address).toLowerCase()));
+    if (known.size !== 2 || !built.steps.every((s) => known.has(String(s?.to || '').toLowerCase()))) {
+      return fail('PLAN_MISMATCH', 'STEP_TARGET');
+    }
+
     return {
       ok: true,
       code: 'PLAN_READY',
       venue: this.id,
       op: 'supply',
       chainId: 8453,
-      asset: { symbol: 'USDC', decimals: A.AAVE_V3_BASE?.usdcDecimals ?? 6 },
-      amountUsd: norm.amountUsd,
-      amount: norm.amountUsd,
-      supplyApyPct: status?.supplyApyPct ?? null,
-      steps: built.steps || [],
+      asset,
+      amountUsd: live.amountUsd,
+      amount: live.amountText,
+      amountWei: String(live.amountWei),
+      supplyApyPct: live.reserve.supplyApyPct ?? null,
+      borrowApyPct: live.reserve.borrowApyPct ?? null,
+      priceUsd: live.priceUsd,
+      steps: built.steps,
       plan: built,
-      action: { ...action, venue: this.id, op: 'supply', chainId: 8453, asset: 'USDC', amountUsd: norm.amountUsd }
+      action: {
+        ...action, venue: this.id, op: 'supply', chainId: 8453, asset: 'USDC',
+        amount: live.amountText, amountUnit: 'USDC', amountUsd: live.amountUsd
+      }
     };
   },
 
   hooks({ action, norm, wallet, drivers }) {
-    const A = drivers.aaveBase;
+    const state = { planned: null };
     return {
       async getQuote(act) {
         const src = venueSource(action, act);
         const planned = await aaveBaseExecutor.plan({ action: src, norm: normalizeVenueAction(src), wallet, drivers });
         if (!planned.ok) return planned;
+        state.planned = planned;
         return { ok: true, venue: planned.venue, ...planned.plan, supplyApyPct: planned.supplyApyPct, chainId: 8453 };
       },
       async checkAllowance() { return false; },
       async sendTransaction(built) {
         const quote = built?.quote;
-        const signer = drivers.wallet?.getSigner?.();
-        if (!signer) return { ok: false, code: 'NO_SIGNER' };
+        const txs = quote?.transactions || quote?.steps || [];
+        if (!Array.isArray(txs) || !txs.length) return { ok: false, code: 'NO_PLAN' };
+        const account = firstAddress(wallet);
+        const signed = await signerOnChain(drivers, 8453);
+        if (!signed.ok) {
+          if (signed.code === 'USER_REJECTED') throw Object.assign(new Error('USER_REJECTED'), { code: 4001 });
+          return { ok: false, code: signed.code };
+        }
+        const signer = signed.signer;
+        if (!(await signerMatchesAccount(signer, account))) return { ok: false, code: 'WALLET_ACCOUNT_CHANGED' };
         /* The adapter builds a tx per step; the LAST one (the supply) is the
            receipt that proves the deposit. Earlier steps (approve) are awaited
-           first because the supply reverts without them. */
-        const txs = quote?.transactions || quote?.steps || [];
+           first because the supply reverts without them. Only the fields a
+           wallet understands are forwarded. */
         let last = null;
+        let sent = 0;
         for (const tx of txs) {
           try {
-            last = await (typeof tx === 'function' ? tx(signer) : signer.sendTransaction(tx));
+            last = await (typeof tx === 'function'
+              ? tx(signer)
+              : signer.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ?? 0n }));
             await last.wait?.();
+            sent += 1;
           } catch (err) {
             const rej = rejectCode(err);
-            if (rej) throw Object.assign(new Error(rej), { code: 4001 });
-            return { ok: false, code: 'AAVE_BASE_TX_FAILED', detail: String(err?.message || '').slice(0, 160) };
+            if (rej && sent === 0) throw Object.assign(new Error(rej), { code: 4001 });
+            return sent > 0
+              ? { ok: false, code: 'LENDING_PARTIAL', detail: `${sent}/${txs.length}` }
+              : { ok: false, code: 'AAVE_BASE_TX_FAILED', detail: String(err?.message || '').slice(0, 160) };
           }
         }
         if (!last?.hash) return { ok: false, code: 'NO_TX_HASH' };
@@ -472,15 +735,17 @@ const aaveBaseExecutor = {
       },
       async waitForConfirmation(txHash) {
         const provider = await drivers.wallet?.getReadProvider?.(8453);
-        if (!provider?.waitForTransaction) return { ok: true, status: 'CONFIRMED', txHash, confirmed: true };
-        const receipt = await provider.waitForTransaction(txHash);
-        return {
-          ok: Number(receipt?.status ?? 1) === 1,
-          status: Number(receipt?.status ?? 1) === 1 ? 'CONFIRMED' : 'FAILED',
-          txHash,
-          receipt,
-          confirmed: Number(receipt?.status ?? 1) === 1
-        };
+        let receipt = null;
+        try {
+          if (typeof provider?.getTransactionReceipt === 'function') receipt = await provider.getTransactionReceipt(txHash);
+          else if (typeof provider?.waitForTransaction === 'function') receipt = await provider.waitForTransaction(txHash);
+          else return { ok: false, code: 'NO_RECEIPT_SOURCE' };
+        } catch (err) {
+          return { ok: false, code: 'CONFIRMATION_FAILED', detail: String(err?.message || '').slice(0, 120) };
+        }
+        if (!receipt) return { ok: false, code: 'NO_RECEIPT' };
+        const ok = Number(receipt.status ?? 0) === 1;
+        return { ok, status: ok ? 'CONFIRMED' : 'FAILED', txHash, receipt, confirmed: ok };
       }
     };
   }
@@ -570,7 +835,10 @@ const perpVeloExecutor = {
       async sendTransaction(built) {
         const quote = built?.quote;
         if (!quote) return { ok: false, code: 'NO_QUOTE' };
-        const solWallet = wallet?.solana?.adapter || wallet?.solana || null;
+        /* velocityTrade accepts the Solana authority as a base58 address and
+           resolves its signer through the wallet module. Passing the context
+           object here makes PublicKey(context) throw before any signature. */
+        const solWallet = wallet?.solana?.address || wallet?.solanaAddress || null;
         if (!solWallet) return { ok: false, code: 'NO_SOLANA_WALLET' };
         try {
           if (quote.op === 'close') {

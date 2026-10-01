@@ -170,11 +170,21 @@ pass('Portfolio Agent computes asset allocation & concentration risk');
 // D. Risk Agent
 const riskAgent = createRiskAgent();
 const riskRes = await riskAgent.analyze({
-  portfolio: { holdings: [{ symbol: 'ETH', valueUsd: 3000 }, { symbol: 'USDC', valueUsd: 2000 }] },
+  portfolio: {
+    dataStatus: 'live',
+    priceDataStatus: 'live',
+    partial: false,
+    holdings: [{ symbol: 'ETH', valueUsd: 3000 }, { symbol: 'USDC', valueUsd: 2000 }]
+  },
   riskTolerance: 'medium'
 });
-assert(riskRes.ok === true && riskRes.riskLevel === 'medium', 'Risk level evaluated');
-pass('Risk Agent calculates risk scores and portfolio exposure');
+assert(riskRes.ok === true && riskRes.riskLevel === 'medium' && riskRes.dataStatus === 'live', 'Risk level evaluated only on a verified complete portfolio');
+const incompleteRisk = await riskAgent.analyze({
+  portfolio: { holdings: [{ symbol: 'ETH', valueUsd: 3000 }, { symbol: 'USDC', valueUsd: 2000 }] },
+  riskTolerance: 'high'
+});
+assert(incompleteRisk.riskLevel === 'unknown' && incompleteRisk.approved === false, 'Unverified portfolio data cannot produce an overall risk verdict or approval');
+pass('Risk Agent reports concentration basis and fails closed without complete portfolio coverage');
 
 // E. Strategy Agent
 const strategyAgent = createStrategyAgent();

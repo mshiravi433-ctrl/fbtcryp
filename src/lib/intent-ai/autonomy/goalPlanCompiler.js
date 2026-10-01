@@ -198,7 +198,15 @@ export async function buildGoalPlan({
   const reachable = required != null && bestApy >= required;
 
   /* ── executable options, best three, each a real venue-action list ──── */
-  const options = ranked.slice(0, 3).map((row, i) => ({
+  /* A row with no verified executor (an LP/farm pool) is an OBSERVED rate, not
+     something this app can sign. It still informs `bestAvailable` and the
+     verdict above, but it is not offered as a runnable option while any
+     executable one exists. Only if nothing is executable does the card list
+     the observed rows — each with no steps, so it shows no Execute button. */
+  const candidates = ranked.map((row) => ({ row, actions: buildOptionActions({ row, capitalUsd: capital, goal }) }));
+  const executable = candidates.filter((candidate) => candidate.actions.length > 0);
+  const offered = (executable.length ? executable : candidates).slice(0, 3);
+  const options = offered.map(({ row, actions }, i) => ({
     id: `goal-opt-${i + 1}`,
     venue: row.venue || row.kind,
     kind: row.kind,
@@ -214,7 +222,7 @@ export async function buildGoalPlan({
     /* The steps are the actions the venue executors sign. A lending option is
        one supply; a perp option is a swap-into-collateral plus an open. Both
        are real, both fail closed without a receipt. */
-    actions: buildOptionActions({ row, capitalUsd: capital, goal })
+    actions
   }));
 
   const chosen = options[0] || null;
@@ -282,14 +290,11 @@ function buildOptionActions({ row, capitalUsd, goal }) {
     }];
   }
   if (row.kind === 'farm') {
-    return [{
-      type: 'FARM',
-      venue: row.venue || null,
-      asset,
-      chainId,
-      amountUsd,
-      label: `Deposit into ${row.title || row.id} @ ${row.apyPct.toFixed(2)}% APY`
-    }];
+    /* No verified LP/farm executor exists, and a single-asset Aave supply is
+       not an LP position. The option stays visible as a rate observation, but
+       it carries no executable step — the card shows no Execute button for it
+       and nothing is signed on a farm row's behalf. */
+    return [];
   }
   if (row.kind === 'perp') {
     const leverage = Number(row.leverage) > 1 ? Number(row.leverage) : 1;

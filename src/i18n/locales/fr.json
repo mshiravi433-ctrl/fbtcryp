@@ -2414,6 +2414,34 @@
     "drawerNote": "Ces boutons ne sont que des raccourcis ; l’assistant fonctionne sans eux.",
     "solanaConnect": "Connecter le portefeuille Solana",
     "readyTitle": "Prêt à exécuter",
+    "quoteReview": {
+      "title": "Vérification du devis d’échange",
+      "quotedAt": "Devis reçu à {{time}}",
+      "expiresAt": "Vérification valable jusqu’à {{time}}",
+      "expired": "Ce devis a expiré. Actualisez-le avant de confirmer.",
+      "from": "Vous payez",
+      "to": "Sortie estimée",
+      "minimum": "Minimum reçu",
+      "network": "Réseau",
+      "route": "Fournisseur de routage",
+      "sourcesCompared": "{{count}} sources de devis comparées",
+      "hops": "{{count}} étapes d’itinéraire",
+      "platformFee": "Frais de plateforme",
+      "slippage": "Glissement maximal",
+      "gas": "Frais réseau estimés",
+      "priceImpact": "Impact sur le prix",
+      "notReported": "Non indiqué",
+      "mev": "Protection MEV",
+      "mevUnknown": "Non vérifiée indépendamment",
+      "tokenAddresses": "Adresses des contrats des jetons",
+      "inputToken": "Jeton d’entrée",
+      "outputToken": "Jeton de sortie",
+      "nativeAsset": "Actif natif (sans contrat de jeton)",
+      "warning": "Les devis peuvent évoluer entre la vérification et la signature. Avant toute signature, l’application obtient un devis à jour. Si le montant d’entrée, l’itinéraire, les frais ou le glissement changent, ou si le minimum de sortie actualisé est inférieur à celui affiché ici, l’exécution s’arrête et une nouvelle vérification est requise.",
+      "refresh": "Actualiser le devis",
+      "refreshing": "Actualisation du devis…",
+      "summary": "Un devis en direct est prêt à être vérifié : minimum {{minimum}} {{to}} sur {{network}}. La protection MEV n’est pas vérifiée indépendamment ; le devis sera contrôlé à nouveau avant la signature."
+    },
     "working": "En cours…",
     "confirm": "Confirmer",
     "edit": "Modifier",
@@ -2422,7 +2450,95 @@
     "executionReady": "Prêt à exécuter. Je vous emmène vers l’écran d’exécution réel pour la signature du portefeuille.",
     "executionBlocked": "C’est en file d’attente dans Portefeuille — votre signature est encore nécessaire.",
     "executionFailed": "Cela n’a pas abouti. La transaction n’a pas été terminée.",
-    "connectWallet": "Connecter le portefeuille"
+    "connectWallet": "Connecter le portefeuille",
+    "portfolioCard": {
+      "title": "Analyse du portefeuille",
+      "subtitle": "Soldes des réseaux pris en charge ; la couverture des prix peut varier.",
+      "asOf": "Soldes au {{time}}",
+      "status": {
+        "live": "Soldes et prix à jour",
+        "partial": "Lecture partielle du portefeuille",
+        "stale": "Certains soldes ou prix peuvent être anciens",
+        "pending": "Actualisation des données du portefeuille",
+        "unavailable": "Données du portefeuille indisponibles",
+        "empty": "Vide (vérifié)"
+      },
+      "metric": {
+        "total": "Valeur du portefeuille",
+        "pricedValue": "Sous-total des actifs valorisés",
+        "stablecoins": "Stablecoins USD reconnus",
+        "concentration": "Part du plus grand jeton",
+        "pricedOnly": "Parmi les actifs valorisés uniquement",
+        "pnl": "P&L latent",
+        "riskScore": "Indice heuristique de composition",
+        "notAvailable": "Indisponible",
+        "noCostBasis": "Le prix d’achat et l’historique ne sont pas connectés.",
+        "riskUnavailable": "Nécessite une lecture complète et à jour contenant au moins une position valorisée.",
+        "notComputed": "Indicateurs du portefeuille",
+        "riskBasis": "Heuristique : concentration des tokens valorisés, part de stablecoins et nombre de positions et de réseaux ; un score plus élevé indique une exposition plus forte."
+      },
+      "note": {
+        "pricedSubtotal": "Cette valeur inclut uniquement les actifs avec un prix valide.",
+        "risk": "Cet indice de composition est heuristique et ne constitue pas une évaluation complète du risque. Il utilise les positions valorisées, les stablecoins reconnus et le nombre de positions et de réseaux ; il exclut la volatilité du marché, les dettes, le prix de revient et les actifs hors de ce portefeuille.",
+        "unpricedCount": "{{count}} actif(s) sans prix valide",
+        "failedCount": "Lecture de {{count}} réseau(x) non confirmée",
+        "staleCount": "Les données de {{count}} réseau(x) peuvent être anciennes"
+      },
+      "tab": {
+        "assets": "Actifs",
+        "networks": "Réseaux"
+      },
+      "row": {
+        "priceUnavailable": "Prix indisponible",
+        "noHoldings": "Aucun solde non nul n’est disponible dans cet aperçu."
+      },
+      "network": {
+        "failed": "Lecture échouée",
+        "stale": "Données anciennes",
+        "live": "Solde à jour",
+        "assetCount": "{{count}} actif(s)",
+        "noNetworks": "Aucun solde réseau à afficher.",
+        "partial": "Lecture partielle"
+      },
+      "action": {
+        "risk": "Questionner le risque",
+        "allocation": "Questionner la répartition",
+        "rebalance": "Prévisualiser le rééquilibrage",
+        "fullPortfolio": "Ouvrir le portefeuille complet",
+        "showAll": "Tout afficher ({{count}})",
+        "showLess": "Afficher moins"
+      },
+      "prompt": {
+        "risk": "Analyse le risque de mon portefeuille. Précise ce qui est mesuré et ce qui manque ; ne présente pas la concentration comme un score de risque complet.",
+        "allocation": "Affiche ma répartition actuelle par jeton et par réseau.",
+        "rebalance": "Aide-moi à choisir une allocation cible et prépare un aperçu de rééquilibrage avec les montants. Demande d’abord ma cible et n’exécute rien."
+      },
+      "riskBand": {
+        "low": "Exposition plus faible",
+        "medium": "Exposition modérée",
+        "high": "Exposition plus élevée"
+      }
+    },
+    "conditional": {
+      "title": "Allocation conditionnelle",
+      "conditions": "Conditions",
+      "met": "remplie",
+      "notMet": "non remplie",
+      "arming": "enregistrement du niveau de référence",
+      "unreadable": "illisible",
+      "allocation": "Allocation",
+      "ofCapital": "du capital",
+      "units": "unités",
+      "analysisOnly": "analyse uniquement — aucun courtier configuré pour cette classe d’actifs",
+      "aboveRail": "au-dessus du plafond de {{pct}} % — nécessite votre confirmation explicite",
+      "watch": "Surveiller cette condition",
+      "declines": "une baisse de {{pct}} %",
+      "rises": "une hausse de {{pct}} %",
+      "above": "au-dessus de {{value}}",
+      "below": "en dessous de {{value}}"
+    },
+    "voiceInput": "Dictez votre demande",
+    "listening": "Écoute en cours…"
   },
   "solana": {
     "wallet": {

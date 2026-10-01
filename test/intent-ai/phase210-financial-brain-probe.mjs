@@ -166,8 +166,15 @@ const decided = await fi.decisionEngine.decide({
 t('decision: a decision is reached and persisted with its trace',
   decided.ok && decided.decision?.id && decided.trace && decided.trace.steps > 0);
 
-t('decision: the decision carries action/rationale/alternatives/risks/range/conditions',
-  decided.ok && decided.decision.decision && decided.decision.reason?.length > 0 && Array.isArray(decided.decision.alternatives) && Array.isArray(decided.decision.risks) && Array.isArray(decided.decision.conditions) && 'expectedRange' in decided.decision && 'invalidationConditions' in decided.decision && Number.isFinite(decided.decision.nextReviewAt));
+t('decision: one-snapshot evidence stays unselected and names why a human choice is required',
+  decided.ok && decided.decision.status === 'NO_RECOMMENDATION'
+  && decided.decision.decision === null && decided.decision.reason?.length > 0
+  && Array.isArray(decided.decision.alternatives) && decided.decision.alternatives.length === 0
+  && Array.isArray(decided.decision.risks) && decided.decision.risks.length > 0
+  && Array.isArray(decided.decision.conditions)
+  && decided.decision.conditions.some((c) => /no candidate is both eligible and evidenced/.test(c))
+  && decided.decision.expectedRange === null
+  && Number.isFinite(decided.decision.nextReviewAt));
 
 t('decision: confidence is decomposed into 7 dimensions with an overall',
   decided.ok && decided.decision.confidence && decided.decision.confidence.dimensions && Object.keys(decided.decision.confidence.dimensions).length === 7 && Number.isFinite(decided.decision.confidence.overall));
@@ -254,8 +261,11 @@ t('replanning: a fired trigger produces a replan verdict, not silent acceptance'
 /* Natural-language acceptance mapping (Tests 1–7)                           */
 /* ═════════════════════════════════════════════════════════════════════════ */
 
-t('NL Test 1: "I have $1000, grow to target" ⇒ goal + strategies + competition + simulation + decision, no execution',
-  strat.ok && comp.ok && sim.ok && decided.ok && decided.decision.status === 'RECOMMENDED' && decided.decision.executionPermission === false);
+t('NL Test 1: "I have $1000, grow to target" ⇒ proposal pipeline runs, but one snapshot cannot force a recommendation or execution',
+  strat.ok && comp.ok && sim.ok && decided.ok
+  && decided.decision.status === 'NO_RECOMMENDATION'
+  && decided.decision.executionPermission === false
+  && comp.competition.judge.winnerId === null);
 
 t('NL Test 2: "best way to reach my goal" ⇒ strategy competition ran with a judge',
   comp.ok && comp.competition.judge.winnerId !== undefined);

@@ -59,6 +59,51 @@ async function loadPerpRisk() {
   return perpRiskMod;
 }
 
+const isUserReject = (err) => Number(err?.code) === 4001
+  || /user\s*(rejected|denied|cancell?ed)/i.test(String(err?.message || ''));
+
+async function signerNetworkId(signer) {
+  try {
+    const network = await signer?.provider?.getNetwork?.();
+    const value = Number(network?.chainId);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a signer that is verifiably on `chainId`, switching the wallet if it
+ * is not. Exported for the Node probes; the executors reach it through
+ * `drivers.wallet.getSignerForChain`.
+ */
+export async function signerOnChain(wallet, chainId) {
+  const target = Number(chainId);
+  if (!Number.isInteger(target) || target <= 0) return { ok: false, code: 'UNSUPPORTED_CHAIN' };
+  if (typeof wallet?.getSigner !== 'function') return { ok: false, code: 'NO_SIGNER' };
+  let signer = wallet.getSigner();
+  if (!signer) return { ok: false, code: 'NO_SIGNER' };
+  let current = await signerNetworkId(signer);
+  if (current === target) return { ok: true, signer };
+  if (typeof wallet.switchChain !== 'function') return { ok: false, code: 'CHAIN_MISMATCH' };
+
+  let switched = false;
+  try { switched = await wallet.switchChain(target); } catch (err) {
+    return { ok: false, code: isUserReject(err) ? 'USER_REJECTED' : 'CHAIN_SWITCH_FAILED' };
+  }
+  if (switched !== true) return { ok: false, code: 'CHAIN_SWITCH_FAILED' };
+
+  /* wallet_switchEthereumChain and `chainChanged` are asynchronous: inspect the
+     signer's actual network before any approval or deposit is requested. */
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    signer = wallet.getSigner();
+    current = await signerNetworkId(signer);
+    if (current === target) return { ok: true, signer };
+  }
+  return { ok: false, code: 'CHAIN_MISMATCH' };
+}
+
 /**
  * ONE warm for the whole session.
  *
@@ -125,7 +170,15 @@ export function buildAutonomyDrivers({
     getSigner: () => (typeof wallet?.getSigner === 'function' ? wallet.getSigner() : null),
     getReadProvider: async (chainId) => (typeof wallet?.getReadProvider === 'function'
       ? wallet.getReadProvider(chainId || wallet.chainId)
-      : null)
+      : null),
+    /**
+     * A signer PROVEN to be on `chainId` — the signer's own provider network is
+     * read (never the React chain label), and a wrong chain asks the wallet to
+     * switch and is re-verified before any signature is requested. Lending
+     * writes need this: lib/lending.js signs against whatever network the
+     * signer happens to be on.
+     */
+    getSignerForChain: (chainId) => signerOnChain(wallet, chainId)
   };
 
   /*
@@ -149,9 +202,14 @@ export function buildAutonomyDrivers({
    * other. That is the whole requirement — EVM and Solana state must not
    * overwrite each other — applied at the boundary where the two are merged.
    */
+  /* WalletContext's public field is `isConnected`; keep the legacy
+     `connected` alias as a fallback for existing callers. Prefer the canonical
+     field when both are present so a stale alias cannot promote a
+     disconnected/locked wallet. An address alone is never a connection. */
+  const evmConnected = Boolean((wallet?.isConnected ?? wallet?.connected) && wallet?.address);
   const injectedEvm = wallet
     ? {
-      connected: Boolean(wallet.connected),
+      connected: evmConnected,
       address: wallet.address ?? null,
       chainId: wallet.chainId ?? null,
       caip2: Number.isFinite(Number(wallet.chainId)) ? `eip155:${Number(wallet.chainId)}` : null,
@@ -159,7 +217,7 @@ export function buildAutonomyDrivers({
       locked: Boolean(wallet.locked),
       /* A signer function IS the capability: without it nothing can be signed,
          whatever the caller calls the connection. */
-      canSign: typeof wallet.getSigner === 'function' && !wallet.locked
+      canSign: Boolean(evmConnected && typeof wallet.getSigner === 'function' && !wallet.locked)
     }
     : null;
   const injectedSolana = solana
@@ -218,6 +276,9 @@ export function buildAutonomyDrivers({
       toUnits: (amount, decimals) => lendingMod?.toUnits?.(amount, decimals) ?? null,
       buildLendingPlan: (args) => lendingMod?.buildLendingPlan?.(args) || null,
       readReserve: async (args) => (await loadLending()).readReserve(args),
+      readOraclePrices: async (args) => (await loadLending()).readOraclePrices(args),
+      readUserAccount: async (args) => (await loadLending()).readUserAccount(args),
+      readAssetPosition: async (args) => (await loadLending()).readAssetPosition(args),
       readAllowance: async (args) => (await loadLending()).readAllowance(args),
       runLendingPlan: async (args) => (await loadLending()).runLendingPlan({ ...args, onStep: onStep || args.onStep })
     },
@@ -226,6 +287,10 @@ export function buildAutonomyDrivers({
     aaveBase: {
       get AAVE_V3_BASE() { return aaveBaseMod?.AAVE_V3_BASE || null; },
       getReserveStatus: async (provider) => (await loadAaveBase()).getReserveStatus(provider),
+      /* `nativeBalance` must be integer wei (the adapter BigInt()s it). The
+         wallet context's own `nativeBalance` is an ether-denominated number,
+         so it is never forwarded from here — the executor reads wei from the
+         chain and passes it explicitly. */
       buildSupplyPlan: async (args) => (await loadAaveBase()).buildSupplyPlan(args)
     },
 

@@ -33,7 +33,8 @@ const { GLOBAL_DOMAINS, normalizeMacro } = await import('../../server/fios/globa
 const { buildBriefingItems } = await import('../../server/fios/briefing.js');
 const { CURRENT_MIGRATION_VERSION } = await import('../../server/fios/migrations.js');
 const { trimKeepingLanguages } = await import('../../server/news.js');
-const { parseStooqCsv, parseYahooChart, parseFredJson, changesFromSeries } = await import('../../server/macroData.js');
+const { MACRO_SYMBOLS, parseStooqCsv, parseYahooChart, parseFredJson, changesFromSeries } = await import('../../server/macroData.js');
+const { readCrossAssetPrices } = await import('../../server/crossAssetPrice.js');
 
 const OWNER = 'dev:phase211';
 const now = Date.now();
@@ -112,10 +113,13 @@ const PROVIDERS = {
   , macroData: async () => ({
     items: [
       { symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F', at: now - 60_000 },
-      { symbol: 'GOLD', name: 'Gold (USD/oz)', kind: 'safe_haven', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F', at: now - 60_000 },
-      { symbol: 'WTI', name: 'WTI Crude (USD/bbl)', kind: 'energy', priceUsd: 78.4, change1dPct: -0.6, change7dPct: -1.8, source: 'stooq:CL.F', at: now - 60_000 },
-      { symbol: 'SPX', name: 'S&P 500 futures', kind: 'equity', priceUsd: 5480.25, change1dPct: 0.4, change7dPct: 0.9, source: 'stooq:ES.F', at: now - 60_000 },
-      { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:T10YIE', at: now - 60_000 },
+      { symbol: 'GOLD', name: 'Gold (USD/troy oz)', kind: 'safe_haven', unit: 'USD/troy oz', priceUsd: 2450.5, change1dPct: 0.5, change7dPct: 2.1, source: 'stooq:GC.F', at: now - 60_000 },
+      { symbol: 'SILVER', name: 'Silver (USD/troy oz)', kind: 'industrial_metal', unit: 'USD/troy oz', priceUsd: 31.2, change1dPct: 0.7, change7dPct: 1.8, source: 'stooq:SI.F', at: now - 60_000 },
+      { symbol: 'WTI', name: 'WTI Crude (USD/bbl)', kind: 'energy', unit: 'USD/barrel', priceUsd: 78.4, change1dPct: -0.6, change7dPct: -1.8, source: 'stooq:CL.F', at: now - 60_000 },
+      { symbol: 'BRENT', name: 'Brent Crude (USD/bbl)', kind: 'energy', unit: 'USD/barrel', priceUsd: 81.2, change1dPct: -0.3, change7dPct: -1.1, source: 'stooq:BRN.F', at: now - 60_000 },
+      { symbol: 'COPPER', name: 'Copper (USD/lb)', kind: 'industrial_metal', unit: 'USD/lb', priceUsd: 4.5, change1dPct: 0.2, change7dPct: 0.6, source: 'stooq:HG.F', at: now - 60_000 },
+      { symbol: 'SPX', name: 'S&P 500 E-mini futures', kind: 'equity', unit: 'index points', priceUsd: 5480.25, change1dPct: 0.4, change7dPct: 0.9, source: 'stooq:ES.F', at: now - 60_000 },
+      { symbol: 'US10Y', name: 'US 10Y Treasury yield (%)', kind: 'rate', priceUsd: 4.21, change1dPct: 0.4, change7dPct: 1.1, source: 'fred:DGS10', at: now - 60_000 },
       { symbol: 'US2S10S', name: 'US 2s10s spread (pct)', kind: 'curve', priceUsd: -0.21, change1dPct: null, change7dPct: -0.3, source: 'fred:T10Y2Y', at: now - 60_000 }
     ],
     at: now,
@@ -204,8 +208,10 @@ t('global-intel: POLITICS headlines are classified as POLITICS (politics → eco
   snapshot.domains.macro.data.byTopic.POLITICS === 1
   && snapshot.domains.macro.data.items.some((m) => m.topic === 'POLITICS' && m.matched));
 t('global-intel: the macro domain carries the real macro quotes as instruments (the connection)',
-  snapshot.domains.macro.data.instruments.length === 6
+  snapshot.domains.macro.data.instruments.length === 9
   && snapshot.domains.macro.data.instruments.every((q) => q.priceUsd !== null && q.source)
+  && snapshot.domains.macro.data.instruments.some((q) => q.symbol === 'SILVER' && q.unit === 'USD/troy oz')
+  && snapshot.domains.macro.data.instruments.some((q) => q.symbol === 'COPPER' && q.unit === 'USD/lb')
   && snapshot.domains.macro.data.instruments.some((q) => q.symbol === 'DXY' && q.change1dPct === 0.8)
   && snapshot.domains.macro.data.curve?.symbol === 'US2S10S'
   && snapshot.domains.macro.data.curve?.spreadPct === -0.21);
@@ -303,9 +309,11 @@ t('cross-asset: read-only classes are labelled (the AI may analyse, never claim 
 /* Phase 211.1 — the macro indicator layer: the real quotes with 1d/7d. */
 t('cross-asset: the macro indicator layer carries the real quotes (1d + 7d) and the curve',
   cross.macro?.status === 'OK'
-  && cross.macro.indicators.length === 6
+  && cross.macro.indicators.length === 9
   && cross.macro.indicators.every((q) => q.priceUsd !== null && q.source)
   && cross.macro.indicators.some((q) => q.symbol === 'DXY' && q.change1dPct === 0.8 && q.change7dPct === 1.2)
+  && cross.macro.indicators.some((q) => q.symbol === 'SILVER' && q.unit === 'USD/troy oz')
+  && cross.macro.indicators.some((q) => q.symbol === 'COPPER' && q.unit === 'USD/lb')
   && cross.macro.curve?.spreadPct === -0.21
   && cross.macro.untrusted === true);
 
@@ -365,6 +373,34 @@ t('cross-asset: an inverted 2s10s is its own named, strongest-weight cautionary 
 t('cross-asset: with nothing read the outlook is honestly UNAVAILABLE (no invented score)',
   economicOutlook({}).label === 'UNAVAILABLE' && economicOutlook({}).score === null
   && economicOutlook({}).reason === 'NO_MARKET_OR_MACRO_READ');
+
+/* The macro desk's five named commodity reads feed the same price-reader
+   contract the Intent AI uses for conditional and cross-asset reasoning. */
+const macroCommoditySymbols = ['GOLD', 'SILVER', 'WTI', 'BRENT', 'COPPER'];
+t('macroData: five commodity instruments have explicit source symbols and USD units',
+  macroCommoditySymbols.every((symbol) => {
+    const row = MACRO_SYMBOLS.find((item) => item.symbol === symbol);
+    return row && row.unit?.startsWith('USD/') && row.stooq && row.yahoo;
+  }));
+t('macroData: US 10Y Treasury yield uses DGS10, not the breakeven-inflation T10YIE series',
+  MACRO_SYMBOLS.find((item) => item.symbol === 'US10Y')?.fred === 'DGS10');
+t('macroData: index feeds do not substitute broad-dollar/inflation proxies for the named instruments',
+  MACRO_SYMBOLS.find((item) => item.symbol === 'DXY')?.fred == null
+  && MACRO_SYMBOLS.find((item) => item.symbol === 'SPX')?.yahoo === 'ES=F'
+  && MACRO_SYMBOLS.find((item) => item.symbol === 'SPX')?.fred == null);
+const commodityPriceReads = await readCrossAssetPrices(macroCommoditySymbols, {
+  now,
+  macroQuotes: { items: [
+    { symbol: 'GOLD', priceUsd: 2450, source: 'stooq:GC.F', at: now },
+    { symbol: 'SILVER', priceUsd: 31, source: 'stooq:SI.F', at: now },
+    { symbol: 'WTI', priceUsd: 78, source: 'stooq:CL.F', at: now },
+    { symbol: 'BRENT', priceUsd: 81, source: 'stooq:BRN.F', at: now },
+    { symbol: 'COPPER', priceUsd: 4.5, source: 'stooq:HG.F', at: now }
+  ] }
+});
+t('cross-asset price reader: all five commodity prices come from a named real macro quote',
+  macroCommoditySymbols.every((symbol) => commodityPriceReads[symbol]?.ok === true
+    && commodityPriceReads[symbol].value > 0 && commodityPriceReads[symbol].source.startsWith('stooq:')));
 
 /* The macroData parsers are pure and honest — driven with real shapes. */
 t('macroData: stooq daily CSV parses dates + closes and rejects garbage rows',

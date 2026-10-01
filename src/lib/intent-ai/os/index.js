@@ -296,7 +296,7 @@ export function createIntentOS({
         if (pref) addLongTermMemory(pref);
         
         // 4. PLAN via orchestrator
-        const plan = await orchestrator.plan({ intent, context });
+        let plan = await orchestrator.plan({ intent, context });
         
         // 5. EXECUTE if read-only, page handoff, or navigation/media
         let executionResult = null;
@@ -317,9 +317,9 @@ export function createIntentOS({
          */
         const ANSWER_IN_CHAT = [
           // analysis and reads — the assistant has the data
-          'PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
+          'PORTFOLIO_ANALYSIS', 'WALLET_BALANCE', 'BRIDGE', 'YIELD_DISCOVERY', 'INVESTMENT_PLAN',
           'RISK_ANALYSIS', 'MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN', 'SIGNALS',
-          'NEWS_SEARCH', 'SMART_MONEY', 'WHALE', 'FARM', 'LEND', 'ORDERS', 'STOCKS',
+          'NEWS_SEARCH', 'SMART_MONEY', 'WHALE', 'FARM', 'LEND', 'BORROW', 'ORDERS', 'STOCKS',
           // conversation control
           'CONTINUE', 'DETAILS', 'CANCEL', 'GENERAL', 'EXECUTE_CURRENT', 'REBALANCE', 'GOAL',
           // "what can you do" is a chat answer by definition
@@ -403,8 +403,43 @@ export function createIntentOS({
           openPage = false;
         }
 
+        const bridgeExecutionUnavailable = workingIntent.type === 'BRIDGE'
+          && !wantsPageOpen(workingIntent.raw);
+        if (bridgeExecutionUnavailable) {
+          // The default registry describes possible domains, not wired
+          // capabilities. Strip its generic swap/bridge quote and execute
+          // suggestions from this request's plan before any observability or
+          // response code can mistake them for supported tools.
+          plan = {
+            ...plan,
+            tools: [],
+            agents: [],
+            actions: [],
+            requiresConfirmation: false,
+            readOnly: false,
+            expected: []
+          };
+        }
+
         if (executionResult?.cancelled) {
           // already handled
+        } else if (bridgeExecutionUnavailable) {
+          /*
+           * BRIDGE is deliberately not wired to the generic swap quote or
+           * execution hooks. Until a verifiable bridge adapter is available,
+           * keep the user in chat and return an explicit unavailable result;
+           * never synthesize a quote card or treat swap hooks as a bridge.
+           * An explicit "open bridge" request is still handled by the normal
+           * read-only page handoff below.
+           */
+          executionResult = {
+            ok: false,
+            unavailable: 'BRIDGE_EXECUTE_UNAVAILABLE',
+            code: 'BRIDGE_EXECUTE_UNAVAILABLE',
+            requiresConfirmation: false,
+            executed: false,
+            broadcasts: false
+          };
         } else if (routing.unavailable) {
           // The module exists in the spec but not in this build — say so,
           // never navigate to a dead URL.
@@ -532,7 +567,7 @@ export function createIntentOS({
           tools: plan.tools?.map(t => t.id) || [],
           latency,
           status: executionResult?.ok ? (executionResult.planReady ? 'AWAITING_CONFIRMATION' : 'COMPLETED') : 'FAILED',
-          errors: executionResult?.ok ? [] : [executionResult?.error || 'FAILED'],
+          errors: executionResult?.ok ? [] : [executionResult?.code || executionResult?.error || executionResult?.unavailable || 'FAILED'],
           provider: plan.tools?.[0]?.id || null,
           result: executionResult,
           context
@@ -650,7 +685,9 @@ export function createIntentOS({
           message: stripInternalLeaks(human.message),
           ui: human.ui,
           card: human.card,
-          requiresConfirmation: human.requiresConfirmation || plan.requiresConfirmation,
+          requiresConfirmation: workingIntent.type === 'BRIDGE'
+            ? Boolean(human.requiresConfirmation || executionResult?.requiresConfirmation)
+            : Boolean(human.requiresConfirmation || plan.requiresConfirmation),
           navigated: workingIntent.inPlaceRoute ? null : (human.navigated || executionResult?.route || null)
         };
         

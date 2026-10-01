@@ -13,40 +13,66 @@ export function createRiskAgent({ riskService = null } = {}) {
       try {
         if (riskService?.analyze) return await riskService.analyze({ portfolio, action, riskTolerance });
         
-        // Local risk analysis
-        const holdings = portfolio?.holdings || [];
-        const total = holdings.reduce((s, h) => s + (Number(h.valueUsd) || 0), 0);
-        const sorted = [...holdings].sort((a, b) => (b.valueUsd || 0) - (a.valueUsd || 0));
-        const top = sorted[0];
-        const concentration = top ? (top.valueUsd / total) * 100 : 0;
-        
-        let level = 'low';
-        let reasons = [];
-        
-        if (concentration > 60) {
-          level = 'high';
-          reasons.push(`Concentration high: ${top.symbol} ${concentration.toFixed(1)}%`);
-        } else if (concentration > 40) {
-          level = 'medium';
-          reasons.push(`Concentration medium: ${top.symbol} ${concentration.toFixed(1)}%`);
+        // This local observation is a concentration check, not a full risk
+        // score. Null / missing prices are excluded rather than converted to
+        // zero, and the unpriced coverage gap is carried with the result.
+        const holdings = Array.isArray(portfolio?.holdings) ? portfolio.holdings : [];
+        const valued = holdings.filter((row) => row?.valueUsd != null
+          && row.valueUsd !== ''
+          && Number.isFinite(Number(row.valueUsd))
+          && Number(row.valueUsd) > 0);
+        const total = valued.reduce((sum, row) => sum + Number(row.valueUsd), 0);
+        const unpricedCount = Math.max(0, holdings.length - valued.length);
+        const tokenTotals = new Map();
+        for (const row of valued) {
+          const symbol = String(row.symbol || '—').toUpperCase();
+          tokenTotals.set(symbol, (tokenTotals.get(symbol) || 0) + Number(row.valueUsd));
         }
-        
-        if (action?.amountUsd && total) {
-          const pct = (Number(action.amountUsd) / total) * 100;
-          if (pct > 50) {
-            level = level === 'low' ? 'medium' : 'high';
-            reasons.push(`Action uses ${pct.toFixed(1)}% of portfolio`);
+        const top = [...tokenTotals.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+        const concentration = top && total > 0 ? (top[1] / total) * 100 : null;
+        const complete = portfolio?.partial !== true
+          && portfolio?.dataStatus === 'live'
+          && portfolio?.priceDataStatus === 'live'
+          && portfolio?.fromSnapshot !== true
+          && !(Array.isArray(portfolio?.failedChains) && portfolio.failedChains.length)
+          && !(Array.isArray(portfolio?.staleChains) && portfolio.staleChains.length)
+          && unpricedCount === 0;
+        const dataStatus = !valued.length ? 'unavailable' : complete ? 'live' : 'partial';
+
+        let level = concentration == null ? 'unknown' : 'low';
+        const reasons = [];
+        if (concentration != null && concentration > 60) {
+          level = 'high';
+          reasons.push(`Concentration high: ${top[0]} ${concentration.toFixed(1)}% of priced holdings`);
+        } else if (concentration != null && concentration > 40) {
+          level = 'medium';
+          reasons.push(`Concentration medium: ${top[0]} ${concentration.toFixed(1)}% of priced holdings`);
+        }
+        if (unpricedCount > 0) reasons.push(`${unpricedCount} holding(s) have no valid price; concentration covers priced holdings only`);
+
+        if (action?.amountUsd && total > 0) {
+          const actionPct = (Number(action.amountUsd) / total) * 100;
+          if (actionPct > 50) {
+            level = level === 'low' ? 'medium' : (level === 'unknown' ? 'unknown' : 'high');
+            reasons.push(`Action uses about ${actionPct.toFixed(1)}% of priced holdings`);
           }
         }
-        
+
         return {
           ok: true,
-          riskLevel: level,
+          riskLevel: complete ? level : 'unknown',
+          concentrationBand: level,
           concentration,
+          concentrationSymbol: top?.[0] || null,
+          riskBasis: 'largest-token-share-of-priced-holdings',
+          overallRiskScore: null,
           reasons,
           riskTolerance,
-          approved: riskTolerance === 'high' ? true : level !== 'high',
-          dataStatus: 'live'
+          pricedCount: valued.length,
+          unpricedCount,
+          coverage: holdings.length ? valued.length / holdings.length : 0,
+          approved: complete && level !== 'unknown' && (riskTolerance === 'high' || level !== 'high'),
+          dataStatus
         };
       } catch (err) {
         return { ok: false, error: err.message, dataStatus: 'unavailable' };

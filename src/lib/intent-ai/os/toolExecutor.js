@@ -91,12 +91,24 @@ export async function executeIntentTools({ intent, context = {}, services = {} }
    * produced a card that always said "I could not read any live rate" — even
    * on a network where the rates were right there.
    */
-  if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'INVESTMENT_PLAN', 'STAKING', 'GOAL_PLAN'].includes(type)) {
+  if (['YIELD_DISCOVERY', 'FARM', 'LEND', 'BORROW', 'INVESTMENT_PLAN', 'STAKING', 'GOAL_PLAN'].includes(type)) {
+    const rawChain = intent?.entities?.chainIds?.[0]
+      ?? intent?.entities?.network
+      ?? intent?.entities?.chainId
+      ?? context.wallet?.chainId
+      ?? null;
+    const amountSymbol = String(intent?.entities?.amountSymbol || '').toUpperCase();
+    const asset = amountSymbol && !['USD', '$', 'TOMAN'].includes(amountSymbol)
+      ? amountSymbol
+      : (intent?.entities?.token || null);
     const scan = await scanOpportunities({
       services,
       portfolio: context.portfolio,
       riskTolerance: intent?.entities?.riskTolerance || 'medium',
-      asset: intent?.entities?.token || intent?.entities?.amountSymbol || null
+      asset,
+      chainId: rawChain,
+      scope: type === 'FARM' ? 'farm' : (type === 'LEND' || type === 'BORROW') ? 'lending' : 'all',
+      operation: type === 'BORROW' ? 'borrow' : 'supply'
     });
     toolsUsed.push({
       id: 'opportunity.scan',
@@ -107,6 +119,35 @@ export async function executeIntentTools({ intent, context = {}, services = {} }
     });
     data.yieldOpportunities = scan;
     data.opportunities = scan.opportunities;
+
+    if (intent?.executionRequested === true && ['LEND', 'BORROW'].includes(type)) {
+      const address = context.wallet?.address || context.wallet?.evmAddresses?.[0] || null;
+      const cid = rawChain != null && Number.isFinite(Number(rawChain)) ? Number(rawChain) : null;
+      if (address && cid != null && asset) {
+        const positionJobs = [
+          services.lendingService?.getPositions
+            ? services.lendingService.getPositions({ address, chainId: cid })
+            : Promise.resolve({ ok: false, dataStatus: 'unavailable', reason: 'POSITION_READ_UNAVAILABLE' })
+        ];
+        if (type === 'LEND') {
+          positionJobs.push(services.lendingService?.getAssetPosition
+            ? services.lendingService.getAssetPosition({ address, chainId: cid, asset })
+            : Promise.resolve({ ok: false, dataStatus: 'unavailable', reason: 'BALANCE_READ_UNAVAILABLE' }));
+        }
+        const reads = await Promise.allSettled(positionJobs);
+        data.lendingPosition = reads[0]?.status === 'fulfilled'
+          ? reads[0].value
+          : { ok: false, dataStatus: 'unavailable', reason: 'POSITION_READ_FAILED' };
+        if (type === 'LEND') {
+          data.lendingAssetPosition = reads[1]?.status === 'fulfilled'
+            ? reads[1].value
+            : { ok: false, dataStatus: 'unavailable', reason: 'BALANCE_READ_FAILED' };
+        }
+      } else {
+        data.lendingPosition = { ok: false, dataStatus: 'unavailable', reason: address ? 'CHAIN_REQUIRED' : 'WALLET_REQUIRED' };
+        if (type === 'LEND') data.lendingAssetPosition = { ok: false, dataStatus: 'unavailable', reason: 'BALANCE_READ_UNAVAILABLE' };
+      }
+    }
   }
 
   if (['MARKET_ANALYSIS', 'MARKET_CONTEXT', 'ANALYZE_TOKEN'].includes(type)) {

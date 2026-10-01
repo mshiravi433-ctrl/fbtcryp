@@ -21,8 +21,26 @@ import {
 import { adapterForChain } from './chainAdapters.js';
 import { planRebalance } from './rebalanceEngine.js';
 import { resolveVenueHooks } from './autonomy/venueExecutors.js';
+import { validateFreshQuoteAgainstReview } from './quoteReview.js';
 
 export const EXECUTION_RUNTIME_SCHEMA = 'fbt.ai-execution-runtime.v1';
+
+const SWAP_TYPES = new Set(['SWAP', 'BUY', 'SELL', 'CONVERT']);
+/* Venue-only action families. Neither may ever run on the swap hook set. */
+const FARM_FAMILY = new Set(['FARM', 'DEPOSIT', 'YIELD_SWEEP']);
+const LENDING_FAMILY = new Set(['LEND', 'SUPPLY', 'BORROW', 'REPAY', 'WITHDRAW', 'UNWIND']);
+
+function blockedResult(actionInput, type, code, now) {
+  const blockedPlan = createExecutionPlan({ actions: [{ ...actionInput, type }], now });
+  const blocked = advanceAction(blockedPlan.actions[0], code, { error: code, now });
+  return toExecutionResult({
+    ...blockedPlan,
+    actions: [blocked.ok ? blocked.action : blockedPlan.actions[0]]
+  });
+}
+const isSwapLikeAction = (action) => SWAP_TYPES.has(String(action?.type || '').toUpperCase())
+  && Boolean(action?.from || action?.fromSymbol)
+  && Boolean(action?.to || action?.toSymbol);
 
 function failResult(code, extra = {}) {
   return {
@@ -64,6 +82,36 @@ export async function runAction(actionInput, {
   now = Date.now()
 } = {}) {
   /*
+   * BRIDGE IS NOT A SWAP. No bridge adapter is bound to this generic runtime,
+   * so refuse before venue dispatch can expose *any* caller or venue hook. In
+   * particular, a BRIDGE action must never reach the generic swap quote,
+   * allowance, simulation, build, approval, send, or receipt hooks.
+   */
+  const requestedType = String(actionInput?.type || actionInput?.kind || actionInput?.op || 'SWAP').toUpperCase();
+  if (requestedType === 'BRIDGE') {
+    const blockedPlan = createExecutionPlan({ actions: [{ ...actionInput, type: 'BRIDGE' }], now });
+    const blocked = advanceAction(blockedPlan.actions[0], 'BRIDGE_EXECUTE_UNAVAILABLE', {
+      error: 'BRIDGE_EXECUTE_UNAVAILABLE',
+      now
+    });
+    return toExecutionResult({
+      ...blockedPlan,
+      actions: [blocked.ok ? blocked.action : blockedPlan.actions[0]]
+    });
+  }
+
+  /*
+   * FARM IS NOT AAVE, AND NOT A SWAP. No verified LP/farm executor exists in
+   * the chat runtime, and a single-asset Aave supply is a different product
+   * with different risk. A farm-family action is therefore refused outright —
+   * it must never be mapped to a lending deposit, nor fall through to the
+   * generic swap hooks that would quote and sign a swap in its place.
+   */
+  if (FARM_FAMILY.has(requestedType)) {
+    return blockedResult(actionInput, requestedType, 'FARM_EXECUTOR_UNAVAILABLE', now);
+  }
+
+  /*
    * VENUE DISPATCH. Before autonomy, every action was handed one swap-shaped
    * hook set, so anything that was not a swap died at QUOTING. The venue
    * executor for this action now supplies the hooks (lending → lib/lending.js,
@@ -77,6 +125,12 @@ export async function runAction(actionInput, {
     drivers: drivers || {},
     hooks: injectedHooks
   });
+  /* A lending-family action with no matching lending venue (an unsupported
+     operation, a venue override that matches nothing) must not inherit the
+     caller's swap hooks either — that would sign something else. */
+  if (LENDING_FAMILY.has(requestedType) && !dispatched.executor) {
+    return blockedResult(actionInput, requestedType, 'LENDING_VENUE_UNAVAILABLE', now);
+  }
   const hooks = dispatched.hooks;
   const venue = dispatched.executor?.id || null;
 
@@ -104,20 +158,42 @@ export async function runAction(actionInput, {
   let moved = await bump('VALIDATING');
   if (!moved.ok) return failResult('VALIDATION_FAILED');
 
-  const amount = Number(action.amountUsd ?? action.amount);
-  if (action.type !== 'ANALYZE' && amount != null && amount <= 0) {
+  const swapLike = isSwapLikeAction(action);
+  const rawAmount = action.amount;
+  const amount = rawAmount !== null && rawAmount !== undefined && rawAmount !== ''
+    ? Number(rawAmount)
+    : null;
+  if (swapLike && action.requiresQuoteReview === true) {
+    if (amount == null || !Number.isFinite(amount) || amount <= 0
+      || String(action.amountUnit || '').toUpperCase() !== String(action.from || '').toUpperCase()) {
+      moved = await bump('AMOUNT_UNIT_REQUIRED', { error: 'AMOUNT_UNIT_REQUIRED' });
+      return toExecutionResult({ ...plan, actions: [moved.action || action] });
+    }
+  } else if (action.type !== 'ANALYZE' && rawAmount != null && (!Number.isFinite(amount) || amount <= 0)) {
     moved = await bump('VALIDATION_FAILED', { error: 'AMOUNT_INVALID' });
     return toExecutionResult({ ...plan, actions: [moved.action || action] });
   }
 
   moved = await bump('QUOTING');
   if (!moved.ok) return failResult('VALIDATION_FAILED');
+  if (action.requiresQuoteReview === true && typeof hooks.getQuote !== 'function') {
+    moved = await bump('QUOTE_REVIEW_REQUIRED', { error: 'QUOTE_REVIEW_REQUIRED' });
+    return toExecutionResult({ ...plan, actions: [moved.action || action] });
+  }
   if (typeof hooks.getQuote === 'function') {
     try {
       const quote = await hooks.getQuote(action);
-      if (!quote || quote.ok === false) {
-        moved = await bump('PROVIDER_FAILED', { error: quote?.code || 'NO_QUOTE' });
+      if (!quote || quote.ok === false || quote.error) {
+        const code = quote?.code || quote?.error || 'NO_QUOTE';
+        moved = await bump('PROVIDER_FAILED', { error: code });
         return toExecutionResult({ ...plan, actions: [moved.action || action] });
+      }
+      if (action.requiresQuoteReview === true) {
+        const terms = validateFreshQuoteAgainstReview({ review: action.quoteReview, action, quote, now });
+        if (!terms.ok) {
+          moved = await bump(terms.code, { error: terms.code });
+          return toExecutionResult({ ...plan, actions: [moved.action || action] });
+        }
       }
       action = { ...action, quote };
     } catch (err) {
@@ -126,27 +202,59 @@ export async function runAction(actionInput, {
     }
   }
 
-  if (typeof hooks.getBalance === 'function') {
+  if (action.requiresQuoteReview === true) {
+    if (typeof hooks.getBalance !== 'function') {
+      moved = await bump('BALANCE_UNVERIFIED', { error: 'BALANCE_UNVERIFIED' });
+      return toExecutionResult({ ...plan, actions: [moved.action || action] });
+    }
     try {
-      const bal = await hooks.getBalance(wallet.address || wallet.evmAddresses?.[0]);
-      const have = Number(bal?.valueUsd ?? bal?.amount);
-      if (Number.isFinite(have) && Number.isFinite(amount) && have + 1e-9 < amount) {
+      const bal = await hooks.getBalance(wallet.address || wallet.evmAddresses?.[0], action);
+      const quote = action.quote;
+      const haveRaw = (() => { try { return BigInt(bal?.raw); } catch { return null; } })();
+      const requiredRaw = (() => { try { return BigInt(quote?.amountInWei); } catch { return null; } })();
+      const tokenAddress = quote?.fromToken?.native === true ? null : String(quote?.fromToken?.address || '').toLowerCase();
+      const balanceTokenAddress = bal?.tokenAddress == null ? null : String(bal.tokenAddress).toLowerCase();
+      const matches = bal?.ok === true
+        && Number(bal?.chainId) === Number(action.chainId)
+        && String(bal?.symbol || '').toUpperCase() === String(action.from || '').toUpperCase()
+        && Number(bal?.decimals) === Number(quote?.fromToken?.decimals)
+        && balanceTokenAddress === tokenAddress
+        && haveRaw != null && requiredRaw != null;
+      if (!matches) {
+        moved = await bump('BALANCE_UNVERIFIED', { error: 'BALANCE_UNVERIFIED' });
+        return toExecutionResult({ ...plan, actions: [moved.action || action] });
+      }
+      if (haveRaw < requiredRaw) {
         moved = await bump('INSUFFICIENT_FUNDS', { error: 'INSUFFICIENT_FUNDS' });
         return toExecutionResult({ ...plan, actions: [moved.action || action] });
       }
-    } catch (err) {
-      moved = await bump('NETWORK_FAILED', { error: String(err?.message || 'NETWORK_FAILED').slice(0, 120) });
+    } catch {
+      moved = await bump('BALANCE_UNVERIFIED', { error: 'BALANCE_UNVERIFIED' });
       return toExecutionResult({ ...plan, actions: [moved.action || action] });
     }
   }
 
+  if (action.requiresQuoteReview === true && action.quote?.fromToken?.native !== true && typeof hooks.checkAllowance !== 'function') {
+    moved = await bump('ALLOWANCE_READ_FAILED', { error: 'ALLOWANCE_READ_FAILED' });
+    return toExecutionResult({ ...plan, actions: [moved.action || action] });
+  }
   if (typeof hooks.checkAllowance === 'function') {
     try {
       const need = await hooks.checkAllowance(action);
-      if (need === true && typeof hooks.approve === 'function') {
+      if (need && typeof need === 'object' && need.ok === false) {
+        moved = await bump('ALLOWANCE_READ_FAILED', { error: need.code || 'ALLOWANCE_READ_FAILED' });
+        return toExecutionResult({ ...plan, actions: [moved.action || action] });
+      }
+      if (need === true) {
+        if (typeof hooks.approve !== 'function') {
+          moved = await bump('ALLOWANCE_REQUIRED', { error: 'ALLOWANCE_REQUIRED' });
+          return toExecutionResult({ ...plan, actions: [moved.action || action] });
+        }
         const approved = await hooks.approve(action);
         if (!approved || approved.ok === false) {
-          moved = await bump('ALLOWANCE_REQUIRED', { error: 'ALLOWANCE_REQUIRED' });
+          const known = new Set(['USER_REJECTED', 'CHAIN_MISMATCH', 'CHAIN_SWITCH_FAILED', 'UNSUPPORTED_CHAIN']);
+          const code = known.has(approved?.code) ? approved.code : 'ALLOWANCE_REQUIRED';
+          moved = await bump(code, { error: approved?.code || code });
           return toExecutionResult({ ...plan, actions: [moved.action || action] });
         }
       }
@@ -156,7 +264,7 @@ export async function runAction(actionInput, {
         moved = await bump('USER_REJECTED', { error: 'USER_REJECTED' });
         return toExecutionResult({ ...plan, actions: [moved.action || action] });
       }
-      moved = await bump('PROVIDER_FAILED', { error: msg.slice(0, 120) });
+      moved = await bump(action.requiresQuoteReview ? 'ALLOWANCE_READ_FAILED' : 'PROVIDER_FAILED', { error: msg.slice(0, 120) });
       return toExecutionResult({ ...plan, actions: [moved.action || action] });
     }
   }
@@ -230,7 +338,7 @@ export async function runAction(actionInput, {
   }
   let receipt = null;
   try {
-    const waited = await waitFn(txHash);
+    const waited = await waitFn(txHash, action);
     receipt = waited?.receipt || waited;
     if (waited && waited.ok === false) {
       moved = await bump('CONFIRMATION_FAILED', { txHash, receipt, error: waited.code || 'CONFIRMATION_FAILED' });

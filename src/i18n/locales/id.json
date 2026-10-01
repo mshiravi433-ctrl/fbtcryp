@@ -2414,6 +2414,34 @@
     "drawerNote": "Tombol-tombol ini hanya pintasan; asisten tetap bekerja tanpanya.",
     "solanaConnect": "Hubungkan dompet Solana",
     "readyTitle": "Siap dieksekusi",
+    "quoteReview": {
+      "title": "Tinjau kuotasi swap",
+      "quotedAt": "Kuotasi pada {{time}}",
+      "expiresAt": "Tinjauan berlaku sampai {{time}}",
+      "expired": "Kuotasi ini sudah kedaluwarsa. Perbarui sebelum mengonfirmasi.",
+      "from": "Anda membayar",
+      "to": "Perkiraan hasil",
+      "minimum": "Minimum yang diterima",
+      "network": "Jaringan",
+      "route": "Penyedia rute",
+      "sourcesCompared": "{{count}} sumber kuotasi dibandingkan",
+      "hops": "{{count}} hop rute",
+      "platformFee": "Biaya platform",
+      "slippage": "Slippage maksimum",
+      "gas": "Perkiraan gas jaringan",
+      "priceImpact": "Dampak harga",
+      "notReported": "Tidak dilaporkan",
+      "mev": "Perlindungan MEV",
+      "mevUnknown": "Belum diverifikasi secara independen",
+      "tokenAddresses": "Alamat kontrak token",
+      "inputToken": "Token masukan",
+      "outputToken": "Token keluaran",
+      "nativeAsset": "Aset native (tanpa kontrak token)",
+      "warning": "Kuotasi dapat berubah antara peninjauan dan penandatanganan. Sebelum tanda tangan apa pun, aplikasi mengambil kuotasi terbaru. Jika jumlah masukan, rute, biaya, atau slippage berubah, atau minimum keluaran terbaru lebih rendah daripada yang ditampilkan di sini, eksekusi dihentikan dan perlu ditinjau ulang.",
+      "refresh": "Perbarui kuotasi",
+      "refreshing": "Memperbarui kuotasi…",
+      "summary": "Kuotasi langsung siap ditinjau: minimum {{minimum}} {{to}} di jaringan {{network}}. Perlindungan MEV belum diverifikasi secara independen; kuotasi akan diperiksa lagi sebelum penandatanganan."
+    },
     "working": "Sedang bekerja…",
     "confirm": "Konfirmasi",
     "edit": "Ubah",
@@ -2422,7 +2450,95 @@
     "executionReady": "Siap dieksekusi. Saya antar ke layar eksekusi asli untuk tanda tangan dompet.",
     "executionBlocked": "Antre di Dompet — tanda tangan Anda masih diperlukan.",
     "executionFailed": "Tidak berhasil. Transaksi tidak selesai.",
-    "connectWallet": "Hubungkan dompet"
+    "connectWallet": "Hubungkan dompet",
+    "portfolioCard": {
+      "title": "Intelijen portofolio",
+      "subtitle": "Saldo dari jaringan yang didukung; cakupan harga dapat berbeda.",
+      "asOf": "Saldo per {{time}}",
+      "status": {
+        "live": "Saldo dan harga terkini",
+        "partial": "Pembacaan portofolio sebagian",
+        "stale": "Sebagian saldo atau harga mungkin sudah lama",
+        "pending": "Menyinkronkan data dompet",
+        "unavailable": "Data portofolio tidak tersedia",
+        "empty": "Kosong (terverifikasi)"
+      },
+      "metric": {
+        "total": "Nilai portofolio",
+        "pricedValue": "Subtotal aset berharga",
+        "stablecoins": "Stablecoin USD yang dikenali",
+        "concentration": "Porsi token terbesar",
+        "pricedOnly": "Hanya dari aset yang memiliki harga",
+        "pnl": "P&L belum terealisasi",
+        "riskScore": "Skor heuristik komposisi dompet",
+        "notAvailable": "Tidak tersedia",
+        "noCostBasis": "Basis biaya dan riwayat pembelian belum terhubung.",
+        "riskUnavailable": "Memerlukan pembacaan lengkap dan terkini dengan setidaknya satu aset yang memiliki harga.",
+        "notComputed": "Metrik portofolio",
+        "riskBasis": "Heuristik: konsentrasi token berharga, porsi stablecoin, serta jumlah posisi dan jaringan; skor lebih tinggi berarti eksposur lebih besar."
+      },
+      "note": {
+        "pricedSubtotal": "Nilai ini hanya mencakup aset dengan harga valid.",
+        "risk": "Skor komposisi dompet ini bersifat heuristik, bukan penilaian risiko menyeluruh. Skor memakai aset berharga, stablecoin yang dikenali, serta jumlah posisi dan jaringan; volatilitas pasar, kewajiban, basis biaya, dan aset di luar dompet ini tidak dinilai.",
+        "unpricedCount": "{{count}} aset tanpa harga valid",
+        "failedCount": "Pembacaan {{count}} jaringan belum terkonfirmasi",
+        "staleCount": "Data {{count}} jaringan mungkin sudah lama"
+      },
+      "tab": {
+        "assets": "Aset",
+        "networks": "Jaringan"
+      },
+      "row": {
+        "priceUnavailable": "Harga tidak tersedia",
+        "noHoldings": "Tidak ada saldo nonnol yang tersedia di snapshot ini."
+      },
+      "network": {
+        "failed": "Pembacaan gagal",
+        "stale": "Snapshot lama",
+        "live": "Pembacaan saldo terkini",
+        "assetCount": "{{count}} aset",
+        "noNetworks": "Tidak ada saldo jaringan untuk ditampilkan.",
+        "partial": "Pembacaan parsial"
+      },
+      "action": {
+        "risk": "Tanya tentang risiko",
+        "allocation": "Tanya tentang alokasi",
+        "rebalance": "Pratinjau rebalance",
+        "fullPortfolio": "Buka portofolio lengkap",
+        "showAll": "Tampilkan semua {{count}}",
+        "showLess": "Tampilkan lebih sedikit"
+      },
+      "prompt": {
+        "risk": "Analisis risiko portofolio saya. Jelaskan apa yang diukur dan apa yang belum tersedia; jangan menyebut konsentrasi sebagai skor risiko lengkap.",
+        "allocation": "Tampilkan alokasi portofolio saya saat ini berdasarkan token dan jaringan.",
+        "rebalance": "Bantu saya memilih alokasi target dan siapkan pratinjau rebalance beserta jumlahnya. Tanyakan target terlebih dahulu dan jangan eksekusi apa pun."
+      },
+      "riskBand": {
+        "low": "Eksposur lebih rendah",
+        "medium": "Eksposur sedang",
+        "high": "Eksposur lebih tinggi"
+      }
+    },
+    "conditional": {
+      "title": "Alokasi bersyarat",
+      "conditions": "Kondisi",
+      "met": "terpenuhi",
+      "notMet": "belum terpenuhi",
+      "arming": "mencatat garis dasar",
+      "unreadable": "tidak terbaca",
+      "allocation": "Alokasi",
+      "ofCapital": "dari modal",
+      "units": "unit",
+      "analysisOnly": "hanya analisis — belum ada broker yang dikonfigurasi untuk kelas aset ini",
+      "aboveRail": "melebihi batas {{pct}}% — memerlukan konfirmasi eksplisit Anda",
+      "watch": "Pantau kondisi ini",
+      "declines": "penurunan {{pct}}%",
+      "rises": "kenaikan {{pct}}%",
+      "above": "di atas {{value}}",
+      "below": "di bawah {{value}}"
+    },
+    "voiceInput": "Ucapkan permintaan Anda",
+    "listening": "Mendengarkan…"
   },
   "solana": {
     "wallet": {

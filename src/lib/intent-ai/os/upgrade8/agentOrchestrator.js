@@ -40,16 +40,22 @@ async function runWalletAgent(context = {}) {
 async function runPortfolioAgent(context = {}) {
   const portfolio = context.portfolioContext || {};
   const positions = Array.isArray(portfolio.positions) ? portfolio.positions : [];
-  const totalValue = safeNumber(portfolio.totalValue, null);
+  const complete = portfolio.complete === true && portfolio.dataStatus === 'live';
+  const totalValue = complete ? safeNumber(portfolio.totalValue, null) : null;
+  const pricedSubtotal = safeNumber(portfolio.pricedSubtotal, null);
   const concentration = positions.length
     ? Math.max(...positions.map((position) => safeNumber(position.weightPct ?? position.weight ?? 0, 0)))
     : null;
   return {
     totalValue,
+    pricedSubtotal,
+    dataStatus: portfolio.dataStatus || 'unavailable',
+    complete,
     positionCount: positions.length,
     concentration,
+    concentrationBasis: portfolio.concentrationBasis || 'priced-holdings-only',
     topPositions: positions.slice(0, 3),
-    confidence: positions.length ? 0.87 : 0.58
+    confidence: complete && positions.length ? 0.87 : positions.length ? 0.58 : 0.38
   };
 }
 
@@ -69,15 +75,24 @@ async function runRiskAgent(context = {}) {
     ?? (Array.isArray(portfolio.positions) && portfolio.positions.length
       ? Math.max(...portfolio.positions.map((position) => safeNumber(position.weightPct ?? position.weight ?? 0, 0)))
       : null);
+  const complete = portfolio.complete === true && portfolio.dataStatus === 'live';
   const riskProfile = context.state?.collectedSlots?.riskProfile || context.riskProfile || null;
+  const riskLevel = complete && concentration != null
+    ? concentration > 60 ? 'high' : concentration > 40 ? 'medium' : 'low'
+    : 'unknown';
   return {
     riskProfile,
+    riskLevel,
     concentration,
+    concentrationBasis: portfolio.concentrationBasis || 'priced-holdings-only',
+    dataStatus: portfolio.dataStatus || 'unavailable',
+    complete,
     warnings: [
-      concentration != null && concentration > 45 ? 'high concentration risk' : null,
+      complete && concentration != null && concentration > 45 ? 'high concentration risk' : null,
+      !complete ? 'portfolio coverage incomplete; overall risk is unknown' : null,
       !riskProfile ? 'risk profile missing' : null
     ].filter(Boolean),
-    confidence: concentration != null ? 0.89 : 0.68
+    confidence: complete && concentration != null ? 0.89 : concentration != null ? 0.48 : 0.38
   };
 }
 
