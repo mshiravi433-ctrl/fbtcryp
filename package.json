@@ -27,6 +27,7 @@
     "test:landing": "node scripts/landing-v2/qa-dist.mjs",
     "test:seo": "node --test test/seo-audit.test.mjs",
     "test:ai-theme": "node test/ai-light-theme-probe.mjs",
+    "test:smart-money-intent": "node test/smart-money-intent-monitor-probe.mjs",
     "notify:verify": "node scripts/notify-verify.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",

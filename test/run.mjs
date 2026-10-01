@@ -1996,6 +1996,20 @@ console.log('\n▸ probing the Smart Money live pipeline…');
   report('smart money live pipeline', rows);
 }
 
+/* SMART MONEY → INTENT OS, the connector. Both halves existed and were
+ * tested; the wire between them did not, so «اگر اسمارت مانی اتریوم را انباشت
+ * کرد خبر بده» was answered with «type a threshold instead» and the one
+ * function documented to handle it was orphaned and Persian-blind. This probe
+ * drives the sentence through the router, the evidence gate and the DRAFT,
+ * and then hands the result to the real server validator — the gate that makes
+ * the rest mean anything, since a Smart Money monitor without a contract is
+ * refused with BAD_SM_TARGET. */
+console.log('\n▸ probing Smart Money → Intent OS alerts (the missing connector)…');
+{
+  const rows = (await import('./smart-money-intent-monitor-probe.mjs')).default;
+  report('smart money → intent os', rows);
+}
+
 /* Verified receipts, profitability qualification, shared consensus gate and
  * Intent/Opportunity handoffs run in a separate process to isolate the
  * monitor/watchlist test store from the rest of the suite. */
