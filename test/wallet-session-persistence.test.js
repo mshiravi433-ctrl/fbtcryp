@@ -47,6 +47,11 @@ beforeEach(() => {
 afterEach(() => localStorage.clear());
 
 describe('the lease policy is ONE policy', () => {
+  it('omitting minutes uses the shared default without a ReferenceError', () => {
+    const value = lease.writeWalletLease({ address: ADDR, mode: 'injected' });
+    expect(value.minutes).toBe(WALLET_LEASE_DEFAULT_MINUTES);
+  });
+
   it('allows a month, a year, and never-expiry', () => {
     expect(walletLeaseMinutes(MONTH_MINUTES)).toBe(MONTH_MINUTES);
     expect(walletLeaseMinutes(MAX_LEASE_MINUTES)).toBe(MAX_LEASE_MINUTES);

@@ -96,9 +96,12 @@ import { resolveChatRoute } from '../lib/intent-ai/autonomy/chatRoutes.js';
 import { buildAutonomyDrivers, warmAutonomyDrivers } from '../lib/intent-ai/autonomy/browserDrivers.js';
 import { GoalPlanCard, AutonomyCard } from './AutonomyCards.jsx';
 import { planFromIntent } from '../lib/intent-ai/autonomy/goalSources.js';
+import { localizeStrategy, strategyOperationLabel } from '../lib/strategyBrain/strategyLocales.js';
+import { num as strategyNum } from '../lib/strategyBrain/numeric.js';
 import { StrategyPlanCard } from './StrategyPlanCard.jsx';
 import { buildStrategyFromChat, createChatStrategyRuntime } from '../lib/strategyBrain/chatBridge.js';
 import { resolveGoalTurn } from '../lib/strategyBrain/goalTurn.js';
+import { parseGoalSpec } from '../lib/strategyBrain/goalSpec.js';
 import { evaluateStrategyPreflight } from '../lib/strategyBrain/strategyPreflight.js';
 import { fetchOverview as fetchSmartMoneyOverview, fetchWallet as fetchSmartMoneyWallet } from '../lib/smartMoneyClient.js';
 import { formatSmartMoneyWalletReport } from '../lib/smartMoneyWalletReport.js';
@@ -170,7 +173,9 @@ import { createRealServices } from '../lib/intent-ai/os/serviceAdapters.js';
 import { setCentralWalletState, snapshotFromAppWallet, getCentralWalletState } from '../lib/intent-ai/os/centralWalletState.js';
 import { patchSharedState } from '../lib/intent-ai/os/sharedState.js';
 import { getSuggestionsForIntent, getSuggestionsForMessage } from '../lib/intent-ai/os/suggestionEngine.js';
-import { opsCardPrompt } from '../lib/intent-ai/os/opsCardPrompts.js';
+import { resolveOpsAction } from '../lib/intent-ai/os/opsDispatch.js';
+import { readOpsRewards } from '../lib/intent-ai/os/opsRewards.js';
+import { rewardsSummary, rewardsMissions, rewardsReferral } from '../lib/rewards/rewardsApi.js';
 import { venueSwapReceipt } from '../lib/intent-ai/os/venueReceipt.js';
 import { useRadioStore } from '../store/useRadioStore.js';
 import { getLastActiveTask, getActiveTasks, updateTaskStatus } from '../lib/intent-ai/os/taskContinuity.js';
@@ -296,6 +301,7 @@ import {
    بعد از جمع‌آوری همه اطلاعات، درخواست با «تفکر عمیق» تحلیل شود. */
 import {
   startForm,
+  isFormInterruption,
   getActiveForm,
   getCurrentSlot,
   submitAnswer as submitFormAnswer,
@@ -306,6 +312,7 @@ import {
 } from '../lib/intent-ai/chat/multiSlotCollector.js';
 import { createSurfaceGate, eventToChatMessage } from '../lib/intent-ai/chat/osSurface.js';
 import { buildNegotiationContext, runSurfaceCommand } from '../lib/intent-ai/chat/surfaceCommands.js';
+import { executeStopPlan, goalRequestText } from '../lib/intent-ai/chat/negotiationActions.js';
 import { offlineSocialFallback } from '../lib/intent-ai/chat/socialChat.js';
 import { OsEventCard, PendingQuestionBar } from './chat/IntentOsSurface.jsx';
 import {
@@ -562,6 +569,7 @@ export const ConversationRow = memo(function ConversationRow({
   onStrategyExecute,
   onStrategyMonitor,
   onStrategyRevise,
+  onStrategySwitch,
   onStrategyFix,
   strategyLive,
   autonomyEngine,
@@ -597,7 +605,11 @@ export const ConversationRow = memo(function ConversationRow({
           keep their stored text; only `kind === 'hello'` is re-read from the
           dictionary, which means it follows the language picker instantly.
         */}
-        <div className="iaos-msg-text">{m.kind === 'hello' ? t('intentAIOS.hello') : m.content}</div>
+        {/* The OS card owns its complete transcript. `content` is retained
+            for history/context, not displayed a second time outside the box. */}
+        {!(m.kind === 'os' && m.osEvent) ? (
+          <div className="iaos-msg-text">{m.kind === 'hello' ? t('intentAIOS.hello') : m.content}</div>
+        ) : null}
         {m.ui?.type === 'CONNECT_WALLET' ? (
           <button
             type="button"
@@ -632,7 +644,7 @@ export const ConversationRow = memo(function ConversationRow({
             a real bubble. Everything on it comes from the module layer; the
             chips ask the next real question instead of navigating blindly. */}
         {m.kind === 'os' && m.osEvent ? (
-          <OsEventCard event={m.osEvent} locale={locale} onChip={onOsChip} onOpenRoute={onOpenRoute} />
+          <OsEventCard event={m.osEvent} locale={locale} onChip={onOsChip} onOpenRoute={onOpenRoute} busy={Boolean(m.osBusy)} />
         ) : null}
         {/* Rich tool-output cards: live token chart + 24h high/low, and the
             allocation view for portfolio answers. */}
@@ -698,6 +710,7 @@ export const ConversationRow = memo(function ConversationRow({
             onExecuteStage={onStrategyExecute ? (strategy) => onStrategyExecute(m, strategy) : null}
             onMonitor={onStrategyMonitor ? (strategy) => onStrategyMonitor(m, strategy) : null}
             onRevise={onStrategyRevise ? (strategy) => onStrategyRevise(m, strategy) : null}
+            onSwitchPlan={onStrategySwitch ? (id) => onStrategySwitch(m, id) : null}
             live={m.strategyPlan?.strategyId ? (strategyLive?.[m.strategyPlan.strategyId] || null) : null}
             progress={m.strategyProgress || null}
             blocked={m.strategyBlock || null}
@@ -996,6 +1009,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const [multiSlotParseError, setMultiSlotParseError] = useState(null);
   const surfaceGateRef = useRef(null);
   const [panel, setPanel] = useState(null);
+  const [historyTab, setHistoryTab] = useState('seasons');
+  const controlStopRef = useRef(null);
   const [ecoKind, setEcoKind] = useState('agent');
   const [opsBusy, setOpsBusy] = useState(false);
   const [monitors, setMonitors] = useState([]);
@@ -1839,6 +1854,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    */
   const multiSlotSubmit = useCallback((answerText) => {
     const fa = (i18n?.language || 'fa').startsWith('fa');
+    if (isFormInterruption(answerText)) {
+      cancelForm({ conversationId });
+      setMultiSlot({ slot: null, ack: null });
+      setMultiSlotParseError(null);
+      void sendRef.current?.(answerText, { skipFormIntercept: true });
+      return;
+    }
     const res = submitFormAnswer({ text: answerText, conversationId, locale: i18n?.language || 'fa' });
     if (!res.ok) {
       setMultiSlotParseError(res.hint || (fa ? 'پاسخ معتبر وارد کن.' : 'Please enter a valid answer.'));
@@ -1872,16 +1894,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMultiSlot({ slot: null, ack: null });
 
       // یک پیام کامل بساز که همه اطلاعات را داشته باشد
-      const combinedMessage = fa
-        ? `من ${Number(data.capitalUsd).toLocaleString('en-US')} دلار سرمایه دارم و می‌خواهم در ${data.horizonDays} روز ${data.targetPct}% سود بکنم با ریسک ${data.riskProfile === 'conservative' ? 'کم' : data.riskProfile === 'aggressive' ? 'بالا' : 'متوسط'}. لطفاً یک استراتژی کامل با تحلیل عمیق، مقایسه گزینه‌ها و مراحل اجرا بده.`
-        : `I have $${Number(data.capitalUsd).toLocaleString('en-US')} in capital and I want to make ${data.targetPct}% return in ${data.horizonDays} days with ${data.riskProfile} risk. Please give me a deep analysis, compare options, and suggest a concrete plan.`;
+      const combinedMessage = goalRequestText(data, i18n?.language || 'fa');
 
       // فرم را پاک کن و پیام ترکیبی را بفرست
       // از sendRef استفاده می‌کنیم چون در این نقطه sendMessage ممکن است در closure نباشد
       clearForm({ conversationId });
       setTimeout(() => {
         if (sendRef.current) {
-          void sendRef.current(combinedMessage, { skipUserBubble: false, deepThinking: true });
+          void sendRef.current(combinedMessage, { skipUserBubble: true, skipFormIntercept: true, deepThinking: true });
         }
       }, 500);
       return;
@@ -1912,7 +1932,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     // اگر فرم چندمرحله‌ای فعال است، هر پیام عادی باید به آن پاسخ حساب شود
     // (مگر اینکه skipUserBubble باشد که از submit داخلی می‌آید)
     const activeFormBefore = getActiveForm({ conversationId });
-    if (activeFormBefore && !opts?.skipFormIntercept) {
+    if (activeFormBefore && !opts?.skipFormIntercept && !opts.surfaceAction) {
       multiSlotSubmit(message);
       setInput('');
       return null;
@@ -2032,16 +2052,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
      * متوقف کن. اما اگر کاربر همه اطلاعات را یک‌جا داده (سرمایه+سود+بازه)،
      * فرم را باز نکن و بگذار مستقیم به تحلیل برود. پاسخ‌های بعدی توسط
      * multiSlotSubmit مدیریت می‌شوند. */
-    const formType = detectFormTrigger(message);
+    const quickSpec = parseGoalSpec({ text: message, portfolio: aiContext.portfolio, wallet, balances: aiContext.balances });
+    const formType = detectFormTrigger(message) || (quickSpec.targetPct != null ? 'STRATEGY_GOAL' : null);
     if (formType && !opts.skipFormIntercept) {
-      // بررسی سریع: آیا پیام از قبل تمام اطلاعات را دارد؟
-      let alreadyComplete = false;
-      try {
-        const quickSpec = (await import('../lib/strategyBrain/goalSpec.js')).parseGoalSpec({ text: message, portfolio: aiContext.portfolio, wallet, balances: aiContext.balances });
-        alreadyComplete = quickSpec.ok === true;
-      } catch { alreadyComplete = false; }
-      if (!alreadyComplete) {
-        const started = startForm({ formId: formType, conversationId, locale });
+      if (!quickSpec.ok && !opts.surfaceAction) {
+        const initialValues = { capitalUsd: quickSpec.capitalUsd, targetPct: quickSpec.targetPct,
+          horizonDays: quickSpec.horizonDays, floorPct: quickSpec.floorPct,
+          ...(quickSpec.riskSource !== 'default' ? { riskProfile: quickSpec.riskProfile } : {}) };
+        const started = startForm({ formId: formType, conversationId, locale, initialValues });
         if (started.ok) {
           const slot = getCurrentSlot({ conversationId, locale });
           if (slot) {
@@ -2050,8 +2068,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               id: makeId(),
               role: 'ai',
               content: fa
-                ? 'عالی! برای ساختن یک استراتژی دقیق و عمیق، چند مورد را یکی‌یکی از تو می‌پرسم. لطفاً پاسخ هر کدام را در باکس سبز پایین بنویس.'
-                : 'Great! To build a deep, accurate strategy I will ask a few questions one by one. Please answer each in the green box below.',
+                ? 'اطلاعاتی که گفتی حفظ شد. برای ساختن پلن فقط موارد باقی‌مانده را در باکس پاسخ تکمیل کن.'
+                : 'Your stated values are kept. Fill only the missing fields in the answer box to build the plan.',
               kind: 'assistant',
               ui: { type: 'TEXT' }
             };
@@ -2088,19 +2106,62 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         const surfaceOut = await runSurfaceCommand(message, {
           locale,
           conversationId,
+          action: opts.surfaceAction || null,
           research: async (args) => aiResearch(args),
           context: buildNegotiationContext({
             wallet,
             portfolio: aiContext?.portfolio,
             conversationState: convStateRef.current,
+            messages: messagesRef.current || messages,
+            text: message,
+            extra: { answerToNegotiation: ledgerVerdict?.kind === 'ANSWER' && ledgerVerdict?.question?.source === 'negotiation' },
             services: {
               automations,
               monitors
             }
           })
         });
+        if (surfaceOut?.handled && surfaceOut.stopRequested) {
+          const stopped = await executeStopPlan({ confirmed: true, services: {
+            stopLocal: () => controlStopRef.current?.(),
+            listAutomations: aiAutomations, pauseAutomation: aiPauseAutomation,
+            listMonitors, pauseMonitor: apiPauseMonitor
+          } });
+          surfaceOut.message = {
+            id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
+            content: locale.startsWith('fa')
+              ? `بررسی توقف انجام شد: ${stopped.paused} پایش/خودکارسازی متوقف شد${stopped.failures ? `؛ ${stopped.failures} مورد خوانده نشد یا توقفش تأیید نشد — توقف کامل را ادعا نمی‌کنم` : '؛ کنترل‌های محلی هم غیرفعال شدند'}. پوزیشن باز بسته نشده، سفارشی پر نشده و تراکنشی امضا یا ارسال نشده است.`
+              : `Stop check: ${stopped.paused} monitor/automation(s) paused${stopped.failures ? `; ${stopped.failures} read or pause(s) failed — this is not a confirmed full stop` : '; local controls are disarmed too'}. No open position was closed, order filled or transaction signed/broadcast.`,
+            stopResult: stopped,
+            actions: [{ id: 'stop-status', label: locale.startsWith('fa') ? 'بررسی وضعیت' : 'Review status', route: '/intent?tab=status' }]
+          };
+          const [autos, watched] = await Promise.allSettled([aiAutomations(), listMonitors()]);
+          if (autos.status === 'fulfilled' && autos.value?.ok) setAutomations(autos.value.automations || []);
+          if (watched.status === 'fulfilled' && watched.value?.ok) setMonitors(watched.value.monitors || []);
+        }
         if (surfaceOut?.handled && surfaceOut.message) {
           const row = surfaceOut.message;
+          if (surfaceOut.selection) {
+            setMessages((prev) => prev.map((m) => (surfaceOut.selection.eventId ? m.osEvent?.id === surfaceOut.selection.eventId : m.osEvent?.at === surfaceOut.selection.eventAt)
+              ? { ...m, osBusy: false, osEvent: { ...m.osEvent, payload: {
+                ...m.osEvent.payload, resolved: true, selectedChipId: surfaceOut.selection.chipId,
+                selectedGoal: surfaceOut.selectedGoal || null
+              } } } : m));
+            const pendingQuestion = getOpenQuestion({ conversationId });
+            if (pendingQuestion?.source === 'negotiation') closeQuestion({ questionId: pendingQuestion.id, reason: 'card_answered' });
+            setOpenQuestion(getOpenQuestion({ conversationId }));
+          }
+          if (surfaceOut.intake) {
+            startForm({ ...surfaceOut.intake, conversationId, locale, restart: true });
+            setMultiSlot({ slot: getCurrentSlot({ conversationId, locale }), ack: null });
+            setMultiSlotParseError(null);
+          }
+          if (surfaceOut.panel === 'agents') { setEcoKind('agent'); setPanel('ecosystem'); }
+          else if (['operations', 'history', 'status', 'intelligence'].includes(surfaceOut.panel)) {
+            if (surfaceOut.panel === 'history') setHistoryTab(surfaceOut.section || 'seasons');
+            openPanel(surfaceOut.panel);
+          }
+
           setMessages((prev) => [...prev, row]);
           setConvState((prev) => appendConvMessage(prev, row));
           addL1Message(row);
@@ -3003,19 +3064,21 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       scrollMgrRef.current.onNewMessage();
     }
     return true;
-  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8, automations, monitors]);
+  }, [aiContext, conversationId, t, locale, rememberPending, intentOS, currentPage, messages, wallet, walletConnected, walletCanSign, liveModuleServices, solanaAddressLive, navigate, pendingExecution, portfolioContextForOs8, automations, monitors, multiSlotSubmit]);
 
   sendRef.current = sendMessage;
 
-  const sendSuggested = useCallback((s) => {
-    /* Two callers: the suggestion chips hand a full chip object, the Intent OS
-       card chips hand the sentence itself. Both must actually send — a chip
-       that renders but does nothing is the exact "disabled option" the Phase
-       213 work exists to remove. */
-    const prompt = typeof s === 'string' ? s : (s?.prompt || s?.label || '');
+  const sendSuggested = useCallback((chip, event = null) => {
+    if (busyRef.current) return;
+    if (typeof chip === 'object' && chip?.route) {
+      openBubbleRoute(chip.route);
+      return;
+    }
+    const prompt = typeof chip === 'string' ? chip : (chip?.prompt || chip?.label || '');
     if (!prompt) return;
-    setInput(prompt);
-    void sendMessage(prompt);
+    if (event) setMessages((prev) => prev.map((m) => (event.id ? m.osEvent?.id === event.id : m.osEvent?.at === event.at) ? { ...m, osBusy: true } : m));
+    return sendMessage(prompt, event ? { surfaceAction: { event, chipId: chip.id }, skipFormIntercept: true } : {})
+      .finally(() => { if (event) setMessages((prev) => prev.map((m) => (event.id ? m.osEvent?.id === event.id : m.osEvent?.at === event.at) ? { ...m, osBusy: false } : m)); });
   }, [sendMessage]);
 
   // Phase 2: predicted chips merge with contextual suggestions; duplicates
@@ -3123,6 +3186,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
   const startAutonomy = useCallback(() => { autonomyEngineRef.current?.start(); rerenderAutonomy(); }, [rerenderAutonomy]);
   const stopAutonomy = useCallback(() => { autonomyEngineRef.current?.stop(); rerenderAutonomy(); }, [rerenderAutonomy]);
+  controlStopRef.current = () => {
+    const engine = autonomyEngineRef.current;
+    if (!engine) return { ok: false, code: 'LOCAL_ENGINE_UNAVAILABLE' };
+    const result = engine.haltControls();
+    cancelForm({ conversationId });
+    setMultiSlot({ slot: null, ack: null });
+    setPendingExecution(null);
+    pendingStageResumeRef.current = null;
+    clearPendingIntent();
+    rerenderAutonomy();
+    return result;
+  };
 
   /*
    * «اتوماسیون را متوقف کن» has to actually stop something.
@@ -3286,6 +3361,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * for a message it already answered, and — because it sets state — re-runs
    * itself. That is both a stuck spinner and a needless load on a small host.
    */
+  const strategySelectionPendingRef = useRef(new Set());
+  const adoptStrategyOption = useCallback((message, blueprintId) => {
+    const strategy = message?.strategyPlan;
+    if (!strategy?.ok || !strategy.comparison?.some((c) => c.id === blueprintId)
+      || strategySelectionPendingRef.current.has(message.id)) return;
+    strategySelectionPendingRef.current.add(message.id);
+    setMessages((prev) => [...prev.map((m) => m.id === message.id ? { ...m, strategyBusy: true } : m), {
+      id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'STRATEGY_PLAN_CARD' },
+      content: locale.startsWith('fa') ? 'گزینهٔ انتخاب‌شده را با حفظ سطح ریسک و دادهٔ تازه در کارت جداگانه می‌سازم.' : 'Building the chosen option from fresh data in a separate card, keeping your risk band.',
+      strategyRequest: { text: goalRequestText(strategy.goal, locale), goal: strategy.goal, blueprintId, forceFresh: true },
+      strategySourceMessageId: message.id
+    }]);
+  }, [locale]);
   const lastStrategyMessageId = useRef(null);
   useEffect(() => {
     const pending = messages.find((m) => m.strategyRequest && !m.strategyPlan && !m.strategyError && !m.strategyBusy && m.id !== lastStrategyMessageId.current);
@@ -3301,6 +3389,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           results: {},
           wallet: wallet || null,
           portfolio: aiContext.portfolio || null,
+          preferredBlueprintId: pending.strategyRequest.blueprintId || null,
+          forceFresh: pending.strategyRequest.forceFresh === true,
+          goalInput: pending.strategyRequest.goal || null,
           locale
         });
         if (!goalMountedRef.current) return;
@@ -3320,28 +3411,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => prev.map((m) => (m.id === pending.id
           ? { ...m, strategyPlan: built, strategySpec: result.spec || null, strategyBusy: false }
           : m)));
-        /* The card below carries the full comparison, allocation and stages;
-           this turn is the two-line verdict the user reads first — reachable
-           or not, what the sourced rates carry, what must come from price. */
-        if (built?.ok) {
-          const v = built.verdict || {};
-          const spec = result.spec || built.goal || {};
-          const covLive = built.coverage?.live;
-          const covTotal = built.coverage?.total;
-          const faSum = locale.startsWith('fa');
-          const r1 = (n) => (Number(n) == null || Number.isNaN(Number(n)) ? '—' : String(Math.round(Number(n) * 10) / 10));
-          const summary = faSum
-            ? (v.reachable === true
-              ? `✅ رسیدنی است: انتظار موتور ${r1(v.expectedReturnPct)}٪ در ${spec.horizonDays ?? '—'} روز روی ${Number(spec.capitalUsd || 0).toLocaleString('en-US')}$ (پوشش زنده: ${covLive ?? '—'} از ${covTotal ?? '—'} دامنه). تخصیص و مراحل اجرا در کارت بالاست — با «اجرای مرحله بعد» از همان‌جا شروع کن.`
-              : `⚠️ با نرخ‌های زنده امروز، فقط ${r1(v.sourcedReturnPct)}٪ از هدف ${r1(spec.targetPct)}٪ از سود واقعی می‌آید و ${r1(v.priceGapPct)}٪ باقی‌مانده فقط از رشد قیمت — که پیش‌بینی نمی‌کنم. کارت بالا مقایسه کامل، طرح جایگزین و مراحل آماده‌به‌اجرا را دارد؛ امضا همیشه با کیف پول توست.`)
-            : (v.reachable === true
-              ? `✅ Reachable: the engine expects ${r1(v.expectedReturnPct)}% over ${spec.horizonDays ?? '—'} days on $${Number(spec.capitalUsd || 0).toLocaleString('en-US')} (live coverage: ${covLive ?? '—'} of ${covTotal ?? '—'} domains). Allocation and stages are in the card above — start with “Run next stage”.`
-              : `⚠️ At today's live rates only ${r1(v.sourcedReturnPct)}% of the ${r1(spec.targetPct)}% target comes from real yield; the remaining ${r1(v.priceGapPct)}% can only come from price growth — which I do not forecast. The card above has the full comparison, the stretch alternative and the ready-to-run stages; signing is always your wallet's.`);
-          setMessages((prev) => [...prev, {
-            id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
-            content: summary, intentType: 'STRATEGY_PLAN'
-          }]);
-        }
+
       } catch (err) {
         if (!goalMountedRef.current) return;
         setMessages((prev) => prev.map((m) => (m.id === pending.id
@@ -3358,6 +3428,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             : 'Because the live read was incomplete, I am not guessing a strategy — a wrong plan is worse than no plan. Check your connection and wallet, then send the same goal again; the engine rebuilds from fresh data.',
           intentType: 'STRATEGY_PLAN'
         }]);
+      }
+      finally {
+        if (pending.strategySourceMessageId && goalMountedRef.current) {
+          strategySelectionPendingRef.current.delete(pending.strategySourceMessageId);
+          setMessages((prev) => prev.map((m) => m.id === pending.strategySourceMessageId ? { ...m, strategyBusy: false } : m));
+        }
       }
     })();
   }, [messages, aiContext, wallet, locale]);
@@ -3634,6 +3710,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           actions: stage?.actions || [], movesFunds: Boolean(stage?.movesFunds),
           detail: 'Reconcile the stage the user left for.' };
       }
+      const shown = localizeStrategy(strategy, locale);
+      const stageWords = (shown.stages || []).find((s) => s.id === (next.stage?.id || next.stageId)) || next.stage || {};
       if (!next.ok) {
         if (next.code === 'AWAITING_RECEIPT') {
           /* We are back from a venue (or the stage started earlier): the ONLY
@@ -3722,7 +3800,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             actions: (next.actions || []).map((action, index) => ({ action, index }))
               .filter(({ action }) => action.route).map(({ action, index }) => ({
                 id: `stage-${next.stageId}-${index}`, route: action.route,
-                label: `${index + 1}. ${action.operation || action.module} ${action.params?.asset || ''}`.trim()
+                label: `${index + 1}. ${strategyOperationLabel(action.operation || action.module, locale)} ${action.params?.asset || ''}`.trim()
               }))
           }]);
           return;
@@ -3905,10 +3983,10 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         setMessages((prev) => [...prev, {
           id: makeId(), role: 'ai', kind: 'error', ui: { type: 'TEXT' },
           content: fa
-            ? `مرحله «${next.stage.title}» آغاز نشد: برای ${unverifiable.map(({ index }) => index + 1).join('، ')} رسید قابل‌تطبیق خودکار ندارم. صفحه‌های مقصد مستقلاً قابل استفاده‌اند، اما انجامشان را به این طرح منتسب یا مرحله بعد را باز نمی‌کنم. برای ادامهٔ مرحله‌ای، طرح قابل‌تأیید دیگری بساز.`
+            ? `مرحله «${stageWords.title}» آغاز نشد: برای ${unverifiable.map(({ index }) => index + 1).join('، ')} رسید قابل‌تطبیق خودکار ندارم. صفحه‌های مقصد مستقلاً قابل استفاده‌اند، اما انجامشان را به این طرح منتسب یا مرحله بعد را باز نمی‌کنم. برای ادامهٔ مرحله‌ای، طرح قابل‌تأیید دیگری بساز.`
             : `Stage “${next.stage.title}” was not started: action(s) ${unverifiable.map(({ index }) => index + 1).join(', ')} lack independent receipt reconciliation. You can use their venues separately, but I cannot attribute them to this plan or unlock later stages. Rebuild a verifiable plan to continue in stages.`,
           actions: unverifiable.map(({ action, index }) => ({
-            id: `standalone-${next.stage.id}-${index}`, label: `${index + 1}. ${action.operation} · ${action.route}`,
+            id: `standalone-${next.stage.id}-${index}`, label: `${index + 1}. ${strategyOperationLabel(action.operation, locale)} · ${routeFaLabel(action.route)}`,
             route: action.route
           }))
         }]);
@@ -3930,7 +4008,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
        * خودکار میره صفحه سواپ، دیگه نمی‌پرسه انجام دادی یا نه» is that line.
        * Now the hand-off is a button in this thread; going is the user's tap.
        */
-      runtime.advance();
+      const advanced = runtime.advance();
+      if (!advanced.ok) {
+        block = { code: advanced.code, remedy: advanced.remedy || 'RESTART_PLAN', message: fa
+          ? advanced.code === 'TRANSACTION_OVER_LIMIT'
+            ? 'این اقدام از سقف مجاز هر تراکنش می‌گذرد؛ مرحله شروع نشد. طرح را بازسازی کن تا به بخش‌های مجاز تقسیم شود.'
+            : 'مبلغ دلاری این اقدام قابل‌تأیید نیست؛ مرحله شروع نشد. طرح را بازسازی کن.'
+          : advanced.detail || advanced.code };
+        return;
+      }
       if (!persistStrategyRuntime(strategy, message.strategySpec || null, runtime)) {
         // Do not hand off after losing the only pending-stage key. Drop the
         // in-memory advance so retry can hydrate the last saved state.
@@ -3946,7 +4032,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       try {
         writePendingHandoff({
           route: actionRoute(first, firstIndex),
-          label: fa ? `مرحله «${next.stage.title}» در ${routeFaLabel(first.route)}` : `Stage "${next.stage.title}" on ${first.route}`,
+          label: fa ? `مرحله «${stageWords.title}» در ${routeFaLabel(first.route)}` : `Stage "${next.stage.title}" on ${first.route}`,
           kind: 'strategy-stage',
           strategyId: strategy.strategyId,
           stageId: next.stage.id,
@@ -3959,12 +4045,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       setMessages((prev) => [...prev, {
         id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' },
         content: fa
-          ? `مرحله «${next.stage.title}» آماده است: ${next.stage.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم. (${confirmedCount} مرحله از این طرح تا این‌جا تأیید شده؛ بعد از برگشت، خودم رسید زنجیره را می‌خوانم و می‌پرسم کار تمام شد یا نه.)`
+          ? `مرحله «${stageWords.title}» آماده است: ${stageWords.objective} تأیید و امضا در همان صفحه انجام می‌شود — من در چت امضا نمی‌کنم. (${confirmedCount} مرحله از این طرح تا این‌جا تأیید شده؛ بعد از برگشت، خودم رسید زنجیره را می‌خوانم و می‌پرسم کار تمام شد یا نه.)`
           : `Stage “${next.stage.title}” is ready: ${next.stage.objective} Confirmation and signature happen on that page — I do not sign in chat. (${confirmedCount} stage(s) of this plan confirmed so far; when you come back I read the chain receipt myself and ask how it went.)`,
         actions: (next.actions || []).map((action, i) => ({ action, index: i }))
           .filter(({ action }) => action.route).map(({ action, index }) => ({
             id: `stage-${next.stage.id}-${index}`, route: actionRoute(action, index),
-            label: `${index + 1}. ${action.operation || action.module} ${action.params?.asset || action.params?.token || ''}`.trim()
+            label: `${index + 1}. ${strategyOperationLabel(action.operation || action.module, locale)} ${action.params?.asset || action.params?.token || ''}`.trim()
           }))
       }]);
     } catch (err) {
@@ -5332,11 +5418,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * silently, and test/intent-ai/chat-route-contract-probe.mjs keeps the map
    * and the router in App.jsx from drifting apart.
    */
-  const openBubbleRoute = useCallback((route) => {
+  function openBubbleRoute(route) {
     if (!route) return;
     const target = resolveChatRoute(route, { currentPathname: location.pathname || '/intent' });
     if (target.kind === 'panel') {
       setDrawerOpen(false);
+      if (target.panel === 'history') setHistoryTab(target.section || 'seasons');
       openPanel(target.panel);
       return;
     }
@@ -5400,7 +5487,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       }
     } catch {}
     try { navigate(target.to); } catch { /* router ready */ }
-  }, [navigate, location.pathname, openPanel, openEcosystem, locale]);
+  }
 
   /*
    * The RETURN turn. When the user comes back to /intent after an execution
@@ -5554,8 +5641,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     let tab = null;
     try { tab = new URLSearchParams(search).get('tab'); } catch { tab = null; }
     if (!tab) return;
-    const target = resolveChatRoute(`/intent?tab=${encodeURIComponent(tab)}`, { currentPathname: '/intent' });
-    if (target.kind === 'panel') { setDrawerOpen(false); openPanel(target.panel); return; }
+    const target = resolveChatRoute(`/intent${search}`, { currentPathname: '/intent' });
+    if (target.kind === 'panel') {
+      setDrawerOpen(false);
+      if (target.panel === 'history') setHistoryTab(target.section || 'seasons');
+      openPanel(target.panel);
+      return;
+    }
     if (target.kind === 'ecosystem') { setDrawerOpen(false); openEcosystem(target.ecoKind); return; }
     if (target.kind === 'tab') { setPanel(null); setDrawerOpen(false); setAiTab(target.tab); }
   }, [location.search, openPanel, openEcosystem]);
@@ -5599,54 +5691,36 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [aiContext.portfolio, liveModuleServices, locale, pushTurn, appendOp]);
 
   const handleOpsAction = useCallback(async (card) => {
-    if (!card) return;
+    if (!card || opsBusy || busyRef.current) return;
+    const action = resolveOpsAction(card, locale);
     const avail = cardAvailability(card, { walletConnected, serverReachable: serverReachable !== false });
     if (avail.reason === 'WALLET_REQUIRED' && !walletConnected) {
-      openWalletSheet(null, card.title);
-      return;
+      openWalletSheet(null, card.title); return;
     }
     setPanel(null);
-    /*
-     * ─── A MENU ENTRY WITH A DESTINATION GOES TO THAT DESTINATION ─────────
-     * The old order here was: check `action`, else look up a chat prompt, and
-     * only navigate if there was NO prompt. Most cards have a prompt, so most
-     * cards were turned into a sentence and fed back into the assistant —
-     * which then decided, on its own, whether the page was worth opening.
-     *
-     * That indirection is what produced «روی منو می‌زنی، سیگنال نمیاد»: the
-     * Signals card became the message «سیگنال‌ها را نشان بده», the classifier
-     * read it as an analysis request, and the page never opened. The user
-     * tapped a destination and got a conversation instead.
-     *
-     * Now the menu is deterministic: `monitor` / `order` / `opportunity` keep
-     * their own surfaces (they open a form or run a scan — there is no page to
-     * go to), and everything else that names a route opens it. No loop check,
-     * no prompt detour, nothing that can quietly decide not to go.
-     */
-    if (card.action === 'monitor') {
-      setMonitorDraftOpen(true);
+    if (action.kind === 'intake') {
+      startForm({ formId: action.formId, conversationId, locale, restart: true });
+      setMultiSlot({ slot: getCurrentSlot({ conversationId, locale }), ack: null });
+      setMultiSlotParseError(null);
       return;
     }
-    if (card.action === 'order') {
-      if (card.id === 'goals_create' || card.id === 'auto_recurring' || card.id === 'auto_scheduled') {
-        const seed = opsCardPrompt(card, locale);
-        if (seed) { void sendMessage(seed); return; }
-      }
-      setOrderDraftOpen(true);
+    if (action.kind === 'history') { setHistoryTab(action.tab); openPanel('history'); return; }
+    if (action.kind === 'monitor') { setMonitorInitial(action.initial); setMonitorDraftOpen(true); return; }
+    if (action.kind === 'order') { setOrderInitial(null); setOrderDraftOpen(true); return; }
+    if (action.kind === 'opportunity') { await runOpportunity(card); return; }
+    if (action.kind === 'rewards') {
+      setOpsBusy(true);
+      try {
+        const msg = await readOpsRewards(card, { locale, services: { summary: rewardsSummary, missions: rewardsMissions, referral: rewardsReferral } });
+        pushTurn(msg);
+        appendOp({ kind: 'REWARDS_READ', status: msg.osEvent?.payload?.available ? 'COMPLETED' : 'FAILED', title: card.title });
+      } finally { setOpsBusy(false); }
       return;
     }
-    if (card.action === 'opportunity') {
-      await runOpportunity(card);
-      return;
-    }
-    if (card.route) {
-      navigate(card.route);
-      appendOp({ kind: 'NAVIGATE', status: 'COMPLETED', title: card.title, detail: card.desc, ref: card.route, refKind: 'route' });
-      return;
-    }
-    const prompt = opsCardPrompt(card, locale);
-    if (prompt) await sendMessage(prompt);
-  }, [walletConnected, serverReachable, openWalletSheet, navigate, appendOp, sendMessage, runOpportunity, locale]);
+    if (action.kind === 'chat') { await sendMessage(action.prompt, { skipFormIntercept: true }); return; }
+    if (action.kind === 'venue') { openBubbleRoute(action.route); return; }
+    pushTurn({ role: 'ai', content: opsText('ops.unavailable', locale), kind: 'error', ui: { type: 'TEXT' } });
+  }, [walletConnected, serverReachable, openWalletSheet, appendOp, pushTurn, sendMessage, runOpportunity, locale, conversationId, openPanel, opsBusy]);
 
   const handleMonitorCreate = useCallback(async (draft) => {
     setOpsBusy(true);
@@ -6127,18 +6201,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     let state = null;
     try { state = runtime?.state?.() || null; } catch { state = null; }
     const progress = state?.stageProgress || held.message.strategyProgress || {};
-    const stages = plan.stages || [];
+    const display = localizeStrategy(plan, locale);
+    const stages = display.stages || [];
     const confirmed = stages.filter((s) => progress[s.id]?.state === 'CONFIRMED').length;
     const percent = stages.length ? Math.round((confirmed / stages.length) * 100) : 0;
     const pending = stages.find((s) => !['CONFIRMED', 'SKIPPED'].includes(progress[s.id]?.state)) || null;
     const blocked = held.message.strategyBlock || null;
-    const n = (v, d = 1) => (Number.isFinite(Number(v)) ? Number(v).toFixed(d) : '—');
+    const n = (v, d = 1) => (strategyNum(v) != null ? strategyNum(v).toFixed(d) : '—');
 
     const lines = [];
     if (riskAsk) {
-      const risk = plan.risk || {};
+      const risk = display.risk || {};
       lines.push(fa
-        ? `ریسک همین طرح: باند «${risk.band || '—'}»، افت برآوردی ${n(risk.estimatedDrawdownPct)}٪ در برابر بودجهٔ ${n(risk.drawdownBudgetPct, 0)}٪.`
+        ? `ریسک همین طرح: باند «${display.goal?.riskProfileFa || risk.band || '—'}»، افت برآوردی ${n(risk.estimatedDrawdownPct)}٪ در برابر بودجهٔ ${n(risk.drawdownBudgetPct, 0)}٪.`
         : `This plan's own risk model: band “${risk.band || '—'}”, estimated drawdown ${n(risk.estimatedDrawdownPct)}% against a ${n(risk.drawdownBudgetPct, 0)}% budget.`);
       const breaches = Array.isArray(risk.breaches) ? risk.breaches : [];
       if (breaches.length) {
@@ -6788,6 +6863,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 onStrategyExecute={runStrategyStage}
                 onStrategyMonitor={monitorStrategy}
                 onStrategyRevise={reviseStrategy}
+                onStrategySwitch={adoptStrategyOption}
                 onStrategyFix={fixStrategyStage}
                 strategyLive={strategyLive}
                 autonomyEngine={autonomyEngine}
@@ -7415,7 +7491,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         onClose={() => setPanel(null)}
         availability={(card) => cardAvailability(card, { walletConnected, serverReachable: serverReachable !== false })}
         onAction={handleOpsAction}
-        busy={opsBusy}
+        onOpenRoute={openBubbleRoute}
+        busy={opsBusy || thinking.length > 0}
         locale={locale}
         summary={{
           walletConnected: walletConnected ? true : false,
@@ -7427,6 +7504,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         }}
       />
       <HistoryPanel
+        key={panel === 'history' ? `history-${historyTab}` : 'history-closed'}
+        initialTab={historyTab}
         open={panel === 'history'}
         onClose={() => setPanel(null)}
         history={histData}

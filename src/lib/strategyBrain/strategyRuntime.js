@@ -29,6 +29,7 @@
  */
 
 import { buildPortfolioStrategy } from './strategyEngine.js';
+import { DEFAULT_POLICY_CAPS } from '../intent-ai/permissions.js';
 import { num, r2 } from './numeric.js';
 
 export const STRATEGY_RUNTIME_SCHEMA = 'fbt.strategy-runtime.v1';
@@ -218,6 +219,12 @@ export function createStrategyRuntime({ strategy, goal = null, readEcosystem = n
   function advance() {
     const next = nextStage();
     if (!next.ok || next.done) return next;
+    if (next.actions.some((a) => a.requiresSignature && (num(a.params?.amountUsd) == null || num(a.params?.amountUsd) <= 0))) {
+      return { ok: false, code: 'TRANSACTION_AMOUNT_UNVERIFIED', stageId: next.stage.id, remedy: 'RESTART_PLAN', detail: 'The signed handoff has no verifiable positive USD amount.', executionAuthorized: false };
+    }
+    if (next.actions.some((a) => a.requiresSignature && num(a.params?.amountUsd) > DEFAULT_POLICY_CAPS.maxTransactionUsd)) {
+      return { ok: false, code: 'TRANSACTION_OVER_LIMIT', stageId: next.stage.id, remedy: 'RESTART_PLAN', detail: 'A handoff exceeds the per-transaction ceiling; rebuild the plan before continuing.', executionAuthorized: false };
+    }
     const progress = stageProgress[next.stage.id];
     progress.state = 'RUNNING';
     progress.attempts += 1;

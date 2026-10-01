@@ -25,12 +25,14 @@
  * A refusal (`ok: false`) renders as an answer with the reason and the way out,
  * never as an empty card.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadStrategyPlan } from '../lib/strategyBrain/strategyStore.js';
 import { strategyActionRoute, strategyReceiptSupport } from '../lib/strategyBrain/strategyReceipts.js';
+import { localizeStrategy, strategyDomainLabel, strategyOperationLabel, strategySourceLabel, strategyBreachLabel, strategyGapReason } from '../lib/strategyBrain/strategyLocales.js';
+import { num } from '../lib/strategyBrain/numeric.js';
 
-const pct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}%` : '—');
-const usd = (v, d = 0) => (Number.isFinite(Number(v)) ? `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: d })}` : '—');
+const pct = (v, d = 2) => (num(v) != null ? `${num(v).toFixed(d)}%` : '—');
+const usd = (v, d = 0) => (num(v) != null ? `$${num(v).toLocaleString('en-US', { maximumFractionDigits: d })}` : '—');
 
 /* The runtime's four verdicts, in the user's language. These are labels for a
    decision the runtime already made — the UI never picks one of them. */
@@ -48,7 +50,7 @@ const FAMILY_LABEL = Object.freeze({
   farm: { fa: 'فارم', en: 'Farm' },
   lp: { fa: 'نقدینگی', en: 'Liquidity' },
   crypto: { fa: 'کریپتو', en: 'Crypto' },
-  rwa: { fa: 'RWA', en: 'RWA' },
+  rwa: { fa: 'دارایی واقعی', en: 'RWA' },
   equity: { fa: 'سهام', en: 'Equities' },
   fx: { fa: 'فارکس', en: 'Forex' },
   commodity: { fa: 'کالا', en: 'Commodities' },
@@ -88,6 +90,10 @@ const REFUSALS = Object.freeze({
     fa: 'خواندن اکوسیستم انجام نشد. دوباره تلاش کن.',
     en: 'The ecosystem read did not run. Try again.'
   },
+  NO_FEASIBLE_PLAN: { fa: 'با داده‌های این نوبت، گزینه‌ای در سطح ریسک شما قابل ساخت نیست. ریسک را خودکار بالا نمی‌برم؛ منابع یا مبلغ را بررسی کن.', en: 'No plan can be built inside your risk band from this read. Risk will not be raised automatically.' },
+  BLUEPRINT_NOT_AVAILABLE: { fa: 'این گزینه با داده‌های تازه یا سطح ریسک انتخاب‌شده قابل ساخت نیست. پلن قبلی دست‌نخورده می‌ماند.', en: 'This option is unavailable with the fresh data or selected risk band. The previous plan is unchanged.' },
+  TARGET_OVER_LIMIT: { fa: 'هدف سود از سقف مجاز محصول بیشتر است؛ هدف را اصلاح کن. سود تضمینی وجود ندارد.', en: 'The return target exceeds the product limit; revise it. Profit is never guaranteed.' },
+  CAPITAL_OVER_LIMIT: { fa: 'سرمایه از سقف کل سیستم بیشتر است؛ مبلغ را در سقف مجاز وارد کن.', en: 'Capital exceeds the system ceiling; enter an amount within the limit.' },
   GOAL_INCOMPLETE: {
     fa: 'برای ساختن استراتژی به سه عدد نیاز دارم: سرمایه، هدف سود، و بازه زمانی.',
     en: 'A strategy needs three numbers: capital, target return, and horizon.'
@@ -248,15 +254,15 @@ function CoverageRow({ strategy, fa }) {
         <b dir="ltr">{cov.live ?? 0}/{cov.requested ?? 0} · {cov.pct ?? 0}%</b>
       </div>
       <div className="isp-domains">
-        {read.map((d) => <span key={d} className="isp-domain is-live">{d}</span>)}
+        {read.map((d) => <span key={d} className="isp-domain is-live">{strategyDomainLabel(d, fa ? 'fa' : 'en')}</span>)}
         {gaps.map((g) => (
-          <span key={g.domain} className="isp-domain is-gap" title={g.reason || ''}>{g.domain}</span>
+          <span key={g.domain} className="isp-domain is-gap" title={strategyGapReason(g.reason, fa ? 'fa' : 'en')}>{strategyDomainLabel(g.domain, fa ? 'fa' : 'en')}</span>
         ))}
       </div>
       {gaps.length ? (
         <p className="isp-note">
           {fa
-            ? `خوانده نشد: ${gaps.map((g) => g.domain).join('، ')}. استراتژی بدون آن‌ها ساخته شد و اعتمادش کمتر است.`
+            ? `خوانده نشد: ${gaps.map((g) => strategyDomainLabel(g.domain, 'fa')).join('، ')}. استراتژی بدون آن‌ها ساخته شد و اعتمادش کمتر است.`
             : `Not read: ${gaps.map((g) => g.domain).join(', ')}. The plan was built without them and its confidence is lower for it.`}
         </p>
       ) : null}
@@ -355,7 +361,7 @@ function SleeveList({ sleeves, fa, onOpenRoute }) {
               {s.handoff?.route ? (
                 onOpenRoute ? (
                   <button type="button" className="isp-link" dir="ltr" onClick={() => onOpenRoute(s.handoff.route)}>
-                    {s.handoff.module || 'Open'} · {(s.amountUsd != null ? `$${Number(s.amountUsd).toLocaleString('en-US')}` : '')} ↗
+                    {strategyDomainLabel(s.handoff.module || (fa ? 'صفحهٔ اجرا' : 'Open'), fa ? 'fa' : 'en')} · {(s.amountUsd != null ? `$${Number(s.amountUsd).toLocaleString('en-US')}` : '')} ↗
                   </button>
                 ) : (
                   <span className="isp-sleeve-route" dir="ltr">{s.handoff.route}</span>
@@ -400,7 +406,7 @@ function StageList({ stages, strategyId, fa, onOpenRoute }) {
             <ul className="isp-stage-actions">
               {(st.actions || []).map((a, i) => (
                 <li key={`${a.operation}-${i}`}>
-                  <span dir="ltr">{a.module} · {a.operation}</span>
+                  <span dir={fa ? 'rtl' : 'ltr'}>{strategyDomainLabel(a.module, fa ? 'fa' : 'en')} · {strategyOperationLabel(a.operation, fa ? 'fa' : 'en')}</span>
                   {a.requiresSignature ? <em>{fa ? 'امضای تو' : 'your signature'}</em> : null}
                   {a.requiresSignature && !strategyReceiptSupport(a)
                     ? <small title={fa ? 'صفحه مقصد فعال است، ولی رسید این اقدام هنوز در طرح تطبیق خودکار ندارد.'
@@ -457,7 +463,8 @@ export function StrategyPlanCard({
 }) {
   const fa = String(locale).startsWith('fa');
   const [picked, setPicked] = useState(null);
-  const effective = useMemo(() => plan || null, [plan]);
+  const effective = useMemo(() => localizeStrategy(plan || null, locale), [plan, locale]);
+  useEffect(() => { setPicked(null); }, [plan?.strategyId]);
   const progressSummary = useMemo(
     () => stageProgressSummary(effective?.stages || [], progress || effective?.stageProgress || {}),
     [effective, progress]
@@ -486,11 +493,11 @@ export function StrategyPlanCard({
     const missing = Array.isArray(effective.missing) ? effective.missing : [];
     return (
       <div className="isp-card isp-refused" data-testid="strategy-plan-refused" data-code={effective.code}>
-        <p className="isp-refusal">{copy ? (fa ? copy.fa : copy.en) : effective.detail || effective.code}</p>
+        <p className="isp-refusal">{copy ? (fa ? copy.fa : copy.en) : (fa ? 'ساخت برنامه انجام نشد. منابع و محدودیت‌ها را بررسی و دوباره تلاش کن.' : effective.detail || effective.code)}</p>
         {missing.length ? (
           <p className="isp-note">{fa ? `کم است: ${missing.map((m) => MISSING_FA[m] || m).join('، ')}` : `missing: ${missing.join(', ')}`}</p>
         ) : null}
-        {effective.detail && copy ? <small dir="ltr">{effective.detail}</small> : null}
+        {effective.code ? <small dir="ltr">{fa ? 'کد: ' : 'Code: '}{effective.code}</small> : null}
       </div>
     );
   }
@@ -510,11 +517,11 @@ export function StrategyPlanCard({
       <div className="isp-head">
         <div className="isp-objective">
           <b dir="ltr">
-            {usd(goal.capitalUsd)} · {pct(goal.targetPct, 1)} · {goal.horizonDays}d
+            {usd(goal.capitalUsd)} · {pct(goal.targetPct, 1)} · {goal.horizonDays}{fa ? ' روز' : 'd'}
           </b>
           <small>
             {fa ? `ریسک ${goal.riskProfileFa || RISK_PROFILE_FA[goal.riskProfile] || goal.riskProfile}` : `${goal.riskProfile} risk`}
-            {goal.capitalSource ? ` · ${fa ? 'سرمایه از' : 'capital from'} ${goal.capitalSource}` : ''}
+            {goal.capitalSource ? ` · ${fa ? 'سرمایه از' : 'capital from'} ${strategySourceLabel(goal.capitalSource, locale)}` : ''}
           </small>
         </div>
         <span
@@ -541,7 +548,7 @@ export function StrategyPlanCard({
           {fa
             ? `رژیم بازار: ${view.regimeFa || REGIME_FA[view.regime] || view.regime} · سوگیری ${view.bias === 'up' ? 'صعودی' : view.bias === 'down' ? 'نزولی' : view.bias || '—'} · قطعیت ${Math.round((view.conviction || 0) * 100)}٪`
             : `regime: ${view.regime} · bias ${view.bias} · conviction ${Math.round((view.conviction || 0) * 100)}%`}
-          <small> ({(view.readDomains || []).join(', ') || (fa ? 'خوانشی نیست' : 'no read')})</small>
+          <small> ({(view.readDomains || []).map((id) => strategyDomainLabel(id, locale)).join(fa ? '، ' : ', ') || (fa ? 'خوانشی نیست' : 'no read')})</small>
         </p>
       ) : null}
 
@@ -550,7 +557,7 @@ export function StrategyPlanCard({
           <b>{fa ? 'گزینه‌ی پرریسک‌تر' : 'The stretch option'}</b>
           <p>{effective.alternatives.stretchNote}</p>
           {onSwitchPlan ? (
-            <button type="button" className="isp-btn is-ghost" onClick={() => onSwitchPlan(effective.alternatives.stretch)} data-testid="strategy-switch-stretch">
+            <button type="button" className="isp-btn is-ghost" onClick={() => setPicked(effective.alternatives.stretch)} data-testid="strategy-switch-stretch">
               {fa ? 'همان را نشان بده' : 'Show that one'}
             </button>
           ) : null}
@@ -562,7 +569,7 @@ export function StrategyPlanCard({
         strategy={effective}
         fa={fa}
         picked={pickedId}
-        onPick={(id) => { setPicked(id); onSwitchPlan?.(id); }}
+        onPick={(id) => { setPicked(id); }}
       />
 
       {showingChosen ? (
@@ -578,7 +585,7 @@ export function StrategyPlanCard({
             </span>
             {Array.isArray(risk.breaches) && risk.breaches.length ? (
               <ul>
-                {risk.breaches.map((b) => <li key={b.code} dir="ltr">{b.code}: {b.detail}</li>)}
+                {risk.breaches.map((b) => <li key={b.code} dir={fa ? 'rtl' : 'ltr'}>{strategyBreachLabel(b.code, locale)}: {b.detail}</li>)}
               </ul>
             ) : null}
           </div>
@@ -589,7 +596,7 @@ export function StrategyPlanCard({
                 type="button"
                 className="isp-btn is-solid"
                 disabled={busy}
-                onClick={() => onExecuteStage(effective)}
+                onClick={() => onExecuteStage(plan)}
                 data-testid="strategy-execute-stage"
               >
                 {busy ? (fa ? 'در حال بررسی…' : 'Checking…')
@@ -600,7 +607,7 @@ export function StrategyPlanCard({
                   type="button"
                   className="isp-btn is-ghost"
                   disabled={busy}
-                  onClick={() => onMonitor(effective)}
+                  onClick={() => onMonitor(plan)}
                   data-testid="strategy-monitor"
                 >
                   {fa ? 'برنامه را با وضعیت واقعی بسنج' : 'Check the plan against reality'}
@@ -611,7 +618,7 @@ export function StrategyPlanCard({
                   type="button"
                   className="isp-btn is-ghost"
                   disabled={busy}
-                  onClick={() => onRevise(effective)}
+                  onClick={() => onRevise(plan)}
                   data-testid="strategy-revise"
                 >
                   {live?.decision === 'REVISE'
@@ -660,20 +667,28 @@ export function StrategyPlanCard({
           ) : null}
         </>
       ) : (
-        <p className="isp-note">
-          {fa
-            ? `«${chosenRow?.title || pickedId}» را انتخاب کردی. برای دیدن تخصیص و مراحلش، روی «پیشنهاد» در جدول بزن.`
-            : `You picked "${chosenRow?.title || pickedId}". Tap "default" in the table to see its allocation and stages.`}
-        </p>
+        <div className="isp-block" data-testid="strategy-option-preview">
+          <b>{chosenRow?.title || pickedId}</b>
+          {chosenRow?.idea ? <p>{chosenRow.idea}</p> : null}
+          <p className="isp-note">{fa
+            ? 'این فقط پیش‌نمایش گزینه است. دکمهٔ زیر آن را با دادهٔ تازه در کارت جداگانه می‌سازد؛ پیشرفت و رسیدهای پلن قبلی حفظ می‌شود.'
+            : 'This is an option preview. Build it from fresh data in a separate card; the previous plan and its receipts are kept.'}</p>
+          {onSwitchPlan ? (
+            <button type="button" className="isp-btn is-solid" disabled={busy}
+              onClick={() => onSwitchPlan(pickedId)} data-testid="strategy-adopt-option">
+              {busy ? (fa ? 'در حال بازخوانی…' : 'Re-reading…') : (fa ? 'این گزینه را با دادهٔ تازه بساز' : 'Build this option with fresh data')}
+            </button>
+          ) : null}
+        </div>
       )}
 
       <ul className="isp-limitations">
-        {(effective.limitations || []).slice(0, 4).map((l, i) => <li key={i}>{l}</li>)}
+        {(effective.limitations || []).map((l, i) => <li key={i}>{l}</li>)}
       </ul>
       <p className="isp-foot">
         {fa
-          ? '* عدد بدون ستاره از داده زنده است؛ ستاره یعنی برآورد یا هزینه‌ی نانوشته. هیچ تراکنشی بدون امضای تو ارسال نمی‌شود.'
-          : '* Unstarred numbers come from live reads; a star means estimated or an unread cost. Nothing is broadcast without your signature.'}
+          ? '* نرخ و قیمت از خوانش زنده می‌آیند؛ بازده، افت و دامنهٔ تنش برآورد هستند. ستاره کنار هزینه یعنی هزینه ناقص است. هیچ تراکنشی بدون امضای تو ارسال نمی‌شود.'
+          : '* Rates and prices are live reads; returns, drawdown and stress ranges are estimates. A cost star marks an incomplete cost. Nothing is broadcast without your signature.'}
       </p>
     </div>
   );

@@ -74,6 +74,17 @@ describe('strategy market observations', () => {
     expect(await read.macro()).toMatchObject({ marketCapChange24hPct: 4.5, btcDominancePct: 50 });
   });
 
+  it('a card rebuild preserves canonical capital provenance and its separately recorded floor', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => String(url).includes('/markets?') ? response([eth]) : response([]));
+    const built = await buildStrategyFromChat({
+      text: 'Build a portfolio strategy for 1000 dollars with at least 20% return in 20 days and balanced risk.',
+      goalInput: { capitalUsd: 1000, targetPct: 20, horizonDays: 20, riskProfile: 'balanced', floorPct: 15, capitalSource: 'portfolio', riskSource: 'user-choice' },
+      context: { wallet: { address: '0xabc', chainId: 1, connected: true }, portfolio: { totalValueUsd: 1000 } },
+      only: ['wallet', 'portfolio', 'crypto']
+    });
+    expect(built.spec).toMatchObject({ capitalUsd: 1000, targetPct: 20, floorPct: 15, capitalSource: 'portfolio', riskSource: 'user-choice' });
+  });
+
   it('excludes offline snapshots and missing 24-hour change from strategy observations', () => {
     expect(liveMarketRows([{ ...eth, dataProvenance: 'offline' }], { registry: TOKENS })).toEqual([]);
     expect(liveMarketRows([{ ...eth, change24h: null, dataProvenance: 'live' }], { registry: TOKENS })).toEqual([]);

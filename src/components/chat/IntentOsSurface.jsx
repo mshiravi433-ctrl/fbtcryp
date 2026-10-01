@@ -42,18 +42,20 @@ function renderLine(line, index) {
   );
 }
 
-export const OsEventCard = memo(function OsEventCard({ event, locale = 'fa', onChip, onOpenRoute }) {
+export const OsEventCard = memo(function OsEventCard({ event, locale = 'fa', onChip, onOpenRoute, busy = false }) {
   if (!event) return null;
   const fa = String(locale || 'fa').startsWith('fa');
   const tone = TONE_CLASS[event.tone] || '';
   const lines = Array.isArray(event.lines) ? event.lines : [];
   const chips = Array.isArray(event.chips) ? event.chips : [];
   const payload = event.payload || {};
+  const kindFa = { CATALOG: 'امکانات', NEGOTIATION: 'مذاکره', AGREEMENT: 'توافق', CONFLICT: 'تضاد', ESCALATION: 'بازبینی', EMERGENCY: 'اضطرار', AGENT: 'ایجنت', MONITOR: 'پایش', ORDER: 'سفارش', EXECUTION: 'اجرا', WALLET: 'کیف پول', MEMORY: 'حافظه', SEARCH: 'جستجو', QUESTION: 'پرسش', NOTICE: 'اطلاع' };
+  const options = Array.isArray(payload.options) ? payload.options : [];
   return (
     <div className={`iaos-os-card ${tone}`} data-testid="intent-os-card" data-kind={event.kind || 'NOTICE'}>
       {event.title ? (
         <div className="iaos-os-head">
-          <span className="iaos-os-kind">{String(event.kind || '').toLowerCase()}</span>
+          <span className="iaos-os-kind">{fa ? kindFa[event.kind] || 'اطلاع' : String(event.kind || '').toLowerCase()}</span>
           <b>{event.title}</b>
           {event.badge ? <span className="iaos-os-badge">{event.badge}</span> : null}
         </div>
@@ -74,9 +76,15 @@ export const OsEventCard = memo(function OsEventCard({ event, locale = 'fa', onC
               type="button"
               className="iaos-btn iss-ghost iaos-os-chip"
               data-testid="intent-os-chip"
-              onClick={() => (onChip ? onChip(chip.prompt || chip.label) : (onOpenRoute && chip.route ? onOpenRoute(chip.route) : null))}
+              data-chip-id={chip.id}
+              data-selected={payload.selectedChipId === chip.id ? 'true' : 'false'}
+              disabled={busy || payload.resolved === true || (!onChip && !(onOpenRoute && chip.route))}
+              onClick={() => chip.route && onOpenRoute ? onOpenRoute(chip.route) : onChip?.(chip, event)}
             >
-              {chip.label}
+              <span>{chip.label}</span>
+              {options.find((o) => `pick_${o.id}` === chip.id)?.tradeoff ? (
+                <small>{options.find((o) => `pick_${o.id}` === chip.id).tradeoff}</small>
+              ) : null}
             </button>
           ))}
         </div>

@@ -253,6 +253,8 @@ export async function run(container) {
   const savedPlan = (stored().plans || [])[0];
   console.log('  stored runtime states:', JSON.stringify(savedPlan?.runtime?.stageProgress));
   console.log('  stored stage actions:', JSON.stringify((savedPlan?.strategy?.stages || []).map((st) => ({ id: st.id, moves: st.movesFunds, actions: (st.actions || []).map((a) => ({ cap: a.capabilityId, sig: a.requiresSignature, route: a.route, params: a.params })) }))));
+  check('Persian handoff messages never leak raw English stage objectives',
+    !Array.from(container.querySelectorAll('.iaos-msg.iaos-ai .iaos-msg-text')).some((m) => /Deploy the market sleeve|Add the 100% that has price risk/.test(m.textContent || '')));
   check('returning from a completed swap settles the stage with no extra tap', after['deploy-market'] === 'CONFIRMED');
   check('the plan then runs its remaining no-signature stage to the end', after.monitor === 'CONFIRMED');
   check('the return turn does NOT re-ask whether the swap was done',

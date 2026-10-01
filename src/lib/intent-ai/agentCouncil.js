@@ -6,6 +6,8 @@
  * precedence: REJECT > REVISE > APPROVE.
  */
 
+import { num } from '../strategyBrain/numeric.js';
+
 export const COUNCIL_SCHEMA = 'fbt.intent-agent-council.v1';
 export const CHALLENGE_SCHEMA = 'fbt.intent-agent-challenge.v1';
 
@@ -26,15 +28,16 @@ export const COUNCIL_ROLES = Object.freeze([
 
 const DECISIONS = new Set(['APPROVE', 'REJECT', 'REVISE']);
 const bounded = (value) => {
-  const n = Number(value);
+  const n = value == null || value === '' ? NaN : Number(value);
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
 };
 
 function challengeRows(strategy, context = {}) {
   const rows = [];
-  const amount = Number(context.amountUsd ?? strategy?.amountUsd);
-  const liquidity = Number(context.liquidityUsd ?? strategy?.liquidityUsd);
-  const slippage = Number(context.slippagePct ?? strategy?.slippagePct);
+  const amount = context.amountUsd ?? strategy?.amountUsd;
+  const amountNumber = amount == null ? NaN : Number(amount);
+  const liquidity = num(context.liquidityUsd ?? strategy?.liquidityUsd);
+  const slippage = num(context.slippagePct ?? strategy?.slippagePct);
   const maxSlippage = Number(context.maxSlippagePct ?? 1);
   const leverage = Number(strategy?.leverage ?? context.leverage ?? 1);
   const maxLeverage = Number(context.maxLeverage ?? 5);
@@ -46,7 +49,7 @@ function challengeRows(strategy, context = {}) {
       }
     }
   }
-  if (Number.isFinite(amount) && Number.isFinite(liquidity) && liquidity < amount * 2) {
+  if (Number.isFinite(amountNumber) && Number.isFinite(liquidity) && liquidity < amountNumber * 2) {
     rows.push({ code: 'LIQUIDITY_INSUFFICIENT', severity: 'revise', message: 'Available liquidity does not provide the required buffer for this amount.' });
   }
   if (Number.isFinite(slippage) && slippage > maxSlippage) {
@@ -89,25 +92,36 @@ export function challengeStrategy(strategy, context = {}) {
 }
 
 function normalizeVote(role, input, proposal, context) {
-  const requested = typeof input === 'string' ? input.toUpperCase() : input?.decision;
+  // Safety vetoes precede even an explicit APPROVE vote. A council vote
+  // cannot override the independent guardian or the risk engine.
+  if (role === 'guardian' && context.guardianApproved === false) {
+    return { role, decision: 'REJECT', confidence: 100, reason: 'Guardian rejected the proposal.', evidence: ['GUARDIAN_REJECTED'] };
+  }
+  if (role === 'risk' && context.riskDecision === 'block') {
+    return { role, decision: 'REJECT', confidence: 100, reason: 'Risk engine blocked the proposal.', evidence: ['RISK_BLOCKED'] };
+  }
+  const requested = typeof input === 'string' ? input.toUpperCase() : String(input?.decision || '').toUpperCase();
   const decision = DECISIONS.has(requested) ? requested : null;
-  const confidence = bounded(typeof input === 'object' ? input.confidence : null);
+  const confidence = bounded(typeof input === 'object' ? input?.confidence : null);
+  const roleIssue = role === 'fee' && context.costComplete === false
+    ? { code: 'COST_INCOMPLETE', message: 'Fees or network gas are unread; the displayed cost is not a complete execution cost.' }
+    : role === 'risk' && num(context.estimatedDrawdownPct) != null && num(context.drawdownBudgetPct) != null
+      && Number(context.estimatedDrawdownPct) > Number(context.drawdownBudgetPct)
+      ? { code: 'DRAWDOWN_ABOVE_BUDGET', message: 'Estimated drawdown exceeds the user-selected budget.' }
+      : role === 'market' && context.quoteFresh === false
+        ? { code: 'QUOTE_STALE', message: 'The proposal needs a fresh executable quote.' }
+        : null;
+  if (roleIssue) return { role, decision: 'REVISE', confidence: null, reason: roleIssue.message, evidence: [roleIssue.code] };
   if (decision) {
     return {
       role,
       decision,
       confidence,
-      reason: typeof input === 'object' && typeof input.reason === 'string'
+      reason: typeof input === 'object' && typeof input?.reason === 'string'
         ? input.reason.slice(0, 240)
         : 'Explicit bounded council vote.',
       evidence: Array.isArray(input?.evidence) ? input.evidence.slice(0, 8) : []
     };
-  }
-  if (role === 'guardian' && context.guardianApproved === false) {
-    return { role, decision: 'REJECT', confidence: 100, reason: 'Guardian rejected the proposal.', evidence: [] };
-  }
-  if (role === 'risk' && context.riskDecision === 'block') {
-    return { role, decision: 'REJECT', confidence: 100, reason: 'Risk engine blocked the proposal.', evidence: [] };
   }
   const challenge = challengeStrategy(proposal, context);
   return {

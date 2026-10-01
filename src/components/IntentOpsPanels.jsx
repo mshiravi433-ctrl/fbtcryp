@@ -20,6 +20,7 @@ import { OpsCardIcon, OpsCategoryIcon } from './OpsIcons.jsx';
  * bare 'en' while the live locale is 'en-US' — see opsPanelStrings.js.
  */
 import { opsText, opsPhrase, intlLocale } from '../lib/intent-ai/os/opsPanelStrings.js';
+import { opsActionLabel } from '../lib/intent-ai/os/opsDispatch.js';
 import { CHAIN_OPTIONS } from '../lib/smartMoneyClient.js';
 
 /* ------------------------------------------------------------------------- */
@@ -27,6 +28,7 @@ import { CHAIN_OPTIONS } from '../lib/smartMoneyClient.js';
 /* ------------------------------------------------------------------------- */
 
 const fmtNum = (v, digits = 2) => {
+  if (v == null || v === '') return '—';
   const n = Number(v);
   if (!Number.isFinite(n)) return '—';
   return n.toLocaleString(undefined, { maximumFractionDigits: digits });
@@ -58,6 +60,7 @@ export function OperationsPanel({
   onClose,
   availability,
   onAction,
+  onOpenRoute,
   busy = false,
   locale = 'fa',
   summary = null
@@ -155,13 +158,13 @@ export function OperationsPanel({
           {cards.map((card) => {
             const avail = availability(card);
             return (
+              <div key={card.id} className="iaos-ops-card-group">
               <button
-                key={card.id}
                 type="button"
                 className="iaos-ops-card"
                 data-available={avail.available ? 'true' : 'false'}
                 data-testid={`ops-card-${card.id}`}
-                disabled={!avail.available || busy}
+                disabled={busy || (!avail.available && avail.reason !== 'WALLET_REQUIRED')}
                 onClick={() => onAction(card)}
               >
                 <span className="iaos-ops-icon"><OpsCardIcon card={card} /></span>
@@ -172,9 +175,15 @@ export function OperationsPanel({
                 <span className="iaos-ops-state">
                   {!avail.available
                     ? opsText(avail.reason === 'WALLET_REQUIRED' ? 'ops.walletNeeded' : 'ops.unavailable', locale)
-                    : '↗'}
+                    : opsActionLabel(card, locale)}
                 </span>
               </button>
+              {card.route && !card.route.startsWith('/intent') && card.action !== 'navigate' && onOpenRoute ? (
+                <button type="button" className="iaos-ops-page" disabled={busy} onClick={() => onOpenRoute(card.route)}>
+                  {opsText('ops.openPage', locale)} ↗
+                </button>
+              ) : null}
+              </div>
             );
           })}
         </div>
@@ -199,9 +208,10 @@ export function HistoryPanel({
   onContinue,
   onMonitorAction,
   busy = false,
-  locale = 'fa'
+  locale = 'fa',
+  initialTab = 'seasons'
 }) {
-  const [tab, setTab] = useState('seasons');
+  const [tab, setTab] = useState(['seasons', 'conversations', 'operations', 'monitoring'].includes(initialTab) ? initialTab : 'seasons');
   if (!open) return null;
 
   const conversations = history?.conversations || [];

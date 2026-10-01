@@ -42,6 +42,8 @@ import { requiredApyPctFor, daysToMultipleAt, multipleAfterDays } from '../inten
 import { FEE_BPS } from '../feeBps.js';
 import { domainData, isLive } from './ecosystemState.js';
 import { num, r2 } from './numeric.js';
+import { INTENT_LIMITS } from '../intent-ai/intentLimits.js';
+import { DEFAULT_POLICY_CAPS } from '../intent-ai/permissions.js';
 
 /*
  * `clamp` here is deliberately NOT the absence-preserving one in numeric.js:
@@ -470,8 +472,10 @@ export function estimateCost({ sleeves = [], capitalUsd = 0, gas = null, feeBps 
     const isMarket = isPriceFamily(family) || family === 'derivatives';
     entryFeeLegs += isMarket ? 1 : (stable ? 0 : 1);
     exitFeeLegs += isMarket ? 1 : 0;
-    entryTx += 1;
-    exitTx += isMarket ? 1 : 1;
+    const legUsd = capitalUsd * (num(sleeve.weightPct) ?? 100) / 100;
+    const chunks = Math.max(1, Math.ceil(legUsd / DEFAULT_POLICY_CAPS.maxTransactionUsd));
+    entryTx += chunks;
+    exitTx += chunks;
   }
   /*
    * ENTRY cost is what deploying the plan costs today, and it is the only part
@@ -862,6 +866,22 @@ function stageRoute(handoff, params = {}) {
   return base;
 }
 
+/** Split a signed handoff, not an execution. Amounts add up exactly in
+ * cents and every chunk still requires its own user review and signature. */
+export function splitTransactionAction(action, capUsd = DEFAULT_POLICY_CAPS.maxTransactionUsd) {
+  const amount = num(action?.params?.amountUsd);
+  if (!action?.requiresSignature || amount == null || amount <= capUsd) return [action];
+  const cents = Math.round(amount * 100);
+  const cap = Math.round(capUsd * 100);
+  const count = Math.ceil(cents / cap);
+  return Array.from({ length: count }, (_, i) => {
+    const amountUsd = Math.min(cap, cents - i * cap) / 100;
+    const params = { ...action.params, amountUsd };
+    return { ...action, params, chunkIndex: i, chunkCount: count,
+      route: stageRoute({ route: String(action.route || '').split('?')[0] }, params) };
+  });
+}
+
 export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonDays }) {
   const sleeves = candidate.sleeves;
   const walletChainId = num(domainData(state, 'wallet')?.chainId ?? domainData(state, 'portfolio')?.chainId);
@@ -983,7 +1003,11 @@ export function buildStages({ candidate, goal, capitalUsd, state, cost, horizonD
     status: 'PENDING'
   });
 
-  return stages;
+  return stages.map((stage) => {
+    const actions = stage.actions.flatMap((action) => splitTransactionAction(action));
+    const extra = actions.length - stage.actions.length;
+    return { ...stage, actions, ...(extra && stage.maxCostUsd != null ? { maxCostUsd: r2(stage.maxCostUsd + (gasPerTxUsd ?? 0) * extra) } : {}) };
+  });
 }
 
 /** The monitors the runtime watches, derived from the plan itself. */
@@ -1039,7 +1063,7 @@ export function buildMonitors({ goal, horizonDays, profile, candidate }) {
  * @param {number} [input.now]
  * @param {boolean} [input.allowLeverageOverride] never true from the parser
  */
-export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now() } = {}) {
+export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now(), preferredBlueprintId = goal.selectedBlueprintId || null } = {}) {
   const started = now;
   const profile = RISK_PROFILES[String(goal.riskProfile).toLowerCase()] || RISK_PROFILES.balanced;
   const capitalUsd = num(goal.capitalUsd) || 0;
@@ -1047,6 +1071,12 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
 
   if (!(capitalUsd > 0)) {
     return { ok: false, schema: PORTFOLIO_STRATEGY_SCHEMA, code: 'CAPITAL_REQUIRED', detail: 'no readable capital — the plan would be a guess about someone else\'s money', goal };
+  }
+  if (num(goal.targetPct) > INTENT_LIMITS.maxGoalPct) {
+    return { ok: false, schema: PORTFOLIO_STRATEGY_SCHEMA, code: 'TARGET_OVER_LIMIT', detail: 'Return target exceeds the product limit.', goal };
+  }
+  if (capitalUsd > DEFAULT_POLICY_CAPS.maxCapitalUsd) {
+    return { ok: false, schema: PORTFOLIO_STRATEGY_SCHEMA, code: 'CAPITAL_OVER_LIMIT', detail: `Capital exceeds ${DEFAULT_POLICY_CAPS.maxCapitalUsd} USD.`, goal };
   }
   if (goal.targetPct == null) {
     return { ok: false, schema: PORTFOLIO_STRATEGY_SCHEMA, code: 'NO_TARGET', detail: 'no target return stated', goal };
@@ -1097,17 +1127,26 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
     }));
   }
 
-  const rankable = candidates.filter((c) => !c.riskBandBreach);
-  const pool = (rankable.length ? rankable : candidates).slice().sort((a, b) => (b.score - a.score) || (b.expectedReturnPct - a.expectedReturnPct));
+  const rankable = candidates.filter((c) => !c.riskBandBreach && (c.riskPct == null || c.riskPct <= profile.drawdownBudgetPct));
+  const pool = rankable.slice().sort((a, b) => (b.score - a.score) || (b.expectedReturnPct - a.expectedReturnPct));
   if (!pool.length) {
     return {
       ok: false, schema: PORTFOLIO_STRATEGY_SCHEMA, code: 'NO_FEASIBLE_PLAN',
-      detail: 'Every blueprint needs a module that did not answer this turn.',
+      detail: 'No available blueprint satisfies the current module and risk-budget constraints.',
       goal, coverage: state.coverage, gaps: state.gaps, marketView, universeSize: universe.length
     };
   }
 
-  const chosen = pool[0];
+  const selected = preferredBlueprintId ? pool.find((c) => c.id === preferredBlueprintId) : null;
+  if (preferredBlueprintId && (!selected || selected.riskPct > profile.drawdownBudgetPct)) {
+    return { ok: false, schema: PORTFOLIO_STRATEGY_SCHEMA, code: 'BLUEPRINT_NOT_AVAILABLE',
+      detail: 'The selected blueprint is unavailable or exceeds the selected risk budget.',
+      goal, coverage: state.coverage, gaps: state.gaps, requestedBlueprintId: preferredBlueprintId };
+  }
+  const chosen = selected || pool[0];
+  // The ranking's chosen row must match the plan that will actually execute.
+  if (selected) { pool.splice(pool.indexOf(selected), 1); pool.unshift(selected); }
+
 
   /*
    * ─── TWO ANSWERS WHEN THE TARGET IS OUT OF REACH ────────────────────────
@@ -1131,6 +1170,7 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
     role: c.id === chosen.id ? 'default' : (stretch && c.id === stretch.id ? 'stretch' : 'alternative')
   }));
   const ranking = explainRanking(pool);
+  if (selected) ranking[0].reason = 'Explicitly selected by you, within the current risk band; rates were re-read.';
 
   const sleeves = chosen.sleeves.map((s) => {
     const handoff = handoffForSleeve(s);
@@ -1191,7 +1231,9 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
      * needs in order to mean anything.
      */
     strategyId: `strat_${started.toString(36)}_${(buildSeq += 1).toString(36)}_${Math.abs(chosen.score).toString(36).slice(0, 4)}`,
+    selection: { source: selected ? 'user' : 'engine', blueprintId: chosen.id },
     goal: {
+      ...(preferredBlueprintId ? { selectedBlueprintId: preferredBlueprintId } : {}),
       capitalUsd, capitalSource: goal.capitalSource || null, targetPct: goal.targetPct,
       floorPct: goal.floorPct ?? null, horizonDays, riskProfile: profile.id, riskSource: goal.riskSource || null,
       requiredApyPct: r2(requiredApyPct), targetValueUsd: r2(capitalUsd * (1 + goal.targetPct / 100))
@@ -1256,7 +1298,8 @@ export function buildPortfolioStrategy({ goal = {}, state = {}, now = Date.now()
         ? ['Planned on the capital you stated: no wallet was read, so your existing holdings and their concentration are not in this plan.']
         : []),
       ...(state.gaps.length ? [`Not read this turn: ${state.gaps.map((g) => g.domain).join(', ')}.`] : []),
-      ...(cost.complete ? [] : ['Gas was unread, so the cost figure is a floor.'])
+      ...(cost.complete ? [] : ['Gas was unread, so the cost figure is a floor.']),
+      ...(stages.some((s) => s.actions.some((a) => a.chunkCount > 1)) ? ['Large actions split to honor the per-transaction ceiling; each chunk needs a separate fresh quote, confirmation and signature.'] : [])
     ],
     fundsMoved: false,
     executionAuthorized: false,

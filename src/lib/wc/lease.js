@@ -68,7 +68,7 @@ export {
   walletLeaseMinutes
 } from '../walletSessionPolicy.js';
 
-import { walletLeaseMinutes } from '../walletSessionPolicy.js';
+import { walletLeaseMinutes, WALLET_LEASE_DEFAULT_MINUTES } from '../walletSessionPolicy.js';
 
 /** Where the lease lives. Bumping the version abandons old shapes. */
 export const WALLET_LEASE_KEY = 'fbt-wallet-session-v1';
