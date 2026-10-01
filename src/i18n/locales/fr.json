@@ -429,6 +429,16 @@
     "partial": "Traduction partielle",
     "full": "Traduction complète"
   },
+  "connectivityAlert": {
+    "offlineTitle": "Aucune connexion Internet",
+    "weakTitle": "Votre connexion Internet est faible",
+    "offlineBody": "Votre appareil semble hors ligne. Vérifiez le Wi-Fi ou les données mobiles. Cette alerte disparaîtra une fois la connexion rétablie.",
+    "weakBody": "La connexion semble lente ou instable. Les prix en direct et certaines fonctionnalités en ligne risquent de ne pas se charger correctement. Vérifiez le Wi-Fi ou les données mobiles, puis reprenez lorsque la connexion sera stable.",
+    "transactionNote": "Les mises à jour des transactions peuvent être retardées. Si vous venez d’en envoyer une, vérifiez son statut avant de réessayer.",
+    "acknowledge": "J’ai compris",
+    "offlineBadge": "HORS LIGNE",
+    "weakBadge": "CONNEXION FAIBLE"
+  },
   "onboarding": {
     "next": "Continuer",
     "skip": "Passer",

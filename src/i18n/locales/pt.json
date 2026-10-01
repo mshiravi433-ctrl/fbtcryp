@@ -429,6 +429,16 @@
     "partial": "Tradução parcial",
     "full": "Tradução completa"
   },
+  "connectivityAlert": {
+    "offlineTitle": "Sem ligação à Internet",
+    "weakTitle": "A sua ligação à Internet está fraca",
+    "offlineBody": "O seu dispositivo parece estar sem ligação. Verifique o Wi-Fi ou os dados móveis. Este aviso fechará quando a ligação for restabelecida.",
+    "weakBody": "A ligação parece lenta ou instável. Os preços em tempo real e algumas funcionalidades online podem não carregar corretamente. Verifique o Wi-Fi ou os dados móveis e continue quando a ligação estiver estável.",
+    "transactionNote": "As atualizações das transações podem atrasar. Se acabou de enviar uma, confirme o estado antes de tentar novamente.",
+    "acknowledge": "Compreendi",
+    "offlineBadge": "SEM LIGAÇÃO",
+    "weakBadge": "LIGAÇÃO FRACA"
+  },
   "onboarding": {
     "next": "Continuar",
     "skip": "Ignorar",

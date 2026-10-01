@@ -429,6 +429,16 @@
     "partial": "Terjemahan sebagian",
     "full": "Terjemahan lengkap"
   },
+  "connectivityAlert": {
+    "offlineTitle": "Tidak ada koneksi internet",
+    "weakTitle": "Koneksi internet Anda lemah",
+    "offlineBody": "Perangkat Anda tampaknya sedang offline. Periksa Wi-Fi atau data seluler. Peringatan ini akan tertutup setelah koneksi pulih.",
+    "weakBody": "Koneksi tampaknya lambat atau tidak stabil. Harga langsung dan beberapa fitur online mungkin tidak dimuat dengan baik. Periksa Wi-Fi atau data seluler, lalu lanjutkan setelah koneksi stabil.",
+    "transactionNote": "Pembaruan transaksi mungkin tertunda. Jika Anda baru saja mengirim transaksi, periksa statusnya sebelum mencoba lagi.",
+    "acknowledge": "Saya mengerti",
+    "offlineBadge": "OFFLINE",
+    "weakBadge": "KONEKSI LEMAH"
+  },
   "onboarding": {
     "next": "Lanjut",
     "skip": "Lewati",
