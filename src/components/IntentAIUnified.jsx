@@ -102,6 +102,7 @@ import { resolveGoalTurn } from '../lib/strategyBrain/goalTurn.js';
 import { evaluateStrategyPreflight } from '../lib/strategyBrain/strategyPreflight.js';
 import { fetchOverview as fetchSmartMoneyOverview, fetchWallet as fetchSmartMoneyWallet } from '../lib/smartMoneyClient.js';
 import { formatSmartMoneyWalletReport } from '../lib/smartMoneyWalletReport.js';
+import { isSmartMoneyWatchText, parseSmartMoneyMonitorRequest } from '../lib/smartMoneyMonitorIntent.js';
 import { reconcileStrategyReceipts, strategyActionRoute, strategyReceiptSupport, hasStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
 import {
   saveStrategyPlan, loadStrategyPlan, hydrateRuntimeArgs, linkRevision
@@ -6258,6 +6259,93 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         if (/لغو|cancel|حذف|delete/i.test(lower)) { await handleMonitorAction(m, 'cancel'); return { handled: true }; }
         if (/بررسی کن|چک کن|check|status/i.test(lower)) { await handleMonitorAction(m, 'evaluate'); return { handled: true }; }
       }
+    }
+
+    /*
+     * ── SMART MONEY → A REAL INTENT OS ALERT ──
+     * «اگر اسمارت مانی اتریوم را انباشت کرد خبر بده».
+     *
+     * This sentence used to be answered with «type a threshold instead»: the
+     * wallet route below needs a wallet word, and `parseMonitorRequest` only
+     * knows PRICE / PERCENT_CHANGE, so it reported NO_CONDITION. The
+     * automation the user actually asked for — and the one the server has
+     * always been able to evaluate — was unreachable from conversation.
+     *
+     * It is ordered FIRST, deliberately. A sentence that names a wallet AND a
+     * notify verb («کیف پول من را هم بپای») must not be swallowed by the
+     * wallet-analysis turn below, which answers a different question and
+     * leaves the alert unbuilt.
+     *
+     * The draft opens the SAME monitor sheet the opportunity card already
+     * uses, prefilled with the metric and the exact contract the verified
+     * paired-swap index is watching. If that index has nothing for the asset,
+     * the answer says so and names what IS observed — no threshold is
+     * invented and no address is guessed.
+     */
+    if (isSmartMoneyWatchText(text)) {
+      const fa = locale.startsWith('fa');
+      setThinkingState('working');
+      let verified = null;
+      try {
+        const { fetchIntelligence } = await import('../lib/smartMoneyClient.js');
+        verified = await fetchIntelligence('24h');
+      } catch { /* fail closed below — never guess a contract */ }
+      setThinkingState('idle');
+      const want = parseSmartMoneyMonitorRequest(text, { verified, locale });
+      if (want.monitor) {
+        const m = want.monitor;
+        const ev = want.evidence || {};
+        setMonitorInitial({
+          asset: { symbol: m.asset.symbol },
+          metric: m.metric,
+          operator: m.operator,
+          threshold: m.threshold,
+          ...(m.reversal ? { reversal: m.reversal } : {}),
+          smartTarget: m.smartTarget,
+          intervalMinutes: m.intervalMinutes,
+          label: m.label
+        });
+        setMonitorDraftOpen(true);
+        pushTurn({
+          id: makeId(), role: 'ai', kind: 'draft', ui: { type: 'TEXT' },
+          content: fa
+            ? `پایش واقعی اسمارت مانی آماده است: ${m.metric} روی قرارداد ${m.smartTarget.token.slice(0, 8)}…${m.smartTarget.token.slice(-4)} (زنجیره ${m.smartTarget.chain})` +
+              `${ev.independentBuyers ? ` — ${ev.independentBuyers} خریدار مستقلِ واجد شرایط` : ''}${ev.swaps ? `، ${ev.swaps} سواپ جفت‌شده` : ''} همین حالا زیر نظرند. هر ${m.intervalMinutes} دقیقه بررسی می‌شود و فقط خبر می‌دهد (هیچ معامله‌ای خودکار انجام نمی‌شود). تأیید می‌کنی؟`
+            : `Real smart-money watch ready: ${m.metric} on ${m.smartTarget.token.slice(0, 8)}…${m.smartTarget.token.slice(-4)} (chain ${m.smartTarget.chain})` +
+              `${ev.independentBuyers ? ` — ${ev.independentBuyers} independent qualified buyers` : ''}${ev.swaps ? `, ${ev.swaps} paired swaps` : ''} under observation right now. Checked every ${m.intervalMinutes}m; it only notifies and never trades. Confirm?`
+        });
+        return { handled: true };
+      }
+      /* Fail closed, and still useful. */
+      const observed = (want.observed || []).join('، ');
+      const body = {
+        NO_VERIFIED_CONTRACT: fa
+          ? `الان هیچ قراردادِ تحت نظارتِ کیف پول‌های واجد شرایط برای این دارایی ثبت نشده، پس پایشی ساخته نمی‌شود — پایشِ متصل به هیچ، یعنی اعلانی که هیچ‌وقت نمی‌آید.` +
+            (observed ? ` زیر نظر فعلی: ${observed}.` : '')
+          : `No contract under qualified-wallet observation is indexed for this asset, so no watch is created — a monitor wired to nothing is an alert that never arrives.` +
+            (observed ? ` Currently observed: ${observed}.` : ''),
+        AMBIGUOUS_CONTRACT: fa
+          ? 'این نماد روی چند شبکه زیر نظر است؛ باید شبکه را مشخص کنی تا به قرارداد درست وصل شود.'
+          : 'This symbol is observed on more than one chain; name the chain so the alert binds to the right contract.',
+        UNSUPPORTED_CHAIN: fa
+          ? 'این دارایی سولاناست و پایش اسمارت مانیِ تأییدشده فعلاً فقط روی قراردادهای EVM کار می‌کند.'
+          : 'This asset is on Solana; verified smart-money watching currently covers EVM contracts only.',
+        NO_ASSET: fa
+          ? 'اسم دارایی را بنویس (مثلاً «اتریوم» یا «BTC») تا بتوانم قرارداد درست را پیدا کنم.'
+          : 'Name the asset (e.g. "Ethereum" or "BTC") so I can find the right contract.',
+        DEFINITION_QUESTION: fa
+          ? 'اگر توضیح می‌خواهی بپرس؛ برای ساخت پایش واقعی باید بگویی کدام دارایی و چه اتفاقی را خبر بدهم.'
+          : 'Ask if you want an explanation; to build a real watch I need the asset and the event to be told about.',
+        NO_NOTIFY: fa
+          ? 'بگو کِی خبر بدهم — مثلاً «اگر اسمارت مانی اتریوم را انباشت کرد خبر بده».'
+          : 'Tell me when to notify — e.g. "alert me if smart money accumulates Ethereum".',
+        NOT_SMART_MONEY: fa
+          ? 'اگر دربارهٔ اسمارت مانی می‌پرسی، دارایی و شرط خبر دادن را بنویس.'
+          : 'If this is about smart money, name the asset and when to be told.',
+        default: fa ? 'این درخواست را نتوانستم به یک پایش واقعی تبدیل کنم.' : 'I could not turn that into a real watch.'
+      };
+      pushTurn({ id: makeId(), role: 'ai', kind: 'assistant', ui: { type: 'TEXT' }, content: body[want.error] || body.default });
+      return { handled: true };
     }
 
     /*
