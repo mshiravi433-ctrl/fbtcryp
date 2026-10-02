@@ -468,6 +468,14 @@ export function normalizeCoin(c = {}) {
     change24h: c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? null,
     change7d: c.price_change_percentage_7d_in_currency ?? 0,
     mcap: c.market_cap ?? 0,
+    /*
+     * The direct (no-backend) CoinGecko path has to carry the SAME fields the
+     * server path does, or the هوشمندی tab would rank capital flows when the
+     * app talks to our API and show an honest gap when it talks to CoinGecko
+     * directly. Null — never 0 — when the feed omits it.
+     */
+    mcapChange24h: c.market_cap_change_24h ?? null,
+    mcapChangePct24h: c.market_cap_change_percentage_24h ?? null,
     volume: c.total_volume ?? 0,
     rank: c.market_cap_rank ?? 0,
     high24h: c.high_24h ?? 0,

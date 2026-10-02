@@ -379,6 +379,26 @@ if (!marketProviderOk) failed += 1;
 if (!marketVisualsOk) failed += 1;
 if (!marketRescueOk) failed += 1;
 
+/* Capital flows + macro top-up: the three keyless desks behind the News →
+   هوشمندی flow/profit cards (CoinGecko market-cap deltas, DefiLlama stablecoin
+   supply, SEC EDGAR reported profit) and the keyless-FRED/Alpha-Vantage top-up
+   that fills «شاخص سهام» and «منحنی بازده آمریکا». It mocks fetch for its whole
+   duration, so it runs isolated like the market probes above. */
+let capitalFlowsOk = false;
+try {
+  execFileSync(process.execPath, ['test/capital-flows-probe.mjs'], {
+    stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+  });
+  capitalFlowsOk = true;
+} catch (err) {
+  const tail = String(err?.stdout || '').split('\n').filter(Boolean).slice(-8).join('\n');
+  if (tail) console.log(tail);
+}
+console.log(`── Capital flows & macro desks ────────────────────────────────────`);
+console.log(`  ${capitalFlowsOk ? '✓' : '✗'} flow ranking honesty — real gains/losses only, quarter-only profit, isolated source failures`);
+console.log(`  ${capitalFlowsOk ? '✓' : '✗'} macro top-up — keyless FRED CSV, budgeted Alpha Vantage last, no fabricated quote`);
+if (!capitalFlowsOk) failed += 1;
+
 // Silence React's act() advice and framer-motion's SSR useLayoutEffect notice;
 // neither indicates a problem and both drown out real output.
 const realError = console.error;

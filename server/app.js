@@ -40,6 +40,7 @@ import {
   getGoldHistory,
   getEtfGoldStatus
 } from './etfGold.js';
+import { getCapitalFlows, capitalFlowsConfigured, FLOW_SCHEMA } from './capitalFlows.js';
 import { cachedWhales } from './whales.js';
 import * as smartMoney from './smartMoney/index.js';
 import { buildMarketPulse, buildSolanaRadar, explainSignal, localExplanation, sanitizeEvidence } from './signalEngine.js';
@@ -4029,6 +4030,48 @@ app.get('/api/gold/history', async (req, res) => {
 app.get('/api/gold/status', (_req, res) => {
   res.set('cache-control', 'public, max-age=30, s-maxage=30, stale-while-revalidate=120');
   return res.json(getEtfGoldStatus());
+});
+
+/*
+ * CAPITAL FLOWS + REPORTED PROFIT — the honest fill-in for three cards that
+ * used to be permanently empty on the News → هوشمندی tab.
+ * ---------------------------------------------------------------------------
+ * «ورود سرمایه سهام و کریپتو به کشور» had no source, «سودده‌ترین شرکت» had no
+ * accounting source, and «بیشترین و کمترین خروج ۲۴ ساعته» had no flow source.
+ * All three stayed explicit gaps rather than inventing a proxy — correct, until
+ * three FREE, KEYLESS upstreams turned out to answer an honest version of each:
+ *
+ *   CoinGecko  market_cap_change_24h  → the token that attracted the most
+ *                                       capital (and the one that lost the most)
+ *   DefiLlama  stablecoin supply      → real 24h/7d money in/out per chain
+ *   SEC EDGAR  NetIncomeLoss frames   → reported (audited) quarterly profit
+ *
+ * No key is involved, so nothing here can leak one, and no section is served
+ * without `status` + `source` + `at`. A dead upstream arrives as an
+ * UNAVAILABLE section with a reason code; the panel then keeps showing the old
+ * honest «no verified source» line for that card only. Read-only: this route
+ * quotes nobody, signs nothing and executes nothing.
+ */
+app.get('/api/insights/flows', async (_req, res) => {
+  const payload = await getCapitalFlows();
+  const secs = 900; // 15 minutes — the same TTL the module caches at
+  res.set('cache-control', `public, max-age=${secs}, s-maxage=${secs}, stale-while-revalidate=${secs * 4}`);
+  if (payload?.stale) res.set('x-data-stale', '1');
+  if (payload?.cached) res.set('x-cache', 'HIT');
+  /* `ok:false` only when EVERY section is dark; the schema is still returned
+     so the client can render three honest gaps instead of a broken panel. */
+  return res.status(payload?.ok === false ? 503 : 200).json(payload);
+});
+
+app.get('/api/insights/flows/status', (_req, res) => {
+  res.set('cache-control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+  return res.json({
+    ok: true,
+    schema: FLOW_SCHEMA,
+    sources: capitalFlowsConfigured(),
+    readOnly: true,
+    executes: false
+  });
 });
 
 /*

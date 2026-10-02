@@ -11536,6 +11536,147 @@ button.farm-protocol-toggle {
   cursor: pointer;
 }
 
+/*
+ * ─── THE FLOW + PROFIT CARDS ───────────────────────────────────────────────
+ * A capital-flow card is not an asset card: there is no logo and no percentage,
+ * there is an amount of money and the source that measured it. Same chrome as
+ * `.insight-metric`, one bigger number, and the direction is carried by the
+ * sign AND the colour (a green −$40M would be a lie in either channel alone).
+ */
+.insight-value {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+
+.insight-value.up { color: var(--up); }
+.insight-value.down { color: var(--down); }
+
+.insight-value-skel {
+  height: 62px;
+  margin-top: 14px;
+  border-radius: 12px;
+}
+
+.insight-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  color: var(--rgb-1);
+  font-size: var(--fs-xs);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.insight-link.inline {
+  margin: 0 0 0 6px;
+  font-size: 9px;
+  vertical-align: 1px;
+}
+
+.insight-note > svg {
+  margin-inline-end: 4px;
+  vertical-align: -2px;
+}
+
+/* The two rankings (capital in / capital out) sit side by side on a wide
+   phone and stack on a narrow one; a list that needs horizontal scrolling on
+   a 360px screen is a list nobody reads. */
+.insight-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 420px) {
+  .insight-flow-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.insight-flow-list {
+  margin: 0;
+  padding: 9px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-panel);
+}
+
+.insight-flow-head {
+  padding: 2px 4px 8px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.insight-flow-head.up { color: var(--up); }
+.insight-flow-head.down { color: var(--down); }
+
+.insight-flow-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 2px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.insight-flow-row .insight-mark {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+}
+
+.insight-flow-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.insight-flow-copy strong {
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-flow-copy small {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 8.8px;
+  line-height: 1.4;
+}
+
+.insight-flow-amount {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.insight-flow-amount.up { color: var(--up); }
+.insight-flow-amount.down { color: var(--down); }
+
+.insight-flow-amount small {
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 8.8px;
+  font-weight: 700;
+}
+
+.insight-flow-empty {
+  padding: 10px 4px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
 .insights-section-heading {
   display: flex;
   align-items: center;
