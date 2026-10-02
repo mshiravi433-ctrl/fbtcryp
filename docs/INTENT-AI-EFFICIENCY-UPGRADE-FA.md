@@ -53,7 +53,19 @@ USER LONG-TERM MEMORY (…BACKGROUND ONLY — never market data, never balances,
 
 برچسب «BACKGROUND ONLY» عمدی است: یک ترجیحِ به‌یادمانده هرگز نباید به‌جای دادهٔ زندهٔ بازار یا مجوز اجرا خوانده شود. همین بلوک‌ها به مسیر «پرسیدن از بقیهٔ مدل‌ها» (`server/aiEscalation.js`) هم اضافه شدند.
 
-### ۲-۴. حافظهٔ معنایی بلندمدت (خاموش تا وقتی خودت روشن کنی)
+### ۲-۴. حافظهٔ بلندمدت — **دو لایه، یک رابط** (لایهٔ رایگان پیش‌فرض روشن)
+
+| لایه | چه وقت فعال است | بازیابی | هزینه |
+|---|---|---|---|
+| `local` (پیش‌فرض) | همیشه، تا وقتی `MEMWAL_PROVIDER=off` نشود | BM25 فارسی‌فهم خود ریپو + تازگی + اهمیت | صفر |
+| `walrus` | وقتی `MEMWAL_ACCOUNT_ID` + `MEMWAL_PRIVATE_KEY` تنظیم شوند (یا `MEMWAL_PROVIDER=walrus`) | معنایی، روی Walrus | طبق Walrus |
+
+انتخاب موتور با `MEMWAL_PROVIDER = auto | local | walrus | off`؛ پیش‌فرض `auto` = والروس اگر کلید بود، وگرنه محلی.
+هر دو یک مسیر کد را طی می‌کنند (`bridgeRecall` / `bridgeRemember`) و هر پاسخ `provider` را صریح می‌گوید.
+پیش از هر ذخیره، همان `sanitize()` + فیلتر PII اجرا می‌شود؛ عدد مالی هرگز ذخیره نمی‌شود.
+جزئیات عملیاتی و محدودیت‌های صادقانه: `docs/WALRUS-MEMORY-ACTIVATION-FA.md`.
+
+### ۲-۴-۱. جزئیات لایهٔ والروس
 
 ماژول جدید `server/walrusMemoryBridge.js`:
 
@@ -135,15 +147,16 @@ curl -s -X POST /api/v1/ai/memory/long-term/recall \
 
 ## ۷. تست‌ها و شواهد اجراشده
 
-`npm run test:memory` → **۱۴۲/۱۴۲ assertion در پنج پروب:**
+`npm run test:memory` → **۱۵۹/۱۵۹ assertion در شش پروب:**
 
 | پروب | تعداد | چه چیزی را قفل می‌کند |
 |---|---|---|
 | `test/intent-ai/walrus-memory-bridge-probe.mjs` | ۵۰ | خاموش‌بودن پیش‌فرض، امضای Ed25519 قابل‌تأیید، شکل پیام استاندارد، redaction، صف/سهمیه/حذف تکراری، timeout و ۴۲۹، کلید خاموش |
 | `test/intent-ai/intent-memory-continuity-probe.mjs` | ۲۹ | دو نام فیلد در هر دو جهت، read-your-writes، fail-open بودن نوشتن ماندگار، رسیدن خلاصه و حافظه به پرامپت با کران و برچسب، ريداکت secret در پرامپت |
 | `test/intent-ai/walrus-memory-wiring-probe.mjs` | ۱۸ | کل مسیر واقعی: یک نوبت `/api/v1/ai/chat` روی اپ واقعی با relayer قلابی — هدرهای امضاشده، namespace یکسان خواندن/نوشتن، ورود حافظه به context، ثبت دقیق شمارنده‌ها، عدم افشای کلید |
-| `test/intent-ai/memwal-account-tool-probe.mjs` | ۱۸ | ابزار ساخت حساب روی زنجیره: هر گیت پیش‌نیاز با پیام دقیق متوقف می‌شود، packageId از `/config` زنده می‌آید و مغایرت env رد می‌شود (تلهٔ شناسهٔ بازنشسته)، dry-run با SDK واقعی به READY می‌رسد و `SuiGrpcClient` را انتخاب می‌کند |
-| `test/intent-ai/memwal-activation-probe.mjs` | ۲۷ | کیت فعال‌سازی: کل چرخهٔ پیش‌پرواز روی relayer قلابی (GO)، مسیر NO_GO با کلید ثبت‌نشده و راهنمای رفع، عدم چاپ کلید خصوصی در `keygen`، دقت پیام‌های `status` |
+| `test/intent-ai/memwal-account-tool-probe.mjs` | ۶–۱۸ | ابزار ساخت حساب روی زنجیره: هر گیت پیش‌نیاز با پیام دقیق متوقف می‌شود، packageId از `/config` زنده می‌آید و مغایرت env رد می‌شود (تلهٔ شناسهٔ بازنشسته)، dry-run با SDK واقعی به READY می‌رسد و `SuiGrpcClient` را انتخاب می‌کند |
+| `test/intent-ai/intent-longterm-local-probe.mjs` | ۱۴ | لایهٔ رایگان روی اپ واقعی و **بدون هیچ متغیر Walrus**: یک نوبت چت یک جملهٔ ماندگار را ذخیره می‌کند، نوبت بعد با کلمات مشترک پیدایش می‌کند (`provider: local`)، نوبت بی‌ربط چیزی به‌خاطر نمی‌آورد، و وضعیت صادقانه می‌گوید لغوی است نه معنایی |
+| `test/intent-ai/memwal-activation-probe.mjs` | ۲۹ | کیت فعال‌سازی: کل چرخهٔ پیش‌پرواز روی relayer قلابی (GO)، مسیر NO_GO با کلید ثبت‌نشده و راهنمای رفع، عدم چاپ کلید خصوصی در `keygen`، دقت پیام‌های `status` |
 
 **رگرسیون موجود:** پروب‌های قبلی که به همین مسیرها دست می‌زنند سبز هستند — `chat-route-contract` (۱۸/۱۸)، `upgrade13-conversation-depth` (۴۶/۴۶)، `phase204-upgrade4` (۲۱/۲۱)، `upgrade6-followup-resume` و `phase66-consented-memory` (خروج ۰).
 
@@ -186,7 +199,7 @@ curl -s -X POST /api/v1/ai/memory/long-term/recall \
 
 | فایل | تغییر |
 |---|---|
-| `server/walrusMemoryBridge.js` | **جدید** — پل حافظهٔ بلندمدت (بدون وابستگی جدید) |
+| `server/walrusMemoryBridge.js` | **جدید** — پل حافظهٔ بلندمدت با دو موتور: `local` (رایگان، روی store خود اپ + BM25 خود ریپو) و `walrus` (Walrus Memory). بدون وابستگی جدید |
 | `server/aiIntentOS.js` | نرمال‌سازی ردیف حافظه، نوشتن غیرمسدودکننده، recall موازی در `/chat`، نوشتن حافظهٔ ماندگار، مسیرهای جدید، حذف کد مرده |
 | `server/aiCollaboration.js` | تزریق کران‌دار خلاصه + حافظهٔ بلندمدت در تنها بلوک context مدل‌ها |
 | `server/aiEscalation.js` | همان دو بلوک در مسیر «بپرس از بقیه» |
@@ -194,7 +207,7 @@ curl -s -X POST /api/v1/ai/memory/long-term/recall \
 | `src/lib/aiIntentClient.js` | دو تابع کلاینت برای وضعیت و آزمون حافظهٔ بلندمدت |
 | `.env.example` | مستندسازی همهٔ متغیرهای جدید (پیش‌فرض: خاموش) |
 | `package.json` | `test:memory`، `test:memory-bridge`، `test:memory-continuity`، `test:memory-wiring` |
-| `test/intent-ai/*-probe.mjs` | پنج پروب جدید (۱۴۲ assertion) |
+| `test/intent-ai/*-probe.mjs` | شش پروب جدید (۱۵۹ assertion) |
 | `scripts/memwal-activate.mjs` | **جدید** — کیت فعال‌سازی: `keygen` / `status` / `preflight` (بدون وابستگی) |
 | `scripts/memwal-create-account.mjs` | **جدید** — ساخت حساب و ثبت کلید روی زنجیره (مسیر جایگزین داشبورد؛ فقط با SDK نصب‌شده، dry-run پیش‌فرض) |
 | `docs/WALRUS-MEMORY-ACTIVATION-FA.md` | **جدید** — راهنمای گام‌به‌گام فعال‌سازی و کدهای خطای پیش‌پرواز |

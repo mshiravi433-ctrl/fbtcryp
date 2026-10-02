@@ -22,7 +22,7 @@
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -83,6 +83,38 @@ function run(args, { env = {}, timeout = 45000 } = {}) {
   });
 }
 
+/**
+ * The Walrus Memory SDK is OPTIONAL for this repo: it is needed only by the
+ * account tool, so it is not a dependency of the app (it would add ~55MB to
+ * every install for a step most deployments never run). The gate assertions
+ * below therefore need it, and this probe links it in when the operator points
+ * `MEMWAL_SDK_DIR` at a directory that has it installed:
+ *
+ *   npm i --prefix /tmp/mw @mysten-incubation/memwal @mysten/sui
+ *   MEMWAL_SDK_DIR=/tmp/mw node test/intent-ai/memwal-account-tool-probe.mjs
+ */
+const SDK_DIR = process.env.MEMWAL_SDK_DIR || '';
+const LINKED = [];
+function linkSdk() {
+  if (!SDK_DIR) return false;
+  const src = join(SDK_DIR, 'node_modules');
+  const wanted = ['@mysten-incubation', '@mysten/sui'];
+  if (!wanted.every((w) => existsSync(join(src, w)))) return false;
+  mkdirSync(join(ROOT, 'node_modules', '@mysten'), { recursive: true });
+  for (const w of wanted) {
+    const target = join(ROOT, 'node_modules', w);
+    try {
+      if (!existsSync(target)) { symlinkSync(join(src, w), target); LINKED.push(target); }
+    } catch { /* already linked or not permitted — the import check below decides */ }
+  }
+  return wanted.every((w) => existsSync(join(ROOT, 'node_modules', w)));
+}
+const sdkLinked = linkSdk();
+function unlinkSdk() {
+  for (const t of LINKED) { try { rmSync(t, { recursive: true, force: true }); } catch { /* best effort */ } }
+}
+process.on('exit', unlinkSdk);
+
 /* A throwaway bech32 owner key. Only ever used for dry runs. */
 const OWNER_KEY = (() => {
   try {
@@ -121,36 +153,49 @@ const stub = startStub();
 await once(stub, 'listening');
 const stubUrl = `http://127.0.0.1:${stub.address().port}`;
 
-const mismatch = await run([], {
+const sdkReadyEarly = await (async () => {
+  try { await import('@mysten-incubation/memwal/account'); await import('@mysten/sui/grpc'); return true; } catch { return false; }
+})();
+if (!sdkReadyEarly) {
+  console.log(`  skip  the relayer gates and the dry run (SDK not installed${SDK_DIR ? ` — MEMWAL_SDK_DIR=${SDK_DIR} did not resolve` : ''})`);
+  console.log('        to exercise them:  npm i --prefix /tmp/mw @mysten-incubation/memwal @mysten/sui');
+  console.log('                           MEMWAL_SDK_DIR=/tmp/mw node test/intent-ai/memwal-account-tool-probe.mjs');
+}
+
+const mismatch = sdkReadyEarly ? await run([], {
   env: { MEMWAL_PRIVATE_KEY: DELEGATE, SUI_PRIVATE_KEY: OWNER_KEY || `suiprivkey1${'q'.repeat(40)}`, MEMWAL_SERVER_URL: stubUrl, MEMWAL_PACKAGE_ID: `0x${'ee'.repeat(32)}` }
-});
-t('a package id that disagrees with /config is refused',
-  mismatch.code === 2 && /MEMWAL_PACKAGE_ID disagrees/.test(mismatch.out));
-t('…and the refusal explains the 401 AUTH_REJECTED consequence',
-  /AUTH_REJECTED/.test(mismatch.out));
+}) : null;
+if (mismatch) {
+  t('a package id that disagrees with /config is refused',
+    mismatch.code === 2 && /MEMWAL_PACKAGE_ID disagrees/.test(mismatch.out));
+  t('…and the refusal explains the 401 AUTH_REJECTED consequence',
+    /AUTH_REJECTED/.test(mismatch.out));
+}
 
 /* A deployment whose /config does not publish the registry id: the id must
    then come from the operator (the dashboard), and the script must say so
    rather than invent one. */
 const stubNoRegistry = startStub({ registry: null });
 await once(stubNoRegistry, 'listening');
-const noRegistry = await run([], {
+const noRegistry = sdkReadyEarly ? await run([], {
   env: {
     MEMWAL_PRIVATE_KEY: DELEGATE,
     SUI_PRIVATE_KEY: OWNER_KEY || `suiprivkey1${'q'.repeat(40)}`,
     MEMWAL_SERVER_URL: `http://127.0.0.1:${stubNoRegistry.address().port}`,
     MEMWAL_REGISTRY_ID: ''
   }
-});
-t('a missing registry id is refused with where to find it', noRegistry.code === 2 && /dashboard/.test(noRegistry.out));
+}) : null;
+if (noRegistry) t('a missing registry id is refused with where to find it', noRegistry.code === 2 && /dashboard/.test(noRegistry.out));
 stubNoRegistry.close();
 stub.close();
 
-const unreachable = await run([], {
+const unreachable = sdkReadyEarly ? await run([], {
   env: { MEMWAL_PRIVATE_KEY: DELEGATE, SUI_PRIVATE_KEY: OWNER_KEY || `suiprivkey1${'q'.repeat(40)}`, MEMWAL_SERVER_URL: 'http://127.0.0.1:9', MEMWAL_REGISTRY_ID: REGISTRY }
-});
-t('an unreachable relayer is NETWORK, not a crash', unreachable.code === 4 && /Cannot read the relayer/.test(unreachable.out));
-t('…and it says why the id must come from the live deployment', /retired/.test(unreachable.out));
+}) : null;
+if (unreachable) {
+  t('an unreachable relayer is NETWORK, not a crash', unreachable.code === 4 && /Cannot read the relayer/.test(unreachable.out));
+  t('…and it says why the id must come from the live deployment', /retired/.test(unreachable.out));
+}
 
 /* -------------------------------------------------------------------------- */
 /*  3. the dry run — needs the SDK, so it is skipped when it is absent          */
@@ -161,8 +206,7 @@ try { await import('@mysten-incubation/memwal/account'); await import('@mysten/s
 if (!sdkReady) {
   const missing = await run([], { env: { MEMWAL_PRIVATE_KEY: DELEGATE, SUI_PRIVATE_KEY: OWNER_KEY || `suiprivkey1${'q'.repeat(40)}`, MEMWAL_SERVER_URL: stubUrl, MEMWAL_REGISTRY_ID: REGISTRY } });
   t('a missing SDK exits 3 and prints the exact install command',
-    missing.code === 3 && /npm i -D @mysten-incubation\/memwal @mysten\/sui/.test(missing.out));
-  console.log('  skip  the dry-run READY path (SDK not installed — run `npm i -D @mysten-incubation/memwal @mysten/sui` to exercise it)');
+    missing.code === 3 && /@mysten-incubation\/memwal @mysten\/sui/.test(missing.out));
 } else {
   const stub2 = startStub();
   await once(stub2, 'listening');

@@ -323,6 +323,16 @@ async function main() {
   report.ownerKeySource = owner.source || 'prompt';
   say(`  owner key           : loaded (${report.ownerKeySource}) — not stored, not printed`);
 
+  /* The SDK presence is a LOCAL prerequisite, so it is checked before any
+     network call: an operator who has not installed it should be told that,
+     not shown a network error from a relayer they cannot reach anyway. */
+  const sdk = await loadSdk();
+  if (!sdk.ok) {
+    return fail('The Walrus Memory SDK is not installed in this project.', CODES.EXIT_SDK_MISSING, {
+      detail: `  npm i -D @mysten-incubation/memwal @mysten/sui\n  (${sdk.error})`
+    });
+  }
+
   /* 3 — the relayer's /config is the source of truth for the package id */
   const cfgRes = await relayerConfig(serverUrl);
   if (!cfgRes.ok) {
@@ -351,13 +361,6 @@ async function main() {
   say(`  package id          : ${packageId}  (from /config, not from docs)`);
   say(`  registry id         : ${registryId}`);
 
-  /* 4 — the SDK, then the client the current @mysten/sui no longer provides by default */
-  const sdk = await loadSdk();
-  if (!sdk.ok) {
-    return fail('The Walrus Memory SDK is not installed in this project.', CODES.EXIT_SDK_MISSING, {
-      detail: `  npm i -D @mysten-incubation/memwal @mysten/sui\n  (${sdk.error})`
-    });
-  }
   const clientRes = await buildSuiClient({
     network,
     transport: cfg.suiTransport || null,

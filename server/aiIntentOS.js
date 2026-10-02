@@ -470,6 +470,10 @@ async function buildAIContext(req, body = {}, opts = {}) {
       schema: WALRUS_MEMORY_SCHEMA,
       ok: value.ok === true,
       reason: value.ok === true ? null : (value.reason || 'UNAVAILABLE'),
+      /* Which tier answered: `walrus` (semantic, on Walrus) or `local` (lexical,
+         this app's own store). The two differ in quality and cost, and a caller
+         that cannot tell them apart cannot report the truth either. */
+      provider: value.provider || bridgeStatus().provider,
       items: (Array.isArray(value.items) ? value.items : []).slice(0, 5),
       at: nowMs()
     };
@@ -2336,7 +2340,8 @@ router.post('/chat', async (req, res) => {
       longTermMemory: {
         used: Array.isArray(context.longTermMemory?.items) ? context.longTermMemory.items.length : 0,
         ok: context.longTermMemory?.ok === true,
-        reason: context.longTermMemory?.reason || null
+        reason: context.longTermMemory?.reason || null,
+        provider: context.longTermMemory?.provider || bridgeStatus().provider
       }
     },
     at: nowMs()

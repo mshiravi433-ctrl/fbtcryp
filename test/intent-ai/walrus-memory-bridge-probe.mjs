@@ -56,14 +56,59 @@ function unconfigure() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  1. OFF BY DEFAULT                                                          */
+/*  1. NO CREDENTIALS → THE FREE LOCAL TIER, NOT SILENCE                       */
 /* -------------------------------------------------------------------------- */
 unconfigure();
 __internals.reset();
-t('no keys → status mode=off', bridgeStatus().mode === 'off' && bridgeStatus().configured === false);
-t('no keys → recall is a named no-op', (await bridgeRecall({ owner: 'u1', query: 'preferences' })).reason === 'NOT_CONFIGURED');
-t('no keys → remember is a named no-op', bridgeRemember({ owner: 'u1', text: 'من ترجیح می‌دهم حالت تاریک' }).reason === 'NOT_CONFIGURED');
+t('no keys → the local provider answers', bridgeStatus().provider === 'local' && bridgeStatus().mode === 'local');
 t('no keys → status never leaks a key field', !JSON.stringify(bridgeStatus()).toLowerCase().includes('private'));
+t('no keys → the walrus half reports itself unconfigured', bridgeStatus().configured === false);
+
+const localWrite = bridgeRemember({ owner: 'u-local', text: 'کاربر همیشه صبح‌ها خبرهای بازار را می‌خواند' });
+t('local remember is queued and stored in-process', localWrite.ok === true && localWrite.provider === 'local');
+await new Promise((r) => setTimeout(r, 60));
+const localHit = await bridgeRecall({ owner: 'u-local', query: 'خبرهای بازار را کی می‌خوانم؟' });
+t('local recall finds the line by its words', localHit.ok === true && localHit.provider === 'local' && localHit.items.length === 1,
+  JSON.stringify(localHit.items));
+t('local recall reports a score and the kind', localHit.items[0]?.score > 0 && localHit.items[0]?.kind === 'note');
+t('local recall is honest about its source', localHit.items[0]?.source === 'local' && localHit.items[0]?.blobId === null);
+t('an unrelated query recalls nothing',
+  (await bridgeRecall({ owner: 'u-local', query: 'قیمت بیت کوین چنده' })).items.length === 0);
+t('a synonym with no shared word is NOT recalled (lexical tier, stated)',
+  (await bridgeRecall({ owner: 'u-local', query: 'چه چشم‌اندازی دارم' })).items.length === 0);
+t('the local tier never claims to be semantic', bridgeStatus().local.semantic === false);
+
+/* The free tier must obey the same discipline as the paid one. */
+__internals.reset();
+bridgeRemember({ owner: 'u-local2', text: 'اولین حافظهٔ محلی برای آزمون تکراری' });
+await new Promise((r) => setTimeout(r, 40));
+const dup = bridgeRemember({ owner: 'u-local2', text: 'اولین حافظهٔ محلی برای آزمون تکراری' });
+t('local writes are de-duplicated', dup.stored === false && dup.reason === 'DUPLICATE');
+t('a secret never survives into local memory',
+  bridgeRemember({ owner: 'u-local3', text: 'seed phrase alpha beta gamma delta' }).reason === 'NOTHING_AFTER_REDACTION');
+t('a goal outranks a note in local recall', await (async () => {
+  __internals.reset();
+  /* Two writes to one owner inside one tick would hit the cooldown; the
+     ranking question is separate from the budget question. */
+  const cooldown = process.env.MEMWAL_WRITE_COOLDOWN_MS;
+  process.env.MEMWAL_WRITE_COOLDOWN_MS = '0';
+  bridgeRemember({ owner: 'u-rank', text: 'کاربر دربارهٔ صبر در بازار نوسانی صحبت کرد', kind: 'note' });
+  bridgeRemember({ owner: 'u-rank', text: 'هدف کاربر: صبر در بازار نوسانی و خرید پله‌ای', kind: 'goal' });
+  if (cooldown === undefined) delete process.env.MEMWAL_WRITE_COOLDOWN_MS; else process.env.MEMWAL_WRITE_COOLDOWN_MS = cooldown;
+  await new Promise((r) => setTimeout(r, 80));
+  const res = await bridgeRecall({ owner: 'u-rank', query: 'صبر در بازار نوسانی' });
+  return res.items[0]?.kind === 'goal';
+})());
+
+/* The whole tier has one kill switch, and it kills the local half too. */
+process.env.MEMWAL_PROVIDER = 'off';
+__internals.reset();
+t('MEMWAL_PROVIDER=off stops the local tier', bridgeStatus().provider === 'off' && bridgeStatus().enabled === false);
+t('…and remember reports the named reason',
+  bridgeRemember({ owner: 'u1', text: 'من ترجیح می‌دهم حالت تاریک' }).reason === 'NOT_CONFIGURED');
+t('…and recall does too', (await bridgeRecall({ owner: 'u1', query: 'preferences' })).reason === 'NOT_CONFIGURED');
+delete process.env.MEMWAL_PROVIDER;
+__internals.reset();
 
 /* -------------------------------------------------------------------------- */
 /*  2. CONFIGURED — signing, namespace, headers                                */
@@ -71,7 +116,7 @@ t('no keys → status never leaks a key field', !JSON.stringify(bridgeStatus()).
 configure();
 __internals.reset();
 const st = bridgeStatus();
-t('configured → mode=on', st.mode === 'on' && st.enabled === true);
+t('with credentials → the walrus provider takes over', st.mode === 'on' && st.provider === 'walrus' && st.enabled === true);
 t('status masks the account', st.account === `${ACCOUNT.slice(0, 6)}…${ACCOUNT.slice(-4)}`);
 t('status says secrets:false', st.secrets === false);
 
@@ -216,7 +261,8 @@ process.env.MEMWAL_ENABLED = 'false';
 __internals.reset();
 t('MEMWAL_ENABLED=false stops reads', (await bridgeRecall({ owner: 'u', query: 'x' })).reason === 'DISABLED');
 t('MEMWAL_ENABLED=false stops writes', bridgeRemember({ owner: 'u', text: 'من ترجیح می‌دهم آزمایش کنم' }).reason === 'DISABLED');
-t('status reports the kill switch', bridgeStatus().enabled === false && bridgeStatus().mode === 'disabled');
+t('MEMWAL_ENABLED=false is still the master kill switch', bridgeStatus().enabled === false && bridgeStatus().mode === 'disabled');
+t('…and it overrides an explicit provider request', bridgeStatus().provider === 'off');
 delete process.env.MEMWAL_ENABLED;
 unconfigure();
 __internals.reset();

@@ -47,9 +47,33 @@
 
 import { createHash, createPrivateKey, createPublicKey, randomUUID, sign as cryptoSign } from 'node:crypto';
 import { sanitize } from '../src/lib/central/memory.js';
+/* The repo's own Persian-aware tokenizer (normalization, ZWNJ, stopwords,
+   stemming). Reused so the local tier needs no new dependency and matches
+   words the way the rest of Intent OS already does. */
+import { tokenize } from '../src/lib/intent-ai/retrieval.js';
+import { storeGet, storeGetFresh, storeSet, storeDurable, EPHEMERAL_TTL_MS } from './store.js';
 
 export const WALRUS_MEMORY_SCHEMA = 'fbt.walrus-memory-bridge.v1';
+export const LOCAL_MEMORY_SCHEMA = 'fbt.longterm-memory.v1';
 export const NOT_CONFIGURED = 'NOT_CONFIGURED';
+
+/**
+ * TWO PROVIDERS, ONE INTERFACE
+ * ---------------------------------------------------------------------------
+ * `walrus` — semantic memory on Walrus Memory (MemWal): an on-chain account,
+ *            encrypted blobs, a relayer that embeds and searches by meaning.
+ *            Requires credentials and (after the launch period) money.
+ * `local`  — the same long-term tier on infrastructure this app already owns:
+ *            the per-owner KV row in server/store.js, retrieved with the
+ *            repo's own BM25 tokenizer plus recency/importance weighting.
+ *            No account, no external service, no cost. Lexical, not semantic —
+ *            `bridgeStatus().provider` always says which one answered, because
+ *            the two have different quality and the caller deserves to know.
+ *
+ * `MEMWAL_PROVIDER` picks: `auto` (default) = walrus when credentials exist,
+ * otherwise local; `walrus`; `local`; `off` = the whole tier off.
+ * `MEMWAL_ENABLED=0` remains the single kill switch for both.
+ */
 
 const DEFAULT_RELAYER = 'https://relayer.memory.walrus.xyz';
 const PKCS8_ED25519_PREFIX = '302e020100300506032b657004220420';
@@ -81,7 +105,28 @@ export function bridgeConfig() {
   const configured = Boolean(seed && accountId);
   const enabledRaw = str('MEMWAL_ENABLED', '').toLowerCase();
   const enabled = configured && !['0', 'false', 'no', 'off'].includes(enabledRaw);
+  /* One switch for the whole tier: `auto` prefers the paid/organised provider
+     when credentials exist and falls back to the free one when they do not. */
+  const providerRequest = str('MEMWAL_PROVIDER', 'auto').toLowerCase();
+  const killSwitch = ['0', 'false', 'no', 'off'].includes(enabledRaw);
+  let provider;
+  if (killSwitch || ['off', '0', 'false', 'no', 'none', 'disabled'].includes(providerRequest)) provider = 'off';
+  else if (providerRequest === 'walrus') provider = configured ? 'walrus' : 'off';
+  else if (providerRequest === 'local') provider = 'local';
+  else provider = configured ? 'walrus' : 'local';
+  const localMaxEntries = Math.max(20, Math.round(pos('MEMWAL_LOCAL_MAX_ENTRIES', 120)));
   return {
+    provider,
+    killSwitch,
+    providerRequest,
+    local: {
+      maxEntries: localMaxEntries,
+      maxText: Math.max(80, Math.round(pos('MEMWAL_LOCAL_MAX_TEXT', 400))),
+      maxWritesPerHour: Math.max(5, Math.round(pos('MEMWAL_LOCAL_WRITES_PER_HOUR', 40))),
+      halfLifeDays: Math.max(1, Math.round(pos('MEMWAL_LOCAL_HALF_LIFE_DAYS', 45))),
+      ttlMs: Math.round(pos('MEMWAL_LOCAL_TTL_MS', EPHEMERAL_TTL_MS)),
+      retrieval: 'bm25+recency+importance'
+    },
     configured,
     enabled,
     accountId,
@@ -233,13 +278,15 @@ export function durableMemoryLine({ message, goalDetected = false, intentType = 
 const state = {
   recallWindow: [],
   rememberWindow: [],
+  localWindow: [],
   lastWriteAt: new Map(), // owner -> ts
   seen: new Map(),        // owner -> Map<hash, ts>
   queue: [],
   draining: false,
   counters: {
     recall: { ok: 0, failed: 0, timeout: 0, rateLimited: 0, skipped: 0 },
-    remember: { queued: 0, sent: 0, failed: 0, dropped: 0, rateLimited: 0, duplicate: 0, cooldown: 0, redacted: 0 }
+    remember: { queued: 0, sent: 0, failed: 0, dropped: 0, rateLimited: 0, duplicate: 0, cooldown: 0, redacted: 0 },
+    local: { stored: 0, persisted: 0, persistFailed: 0, failed: 0, duplicate: 0, cooldown: 0, rateLimited: 0, redacted: 0, recalled: 0, recallMiss: 0 }
   },
   lastError: null,
   lastErrorAt: null,
@@ -344,6 +391,202 @@ export async function relayerRequest(pathAndQuery, {
   return relayerFetch(pathAndQuery, { method, payload, timeoutMs: timeoutMs || cfg.requestTimeoutMs });
 }
 
+
+/* -------------------------------------------------------------------------- */
+/*  LOCAL PROVIDER — the free tier                                              */
+/* -------------------------------------------------------------------------- */
+/*
+ * The same contract as the Walrus tier (remember / recall / redact / budget /
+ * fail-open) on infrastructure this app already owns. Retrieval is the repo's
+ * own BM25 tokenizer — Persian normalization, ZWNJ splitting, stopwords and
+ * stemming included — combined with recency decay and a per-kind importance,
+ * which is the same shape of ranking the remote tier offers.
+ *
+ * HONEST DIFFERENCE: this is lexical, not semantic. «چطور سرمایهام را پخش
+ * کنم» will not match a line that only says «تنوعبخشی». The status endpoint
+ * reports `provider: "local"` so no caller can mistake one for the other, and
+ * the message the model receives is labelled the same way.
+ */
+
+const localCache = new Map(); // owner -> record, authoritative for THIS instance
+
+/** How much a line is worth keeping and how much it lifts a recall. */
+const KIND_WEIGHT = Object.freeze({ goal: 1, preference: 0.95, note: 0.8 });
+const BM25_K1 = 1.4;
+const BM25_B = 0.72;
+
+const localKey = (owner) => `ai:longterm:v1:${owner}`;
+const emptyLocal = () => ({ schema: LOCAL_MEMORY_SCHEMA, entries: [], updatedAt: 0 });
+
+function normalizeLocal(raw, maxEntries) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.entries)) return emptyLocal();
+  const entries = raw.entries
+    .filter((e) => e && typeof e.text === 'string' && e.text.trim())
+    .map((e) => ({
+      id: typeof e.id === 'string' ? e.id.slice(0, 48) : `lt_${randomUUID().slice(0, 8)}`,
+      at: Number.isFinite(Number(e.at)) ? Number(e.at) : 0,
+      kind: ['goal', 'preference', 'note'].includes(e.kind) ? e.kind : 'note',
+      text: String(e.text).slice(0, 600),
+      hash: typeof e.hash === 'string' && e.hash ? e.hash.slice(0, 64) : sha256Hex(String(e.text).toLowerCase()),
+      importance: Number.isFinite(Number(e.importance)) ? Number(e.importance) : 0.8
+    }))
+    .slice(-2 * maxEntries);
+  return { schema: LOCAL_MEMORY_SCHEMA, entries, updatedAt: Number(raw.updatedAt) || 0 };
+}
+
+async function loadLocal(owner, { fresh = false } = {}) {
+  const cfg = bridgeConfig();
+  if (!fresh && localCache.has(owner)) return localCache.get(owner);
+  let raw = null;
+  try {
+    raw = fresh ? await storeGetFresh(localKey(owner), null) : await storeGet(localKey(owner), null);
+  } catch { raw = null; }
+  const record = normalizeLocal(raw, cfg.local.maxEntries);
+  localCache.set(owner, record);
+  return record;
+}
+
+function persistLocal(owner, record) {
+  const cfg = bridgeConfig();
+  record.updatedAt = Date.now();
+  /* Fire-and-forget on purpose: the in-process record is authoritative for this
+     instance, so a slow or absent durable backend costs durability, never the
+     reply. Failures are counted and surfaced in the status route. */
+  return storeSet(localKey(owner), record, cfg.local.ttlMs)
+    .then(() => { note('local', 'persisted'); return true; })
+    .catch((err) => { note('local', 'persistFailed'); fail('local', err); return false; });
+}
+
+/** BM25 over the owner's own lines, then recency and importance. */
+function scoreLocalEntries(entries, tokens, halfLifeDays) {
+  const N = entries.length || 1;
+  const docs = entries.map((e) => {
+    const words = tokenize(e.text);
+    const tf = new Map();
+    for (const w of words) tf.set(w, (tf.get(w) || 0) + 1);
+    return { entry: e, tf, len: Math.max(1, words.length) };
+  });
+  const avgLen = docs.reduce((sum, d) => sum + d.len, 0) / N || 1;
+  const df = new Map();
+  for (const d of docs) for (const w of d.tf.keys()) df.set(w, (df.get(w) || 0) + 1);
+  const idf = (t) => {
+    const n = df.get(t) || 0;
+    return Math.log(1 + (N - n + 0.5) / (n + 0.5));
+  };
+  const now = Date.now();
+  const rows = docs.map((d) => {
+    let bm25 = 0;
+    for (const t of tokens) {
+      const f = d.tf.get(t);
+      if (!f) continue;
+      bm25 += idf(t) * ((f * (BM25_K1 + 1)) / (f + BM25_K1 * (1 - BM25_B + BM25_B * (d.len / avgLen))));
+    }
+    const ageDays = Math.max(0, (now - (d.entry.at || now)) / 86_400_000);
+    const recency = 0.5 ** (ageDays / Math.max(1, halfLifeDays));
+    const importance = KIND_WEIGHT[d.entry.kind] ?? 0.8;
+    return { entry: d.entry, bm25, recency, importance };
+  });
+  const maxBm25 = Math.max(0, ...rows.map((r) => r.bm25));
+  return rows.map((r) => ({
+    ...r,
+    score: maxBm25 > 0
+      ? 0.7 * (r.bm25 / maxBm25) + 0.2 * r.recency + 0.1 * r.importance
+      : 0.6 * r.recency + 0.4 * r.importance
+  }));
+}
+
+async function recallLocal({ owner, query, limit }) {
+  const cfg = bridgeConfig();
+  const record = await loadLocal(owner);
+  if (!record.entries.length) {
+    note('local', 'recallMiss');
+    return { ok: true, provider: 'local', items: [], total: 0 };
+  }
+  const tokens = [...new Set(tokenize(String(query || '').slice(0, 300)))];
+  const scored = scoreLocalEntries(record.entries, tokens, cfg.local.halfLifeDays);
+  /* A query with words finds only lines that share one. Asking «قیمت بیتکوین»
+     must not drag back an unrelated stored line just because it is recent. */
+  const relevant = tokens.length ? scored.filter((r) => r.bm25 > 0) : scored;
+  const items = relevant
+    .sort((a, b) => (b.score - a.score) || (b.entry.at - a.entry.at))
+    .slice(0, Math.min(10, Math.max(1, limit || cfg.recallLimit)))
+    .map((r) => ({
+      text: r.entry.text.slice(0, 280),
+      blobId: null,
+      distance: null,
+      score: Math.round(r.score * 1000) / 1000,
+      kind: r.entry.kind,
+      at: r.entry.at || null,
+      source: 'local'
+    }));
+  if (items.length) note('local', 'recalled'); else note('local', 'recallMiss');
+  return { ok: true, provider: 'local', items, total: items.length };
+}
+
+/**
+ * Admission for a local write — SYNCHRONOUS on purpose.
+ *
+ * Redaction, the hourly budget, content de-duplication and the per-owner
+ * cooldown all resolve before this function returns, so two calls in the same
+ * tick cannot both pass admission (which is exactly what an async-only version
+ * would allow: the second call would check a state the first had not updated
+ * yet). `isDuplicate` runs before the cooldown so a repeated sentence reports
+ * DUPLICATE rather than a less informative COOLDOWN.
+ */
+function admitLocalWrite({ owner, text }) {
+  const cfg = bridgeConfig();
+  const at = Date.now();
+  const copy = redactForThirdParty(text).slice(0, cfg.local.maxText);
+  if (copy.length < 8) {
+    note('local', 'redacted');
+    return { ok: false, reason: 'NOTHING_AFTER_REDACTION', stored: false, provider: 'local' };
+  }
+  if (withinWindow(state.localWindow, 3600_000, at) >= cfg.local.maxWritesPerHour) {
+    note('local', 'rateLimited');
+    return { ok: false, reason: 'RATE_LIMITED', stored: false, provider: 'local' };
+  }
+  if (isDuplicate(owner, copy)) {
+    note('local', 'duplicate');
+    return { ok: true, stored: false, reason: 'DUPLICATE', provider: 'local' };
+  }
+  if (at - (state.lastWriteAt.get(owner) || 0) < cfg.writeCooldownMs) {
+    note('local', 'cooldown');
+    return { ok: true, stored: false, reason: 'COOLDOWN', provider: 'local' };
+  }
+  state.lastWriteAt.set(owner, at);
+  state.localWindow.push(at);
+  return { ok: true, copy, at, admitted: true };
+}
+
+async function rememberLocal({ owner, copy, kind, at }) {
+  const cfg = bridgeConfig();
+  /* Merge with the durable copy before writing: two instances sharing an owner
+     would otherwise lose each other's lines (a Blob PUT is last-writer-wins).
+     The merge read only happens when a durable backend is actually configured. */
+  const record = (storeDurable() && await loadLocal(owner, { fresh: true }).catch(() => null)) || await loadLocal(owner);
+  const entry = {
+    id: `lt_${Number(at).toString(36)}_${randomUUID().slice(0, 6)}`,
+    at,
+    kind,
+    text: copy,
+    hash: sha256Hex(copy.toLowerCase()),
+    importance: KIND_WEIGHT[kind] ?? 0.8
+  };
+  record.entries = [...record.entries.filter((e) => e.hash !== entry.hash), entry];
+  if (record.entries.length > cfg.local.maxEntries) {
+    const rank = (e) => (e.importance ?? 0.8) * 0.6 + Math.min(1, (e.at || 0) / Date.now());
+    record.entries = record.entries
+      .slice()
+      .sort((a, b) => rank(b) - rank(a))
+      .slice(0, cfg.local.maxEntries)
+      .sort((a, b) => a.at - b.at);
+  }
+  localCache.set(owner, record);
+  note('local', 'stored');
+  persistLocal(owner, record).catch(() => {});
+  return { ok: true, stored: true, provider: 'local', kind, entries: record.entries.length };
+}
+
 /* -------------------------------------------------------------------------- */
 /*  PUBLIC — status                                                            */
 /* -------------------------------------------------------------------------- */
@@ -351,11 +594,25 @@ export async function relayerRequest(pathAndQuery, {
 export function bridgeStatus() {
   const cfg = bridgeConfig();
   const now = Date.now();
+  const enabled = cfg.provider !== 'off';
   return {
     schema: WALRUS_MEMORY_SCHEMA,
     configured: cfg.configured,
-    enabled: cfg.enabled,
-    mode: !cfg.configured ? 'off' : (cfg.enabled ? 'on' : 'disabled'),
+    enabled,
+    /** Which tier answers right now — never inferred, always stated. */
+    provider: cfg.provider,
+    providerRequest: cfg.providerRequest,
+    mode: cfg.provider === 'walrus' ? 'on' : (cfg.provider === 'local' ? 'local' : (cfg.killSwitch ? 'disabled' : 'off')),
+    local: {
+      enabled: cfg.provider === 'local',
+      retrieval: cfg.local.retrieval,
+      semantic: false,
+      maxEntries: cfg.local.maxEntries,
+      writesPerHour: cfg.local.maxWritesPerHour,
+      halfLifeDays: cfg.local.halfLifeDays,
+      durable: storeDurable(),
+      ownersCached: localCache.size
+    },
     relayer: cfg.enabled ? cfg.serverUrl : null,
     account: cfg.accountId ? `${cfg.accountId.slice(0, 6)}…${cfg.accountId.slice(-4)}` : null,
     namespacePrefix: cfg.namespacePrefix,
@@ -393,8 +650,10 @@ export function namespaceFor(owner) {
  */
 export async function bridgeRecall({ owner, query, limit = null, deadlineMs = null } = {}) {
   const cfg = bridgeConfig();
-  if (!cfg.configured) return { ok: false, reason: NOT_CONFIGURED, items: [] };
-  if (!cfg.enabled) return { ok: false, reason: 'DISABLED', items: [] };
+  if (cfg.provider === 'off') {
+    return { ok: false, reason: cfg.killSwitch ? 'DISABLED' : NOT_CONFIGURED, items: [], provider: 'off' };
+  }
+  if (cfg.provider === 'local') return recallLocal({ owner, query, limit });
   const q = redactForThirdParty(String(query || '').trim()).slice(0, 300);
   if (!q) return { ok: false, reason: 'EMPTY_QUERY', items: [] };
 
@@ -476,8 +735,18 @@ async function sendRemember(job) {
  */
 export function bridgeRemember({ owner, text, kind = 'note' } = {}) {
   const cfg = bridgeConfig();
-  if (!cfg.configured) return { ok: false, reason: NOT_CONFIGURED, queued: false };
-  if (!cfg.enabled) return { ok: false, reason: 'DISABLED', queued: false };
+  if (cfg.provider === 'off') {
+    return { ok: false, reason: cfg.killSwitch ? 'DISABLED' : NOT_CONFIGURED, queued: false, provider: 'off' };
+  }
+  if (cfg.provider === 'local') {
+    /* Same contract, different engine: admission is decided synchronously (so
+       de-dupe and cooldown hold even for back-to-back calls), the record lands
+       in-process immediately and persistence happens in the background. */
+    const admitted = admitLocalWrite({ owner, text });
+    if (!admitted.admitted) return admitted;
+    rememberLocal({ owner, copy: admitted.copy, kind, at: admitted.at }).catch((err) => fail('local', err));
+    return { ok: true, queued: true, provider: 'local', kind };
+  }
   const copy = redactForThirdParty(String(text || '').trim()).slice(0, cfg.maxText);
   if (copy.length < 8) { note('remember', 'redacted'); return { ok: false, reason: 'NOTHING_AFTER_REDACTION', queued: false }; }
 
@@ -536,13 +805,16 @@ export const __internals = {
   reset() {
     state.recallWindow.length = 0;
     state.rememberWindow.length = 0;
+    state.localWindow.length = 0;
+    localCache.clear();
     state.lastWriteAt.clear();
     state.seen.clear();
     state.queue.length = 0;
     state.draining = false;
     state.counters = {
       recall: { ok: 0, failed: 0, timeout: 0, rateLimited: 0, skipped: 0 },
-      remember: { queued: 0, sent: 0, failed: 0, dropped: 0, rateLimited: 0, duplicate: 0, cooldown: 0, redacted: 0 }
+      remember: { queued: 0, sent: 0, failed: 0, dropped: 0, rateLimited: 0, duplicate: 0, cooldown: 0, redacted: 0 },
+      local: { stored: 0, persisted: 0, persistFailed: 0, failed: 0, duplicate: 0, cooldown: 0, rateLimited: 0, redacted: 0, recalled: 0, recallMiss: 0 }
     };
     state.lastError = null;
     state.lastErrorAt = null;
@@ -550,5 +822,7 @@ export const __internals = {
     state.lastRememberAt = null;
     keyCache = null;
   },
+  loadLocal,
+  localCache,
   state
 };

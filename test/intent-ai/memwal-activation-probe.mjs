@@ -65,11 +65,13 @@ t('keygen --no-write writes nothing', !existsSync(`${ROOT}.env.local`));
 /* -------------------------------------------------------------------------- */
 const off = run(['status']);
 t('status exits 0 with nothing configured', off.code === 0);
-t('status says the feature is OFF', /OFF/.test(off.out));
-t('status names the first missing step', /keygen/.test(off.out));
+t('status reports the free local tier as the active provider', /local \(free, lexical/.test(off.out));
+t('status says long-term memory is already on', /ALREADY ON using the free local tier/.test(off.out));
+t('status names the upgrade path to Walrus', /memwal-activate\.mjs keygen/.test(off.out));
 
 const halfKey = run(['status'], { env: { MEMWAL_PRIVATE_KEY: 'ab'.repeat(32) } });
 t('status detects a key without an account', halfKey.code === 0 && /MEMWAL_ACCOUNT_ID is missing/.test(halfKey.out));
+t('status still shows the free tier serving in the meantime', /local \(free, lexical/.test(halfKey.out));
 t('status prints the public key to register',
   (halfKey.out.match(/\b[0-9a-f]{64}\b/g) || []).length >= 1);
 

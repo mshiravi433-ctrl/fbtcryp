@@ -132,9 +132,14 @@ async function status() {
   const { bridgeStatus } = await import('../server/walrusMemoryBridge.js');
   const s = bridgeStatus();
   say('');
-  say('  WALRUS MEMORY — status of this process');
+  say('  LONG-TERM MEMORY — status of this process');
   say('  ────────────────────────────────────────────────────────────────');
-  say(`  configured : ${s.configured ? ok('yes') : warn('no')}   mode: ${s.mode}`);
+  say(`  provider   : ${s.provider === 'walrus' ? ok('walrus (semantic, on Walrus)') : (s.provider === 'local' ? ok('local (free, lexical — this app\'s own store)') : warn('off'))}`);
+  say(`  configured : ${s.configured ? ok('yes (walrus credentials present)') : warn('no walrus credentials')}   mode: ${s.mode}`);
+  if (s.provider === 'local') {
+    say(`  local tier : retrieval=${s.local?.retrieval} · semantic=${s.local?.semantic} · maxEntries=${s.local?.maxEntries}`);
+    say(`  store      : ${s.local?.durable ? ok('durable (Blob/Upstash configured)') : warn('in-process only — set BLOB_READ_WRITE_TOKEN or UPSTASH_* to survive cold starts')}`);
+  }
   say(`  relayer    : ${s.relayer || dim('(not used while off)')}`);
   say(`  account    : ${s.account || dim('(none)')}`);
   say(`  namespace  : ${s.namespacePrefix}-<hash of owner>`);
@@ -147,11 +152,19 @@ async function status() {
     say('');
     return s;
   }
+  if (s.provider === 'local') {
+    say('  Long-term memory is ALREADY ON using the free local tier: no account, no');
+    say('  credentials, nothing sent anywhere. Adding MEMWAL_ACCOUNT_ID +');
+    say('  MEMWAL_PRIVATE_KEY upgrades the SAME tier to semantic recall on Walrus.');
+    say('');
+  }
   if (!s.configured) {
-    say(warn('  The feature is OFF. Nothing is sent anywhere.'));
     const hasKey = Boolean(process.env.MEMWAL_PRIVATE_KEY || process.env.MEMWAL_KEY);
     const hasAccount = Boolean(process.env.MEMWAL_ACCOUNT_ID);
-    if (!hasKey && !hasAccount) say('  Missing both halves. Start with:  node scripts/memwal-activate.mjs keygen');
+    if (!hasKey && !hasAccount) {
+      say('  To upgrade to Walrus (semantic) recall:  node scripts/memwal-activate.mjs keygen');
+      say('  Nothing is required for the free tier — it is running now.');
+    }
     else if (!hasKey) say('  Missing MEMWAL_PRIVATE_KEY. Run:  node scripts/memwal-activate.mjs keygen');
     else if (!hasAccount) {
       say('  The delegate key exists but MEMWAL_ACCOUNT_ID is missing.');
