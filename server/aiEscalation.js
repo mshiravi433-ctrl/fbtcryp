@@ -376,6 +376,16 @@ function safeContext(context = {}) {
   if (Number.isFinite(Number(context.portfolio?.totalValueUsd))) {
     rows.push(`PORTFOLIO(aggregate only): $${Number(context.portfolio.totalValueUsd).toFixed(0)}`);
   }
+  /* Bounded, labelled background — the same rule `buildSafeContextBlock` uses.
+     A recalled preference is context for the answer, never a fact about the
+     market and never authorization to do anything. */
+  const summary = typeof context.conversationSummary === 'string' ? context.conversationSummary.trim().slice(0, 400) : '';
+  if (summary) rows.push(`CONVERSATION SO FAR(user's earlier turns, background only): ${summary}`);
+  const longTerm = Array.isArray(context.longTermMemory?.items) ? context.longTermMemory.items : [];
+  for (const m of longTerm.slice(0, 4)) {
+    const text = String(m?.text || '').trim();
+    if (text) rows.push(`USER LONG-TERM MEMORY(background only): ${text.slice(0, 180)}`);
+  }
   return rows.length ? `DATA AVAILABLE TO FBT:\n${rows.join('\n')}` : 'NO DATA AVAILABLE IN THIS TURN — if you cannot answer from that, reply UNANSWERABLE.';
 }
 

@@ -43,6 +43,23 @@ recovery phrase.
   data quality; nothing is ever labelled guaranteed.
 - **History** — conversations, operations and active monitoring in one drawer,
   and an operation can be continued in chat («متوقفش کن», «شرطش را تغییر بده»).
+- **Memory that survives the session** — the per-account summary is now read
+  back (a `summary`/`conversationSummary` name mismatch had made every session
+  start from zero) and both the summary and a bounded long-term memory block
+  reach the model. Long-term memory ships in **two tiers behind one interface**:
+  a **free local tier that is ON by default** (no account, no key, no outbound
+  request — the app's own store plus a BM25/recency/importance ranking over the
+  repo's existing Persian-aware tokenizer) and an **optional on-chain Walrus
+  Memory (MemWal)** tier that adds semantic search and cross-device durability.
+  `MEMWAL_PROVIDER=auto` (the default) uses Walrus when
+  `MEMWAL_ACCOUNT_ID`+`MEMWAL_PRIVATE_KEY` are present and the local tier
+  otherwise; everything is redacted before it is stored, never used for
+  balances, and `GET /api/v1/ai/memory/long-term` reports which provider is
+  live. See
+  [docs/INTENT-AI-EFFICIENCY-UPGRADE-FA.md](docs/INTENT-AI-EFFICIENCY-UPGRADE-FA.md)
+  and [docs/WALRUS-MEMORY-ACTIVATION-FA.md](docs/WALRUS-MEMORY-ACTIVATION-FA.md)
+  for the Walrus upgrade path (`npm run memwal:keygen` → dashboard →
+  `npm run memwal:preflight`).
 
 See [docs/INTENT-OS-RESTORATION-AUDIT.md](docs/INTENT-OS-RESTORATION-AUDIT.md)
 for the full audit (FOUND / REUSED / BROKEN / MISSING / DISCONNECTED /

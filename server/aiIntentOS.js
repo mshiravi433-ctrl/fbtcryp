@@ -81,6 +81,16 @@ import {
   monitorEngineStatus
 } from './intentMonitoring.js';
 import { storeGet, storeSet, storeDurable, EPHEMERAL_TTL_MS } from './store.js';
+/* Long-term semantic memory (Walrus Memory / MemWal). OFF unless the operator
+   sets MEMWAL_ACCOUNT_ID + MEMWAL_PRIVATE_KEY, and every call is fail-open: a
+   missing relayer degrades this turn to exactly the behaviour it had before. */
+import {
+  bridgeRecall,
+  bridgeRemember,
+  bridgeStatus,
+  durableMemoryLine,
+  WALRUS_MEMORY_SCHEMA
+} from './walrusMemoryBridge.js';
 /* Central Intelligence OS: share one world view between the V1 chat and the
    central brain (wallet/portfolio truth + page awareness, §5/§7). */
 import { ingestClientData as centralIngestClientData, setPage as centralSetPage } from './central/stateStore.js';
@@ -401,7 +411,7 @@ function sanitizeWallet(value) {
   return { connected, canSign, evmAddresses: evm, solanaAddresses: sol, dataStatus: connected ? 'client' : 'unavailable' };
 }
 
-async function buildAIContext(req, body = {}) {
+async function buildAIContext(req, body = {}, opts = {}) {
   const userId = ownerFor(req);
   const b = body && typeof body === 'object' ? body : {};
   /*
@@ -443,12 +453,38 @@ async function buildAIContext(req, body = {}) {
       return { dataStatus: 'unavailable', at: null, items: [] };
     }
   };
-  const [market, yields, solanaAssets, goals, news] = await Promise.all([
+  /*
+   * LONG-TERM MEMORY (opt-in). Asked for only when the caller says this is a
+   * chat turn (`opts.longTermQuery`), never on a `/context` poll: a recall
+   * spends a rate-limit point whether or not a human is waiting for it. It
+   * rides the SAME racy deadline as every other read, so on a slow relayer it
+   * costs no extra wall-clock — the turn simply has no long-term memory.
+   */
+  const longTermMemoryContext = async () => {
+    const query = typeof opts.longTermQuery === 'string' ? opts.longTermQuery.trim().slice(0, 300) : '';
+    if (!query) return null;
+    const value = await ctxDeadline(bridgeRecall({ owner: userId, query }), 2500)
+      .then((v) => v || { ok: false, reason: 'DEADLINE', items: [] })
+      .catch(() => ({ ok: false, reason: 'BRIDGE_ERROR', items: [] }));
+    return {
+      schema: WALRUS_MEMORY_SCHEMA,
+      ok: value.ok === true,
+      reason: value.ok === true ? null : (value.reason || 'UNAVAILABLE'),
+      /* Which tier answered: `walrus` (semantic, on Walrus) or `local` (lexical,
+         this app's own store). The two differ in quality and cost, and a caller
+         that cannot tell them apart cannot report the truth either. */
+      provider: value.provider || bridgeStatus().provider,
+      items: (Array.isArray(value.items) ? value.items : []).slice(0, 5),
+      at: nowMs()
+    };
+  };
+  const [market, yields, solanaAssets, goals, news, longTermMemory] = await Promise.all([
     ctxDeadline(marketContext()).then((v) => v || { dataStatus: 'unavailable', change24hPct: null, priceMap: null }),
     ctxDeadline(yieldContext()).then((v) => v || null),
     ctxDeadline(solanaAssetsContext()).then((v) => v || null),
     ctxDeadline(readGoals(userId)).then((v) => v || { ok: true, dataStatus: 'unavailable', goals: [] }),
-    ctxDeadline(newsContext(), 4000).then((v) => v || { dataStatus: 'unavailable', at: null, items: [] })
+    ctxDeadline(newsContext(), 4000).then((v) => v || { dataStatus: 'unavailable', at: null, items: [] }),
+    opts.longTermQuery ? longTermMemoryContext() : Promise.resolve(null)
   ]);
 
   const wallet = sanitizeWallet(client.wallet || b.wallet);
@@ -469,13 +505,17 @@ async function buildAIContext(req, body = {}) {
   const recentActivity = sanitizeClientArray(client.recentActivity || client.activity || b.recentActivity || b.activity || [], (a) => ({
     type: safe(a?.type || a?.kind, 16), symbol: token(a?.symbol), amount: Number(a?.amount), status: safe(a?.status, 16), at: Number(a?.at) || null
   }));
-  const memoryKey = `ai:memory:v1:${userId}`;
-  const memory = await storeGet(memoryKey, null);
-  const memoryRows = memory && typeof memory === 'object' ? memory : {};
+  /* Read through the same normalizer the writer uses, so a row written before
+     the `summary`/`conversationSummary` fix (only `summary`) still contributes
+     its text here instead of reading as empty forever. */
+  const memoryRows = normalizeMemoryRow(await storeGet(MEMORY_KEY(userId), null));
   const summary = safe(memoryRows.conversationSummary, 600) || '';
 
+  /* (A `wallet.evmAddresses.map(() => null).filter(Boolean)` spread used to sit
+     first here. It mapped every address to `null` and then filtered nulls out,
+     so it contributed nothing but the impression of per-address logic. Removed
+     as a no-op; the chain list below is unchanged.) */
   const chainList = [...new Set([
-    ...wallet.evmAddresses.map(() => null).filter(Boolean),
     ...(wallet.evmAddresses.length ? [1, 10, 56, 137, 146, 8453, 42161, 43114, 59144] : []),
     ...(wallet.solanaAddresses.length ? [501] : [])
   ])];
@@ -526,6 +566,10 @@ async function buildAIContext(req, body = {}) {
     yields,
     solanaAssets,
     news,
+    /* Long-term semantic memory for THIS turn. `null` means the feature was not
+       asked for; an object with `ok:false` means it was asked for and did not
+       answer — the two are different facts and the UI must not conflate them. */
+    longTermMemory,
     now: nowMs(),
     dataStatus: {
       wallet: wallet.connected ? 'live' : 'unavailable',
@@ -533,6 +577,7 @@ async function buildAIContext(req, body = {}) {
       market: market.dataStatus,
       yield: Array.isArray(yields) ? 'live' : 'unavailable',
       news: news?.dataStatus || 'unavailable',
+      longTerm: longTermMemory ? (longTermMemory.ok ? 'live' : longTermMemory.reason) : (bridgeStatus().enabled ? 'idle' : 'disabled'),
       durable: storeDurable() ? 'live' : 'memory'
     }
   };
@@ -540,18 +585,61 @@ async function buildAIContext(req, body = {}) {
 
 /* ------------------------------ memory helpers ---------------------------- */
 
-async function readMemory(owner) {
-  const key = `ai:memory:v1:${owner}`;
-  const saved = await storeGet(key, null);
-  return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {
+const MEMORY_KEY = (owner) => `ai:memory:v1:${owner}`;
+
+/**
+ * One memory row, two field names — on purpose.
+ *
+ * The writer has always stored `summary`; the readers (this file's context
+ * builder and the app's startup memory read) have always asked for
+ * `conversationSummary`. The result was that the summary was written on every
+ * turn and read back empty on every turn: «تداوم بین نشستها» never happened.
+ * Rather than pick a winner and break whichever side is deployed, the row is
+ * normalized on read so BOTH names are always populated, and future writes
+ * persist both. Nothing changes shape for a caller.
+ */
+function normalizeMemoryRow(raw) {
+  const base = {
     conversationId: null,
     summary: '',
+    conversationSummary: '',
     goals: [],
     preferences: [],
     activeTasks: [],
     recentIntents: []
   };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
+  const text = typeof raw.summary === 'string' && raw.summary.trim()
+    ? raw.summary
+    : (typeof raw.conversationSummary === 'string' ? raw.conversationSummary : '');
+  return { ...base, ...raw, summary: text, conversationSummary: text };
 }
+
+async function readMemory(owner) {
+  const saved = await storeGet(MEMORY_KEY(owner), null);
+  return normalizeMemoryRow(saved);
+}
+
+/* Honest diagnostics for the durable half of the memory write. */
+const memoryPersist = { lastOkAt: null, lastError: null, lastErrorAt: null, lastCappedWait: false };
+
+/**
+ * Compute the next memory row and persist it WITHOUT holding the reply hostage.
+ *
+ * `storeSet` installs the value in the process cache synchronously and only
+ * then awaits the durable backend, so a capped wait is safe: this instance
+ * reads its own write immediately, and the durable half continues in the
+ * background. Two wins over the previous `await storeSet(...)`:
+ *   · the chat turn no longer pays a full Blob round-trip on every message
+ *   · a failing durable backend degrades to a logged `lastError` instead of
+ *     throwing out of `/chat` and turning a good reply into a 500
+ *
+ * A cap of `AI_MEMORY_WRITE_WAIT_MS` (default 700ms, 0 = never wait) keeps the
+ * best-effort durable attempt inside the turn's budget.
+ */
+const MEMORY_WRITE_WAIT_MS = Number.isFinite(Number(process.env.AI_MEMORY_WRITE_WAIT_MS))
+  ? Math.max(0, Number(process.env.AI_MEMORY_WRITE_WAIT_MS))
+  : 700;
 
 async function appendMemory(owner, payload = {}) {
   const mem = await readMemory(owner);
@@ -567,12 +655,32 @@ async function appendMemory(owner, payload = {}) {
   for (const field of ['goals', 'preferences', 'activeTasks', 'recentIntents']) {
     if (Array.isArray(next[field])) next[field] = next[field].slice(-MAX_MEMORY);
   }
+  next.conversationSummary = next.summary;
   /* An assistant memory is a convenience, not a record: it is per-account and
      grows with every conversation, so it carries the short TTL rather than
      occupying metered storage forever. */
-  await storeSet(`ai:memory:v1:${owner}`, next, EPHEMERAL_TTL_MS);
+  const write = storeSet(MEMORY_KEY(owner), next, EPHEMERAL_TTL_MS)
+    .then(() => { memoryPersist.lastOkAt = nowMs(); memoryPersist.lastError = null; return true; })
+    .catch((err) => {
+      memoryPersist.lastError = String(err?.message || err).slice(0, 160);
+      memoryPersist.lastErrorAt = nowMs();
+      logInternal('memory-persist-failed', { error: memoryPersist.lastError });
+      return false;
+    });
+  if (MEMORY_WRITE_WAIT_MS > 0) {
+    const settled = await Promise.race([
+      write,
+      new Promise((resolve) => { const t = setTimeout(() => resolve('capped'), MEMORY_WRITE_WAIT_MS); t.unref?.(); })
+    ]);
+    memoryPersist.lastCappedWait = settled === 'capped';
+  }
   return next;
 }
+
+/* Named export for probes only — the router is still the default export. The
+   `summary`/`conversationSummary` mix-up survived a long time precisely because
+   nothing could assert on it; now something can. */
+export const __memoryInternals = { normalizeMemoryRow, readMemory, appendMemory, memoryPersist };
 
 /* ---------------------------- dynamic suggestions -------------------------- */
 
@@ -1542,10 +1650,29 @@ export async function conditionalAllocationReply({ message, context, locale = 'f
   };
 }
 
+/*
+ * A turn's durable fact is written to long-term memory exactly once, from
+ * whichever branch answers it. `durableMemoryLine` is deliberately strict (see
+ * the bridge): an explicit «یادت باشه…», a goal turn, or a stated preference.
+ * Chit-chat never spends a write — the account's remote quota is shared.
+ */
+function rememberDurableTurn(req, { message, goalDetected = false, intentType = null } = {}) {
+  try {
+    const durable = durableMemoryLine({ message, goalDetected, intentType });
+    if (!durable) return { written: false, reason: 'NOT_DURABLE' };
+    return bridgeRemember({ owner: ownerFor(req), text: durable.text, kind: durable.kind });
+  } catch (err) {
+    logInternal('long-term-memory-skip', { error: String(err?.message || err).slice(0, 120) });
+    return { written: false, reason: 'BRIDGE_ERROR' };
+  }
+}
+
 router.post('/chat', async (req, res) => {
   const message = String(req.body?.message || '').slice(0, MAX_MESSAGE);
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
-  const context = await buildAIContext(req, req.body || {});
+  /* Only this route asks for a semantic recall — it is the only one where a
+     human is waiting for an answer that could use it. */
+  const context = await buildAIContext(req, req.body || {}, { longTermQuery: message });
   const locale = safe(req.body?.locale, 5) || null;
   const conversationId = safe(req.body?.conversationId, 64) || null;
   const prior = req.body?.prior && AI_INTENTS.includes(String(req.body.prior.intent || '').toUpperCase())
@@ -1633,6 +1760,11 @@ router.post('/chat', async (req, res) => {
       preferences: [],
       activeTasks: [],
       goals: rich.goalDetected ? ['financial-goal'] : []
+    });
+    rememberDurableTurn(req, {
+      message,
+      goalDetected: rich.goalDetected === true,
+      intentType: rich.intent?.type || u4.type || null
     });
     return res.json({
       ok: true,
@@ -1927,6 +2059,13 @@ router.post('/chat', async (req, res) => {
           market: context.market,
           portfolio: context.portfolio,
           locale: locale || 'fa',
+          /* Two things the model was previously told nothing about: what the
+             user already said in this session (the summary was written every
+             turn but never read back) and what they said in earlier sessions
+             (long-term memory). Both are bounded and rendered as BACKGROUND in
+             `buildSafeContextBlock` — never as market data, never as balances. */
+          conversationSummary: context.conversationSummary || '',
+          longTermMemory: context.longTermMemory,
           /* Phase 213 — when the browser says this turn is an answer to an open
              question (or arrives while one is still open), the model is told so
              as a directive. Without it the turn was re-derived from scratch and
@@ -2187,6 +2326,7 @@ router.post('/chat', async (req, res) => {
     activeTasks: (out.plan.actions || []).map((a) => `${a.type}:${a.asset || ''}`),
     goals: goalDetected ? ['financial-goal'] : []
   });
+  rememberDurableTurn(req, { message, goalDetected, intentType: human.intent?.type || intent });
 
   return res.json({
     ok: true,
@@ -2194,7 +2334,15 @@ router.post('/chat', async (req, res) => {
     reply,
     context: {
       ...context,
-      conversationSummary: nextMemory.summary || context.conversationSummary
+      conversationSummary: nextMemory.summary || context.conversationSummary,
+      /* What long-term memory did for THIS turn — honest either way, so the
+         client can show «حافظهٔ بلندمدت» instead of guessing. */
+      longTermMemory: {
+        used: Array.isArray(context.longTermMemory?.items) ? context.longTermMemory.items.length : 0,
+        ok: context.longTermMemory?.ok === true,
+        reason: context.longTermMemory?.reason || null,
+        provider: context.longTermMemory?.provider || bridgeStatus().provider
+      }
     },
     at: nowMs()
   });
@@ -2791,7 +2939,43 @@ router.get('/monitors/status', async (_req, res) => {
 
 router.get('/memory', async (req, res) => {
   const mem = await readMemory(ownerFor(req));
-  return res.json({ ok: true, schema: 'fbt.ai-memory.v1', memory: mem, durable: storeDurable(), secrets: false });
+  return res.json({
+    ok: true,
+    schema: 'fbt.ai-memory.v1',
+    memory: mem,
+    durable: storeDurable(),
+    /* How the durable half of the last write actually went. Without this, a
+       failing Blob backend looked identical to a working one from outside. */
+    persistence: {
+      lastOkAt: memoryPersist.lastOkAt,
+      lastError: memoryPersist.lastError,
+      lastErrorAt: memoryPersist.lastErrorAt,
+      cappedWait: memoryPersist.lastCappedWait,
+      waitMs: MEMORY_WRITE_WAIT_MS
+    },
+    longTerm: bridgeStatus(),
+    secrets: false
+  });
+});
+
+/**
+ * Long-term memory (Walrus Memory / MemWal) — read-only diagnostics, plus an
+ * explicit recall probe. The owner always comes from the signed request, so
+ * these routes can only ever read the caller's own namespace; nothing here can
+ * write, and nothing here can be pointed at somebody else's memory.
+ */
+router.get('/memory/long-term', (req, res) => res.json({
+  ok: true,
+  schema: WALRUS_MEMORY_SCHEMA,
+  status: bridgeStatus(),
+  at: nowMs()
+}));
+
+router.post('/memory/long-term/recall', async (req, res) => {
+  const query = safe(req.body?.query || '', 300);
+  if (!query) return res.status(400).json({ ok: false, error: 'EMPTY_QUERY' });
+  const out = await bridgeRecall({ owner: ownerFor(req), query, limit: req.body?.limit });
+  return res.json({ ok: out.ok === true, schema: `${WALRUS_MEMORY_SCHEMA}.recall`, ...out, at: nowMs() });
 });
 
 router.post('/memory', async (req, res) => {

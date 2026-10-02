@@ -59,6 +59,10 @@
     "test:buy-sell-wizard": "vite build --config test/vite.buysellwizard.mjs && node test/run-one-probe.mjs ./.out/buysellwizard/buy-sell-wizard-probe.js",
     "test:shop-revenue": "node test/shop-revenue-probe.mjs && vitest run test/shop-howto-language.test.jsx",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
+    "test:memory-bridge": "node test/intent-ai/walrus-memory-bridge-probe.mjs",
+    "test:memory-continuity": "node test/intent-ai/intent-memory-continuity-probe.mjs",
+    "test:memory-wiring": "node test/intent-ai/walrus-memory-wiring-probe.mjs",
+    "test:memory": "npm run test:memory-bridge && npm run test:memory-continuity && npm run test:memory-wiring && npm run test:memory-activation && npm run test:memory-account && npm run test:memory-local",
     "test:understanding": "node test/intent-ai/intent-understanding-probe.mjs",
     "test:upgrade4": "node test/intent-ai/phase204-upgrade4-intent-intelligence-probe.mjs",
     "test:upgrade5": "node test/intent-ai/upgrade5-collaborative-intelligence-probe.mjs",
@@ -315,7 +319,15 @@
     "mcp": "node mcp/src/cli.mjs",
     "compile:intent-protocol": "node scripts/compile-intent-protocol.mjs",
     "intent-os:activate": "node scripts/intent-os-activate.mjs",
-    "test:connectivity": "vitest run test/connectivity-alert.test.jsx"
+    "test:connectivity": "vitest run test/connectivity-alert.test.jsx",
+    "memwal:keygen": "node scripts/memwal-activate.mjs keygen",
+    "memwal:status": "node scripts/memwal-activate.mjs status",
+    "memwal:preflight": "node scripts/memwal-activate.mjs preflight",
+    "memwal:preflight:self-test": "node scripts/memwal-activate.mjs preflight --self-test",
+    "test:memory-activation": "node test/intent-ai/memwal-activation-probe.mjs",
+    "memwal:create-account": "node scripts/memwal-create-account.mjs",
+    "test:memory-account": "node test/intent-ai/memwal-account-tool-probe.mjs",
+    "test:memory-local": "node test/intent-ai/intent-longterm-local-probe.mjs"
   },
   "dependencies": {
     "@capacitor/browser": "^6.0.6",

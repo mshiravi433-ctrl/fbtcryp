@@ -5297,7 +5297,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     void (async () => {
       try {
         const mem = await aiMemory();
-        if (mem?.ok && mem.memory?.conversationSummary) setMemorySummary(mem.memory.conversationSummary);
+        /* The server has written `summary` on every turn and this read has asked
+           for `conversationSummary` since the beginning, so the startup restore
+           silently did nothing. Both names are accepted now (the server also
+           returns both), which is what makes continuity across sessions real. */
+        const remembered = mem?.memory?.conversationSummary || mem?.memory?.summary || '';
+        if (mem?.ok && remembered) setMemorySummary(remembered);
         const list = await aiAutomations();
         if (list?.ok) setAutomations(list.automations || []);
       } catch {}
