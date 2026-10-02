@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ThinkingOrb } from './ThinkingOrb.jsx';
 import { apiBase } from '../../lib/apiBase';
+import { getCapitalFlows } from '../../lib/capitalFlows';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
 const STYLES = `
@@ -243,7 +244,19 @@ const AIG_SOURCE = {
   'learning:calibration': { fa: 'یادگیری', en: 'learning' },
   'macroData': { fa: 'داده کلان', en: 'macro data' }, 'macroData:stooq': { fa: 'داده کلان (stooq)', en: 'macro data (stooq)' },
   'macroData:yahoo': { fa: 'داده کلان (yahoo)', en: 'macro data (yahoo)' }, 'macroData:fred': { fa: 'داده کلان (FRED)', en: 'macro data (FRED)' },
-  'stooq': { fa: 'داده کلان', en: 'macro data' }, 'yahoo': { fa: 'داده کلان', en: 'macro data' }, 'fred': { fa: 'داده کلان', en: 'macro data' }
+  /* The macro desk reads more than one upstream now, and a topped-up
+     instrument keeps the desk that produced it — so the mixed source and each
+     individual one both need a Persian name. */
+  'macroData:fredcsv': { fa: 'داده کلان (FRED بدون کلید)', en: 'macro data (keyless FRED)' },
+  'macroData:av': { fa: 'داده کلان (آلفا ونتیج)', en: 'macro data (Alpha Vantage)' },
+  'macroData:stooq+topup': { fa: 'داده کلان (stooq + تکمیل)', en: 'macro data (stooq + top-up)' },
+  'macroData:yahoo+topup': { fa: 'داده کلان (yahoo + تکمیل)', en: 'macro data (yahoo + top-up)' },
+  'macroData:fredcsv+topup': { fa: 'داده کلان (FRED + تکمیل)', en: 'macro data (FRED + top-up)' },
+  'macroData:av+topup': { fa: 'داده کلان (آلفا ونتیج + تکمیل)', en: 'macro data (Alpha Vantage + top-up)' },
+  'stooq': { fa: 'داده کلان', en: 'macro data' }, 'yahoo': { fa: 'داده کلان', en: 'macro data' }, 'fred': { fa: 'داده کلان', en: 'macro data' },
+  'fredcsv': { fa: 'FRED بدون کلید', en: 'keyless FRED' }, 'av': { fa: 'آلفا ونتیج', en: 'Alpha Vantage' },
+  'coingecko': { fa: 'کوین‌گکو', en: 'CoinGecko' }, 'defillama': { fa: 'دیفای‌لاما', en: 'DefiLlama' },
+  'sec-edgar': { fa: 'گزارش‌های SEC', en: 'SEC filings' }
 };
 const AIG_REGIME = {
   RISK_ON: { fa: 'ریسک‌پذیر', en: 'risk on' }, RISK_ON_LEANING: { fa: 'متمایل به ریسک‌پذیری', en: 'risk on leaning' },
@@ -464,8 +477,15 @@ const AIG_MACRO_NAME = {
   XAU: { fa: 'طلا (دلار/اونس)', en: 'Gold (USD/oz)' },
   WTI: { fa: 'نفت خام', en: 'Crude (WTI)' },
   SPX: { fa: 'قرارداد آتی ای‌مینی اس‌اندپی ۵۰۰', en: 'S&P 500 E-mini futures' },
+  /* The two index ETFs exist because stooq/yahoo can both be dark on an
+     Iranian network: an ETF price is shown AS an ETF price (its own symbol and
+     unit), never relabelled as the index it tracks. */
+  SPY: { fa: 'صندوق قابل معامله اس‌اندپی ۵۰۰', en: 'S&P 500 ETF (SPDR)' },
+  QQQ: { fa: 'صندوق قابل معامله نزدک ۱۰۰', en: 'Nasdaq-100 ETF (Invesco)' },
   NDX: { fa: 'شاخص نزدک ۱۰۰', en: 'Nasdaq 100' },
   US10Y: { fa: 'بازده ۱۰ سالهٔ آمریکا', en: 'US 10Y yield' },
+  US2Y: { fa: 'بازده ۲ سالهٔ آمریکا', en: 'US 2Y yield' },
+  US30Y: { fa: 'بازده ۳۰ سالهٔ آمریکا', en: 'US 30Y yield' },
   US2S10S: { fa: 'اختلاف ۲ و ۱۰ ساله', en: '2y vs 10y spread' }
 };
 const AIG_CHAIN = {
@@ -829,6 +849,7 @@ function LeaderCard({ icon, title, row, empty, tone = 'var(--rgb-2)' }) {
             <AigDir dir={row.dir} />
             <span>{row.symbol}</span>
             {row.name ? <span className="aig-insight-name">{row.name}</span> : null}
+            {row.tag ? <span className="aig-fallback-tag" title={row.tagTitle || row.tag}>{row.tag}</span> : null}
           </div>
           <div className={`aig-insight-value ${row.dir === 'up' ? 'up' : row.dir === 'down' ? 'down' : 'flat'}`}>{row.value}</div>
           <div className="aig-insight-meta">{row.meta}</div>
@@ -840,7 +861,7 @@ function LeaderCard({ icon, title, row, empty, tone = 'var(--rgb-2)' }) {
   );
 }
 
-function EconomyLeaders({ cross, domains, L, isPersian }) {
+function EconomyLeaders({ cross, domains, flows, L, isPersian }) {
   const indicators = (Array.isArray(cross?.macro?.indicators) ? cross.macro.indicators : [])
     .filter((q) => q && Number.isFinite(Number(q.change1dPct)));
   const sorted = indicators.slice().sort((a, b) => Number(b.change1dPct) - Number(a.change1dPct));
@@ -853,7 +874,8 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
     r.signal ? (mapLabel(AIG_FLOW, String(r.signal).toLowerCase(), isPersian) || r.signal) : null
   ].filter(Boolean).join(' · ');
 
-  /* the equity index the macro desk reads (SPX futures), else the equity class */
+  /* The equity index the macro desk reads — the S&P future, or one of the two
+     index ETFs it now falls back to — else the tokenised-equity class. */
   const equity = indicators.find((q) => q.kind === 'equity') || null;
   const stocksClass = cross?.classes?.stocks;
   const stockTop = (stocksClass?.top || [])[0] || null;
@@ -868,6 +890,71 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
   const loOut = outflows.slice().sort((a, b) => a.amount - b.amount)[0] || null;
   const unread = L('در این دور خوانده نشد.', 'Not read in this pass.');
 
+  /* ── WHAT THE SAME PASS ALREADY READ ──────────────────────────────────────
+     «در این دور خوانده نشد.» used to be the ONLY answer these six cards had
+     whenever the macro desk was dark — even though the very same pass had
+     usually read the crypto class movers, and even though three free public
+     sources (CoinGecko capital deltas, DefiLlama stablecoin supply, SEC
+     reported profit) are one request away on /api/insights/flows.
+
+     A card now falls back to a real reading from THIS pass and says so with
+     the same tag the movement rows already use. It still says «خوانده نشد»
+     when nothing answered, and it never borrows a number from another card's
+     subject: a chain's stablecoin burn is shown as a chain, not as a token. */
+  const cryptoTop = (cross?.classes?.crypto?.top || [])[0] || null;
+  const cryptoBottom = (cross?.classes?.crypto?.bottom || [])[0] || null;
+  const tokenFlows = flows?.tokenFlows?.status === 'OK' ? flows.tokenFlows : null;
+  const chainFlows = flows?.chainFlows?.status === 'OK' ? flows.chainFlows : null;
+  const srcTag = L('منبع جایگزین', 'fallback source');
+
+  /* The curve from two real reads when the spread series itself was not read:
+     10y minus 2y, both from the same desk pass, both sources named. This is
+     arithmetic on observations, not an estimate of anything. */
+  const ten = indicators.find((q) => q.symbol === 'US10Y');
+  const two = indicators.find((q) => q.symbol === 'US2Y');
+  const derivedSpread = ten && two && Number.isFinite(Number(ten.priceUsd)) && Number.isFinite(Number(two.priceUsd))
+    ? Math.round((Number(ten.priceUsd) - Number(two.priceUsd)) * 100) / 100
+    : null;
+
+  /* Chain-level stablecoin flows: supply is burned when money leaves, so a
+     chain's 24h delta IS an observed outflow rather than a price move dressed
+     up as one. */
+  const chainOuts = Array.isArray(chainFlows?.chainOutflows) ? chainFlows.chainOutflows : [];
+  const hiChainOut = chainFlows?.topOutflowChain || chainOuts[0] || null;
+  const loChainOut = chainOuts.length > 1 ? chainOuts[chainOuts.length - 1] : null;
+
+  const gainerRow = best ? {
+    symbol: best.symbol, name: nameOf(best), dir: dirOfPct(best.change1dPct),
+    value: pct(best.change1dPct),
+    meta: `${L('۷ روز', '7d')}: ${best.change7dPct != null ? pct(best.change7dPct) : '—'}${best.source ? ` · ${sourceLabel(best.source, isPersian)}` : ''}`
+  } : cryptoTop && Number(cryptoTop.changePct) > 0 ? {
+    symbol: cryptoTop.symbol, name: isPersian ? '' : (cryptoTop.name || ''), dir: dirOfPct(cryptoTop.changePct),
+    value: pct(cryptoTop.changePct), tag: srcTag,
+    tagTitle: L('میز کلان خوانده نشد؛ این عدد از کلاس رمزارز همین دور است', 'The macro desk was unread; this number is from the same pass\u2019s crypto class'),
+    meta: L('از کلاس رمزارز همین دور', 'from this pass\u2019s crypto class')
+  } : tokenFlows?.topInflow ? {
+    symbol: tokenFlows.topInflow.symbol, name: isPersian ? '' : (tokenFlows.topInflow.name || ''),
+    dir: dirOfPct(tokenFlows.topInflow.mcapChangePct), value: pct(tokenFlows.topInflow.mcapChangePct), tag: srcTag,
+    tagTitle: L('تغییر ارزش بازار ۲۴ ساعته از کوین‌گکو', 'CoinGecko 24h market-cap change'),
+    meta: `${L('جذب سرمایه', 'capital in')}: $${isPersian ? faNum(fmtK(tokenFlows.topInflow.mcapChangeUsd)) : fmtK(tokenFlows.topInflow.mcapChangeUsd)}`
+  } : null;
+
+  const loserRow = worst && worst.symbol !== best?.symbol ? {
+    symbol: worst.symbol, name: nameOf(worst), dir: dirOfPct(worst.change1dPct),
+    value: pct(worst.change1dPct),
+    meta: `${L('۷ روز', '7d')}: ${worst.change7dPct != null ? pct(worst.change7dPct) : '—'}${worst.source ? ` · ${sourceLabel(worst.source, isPersian)}` : ''}`
+  } : cryptoBottom && Number(cryptoBottom.changePct) < 0 && cryptoBottom.symbol !== cryptoTop?.symbol ? {
+    symbol: cryptoBottom.symbol, name: isPersian ? '' : (cryptoBottom.name || ''), dir: dirOfPct(cryptoBottom.changePct),
+    value: pct(cryptoBottom.changePct), tag: srcTag,
+    tagTitle: L('میز کلان خوانده نشد؛ این عدد از کلاس رمزارز همین دور است', 'The macro desk was unread; this number is from the same pass\u2019s crypto class'),
+    meta: L('از کلاس رمزارز همین دور', 'from this pass\u2019s crypto class')
+  } : tokenFlows?.topOutflow ? {
+    symbol: tokenFlows.topOutflow.symbol, name: isPersian ? '' : (tokenFlows.topOutflow.name || ''),
+    dir: dirOfPct(tokenFlows.topOutflow.mcapChangePct), value: pct(tokenFlows.topOutflow.mcapChangePct), tag: srcTag,
+    tagTitle: L('تغییر ارزش بازار ۲۴ ساعته از کوین‌گکو', 'CoinGecko 24h market-cap change'),
+    meta: `${L('خروج سرمایه', 'capital out')}: $${isPersian ? faNum(fmtK(tokenFlows.topOutflow.mcapChangeUsd)) : fmtK(tokenFlows.topOutflow.mcapChangeUsd)}`
+  } : null;
+
   return (
     <>
       <div className="aig-section-title" style={{ marginTop: 4 }}>
@@ -877,21 +964,13 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
         <LeaderCard
           icon="chart" tone="var(--up)"
           title={L('بیشترین رشد ۲۴ ساعته', 'Biggest 24h gainer')}
-          row={best ? {
-            symbol: best.symbol, name: nameOf(best), dir: dirOfPct(best.change1dPct),
-            value: pct(best.change1dPct),
-            meta: `${L('۷ روز', '7d')}: ${best.change7dPct != null ? pct(best.change7dPct) : '—'}${best.source ? ` · ${best.source}` : ''}`
-          } : null}
+          row={gainerRow}
           empty={unread}
         />
         <LeaderCard
           icon="warning" tone="var(--down)"
           title={L('بیشترین افت ۲۴ ساعته', 'Biggest 24h decline')}
-          row={worst && worst.symbol !== best?.symbol ? {
-            symbol: worst.symbol, name: nameOf(worst), dir: dirOfPct(worst.change1dPct),
-            value: pct(worst.change1dPct),
-            meta: `${L('۷ روز', '7d')}: ${worst.change7dPct != null ? pct(worst.change7dPct) : '—'}${worst.source ? ` · ${worst.source}` : ''}`
-          } : null}
+          row={loserRow}
           empty={unread}
         />
         <LeaderCard
@@ -900,10 +979,11 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
           row={equity ? {
             symbol: equity.symbol, name: nameOf(equity), dir: dirOfPct(equity.change1dPct),
             value: equity.priceUsd != null ? numText(equity.priceUsd, isPersian) : pct(equity.change1dPct),
-            meta: `${L('۲۴ ساعت', '1d')} ${pct(equity.change1dPct)}${equity.change7dPct != null ? ` · ${L('۷ روز', '7d')} ${pct(equity.change7dPct)}` : ''}`
+            meta: `${L('۲۴ ساعت', '1d')} ${pct(equity.change1dPct)}${equity.change7dPct != null ? ` · ${L('۷ روز', '7d')} ${pct(equity.change7dPct)}` : ''}${equity.source ? ` · ${sourceLabel(equity.source, isPersian)}` : ''}`
           } : stockTop ? {
             symbol: stockTop.symbol, name: isPersian ? '' : (stockTop.name || ''), dir: dirOfPct(stockTop.changePct),
-            value: pct(stockTop.changePct),
+            value: pct(stockTop.changePct), tag: srcTag,
+            tagTitle: L('از فید سهام همین دور', 'from this pass\u2019s equity feed'),
             meta: L('از فید سهام همین دور', 'from this pass\u2019s equity feed')
           } : null}
           empty={L('شاخص سهامی در این دور خوانده نشد.', 'No equity index was read in this pass.')}
@@ -919,8 +999,17 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
               : `${Number(curve.spreadPct) > 0 ? '+' : ''}${curve.spreadPct}pp`,
             meta: Number(curve.spreadPct) < 0
               ? L('وارون — نشانهٔ کلاسیک فشار رکودی', 'inverted — the classic recession-pressure signal')
-              : L('طبیعی', 'positive')}
-          : null}
+              : L('طبیعی', 'positive')
+          } : derivedSpread !== null ? {
+            symbol: '2s10s', name: L('اختلاف ۲ و ۱۰ ساله', '2y vs 10y spread'),
+            dir: derivedSpread < 0 ? 'down' : 'up',
+            value: isPersian
+              ? `${faNum(`${derivedSpread > 0 ? '+' : ''}${derivedSpread}`)} ${L('واحد درصد', 'pp')}`
+              : `${derivedSpread > 0 ? '+' : ''}${derivedSpread}pp`,
+            tag: srcTag,
+            tagTitle: L('از دو خوانش واقعیِ بازده ۲ و ۱۰ سالهٔ همین دور محاسبه شد', 'computed from this pass\u2019s real 2y and 10y reads'),
+            meta: `${L('۱۰ساله', '10y')} ${numText(ten.priceUsd, isPersian)}% − ${L('۲ساله', '2y')} ${numText(two.priceUsd, isPersian)}%${ten.source ? ` · ${sourceLabel(ten.source, isPersian)}` : ''}`
+          } : null}
           empty={L('منحنی بازده خوانده نشد.', 'The yield curve was not read.')}
         />
         <LeaderCard
@@ -930,6 +1019,12 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
             symbol: hiOut.symbol, name: isPersian ? '' : (hiOut.name || ''), dir: 'down',
             value: `$${isPersian ? faNum(fmtK(hiOut.amount)) : fmtK(hiOut.amount)}`,
             meta: flowMeta(hiOut) || L('جریان برچسب‌خورده', 'labelled flow')
+          } : hiChainOut ? {
+            symbol: hiChainOut.chain, name: L('استیبل‌کوین', 'stablecoin'), dir: 'down',
+            value: `$${isPersian ? faNum(fmtK(Math.abs(hiChainOut.net24hUsd))) : fmtK(Math.abs(hiChainOut.net24hUsd))}`,
+            tag: srcTag,
+            tagTitle: L('استیبل‌کوین سوخته‌شده روی این زنجیره = پول واقعیِ خارج‌شده', 'stablecoin burned on this chain = real money out'),
+            meta: `${L('۲۴ ساعت', '24h')}${hiChainOut.net24hPct != null ? ` · ${pct(hiChainOut.net24hPct)}` : ''}${chainFlows?.source ? ` · ${sourceLabel(chainFlows.source, isPersian)}` : ''}`
           } : null}
           empty={L('خروجی معتبر در این بازه خوانده نشد.', 'No measured outflow was read in this window.')}
         />
@@ -940,6 +1035,12 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
             symbol: loOut.symbol, name: isPersian ? '' : (loOut.name || ''), dir: 'down',
             value: `$${isPersian ? faNum(fmtK(loOut.amount)) : fmtK(loOut.amount)}`,
             meta: flowMeta(loOut) || L('جریان برچسب‌خورده', 'labelled flow')
+          } : loChainOut && loChainOut.chain !== hiChainOut?.chain ? {
+            symbol: loChainOut.chain, name: L('استیبل‌کوین', 'stablecoin'), dir: 'down',
+            value: `$${isPersian ? faNum(fmtK(Math.abs(loChainOut.net24hUsd))) : fmtK(Math.abs(loChainOut.net24hUsd))}`,
+            tag: srcTag,
+            tagTitle: L('کوچک‌ترین خروج در میان زنجیره‌های رتبه‌بندی‌شدهٔ همین دور', 'the smallest outflow among this pass\u2019s ranked chains'),
+            meta: `${L('۲۴ ساعت', '24h')}${chainFlows?.source ? ` · ${sourceLabel(chainFlows.source, isPersian)}` : ''}`
           } : null}
           empty={L('خروجی معتبر در این بازه خوانده نشد.', 'No measured outflow was read in this window.')}
         />
@@ -949,8 +1050,16 @@ function EconomyLeaders({ cross, domains, L, isPersian }) {
           {L('ضعیف‌ترین سهم خوانده‌شده: ', 'Weakest equity read: ')}{stockBottom.symbol} {pct(stockBottom.changePct)}
         </div>
       ) : null}
+      {chainFlows ? (
+        <div className="aig-note">
+          {L('جریان استیبل‌کوین ۲۴ ساعتهٔ کل بازار: ', 'Whole-market 24h stablecoin flow: ')}
+          {`${chainFlows.net24hUsd >= 0 ? '+' : '−'}$${isPersian ? faNum(fmtK(Math.abs(chainFlows.net24hUsd))) : fmtK(Math.abs(chainFlows.net24hUsd))}`}
+          {chainFlows.source ? ` · ${sourceLabel(chainFlows.source, isPersian)}` : ''}
+          {chainFlows.at ? ` · ${timeAgo(chainFlows.at, isPersian)}` : ''}
+        </div>
+      ) : null}
       <div className="aig-note">
-        {L('این کارت‌ها فقط از ابزارهایی ساخته شده‌اند که منبع در همین دور خوانده است؛ نبود داده به‌صورت «خوانده نشد» نمایش داده می‌شود، نه با مقدار ساختگی.', 'These cards use only instruments read by the connected sources in this pass; missing data stays explicitly unread rather than becoming a fabricated value.')}
+        {L('این کارت‌ها فقط از ابزارهایی ساخته شده‌اند که منبع در همین دور خوانده است؛ نبود داده به‌صورت «خوانده نشد» نمایش داده می‌شود، نه با مقدار ساختگی. برچسب «منبع جایگزین» یعنی عدد از همان دور است ولی از میز دیگری خوانده شده.', 'These cards use only instruments read by the connected sources in this pass; missing data stays explicitly unread rather than becoming a fabricated value. A «fallback source» tag means the number is still from this pass, read by a different desk.')}
       </div>
     </>
   );
@@ -1021,7 +1130,7 @@ function AiGlobalIntelligenceInner() {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
   const [tab, setTab] = useState('briefing');
-  const [data, setData] = useState({ intelligence: null, briefing: null, cross: null, providers: null, tomanRate: null, goldEtfs: null });
+  const [data, setData] = useState({ intelligence: null, briefing: null, cross: null, providers: null, tomanRate: null, goldEtfs: null, flows: null });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
@@ -1087,16 +1196,21 @@ function AiGlobalIntelligenceInner() {
         readJson(`/ai/global/cross-asset${qs}`),
         readJson('/ai/global/providers'),
         readTomanRate(),
-        readGoldEtfs()
+        readGoldEtfs(),
+        /* The capital-flow read is shared with the News → هوشمندی tab through
+           lib/capitalFlows.js, so both surfaces cost ONE request per window
+           even when the user switches between them. */
+        getCapitalFlows({ force: refresh === true })
       ]);
       if (id !== requestId.current) return;
-      const [intelRes, briefRes, crossRes, providerRes, rateRes, etfRes] = results;
+      const [intelRes, briefRes, crossRes, providerRes, rateRes, etfRes, flowRes] = results;
       const intel = intelRes.status === 'fulfilled' ? intelRes.value : null;
       const brief = briefRes.status === 'fulfilled' ? briefRes.value : null;
       const crossAsset = crossRes.status === 'fulfilled' ? crossRes.value : null;
       const providerState = providerRes.status === 'fulfilled' ? providerRes.value : null;
       const tomanRate = rateRes.status === 'fulfilled' ? rateRes.value : null;
       const goldEtfs = etfRes.status === 'fulfilled' ? etfRes.value : null;
+      const flows = flowRes.status === 'fulfilled' ? flowRes.value : null;
 
       if (!intel && !brief && !crossAsset && !providerState) {
         throw (intelRes.reason || briefRes.reason || crossRes.reason || providerRes.reason || new Error('NETWORK_ERROR'));
@@ -1108,7 +1222,8 @@ function AiGlobalIntelligenceInner() {
         cross: crossAsset || null,
         providers: providerState?.providers || intel?.globalIntelligence?.providers || null,
         tomanRate,
-        goldEtfs
+        goldEtfs,
+        flows
       });
     } catch (error) {
       if (id === requestId.current) setConnectionError(error?.message || 'NETWORK_ERROR');
@@ -1356,7 +1471,7 @@ function AiGlobalIntelligenceInner() {
 
               {/* ── the global-economy leaders, built from the instruments
                      this pass actually read ──────────────────────────── */}
-              <EconomyLeaders cross={cross} domains={domains} L={L} isPersian={isPersian} />
+              <EconomyLeaders cross={cross} domains={domains} flows={data.flows} L={L} isPersian={isPersian} />
 
               {/* ── the macro indicator layer — real quotes (dollar/gold/
                      crude/equity/rates/curve) with 1d + 7d changes ─────── */}

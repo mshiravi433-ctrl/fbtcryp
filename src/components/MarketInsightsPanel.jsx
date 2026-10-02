@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fmtPct, fmtCompact, timeAgo } from '../lib/format';
 import { getSolanaAssets } from '../lib/solanaAssetsClient';
+import { getCapitalFlows } from '../lib/capitalFlows';
 import { deriveMarketInsights } from '../lib/marketInsights';
 import { publishInsightEquities } from '../lib/insightSession';
 import {
@@ -61,10 +62,96 @@ function MetricCard({ title, item, source, tone = 'up', note, fallback, emptyTex
   );
 }
 
+/** A signed money amount in the display currency, or an em dash. */
+function signedMoney(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return null;
+  const n = Number(value);
+  const text = fmtCompact(Math.abs(n));
+  if (text === '—') return null;
+  return `${n < 0 ? '−' : '+'}${text}`;
+}
+
+/**
+ * VALUE CARD — the shape the flow and profit cards need.
+ *
+ * `MetricCard` renders an ASSET (logo, name, a 24h percentage). The three
+ * cards that used to be permanently empty are not assets: they are a measured
+ * amount of money with a named source behind it — «$25.1B attracted by this
+ * token», «$412M left this chain», «$34.6B of reported net income». So the
+ * same card chrome carries a big signed number, the subject underneath it, and
+ * the source line every number in this app is required to have.
+ *
+ * `href` opens the primary document (the SEC filing) externally; a reported
+ * accounting number without its filing is an assertion, not evidence.
+ */
+function ValueCard({
+  title, value, name, meta, source, note, tone = 'up', icon: Icon = IconTrend,
+  href, linkLabel, emptyText, loading = false
+}) {
+  const hasValue = typeof value === 'string' && value.length > 0 && value !== '—';
+  const dir = value?.startsWith?.('−') ? 'down' : value?.startsWith?.('+') ? 'up' : null;
+  return (
+    <article className="insight-metric" data-tone={tone}>
+      <div className="insight-card-top">
+        <span className="insight-mark" aria-hidden="true"><Icon width={20} height={20} /></span>
+        <span className="insight-card-kicker">{title}</span>
+      </div>
+      {loading ? (
+        <div className="skel insight-value-skel" />
+      ) : hasValue ? (
+        <>
+          <div className="insight-asset-row">
+            <div className="insight-asset-copy">
+              <strong>{name}</strong>
+              {meta ? <span>{meta}</span> : null}
+            </div>
+            <span className={`insight-change insight-value ${dir || ''}`}>{value}</span>
+          </div>
+          <div className="insight-source">{source}</div>
+          {href ? (
+            <a className="insight-link" href={href} target="_blank" rel="noopener noreferrer">
+              <IconExternal width={12} height={12} /> {linkLabel}
+            </a>
+          ) : null}
+          {note ? <p className="insight-note">{note}</p> : null}
+        </>
+      ) : (
+        <div className="insight-card-empty" data-text="true">{emptyText}</div>
+      )}
+    </article>
+  );
+}
+
+/** One ranked flow row: who, how much, and in which direction. */
+function FlowRow({ amount, pct, name, meta, dir, image }) {
+  return (
+    <li className="insight-flow-row">
+      <AssetMark item={{ image }} fallback={IconTrend} />
+      <span className="insight-flow-copy">
+        <strong>{name}</strong>
+        {meta ? <small>{meta}</small> : null}
+      </span>
+      <span className={`insight-flow-amount ${dir}`}>
+        {amount}
+        {pct ? <small>{pct}</small> : null}
+      </span>
+    </li>
+  );
+}
+
 /**
  * Market intelligence assembled only from feeds already verified by the app.
  * Key indicators (Volume, Market Cap, Volatility) are computed from live market
  * data and kept strictly factual.
+ *
+ * ─── WHAT CHANGED HERE, AND WHY IT IS STILL HONEST ─────────────────────────
+ * Three cards («ورود سرمایه … به کشور», «سودده‌ترین شرکت», «بیشترین و کمترین
+ * خروج ۲۴ ساعته») were hard-wired to `item={null}` because no connected source
+ * could prove them. They now carry REAL numbers from three free public sources
+ * — CoinGecko's 24h market-cap change, DefiLlama's stablecoin supply deltas and
+ * the SEC's reported net income — and each of them says which one. What did NOT
+ * change is the rule: when a source is dark the card shows its old «no verified
+ * source» line, and a price move is still never presented as a flow or a profit.
  */
 export default function MarketInsightsPanel({
   markets = [],
@@ -77,6 +164,8 @@ export default function MarketInsightsPanel({
   const [equities, setEquities] = useState([]);
   const [equityState, setEquityState] = useState('loading');
   const [equityAt, setEquityAt] = useState(0);
+  const [flows, setFlows] = useState(null);
+  const [flowState, setFlowState] = useState('loading');
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -106,9 +195,31 @@ export default function MarketInsightsPanel({
     return () => { cancelled = true; };
   }, [reloadKey]);
 
+  /*
+   * The flow/profit read. One request per mount (and per retry), cached in
+   * lib/capitalFlows.js, single-flighted with the Global tab's copy.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    setFlowState('loading');
+    getCapitalFlows({ force: reloadKey > 0 })
+      .then((data) => {
+        if (cancelled) return;
+        setFlows(data);
+        setFlowState(data?.ok ? 'ready' : 'unavailable');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFlows(null);
+        setFlowState('unavailable');
+      });
+
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
   const insights = useMemo(
-    () => deriveMarketInsights({ markets, equities, news: newsItems }),
-    [markets, equities, newsItems]
+    () => deriveMarketInsights({ markets, equities, news: newsItems, flows }),
+    [markets, equities, newsItems, flows]
   );
   // Only timestamp rows that are actually eligible for display. `usePoll`
   // also timestamps deterministic offline fallbacks; treating that as a live
@@ -116,9 +227,15 @@ export default function MarketInsightsPanel({
   const freshestAt = Math.max(
     insights.cryptoLeader || insights.cryptoLaggard || insights.volumeLeader ? Number(marketsUpdatedAt) || 0 : 0,
     insights.tokenizedLeader || insights.companyLeader ? equityAt : 0,
-    insights.eventStories.length ? Number(newsUpdatedAt) || 0 : 0
+    insights.eventStories.length ? Number(newsUpdatedAt) || 0 : 0,
+    insights.capitalInflow || insights.chainInflow || insights.profitLeader ? Number(insights.flowsAt) || 0 : 0
   );
-  const stillLoading = marketsLoading || equityState === 'loading';
+  const stillLoading = marketsLoading || equityState === 'loading' || flowState === 'loading';
+
+  const inflowList = Array.isArray(flows?.tokenFlows?.inflows) ? flows.tokenFlows.inflows : [];
+  const outflowList = Array.isArray(flows?.tokenFlows?.outflows) ? flows.tokenFlows.outflows : [];
+  const profitList = Array.isArray(insights.profitLeaders) ? insights.profitLeaders : [];
+  const sourceName = (source) => String(source || '').split(':')[0];
 
   return (
     <section className="insights-panel" aria-labelledby="market-intelligence-title">
@@ -197,43 +314,208 @@ export default function MarketInsightsPanel({
               note={insights.companyLeader ? t('insights.performanceNotProfit') : null}
               emptyText={t('insights.equityUnavailable')}
             />
-            {/* Flow and accounting metrics stay EXPLICIT source gaps: price,
-                market cap and open interest prove neither country-level capital
-                flow nor company profit, so the cards say so instead of
-                pretending a proxy metric exists. */}
-            <MetricCard
-              title={t('insights.countryFlow')}
-              item={null}
-              source={insights.countryFlow?.reason ?? 'NO_VERIFIED_COUNTRY_FLOW_SOURCE'}
-              tone="violet"
-              fallback={IconGlobe}
-              emptyText={t('insights.countryUnavailable')}
-            />
-            <MetricCard
-              title={t('insights.companyProfit')}
-              item={null}
-              source={insights.companyProfit?.reason ?? 'NO_ACCOUNTING_PROFIT_SOURCE'}
-              tone="blue"
-              fallback={IconBuilding}
-              emptyText={t('insights.profitUnavailable')}
-            />
-            <MetricCard
-              title={t('insights.capitalOutflow')}
-              item={null}
-              source={insights.capitalOutflow?.reason ?? 'NO_VERIFIED_FLOW_SOURCE'}
-              tone="up"
-              fallback={IconTrend}
-              emptyText={t('insights.outflowUnavailable')}
-            />
           </>
         )}
+
+        {/*
+          ─── THE FLOW + PROFIT CARDS: REAL SOURCES, NAMED ───────────────────
+          Each card below is a measured amount from a free public source, and
+          each one prints that source. When a source is dark the card falls
+          back to the explicit gap it showed before — the numbers are new, the
+          refusal to invent them is not.
+        */}
+        <ValueCard
+          title={t('insights.capitalInflow')}
+          tone="up"
+          icon={IconTrend}
+          loading={flowState === 'loading' && !insights.capitalInflow}
+          value={signedMoney(insights.capitalInflow?.mcapChangeUsd)}
+          name={insights.capitalInflow?.name || insights.capitalInflow?.symbol || ''}
+          meta={insights.capitalInflow
+            ? [
+              insights.capitalInflow.symbol,
+              insights.capitalInflow.mcapChangePct != null ? fmtPct(Number(insights.capitalInflow.mcapChangePct)) : null,
+              insights.capitalInflow.change24hPct != null ? `${t('insights.price24h')} ${fmtPct(Number(insights.capitalInflow.change24hPct))}` : null
+            ].filter(Boolean).join(' · ')
+            : null}
+          source={insights.capitalInflow
+            ? t('insights.capitalInflowSource', { source: sourceName(insights.capitalInflow.source) })
+            : t('insights.flowSourcePending')}
+          note={t('insights.capitalInflowNote')}
+          emptyText={t('insights.capitalInflowUnavailable')}
+        />
+        <ValueCard
+          title={t('insights.countryFlow')}
+          tone="violet"
+          icon={IconGlobe}
+          loading={flowState === 'loading' && !insights.stablecoinNet}
+          value={signedMoney(insights.stablecoinNet?.net24hUsd)}
+          name={t('insights.stablecoinSupply')}
+          meta={insights.stablecoinNet
+            ? [
+              `${t('insights.totalCirculating')}: ${fmtCompact(insights.stablecoinNet.totalCirculatingUsd)}`,
+              insights.stablecoinNet.net7dUsd != null ? `${t('insights.sevenDay')}: ${signedMoney(insights.stablecoinNet.net7dUsd)}` : null
+            ].filter(Boolean).join(' · ')
+            : null}
+          source={insights.stablecoinNet
+            ? t('insights.stablecoinSource', { source: sourceName(insights.stablecoinNet.source) })
+            : t('insights.flowSourcePending')}
+          note={t('insights.stablecoinNote')}
+          emptyText={t('insights.countryUnavailable')}
+        />
+        <ValueCard
+          title={t('insights.chainInflow')}
+          tone="up"
+          icon={IconGlobe}
+          loading={flowState === 'loading' && !insights.chainInflow}
+          value={signedMoney(insights.chainInflow?.net24hUsd)}
+          name={insights.chainInflow?.chain || ''}
+          meta={insights.chainInflow
+            ? `${t('insights.chainSupply')}: ${fmtCompact(insights.chainInflow.currentUsd)}${insights.chainInflow.net24hPct != null ? ` · ${fmtPct(Number(insights.chainInflow.net24hPct))}` : ''}`
+            : null}
+          source={insights.chainInflow
+            ? t('insights.stablecoinSource', { source: sourceName(insights.chainInflow.source) })
+            : t('insights.flowSourcePending')}
+          emptyText={t('insights.countryUnavailable')}
+        />
+        <ValueCard
+          title={t('insights.chainOutflow')}
+          tone="down"
+          icon={IconGlobe}
+          loading={flowState === 'loading' && !insights.chainOutflow}
+          value={signedMoney(insights.chainOutflow?.net24hUsd)}
+          name={insights.chainOutflow?.chain || ''}
+          meta={insights.chainOutflow
+            ? `${t('insights.chainSupply')}: ${fmtCompact(insights.chainOutflow.currentUsd)}${insights.chainOutflow.net24hPct != null ? ` · ${fmtPct(Number(insights.chainOutflow.net24hPct))}` : ''}`
+            : null}
+          source={insights.chainOutflow
+            ? t('insights.stablecoinSource', { source: sourceName(insights.chainOutflow.source) })
+            : t('insights.flowSourcePending')}
+          emptyText={t('insights.outflowUnavailable')}
+        />
+        <ValueCard
+          title={t('insights.capitalOutflow')}
+          tone="down"
+          icon={IconTrend}
+          loading={flowState === 'loading' && !insights.capitalOutflowToken}
+          value={signedMoney(insights.capitalOutflowToken?.mcapChangeUsd)}
+          name={insights.capitalOutflowToken?.name || insights.capitalOutflowToken?.symbol || ''}
+          meta={insights.capitalOutflowToken
+            ? [
+              insights.capitalOutflowToken.symbol,
+              insights.capitalOutflowToken.mcapChangePct != null ? fmtPct(Number(insights.capitalOutflowToken.mcapChangePct)) : null
+            ].filter(Boolean).join(' · ')
+            : null}
+          source={insights.capitalOutflowToken
+            ? t('insights.capitalInflowSource', { source: sourceName(insights.capitalOutflowToken.source) })
+            : t('insights.flowSourcePending')}
+          emptyText={t('insights.outflowUnavailable')}
+        />
+        <ValueCard
+          title={t('insights.companyProfit')}
+          tone="blue"
+          icon={IconBuilding}
+          loading={flowState === 'loading' && !insights.profitLeader}
+          value={insights.profitLeader ? fmtCompact(insights.profitLeader.netIncomeUsd) : null}
+          name={insights.profitLeader?.name || ''}
+          meta={insights.profitLeader
+            ? `${t('insights.reportedPeriod')}: ${insights.profitLeader.periodStart} → ${insights.profitLeader.periodEnd}`
+            : null}
+          source={insights.profitLeader
+            ? t('insights.profitSource', { source: sourceName(insights.profitLeader.source), period: insights.profitPeriod || '' })
+            : t('insights.flowSourcePending')}
+          href={insights.profitLeader?.url || undefined}
+          linkLabel={insights.profitLeader?.url ? t('insights.profitFiling') : null}
+          note={t('insights.profitNote')}
+          emptyText={t('insights.profitUnavailable')}
+        />
       </div>
 
-      {equityState === 'unavailable' && (
+      {(equityState === 'unavailable' || flowState === 'unavailable') && (
         <button className="insights-retry" type="button" onClick={() => setReloadKey((n) => n + 1)}>
-          {t('insights.retryEquities')}
+          {equityState === 'unavailable' ? t('insights.retryEquities') : t('insights.retryFlows')}
         </button>
       )}
+
+      {/* ── THE RANKINGS BEHIND THE CARDS ─────────────────────────────────
+          One card names a winner; a reader who asks «and the rest?» deserves
+          the list the winner came from. Both lists are the server's own
+          ranking — nothing is re-sorted or re-derived on the phone. */}
+      {inflowList.length || outflowList.length ? (
+        <>
+          <div className="insights-section-heading">
+            <IconTrend width={17} height={17} />
+            <div>
+              <strong>{t('insights.flowRankTitle')}</strong>
+              <span>{t('insights.flowRankSub', { rows: flows?.tokenFlows?.count ?? 0 })}</span>
+            </div>
+          </div>
+          <div className="insight-flow-grid">
+            <ul className="insight-flow-list">
+              <li className="insight-flow-head up">{t('insights.flowRankIn')}</li>
+              {inflowList.length ? inflowList.map((row) => (
+                <FlowRow
+                  key={`in-${row.id}`}
+                  image={row.image}
+                  dir="up"
+                  name={`${row.name} (${row.symbol})`}
+                  meta={row.mcapUsd != null ? `${t('insights.mcapShort')}: ${fmtCompact(row.mcapUsd)}` : null}
+                  amount={signedMoney(row.mcapChangeUsd)}
+                  pct={row.mcapChangePct != null ? fmtPct(Number(row.mcapChangePct)) : null}
+                />
+              )) : <li className="insight-flow-empty">{t('insights.flowRankEmpty')}</li>}
+            </ul>
+            <ul className="insight-flow-list">
+              <li className="insight-flow-head down">{t('insights.flowRankOut')}</li>
+              {outflowList.length ? outflowList.map((row) => (
+                <FlowRow
+                  key={`out-${row.id}`}
+                  image={row.image}
+                  dir="down"
+                  name={`${row.name} (${row.symbol})`}
+                  meta={row.mcapUsd != null ? `${t('insights.mcapShort')}: ${fmtCompact(row.mcapUsd)}` : null}
+                  amount={signedMoney(row.mcapChangeUsd)}
+                  pct={row.mcapChangePct != null ? fmtPct(Number(row.mcapChangePct)) : null}
+                />
+              )) : <li className="insight-flow-empty">{t('insights.flowRankEmpty')}</li>}
+            </ul>
+          </div>
+        </>
+      ) : null}
+
+      {profitList.length ? (
+        <>
+          <div className="insights-section-heading">
+            <IconBuilding width={17} height={17} />
+            <div>
+              <strong>{t('insights.profitRankTitle')}</strong>
+              <span>{t('insights.profitRankSub', { period: insights.profitPeriod || '', companies: profitList.length })}</span>
+            </div>
+          </div>
+          <ul className="insight-flow-list">
+            {profitList.map((row) => (
+              <li className="insight-flow-row" key={`profit-${row.cik}`}>
+                <span className="insight-mark" aria-hidden="true"><IconBuilding width={20} height={20} /></span>
+                <span className="insight-flow-copy">
+                  <strong>{row.name}</strong>
+                  <small>
+                    {row.periodStart} → {row.periodEnd}
+                    {row.url ? (
+                      <a className="insight-link inline" href={row.url} target="_blank" rel="noopener noreferrer">
+                        <IconExternal width={11} height={11} /> {t('insights.profitFiling')}
+                      </a>
+                    ) : null}
+                  </small>
+                </span>
+                <span className="insight-flow-amount up">{fmtCompact(row.netIncomeUsd)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="insight-note">
+            <IconInfo width={12} height={12} /> {t('insights.profitQuarterNote')}
+          </p>
+        </>
+      ) : null}
 
       <div className="insights-section-heading insights-events-heading">
         <IconClock width={17} height={17} />
@@ -261,6 +543,12 @@ export default function MarketInsightsPanel({
           <div className="insight-events-empty"><IconNews width={21} height={21} /> {t('insights.eventsEmpty')}</div>
         )}
       </div>
+
+      {flows && !flows.ok ? (
+        <p className="insight-note">
+          <IconInfo width={12} height={12} /> {t('insights.flowSourceDown', { reason: String(flows.error || flows.tokenFlows?.reason || 'UNAVAILABLE') })}
+        </p>
+      ) : null}
 
       <p className="insights-disclaimer">{t('insights.disclaimer')}</p>
     </section>

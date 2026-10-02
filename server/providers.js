@@ -115,6 +115,16 @@ export function normalizeCoin(c) {
     change24h: c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? null,
     change7d: c.price_change_percentage_7d_in_currency ?? 0,
     mcap: c.market_cap ?? 0,
+    /*
+     * The 24h CHANGE OF MARKET CAPITALISATION, in the quote currency — the one
+     * field the feed gives us that measures capital being added to (or pulled
+     * out of) an asset instead of its price moving. The News → هوشمندی tab
+     * ranks «جذب سرمایه ۲۴ ساعته» by it. Null when the upstream did not report
+     * it (the CoinLore backup does not), so a card can say «unread» instead of
+     * treating an absent number as zero flow.
+     */
+    mcapChange24h: c.market_cap_change_24h ?? null,
+    mcapChangePct24h: c.market_cap_change_percentage_24h ?? null,
     volume: c.total_volume ?? 0,
     rank: c.market_cap_rank ?? 0,
     high24h: c.high_24h ?? 0,

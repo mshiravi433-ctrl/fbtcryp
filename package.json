@@ -273,6 +273,7 @@
     "test:central-brain": "node test/intent-ai/ci-brain-turns-probe.mjs && node test/intent-ai/ci-brain-http-probe.mjs",
     "test:central-brain-turns": "node test/intent-ai/ci-brain-turns-probe.mjs",
     "test:central-brain-http": "node test/intent-ai/ci-brain-http-probe.mjs",
+    "test:capital-flows": "node test/capital-flows-probe.mjs",
     "test:etf-gold": "node test/etf-gold-provider-probe.mjs && node test/etf-gold-api-probe.mjs",
     "test:etf-gold-provider": "node test/etf-gold-provider-probe.mjs",
     "test:etf-gold-api": "node test/etf-gold-api-probe.mjs",

@@ -14859,5 +14859,160 @@ export default function run() {
       existsSync('test/stocks-sell-path.test.jsx'));
   }
 
+  /* ---- 118. capital flows: real sources for the cards that used to say
+              «در این دور خوانده نشد.» -------------------------------------- */
+  {
+    const serverFlows = read('server/capitalFlows.js');
+    const clientFlows = read('src/lib/capitalFlows.js');
+    const panel = read('src/components/MarketInsightsPanel.jsx');
+    const insights = read('src/lib/marketInsights.js');
+    const macro = read('server/macroData.js');
+    const app = read('server/app.js');
+    const aig = read('src/components/ai/AiGlobalIntelligence.jsx');
+    const envExample = read('.env.example');
+
+    /* the desk: three keyless sources, isolated failures, no fabrication */
+    t('the capital-flow desk reads CoinGecko deltas, DefiLlama supply and SEC frames',
+      /api\.coingecko\.com|COINGECKO_BASE/.test(serverFlows) &&
+      /stablecoins\.llama\.fi|DEFILLAMA_STABLECOINS_BASE/.test(serverFlows) &&
+      /data\.sec\.gov|SEC_EDGAR_BASE/.test(serverFlows));
+    t('a flow leader must be a real gain — an all-negative window has no inflow card',
+      /market_cap_change_24h/.test(serverFlows) &&
+      /mcapChangeUsd > 0 \? desc\[0\] : null/.test(serverFlows) &&
+      /mcapChangeUsd < 0 \? desc\[desc\.length - 1\] : null/.test(serverFlows));
+    t('a half-year filing can never outrank a reported quarter',
+      /QUARTER_MAX_DAYS/.test(serverFlows) && /skippedDuration/.test(serverFlows));
+    t('each profit number keeps the filing URL it came from',
+      /Archives\/edgar\/data\//.test(serverFlows) && /secFilingUrl/.test(serverFlows));
+    t('flow sections fail independently and stay read-only',
+      /status: 'UNAVAILABLE'/.test(serverFlows) &&
+      /readOnly: true/.test(serverFlows) && /executes: false/.test(serverFlows) &&
+      /liveSections/.test(serverFlows));
+    t('an upstream detail is truncated and can never carry a URL or a body',
+      /slice\(0, 160\)/.test(serverFlows));
+    t('SEC bulk requests identify the client (a bare fetch agent gets 403)',
+      /SEC_EDGAR_USER_AGENT/.test(serverFlows));
+
+    /* the route + the client that shares one payload between two surfaces */
+    t('the flows payload is served from one route with a status route beside it',
+      /app\.get\('\/api\/insights\/flows'/.test(app) &&
+      /app\.get\('\/api\/insights\/flows\/status'/.test(app));
+    t('the client caches and single-flights, so two panels cost one request',
+      /let inflight = null/.test(clientFlows) && /CACHE_TTL_MS/.test(clientFlows) &&
+      /if \(inflight\) return inflight/.test(clientFlows));
+    t('the client asks the relative API base, never localhost',
+      /apiBase\(\)/.test(clientFlows) && !/localhost|127\.0\.0\.1/.test(clientFlows));
+    t('the client never invents rows when the desk is dark',
+      /EMPTY_CAPITAL_FLOWS/.test(clientFlows) &&
+      !/dataProvenance: 'offline'/.test(clientFlows));
+
+    /* the panel: cards are fed by the flows, and stay honest when they are not */
+    t('the panel reads the flow payload and re-reads it on retry',
+      /getCapitalFlows\(\{ force: reloadKey > 0 \}\)/.test(panel) &&
+      /insights\.retryFlows/.test(panel));
+    t('the flow fetch keeps the unmount guard the equity fetch already had',
+      (panel.match(/let cancelled = false/g) || []).length >= 2 &&
+      (panel.match(/if \(cancelled\) return/g) || []).length >= 4 &&
+      (panel.match(/return \(\) => \{ cancelled = true; \}/g) || []).length >= 2);
+    t('an unread flow source is announced, not silently blank',
+      /flows && !flows\.ok/.test(panel) && /insights\.flowSourceDown/.test(panel) &&
+      /insights\.capitalInflowUnavailable/.test(panel));
+    t('the three legacy gap reasons still gate their cards',
+      /insights\.countryUnavailable/.test(panel) &&
+      /insights\.profitUnavailable/.test(panel) &&
+      /insights\.outflowUnavailable/.test(panel) &&
+      /NO_VERIFIED_COUNTRY_FLOW_SOURCE/.test(insights) &&
+      /NO_VERIFIED_FLOW_SOURCE/.test(insights) &&
+      /NO_ACCOUNTING_PROFIT_SOURCE/.test(insights));
+    t('money keeps its sign and its compact formatter',
+      /signedMoney/.test(panel) && /fmtCompact\(Math\.abs\(/.test(panel) &&
+      /\u2212/.test(panel) && /startsWith\?\.\('\u2212'\)/.test(panel));
+    t('a profit card links the filing it reports',
+      /insights\.profitFiling/.test(panel) && /href=\{/.test(panel) &&
+      /target="_blank"/.test(panel) && /rel="noopener noreferrer"/.test(panel));
+
+    /* deriveMarketInsights: the new contract, keyed off the flows payload */
+    t('insights expose capital in/out, stablecoin net, chains and reported profit',
+      /capitalInflow/.test(insights) && /capitalOutflowToken/.test(insights) &&
+      /stablecoinNet/.test(insights) && /chainInflow/.test(insights) &&
+      /chainOutflow/.test(insights) && /profitLeader/.test(insights));
+    t('insights only accept a section the desk marked OK',
+      /status === 'OK'/.test(insights));
+    t('the mcap delta survives both live normalization paths',
+      (read('src/lib/api.js').match(/mcapChange24h/g) || []).length >= 1 &&
+      (read('server/providers.js').match(/mcapChange24h/g) || []).length >= 1);
+
+    /* the macro desk behind «شاخص سهام» and «منحنی بازده آمریکا» */
+    t('the macro desk reads keyless FRED CSV before spending any key',
+      /fredgraph\.csv/.test(macro) && /parseFredCsv/.test(macro) &&
+      /'stooq',\s*'yahoo',\s*'fredcsv'/.test(macro));
+    t('Alpha Vantage is the LAST macro desk, on a hard daily budget',
+      /AV_DAILY_BUDGET/.test(macro) && /DAILY_BUDGET_EXHAUSTED/.test(macro) &&
+      /alphaVantageMacroConfigured\(\) \? \['av'\] : \[\]/.test(macro));
+    t('an index ETF is labelled as an ETF, never relabelled as the index',
+      /S&P 500 ETF/.test(macro) && /Nasdaq-100 ETF/.test(macro) &&
+      /USD\/share/.test(macro));
+    t('a topped-up instrument keeps the desk that produced it',
+      /macroData:\$\{primary\}\$\{topped \? '\+topup' : ''\}/.test(macro));
+    t('no macro desk answering is a throw, never a fabricated quote',
+      /throw new Error\('NO_MACRO_DATA_SOURCE'\)/.test(macro) &&
+      /MIN_ACCEPTABLE_INSTRUMENTS/.test(macro));
+    t('the top-up phase cannot outlive the global-intel provider timeout',
+      /MACRO_TOPUP_DEADLINE_MS/.test(macro) && /TOPUP_DEADLINE/.test(macro));
+
+    /* the global tab: same pass, tagged fallbacks, still honest when unread */
+    t('the global leaders read the same flow payload as the insights panel',
+      /getCapitalFlows\(\{ force: refresh === true \}\)/.test(aig) &&
+      /<EconomyLeaders cross=\{cross\} domains=\{domains\} flows=\{data\.flows\}/.test(aig));
+    t('a leader card that fell back to another desk says so',
+      /aig-fallback-tag/.test(aig) && /tag: srcTag/.test(aig) &&
+      /منبع جایگزین/.test(aig));
+    t('an unread leader still says «خوانده نشد» instead of showing a number',
+      /در این دور خوانده نشد\./.test(aig) && /aig-insight-empty/.test(aig));
+    t('the curve can be rebuilt from two real treasury reads',
+      /derivedSpread/.test(aig) && /US2S10S/.test(aig));
+
+    /* locales: 12 languages, every new key, and no plural-selector accident */
+    const flowKeys = [
+      'capitalInflow', 'capitalInflowSource', 'capitalInflowNote', 'capitalInflowUnavailable',
+      'flowSourcePending', 'stablecoinSupply', 'totalCirculating', 'sevenDay', 'stablecoinSource',
+      'stablecoinNote', 'chainInflow', 'chainOutflow', 'chainSupply', 'reportedPeriod',
+      'profitSource', 'profitFiling', 'profitNote', 'profitQuarterNote', 'flowRankTitle',
+      'flowRankSub', 'flowRankIn', 'flowRankOut', 'flowRankEmpty', 'profitRankTitle',
+      'profitRankSub', 'mcapShort', 'price24h', 'retryFlows', 'flowSourceDown'
+    ];
+    for (const lang of ['en', 'fa', 'ar', 'es', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh']) {
+      const locale = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+      const missing = flowKeys.filter((k) => typeof locale?.insights?.[k] !== 'string' || !locale.insights[k].trim());
+      t(`${lang} translates every capital-flow and profit string`, missing.length === 0, missing.join(','));
+      /* i18next reads {{count}} as a plural selector and would look for
+         flowRankSub_one/_other — the panel passes {{rows}} instead. */
+      t(`${lang} keeps flowRankSub off the i18next plural selector`,
+        !/\{\{count\}\}/.test(String(locale?.insights?.flowRankSub || '')) &&
+        /\{\{rows\}\}/.test(String(locale?.insights?.flowRankSub || '')));
+    }
+    t('the interpolated source strings keep their placeholders in every locale',
+      ['capitalInflowSource', 'stablecoinSource', 'profitSource', 'flowSourceDown', 'profitRankSub']
+        .every((k) => ['en', 'fa', 'ar', 'zh'].every((lang) => {
+          const v = String(JSON.parse(read(`src/i18n/locales/${lang}.json`))?.insights?.[k] || '');
+          return /\{\{[a-zA-Z]+\}\}/.test(v);
+        })));
+
+    /* knobs are documented, and the secret stays out of the repo */
+    t('the new macro and flow knobs are documented in .env.example',
+      /ALPHA_VANTAGE_MACRO_DAILY_BUDGET/.test(envExample) &&
+      /MACRO_TOPUP_DEADLINE_MS/.test(envExample) &&
+      /FRED_API_KEY/.test(envExample) &&
+      /SEC_EDGAR_USER_AGENT/.test(envExample) &&
+      /CAPITAL_FLOWS_TIMEOUT_MS/.test(envExample));
+    t('the key the user handed over lives only in the git-ignored .env',
+      !read('.gitignore').split('\n').every((l) => !/^\.env/.test(l.trim())) &&
+      !/0IAHXC93J9P8J66Q/.test(envExample) &&
+      !/0IAHXC93J9P8J66Q/.test(read('server/macroData.js')) &&
+      !/0IAHXC93J9P8J66Q/.test(serverFlows));
+    t('the probe that drives both desks without a network exists',
+      existsSync('test/capital-flows-probe.mjs'));
+  }
+
   return rows;
 }
