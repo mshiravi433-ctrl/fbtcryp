@@ -102,6 +102,10 @@ export const aiAutomationResult = (id, result) => call(`/v1/ai/automations/${enc
 
 export const aiMemory = () => call('/v1/ai/memory');
 export const aiAppendMemory = (memory) => call('/v1/ai/memory', { method: 'POST', body: memory });
+/* Long-term (semantic) memory tier — status is a free GET; the recall probe is
+   a POST because it spends a rate-limit point on the memory relayer. */
+export const aiLongTermMemory = () => call('/v1/ai/memory/long-term');
+export const aiLongTermRecall = (query, limit) => call('/v1/ai/memory/long-term/recall', { method: 'POST', body: { query, ...(limit ? { limit } : {}) } });
 
 export const aiCreateGoal = (goal) => call('/v1/ai/goal', { method: 'POST', body: goal });
 

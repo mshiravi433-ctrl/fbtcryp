@@ -43,6 +43,15 @@ recovery phrase.
   data quality; nothing is ever labelled guaranteed.
 - **History** — conversations, operations and active monitoring in one drawer,
   and an operation can be continued in chat («متوقفش کن», «شرطش را تغییر بده»).
+- **Memory that survives the session** — the per-account summary is now read
+  back (a `summary`/`conversationSummary` name mismatch had made every session
+  start from zero) and both the summary and a bounded long-term memory block
+  reach the model. An optional semantic tier on **Walrus Memory (MemWal)** —
+  off by default, encrypted, redacted before it leaves the server, and never
+  used for balances — can carry preferences and goals across devices. See
+  [docs/INTENT-AI-EFFICIENCY-UPGRADE-FA.md](docs/INTENT-AI-EFFICIENCY-UPGRADE-FA.md).
+  Turning it on is three commands (`npm run memwal:keygen` → dashboard →
+  `npm run memwal:preflight`): [docs/WALRUS-MEMORY-ACTIVATION-FA.md](docs/WALRUS-MEMORY-ACTIVATION-FA.md).
 
 See [docs/INTENT-OS-RESTORATION-AUDIT.md](docs/INTENT-OS-RESTORATION-AUDIT.md)
 for the full audit (FOUND / REUSED / BROKEN / MISSING / DISCONNECTED /
