@@ -135,13 +135,14 @@ curl -s -X POST /api/v1/ai/memory/long-term/recall \
 
 ## ۷. تست‌ها و شواهد اجراشده
 
-`npm run test:memory` → **۱۲۴/۱۲۴ assertion در چهار پروب:**
+`npm run test:memory` → **۱۴۲/۱۴۲ assertion در پنج پروب:**
 
 | پروب | تعداد | چه چیزی را قفل می‌کند |
 |---|---|---|
 | `test/intent-ai/walrus-memory-bridge-probe.mjs` | ۵۰ | خاموش‌بودن پیش‌فرض، امضای Ed25519 قابل‌تأیید، شکل پیام استاندارد، redaction، صف/سهمیه/حذف تکراری، timeout و ۴۲۹، کلید خاموش |
 | `test/intent-ai/intent-memory-continuity-probe.mjs` | ۲۹ | دو نام فیلد در هر دو جهت، read-your-writes، fail-open بودن نوشتن ماندگار، رسیدن خلاصه و حافظه به پرامپت با کران و برچسب، ريداکت secret در پرامپت |
 | `test/intent-ai/walrus-memory-wiring-probe.mjs` | ۱۸ | کل مسیر واقعی: یک نوبت `/api/v1/ai/chat` روی اپ واقعی با relayer قلابی — هدرهای امضاشده، namespace یکسان خواندن/نوشتن، ورود حافظه به context، ثبت دقیق شمارنده‌ها، عدم افشای کلید |
+| `test/intent-ai/memwal-account-tool-probe.mjs` | ۱۸ | ابزار ساخت حساب روی زنجیره: هر گیت پیش‌نیاز با پیام دقیق متوقف می‌شود، packageId از `/config` زنده می‌آید و مغایرت env رد می‌شود (تلهٔ شناسهٔ بازنشسته)، dry-run با SDK واقعی به READY می‌رسد و `SuiGrpcClient` را انتخاب می‌کند |
 | `test/intent-ai/memwal-activation-probe.mjs` | ۲۷ | کیت فعال‌سازی: کل چرخهٔ پیش‌پرواز روی relayer قلابی (GO)، مسیر NO_GO با کلید ثبت‌نشده و راهنمای رفع، عدم چاپ کلید خصوصی در `keygen`، دقت پیام‌های `status` |
 
 **رگرسیون موجود:** پروب‌های قبلی که به همین مسیرها دست می‌زنند سبز هستند — `chat-route-contract` (۱۸/۱۸)، `upgrade13-conversation-depth` (۴۶/۴۶)، `phase204-upgrade4` (۲۱/۲۱)، `upgrade6-followup-resume` و `phase66-consented-memory` (خروج ۰).
@@ -193,6 +194,7 @@ curl -s -X POST /api/v1/ai/memory/long-term/recall \
 | `src/lib/aiIntentClient.js` | دو تابع کلاینت برای وضعیت و آزمون حافظهٔ بلندمدت |
 | `.env.example` | مستندسازی همهٔ متغیرهای جدید (پیش‌فرض: خاموش) |
 | `package.json` | `test:memory`، `test:memory-bridge`، `test:memory-continuity`، `test:memory-wiring` |
-| `test/intent-ai/*-probe.mjs` | چهار پروب جدید (۱۲۴ assertion) |
+| `test/intent-ai/*-probe.mjs` | پنج پروب جدید (۱۴۲ assertion) |
 | `scripts/memwal-activate.mjs` | **جدید** — کیت فعال‌سازی: `keygen` / `status` / `preflight` (بدون وابستگی) |
+| `scripts/memwal-create-account.mjs` | **جدید** — ساخت حساب و ثبت کلید روی زنجیره (مسیر جایگزین داشبورد؛ فقط با SDK نصب‌شده، dry-run پیش‌فرض) |
 | `docs/WALRUS-MEMORY-ACTIVATION-FA.md` | **جدید** — راهنمای گام‌به‌گام فعال‌سازی و کدهای خطای پیش‌پرواز |

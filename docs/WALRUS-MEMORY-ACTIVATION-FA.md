@@ -44,7 +44,27 @@ node scripts/memwal-activate.mjs keygen --no-write --print
 
 ---
 
-## گام ۲ — ساخت حساب و ثبت کلید (داشبورد، با کیف پول خودت)
+## گام ۲ — ساخت حساب و ثبت کلید
+
+### مسیر الف (پیشنهادی): یک دستور، بدون چسباندن چیزی در وب
+
+```bash
+npm i -D @mysten-incubation/memwal @mysten/sui      # فقط یک‌بار، روی سیستم خودت
+node scripts/memwal-create-account.mjs              # dry-run: همهٔ پیش‌نیازها را چک می‌کند
+node scripts/memwal-create-account.mjs --yes        # اجرای دو تراکنش
+```
+
+اسکریپت مالکیت کلید را رعایت می‌کند:
+
+- **کلید کیف پول مالک** را از `SUI_PRIVATE_KEY`، `--key-file <path>` یا پرسش مخفی ترمینال می‌گیرد؛ هیچ‌وقت ذخیره یا چاپ نمی‌شود.
+- **packageId را از `/config` زندهٔ relayer** می‌خواند، نه از یک سند. اگر `MEMWAL_PACKAGE_ID` با آن مغایر باشد **متوقف می‌شود** — چون حسابی که زیر پکیج بازنشسته ساخته شود، برای relayer تولید `HTTP 401 AUTH_REJECTED` می‌دهد.
+- برای `@mysten/sui` نسخهٔ ۲٫۶ به بعد یک کلاینت صریح می‌سازد (`SuiGrpcClient`، وگرنه `SuiJsonRpcClient`) چون خود MemWal بدون آن خطای «SuiClient not found» می‌دهد.
+- کد خطاهای قرارداد را ترجمه می‌کند (مثلاً `EAccountAlreadyExists` → با `--account-id 0x…` فقط کلید را ثبت کن).
+- در پایان، `MEMWAL_ACCOUNT_ID` و `MEMWAL_REGISTRY_ID` را در `.env.local` می‌نویسد.
+
+اگر SDK نصب نباشد، همان دستور نصب را چاپ می‌کند و خارج می‌شود. مسیر ارسال روی زنجیره در CI تست نشده است (نه کیف پول هست، نه دسترسی fullnode)؛ `npm run test:memory-account` همهٔ گیت‌های پیش از امضا و مسیر dry-run را تست می‌کند.
+
+### مسیر ب: داشبورد (بدون نصب هیچ چیز)
 
 1. به `https://memory.walrus.xyz` برو و کیف پول Sui را وصل کن.
 2. **Create account** — یک تراکنش (هزینه: چند سنت SUI). یک `MemWalAccount` با شناسهٔ `0x…` می‌سازی.
@@ -177,8 +197,9 @@ curl -s https://<your-domain>/api/v1/ai/memory/long-term | jq '.status | {config
 |---|---|
 | `npm run memwal:keygen` | ساخت کلید delegate؛ عمومی → داشبورد، خصوصی → `.env.local` |
 | `npm run memwal:status` | آیا این فرایند تنظیم و روشن است؟ نصیحت گام بعدی |
+| `npm run memwal:create-account` | ساخت حساب + ثبت کلید روی زنجیره (dry-run پیش‌فرض؛ `--yes` برای اجرا) |
 | `npm run memwal:preflight` | پیش‌پرواز زنده + اندازه‌گیری تأخیر + حکم Go/No-Go |
 | `npm run memwal:preflight -- --cleanup` | همان + پاک‌کردن namespace آزمایشی از ایندکس |
 | `npm run memwal:preflight -- --json` | خروجی ماشین‌خوان برای CI/شواهد |
 | `npm run memwal:preflight:self-test` | اجرای کل چرخه روی relayer قلابی محلی (بدون کلید/شبکه) |
-| `npm run test:memory` | ۱۰۳ assertion روی پل، تداوم حافظه، سیم‌کشی و همین کیت فعال‌سازی |
+| `npm run test:memory` | ۱۴۲ assertion روی پل، تداوم حافظه، سیم‌کشی، کیت فعال‌سازی و ابزار ساخت حساب |
