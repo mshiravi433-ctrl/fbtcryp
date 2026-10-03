@@ -4479,13 +4479,41 @@
   "p2p": {
     "title": "P2P",
     "subtitle": "Buy and sell bitcoin for local money with real escrow, or send crypto directly, person to person.",
+    "eyebrow": "P2P SETTLEMENT DESK",
+    "heroNote": "The fiat market uses the provider’s escrow; direct OTC transfers here are not escrowed.",
+    "tabListLabel": "P2P trading routes",
     "tab": {
       "market": "Market",
       "otc": "On-chain OTC",
       "pay": "Pay"
     },
-    "otcTitle": "Direct wallet-to-wallet",
-    "otcBody": "Send crypto straight to another person's address. No middleman, no escrow needed — because nothing has to be trusted: the blockchain settles it in one transaction.",
+    "tabHint": {
+      "market": "Local fiat ↔ BTC",
+      "otc": "Wallet ↔ wallet",
+      "pay": "Create a payment link"
+    },
+    "marketKicker": "BTC · FIAT MARKET",
+    "marketHeading": "Compare Bitcoin offers",
+    "marketIntro": "Filter by amount, local currency and payment method. Check each trader’s limits and terms before opening a deal.",
+    "marketBadge": "BTC / FIAT",
+    "escrowBadge": "PROVIDER ESCROW",
+    "safetyHeading": "Safety & settlement",
+    "safetyIntro": "Know who holds the asset and what protection applies before you continue.",
+    "otcBadge": "DIRECT SETTLEMENT · NO ESCROW",
+    "otcFact": {
+      "wallet": "You review and sign in your own wallet",
+      "agreement": "Agree on price and amount before sending",
+      "escrow": "No escrow or dispute mediation on this tab"
+    },
+    "sendKicker": "ON-CHAIN TRANSFER",
+    "walletReady": "Wallet ready",
+    "walletNeeded": "Wallet needed",
+    "networkLabel": "NETWORK",
+    "chainId": "Chain ID {{id}}",
+    "stepsTitle": "Before you send",
+    "stepsHint": "Use this short checklist to reduce irreversible mistakes.",
+    "otcTitle": "Direct wallet-to-wallet settlement",
+    "otcBody": "Agree with the other party on the asset, price and amount before you send. This is direct on-chain settlement: we do not hold funds, secure an off-app agreement or arbitrate disputes.",
     "sendDirect": "Send to a person",
     "yourAddress": "Your address",
     "openSend": "Open send screen",
@@ -4523,7 +4551,7 @@
     "cashTitle": "Buying with physical cash, in person",
     "cashBody": "Meeting someone with banknotes has no escrow at all — nothing can be reversed and nobody can arbitrate. If you do it anyway: meet inside a bank branch or a police-station lobby in daylight, count the notes before touching your phone, and have the sender broadcast the transaction while you are both standing there. Never travel to a private address, and never hand over cash against a screenshot — only against a confirmation you have read on-chain yourself.",
     "escrowTitle": "Why the escrow lives on the desk",
-    "escrowBody": "A fiat P2P desk needs multisig escrow holding the coins while money moves, arbitrators for disputes, and a licensed operator. Hodl Hodl runs exactly that — no identity check to start, escrowed since 2018. So the offers stream live into this page, and the one step that requires their infrastructure (the escrow contract) is completed on their platform. We never hold your funds at any point."
+    "escrowBody": "Hodl Hodl supplies these offers and hosts their multisig escrow and dispute process. The escrow step stays on their platform; we never hold your funds."
   },
   "rank": {
     "title": "Your points",
@@ -8310,6 +8338,7 @@
       "fast": "Lightning / Ark"
     },
     "workingNow": "Working now",
+    "reset": "Clear filters",
     "refresh": "Refresh offers",
     "loading": "Loading live offers…",
     "listLabel": "Live offers",

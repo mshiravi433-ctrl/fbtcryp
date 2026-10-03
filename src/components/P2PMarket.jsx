@@ -447,6 +447,14 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
   }, [offers.list, input.amount]);
 
   const summaryQuote = bestOffer?.quote ?? null;
+  const hasActiveFilters = Boolean(
+    input.amount || input.currency !== 'USD' || input.paymentMethod || input.country || input.layer !== 'any' || workingNow
+  );
+  const resetFilters = () => {
+    patch(emptyInputs());
+    setWorkingNow(false);
+    haptic?.('light');
+  };
 
   const openSheet = (offer) => {
     haptic?.('light');
@@ -603,8 +611,21 @@ export default function P2PMarket({ side: controlledSide, onSideChange }) {
           >
             {t('p2pMarket.workingNow')}
           </button>
-          <button className="p2pm-toggle" onClick={refresh} aria-label={t('p2pMarket.refresh')}>
+          {hasActiveFilters && (
+            <button type="button" className="p2pm-toggle p2pm-reset" onClick={resetFilters}>
+              <IconX width={13} height={13} />
+              <span>{t('p2pMarket.reset')}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className={`p2pm-toggle p2pm-refresh ${offers.status === 'loading' ? 'is-loading' : ''}`}
+            onClick={refresh}
+            aria-label={t('p2pMarket.refresh')}
+            title={t('p2pMarket.refresh')}
+          >
             <IconRefresh width={13} height={13} />
+            <span>{t('p2pMarket.refresh')}</span>
           </button>
         </div>
       </motion.section>
