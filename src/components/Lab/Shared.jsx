@@ -20,9 +20,8 @@
  *     `Donut`, `Meter`, `AnimatedNumber`, `StatChip`, `PriceBlock`, `LivePill`.
  */
 
-import { useEffect, useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import {
-  AnimatePresence,
   motion,
   useMotionValue,
   useSpring,
@@ -397,25 +396,69 @@ const COACH_ICON = {
   warn: 'alert'
 };
 
-export function AICoach({ name, message, emoji, icon, tone = 'neutral' }) {
+/**
+ * THE COACH, STREAMING.
+ *
+ * «مربی هوش مصنوعی واقعا خوب کار بده» — a static line under a trading card
+ * reads as decoration, and the report was right: an AI that never visibly does
+ * anything is a label, not a coach. Three changes make it read as a coach
+ * that is working:
+ *
+ *  · THE MESSAGE STREAMS. It types out character by character with a caret,
+ *    the way every assistant the reader has ever used behaves — so a changed
+ *    verdict is visibly NEW, not a line that silently swapped. Reduced motion
+ *    gets the complete sentence instantly.
+ *  · TONE NOW REACHES THE BOX ITSELF. A warning looks like a warning (amber
+ *    rim) and a green-light looks like one (mint rim), so the verdict lands
+ *    before the first word is read. `data-tone` is the hook; CSS owns it.
+ *  · `chips` SHOW THE NUMBERS THE VERDICT IS ABOUT. A coach that says "cut
+ *    the size" without saying what the size IS makes the reader go hunting;
+ *    the chips print the measured R:R, size % and $ risk under the sentence.
+ */
+export function AICoach({ name, message, emoji, icon, tone = 'neutral', chips }) {
   const { t } = useTranslation();
   const still = useStill();
+  const [typed, setTyped] = useState(() => (still || !message ? String(message ?? '') : ''));
+
+  useEffect(() => {
+    const full = String(message ?? '');
+    if (still || !full) {
+      setTyped(full);
+      return undefined;
+    }
+    /* ~2 characters per frame ≈ 120/s: a 90-character verdict lands in under
+       a second — readable speed, not a gimmick. requestAnimationFrame idles
+       automatically when the tab hides. */
+    let i = 0;
+    let raf = 0;
+    setTyped('');
+    const step = () => {
+      i = Math.min(full.length, i + 2);
+      setTyped(full.slice(0, i));
+      if (i < full.length) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [message, still]);
+
   if (!message) return null;
   const coachName = name ?? t('lab2.aiCoach');
   const glyph = emoji ?? <LabIcon name={icon || COACH_ICON[tone] || 'robot'} width={21} height={21} />;
+  const typing = !still && typed.length < String(message).length;
 
   return (
     <motion.div
       className="lab2-coach"
+      data-tone={tone}
       initial={still ? false : { opacity: 0, y: 10, scale: 0.985 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.42, ease: LAB_EASE }}
     >
-      <div className="lab2-coach-avatar" aria-hidden="true">
+      <div className="lab2-coach-avatar" data-tone={tone} aria-hidden="true">
         {glyph}
       </div>
       <div className="lab2-coach-body">
-        <div className="lab2-coach-name">
+        <div className="lab2-coach-name" data-tone={tone}>
           <IconRobot width={13} height={13} />
           {coachName}
           <span className="lab2-coach-dots" aria-hidden="true">
@@ -424,20 +467,20 @@ export function AICoach({ name, message, emoji, icon, tone = 'neutral' }) {
             <i />
           </span>
         </div>
-        {/* Keyed on the message so a coach that changes its mind cross-fades
-            instead of snapping mid-read. */}
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={String(message)}
-            className="lab2-coach-msg"
-            initial={still ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={still ? undefined : { opacity: 0, y: -6 }}
-            transition={{ duration: 0.26, ease: LAB_EASE }}
-          >
-            {message}
-          </motion.div>
-        </AnimatePresence>
+        <div className="lab2-coach-msg">
+          {typed}
+          {typing && <span className="lab2-coach-caret" aria-hidden="true" />}
+        </div>
+        {Array.isArray(chips) && chips.length > 0 && (
+          <div className="lab2-coach-chips">
+            {chips.map((c, i) => (
+              <span key={`${c.label}-${i}`} className={`lab2-coach-chip ${c.tone ? `is-${c.tone}` : ''}`}>
+                <span className="lab2-coach-chip-k">{c.label}</span>
+                <b className="lab2-num">{c.value}</b>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );

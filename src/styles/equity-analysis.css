@@ -450,6 +450,25 @@
   font-weight: 700;
 }
 
+.gold-token-winrow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* The window badge («دامنه واقعی»): names the window that actually loaded —
+   90, or the 30/14-day fallback the cascade settled for — so a one-month
+   chart is never read as a three-month one. */
+.gold-token-win {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink-amber) 38%, transparent);
+  background: color-mix(in srgb, var(--ink-amber) 10%, transparent);
+  color: color-mix(in srgb, var(--ink-amber) 82%, var(--text-1));
+}
+
 .gold-token-facts {
   margin-top: 9px;
 }
@@ -476,4 +495,429 @@
   .gold-box-chevron {
     transition: none;
   }
+}
+
+/* ==========================================================================
+   THE FULL-SCREEN ANALYSIS POPUP  —  .eqsheet-*
+   --------------------------------------------------------------------------
+   «صفحه تحلیل ... پاپ آپ کامل صفحه ایی شود با ظاهر بی نظیر · فاصله و زبان و
+   اندازه درست»
+
+   The measurement pieces (.eqan-*) stay token-driven as before; this shell is
+   the viewport around them. It is token-driven for the same reason, dark and
+   light both work, and every measurement keeps its reading column: content is
+   a centered 560px column so the grid, chart and facts share one optical
+   line down the screen instead of drifting edge to edge on a tablet.
+   ========================================================================== */
+
+.eqsheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220; /* above .sheet-backdrop (200) and the nav */
+  display: flex;
+  justify-content: center;
+  background:
+    radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--rgb-1) 14%, transparent), transparent 62%),
+    rgba(2, 6, 12, 0.7);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+:root[data-theme='light'] .eqsheet-backdrop {
+  background:
+    radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 62%),
+    rgba(236, 240, 250, 0.72);
+}
+
+.eqsheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  height: 100%;
+  background: var(--bg-abyss);
+  border-inline: 1px solid var(--line);
+  box-shadow: 0 0 90px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+/* ── the sticky bar ─────────────────────────────────────────────────────── */
+.eqsheet-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-abyss) 78%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.eqsheet-close {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.eqsheet-close:active { transform: scale(0.93); }
+
+.eqsheet-bar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.eqsheet-bar-k {
+  font-size: 13.5px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eqsheet-bar-chip {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ink-cyan) 38%, transparent);
+  background: color-mix(in srgb, var(--ink-cyan) 10%, transparent);
+  color: var(--ink-cyan);
+  white-space: nowrap;
+}
+
+/* ── the reading column ─────────────────────────────────────────────────── */
+.eqsheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 14px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── hero ───────────────────────────────────────────────────────────────── */
+.eqsheet-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(140% 160% at 8% -30%, color-mix(in srgb, var(--ink-cyan) 16%, transparent), transparent 58%),
+    var(--bg-panel);
+}
+
+.eqsheet-orb {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink-cyan) 42%, transparent);
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--ink-cyan) 24%, transparent), transparent 70%);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--ink-cyan) 20%, transparent);
+}
+
+.eqsheet-id { flex: 1 1 auto; min-width: 0; }
+.eqsheet-name {
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eqsheet-sym {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
+.eqsheet-px { flex-shrink: 0; text-align: end; }
+.eqsheet-px-now {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.eqsheet-px-chg {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.eqsheet-px-chg-k { font-weight: 500; font-size: 10px; }
+
+/* ── the chart card ─────────────────────────────────────────────────────── */
+.eqsheet-chart {
+  padding: 12px 13px 11px;
+  border-radius: var(--radius);
+}
+
+.eq-chart { position: relative; }
+.eq-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.eq-chart-grid {
+  stroke: var(--line);
+  stroke-width: 0.7;
+  stroke-dasharray: 3 5;
+}
+.eq-chart-scale {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 10px;
+  bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: end;
+  font-size: 9.5px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.eq-chart-scale span {
+  background: color-mix(in srgb, var(--bg-abyss) 62%, transparent);
+  padding: 1px 5px;
+  border-radius: 6px;
+}
+.eq-chart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: 5px;
+  font-size: 10.5px;
+}
+.eq-chart-win {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+
+/* ── the pinned action row ──────────────────────────────────────────────── */
+.eqsheet-foot {
+  flex-shrink: 0;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-abyss) 80%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.eqsheet-foot .eqan-buy {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  font-size: 13.5px;
+}
+
+/* Wider screens: the popup reads like a panel, not a phone stretched out. */
+@media (min-width: 640px) {
+  .eqsheet-backdrop { align-items: center; }
+  .eqsheet {
+    height: min(760px, 100% - 48px);
+    border-radius: 26px;
+    border: 1px solid var(--line-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eqsheet-close { transition: none; }
+}
+
+/* ==========================================================================
+   FULL-PAGE EQUITY ANALYSIS POPUP — .eqsh-*
+   --------------------------------------------------------------------------
+   «تحلیل را به صورت پاپ آپ کامل صفحه‌ای می‌خواهم» — the analysis that used to
+   unfold to 56px of chart under each row is now the whole viewport. The
+   shell owns the frame only; every measurement cell inside it keeps the
+   .eqan-* classes above and therefore the same number styles the probes pin.
+   Still fully token-driven: the light theme is the same variables re-seeded,
+   and the aurora edge is the brand gradient used across the app.
+   ========================================================================== */
+.eqsh-root {
+  position: fixed;
+  inset: 0;
+  z-index: 210; /* above .sheet-layer (201) — analysis can open over a sheet-less list */
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+.eqsh-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(2, 6, 16, 0.62);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  cursor: default;
+}
+
+.eqsh-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 60% at 50% -18%, rgba(var(--rgb-1-rgb, 255 255 255), 0) 0%, transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 92%, transparent), var(--bg-panel) 220px);
+  background-color: var(--bg);
+}
+@media (min-width: 560px) {
+  .eqsh-root { align-items: center; padding: 20px; }
+  .eqsh-panel {
+    width: min(720px, 100%);
+    height: min(92dvh, 880px);
+    border-radius: 26px;
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ── the bar ──────────────────────────────────────────────────────────── */
+.eqsh-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding:
+    calc(env(safe-area-inset-top) + 14px)
+    16px
+    12px;
+  border-block-end: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 88%, transparent), transparent);
+}
+.eqsh-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.eqsh-id-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.eqsh-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+.eqsh-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 56vw;
+}
+@media (min-width: 560px) { .eqsh-name { max-width: 460px; font-size: 19px; } }
+.eqsh-sym { font-size: 11.5px; color: var(--text-3); font-weight: 600; }
+.eqsh-close {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, transform 0.08s;
+}
+.eqsh-close:active { transform: scale(0.93); }
+
+/* ── the scroll column ────────────────────────────────────────────────── */
+.eqsh-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px 10px;
+}
+.eqsh-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+/* ── hero ─────────────────────────────────────────────────────────────── */
+.eqsh-hero { display: flex; flex-direction: column; gap: 8px; padding: 2px 4px; }
+.eqsh-price-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.eqsh-price {
+  font-size: clamp(26px, 7.4vw, 34px);
+  font-weight: 800;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.eqsh-chip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+}
+.eqsh-window { font-size: 12px; }
+
+/* ── chart card ───────────────────────────────────────────────────────── */
+.eqsh-card .eqan-chart-head { margin-bottom: 10px; }
+.eqsh-card .eqan-chart svg, .eqsh-card .eqan-chart .skel { width: 100%; display: block; }
+.eqsh-card .eqan-chart svg { height: auto; }
+.eqsh-fallback {
+  margin-top: 10px;
+  color: var(--ink-amber, #b98900);
+}
+
+/* ── the one action ───────────────────────────────────────────────────── */
+.eqsh-foot {
+  padding: 12px 16px calc(env(safe-area-inset-bottom) + 14px);
+  border-block-start: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  background: linear-gradient(0deg, color-mix(in srgb, var(--bg-panel) 92%, transparent), transparent);
+}
+.eqsh-foot .eqan-buy {
+  width: 100%;
+  height: 52px;
+  font-size: 15px;
+  font-weight: 800;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eqsh-close { transition: none; }
 }

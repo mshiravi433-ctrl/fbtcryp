@@ -7786,5 +7786,12 @@
     "title": "الذكاء العالمي",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing",
     "tabShort": "عالمي"
+  },
+  "eqsheet": {
+    "title": "تحليل {{name}}",
+    "kicker": "تحليل الرمز",
+    "day": "٢٤ ساعة",
+    "chartTitle": "مخطط السعر — {{days}} يوماً",
+    "windowFallback": "سلسلة 90 يوماً الكاملة غير متاحة لهذا الرمز بعد؛ تُعرض أقرب نافذة حقيقية — {{days}} يوماً — بدلاً من ذلك."
   }
 }

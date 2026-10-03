@@ -1085,7 +1085,8 @@ export default function Perp() {
                   aria-label={t('perp.terminal.trade', { symbol: p.symbol })}
                   data-testid={`perp-row-open-${p.symbol}`}
                 >
-                  {t('perp.terminal.trade')}
+                  <IconTrend width={13} height={13} aria-hidden="true" />
+                  <span>{t('perp.terminal.trade')}</span>
                 </button>
               </div>
             );

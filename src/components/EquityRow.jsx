@@ -57,7 +57,7 @@ export default function EquityRow({ asset, amountUsd, onBuy, holding = null, onS
   const held = holding && Number.isFinite(holding.amount) && holding.amount > 0 ? holding : null;
 
   /*
-   * The analysis box under this row.
+   * The analysis for this row — a FULL-SCREEN popup, not an in-place box.
    *
    * Closed by default and mounted only while open — see the note in
    * EquityAnalysis.jsx for why the 90-day fetch must not run for twenty-two
@@ -234,7 +234,12 @@ export default function EquityRow({ asset, amountUsd, onBuy, holding = null, onS
 
       <AnimatePresence initial={false}>
         {analysisOpen && (
-          <EquityAnalysis asset={asset} amountUsd={amountUsd} onBuy={onBuy} />
+          <EquityAnalysis
+            asset={asset}
+            amountUsd={amountUsd}
+            onBuy={onBuy}
+            onClose={() => setAnalysisOpen(false)}
+          />
         )}
       </AnimatePresence>
     </motion.div>

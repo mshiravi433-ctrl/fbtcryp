@@ -1098,71 +1098,60 @@ export default function Stocks() {
             no `withReferral` call, so the earnings disclosure that used to
             follow it is gone too: there is nothing left to disclose.
           */}
-          <section>
-            <p className="section-label">{t('stocks.ref.title')}</p>
-            <p className="farm-filtered faint">{t('stocks.ref.intro')}</p>
-
-            {avantisLoading && !avantis ? (
-              <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="skel" style={{ height: 52 }} />
-                ))}
-              </div>
-            ) : !avantis?.live || !refRows.length ? (
-              /* Silent when empty. A reference table nobody asked for should
-                 not shout about being unavailable. */
-              null
-            ) : (
-              <motion.div
-                className="stack"
-                style={{ gap: 8, marginTop: 10 }}
-                variants={stagger}
-                initial="hidden"
-                animate="show"
-              >
-                {refRows.map((r) => (
-                  <motion.div key={r.id} className="coin-row" variants={riseIn}>
-                    {/*
-                      Real company logo from the ticker — the same visual
-                      language as the buyable rows above, not a text stub.
-                      CoinLogo degrades to the monogram if the CDN fails, so a
-                      dead logo cannot leave a blank circle.
-                    */}
-                    <CoinLogo ticker={r.symbol} px={26} />
-                    <div className="coin-meta">
-                      <div className="coin-sym">{r.symbol}</div>
-                      <div className="coin-name">
-                        {/*
-                          Market hours, not a venue name. US markets are shut
-                          most of the week in Tehran and an unlabelled price
-                          reads as stale or broken.
-                        */}
-                        {r.marketOpen === false ? t('stocks.ref.closed') : t('stocks.ref.openNow')}
-                      </div>
-                    </div>
-                    <div className="coin-right">
+          {/*
+            ─── THE REFERENCE TABLE, INSIDE A COLLAPSIBLE BOX ─────────────────
+            «این فقط لوگو و اسم هست داده قیمتی نیست ... در باکس باز شونده
+            بزار» — a dozen rows of names with no buy action sat on the page
+            whether anyone asked for them or not, and between two buy lists
+            they read as a broken section. The table stays — it answers "is my
+            ticker here at all" with live Pyth numbers — but it folds: the
+            closed title already says what it is, and one tap shows the rows.
+            When the feed is down the box simply is not rendered, exactly as
+            the old empty state behaved.
+          */}
+          {avantis?.live && refRows.length > 0 && (
+            <motion.div variants={riseIn} initial="hidden" animate="show">
+              <InfoBox title={t('stocks.ref.title')} tone="info" id="stocks-ref">
+                <p className="faint" style={{ marginTop: 0, lineHeight: 1.7 }}>{t('stocks.ref.intro')}</p>
+                <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
+                  {refRows.map((r) => (
+                    <motion.div key={r.id} className="coin-row" variants={riseIn}>
                       {/*
-                        Null stays a dash. Number(null) is 0 and 0 is finite,
-                        so "$0.00" is the easy and very misleading bug.
+                        Real company logo from the ticker — the same visual
+                        language as the buyable rows above, not a text stub.
+                        CoinLogo degrades to the monogram if the CDN fails, so a
+                        dead logo cannot leave a blank circle.
                       */}
-                      <div className="mono" style={{ fontSize: 12.5 }}>
-                        {r.price ? `$${fmtPrice(r.price)}` : '—'}
+                      <CoinLogo ticker={r.symbol} px={26} />
+                      <div className="coin-meta">
+                        <div className="coin-sym">{r.symbol}</div>
+                        <div className="coin-name">
+                          {/*
+                            Market hours, not a venue name. US markets are shut
+                            most of the week in Tehran and an unlabelled price
+                            reads as stale or broken.
+                          */}
+                          {r.marketOpen === false ? t('stocks.ref.closed') : t('stocks.ref.openNow')}
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
-
-            {/*
-              Says plainly that these are not for sale here and that we are not
-              routing anyone anywhere. Without it a price with no button looks
-              like a broken buy flow rather than a deliberate reference.
-            */}
-            <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>
-              {t('stocks.ref.note')}
-            </p>
-          </section>
+                      <div className="coin-right">
+                        {/*
+                          Null stays a dash. Number(null) is 0 and 0 is finite,
+                          so "$0.00" is the easy and very misleading bug.
+                        */}
+                        <div className="mono" style={{ fontSize: 12.5 }}>
+                          {r.price ? `$${fmtPrice(r.price)}` : '—'}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+                <p className="faint" style={{ marginTop: 8, marginBottom: 0, lineHeight: 1.75 }}>
+                  {t('stocks.ref.note')}
+                </p>
+              </InfoBox>
+            </motion.div>
+          )}
         </>
       ) : tab === 'rwa' ? (
         <>

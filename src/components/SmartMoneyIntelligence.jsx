@@ -66,10 +66,40 @@ export function VerifiedWallets() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
+  /*
+   * «هوش تایید شده برای کیف پول واجد شرایط داده ندارد» — the board used to
+   * fetch ONCE. An empty answer on a fresh server is usually a mid-index
+   * pass, not a finished verdict, so the reader inherited a static empty board
+   * forever. It now re-asks every 30s while it has nothing to show (and stops
+   * the moment a wallet qualifies), and while empty it prints WHAT the engine
+   * has seen so far — analysed wallets and on-chain receipts — instead of a
+   * one-line shrug.
+   */
   useEffect(() => {
+    let alive = true;
     const ctrl = new AbortController();
-    fetchVerifiedWallets(ctrl.signal).then(setData).catch(() => { if (!ctrl.signal.aborted) setError(true); });
-    return () => ctrl.abort();
+    const emptyRef = { current: true };
+    const run = () =>
+      fetchVerifiedWallets(ctrl.signal)
+        .then((d) => {
+          if (!alive) return;
+          setData(d);
+          emptyRef.current = !(d?.wallets?.length > 0);
+        })
+        .catch(() => {
+          if (alive && !ctrl.signal.aborted) setError(true);
+        });
+    setError(false);
+    run();
+    const iv = setInterval(() => {
+      if (ctrl.signal.aborted || typeof document !== 'undefined' && document.hidden) return;
+      if (emptyRef.current) run();
+    }, 30_000);
+    return () => {
+      alive = false;
+      ctrl.abort();
+      clearInterval(iv);
+    };
   }, []);
 
   return (
@@ -86,8 +116,34 @@ export function VerifiedWallets() {
 
       {error && <p className="smi-sub">{t('sm.engine.unavailable')}</p>}
       {!error && !data && <div className="sm-skel" />}
-      {data && !data.wallets?.length && <p className="smi-sub">{t('sm.engine.noQualified')}</p>}
-      {data && !data.wallets?.length && !data.indexedAt && <p className="smi-sub">{refreshNote(t, data) || t('sm.engine.notIndexed')}</p>}
+      {/* While the board is empty: not «داده ندارد», but what the engine has
+          measured so far, the index stamp, and the fact that it is STILL
+          scanning (the 30s re-poll above). Candidates render below this. */}
+      {data && !data.wallets?.length && (
+        <div className="smi-scanning" data-testid="sm-verified-scanning">
+          <div className="smi-scanning-head">
+            <span className="smi-live-dot" aria-hidden="true" />
+            <span>{t('sm.engine.noQualified')}</span>
+          </div>
+          <div className="smi-scanning-stats">
+            <div>
+              <b className="mono">{data.coverage?.analyzedWallets ?? '—'}</b>
+              <span>{t('sm.engine.analysed')}</span>
+            </div>
+            <div>
+              <b className="mono">{data.coverage?.observedSwaps ?? data.coverage?.swapsInWindow ?? '—'}</b>
+              <span>{t('sm.engine.receiptsShort', { defaultValue: 'معامله' })}</span>
+            </div>
+            <div>
+              <b className="mono">{data.indexedAt ? '✓' : '…'}</b>
+              <span>{t('sm.engine.indexed')}</span>
+            </div>
+          </div>
+          <small>
+            {refreshNote(t, data) || (data.indexedAt ? t('sm.engine.emptyBody') : t('sm.engine.notIndexed'))}
+          </small>
+        </div>
+      )}
 
       <div className="smi-wallet-grid">
         {(data?.wallets || []).slice(0, 15).map((w, i) => {

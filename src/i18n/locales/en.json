@@ -3502,13 +3502,15 @@
       "poolDepth": "Market depth",
       "yourShare": "Your share of it",
       "tooDeep": "The largest size that keeps your order inside the 2% depth gate is about {{max}}.",
-      "youWouldGet": "You would get"
+      "youWouldGet": "You would get",
+      "sheetTitle": "Analysis"
     },
     "goldHistory": {
       "historyTitle": "Gold — what the past says",
       "historySub": "{{days}} days, measured per token",
       "historyNote": "Each token is priced by a different issuer, so the three series are measured separately rather than averaged into one number.",
-      "noHistoryOne": "No 90-day history available for this token."
+      "noHistoryOne": "No 90-day history available for this token.",
+      "windowChip": "{{days}}-day window"
     }
   },
   "help": {
@@ -11961,9 +11963,12 @@
       "coachLive": "Position is live. Watch the PnL but do not touch the stop — that is the point of having one.",
       "coachNoStop": "Every trade needs a stop loss. If you cannot define your loss, you do not have a trade.",
       "coachNoTp": "A trade without a target is a trade that will reverse and give back its gains.",
-      "coachOverSize": "Position above 10% of your balance is reckless. Cut it down or skip this one.",
-      "coachBadRr": "R:R below 1.5 means you need a 70% win rate to break even. Wait for a better setup.",
-      "coachGood": "Setup looks disciplined. Execute."
+      "coachOverSize": "Position at {{size}}% of your balance is reckless. Cut it under 10% or skip this one.",
+      "coachBadRr": "R:R is {{rr}} — below 1.5 you need a 70% win rate just to break even. Wait for a better setup.",
+      "coachGood": "Setup looks disciplined. Execute.",
+      "coachTip1": "The 1% rule: never risk more than 1–2% of balance on one trade. Survival beats winning.",
+      "coachTip2": "Before entering, write down where the idea is wrong (the stop) and where it is enough (the target). Then execute.",
+      "coachTip3": "The best trade is often the one you skip. Sitting in cash is also a position."
     },
     "assets": {
       "BTC": "Bitcoin",
@@ -14285,5 +14290,12 @@
     "goldUnit": "USD per troy ounce",
     "goldFailed": "Gold spot unavailable",
     "disclaimer": "Read-only. FBT does not place ETF or gold orders. Funds and Prediction markets stay unavailable in this phase."
+  },
+  "eqsheet": {
+    "title": "{{name}} analysis",
+    "kicker": "Token analysis",
+    "day": "24h",
+    "chartTitle": "Price chart — {{days}} days",
+    "windowFallback": "A full 90-day series is not available for this ticker yet; the nearest real window — {{days}} days — is shown instead."
   }
 }

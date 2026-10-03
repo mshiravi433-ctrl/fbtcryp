@@ -5,7 +5,7 @@ import Sparkline from './Sparkline';
 import TokenIcon from '../lib/tokenIcon';
 import { fmtCompact, fmtPct, fmtPrice } from '../lib/format';
 import { equitySeriesFacts } from '../lib/equityAnalysis';
-import { fetchEquityChart, isUsableSeries } from '../lib/equityChart';
+import { fetchEquityChartWindowed, isUsableSeries } from '../lib/equityChart';
 import { usePoll } from '../hooks/useMarket';
 import { IconChevronRight } from './Icons';
 import '../styles/equity-analysis.css';
@@ -44,19 +44,29 @@ import '../styles/equity-analysis.css';
 
 const DAYS = 90;
 
-/** One token's 90-day facts, fetched only while the box is open. */
+/** One token's facts, fetched only while the box is open.
+ *
+ *  «طلا گذشته ... تاریخ ۹۰ روزه در دسترس نیست. اگر نمیتونی تاریخ ۱ ماهه را
+ *  داده بده» — 90 days are asked for first, and the cascade settles for a
+ *  real 30-day (then 14-day) window rather than showing nothing. The badge on
+ *  the card names the window that actually loaded, so a one-month chart is
+ *  never labelled as three. */
 function GoldFacts({ asset }) {
   const { t } = useTranslation();
   const { data: chart } = usePoll(
-    () => (asset?.coingeckoId ? fetchEquityChart(asset.coingeckoId, DAYS) : Promise.resolve([])),
+    () =>
+      asset?.coingeckoId
+        ? fetchEquityChartWindowed(asset.coingeckoId, DAYS)
+        : Promise.resolve({ series: [], days: DAYS }),
     [asset?.coingeckoId],
     120_000
   );
 
-  const series = useMemo(() => (chart ?? []).map((d) => d.p), [chart]);
+  const effectiveDays = chart?.days ?? DAYS;
+  const series = useMemo(() => (chart?.series ?? []).map((d) => d.p), [chart]);
   const facts = useMemo(
-    () => (isUsableSeries(series) ? equitySeriesFacts(series, { days: DAYS }) : []),
-    [series]
+    () => (isUsableSeries(series) ? equitySeriesFacts(series, { days: effectiveDays }) : []),
+    [series, effectiveDays]
   );
 
   const up = (asset?.change24h ?? 0) >= 0;
@@ -105,6 +115,11 @@ function GoldFacts({ asset }) {
           </div>
         </div>
       </div>
+      <div className="gold-token-winrow">
+        <span className="gold-token-win mono">
+          {t('stocks.goldHistory.windowChip', { days: effectiveDays, defaultValue: '{{days}}d' })}
+        </span>
+      </div>
       <ul className="hist-list gold-token-facts">
         {facts.map((f) => (
           <li key={f.id} className={`hist-item hist-${f.kind}`}>
@@ -134,13 +149,13 @@ export default function GoldHistoryBox({ assets = [], amountUsd = 1000 }) {
   const { data: primaryChart } = usePoll(
     () =>
       open && primary?.coingeckoId
-        ? fetchEquityChart(primary.coingeckoId, DAYS)
-        : Promise.resolve([]),
+        ? fetchEquityChartWindowed(primary.coingeckoId, DAYS)
+        : Promise.resolve({ series: [], days: DAYS }),
     [primary?.coingeckoId, open],
     120_000
   );
 
-  const primarySeries = useMemo(() => (primaryChart ?? []).map((d) => d.p), [primaryChart]);
+  const primarySeries = useMemo(() => (primaryChart?.series ?? []).map((d) => d.p), [primaryChart]);
   const primaryUp = (primarySeries.at(-1) ?? 0) >= (primarySeries[0] ?? 0);
 
   if (!assets.length) return null;
