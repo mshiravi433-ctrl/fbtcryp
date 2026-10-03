@@ -770,14 +770,13 @@ export default function Bridge() {
       </motion.div>
 
       {/*
-        ─── THE BANNER ─────────────────────────────────────────────────────
-        «به صفحه پل یک بنر فوق‌مدرن و زیبا اضافه کن … با تبلیغ پل ترون و
-        سولانا». It sits ABOVE the mode rail, because it is what explains why
-        there are four modes at all: Tron and Solana are the two routes this
-        audience actually uses, and each card's CTA presses the matching tab.
-        The route count is only printed when a quote actually produced routes.
+        ─── THE COMPACT ROUTE BANNER ──────────────────────────────────────
+        The carousel highlights one of the two special routes at a time, with
+        explicit slide controls and a CTA that selects the matching mode.
+        It sits above the mode rail without pushing the bridge form far below
+        the fold.
       */}
-      <BridgeHero onSelectMode={setMode} routesLive={routes.length} />
+      <BridgeHero onSelectMode={setMode} />
 
       {/*
         ─── THE MODE RAIL ─────────────────────────────────────────────────

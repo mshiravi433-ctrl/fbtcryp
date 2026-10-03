@@ -6145,14 +6145,19 @@
       "factRoutes": "live routes",
       "factChains": "special routes: Tron & Solana",
       "factFee": "platform fee",
+      "carousel": "carousel",
+      "slide": "slide",
+      "slideLabel": "Slide {{current}} of {{total}}: {{route}}",
+      "chooseRoute": "Choose a bridge route",
+      "goTo": "Show {{route}}",
       "tron": {
-        "title": "Tron bridge — TRC20 USDT",
-        "note": "The cheapest way to move USDT; the destination network's flat activation cost is charged separately.",
+        "title": "Tron bridge — Tether TRC20",
+        "note": "Move USDT on Tron. Review destination and network costs before confirming.",
         "cta": "Open the Tron bridge"
       },
       "solana": {
         "title": "Solana bridge — SOL & SPL",
-        "note": "The fastest route; the network fee is paid in SOL, so keep a little SOL for gas.",
+        "note": "Move SOL and SPL tokens. Keep a little SOL for network fees.",
         "cta": "Open the Solana bridge"
       }
     }

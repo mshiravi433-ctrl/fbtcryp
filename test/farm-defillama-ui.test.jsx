@@ -51,7 +51,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).endsWith('/history') ? history() : feed()));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('Farm discovery UI', () => {
   it.each(['en', 'fa'])('renders real data and a visible stale warning in %s', async (lang) => {
@@ -104,6 +104,46 @@ describe('Farm discovery UI', () => {
     fireEvent.click(details);
     await screen.findByText(t('farm.historyTitle'));
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/${id}/history`))).toBe(true));
+  });
+
+  it('keeps the two analysis actions equal and fades the pinned copy when the inline row is visible', async () => {
+    const observers = [];
+    class FakeIntersectionObserver {
+      constructor(callback, options) { this.callback = callback; this.options = options; observers.push(this); }
+      observe(target) { this.target = target; }
+      disconnect() {}
+      setVisible(isIntersecting) {
+        this.callback([{ target: this.target, isIntersecting, intersectionRatio: isIntersecting ? 1 : 0 }], this);
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+    fetch.mockImplementation(async (url) => String(url).endsWith('/history')
+      ? json(history())
+      : json(feed([{ ...pool, url: 'https://example.org/pool' }])));
+
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
+    const card = container.querySelector('.farm-pool');
+    fireEvent.click(card.querySelector('.farm-pool-toggle'));
+    const details = [...card.querySelectorAll('button')].find((button) => button.textContent.includes(t('farm.viewAnalytics')));
+    fireEvent.click(details);
+
+    const footer = await screen.findByTestId('farm-analysis-sheet-footer');
+    await screen.findByTestId('farm-analysis-inline-actions');
+    const footerActions = footer.querySelector('.farm-ana-foot');
+    expect(footerActions.classList.contains('has-two-actions')).toBe(true);
+    expect(footerActions.querySelectorAll('button')).toHaveLength(2);
+    expect(observers).toHaveLength(1);
+    expect(observers[0].options.root.classList.contains('fsh-body')).toBe(true);
+
+    act(() => observers[0].setVisible(true));
+    await waitFor(() => expect(footer.getAttribute('data-footer-visible')).toBe('false'));
+    expect(footer.getAttribute('aria-hidden')).toBe('true');
+    expect(footer.classList.contains('is-hidden')).toBe(true);
+
+    act(() => observers[0].setVisible(false));
+    await waitFor(() => expect(footer.getAttribute('data-footer-visible')).toBe('true'));
+    expect(footer.getAttribute('aria-hidden')).toBeNull();
   });
 });
 

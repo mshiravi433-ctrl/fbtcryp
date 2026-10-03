@@ -438,62 +438,89 @@
    it is also stated in words in the tiles themselves; nothing is encoded in
    colour alone. */
 .farm-ana-hero {
-  padding: 12px;
-  border-radius: 15px;
-  border: 1px solid var(--line);
+  position: relative;
+  padding: 14px;
+  border-radius: 19px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 20%, var(--line));
   background:
     radial-gradient(120% 130% at 0% 0%, rgba(0, 229, 255, 0.12), transparent 56%),
-    radial-gradient(120% 130% at 100% 0%, rgba(255, 45, 149, 0.12), transparent 58%),
+    radial-gradient(120% 130% at 100% 0%, rgba(255, 45, 149, 0.1), transparent 58%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 38px -30px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
+}
+.farm-ana-hero::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -54px;
+  inset-block-start: -65px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  opacity: 0.06;
+  filter: blur(28px);
+  pointer-events: none;
 }
 .farm-ana-hero-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.farm-ana-rate-label {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
-.farm-ana-id { flex: 1 1 auto; min-width: 0; }
+.farm-ana-rate-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 30%, transparent);
+  border-radius: 12px;
+  color: var(--ink-cyan, var(--rgb-1));
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+}
+.farm-ana-rate-icon svg { width: 19px; height: 19px; }
+.farm-ana-rate-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .farm-ana-kicker {
+  display: block;
   margin: 0;
-  font-size: 10.2px;
-  letter-spacing: 0.2px;
-  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.1px;
+  color: var(--text-2);
   line-height: 1.4;
 }
-.farm-ana-sym {
-  font-size: 15.6px;
-  font-weight: 800;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.farm-ana-meta {
-  font-size: 11px;
-  color: var(--text-2);
-  line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.farm-ana-rate-caption { color: var(--text-3); font-size: 9.8px; line-height: 1.35; }
 .farm-ana-apy {
-  flex: 0 0 auto;
+  position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 7px 11px;
-  border-radius: 13px;
-  border: 1px solid rgba(0, 255, 157, 0.28);
-  background: rgba(0, 255, 157, 0.09);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 255, 157, 0.3);
+  background: linear-gradient(145deg, rgba(0, 255, 157, 0.14), rgba(0, 229, 255, 0.07));
+  box-shadow: 0 10px 28px -22px rgba(0, 255, 157, 0.8);
 }
 .farm-ana-apy-value {
-  font-size: 19px;
-  font-weight: 800;
+  color: var(--ink-mint, var(--rgb-4));
+  font-size: 21px;
+  font-weight: 900;
   line-height: 1.2;
   letter-spacing: -0.5px;
-  color: var(--ink-mint, var(--rgb-4));
+  font-variant-numeric: tabular-nums;
 }
-.farm-ana-apy-label { font-size: 9.4px; color: var(--text-2); line-height: 1.3; }
 .farm-ana-pills {
   display: flex;
   flex-wrap: wrap;
@@ -507,12 +534,19 @@
   overflow-wrap: anywhere;
 }
 
-.farm-ana-section { margin-top: 12px; }
+.farm-ana-section {
+  margin-top: 13px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008));
+  box-shadow: 0 14px 32px -28px rgba(0, 0, 0, 0.8);
+}
 .farm-ana-section-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 9px;
 }
 .farm-ana-section-icon {
   flex: 0 0 28px;
@@ -586,16 +620,104 @@
   box-shadow: none;
 }
 
-.farm-ana-foot {
-  display: flex;
-  align-items: center;
-  gap: 9px;
+.fsh-panel.farm-ana-fs .fsh-head {
+  border-bottom-color: color-mix(in srgb, var(--rgb-1) 16%, var(--line));
+  background: color-mix(in srgb, var(--bg-panel-solid, #06070c) 86%, transparent);
 }
-.farm-ana-foot > .farm-btn { flex: 1 1 0; min-height: 48px; }
-.farm-ana-foot .farm-btn-minor { flex: 1 1 100%; min-height: 42px; }
+.fsh-panel.farm-ana-fs .fsh-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--rgb-1) 35%, transparent) transparent;
+}
+.fsh-panel.farm-ana-fs .fsh-foot {
+  border-top-color: color-mix(in srgb, var(--rgb-1) 18%, var(--line));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel-solid, #06070c) 94%, transparent), var(--bg-panel-solid, #06070c));
+  box-shadow: 0 -12px 30px -26px color-mix(in srgb, var(--rgb-1) 38%, transparent);
+}
+
+.farm-ana-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+.farm-ana-foot.has-two-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.farm-ana-foot > .farm-btn {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 9px;
+  border-radius: 15px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.farm-ana-foot > .farm-btn:first-child:not(.farm-btn-minor) {
+  border-color: color-mix(in srgb, var(--rgb-1) 38%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 17%, var(--bg-raised)), color-mix(in srgb, var(--rgb-2) 14%, var(--bg-panel-solid, #06070c)));
+  color: var(--text-1);
+  box-shadow: 0 10px 26px -22px var(--rgb-1), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.farm-ana-foot .farm-btn-minor {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding-inline: 8px;
+  opacity: 1;
+  background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+  border-color: color-mix(in srgb, var(--line) 88%, transparent);
+}
+.farm-ana-foot .farm-btn svg { flex: none; width: 15px; height: 15px; }
+
+.farm-ana-inline-actions.has-two-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.farm-ana-inline-actions .farm-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding-inline: 8px;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+:root[data-theme='light'] .fsh-panel.farm-ana-fs .fsh-head {
+  background: rgba(255, 255, 255, 0.92);
+}
+:root[data-theme='light'] .fsh-panel.farm-ana-fs .fsh-foot {
+  background: linear-gradient(180deg, rgba(247, 248, 252, 0.92), #f7f8fc);
+  box-shadow: 0 -12px 30px -26px rgba(0, 131, 146, 0.2);
+}
+:root[data-theme='light'] .farm-ana-hero {
+  border-color: rgba(0, 131, 146, 0.17);
+  background:
+    radial-gradient(120% 130% at 0% 0%, rgba(0, 160, 200, 0.08), transparent 56%),
+    radial-gradient(120% 130% at 100% 0%, rgba(255, 45, 149, 0.06), transparent 58%),
+    #ffffff;
+  box-shadow: 0 10px 28px -24px rgba(16, 20, 40, 0.28), inset 0 1px 0 #fff;
+}
+:root[data-theme='light'] .farm-ana-section {
+  border-color: rgba(16, 20, 40, 0.09);
+  background: linear-gradient(155deg, #ffffff, #f9fafe);
+  box-shadow: 0 10px 26px -24px rgba(16, 20, 40, 0.24);
+}
+:root[data-theme='light'] .farm-ana-rate-icon {
+  color: #00798a;
+  border-color: rgba(0, 121, 138, 0.2);
+  background: rgba(0, 160, 200, 0.08);
+}
+:root[data-theme='light'] .farm-ana-apy {
+  border-color: rgba(0, 142, 94, 0.22);
+  background: linear-gradient(145deg, rgba(0, 168, 107, 0.1), rgba(0, 160, 200, 0.06));
+}
 
 @media (max-width: 380px) {
   .farm-ana-hero { padding: 11px; }
-  .farm-ana-sym { font-size: 14.5px; }
-  .farm-ana-apy-value { font-size: 17px; }
+  .farm-ana-apy-value { font-size: 19px; }
+  .farm-ana-foot.has-two-actions { gap: 8px; }
+  .farm-ana-foot > .farm-btn { padding-inline: 6px; font-size: 10.5px; }
 }
