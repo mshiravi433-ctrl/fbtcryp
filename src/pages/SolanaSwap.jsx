@@ -34,7 +34,7 @@ import {
 import { solanaSwapPreflight, lamportsToSol } from '../lib/solana/swapPreflight';
 import { shortAddress } from '../context/WalletContext';
 import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS, findAsset } from '../lib/solanaAssets';
-import { loadSolanaUniverse, mergeSolanaUniverse } from '../lib/solanaUniverse';
+import { SOLANA_BASE_TOKENS as BASE_TOKENS, loadSolanaUniverse, mergeSolanaUniverse } from '../lib/solanaUniverse';
 import { useAppStore } from '../store/useAppStore';
 import { recordSwap, confirmSwap, failSwap } from '../lib/swapHistory';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
@@ -63,44 +63,7 @@ import { POINT_VALUES } from '../lib/ranks';
  */
 
 /** Curated starting points. Everything else arrives by pasted mint address. */
-const BASE_TOKENS = [
-  { mint: SOL_MINT, symbol: 'SOL', name: 'Solana', decimals: 9 },
-  { mint: USDC_MINT, symbol: 'USDC', name: 'USD Coin', decimals: 6 },
-  { mint: USDT_MINT, symbol: 'USDT', name: 'Tether USD', decimals: 6 },
-  /*
-   * The curated liquid-staking tokens and tokenized equities.
-   *
-   * These are spread in from lib/solanaAssets.js rather than retyped, because
-   * a second copy of a mint address is a second chance to transpose a base58
-   * character — and one of the six equity addresses WAS wrong on first write,
-   * caught only by querying the API. One list, verified once.
-   *
-   * They belong in the dropdown as well as on their own screens: someone who
-   * arrives here from Stocks with ?to= set should be able to see what they are
-   * swapping into, and someone who already knows what jitoSOL is should not
-   * have to go via another page to buy it.
-   */
-  ...LST_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
-  ...EQUITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
-  /*
-   * Gold (PAXG, XAUt0, GLDx) too. The Stocks page has had a Gold section with
-   * a Buy button on every row for a while, and that button hands off here by
-   * mint. Until 2026-09-28 the gold mints were NOT in this list, so the ?to=
-   * handler below could not find them and quietly fell back to USDC — the
-   * user tapped «خرید طلا» and landed on a USDC → USDC screen. A curated,
-   * issuer-verified asset that has its own Buy button must be pickable here.
-   */
-  ...COMMODITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals }))
-  /*
-   * `decimalsVerified: true` — these scales were read from the chain (or from
-   * the issuer's own list) when the mint was added, so an amount converted with
-   * them may be compared against a balance. A token imported by pasted address
-   * starts FALSE and becomes true only when the chain answers; see
-   * resolveTokenScale below. The distinction is the whole fix for «موجودی برای
-   * این سواپ کافی نیست» on a funded wallet: a guessed scale must never decide
-   * that verdict.
-   */
-].map((tk) => ({ ...tk, decimalsVerified: true }));
+/* The curated list lives in lib/solanaUniverse.js — one list, two screens. */
 
 const DEBOUNCE_MS = 450;
 

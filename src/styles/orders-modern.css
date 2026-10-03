@@ -1,0 +1,494 @@
+/**
+ * AUTO ORDERS — the crisp layer.
+ * ===========================================================================
+ *
+ * WHAT WAS WRONG
+ * The screen was built out of inline styles: a `backdrop-filter: blur(16px)`
+ * hero, two `radial-gradient` halos, a `boxShadow` glow on the icon tile, and
+ * a per-card `backdrop-filter: blur(12px)` on a horizontally-scrolled rail.
+ * Every one of those costs the compositor real work on every frame, and the
+ * visual result is the “washed-out / milky” look — a translucent panel over a
+ * moving background reads as soft and out of focus rather than premium.
+ *
+ * WHAT REPLACES IT
+ *   · NO blur, anywhere. The frosted look is faked the way index.css already
+ *     fakes it elsewhere: a translucent tint, a hairline, and one soft sheen
+ *     layer that never animates behind the content.
+ *   · NO infinite glow. The only motion is a dash-draw on the hero's SVG ring
+ *     and a single sheen sweep when the card mounts — both finite, both
+ *     `transform`/`opacity`/`stroke-dashoffset`, all compositor-cheap.
+ *   · Hairlines instead of shadows. A 1px gradient border reads as “cut” and
+ *     stays sharp at every DPI, where a 32px blur radius reads as fog.
+ *
+ * SIZES ARE UNCHANGED. The hero keeps its radius and padding, each rail card
+ * keeps `flex: 0 0 140px` / `min-height: 110px`, and the field rows keep their
+ * original heights — this file restyles, it does not re-lay-out. A layout
+ * change here would be a change to every other screen's rhythm too, because
+ * this page is rendered inside the same shell.
+ */
+
+/* --------------------------------------------------------------------------
+   THE HERO — live numbers instead of a poster
+   --------------------------------------------------------------------------
+   The banner used to be decoration: a title, a subtitle and a floating star.
+   It now reports the three facts the screen exists to answer: how many orders
+   are watching, how many are ready to act on, and what is queued. Same box,
+   same footprint, more use. The figures come from the page's own state, so
+   they cost nothing extra to compute.
+   -------------------------------------------------------------------------- */
+.ord-hero {
+  position: relative;
+  padding: 16px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--rgb-1) 9%, transparent), transparent 46%),
+    linear-gradient(20deg, color-mix(in srgb, var(--rgb-2) 8%, transparent), transparent 52%),
+    var(--bg-panel);
+}
+
+/* The sheen: one pass, on mount, then permanent rest. `transform` only, so it
+   cannot trigger layout or paint of the text above it. */
+.ord-hero::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 46%;
+  left: -60%;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.055), transparent);
+  animation: ord-sheen 1.5s ease-out 0.15s 1 both;
+}
+
+@keyframes ord-sheen {
+  from { transform: translateX(0); opacity: 0; }
+  35% { opacity: 1; }
+  to { transform: translateX(360%); opacity: 0; }
+}
+
+.ord-hero-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* The mark: a flat gradient tile with a hand-drawn ring. No glow shadow. */
+.ord-hero-mark {
+  width: 62px;
+  height: 62px;
+  border-radius: 17px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* The ring draws itself once — a stroke offset is not a repaint of the whole
+   card, and `both` leaves it complete when the animation ends. */
+.ord-hero-ring {
+  stroke-dasharray: 132;
+  stroke-dashoffset: 132;
+  animation: ord-draw 1.1s cubic-bezier(0.22, 0.7, 0.3, 1) 0.1s 1 both;
+}
+
+@keyframes ord-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.ord-hero-title {
+  font-weight: 900;
+  font-size: 15px;
+  line-height: 1.32;
+}
+
+.ord-hero-sub {
+  font-size: 12.4px;
+  line-height: 1.68;
+  margin-top: 4px;
+  color: var(--text-3);
+}
+
+/* Three facts, hairline-separated. A grid with borders rather than three
+   cards: one border set instead of three background layers. */
+.ord-hero-stats {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-panel-solid) 55%, transparent);
+}
+
+.ord-stat {
+  padding: 9px 10px;
+  min-width: 0;
+  text-align: center;
+}
+
+.ord-stat + .ord-stat {
+  border-inline-start: 1px solid var(--line);
+}
+
+.ord-stat-val {
+  display: block;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.ord-stat-lbl {
+  display: block;
+  font-size: 9.8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-top: 3px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ord-stat-val.is-ready { color: var(--ink-mint); }
+
+/* --------------------------------------------------------------------------
+   THE TYPE RAIL — flat cards, one accent each
+   -------------------------------------------------------------------------- */
+.ord-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  padding: 6px 2px 8px;
+  margin-top: 4px;
+}
+
+.ord-rail::-webkit-scrollbar { display: none; }
+
+.ord-new-card {
+  flex: 0 0 140px;
+  scroll-snap-align: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 10px;
+  min-height: 110px;
+  border-radius: 18px;
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--hue) 16%, var(--line));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--hue) 9%, transparent), transparent 62%),
+    var(--bg-panel);
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+/* The accent bar: 2px of the type's colour, drawn as a background layer on a
+   pseudo-element instead of a child node. */
+.ord-new-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, transparent, var(--hue), transparent);
+  opacity: 0.75;
+}
+
+.ord-new-card:active { transform: scale(0.975); }
+
+@media (hover: hover) {
+  .ord-new-card:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--hue) 38%, var(--line));
+  }
+}
+
+.ord-new-glyph {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(140deg, var(--hue), color-mix(in srgb, var(--hue) 62%, #000));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.ord-new-label {
+  font-weight: 800;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+.ord-new-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* How many of this type are live. Shown only when there is something to say,
+   so a first-time visitor sees the same card they saw before. */
+.ord-new-count {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  color: var(--hue);
+  background: color-mix(in srgb, var(--hue) 15%, var(--bg-panel-solid));
+  border: 1px solid color-mix(in srgb, var(--hue) 30%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   FIELDS — crisp focus, no halo
+   -------------------------------------------------------------------------- */
+.ord-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+
+.ord-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+}
+
+.ord-field input,
+.ord-field select {
+  width: 100%;
+}
+
+/*
+ * The focus ring is an OUTLINE, not a box-shadow: a 3px soft shadow around a
+ * 44px field is exactly the milky halo this screen was reported for, and an
+ * outline is drawn as a hard edge the eye can actually follow.
+ */
+.ord-field input:focus-visible,
+.ord-field select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rgb-1) 70%, transparent);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+/* A row that cannot be traded: the reason sits under the field, not in a toast
+   that disappears before it is read. */
+.ord-warn {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 12px;
+  font-size: 11.8px;
+  line-height: 1.75;
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 34%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 9%, transparent);
+  color: var(--text-2, inherit);
+}
+
+/* The resolved/unresolved state of a picked token. */
+.ord-price-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.ord-price-state.is-ok { color: var(--ink-mint); }
+.ord-price-state.is-pending { color: var(--text-3); }
+.ord-price-state.is-none { color: var(--ink-amber); }
+
+.ord-price-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* A pending resolution spins only while there is a request in flight, and the
+   animation is on a 1px border so it paints almost nothing. */
+.ord-price-state.is-pending .ord-price-dot {
+  background: transparent;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  animation: ord-spin 0.9s linear infinite;
+}
+
+@keyframes ord-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --------------------------------------------------------------------------
+   THE DCA REVISION PANEL
+   --------------------------------------------------------------------------
+   Replaces four `window.prompt` dialogs. Same fields as the creation form,
+   inside the row it belongs to, so the plan being revised is the thing on
+   screen while it is edited — and the active plan is untouched, which the
+   confirmation toast says outright.
+   -------------------------------------------------------------------------- */
+.ord-edit {
+  margin-top: 9px;
+  padding: 11px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, var(--line));
+  background: color-mix(in srgb, var(--rgb-1) 5%, transparent);
+}
+
+:root[data-theme='light'] .ord-edit {
+  background: color-mix(in srgb, var(--ink-cyan) 4%, #fff);
+}
+
+/* --------------------------------------------------------------------------
+   THE ROW — which network, and what it is watching
+   -------------------------------------------------------------------------- */
+.ord-chain-mark {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+}
+
+.ord-netline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  min-width: 0;
+}
+
+.ord-netline > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   THE SOLANA HANDOFF — its own box, its own rules
+   --------------------------------------------------------------------------
+   A Solana handoff is NOT a price-watched order: nothing can check a Solana
+   mint against a CoinGecko id, and the server watcher holds no key. The box
+   says so before it is used, and the saved list says what each row is.
+   -------------------------------------------------------------------------- */
+.ord-sol-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--bg-panel);
+}
+
+.ord-sol-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ord-sol-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #fff;
+  background: linear-gradient(140deg, #9945ff, #14f195);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.ord-sol-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 40%, transparent);
+}
+
+.ord-sol-row + .ord-sol-row { margin-top: 7px; }
+
+.ord-sol-pair {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   LIGHT THEME
+   --------------------------------------------------------------------------
+   The tinted layers above are built for a dark canvas; on white they read as
+   stains. Same geometry, less saturation, and the hairline carries the colour
+   instead of the fill.
+   -------------------------------------------------------------------------- */
+:root[data-theme='light'] .ord-hero {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--ink-cyan) 5%, transparent), transparent 48%),
+    linear-gradient(20deg, color-mix(in srgb, var(--ink-violet) 5%, transparent), transparent 52%),
+    #fff;
+  border-color: var(--line-strong);
+}
+
+:root[data-theme='light'] .ord-hero::after { display: none; }
+
+:root[data-theme='light'] .ord-hero-mark,
+:root[data-theme='light'] .ord-new-glyph,
+:root[data-theme='light'] .ord-sol-mark { border-color: rgba(0, 0, 0, 0.08); }
+
+:root[data-theme='light'] .ord-hero-stats {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+:root[data-theme='light'] .ord-new-card {
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--hue) 6%, transparent), transparent 62%),
+    #fff;
+}
+
+:root[data-theme='light'] .ord-new-label,
+:root[data-theme='light'] .ord-hero-title { color: #10142a; }
+
+:root[data-theme='light'] .ord-sol-row,
+:root[data-theme='light'] .ord-sol-card { background: #fff; }
+
+:root[data-theme='light'] .ord-new-count { background: #fff; }
+
+/* --------------------------------------------------------------------------
+   REDUCED MOTION
+   --------------------------------------------------------------------------
+   Three animations live on this screen and all three are decorative. Anyone
+   who has asked their phone for less motion gets a completely still page —
+   including the sheen, which is removed rather than shortened, because a
+   half-second flash is worse than none for a vestibular trigger.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .ord-hero::after { display: none; animation: none; }
+  .ord-hero-ring { animation: none; stroke-dashoffset: 0; }
+  .ord-price-state.is-pending .ord-price-dot { animation: none; }
+  .ord-new-card,
+  .ord-new-card:hover { transform: none; transition: none; }
+}

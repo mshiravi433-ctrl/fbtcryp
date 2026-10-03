@@ -52,7 +52,11 @@
     "language": "Langue",
     "tryAgain": "Réessayer",
     "notAdvice": "Les données de marché sont fournies à titre informatif et ne constituent pas un conseil financier. Les cryptos sont volatiles : vous pouvez tout perdre.",
-    "offlineData": "Flux en direct indisponible : instantané en cache affiché. Les prix ne sont pas réels."
+    "offlineData": "Flux en direct indisponible : instantané en cache affiché. Les prix ne sont pas réels.",
+    "search": "Rechercher",
+    "noResults": "Aucun résultat",
+    "max": "Max",
+    "showing": "{{shown}} sur {{total}} affichés"
   },
   "share": {
     "screen": "Partager",
@@ -689,7 +693,14 @@
         "SAME_TOKEN": "Choisissez deux jetons différents.",
         "BAD_MINT": "Cette adresse n’est pas un mint Solana."
       }
-    }
+    },
+    "network": "Réseau",
+    "networkCount": "{{n}} jetons",
+    "statWatching": "Sous surveillance",
+    "statReady": "Prêt maintenant",
+    "pxOk": "Flux de prix connecté",
+    "pxChecking": "Vérification du flux de prix…",
+    "pxNone": "Aucun flux de prix"
   },
   "bridge": {
     "emptyHint": "Saisissez un montant pour voir le meilleur itinéraire et ses frais.",
@@ -752,6 +763,15 @@
       "DESTINATION_ADDRESS_REQUIRED": "Saisissez l’adresse de destination — cet itinéraire ne peut pas la déduire.",
       "CROSSCHAIN_NOT_CONFIGURED": "Le service inter-chaînes n’est pas configuré sur ce déploiement.",
       "GENERIC": "Un problème est survenu ({{code}}). Rien n’a été envoyé."
+    },
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "Faites travailler l’argent que vous venez de déplacer",
+      "body": "Farm lit les rendements en direct des protocoles et envoie le dépôt vers votre propre portefeuille — nous ne détenons jamais la position et vous pouvez retirer à tout moment.",
+      "chipLive": "Rendements en direct",
+      "chipSelf": "Non dépositaire",
+      "chipExit": "Retrait à tout moment",
+      "cta": "Ouvrir Farm"
     }
   },
   "dydx": {
@@ -2581,10 +2601,8 @@
       "empty": "Aucun solde de jeton n’a été trouvé sur cette adresse.",
       "splNote": "Envoyer ici ne déplace que le SOL natif. Les autres jetons passent par l’échange.",
       "sendTitle": "Envoyer du SOL",
-      "sendOnly": "Ceci envoie uniquement du SOL natif. Les jetons SPL ne bougent pas.",
       "recipient": "Adresse du destinataire",
       "amount": "Montant",
-      "sendCta": "Envoyer le SOL",
       "receiveTitle": "Recevoir",
       "receiveHint": "Envoyez uniquement du SOL et des jetons Solana à cette adresse. Une adresse Ethereum commençant par 0x n’arrivera pas ici.",
       "copied": "Copié",

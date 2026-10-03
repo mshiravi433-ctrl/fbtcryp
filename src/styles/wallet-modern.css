@@ -451,6 +451,91 @@
 }
 .sol-wal-both-sum::-webkit-details-marker { display: none; }
 .sol-wal-full-addr { font-size: 12px; word-break: break-all; line-height: 1.7; text-align: center; }
+
+/* ── the SEND sheet's asset picker ─────────────────────────────────────────
+   `components/SolanaSendSheet.jsx`. The asset is the first decision in a
+   transfer, so it is the first control: a horizontally scrollable row of
+   chips, each with its own artwork and its own balance. RTL-safe (logical
+   padding only), and a chip whose scale could not be read is dimmed rather
+   than hidden — the user has to be able to see that the holding exists. */
+.sol-send-assets {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  margin: 0 -2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.sol-send-assets::-webkit-scrollbar { display: none; }
+.sol-send-asset {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  min-width: 116px;
+  padding: 8px 12px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sol-send-asset:hover { border-color: var(--line-strong); }
+.sol-send-asset:active { transform: scale(0.985); }
+.sol-send-asset.is-on {
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 14%, transparent), color-mix(in srgb, var(--rgb-2) 10%, transparent));
+}
+.sol-send-asset.is-disabled { opacity: 0.5; cursor: not-allowed; }
+.sol-send-asset-mark { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 26px; }
+.sol-send-asset-text { display: flex; flex-direction: column; min-width: 0; }
+.sol-send-asset-text strong { font-size: 12.5px; font-weight: 800; }
+.sol-send-asset-text small { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.sol-send-asset-check {
+  position: absolute;
+  inset-block-start: 7px;
+  inset-inline-end: 7px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--rgb-1);
+  color: #001b1f;
+}
+.sol-send-amount { position: relative; display: flex; align-items: center; gap: 8px; }
+.sol-send-amount input { flex: 1; min-width: 0; }
+.sol-send-max {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 32%, var(--line));
+  background: color-mix(in srgb, var(--rgb-1) 10%, transparent);
+  color: var(--rgb-1);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sol-send-max:disabled { opacity: 0.45; cursor: not-allowed; }
+:root[data-theme='light'] .sol-send-asset { background: #ffffff; border-color: rgba(15, 23, 42, 0.09); }
+:root[data-theme='light'] .sol-send-asset.is-on {
+  border-color: rgba(0, 153, 204, 0.32);
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.1), rgba(124, 77, 255, 0.07));
+}
+:root[data-theme='light'] .sol-send-asset-check { color: #ffffff; }
+:root[data-theme='light'] .sol-send-max { color: #00728f; border-color: rgba(0, 153, 204, 0.3); background: rgba(0, 229, 255, 0.12); }
+@media (prefers-reduced-motion: reduce) {
+  .sol-send-asset { transition: none; }
+}
 :root[data-theme='light'] .sol-wal-holdings,
 :root[data-theme='light'] .sol-wal-both {
   background: #ffffff;

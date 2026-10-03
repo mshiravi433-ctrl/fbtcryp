@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -8,10 +8,15 @@ import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { usePriceMap } from '../hooks/useMarket';
-import { EVM_CHAINS, FEE_BPS, TOKENS } from '../lib/chains';
+import { EVM_CHAINS, EVM_CHAIN_ORDER, FEE_BPS, TOKENS } from '../lib/chains';
+import { findToken, getTokensSync, loadTokens, tokenKey } from '../lib/tokenLists';
+import { isOrderable, resolveCoinIds, withCoinId } from '../lib/coinId';
 import ModernSelect from '../components/ModernSelect';
+import AssetIcon from '../components/AssetIcon';
+import SolanaOrderCard from '../components/SolanaOrderCard';
 import TokenIcon from '../lib/tokenIcon';
 import '../styles/wallet-modern.css';
+import '../styles/orders-modern.css';
 import { fmtQty } from '../lib/format';
 import {
   DCA_INTERVALS,
@@ -68,6 +73,28 @@ import AutopilotGuideSheet from '../components/AutopilotGuideSheet';
  * is the point: it earns the platform fee on trades the user had already
  * decided to make but would have forgotten.
  */
+/**
+ * The network rows for EVERY picker on this screen, built in one place.
+ *
+ * Two pickers need the same list — the order form and the DCA revision panel —
+ * and a second copy of the row shape is a second place for the marks, the
+ * counts and the short tags to drift apart.
+ */
+const chainOptionsFrom = (counts, t) =>
+  EVM_CHAIN_ORDER
+    .map((id) => {
+      const c = EVM_CHAINS[id];
+      if (!c) return null;
+      const n = counts?.[id];
+      return {
+        value: String(id),
+        label: c.name,
+        sublabel: Number.isFinite(n) && n > 0 ? `${c.short} · ${t('orders.networkCount', { n })}` : c.short,
+        chain: id
+      };
+    })
+    .filter(Boolean);
+
 export default function Orders() {
   // Subscribe so the figures re-render the moment the switch moves;
   // the masking itself lives in the formatters.
@@ -90,6 +117,8 @@ export default function Orders() {
    */
   const [guideOpen, setGuideOpen] = useState(false);
   const [cancelReview, setCancelReview] = useState(null);
+  /* The DCA revision draft being edited, if any. `null` means no row is open. */
+  const [editDraft, setEditDraft] = useState(null);
 
   useEffect(() => {
     // Mark stale limit orders on open so the list explains why one stopped,
@@ -101,6 +130,23 @@ export default function Orders() {
 
   const chain = EVM_CHAINS[wallet.chainId] ?? EVM_CHAINS[56];
   const chainTokens = TOKENS[chain.id] ?? [];
+
+  /*
+   * Network rows, with their token counts. The counts are read after paint:
+   * `getTokensSync` parses cached lists out of localStorage, and doing that for
+   * sixteen chains while the screen is first rendering would put the parse on
+   * the frame the user is waiting for.
+   */
+  const [chainCounts, setChainCounts] = useState({});
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const counts = {};
+      for (const cid of EVM_CHAIN_ORDER) counts[cid] = (getTokensSync(cid) ?? []).length;
+      setChainCounts(counts);
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+  const chainOptions = useMemo(() => chainOptionsFrom(chainCounts, t), [chainCounts, t]);
 
   /*
    * History for the guide sheet — and ONLY while it is open.
@@ -337,20 +383,58 @@ export default function Orders() {
     const result = confirmDcaCancel(order, { confirmed: true });
     if (result.order) { setOrders(updateOrder(order.id, result.order)); setCancelReview(null); }
   };
-  const editDca = (order) => {
-    const amount = window.prompt(t('orders.editAmountPrompt'), order.amountIn);
-    if (amount == null) return;
-    const interval = window.prompt(t('orders.editCadencePrompt'), order.interval);
-    if (interval == null) return;
-    const chainId = window.prompt(t('orders.editChainPrompt'), String(order.chainId));
-    if (chainId == null) return;
-    const deadlineMs = window.prompt(t('orders.editDeadlinePrompt'), order.deadlineMs ? String(order.deadlineMs) : '');
-    if (deadlineMs == null) return;
-    const revision = createDcaRevision(order, { amountIn: amount, interval, chainId: Number(chainId), deadlineMs: deadlineMs ? Number(deadlineMs) : undefined });
-    if (!revision.order) return;
-    // Old active order remains untouched; the revision is a separate paused draft.
+  /*
+   * ─── EDITING A DCA PLAN, IN REAL FIELDS ─────────────────────────────────
+   * This used to be four `window.prompt` dialogs in a row: a modal the browser
+   * draws, one field at a time, with the chain typed in as a raw EVM id and no
+   * way back to the previous question. Three things were wrong with that
+   * beyond the look — the cadence had to be spelled correctly from memory, the
+   * network was a number nobody knows by heart, and a mistyped chain id made
+   * the revision unsignable.
+   *
+   * It is now a panel inside the row, with the same fields the creation form
+   * uses (the same network picker with marks, the same cadence list, the same
+   * amount input) and a single Confirm. The active plan is still untouched:
+   * the revision is a separate PAUSED draft, and the confirmation says so.
+   */
+  const startEditDca = (o) => {
+    haptic?.('light');
+    setEditDraft({
+      id: o.id,
+      amountIn: String(o.amountIn ?? ''),
+      interval: o.interval ?? 'weekly',
+      chainId: Number(o.chainId) || chain.id,
+      deadlineMs: o.deadlineMs ? String(o.deadlineMs) : ''
+    });
+  };
+
+  const saveEditDca = () => {
+    if (!editDraft) return;
+    const order = orders.find((o) => o.id === editDraft.id);
+    if (!order) {
+      setEditDraft(null);
+      return;
+    }
+    const revision = createDcaRevision(order, {
+      amountIn: editDraft.amountIn,
+      interval: editDraft.interval,
+      chainId: Number(editDraft.chainId),
+      deadlineMs: editDraft.deadlineMs ? Number(editDraft.deadlineMs) : undefined
+    });
+    /* A refused revision leaves the panel open with the user's values in it. */
+    if (!revision.order) {
+      notify('orderErr.BAD_AMOUNT', 'error');
+      return;
+    }
     const res = addOrder(revision.order);
-    if (!res.error) { setOrders(res.orders); window.alert(t('orders.revisionReview', { changes: revision.diff.map((d) => d.key).join(', ') })); }
+    if (res.error) {
+      notify(`orderErr.${res.error}`, 'error');
+      return;
+    }
+    setOrders(res.orders);
+    setEditDraft(null);
+    haptic?.('success');
+    notify('orders.revisionReview', 'success', { changes: revision.diff.map((d) => d.key).join(', ') });
   };
 
   const cancel = (id) => {
@@ -383,226 +467,16 @@ export default function Orders() {
     setOrders(updateOrder(o.id, o.status === 'paused' ? resumeOrder(o) : pauseOrder(o)));
   };
 
-  const Row = ({ o, isReady }) => {
-    const notional = orderNotionalUsd(o, usdMap);
-    const executionStatus = o.type === 'dca' ? dcaDisplayStatus(o, loadDcaReceipts()) : o.status;
-    const raw = rateFor(o);
-    // Display in whichever unit the order was written in.
-    const rate =
-      o.type === 'limit' && o.priceOf === 'to' && Number.isFinite(raw) && raw > 0 ? 1 / raw : raw;
-    const pct =
-      o.type === 'limit' && Number.isFinite(rate) && o.targetRate
-        ? ((rate - o.targetRate) / o.targetRate) * 100
-        : null;
-
-    return (
-      <motion.div
-        className={`ord-row ${isReady ? 'ord-ready' : ''}`}
-        data-paused={o.status === 'paused' ? 'true' : undefined}
-        variants={riseIn}
-      >
-        <div className="ord-head">
-          <span className={`ord-kind ord-${o.type}`}>{t(`orders.type.${o.type}`)}</span>
-          <span className="ord-pair mono">
-            {o.amountIn} {o.fromToken.symbol} → {o.toToken.symbol}
-          </span>
-          {o.type === 'dca' && ['completed', 'failed', 'rejected', 'partial', 'cancelled'].includes(executionStatus) && <span className={`ord-status ord-${executionStatus}`}>{t(`orders.status.${executionStatus}`, { defaultValue: executionStatus })}</span>}
-
-          {/*
-            IS THIS ORDER ACTUALLY WATCHING?  Requested: «فعال بودن کادم را
-            نشان بده با تیک سبز یا چیزی شبیه آن».
-
-            Before this, an active order and a paused one looked the same from
-            across the row: the pause/resume BUTTON changed its label, but the
-            row itself carried no state. You had to read the button to work out
-            whether the market was being watched — and a paused order that
-            looks live is the failure mode that costs a user their price.
-
-            A dot plus a word, not a dot alone: colour is not available to
-            everyone, and «فعال» is unambiguous where a green circle is not.
-          */}
-          {(o.status === 'active' || o.status === 'paused') && (
-            <span
-              className={`ord-live ${isReady ? 'ord-live-ready' : o.status === 'active' ? 'ord-live-on' : 'ord-live-off'}`}
-            >
-              <span className="ord-live-dot" />
-              {isReady
-                ? t('orders.liveReady')
-                : o.status === 'active'
-                  ? t('orders.liveOn')
-                  : t('orders.liveOff')}
-            </span>
-          )}
-        </div>
-
-        {o.type === 'bracket' ? (
-          <div className="ord-meta">
-            {/* Both exits on one row: the whole point of a bracket is that
-                they are a pair, and splitting them would hide that. */}
-            <span className="faint">
-              {t('orders.bracketRow', {
-                tp: fmtQty(o.takeProfitRate),
-                sl: fmtQty(o.stopLossRate),
-                quote: o.priceOf === 'to' ? o.fromToken.symbol : o.toToken.symbol
-              })}
-            </span>
-            {Number.isFinite(rate) && (
-              <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>
-            )}
-          </div>
-        ) : o.type === 'ladder' ? (
-          <div className="ord-meta">
-            <span className="faint">
-              {t('orders.ladderRow', {
-                done: o.rungsFilled ?? 0,
-                total: o.steps,
-                next: fmtQty(ladderRungs(o)[o.rungsFilled ?? 0] ?? 0)
-              })}
-            </span>
-            {Number.isFinite(rate) && (
-              <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>
-            )}
-          </div>
-        ) : o.type === 'trailing' ? (
-          <div className="ord-meta">
-            <span className="faint">
-              {t('orders.trailPct')} {o.trailPct}%
-            </span>
-            {Number.isFinite(o.peakRate) && o.peakRate > 0 ? (
-              <span className="mono faint">
-                {t('orders.peak')} {fmtQty(o.peakRate)} · {t('orders.stopAt')}{' '}
-                {fmtQty(o.peakRate * (1 - o.trailPct / 100))}
-              </span>
-            ) : (
-              /*
-               * A trailing order has no peak until the first price arrives.
-               * Showing "0" or a blank would read as broken, so say what is
-               * actually happening.
-               */
-              <span className="faint mono">{t('orders.notYetTracking')}</span>
-            )}
-          </div>
-        ) : o.type === 'twap' ? (
-          <div className="ord-meta">
-            <span className="faint">{t('orders.twapRow', { done: o.runsDone, total: o.slices, window: o.windowMin })}</span>
-          </div>
-        ) : o.type === 'rebalance' ? (
-          <div className="ord-meta">
-            <span className="faint">{t('orders.rebalanceRow', { target: fmtQty(o.targetRate), drift: o.driftPct })}</span>
-            {Number.isFinite(rate) && <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>}
-          </div>
-        ) : o.type === 'limit' ? (
-          <div className="ord-meta">
-            <span className="faint">
-              {/*
-                The label must name BOTH tokens. "When 1 unit ≥ 700 USDT" was
-                ambiguous: the rate is always priced in the TO token, and which
-                side is being sold depends on which token sits in the FROM
-                slot — not on the direction. Naming both removes the guess.
-              */}
-              {t(`orders.when.${o.direction}`, {
-                from: o.priceOf === 'to' ? o.toToken.symbol : o.fromToken.symbol,
-                rate: fmtQty(o.targetRate),
-                to: o.priceOf === 'to' ? o.fromToken.symbol : o.toToken.symbol
-              })}
-            </span>
-            {Number.isFinite(rate) ? (
-              /*
-               * THE COLOUR HERE WAS BACKWARDS HALF THE TIME.
-               *
-               * It was `pct >= 0 ? 'up' : 'down'` — green when the market sits
-               * above the target, red when below. That is right for a "sell
-               * when it rises" order and exactly WRONG for "buy when it
-               * falls": the price dropping towards a buy target is the good
-               * news, and it was painted red.
-               *
-               * Green now means "moving the way you asked for", which is the
-               * only reading that is correct for both directions.
-               *
-               * `pct` can also be null on an order stored before targetRate
-               * was validated, and `null.toFixed` throws — one legacy row
-               * would white-screen the whole list.
-               */
-              <span
-                className={`mono ${
-                  !Number.isFinite(pct)
-                    ? ''
-                    : (o.direction === 'above') === pct >= 0
-                      ? 'up'
-                      : 'down'
-                }`}
-              >
-                {t('orders.now')} {fmtQty(rate)}
-                {Number.isFinite(pct) && ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)`}
-              </span>
-            ) : (
-              <span className="faint mono">{t('orders.noPrice')}</span>
-            )}
-          </div>
-        ) : (
-          <div className="ord-meta">
-            <span className="faint">{t(`orders.every.${o.interval}`)}</span>
-            <span className="mono faint">
-              {o.runsDone}/{o.totalRuns}
-            </span>
-          </div>
-        )}
-
-        {/*
-          Trade size, and the fee it carries.
-          
-          Shown rather than hidden for the same reason the swap screen had to
-          stop claiming it was free: a plan that quietly costs more than the
-          user expects is the kind of surprise that loses the customer, and
-          six scheduled buys carry six fees.
-        */}
-        {notional !== null && (
-          <div className="ord-meta">
-            <span className="faint">
-              {o.type === 'dca' ? t('orders.planValue') : t('orders.tradeValue')}
-            </span>
-            <span className="mono">
-              ${notional < 1 ? notional.toFixed(4) : notional.toFixed(2)}
-              <span className="faint"> · {t('orders.feeNote', { pct: FEE_BPS / 100 })}</span>
-            </span>
-          </div>
-        )}
-
-        {o.status === 'paused' && <p className="faint" style={{ margin: '6px 0 0' }}>{t('orders.pausedHint')}</p>}
-
-        <div className="row" style={{ gap: 7, marginTop: 9 }}>
-          {isReady && (
-            <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => execute(o)}>
-              {t('orders.swapNow')}
-            </button>
-          )}
-          {o.type === 'dca' && o.status === 'paused' && (
-            <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => signDca(o)}>{t('orders.signActivate')}</button>
-          )}
-          {o.type === 'dca' && o.status === 'active' && (
-            <>
-              <button className="btn btn-ghost btn-sm" onClick={() => editDca(o)}>{t('orders.edit')}</button>
-              {cancelReview === o.id ? <button className="btn btn-ghost btn-sm" onClick={() => confirmCancelDca(o)}>{t('orders.confirmCancel')}</button> : <button className="btn btn-ghost btn-sm" onClick={() => reviewCancelDca(o)}>{t('orders.cancelDca')}</button>}
-            </>
-          )}
-          {o.type !== 'dca' && (o.status === 'active' || o.status === 'paused') && (
-            <>
-              <button className="btn btn-ghost btn-sm" onClick={() => togglePause(o)}>{o.status === 'paused' ? t('orders.resume') : t('orders.pause')}</button>
-              <button className="btn btn-ghost btn-sm" style={{ flex: isReady ? 0 : 1 }} onClick={() => cancel(o.id)}>{t('orders.cancel')}</button>
-            </>
-          )}
-          {o.status !== 'active' && o.status !== 'paused' && (
-            <>
-              <span className={`ord-status ord-${o.status}`}>{t(`orders.status.${o.status}`)}</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => cancel(o.id)}>
-                {t('orders.remove')}
-              </button>
-            </>
-          )}
-        </div>
-      </motion.div>
-    );
-  };
+  /*
+   * Everything a row can do, in one object. Identity changes on a page render,
+   * which re-renders the rows — it does NOT remount them, because `OrderRow`
+   * is now a stable component type. Re-rendering a row is cheap; losing a tap
+   * is not.
+   */
+  const rowActions = useMemo(
+    () => ({ execute, cancel, togglePause, startEditDca, reviewCancelDca, confirmCancelDca, signDca, cancelReview }),
+    [cancelReview] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   return (
     <PageTransition>
@@ -615,56 +489,56 @@ export default function Orders() {
 
       <p className="muted" style={{ lineHeight: 1.85 }}>{t('orders.subtitle')}</p>
 
-      {/* Animated banner with SVG illustration */}
-      <motion.section
-        className="card"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        style={{
-          padding: 0,
-          overflow: 'hidden',
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, rgba(0,229,255,0.10), rgba(124,77,255,0.10) 55%, rgba(255,45,149,0.08))',
-          border: '1px solid rgba(255,255,255,0.08)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          position: 'relative'
-        }}
-      >
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(600px 200px at 20% 0%, rgba(0,229,255,0.12), transparent 60%), radial-gradient(500px 180px at 90% 100%, rgba(124,77,255,0.10), transparent 60%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, padding: '18px 16px 16px' }}>
-          <motion.div
-            animate={{ y: [0, -6, 0], rotate: [0, 2, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ width: 72, height: 72, borderRadius: 18, display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', flexShrink: 0, boxShadow: '0 12px 32px rgba(0,229,255,0.22)' }}
-          >
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L13.5 8.5H20L14.75 12.5L16.25 19L12 14.75L7.75 19L9.25 12.5L4 8.5H10.5L12 2z" />
-              <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.9" stroke="none" />
+      {/*
+        ─── THE HERO: LIVE NUMBERS, NOT A POSTER ──────────────────────────────
+        This box used to carry a floating star and two sentences. It keeps the
+        sentences (they name what the screen does) and adds the three facts a
+        person opens this screen to learn: how many orders are watching, how
+        many are ready to act on right now, and what value is queued.
+
+        The glass is drawn, not blurred — see styles/orders-modern.css. The
+        only motion is one sheen pass and a ring that draws itself once, both
+        finite, so the card is not repainting while the user reads it.
+      */}
+      <motion.section className="ord-hero" variants={riseIn} initial="hidden" animate="show">
+        <div className="ord-hero-top">
+          <div className="ord-hero-mark" aria-hidden="true">
+            <svg width="34" height="34" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle className="ord-hero-ring" cx="18" cy="18" r="13" opacity="0.45" />
+              <path d="M18 8.5v5" />
+              <path d="M18 22.5v5" />
+              <path d="M8.5 18h5" />
+              <path d="M22.5 18h5" />
+              <circle cx="18" cy="18" r="3.4" fill="currentColor" stroke="none" />
             </svg>
-          </motion.div>
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.3 }}>{t('orders.bannerTitle')}</div>
-            <div className="faint" style={{ fontSize: 12.5, lineHeight: 1.7, marginTop: 4 }}>{t('orders.bannerSub')}</div>
+            <div className="ord-hero-title">{t('orders.bannerTitle')}</div>
+            <div className="ord-hero-sub">{t('orders.bannerSub')}</div>
+          </div>
+        </div>
+        <div className="ord-hero-stats">
+          <div className="ord-stat">
+            <span className="ord-stat-val">{ready.length + active.length}</span>
+            <span className="ord-stat-lbl">{t('orders.statWatching')}</span>
+          </div>
+          <div className="ord-stat">
+            <span className={`ord-stat-val ${ready.length ? 'is-ready' : ''}`}>{ready.length}</span>
+            <span className="ord-stat-lbl">{t('orders.statReady')}</span>
+          </div>
+          <div className="ord-stat">
+            <span className="ord-stat-val">{queuedUsd > 0 ? `$${queuedUsd.toFixed(2)}` : '—'}</span>
+            <span className="ord-stat-lbl">{t('orders.pipelineTitle')}</span>
           </div>
         </div>
       </motion.section>
 
-      {/* Rail of order types — horizontal scroll, modern cards */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          WebkitOverflowScrolling: 'touch',
-          scrollSnapType: 'x mandatory',
-          padding: '6px 2px 8px',
-          marginTop: 4
-        }}
-        className="ord-rail"
-      >
+      {/*
+        Rail of order types. Flat tinted cards with one accent each — no
+        backdrop blur, no glow — and each card now carries the number of live
+        orders of its type, so the rail doubles as a status strip.
+      */}
+      <div className="ord-rail">
         {[
           { id: 'limit', Icon: IconTrend, label: t('orders.newLimit'), sub: t('orders.type.limit'), hue: 'var(--rgb-1)' },
           { id: 'trailing', Icon: IconTrend, label: t('orders.newTrailing'), sub: t('orders.type.trailing'), hue: 'var(--rgb-3)' },
@@ -672,43 +546,41 @@ export default function Orders() {
           { id: 'ladder', Icon: IconPools, label: t('orders.newLadder'), sub: t('orders.type.ladder'), hue: 'var(--rgb-5)' },
           { id: 'dca', Icon: IconClock, label: t('orders.newDca'), sub: t('orders.type.dca'), hue: 'var(--rgb-2)' },
           { id: 'twap', Icon: IconClock, label: t('orders.newTwap'), sub: t('orders.type.twap'), hue: 'var(--rgb-6)' },
-          { id: 'rebalance', Icon: IconPools, label: t('orders.newRebalance'), sub: t('orders.type.rebalance'), hue: 'var(--rgb-8)' },
-        ].map(({ id, Icon, label, sub, hue }) => (
-          <motion.button
-            key={id}
-            className={`card ord-new-${id}`}
-            whileTap={{ scale: 0.97 }}
-            /* setSheet('limit') setSheet('dca') setSheet('trailing') setSheet('bracket') setSheet('ladder') setSheet('twap') setSheet('rebalance') */
-            onClick={() => setSheet(id)}
-            style={{
-              flex: '0 0 140px',
-              scrollSnapAlign: 'start',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 10,
-              padding: '16px 10px',
-              borderRadius: 18,
-              background: `linear-gradient(145deg, color-mix(in srgb, ${hue} 10%, rgba(255,255,255,0.05)), rgba(255,255,255,0.03))`,
-              border: `1px solid color-mix(in srgb, ${hue} 14%, rgba(255,255,255,0.08))`,
-              backdropFilter: 'blur(12px)',
-              textAlign: 'center',
-              minHeight: 110
-            }}
-          >
-            <span style={{ width: 44, height: 44, borderRadius: 13, display: 'grid', placeItems: 'center', background: `linear-gradient(135deg, ${hue}, color-mix(in srgb, ${hue} 70%, #000))`, color: '#fff', boxShadow: `0 8px 20px color-mix(in srgb, ${hue} 20%, transparent)` }}>
-              <Icon width={22} height={22} />
-            </span>
-            <span style={{ fontWeight: 800, fontSize: 12.5, lineHeight: 1.3 }}>{label}</span>
-            <span className="faint" style={{ fontSize: 11 }}>{sub}</span>
-          </motion.button>
-        ))}
+          { id: 'rebalance', Icon: IconPools, label: t('orders.newRebalance'), sub: t('orders.type.rebalance'), hue: 'var(--rgb-8)' }
+        ].map(({ id, Icon, label, sub, hue }) => {
+          const live = [...ready, ...active, ...paused].filter((o) => o.type === id).length;
+          return (
+            <motion.button
+              key={id}
+              className={`ord-new-card ord-new-${id}`}
+              style={{ '--hue': hue }}
+              whileTap={{ scale: 0.97 }}
+              /* setSheet('limit') setSheet('dca') setSheet('trailing') setSheet('bracket') setSheet('ladder') setSheet('twap') setSheet('rebalance') */
+              onClick={() => setSheet(id)}
+            >
+              {live > 0 && <span className="ord-new-count">{live}</span>}
+              <span className="ord-new-glyph"><Icon width={22} height={22} /></span>
+              <span className="ord-new-label">{label}</span>
+              <span className="ord-new-sub">{sub}</span>
+            </motion.button>
+          );
+        })}
       </div>
 
       {/* The limitation, stated before the user creates anything. */}
       <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
         {t('orders.manualNotice')}
       </motion.p>
+
+      {/*
+        Solana, next to the EVM cards rather than inside them: a Solana mint
+        has no CoinGecko id and the server watcher holds no key, so a Solana
+        "order" is a saved handoff that opens the swap pre-filled. The card
+        says so before it is used. See components/SolanaOrderCard.jsx.
+      */}
+      <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
+        <SolanaOrderCard />
+      </motion.div>
 
       {/*
         What is currently scheduled. Only shown once something exists, so an
@@ -730,7 +602,7 @@ export default function Orders() {
         <motion.section variants={stagger} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.readyNow')}</p>
           <div className="stack" style={{ gap: 8 }}>
-            <AnimatePresence>{ready.map((o) => <Row key={o.id} o={o} isReady />)}</AnimatePresence>
+            <AnimatePresence>{ready.map((o) => <OrderRow key={o.id} o={o} isReady t={t} rateFor={rateFor} usdMap={usdMap} actions={rowActions} />)}</AnimatePresence>
           </div>
         </motion.section>
       )}
@@ -739,7 +611,7 @@ export default function Orders() {
         <motion.section variants={stagger} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.waiting')}</p>
           <div className="stack" style={{ gap: 8 }}>
-            <AnimatePresence>{active.map((o) => <Row key={o.id} o={o} />)}</AnimatePresence>
+            <AnimatePresence>{active.map((o) => <OrderRow key={o.id} o={o} t={t} rateFor={rateFor} usdMap={usdMap} actions={rowActions} />)}</AnimatePresence>
           </div>
         </motion.section>
       )}
@@ -748,7 +620,7 @@ export default function Orders() {
         <motion.section variants={stagger} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.paused')}</p>
           <div className="stack" style={{ gap: 8 }}>
-            <AnimatePresence>{paused.map((o) => <Row key={o.id} o={o} />)}</AnimatePresence>
+            <AnimatePresence>{paused.map((o) => <OrderRow key={o.id} o={o} t={t} rateFor={rateFor} usdMap={usdMap} actions={rowActions} />)}</AnimatePresence>
           </div>
         </motion.section>
       )}
@@ -757,7 +629,7 @@ export default function Orders() {
         <motion.section variants={stagger} initial="hidden" animate="show">
           <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.history')}</p>
           <div className="stack" style={{ gap: 8 }}>
-            {done.slice(0, 10).map((o) => <Row key={o.id} o={o} />)}
+            {done.slice(0, 10).map((o) => <OrderRow key={o.id} o={o} t={t} rateFor={rateFor} usdMap={usdMap} actions={rowActions} />)}
           </div>
         </motion.section>
       )}
@@ -806,25 +678,369 @@ export default function Orders() {
         />
       )}
 
+      <DcaRevisionSheet
+        draft={editDraft}
+        onChange={setEditDraft}
+        onSave={saveEditDca}
+        onClose={() => setEditDraft(null)}
+        chainOptions={chainOptions}
+      />
+
       <OrderSheet
         kind={sheet}
         onClose={() => setSheet(null)}
         onSwitchKind={setSheet}
         onSubmit={submit}
-        tokens={chainTokens}
-        chainId={chain.id}
+        walletChainId={chain.id}
         prices={prices}
       />
     </PageTransition>
   );
 }
 
+/**
+ * ONE ORDER ROW.
+ *
+ * ─── WHY IT IS A MODULE-LEVEL COMPONENT AND NOT DEFINED INSIDE `Orders` ────
+ * It used to be declared inside the page. React compares component TYPES by
+ * identity, so a function re-created on every render is a component React has
+ * never seen before: every re-render destroyed and rebuilt every row. This page
+ * re-renders on every price tick — `usePriceMap(100)`, ten times a second — so
+ * a tap on Pause or Edit could land on a node that was already detached, and
+ * any state a row owned was wiped before it could be used. That is exactly what
+ * the DCA revision-sheet test caught.
+ *
+ * The handlers arrive as one `actions` object rather than a dozen props, so the
+ * row has a single seam to read.
+ */
+function OrderRow({ o, isReady, t, rateFor, usdMap, actions }) {
+  const notional = orderNotionalUsd(o, usdMap);
+  const executionStatus = o.type === 'dca' ? dcaDisplayStatus(o, loadDcaReceipts()) : o.status;
+  const raw = rateFor(o);
+  // Display in whichever unit the order was written in.
+  const rate =
+    o.type === 'limit' && o.priceOf === 'to' && Number.isFinite(raw) && raw > 0 ? 1 / raw : raw;
+  const pct =
+    o.type === 'limit' && Number.isFinite(rate) && o.targetRate
+      ? ((rate - o.targetRate) / o.targetRate) * 100
+      : null;
+
+  return (
+    <motion.div
+      className={`ord-row ${isReady ? 'ord-ready' : ''}`}
+      data-paused={o.status === 'paused' ? 'true' : undefined}
+      variants={riseIn}
+    >
+      <div className="ord-head">
+        <span className={`ord-kind ord-${o.type}`}>{t(`orders.type.${o.type}`)}</span>
+        {/*
+          WHICH NETWORK. Orders can be created on any supported chain, so a row
+          that does not name its network is ambiguous the moment somebody has
+          two — and the same pair on two chains is a normal way to work. The
+          mark is drawn from the chain id; the word is there for everyone who
+          cannot see it.
+        */}
+        {EVM_CHAINS[o.chainId] && (
+          <span className="ord-netline">
+            <span className="ord-chain-mark" aria-hidden="true">
+              <AssetIcon chain={o.chainId} size={17} />
+            </span>
+            <span>{EVM_CHAINS[o.chainId].short || EVM_CHAINS[o.chainId].name}</span>
+          </span>
+        )}
+        <span className="ord-pair mono">
+          {o.amountIn} {o.fromToken.symbol} → {o.toToken.symbol}
+        </span>
+        {o.type === 'dca' && ['completed', 'failed', 'rejected', 'partial', 'cancelled'].includes(executionStatus) && <span className={`ord-status ord-${executionStatus}`}>{t(`orders.status.${executionStatus}`, { defaultValue: executionStatus })}</span>}
+
+        {/*
+          IS THIS ORDER ACTUALLY WATCHING?
+          Before this, an active order and a paused one looked the same from
+          across the row: only the pause/resume BUTTON changed its label. You
+          had to read the button to work out whether the market was being
+          watched — and a paused order that looks live is the failure mode that
+          costs a user their price.
+
+          A dot plus a word, not a dot alone: colour is not available to
+          everyone, and the word is unambiguous where a green circle is not.
+        */}
+        {(o.status === 'active' || o.status === 'paused') && (
+          <span
+            className={`ord-live ${isReady ? 'ord-live-ready' : o.status === 'active' ? 'ord-live-on' : 'ord-live-off'}`}
+          >
+            <span className="ord-live-dot" />
+            {isReady
+              ? t('orders.liveReady')
+              : o.status === 'active'
+                ? t('orders.liveOn')
+                : t('orders.liveOff')}
+          </span>
+        )}
+      </div>
+
+      {o.type === 'bracket' ? (
+        <div className="ord-meta">
+          {/* Both exits on one row: the whole point of a bracket is that they
+              are a pair, and splitting them would hide that. */}
+          <span className="faint">
+            {t('orders.bracketRow', {
+              tp: fmtQty(o.takeProfitRate),
+              sl: fmtQty(o.stopLossRate),
+              quote: o.priceOf === 'to' ? o.fromToken.symbol : o.toToken.symbol
+            })}
+          </span>
+          {Number.isFinite(rate) && (
+            <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>
+          )}
+        </div>
+      ) : o.type === 'ladder' ? (
+        <div className="ord-meta">
+          <span className="faint">
+            {t('orders.ladderRow', {
+              done: o.rungsFilled ?? 0,
+              total: o.steps,
+              next: fmtQty(ladderRungs(o)[o.rungsFilled ?? 0] ?? 0)
+            })}
+          </span>
+          {Number.isFinite(rate) && (
+            <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>
+          )}
+        </div>
+      ) : o.type === 'trailing' ? (
+        <div className="ord-meta">
+          <span className="faint">
+            {t('orders.trailPct')} {o.trailPct}%
+          </span>
+          {Number.isFinite(o.peakRate) && o.peakRate > 0 ? (
+            <span className="mono faint">
+              {t('orders.peak')} {fmtQty(o.peakRate)} · {t('orders.stopAt')}{' '}
+              {fmtQty(o.peakRate * (1 - o.trailPct / 100))}
+            </span>
+          ) : (
+            /*
+             * A trailing order has no peak until the first price arrives.
+             * Showing "0" or a blank would read as broken, so say what is
+             * actually happening.
+             */
+            <span className="faint mono">{t('orders.notYetTracking')}</span>
+          )}
+        </div>
+      ) : o.type === 'twap' ? (
+        <div className="ord-meta">
+          <span className="faint">{t('orders.twapRow', { done: o.runsDone, total: o.slices, window: o.windowMin })}</span>
+        </div>
+      ) : o.type === 'rebalance' ? (
+        <div className="ord-meta">
+          <span className="faint">{t('orders.rebalanceRow', { target: fmtQty(o.targetRate), drift: o.driftPct })}</span>
+          {Number.isFinite(rate) && <span className="mono faint">{t('orders.now')} {fmtQty(rate)}</span>}
+        </div>
+      ) : o.type === 'limit' ? (
+        <div className="ord-meta">
+          <span className="faint">
+            {/*
+              The label must name BOTH tokens. "When 1 unit ≥ 700 USDT" was
+              ambiguous: the rate is always priced in the TO token, and which
+              side is being sold depends on which token sits in the FROM
+              slot — not on the direction. Naming both removes the guess.
+            */}
+            {t(`orders.when.${o.direction}`, {
+              from: o.priceOf === 'to' ? o.toToken.symbol : o.fromToken.symbol,
+              rate: fmtQty(o.targetRate),
+              to: o.priceOf === 'to' ? o.fromToken.symbol : o.toToken.symbol
+            })}
+          </span>
+          {Number.isFinite(rate) ? (
+            /*
+             * THE COLOUR HERE WAS BACKWARDS HALF THE TIME.
+             *
+             * It was `pct >= 0 ? 'up' : 'down'` — green when the market sits
+             * above the target, red when below. That is right for a "sell when
+             * it rises" order and exactly WRONG for "buy when it falls": the
+             * price dropping towards a buy target is the good news, and it was
+             * painted red.
+             *
+             * Green now means "moving the way you asked for", which is the only
+             * reading that is correct for both directions.
+             *
+             * `pct` can also be null on an order stored before targetRate was
+             * validated, and `null.toFixed` throws — one legacy row would
+             * white-screen the whole list.
+             */
+            <span
+              className={`mono ${
+                !Number.isFinite(pct)
+                  ? ''
+                  : (o.direction === 'above') === pct >= 0
+                    ? 'up'
+                    : 'down'
+              }`}
+            >
+              {t('orders.now')} {fmtQty(rate)}
+              {Number.isFinite(pct) && ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)`}
+            </span>
+          ) : (
+            <span className="faint mono">{t('orders.noPrice')}</span>
+          )}
+        </div>
+      ) : (
+        <div className="ord-meta">
+          <span className="faint">{t(`orders.every.${o.interval}`)}</span>
+          <span className="mono faint">
+            {o.runsDone}/{o.totalRuns}
+          </span>
+        </div>
+      )}
+
+      {/*
+        Trade size, and the fee it carries.
+
+        Shown rather than hidden for the same reason the swap screen had to stop
+        claiming it was free: a plan that quietly costs more than the user
+        expects is the kind of surprise that loses the customer, and six
+        scheduled buys carry six fees.
+      */}
+      {notional !== null && (
+        <div className="ord-meta">
+          <span className="faint">
+            {o.type === 'dca' ? t('orders.planValue') : t('orders.tradeValue')}
+          </span>
+          <span className="mono">
+            ${notional < 1 ? notional.toFixed(4) : notional.toFixed(2)}
+            <span className="faint"> · {t('orders.feeNote', { pct: FEE_BPS / 100 })}</span>
+          </span>
+        </div>
+      )}
+
+      {o.status === 'paused' && <p className="faint" style={{ margin: '6px 0 0' }}>{t('orders.pausedHint')}</p>}
+
+      <div className="row" style={{ gap: 7, marginTop: 9 }}>
+        {isReady && (
+          <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => actions.execute(o)}>
+            {t('orders.swapNow')}
+          </button>
+        )}
+        {o.type === 'dca' && o.status === 'paused' && (
+          <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={() => actions.signDca(o)}>{t('orders.signActivate')}</button>
+        )}
+        {o.type === 'dca' && o.status === 'active' && (
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={() => actions.startEditDca(o)}>{t('orders.edit')}</button>
+            {actions.cancelReview === o.id ? <button className="btn btn-ghost btn-sm" onClick={() => actions.confirmCancelDca(o)}>{t('orders.confirmCancel')}</button> : <button className="btn btn-ghost btn-sm" onClick={() => actions.reviewCancelDca(o)}>{t('orders.cancelDca')}</button>}
+          </>
+        )}
+        {o.type !== 'dca' && (o.status === 'active' || o.status === 'paused') && (
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={() => actions.togglePause(o)}>{o.status === 'paused' ? t('orders.resume') : t('orders.pause')}</button>
+            <button className="btn btn-ghost btn-sm" style={{ flex: isReady ? 0 : 1 }} onClick={() => actions.cancel(o.id)}>{t('orders.cancel')}</button>
+          </>
+        )}
+        {o.status !== 'active' && o.status !== 'paused' && (
+          <>
+            <span className={`ord-status ord-${o.status}`}>{t(`orders.status.${o.status}`)}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => actions.cancel(o.id)}>
+              {t('orders.remove')}
+            </button>
+          </>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 
-function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, prices }) {
+/**
+ * EDIT A DCA PLAN — a real sheet, owned by the page.
+ *
+ * ─── WHY NOT INSIDE THE ROW ─────────────────────────────────────────────────
+ * The first version of this panel rendered inside the row it belongs to. That
+ * lasted one test: the price map re-renders this page every 100 ms, and `Row`
+ * is declared inside `Orders`, so each render gives every row a NEW component
+ * type — React unmounts and remounts the subtree, and anything holding local
+ * state inside a row dies instantly. A network picker opened from the row
+ * closed itself before it could be used.
+ *
+ * The sheet is therefore a sibling of the order form, owned by the page, where
+ * its state survives a price tick. (The deeper issue — `Row` being redefined
+ * every render — is pre-existing and worth a separate pass; the `editDraft`
+ * state was deliberately put in the PAGE for the same reason.)
+ */
+function DcaRevisionSheet({ draft, onChange, onSave, onClose, chainOptions }) {
   const { t } = useTranslation();
-  const [fromSym, setFromSym] = useState('');
-  const [toSym, setToSym] = useState('');
+  if (!draft) return null;
+  return (
+    <Sheet open onClose={onClose} title={t('orders.edit')} size="md" anchor="bottom">
+      <div className="ord-edit" style={{ marginTop: 0 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <label className="ord-field">
+            <span>{t('orders.editAmountPrompt')}</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={draft.amountIn}
+              onChange={(e) => onChange({ ...draft, amountIn: e.target.value })}
+            />
+          </label>
+          <label className="ord-field">
+            <span>{t('orders.interval')}</span>
+            <select value={draft.interval} onChange={(e) => onChange({ ...draft, interval: e.target.value })}>
+              {Object.keys(DCA_INTERVALS).map((k) => (
+                <option key={k} value={k}>{t(`orders.every.${k}`)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* The network, picked the same way it is picked at creation: a row with
+            a mark and a name, never a raw chain id typed from memory. */}
+        <label className="ord-field" style={{ marginTop: 9 }}>
+          <span>{t('orders.network')}</span>
+          <ModernSelect
+            value={String(draft.chainId)}
+            onChange={(v) => onChange({ ...draft, chainId: Number(v) })}
+            options={chainOptions}
+            title={t('orders.network')}
+            placeholder={t('orders.network')}
+            ariaLabel={t('orders.network')}
+            testId="ord-edit-chain-select"
+          />
+        </label>
+
+        <label className="ord-field" style={{ marginTop: 9 }}>
+          <span>{t('orders.editDeadlinePrompt')}</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={draft.deadlineMs}
+            onChange={(e) => onChange({ ...draft, deadlineMs: e.target.value })}
+          />
+        </label>
+
+        <div className="row" style={{ gap: 8, marginTop: 10 }}>
+          <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onSave}>
+            {t('common.confirm')}
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('common.cancel')}</button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, prices }) {
+  const { t } = useTranslation();
+
+  /*
+   * ─── THE NETWORK IS A CHOICE HERE, NOT AN INHERITANCE ───────────────────
+   * `chainId` used to arrive as a prop from the connected wallet, so a user on
+   * BNB Smart Chain could not schedule an order on Arbitrum at all — and the
+   * token list was the four-to-twenty hand-curated entries of that one chain.
+   * It is sheet state now, defaulted to the wallet's chain, and the picker
+   * offers every network this app can route on.
+   */
+  const [chainId, setChainId] = useState(() => Number(walletChainId) || 56);
+  const [fromKey, setFromKey] = useState('');
+  const [toKey, setToKey] = useState('');
   const [amount, setAmount] = useState('');
   const [target, setTarget] = useState('');
   const [direction, setDirection] = useState('below');
@@ -844,16 +1060,174 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
   const goal = useMemo(() => loadGoal(), [kind]);
   const [goalId, setGoalId] = useState('');
 
+  /* The chain's hand-verified entries: the instant first paint, and always
+     present in the merged universe below. */
+  const curated = useMemo(() => TOKENS[chainId] ?? [], [chainId]);
+
+  /*
+   * ─── THE TOKEN UNIVERSE, THE SAME ONE THE SWAP SCREEN TRADES ────────────
+   * This form offered 86 curated entries across every chain — 21 on Ethereum,
+   * five on Polygon — because an order needs a PRICE FEED and only curated
+   * tokens carried a `coingeckoId`. The swap screen has always offered
+   * thousands. `getTokensSync` paints from the curated set plus whatever the
+   * swap screen already cached, then `loadTokens` merges the remote lists in,
+   * so the picker is never empty, never waits to be usable, and never narrower
+   * than the screen it hands off to.
+   */
+  const [universe, setUniverse] = useState(() => getTokensSync(chainId));
+
   useEffect(() => {
-    if (!kind || !tokens.length) return;
-    setFromSym(tokens[0].symbol);
-    setToSym(tokens[1]?.symbol ?? tokens[0].symbol);
+    let alive = true;
+    setUniverse(getTokensSync(chainId));
+    loadTokens(chainId)
+      .then((list) => {
+        if (alive && Array.isArray(list) && list.length) setUniverse(list);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [chainId]);
+
+  /* Defaults come from the CURATED list, which does not change underfoot: if
+     they came from the universe, the remote list landing mid-typing would
+     silently reset the pair. */
+  useEffect(() => {
+    if (!kind) return;
+    setFromKey(tokenKey(curated[0] ?? {}));
+    setToKey(tokenKey(curated[1] ?? curated[0] ?? {}));
     setAmount('');
     setTarget('');
-  }, [kind, tokens]);
+  }, [kind, curated]);
 
-  const fromToken = tokens.find((x) => x.symbol === fromSym);
-  const toToken = tokens.find((x) => x.symbol === toSym);
+  /*
+   * ─── PRICE-OR-NOTHING, RESOLVED BY CONTRACT ADDRESS ─────────────────────
+   * An automatic order is only real if the server can price it, and a price
+   * feed is looked up by contract address — never by symbol, because dozens
+   * of tokens share the ticker "BTC". `lib/coinId.js` documents the rule and
+   * `server/coinIndex.js` answers it; this is the wiring, which was the one
+   * piece missing (the error copy `orders.typeUnorderable` has been sitting in
+   * all twelve locales, unused, waiting for it).
+   *
+   * One request per unknown token as it is picked — the endpoint caps a call
+   * at 25 addresses, and a 4,000-address sweep would be both slow and rude.
+   */
+  const [priceIds, setPriceIds] = useState(() => new Map());
+  const [asked, setAsked] = useState(() => new Set());
+  const [answered, setAnswered] = useState(() => new Set());
+
+  useEffect(() => {
+    setPriceIds(new Map());
+    setAsked(new Set());
+    setAnswered(new Set());
+  }, [chainId]);
+
+  const addrKey = (tk) =>
+    (tk && !tk.native && tk.address ? String(tk.address).toLowerCase() : null);
+
+  const rawFrom = useMemo(
+    () => findToken(universe, fromKey) ?? findToken(curated, fromKey) ?? curated[0] ?? null,
+    [universe, curated, fromKey]
+  );
+  const rawTo = useMemo(
+    () => findToken(universe, toKey) ?? findToken(curated, toKey) ?? curated[1] ?? null,
+    [universe, curated, toKey]
+  );
+
+  const hydrate = (tk) => withCoinId(tk, priceIds);
+  const fromToken = useMemo(() => hydrate(rawFrom), [rawFrom, priceIds]);
+  const toToken = useMemo(() => hydrate(rawTo), [rawTo, priceIds]);
+
+  /*
+   * A lookup in flight belongs to ONE chain. If the user switches networks
+   * while it is running, the answer is about the wrong set of contracts and
+   * must be dropped — hence a ref rather than a cleanup flag.
+   *
+   * ─── WHY NOT AN `alive` FLAG (THE BUG THIS REPLACES) ────────────────────
+   * The first version of this effect cancelled itself. It marked the keys as
+   * "asked" in the same effect that depended on `asked`, so the state update
+   * re-ran the effect, whose CLEANUP set `alive = false` — and the request
+   * that had just been fired resolved into a dead branch. The rows sat on
+   * «در حال بررسی فید قیمت…» forever and every token looked unpriceable.
+   * A cleanup flag is only safe when the effect cannot re-run for its own
+   * reasons.
+   */
+  const chainRef = useRef(chainId);
+  useEffect(() => {
+    chainRef.current = chainId;
+  }, [chainId]);
+
+  useEffect(() => {
+    const want = [rawFrom, rawTo].filter((tk) => {
+      const k = addrKey(tk);
+      return k && !tk.coingeckoId && !asked.has(k);
+    });
+    if (!want.length) return;
+    const keys = want.map(addrKey);
+    const cid = chainId;
+    setAsked((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+    /*
+     * A resolved promise is a completed lookup: `resolveCoinIds` swallows
+     * transport failures instead of rejecting, so "no id" and "the request
+     * failed" look alike from here. Marking the keys answered is the honest
+     * reading of that, and re-picking the token asks again (see `pickOn`).
+     */
+    const settle = (map) => {
+      if (chainRef.current !== cid) return;
+      setPriceIds((prev) => {
+        const next = new Map(prev);
+        let changed = false;
+        for (const [k, v] of map ?? []) {
+          if (v && !next.has(k)) {
+            next.set(k, v);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+      setAnswered((prev) => {
+        const next = new Set(prev);
+        for (const k of keys) next.add(k);
+        return next;
+      });
+    };
+    resolveCoinIds(cid, want).then(settle).catch(() => settle(null));
+  }, [chainId, rawFrom, rawTo, asked]);
+
+  /* ok | checking | none — 'checking' is the state the old form had no way to
+     express, and it is why a token with no feed looked like a working pick. */
+  const priceStateOf = (tk) => {
+    if (!tk) return 'none';
+    if (isOrderable(tk)) return 'ok';
+    const k = addrKey(tk);
+    if (!k) return 'none';
+    return answered.has(k) ? 'none' : 'checking';
+  };
+
+  /* Only the token that changed is forgotten, so re-picking it retries. */
+  const pickOn = (side) => (value, opt) => {
+    const k = addrKey(opt);
+    if (k) {
+      setAsked((prev) => {
+        if (!prev.has(k)) return prev;
+        const next = new Set(prev);
+        next.delete(k);
+        return next;
+      });
+      setAnswered((prev) => {
+        if (!prev.has(k)) return prev;
+        const next = new Set(prev);
+        next.delete(k);
+        return next;
+      });
+    }
+    if (side === 'from') setFromKey(String(value));
+    else setToKey(String(value));
+  };
 
   /*
    * ─── HISTORY FOR THE TOKEN BEING WATCHED ──────────────────────────────
@@ -950,48 +1324,142 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
     return priceOf === 'to' ? b / a : a / b;
   }, [prices, fromToken, toToken, priceOf]);
 
-  // Token options for the modern picker — offline SVG first, TrustWallet CDN second, monogram last.
-  // Native coins use AssetIcon (symbol+chain), everything else uses the address-keyed TokenIcon so a
-  // scam symbol can never borrow the real token's face.
-  const tokenOptions = useMemo(() => tokens.map((tk) => {
-    const isNative = tk.native || !tk.address;
-    if (isNative) return { value: tk.symbol, label: tk.symbol, sublabel: tk.name, symbol: tk.symbol, chain: chainId };
-    return { value: tk.symbol, label: tk.symbol, sublabel: tk.name, token: tk, chainId };
-  }), [tokens, chainId]);
+  /*
+   * Token options for the picker, keyed by CONTRACT (or 'native'), never by
+   * symbol: a 4,000-row list has duplicate tickers by construction, and two
+   * rows both valued "USDT" would make a selection ambiguous. Native coins
+   * draw from the bundled SVG marks; everything else is address-keyed, so a
+   * scam symbol can never borrow the real token's face.
+   *
+   * A token with no price feed stays IN the list and is marked off, with the
+   * reason in the row: hiding it would leave the user hunting for a token that
+   * is right there on the swap screen, with nothing to explain its absence.
+   */
+  const tokenOptions = useMemo(
+    () => universe.map((tk) => {
+      const state = priceStateOf(tk);
+      const off = state === 'none';
+      const isNative = tk.native || !tk.address;
+      return {
+        value: tokenKey(tk),
+        label: tk.symbol,
+        sublabel:
+          !isNative && tk.duplicateSymbol && tk.address
+            ? `${tk.name} · ${String(tk.address).slice(0, 6)}…${String(tk.address).slice(-4)}`
+            : tk.name,
+        ...(isNative ? { symbol: tk.symbol, chain: chainId } : { token: tk, chainId }),
+        disabled: off,
+        disabledReason: off ? t('orders.pxNone') : undefined
+      };
+    }),
+    [universe, chainId, answered, t]
+  );
+
+  /*
+   * Every network this app can route on, with the wallet's chain first in the
+   * list order only in the sense that it is already selected. Counts arrive
+   * from a post-paint effect: `getTokensSync` parses cached lists out of
+   * localStorage, and doing that for sixteen chains while opening a sheet
+   * would put the parse on the frame the user is waiting for.
+   */
+  const [tokenCounts, setTokenCounts] = useState({});
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const counts = {};
+      for (const cid of EVM_CHAIN_ORDER) counts[cid] = (getTokensSync(cid) ?? []).length;
+      setTokenCounts(counts);
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  const chainOptions = useMemo(() => chainOptionsFrom(tokenCounts, t), [tokenCounts, t]);
+
+  /* The two legs, by symbol. Kept as plain strings because the price-target
+     inputs, the segmented control and the ladder preview all name them. */
+  const fromSym = fromToken?.symbol ?? '';
+  const toSym = toToken?.symbol ?? '';
 
   // Which symbol is being priced, and in what.
   const baseSym = priceOf === 'to' ? toSym : fromSym;
   const quoteSym = priceOf === 'to' ? fromSym : toSym;
+  const fromState = priceStateOf(fromToken);
+  const toState = priceStateOf(toToken);
+  const canCreate = fromState === 'ok' && toState === 'ok';
+  const priceState = fromState === 'ok' ? toState : fromState;
 
   if (!kind) return null;
 
   return (
     <Sheet open onClose={onClose} title={t(`orders.new.${kind}`)}>
       <div className="stack" style={{ gap: 11 }}>
+        {/*
+          ─── THE NETWORK PICKER ────────────────────────────────────────────
+          With per-network marks, and each row saying how many tokens that
+          chain offers. Eleven of the sixteen networks used to be unreachable
+          from this screen entirely, because the chain was inherited from the
+          wallet.
+        */}
+        <label className="ord-field">
+          <span className="faint">{t('orders.network')}</span>
+          <ModernSelect
+            value={String(chainId)}
+            onChange={(v) => setChainId(Number(v))}
+            options={chainOptions}
+            title={t('orders.network')}
+            placeholder={t('orders.network')}
+            ariaLabel={t('orders.network')}
+            testId="ord-chain-select"
+          />
+        </label>
+
         <div className="row" style={{ gap: 8 }}>
           <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
             <span className="faint">{t('orders.from')}</span>
             <ModernSelect
-              value={fromSym}
-              onChange={setFromSym}
+              value={fromKey}
+              onChange={pickOn('from')}
               options={tokenOptions}
               title={t('orders.from')}
               placeholder={t('orders.from')}
+              ariaLabel={t('orders.from')}
+              testId="ord-from-select"
               searchable
             />
           </label>
           <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
             <span className="faint">{t('orders.to')}</span>
             <ModernSelect
-              value={toSym}
-              onChange={setToSym}
+              value={toKey}
+              onChange={pickOn('to')}
               options={tokenOptions}
               title={t('orders.to')}
               placeholder={t('orders.to')}
+              ariaLabel={t('orders.to')}
+              testId="ord-to-select"
               searchable
             />
           </label>
         </div>
+
+        {/*
+          WHETHER THIS PAIR CAN ACTUALLY BE WATCHED.
+
+          The rule is not "the price exists somewhere" — it is "the server can
+          price this contract", which is a different and specific question.
+          Saying so next to the pickers, before anything is typed into the rest
+          of the form, is the difference between a token that is unavailable
+          and a token that looks perfectly normal until the Create button
+          refuses.
+        */}
+        <div className={`ord-price-state is-${priceState}`}>
+          <span className="ord-price-dot" aria-hidden="true" />
+          {priceState === 'ok'
+            ? t('orders.pxOk')
+            : priceState === 'checking'
+              ? t('orders.pxChecking')
+              : t('orders.pxNone')}
+        </div>
+        {priceState === 'none' && <p className="ord-warn">{t('orders.typeUnorderable')}</p>}
 
         <label className="ord-field">
           <span className="faint">{t('orders.amount')}</span>
@@ -1422,6 +1890,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, tokens, chainId, pr
 
         <button
           className="btn btn-primary"
+          disabled={!canCreate}
           onClick={() =>
             onSubmit({
               type: kind,

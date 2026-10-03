@@ -52,7 +52,11 @@
     "language": "Idioma",
     "tryAgain": "Tentar de novo",
     "notAdvice": "Os dados de mercado são apenas informativos e não constituem aconselhamento financeiro. As criptomoedas são voláteis: pode perder tudo.",
-    "offlineData": "Fluxo ao vivo indisponível — a mostrar cópia em cache. Os preços não são reais."
+    "offlineData": "Fluxo ao vivo indisponível — a mostrar cópia em cache. Os preços não são reais.",
+    "search": "Buscar",
+    "noResults": "Sem resultados",
+    "max": "Máx.",
+    "showing": "A mostrar {{shown}} de {{total}}"
   },
   "share": {
     "screen": "Compartilhar",
@@ -689,7 +693,14 @@
         "SAME_TOKEN": "Escolha dois tokens diferentes.",
         "BAD_MINT": "Esse endereço não é um mint da Solana."
       }
-    }
+    },
+    "network": "Rede",
+    "networkCount": "{{n}} tokens",
+    "statWatching": "A vigiar",
+    "statReady": "Pronta agora",
+    "pxOk": "Cotação ligada",
+    "pxChecking": "A verificar a cotação…",
+    "pxNone": "Sem cotação"
   },
   "bridge": {
     "emptyHint": "Introduza um valor para ver a melhor rota e as suas taxas.",
@@ -752,6 +763,15 @@
       "DESTINATION_ADDRESS_REQUIRED": "Introduza o endereço de destino — esta rota não o pode assumir.",
       "CROSSCHAIN_NOT_CONFIGURED": "O serviço entre cadeias não está configurado nesta implantação.",
       "GENERIC": "Ocorreu um problema ({{code}}). Nada foi enviado."
+    },
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "Ponha o dinheiro que acabou de mover para trabalhar",
+      "body": "O Farm lê os rendimentos ao vivo dos protocolos e envia o depósito para a sua própria carteira — nunca ficamos com a posição e você pode sacar quando quiser.",
+      "chipLive": "Rendimento ao vivo",
+      "chipSelf": "Sem custódia",
+      "chipExit": "Saque quando quiser",
+      "cta": "Abrir Farm"
     }
   },
   "dydx": {
@@ -2581,10 +2601,8 @@
       "empty": "Nenhum saldo de token foi encontrado neste endereço.",
       "splNote": "Enviar nesta tela move apenas SOL nativo. Os outros tokens saem pela troca.",
       "sendTitle": "Enviar SOL",
-      "sendOnly": "Isto envia apenas SOL nativo. Não move tokens SPL.",
       "recipient": "Endereço do destinatário",
       "amount": "Quantidade",
-      "sendCta": "Enviar SOL",
       "receiveTitle": "Receber",
       "receiveHint": "Envie apenas SOL e tokens da Solana para este endereço. Um endereço Ethereum que começa com 0x não chega aqui.",
       "copied": "Copiado",

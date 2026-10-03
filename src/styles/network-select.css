@@ -216,6 +216,36 @@
 .net-select__x:active { transform: scale(0.94); }
 .net-select__x:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
 
+/* SEARCH ON DEMAND — the magnifier that replaces the auto-focused field.
+   Same 34px circle as the close button so the head stays one optical row, and
+   the «on» state is the only thing on this control that carries colour. */
+.net-select__searchbtn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+.net-select__searchbtn:hover { background: var(--bg-panel); color: var(--text-1); }
+.net-select__searchbtn:active { transform: scale(0.94); }
+.net-select__searchbtn:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+.net-select__searchbtn.is-on {
+  border-color: rgba(0, 229, 255, 0.34);
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--rgb-1);
+}
+:root[data-theme='light'] .net-select__searchbtn.is-on {
+  border-color: rgba(0, 153, 204, 0.34);
+  background: rgba(0, 229, 255, 0.14);
+  color: #00728f;
+}
+
 /* The little bar that says "this sheet can be dragged" — drawn only on the
    phone layout, where the popup actually is a sheet. */
 .net-select__grabber {

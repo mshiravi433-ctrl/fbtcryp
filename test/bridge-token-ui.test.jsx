@@ -22,7 +22,6 @@ vi.mock('ethers', () => ({ Contract: class {
   approve = state.approve;
 } }));
 import Bridge from '../src/pages/Bridge';
-import BridgeHero from '../src/components/BridgeHero';
 
 const OWNER = '0x3456789012345678901234567890123456789012';
 const TOKEN = '0x55d398326f99059ff775485246999027b3197955';
@@ -90,19 +89,66 @@ it('an invalid destination cannot silently fall back to the sender', async () =>
   expect(screen.getByRole('button', { name: 'bridge.send' }).disabled).toBe(true);
 });
 
-it('slides between the Tron and Solana promos and selects the matching bridge mode', async () => {
-  const onSelectMode = vi.fn();
-  render(<BridgeHero onSelectMode={onSelectMode} />);
+/*
+ * ─── THE CAROUSEL IS GONE, AND THE SLOT IT HELD NOW SELLS FARM ─────────────
+ *
+ * «بنر بالای صفحه که مربوط به ترون و سولانا هست را محو کن و ببرش، به‌درد
+ * نمی‌خورد … پایین صفحه‌ش یک بنر تبلیغاتی خیلی مدرن با انیمیشن برای تبلیغ
+ * فارم بزار».
+ *
+ * Two things had to be true at once, so both are asserted: the top banner is
+ * ABSENT (not merely hidden — a `display:none`ed carousel still costs its
+ * fetches and its timers), and the two routes it advertised are still reachable
+ * from the tab rail below, because deleting a promo must never delete a tab.
+ */
+it('drops the tron/solana carousel but keeps both routes on the mode rail', async () => {
+  render(<MemoryRouter initialEntries={['/bridge']}><Bridge /></MemoryRouter>);
+  await advance();
 
-  expect(screen.getByText('bridge.hero.tron.title')).toBeTruthy();
-  const dots = screen.getAllByRole('button', { name: 'bridge.hero.goTo' });
-  expect(dots).toHaveLength(2);
-  expect(dots[0].getAttribute('aria-pressed')).toBe('true');
+  expect(document.querySelector('.brg-hero')).toBeNull();
+  expect(screen.queryByText('bridge.hero.tron.title')).toBeNull();
 
-  fireEvent.click(dots[1]);
+  // the two modes are still one tap away, under their own labels
+  expect(screen.getByRole('tab', { name: 'bridge.mode.tron' })).toBeTruthy();
+  expect(screen.getByRole('tab', { name: 'bridge.mode.solana' })).toBeTruthy();
+});
+
+it('pitches Farm at the foot of the page, after the ticket and the disclosure', async () => {
+  const { container } = render(<MemoryRouter initialEntries={['/bridge']}><Bridge /></MemoryRouter>);
+  await advance();
+
+  const promo = container.querySelector('.farm-promo');
+  expect(promo).toBeTruthy();
+  expect(screen.getByText('bridge.farmPromo.title')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'bridge.farmPromo.cta' })).toBeTruthy();
+
+  /* Below the custody warning, never above it: a promotion printed over the
+     one paragraph that says «we cannot recover your transfer» reads as an
+     attempt to bury it. `InfoBox` is the last thing the page renders before
+     the banner, so its title is the anchor to compare against. */
+  const trust = screen.getByText('bridge.trustTitle').closest('section, div');
+  expect(trust).toBeTruthy();
+  expect(trust.compareDocumentPosition(promo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+/*
+ * ─── NO PICKER MAY RAISE THE KEYBOARD ON ITS OWN ───────────────────────────
+ *
+ * «باکس‌های پاپ‌اپ برای انتخاب توکن و شبکه … هر بار می‌زنه خودکار صفحه کلید هم
+ * باز می‌شود». The old sheet rendered `<input autoFocus>` from six options up,
+ * so opening the network list covered half of it with a keyboard. This asserts
+ * the property, not the implementation: after tapping a picker trigger, there
+ * is no focused text field anywhere in the document.
+ */
+it('opening a token or network picker focuses nothing and shows no search box', async () => {
+  render(<MemoryRouter initialEntries={['/bridge']}><Bridge /></MemoryRouter>);
+  await advance();
+
+  fireEvent.click(screen.getByTestId('bridge-from-chain').querySelector('.modern-select-trigger'));
   await advance(350);
-  expect(screen.getByText('bridge.hero.solana.title')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'bridge.hero.solana.cta' })).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'bridge.hero.solana.cta' }));
-  expect(onSelectMode).toHaveBeenCalledWith('solana');
+
+  const active = document.activeElement;
+  expect(active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA').toBe(false);
+  expect(document.querySelector('.modern-select-search')).toBeNull();
+  expect(document.querySelector('.modern-select-option')).toBeTruthy();
 });

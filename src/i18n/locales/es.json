@@ -52,7 +52,11 @@
     "language": "Idioma",
     "tryAgain": "Reintentar",
     "notAdvice": "Los datos de mercado son solo informativos y no constituyen asesoramiento financiero. Las criptomonedas son volátiles: puedes perderlo todo.",
-    "offlineData": "Sin conexión en directo: se muestra una copia en caché. Los precios no son reales."
+    "offlineData": "Sin conexión en directo: se muestra una copia en caché. Los precios no son reales.",
+    "search": "Buscar",
+    "noResults": "Sin resultados",
+    "max": "Máx.",
+    "showing": "Mostrando {{shown}} de {{total}}"
   },
   "share": {
     "screen": "Compartir",
@@ -689,7 +693,14 @@
         "SAME_TOKEN": "Elige dos tokens distintos.",
         "BAD_MINT": "Esa dirección no es un mint de Solana."
       }
-    }
+    },
+    "network": "Red",
+    "networkCount": "{{n}} tokens",
+    "statWatching": "Vigilando",
+    "statReady": "Lista ahora",
+    "pxOk": "Cotización conectada",
+    "pxChecking": "Comprobando la cotización…",
+    "pxNone": "Sin cotización"
   },
   "bridge": {
     "emptyHint": "Introduce un importe para ver la mejor ruta y sus comisiones.",
@@ -752,6 +763,15 @@
       "DESTINATION_ADDRESS_REQUIRED": "Introduce la dirección de destino: esta ruta no puede asumirla por defecto.",
       "CROSSCHAIN_NOT_CONFIGURED": "El servicio de cadenas cruzadas no está configurado en este despliegue.",
       "GENERIC": "Algo salió mal ({{code}}). No se envió nada."
+    },
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "Pon a trabajar el dinero que acabas de mover",
+      "body": "Farm lee los rendimientos en vivo de los protocolos y envía el depósito a tu propia cartera: nosotros nunca custodiamos la posición y puedes retirar cuando quieras.",
+      "chipLive": "Rendimiento en vivo",
+      "chipSelf": "Sin custodia",
+      "chipExit": "Retira cuando quieras",
+      "cta": "Abrir Farm"
     }
   },
   "dydx": {
@@ -2581,10 +2601,8 @@
       "empty": "No se encontró saldo de tokens en esta dirección.",
       "splNote": "Enviar en esta pantalla mueve solo SOL nativo. Los demás tokens se mueven desde el cambio.",
       "sendTitle": "Enviar SOL",
-      "sendOnly": "Esto envía solo SOL nativo. No mueve tokens SPL.",
       "recipient": "Dirección del destinatario",
       "amount": "Cantidad",
-      "sendCta": "Enviar SOL",
       "receiveTitle": "Recibir",
       "receiveHint": "Envía solo SOL y tokens de Solana a esta dirección. Una dirección de Ethereum que empieza por 0x no llegará aquí.",
       "copied": "Copiado",

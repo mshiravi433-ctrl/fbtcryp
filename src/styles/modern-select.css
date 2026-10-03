@@ -218,10 +218,83 @@
 }
 
 /* ── Sheet content ───────────────────────────────────────────────────── */
+/*
+ * THE TOOLBAR — «جستجو» on demand, plus the match count.
+ *
+ * It replaces an `<input autoFocus>` that used to be rendered the moment a
+ * list passed five rows (see the report quoted in components/ModernSelect.jsx:
+ * every token/network popup was opening the phone keyboard by itself). The
+ * button is 32px of quiet chrome on the row above the list; opening the sheet
+ * costs no keyboard and no layout shift, and the field only exists after a tap.
+ */
+.modern-select-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-height: 34px;
+}
+.modern-select-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.modern-select-search-toggle svg { width: 14px; height: 14px; }
+.modern-select-search-toggle:hover { border-color: var(--line-strong); color: var(--text-1); }
+.modern-select-search-toggle.is-on {
+  border-color: rgba(0,229,255,0.3);
+  background: rgba(0,229,255,0.1);
+  color: var(--rgb-1);
+}
+.modern-select-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
 .modern-select-search {
   position: relative;
   margin-bottom: 12px;
+  animation: ms-field-in 160ms ease both;
 }
+@keyframes ms-field-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+/* the field's own clear button — the row keeps one tap to start over */
+.modern-select-search-clear {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 0;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+/* keep what is typed clear of it */
+.modern-select-search input[type='search'] { padding-inline-end: 44px; }
+.modern-select-search input[type='search']::-webkit-search-cancel-button { display: none; }
 .modern-select-search input {
   width: 100%;
   min-height: 46px;
@@ -498,6 +571,18 @@
   border-color: rgba(0,153,204,0.32);
   box-shadow: 0 0 0 3px rgba(0,229,255,0.14);
 }
+:root[data-theme='light'] .modern-select-search-toggle {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.1);
+  color: #475569;
+}
+:root[data-theme='light'] .modern-select-search-toggle.is-on {
+  border-color: rgba(0,153,204,0.32);
+  background: rgba(0,229,255,0.12);
+  color: #00728f;
+}
+:root[data-theme='light'] .modern-select-search-clear { background: #f1f5f9; color: #475569; }
+:root[data-theme='light'] .modern-select-count { color: #94a3b8; }
 :root[data-theme='light'] .modern-select-option {
   background: #ffffff;
   border-color: rgba(15,23,42,0.07);
@@ -529,5 +614,39 @@
   .modern-select-trigger,
   .modern-select-chevron,
   .modern-select-option,
-  .modern-select-opt-check { transition: none; }
+  .modern-select-opt-check,
+  .modern-select-search-toggle { transition: none; }
+  /* the field still appears — it just does not slide */
+  .modern-select-search { animation: none; }
+}
+
+/* --------------------------------------------------------------------------
+   A ROW THAT IS OFFERED BUT UNPICKABLE
+   --------------------------------------------------------------------------
+   Used by the Auto Orders token picker for a token that exists and is
+   tradeable on the swap screen but has no price feed, so an order could never
+   check it. Still visible (so its absence is never a mystery), still readable,
+   visibly dimmed, and it cannot take the selection.
+   -------------------------------------------------------------------------- */
+.modern-select-option.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modern-select-option.is-disabled .modern-select-opt-label { color: var(--text-3); }
+
+.modern-select-option.is-disabled .modern-select-opt-check { display: none; }
+
+/* It may still be the selected one (a chain switch can strand a selection);
+   that state must stay legible rather than dimmed into the background. */
+.modern-select-option.is-disabled.is-selected { opacity: 0.75; }
+
+/* The tail of a long list: how many of how many are on screen. Always paired
+   with a bounded render (see `maxRender`), so this line is never the reason a
+   list feels slow — it is the message that explains why the list ends. */
+.modern-select-more {
+  margin: 8px 2px 2px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
 }

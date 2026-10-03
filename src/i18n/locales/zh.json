@@ -52,7 +52,11 @@
     "language": "语言",
     "tryAgain": "重试",
     "notAdvice": "市场数据仅供参考，不构成投资建议。加密资产波动剧烈，你可能损失全部本金。",
-    "offlineData": "无法连接实时行情，显示的是缓存快照。价格并非实时。"
+    "offlineData": "无法连接实时行情，显示的是缓存快照。价格并非实时。",
+    "search": "搜索",
+    "noResults": "没有结果",
+    "max": "最大",
+    "showing": "显示 {{shown}} / {{total}}"
   },
   "share": {
     "screen": "分享",
@@ -689,7 +693,14 @@
         "SAME_TOKEN": "请选择两种不同的代币。",
         "BAD_MINT": "这个地址不是 Solana mint。"
       }
-    }
+    },
+    "network": "网络",
+    "networkCount": "{{n}} 个代币",
+    "statWatching": "监控中",
+    "statReady": "现在可执行",
+    "pxOk": "价格源已连接",
+    "pxChecking": "正在检查价格源…",
+    "pxNone": "没有价格源"
   },
   "bridge": {
     "emptyHint": "输入金额以查看最佳路径和费用。",
@@ -752,6 +763,15 @@
       "DESTINATION_ADDRESS_REQUIRED": "请输入目标地址——此路线无法使用默认地址。",
       "CROSSCHAIN_NOT_CONFIGURED": "此部署未配置跨链服务。",
       "GENERIC": "出现问题（{{code}}）。没有发送任何资产。"
+    },
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "让刚转进来的资金开始生息",
+      "body": "Farm 读取协议的实时收益，并把存款直接送入你自己的钱包——我们从不托管仓位，你随时可以取出。",
+      "chipLive": "实时收益",
+      "chipSelf": "非托管",
+      "chipExit": "随时退出",
+      "cta": "打开 Farm"
     }
   },
   "dydx": {
@@ -2574,10 +2594,8 @@
       "empty": "这个地址上没有找到代币余额。",
       "splNote": "此页面的发送只转移原生 SOL。其他代币请从兑换页操作。",
       "sendTitle": "发送 SOL",
-      "sendOnly": "这里只发送原生 SOL，不会转移 SPL 代币。",
       "recipient": "收款地址",
       "amount": "数量",
-      "sendCta": "发送 SOL",
       "receiveTitle": "接收",
       "receiveHint": "只向此地址发送 SOL 和 Solana 代币。以 0x 开头的以太坊地址不会到账。",
       "copied": "已复制",

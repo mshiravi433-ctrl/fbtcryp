@@ -52,7 +52,11 @@
     "language": "Dil",
     "tryAgain": "Tekrar dene",
     "notAdvice": "Piyasa verileri yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir. Kripto oynaktır — her şeyinizi kaybedebilirsiniz.",
-    "offlineData": "Canlı akış yok — önbellek gösteriliyor. Fiyatlar gerçek değil."
+    "offlineData": "Canlı akış yok — önbellek gösteriliyor. Fiyatlar gerçek değil.",
+    "search": "Ara",
+    "noResults": "Sonuç yok",
+    "max": "Maks",
+    "showing": "{{total}} sonuçtan {{shown}} tanesi"
   },
   "share": {
     "screen": "Paylaş",
@@ -689,7 +693,14 @@
         "SAME_TOKEN": "İki farklı token seçin.",
         "BAD_MINT": "Bu adres bir Solana mint’i değil."
       }
-    }
+    },
+    "network": "Ağ",
+    "networkCount": "{{n}} token",
+    "statWatching": "İzleniyor",
+    "statReady": "Şimdi hazır",
+    "pxOk": "Fiyat akışı bağlı",
+    "pxChecking": "Fiyat akışı kontrol ediliyor…",
+    "pxNone": "Fiyat akışı yok"
   },
   "bridge": {
     "emptyHint": "En iyi rotayı ve ücretleri görmek için bir tutar girin.",
@@ -752,6 +763,15 @@
       "DESTINATION_ADDRESS_REQUIRED": "Hedef adresi girin — bu rota bunu varsayılan olarak seçemez.",
       "CROSSCHAIN_NOT_CONFIGURED": "Bu dağıtımda çapraz zincir servisi yapılandırılmamış.",
       "GENERIC": "Bir sorun oluştu ({{code}}). Hiçbir şey gönderilmedi."
+    },
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "Az önce taşıdığın parayı çalıştır",
+      "body": "Farm getirileri protokollerden canlı okur ve mevduatı doğrudan kendi cüzdanına gönderir — pozisyonu asla biz tutmayız ve istediğin zaman çekebilirsin.",
+      "chipLive": "Canlı getiri",
+      "chipSelf": "Saklamasız",
+      "chipExit": "Dilediğin an çık",
+      "cta": "Farm’ı aç"
     }
   },
   "dydx": {
@@ -2581,10 +2601,8 @@
       "empty": "Bu adreste token bakiyesi bulunamadı.",
       "splNote": "Bu ekrandaki gönderim yalnızca yerel SOL taşır. Diğer tokenlar takas ekranından gider.",
       "sendTitle": "SOL gönder",
-      "sendOnly": "Bu yalnızca yerel SOL gönderir. SPL tokenlarını taşımaz.",
       "recipient": "Alıcı adresi",
       "amount": "Miktar",
-      "sendCta": "SOL gönder",
       "receiveTitle": "Al",
       "receiveHint": "Bu adrese yalnızca SOL ve Solana tokenları gönderin. 0x ile başlayan bir Ethereum adresi buraya ulaşmaz.",
       "copied": "Kopyalandı",
