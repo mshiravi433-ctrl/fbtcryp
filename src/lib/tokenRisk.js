@@ -23,7 +23,31 @@
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-/** GoPlus chain ids. A chain we cannot ask about is reported as unsupported. */
+/*
+ * GoPlus chain ids. A chain we cannot ask about is reported as unsupported.
+ *
+ * ─── 2026-10-03: THE EIGHT NEWER NETWORKS WERE MISSING ──────────────────────
+ * Reported: «شبکه‌های S / MINT / BREA / UNI / Mon / Scr / Zk / Rabinhood …
+ * تحلیل هوش مصنوعی توکن … ندارد». The map below stopped at Linea, so
+ * `goplusChainId()` returned null for Sonic (146), Mantle (5000), Berachain
+ * (80094), Unichain (130), Monad (143), Scroll (534352), zkSync Era (324) and
+ * Robinhood Chain (4663) — and `TokenRiskCard` renders NOTHING when it gets
+ * null, so those eight networks simply had no AI security card at all.
+ *
+ * Every id added here is taken from GoPlus's own published chain table
+ * (docs.gopluslabs.io → «Response Details», «Updated 13 days ago» as of
+ * 2026-10-03), not guessed: 146 Sonic, 5000 Mantle, 80094 Berachain,
+ * 130 Unichain, 143 Monad, 534352 Scroll, 324 zkSync Era, 4663 Robinhood.
+ *
+ * ⚠️ Supporting a chain id is NOT the same as the scanner having data for a
+ * token on it. GoPlus answers per contract; a thin or brand-new token comes
+ * back empty and the scorer reports `unknown` (never "safe") — which is the
+ * correct behaviour and is unchanged by this edit.
+ *
+ * Keep this set in sync with `ALLOWED` in server/tokenRisk.js and
+ * `GOPLUS_CHAINS` in server/securityIntel.js. test/network-capability-parity-probe.mjs
+ * fails when the three drift apart.
+ */
 export const GOPLUS_CHAINS = {
   1: '1',
   56: '56',
@@ -32,7 +56,15 @@ export const GOPLUS_CHAINS = {
   10: '10',
   8453: '8453',
   43114: '43114',
-  59144: '59144'
+  59144: '59144',
+  146: '146',
+  5000: '5000',
+  80094: '80094',
+  130: '130',
+  143: '143',
+  534352: '534352',
+  324: '324',
+  4663: '4663'
 };
 
 export function goplusChainId(chainId) {

@@ -114,24 +114,41 @@ async function zeroxFetch(path) {
  */
 const ALLOWED = ['chainId', 'sellToken', 'buyToken', 'sellAmount', 'taker', 'slippageBps', 'recipient'];
 
-/** Chains where 0x Gasless is available AND we already support the chain. */
-// Based on 0x API documentation (2026):
-// https://docs.0x.org/docs/introduction/supported-chains
-// Gasless API supported chains: Arbitrum, Avalanche, Base, BSC, Mantle, Monad,
-// Optimism, Polygon, Robinhood, Scroll, zkSync Era
+/*
+ * Chains where 0x Gasless is available AND we already support the chain.
+ *
+ * ─── 2026-10-03, REBUILT FROM THE PUBLISHED TABLE ───────────────────────────
+ * Source: https://docs.0x.org/docs/introduction/supported-chains, read
+ * 2026-10-03. The previous comment's list neither matched that table nor the
+ * client copy: it claimed zkSync Era (which 0x does not list at all — no Swap
+ * row, no Gasless row) and omitted three chains 0x DOES list.
+ *
+ * Added:     146 Sonic · 80094 Berachain · 130 Unichain
+ * Removed:   324 zkSync Era   (not a 0x chain; every call would have been a
+ *                              funded-but-hopeless relay attempt)
+ * Still out: 59144 Linea      (0x routes Linea swaps but the Gasless column
+ *                              is blank)
+ *
+ * Mirrors GASLESS_CHAINS in src/lib/gasless.js — the client is the gate the
+ * user actually sees, and a server that accepts a chain the client never
+ * offers is indistinguishable from one that rejects it. The parity probe
+ * asserts the two sets are equal.
+ */
 const SUPPORTED = new Set([
   1,      // Ethereum
-  10,     // Optimism
+  10,     // OP Mainnet
   56,     // BNB Smart Chain
   137,    // Polygon
   8453,   // Base
   42161,  // Arbitrum One
-  43114,  // Avalanche
+  43114,  // Avalanche C-Chain
+  146,    // Sonic
   5000,   // Mantle
+  80094,  // Berachain
+  130,    // Unichain
   143,    // Monad
-  4663,   // Robinhood Chain
   534352, // Scroll
-  324     // zkSync Era
+  4663    // Robinhood Chain
 ]);
 
 /**

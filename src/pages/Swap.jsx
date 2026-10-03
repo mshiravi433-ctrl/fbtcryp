@@ -7,6 +7,7 @@ import InfoBox from '../components/InfoBox';
 import Switch from '../components/Switch';
 import {
   gaslessEligible,
+  gaslessExclusionReason,
   getGaslessStatus,
   getGaslessPrice,
   getGaslessQuote,
@@ -1389,6 +1390,23 @@ export default function Swap() {
    */
   const cannotPayGas = wallet.isConnected && gaslessPairOk && nativeBal <= 0;
 
+  /*
+   * 2026-10-03 — «سواپ بدون گس» on zkSync Era and Linea.
+   *
+   * 0x is the only gasless relayer we run, and it simply does not serve those
+   * two networks (no zkSync row at all; Linea has a Swap row and a blank
+   * Gasless column — docs.0x.org/docs/introduction/supported-chains, read
+   * 2026-10-03). `gaslessEligible()` returns false for them, so the toggle
+   * never renders and `cannotPayGas` (above) stays false too — a user holding
+   * only USDT on zkSync got a swap button that could not work and NO sentence
+   * explaining why. This names the reason instead.
+   *
+   * Shown only when the user actually needs it (connected, zero native coin):
+   * on any other network, or for someone who has gas, this is noise.
+   */
+  const gaslessChainOffReason = gaslessExclusionReason(chainId);
+  const gaslessChainOff = wallet.isConnected && nativeBal <= 0 && Boolean(gaslessChainOffReason);
+
   /* 0x prices the exact sell amount, so do not wait for the normal router
      quote (and do not reuse its amount when the input has just changed). */
   const gaslessAmountWei = useMemo(
@@ -2033,6 +2051,10 @@ export default function Swap() {
         ) : cannotPayGas ? (
           <p className="faint" style={{ marginTop: 10, fontSize: 11.8, lineHeight: 1.75 }}>
             {t('swap.gaslessUnavailable', { coin: cfg.native.symbol })}
+          </p>
+        ) : gaslessChainOff ? (
+          <p className="faint" style={{ marginTop: 10, fontSize: 11.8, lineHeight: 1.75 }}>
+            {t(`swap.gaslessChainOff.${gaslessChainOffReason}`, { chain: cfg.name, coin: cfg.native.symbol })}
           </p>
         ) : null}
 

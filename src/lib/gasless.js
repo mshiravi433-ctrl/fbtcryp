@@ -52,14 +52,69 @@ const API_BASE = apiBase();
 /**
  * Chains where 0x Gasless works AND we already support the chain.
  *
+ * ─── 2026-10-03: THE CLIENT AND THE SERVER HAD DRIFTED APART ────────────────
+ * Reported: «شبکه‌های S / MINT / BREA / UNI / Mon / Scr / Zk / Rabinhood …
+ * سواپ بدون گس … ندارد». `server/gasless.js` had been widened to include
+ * Mantle, Monad, Robinhood, Scroll and zkSync Era, but this set — the one the
+ * UI actually asks — still held the original seven. The server was willing,
+ * the toggle was never rendered, so on all eight networks the user with zero
+ * native coin saw a dead screen and no explanation.
+ *
+ * Rebuilt from 0x's own published table (docs.0x.org/docs/introduction/
+ * supported-chains, read 2026-10-03), intersected with our registry:
+ *
+ *   1 Ethereum · 10 OP Mainnet · 56 BNB · 137 Polygon · 8453 Base ·
+ *   42161 Arbitrum · 43114 Avalanche · 146 Sonic · 5000 Mantle ·
+ *   80094 Berachain · 130 Unichain · 143 Monad · 534352 Scroll ·
+ *   4663 Robinhood Chain          — all listed with ✅ in the Gasless column.
+ *
+ *   ⚠️ 324 zkSync Era is NOT in that table (no Swap and no Gasless row at
+ *   all), even though the server's old comment claimed it was. Listing a chain
+ *   here buys a toggle that returns UNSUPPORTED_CHAIN — the exact failure
+ *   `getGaslessStatus()` exists to prevent — so it is left out deliberately.
+ *   ⚠️ 59144 Linea has a Swap row but a BLANK Gasless column. Same reason.
+ *
+ * If 0x adds either one, add it here AND in server/gasless.js in the same
+ * commit; test/network-capability-parity-probe.mjs fails when they disagree.
+ *
  * Mirrors `SUPPORTED` in server/gasless.js. Duplicated deliberately rather
  * than fetched: the UI has to decide whether to OFFER the option before any
  * request is made, and a network round-trip to answer "should this toggle
  * exist" would make the screen flicker on every chain change.
  */
-export const GASLESS_CHAINS = new Set([1, 10, 56, 137, 8453, 42161, 43114]);
+export const GASLESS_CHAINS = new Set([
+  1,      // Ethereum
+  10,     // OP Mainnet
+  56,     // BNB Smart Chain
+  137,    // Polygon
+  8453,   // Base
+  42161,  // Arbitrum One
+  43114,  // Avalanche C-Chain
+  146,    // Sonic
+  5000,   // Mantle
+  80094,  // Berachain
+  130,    // Unichain
+  143,    // Monad
+  534352, // Scroll
+  4663    // Robinhood Chain
+]);
+
+/**
+ * Chains we support where 0x Gasless genuinely has no route.
+ *
+ * Exported so the UI can say WHY the option is missing instead of staying
+ * silent — silence is what made «سواپ بدون گس» look like a bug the user had
+ * caused. `reason` is an i18n key suffix (see `swap.gaslessChainOff.*`).
+ */
+export const GASLESS_EXCLUDED = Object.freeze({
+  324: 'noZeroXChain',     // 0x lists no Swap/Gasless row for zkSync Era
+  59144: 'noZeroXGasless'  // 0x routes Linea swaps, but not gasless ones
+});
 
 export const gaslessSupports = (chainId) => GASLESS_CHAINS.has(Number(chainId));
+
+/** Why is the gasless option absent here, when the chain itself is supported? */
+export const gaslessExclusionReason = (chainId) => GASLESS_EXCLUDED[Number(chainId)] ?? null;
 
 /**
  * Is the gasless route even worth offering for this pair?

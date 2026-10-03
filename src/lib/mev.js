@@ -32,18 +32,31 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
  * - Optimism: dRPC MEV-protected endpoint
  * - Avalanche: dRPC MEV-protected endpoint
  * - Linea: dRPC MEV-protected endpoint
- * - Sonic: dRPC MEV-protected endpoint
- * - Mantle: dRPC MEV-protected endpoint
- * - Berachain: dRPC MEV-protected endpoint
- * - Unichain: dRPC MEV-protected endpoint
- * - Monad: dRPC MEV-protected endpoint
- * - Scroll: dRPC MEV-protected endpoint
- * - zkSync Era: dRPC MEV-protected endpoint
- * - Robinhood Chain: PublicNode MEV-protected endpoint
+ *
+ * ─── CORRECTED 2026-10-03 — READ THIS BEFORE COPYING A ROW ─────────────────
+ * The list above used to continue "…Sonic, Mantle, Berachain, Unichain, Monad,
+ * Scroll, zkSync Era: dRPC MEV-protected; Robinhood Chain: PublicNode
+ * MEV-protected". Every one of those eight rows was invented by pattern.
+ * dRPC's own documentation states MEV protection is a PREMIUM add-on covering
+ * exactly five chains (Ethereum · Base · BNB Smart Chain · Arbitrum · Solana),
+ * and there is no such host as robinhood-rpc.publicnode.com.
+ *
+ * A relay label is a promise about where the user's signed transaction goes.
+ * Promising a private mempool on an endpoint that forwards to the public one
+ * is the one failure this module exists to prevent, so those rows now say what
+ * they really are — several of them are the chain's own sequencer, which has
+ * no public mempool at all — and the three L1s with a genuinely public mempool
+ * and no documented private relay (Sonic, Berachain, Monad) carry no row.
+ *
+ * For chains without a native private relay we do NOT invent one. Where the
+ * transaction cannot be observed before inclusion (single sequencer / encrypted
+ * mempool / TEE builder) that is stated as the reason; where it can, we say so
+ * and fall back to the only defence that actually works everywhere: tight
+ * slippage.
  *
  * Note: Some endpoints require API keys or paid tiers. Free public endpoints
- * are used where available. For chains without native private relays, we use
- * MEV-protected RPC providers (dRPC, GetBlock, PublicNode).
+ * are used where available. Chains with no verified public relay honour a
+ * per-chain operator override — see relayOverride() below.
  */
 export const PRIVATE_RELAYS = {
   // Ethereum - Official Flashbots Protect
@@ -102,66 +115,194 @@ export const PRIVATE_RELAYS = {
     rpc: 'https://linea.drpc.org',
     alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://linea-rpc.publicnode.com' }
   },
-  // Sonic - dRPC MEV-protected
-  146: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://sonic.drpc.org',
-    alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://sonic-rpc.publicnode.com' }
-  },
-  // Mantle - dRPC MEV-protected
+  /*
+   * ─── THE EIGHT NEWER NETWORKS (corrected 2026-10-03) ─────────────────────
+   * Reported: «رله خصوصی و ریسک mev و محافظت» was absent on S / MINT / BREA /
+   * UNI / Mon / Scr / Zk / Rabinhood. These entries existed but were copied
+   * from the Linea row with the same label — «dRPC MEV-Protected» — on every
+   * one of them, including `https://robinhood-rpc.publicnode.com`, a host
+   * PublicNode does not operate. dRPC's own documentation is explicit that MEV
+   * protection is a PREMIUM add-on and lists exactly five chains for it
+   * (Ethereum · Base · BNB Smart Chain · Arbitrum · Solana). A label claiming
+   * protection that the endpoint does not provide is worse than no label: the
+   * card renders a confident green toggle over a public mempool.
+   *
+   * So each row below now names what the endpoint ACTUALLY is, and `kind`
+   * tells the UI which sentence to print:
+   *
+   *   kind: 'relay'      a third-party service that keeps the transaction out
+   *                      of a public mempool (Flashbots, MEV Blocker, …).
+   *   kind: 'sequencer'  the chain has NO public mempool. A single sequencer
+   *                      is the only entry point for transactions, so nothing
+   *                      a searcher can read is ever broadcast — submitting
+   *                      to the chain's own RPC IS the private path.
+   *   kind: 'encrypted'  transactions land in an encrypted mempool and blocks
+   *                      are built inside a TEE (Unichain + Flashbots
+   *                      Rollup-Boost), so ordering is by priority fee and
+   *                      pre-trade contents are not observable.
+   *
+   * Sonic (146), Berachain (80094) and Monad (143) are L1s WITH a public
+   * mempool and no publicly documented private relay, so they are NOT listed
+   * here. `privateRelayFor()` returning null for them is the honest answer,
+   * and MevGuard says so out loud (mev.noRelay) instead of offering a toggle
+   * that would only change which public node hears the transaction. An
+   * operator who buys a private endpoint for one of them sets
+   * VITE_MEV_RELAY_<chainId> and it is used verbatim — see relayOverride().
+   */
+  // Sonic — L1 with a public mempool and no documented public private relay
+  146: null,
+  // Mantle — single sequencer, no public mempool (Eco "What is a sequencer?", 2026)
   5000: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://mantle.drpc.org',
-    alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://mantle-rpc.publicnode.com' }
+    id: 'mantle-sequencer',
+    kind: 'sequencer',
+    name: 'Mantle sequencer',
+    rpc: 'https://rpc.mantle.xyz',
+    alt: { id: 'publicnode', kind: 'sequencer', name: 'PublicNode (Mantle)', rpc: 'https://mantle-rpc.publicnode.com' }
   },
-  // Berachain - dRPC MEV-protected
-  80094: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://berachain.drpc.org',
-    alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://berachain-rpc.publicnode.com' }
-  },
-  // Unichain - dRPC MEV-protected
+  // Berachain — L1, geth mempool, no verified public private relay
+  80094: null,
+  // Unichain — TEE block builder, encrypted mempool (Uniswap Labs × Flashbots)
   130: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://unichain.drpc.org',
-    alt: { id: 'llamarpc', name: 'LlamaNodes', rpc: 'https://unichain.llamarpc.com' }
+    id: 'unichain-tee',
+    kind: 'encrypted',
+    name: 'Unichain TEE builder (encrypted mempool)',
+    rpc: 'https://mainnet.unichain.org',
+    alt: { id: 'drpc', kind: 'encrypted', name: 'dRPC (Unichain)', rpc: 'https://unichain.drpc.org' }
   },
-  // Monad - dRPC MEV-protected
-  143: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://monad.drpc.org',
-    alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://monad-rpc.publicnode.com' }
-  },
-  // Scroll - dRPC MEV-protected
+  // Monad — L1 with a public mempool, no verified public private relay
+  143: null,
+  // Scroll — zk-rollup, private mempool, FCFS sequencer
   534352: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://scroll.drpc.org',
-    alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://scroll-rpc.publicnode.com' }
+    id: 'scroll-sequencer',
+    kind: 'sequencer',
+    name: 'Scroll sequencer (private mempool)',
+    rpc: 'https://rpc.scroll.io',
+    alt: { id: 'publicnode', kind: 'sequencer', name: 'PublicNode (Scroll)', rpc: 'https://scroll-rpc.publicnode.com' }
   },
-  // zkSync Era - dRPC MEV-protected
+  // zkSync Era — sequencer-only mempool (Chainstack: "zkSync Era · Sequencer only")
   324: {
-    id: 'drpc',
-    name: 'dRPC MEV-Protected',
-    rpc: 'https://zksync.drpc.org',
-    alt: { id: 'publicnode', name: 'PublicNode', rpc: 'https://zksync-era-rpc.publicnode.com' }
+    id: 'zksync-sequencer',
+    kind: 'sequencer',
+    name: 'zkSync Era sequencer',
+    rpc: 'https://mainnet.era.zksync.io',
+    alt: { id: 'drpc', kind: 'sequencer', name: 'dRPC (zkSync Era)', rpc: 'https://zksync.drpc.org' }
   },
-  // Robinhood Chain - PublicNode MEV-protected
+  // Robinhood Chain — Arbitrum Orbit L2, single sequencer
   4663: {
-    id: 'publicnode',
-    name: 'PublicNode MEV-Protected',
-    rpc: 'https://robinhood-rpc.publicnode.com',
-    alt: { id: 'hypersync', name: 'Envio HyperRPC', rpc: 'https://robinhood.rpc.hypersync.xyz' }
+    id: 'robinhood-sequencer',
+    kind: 'sequencer',
+    name: 'Robinhood Chain sequencer',
+    rpc: 'https://rpc.mainnet.chain.robinhood.com',
+    alt: { id: 'hypersync', kind: 'sequencer', name: 'Envio HyperRPC', rpc: 'https://robinhood.rpc.hypersync.xyz' }
   }
 };
 
+/*
+ * ─── PER-CHAIN MEMPOOL MODEL (added 2026-10-03) ─────────────────────────────
+ * `PRIVATE_RELAYS` answers "where can I send this privately?". It cannot
+ * answer "how exposed am I in the first place?", and on a chain with no public
+ * mempool the correct risk sentence is completely different from the one for
+ * Ethereum — telling a Scroll user to fear sandwiches the way an Ethereum user
+ * must is its own kind of wrong number.
+ *
+ * `mempool`   'public'   — pending transactions are gossiped and readable, so
+ *                          sandwiching is atomic and cheap for a bot.
+ *             'private'  — a single sequencer is the only entry point; there is
+ *                          nothing public to read.
+ *             'encrypted'— pooled transactions are encrypted until the block is
+ *                          built inside a TEE.
+ * `ordering`  how the block producer orders what it accepts (FCFS, priority
+ *             fee, or builder discretion).
+ *
+ * The empirical backing for the L2 rows: the 2026 sandwich-measurement study
+ * at arxiv.org/pdf/2601.19570 finds L2 sandwiching "inherently probabilistic
+ * rather than atomic" precisely because centralised sequencing and private
+ * mempools remove the co-inclusion guarantees an attacker needs — which is why
+ * `riskBias` discounts the measured score on those chains rather than
+ * presenting it as the same number it would be on Ethereum.
+ */
+export const MEV_CHAIN_MODEL = {
+  1:      { mempool: 'public',    ordering: 'builder',  riskBias: 1,    source: 'Ethereum — public mempool, builder discretion' },
+  56:     { mempool: 'public',    ordering: 'builder',  riskBias: 1,    source: 'BNB Smart Chain — public mempool' },
+  137:    { mempool: 'public',    ordering: 'builder',  riskBias: 1,    source: 'Polygon PoS — public mempool' },
+  42161:  { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'Arbitrum One — sequencer, FCFS (Timeboost aside)' },
+  8453:   { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'Base — sequencer, FCFS' },
+  10:     { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'OP Mainnet — sequencer, FCFS' },
+  43114:  { mempool: 'public',    ordering: 'builder',  riskBias: 1,    source: 'Avalanche C-Chain — public mempool' },
+  59144:  { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'Linea — sequencer, FCFS' },
+  146:    { mempool: 'public',    ordering: 'builder',  riskBias: 1,    source: 'Sonic — L1, public mempool, instant finality' },
+  5000:   { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'Mantle — single sequencer' },
+  80094:  { mempool: 'public',    ordering: 'builder',  riskBias: 1,    source: 'Berachain — L1, mempool in the execution client' },
+  130:    { mempool: 'encrypted', ordering: 'priority', riskBias: 0.4,  source: 'Unichain — TEE builder + encrypted mempool (Rollup-Boost)' },
+  143:    { mempool: 'public',    ordering: 'builder',  riskBias: 0.85, source: 'Monad — L1, public mempool, ~400-500ms blocks' },
+  534352: { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'Scroll — zk-rollup, private mempool, FCFS' },
+  324:    { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'zkSync Era — sequencer-only mempool (Chainstack)' },
+  4663:   { mempool: 'private',   ordering: 'fcfs',     riskBias: 0.6,  source: 'Robinhood Chain — Arbitrum Orbit, single sequencer' }
+};
+
+/** The mempool/ordering model for a chain, or null when we have not modelled it. */
+export function mevChainModel(chainId) {
+  return MEV_CHAIN_MODEL[Number(chainId)] ?? null;
+}
+
+/*
+ * ─── OPERATOR OVERRIDE ─────────────────────────────────────────────────────
+ * A deployment that has bought a private submission endpoint for a chain we
+ * could not verify one for (Sonic, Berachain, Monad today) should not need a
+ * code change to use it. `VITE_MEV_RELAY_146=https://…` is picked up verbatim;
+ * an https URL is required because a plaintext relay is worse than none (the
+ * whole point is that nobody else sees the bytes).
+ */
+function relayOverride(chainId) {
+  const map = typeof import.meta !== 'undefined' && import.meta.env;
+  if (!map) return null;
+  const url = map[`VITE_MEV_RELAY_${Number(chainId)}`];
+  if (typeof url !== 'string' || !/^https:\/\//.test(url.trim())) return null;
+  return { id: 'operator', kind: 'relay', name: 'Private relay (configured)', rpc: url.trim(), operator: true };
+}
+
 export function privateRelayFor(chainId) {
-  return PRIVATE_RELAYS[Number(chainId)] ?? null;
+  /*
+   * A row can be explicitly `null` — meaning "we looked, and there is no
+   * verified private path on this chain" — which must stay distinguishable
+   * from "we never looked". Both read as null here; `mevChainModel()` carries
+   * the difference for the UI.
+   */
+  const row = relayOverride(chainId) || PRIVATE_RELAYS[Number(chainId)] || null;
+  if (!row) return null;
+  /*
+   * Rows added before 2026-10-03 carry no `kind`. Every one of them is a
+   * third-party private-mempool service (Flashbots, MEV Blocker, Polygon's
+   * private mempool, dRPC / GetBlock on the chains they actually protect), so
+   * defaulting them to 'relay' is a statement of fact, not a guess.
+   */
+  return row.kind ? row : { ...row, kind: 'relay' };
+}
+
+/** Is the offered path a third-party relay, or the chain's own sequencer? */
+export function privateRelayKind(chainId) {
+  return privateRelayFor(chainId)?.kind ?? null;
+}
+
+/**
+ * The sandwich score, adjusted for how this chain actually orders
+ * transactions.
+ *
+ * The raw score is built from slippage × impact × size — it knows nothing
+ * about who can SEE the order before it lands. On a chain with no public
+ * mempool an attacker cannot guarantee both legs of a sandwich are included,
+ * so the same slippage is materially less dangerous. Reporting the Ethereum
+ * number on Scroll would overstate the risk; reporting the Scroll number on
+ * Ethereum would understate it. `riskBias` is the one knob, per chain, and it
+ * is never applied to anything but the number we print.
+ */
+export function chainAdjustedRisk(chainId, sandwich) {
+  if (!sandwich || !Number.isFinite(Number(sandwich.score))) return sandwich ?? null;
+  const bias = mevChainModel(chainId)?.riskBias ?? 1;
+  if (bias === 1) return sandwich;
+  const score = clamp(Math.round(Number(sandwich.score) * bias), 0, 100);
+  const level = score >= 70 ? 'critical' : score >= 45 ? 'high' : score >= 22 ? 'medium' : 'low';
+  return { ...sandwich, score, level, adjusted: true, rawScore: Number(sandwich.score) };
 }
 
 /**
@@ -270,7 +411,12 @@ export function simulateSwap({
   const min = Number(minOut);
   if (!Number.isFinite(out) || out <= 0) return null;
 
-  const sandwich = estimateSandwichRisk({ slippagePct, priceImpact, amountUsd, bothStable });
+  /* Chain-adjusted, not raw: the same slippage is not the same exposure on a
+     chain whose mempool nobody can read. See chainAdjustedRisk(). */
+  const sandwich = chainAdjustedRisk(
+    chainId,
+    estimateSandwichRisk({ slippagePct, priceImpact, amountUsd, bothStable })
+  );
   const relay = privateRelayFor(chainId);
   const gas = Number(gasNative);
   return {
