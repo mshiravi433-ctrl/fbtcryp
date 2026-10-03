@@ -1010,6 +1010,244 @@ body.sic-why-open .ap {
 .sic-why-concl .k { color: #7ee9ff; font-size: 9.5px; font-weight: 900; letter-spacing: 0.4px; text-transform: uppercase; }
 .sic-why-concl p { margin: 6px 0 0; color: var(--text-1); font-size: 11.5px; line-height: 1.8; }
 
+/* ── Why-modal modern pass (header chips, cards, grid, live states) ─────── */
+.sic-why-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 13px;
+  margin-bottom: 13px;
+  border-bottom: 1px solid var(--sic-line-soft, rgba(255, 255, 255, 0.07));
+}
+.sic-why-head-copy { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.sic-why-head-glow {
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  flex: 0 0 auto;
+  border-radius: 13px;
+  color: #7ee9ff;
+  background:
+    radial-gradient(120% 120% at 20% 0%, rgba(0, 229, 255, 0.28), rgba(124, 77, 255, 0.22) 65%, rgba(124, 77, 255, 0.08));
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.sic-why-head-glow svg { width: 19px; height: 19px; filter: drop-shadow(0 0 5px rgba(0, 229, 255, 0.55)); }
+.sic-why-asset-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.sic-why-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+}
+.sic-why-chip.symbol { color: var(--text-1); background: rgba(0, 229, 255, 0.1); border-color: rgba(0, 229, 255, 0.3); }
+.sic-why-chip.conf { color: #7ee9ff; font-family: var(--font-mono, ui-monospace, monospace); }
+.sic-why-body { display: block; }
+.sic-why-card {
+  position: relative;
+  margin-top: 10px;
+  padding: 12px 13px;
+  border: 1px solid var(--sic-line-soft, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+}
+.sic-why-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+.sic-why-card-head .k {
+  flex: 1;
+  margin: 0;
+  color: #b9a8ff;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+.sic-why-card-icon {
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: #7ee9ff;
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+}
+.sic-why-onchain.has-data {
+  border-color: rgba(0, 255, 157, 0.24);
+  background:
+    radial-gradient(240px 90px at 8% -20%, rgba(0, 255, 157, 0.1), transparent 70%),
+    linear-gradient(160deg, rgba(0, 255, 157, 0.05), rgba(255, 255, 255, 0.015));
+}
+.sic-why-onchain.has-data .sic-why-card-icon {
+  color: var(--up);
+  background: rgba(0, 255, 157, 0.1);
+  border-color: rgba(0, 255, 157, 0.26);
+}
+.sic-why-onchain.has-data .sic-why-card-head .k { color: #8df0c0; }
+.sic-why-onchain-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px; height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--up);
+  background: rgba(0, 255, 157, 0.12);
+  border: 1px solid rgba(0, 255, 157, 0.3);
+}
+.sic-why-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.sic-why-section-card { margin-top: 0; }
+.sic-why-section-card p { margin: 0; color: var(--text-2); font-size: 11.5px; line-height: 1.8; }
+@media (max-width: 520px) { .sic-why-grid { grid-template-columns: 1fr; } }
+.sic-why-agree-pct { font-size: 13px; font-weight: 900; color: var(--text-2); font-family: var(--font-mono, ui-monospace, monospace); }
+.sic-why-agree-pct.up { color: var(--up); }
+.sic-why-agree-bar { margin-top: 2px; }
+.sic-why-agree-bar i { display: block; height: 100%; border-radius: 999px; }
+.sic-why-agree-cap { display: block; margin-top: 5px; color: var(--text-3); font-size: 9.5px; letter-spacing: 0.3px; }
+.sic-why-concl .k svg { vertical-align: -1.5px; margin-inline-end: 5px; }
+.sic-why-meta { margin-top: 12px; }
+.sic-why-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sic-line-faint, rgba(255, 255, 255, 0.06));
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.sic-why-src i { width: 6px; height: 6px; border-radius: 50%; background: var(--rgb-5, #9aa4b2); flex: 0 0 auto; }
+.sic-why-src.ai i { background: #7ee9ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.7); }
+.sic-why-src.local i { background: #ffb300; box-shadow: 0 0 8px rgba(255, 179, 0, 0.55); }
+.sic-why-loading { display: grid; gap: 10px; margin-top: 14px; }
+.sic-why-loading-card {
+  padding: 13px 14px;
+  border: 1px solid var(--sic-line-faint, rgba(255, 255, 255, 0.06));
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012));
+}
+.sic-why-loading-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.sic-why-loading-dot { width: 7px; height: 7px; border-radius: 50%; background: #7ee9ff; box-shadow: 0 0 9px rgba(0, 229, 255, 0.8); }
+.sic-why-empty {
+  margin-top: 14px;
+  padding: 18px 16px;
+  text-align: center;
+  border: 1px dashed var(--sic-line, rgba(255, 255, 255, 0.14));
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.sic-why-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+  color: var(--down);
+  background: rgba(255, 59, 107, 0.1);
+  border: 1px solid rgba(255, 59, 107, 0.25);
+}
+.sic-why-empty-icon svg { width: 15px; height: 15px; }
+.sic-why-empty p { margin: 0; color: var(--text-2); font-size: 11.5px; line-height: 1.8; }
+:root[data-theme='light'] .sic-why-card { background: linear-gradient(160deg, rgba(13, 16, 32, 0.035), rgba(13, 16, 32, 0.012)); border-color: rgba(13, 16, 32, 0.09); }
+:root[data-theme='light'] .sic-why-chip { background: rgba(13, 16, 32, 0.04); border-color: rgba(13, 16, 32, 0.12); color: rgba(13, 16, 32, 0.62); }
+:root[data-theme='light'] .sic-why-chip.symbol { background: rgba(10, 117, 184, 0.08); border-color: rgba(10, 117, 184, 0.3); color: #0a5c8f; }
+:root[data-theme='light'] .sic-why-src { background: rgba(13, 16, 32, 0.03); border-color: rgba(13, 16, 32, 0.08); }
+:root[data-theme='light'] .sic-why-loading-card { background: linear-gradient(160deg, rgba(13, 16, 32, 0.03), rgba(13, 16, 32, 0.01)); border-color: rgba(13, 16, 32, 0.07); }
+:root[data-theme='light'] .sic-why-empty { background: rgba(13, 16, 32, 0.02); border-color: rgba(13, 16, 32, 0.14); }
+
+/* ── Early signals: modern rows (direction pill, flag chips, conf bar) ──── */
+.sic-early-row .s { display: flex; align-items: center; gap: 7px; }
+.sic-early-dir {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+}
+.sic-early-dir.earlyBullish { color: var(--up); background: rgba(0, 255, 157, 0.1); border: 1px solid rgba(0, 255, 157, 0.3); }
+.sic-early-dir.earlyBearish { color: var(--down); background: rgba(255, 59, 107, 0.1); border: 1px solid rgba(255, 59, 107, 0.3); }
+.sic-early-dir.earlyWatch { color: #ffb300; background: rgba(255, 179, 0, 0.1); border: 1px solid rgba(255, 179, 0, 0.32); }
+.sic-early-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.sic-early-flag {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 7px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid var(--sic-line-faint, rgba(255, 255, 255, 0.08));
+}
+.sic-early-conf-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
+.sic-early-conf-row .lbl { margin: 0; font-size: 9px; }
+.sic-early-conf-row b { font-size: 12px; font-weight: 900; color: var(--text-1); }
+.sic-early-conf-bar {
+  width: 74px;
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  overflow: hidden;
+}
+.sic-early-conf-bar i { display: block; height: 100%; border-radius: 999px; transition: width 0.6s var(--sic-ease, ease-out); }
+
+/* ── History: live «so far» move marker + snapshot note ─────────────────── */
+.sic-move-sofar {
+  display: inline-block;
+  margin-inline-start: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: var(--rgb-4, #9aa4b2);
+  background: rgba(127, 127, 127, 0.14);
+  border: 1px solid rgba(127, 127, 127, 0.22);
+  vertical-align: 1px;
+}
+.sic-sm-snapshot-note {
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 179, 0, 0.28);
+  background: rgba(255, 179, 0, 0.07);
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.75;
+}
+
 /* ── Theme parity (one variable flip, everything above follows) ─────────── */
 :root[data-theme='light'] .sic-page {
   --sic-surface-1: rgba(255, 255, 255, 0.92);

@@ -464,10 +464,31 @@ export function computeSignalCard({
 /* ═══════════════════ 4. AI EARLY SIGNALS ═════════════════════════════ */
 
 /**
- * Early-movement detector. An asset only qualifies with at least two
- * independent measured signals (momentum acceleration + at least one of
- * smart-money flow / holder growth / whale inflow / DEX buy pressure /
- * volume turnover). Nothing is inferred from a single number.
+ * Early-movement detector.
+ *
+ * ─── WHY THE GATE HAS THREE FLAG GROUPS ────────────────────────────────────
+ * Reported: «سیگنال‌های زودهنگام هوش مصنوعی — اصلا داده‌ای وجود ندارد» —
+ * the section rendered its empty state permanently. The old gate accepted
+ * only TWO flag families: momentum acceleration of the 7-day sparkline and
+ * on-chain/flow feeds (Solana intel, verified smart money). On the GLOBAL
+ * tab neither flow feed ever joins an entry, so a coin needed acceleration
+ * AND ≥6% volume turnover — a combination the top-24 almost never shows.
+ * The list stayed empty by construction, not by bad luck.
+ *
+ * Every number below is still measured, never guessed — the detector now
+ * simply reads the THREE observation planes the page actually holds for
+ * every asset:
+ *
+ *   G1 · series/technical — the price series itself: momentum acceleration,
+ *        RSI extremes, MACD histogram, Bollinger position, MA structure.
+ *   G2 · flow/on-chain    — Solana intel, verified smart-money swaps.
+ *   G3 · market           — 24h/7d measured change, volume turnover.
+ *
+ * A coin qualifies with flags from AT LEAST TWO DIFFERENT GROUPS (and at
+ * least two flags overall), so a single number can never mint a signal —
+ * the same independence rule as before, enforced across real data planes
+ * instead of across feeds that are absent on most assets. An entry with no
+ * series and no analysis still produces nothing (fail closed).
  */
 export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
   const out = [];
@@ -487,38 +508,78 @@ export function computeEarlySignals({ entries = [], now = Date.now() } = {}) {
     const accel = recentAvg - earlierAvg;
 
     const flags = [];
+    const groups = new Set();
     let strength = 0;
-    if (accel > 0.15) { flags.push('momentumAccel'); strength += 1; }
-    else if (accel < -0.15) { flags.push('momentumDecel'); strength -= 1; }
+    const add = (flag, weight, group) => { flags.push(flag); strength += weight; groups.add(group); };
 
+    /* ── G1 · series/technical: movement measured on the price series ──── */
+    if (accel > 0.12) add('momentumAccel', 1, 'series');
+    else if (accel < -0.12) add('momentumDecel', -1, 'series');
+
+    const ind = e.analysis.indicators || {};
+    const rsiVal = num(ind.rsi);
+    if (rsiVal != null) {
+      if (rsiVal < 32) add('rsiOversold', 0.8, 'series');
+      else if (rsiVal > 68) add('rsiOverbought', -0.8, 'series');
+    }
+    const hist = num(ind.macd?.histogram);
+    if (hist != null && Math.abs(hist) > 0) {
+      // A histogram agreeing with the acceleration is one measured setup;
+      // fighting it cancels out rather than inventing a direction.
+      if (hist > 0 && accel > 0) add('macdUp', 0.6, 'series');
+      else if (hist < 0 && accel < 0) add('macdDown', -0.6, 'series');
+    }
+    const percentB = num(ind.bollinger?.percentB);
+    if (percentB != null) {
+      if (percentB < 0.16) add('bollingerLow', 0.7, 'series');
+      else if (percentB > 0.84) add('bollingerHigh', -0.7, 'series');
+    }
+    const ma20 = num(ind.ma20);
+    const ma50 = num(ind.ma50);
+    const price = num(e.coin.price) || last;
+    if (ma20 != null && ma50 != null && Math.abs(pct(ma20, ma50)) > 0.4) {
+      add(ma20 >= ma50 ? 'maBullish' : 'maBearish', ma20 >= ma50 ? 0.5 : -0.5, 'series');
+    } else if (ma20 != null && price != null && Math.abs(pct(price, ma20)) > 1.5) {
+      add(price >= ma20 ? 'aboveMa20' : 'belowMa20', price >= ma20 ? 0.5 : -0.5, 'series');
+    }
+
+    /* ── G2 · flow / on-chain: only when a feed actually measured it ───── */
     const intel = e.solanaIntel;
     if (intel?.configured) {
-      if (intel?.holderTrend?.change === 'rising') { flags.push('holderGrowth'); strength += 1; }
-      if (intel?.whaleFlow?.direction === 'inflow') { flags.push('whaleInflow'); strength += 1; }
-      if (intel?.whaleFlow?.direction === 'outflow') { flags.push('whaleOutflow'); strength -= 1; }
-      if (intel?.dexActivity?.pressure === 'buy') { flags.push('dexBuy'); strength += 1; }
-      if (intel?.dexActivity?.pressure === 'sell') { flags.push('dexSell'); strength -= 1; }
+      if (intel?.holderTrend?.change === 'rising') add('holderGrowth', 1, 'flow');
+      if (intel?.whaleFlow?.direction === 'inflow') add('whaleInflow', 1, 'flow');
+      if (intel?.whaleFlow?.direction === 'outflow') add('whaleOutflow', -1, 'flow');
+      if (intel?.dexActivity?.pressure === 'buy') add('dexBuy', 1, 'flow');
+      if (intel?.dexActivity?.pressure === 'sell') add('dexSell', -1, 'flow');
     }
-    if (e?.smToken?.classification === 'verified-paired-swaps' && e?.smToken?.signal === 'ACCUMULATION') { flags.push('smartMoneyAccum'); strength += 1; }
-    else if (e?.smToken?.classification === 'verified-paired-swaps' && e?.smToken?.signal === 'DISTRIBUTION') { flags.push('smartMoneyDistrib'); strength -= 1; }
+    if (e?.smToken?.classification === 'verified-paired-swaps' && e?.smToken?.signal === 'ACCUMULATION') add('smartMoneyAccum', 1, 'flow');
+    else if (e?.smToken?.classification === 'verified-paired-swaps' && e?.smToken?.signal === 'DISTRIBUTION') add('smartMoneyDistrib', -1, 'flow');
 
-    const t = e.coin.mcap > 0 ? (e.coin.volume / e.coin.mcap) * 100 : null;
-    if (t != null && t >= 6) { flags.push('volumeTurnover'); strength += 0.5; }
+    /* ── G3 · market: the tape the markets endpoint already reported ───── */
+    const t = num(e.coin.mcap) > 0 ? (num(e.coin.volume) / num(e.coin.mcap)) * 100 : null;
+    if (t != null && t >= 6) add('volumeTurnover', 0.5, 'market');
+    const c24 = num(e.coin.change24h);
+    if (c24 != null && c24 >= 2.5) add('momentum24Up', 0.6, 'market');
+    else if (c24 != null && c24 <= -2.5) add('momentum24Down', -0.6, 'market');
+    const c7 = num(e.coin.change7d);
+    if (c7 != null && c7 >= 6) add('trend7dUp', 0.6, 'market');
+    else if (c7 != null && c7 <= -6) add('trend7dDown', -0.6, 'market');
 
-    if (flags.length < 2) continue;
+    /* Independence gate: ≥2 flags AND ≥2 different observation planes. */
+    if (flags.length < 2 || groups.size < 2) continue;
     out.push({
       coin: e.coin,
       symbol: e.coin.symbol,
       at: now,
-      direction: strength > 0 ? 'earlyBullish' : strength < 0 ? 'earlyBearish' : 'earlyWatch',
-      confidence: Math.round(clampf(45 + Math.abs(strength) * 14 + flags.length * 5, 25, 92)),
+      direction: strength > 0.3 ? 'earlyBullish' : strength < -0.3 ? 'earlyBearish' : 'earlyWatch',
+      confidence: Math.round(clampf(42 + Math.abs(strength) * 13 + flags.length * 5 + (groups.size > 2 ? 4 : 0), 25, 92)),
       flags,
       momentumAccelPct: Math.round(accel * 100) / 100,
       last,
       strength: Math.round(strength * 10) / 10
     });
   }
-  return out.sort((a, b) => b.strength - a.strength);
+  return out.sort((a, b) => Math.abs(b.strength) - Math.abs(a.strength));
 }
 
 /* ═══════════════════ 5. PORTFOLIO-AWARE IMPACT ════════════════════════ */
