@@ -1,0 +1,75 @@
+# ============================================================================
+# A COPY OF A WORKFLOW — PASTE IT INTO .github/workflows/ BY HAND (2 minutes)
+#
+# GitHub rejects an app token writing under `.github/workflows/`, so this file
+# cannot be committed to its real home by the agent that wrote it. Every other
+# workflow in this repository has the same twin here (ci/build-apk.yml,
+# ci/aave-base-fork-probe.yml, …).
+#
+# ONE-TIME SETUP:
+#   1. Repository → Settings → Secrets and variables → Actions → New secret
+#        Name: CRON_SECRET   Value: the value already configured on Vercel
+#   2. Create the file .github/workflows/order-watch-tick.yml in the GitHub
+#      editor and paste everything below `name:` (the whole file is fine — the
+#      `name:` line, the schedule and the job are all it needs).
+#   3. Actions tab → "Order watch tick" → Run workflow, to confirm it answers
+#      200 instead of 401.
+#
+# WHY IT MATTERS: without it the order watcher is only woken by app traffic
+# plus the once-a-day cron, so a swap that comes due while the phone is closed
+# can be announced up to a day late. With it, every five minutes.
+#
+# ============================================================================
+name: Order watch tick
+
+on:
+  schedule:
+    # Every five minutes. GitHub's scheduler is best-effort and can lag under
+    # load, which is fine here: the daily cron remains the floor, and a tick
+    # that arrives late is still a tick. The point is that the alarm is no
+    # longer measured in hours.
+    - cron: '*/5 * * * *'
+  # Manual trigger, so a suspected silence can be tested without waiting for
+  # the next five-minute slot.
+  workflow_dispatch:
+
+# One at a time: a slow run must not overlap the next tick into a queue.
+concurrency:
+  group: order-watch-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Advance the order watch clock
+        env:
+          # Canonical production origin. A preview URL would work too, but the
+          # watches live in production's durable store — ticking a preview
+          # would advance a store nobody's phone is registered against.
+          TICK_URL: https://fbtswap.ir/api/cron/watch
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET}" ]; then
+            # Deliberately not a failure: a missing secret is a setup problem,
+            # and failing every five minutes would bury real errors in noise.
+            # The message says exactly which one button to press.
+            echo "::warning::CRON_SECRET is not set — add it in Settings → Secrets and variables → Actions. Skipping this tick."
+            exit 0
+          fi
+
+          # --fail-with-body so a 401/500 is a visible red X AND the server's
+          # own explanation lands in the log (the cycle returns its counters and
+          # any { error: 'PRICES_UNAVAILABLE' }), instead of a bare curl error.
+          # --max-time keeps a hung request from occupying the job.
+          echo "Ticking ${TICK_URL} …"
+          curl --silent --show-error \
+               --fail-with-body \
+               --max-time 120 \
+               -H "x-cron-secret: ${CRON_SECRET}" \
+               "${TICK_URL}"
+          echo
+          echo "Tick complete."

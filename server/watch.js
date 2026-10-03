@@ -43,9 +43,51 @@ const COOLDOWN = 6 * 3600000;
 /** Watches expire, so an abandoned device does not get polled forever. */
 const MAX_AGE = 45 * 86400000;
 
-/** The order types this watcher can evaluate. DCA is time-based and stays on
- *  the device, which also keeps the user's schedule off our servers. */
-const WATCH_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder', 'rebalance']);
+/**
+ * The order types this watcher can evaluate.
+ *
+ * ─── DCA AND TWAP ARE HERE NOW, AND THAT IS THE WHOLE FIX ───────────────────
+ * Reported, and it is the reason this watcher exists at all:
+ *
+ *   «برای سفارش خودکار نوتیفیکیشن fcm و رسیدن روی موبایل کاربر خیلی مهمه چون
+ *    وقتی زمان سواپ فرا برسه باید سریع متوجه بشه اما نمیرسه به گوشی.»
+ *
+ * A time-based plan (DCA — «هر هفته ۵۰ دلار بخر» — and TWAP, N slices across a
+ * window) is decided by the CLOCK, not by a price. It used to be excluded here
+ * on privacy grounds: sending a schedule tells the server when somebody buys.
+ * That reasoning is sound and it lost to a harder fact — a schedule the phone
+ * alone knows is a schedule that does not exist when the app is closed, which
+ * is exactly when a DCA run has to alert. The phone is not awake; the server
+ * is. So the schedule is mirrored, and the trade-off is stated rather than
+ * hidden:
+ *
+ *   STORED:  the pair's SYMBOLS, the next due time, the interval, how many
+ *            runs are left, and the push identity.
+ *   NOT STORED: the wallet address, the amount, the price target, or anything
+ *            that can authorise a transaction. The server cannot tell how much
+ *            is being bought, only that a plan of this pair has a run due.
+ *
+ * `dca` and `twap` are therefore evaluated by `evaluateWatch` against the
+ * clock, with no price lookup at all — which also means an upstream price
+ * outage can never silence a scheduled alert.
+ */
+const WATCH_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder', 'rebalance', 'dca', 'twap']);
+
+/** Types decided by the clock rather than by a rate. */
+export const SCHEDULED_TYPES = new Set(['dca', 'twap']);
+
+/**
+ * Bounds on a mirrored interval, in ms.
+ *
+ * The floor is a minute rather than an hour because a TWAP window can be
+ * fifteen minutes across twenty-four slices — a legitimate 37-second gap. The
+ * ceiling is ninety days so a crafted request cannot park a row that is
+ * evaluated forever. None of this is a trust boundary: a shorter interval than
+ * the user's real one can only produce an EARLIER alert, and the six-hour
+ * per-row cooldown below is what bounds the notification rate.
+ */
+const MIN_INTERVAL_MS = 60_000;
+const MAX_INTERVAL_MS = 90 * 86400000;
 
 const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 64;
 const isSym = (v) => typeof v === 'string' && /^[A-Za-z0-9._-]{1,16}$/.test(v);
@@ -90,7 +132,17 @@ export async function putWatches(endpoint, items, lang = 'fa') {
   const clean = [];
   for (const it of items.slice(0, MAX_PER_ENDPOINT)) {
     if (!isId(it?.id) || !isSym(it?.fromSym) || !isSym(it?.toSym)) continue;
-    if (!isCgId(it?.fromId) || !isCgId(it?.toId)) continue;
+
+    /*
+     * CoinGecko ids are required for the PRICE-triggered types and optional for
+     * the scheduled ones: a DCA plan on a token the market feed has never
+     * heard of still has a due time, and refusing it would mean "you can only
+     * schedule plans for coins CoinGecko lists" — a limitation nobody asked
+     * for and nobody could see. The symbols are what the notification names.
+     */
+    const planned = it?.type === 'dca' || it?.type === 'twap';
+    if (!isCgId(it?.fromId) && !planned) continue;
+    if (!isCgId(it?.toId) && !planned) continue;
 
     /*
      * ─── FOUR WATCHABLE TYPES, NOT ONE ──────────────────────────────────────
@@ -110,11 +162,30 @@ export async function putWatches(endpoint, items, lang = 'fa') {
       type,
       fromSym: it.fromSym,
       toSym: it.toSym,
-      fromId: it.fromId,
-      toId: it.toId,
+      fromId: isCgId(it?.fromId) ? it.fromId : null,
+      toId: isCgId(it?.toId) ? it.toId : null,
       priceOf: it.priceOf === 'to' ? 'to' : 'from',
       lastNotifiedAt: 0
     };
+
+    /* ── the scheduled types: a due time, an interval, and how many are left ──
+       `nextRunAt` is the client's own number. The server never invents one, so
+       the alert fires when the plan says it should, not when a server-side
+       counter thinks it should. */
+    if (type === 'dca' || type === 'twap') {
+      const nextRunAt = Number(it.nextRunAt);
+      const intervalMs = Number(it.intervalMs);
+      if (!Number.isFinite(nextRunAt) || nextRunAt <= 0) continue;
+      if (!Number.isFinite(intervalMs) || intervalMs < MIN_INTERVAL_MS || intervalMs > MAX_INTERVAL_MS) continue;
+      row.nextRunAt = Math.round(nextRunAt);
+      row.intervalMs = Math.round(intervalMs);
+      /* Null means "no known end", which the copy treats as "next run", never
+         as "last run" — claiming a final step nobody stated would be a lie. */
+      const runsLeft = Number(it.runsLeft);
+      row.runsLeft = Number.isFinite(runsLeft) && runsLeft >= 0 ? Math.min(Math.round(runsLeft), 1000) : null;
+      clean.push(row);
+      continue;
+    }
 
     if (type === 'limit' || type === 'ladder') {
       const target = Number(it.targetRate);
@@ -197,9 +268,22 @@ export async function clearWatches(endpoint) {
  * Returns `{hit, at, side?, peak?}`. `peak` is returned rather than mutated so
  * the caller decides what to persist, the same shape the client uses.
  */
-export function evaluateWatch(w, rate) {
-  if (!Number.isFinite(rate) || rate <= 0) return { hit: false };
+export function evaluateWatch(w, rate, now = Date.now()) {
   const type = w?.type ?? 'limit';
+
+  /*
+   * SCHEDULED (DCA / TWAP) — decided by the clock, BEFORE any price check.
+   * Order matters: an upstream outage must not be able to silence a plan whose
+   * run is due, and a missing rate is not "unknown" here — it is irrelevant.
+   */
+  if (type === 'dca' || type === 'twap') {
+    const dueAt = Number(w?.nextRunAt);
+    if (!Number.isFinite(dueAt) || dueAt <= 0) return { hit: false, reason: 'NO_SCHEDULE' };
+    const hit = now >= dueAt;
+    return { hit, at: dueAt, scheduled: true, reason: hit ? 'DUE' : 'WAITING' };
+  }
+
+  if (!Number.isFinite(rate) || rate <= 0) return { hit: false };
 
   if (type === 'trailing') {
     const prevPeak = Number.isFinite(w.peakRate) && w.peakRate > 0 ? w.peakRate : null;
@@ -247,17 +331,27 @@ export async function runWatchCycle(send, now = Date.now()) {
   // Drop stale rows before doing any work.
   const live = all.filter((w) => now - (w.at || 0) < MAX_AGE);
 
-  // One price request for every coin across every watch.
-  const ids = [...new Set(live.flatMap((w) => [w.fromId, w.toId]))];
+  /*
+   * One price request for every coin across every PRICE-triggered watch.
+   * Scheduled rows are excluded from the lookup entirely — they need no rate,
+   * and including their ids would cost a request for data nothing reads.
+   */
+  const priceRows = live.filter((w) => !SCHEDULED_TYPES.has(w.type ?? 'limit'));
+  const ids = [...new Set(priceRows.flatMap((w) => [w.fromId, w.toId]).filter(isCgId))];
   let prices = {};
-  try {
-    prices = await fetchSimplePrices(ids);
-  } catch {
-    /*
-     * Upstream is down. Return without alerting: an unknown price must never
-     * count as "target hit", or one outage fires every open order at once.
-     */
-    return { checked: live.length, triggered: 0, sent: 0, error: 'PRICES_UNAVAILABLE' };
+  let pricesOk = true;
+  if (ids.length) {
+    try {
+      prices = await fetchSimplePrices(ids);
+    } catch {
+      /*
+       * Upstream is down. Price-triggered rows are skipped below rather than
+       * treated as hits — an unknown price must never count as "target hit",
+       * or one outage fires every open order at once. Scheduled rows still run:
+       * their trigger does not depend on the feed.
+       */
+      pricesOk = false;
+    }
   }
 
   let triggered = 0;
@@ -265,18 +359,23 @@ export async function runWatchCycle(send, now = Date.now()) {
   const updated = [];
 
   for (const w of live) {
-    const a = prices?.[w.fromId]?.usd;
-    const b = prices?.[w.toId]?.usd;
-    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
-      updated.push(w);
-      continue;
+    const scheduled = SCHEDULED_TYPES.has(w.type ?? 'limit');
+
+    let rate = null;
+    if (!scheduled) {
+      if (!pricesOk) { updated.push(w); continue; }
+      const a = prices?.[w.fromId]?.usd;
+      const b = prices?.[w.toId]?.usd;
+      if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) {
+        updated.push(w);
+        continue;
+      }
+      // Same convention as the client: rate is "1 from = ? to", inverted when
+      // the user priced the target in the TO token.
+      rate = w.priceOf === 'to' ? b / a : a / b;
     }
 
-    // Same convention as the client: rate is "1 from = ? to", inverted when
-    // the user priced the target in the TO token.
-    const rate = w.priceOf === 'to' ? b / a : a / b;
-
-    const res = evaluateWatch(w, rate);
+    const res = evaluateWatch(w, rate, now);
 
     /*
      * The trailing peak is persisted even when nothing fires. That IS the
@@ -307,6 +406,9 @@ export async function runWatchCycle(send, now = Date.now()) {
          */
         rate: res.at,
         type: w.type ?? 'limit',
+        /* `scheduled` is what tells the copy writer that the trigger was the
+           clock, not a level: «زمان سواپ رسید» instead of «به هدف رسید». */
+        scheduled: Boolean(scheduled),
         /* `takeProfit` vs `stopLoss` — opposite news, and the notification
            must not present them identically. */
         side: res.side ?? null,
@@ -319,17 +421,140 @@ export async function runWatchCycle(send, now = Date.now()) {
     }
 
     if (ok) sent += 1;
+
+    /*
+     * ─── AFTER A SCHEDULED ALERT, MOVE THE DUE TIME FORWARD ─────────────────
+     * The device owns the schedule and re-syncs it on the next app open; this
+     * server-side step exists so that a phone which stays closed for a week
+     * does not get the SAME run alerted on every tick in between. The client's
+     * own resync replaces this number wholesale, so the two cannot disagree:
+     * the client's value always wins the moment it is sent again.
+     *
+     * Advanced on SUCCESS only — a failed push must never consume a run the
+     * user was never told about. And when the last run has been announced the
+     * row is DROPPED rather than parked: a finished plan that keeps its watch
+     * alive is one more notification for a step that no longer exists.
+     */
+    let after = carried;
+    if (ok && scheduled) {
+      const gap = Number(w.intervalMs);
+      let dueAt = Number(w.nextRunAt);
+      let guard = 0;
+      while (dueAt <= now && guard < 10_000) { dueAt += gap; guard += 1; }
+      const left = w.runsLeft == null ? null : Math.max(0, w.runsLeft - 1);
+      after = { ...carried, nextRunAt: dueAt, runsLeft: left };
+      if (left === 0) continue; // finished: no row, no future alert
+    }
+
     // Only start the cooldown on a successful send, otherwise a transient
     // push failure silences the alert for six hours.
     //
     // Built from `carried`, not `w`, so an advanced trailing peak is kept even
     // on the tick that fires. Rebuilding from `w` would discard it and let the
     // stop drift back down to a stale high-water mark.
-    updated.push(ok ? { ...carried, lastNotifiedAt: now } : carried);
+    updated.push(ok ? { ...after, lastNotifiedAt: now } : after);
   }
 
   if (updated.length !== all.length || triggered > 0) {
     await storeSet(WATCH_KEY, updated);
   }
-  return { checked: live.length, triggered, sent, pruned: all.length - live.length };
+  return {
+    checked: live.length,
+    triggered,
+    sent,
+    scheduled: live.filter((w) => SCHEDULED_TYPES.has(w.type ?? 'limit')).length,
+    priced: priceRows.length,
+    pricesOk,
+    pruned: all.length - live.length
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* the throttle that makes this run often enough to be useful                  */
+/* -------------------------------------------------------------------------- */
+
+const TICK_KEY = 'orders:watch:lastTick';
+
+/**
+ * How often the watch cycle may be advanced by ANY trigger.
+ *
+ * ─── WHY THIS EXISTS AT ALL (the reported bug, in one line) ─────────────────
+ * «وقتی زمان سواپ فرا برسه باید سریع متوجه بشه اما نمیرسه به گوشی.»
+ *
+ * The cycle was correct, the sender was correct, the channels and the custom
+ * tone were correct — and the whole thing still could not arrive on time,
+ * because on this hosting plan a cron may fire at most ONCE A DAY. A DCA run
+ * due at nine in the morning was announced at nine the next morning at best.
+ * A scheduled alert that is up to twenty-four hours late is not a late alert;
+ * it is a wrong one, because the price the user was told about has moved.
+ *
+ * The plan forbids sub-daily Vercel crons (a ten-minute expression makes the
+ * whole deployment fail — see docs/VERCEL-CRON-HOBBY-FA.md), so frequency has
+ * to come from somewhere else. It comes from three places, in this order of
+ * reliability:
+ *
+ *   1. A GitHub Actions schedule every five minutes hitting /api/cron/watch
+ *      with the cron secret (see .github/workflows/order-watch-tick.yml).
+ *      Runs whether or not anybody has the app open.
+ *   2. THIS FUNCTION: any request the app already makes can advance the cycle,
+ *      throttled to one run per window. It costs one store read on the hot
+ *      path when it declines, and it means ordinary traffic keeps the clock
+ *      ticking even if the workflow is ever disabled.
+ *   3. The daily cron, unchanged, as the floor: if both of the above are down,
+ *      nothing is silent for longer than a day.
+ *
+ * ─── WHY THE THROTTLE IS READ-THEN-WRITE, AND WHY THAT IS ACCEPTABLE ────────
+ * The store is last-writer-wins (see store.js), so two serverless instances
+ * can both read "stale" and both run a cycle. The consequence is a duplicated
+ * price read and, in the worst case, two attempts at the same alert — which
+ * the per-row cooldown collapses to one notification. Spending a lease (an
+ * atomic store) on this would be the wrong trade: the failure mode of a lost
+ * lease is a SILENT alert, and the failure mode here is one extra poll.
+ */
+export const WATCH_TICK_MIN_MS = Math.max(60_000, Number(process.env.WATCH_TICK_MIN_MS || 240_000));
+
+/** In-process guard, so a burst of requests on one instance runs one cycle. */
+let inFlight = null;
+
+export async function watchTickStatus() {
+  const last = Number(await storeGet(TICK_KEY, 0)) || 0;
+  return { lastTickAt: last || null, minIntervalMs: WATCH_TICK_MIN_MS };
+}
+
+/**
+ * Advance the watch cycle, if the window has passed.
+ *
+ * @param {{send?:Function, now?:number, force?:boolean}} opts
+ *        `send` is required to deliver anything; without it this is a no-op
+ *        that still reports honestly (see the wiring note on the daily cron,
+ *        which shipped WITHOUT a sender once and silently dropped every alert).
+ */
+export async function maybeWatchTick({ send, now = Date.now(), force = false } = {}) {
+  if (typeof send !== 'function') return { skipped: 'NO_SENDER' };
+
+  const last = Number(await storeGet(TICK_KEY, 0)) || 0;
+  const since = now - last;
+  if (!force && since < WATCH_TICK_MIN_MS) return { skipped: 'THROTTLED', sinceMs: since };
+  if (inFlight) return { skipped: 'IN_FLIGHT' };
+
+  /* No watches means no work and no price request — the cheapest possible
+     answer for the overwhelming majority of requests that reach here. */
+  const rows = await readWatches().catch(() => []);
+  if (!rows.length) {
+    await storeSet(TICK_KEY, now).catch(() => {});
+    return { skipped: 'NO_WATCHES', at: now };
+  }
+
+  inFlight = runWatchCycle(send, now)
+    .then((out) => { return out; })
+    .catch((err) => ({ error: String(err?.message || err).slice(0, 120) }))
+    .finally(() => {
+      inFlight = null;
+      /* The stamp is written AFTER the run, so a crash mid-cycle does not lock
+         the window and silence the next few minutes of traffic. */
+      storeSet(TICK_KEY, Date.now()).catch(() => {});
+    });
+
+  const out = await inFlight;
+  return { ...out, at: now };
 }

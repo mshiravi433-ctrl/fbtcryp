@@ -1716,6 +1716,38 @@
     }
   },
   "perp": {
+    "positions": {
+      "title": "Open positions",
+      "sub": "Live from the venues",
+      "count": "{n} open",
+      "reading": "Reading your positions…",
+      "unavailable": "The venue did not answer. Your position is untouched — this is only a read.",
+      "empty": "No open position right now.",
+      "entry": "Entry",
+      "mark": "Mark",
+      "size": "Size",
+      "pnl": "P&L",
+      "risk": "TP / SL",
+      "howMuch": "How much do you want to close?",
+      "all": "All",
+      "close": "Close position",
+      "closing": "Closing…",
+      "confirm": "Close {pct}% and sign",
+      "sent": "Close submitted:",
+      "noWallet": "Connect a wallet to see your open positions.",
+      "venue": {
+        "solana": "Solana",
+        "evm": "Arbitrum"
+      },
+      "err": {
+        "USER_REJECTED": "You cancelled the signature. The position is untouched.",
+        "WALLET_NOT_CONNECTED": "Connect the wallet that owns this position.",
+        "NO_POSITION": "The venue no longer has this position — it may already be closed.",
+        "INVALID_INPUT": "The venue refused that amount. Try a larger close percentage.",
+        "BROADCAST_FAILED": "The signature was made but the transaction was not accepted. Nothing changed.",
+        "PROVIDER_UNAVAILABLE": "The venue is not answering right now. Try again in a moment."
+      }
+    },
     "tab": {
       "overview": "Overview",
       "perpetual": "Perpetual",
@@ -5245,6 +5277,7 @@
     "safetyTitle": "Before you trust an NFT you were sent"
   },
   "orders": {
+    "heroLive": "Live watching",
     "title": "Auto Orders",
     "subtitle": "Set it once and let it watch the market for you — a target price, a trailing stop that follows gains up, or steady scheduled buys.",
     "newLimit": "Limit order",
@@ -5385,6 +5418,8 @@
     "editChainPrompt": "New EVM chain ID",
     "editDeadlinePrompt": "New deadline (Unix milliseconds; leave empty for none)",
     "solana": {
+      "sub": "Save a pair and an amount — you sign it yourself",
+      "hint": "This does not watch a price — it opens the Solana swap with this pair filled in.",
       "title": "Solana order",
       "body": "This does not watch a price. It saves the pair and amount, then opens the Solana swap with those values. Nothing moves until you sign.",
       "network": "Network",
@@ -6165,7 +6200,6 @@
     "farmPromo": {
       "badge": "Farm",
       "title": "Put the money you just moved to work",
-      "body": "Farm reads live yields from the protocols and hands the deposit to your own wallet — we never hold the position, and you can withdraw whenever you like.",
       "chipLive": "Live yields",
       "chipSelf": "Non-custodial",
       "chipExit": "Exit any time",
@@ -6853,6 +6887,10 @@
     "serverFallback": "The server could not prepare this order. Your wallet will sign the local transaction instead."
   },
   "dydx": {
+    "errNotConnected": "Connect your dYdX account first.",
+    "closing": "Closing…",
+    "close": "Close",
+    "closeSent": "Close order submitted:",
     "title": "dYdX Orbit",
     "subtitle": "200+ perpetual markets on dYdX Chain — always live, directly with your wallet.",
     "live": "Live",

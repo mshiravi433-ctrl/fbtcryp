@@ -135,7 +135,22 @@ const FarmPromoBanner = memo(function FarmPromoBanner({ className = '' }) {
           <span>{t('bridge.farmPromo.badge')}</span>
         </span>
         <h2 className="farm-promo-title">{t('bridge.farmPromo.title')}</h2>
-        <p className="farm-promo-body">{t('bridge.farmPromo.body')}</p>
+        {/*
+          NO BODY PARAGRAPH — deliberately.
+          ------------------------------------------------------------------
+          Reported: «این جمله باعث شده باکس خیلی طولش زیاد بشه و زشت شده، این
+          جمله را پاک کن.» The sentence that used to sit here was true, and it
+          was also the only thing on this banner that could not be read at a
+          glance: two lines of prose pushed the card to roughly 200px tall on a
+          360px phone, so the ad for the NEXT screen ate the bottom of the one
+          the user was still using.
+
+          Nothing was lost by removing it. Every claim it made is already
+          carried by a chip («بازده زنده»، «غیرامانی»، «برداشت هر زمان») in one
+          line, and the Farm screen repeats all three at greater length — see
+          pages/Farm.jsx. What is left is the shape a banner at the foot of a
+          form should have: a mark, one line, three chips, one button.
+        */}
 
         <div className="farm-promo-chips">
           <span className="farm-promo-chip">{t('bridge.farmPromo.chipLive')}</span>

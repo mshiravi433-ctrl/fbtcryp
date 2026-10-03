@@ -3634,7 +3634,25 @@ export default function Loan() {
         {venue && (
           <div className="row-between" style={{ gap: 8, marginTop: 4 }}>
             <UpdatedAgo at={readAt} t={t} />
-            <DataStatusPill status={dataStatus} ageMs={snapshotAgeMs} t={t} testId="loan-rate-source-status" />
+            {/*
+              ─── ONE «زنده از زنجیره» PER TAB, NOT TWO ──────────────────────
+              Reported: «زیر هر یه تب دوبار زنده از زنجیره هست؛ اولینش را پاک
+              کن، کلمش را زشت کرده.»
+
+              It was literally two: this pill, in the provenance line under the
+              tab rail, and then the SAME pill again inside every tab body,
+              beside the asset the numbers belong to. The word appeared twice
+              within two thumb-heights of itself, which reads as a rendering
+              bug rather than as an assurance — and the second one is the one
+              that carries information, because it sits next to the rate it is
+              describing.
+
+              So the duplicate here is gone and the rate-source line keeps the
+              part that is NOT repeated anywhere: which venue was read and how
+              long ago. The surviving pill lives in the tab body, next to the
+              asset the numbers describe, and keeps its own stable test id
+              (`loan-data-status`).
+            */}
           </div>
         )}
       </motion.div>}

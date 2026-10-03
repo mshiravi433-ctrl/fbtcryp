@@ -641,6 +641,8 @@
     "flowSourceDown": "Sumber arus modal tidak merespons pada pembacaan ini ({{reason}}); kartu itu tetap kosong, bukan diperkirakan."
   },
   "orders": {
+    "pipelineTitle": "Dalam antrean",
+    "heroLive": "Pemantauan langsung",
     "title": "Order Otomatis",
     "subtitle": "Atur sekali dan biarkan order memantau pasar untuk Anda.",
     "bannerTitle": "Order Otomatis — pasar tidak menunggu",
@@ -671,6 +673,8 @@
       "rebalance": "Penyeimbangan baru"
     },
     "solana": {
+      "sub": "Simpan pasangan dan jumlah — Anda sendiri yang menandatangani",
+      "hint": "Ini tidak memantau harga — ini membuka swap Solana dengan pasangan ini.",
       "title": "Order Solana",
       "body": "Ini tidak memantau harga. Pasangan dan jumlah disimpan, lalu swap Solana dibuka dengan nilai itu. Tidak ada yang berpindah sampai Anda menandatangani.",
       "network": "Jaringan",
@@ -767,7 +771,6 @@
     "farmPromo": {
       "badge": "Farm",
       "title": "Buat uang yang baru Anda pindahkan jadi produktif",
-      "body": "Farm membaca imbal hasil langsung dari protokol dan mengirim setoran ke dompet Anda sendiri — kami tidak pernah memegang posisinya, dan Anda bisa menarik kapan saja.",
       "chipLive": "Imbal hasil langsung",
       "chipSelf": "Non-kustodial",
       "chipExit": "Tarik kapan saja",
@@ -775,6 +778,10 @@
     }
   },
   "dydx": {
+    "errNotConnected": "Hubungkan akun dYdX Anda dulu.",
+    "closing": "Menutup…",
+    "close": "Tutup",
+    "closeSent": "Perintah tutup dikirim:",
     "steps": {
       "title": "How it works",
       "connect": "Connect your EVM wallet and sign the dYdX onboarding message. The dYdX key remains in memory only.",
@@ -2618,6 +2625,38 @@
     }
   },
   "perp": {
+    "positions": {
+      "title": "Posisi terbuka",
+      "sub": "Langsung dari bursa",
+      "count": "{n} terbuka",
+      "reading": "Membaca posisi Anda…",
+      "unavailable": "Bursa tidak menjawab. Posisi Anda tidak tersentuh — ini hanya pembacaan.",
+      "empty": "Tidak ada posisi terbuka saat ini.",
+      "entry": "Masuk",
+      "mark": "Mark",
+      "size": "Ukuran",
+      "pnl": "L/R",
+      "risk": "TP / SL",
+      "howMuch": "Berapa yang ingin ditutup?",
+      "all": "Semua",
+      "close": "Tutup posisi",
+      "closing": "Menutup…",
+      "confirm": "Tutup {pct}% dan tanda tangan",
+      "sent": "Penutupan dikirim:",
+      "noWallet": "Hubungkan dompet untuk melihat posisi terbuka Anda.",
+      "venue": {
+        "solana": "Solana",
+        "evm": "Arbitrum"
+      },
+      "err": {
+        "USER_REJECTED": "Anda membatalkan tanda tangan. Posisi tidak tersentuh.",
+        "WALLET_NOT_CONNECTED": "Hubungkan dompet pemilik posisi ini.",
+        "NO_POSITION": "Bursa tidak lagi memiliki posisi ini — mungkin sudah ditutup.",
+        "INVALID_INPUT": "Bursa menolak jumlah itu. Coba persentase lebih besar.",
+        "BROADCAST_FAILED": "Sudah ditandatangani tetapi transaksi tidak diterima. Tidak ada yang berubah.",
+        "PROVIDER_UNAVAILABLE": "Bursa tidak menjawab sekarang. Coba lagi sebentar."
+      }
+    },
     "terminal": {
       "pairsCount": "{{count}} pasangan",
       "pairSearch": "Cari pasangan",

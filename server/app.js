@@ -210,7 +210,7 @@ import { activateListing, myListing, putListing, readBoard, removeListing, tierF
 import { promotionTerms, verifyPromotionPayment } from './promote.js';
 import { CHANNEL_IDS, fetchChannel } from './farcaster.js';
 import { fetchNfts, nftChains, nftConfigured, nftDiagnose } from './nft.js';
-import { clearWatches, putWatches, readWatches, runWatchCycle } from './watch.js';
+import { clearWatches, maybeWatchTick, putWatches, readWatches, runWatchCycle, watchTickStatus } from './watch.js';
 import { evaluateAllMonitors, monitorEngineStatus } from './intentMonitoring.js';
 import { runSmartMoneyCadence } from './smartMoney/cadence.js';
 import {
@@ -6642,7 +6642,27 @@ app.post('/api/orders/watch', async (req, res) => {
   const { endpoint, items, lang } = req.body ?? {};
   try {
     const out = await putWatches(endpoint, items, lang);
-    return res.json({ ok: true, ...out });
+    /*
+     * ─── A SYNC IS ALSO A HEARTBEAT ─────────────────────────────────────────
+     * Every device that opens the orders screen lands here, and those are
+     * exactly the moments a price or schedule may already have passed. So the
+     * throttled tick rides along: it returns immediately unless the window has
+     * elapsed (see maybeWatchTick), and when it does run, the caller is a
+     * request that was going to wait on the store anyway.
+     *
+     * NOT awaited into the failure path — a watch sync must succeed even if
+     * the cycle cannot run — and the response is written FIRST, so the client
+     * is never held behind a push. The awaited race afterwards keeps the
+     * invocation alive long enough for the work to finish on a platform that
+     * freezes a handler the moment it returns, without letting a slow price
+     * read become a slow sync.
+     */
+    res.json({ ok: true, ...out });
+    await Promise.race([
+      maybeWatchTick({ send: sendWatchAlert }).catch(() => {}),
+      new Promise((resolve) => { setTimeout(resolve, 3000); })
+    ]);
+    return undefined;
   } catch (e) {
     return res.status(400).json({ ok: false, error: String(e.message).slice(0, 80) });
   }
@@ -6693,7 +6713,12 @@ async function sendWatchAlert(endpoint, lang, payload) {
     base: payload.base,
     quote: payload.quote,
     rate: payload.rate,
-    id: payload.id
+    id: payload.id,
+    /* Clock-triggered (DCA/TWAP) rather than level-triggered: the copy, the
+       deep link and the urgency all differ, and a notification that says «به
+       هدف رسید» for a plan whose run merely came due is a false statement
+       about a price. */
+    scheduled: payload.scheduled === true
   });
   return deliverStagePush(endpoint, message);
 }
@@ -6703,6 +6728,30 @@ app.get('/api/cron/watch', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   const out = await runWatchCycle(sendWatchAlert);
   return res.json(out);
+});
+
+/**
+ * ─── THE PUBLIC TICK: what makes a scheduled alert arrive ON TIME ───────────
+ * «وقتی زمان سواپ فرا برسه باید سریع متوجه بشه اما نمیرسه به گوشی.»
+ *
+ * The daily cron cannot be made more frequent on this plan (a ten-minute
+ * expression fails the whole deployment), so the clock is advanced by traffic
+ * instead: the app calls this when it opens and every few minutes while it is
+ * in the foreground, and any of those calls may run the cycle. The throttle is
+ * inside maybeWatchTick — one run per window, shared with the cron path — so
+ * this endpoint is cheap, bounded and safe to call at any frequency.
+ *
+ * WHY IT TAKES NO SECRET. A browser cannot hold one: anything shipped to the
+ * client is public, and a "secret" in the bundle would be worse than none. The
+ * honest design is a bounded, idempotent, read-only trigger — it cannot act on
+ * anybody's money (this path has no signer), it cannot exceed the throttle, and
+ * the only thing an abuser can do is cause a price read that the cycle would
+ * have performed anyway moments later. The response says which of those cases
+ * applied, so a silent cron is diagnosable from a browser.
+ */
+app.all('/api/cron/tick', async (_req, res) => {
+  const out = await maybeWatchTick({ send: sendWatchAlert }).catch(() => ({ error: 'TICK_FAILED' }));
+  return res.json({ ok: true, ...out });
 });
 
 /* --------------------------- user monitor cron ---------------------------- */
@@ -6736,7 +6785,18 @@ app.get('/api/monitors/status', async (_req, res) => {
 /** How many watches are registered, for debugging a silent cron. */
 app.get('/api/orders/watch/status', async (_req, res) => {
   const rows = await readWatches().catch(() => []);
-  res.json({ watches: rows.length, cronSecretSet: Boolean(process.env.CRON_SECRET) });
+  const tick = await watchTickStatus().catch(() => ({ lastTickAt: null }));
+  res.json({
+    watches: rows.length,
+    /* How many of the mirrored rows are clock-driven plans, so a DCA that
+       never alerts can be told apart from one that was never synced. */
+    scheduled: rows.filter((w) => w?.type === 'dca' || w?.type === 'twap').length,
+    /* When any trigger last advanced the cycle. `null` means never — which is
+       the signature of a watcher that is not being woken at all. */
+    lastTickAt: tick.lastTickAt ?? null,
+    tickMinIntervalMs: tick.minIntervalMs ?? null,
+    cronSecretSet: Boolean(process.env.CRON_SECRET)
+  });
 });
 
 /*

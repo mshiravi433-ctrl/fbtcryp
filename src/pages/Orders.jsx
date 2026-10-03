@@ -39,6 +39,7 @@ import {
   loadOrders,
   orderNotionalUsd,
   pauseOrder,
+  pingWatchTick,
   removeOrder,
   resumeOrder,
   ladderPortion,
@@ -51,6 +52,7 @@ import {
 import { dispatchStageAlert } from '../lib/stagePush';
 import { activateDca, confirmDcaCancel, createDcaRevision, dcaDisplayStatus, loadDcaReceipts, requestDcaCancel } from '../lib/dcaExecution';
 import { loadGoal } from '../lib/goalStore';
+import { loadSolanaHandoffs } from '../lib/solanaOrders';
 import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -60,6 +62,9 @@ import { adviseOrder } from '../lib/orderAdvisor';
 import { loadLearningParams, orderTune } from '../lib/learning';
 import AutopilotPanel from '../components/AutopilotPanel';
 import AutopilotGuideSheet from '../components/AutopilotGuideSheet';
+import OrdersHero from '../components/OrdersHero';
+import CollapsibleCard from '../components/CollapsibleCard';
+import '../styles/orders-hero.css';
 
 /**
  * ORDERS — limit orders and DCA plans.
@@ -116,6 +121,13 @@ export default function Orders() {
    * asks for it, and the component is not even mounted until then.
    */
   const [guideOpen, setGuideOpen] = useState(false);
+  /*
+   * How many Solana handoffs are stored, for the fold's badge. Read here
+   * rather than inside the fold because the badge lives in the header, which
+   * is rendered by CollapsibleCard — and kept in sync by the card's own
+   * `onSaved` so saving one updates the count without closing the fold.
+   */
+  const [solanaCount, setSolanaCount] = useState(() => loadSolanaHandoffs().length);
   const [cancelReview, setCancelReview] = useState(null);
   /* The DCA revision draft being edited, if any. `null` means no row is open. */
   const [editDraft, setEditDraft] = useState(null);
@@ -245,8 +257,17 @@ export default function Orders() {
    * Two independent filters expressing the same intent, and fixing one without
    * the other leaves the feature just as broken while looking repaired.
    *
-   * DCA stays out on purpose: it is time-based, never sent, and including it
-   * would fire a pointless request on every run counter tick.
+   * ─── DCA AND TWAP ARE IN NOW, FOR THE SAME ONE REASON ────────────────────
+   * They were excluded because "the device knows the schedule". It does — and
+   * the device is asleep when the schedule arrives, which is the whole bug:
+   * «وقتی زمان سواپ فرا برسه … نمیرسه به گوشی». Their schedule and progress
+   * therefore join the key, so creating, editing, pausing or completing a plan
+   * re-syncs the server's copy.
+   *
+   * `runsDone` is deliberately NOT in the key — only `runsLeft`-relevant state
+   * that the server acts on (the due time and the interval). A plan fires, the
+   * device advances `nextRunAt`, and that change alone re-syncs; the raw run
+   * counter would re-sync on renders where nothing the server evaluates moved.
    */
   const watchKey = useMemo(
     () =>
@@ -261,6 +282,9 @@ export default function Orders() {
           if (o.type === 'bracket') parts.push(o.takeProfitRate, o.stopLossRate);
           if (o.type === 'ladder') parts.push(o.rungsFilled, o.steps, o.startRate, o.endRate, o.direction);
           if (o.type === 'rebalance') parts.push(o.targetRate, o.driftPct);
+          /* Clock-driven: the due time and the gap are exactly what the server
+             evaluates; anything else about a DCA/TWAP is invisible to it. */
+          if (o.type === 'dca' || o.type === 'twap') parts.push(o.nextRunAt ?? 0, o.interval ?? '', o.totalRuns ?? '');
           return parts.join(':');
         })
         .join('|'),
@@ -271,6 +295,36 @@ export default function Orders() {
     syncWatches(orders);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchKey]);
+
+  /*
+   * ─── THE HEARTBEAT THAT MAKES A CLOCK-BASED ALERT ARRIVE ON TIME ──────────
+   * Landing on this screen is a strong signal that the user is thinking about
+   * their plans, and it is one of the few moments the app has a network and a
+   * foreground to spare. So opening AUTO ORDERS advances the server's watch
+   * clock immediately, and a slow timer plus the visibility change keep it
+   * advancing while somebody leaves the tab open.
+   *
+   * The server throttles all of it (one run per window, whichever trigger gets
+   * there first), so the timer's period is a policy choice rather than a cost:
+   * three minutes is frequent enough that a plan due while the page sits open
+   * is announced within a few minutes, and rare enough that a phone left on
+   * this screen overnight makes ~300 tiny requests, none of which move money.
+   *
+   * Fire-and-forget on purpose: nothing here is allowed to fail loudly on a
+   * screen about the user's money.
+   */
+  useEffect(() => {
+    pingWatchTick();
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') pingWatchTick();
+    }, 180_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') pingWatchTick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   /*
    * usePriceMap is keyed by coingecko id with a `.price` field; the order
@@ -311,6 +365,38 @@ export default function Orders() {
     () =>
       [...ready, ...active].reduce((sum, o) => sum + (orderNotionalUsd(o, usdMap) ?? 0), 0),
     [ready, active, usdMap]
+  );
+
+  /*
+   * ─── THE HERO'S ORDER STRIP ────────────────────────────────────────────────
+   * One bar per live order, and one number per bar: how far the CURRENT rate
+   * sits from the level that order is waiting for, in percent.
+   *
+   * Read from the order itself rather than from a precomputed "progress"
+   * field, because that field does not exist and inventing one would put a
+   * second source of truth next to `evaluateOrder`. Anything we cannot measure
+   * — a missing price, a DCA plan with no price target, a bracket with two
+   * levels — returns `distancePct: null`, and the component renders the bar at
+   * its neutral height instead of drawing a confident guess.
+   */
+  const heroBars = useMemo(
+    () => [...ready, ...active].slice(0, 14).map((o) => {
+      const rate = rateFor(o);
+      const isReady = ready.includes(o);
+      const target =
+        o.type === 'rebalance' ? o.targetRate
+          : o.type === 'trailing' ? null   // the stop slides with the peak — see orders.js
+            : o.type === 'bracket' ? o.takeProfitRate
+              : (o.targetRate ?? null);
+      const observed = Number.isFinite(rate) && rate > 0
+        ? (o.priceOf === 'to' ? 1 / rate : rate)
+        : null;
+      const distancePct = Number.isFinite(observed) && Number.isFinite(target) && target > 0
+        ? ((observed - target) / target) * 100
+        : null;
+      return { id: o.id, ready: isReady, distancePct };
+    }),
+    [ready, active, rateFor]
   );
 
   const submit = (input) => {
@@ -491,47 +577,23 @@ export default function Orders() {
 
       {/*
         ─── THE HERO: LIVE NUMBERS, NOT A POSTER ──────────────────────────────
-        This box used to carry a floating star and two sentences. It keeps the
-        sentences (they name what the screen does) and adds the three facts a
-        person opens this screen to learn: how many orders are watching, how
-        many are ready to act on right now, and what value is queued.
+        The screen's own instrument panel — a radar beacon, the three facts a
+        person opens this screen to learn, and one bar per live order whose
+        height is that order's real distance from its target. See
+        components/OrdersHero.jsx for why it is a beacon and not another card,
+        and styles/orders-hero.css for the light-theme and motion budget.
 
-        The glass is drawn, not blurred — see styles/orders-modern.css. The
-        only motion is one sheen pass and a ring that draws itself once, both
-        finite, so the card is not repainting while the user reads it.
+        It replaced an inline block of markup that lived here and was rebuilt
+        on every price poll; the whole thing is now ONE memoised component with
+        four primitive props, so a poll that changes nothing costs one
+        reference comparison per prop.
       */}
-      <motion.section className="ord-hero" variants={riseIn} initial="hidden" animate="show">
-        <div className="ord-hero-top">
-          <div className="ord-hero-mark" aria-hidden="true">
-            <svg width="34" height="34" viewBox="0 0 36 36" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle className="ord-hero-ring" cx="18" cy="18" r="13" opacity="0.45" />
-              <path d="M18 8.5v5" />
-              <path d="M18 22.5v5" />
-              <path d="M8.5 18h5" />
-              <path d="M22.5 18h5" />
-              <circle cx="18" cy="18" r="3.4" fill="currentColor" stroke="none" />
-            </svg>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="ord-hero-title">{t('orders.bannerTitle')}</div>
-            <div className="ord-hero-sub">{t('orders.bannerSub')}</div>
-          </div>
-        </div>
-        <div className="ord-hero-stats">
-          <div className="ord-stat">
-            <span className="ord-stat-val">{ready.length + active.length}</span>
-            <span className="ord-stat-lbl">{t('orders.statWatching')}</span>
-          </div>
-          <div className="ord-stat">
-            <span className={`ord-stat-val ${ready.length ? 'is-ready' : ''}`}>{ready.length}</span>
-            <span className="ord-stat-lbl">{t('orders.statReady')}</span>
-          </div>
-          <div className="ord-stat">
-            <span className="ord-stat-val">{queuedUsd > 0 ? `$${queuedUsd.toFixed(2)}` : '—'}</span>
-            <span className="ord-stat-lbl">{t('orders.pipelineTitle')}</span>
-          </div>
-        </div>
-      </motion.section>
+      <OrdersHero
+        watching={ready.length + active.length}
+        ready={ready.length}
+        queuedUsd={queuedUsd}
+        bars={heroBars}
+      />
 
       {/*
         Rail of order types. Flat tinted cards with one accent each — no
@@ -571,16 +633,6 @@ export default function Orders() {
       <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
         {t('orders.manualNotice')}
       </motion.p>
-
-      {/*
-        Solana, next to the EVM cards rather than inside them: a Solana mint
-        has no CoinGecko id and the server watcher holds no key, so a Solana
-        "order" is a saved handoff that opens the swap pre-filled. The card
-        says so before it is used. See components/SolanaOrderCard.jsx.
-      */}
-      <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
-        <SolanaOrderCard />
-      </motion.div>
 
       {/*
         What is currently scheduled. Only shown once something exists, so an
@@ -639,6 +691,43 @@ export default function Orders() {
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('orders.empty')}</p>
         </motion.div>
       )}
+
+      {/*
+        ─── SOLANA, AT THE FOOT OF THE PAGE, BEHIND A FOLD ───────────────────
+        Requested: «سفارش سولانا را در باکس بازشونده و پایین صفحه ببر با ظاهری
+        مدرن‌تر.»
+
+        Where it sat before — between the EVM rail and the user's own live
+        orders — was the worst of the three possible places: an open form, for
+        a different network family, above the list the person opened this
+        screen to see. Its own comment argued it belonged "next to the EVM
+        cards", and it does; what it must not be is in the way of the orders
+        that are already running.
+
+        A Solana handoff is still not a price-watched order (no CoinGecko id,
+        no server watcher, nothing signed until the user signs it), so the fold
+        still says that in its own sub-line and again inside, before the first
+        field. The count badge is read from local storage when the page mounts
+        and again whenever the fold is opened — the card's own state is private
+        to it, and the badge is a reading, not a copy.
+      */}
+      <CollapsibleCard
+        id="ord-sol-fold"
+        icon={(
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3.5 8.5 6 6h14.5L18 8.5H3.5Z" />
+            <path d="M3.5 15.5 6 18h14.5L18 15.5H3.5Z" />
+          </svg>
+        )}
+        title={t('orders.solana.title')}
+        subtitle={t('orders.solana.sub')}
+        hint={t('orders.solana.hint')}
+        badge={solanaCount > 0 ? solanaCount : null}
+        unmountOnClose
+        onToggle={(open) => { if (open) setSolanaCount(loadSolanaHandoffs().length); }}
+      >
+        <SolanaOrderCard embedded onSaved={setSolanaCount} />
+      </CollapsibleCard>
 
       {/*
         ─── THE ONE WAY INTO THE GUIDE ─────────────────────────────────────

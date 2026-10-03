@@ -200,6 +200,60 @@ export default function Dydx({ embedded = false } = {}) {
     }
   };
 
+  /*
+   * ─── AN EXIT, WHICH THIS TAB DID NOT HAVE ──────────────────────────────────
+   * Reported across all three futures tabs: «هیچ جا نشون نمیده پوزیشن باز
+   * داره، نفروشه، ببندش، یا خارج بشه.» This tab listed positions and stopped
+   * there — a user could read that they were long BTC and had no button to do
+   * anything about it, in the same app, on the same connection that opened it.
+   *
+   * A dYdX close is the SAME order as an open with one difference that is not
+   * cosmetic: `reduceOnly: true`, and the side is the OPPOSITE of the position.
+   * Reduce-only is enforced by the venue, not by us, so this call can shrink a
+   * position and can never flip it into one on the other side — which is the
+   * exact accident a hand-built "close" gets wrong.
+   *
+   * The market is resolved from the live list by ticker rather than read off
+   * the position row: closing needs the venue's own decimals and oracle price,
+   * and a row carried over from an earlier read can be a funding tick stale.
+   */
+  const [closingMarket, setClosingMarket] = useState(null);
+  const closePosition = async (pos) => {
+    const live = markets.find((m) => m.ticker === pos.market);
+    if (!live || !Number.isFinite(Math.abs(Number(pos.size))) || Math.abs(Number(pos.size)) === 0) {
+      /* The market list has not answered yet, or the position is a zero-size
+         ghost. Both are retryable, and both say so with a code that already
+         has copy — an invented code would render raw. */
+      setError('ORDER_FAILED');
+      return;
+    }
+    setBusy(true);
+    setClosingMarket(pos.market);
+    setError(null);
+    setResult(null);
+    try {
+      /* `size` off a dYdX subaccount is signed (negative = short); the SDK
+         wants a positive quantity plus an explicit side. */
+      const sizeAbs = Math.abs(Number(pos.size));
+      const order = await placeDydxOrder({
+        market: live,
+        side: pos.side === 'LONG' ? 'sell' : 'buy',
+        size: sizeAbs,
+        reduceOnly: true
+      });
+      setResult(order);
+      await refreshAccount();
+      haptic?.('success');
+    } catch (e) {
+      const msg = String(e?.message || 'ORDER_FAILED');
+      setError(/insufficient|does not exist|not found/i.test(msg) ? 'NO_COLLATERAL' : msg.slice(0, 160));
+      haptic?.('error');
+    } finally {
+      setBusy(false);
+      setClosingMarket(null);
+    }
+  };
+
   const canReview = dydxAddress && market?.status === 'ACTIVE' && Number(size) > 0 && notional > 0 && (orderType === 'market' || (orderType === 'limit' && Number(limitPrice) > 0));
 
   return (
@@ -424,7 +478,7 @@ export default function Dydx({ embedded = false } = {}) {
         </motion.section>
       )}
 
-      {result && <div className="notice" style={{ marginTop: 16 }}><strong>{t('dydx.submitted')}</strong>{result.hash && <div className="mono faint" style={{ marginTop: 5, wordBreak: 'break-all' }}>{result.hash}</div>}</div>}
+      {result && <div className="notice" style={{ marginTop: 16 }}><strong>{result.reduceOnly ? t('dydx.closeSent') : t('dydx.submitted')}</strong>{result.hash && <div className="mono faint" style={{ marginTop: 5, wordBreak: 'break-all' }}>{result.hash}</div>}</div>}
 
       {dydxAddress && <section style={{ marginTop: 18 }}>
         <p className="section-label" style={{ marginBottom: 10 }}>{t('dydx.positions')}</p>
@@ -433,6 +487,18 @@ export default function Dydx({ embedded = false } = {}) {
             <div className="row-between"><strong>{p.market}</strong><span className={`pill ${p.side === 'LONG' ? 'pill-up' : 'pill-down'}`}>{p.side}</span></div>
             <div className="row-between" style={{ marginTop: 7 }}><span className="faint">{t('dydx.sizeLabel')}</span><span className="mono">{p.size}</span></div>
             <div className="row-between"><span className="faint">{t('dydx.entryPrice')}</span><span className="mono">${fmtPrice(Number(p.entryPrice))}</span></div>
+            {/* One tap, reduce-only, signed with the same session that opened
+                it. Before this the row was a read-only statement. */}
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              style={{ width: '100%', marginTop: 9 }}
+              disabled={busy || !dydxAddress}
+              onClick={() => closePosition(p)}
+              data-testid={`dydx-close-${p.market}`}
+            >
+              {closingMarket === p.market ? t('dydx.closing') : t('dydx.close')}
+            </button>
           </div>)}</div>
         )}
       </section>}

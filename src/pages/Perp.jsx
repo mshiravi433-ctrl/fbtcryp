@@ -12,6 +12,7 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import FuturesMarketChart from '../components/FuturesMarketChart';
 import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
+import FuturesPositionsCard from '../components/FuturesPositionsCard';
 import { IconActivity, IconRoute, IconShield, IconSparkle, IconTrend } from '../components/Icons';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
@@ -34,6 +35,7 @@ import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { publicAppUrl } from '../lib/solanaWallet.js';
 import lazyRetry from '../lib/lazyRetry';
 import '../styles/perp-modern.css';
+import '../styles/futures-positions.css';
 import '../styles/derivatives-glass.css';
 
 const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
@@ -958,6 +960,26 @@ export default function Perp() {
         </Suspense>
       ) : (
         <div className="perp-modern">
+
+      {/*
+        ─── THE ANSWER TO «هیچ جا نشون نمیده پوزیشن باز داری» ────────────────
+        Reported: a user opens a leveraged position from this tab, the sheet
+        closes, and afterwards there is nowhere that lists it, nothing that
+        sells it and nothing that exits it. That was exactly true — the ticket
+        wrote to the venue and the page forgot.
+
+        It is a LIST of what is open, with a close on every row, and it sits
+        ABOVE the pair list because the question "what am I already in?"
+        outranks "what else could I open?" for anybody who has a position. It
+        renders only when a wallet is actually connected (there is no account
+        to read otherwise, and an empty box that says «connect a wallet» in the
+        middle of a trading screen is noise, not information).
+
+        Both families are read from the card itself: Velocity through the
+        Solana SDK in this tab, Ostium through our BFF as unsigned calldata.
+        Nothing here holds a key, and every close is signed by the user.
+      */}
+      {(solReady || evmReady) && <FuturesPositionsCard />}
 
       {/*
         ─── THE PAGE IS A LIST. THAT IS THE WHOLE REDESIGN ──────────────────

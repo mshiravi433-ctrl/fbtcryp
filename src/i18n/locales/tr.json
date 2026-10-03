@@ -641,6 +641,8 @@
     "flowSourceDown": "Sermaye akışı kaynakları bu turda yanıt vermedi ({{reason}}); bu kartlar tahmin yerine boş kalır."
   },
   "orders": {
+    "pipelineTitle": "Sırada",
+    "heroLive": "Canlı izleme",
     "title": "Otomatik Emirler",
     "subtitle": "Bir kez ayarlayın, piyasayı sizin için izlesin.",
     "bannerTitle": "Otomatik Emirler — piyasa beklemez",
@@ -671,6 +673,8 @@
       "rebalance": "Yeni dengeleme"
     },
     "solana": {
+      "sub": "Çifti ve tutarı kaydedin — imza sizde",
+      "hint": "Bu bir fiyatı izlemez — Solana takasını bu çiftle açar.",
       "title": "Solana emri",
       "body": "Bu bir fiyat izlemesi değildir. Çifti ve miktarı kaydeder, sonra Solana takasını bu değerlerle açar. Siz imzalamadan hiçbir şey hareket etmez.",
       "network": "Ağ",
@@ -767,7 +771,6 @@
     "farmPromo": {
       "badge": "Farm",
       "title": "Az önce taşıdığın parayı çalıştır",
-      "body": "Farm getirileri protokollerden canlı okur ve mevduatı doğrudan kendi cüzdanına gönderir — pozisyonu asla biz tutmayız ve istediğin zaman çekebilirsin.",
       "chipLive": "Canlı getiri",
       "chipSelf": "Saklamasız",
       "chipExit": "Dilediğin an çık",
@@ -775,6 +778,10 @@
     }
   },
   "dydx": {
+    "errNotConnected": "Önce dYdX hesabınızı bağlayın.",
+    "closing": "Kapatılıyor…",
+    "close": "Kapat",
+    "closeSent": "Kapatma emri gönderildi:",
     "steps": {
       "title": "How it works",
       "connect": "Connect your EVM wallet and sign the dYdX onboarding message. The dYdX key remains in memory only.",
@@ -2618,6 +2625,38 @@
     }
   },
   "perp": {
+    "positions": {
+      "title": "Açık pozisyonlar",
+      "sub": "Doğrudan borsalardan",
+      "count": "{n} açık",
+      "reading": "Pozisyonlarınız okunuyor…",
+      "unavailable": "Borsa yanıt vermedi. Pozisyonunuz olduğu gibi duruyor — bu yalnızca bir okumaydı.",
+      "empty": "Şu anda açık pozisyonunuz yok.",
+      "entry": "Giriş",
+      "mark": "Piyasa",
+      "size": "Büyüklük",
+      "pnl": "K/Z",
+      "risk": "TP / SL",
+      "howMuch": "Ne kadarını kapatmak istiyorsunuz?",
+      "all": "Tamamı",
+      "close": "Pozisyonu kapat",
+      "closing": "Kapatılıyor…",
+      "confirm": "{pct}% kapat ve imzala",
+      "sent": "Kapatma gönderildi:",
+      "noWallet": "Açık pozisyonlarınızı görmek için cüzdan bağlayın.",
+      "venue": {
+        "solana": "Solana",
+        "evm": "Arbitrum"
+      },
+      "err": {
+        "USER_REJECTED": "İmzayı iptal ettiniz. Pozisyon olduğu gibi duruyor.",
+        "WALLET_NOT_CONNECTED": "Bu pozisyonun sahibi olan cüzdanı bağlayın.",
+        "NO_POSITION": "Borsada bu pozisyon artık yok — kapanmış olabilir.",
+        "INVALID_INPUT": "Borsa bu tutarı kabul etmedi. Daha büyük bir yüzde deneyin.",
+        "BROADCAST_FAILED": "İmzalandı ama işlem kabul edilmedi. Hiçbir şey değişmedi.",
+        "PROVIDER_UNAVAILABLE": "Borsa şu anda yanıt vermiyor. Birazdan tekrar deneyin."
+      }
+    },
     "terminal": {
       "pairsCount": "{{count}} çift",
       "pairSearch": "Çift ara",

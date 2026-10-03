@@ -314,7 +314,26 @@ async function presentNativeShade(title, options = {}) {
         title: String(title || 'FBT Swap'),
         body: options?.body ? String(options.body) : '',
         extra: options?.data || {},
-        smallIcon: 'ic_stat_icon_config_sample',
+        /*
+         * ─── A LAUNCHER-ICON PLACEHOLDER WAS HERE, AND IT SILENCED THE APP ──
+         * This read `ic_stat_icon_config_sample` — a name copied from the
+         * Capacitor docs that exists in NO resource folder of this project
+         * (`android/app/src/main/res/drawable/` holds exactly one status icon,
+         * `ic_stat_notification`, which capacitor.config.json and the FCM
+         * manifest defaults already point at).
+         *
+         * Android refuses to post a notification with no valid small icon:
+         * NotificationCompat builds it, then the framework rejects it and the
+         * post throws. The catch below swallows it, so the symptom is not an
+         * error — it is silence, in the ONE path used while the user is looking
+         * at the app (a foreground FCM message is re-raised through
+         * LocalNotifications, and so is every in-app trade notice).
+         *
+         * That is exactly the shape of the report: «نوتیفیکیشن … نمیرسه به
+         * گوشی.» It was never the sender, the channel or the sound — the local
+         * notification could not be posted at all on an app that was open.
+         */
+        smallIcon: 'ic_stat_notification',
         iconColor: '#00e5ff',
         /*
          * OUR tone, not the device's.
