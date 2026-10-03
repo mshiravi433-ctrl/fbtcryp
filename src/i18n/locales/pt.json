@@ -641,6 +641,8 @@
     "flowSourceDown": "As fontes de fluxo não responderam nesta leitura ({{reason}}); esses cartões ficam vazios em vez de estimados."
   },
   "orders": {
+    "pipelineTitle": "Na fila",
+    "heroLive": "Monitorando ao vivo",
     "title": "Ordens automáticas",
     "subtitle": "Configure uma vez e deixe-as acompanhar o mercado por você.",
     "bannerTitle": "Ordens automáticas — o mercado não espera",
@@ -671,6 +673,8 @@
       "rebalance": "Novo reequilíbrio"
     },
     "solana": {
+      "sub": "Guarde o par e o valor — você mesmo assina",
+      "hint": "Isto não vigia um preço — abre a troca na Solana com este par.",
       "title": "Ordem Solana",
       "body": "Isto não observa um preço. Guarda o par e a quantidade e abre a troca Solana com esses valores. Nada se move até você assinar.",
       "network": "Rede",
@@ -767,7 +771,6 @@
     "farmPromo": {
       "badge": "Farm",
       "title": "Ponha o dinheiro que acabou de mover para trabalhar",
-      "body": "O Farm lê os rendimentos ao vivo dos protocolos e envia o depósito para a sua própria carteira — nunca ficamos com a posição e você pode sacar quando quiser.",
       "chipLive": "Rendimento ao vivo",
       "chipSelf": "Sem custódia",
       "chipExit": "Saque quando quiser",
@@ -775,6 +778,10 @@
     }
   },
   "dydx": {
+    "errNotConnected": "Ligue primeiro a sua conta dYdX.",
+    "closing": "A fechar…",
+    "close": "Fechar",
+    "closeSent": "Ordem de fecho enviada:",
     "steps": {
       "title": "How it works",
       "connect": "Connect your EVM wallet and sign the dYdX onboarding message. The dYdX key remains in memory only.",
@@ -2618,6 +2625,38 @@
     }
   },
   "perp": {
+    "positions": {
+      "title": "Posições abertas",
+      "sub": "Ao vivo das corretoras",
+      "count": "{n} aberta(s)",
+      "reading": "A ler as suas posições…",
+      "unavailable": "A corretora não respondeu. A sua posição está intacta — isto foi apenas uma leitura.",
+      "empty": "Neste momento não tem posições abertas.",
+      "entry": "Entrada",
+      "mark": "Mercado",
+      "size": "Tamanho",
+      "pnl": "L/P",
+      "risk": "TP / SL",
+      "howMuch": "Quanto quer fechar?",
+      "all": "Tudo",
+      "close": "Fechar posição",
+      "closing": "A fechar…",
+      "confirm": "Fechar {pct}% e assinar",
+      "sent": "Fecho enviado:",
+      "noWallet": "Ligue uma carteira para ver as suas posições abertas.",
+      "venue": {
+        "solana": "Solana",
+        "evm": "Arbitrum"
+      },
+      "err": {
+        "USER_REJECTED": "Cancelou a assinatura. A posição está intacta.",
+        "WALLET_NOT_CONNECTED": "Ligue a carteira dona desta posição.",
+        "NO_POSITION": "A corretora já não tem esta posição — pode estar fechada.",
+        "INVALID_INPUT": "A corretora recusou esse valor. Tente uma percentagem maior.",
+        "BROADCAST_FAILED": "Foi assinado mas a transação não foi aceite. Nada mudou.",
+        "PROVIDER_UNAVAILABLE": "A corretora não responde agora. Tente daqui a pouco."
+      }
+    },
     "terminal": {
       "pairsCount": "{{count}} pares",
       "pairSearch": "Buscar pares",

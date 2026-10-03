@@ -641,6 +641,8 @@
     "flowSourceDown": "Les sources de flux n’ont pas répondu cette fois ({{reason}}) ; ces cartes restent vides plutôt qu’estimées."
   },
   "orders": {
+    "pipelineTitle": "En attente",
+    "heroLive": "Surveillance en direct",
     "title": "Ordres automatiques",
     "subtitle": "Réglez-les une fois et laissez-les surveiller le marché pour vous.",
     "bannerTitle": "Ordres automatiques — le marché n’attend pas",
@@ -671,6 +673,8 @@
       "rebalance": "Nouveau rééquilibrage"
     },
     "solana": {
+      "sub": "Enregistrez la paire et le montant — c’est vous qui signez",
+      "hint": "Ceci ne surveille pas de prix : cela ouvre le swap Solana avec cette paire.",
       "title": "Ordre Solana",
       "body": "Ceci ne surveille pas un prix. Il enregistre la paire et le montant, puis ouvre l’échange Solana avec ces valeurs. Rien ne bouge tant que vous ne signez pas.",
       "network": "Réseau",
@@ -767,7 +771,6 @@
     "farmPromo": {
       "badge": "Farm",
       "title": "Faites travailler l’argent que vous venez de déplacer",
-      "body": "Farm lit les rendements en direct des protocoles et envoie le dépôt vers votre propre portefeuille — nous ne détenons jamais la position et vous pouvez retirer à tout moment.",
       "chipLive": "Rendements en direct",
       "chipSelf": "Non dépositaire",
       "chipExit": "Retrait à tout moment",
@@ -775,6 +778,10 @@
     }
   },
   "dydx": {
+    "errNotConnected": "Connectez d’abord votre compte dYdX.",
+    "closing": "Clôture…",
+    "close": "Clôturer",
+    "closeSent": "Ordre de clôture envoyé :",
     "steps": {
       "title": "How it works",
       "connect": "Connect your EVM wallet and sign the dYdX onboarding message. The dYdX key remains in memory only.",
@@ -2618,6 +2625,38 @@
     }
   },
   "perp": {
+    "positions": {
+      "title": "Positions ouvertes",
+      "sub": "En direct des plateformes",
+      "count": "{n} ouverte(s)",
+      "reading": "Lecture de vos positions…",
+      "unavailable": "La plateforme n’a pas répondu. Votre position est intacte — ceci n’était qu’une lecture.",
+      "empty": "Aucune position ouverte pour le moment.",
+      "entry": "Entrée",
+      "mark": "Cours",
+      "size": "Taille",
+      "pnl": "G/P",
+      "risk": "TP / SL",
+      "howMuch": "Combien voulez-vous clôturer ?",
+      "all": "Tout",
+      "close": "Clôturer la position",
+      "closing": "Clôture…",
+      "confirm": "Clôturer {pct} % et signer",
+      "sent": "Clôture envoyée :",
+      "noWallet": "Connectez un portefeuille pour voir vos positions ouvertes.",
+      "venue": {
+        "solana": "Solana",
+        "evm": "Arbitrum"
+      },
+      "err": {
+        "USER_REJECTED": "Vous avez annulé la signature. La position est intacte.",
+        "WALLET_NOT_CONNECTED": "Connectez le portefeuille propriétaire de cette position.",
+        "NO_POSITION": "La plateforme n’a plus cette position — elle est peut-être déjà clôturée.",
+        "INVALID_INPUT": "La plateforme a refusé ce montant. Essayez un pourcentage plus élevé.",
+        "BROADCAST_FAILED": "La signature a eu lieu mais la transaction a été refusée. Rien n’a changé.",
+        "PROVIDER_UNAVAILABLE": "La plateforme ne répond pas. Réessayez dans un instant."
+      }
+    },
     "terminal": {
       "pairsCount": "{{count}} paires",
       "pairSearch": "Rechercher des paires",

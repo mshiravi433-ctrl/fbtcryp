@@ -1,0 +1,178 @@
+/**
+ * FOLDING CARD — shared, theme-aware, motion-budgeted.
+ * ===========================================================================
+ *
+ * Used by the Solana handoff box on AUTO ORDERS (and available to any other
+ * screen that needs "the rest of the page, on request"). Behaviour and the
+ * reasons for not using `<details>` live in components/CollapsibleCard.jsx;
+ * this file is the look.
+ *
+ * MOTION: exactly ONE transition — `max-height` on the body. It runs on the
+ * compositor-owned property for a box that is already isolated, and it is
+ * shortened (not removed) when the user has asked for less motion. The
+ * chevron rotates with `transform` only. There is no blur, no glow and no
+ * infinite animation anywhere in here: a fold is a control, and a control
+ * that twitches is a distraction from the number the user is reading.
+ *
+ * THEMES: the base block is dark (the app's canvas); the light block at the
+ * bottom re-inks the surface, the border and the two text weights. Both are
+ * written explicitly — nothing relies on inheriting a dark value into white.
+ */
+
+.fold {
+  position: relative;
+  margin-top: 10px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+
+.fold.is-open {
+  border-color: color-mix(in srgb, var(--rgb-4) 32%, var(--line));
+  background:
+    linear-gradient(168deg, color-mix(in srgb, var(--rgb-4) 7%, transparent), transparent 46%),
+    var(--bg-panel);
+}
+
+/* ── the header: a real button, 52px tall, 16px radius inside the card ───── */
+
+.fold-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  min-height: 52px;
+}
+
+:root[dir='rtl'] .fold-head { text-align: right; }
+
+.fold-head:active { transform: scale(0.995); }
+
+.fold-ico {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(140deg, #9945ff, #14f195);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.fold-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.fold-title {
+  font-size: 13.5px;
+  font-weight: 900;
+  line-height: 1.3;
+  color: var(--text-1);
+}
+
+.fold-sub {
+  font-size: 11.2px;
+  line-height: 1.6;
+  color: var(--text-3);
+  /* Two lines maximum: the header is a label, not a paragraph. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fold-badge {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  text-align: center;
+  color: color-mix(in srgb, var(--rgb-4) 82%, var(--text-1));
+  background: color-mix(in srgb, var(--rgb-4) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-4) 28%, transparent);
+}
+
+.fold-chev {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-3) 12%, transparent);
+  transition: transform 0.28s cubic-bezier(0.22, 0.7, 0.3, 1), color 0.2s ease;
+}
+
+.fold.is-open .fold-chev {
+  transform: rotate(180deg);
+  color: color-mix(in srgb, var(--rgb-4) 80%, var(--text-1));
+}
+
+.fold-hint {
+  margin: 0;
+  padding: 0 13px 12px;
+  font-size: 11.2px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
+/* ── the body ─────────────────────────────────────────────────────────────── */
+
+.fold-body {
+  overflow: hidden;
+  transition: max-height 0.34s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+
+.fold-inner {
+  padding: 0 13px 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold-body { transition: none; }
+  .fold-chev { transition: none; }
+  .fold-head:active { transform: none; }
+}
+
+/* ── light theme ──────────────────────────────────────────────────────────── */
+
+:root[data-theme='light'] .fold {
+  border-color: rgba(16, 20, 40, 0.1);
+  background: #ffffff;
+}
+
+:root[data-theme='light'] .fold.is-open {
+  border-color: rgba(0, 143, 90, 0.32);
+  background:
+    linear-gradient(168deg, rgba(0, 168, 107, 0.05), transparent 48%),
+    #ffffff;
+}
+
+:root[data-theme='light'] .fold-title { color: #10142a; }
+:root[data-theme='light'] .fold-sub,
+:root[data-theme='light'] .fold-hint { color: #4c5570; }
+
+:root[data-theme='light'] .fold-ico { border-color: rgba(16, 20, 40, 0.08); }
+
+:root[data-theme='light'] .fold-badge {
+  color: #006b47;
+  background: rgba(0, 168, 107, 0.1);
+  border-color: rgba(0, 168, 107, 0.24);
+}
+
+:root[data-theme='light'] .fold-chev {
+  color: #59617d;
+  background: rgba(16, 20, 40, 0.05);
+}
+
+:root[data-theme='light'] .fold.is-open .fold-chev { color: #00794f; }

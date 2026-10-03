@@ -30,10 +30,12 @@ import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
  * CoinDetail during idle time and swallows failures. See lib/lazyRetry.js.
  */
 import lazyRetry from './lib/lazyRetry';
+import { seoEntryHandoff } from './lib/webEntry';
 import Welcome from './pages/Welcome';
 import Onboarding from './pages/Onboarding';
 import Guide from './pages/Guide';
 import Splash from './pages/Splash';
+import { pingWatchTick } from './lib/watchTick';
 import GalaxyBackdrop from './components/GalaxyBackdrop';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
@@ -537,6 +539,25 @@ function normalizeColdStartRoute() {
 
 export default function App() {
   const { t } = useTranslation();
+
+  /*
+   * ─── THE WEB FRONT DOOR GOES TO THE SEO PAGE, THE APP KEEPS ITS WELCOME ───
+   * «صفحهٔ خوش‌آمد فقط در اپ اندروید و در حالت اپ وب بماند؛ کاربر مرورگر باید
+   *  برود به /decentralized-crypto-exchange تا گوگل ایندکس کند.»
+   *
+   * Runs FIRST, and as a lazy initialiser for the same reason the route
+   * normaliser below is one: this has to decide before anything paints. It
+   * returns true only when the document is already navigating away — the app
+   * then renders nothing rather than a splash nobody will ever see.
+   *
+   * The whole rule (native always wins, `?app=1` always wins, a returning user
+   * and a deep link are never redirected) lives in lib/webEntry.js, where it is
+   * a pure function and where the tests can reach it. `true` here means the
+   * browser is on its way to the landing page.
+   */
+  const [seoHandoff] = useState(seoEntryHandoff);
+  if (seoHandoff) return null;
+
   /*
    * Lazy initialiser, so this runs exactly once and BEFORE <HashRouter> is
    * created below — a `useEffect` would run after the router had already read
@@ -679,6 +700,14 @@ export default function App() {
          users who already opted in. Neither can prompt — both are no-ops
          unless the device opted in before. */
       refreshWebPushIfOptedIn().catch(() => {});
+      /* ─── AND THE WATCH CLOCK ────────────────────────────────────────────
+         Every app open advances the server's order watcher by one tick (it is
+         throttled server-side, so most of these do nothing). Without a
+         sub-daily trigger an auto order that comes due could not be announced
+         for up to a day — see server/watch.js and lib/orders.js
+         pingWatchTick. Deliberately last and not awaited: push registration
+         matters more than a tick that the next open will repeat. */
+      pingWatchTick().catch(() => {});
     }, 900);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps

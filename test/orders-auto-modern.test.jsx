@@ -251,11 +251,35 @@ describe('auto orders — networks, tokens and price feeds', () => {
     expect(row.querySelector('i[data-chain="42161"]')).toBeTruthy();
   });
 
-  it('keeps the Solana handoff on its own network, next to the EVM cards', async () => {
+  /*
+   * THE SOLANA HANDOFF MOVED BEHIND A FOLD AT THE FOOT OF THE PAGE.
+   *
+   * Requested: «سفارش سولانا را در باکس بازشونده و پایین صفحه ببر با ظاهری
+   * مدرن‌تر.» It used to render open, between the EVM rail and the user's own
+   * live orders — an unrequested form, for a different network family, above
+   * the list the screen exists to show.
+   *
+   * What must survive the move: the card still says it is a saved handoff and
+   * not a fill (both in the fold header, before the tap, and inside, before the
+   * first field), and the form is one tap away rather than gone.
+   */
+  it('keeps the Solana handoff behind a fold, and still says what it is', async () => {
     mount();
+    const fold = await screen.findByTestId('ord-sol-fold');
+    expect(fold.dataset.open).toBe('false');
+    /* the disclosure is readable WITHOUT opening anything: that is the promise
+       that must not be one tap deep */
+    expect(fold.textContent).toContain('orders.solana.title');
+    expect(fold.textContent).toContain('orders.solana.hint');
+    /* and the body really is absent while closed, not merely styled away */
+    expect(screen.queryByTestId('ord-sol-card')).toBeNull();
+
+    fireEvent.click(within(fold).getByRole('button', { expanded: false }));
+    await waitFor(() => expect(fold.dataset.open).toBe('true'));
+
     const card = await screen.findByTestId('ord-sol-card');
-    expect(card.textContent).toContain('orders.solana.title');
     /* it says what it is before it is used: a saved handoff, not a fill */
+    expect(card.textContent).toContain('orders.solana.body');
     expect(card.textContent).toContain('orders.solana.evmHint');
     expect(within(card).getByText('orders.solana.create')).toBeTruthy();
   });

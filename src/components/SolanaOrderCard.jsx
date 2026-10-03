@@ -36,8 +36,27 @@ import { SOL_MINT, USDC_MINT } from '../lib/solana';
  *
  * The saved rows are capped (40) and local. Nothing here claims a fill, and
  * nothing is sent to a server.
+ *
+ * ─── IT MOVED TO THE BOTTOM OF THE PAGE, BEHIND A FOLD ─────────────────────
+ * Requested: «سفارش سولانا را در باکس بازشونده و پایین صفحه ببر با ظاهری
+ * مدرن‌تر.» It used to sit between the EVM rail and the user's own live
+ * orders, which put a form they had not asked for above the list they came to
+ * see. `embedded` renders the form with no outer chrome so
+ * components/CollapsibleCard.jsx can own the header, the icon and the fold;
+ * the non-embedded path is kept because other screens (and the tests) mount
+ * this card directly.
+ *
+ * ─── EVERY MESSAGE HERE IS A KEY ───────────────────────────────────────────
+ * Reported on this exact card: «ارورها را به صورت استرینگ میزنه … با توجه زبان
+ * انتخابی باید درست بزنه.» Both calls below were always written as keys —
+ * `orders.solana.err.BAD_AMOUNT`, `orders.solana.notice` — and the contents of
+ * the toast was the defect: the toast host resolved `toast.<key>` with an
+ * empty-string default, and because i18n is configured with
+ * `returnEmptyString: false` the "missing" answer came back as the key path
+ * itself. Fixed in components/Toasts.jsx (see MISSING there); the keys here are
+ * translated in all twelve locales and now actually render.
  */
-export default function SolanaOrderCard() {
+export default function SolanaOrderCard({ embedded = false, onSaved = null } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
@@ -103,7 +122,12 @@ export default function SolanaOrderCard() {
       return;
     }
     haptic?.('success');
-    setRows(loadSolanaHandoffs());
+    const next = loadSolanaHandoffs();
+    setRows(next);
+    /* The fold's badge is owned by the page, so the count is reported rather
+       than duplicated. Optional, so the standalone card (and the tests that
+       mount it alone) do not have to supply a handler. */
+    onSaved?.(next.length);
     notify('orders.solana.notice', 'success');
   };
 
@@ -118,23 +142,21 @@ export default function SolanaOrderCard() {
   };
 
   const drop = (id) => {
-    setRows(removeSolanaHandoff(id));
+    const next = removeSolanaHandoff(id);
+    setRows(next);
+    onSaved?.(next.length);
   };
 
-  return (
-    <section className="ord-sol-card" data-testid="ord-sol-card">
-      <div className="ord-sol-head">
-        <span className="ord-sol-mark" aria-hidden="true">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3.5 8.5 6 6h14.5L18 8.5H3.5Z" />
-            <path d="M3.5 15.5 6 18h14.5L18 15.5H3.5Z" />
-          </svg>
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 900, fontSize: 13.5, lineHeight: 1.3 }}>{t('orders.solana.title')}</div>
-          <div className="faint" style={{ fontSize: 11.4, lineHeight: 1.65, marginTop: 3 }}>{t('orders.solana.body')}</div>
-        </div>
-      </div>
+  const form = (
+    <>
+      {/* The same disclosure the standalone card carried in its header: this
+          is a saved handoff, not a price-watched order. Inside the fold it
+          stays first, so it is read before the fields are filled. */}
+      {embedded && (
+        <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.75, margin: '0 0 10px' }}>
+          {t('orders.solana.body')}
+        </p>
+      )}
 
       <div className="row" style={{ gap: 8 }}>
         <button type="button" className="ord-sol-row" style={{ flex: 1, minWidth: 0 }} onClick={() => setPicker('from')}>
@@ -195,6 +217,27 @@ export default function SolanaOrderCard() {
           ))}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className={embedded ? 'ord-sol-body' : 'ord-sol-card'} data-testid="ord-sol-card">
+      {!embedded && (
+        <div className="ord-sol-head">
+          <span className="ord-sol-mark" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.5 8.5 6 6h14.5L18 8.5H3.5Z" />
+              <path d="M3.5 15.5 6 18h14.5L18 15.5H3.5Z" />
+            </svg>
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 900, fontSize: 13.5, lineHeight: 1.3 }}>{t('orders.solana.title')}</div>
+            <div className="faint" style={{ fontSize: 11.4, lineHeight: 1.65, marginTop: 3 }}>{t('orders.solana.body')}</div>
+          </div>
+        </div>
+      )}
+
+      {form}
 
       <SolanaTokenPicker
         open={picker != null}
@@ -205,6 +248,6 @@ export default function SolanaOrderCard() {
         side={picker === 'from' ? 'from' : 'to'}
         selectedMints={[fromMint, toMint]}
       />
-    </section>
+    </div>
   );
 }

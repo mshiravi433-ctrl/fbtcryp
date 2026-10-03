@@ -1,4 +1,5 @@
 import { activateDca } from '../src/lib/dcaExecution.js';
+import { syncWatches } from '../src/lib/orders.js';
 /**
  * Pure-logic unit tests. No DOM, no bundler — these modules are deliberately
  * free of React and browser APIs so they can be exercised directly, which is
@@ -216,6 +217,7 @@ import { bestVenue, fundingCost, liquidationMove } from '../src/lib/perp.js';
 import {
   LADDER_MAX_STEPS,
   LADDER_MIN_STEPS,
+  SCHEDULED_TYPES,
   WATCHED_TYPES,
   ladderPortion,
   ladderRungs
@@ -1330,6 +1332,108 @@ export default async function run() {
     t('watch payload carries no address', !keys.some((k) => /address|owner|wallet/i.test(k)));
     t('watch payload has exactly the fields needed to compare a price', keys.length === 8);
     t('watch payload keeps the price denomination', item.priceOf === 'from');
+  }
+
+  /*
+   * ------------------ and the payload syncWatches REALLY sends -------------
+   *
+   * The block above mirrors the mapping by hand, which means it agrees with
+   * whatever the author believed at the time. This one runs the real function
+   * with a stubbed push identity and inspects the request body, because the
+   * reported bug — «وقتی زمان سواپ فرا برسه … نمیرسه به گوشی» — lived exactly
+   * here: a DCA plan was filtered out of the payload, so the server had no
+   * clock to watch and the phone stayed silent with the app closed.
+   */
+  {
+    const dueAt = Date.now() + 3_600_000;
+    const dca = {
+      id: 'plan-dca-1',
+      type: 'dca',
+      status: 'active',
+      interval: 'weekly',
+      totalRuns: 5,
+      runsDone: 2,
+      nextRunAt: dueAt,
+      amountIn: '250',
+      chainId: 56,
+      fromToken: { symbol: 'BTC' },
+      toToken: { symbol: 'USDT' }
+    };
+    const twap = {
+      id: 'plan-twap-1',
+      type: 'twap',
+      status: 'active',
+      slices: 6,
+      sliceGapMs: 300_000,
+      nextRunAt: dueAt,
+      amountIn: '3',
+      fromToken: { symbol: 'ETH', coingeckoId: 'ethereum' },
+      toToken: { symbol: 'USDT', coingeckoId: 'tether' }
+    };
+    /* A level-triggered order on a token the market feed does not list must
+       still be dropped — the clock types are the exception, not the rule. */
+    const unlisted = {
+      id: 'limit-1',
+      type: 'limit',
+      status: 'active',
+      targetRate: 2,
+      direction: 'above',
+      fromToken: { symbol: 'X' },
+      toToken: { symbol: 'Y' }
+    };
+    /* Paused plans are not uploaded: a plan the user stopped must not alert. */
+    const paused = { ...dca, id: 'plan-paused', status: 'paused' };
+    /* A finished run counter of zero is still a run — `nextRunAt` decides. */
+    const lastRun = { ...dca, id: 'plan-last', runsLeft: undefined, totalRuns: 2, runsDone: 2 };
+
+    const calls = [];
+    const realFetch = globalThis.fetch;
+    /* `navigator` is a getter on the Node global, so it has to be replaced
+       through a descriptor rather than assigned. Restored in the finally. */
+    const navDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        serviceWorker: {
+          getRegistration: async () => ({
+            pushManager: { getSubscription: async () => ({ endpoint: 'https://push.example.com/device-1' }) }
+          })
+        }
+      }
+    });
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url, body: init?.body ? JSON.parse(init.body) : null });
+      return { ok: true, json: async () => ({ ok: true }) };
+    };
+
+    try {
+      await syncWatches([dca, twap, unlisted, paused, lastRun]);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (navDesc) Object.defineProperty(globalThis, 'navigator', navDesc);
+      else delete globalThis.navigator;
+    }
+
+    const sent = calls[0]?.body?.items ?? [];
+    const byId = new Map(sent.map((i) => [i.id, i]));
+
+    t('a DCA plan is uploaded at all', Boolean(byId.get('plan-dca-1')));
+    t('a TWAP plan is uploaded at all', Boolean(byId.get('plan-twap-1')));
+    t('exactly the two live plans are uploaded', sent.length === 2);
+    t('an unlisted, unpriced level order is still dropped', !byId.has('limit-1'));
+    t('a paused plan is not uploaded', !byId.has('plan-paused'));
+    t('a level alert carries a target and a direction, as before',
+      byId.get('plan-dca-1')?.targetRate === undefined && !!byId.get('plan-dca-1')?.nextRunAt);
+    t('a plan carries the due time the server must compare against',
+      byId.get('plan-dca-1')?.nextRunAt === dueAt);
+    t('a DCA carries the interval it recurs by',
+      byId.get('plan-dca-1')?.intervalMs === 604_800_000);
+    t('the runs left are derived from total minus done, not trusted blindly',
+      byId.get('plan-dca-1')?.runsLeft === 3);
+    t('a TWAP carries its slice gap', byId.get('plan-twap-1')?.intervalMs === 300_000);
+    t('...and never the amount it is for', sent.every((i) => i.amountIn === undefined));
+    t('...and never the wallet or the chain', sent.every((i) => i.chainId === undefined));
+    t('a finished plan is not worth uploading', !byId.has('plan-last'));
   }
 
   /* ---------------------- push transport (android) ------------------------ */
@@ -5650,11 +5754,35 @@ export default async function run() {
     t('ladders are watched too', WATCHED_TYPES.has('ladder'));
     t('limit orders still are', WATCHED_TYPES.has('limit'));
     /*
-     * DCA stays OFF the server deliberately: it is time-based, the device
-     * already knows the schedule, and uploading it would hand over a
-     * behavioural profile for no functional gain.
+     * ─── AND THE TWO THAT USED TO BE EXCLUDED ON PURPOSE ────────────────────
+     * DCA and TWAP were kept off this list with a real argument: they are
+     * time-based, the device already knows the schedule, and uploading them
+     * tells the server when somebody buys.
+     *
+     * That argument lost to a harder fact, reported from a phone:
+     *
+     *   «وقتی زمان سواپ فرا برسه باید سریع متوجه بشه اما نمیرسه به گوشی.»
+     *
+     * The device knows the schedule and is ASLEEP when it comes due — Android
+     * freezes its timers, so a plan due at 09:00 is announced whenever the app
+     * is next opened, which is not what "alert" means. The server is the only
+     * party awake at 09:00, so it has to know the time. The privacy line is
+     * drawn at the amount and the wallet, both of which stay on the device.
+     *
+     * These two assertions are the exact inverse of what was here, kept as a
+     * pair so the reasoning above cannot be quietly undone in either
+     * direction without deleting the reason it changed.
      */
-    t('DCA is deliberately not uploaded', !WATCHED_TYPES.has('dca'));
+    t('a DCA plan is now mirrored so a closed phone can be alerted',
+      WATCHED_TYPES.has('dca') && SCHEDULED_TYPES.has('dca'));
+    t('...and so is a TWAP', WATCHED_TYPES.has('twap') && SCHEDULED_TYPES.has('twap'));
+    t('the clock-driven types are evaluated from the due time, not a rate',
+      evaluateWatch({ type: 'dca', nextRunAt: 1000 }, null, 1500).hit === true &&
+      evaluateWatch({ type: 'dca', nextRunAt: 1000 }, null, 500).hit === false);
+    t('...and a missing price cannot silence a plan that is due',
+      evaluateWatch({ type: 'twap', nextRunAt: 1000 }, null, 1500).hit === true);
+    t('a plan with no due time never fires, rather than firing immediately',
+      evaluateWatch({ type: 'dca' }, null, Date.now()).hit === false);
   }
 
   /* ==================== coin-id index (more coins) ======================= */
@@ -6492,7 +6620,8 @@ export default async function run() {
       chainId: 56, fromToken: { symbol: 'A' }, toToken: { symbol: 'B' }, amountIn: '1',
       type: 'rebalance', targetRate: 700, driftPct: REBALANCE_MAX_DRIFT + 1
     }) === 'BAD_DRIFT');
-    t('TWAP is not uploaded to the server', !WATCHED_TYPES.has('twap'));
+    t('a TWAP is mirrored with the slice gap it recurs by',
+      WATCHED_TYPES.has('twap') && SCHEDULED_TYPES.has('twap'));
     t('rebalance IS watched in the background', WATCHED_TYPES.has('rebalance'));
   }
 

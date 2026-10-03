@@ -74,6 +74,33 @@ const COPY = {
   }
 };
 
+/**
+ * ─── SCHEDULED ALERTS: «زمان سواپ رسید» IS NOT «به هدف رسید» ────────────────
+ * A DCA run and a price target produce the same STAGE («ready») and mean two
+ * different things. «۱ BTC به ۶۵٬۰۰۰ دلار رسید» is false for a plan whose run
+ * simply came due — the price is wherever it is, and the user was told a
+ * number. So the trigger reason gets its own copy in every locale below, and
+ * the price line is only used where a price actually decided the alert.
+ *
+ * The body also says what to DO («اپ را باز کن و سواپ را امضا کن») because a
+ * notification that only reports a state leaves the person who tapped it one
+ * screen away from an answer.
+ */
+const SCHEDULE_COPY = {
+  fa: { title: 'زمان سواپ رسید', body: 'نوبت بعدی برنامهٔ {base}→{quote} رسید. اپ را باز کن و سواپ را امضا کن.' },
+  en: { title: 'Time to swap', body: 'The next step of your {base}→{quote} plan is due. Open the app and sign the swap.' },
+  ar: { title: 'حان وقت التبديل', body: 'وصل موعد الخطوة التالية لخطتك {base}→{quote}. افتح التطبيق ووقّع التبديل.' },
+  es: { title: 'Hora de cambiar', body: 'Toca el siguiente paso de tu plan {base}→{quote}. Abre la app y firma el swap.' },
+  fr: { title: 'C’est l’heure du swap', body: 'La prochaine étape de votre plan {base}→{quote} est due. Ouvrez l’app et signez l’échange.' },
+  hi: { title: 'स्वैप का समय', body: 'आपकी {base}→{quote} योजना का अगला चरण आ गया है। ऐप खोलें और स्वैप साइन करें।' },
+  id: { title: 'Waktunya swap', body: 'Langkah berikutnya dari rencana {base}→{quote} sudah tiba. Buka aplikasi dan tanda tangani swap.' },
+  pt: { title: 'Hora de trocar', body: 'A próxima etapa do seu plano {base}→{quote} chegou. Abra o app e assine a troca.' },
+  ru: { title: 'Время обмена', body: 'Подошёл следующий шаг плана {base}→{quote}. Откройте приложение и подпишите обмен.' },
+  tr: { title: 'Takas zamanı', body: '{base}→{quote} planınızın sıradaki adımı geldi. Uygulamayı açıp takası imzalayın.' },
+  ur: { title: 'سواپ کا وقت', body: 'آپ کے {base}→{quote} پلان کا اگلا مرحلہ آ گیا ہے۔ ایپ کھولیں اور سواپ پر دستخط کریں۔' },
+  zh: { title: '该兑换了', body: '你的 {base}→{quote} 计划下一步已到期。打开应用并签名兑换。' }
+};
+
 export function buildStageAlert({
   stage,
   kind = 'order',
@@ -81,15 +108,29 @@ export function buildStageAlert({
   base = '',
   quote = '',
   rate = '',
-  id = 'x'
+  id = 'x',
+  scheduled = false
 } = {}) {
   const st = STAGES.includes(stage) ? stage : 'ready';
   const family = kind === 'intent' ? 'intent' : 'order';
   const pack = COPY[family][lang] || COPY[family].en;
   const line = pack[st];
   const style = STAGE_STYLE[st];
-  const title = String(line.title).slice(0, 48);
-  const body = String(line.body)
+  /*
+   * A scheduled alert replaces the copy wholesale rather than editing the
+   * price sentence, because the two share no words: one reports a LEVEL, the
+   * other reports a TIME. Only order/intent `ready` alerts can be scheduled —
+   * a pending or closed stage never is.
+   */
+  const scheduleLine = scheduled && st === 'ready'
+    ? (SCHEDULE_COPY[String(lang).split('-')[0]] || SCHEDULE_COPY.en)
+    : null;
+  const source = scheduleLine
+    ? { title: scheduleLine.title, body: scheduleLine.body }
+    : line;
+
+  const title = String(source.title).slice(0, 48);
+  const body = String(source.body)
     .replace('{base}', String(base).slice(0, 16) || '—')
     .replace('{quote}', String(quote).slice(0, 16) || '—')
     .replace('{rate}', String(rate || '—').slice(0, 24))
@@ -98,6 +139,7 @@ export function buildStageAlert({
   return {
     title,
     body,
+    scheduled: Boolean(scheduled),
     url,
     tag: `fbt-${family}-${st}-${String(id).slice(0, 40)}`,
     stage: st,

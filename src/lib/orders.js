@@ -87,11 +87,28 @@ export const ORDER_TYPES = ['limit', 'dca', 'trailing', 'bracket', 'ladder', 'tw
  * already out of step once. Two copies of the same intent is how a trailing
  * stop ends up mirrored by one filter and ignored by the other.
  *
- * DCA is deliberately absent: it is time-based, the device already knows the
- * schedule, and sending it would hand the server a behavioural profile it does
- * not need to do its job.
+ * ─── DCA AND TWAP JOINED, AND THIS IS THE REPORTED BUG ─────────────────────
+ * «برای سفارش خودکار … وقتی زمان سواپ فرا برسه باید سریع متوجه بشه اما
+ *  نمیرسه به گوشی.»
+ *
+ * They used to be excluded here on privacy grounds, which was a real argument
+ * that lost to a harder one: a plan whose run is due while the phone is in a
+ * pocket has nobody to notice it. The device is asleep, its timers are frozen
+ * by Android, and the one machine that is awake — the server — had never been
+ * told the schedule existed. So the plan is mirrored, and the payload holds
+ * the least that can possibly be enough:
+ *
+ *   sent:      the pair SYMBOLS, the next due time, the interval, runs left
+ *   never sent: the amount, the wallet, the price target (a DCA has none)
+ *
+ * See server/watch.js for the storage-side note. The client stays the source
+ * of truth for the schedule: every sync replaces the server's copy, so a
+ * paused or edited plan cannot keep alerting on the old times.
  */
-export const WATCHED_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder', 'rebalance']);
+export const WATCHED_TYPES = new Set(['limit', 'trailing', 'bracket', 'ladder', 'rebalance', 'dca', 'twap']);
+
+/** The types whose trigger is the clock rather than a rate. */
+export const SCHEDULED_TYPES = new Set(['dca', 'twap']);
 
 /** TWAP: how many slices, and how long the window may be. */
 export const TWAP_MIN_SLICES = 2;
@@ -815,17 +832,60 @@ export async function syncWatches(orders) {
      */
     const items = orders
       .filter((o) => o.status === 'active' && WATCHED_TYPES.has(o.type))
-      .filter((o) => o.fromToken?.coingeckoId && o.toToken?.coingeckoId)
+      /*
+       * A price-triggered row needs both coin ids, because that is how the
+       * watcher prices it. A SCHEDULED row needs neither: its trigger is the
+       * clock, and requiring an id would silently drop every DCA on a token
+       * the market feed has not indexed — the exact plans most likely to run
+       * unattended.
+       */
+      .filter((o) => SCHEDULED_TYPES.has(o.type)
+        || (o.fromToken?.coingeckoId && o.toToken?.coingeckoId))
       .map((o) => {
         const base = {
           id: o.id,
           type: o.type,
           fromSym: o.fromToken.symbol,
           toSym: o.toToken.symbol,
-          fromId: o.fromToken.coingeckoId,
-          toId: o.toToken.coingeckoId,
+          fromId: o.fromToken.coingeckoId || null,
+          toId: o.toToken.coingeckoId || null,
           priceOf: o.priceOf ?? 'from'
         };
+        /*
+         * ─── THE CLOCK-DRIVEN SHAPES ────────────────────────────────────────
+         * `nextRunAt` is the device's own number and the only trigger the
+         * server compares against. `runsLeft` is optional and means "unknown"
+         * when absent — the copy says «نوبت بعدی» rather than inventing a
+         * final step. The interval is what the server advances by after a
+         * delivered alert, so a phone that stays closed for a week does not
+         * get the same run announced on every tick.
+         */
+        if (o.type === 'dca' || o.type === 'twap') {
+          const intervalMs = o.type === 'twap'
+            ? Number(o.sliceGapMs) || (Number(o.windowMin) * 60000) / (Number(o.slices) || 1)
+            : DCA_INTERVALS[o.interval];
+          const runsLeft = Number.isFinite(Number(o.totalRuns)) && Number.isFinite(Number(o.runsDone))
+            ? Math.max(0, Number(o.totalRuns) - Number(o.runsDone))
+            : null;
+          /*
+           * A plan with nothing left to run is finished, whatever its `status`
+           * field still says. Uploading it would give the server a due time in
+           * the past and one last alert for a step that no longer exists — and
+           * a notification about a run that already happened is worse than no
+           * notification, because it teaches the user to distrust the rest.
+           */
+          if (runsLeft === 0) return null;
+          return {
+            ...base,
+            /* A plan whose next run has not been stamped yet (older rows) is
+               scheduled from NOW, which is what `advanceOrder` does on the
+               first fill — the alternative is a `0`, which the validator
+               rejects and the plan silently never syncs. */
+            nextRunAt: Number(o.nextRunAt) > 0 ? Number(o.nextRunAt) : Date.now(),
+            intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : DCA_INTERVALS.daily,
+            runsLeft
+          };
+        }
         if (o.type === 'limit') {
           return { ...base, targetRate: o.targetRate, direction: o.direction };
         }
@@ -846,11 +906,18 @@ export async function syncWatches(orders) {
         };
       })
       /*
-       * A ladder with every rung filled has no next target. Sending
-       * `targetRate: null` would be rejected by the server's validator and
-       * silently drop the whole batch's tail, so it is filtered here where the
-       * reason is visible.
+       * ORDER MATTERS. The mapping above can return `null` (a finished plan
+       * has no future run to announce), and the ladder filter below reads
+       * `it.type` — so a null that survives to it throws, the outer catch
+       * swallows the throw, and the ENTIRE watch list silently stops syncing
+       * for that device. The runtime test in test/units.mjs is what caught it:
+       * `.filter(Boolean)` has to come first.
        */
+      .filter(Boolean)
+      /* A ladder with every rung filled has no next target. Sending
+         `targetRate: null` would be rejected by the server's validator and
+         silently drop the whole batch's tail, so it is filtered here where the
+         reason is visible. */
       .filter((it) => it.type !== 'ladder' || Number.isFinite(it.targetRate));
 
     await fetch(`${apiBase()}/orders/watch`, {
@@ -864,9 +931,20 @@ export async function syncWatches(orders) {
     });
     return true;
   } catch {
+    /* Best-effort by design: a failed sync costs a background alert, never a
+       visible error on the user's order screen. */
     return false;
   }
 }
+
+/*
+ * `pingWatchTick` used to live here. It moved to lib/watchTick.js so the boot
+ * path (App.jsx pings it on every open) does not have to load this engine —
+ * see the header of that file. Re-exported because pages/Orders.jsx has
+ * imported it from here since it was written, and a moved function is not a
+ * reason to touch a money screen.
+ */
+export { pingWatchTick } from './watchTick.js';
 
 /* -------------------------------------------------------------------------- */
 /* value & fee estimation                                                     */

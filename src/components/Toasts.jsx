@@ -23,19 +23,52 @@ const LIFETIME = 3200;
 const LOAN_NAMESPACE = 'loan.';
 
 /**
+ * A MISSING SENTINEL, NOT AN EMPTY STRING.
+ *
+ * ─── THE BUG THIS REPLACES (reported: «در سفارش سولانا ارورها را به صورت
+ *     استرینگ میزنه یا هشدار را») ───────────────────────────────────────────
+ * The resolver used to test whether the shared namespace had an answer with
+ *
+ *     const shared = t(`toast.${raw}`, { defaultValue: '' });
+ *     if (shared) return shared;
+ *
+ * and src/i18n/index.js sets `returnEmptyString: false` — deliberately, so a
+ * locale that has an empty translation shows the key rather than a blank
+ * toast. The two settings collide exactly on the missing-key path: i18next
+ * never returned the empty default, it returned the KEY, `toast.<raw>`, which
+ * is a non-empty string, so `if (shared)` was always true and every toast
+ * raised with a namespaced key printed its own key path.
+ *
+ * That is not a Loan-only problem, whatever the earlier fix assumed. The
+ * Solana order card on AUTO ORDERS raises `orders.solana.notice` (its
+ * success message) and `orders.solana.err.BAD_AMOUNT` / `SAME_TOKEN` — all
+ * three written and translated in twelve locales, and all three rendered as
+ * the literal text `toast.orders.solana.notice` over the UI. Same for
+ * `orders.revisionReview`, raised by the DCA revision flow.
+ *
+ * A sentinel cannot be confused with a translation, an empty string or a key,
+ * so the check is now unambiguous no matter how i18next is configured.
+ */
+const MISSING = '\u0000__fbt_missing__\u0000';
+
+/**
  * Resolve one notification key.
  *
  * Order, and why it is this order:
  *   1. `toast.<key>` — the shared namespace, where every generic notification
  *      lives. Never skipped, so nothing that used to resolve can stop.
- *   2. the key itself, when the page that raised it owns a namespace of its own
- *      (`loan.chooseAssetFirst`, `loan.error.MARKET_PAUSED` — the loan page
- *      names its toasts that way, and `toast.loan.…` cannot exist under a
- *      prefix the page never writes to).
- *   3. `loanErrorText` — for a code that has no sentence yet: a translated
+ *   2. `t(<key>)` ITSELF — the page-owned namespace. This is the door that was
+ *      missing: pages name their own messages after themselves
+ *      (`orders.solana.notice`, `orders.revisionReview`, `loan.chooseAssetFirst`,
+ *      `loan.error.MARKET_PAUSED`), and those keys are real, translated, root
+ *      keys — they simply never lived under `toast.`. Without this step the
+ *      sentinel above falls straight through to step 4 and the user reads a
+ *      key path.
+ *   3. `loanErrorText` — for a loan code that has no sentence yet: a translated
  *      generic that carries the code, instead of the code alone.
  *   4. the raw key, last: if i18n has nothing at all to say, showing the key is
- *      still better than showing an empty toast.
+ *      still better than showing an empty toast. This is now genuinely rare
+ *      rather than the normal path for anything namespaced.
  */
 /* Exported for the l10n contract test (test/loan-errors-l10n.test.js): the
    toast host is a resolver, and a resolver is worth testing without a DOM. */
@@ -45,10 +78,16 @@ export function toastTextForTest(t, key, values) {
 
 function toastText(t, key, values) {
   const raw = String(key ?? '');
-  const shared = t(`toast.${raw}`, { defaultValue: '', ...values });
-  if (shared) return shared;
+  if (!raw) return '';
+
+  const shared = t(`toast.${raw}`, { defaultValue: MISSING, ...values });
+  if (shared && shared !== MISSING) return shared;
+
+  const own = t(raw, { defaultValue: MISSING, ...values });
+  if (own && own !== MISSING) return own;
+
   if (raw.startsWith(LOAN_NAMESPACE)) return loanErrorText(t, raw, values);
-  return t(raw, { defaultValue: raw, ...values });
+  return raw;
 }
 
 function Toast({ item }) {

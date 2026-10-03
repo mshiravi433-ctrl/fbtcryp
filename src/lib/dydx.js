@@ -561,6 +561,9 @@ export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, re
   const hash = result?.hash;
   return {
     hash: typeof hash === 'string' ? hash : hash?.toString?.() || null,
+    /* Echoed so a caller can say «دستور بستن ثبت شد» instead of «سفارش ثبت
+       شد» — the two are the same request and opposite news. */
+    reduceOnly: Boolean(reduceOnly),
     clientId,
     builderAddress: DYDX_BUILDER_ADDRESS,
     feePpm: DYDX_BUILDER_FEE_PPM
