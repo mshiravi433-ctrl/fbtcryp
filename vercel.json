@@ -16,6 +16,14 @@
     {
       "source": "/iran-buy/return",
       "destination": "/index.html"
+    },
+    {
+      "source": "/bridge",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/farm",
+      "destination": "/index.html"
     }
   ],
   "redirects": [
