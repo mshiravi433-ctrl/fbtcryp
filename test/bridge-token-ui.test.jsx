@@ -22,6 +22,7 @@ vi.mock('ethers', () => ({ Contract: class {
   approve = state.approve;
 } }));
 import Bridge from '../src/pages/Bridge';
+import BridgeHero from '../src/components/BridgeHero';
 
 const OWNER = '0x3456789012345678901234567890123456789012';
 const TOKEN = '0x55d398326f99059ff775485246999027b3197955';
@@ -87,4 +88,21 @@ it('an invalid destination cannot silently fall back to the sender', async () =>
   fireEvent.change(screen.getByLabelText('bridge.toAddressLabel'), { target: { value: '0x123' } });
   await advance();
   expect(screen.getByRole('button', { name: 'bridge.send' }).disabled).toBe(true);
+});
+
+it('slides between the Tron and Solana promos and selects the matching bridge mode', async () => {
+  const onSelectMode = vi.fn();
+  render(<BridgeHero onSelectMode={onSelectMode} />);
+
+  expect(screen.getByText('bridge.hero.tron.title')).toBeTruthy();
+  const dots = screen.getAllByRole('button', { name: 'bridge.hero.goTo' });
+  expect(dots).toHaveLength(2);
+  expect(dots[0].getAttribute('aria-pressed')).toBe('true');
+
+  fireEvent.click(dots[1]);
+  await advance(350);
+  expect(screen.getByText('bridge.hero.solana.title')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'bridge.hero.solana.cta' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'bridge.hero.solana.cta' }));
+  expect(onSelectMode).toHaveBeenCalledWith('solana');
 });

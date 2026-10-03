@@ -654,6 +654,29 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
    */
   const execution = farmExecutionAdapterFor(pool);
   const ExecutionPanel = execution?.openToPublic ? execution.Panel : null;
+  const hasInlineActions = Boolean(route || pool.url);
+  const inlineActionsRef = useRef(null);
+  const [inlineActionsVisible, setInlineActionsVisible] = useState(false);
+
+  /*
+   * The action row is repeated at the end of the analysis so it remains in
+   * context for someone who reads all the way down. Hide the pinned copy only
+   * while that inline row is actually visible; this keeps the two actions from
+   * appearing twice at the bottom of the sheet. The observer is scoped to the
+   * sheet's own scroller, never the page behind the portal.
+   */
+  useEffect(() => {
+    setInlineActionsVisible(false);
+    const target = inlineActionsRef.current;
+    const root = target?.closest('.fsh-body');
+    if (!hasInlineActions || !target || !root || typeof IntersectionObserver === 'undefined') return undefined;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setInlineActionsVisible(Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.35));
+    }, { root, threshold: [0, 0.35] });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasInlineActions, pool.id]);
 
   /*
    * ─── A FULL SCREEN, NOT A DRAWR UNDER A CARD ────────────────────────────
@@ -668,6 +691,8 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
    * `position: fixed` is measured against the viewport rather than
    * PageTransition's animated `<main>`), its own header with the pool's mark,
    * one scroller, and the action pinned at the bottom where a thumb already is.
+   * When the matching inline actions enter view at the end, that pinned copy
+   * fades away so the user sees the buttons once, not twice.
    *
    * The `.farm-details` class stays on the content root ON PURPOSE: the
    * execution tests scope their assertions to it («the analytics ask for a
@@ -680,10 +705,13 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       testId="farm-analysis-sheet"
       className="farm-ana-fs"
       kicker={t('farm.poolAnalytics')}
+      title={pool.symbol}
+      subtitle={`${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}
       icon={<PoolGlyph pool={pool} size={22} chainKey={chainIconKey(pool.chain)} />}
       closeLabel={t('farm.hideAnalytics')}
+      footerVisible={!inlineActionsVisible}
       footer={(
-        <div className="farm-ana-foot">
+        <div className={`farm-ana-foot${route && pool.url ? ' has-two-actions' : ''}`}>
           <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
           {pool.url && (
             <button
@@ -708,15 +736,15 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       */}
       <header className="farm-ana-hero">
         <div className="farm-ana-hero-top">
-          <PoolGlyph pool={pool} size={32} chainKey={chainIconKey(pool.chain)} />
-          <div className="farm-ana-id">
-            <p className="farm-ana-kicker">{t('farm.poolAnalytics')}</p>
-            <div className="farm-ana-sym" dir="ltr">{pool.symbol}</div>
-            <div className="farm-ana-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</div>
+          <div className="farm-ana-rate-label">
+            <span className="farm-ana-rate-icon" aria-hidden="true">{APY_ICON}</span>
+            <span className="farm-ana-rate-copy">
+              <span className="farm-ana-kicker">{t('farm.estimatedApy')}</span>
+              <span className="farm-ana-rate-caption">{t('farm.grossApy')}</span>
+            </span>
           </div>
           <div className="farm-ana-apy">
             <span className="farm-ana-apy-value mono" dir="ltr">{pool.apy}%</span>
-            <span className="farm-ana-apy-label">{t('farm.estimatedApy')}</span>
           </div>
         </div>
         <div className="farm-ana-pills">
@@ -813,7 +841,11 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         panel below instead of dead buttons.
       */}
       <AnaSection icon={ACTIONS_ICON} title={t('farm.ana.actionsTitle')}>
-        <div className="farm-action-grid">
+        <div
+          ref={inlineActionsRef}
+          className={`farm-action-grid farm-ana-inline-actions${route && pool.url ? ' has-two-actions' : ''}`}
+          data-testid="farm-analysis-inline-actions"
+        >
           {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
           {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
         </div>

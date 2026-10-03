@@ -29,7 +29,8 @@ import '../styles/fullscreen-sheet.css';
  *      a notch and the footer clears the home indicator — a "full screen" panel
  *      that tucks its close button under the status bar is a trap.
  *   3. It has a HEADER, a BODY that scrolls on its own, and an optional FOOTER
- *      that stays put. Nothing in it moves except the content between them.
+ *      that stays put by default. A caller may fade it while an equivalent
+ *      inline action row is visible, avoiding duplicate controls at the end.
  *
  * Reduced motion (the OS preference and the in-app setting, via `useStill`) is
  * honoured: the panel appears instead of sliding.
@@ -43,6 +44,7 @@ export default function FullScreenSheet({
   icon,
   hero,
   footer,
+  footerVisible = true,
   children,
   className = '',
   testId,
@@ -92,8 +94,8 @@ export default function FullScreenSheet({
               {icon ? <span className="fsh-head-icon" aria-hidden="true">{icon}</span> : null}
               <div className="fsh-head-copy">
                 {kicker ? <p className="fsh-kicker">{kicker}</p> : null}
-                {title ? <h2 className="fsh-title">{title}</h2> : null}
-                {subtitle ? <p className="fsh-sub">{subtitle}</p> : null}
+                {title ? <h2 className="fsh-title" dir="auto">{title}</h2> : null}
+                {subtitle ? <p className="fsh-sub" dir="auto">{subtitle}</p> : null}
               </div>
               <button
                 type="button"
@@ -110,7 +112,17 @@ export default function FullScreenSheet({
 
             <div className="fsh-body">{children}</div>
 
-            {footer ? <footer className="fsh-foot">{footer}</footer> : null}
+            {footer ? (
+              <footer
+                className={`fsh-foot${footerVisible ? '' : ' is-hidden'}`}
+                aria-hidden={footerVisible ? undefined : 'true'}
+                inert={footerVisible ? undefined : 'true'}
+                data-footer-visible={footerVisible}
+                data-testid={testId ? `${testId}-footer` : undefined}
+              >
+                {footer}
+              </footer>
+            ) : null}
           </motion.div>
         </>
       )}
