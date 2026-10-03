@@ -24,7 +24,7 @@
  * file churn every time a translation is reworded.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('react-i18next', () => ({
@@ -85,10 +85,23 @@ describe('Lab shell', () => {
     expect(screen.getByText('lab2.title').textContent).toBe('lab2.title');
     // Three group tabs, each with its own layoutId pill target.
     expect(container.querySelectorAll('[role="tab"]')).toHaveLength(3);
-    expect(container.querySelectorAll('.lab2-group')).toHaveLength(2); // Practice + More tools
+    // One .lab2-group on the landing grid: the active tab's card grid
+    // (Practice on /lab). The three extra tools live in the More-tools fold,
+    // which is closed by default — open it the way a thumb would before
+    // asserting on its cards, so the fold's existence is verified, not
+    // merely assumed.
+    expect(container.querySelectorAll('.lab2-group')).toHaveLength(1);
+
+    const landed = [...container.querySelectorAll('.lab2-card')].map((el) => el.getAttribute('aria-label'));
+    expect(landed).toContain('lab2.cards.predict.title');
+
+    const fold = container.querySelector('.lab2-more-trigger');
+    expect(fold, 'the More-tools fold must exist').toBeTruthy();
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(fold);
+    expect(container.querySelector('.lab2-more-trigger').getAttribute('aria-expanded')).toBe('true');
 
     const cardIds = [...container.querySelectorAll('.lab2-card')].map((el) => el.getAttribute('aria-label'));
-    expect(cardIds).toContain('lab2.cards.predict.title');
     expect(cardIds).toContain('lab2.cards.compare.title');
     expect(cardIds).toContain('lab2.cards.leaderboard.title');
 

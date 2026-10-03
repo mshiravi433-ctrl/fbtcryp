@@ -371,7 +371,10 @@ check(
 );
 check(
   'the two row actions sit in .btn-row so the toggle is never squeezed',
-  /className="btn-row eq-actions"/.test(EQROW)
+  /* Older form: className="btn-row eq-actions". Current form: the same two
+     classes built with a template literal so .has-sell can be appended:
+     className={`btn-row eq-actions …` — accept both, pinned to .btn-row. */
+  /className="btn-row eq-actions"|className=\{[`"']btn-row eq-actions/.test(EQROW)
 );
 check(
   'the gold box is a disclosure button and collapses',
