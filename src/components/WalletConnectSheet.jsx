@@ -412,8 +412,18 @@ export default function WalletConnectSheet({ open, onClose }) {
     setBusy(true);
     setErr(null);
     try {
-      const { signer } = await createVaultWithSigner(phrase, password);
+      /* `mnemonic` comes back with the signer so the wallet layer can put the
+         seed in the DEVICE session — that is what makes the next refresh open
+         this wallet instead of asking for the password again (see
+         lib/localWalletSession.js). It is used in memory and never stored
+         anywhere but this browser's non-extractable key. */
+      const { signer, mnemonic } = await createVaultWithSigner(phrase, password);
       if (!(await wallet.attachCreatedLocal(signer))) throw new Error('ATTACH_FAILED');
+      /* ONLY after the attach has PROVED the signer matches the vault on disk:
+         remembering a seed the vault does not belong to would survive the next
+         refresh as a wallet that cannot sign. Same order the attach used to run
+         internally when it took the phrase as a second argument. */
+      if (mnemonic) wallet.rememberLocalSession(mnemonic, signer.address);
       haptic?.('success');
       close();
     } catch {

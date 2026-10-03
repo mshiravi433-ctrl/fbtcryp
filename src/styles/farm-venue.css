@@ -553,3 +553,49 @@
     #fbfbfe;
 }
 :root[data-theme='light'] .farm-ana-apy { background: rgba(0, 168, 107, 0.1); }
+
+/* ─── THE ANALYSIS, AS A FULL-SCREEN POPUP ────────────────────────────────
+   «در مزرعه برای هر پوزیشن یک تحلیل هست که بهتر است پاپ‌اپ تمام‌صفحه بشود —
+   یک پاپ‌اپ تمام‌صفحه بی‌نظیر و مدرن».
+
+   The shell is components/FullScreenSheet.jsx (styles/fullscreen-sheet.css):
+   portalled to the body so `position: fixed` resolves against the viewport
+   rather than PageTransition's animated `<main>`, safe-area aware, one scroller
+   and a pinned footer. What is left for this file is the two things that are
+   only true of Farm:
+
+     1. the content root inside the sheet — the same `.farm-details` block the
+        execution tests scope to, with the CARD chrome removed (it is not a card
+        any more; it is the page);
+     2. the pinned action row, where the invest CTA now lives so it is
+        reachable without scrolling through nineteen figures to find it. */
+
+.fsh-panel.farm-ana-fs {
+  background:
+    radial-gradient(120% 55% at 100% 0%, rgba(0, 229, 255, 0.1), transparent 58%),
+    radial-gradient(120% 55% at 0% 0%, rgba(255, 45, 149, 0.1), transparent 60%),
+    var(--bg-panel-solid, #06070c);
+}
+
+.farm-details-full {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.farm-ana-foot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.farm-ana-foot > .farm-btn { flex: 1 1 0; min-height: 48px; }
+.farm-ana-foot .farm-btn-minor { flex: 1 1 100%; min-height: 42px; }
+
+@media (max-width: 380px) {
+  .farm-ana-hero { padding: 11px; }
+  .farm-ana-sym { font-size: 14.5px; }
+  .farm-ana-apy-value { font-size: 17px; }
+}

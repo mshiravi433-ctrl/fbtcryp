@@ -6137,7 +6137,25 @@
       "explorer": "View token on BscScan"
     },
     "waitingHint": "The request is in your wallet. If you came back without signing, or no signature screen appeared, cancel the wait here — nothing will be sent.",
-    "cancelWaiting": "Cancel waiting"
+    "cancelWaiting": "Cancel waiting",
+    "hero": {
+      "badge": "Non-custodial · your wallet signs it",
+      "title": "Move USDT and SOL across chains",
+      "sub": "Every route's fee and timing is readable before you sign — and the money never passes through us.",
+      "factRoutes": "live routes",
+      "factChains": "special routes: Tron & Solana",
+      "factFee": "platform fee",
+      "tron": {
+        "title": "Tron bridge — TRC20 USDT",
+        "note": "The cheapest way to move USDT; the destination network's flat activation cost is charged separately.",
+        "cta": "Open the Tron bridge"
+      },
+      "solana": {
+        "title": "Solana bridge — SOL & SPL",
+        "note": "The fastest route; the network fee is paid in SOL, so keep a little SOL for gas.",
+        "cta": "Open the Solana bridge"
+      }
+    }
   },
   "autopilot": {
     "title": "Autopilot",

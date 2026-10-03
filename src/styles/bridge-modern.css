@@ -1,0 +1,309 @@
+/*
+ * BRIDGE — the hero banner and the mode rail.
+ * ---------------------------------------------------------------------------
+ * REPORTED: «به صفحه پل یک بنر فوق‌مدرن و زیبا اضافه کن … تب توکن‌ها فوق‌مدرن و
+ * بی‌نظیر … با تبلیغ پل ترون و سولانا … اندازه درست.»
+ *
+ * Two things live here:
+ *   .brg-hero    the banner (components/BridgeHero.jsx)
+ *   .brg-modes   the four-way mode control that used to be `.segmented seg-lg`
+ *
+ * The rail is a NEW class rather than a restyle of `.segmented` on purpose:
+ * fourteen other controls share `.segmented`, and changing its metrics to make
+ * this one look like a product rail would have moved all fourteen. `.brg-modes`
+ * keeps the same semantics (role="tablist", role="tab", aria-selected) and the
+ * same visible labels, so nothing that reads the control has to change — it
+ * just stops looking like a settings toggle.
+ */
+
+/* ─── the banner ─────────────────────────────────────────────────────────── */
+.brg-hero {
+  position: relative;
+  margin: 14px 0 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 24%, var(--line));
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--rgb-2) 22%, transparent), transparent 58%),
+    radial-gradient(120% 130% at 0% 0%, color-mix(in srgb, var(--rgb-1) 20%, transparent), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+  box-shadow: 0 26px 60px -40px rgba(0, 0, 0, 0.95);
+  overflow: hidden;
+}
+
+/* two slow aurora blobs — depth, not motion sickness: they never animate */
+.brg-hero-aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.brg-hero-aurora::before,
+.brg-hero-aurora::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(46px);
+}
+.brg-hero-aurora::before {
+  width: 190px;
+  height: 190px;
+  inset-inline-end: -60px;
+  top: -70px;
+  background: var(--rgb-2);
+  opacity: 0.24;
+}
+.brg-hero-aurora::after {
+  width: 160px;
+  height: 160px;
+  inset-inline-start: -50px;
+  bottom: -80px;
+  background: var(--rgb-1);
+  opacity: 0.18;
+}
+
+/* a faint grid, so the panel reads as engineered rather than as a gradient */
+.brg-hero-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--text-1) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--text-1) 22%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(120% 90% at 100% 0%, #000 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(120% 90% at 100% 0%, #000 0%, transparent 70%);
+}
+
+.brg-hero-head { position: relative; z-index: 1; }
+.brg-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 34%, transparent);
+  border-radius: 999px;
+  color: var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.brg-hero-badge svg { flex: none; }
+
+.brg-hero-title {
+  margin: 11px 0 0;
+  color: var(--text-1);
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+}
+.brg-hero-sub {
+  margin: 7px 0 0;
+  max-width: 46ch;
+  color: var(--text-3);
+  font-size: 11.8px;
+  font-weight: 650;
+  line-height: 1.95;
+}
+
+.brg-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.brg-hero-facts li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+}
+.brg-hero-facts b {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.brg-hero-facts span {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.brg-hero-cards {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.brg-hero-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-panel-solid, #06070c) 58%, transparent);
+  overflow: hidden;
+}
+.brg-hero-card::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--brg-card-accent, var(--rgb-1));
+}
+.brg-hero-card.is-tron { --brg-card-accent: #ff4a5f; }
+.brg-hero-card.is-solana { --brg-card-accent: #14f195; }
+
+.brg-hero-card-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--brg-card-accent) 34%, transparent);
+  color: var(--brg-card-accent);
+  background: color-mix(in srgb, var(--brg-card-accent) 12%, transparent);
+}
+.brg-hero-card-mark svg { width: 22px; height: 22px; }
+
+.brg-hero-card-copy { min-width: 0; }
+.brg-hero-card-title {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 12.8px;
+  font-weight: 900;
+  line-height: 1.5;
+}
+.brg-hero-card-note {
+  margin: 5px 0 0;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.85;
+}
+
+.brg-hero-card-cta {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  margin-top: 2px;
+  border: 1px solid color-mix(in srgb, var(--brg-card-accent) 40%, transparent);
+  border-radius: 13px;
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brg-card-accent) 82%, #000), color-mix(in srgb, var(--brg-card-accent) 46%, #000));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  transition: transform 0.16s ease, filter 0.16s ease;
+}
+.brg-hero-card-cta:hover { filter: brightness(1.08); }
+.brg-hero-card-cta:active { transform: scale(0.98); }
+.brg-hero-card-cta:focus-visible { outline: 2px solid var(--brg-card-accent); outline-offset: 2px; }
+
+/* ─── the mode rail ──────────────────────────────────────────────────────── */
+.brg-modes {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.brg-modes button {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  color: var(--text-3);
+  background: transparent;
+  font: inherit;
+  font-size: 10.8px;
+  font-weight: 780;
+  line-height: 1.45;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+.brg-modes button svg { width: 18px; height: 18px; flex: none; }
+/* The label, not the glyph, is what the eye lands on — so it gets the width
+   budget: a two-word Persian label («توکن‌ها») must wrap inside the tile rather
+   than push the grid column wider and break the four-way rail. */
+.brg-modes-label {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.brg-modes button:hover { color: var(--text-1); background: rgba(255, 255, 255, 0.035); }
+.brg-modes button.active {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 42%, transparent);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--rgb-1) 18%, transparent), color-mix(in srgb, var(--rgb-2) 18%, transparent));
+  box-shadow: 0 10px 24px -16px var(--rgb-1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+.brg-modes button.active svg { color: var(--rgb-1); }
+.brg-modes button:disabled { opacity: 0.55; cursor: wait; }
+.brg-modes button:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+.brg-modes .seg-indicator { border-radius: 15px; }
+
+:root[data-theme='light'] .brg-hero {
+  background:
+    radial-gradient(120% 130% at 100% 0%, rgba(124, 77, 255, 0.12), transparent 58%),
+    radial-gradient(120% 130% at 0% 0%, rgba(0, 160, 200, 0.14), transparent 60%),
+    linear-gradient(180deg, rgba(13, 16, 32, 0.03), rgba(13, 16, 32, 0.01));
+  border-color: rgba(13, 16, 32, 0.1);
+}
+:root[data-theme='light'] .brg-hero-card { background: #ffffff; border-color: rgba(13, 16, 32, 0.1); }
+:root[data-theme='light'] .brg-hero-facts li { background: rgba(13, 16, 32, 0.035); }
+:root[data-theme='light'] .brg-modes { background: #ffffff; border-color: rgba(13, 16, 32, 0.1); }
+:root[data-theme='light'] .brg-modes button.active { background: rgba(13, 16, 32, 0.05); }
+
+@media (max-width: 380px) {
+  .brg-hero { padding: 14px; border-radius: 20px; }
+  .brg-hero-title { font-size: 17px; }
+  .brg-modes button { min-height: 54px; font-size: 10.2px; padding: 7px 4px; }
+  .brg-modes button svg { width: 16px; height: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brg-hero-card-cta,
+  .brg-modes button { transition: none; }
+  .brg-modes button.active { transform: none; }
+}

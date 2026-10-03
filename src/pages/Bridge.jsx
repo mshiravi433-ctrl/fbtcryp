@@ -37,9 +37,11 @@ import {
 import { crossChainService } from '../services/cross-chain';
 import CrossChainStatus from '../components/crosschain/CrossChainStatus';
 import CrossChainHistory from '../components/crosschain/CrossChainHistory';
-import { IconExternal, IconShield, IconSwap } from '../components/Icons';
+import { IconExternal, IconGlobe, IconRoute, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
+import BridgeHero from '../components/BridgeHero';
+import '../styles/bridge-modern.css';
 import ModernSelect from '../components/ModernSelect';
 import AssetIcon from '../components/AssetIcon';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -767,7 +769,25 @@ export default function Bridge() {
         <p className="muted">{t('bridge.subtitle')}</p>
       </motion.div>
 
-      <div className="segmented seg-lg" role="tablist">
+      {/*
+        ─── THE BANNER ─────────────────────────────────────────────────────
+        «به صفحه پل یک بنر فوق‌مدرن و زیبا اضافه کن … با تبلیغ پل ترون و
+        سولانا». It sits ABOVE the mode rail, because it is what explains why
+        there are four modes at all: Tron and Solana are the two routes this
+        audience actually uses, and each card's CTA presses the matching tab.
+        The route count is only printed when a quote actually produced routes.
+      */}
+      <BridgeHero onSelectMode={setMode} routesLive={routes.length} />
+
+      {/*
+        ─── THE MODE RAIL ─────────────────────────────────────────────────
+        Same semantics as before (tablist / tab / aria-selected, identical
+        labels), different object: a rail with a glyph per route instead of a
+        four-cell settings toggle. Each glyph is aria-hidden, so the accessible
+        name stays exactly the translated label the tests and screen readers
+        already match on.
+      */}
+      <div className="brg-modes" role="tablist" aria-label={t('bridge.title')}>
         {MODES.map((k) => (
           <button
             key={k}
@@ -779,7 +799,21 @@ export default function Bridge() {
             style={{ isolation: 'isolate' }}
           >
             {mode === k && <SegIndicator id="bridgemode" />}
-            {t(`bridge.mode.${k}`)}
+            <span aria-hidden="true">
+              {k === 'tokens' ? <IconSwap /> : k === 'native' ? <IconRoute /> : k === 'tron' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2.6 3.2 21.4 6l-6.1 12.6z" />
+                  <path d="M2.6 3.2 9.1 9.4l6.2 9.2" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <path d="M6 5.4 9 3l3 2.4v3.1L9 10.9 6 8.5z" />
+                  <path d="M12 13.2 15 11l3 2.2v3.2L15 18.6l-3-2.2z" opacity="0.75" />
+                  <path d="M6 18.6 9 16.4l3 2.2v3.2L9 24l-3-2.2z" opacity="0.5" />
+                </svg>
+              )}
+            </span>
+            <span className="brg-modes-label">{t(`bridge.mode.${k}`)}</span>
           </button>
         ))}
       </div>
