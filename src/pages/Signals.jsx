@@ -55,6 +55,7 @@ import SectionGuard from '../components/SectionGuard';
 import '../styles/docs-modern.css';
 import '../styles/wallet-modern.css';
 import '../styles/signals-intel.css';
+import '../styles/signals-early.css';
 
 const HORIZONS = [
   { days: 1, key: '1D' },
@@ -504,9 +505,14 @@ function EvidenceChips({ evidence, max = 5 }) {
       {rows.map((e) => {
         const dir = e.direction > 0 ? 'up' : e.direction < 0 ? 'down' : '';
         const arrow = e.direction > 0 ? '↑' : e.direction < 0 ? '↓' : '·';
+        const label = t(`signals.intel.early.${e.reason || e.key}`);
+        /* A shortened label can already carry its own direction glyph (the
+           fa bundle uses ↑/↓ where it used to spell «صعودی»), and two arrows
+           on one chip is noise, not information. */
+        const glyph = /[↑↓]/.test(label) ? '' : `${arrow} `;
         return (
           <span key={`${e.key}-${e.source}`} className={`sic-ev ${dir}`}>
-            {arrow} {t(`signals.intel.early.${e.reason || e.key}`)}
+            {glyph}{label}
             {e.pct != null ? ` ${e.pct}%` : ''}
           </span>
         );
@@ -805,54 +811,161 @@ function AlertSheet({ symbol, onClose }) {
   );
 }
 
+/*
+ * ─── SHORT TAGS, BECAUSE A TAG IS NOT A SENTENCE ──────────────────────────
+ * The reported overlap («کند شدن حرکت، RSI در ناحیه اشباع فروش، MACD نزولی،
+ * نوار پایینی بولینگر … در هم فرو رفته‌اند») was a chip strip asked to hold
+ * four full Persian sentences in the leftover width of a row.
+ *
+ * Two things had to change. The layout fix lives in styles/signals-early.css
+ * (a real grid, two lines allowed). The LABELS had to get shorter — and they
+ * are shortened where a label belongs: in the locale bundle, so every surface
+ * that renders `signals.intel.early.*` (this card, the legacy evidence chips,
+ * the alerts sheet) shows the short form instead of only this one. The fa
+ * values now read «شتاب ۲۴س ↑», «RSI اشباع فروش», «کف بولینگر» — and the
+ * words «صعودی/نزولی» that made a chip a sentence became the arrow the report
+ * asked for, because in this component an arrow is what renders.
+ *
+ * Nothing is hardcoded here: hardcoded Persian in a localized page is exactly
+ * what test/signals-probe.mjs and test/wiring.mjs fail the build over.
+ */
+
+const ARROW_UP = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 19V5" />
+    <path d="m5.5 11.5 6.5-6.5 6.5 6.5" />
+  </svg>
+);
+const ARROW_DOWN = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 5v14" />
+    <path d="m5.5 12.5 6.5 6.5 6.5-6.5" />
+  </svg>
+);
+const ARROW_WATCH = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 12h16" />
+  </svg>
+);
+
+/** The confidence, as a ring — a bar under a row reads as a loading state. */
+function ConfidenceRing({ value, tone }) {
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  const r = 19;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <span className="sie-conf-ring">
+      <svg viewBox="0 0 46 46" aria-hidden="true">
+        <circle className="sie-conf-track" cx="23" cy="23" r={r} />
+        <circle
+          className="sie-conf-arc"
+          cx="23"
+          cy="23"
+          r={r}
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - pct / 100)}
+          style={{ stroke: tone === 'up' ? 'var(--up)' : tone === 'down' ? 'var(--down)' : '#ffb300' }}
+        />
+      </svg>
+      <span className="sie-conf-value mono">{pct}<small>%</small></span>
+    </span>
+  );
+}
+
+/*
+ * ─── EARLY AI SIGNALS, REBUILT ────────────────────────────────────────────
+ * One card per asset, two rows inside it: identity + direction arrow +
+ * confidence ring, then a GRID of tags that is allowed to be two lines tall.
+ * The direction arrow replaces the words «زودهنگام صعودی/نزولی» exactly as
+ * asked, while the words stay on the element as its accessible name — so the
+ * glyph is legible and the sentence is still spoken.
+ *
+ * The header (outside the hub, when this section is used standalone) carries a
+ * live count, because «how many is it watching» was a question the old head had
+ * no answer to.
+ */
 function EarlySection({ early, embedded = false }) {
   const { t } = useTranslation();
+  /* A key the bundle has not been taught falls back to the key's own name,
+     never to a raw dotted path in the middle of a chip. */
+  const tag = (key) => {
+    const full = t(`signals.intel.early.${key}`);
+    return full === `signals.intel.early.${key}` ? key : full;
+  };
+  const toneOf = (direction) => (direction === 'earlyBullish' ? 'up' : direction === 'earlyBearish' ? 'down' : 'watch');
+  const rows = early.slice(0, 8);
+
   return (
-    <section className={embedded ? 'sic-embedded-section' : ''}>
+    <section className={`sie ${embedded ? 'sic-embedded-section' : ''}`}>
       {!embedded && (
-        <div className="sic-section-head">
-          <span className="cap"><IconSparkle /></span>
-          <div>
-            <div className="title">{t('signals.intel.early.title')}</div>
-            <div className="faint" style={{ fontSize: 10.5 }}>{t('signals.intel.early.subtitle')}</div>
+        <div className="sie-head">
+          <span className="sie-head-cap" aria-hidden="true"><IconSparkle /></span>
+          <div className="sie-head-copy">
+            <h3 className="sie-head-title">{t('signals.intel.early.title')}</h3>
+            <p className="sie-head-sub">{t('signals.intel.early.subtitle')}</p>
           </div>
+          {rows.length > 0 && (
+            <span className="sie-head-count">{rows.length}</span>
+          )}
         </div>
       )}
-      {early.length === 0 ? (
-        <div className="sic-insufficient">{t('signals.intel.early.empty')}</div>
+
+      {rows.length === 0 ? (
+        <div className="sie-empty">{t('signals.intel.early.empty')}</div>
       ) : (
-        <div className="sic-rows sic-early-rows">
-          {early.slice(0, 8).map((e) => (
-            <div key={e.symbol} className={`sic-row sic-early-row ${e.direction}`}>
-              <CoinLogo coin={e.coin} />
-              <div className="main">
-                <div className="s">
-                  {e.symbol}
-                  <span className={`sic-early-dir ${e.direction}`}>{t(`signals.intel.early.direction.${e.direction}`)}</span>
+        <div className="sie-rows">
+          {rows.map((e) => {
+            const tone = toneOf(e.direction);
+            const dirText = t(`signals.intel.early.direction.${e.direction}`);
+            const flags = (e.flags ?? []).slice(0, 6);
+            return (
+              <article key={e.symbol} className={`sie-card sie-${tone}`}>
+                <div className="sie-top">
+                  <span className="sie-logo"><CoinLogo coin={e.coin} /></span>
+                  <span className="sie-id">
+                    <span className="sie-sym">{e.symbol}</span>
+                    {e.coin?.name ? <span className="sie-name">{e.coin.name}</span> : null}
+                  </span>
+                  {/* The arrow IS the direction. The words live in the
+                      accessible name and the tooltip — never only in colour. */}
+                  <span
+                    className={`sie-dir sie-${tone}`}
+                    role="img"
+                    aria-label={dirText}
+                    title={dirText}
+                  >
+                    {tone === 'up' ? ARROW_UP : tone === 'down' ? ARROW_DOWN : ARROW_WATCH}
+                  </span>
+                  <span
+                    className="sie-conf"
+                    role="img"
+                    aria-label={`${t('signals.intel.early.confidence')} ${e.confidence}%`}
+                    title={`${t('signals.intel.early.confidence')} ${e.confidence}%`}
+                  >
+                    <ConfidenceRing value={e.confidence} tone={tone} />
+                  </span>
                 </div>
-                <div className="sic-early-flags">
-                  {(e.flags ?? []).slice(0, 4).map((f) => (
-                    <span key={f} className="sic-early-flag">{t(`signals.intel.early.${f}`)}</span>
-                  ))}
-                </div>
-              </div>
-              <div className="num">
-                <div className="sic-early-conf-row">
-                  <span className="lbl">{t('signals.intel.early.confidence')}</span>
-                  <b className="mono">{e.confidence}%</b>
-                </div>
-                <div className="sic-early-conf-bar" aria-hidden="true">
-                  <i style={{
-                    width: `${e.confidence}%`,
-                    background: e.direction === 'earlyBullish' ? 'var(--up)' : e.direction === 'earlyBearish' ? 'var(--down)' : '#ffb300'
-                  }} />
-                </div>
-              </div>
-            </div>
-          ))}
+                {flags.length > 0 && (
+                  <ul className="sie-flags">
+                    {flags.map((f) => {
+                      const warn = /rsi|bollinger|liquidityThin|maBearish|macdDown|marketSentimentDown|whaleOutflow|holderSpread|dexSell|momentumDecel/i
+                        .test(String(f));
+                      return (
+                        <li key={f} className={`sie-flag${warn ? ' is-warn' : ''}`}>{tag(f)}</li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
-      <div className="sic-note">{t('signals.intel.early.note')}</div>
+
+      <p className="sie-note">
+        <span className="sie-note-glyph" aria-hidden="true"><IconSparkle /></span>
+        <span>{t('signals.intel.early.note')}</span>
+      </p>
     </section>
   );
 }

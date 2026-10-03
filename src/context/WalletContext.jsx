@@ -1,7 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { DEFAULT_CHAIN, EVM_CHAINS } from '../lib/chains';
-import { clearVault, loadVault, unlockVault } from '../lib/localWallet';
+import { clearVault, loadVault, signerFromMnemonic, unlockVaultWithSecret } from '../lib/localWallet';
+import {
+  clearLocalSession,
+  localSessionAlive,
+  localSessionRemainingMinutes,
+  readLocalSession,
+  readLocalSessionMnemonic,
+  saveLocalSession
+} from '../lib/localWalletSession';
 import { clearPortfolioSnapshot } from '../lib/portfolioSnapshot';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { isIOS as isIOSDevice } from '../lib/platform';
@@ -561,26 +569,76 @@ export function WalletProvider({ children }) {
    */
   const restoreInjected = useCallback(
     async (rdns, expected) => {
-      const announced = eip6963Ref.current;
-      let target = null;
-      let matchedInfo = null;
-      if (rdns) {
-        for (const { info, provider } of announced.values()) {
-          if (info.rdns === rdns) {
-            target = provider;
-            matchedInfo = info;
-            break;
-          }
+      /*
+       * ─── WAITING FOR THE WALLET TO SAY IT IS HERE ─────────────────────────
+       * EIP-6963 is an ANNOUNCEMENT, and an announcement is asynchronous: the
+       * extension injects its provider whenever it finishes starting up, which
+       * on a cold mobile WebView can be a beat or two after this app's first
+       * render. The old code looked ONCE, in the first frame, and took silence
+       * as absence — after which a named wallet was never attached and the
+       * ladder kept retrying against an empty map, which is the
+       * «با رفرش باید دوباره از اول وصل کنم» report for Trust Wallet.
+       *
+       * So: ask again, and give the wallet a bounded moment to answer. This
+       * costs one dispatch and one short poll — and it happens ONLY when the
+       * map does not already contain the wallet we are looking for.
+       */
+      const findAnnounced = (name) => {
+        for (const { info, provider } of eip6963Ref.current.values()) {
+          if (!name || info.rdns === name) return { target: provider, matchedInfo: info };
         }
-        /* A named wallet that has not announced itself yet is ABSENT, not
-           replaced by window.ethereum: attaching Trust because MetaMask was
-           slower to announce would connect the wrong wallet on the strength of
-           a record that names the other one. */
-        if (!target) {
-          wcEvent('lease_injected_absent', announced.size);
+        return null;
+      };
+
+      let found = findAnnounced(rdns);
+      if (!found && rdns) {
+        for (let attempt = 0; attempt < 6 && !found; attempt += 1) {
+          try { window.dispatchEvent(new Event('eip6963:requestProvider')); } catch { /* no window */ }
+          await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 80 : 260));
+          found = findAnnounced(rdns);
+        }
+      }
+      let target = found?.target ?? null;
+      let matchedInfo = found?.matchedInfo ?? null;
+
+      /*
+       * ─── THE SAME WALLET WITHOUT AN ANNOUNCEMENT ──────────────────────────
+       * Plenty of mobile wallets — Trust's own in-app browser among them — are
+       * inject-only: `window.ethereum` exists and is fully usable, and no
+       * EIP-6963 announcement ever arrives for them.
+       *
+       * The rule that used to skip this case entirely was written to stop one
+       * specific mistake: attaching MetaMask because it answered faster than
+       * the Trust the lease named. The fix is NOT to attach whatever is at
+       * `window.ethereum`; it is to attach it only when it PROVES it is the
+       * same wallet — the lease remembers an ADDRESS, and the provider must
+       * answer `eth_accounts` with exactly that address. A different wallet
+       * answering makes this fall through, and the ladder keeps waiting for
+       * the right one.
+       */
+      if (!target && rdns && typeof window !== 'undefined' && window.ethereum) {
+        const probe = window.ethereum;
+        let probeAccounts = [];
+        try {
+          probeAccounts = await probe.request?.({ method: 'eth_accounts' });
+        } catch {
+          probeAccounts = [];
+        }
+        const probeAcct = Array.isArray(probeAccounts) ? probeAccounts[0] : null;
+        const sameAddress = Boolean(
+          probeAcct && expected && String(probeAcct).toLowerCase() === String(expected).toLowerCase()
+        );
+        if (sameAddress) {
+          target = probe;
+          wcEvent('lease_injected_unnamed_match');
+        } else {
+          /* Still absent as far as we can prove. Named, so the health trace
+             says «the wallet this lease names is not on this page», which is a
+             different fact from «the page has no wallet». */
+          wcEvent('lease_injected_absent', eip6963Ref.current.size);
           return false;
         }
-      } else if (typeof window !== 'undefined' && window.ethereum) {
+      } else if (!target && !rdns && typeof window !== 'undefined' && window.ethereum) {
         target = window.ethereum;
       }
       if (!target) {
@@ -596,6 +654,16 @@ export function WalletProvider({ children }) {
       }
       const acct = Array.isArray(accounts) ? accounts[0] : null;
       if (!acct) {
+        /*
+         * ─── A WALLET THAT IS LOCKED IS NOT A WALLET THAT LEFT ────────────
+         * `[]` here means «locked, or this origin was never approved». The
+         * lease is deliberately KEPT and the retry ladder keeps knocking, so
+         * unlocking the wallet (or approving it once) is enough to bring the
+         * connection back with no Connect tap. This is also the state Trust
+         * reports for a moment while its own UI is in the foreground, so
+         * returning false rather than tearing anything down is the whole
+         * difference between a resume and a disconnect.
+         */
         wcEvent('lease_injected_locked');
         return false;
       }
@@ -1003,6 +1071,83 @@ export function WalletProvider({ children }) {
   }, [grantLease, refreshBalance, localTargetChain]);
 
   /**
+   * ─── THE REFRESH THAT USED TO COST A PASSWORD ─────────────────────────────
+   * «اتصال به کیف پول داخلی با رفرش صفحه از دست می‌ره و باید دوباره از اول
+   * اتصال را برقرار کنیم».
+   *
+   * `attachLocal()` above is synchronous and can only ever produce a LOCKED
+   * wallet — the password is gone with the old document, and a locked wallet
+   * reads as «not connected» everywhere in the app. So the cold start now first
+   * asks the DEVICE SESSION (lib/localWalletSession.js): a seed phrase
+   * re-encrypted under a non-extractable key that stayed in this browser, with
+   * the same expiry the EVM lease uses. When it answers, the wallet comes back
+   * OPEN, exactly as the user left it.
+   *
+   * If it cannot (no session, a lapsed window, IndexedDB unavailable, a key the
+   * browser rotated), the caller falls back to the locked attach — the wallet
+   * is still there, and one password brings it back. Nothing is ever destroyed
+   * by this function failing.
+   */
+  const restoreLocalSession = useCallback(async () => {
+    const vault = loadVault();
+    if (!vault) return false;
+    if (!localSessionAlive()) return false;
+    let phrase = null;
+    try {
+      phrase = await readLocalSessionMnemonic({ address: vault.address });
+    } catch {
+      phrase = null;
+    }
+    if (!phrase) {
+      wcEvent('local_session_unreadable');
+      return false;
+    }
+    try {
+      const cid = localTargetChain();
+      /* A read provider is a convenience, not a precondition: with no RPC the
+         signer still exists, the address still answers, and the wallet comes
+         back open — it just cannot quote a balance until the network is there. */
+      const provider = await getReadProvider(cid).catch(() => null);
+      const signer = await signerFromMnemonic(phrase, provider || undefined);
+      const signerAddress = signer.address || (await signer.getAddress());
+      if (String(signerAddress).toLowerCase() !== String(vault.address).toLowerCase()) {
+        /* A remembered phrase that does not open THIS vault is not this
+           wallet's. Forget it rather than attach the wrong address. */
+        clearLocalSession();
+        wcEvent('local_session_mismatch');
+        return false;
+      }
+      signerRef.current = signer;
+      eip1193Ref.current = createLocalEip1193Adapter({
+        signer,
+        account: signerAddress,
+        chainId: cid,
+        getReadProvider
+      });
+      setMode('local');
+      setAddress(signerAddress);
+      setChainId(cid);
+      setLocked(false);
+      setError(null);
+      grantLease({ address: signerAddress, chainId: cid, mode: 'local' });
+      void refreshBalance(signerAddress, cid);
+      wcEvent('local_session_restored');
+      return true;
+    } catch (error) {
+      wcEventDetail('local_session_attach_err', { m: String(error?.message || error || '') });
+      return false;
+    }
+  }, [getReadProvider, grantLease, refreshBalance, localTargetChain]);
+
+  /** Remember the phrase for the window the user chose. Never load-bearing. */
+  const rememberLocalSession = useCallback((phrase, address) => {
+    if (!phrase) return;
+    const minutes = useSettingsStore.getState?.().walletSessionMinutes;
+    void saveLocalSession(phrase, { address, minutes });
+  }, []);
+
+
+  /**
    * Attach the memory-only signer returned while a new vault was encrypted —
    * avoiding a second PBKDF2 pass while still checking it matches disk state.
    */
@@ -1033,6 +1178,15 @@ export function WalletProvider({ children }) {
         setLocked(false);
         setError(null);
         grantLease({ address: signerAddress, chainId: cid, mode: 'local' });
+        /* A wallet that was just CREATED is remembered on the device for the
+           same window the lease uses, so the very next refresh does not ask the
+           user to retype the password they set a minute ago. The phrase is
+           handed over by the caller that generated/imported it and is never
+           written anywhere else. */
+        /* The device session (what survives a refresh) is remembered by the
+           caller AFTER this proves the vault matches — see WalletConnectSheet:
+           the sheet calls rememberLocalSession only when the attach returns
+           true, so a failed attach can never leave a seed behind. */
         void refreshBalance(signerAddress, cid);
         return true;
       } catch {
@@ -1040,7 +1194,7 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [getReadProvider, grantLease, refreshBalance, localTargetChain]
+    [getReadProvider, grantLease, refreshBalance, localTargetChain, rememberLocalSession]
   );
 
   const unlockLocal = useCallback(
@@ -1049,7 +1203,11 @@ export function WalletProvider({ children }) {
       const cid = localTargetChain();
       try {
         const provider = await getReadProvider(cid);
-        const signer = await unlockVault(password, provider);
+        /* The secret comes back with the signer from ONE PBKDF2 pass — the
+           device session re-encrypts it under this browser's non-extractable
+           key so the next document does not have to ask for this password
+           again (see lib/localWalletSession.js). */
+        const { signer, secret } = await unlockVaultWithSecret(password, provider);
         /* Same teardown — and only AFTER the password has proven correct: a
            BAD_PASSWORD must leave an existing connection exactly as it was. */
         void wcRef.current?.disconnect();
@@ -1065,6 +1223,7 @@ export function WalletProvider({ children }) {
         setChainId(cid);
         setLocked(false);
         grantLease({ address: signer.address, chainId: cid, mode: 'local' });
+        rememberLocalSession(secret, signer.address);
         void refreshBalance(signer.address, cid);
         return true;
       } catch (e) {
@@ -1072,12 +1231,20 @@ export function WalletProvider({ children }) {
         return false;
       }
     },
-    [getReadProvider, grantLease, refreshBalance, localTargetChain]
+    [getReadProvider, grantLease, refreshBalance, localTargetChain, rememberLocalSession]
   );
 
-  /** Drop the in-memory signer but keep the encrypted vault on disk. */
+  /**
+   * Drop the in-memory signer but keep the encrypted vault on disk.
+   *
+   * «قفل» is an instruction, not an idle state: the device session goes with
+   * it, so the next document comes up LOCKED and asks for the password. A lock
+   * the next page load silently undid would not be a lock.
+   */
   const lock = useCallback(() => {
+    clearLocalSession();
     signerRef.current = null;
+    eip1193Ref.current = null;
     setLocked(true);
   }, []);
 
@@ -1087,6 +1254,9 @@ export function WalletProvider({ children }) {
    */
   const forgetLocalWallet = useCallback(() => {
     clearVault();
+    /* The device session is a copy of the seed under a key in this browser —
+       «forget this wallet» must leave nothing behind that could rebuild it. */
+    clearLocalSession();
     /* The portfolio snapshot is keyed by address and is a display cache, but
        «forget this wallet» is the one action that means the device should stop
        remembering anything about it — including the numbers it last showed. */
@@ -1187,9 +1357,11 @@ export function WalletProvider({ children }) {
     }
 
     if (plan.action === 'local') {
-      /* The vault auto-attach effect owns this path (it is synchronous, so it
-         has already run by the time this is called). Report honestly. */
-      setRestoring(false);
+      /* The vault restore effect owns this path. It runs on mount and, since
+         the device-session work, may attach an OPEN wallet asynchronously —
+         `restoring` is what tells the user a wallet is coming, so it goes up
+         when a live session is on disk and nothing is attached yet. */
+      setRestoring(!addressRef.current && localSessionAlive());
       return Boolean(addressRef.current);
     }
 
@@ -1294,6 +1466,11 @@ export function WalletProvider({ children }) {
        wallet the user just disconnected. Clearing it first makes «قطع اتصال»
        mean it, on this document and on the next one. */
     dropLease();
+    /* The in-app wallet's device session is the other record a cold start reads
+       — a seed this browser can re-open without a password. «قطع اتصال» has to
+       mean it there too, or a refresh would bring back the connection the user
+       just ended. */
+    clearLocalSession();
     balanceAddressRef.current = null;
     /* WalletConnect first: tell the peer the session is over (bounded — a dead
        relay must never stall the UI) and purge the storage artifacts, then the
@@ -1460,7 +1637,16 @@ export function WalletProvider({ children }) {
      * and `settleRestoring()` takes it down when the promise is kept or a
      * terminal fact breaks it.
      */
-    if (storedLease?.alive && !addressRef.current && !loadVault()) setRestoring(true);
+    /*
+     * A live lease with nothing attached is a PROMISE. It is made when the
+     * resume is asynchronous — a WalletConnect session, a silent injected
+     * re-attach — and, since the in-app wallet got a device session, ALSO when
+     * a vault is on disk and this browser can re-open it without a password
+     * (`localSessionAlive()`). A vault whose session is gone genuinely needs
+     * the password, and «در حال اتصال مجدد…» over that would be the lie.
+     */
+    if (storedLease?.alive && !addressRef.current
+      && (!loadVault() || localSessionAlive())) setRestoring(true);
 
     const resume = () => {
       if (addressRef.current) {
@@ -1541,8 +1727,39 @@ export function WalletProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+   * ─── THE IN-APP WALLET AFTER A REFRESH ────────────────────────────────────
+   * Reported twice, in the same words: «کیف پول داخلی با رفرش از دست می‌ره و
+   * باید دوباره از اول اتصال را برقرار کنیم».
+   *
+   * The order matters and is the whole fix. `restoreLocalSession()` asks the
+   * device for the seed it was told to keep (a non-extractable key, this
+   * origin's IndexedDB, the window from Settings) and attaches an OPEN wallet
+   * if it answers. Only when it cannot — no session, lapsed window, storage
+   * refused — does the wallet fall back to `attachLocal()`: address attached,
+   * LOCKED, one password away. The user is never asked to «reconnect»; at
+   * worst they are asked to unlock, and at best they see their wallet exactly
+   * where they left it.
+   */
   useEffect(() => {
-    if (!address && loadVault()) attachLocal();
+    if (address) return undefined;
+    if (!loadVault()) return undefined;
+    let cancelled = false;
+    (async () => {
+      const restored = await restoreLocalSession().catch(() => false);
+      if (cancelled || restored || addressRef.current) {
+        if (restored) settleRestoring();
+        return;
+      }
+      if (localSessionAlive()) {
+        /* A session exists but could not be read (a key the browser rotated,
+           a wiped database). Drop it and let the password path stand. */
+        clearLocalSession();
+      }
+      attachLocal();
+      settleRestoring();
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1683,6 +1900,13 @@ export function WalletProvider({ children }) {
       lease,
       leaseMinutesLeft: walletLeaseRemainingMinutes(lease),
       reconnectWallet,
+      /* The IN-APP wallet's device session (lib/localWalletSession.js): the
+         record that lets a reload re-open the vault without a password.
+         `localSessionMinutesLeft` is null for «until I disconnect», 0 when
+         there is no session at all — the wallet page prints it next to the
+         lock state so the user can see whether the next refresh will ask. */
+      localSession: readLocalSession(),
+      localSessionMinutesLeft: localSessionRemainingMinutes(),
       /* The pairing surface: the URI the SDK issued for the in-flight attempt
          (null when there is none), which surface owns the screen, and the
          control that ends the attempt. The sheet renders the QR and the wallet
@@ -1703,6 +1927,11 @@ export function WalletProvider({ children }) {
       unlockLocal,
       lock,
       forgetLocalWallet,
+      /* The vault's device-session pair, exposed so a screen can see whether
+         the next refresh will ask for a password (localSessionMinutesLeft) and
+         retry the re-open by hand. No-ops on every other transport. */
+      restoreLocalSession,
+      rememberLocalSession,
       disconnect,
       switchChain,
       refreshBalance,
@@ -1766,6 +1995,11 @@ export function WalletProvider({ children }) {
       unlockLocal,
       lock,
       forgetLocalWallet,
+      /* The vault's device-session pair, exposed so a screen can see whether
+         the next refresh will ask for a password (localSessionMinutesLeft) and
+         retry the re-open by hand. No-ops on every other transport. */
+      restoreLocalSession,
+      rememberLocalSession,
       disconnect,
       switchChain,
       refreshBalance,

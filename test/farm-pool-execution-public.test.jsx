@@ -124,7 +124,10 @@ describe('Farm execution surface — public-open build', () => {
     // Disconnected, the analytics ask for a wallet instead of announcing
     // read-only. Scoped to the details card: the positions section keeps its
     // own "read-only until you connect" pill, which is still true of it.
-    const details = container.querySelector('.farm-details');
+    /* The analysis is a FULL-SCREEN popup now (components/FullScreenSheet), so
+       it portals to document.body — the RTL `container` is one node inside it
+       and would not see the sheet. Same node, same class, one scope out. */
+    const details = document.querySelector('.farm-details');
     expect(details.textContent).toContain(t('farm.connectToExecute'));
     expect(details.textContent).not.toContain(t('farm.readOnly'));
     // …and the page header stops introducing the whole screen as read-only.

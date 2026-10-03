@@ -1,0 +1,231 @@
+/*
+ * RWA DETAIL — the hero and the bits that are only true of this screen.
+ * ---------------------------------------------------------------------------
+ * REPORTED: «در توکن‌های rwa پاپ‌اپ مشخصات هر توکن تمام‌صفحه باشد… با فاصله و
+ * اندازه و تم درست». The full-screen shell is components/FullScreenSheet.jsx
+ * (see styles/fullscreen-sheet.css); this file owns the hero, the contract
+ * line, the calculator and the pinned footer.
+ *
+ * The rule the old sheet broke is spacing: a specification read at 10px with
+ * 6px between rows is a wall. Every block here is separated by at least 14px,
+ * every value has a label above it, and every line has a line-height that lets
+ * Persian descenders and Latin digits share a row without touching.
+ */
+
+/* ── the hero ────────────────────────────────────────────────────────────── */
+.rwa-fs-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 16px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--rgb-2) 24%, transparent);
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--rgb-2) 20%, transparent), transparent 58%),
+    linear-gradient(150deg, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 62%);
+  overflow: hidden;
+}
+.rwa-fs-mark {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  flex: none;
+  place-items: center;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-raised) 65%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.8);
+}
+.rwa-fs-hero-copy { min-width: 0; display: grid; gap: 4px; }
+.rwa-fs-hero-name {
+  color: var(--text-1);
+  font-size: 16.5px;
+  font-weight: 900;
+  line-height: 1.45;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+.rwa-fs-hero-sym {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--rgb-1);
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.rwa-fs-hero-sym em {
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--rgb-1) 13%, transparent);
+  color: var(--text-2);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 800;
+}
+.rwa-fs-hero-chain {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.rwa-fs-hero-price {
+  flex: none;
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: end;
+}
+.rwa-fs-price {
+  color: var(--text-1);
+  font-size: 17px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.rwa-fs-chg {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rwa-fs-chg.up { color: var(--up); background: color-mix(in srgb, var(--up) 13%, transparent); }
+.rwa-fs-chg.down { color: var(--down); background: color-mix(in srgb, var(--down) 13%, transparent); }
+.rwa-fs-spark {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+/* ── facts ───────────────────────────────────────────────────────────────── */
+.rwa-fs-grid .fsh-cell { min-height: 62px; }
+
+/* ── the contract ────────────────────────────────────────────────────────── */
+.rwa-fs-addr {
+  display: block;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 13px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.rwa-fs-contract-actions { margin-top: 11px; }
+.rwa-fs-explorer {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, transparent);
+  border-radius: 11px;
+  color: var(--rgb-1);
+  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
+  font-size: 11.5px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.rwa-fs-explorer:active { transform: scale(0.98); }
+
+/* ── the calculator ──────────────────────────────────────────────────────── */
+.rwa-fs-picks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.rwa-fs-pick {
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 13px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.rwa-fs-pick.is-active {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 48%, transparent);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--rgb-1) 18%, transparent), color-mix(in srgb, var(--rgb-2) 16%, transparent));
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--rgb-1) 70%, transparent);
+}
+.rwa-fs-pick:active { transform: scale(0.97); }
+.rwa-fs-pick:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+.rwa-fs-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px dashed color-mix(in srgb, var(--rgb-2) 34%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--rgb-2) 7%, transparent);
+}
+.rwa-fs-result-label { color: var(--text-3); font-size: 11.5px; font-weight: 700; line-height: 1.6; }
+.rwa-fs-result-num { color: var(--text-1); font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* ── the custody note ────────────────────────────────────────────────────── */
+.rwa-fs-custody {
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-raised) 40%, transparent);
+}
+.rwa-fs-custody-title {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 900;
+  line-height: 1.7;
+}
+.rwa-fs-custody-body {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1.9;
+}
+
+/* ── the pinned footer ───────────────────────────────────────────────────── */
+.rwa-fs-foot { display: flex; align-items: center; gap: 9px; }
+.rwa-fs-buy {
+  flex: 1;
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 850;
+}
+.rwa-fs-chart {
+  flex: none;
+  width: 50px;
+  min-height: 50px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+@media (max-width: 380px) {
+  .rwa-fs-mark { width: 56px; height: 56px; }
+  .rwa-fs-hero { gap: 10px; padding: 13px; }
+  .rwa-fs-hero-name { font-size: 15px; }
+  .rwa-fs-price { font-size: 15.5px; }
+  .rwa-fs-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rwa-fs-pick { transition: none; }
+}

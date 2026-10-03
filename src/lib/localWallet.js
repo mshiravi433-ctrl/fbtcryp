@@ -171,7 +171,12 @@ export async function createVaultWithSigner(mnemonic, password, provider) {
   saveVault(vault);
   return {
     address: wallet.address,
-    signer: provider ? wallet.connect(provider) : wallet
+    signer: provider ? wallet.connect(provider) : wallet,
+    /* The phrase is returned for ONE reason: the device session (see
+       lib/localWalletSession.js) has to be able to re-unlock this wallet on the
+       next document, and only the caller that just typed it can hand it over.
+       It is never persisted here and never leaves the device. */
+    mnemonic: phrase
   };
 }
 
@@ -186,6 +191,22 @@ export async function createVault(mnemonic, password) {
  * and drop it on lock — never write it back to storage.
  */
 export async function unlockVault(password, provider) {
+  const { signer } = await unlockVaultWithSecret(password, provider);
+  return signer;
+}
+
+/**
+ * The same unlock, plus the phrase it decrypted.
+ *
+ * Two callers need the phrase itself: the device session (which re-encrypts it
+ * under a non-extractable device key so a REFRESH does not cost a password —
+ * see lib/localWalletSession.js) and the backup screen. One PBKDF2 pass serves
+ * both, which matters on a phone where that pass is the slowest thing on the
+ * screen.
+ *
+ * @returns {Promise<{ signer: object, secret: string, address: string }>}
+ */
+export async function unlockVaultWithSecret(password, provider) {
   const vault = loadVault();
   if (!vault) throw new Error('NO_VAULT');
   await yieldFrame();
@@ -197,6 +218,22 @@ export async function unlockVault(password, provider) {
   }
   const { HDNodeWallet } = await loadEthers();
   const wallet = HDNodeWallet.fromPhrase(mnemonic);
+  return {
+    signer: provider ? wallet.connect(provider) : wallet,
+    secret: mnemonic,
+    address: vault.address || wallet.address
+  };
+}
+
+/**
+ * Rebuild a signer from a phrase the DEVICE remembered (never from a server).
+ * Used only by the cold-start path that restores an unlocked in-app wallet.
+ */
+export async function signerFromMnemonic(mnemonic, provider) {
+  const phrase = String(mnemonic || '').trim().replace(/\s+/g, ' ');
+  if (!phrase) throw new Error('BAD_MNEMONIC');
+  const { HDNodeWallet } = await loadEthers();
+  const wallet = HDNodeWallet.fromPhrase(phrase);
   return provider ? wallet.connect(provider) : wallet;
 }
 

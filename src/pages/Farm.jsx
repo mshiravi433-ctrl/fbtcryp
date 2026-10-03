@@ -24,6 +24,7 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import { useFarmYields } from '../hooks/useFarmYields';
 import PoolHistory from '../components/Farm/PoolHistory';
 import PoolGlyph from '../components/Farm/PoolGlyph';
+import FullScreenSheet from '../components/FullScreenSheet';
 import { TOKENS } from '../lib/chains';
 import {
   farmScore, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
@@ -600,22 +601,25 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
 
           <div className="farm-actions">
             <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
-            <button className="btn btn-ghost farm-btn" onClick={() => onShowDetails(pool)} aria-expanded={selected}>{selected ? t('farm.hideAnalytics') : t('farm.viewAnalytics')}</button>
+            {/* THE DOOR TO THE ANALYSIS. It opens a FULL-SCREEN sheet now
+                (see PoolDetails), so the label is a promise about the whole
+                screen rather than about a box that grows under the card. */}
+            <button
+              className="btn btn-ghost farm-btn"
+              onClick={() => onShowDetails(pool)}
+              aria-expanded={selected}
+              data-testid={`farm-view-analytics-${pool.id}`}
+            >
+              {selected ? t('farm.hideAnalytics') : t('farm.viewAnalytics')}
+            </button>
           </div>
-          {pool.url && (
-            <div className="farm-actions">
-              <button className="btn btn-ghost farm-btn farm-btn-minor" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>
-                {t('farm.openPool')}
-              </button>
-            </div>
-          )}
         </div>
       )}
     </motion.article>
   );
 }
 
-function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
+function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t }) {
   const route = investRoute(pool);
   const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
   const feeYield = fbtFeeEngine.estimateNetYield({ grossApy: Number(pool.apy), protocolCostApy: 0, gasUsd: null, amountUsd: amount });
@@ -651,8 +655,50 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
   const execution = farmExecutionAdapterFor(pool);
   const ExecutionPanel = execution?.openToPublic ? execution.Panel : null;
 
+  /*
+   * ─── A FULL SCREEN, NOT A DRAWR UNDER A CARD ────────────────────────────
+   * REPORTED: «در مزرعه برای هر پوزیشن یک تحلیل هست که بهتر است پاپ‌اپ تمام‌صفحه
+   * بشود — یک پاپ‌اپ تمام‌صفحه بی‌نظیر و مدرن».
+   *
+   * The analysis used to expand INLINE under the pool card: on a phone that
+   * meant the reader scrolled the page to the card, opened the card, opened the
+   * analysis, and then read a column of nineteen figures underneath two nested
+   * open boxes — with the CTA somewhere far below the fold. It is a page of
+   * analysis, so it gets a page: `FullScreenSheet` (portalled to the body, so
+   * `position: fixed` is measured against the viewport rather than
+   * PageTransition's animated `<main>`), its own header with the pool's mark,
+   * one scroller, and the action pinned at the bottom where a thumb already is.
+   *
+   * The `.farm-details` class stays on the content root ON PURPOSE: the
+   * execution tests scope their assertions to it («the analytics ask for a
+   * wallet»), and the class is what they look for.
+   */
   return (
-    <motion.section className="card card-rgb farm-details" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
+    <FullScreenSheet
+      open
+      onClose={onClose}
+      testId="farm-analysis-sheet"
+      className="farm-ana-fs"
+      kicker={t('farm.poolAnalytics')}
+      icon={<PoolGlyph pool={pool} size={22} chainKey={chainIconKey(pool.chain)} />}
+      closeLabel={t('farm.hideAnalytics')}
+      footer={(
+        <div className="farm-ana-foot">
+          <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
+          {pool.url && (
+            <button
+              type="button"
+              className="btn btn-ghost farm-btn farm-btn-minor"
+              onClick={() => onOpenPool(pool.url)}
+              title={t('farm.openPoolHint')}
+            >
+              {t('farm.openPool')}
+            </button>
+          )}
+        </div>
+      )}
+    >
+    <motion.section className="farm-details farm-details-full" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
       {/*
         THE HERO. The drawer repeats the card's mark so the user never wonders
         whether they opened the pool they meant to open — and now it leads with
@@ -779,6 +825,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, t }) {
         {!wallet.isConnected && <p className="faint">{t(ExecutionPanel ? 'farm.connectToExecute' : 'farm.readOnly')}</p>}
       </AnaSection>
     </motion.section>
+    </FullScreenSheet>
   );
 }
 
@@ -1115,7 +1162,7 @@ export default function Farm() {
       {rows.map((pool) => (
         <div key={pool.id} className="farm-pool-with-details">
           <PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
-          {selected?.id === pool.id && <PoolDetails pool={pool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
+          {selected?.id === pool.id && <PoolDetails pool={pool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(pool)} t={t} />}
         </div>
       ))}
     </motion.div>
@@ -1281,12 +1328,12 @@ export default function Farm() {
         </>
       )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
-      {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
+      {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
       {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered.slice(0, visibleCount))}{filtered.length > visibleCount && <button type="button" className="btn btn-ghost" onClick={() => setVisibleCount((n) => n + 24)}>{t('farm.showMore')}</button>}</section>}
 
-      {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} t={t} />}
+      {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
 
       <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody"><p>{t('farm.nativeCustodyNotice')}</p></InfoBox>
       <InfoBox title={t('farm.riskDisclosureTitle')} tone="warning"><p>{t('farm.riskDisclosure')}</p></InfoBox>

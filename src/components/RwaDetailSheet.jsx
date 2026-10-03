@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import Sheet from './Sheet';
+import FullScreenSheet from './FullScreenSheet';
 import ShareSheet from './ShareSheet';
 import Sparkline from './Sparkline';
 import RwaRiskPanel from './RwaRiskPanel';
@@ -12,8 +12,9 @@ import { EVM_CHAINS } from '../lib/chains';
 import { canonicalizeRwa, rwaCounterSymbol } from '../lib/rwaTokens';
 import { copyText } from '../lib/share';
 import { useShare } from '../hooks/useShare';
-import { IconCheck, IconCopy, IconExternal, IconShield, IconSwap } from './Icons';
+import { IconCheck, IconCopy, IconExternal, IconShield, IconSwap, IconTrend } from './Icons';
 import { useTelegram } from '../context/TelegramContext';
+import '../styles/rwa-detail-modern.css';
 
 const QUICK = [100, 500, 1000, 5000];
 
@@ -23,11 +24,36 @@ function chipUsd(n) {
 }
 
 /**
- * RWA specification sheet.
+ * RWA specification — now a FULL-SCREEN surface.
+ * ---------------------------------------------------------------------------
+ * REPORTED: «در توکن‌های rwa پاپ‌اپ مشخصات هر توکن تمام‌صفحه باشد و اندازه و
+ * مدرن بودن چیز بی‌نظیر ازش بساز با فاصله و اندازه و تم درست».
  *
- * Contract share + copy sit in `.btn-row` (equal width, one line, 44px).
- * A `.btn` next to another `.btn` without that class collapses the share
- * control — the same trap documented on the Earn invite row.
+ * It used to open in the shared 560px dialog (`<Sheet size="lg" anchor="bottom">`):
+ * a token's backing model, issuer, chain, contract, fee, calculator and risk
+ * panel all stacked inside a card that covers under half of a phone screen, so
+ * the reader scrolled a letterbox and the actions were always half off the
+ * bottom. A specification is a PAGE, and this app already has the surface for
+ * one — `FullScreenSheet` (portalled, safe-area aware, one scroller, one pinned
+ * footer).
+ *
+ * ─── WHAT THE REDESIGN CHANGES, AND NOT ONLY VISUALLY ──────────────────────
+ *   • A HERO: the token's mark, name, ticker, chain and live price lead, with
+ *     the 7-day sparkline beside them. The screen says WHAT you opened before
+ *     it says anything else.
+ *   • FACT CELLS, not a run-on chip row: category, chain, standard, our fee and
+ *     market cap each get a tile with a label, so a value is never a floating
+ *     word.
+ *   • THE CONTRACT IS READABLE: the address is a monospace line that wraps
+ *     instead of scrolling away, with copy / share / explorer as real controls.
+ *   • THE CALCULATOR IS A SECTION, not three loose blocks: pick an amount, read
+ *     what it buys at the real price minus the real fee.
+ *   • THE ACTION IS PINNED: quick-buy lives in the footer, so it is reachable
+ *     without scrolling to the end of the specification.
+ *
+ * Everything the old sheet asserted about honesty is kept: no estimate is shown
+ * where a number is missing ('—'), the fee is printed from the same `feeBps`
+ * the router charges, and the non-custodial note stays on the screen.
  */
 export default function RwaDetailSheet({
   open,
@@ -93,170 +119,183 @@ export default function RwaDetailSheet({
     });
   };
 
+  const priceLabel = Number.isFinite(price) && price > 0 ? `$${fmtPrice(price)}` : '—';
+
   return (
     <>
-      <Sheet
+      <FullScreenSheet
         open={open}
         onClose={onClose}
-        title={token.symbol || t('stocks.rwaDetailsTitle')}
-        anchor="bottom"
-        size="lg"
+        testId="rwa-detail-sheet"
+        className="rwa-fs"
+        kicker={t('stocks.rwaDetailsTitle')}
+        title={token.name || token.symbol}
+        subtitle={`${token.symbol || ''} · ${chainLabel}`}
+        icon={<TokenIcon token={token} chainId={token.chainId} size={26} />}
+        footer={(
+          <div className="rwa-fs-foot">
+            <button
+              type="button"
+              className="btn btn-primary rwa-fs-buy"
+              onClick={() => onBuy?.(token, calcAmount)}
+            >
+              <IconSwap width={16} height={16} />
+              <span>{t('stocks.rwaQuickBuy', { sym: token.symbol, pay, fee: feePct })}</span>
+            </button>
+            {token.coingeckoId && (
+              <button
+                type="button"
+                className="btn btn-ghost rwa-fs-chart"
+                aria-label={t('stocks.rwaViewChart')}
+                title={t('stocks.rwaViewChart')}
+                onClick={() => {
+                  onClose?.();
+                  navigate(`/coin/${token.coingeckoId}`);
+                }}
+              >
+                <IconTrend width={16} height={16} />
+              </button>
+            )}
+          </div>
+        )}
       >
-        <div className="rwa-detail">
-          <div className="rwa-card-head">
-            <span className="rwa-logo" aria-hidden="true">
-              <TokenIcon token={token} chainId={token.chainId} size={44} />
+        {/* ─── HERO: what this is, and what it is doing ─────────────────── */}
+        <section className="rwa-fs-hero">
+          <span className="rwa-fs-mark" aria-hidden="true">
+            <TokenIcon token={token} chainId={token.chainId} size={62} />
+          </span>
+          <div className="rwa-fs-hero-copy">
+            <span className="rwa-fs-hero-name">{token.name}</span>
+            <span className="rwa-fs-hero-sym mono" dir="ltr">
+              {token.symbol}
+              {token.standard ? <em>{token.standard}</em> : null}
             </span>
-            <div className="rwa-card-id">
-              <div className="rwa-card-name rwa-name-full">{token.name}</div>
-              <div className="rwa-card-sym mono">
-                <span>{token.symbol}</span>
-                <span className="faint">·</span>
-                <span className="faint">{chainLabel}</span>
-              </div>
-            </div>
-            <div className="rwa-card-px">
-              <div className="mono eq-price">{Number.isFinite(price) && price > 0 ? `$${fmtPrice(price)}` : '—'}</div>
-              <div className={`mono ${up ? 'up' : 'down'}`}>
-                {token.change24h != null ? fmtPct(token.change24h, 1) : '—'}
-              </div>
-            </div>
+            <span className="rwa-fs-hero-chain">{chainLabel}</span>
           </div>
-
-          <div className="rwa-chips">
-            <span className="pill pill-neutral">{t(`stocks.rwaCategory.${token.category}`, token.category)}</span>
-            <span className="pill pill-neutral">{chainLabel}</span>
-            {token.standard && <span className="pill pill-neutral mono">{token.standard}</span>}
-            <span className="pill pill-up mono">{feePct}% {t('stocks.rwaFeeChip')}</span>
-            {token.mcap > 0 && (
-              <span className="pill pill-neutral">{t('stocks.stats.mcap')}: {fmtCompact(token.mcap)}</span>
-            )}
+          <div className="rwa-fs-hero-price">
+            <span className="mono rwa-fs-price" dir="ltr">{priceLabel}</span>
+            <span className={`mono rwa-fs-chg ${up ? 'up' : 'down'}`} dir="ltr">
+              {token.change24h != null ? fmtPct(token.change24h, 1) : '—'}
+            </span>
           </div>
-
           {Array.isArray(token.sparkline) && token.sparkline.length > 2 && (
-            <div className="rwa-spark">
-              <span>{t('stocks.sparkline7d')}</span>
-              <Sparkline data={token.sparkline.slice(-40)} up={up} width={108} height={28} />
+            <div className="rwa-fs-spark" aria-hidden="true">
+              <Sparkline data={token.sparkline.slice(-40)} up={up} width={132} height={34} />
             </div>
           )}
+        </section>
 
-          <RwaRiskPanel token={token} />
+        {/* ─── THE FACTS, AS CELLS ──────────────────────────────────────── */}
+        <section className="fsh-section">
+          <div className="fsh-section-head">
+            <span className="fsh-section-icon" aria-hidden="true"><IconShield width={14} height={14} /></span>
+            <h3 className="fsh-section-title">{t('stocks.rwaBackingTitle')}</h3>
+          </div>
+          <div className="fsh-grid rwa-fs-grid">
+            <div className="fsh-cell">
+              <span className="fsh-cell-k">{t('stocks.rwaSpecType')}</span>
+              <span className="fsh-cell-v">{t(`stocks.rwaCategory.${token.category}`, token.category)}</span>
+            </div>
+            <div className="fsh-cell">
+              <span className="fsh-cell-k">{t('stocks.rwaSpecChain')}</span>
+              <span className="fsh-cell-v">{chainLabel}</span>
+            </div>
+            <div className="fsh-cell">
+              <span className="fsh-cell-k">{t('stocks.rwaSpecStandard')}</span>
+              <span className="fsh-cell-v mono" dir="ltr">{token.standard || 'ERC-20'}</span>
+            </div>
+            <div className="fsh-cell">
+              <span className="fsh-cell-k">{t('stocks.rwaSpecFee')}</span>
+              <span className="fsh-cell-v mono" dir="ltr">{feePct}%</span>
+            </div>
+            <div className="fsh-cell">
+              <span className="fsh-cell-k">{t('stocks.rwaIssuer')}</span>
+              <span className="fsh-cell-v">{token.issuer || '—'}</span>
+            </div>
+            <div className="fsh-cell">
+              <span className="fsh-cell-k">{t('stocks.stats.mcap')}</span>
+              <span className="fsh-cell-v">{token.mcap > 0 ? fmtCompact(token.mcap) : '—'}</span>
+            </div>
+          </div>
+          {(token.backing || typeLabel) && (
+            <p className="fsh-section-note">
+              {token.backing || typeLabel}
+              {token.backing && typeLabel ? ` · ${typeLabel}` : ''}
+            </p>
+          )}
+          {token.description && <p className="fsh-section-note">{token.description}</p>}
+        </section>
 
-          <section className="rwa-spec">
-            <div className="rwa-spec-title">
-              <IconShield width={15} height={15} />
-              <span>{t('stocks.rwaBackingTitle')}</span>
+        {/* ─── RISK: the panel keeps its own honest renderer ────────────── */}
+        <RwaRiskPanel token={token} />
+
+        {/* ─── THE CONTRACT ─────────────────────────────────────────────── */}
+        {token.address && (
+          <section className="fsh-section">
+            <div className="fsh-section-head">
+              <span className="fsh-section-icon" aria-hidden="true"><IconExternal width={14} height={14} /></span>
+              <h3 className="fsh-section-title">{t('stocks.rwaContract')}</h3>
             </div>
-            <div className="rwa-spec-row">
-              <span className="rwa-spec-k">{t('stocks.rwaIssuer')}</span>
-              <span className="rwa-spec-v">{token.issuer || '—'}</span>
+            <code className="rwa-fs-addr" dir="ltr">{token.address}</code>
+            <div className="btn-row rwa-fs-contract-actions">
+              <button type="button" className="btn btn-primary" onClick={shareAddress}>
+                {t('receive.share')}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={copyAddress}>
+                {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
+                <span>{copied ? t('common.copied') : t('common.copy')}</span>
+              </button>
             </div>
-            <div className="rwa-spec-row">
-              <span className="rwa-spec-k">{t('stocks.rwaBackingModel')}</span>
-              <span className="rwa-spec-v">{token.backing || '—'}</span>
-            </div>
-            {typeLabel && (
-              <div className="rwa-spec-row">
-                <span className="rwa-spec-k">{t('stocks.rwaSpecType')}</span>
-                <span className="rwa-spec-v">{typeLabel}</span>
-              </div>
+            {explorerUrl && (
+              <a className="rwa-fs-explorer" href={explorerUrl} target="_blank" rel="noopener noreferrer">
+                <IconExternal width={14} height={14} />
+                <span>{t('stocks.rwaExplorer')}</span>
+              </a>
             )}
-            <div className="rwa-spec-row">
-              <span className="rwa-spec-k">{t('stocks.rwaSpecChain')}</span>
-              <span className="rwa-spec-v">{chainLabel}</span>
-            </div>
-            <div className="rwa-spec-row">
-              <span className="rwa-spec-k">{t('stocks.rwaSpecStandard')}</span>
-              <span className="rwa-spec-v mono">{token.standard || 'ERC-20'}</span>
-            </div>
-            <div className="rwa-spec-row">
-              <span className="rwa-spec-k">{t('stocks.rwaSpecFee')}</span>
-              <span className="rwa-spec-v mono">{feePct}%</span>
-            </div>
-            {token.description && <p className="rwa-spec-note">{token.description}</p>}
           </section>
+        )}
 
-          {token.address && (
-            <section className="rwa-contract">
-              <div className="rwa-spec-k">{t('stocks.rwaContract')}</div>
-              <div className="rwa-addr" dir="ltr" title={token.address}>{token.address}</div>
-              <div className="btn-row rwa-contract-actions">
-                <button type="button" className="btn btn-primary" onClick={shareAddress}>
-                  {t('receive.share')}
-                </button>
-                <button type="button" className="btn btn-ghost" onClick={copyAddress}>
-                  {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
-                  <span>{copied ? t('common.copied') : t('common.copy')}</span>
-                </button>
-              </div>
-              {explorerUrl && (
-                <a className="rwa-explorer" href={explorerUrl} target="_blank" rel="noopener noreferrer">
-                  <IconExternal width={14} height={14} />
-                  <span>{t('stocks.rwaExplorer')}</span>
-                </a>
-              )}
-            </section>
-          )}
-
-          <div className="rwa-custody">
-            <div className="rwa-custody-title">
-              {feePct}% {t('stocks.rwaFeeChip')} — {t('stocks.rwaNonCustodialHeader')}
-            </div>
-            <p>{t('stocks.rwaNonCustodialBody')}</p>
+        {/* ─── WHAT AN AMOUNT BUYS ──────────────────────────────────────── */}
+        <section className="fsh-section rwa-fs-calc">
+          <div className="fsh-section-head">
+            <span className="fsh-section-icon" aria-hidden="true"><IconSwap width={14} height={14} /></span>
+            <h3 className="fsh-section-title">{t('stocks.ifIBuy')}</h3>
           </div>
-
-          <div className="rwa-amounts">
-            <span className="rwa-amounts-label">{t('stocks.ifIBuy')}</span>
-            <div className="rwa-amounts-picks">
-              {QUICK.map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  className={`tag ${calcAmount === amt ? 'active' : ''}`}
-                  onClick={() => {
-                    haptic?.('select');
-                    setCalcAmount(amt);
-                  }}
-                >
-                  {chipUsd(amt)}
-                </button>
-              ))}
-            </div>
+          <div className="rwa-fs-picks">
+            {QUICK.map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                className={`rwa-fs-pick${calcAmount === amt ? ' is-active' : ''}`}
+                aria-pressed={calcAmount === amt}
+                onClick={() => {
+                  haptic?.('select');
+                  setCalcAmount(amt);
+                }}
+              >
+                {chipUsd(amt)}
+              </button>
+            ))}
           </div>
-
           {units != null && (
-            <div className="rwa-calc">
-              <span className="rwa-calc-label">{t('stocks.wouldGet', { amount: fmtUsd(calcAmount) })}</span>
-              <span className="mono rwa-calc-num">
+            <div className="rwa-fs-result">
+              <span className="rwa-fs-result-label">{t('stocks.wouldGet', { amount: fmtUsd(calcAmount) })}</span>
+              <span className="mono rwa-fs-result-num" dir="ltr">
                 {units < 0.01 ? units.toFixed(4) : units.toFixed(2)}
                 <span className="faint"> {token.symbol}</span>
               </span>
             </div>
           )}
+        </section>
 
-          <button
-            type="button"
-            className="btn btn-primary rwa-quick"
-            onClick={() => onBuy?.(token, calcAmount)}
-          >
-            <IconSwap width={16} height={16} />
-            <span>{t('stocks.rwaQuickBuy', { sym: token.symbol, pay, fee: feePct })}</span>
-          </button>
-
-          {token.coingeckoId && (
-            <button
-              type="button"
-              className="btn btn-ghost rwa-chart"
-              onClick={() => {
-                onClose?.();
-                navigate(`/coin/${token.coingeckoId}`);
-              }}
-            >
-              {t('stocks.rwaViewChart')}
-            </button>
-          )}
-        </div>
-      </Sheet>
+        {/* ─── THE CUSTODY NOTE, LAST SO IT IS NOT A FOOTER NOBODY READS ── */}
+        <section className="rwa-fs-custody">
+          <p className="rwa-fs-custody-title">
+            {feePct}% {t('stocks.rwaFeeChip')} — {t('stocks.rwaNonCustodialHeader')}
+          </p>
+          <p className="rwa-fs-custody-body">{t('stocks.rwaNonCustodialBody')}</p>
+        </section>
+      </FullScreenSheet>
       <ShareSheet {...shareSheet} />
     </>
   );

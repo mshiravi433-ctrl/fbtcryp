@@ -1,0 +1,298 @@
+/*
+ * EARLY AI SIGNALS — the reported layout, rebuilt.
+ * ---------------------------------------------------------------------------
+ * REPORT (verbatim): «فاصله و اندازه زیر باکس‌های زودهنگام صعودی یا نزولی اصلا
+ * کل متنش پیدا نیست و متن‌های دیگر فاصله بینشون کم و داخل هم فرو رفته… کند شدن
+ * حرکت، RSI در ناحیه اشباع فروش، MACD نزولی، نوار پایینی بولینگر — این‌ها در هم
+ * فرو رفته‌اند. فاصله درست.»
+ *
+ * ─── WHAT WAS WRONG ───────────────────────────────────────────────────────
+ * The row was ONE flex line: logo · symbol+flags · confidence. Every flag was an
+ * inline chip in a `flex-wrap` strip inside a cell that also had to hold the
+ * symbol, the confidence row and the confidence bar — so the chips were squeezed
+ * into whatever was left of a phone-width row, wrapped three deep, and their
+ * text ran into the neighbouring rows (no line-height, no min-height, no
+ * overflow guard). Persian chip text is long by nature; the layout had to give
+ * it a column, not the leftover crumbs of one.
+ *
+ * ─── THE SHAPE NOW ────────────────────────────────────────────────────────
+ * A card per asset, and inside it two rows that never fight:
+ *
+ *   1. identity  — logo · symbol/name · DIRECTION GLYPH · confidence ring
+ *   2. tags      — a real 2-column grid, each tag free to wrap onto two lines
+ *
+ * The direction is an ARROW (↑ / ↓ / ·), as asked: «به جای کلمه صعودی یا نزولی
+ * فلش بالا و پایین بذار». The words are not lost — they stay on the element as
+ * its accessible name and tooltip, so a screen reader and a long-press both
+ * still say «زودهنگام صعودی».
+ *
+ * Everything below is defensive about text: `line-height`, `min-height`,
+ * `overflow-wrap`, and a grid that is allowed to grow. Overlap is not a
+ * spacing preference; it is text with nowhere to go.
+ */
+
+.sie-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sie-head-cap {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid rgba(0, 229, 255, 0.24);
+  border-radius: 12px;
+  color: var(--rgb-1);
+  background: linear-gradient(150deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.12));
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.12);
+}
+
+.sie-head-cap svg { width: 17px; height: 17px; }
+.sie-head-copy { min-width: 0; flex: 1; }
+.sie-head-title {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.5;
+  letter-spacing: -0.1px;
+}
+.sie-head-sub {
+  margin: 3px 0 0;
+  color: var(--sic-dim, var(--text-3));
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+.sie-head-count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 999px;
+  color: var(--rgb-1);
+  background: rgba(0, 229, 255, 0.09);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.sie-head-count::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: sie-pulse 2.4s ease-in-out infinite;
+}
+@keyframes sie-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.72); }
+}
+
+.sie-rows {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ── one asset ───────────────────────────────────────────────────────────── */
+.sie-card {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 13px 13px;
+  border: 1px solid var(--sic-line-soft, var(--line));
+  border-radius: 18px;
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012) 60%),
+    var(--sic-surface-3, var(--card));
+  overflow: hidden;
+}
+.sie-card::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--sie-accent, transparent);
+  opacity: 0.85;
+}
+.sie-card.sie-up { --sie-accent: var(--up); }
+.sie-card.sie-down { --sie-accent: var(--down); }
+.sie-card.sie-watch { --sie-accent: #ffb300; }
+
+.sie-top {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+.sie-logo { flex: none; display: grid; place-items: center; }
+.sie-id { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.sie-sym {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sie-name {
+  color: var(--sic-dim, var(--text-3));
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── the direction, as a glyph ───────────────────────────────────────────── */
+.sie-dir {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+.sie-dir svg { width: 15px; height: 15px; }
+.sie-dir.sie-up { color: var(--up); background: rgba(0, 255, 157, 0.11); border: 1px solid rgba(0, 255, 157, 0.32); }
+.sie-dir.sie-down { color: var(--down); background: rgba(255, 59, 107, 0.11); border: 1px solid rgba(255, 59, 107, 0.32); }
+.sie-dir.sie-watch { color: #ffb300; background: rgba(255, 179, 0, 0.11); border: 1px solid rgba(255, 179, 0, 0.32); }
+
+/* ── the confidence ring ─────────────────────────────────────────────────── */
+.sie-conf {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+}
+.sie-conf-ring { position: relative; display: grid; place-items: center; width: 46px; height: 46px; }
+.sie-conf-ring svg { position: absolute; inset: 0; width: 46px; height: 46px; transform: rotate(-90deg); }
+.sie-conf-ring circle { fill: none; stroke-width: 4; }
+.sie-conf-track { stroke: rgba(127, 127, 127, 0.18); }
+.sie-conf-arc {
+  stroke: var(--sie-accent, var(--rgb-1));
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--sie-accent, var(--rgb-1)) 55%, transparent));
+  transition: stroke-dashoffset 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sie-conf-value {
+  position: relative;
+  color: var(--text-1);
+  font-size: 11.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.sie-conf-value small { font-size: 8px; font-weight: 700; color: var(--sic-faint, var(--text-3)); }
+
+/* ── the tags, in a real grid ────────────────────────────────────────────── */
+.sie-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sie-flag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 9px;
+  border: 1px solid var(--sic-line-faint, rgba(255, 255, 255, 0.09));
+  border-radius: 10px;
+  color: var(--text-2);
+  background: rgba(127, 127, 127, 0.09);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.sie-flag::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--sie-accent, var(--rgb-1));
+  opacity: 0.85;
+}
+.sie-flag b { color: var(--text-1); font-weight: 900; }
+.sie-flag.is-warn { color: #ffc457; border-color: rgba(255, 179, 0, 0.3); background: rgba(255, 179, 0, 0.08); }
+.sie-flag.is-warn::before { background: #ffb300; }
+
+/* A one-line honest note about what these numbers are. */
+.sie-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 11px;
+  padding: 9px 11px;
+  border: 1px solid var(--sic-line-faint, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  color: var(--sic-faint, var(--text-3));
+  background: rgba(127, 127, 127, 0.06);
+  font-size: 9.5px;
+  line-height: 1.85;
+}
+.sie-note-glyph { flex: none; color: var(--rgb-1); opacity: 0.85; }
+.sie-note-glyph svg { width: 14px; height: 14px; }
+
+.sie-empty {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 22px 16px;
+  border: 1px dashed var(--sic-line-soft, rgba(255, 255, 255, 0.12));
+  border-radius: 16px;
+  color: var(--sic-dim, var(--text-3));
+  background: rgba(127, 127, 127, 0.05);
+  font-size: 11px;
+  line-height: 1.8;
+  text-align: center;
+}
+
+/* ── light theme ─────────────────────────────────────────────────────────── */
+:root[data-theme='light'] .sie-card {
+  background: linear-gradient(158deg, rgba(13, 16, 32, 0.035), rgba(13, 16, 32, 0.012) 60%), #fff;
+  border-color: rgba(13, 16, 32, 0.1);
+}
+:root[data-theme='light'] .sie-flag {
+  background: rgba(13, 16, 32, 0.035);
+  border-color: rgba(13, 16, 32, 0.1);
+}
+:root[data-theme='light'] .sie-note { background: rgba(13, 16, 32, 0.03); }
+
+/* ── narrow screens: the ring drops under the identity row ───────────────── */
+@media (max-width: 380px) {
+  .sie-flags { grid-template-columns: 1fr; }
+  .sie-conf, .sie-conf-ring, .sie-conf-ring svg { width: 42px; height: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sie-head-count::before { animation: none; }
+  .sie-conf-arc { transition: none; }
+}
