@@ -166,6 +166,39 @@ export async function run(container) {
    */
   await mount('P2P', <P2P />);
 
+  /* The active panel must track the route tab: a successful initial mount does
+     not reach the on-chain OTC or payment-link workspaces behind the strip. */
+  {
+    const before = errors.length;
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<Wrap><P2P /></Wrap>));
+      const activate = async (key) => {
+        const button = container.querySelector(`#p2p-tab-${key}`);
+        if (!button) throw new Error(`missing P2P tab: ${key}`);
+        await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+        return container.querySelector('.p2p-tab-panel');
+      };
+      const marketPanel = await activate('market');
+      out.push(['P2P market tab shows offers and safety guidance', Boolean(
+        marketPanel?.querySelector('.p2pm') && marketPanel.querySelector('.p2p-safety-section')
+      )]);
+      const otcPanel = await activate('otc');
+      out.push(['P2P OTC tab shows the send action and safety checklist', Boolean(
+        otcPanel?.querySelector('.p2p-send-card') && otcPanel.querySelector('.p2p-checklist-card')
+      )]);
+      const payPanel = await activate('pay');
+      out.push(['P2P payment tab mounts the merchant link builder', Boolean(payPanel?.querySelector('.pay-gw'))]);
+      out.push(['P2P tab switching does not throw a React error', errors.length === before]);
+    } catch (e) {
+      out.push(['P2P tabs switch between all three workspaces', false]);
+      out.push(['P2P tab switching does not throw a React error', false]);
+      errors.push(`P2P tabs: ${e.message}`);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  }
+
   /*
    * The classifieds board, mounted DIRECTLY rather than through P2P.
    *
