@@ -1222,28 +1222,85 @@
 .perp-row-chg.up { color: var(--success); }
 .perp-row-chg.down { color: var(--danger); }
 .perp-row-nodata { font-size: 13px; }
+/* ─── THE TRADE BUTTON ────────────────────────────────────────────────
+   «دکمه معامله برای هر توکن را قشنگ تر و مدرن ترش کن با فاصله و اندازه
+   درست» — a flat cyan chip looked like a tag, not an action. The button is
+   the row's only verb, so it gets the treatment an action deserves: a real
+   gradient surface with an inner highlight, the trend glyph next to the
+   word, and a resting glow — sized so the Persian label never wraps and the
+   tap target stays ≥ 40px. Decoration lives in CSS, the label stays text.
+*/
 .perp-row-go {
+  position: relative;
+  overflow: hidden;
   flex: none;
-  min-width: 68px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 11px;
-  border: 1px solid rgba(var(--rgb-1-rgb), 0.34);
-  background: rgba(var(--rgb-1-rgb), 0.13);
-  color: var(--rgb-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 88px;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 42%, transparent);
+  background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2) 130%);
+  color: #fff;
   font: inherit;
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 750;
+  letter-spacing: 0.005em;
   cursor: pointer;
-  transition: transform 0.14s ease, background 0.14s ease;
+  box-shadow:
+    0 6px 18px -8px var(--rgb-1),
+    0 2px 6px -3px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease, filter 0.16s ease;
+}
+/* the moving sheen — a light band that passes once on hover/press, never on
+   a loop. A looped sheen on twenty rows is a fairground. */
+.perp-row-go::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.32) 50%, transparent 62%);
+  transform: translateX(-130%);
+  pointer-events: none;
+}
+.perp-row-go:hover::after,
+.perp-row-go:focus-visible::after {
+  transform: translateX(130%);
+  transition: transform 0.7s ease;
+}
+.perp-row-go svg { flex: none; opacity: 0.94; }
+.perp-row-go span { position: relative; z-index: 1; }
+.perp-row-go:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 9px 22px -8px var(--rgb-1),
+    0 3px 8px -3px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 .perp-row-go:active {
-  transform: scale(0.94);
-  background: rgba(var(--rgb-1-rgb), 0.22);
+  transform: scale(0.95);
+  filter: saturate(1.15);
+}
+.perp-row-go:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
+/* The sheen runs into the page direction; mirror the sweep for RTL. */
+[dir='rtl'] .perp-row-go::after {
+  transform: translateX(130%);
+}
+[dir='rtl'] .perp-row-go:hover::after,
+[dir='rtl'] .perp-row-go:focus-visible::after {
+  transform: translateX(-130%);
 }
 @media (prefers-reduced-motion: reduce) {
   .perp-row,
   .perp-row-go { transition: none; }
+  .perp-row-go:hover, .perp-row-go:active { transform: none; }
+  .perp-row-go::after { display: none; }
 }
 
 /* ─── THE TICKET, OVER THE WHOLE SCREEN ─────────────────────────────

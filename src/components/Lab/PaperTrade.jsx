@@ -129,7 +129,28 @@ export default function PaperTrade({ onBack }) {
   const potentialLoss = positionValue * (riskPctEntry / 100);
   const potentialProfit = positionValue * (rewardPctEntry / 100);
 
-  // Coach triggers
+  // Coach triggers — the verdict carries its numbers now («مربی هوش مصنوعی
+  // واقعا خوب کار بده»): «cut the size» names the size, «R:R is low» names
+  // the ratio, and the chips below the sentence print the full ticket maths.
+  const [tipIdx, setTipIdx] = useState(0);
+  const coachTone = open
+    ? 'neutral'
+    : !Number(stop) || !Number(tp) || sizePct > 10 || rr < 1.5
+    ? 'warn'
+    : 'good';
+
+  /* When the verdict is «green light» there is nothing left to fix, so the
+     coach spends its attention on the discipline instead: one rotating
+     principle every few seconds. A static "looks good, execute" forever is
+     exactly the dead label this component stopped being. */
+  const rotating = !open && coachTone === 'good';
+  useEffect(() => {
+    if (!rotating) return undefined;
+    const id = setInterval(() => setTipIdx((v) => (v + 1) % 4), 8000);
+    return () => clearInterval(id);
+  }, [rotating]);
+
+  const TIP_KEYS = ['coachGood', 'coachTip1', 'coachTip2', 'coachTip3'];
   const coachMsg = open
     ? t('lab2.paper.coachLive')
     : !Number(stop)
@@ -137,16 +158,20 @@ export default function PaperTrade({ onBack }) {
     : !Number(tp)
     ? t('lab2.paper.coachNoTp')
     : sizePct > 10
-    ? t('lab2.paper.coachOverSize')
+    ? t('lab2.paper.coachOverSize', { size: sizePct.toFixed(1) })
     : rr < 1.5
-    ? t('lab2.paper.coachBadRr')
-    : t('lab2.paper.coachGood');
+    ? t('lab2.paper.coachBadRr', { rr: rr.toFixed(2) })
+    : t(`lab2.paper.${TIP_KEYS[rotating ? tipIdx : 0]}`);
 
-  const coachTone = open
-    ? 'neutral'
-    : !Number(stop) || !Number(tp) || sizePct > 10 || rr < 1.5
-    ? 'warn'
-    : 'good';
+  /* The ticket's own numbers, pinned under the sentence. */
+  const coachChips = open
+    ? null
+    : [
+        { label: t('lab2.paper.rr'), value: rr > 0 ? `1 : ${rr.toFixed(2)}` : '—', tone: rr >= 1.5 ? 'up' : rr > 0 ? 'down' : undefined },
+        { label: t('lab2.paper.size'), value: `${sizePct.toFixed(1)}%`, tone: sizePct > 10 ? 'down' : 'up' },
+        { label: t('lab2.paper.risk'), value: `$${potentialLoss.toFixed(2)}`, tone: potentialLoss > 0 ? 'down' : undefined },
+        { label: t('lab2.paper.reward'), value: `$${potentialProfit.toFixed(2)}`, tone: potentialProfit > 0 ? 'up' : undefined }
+      ];
 
   if (result && !open) {
     const last = trades.find((x) => x.closed);
@@ -277,7 +302,7 @@ export default function PaperTrade({ onBack }) {
         <OpenPosition open={open} livePrice={livePrice} onClose={submit} />
       )}
 
-      <AICoach tone={coachTone} message={coachMsg} />
+      <AICoach tone={coachTone} message={coachMsg} chips={coachChips} />
 
       {result && !open && result.closed && (
         <ResultCard

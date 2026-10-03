@@ -660,3 +660,72 @@
   border-color: rgba(0, 169, 107, 0.25);
   color: #1e293b;
 }
+
+/* ─── the "still scanning" empty board ────────────────────────────────
+   «هوش تایید شده برای کیف پول واجد شرایط داده ندارد» — the empty board used
+   to be one plain line. It now reports the engine's own progress: how many
+   wallets were analysed, how many paired receipts were seen, and whether the
+   index pass has finished — so an empty board reads as work in progress,
+   not as a broken feature. The dot pulses; everything else is still.
+*/
+.smi-scanning {
+  border: 1px dashed color-mix(in srgb, var(--line-strong, rgba(255,255,255,0.16)) 70%, transparent);
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: color-mix(in srgb, var(--bg-panel, rgba(255,255,255,0.05)) 60%, transparent);
+  display: grid;
+  gap: 10px;
+}
+.smi-scanning-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2, #9aa4bf);
+  line-height: 1.7;
+}
+.smi-scanning-head .smi-live-dot {
+  animation: smi-scan-pulse 2.2s ease-in-out infinite;
+}
+@keyframes smi-scan-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.smi-scanning-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.smi-scanning-stats > div {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(255,255,255,0.09));
+  background: var(--bg-panel, rgba(255,255,255,0.05));
+  text-align: center;
+}
+.smi-scanning-stats b {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-1, #fff);
+  font-variant-numeric: tabular-nums;
+}
+.smi-scanning-stats span {
+  font-size: 10px;
+  color: var(--text-3, #5b647f);
+}
+.smi-scanning small {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--text-3, #5b647f);
+}
+@media (prefers-reduced-motion: reduce) {
+  .smi-scanning-head .smi-live-dot { animation: none; }
+}
+:root[data-theme='light'] .smi-scanning {
+  background: rgba(15, 23, 42, 0.02);
+  border-color: rgba(15, 23, 42, 0.12);
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { fmtDuration } from '../lib/audio';
+import '../styles/audio-player.css';
 
 /**
  * THE RADIO PLAYER — a real transport, not a play button.
@@ -320,6 +321,35 @@ export default function AudioPlayer({
       />
 
       <div className="ap-body">
+        {/*
+          The station orb — artwork plus the thing every modern player has and
+          this one did not: a live equalizer. It is the honest state indicator
+          for radio specifically (streams have no karaoke-style progress
+          markers), so bars move ONLY while sound is actually coming out. An
+          orb with bars frozen would claim a radio is playing when it is not.
+        */}
+        <span className={`ap-orb ${playing ? 'is-live' : ''}`} aria-hidden="true">
+          <span className="ap-orb-initial">{String(track.stationName ?? '·').trim().charAt(0) || '·'}</span>
+          <span className="ap-eq">
+            <i /><i /><i /><i />
+          </span>
+        </span>
+
+        <button
+          className="ap-meta"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
+          <span className="ap-title">{track.title}</span>
+          <span className="ap-sub">
+            <span className="ap-station">{track.stationName}</span>
+            <span className="ap-time mono">
+              {fmtDuration(shown) ?? '0:00'}
+              {duration > 0 && ` / ${fmtDuration(duration)}`}
+            </span>
+          </span>
+        </button>
+
         <button
           className={`ap-play ${playing ? 'is-playing' : ''}`}
           onClick={toggle}
@@ -342,21 +372,6 @@ export default function AudioPlayer({
               <path d="M4 2.6v10.8a.8.8 0 0 0 1.22.68l8.6-5.4a.8.8 0 0 0 0-1.36l-8.6-5.4A.8.8 0 0 0 4 2.6Z" />
             </svg>
           )}
-        </button>
-
-        <button
-          className="ap-meta"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-        >
-          <span className="ap-title">{track.title}</span>
-          <span className="ap-sub">
-            <span className="ap-station">{track.stationName}</span>
-            <span className="ap-time mono">
-              {fmtDuration(shown) ?? '0:00'}
-              {duration > 0 && ` / ${fmtDuration(duration)}`}
-            </span>
-          </span>
         </button>
 
         <button className="ap-btn" onClick={onClose} aria-label={t('radio.stop')}>

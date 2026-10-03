@@ -837,16 +837,54 @@
 
 .lab2-tab.active { color: #04121a; font-weight: 800; }
 
-/* The sliding pill. framer-motion moves it between tabs with `layoutId`. */
+/* The sliding pill. framer-motion moves it between tabs with `layoutId`.
+ *
+ * «پس از چند ثانیه رنگ عوض میکند این جالب نیست» — the pill used to pan its
+ * 180%-wide gradient on a 6-second loop, so the ACTIVE tab's hue kept
+ * drifting long after the tab was chosen, which read as the app recolouring
+ * itself. The gradient is now FIXED: identity stays put, and the life comes
+ * from light instead of colour — a soft sheen band crosses the pill every few
+ * seconds and the glow under it breathes once, both subtle enough that the
+ * colour you see is always the colour of the tab you chose. All of it goes
+ * to zero under reduced motion via the catch-all below.
+ */
 .lab2-tab-pill {
   position: absolute;
   inset: 0;
   border-radius: 13px;
   z-index: 0;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--rgb-1), var(--rgb-2) 55%, var(--rgb-3));
-  background-size: 180% 100%;
   box-shadow: 0 10px 24px -14px var(--rgb-2), inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  animation: lab-bar-pan 6s linear infinite;
+  animation: lab-tab-glow 4.6s ease-in-out infinite;
+}
+
+/* The light band — one slow sweep, then rest. It never re-saturates the
+   pill, it only passes across it. */
+.lab2-tab-pill::after {
+  content: '';
+  position: absolute;
+  inset: -10% -30%;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.30) 50%, transparent 58%);
+  transform: translateX(-80%);
+  animation: lab-tab-sheen 4.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes lab-tab-sheen {
+  0%, 46% { transform: translateX(-80%); opacity: 0; }
+  55% { opacity: 1; }
+  92%, 100% { transform: translateX(80%); opacity: 0; }
+}
+@keyframes lab-tab-glow {
+  0%, 100% { box-shadow: 0 10px 24px -14px var(--rgb-2), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+  50% { box-shadow: 0 12px 28px -12px var(--rgb-1), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
+}
+[dir='rtl'] .lab2-tab-pill::after { animation-name: lab-tab-sheen-rtl; }
+@keyframes lab-tab-sheen-rtl {
+  0%, 46% { transform: translateX(80%); opacity: 0; }
+  55% { opacity: 1; }
+  92%, 100% { transform: translateX(-80%); opacity: 0; }
 }
 
 .lab2-tab.active .lab2-tab-icon { transform: scale(1.06); }
@@ -1361,6 +1399,66 @@
 }
 
 .lab2-coach-msg { font-size: 12.5px; color: var(--text-1); line-height: 1.65; }
+
+/* ── tone reaches the box itself ─────────────────────────────────────── */
+.lab2-coach[data-tone='good'] {
+  --acc: var(--up);
+  border-color: color-mix(in srgb, var(--up) 30%, transparent);
+}
+.lab2-coach[data-tone='warn'] {
+  --acc: var(--ink-amber, #ffb547);
+  border-color: color-mix(in srgb, var(--ink-amber, #ffb547) 38%, transparent);
+}
+.lab2-coach-avatar[data-tone='good'] {
+  background: linear-gradient(140deg, var(--up), var(--rgb-1));
+  box-shadow: 0 10px 22px -12px var(--up), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.lab2-coach-avatar[data-tone='warn'] {
+  background: linear-gradient(140deg, var(--ink-amber, #ffb547), var(--rgb-3));
+  box-shadow: 0 10px 22px -12px var(--ink-amber, #ffb547), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.lab2-coach-name[data-tone='good'] { color: var(--up); }
+.lab2-coach-name[data-tone='warn'] { color: var(--ink-amber, #ffb547); }
+
+/* The streaming caret: a caret that blinks while the verdict types itself. */
+.lab2-coach-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-inline-start: 2px;
+  vertical-align: -0.14em;
+  background: var(--acc);
+  border-radius: 1px;
+  animation: lab-caret-blink 0.9s steps(2, start) infinite;
+}
+@keyframes lab-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* The numbers the verdict is ABOUT, printed under it as small chips. */
+.lab2-coach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.lab2-coach-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--lab-line);
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 10.5px;
+}
+.lab2-coach-chip-k { color: var(--text-3); font-weight: 600; }
+.lab2-coach-chip b { font-size: 11.5px; font-weight: 800; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.lab2-coach-chip.is-up { border-color: color-mix(in srgb, var(--up) 38%, transparent); }
+.lab2-coach-chip.is-up b { color: var(--up); }
+.lab2-coach-chip.is-down { border-color: color-mix(in srgb, var(--down) 38%, transparent); }
+.lab2-coach-chip.is-down b { color: var(--down); }
 
 /* Three dots that light up in sequence while the coach "talks". */
 .lab2-coach-dots { display: inline-flex; gap: 3px; align-items: center; }

@@ -94,9 +94,21 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
   const verifiedRow = verifiedToken({ verified: { ...data?.verified,
     consensus: data?.verified?.consensus ? [data.verified.consensus] : [] }, window: win },
   chain, address, { window: win });
+  const observed = data?.verified?.observed;
+  /* «هوشمند مانی برای صفحه زیر هر توکن در بیشتر مواقع میزنه داده ناکافی».
+     Verified consensus is a HIGH bar (3+ qualified independent wallets) and
+     most contracts legitimately never clear it — but the card was answering
+     that with a bare «داده ناکافی» as the head number, even while a real,
+     measured window flow sat three tiles below. The header now shows the
+     best measured number that EXISTS for this contract — verified consensus
+     when it is earned, the window-scoped DEX flow otherwise — and only says
+     insufficient when nothing at all has been measured. The "not consensus"
+     marking stays on the body where the number is substantiated. */
   const headSummary = loading ? null : verifiedRow
     ? `${verifiedRow.netFlowUsd > 0 ? '+' : '−'}${fmtUsd(Math.abs(verifiedRow.netFlowUsd))}`
-    : t('sm.engine.insufficient');
+    : flow && Number.isFinite(flow.netUsd)
+      ? `${flow.netUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(flow.netUsd))}`
+      : t('sm.engine.insufficient');
 
   return (
     <motion.div
@@ -199,12 +211,24 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
               {t(`sm.engine.signal.${verifiedRow.signal}`)} · {verifiedRow.confidence}/100 · {verifiedRow.netFlowUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(verifiedRow.netFlowUsd))}
             </span><small>{t('sm.engine.verifiedGroups', { n: verifiedRow.independentVotes, swaps: verifiedRow.swaps })}</small></>
               : <p>{t('sm.engine.tokenInsufficient')}</p>}
-            {/* Real paired swaps of this contract by analysed wallets —
-                receipts, explicitly NOT consensus. */}
-            {!verifiedRow && data?.verified?.observed?.swaps > 0 && <small data-testid="sm-token-observed">
-              {t('sm.engine.tokenObserved', { swaps: data.verified.observed.swaps, wallets: data.verified.observed.wallets,
-                net: `${data.verified.observed.netFlowUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(data.verified.observed.netFlowUsd))}` })}
+            {/*
+              Three escalating answers instead of one bare «insufficient»:
+                1. observed receipts for THIS contract (promoted to the main
+                   line — it is real measured evidence, just not consensus);
+                2. the engine's own coverage, so «نکافی» is backed by the
+                   sample size it was derived from;
+                3. only then silence.
+            */}
+            {!verifiedRow && observed?.swaps > 0 && <small data-testid="sm-token-observed">
+              {t('sm.engine.tokenObserved', { swaps: observed.swaps, wallets: observed.wallets,
+                net: `${observed.netFlowUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(observed.netFlowUsd))}` })}
             </small>}
+            {!verifiedRow && !(observed?.swaps > 0) && data?.verified?.coverage?.analyzedWallets > 0 && (
+              <small>{t('sm.engine.teaserSample', {
+                wallets: data.verified.coverage.analyzedWallets,
+                swaps: data.verified.coverage.observedSwaps ?? data.verified.coverage.swapsInWindow ?? 0
+              })}</small>
+            )}
           </div>
           {/* Legacy router/market flow is useful context, not verified trades. */}
           <div className="sm-coverage" data-testid="sm-token-window-note">
