@@ -184,28 +184,56 @@ describe('the network picker', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('focuses the search box on open, so the very first keypress answers', () => {
+  /*
+   * ─── THE POPUP OPENS WITHOUT A KEYBOARD ───────────────────────────────────
+   *
+   * «هر بار می‌زنه خودکار صفحه کلید هم باز می‌شود» — the field used to be
+   * mounted with `autoFocus`, so tapping «شبکه» on the wallet hero raised the
+   * phone keyboard over a list of fifteen rows. Two properties now hold, and
+   * BOTH are asserted because either one alone can be faked: no field exists
+   * in the default view, and nothing in the popup has taken focus.
+   */
+  it('opens with no search box and no focused input — nothing raises the keyboard', () => {
     render(<NetworkSelect {...baseProps} />);
     openList();
-    const box = screen.getByPlaceholderText(en.wallet.netSearch);
-    expect(document.activeElement).toBe(box);
+    expect(screen.queryByPlaceholderText(en.wallet.netSearch)).toBeNull();
+    expect(document.querySelector('.net-select__search')).toBeNull();
+    const active = document.activeElement;
+    expect(active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA').toBe(false);
   });
 
-  it('navigates with the keyboard from the search box and chooses with Enter', () => {
+  it('focuses the LIST instead, so ↑/↓ answer on the first keypress', () => {
+    render(<NetworkSelect {...baseProps} />);
+    const list = openList();
+    expect(document.activeElement).toBe(list);
+  });
+
+  it('the magnifier reveals the field and only then focuses it', () => {
+    render(<NetworkSelect {...baseProps} />);
+    openList();
+    fireEvent.click(document.querySelector('.net-select__searchbtn'));
+    const box = screen.getByPlaceholderText(en.wallet.netSearch);
+    expect(document.activeElement).toBe(box);
+    /* and tapping it again puts the field away — the list is the default */
+    fireEvent.click(document.querySelector('.net-select__searchbtn'));
+    expect(screen.queryByPlaceholderText(en.wallet.netSearch)).toBeNull();
+  });
+
+  it('navigates with the keyboard from the list and chooses with Enter', () => {
     const onChange = vi.fn();
     render(<NetworkSelect {...baseProps} onChange={onChange} />);
-    openList();
-    const box = screen.getByPlaceholderText(en.wallet.netSearch);
-    fireEvent.keyDown(box, { key: 'ArrowDown' });
-    fireEvent.keyDown(box, { key: 'ArrowDown' });
-    fireEvent.keyDown(box, { key: 'Enter' });
+    const list = openList();
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    fireEvent.keyDown(list, { key: 'Enter' });
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toBe(EVM_CHAIN_ORDER[1]);
   });
 
-  it('searches by name, by short code and by chain id', () => {
+  it('searches by name, by short code and by chain id once search is asked for', () => {
     render(<NetworkSelect {...baseProps} />);
     openList();
+    fireEvent.click(document.querySelector('.net-select__searchbtn'));
     const box = screen.getByPlaceholderText(en.wallet.netSearch);
     fireEvent.change(box, { target: { value: 'zk' } });
     let options = within(screen.getByRole('listbox')).getAllByRole('option');
@@ -240,7 +268,10 @@ describe('the network picker', () => {
     expect(trigger.getAttribute('aria-haspopup')).toBe('listbox');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     openList();
-    expect(screen.getByRole('button', { name: /Network/i }).getAttribute('aria-expanded')).toBe('true');
+    /* An EXACT name, not /Network/i: the magnifier added to the popup head
+       carries the search label («Search networks…») as its accessible name, so
+       the loose matcher now legitimately matches two controls. */
+    expect(screen.getByRole('button', { name: baseProps.label }).getAttribute('aria-expanded')).toBe('true');
     const selected = within(screen.getByRole('listbox'))
       .getByText(EVM_CHAINS[56].name)
       .closest('li');

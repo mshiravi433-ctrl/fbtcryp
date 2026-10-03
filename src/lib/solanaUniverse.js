@@ -29,6 +29,41 @@
 
 import { apiBase } from './apiBase.js';
 
+/*
+ * The curated starting points, defined ONCE.
+ *
+ * These rows lived inside pages/SolanaSwap.jsx until the Auto Orders screen
+ * needed the same five mints. A second copy of a mint address is a second
+ * chance to transpose a base58 character, and one of the six equity addresses
+ * was wrong on first write — caught only by querying the API. So the list
+ * moved here and both screens import it.
+ */
+import { SOL_MINT, USDC_MINT, USDT_MINT } from './solana.js';
+import { COMMODITY_ASSETS, EQUITY_ASSETS, LST_ASSETS } from './solanaAssets.js';
+
+/**
+ * Curated starting points. Everything else arrives from the remote catalogue
+ * or by pasted mint address.
+ *
+ * The liquid-staking tokens, the tokenized equities and the tokenized gold
+ * mints are spread in from lib/solanaAssets.js rather than retyped: someone
+ * who arrives from Stocks with a mint in mind should find it pickable, and
+ * the mints with their own Buy buttons must never fall back to USDC.
+ *
+ * `decimalsVerified: true` — these scales were read from the chain (or from
+ * the issuer's own list) when the mint was added, so an amount converted with
+ * them may be compared against a balance. A token imported by pasted address
+ * starts FALSE and becomes true only when the chain answers.
+ */
+export const SOLANA_BASE_TOKENS = [
+  { mint: SOL_MINT, symbol: 'SOL', name: 'Solana', decimals: 9 },
+  { mint: USDC_MINT, symbol: 'USDC', name: 'USD Coin', decimals: 6 },
+  { mint: USDT_MINT, symbol: 'USDT', name: 'Tether USD', decimals: 6 },
+  ...LST_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
+  ...EQUITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals })),
+  ...COMMODITY_ASSETS.map(({ mint, symbol, name, decimals }) => ({ mint, symbol, name, decimals }))
+].map((tk) => ({ ...tk, decimalsVerified: true }));
+
 const CACHE_KEY = 'fbt-solana-universe-v1';
 const DAY = 24 * 60 * 60 * 1000;
 

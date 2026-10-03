@@ -5,6 +5,7 @@ import { fetchIntelligence, fetchVerifiedWallets, fmtUsd, shortAddr, timeAgo, CH
 import { getTracked, trackWallet } from '../lib/smartMoneyWatch';
 import { openUrl } from '../lib/browser';
 import TokenIcon from '../lib/tokenIcon';
+import ModernSelect from './ModernSelect';
 
 const WINDOWS = ['30m', '24h', '7d'];
 const badge = (signal) => signal === 'ACCUMULATION' ? 'up' : signal === 'DISTRIBUTION' ? 'down' : 'idle';
@@ -610,10 +611,54 @@ export default function SmartMoneyIntelligence() {
             </button>
           ))}
         </div>
-        <select value={chain} onChange={(e) => { setChain(e.target.value); setSelected(null); }} aria-label={t('sm.engine.chain')}>
-          <option value="all">{t('sm.engine.allChains')}</option>
-          {CHAIN_OPTIONS.filter((c) => c.id !== 'solana').map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        {/*
+          ─── THE NETWORK BOX, BROUGHT IN LINE WITH EVERY OTHER ONE ──────────
+          Reported: «در باکس انتخاب شبکه باید مانند بقیهٔ پاپ‌اپ‌های دیگر به‌روز
+          و مدرن همراه با ایکون شبکه باشد و فیلد جستجو نمی‌خواهد».
+
+          It was a native `<select>`: the operating system drew the list, so the
+          networks had no marks, the open list looked nothing like the rest of
+          the app, and on Android the sheet that appears is the platform's own.
+          It is now the SAME picker as everywhere else — logo, full name, short
+          tag, a check on the current one — and because this screen is a filter,
+          not a transfer, `searchable` is left off: eight rows fit on any phone
+          and a keyboard here would only cover them.
+        */}
+        <ModernSelect
+          value={chain}
+          onChange={(v) => { setChain(String(v)); setSelected(null); }}
+          options={[
+            {
+              value: 'all',
+              label: t('sm.engine.allChains'),
+              /* The count, not a second copy of the label: the row says
+                 "all networks" and this says how many that actually is. */
+              sublabel: t('sm.engine.networkCount', {
+                n: CHAIN_OPTIONS.filter((c) => c.id !== 'solana').length
+              }),
+              /* A globe, drawn here: the "all networks" row has no chain to
+                 borrow a logo from, and a monogram («AL») would read as one. */
+              iconNode: (
+                <svg viewBox="0 0 24 24" width={30} height={30} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: 'var(--rgb-1)' }}>
+                  <circle cx="12" cy="12" r="8.6" />
+                  <path d="M3.4 12h17.2" />
+                  <path d="M12 3.4c2.3 2.4 3.5 5.3 3.5 8.6S14.3 18.2 12 20.6C9.7 18.2 8.5 15.3 8.5 12S9.7 5.8 12 3.4Z" />
+                </svg>
+              )
+            },
+            ...CHAIN_OPTIONS.filter((c) => c.id !== 'solana').map((c) => ({
+              value: c.id,
+              label: c.name,
+              sublabel: c.short,
+              chain: c.id
+            }))
+          ]}
+          title={t('sm.engine.chain')}
+          placeholder={t('sm.engine.allChains')}
+          compact
+          ariaLabel={t('sm.engine.chain')}
+          testId="sm-chain-select"
+        />
       </div>
 
       {busy && !data && <div className="sm-section"><div className="sm-skel" /><div className="sm-skel" /></div>}

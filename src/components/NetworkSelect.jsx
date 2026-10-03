@@ -91,6 +91,9 @@ export default function NetworkSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
+  /* The search field is revealed by the magnifier in the head — see the note
+     beside that button. Opening the popup therefore never focuses anything. */
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const baseId = id || `netsel-${autoId}`;
   const listId = `${baseId}-list`;
@@ -138,6 +141,7 @@ export default function NetworkSelect({
   const close = useCallback(({ focus = true } = {}) => {
     setOpen(false);
     setQuery('');
+    setSearchOpen(false);
     if (focus) {
       try {
         triggerRef.current?.focus?.();
@@ -310,6 +314,27 @@ export default function NetworkSelect({
                 <span className="net-select__head-title">
                   {label || allLabel || 'Networks'}
                 </span>
+                {/*
+                  ─── SEARCH IS A BUTTON, NOT AN OPEN TEXT FIELD ──────────────
+                  The list is fifteen networks; the sheet used to open with its
+                  search input focused, so tapping «شبکه» on the wallet hero
+                  raised the phone keyboard over the rows the user came to pick
+                  («هر بار می‌زنه خودکار صفحه کلید هم باز می‌شود»). The magnifier
+                  is now the only thing that can focus the field, and it focuses
+                  it because it was tapped.
+                */}
+                {searchLabel ? (
+                  <button
+                    type="button"
+                    className={`net-select__searchbtn${searchOpen ? ' is-on' : ''}`}
+                    aria-expanded={searchOpen}
+                    aria-label={searchLabel}
+                    data-testid={testId ? `${testId}-search-toggle` : undefined}
+                    onClick={() => setSearchOpen((v) => !v)}
+                  >
+                    <SearchMark />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="net-select__x"
@@ -320,7 +345,7 @@ export default function NetworkSelect({
                 </button>
               </div>
 
-              {searchLabel ? (
+              {searchLabel && searchOpen ? (
                 <div className="net-select__search">
                   <SearchMark />
                   <input
@@ -356,11 +381,14 @@ export default function NetworkSelect({
                 id={listId}
                 tabIndex={-1}
                 aria-label={label || allLabel || 'networks'}
-                /* Without a search box there is nothing else that can hold focus,
-                   so the list itself takes it — ↑/↓ answer immediately. */
+                /* Focus goes to the LIST whenever the field is absent — which
+                   now includes the default state of a popup that HAS search:
+                   the field only exists after the magnifier is tapped, and a
+                   listbox that has to be clicked before ↑/↓ answer is the
+                   «custom picker feels broken» complaint. */
                 ref={(node) => {
                   listRef.current = node;
-                  if (node && !searchLabel) {
+                  if (node && !(searchLabel && searchOpen)) {
                     try { node.focus({ preventScroll: true }); } catch { /* noop */ }
                   }
                 }}

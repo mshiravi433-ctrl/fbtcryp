@@ -24,6 +24,17 @@
 .smi-window button.active { color: #062923; background: #8ce4c6; box-shadow: 0 2px 8px rgba(12, 32, 37, .13); }
 .smi-controls select, .smi-follow select { min-width: 0; max-width: 145px; padding: 6px 8px; border-radius: 10px;
   border: 1px solid rgba(107, 150, 167, .3); background: #142638; color: #f0f7fc; font-size: 11px; }
+/* The chain filter is the app's own picker now (ModernSelect), not a <select>:
+   same logo, name and check as every other network box — see the note in
+   components/SmartMoneyIntelligence.jsx. It sits in the same controls row, so it
+   gets the same width budget the native box had. */
+.smi-controls .modern-select { flex: 0 1 auto; width: auto; min-width: 152px; max-width: 56%; }
+.smi-controls .modern-select-trigger { min-height: 40px; padding: 5px 9px; border-radius: 12px; gap: 8px; }
+.smi-controls .modern-select-icon { width: 30px; height: 30px; flex-basis: 30px; border-radius: 9px; }
+.smi-controls .modern-select-label { font-size: 12px; font-weight: 700; }
+.smi-controls .modern-select-sublabel { display: none; }
+.smi-controls .modern-select-chevron { width: 22px; height: 22px; flex-basis: 22px; border-radius: 7px; }
+.smi-controls .modern-select-chevron svg { width: 11px; height: 11px; }
 .smi-section { border: 1px solid rgba(131, 177, 195, .2); border-radius: 20px; padding: 17px 15px 14px;
   background: linear-gradient(155deg, rgba(105, 154, 180, .07), rgba(94, 132, 149, .025)); min-width: 0; }
 .smi-head { display: flex; justify-content: space-between; align-items: center; gap: 7px; margin-bottom: 14px; }

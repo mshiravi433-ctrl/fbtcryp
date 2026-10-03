@@ -14842,8 +14842,18 @@ export default function run() {
     /* the swap screen must keep honouring the contract every button uses */
     t('SolanaSwap still honours ?fromMint=&toMint=',
       /searchParams\.get\('fromMint'\)/.test(solSwap) && /searchParams\.get\('toMint'\)/.test(solSwap));
+    /*
+     * The curated Solana list MOVED to lib/solanaUniverse.js (the Auto Orders
+     * screen needs the same five mints, and a second copy of a base58 address
+     * is a second chance to transpose a character). The property is unchanged,
+     * so the assertion follows the list to its new owner and additionally
+     * checks that the swap page imports it — otherwise this gate would pass on
+     * a module nobody uses.
+     */
+    const solUniverse = read('src/lib/solanaUniverse.js');
     t('gold mints are pickable on the swap screen (the gold Buy used to land on USDC → USDC)',
-      /\.\.\.COMMODITY_ASSETS\.map\(/.test(solSwap));
+      /\.\.\.COMMODITY_ASSETS\.map\(/.test(solUniverse) &&
+      /SOLANA_BASE_TOKENS as BASE_TOKENS/.test(solSwap));
     t('a curated ?to= target is never silently replaced by USDC',
       !/BASE_TOKENS\.find\(\(tk\) => tk\.mint === asset\.mint\) \?\? BASE_TOKENS\[1\]/.test(solSwap));
 

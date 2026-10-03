@@ -1,12 +1,16 @@
 /*
- * BRIDGE — the hero banner and the mode rail.
+ * BRIDGE — the mode rail.
  * ---------------------------------------------------------------------------
- * REPORTED: «به صفحه پل یک بنر فوق‌مدرن و زیبا اضافه کن … تب توکن‌ها فوق‌مدرن و
- * بی‌نظیر … با تبلیغ پل ترون و سولانا … اندازه درست.»
+ * ONE THING LIVES HERE NOW: `.brg-modes`, the four-way control that used to be
+ * `.segmented seg-lg`.
  *
- * Two things live here:
- *   .brg-hero    the banner (components/BridgeHero.jsx)
- *   .brg-modes   the four-way mode control that used to be `.segmented seg-lg`
+ * `*.brg-hero*` — the tron/solana carousel that was the top third of this page —
+ * was deleted with its component. See the note where it used to be rendered in
+ * pages/Bridge.jsx: it advertised two of the four tabs drawn immediately below
+ * it, so the largest element on the screen repeated a control the user was
+ * about to touch and pushed the bridge form under the fold. The advertising
+ * slot it freed is now a Farm banner at the FOOT of the page
+ * (styles/farm-promo.css).
  *
  * The rail is a NEW class rather than a restyle of `.segmented` on purpose:
  * fourteen other controls share `.segmented`, and changing its metrics to make
@@ -15,280 +19,6 @@
  * same visible labels, so nothing that reads the control has to change — it
  * just stops looking like a settings toggle.
  */
-
-/* ─── compact, animated route carousel ───────────────────────────────────── */
-.brg-hero {
-  position: relative;
-  isolation: isolate;
-  margin: 12px 0 14px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--rgb-1) 25%, var(--line));
-  border-radius: 22px;
-  background:
-    radial-gradient(110% 130% at 100% 0%, color-mix(in srgb, var(--rgb-2) 17%, transparent), transparent 60%),
-    radial-gradient(100% 130% at 0% 100%, color-mix(in srgb, var(--rgb-1) 14%, transparent), transparent 62%),
-    linear-gradient(155deg, color-mix(in srgb, var(--bg-panel-solid, #06070c) 94%, var(--rgb-1) 6%), var(--bg-panel-solid, #06070c));
-  box-shadow: 0 20px 44px -34px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-
-.brg-hero-aurora {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
-.brg-hero-aurora::before,
-.brg-hero-aurora::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(42px);
-}
-.brg-hero-aurora::before {
-  width: 150px;
-  height: 150px;
-  inset-inline-end: -58px;
-  top: -76px;
-  background: var(--rgb-2);
-  opacity: 0.2;
-}
-.brg-hero-aurora::after {
-  width: 120px;
-  height: 120px;
-  inset-inline-start: -55px;
-  bottom: -68px;
-  background: var(--rgb-1);
-  opacity: 0.16;
-}
-
-.brg-hero-grid {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.12;
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--text-1) 20%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--text-1) 20%, transparent) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: radial-gradient(100% 100% at 100% 0%, #000 0%, transparent 72%);
-  -webkit-mask-image: radial-gradient(100% 100% at 100% 0%, #000 0%, transparent 72%);
-}
-
-.brg-hero-top {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  margin-bottom: 9px;
-}
-.brg-hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: calc(100% - 50px);
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--rgb-1) 32%, transparent);
-  border-radius: 999px;
-  color: var(--rgb-1);
-  background: color-mix(in srgb, var(--rgb-1) 10%, transparent);
-  font-size: 9.6px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-}
-.brg-hero-badge svg { flex: none; }
-.brg-hero-badge > span { overflow: hidden; text-overflow: ellipsis; }
-.brg-hero-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  color: var(--text-3);
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-.brg-hero-count i {
-  width: 16px;
-  height: 1px;
-  background: color-mix(in srgb, var(--text-3) 55%, transparent);
-}
-
-.brg-hero-stage {
-  position: relative;
-  z-index: 1;
-  perspective: 900px;
-}
-.brg-hero-card {
-  --brg-card-accent: #ff536a;
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 94px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--brg-card-accent) 27%, var(--line));
-  border-radius: 17px;
-  background:
-    radial-gradient(85% 150% at 100% 0%, color-mix(in srgb, var(--brg-card-accent) 11%, transparent), transparent 65%),
-    linear-gradient(150deg, color-mix(in srgb, var(--bg-panel-solid, #06070c) 92%, var(--brg-card-accent) 8%), color-mix(in srgb, var(--bg-raised) 55%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  overflow: hidden;
-  transform-style: preserve-3d;
-}
-.brg-hero-card::before {
-  content: '';
-  position: absolute;
-  inset-block: 12px;
-  inset-inline-start: 0;
-  width: 3px;
-  border-radius: 0 4px 4px 0;
-  background: var(--brg-card-accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--brg-card-accent) 42%, transparent);
-}
-.brg-hero-card.is-tron { --brg-card-accent: #ff536a; }
-.brg-hero-card.is-solana { --brg-card-accent: #18d997; }
-
-.brg-hero-card-mark {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 42px;
-  height: 42px;
-  grid-column: 1;
-  grid-row: 1;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--brg-card-accent) 38%, transparent);
-  border-radius: 14px;
-  color: var(--brg-card-accent);
-  background: color-mix(in srgb, var(--brg-card-accent) 12%, var(--bg-panel-solid, #06070c));
-  box-shadow: 0 8px 24px -18px var(--brg-card-accent);
-}
-.brg-hero-card-mark svg { width: 23px; height: 23px; }
-
-.brg-hero-card-copy {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  grid-column: 2;
-  grid-row: 1;
-}
-.brg-hero-card-network {
-  display: block;
-  margin-bottom: 2px;
-  color: var(--brg-card-accent);
-  font-size: 8.5px;
-  font-weight: 900;
-  letter-spacing: 0.11em;
-  line-height: 1.2;
-}
-.brg-hero-card-title {
-  margin: 0;
-  color: var(--text-1);
-  font-size: 13.3px;
-  font-weight: 900;
-  line-height: 1.45;
-  letter-spacing: -0.01em;
-}
-.brg-hero-card-note {
-  display: -webkit-box;
-  margin: 3px 0 0;
-  overflow: hidden;
-  color: var(--text-3);
-  font-size: 10.3px;
-  font-weight: 650;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.brg-hero-flow {
-  position: absolute;
-  z-index: 0;
-  inset-block-start: 8px;
-  inset-inline-end: 12px;
-  width: 76px;
-  height: 40px;
-  color: var(--brg-card-accent);
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.brg-hero-card-cta {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 130px;
-  min-height: 40px;
-  grid-column: 3;
-  grid-row: 1;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--brg-card-accent) 36%, transparent);
-  border-radius: 13px;
-  color: #fff;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--brg-card-accent) 80%, #090a10), color-mix(in srgb, var(--brg-card-accent) 57%, #090a10));
-  box-shadow: 0 8px 20px -14px var(--brg-card-accent), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  font: inherit;
-  font-size: 10.8px;
-  font-weight: 850;
-  line-height: 1.35;
-  text-align: center;
-  cursor: pointer;
-  transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
-}
-.brg-hero-card-cta svg { flex: none; }
-.brg-hero-card-cta:hover { filter: brightness(1.1); box-shadow: 0 11px 24px -14px var(--brg-card-accent); }
-.brg-hero-card-cta:active { transform: scale(0.98); }
-.brg-hero-card-cta:focus-visible { outline: 2px solid var(--brg-card-accent); outline-offset: 2px; }
-
-.brg-hero-dots {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  margin-top: 7px;
-}
-.brg-hero-dot {
-  display: grid;
-  width: 32px;
-  height: 24px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  cursor: pointer;
-}
-.brg-hero-dot::before {
-  content: '';
-  display: block;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-3) 55%, transparent);
-  transition: width 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-.brg-hero-dot.active::before {
-  width: 21px;
-  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
-  box-shadow: 0 0 12px color-mix(in srgb, var(--rgb-1) 45%, transparent);
-}
-.brg-hero-dot:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: -2px; }
 
 /* ─── the mode rail ──────────────────────────────────────────────────────── */
 .brg-modes {
@@ -350,60 +80,15 @@
 .brg-modes button:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
 .brg-modes .seg-indicator { border-radius: 15px; }
 
-@media (max-width: 560px) {
-  .brg-hero-card {
-    grid-template-columns: 40px minmax(0, 1fr);
-    gap: 9px;
-    min-height: 0;
-    padding: 11px;
-  }
-  .brg-hero-card-mark { width: 40px; height: 40px; }
-  .brg-hero-card-cta {
-    grid-column: 1 / -1;
-    grid-row: auto;
-    width: 100%;
-    min-width: 0;
-    min-height: 38px;
-  }
-  .brg-hero-flow { width: 62px; opacity: 0.28; }
-}
-
-:root[data-theme='light'] .brg-hero {
-  background:
-    radial-gradient(120% 130% at 100% 0%, rgba(124, 77, 255, 0.09), transparent 58%),
-    radial-gradient(120% 130% at 0% 100%, rgba(0, 160, 200, 0.08), transparent 62%),
-    linear-gradient(180deg, #ffffff, #f7f8fc);
-  border-color: rgba(13, 16, 32, 0.1);
-  box-shadow: 0 10px 28px -22px rgba(16, 20, 40, 0.32), inset 0 1px 0 #fff;
-}
-:root[data-theme='light'] .brg-hero-badge {
-  color: #006b78;
-  border-color: rgba(0, 107, 120, 0.22);
-  background: rgba(0, 131, 146, 0.07);
-}
-:root[data-theme='light'] .brg-hero-card {
-  background:
-    radial-gradient(85% 150% at 100% 0%, color-mix(in srgb, var(--brg-card-accent) 8%, transparent), transparent 65%),
-    linear-gradient(150deg, #ffffff, #f8f9fc);
-  border-color: color-mix(in srgb, var(--brg-card-accent) 24%, rgba(13, 16, 32, 0.1));
-}
-:root[data-theme='light'] .brg-hero-card.is-tron { --brg-card-accent: #c52e46; }
-:root[data-theme='light'] .brg-hero-card.is-solana { --brg-card-accent: #007c54; }
-:root[data-theme='light'] .brg-hero-flow { opacity: 0.24; }
 :root[data-theme='light'] .brg-modes { background: #ffffff; border-color: rgba(13, 16, 32, 0.1); }
 :root[data-theme='light'] .brg-modes button.active { background: rgba(13, 16, 32, 0.05); }
 
 @media (max-width: 380px) {
-  .brg-hero { padding: 10px; border-radius: 19px; }
-  .brg-hero-card-title { font-size: 12.8px; }
-  .brg-hero-card-note { font-size: 9.8px; }
   .brg-modes button { min-height: 54px; font-size: 10.2px; padding: 7px 4px; }
   .brg-modes button svg { width: 16px; height: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brg-hero-card-cta,
-  .brg-hero-dot,
   .brg-modes button { transition: none; }
   .brg-modes button.active { transform: none; }
 }

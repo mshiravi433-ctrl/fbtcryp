@@ -11976,6 +11976,41 @@ button.farm-protocol-toggle {
   box-shadow: 0 22px 48px -12px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.04);
   overflow: hidden;
 }
+/* SEARCH ON DEMAND — see the note in P2PMarket.jsx's FilterPicker. The row is
+   the panel's header: one quiet pill and the match count, no input, no focus,
+   so opening the picker never raises the keyboard. */
+.p2pm-picker-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+}
+.p2pm-picker-searchbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.p2pm-picker-searchbtn:hover { color: var(--text-1); border-color: var(--line-strong); }
+.p2pm-picker-searchbtn.is-on {
+  border-color: rgba(0, 229, 255, 0.34);
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--rgb-1);
+}
+.p2pm-picker-count { font-size: 11px; font-weight: 700; color: var(--text-3); }
+
 .p2pm-picker-search {
   display: flex;
   align-items: center;

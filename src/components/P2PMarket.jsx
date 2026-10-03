@@ -135,6 +135,17 @@ function CountryFlag({ code }) {
 function FilterPicker({ id, label, value, options, onChange, searchPlaceholder, emptyText }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  /*
+   * ─── THE FILTER FIELD IS OPT-IN, SO THE KEYBOARD IS TOO ───────────────────
+   * Reported across the P2P «درگاه پرداخت» tab and the rest of the app:
+   * «وقتی روش می‌زنی صفحه کلید باز می‌شه» — every picker opened with its search
+   * input focused, so choosing a country raised the phone keyboard over the
+   * list. These lists ARE long (Hodl Hodl publishes ~150 countries), so the
+   * field stays — but behind a «جستجو» button, which is the only control that
+   * can focus it. Opening the panel now costs nothing and shows everything.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef(null);
   const wrapRef = useRef(null);
   const triggerRef = useRef(null);
 
@@ -143,6 +154,7 @@ function FilterPicker({ id, label, value, options, onChange, searchPlaceholder, 
   useEffect(() => {
     if (!open) return undefined;
     setQ('');
+    setSearchOpen(false);
     const onDown = (e) => {
       if (!wrapRef.current?.contains(e.target)) setOpen(false);
     };
@@ -192,22 +204,41 @@ function FilterPicker({ id, label, value, options, onChange, searchPlaceholder, 
 
       {open && (
         <div className="p2pm-picker-panel" role="dialog" aria-labelledby={`${id}-label`}>
-          <div className="p2pm-picker-search">
-            <IconSearch width={14} height={14} aria-hidden="true" />
-            <input
-              type="text"
-              value={q}
-              autoFocus
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={searchPlaceholder}
-              aria-label={searchPlaceholder}
-            />
-            {q ? (
-              <button type="button" className="p2pm-picker-clear" onClick={() => setQ('')} aria-label={searchPlaceholder}>
-                <IconX width={12} height={12} />
-              </button>
-            ) : null}
+          <div className="p2pm-picker-tools">
+            <button
+              type="button"
+              className={`p2pm-picker-searchbtn${searchOpen ? ' is-on' : ''}`}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((v) => !v)}
+            >
+              <IconSearch width={13} height={13} aria-hidden="true" />
+              <span>{searchPlaceholder}</span>
+            </button>
+            <span className="p2pm-picker-count mono" aria-live="polite">{filtered.length}</span>
           </div>
+
+          {searchOpen ? (
+            <div className="p2pm-picker-search">
+              <IconSearch width={14} height={14} aria-hidden="true" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={q}
+                /* Deliberate: this input exists because the button above was
+                   tapped. Focusing it here is answering a request, not
+                   hijacking the tap that opened the picker. */
+                autoFocus
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+              />
+              {q ? (
+                <button type="button" className="p2pm-picker-clear" onClick={() => { setQ(''); searchRef.current?.focus(); }} aria-label={searchPlaceholder}>
+                  <IconX width={12} height={12} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="p2pm-picker-list" role="listbox" aria-labelledby={`${id}-label`} tabIndex={-1}>
             {filtered.length === 0 ? (

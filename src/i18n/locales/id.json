@@ -52,7 +52,11 @@
     "language": "Bahasa",
     "tryAgain": "Coba lagi",
     "notAdvice": "Data pasar hanya bersifat informatif dan bukan nasihat keuangan. Kripto sangat fluktuatif — Anda bisa kehilangan semuanya.",
-    "offlineData": "Umpan langsung tidak tersedia — menampilkan cadangan tersimpan. Harga tidak nyata."
+    "offlineData": "Umpan langsung tidak tersedia — menampilkan cadangan tersimpan. Harga tidak nyata.",
+    "search": "Cari",
+    "noResults": "Tidak ada hasil",
+    "max": "Maks",
+    "showing": "Menampilkan {{shown}} dari {{total}}"
   },
   "share": {
     "screen": "Bagikan",
@@ -689,7 +693,14 @@
         "SAME_TOKEN": "Pilih dua token yang berbeda.",
         "BAD_MINT": "Alamat itu bukan mint Solana."
       }
-    }
+    },
+    "network": "Jaringan",
+    "networkCount": "{{n}} token",
+    "statWatching": "Dipantau",
+    "statReady": "Siap sekarang",
+    "pxOk": "Umpan harga terhubung",
+    "pxChecking": "Memeriksa umpan harga…",
+    "pxNone": "Tanpa umpan harga"
   },
   "bridge": {
     "emptyHint": "Masukkan jumlah untuk melihat rute terbaik dan biayanya.",
@@ -752,6 +763,15 @@
       "DESTINATION_ADDRESS_REQUIRED": "Masukkan alamat tujuan — rute ini tidak bisa menentukannya sendiri.",
       "CROSSCHAIN_NOT_CONFIGURED": "Layanan lintas rantai belum dikonfigurasi di deployment ini.",
       "GENERIC": "Terjadi masalah ({{code}}). Tidak ada yang dikirim."
+    },
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "Buat uang yang baru Anda pindahkan jadi produktif",
+      "body": "Farm membaca imbal hasil langsung dari protokol dan mengirim setoran ke dompet Anda sendiri — kami tidak pernah memegang posisinya, dan Anda bisa menarik kapan saja.",
+      "chipLive": "Imbal hasil langsung",
+      "chipSelf": "Non-kustodial",
+      "chipExit": "Tarik kapan saja",
+      "cta": "Buka Farm"
     }
   },
   "dydx": {
@@ -2581,10 +2601,8 @@
       "empty": "Tidak ada saldo token di alamat ini.",
       "splNote": "Kirim di layar ini hanya memindahkan SOL asli. Token lain lewat halaman tukar.",
       "sendTitle": "Kirim SOL",
-      "sendOnly": "Ini hanya mengirim SOL asli. Token SPL tidak ikut pindah.",
       "recipient": "Alamat penerima",
       "amount": "Jumlah",
-      "sendCta": "Kirim SOL",
       "receiveTitle": "Terima",
       "receiveHint": "Kirim hanya SOL dan token Solana ke alamat ini. Alamat Ethereum yang diawali 0x tidak akan sampai ke sini.",
       "copied": "Tersalin",

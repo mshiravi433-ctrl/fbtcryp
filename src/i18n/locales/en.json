@@ -70,7 +70,11 @@
     "tryAgain": "Try again",
     "retry": "Try again",
     "close": "Close",
-    "notAdviceTitle": "This is market data, not advice"
+    "notAdviceTitle": "This is market data, not advice",
+    "search": "Search",
+    "noResults": "No results",
+    "max": "Max",
+    "showing": "Showing {{shown}} of {{total}}"
   },
   "market": {
     "totalMcap": "Total market cap",
@@ -5399,7 +5403,14 @@
         "SAME_TOKEN": "Choose two different tokens.",
         "BAD_MINT": "That token address is not a Solana mint."
       }
-    }
+    },
+    "network": "Network",
+    "networkCount": "{{n}} tokens",
+    "statWatching": "Watching",
+    "statReady": "Ready now",
+    "pxOk": "Price feed connected",
+    "pxChecking": "Checking the price feed…",
+    "pxNone": "No price feed"
   },
   "lock": {
     "title": "Locked",
@@ -5508,7 +5519,11 @@
       "SEND_FAILED": "The wallet could not submit the transaction. Nothing is shown as successful; check your balance and try again.",
       "NO_SIGNATURE": "The wallet returned no transaction signature.",
       "UNSUPPORTED_TRANSACTION": "This wallet does not support the transaction version returned by the route.",
-      "IN_WALLET": "The wallet opened — approve it there. The result appears on this page as soon as you are back."
+      "IN_WALLET": "The wallet opened — approve it there. The result appears on this page as soon as you are back.",
+      "SPL_NO_ACCOUNT": "This wallet has no token account for that mint, so there is nothing to send. Refresh the holdings list and try again.",
+      "SPL_SCALE_UNKNOWN": "We could not read this token’s decimal scale from the chain, so the amount cannot be verified. Send it from the swap screen instead.",
+      "BAD_DECIMALS": "The token’s decimal scale is unknown, so this transfer is refused rather than guessed.",
+      "BAD_ADDRESS": "That is not a valid Solana address."
     },
     "balanceUnverifiedBody": "Your balance is shown as «—» rather than as a number, because an unread balance is not a zero balance. The swap is still possible: your wallet simulates every transaction before it is sent, so one that would fail is never submitted and costs you nothing.",
     "swapUnverifiedNote": "We could not verify your balance from here, so this swap goes to your wallet unchecked. Your wallet and the network simulate it before anything lands — if the amount is too high, the transaction is rejected and nothing is spent.",
@@ -5690,17 +5705,22 @@
       "holdings": "Holdings",
       "partial": "Some balances could not be read. Only the part that answered is shown.",
       "empty": "No token balance was found on this address.",
-      "splNote": "Send on this screen moves native SOL only. Other tokens move from the swap.",
-      "sendTitle": "Send SOL",
-      "sendOnly": "This sends native SOL only. It does not move SPL tokens.",
+      "splNote": "If the recipient has never held this token, their token account is created in the same transaction; it costs about 0.00204 SOL in rent, paid from this wallet.",
+      "sendTitle": "Send",
       "recipient": "Recipient address",
       "amount": "Amount",
-      "sendCta": "Send SOL",
       "receiveTitle": "Receive",
       "receiveHint": "Send only SOL and Solana tokens to this address. An Ethereum address starting with 0x will not arrive here.",
       "copied": "Copied",
       "copy": "Copy address",
-      "badAddress": "That is not a Solana address."
+      "badAddress": "That is not a Solana address.",
+      "sendCtaAsset": "Send {{symbol}}",
+      "asset": "Asset",
+      "available": "Available",
+      "recipientPlaceholder": "Recipient address",
+      "to": "To",
+      "scaleUnknown": "This token’s decimal scale could not be read, so the amount cannot be checked. Swap it instead.",
+      "splSendable": "Every token here can be sent from this wallet — SPL transfers are signed by your own wallet, exactly like SOL."
     },
     "universe": {
       "unavailable": "Could not load the token list. Paste a mint address to swap it anyway."
@@ -6138,28 +6158,14 @@
     },
     "waitingHint": "The request is in your wallet. If you came back without signing, or no signature screen appeared, cancel the wait here — nothing will be sent.",
     "cancelWaiting": "Cancel waiting",
-    "hero": {
-      "badge": "Non-custodial · your wallet signs it",
-      "title": "Move USDT and SOL across chains",
-      "sub": "Every route's fee and timing is readable before you sign — and the money never passes through us.",
-      "factRoutes": "live routes",
-      "factChains": "special routes: Tron & Solana",
-      "factFee": "platform fee",
-      "carousel": "carousel",
-      "slide": "slide",
-      "slideLabel": "Slide {{current}} of {{total}}: {{route}}",
-      "chooseRoute": "Choose a bridge route",
-      "goTo": "Show {{route}}",
-      "tron": {
-        "title": "Tron bridge — Tether TRC20",
-        "note": "Move USDT on Tron. Review destination and network costs before confirming.",
-        "cta": "Open the Tron bridge"
-      },
-      "solana": {
-        "title": "Solana bridge — SOL & SPL",
-        "note": "Move SOL and SPL tokens. Keep a little SOL for network fees.",
-        "cta": "Open the Solana bridge"
-      }
+    "farmPromo": {
+      "badge": "Farm",
+      "title": "Put the money you just moved to work",
+      "body": "Farm reads live yields from the protocols and hands the deposit to your own wallet — we never hold the position, and you can withdraw whenever you like.",
+      "chipLive": "Live yields",
+      "chipSelf": "Non-custodial",
+      "chipExit": "Exit any time",
+      "cta": "Open Farm"
     }
   },
   "autopilot": {
@@ -11092,7 +11098,8 @@
         "INSUFFICIENT_EVIDENCE": "sampling",
         "UNAVAILABLE": "no history"
       },
-      "realized": "Realised P&L"
+      "realized": "Realised P&L",
+      "networkCount": "{{n}} networks"
     },
     "title": "Smart Money",
     "windowAria": "Time window",

@@ -40,7 +40,7 @@ import CrossChainHistory from '../components/crosschain/CrossChainHistory';
 import { IconExternal, IconGlobe, IconRoute, IconShield, IconSwap } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
-import BridgeHero from '../components/BridgeHero';
+import FarmPromoBanner from '../components/FarmPromoBanner';
 import '../styles/bridge-modern.css';
 import ModernSelect from '../components/ModernSelect';
 import AssetIcon from '../components/AssetIcon';
@@ -770,13 +770,21 @@ export default function Bridge() {
       </motion.div>
 
       {/*
-        ─── THE COMPACT ROUTE BANNER ──────────────────────────────────────
-        The carousel highlights one of the two special routes at a time, with
-        explicit slide controls and a CTA that selects the matching mode.
-        It sits above the mode rail without pushing the bridge form far below
-        the fold.
+        ─── THE TRON/SOLANA CAROUSEL USED TO BE HERE ──────────────────────
+        «بنر بالای صفحه که مربوط به ترون و سولانا هست را محو کن، به‌درد
+        نمی‌خورد.» It advertised two of the four modes whose rail is rendered
+        eight lines below it, so the biggest block on the first screen repeated
+        a control the user was about to touch — and pushed the bridge form, the
+        reason the screen exists, under the fold.
+
+        The two modes are not gone: they are the third and fourth tabs of the
+        rail below, with the same labels, the same glyphs and the same panels.
+        What is gone is the second copy of them.
+
+        The advertising slot this freed is now at the FOOT of the page, where
+        it sells something this screen cannot do (Farm) to a user who has just
+        finished doing what it can. See components/FarmPromoBanner.jsx.
       */}
-      <BridgeHero onSelectMode={setMode} />
 
       {/*
         ─── THE MODE RAIL ─────────────────────────────────────────────────
@@ -1323,6 +1331,14 @@ export default function Bridge() {
       <InfoBox title={t('bridge.trustTitle')} tone="danger" id="bridge-trust">
         <p>{t('bridge.trustBody')}</p>
       </InfoBox>
+
+      {/*
+        ─── THE AD SLOT, AT THE FOOT ─────────────────────────────────────────
+        Last element on the page and the only thing here that sells: the trust
+        disclosure above it is the last thing a cautious user reads, and a
+        promotion printed above a warning reads as an attempt to bury it.
+      */}
+      <FarmPromoBanner />
     </PageTransition>
   );
 }

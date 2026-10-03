@@ -4,12 +4,9 @@ import Sheet from './Sheet';
 import FancyQr from './FancyQr';
 import TokenIcon from '../lib/tokenIcon';
 import { shortAddress } from '../context/WalletContext';
-import { isSolanaAddress } from '../lib/solana';
 import { readSolanaPortfolio } from '../lib/solana/portfolio';
 import { solanaExitKind, solanaSellUrl } from '../lib/solanaSell';
-import { sendNativeSol, solToLamports } from '../lib/solana/transfer';
-import QrScanner, { parseScanned, scannerSupported } from './QrScanner';
-import { IconQr } from './Icons';
+import SolanaSendSheet from './SolanaSendSheet';
 import { IconSend, IconReceive } from './WalletArt';
 import { IconSwap, IconGlobe } from './Icons';
 
@@ -68,13 +65,7 @@ export default function SolanaWalletHome({
   const [loading, setLoading] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
-  const [to, setTo] = useState('');
-  const [amount, setAmount] = useState('');
-  const [sendErr, setSendErr] = useState(null);
-  const [sendSig, setSendSig] = useState(null);
-  const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!address) {
@@ -118,67 +109,6 @@ export default function SolanaWalletHome({
       setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
-    }
-  };
-
-  const handleScanResult = useCallback((parsed, raw) => {
-    if (parsed?.address) {
-      if (isSolanaAddress(parsed.address)) {
-        setTo(parsed.address);
-        if (parsed.amount && !Number.isNaN(Number(parsed.amount))) {
-          // amount from QR may be in SOL; keep as string
-          const amt = String(parsed.amount).replace(/[^0-9.]/g, '');
-          if (amt) setAmount(amt);
-        }
-        setSendErr(null);
-        haptic?.('success');
-      } else {
-        // EVM address scanned while solana sheet open — show raw but mark error
-        setTo(raw || parsed.address);
-        setSendErr('BAD_ADDRESS');
-      }
-    } else if (raw && isSolanaAddress(String(raw).trim())) {
-      setTo(String(raw).trim());
-      setSendErr(null);
-      haptic?.('success');
-    }
-  }, [haptic]);
-
-  const submitSend = async () => {
-    setSendErr(null);
-    setSendSig(null);
-    if (!address) {
-      setSendErr('NO_WALLET');
-      return;
-    }
-    if (!isSolanaAddress(to.trim())) {
-      setSendErr('BAD_ADDRESS');
-      return;
-    }
-    const lamports = solToLamports(amount);
-    if (!lamports) {
-      setSendErr('BAD_AMOUNT');
-      return;
-    }
-    if (solRow && !solRow.unread && solRow.raw && lamports > BigInt(solRow.raw)) {
-      setSendErr('INSUFFICIENT_BALANCE');
-      return;
-    }
-    setSending(true);
-    try {
-      const sig = await sendNativeSol({ from: address, to: to.trim(), lamports });
-      setSendSig(sig);
-      setAmount('');
-      haptic?.('success');
-      refresh();
-    } catch (err) {
-      const code = err?.code || err?.message || 'SEND_FAILED';
-      setSendErr(['NO_WALLET', 'BAD_AMOUNT', 'INSUFFICIENT_BALANCE', 'SEND_FAILED', 'REJECTED', 'RPC_UNAVAILABLE'].includes(code)
-        ? code
-        : 'SEND_FAILED');
-      haptic?.('error');
-    } finally {
-      setSending(false);
     }
   };
 
@@ -281,67 +211,28 @@ export default function SolanaWalletHome({
             ))}
           </div>
           {holdings?.some((row) => !row.native) && (
-            <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, margin: '10px 0 0' }}>{t('solana.wallet.splNote')}</p>
+            <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, margin: '10px 0 0' }}>{t('solana.wallet.splSendable')}</p>
           )}
         </section>
       )}
 
-      <Sheet open={sendOpen} onClose={() => { setSendOpen(false); setSendErr(null); setScanOpen(false); }} title={t('solana.wallet.sendTitle')}>
-        <p className="notice" style={{ marginTop: 0 }}>{t('solana.wallet.sendOnly')}</p>
-        <label className="field-label">{t('solana.wallet.recipient')}</label>
-        <div className="row" style={{ gap: 8 }}>
-          <input
-            type="text"
-            value={to}
-            dir="ltr"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            onChange={(e) => { setTo(e.target.value.trim()); setSendErr(null); }}
-            placeholder={t('solana.wallet.recipient')}
-            style={{ flex: 1, minWidth: 0 }}
-          />
-          {scannerSupported() && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setScanOpen(true)}
-              aria-label={t('scan.title')}
-              style={{ flex: '0 0 auto', minWidth: 44, paddingInline: 10 }}
-            >
-              <IconQr width={18} height={18} />
-            </button>
-          )}
-        </div>
-        <label className="field-label" style={{ marginTop: 10 }}>{t('solana.wallet.amount')}</label>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => { setAmount(e.target.value.replace(/[^\\d.]/g, '')); setSendErr(null); }}
-          placeholder="0.0"
-        />
-        <p className="faint" style={{ marginTop: 8 }}>
-          {t('solana.balance')}: {solRow?.unread || solRow?.amount == null ? '—' : `${solRow.amount} SOL`}
-        </p>
-        {sendErr && (
-          <p className="notice notice-danger">
-            {sendErr === 'BAD_ADDRESS'
-              ? t('solana.wallet.badAddress')
-              : t(`solana.err.${sendErr}`, t('solana.err.SEND_FAILED'))}
-          </p>
-        )}
-        {sendSig && (
-          <a className="notice" href={`https://solscan.io/tx/${encodeURIComponent(sendSig)}`} target="_blank" rel="noopener noreferrer">
-            {t('swap.viewOnExplorer')}
-          </a>
-        )}
-        <button type="button" className="btn btn-primary" style={{ marginTop: 12 }} disabled={sending} onClick={submitSend}>
-          {sending ? t('common.loading') : t('solana.wallet.sendCta')}
-        </button>
-      </Sheet>
-
-      <QrScanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScanResult} parse={parseScanned} />
+      {/*
+        ─── THE SEND SHEET NOW SENDS EVERYTHING ────────────────────────────
+        It used to be inline here, and it used to open with the sentence that
+        started this whole item: «این ارسال فقط SOL بومی است و توکن‌های SPL را
+        جابه‌جا نمی‌کند». The picker, the amount field and the honest error
+        mapping now live in components/SolanaSendSheet.jsx, which handles both
+        native SOL and SPL tokens — see that file for the reasoning.
+      */}
+      <SolanaSendSheet
+        open={sendOpen}
+        onClose={() => setSendOpen(false)}
+        address={address}
+        holdings={holdings}
+        solBalanceRaw={solRow?.raw ?? null}
+        onSent={refresh}
+        haptic={haptic}
+      />
 
       <Sheet open={receiveOpen} onClose={() => setReceiveOpen(false)} title={t('solana.wallet.receiveTitle')}>
         <FancyQr

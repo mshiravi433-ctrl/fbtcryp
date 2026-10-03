@@ -178,6 +178,16 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
   const cluster = useSettingsStore((s) => s.solanaCluster);
   const devnet = cluster === 'devnet';
   const [onlyVerified, setOnlyVerified] = useState(false);
+  /*
+   * ─── THE KEYBOARD NO LONGER OPENS WITH THE SHEET ──────────────────────────
+   * «باکس‌های پاپ‌اپ برای انتخاب توکن … هر بار می‌زنه خودکار صفحه کلید هم باز
+   * می‌شود». This picker used to render its input with `autoFocus`, so the
+   * sheet rose with the keyboard already covering half the list — and on the
+   * Solana side the list IS the point (the curated tokens, their prices, the
+   * verified badge). The field is now revealed by the «جستجو» button in the
+   * toolbar below, and only that button can focus it.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [deferred, setDeferred] = useState('');
   const [remoteRows, setRemoteRows] = useState([]);
@@ -306,6 +316,7 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
       onClose={() => {
         setQuery('');
         setDeferred('');
+        setSearchOpen(false);
         onClose?.();
       }}
       title={side === 'from' ? t('solana.picker.titleFrom') : t('solana.picker.titleTo')}
@@ -313,25 +324,57 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
       size="lg"
       className="stp-sheet"
     >
-      <div className="stp-search">
-        <span className="stp-search-icon" aria-hidden="true">⌕</span>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('solana.picker.searchPlaceholder')}
-          autoFocus
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          dir="ltr"
-          style={{ textAlign: 'start' }}
-          data-testid="stp-search-input"
-        />
-        {query ? (
-          <button type="button" className="stp-clear" onClick={() => setQuery('')} aria-label={t('common.clear')}>×</button>
-        ) : null}
+      {/*
+        ─── THE 44 MINT ADDRESSES DIRECTLY UNDER THIS ROW ────────────────────
+        «می‌خواهم هر ۴۴ کاراکتر آدرس را ببینم و مطمئن باشم همان است» (see the
+        mint strip further down) is only useful if the sheet opens showing the
+        tokens. So the search field lives behind this pill.
+      */}
+      <div className="stp-tools">
+        <button
+          type="button"
+          className={`stp-searchbtn${searchOpen ? ' is-on' : ''}`}
+          aria-expanded={searchOpen}
+          onClick={() => setSearchOpen((v) => !v)}
+          data-testid="stp-search-toggle"
+        >
+          <span className="stp-search-icon" aria-hidden="true">⌕</span>
+          <span>{t('solana.picker.searchPlaceholder')}</span>
+        </button>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-sm ${onlyVerified ? 'is-verified-on' : ''}`}
+          style={{ minHeight: 32, paddingInline: 10, fontSize: 11, borderColor: onlyVerified ? 'rgba(0,230,158,0.45)' : undefined, background: onlyVerified ? 'rgba(0,230,158,0.12)' : undefined }}
+          onClick={() => setOnlyVerified((v) => !v)}
+          aria-pressed={onlyVerified}
+        >
+          {onlyVerified ? `✓ ${t('solana.picker.verified')}` : t('solana.picker.verified')}
+        </button>
       </div>
+
+      {searchOpen ? (
+        <div className="stp-search">
+          <span className="stp-search-icon" aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('solana.picker.searchPlaceholder')}
+            /* Exists only because the button above was tapped — see the note
+               on `searchOpen`. */
+            autoFocus
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            dir="ltr"
+            style={{ textAlign: 'start' }}
+            data-testid="stp-search-input"
+          />
+          {query ? (
+            <button type="button" className="stp-clear" onClick={() => setQuery('')} aria-label={t('common.clear')}>×</button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="stp-meta-row" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <span className={`sol-net-chip${devnet ? ' is-devnet' : ''}`} style={{ fontSize: 10 }}>
@@ -339,15 +382,6 @@ export default function SolanaTokenPicker({ open, onClose, tokens, onPick, onImp
           {devnet ? 'Devnet' : 'Mainnet'}
         </span>
         <span className="faint" style={{ fontSize: 11 }}>{t('solana.picker.tokenOnlyNote', { defaultValue: 'فقط توکن — مین‌نت' })}</span>
-        <button
-          type="button"
-          className={`btn btn-ghost btn-sm ${onlyVerified ? 'is-verified-on' : ''}`}
-          style={{ marginInlineStart: 'auto', minHeight: 32, paddingInline: 10, fontSize: 11, borderColor: onlyVerified ? 'rgba(0,230,158,0.45)' : undefined, background: onlyVerified ? 'rgba(0,230,158,0.12)' : undefined }}
-          onClick={() => setOnlyVerified((v) => !v)}
-          aria-pressed={onlyVerified}
-        >
-          {onlyVerified ? `✓ ${t('solana.picker.verified')}` : t('solana.picker.verified')}
-        </button>
       </div>
 
       {!deferred && curatedIdle.length > 0 && (

@@ -11,8 +11,12 @@ import { findAsset } from '../solanaAssets.js';
 import { SOL_MINT, USDC_MINT, USDT_MINT, fromBaseUnits, isSolanaAddress } from '../solana.js';
 import { readSolanaNetworkSettings, solanaRpcCall, solanaRpcCandidates } from '../solanaRpc.js';
 
-export const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-export const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+/* The program ids live in one place now (see ./tokenPrograms.js): the SPL
+   transfer path needs the same two plus the ATA program, and a second copy of
+   a program address is how one path ends up moving a different asset. */
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from './tokenPrograms.js';
+/* Re-exported so every existing importer of this module keeps working. */
+export { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID };
 
 const KNOWN = Object.freeze({
   [SOL_MINT]: { symbol: 'SOL', name: 'Solana', decimals: 9 },
@@ -33,7 +37,7 @@ export function parseLamports(result) {
  * jsonParsed getTokenAccountsByOwner. Returns `{ ok:false }` when the shape is
  * not an account list — that is a failed read, not an empty wallet.
  */
-export function parseTokenAccounts(result) {
+export function parseTokenAccounts(result, programId = null) {
   const list = Array.isArray(result) ? result : result?.value;
   if (!Array.isArray(list)) return { ok: false, rows: [] };
   const rows = [];
@@ -47,7 +51,13 @@ export function parseTokenAccounts(result) {
     rows.push({
       mint,
       raw,
-      decimals: Number.isInteger(decimals) ? decimals : null
+      decimals: Number.isInteger(decimals) ? decimals : null,
+      /* Which token program owns this account. The SPL send path needs it:
+         a Token-2022 mint can only be moved by TokenzQd…, and a transfer sent
+         to Tokenkeg… is rejected by the runtime AFTER the user approved it.
+         Both legs are read here anyway, so recording which one answered costs
+         nothing and removes a guess from the signing path. */
+      programId: programId || null
     });
   }
   return { ok: true, rows };
@@ -126,9 +136,9 @@ export async function readSolanaPortfolio(owner) {
   }
 
   const parsed = [];
-  for (const leg of [classic, token2022]) {
+  for (const [leg, programId] of [[classic, TOKEN_PROGRAM_ID], [token2022, TOKEN_2022_PROGRAM_ID]]) {
     if (!leg.ok) continue;
-    const accounts = parseTokenAccounts(leg.result);
+    const accounts = parseTokenAccounts(leg.result, programId);
     if (!accounts.ok) return { ok: false, code: 'RPC_UNAVAILABLE', holdings };
     parsed.push(...accounts.rows);
   }
@@ -145,6 +155,7 @@ export async function readSolanaPortfolio(owner) {
       name: meta.name,
       icon: meta.icon,
       native: false,
+      programId: row.programId,
       decimals,
       raw: row.raw,
       amount: Number.isInteger(decimals) ? fromBaseUnits(row.raw, decimals) : null
