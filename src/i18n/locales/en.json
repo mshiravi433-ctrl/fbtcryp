@@ -2965,7 +2965,9 @@
       "measuredTitle": "Measured on-chain data",
       "measuredNone": "No on-chain data was read for this asset right now — no number is guessed.",
       "measuredNote": "Every number comes from a real read; direction is shown with colour and an arrow.",
-      "exchangeSupply": "Supply held on exchanges"
+      "exchangeSupply": "Supply held on exchanges",
+      "dexVolume": "DEX volume (24h)",
+      "dexTxns": "DEX buys/sells recorded"
     },
     "createIntent": "Create intent",
     "acc": {
@@ -3108,7 +3110,9 @@
         "unavailable": "Smart-money flow feed is unavailable right now. No numbers are invented.",
         "note": "Derived from observed on-chain transfers only; unlabelled counterparties are not counted.",
         "live": "flow feed live",
-        "stale": "flow feed stale"
+        "stale": "flow feed stale",
+        "pulseSnapshot": "The full smart-money feed is not reachable right now; the figures below are the verified snapshot the market pulse is reporting.",
+        "votes": "independent votes"
       },
       "radar": {
         "title": "EARLY TOKEN RADAR",
@@ -3257,7 +3261,9 @@
           "flat": "FLAT",
           "pending": "pending…"
         },
-        "pendingTime": "settles {{d}}d after entry"
+        "pendingTime": "settles {{d}}d after entry",
+        "soFar": "so far",
+        "liveNote": "For pending signals the move is shown from entry against the live price; the final result is recorded when the horizon ends."
       },
       "filters": {
         "title": "Filters",

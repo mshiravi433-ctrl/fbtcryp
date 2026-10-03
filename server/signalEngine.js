@@ -299,6 +299,11 @@ const ALLOWED_EVIDENCE = new Set([
   'volatilityPct', 'whaleFlow', 'holderTrend', 'topHolderPct', 'dexPressure',
   'smartMoneyNetUsd', 'smartMoneySignal', 'marketSentiment', 'btcDominance',
   'riskScore', 'confidence', 'agreement', 'evidenceCount', 'timeframe',
+  /* Measured DEX-pair / holder observations carried by the smart-money token
+     route. Without these the on-chain explanation degraded to «unavailable»
+     even when liquidity, 24h volume, buy/sell counts and holder totals had
+     just been read from the chain — they simply never reached the evidence. */
+  'holdersTotal', 'dexVolumeH24', 'dexBuys24', 'dexSells24',
   /* OPT-IN portfolio context — aggregate percentages ONLY, never addresses,
      amounts or positions. The client gate (src/lib/signalStore.js consent)
      decides whether these are sent at all. */
@@ -330,7 +335,7 @@ Respond with STRICT JSON only:
 {
   "technical": "2-3 sentences on RSI, MACD, moving averages, support/resistance from the numbers provided.",
   "market": "2-3 sentences on volume, momentum, volatility, liquidity.",
-  "onchain": "2 sentences about whale/holder/DEX activity. If the fields are null, say the data was unavailable and do not guess.",
+  "onchain": "2 sentences about on-chain activity: whale/holder fields AND measured DEX-pair stats (liquidityUsd, dexVolumeH24, dexBuys24, dexSells24, holdersTotal) when present. Only for fields that are null say that specific data was unavailable; never guess.",
   "sentiment": "1-2 sentences on market sentiment and dominance.",
   "conclusion": "2-3 plain-language sentences: what the combination of measured evidence suggests, why confidence is as reported, and what would invalidate it.",
   "agree": true,
@@ -564,6 +569,26 @@ function localSections(safe, lang) {
   }
   if (safe.smartMoneyNetUsd != null) {
     onchain.push(isFa ? `خالص سرمایه هوشمند $${safe.smartMoneyNetUsd}` : `smart-money net $${safe.smartMoneyNetUsd}`);
+  }
+  /* Measured DEX-pair & holder observations — these keep the on-chain read
+     concrete on chains where the whale/holder feeds are not configured. */
+  if (safe.holdersTotal != null) {
+    onchain.push(isFa ? `شمار دارندگان ${Number(safe.holdersTotal).toLocaleString('fa-IR')}` : `holders ${Number(safe.holdersTotal).toLocaleString('en-US')}`);
+  }
+  if (safe.topHolderPct != null && !safe.holderTrend) {
+    onchain.push(isFa ? `سهم ۱۰ نگهدارنده بزرگ ${safe.topHolderPct}%` : `top-10 holder share ${safe.topHolderPct}%`);
+  }
+  if (safe.liquidityUsd != null) {
+    onchain.push(isFa ? `نقدینگی مشاهده‌شده $${Number(safe.liquidityUsd).toLocaleString('en-US')}` : `observed liquidity $${Number(safe.liquidityUsd).toLocaleString('en-US')}`);
+  }
+  if (safe.dexVolumeH24 != null) {
+    onchain.push(isFa ? `حجم معاملاتی ۲۴ ساعتهٔ دکس $${Number(safe.dexVolumeH24).toLocaleString('en-US')}` : `DEX 24h volume $${Number(safe.dexVolumeH24).toLocaleString('en-US')}`);
+  }
+  if (safe.dexBuys24 != null || safe.dexSells24 != null) {
+    const b = safe.dexBuys24 ?? 0;
+    const s = safe.dexSells24 ?? 0;
+    const tilt = b > s * 1.15 ? (isFa ? 'با فشار خرید' : 'buy-tilted') : s > b * 1.15 ? (isFa ? 'با فشار فروش' : 'sell-tilted') : (isFa ? 'متوازن' : 'balanced');
+    onchain.push(isFa ? `${b} خرید و ${s} فروش ثبت‌شده در دکس (${tilt})` : `${b} buys vs ${s} sells on DEX (${tilt})`);
   }
   if (!onchain.length) {
     onchain.push(isFa ? 'داده آنچین در دسترس نبود — هیچ عددی حدس زده نمی‌شود.' : 'On-chain data unavailable — no numbers are guessed.');

@@ -100,6 +100,47 @@ const safeCalc = (fn, fallback = null) => {
   }
 };
 
+/*
+ * SMART MONEY FEED FALLBACK — the pulse snapshot.
+ * ---------------------------------------------------------------------------
+ * Reported: «فید جریان پول هوشمند فعلاً در دسترس نیست — انگار ارتباط
+ * برقرار نمی‌کنه». The full overview feed (/api/v1/smart-money/overview) is
+ * a heavy, cold-start-prone read; when it times out or 5xx's, this section
+ * used to go completely dark even though the LIGHT pulse endpoint next to it
+ * answered fine — carrying the same verified consensus (symbol, signal,
+ * independent votes, net flow) inside `pulse.smartMoney`.
+ *
+ * So when the overview is unreachable, the section renders that snapshot
+ * instead of the empty state: fewer metrics, same real numbers, clearly
+ * labelled as a pulse snapshot (`fromPulse`). No number is invented — every
+ * field below is copied straight from the pulse payload, and when the pulse
+ * has no consensus either, the honest empty state stays exactly as before.
+ */
+function smartMoneyFromPulse(pulse) {
+  const smm = pulse?.smartMoney;
+  const consensus = Array.isArray(smm?.consensus) ? smm.consensus : [];
+  if (!smm || !consensus.length) return null;
+  return {
+    fromPulse: true,
+    at: pulse.lastUpdate || pulse.at || Date.now(),
+    metrics: {
+      whaleActivity: { value: smm.whaleTransferProxy?.whaleActivity ?? null },
+      accumulation: { valueUsd: smm.accumulationUsd ?? null },
+      distribution: { valueUsd: smm.distributionUsd ?? null },
+      netFlow: { value: smm.netFlowUsd ?? null }
+    },
+    tokenActivity: consensus
+      .filter((r) => r && r.symbol)
+      .map((r) => ({
+        chainId: r.chain ?? null,
+        symbol: String(r.symbol).toUpperCase(),
+        signal: r.signal === 'DISTRIBUTION' ? 'DISTRIBUTION' : 'ACCUMULATION',
+        netUsd: Number.isFinite(Number(r.netFlowUsd)) ? Number(r.netFlowUsd) : null,
+        events: Number.isFinite(Number(r.independentVotes)) ? Number(r.independentVotes) : null
+      }))
+  };
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * COLLAPSIBLE SIGNAL SECTION (kept from the existing page — presentation only)
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -396,7 +437,19 @@ function PulseCard({ pulse, brief }) {
               <div className="sic-pulse-meta">
                 <span>
                   {t(`signals.intel.source.${['live', 'market-only', 'local', 'offline'].includes(pulse.source) ? pulse.source : 'unavailable'}`)}
-                  {pulse.smartMoney?.dataStatus ? ` · ${t(`signals.intel.smartMoney.${pulse.smartMoney.dataStatus === 'live' ? 'live' : 'unavailable'}`)}` : ''}
+                  {/* The feed's real statuses are 'live'/'observed' (verified
+                      consensus rows exist) vs 'insufficient-evidence'. The old
+                      check only accepted 'live' — a status the server never
+                      sends — so the pulse ALWAYS printed «feed unavailable»,
+                      even while its own consensus numbers rendered above. */}
+                  {pulse.smartMoney ? ` · ${t(['live', 'observed', 'market-only'].includes(pulse.smartMoney.dataStatus)
+                    ? 'signals.intel.smartMoney.live'
+                    : 'signals.intel.smartMoney.unavailable')}` : ''}
+                  {['live', 'observed', 'market-only'].includes(pulse.smartMoney?.dataStatus) && Number.isFinite(Number(pulse.smartMoney?.netFlowUsd)) && (
+                    <b className={`mono ${Number(pulse.smartMoney.netFlowUsd) >= 0 ? 'up' : 'down'}`} style={{ marginInlineStart: 6 }}>
+                      {Number(pulse.smartMoney.netFlowUsd) >= 0 ? '+' : '−'}${fmtCompact(Math.abs(Number(pulse.smartMoney.netFlowUsd)))}
+                    </b>
+                  )}
                 </span>
                 <span className={liveTone}>{t('signals.intel.lastUpdate')}: {timeAgo(pulse.lastUpdate || pulse.at)}</span>
               </div>
@@ -492,38 +545,74 @@ function WhyModal({ why, onClose }) {
         transition={{ duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="row-between" style={{ alignItems: 'flex-start' }}>
-          <div>
-            <h3 className="sic-modal-title"><IconSparkle /> {t('signals.intel.why.title')}</h3>
-            <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>
-              {signal?.coin?.symbol} · {t(classKey(signal?.classification))} · {signal?.confidence}%
+        <div className="sic-why-head">
+          <div className="sic-why-head-copy">
+            <span className="sic-why-head-glow" aria-hidden="true"><IconSparkle /></span>
+            <div>
+              <h3 className="sic-modal-title">{t('signals.intel.why.title')}</h3>
+              <div className="sic-why-asset-chips">
+                {signal?.coin?.symbol && <b className="sic-why-chip symbol">{signal.coin.symbol}</b>}
+                {signal?.classification && <span className="sic-why-chip class">{t(classKey(signal.classification))}</span>}
+                {signal?.confidence != null && <span className="sic-why-chip conf">{signal.confidence}%</span>}
+              </div>
             </div>
           </div>
           <button type="button" className="sic-icon-btn" onClick={onClose} aria-label={t('signals.intel.actions.close')}><IconX /></button>
         </div>
 
         {loading && (
-          <div className="stack" style={{ gap: 10, marginTop: 16 }}>
-            {[92, 76, 58].map((w) => <motion.div key={w} className="skel" style={{ height: 11, width: `${w}%`, borderRadius: 8 }} animate={{ opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 1.4, repeat: Infinity }} />)}
-            <span className="faint" style={{ fontSize: 12 }}>{t('signals.intel.why.loading')}</span>
+          <div className="sic-why-loading">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="sic-why-loading-card"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08, duration: 0.25 }}
+              >
+                <motion.i className="skel" style={{ height: 12, width: `${34 - i * 6}%`, borderRadius: 7, display: 'block' }} animate={{ opacity: [0.35, 0.85, 0.35] }} transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.2 }} />
+                <motion.i className="skel" style={{ height: 9, width: `${88 - i * 10}%`, borderRadius: 6, display: 'block', marginTop: 8 }} animate={{ opacity: [0.35, 0.85, 0.35] }} transition={{ duration: 1.4, repeat: Infinity, delay: 0.15 + i * 0.2 }} />
+              </motion.div>
+            ))}
+            <span className="sic-why-loading-label">
+              <motion.i className="sic-why-loading-dot" animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ duration: 1.1, repeat: Infinity }} aria-hidden="true" />
+              {t('signals.intel.why.loading')}
+            </span>
           </div>
         )}
 
-        {!loading && !data && <p className="notice" style={{ marginTop: 16 }}>{t('signals.intel.why.unavailable')}</p>}
+        {!loading && !data && (
+          <div className="sic-why-empty">
+            <span className="sic-why-empty-icon" aria-hidden="true"><IconX /></span>
+            <p>{t('signals.intel.why.unavailable')}</p>
+          </div>
+        )}
 
         {!loading && data && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <motion.div className="sic-why-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {data.aiDisagreement && (
               <div className="sic-why-block">
                 <span className="pill pill-down sic-warning-pill"><b aria-hidden="true">!</b> {t('signals.intel.why.disagreement')}</span>
               </div>
             )}
             {data.agreement != null && (
-              <div className="sic-why-block">
-                <div className="k">{t('signals.intel.why.consensus')} · {t('signals.intel.why.agreement')}: {data.agreement}%</div>
-                <div className="sic-bar" style={{ marginTop: 6 }}>
-                  <i style={{ width: `${data.agreement}%`, background: data.agreement >= 60 ? 'var(--up)' : 'var(--rgb-5)' }} />
+              <div className="sic-why-card sic-why-consensus">
+                <div className="sic-why-card-head">
+                  <span className="sic-why-card-icon" aria-hidden="true">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d="M8 12l3 3 5-6" /><circle cx="12" cy="12" r="9" /></svg>
+                  </span>
+                  <span className="k">{t('signals.intel.why.consensus')}</span>
+                  <b className={`sic-why-agree-pct ${data.agreement >= 60 ? 'up' : ''}`}>{data.agreement}%</b>
                 </div>
+                <div className="sic-bar sic-why-agree-bar">
+                  <motion.i
+                    initial={{ width: 0 }}
+                    animate={{ width: `${data.agreement}%` }}
+                    transition={{ duration: 0.7, ease: 'easeOut' }}
+                    style={{ background: data.agreement >= 60 ? 'var(--up)' : 'var(--rgb-5)' }}
+                  />
+                </div>
+                <span className="sic-why-agree-cap">{t('signals.intel.why.agreement')}</span>
               </div>
             )}
 
@@ -531,43 +620,66 @@ function WhyModal({ why, onClose }) {
               ── THE MEASURED ON-CHAIN BLOCK ────────────────────────────────
               Reported: "the on-chain section is not connected to the data".
               The prose paragraph below is a model's *reading* of the
-              evidence, and until the
-              evidence carried real on-chain numbers it could only ever say
-              "unavailable". The numbers themselves are shown first, so the
-              section is anchored to a measurement the user can check, and the
-              prose that follows explains THAT rather than a null.
+              evidence, and until the evidence carried real on-chain numbers
+              it could only ever say "unavailable". The numbers themselves
+              are shown first — in their own highlighted card — so the
+              section is anchored to a measurement the user can check, and
+              the prose that follows explains THAT rather than a null.
             */}
-            <div className="sic-why-block">
-              <div className="k">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px', marginInlineEnd: 5, color: 'var(--rgb-4)' }}>
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                </svg>
-                {t('signals.onchain.measuredTitle')}
+            <div className={`sic-why-card sic-why-onchain ${onchainRows.length ? 'has-data' : ''}`}>
+              <div className="sic-why-card-head">
+                <span className="sic-why-card-icon" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                </span>
+                <span className="k">{t('signals.onchain.measuredTitle')}</span>
+                {onchainRows.length > 0 && <b className="sic-why-onchain-count">{onchainRows.length}</b>}
               </div>
               {onchainRows.length
                 ? <OnchainRowList rows={onchainRows} />
                 : <p className="sic-why-none">{t('signals.onchain.measuredNone')}</p>}
             </div>
-            {[
-              ['technical', data.sections?.technical],
-              ['market', data.sections?.market],
-              ['onchain', data.sections?.onchain],
-              ['sentiment', data.sections?.sentiment]
-            ].map(([k, v]) => (v ? (
-              <div key={k} className="sic-why-block">
-                <div className="k">{t(`signals.intel.why.${k}`)}</div>
-                <p>{v}</p>
-              </div>
-            ) : null))}
+
+            <div className="sic-why-grid">
+              {[
+                ['technical', data.sections?.technical, 'M3 3v18h18', 'M7 14l4-4 3 3 5-6'],
+                ['market', data.sections?.market, 'M3 12h4l3-8 4 16 3-8h4', null],
+                ['onchain', data.sections?.onchain, 'M12 2l8 4.5v9L12 20l-8-4.5v-9L12 2z', 'M12 22V12'],
+                ['sentiment', data.sections?.sentiment, 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M8 14s1.5 2 4 2 4-2 4-2']
+              ].map(([k, v, d1, d2]) => (v ? (
+                <motion.div key={k} className="sic-why-card sic-why-section-card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}>
+                  <div className="sic-why-card-head">
+                    <span className="sic-why-card-icon" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                        <path d={d1} />
+                        {d2 ? <path d={d2} /> : null}
+                      </svg>
+                    </span>
+                    <span className="k">{t(`signals.intel.why.${k}`)}</span>
+                  </div>
+                  <p>{v}</p>
+                </motion.div>
+              ) : null))}
+            </div>
+
             {data.conclusion && (
               <div className="sic-why-concl">
-                <div className="k">{t('signals.intel.why.conclusion')}</div>
+                <div className="k">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9" />
+                  </svg>
+                  {t('signals.intel.why.conclusion')}
+                </div>
                 <p>{data.conclusion}</p>
               </div>
             )}
-            <div className="faint" style={{ fontSize: 10, marginTop: 12, lineHeight: 1.7 }}>
-              {data.source === 'ai' ? t('signals.intel.why.meta', { providers: (data.aiMeta?.providers || []).join(' · ') }) : t('signals.intel.why.localMeta')}
+            <div className="sic-why-meta">
+              <span className={`sic-why-src ${data.source === 'ai' ? 'ai' : 'local'}`}>
+                <i aria-hidden="true" />
+                {data.source === 'ai' ? t('signals.intel.why.meta', { providers: (data.aiMeta?.providers || []).join(' · ') }) : t('signals.intel.why.localMeta')}
+              </span>
             </div>
           </motion.div>
         )}
@@ -709,19 +821,32 @@ function EarlySection({ early, embedded = false }) {
       {early.length === 0 ? (
         <div className="sic-insufficient">{t('signals.intel.early.empty')}</div>
       ) : (
-        <div className="sic-rows">
+        <div className="sic-rows sic-early-rows">
           {early.slice(0, 8).map((e) => (
-            <div key={e.symbol} className="sic-row">
+            <div key={e.symbol} className={`sic-row sic-early-row ${e.direction}`}>
               <CoinLogo coin={e.coin} />
               <div className="main">
-                <div className="s">{e.symbol}</div>
-                <div className="d">{(e.flags ?? []).map((f) => t(`signals.intel.early.${f}`)).join(' · ')}</div>
+                <div className="s">
+                  {e.symbol}
+                  <span className={`sic-early-dir ${e.direction}`}>{t(`signals.intel.early.direction.${e.direction}`)}</span>
+                </div>
+                <div className="sic-early-flags">
+                  {(e.flags ?? []).slice(0, 4).map((f) => (
+                    <span key={f} className="sic-early-flag">{t(`signals.intel.early.${f}`)}</span>
+                  ))}
+                </div>
               </div>
               <div className="num">
-                <div style={{ color: e.direction === 'earlyBullish' ? 'var(--up)' : e.direction === 'earlyBearish' ? 'var(--down)' : '#ffb300', fontWeight: 900 }}>
-                  {t(`signals.intel.early.direction.${e.direction}`)}
+                <div className="sic-early-conf-row">
+                  <span className="lbl">{t('signals.intel.early.confidence')}</span>
+                  <b className="mono">{e.confidence}%</b>
                 </div>
-                <div className="lbl">{t('signals.intel.early.confidence')}: {e.confidence}%</div>
+                <div className="sic-early-conf-bar" aria-hidden="true">
+                  <i style={{
+                    width: `${e.confidence}%`,
+                    background: e.direction === 'earlyBullish' ? 'var(--up)' : e.direction === 'earlyBearish' ? 'var(--down)' : '#ffb300'
+                  }} />
+                </div>
               </div>
             </div>
           ))}
@@ -757,18 +882,21 @@ function SmartMoneySection({ sm, embedded = false }) {
           </div>
         </div>
       )}
-      <div className="sic-sm-verified">
-        <div className="sic-sm-verified-head"><strong>{t('sm.engine.consensus')}</strong>
-          <button type="button" onClick={() => navigate('/smart-money?tab=intelligence')}>{t('sm.engine.open')} ↗</button></div>
-        {!verified.rows.length && <p>{t('sm.engine.emptyTitle')}</p>}
-        {verified.rows.slice(0, 4).map((r) => <button className="sic-sm-verified-token" type="button" key={`${r.chain}:${r.token}`}
-          onClick={() => navigate(`/smart-money/token/${r.chain}/${r.token}`)}>
-          <span>{r.symbol} · {r.chain}</span><b className={r.signal === 'ACCUMULATION' ? 'up' : 'down'}>
-            {r.netFlowUsd >= 0 ? '+' : '−'}${fmtCompact(Math.abs(r.netFlowUsd))}</b>
-          <small>{r.independentVotes} {t('sm.engine.groups')} · {r.confidence}/100</small>
-        </button>)}
-      </div>
-      <div className="sic-sm-proxy-title">{t('sm.engine.proxyLabel')}</div>
+      {sm.fromPulse && <div className="sic-sm-snapshot-note">{t('signals.intel.smartMoney.pulseSnapshot')}</div>}
+      {!sm.fromPulse && (
+        <div className="sic-sm-verified">
+          <div className="sic-sm-verified-head"><strong>{t('sm.engine.consensus')}</strong>
+            <button type="button" onClick={() => navigate('/smart-money?tab=intelligence')}>{t('sm.engine.open')} ↗</button></div>
+          {!verified.rows.length && <p>{t('sm.engine.emptyTitle')}</p>}
+          {verified.rows.slice(0, 4).map((r) => <button className="sic-sm-verified-token" type="button" key={`${r.chain}:${r.token}`}
+            onClick={() => navigate(`/smart-money/token/${r.chain}/${r.token}`)}>
+            <span>{r.symbol} · {r.chain}</span><b className={r.signal === 'ACCUMULATION' ? 'up' : 'down'}>
+              {r.netFlowUsd >= 0 ? '+' : '−'}${fmtCompact(Math.abs(r.netFlowUsd))}</b>
+            <small>{r.independentVotes} {t('sm.engine.groups')} · {r.confidence}/100</small>
+          </button>)}
+        </div>
+      )}
+      {!sm.fromPulse && <div className="sic-sm-proxy-title">{t('sm.engine.proxyLabel')}</div>}
       <div className="sic-history-grid">
         <div className="sic-stat"><div className="k">{t('signals.intel.smartMoney.whaleActivity')}</div><div className="v">{m.whaleActivity?.value ?? '—'}</div></div>
         <div className="sic-stat"><div className="k">{t('signals.intel.smartMoney.accumulation')}</div><div className="v up">{m.accumulation?.valueUsd != null ? `$${fmtCompact(m.accumulation.valueUsd)}` : '—'}</div></div>
@@ -777,20 +905,20 @@ function SmartMoneySection({ sm, embedded = false }) {
       </div>
       <div className="faint" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, margin: '14px 0 8px' }}>{t('signals.intel.smartMoney.tokenTitle')}</div>
       <div className="sic-rows">
-        {proxyRows.slice(0, 6).map((r) => (
-          <div key={`${r.chainId}:${r.symbol}`} className="sic-row">
+        {proxyRows.slice(0, 6).map((r, i) => (
+          <div key={`${r.chainId ?? 'c'}:${r.symbol}:${i}`} className="sic-row">
             <div className="main">
               <div className="s">{r.symbol}</div>
-              <div className="d">{t(`signals.intel.smartMoney.signal.${r.signal}`)} · ${fmtCompact(r.netUsd)}</div>
+              <div className="d">{t(`signals.intel.smartMoney.signal.${r.signal}`)}{r.netUsd != null ? ` · $${fmtCompact(Math.abs(r.netUsd))}` : ''}</div>
             </div>
             <div className="num">
-              <div style={{ color: r.netUsd >= 0 ? 'var(--up)' : 'var(--down)', fontWeight: 900 }}>{r.netUsd >= 0 ? '+' : ''}{fmtCompact(r.netUsd)}</div>
-              <div className="lbl">{r.events} tx</div>
+              <div style={{ color: (r.netUsd ?? 0) >= 0 ? 'var(--up)' : 'var(--down)', fontWeight: 900 }}>{r.netUsd != null ? `${r.netUsd >= 0 ? '+' : '−'}${fmtCompact(Math.abs(r.netUsd))}` : '—'}</div>
+              {r.events != null && <div className="lbl">{r.events} {sm.fromPulse ? t('signals.intel.smartMoney.votes') : 'tx'}</div>}
             </div>
           </div>
         ))}
       </div>
-      <div className="sic-note">{t('sm.engine.proxyNote')} {t('signals.intel.smartMoney.note')}</div>
+      <div className="sic-note">{sm.fromPulse ? t('signals.intel.smartMoney.note') : `${t('sm.engine.proxyNote')} ${t('signals.intel.smartMoney.note')}`}</div>
     </section>
   );
 }
@@ -833,7 +961,20 @@ function MomentumSection({ cards, embedded = false }) {
   );
 }
 
-function HistorySection({ history, embedded = false }) {
+/* Live move of one ledger row against the CURRENT market price. The final
+   `outcomePct` only exists after the horizon settles (up to 30 days later),
+   so the «actual move» column used to print «—» for every living signal —
+   reported as «no data at all». Pending rows now show the measured move
+   since entry, live from the same price map the rest of the page reads. */
+function liveMovePct(h, prices) {
+  if (!h || h.settled) return null;
+  const entry = Number(h.entryPrice);
+  const now = Number(prices?.[h.coinId]);
+  if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(now) || now <= 0) return null;
+  return Math.round(((now - entry) / entry) * 10000) / 100;
+}
+
+function HistorySection({ history, prices = {}, embedded = false }) {
   const { t } = useTranslation();
   /* The ledger lives in localStorage — only render rows that still look like
      rows; anything an older build wrote differently is skipped, not fatal. */
@@ -863,21 +1004,36 @@ function HistorySection({ history, embedded = false }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((h) => (
-                <tr key={h.id}>
-                  <td style={{ fontWeight: 800, color: 'var(--text-1)' }}>{h.symbol}</td>
-                  <td>{new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td>${fmtPrice(h.entryPrice)}</td>
-                  <td>{t(classKey(h.classification))}</td>
-                  <td>{h.confidence}%</td>
-                  <td className={`r ${h.result === 'success' ? 'up' : h.result === 'failed' ? 'down' : ''}`}>
-                    {h.settled ? t(`signals.intel.history.result.${h.result}`) : `${t('signals.intel.history.result.pending')} ${t('signals.intel.history.pendingTime', { d: h.horizon })}`}
-                  </td>
-                  <td className={`r ${(h.outcomePct ?? 0) >= 0 ? 'up' : 'down'}`}>{h.outcomePct != null ? `${h.outcomePct > 0 ? '+' : ''}${h.outcomePct}%` : '—'}</td>
-                </tr>
-              ))}
+              {rows.map((h) => {
+                /* Settled rows carry their final measured move; pending rows
+                   show the LIVE move since entry (marked «so far»), so the
+                   column is never blank while the market is moving. */
+                const live = liveMovePct(h, prices);
+                const move = h.settled ? h.outcomePct : live;
+                return (
+                  <tr key={h.id}>
+                    <td style={{ fontWeight: 800, color: 'var(--text-1)' }}>{h.symbol}</td>
+                    <td>{new Date(h.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td>${fmtPrice(h.entryPrice)}</td>
+                    <td>{t(classKey(h.classification))}</td>
+                    <td>{h.confidence}%</td>
+                    <td className={`r ${h.result === 'success' ? 'up' : h.result === 'failed' ? 'down' : ''}`}>
+                      {h.settled ? t(`signals.intel.history.result.${h.result}`) : `${t('signals.intel.history.result.pending')} ${t('signals.intel.history.pendingTime', { d: h.horizon })}`}
+                    </td>
+                    <td className={`r ${(move ?? 0) >= 0 ? 'up' : 'down'}`}>
+                      {move != null ? (
+                        <>
+                          {move > 0 ? '+' : ''}{move}%
+                          {!h.settled && <span className="sic-move-sofar">{t('signals.intel.history.soFar')}</span>}
+                        </>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          <div className="faint sic-panel-note">{t('signals.intel.history.liveNote')}</div>
         </div>
       )}
     </section>
@@ -1321,7 +1477,7 @@ function AiAnalysisPanel({ outlook, aiLoading, aiError, horizon, setHorizon }) {
   );
 }
 
-function IntelligenceHub({ early, sm, momentumCards, portfolioImpactData, history }) {
+function IntelligenceHub({ early, sm, momentumCards, portfolioImpactData, history, prices }) {
   const { t } = useTranslation();
   const still = useStill();
   const [open, setOpen] = useState(false);
@@ -1352,7 +1508,7 @@ function IntelligenceHub({ early, sm, momentumCards, portfolioImpactData, histor
     smartMoney: <SmartMoneySection sm={sm} embedded />,
     momentum: <MomentumSection cards={momentumCards} embedded />,
     portfolio: <PortfolioCard impact={portfolioImpactData} embedded />,
-    history: <HistorySection history={history} embedded />
+    history: <HistorySection history={history} prices={prices} embedded />
   };
 
   return (
@@ -1460,7 +1616,12 @@ export default function Signals() {
   /* ── server-driven feeds (all fail closed) ────────────────────────────── */
   const pulsePoll = usePoll(() => getSignalPulse(), [], 60_000);
   const smPoll = usePoll(() => fetchOverview('24h'), [], 120_000);
-  const sm = smPoll.data;
+  /* Full overview first; when it is unreachable the pulse's own verified
+     snapshot keeps the section alive (see smartMoneyFromPulse). */
+  const sm = useMemo(
+    () => smPoll.data || safeCalc(() => smartMoneyFromPulse(pulsePoll.data), null),
+    [smPoll.data, pulsePoll.data]
+  );
   const pulse = useMemo(() => {
     const srv = pulsePoll.data?.sentiment ? pulsePoll.data : null;
     if (srv && (srv.source === 'live' || srv.source === 'market-only')) return srv;
@@ -1697,6 +1858,26 @@ export default function Signals() {
     if (Number.isFinite(Number(tokenOnchain?.liquidityUsd)) && Number(tokenOnchain.liquidityUsd) > 0) {
       push('liquidityObserved', `$${fmtCompact(tokenOnchain.liquidityUsd)}`, '', null);
     }
+    /* DEX pair activity — measured by the token route from real pairs.
+       These two rows keep the on-chain block alive even on chains where the
+       holder/whale feeds are not configured, so the section stops reading
+       «everything is unavailable» while pair data is sitting in the very
+       same response. */
+    const dexVol = Number(tokenOnchain?.volume?.h24);
+    if (Number.isFinite(dexVol) && dexVol > 0) {
+      push('dexVolume', `$${fmtCompact(dexVol)}`, '', null);
+    }
+    const dexBuys = Number(tokenOnchain?.txns?.buys24);
+    const dexSells = Number(tokenOnchain?.txns?.sells24);
+    if (Number.isFinite(dexBuys) && Number.isFinite(dexSells) && dexBuys + dexSells > 0) {
+      const pressure = dexBuys > dexSells * 1.15 ? 'buy' : dexSells > dexBuys * 1.15 ? 'sell' : 'balanced';
+      push(
+        'dexTxns',
+        `${dexBuys} ↑ / ${dexSells} ↓`,
+        pressure === 'buy' ? 'up' : pressure === 'sell' ? 'down' : '',
+        pressure === 'balanced' ? null : pressure === 'buy' ? 'up' : 'down'
+      );
+    }
     if (verifiedForTarget) {
       const net = verifiedForTarget.netFlowUsd;
       push('smartMoneyNet', `${net >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(net))}`,
@@ -1847,7 +2028,16 @@ export default function Signals() {
     const holders = tokenOnchain?.holders;
     if (holders?.top10Share != null && Number.isFinite(Number(holders.top10Share))) ev.topHolderPct = Number(holders.top10Share);
     else if (intel?.topHolderPct != null && Number.isFinite(Number(intel.topHolderPct))) ev.topHolderPct = Number(intel.topHolderPct);
+    if (holders?.dataStatus === 'live' && Number(holders?.total) > 0) ev.holdersTotal = Math.round(Number(holders.total));
     if (tokenOnchain?.liquidityUsd != null && Number.isFinite(Number(tokenOnchain.liquidityUsd))) ev.liquidityUsd = Math.round(Number(tokenOnchain.liquidityUsd));
+    /* DEX pair measurements — the on-chain paragraph used to say
+       «unavailable» purely because these never reached the evidence, even
+       when the token route had measured them. All on the server allowlist. */
+    if (Number(tokenOnchain?.volume?.h24) > 0) ev.dexVolumeH24 = Math.round(Number(tokenOnchain.volume.h24));
+    if (Number(tokenOnchain?.txns?.buys24) > 0 || Number(tokenOnchain?.txns?.sells24) > 0) {
+      ev.dexBuys24 = Math.max(0, Math.round(Number(tokenOnchain?.txns?.buys24) || 0));
+      ev.dexSells24 = Math.max(0, Math.round(Number(tokenOnchain?.txns?.sells24) || 0));
+    }
     if (verifiedForTarget) {
       ev.smartMoneyNetUsd = Math.round(verifiedForTarget.netFlowUsd);
       ev.dexPressure = verifiedForTarget.signal === 'ACCUMULATION' ? 'buy' : 'sell';
@@ -2069,6 +2259,7 @@ export default function Signals() {
           momentumCards={momentumCards}
           portfolioImpactData={portfolioImpactData}
           history={history}
+          prices={priceMap}
         />
       </SectionGuard>
 
