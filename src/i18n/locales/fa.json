@@ -11031,7 +11031,8 @@
         "SCORED": "امتیازدهی‌شده",
         "INSUFFICIENT_EVIDENCE": "در حال نمونه‌برداری",
         "UNAVAILABLE": "بدون تاریخچه"
-      }
+      },
+      "realized": "سود محقق‌شده"
     },
     "title": "هوشمند مانی (Smart Money)",
     "windowAria": "بازهٔ زمانی",
@@ -11181,7 +11182,9 @@
     "tokenSummaryUp": "جریان خالص مثبت",
     "tokenSummaryDown": "جریان خالص منفی",
     "tokenSummaryFlat": "بدون جریان ثبت‌شده",
-    "marketsChip": "جفت فعال"
+    "marketsChip": "جفت فعال",
+    "tokens": "توکن",
+    "volume": "حجم جابه‌جایی"
   },
   "crossChain": {
     "youReceive": "دریافت می‌کنید",

@@ -11033,7 +11033,8 @@
         "SCORED": "scored",
         "INSUFFICIENT_EVIDENCE": "sampling",
         "UNAVAILABLE": "no history"
-      }
+      },
+      "realized": "Realised P&L"
     },
     "title": "Smart Money",
     "windowAria": "Time window",
@@ -11183,7 +11184,9 @@
     "tokenSummaryUp": "net flow positive",
     "tokenSummaryDown": "net flow negative",
     "tokenSummaryFlat": "no recorded flow",
-    "marketsChip": "active pairs"
+    "marketsChip": "active pairs",
+    "tokens": "tokens",
+    "volume": "Flow volume"
   },
   "crossChain": {
     "youReceive": "You receive",
