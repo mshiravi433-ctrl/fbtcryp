@@ -120,10 +120,85 @@ export const EVM_CHAINS = {
     router: '0x1D368773735ee1E678950B7A97bcA2CafB330CDc',
     wrapped: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', // wS
     dexName: 'KyberSwap'
+  },
+  /*
+   * ─── NEW EVM CHAINS ADDED 2026-09 ─────────────────────────────────────────
+   * Mantle, Berachain, Unichain, Monad, Scroll, zkSync Era, Robinhood Chain
+   * All verified against official chain documentation and live RPC endpoints.
+   */
+  5000: {
+    id: 5000, short: 'MNT', name: 'Mantle',
+    native: { symbol: 'MNT', decimals: 18, coingeckoId: 'mantle' },
+    rpc: ['https://rpc.mantle.xyz', 'https://mantle-rpc.publicnode.com', 'https://mantle.drpc.org'],
+    explorer: 'https://explorer.mantle.xyz',
+    color: '#f0b90b',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8',
+    dexName: 'LI.FI'
+  },
+  80094: {
+    id: 80094, short: 'BERA', name: 'Berachain',
+    native: { symbol: 'BERA', decimals: 18, coingeckoId: 'berachain' },
+    rpc: ['https://rpc.berachain.com', 'https://berachain-rpc.publicnode.com', 'https://berachain.drpc.org'],
+    explorer: 'https://berascan.com',
+    color: '#a855f7',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x6969696969696969696969696969696969696969',
+    dexName: 'KyberSwap'
+  },
+  130: {
+    id: 130, short: 'UNI', name: 'Unichain',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://mainnet.unichain.org', 'https://unichain.llamarpc.com', 'https://unichain.drpc.org'],
+    explorer: 'https://uniscan.xyz',
+    color: '#ff007a',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x4200000000000000000000000000000000000006',
+    dexName: 'KyberSwap'
+  },
+  143: {
+    id: 143, short: 'MON', name: 'Monad',
+    native: { symbol: 'MON', decimals: 18, coingeckoId: 'monad' },
+    rpc: ['https://rpc.monad.xyz', 'https://monad-rpc.publicnode.com', 'https://monad.drpc.org'],
+    explorer: 'https://monadvision.com',
+    color: '#7c3aed',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A',
+    dexName: 'KyberSwap'
+  },
+  534352: {
+    id: 534352, short: 'SCR', name: 'Scroll',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://rpc.scroll.io', 'https://scroll-rpc.publicnode.com', 'https://scroll.drpc.org'],
+    explorer: 'https://scrollscan.com',
+    color: '#f1c27d',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x5300000000000000000000000000000000000004',
+    dexName: 'LI.FI'
+  },
+  324: {
+    id: 324, short: 'ZK', name: 'zkSync Era',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://mainnet.era.zksync.io', 'https://zksync.drpc.org', 'https://zksync-era-rpc.publicnode.com'],
+    explorer: 'https://era.zksync.network',
+    color: '#8c8dfc',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91',
+    dexName: 'LI.FI'
+  },
+  4663: {
+    id: 4663, short: 'HOOD', name: 'Robinhood Chain',
+    native: { symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum' },
+    rpc: ['https://rpc.mainnet.chain.robinhood.com', 'https://robinhood-rpc.publicnode.com'],
+    explorer: 'https://robinhoodchain.blockscout.com',
+    color: '#00c805',
+    router: '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506',
+    wrapped: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73',
+    dexName: 'KyberSwap'
   }
 };
 
-export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146];
+export const EVM_CHAIN_ORDER = [56, 1, 137, 42161, 8453, 10, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663];
 
 /**
  * Solana — the one non-EVM network with first-class reads in the explorer.
@@ -203,5 +278,51 @@ export const TOKENS = {
     T('USDC', 'USD Coin', '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', 6, 'usd-coin'),
     T('wS', 'Wrapped Sonic', '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38', 18, 'sonic-3'),
     T('stS', 'Staked Sonic', '0xE5DA20F15420aD15DE0fa650600aFc998bbE3955', 18, 'sonic-3')
+  ],
+  5000: [
+    T('MNT', 'Mantle', null, 18, 'mantle', { native: true }),
+    T('WMNT', 'Wrapped Mantle', '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8', 18, 'mantle'),
+    T('USDT', 'Tether USD', '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', 6, 'tether'),
+    T('USDC', 'USD Coin', '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', 6, 'usd-coin'),
+    T('WETH', 'Wrapped Ether', '0xdeaddeaddeaddeaddeaddeaddeaddeaddead1111', 18, 'ethereum')
+  ],
+  80094: [
+    T('BERA', 'Berachain', null, 18, 'berachain', { native: true }),
+    T('WBERA', 'Wrapped BERA', '0x6969696969696969696969696969696969696969', 18, 'berachain'),
+    T('WETH', 'Wrapped Ether', '0x2F6F07CDcf3588944Bf4C42aC74ff24bF56e7590', 18, 'ethereum'),
+    T('USDC', 'USD Coin', '0x549943e04f40284185054145c6E4e9568C1D3241', 6, 'usd-coin'),
+    T('HONEY', 'Honey', '0xfcbd14dc51f0a4d49d5e53c2e0950e0bc26d0dce', 18, 'honey'),
+    T('WBTC', 'Wrapped Bitcoin', '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c', 8, 'bitcoin')
+  ],
+  130: [
+    T('ETH', 'Ethereum', null, 18, 'ethereum', { native: true }),
+    T('WETH', 'Wrapped Ether', '0x4200000000000000000000000000000000000006', 18, 'ethereum'),
+    T('USDC', 'USD Coin', '0x078D782b760474a361dDA0AF3839290b0EF57AD6', 6, 'usd-coin')
+  ],
+  143: [
+    T('MON', 'Monad', null, 18, 'monad', { native: true }),
+    T('WMON', 'Wrapped MON', '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A', 18, 'monad'),
+    T('USDC', 'USD Coin', '0x754704Bc059F8c67012feD69BC8a327a5aafb603', 6, 'usd-coin'),
+    T('WETH', 'Wrapped Ether', '0xEe8C0E9f1bFfB4Eb878d8f15f368a02A35481242', 18, 'ethereum')
+  ],
+  534352: [
+    T('ETH', 'Ethereum', null, 18, 'ethereum', { native: true }),
+    T('WETH', 'Wrapped Ether', '0x5300000000000000000000000000000000000004', 18, 'ethereum'),
+    T('USDC', 'USD Coin', '0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4', 6, 'usd-coin'),
+    T('USDT', 'Tether USD', '0xf55bec9cafdbe8730f096aa55dad6d22d44099df', 6, 'tether'),
+    T('ZK', 'ZKsync', '0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E', 18, 'zksync')
+  ],
+  324: [
+    T('ETH', 'Ethereum', null, 18, 'ethereum', { native: true }),
+    T('WETH', 'Wrapped Ether', '0x5aea5775959fbc2557cc8789bc1bf90a239d9a91', 18, 'ethereum'),
+    T('USDC', 'USD Coin', '0x1d17cbcf0d6d143135ae902365d2e5e2a16538d4', 6, 'usd-coin'),
+    T('USDT', 'Tether USD', '0x493257fD37EDB34451f62EDf8D2a0C418852bA4C', 6, 'tether'),
+    T('DAI', 'Dai', '0x4b9eb6c0b6ea15176bbf62841c6b2a8a398cb656', 18, 'zksync-erc20-bridged-dai-zksync'),
+    T('ZK', 'ZKsync', '0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E', 18, 'zksync')
+  ],
+  4663: [
+    T('ETH', 'Ethereum', null, 18, 'ethereum', { native: true }),
+    T('WETH', 'Wrapped Ether', '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', 18, 'ethereum'),
+    T('USDG', 'Global Dollar', '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', 6, 'global-dollar')
   ]
 };

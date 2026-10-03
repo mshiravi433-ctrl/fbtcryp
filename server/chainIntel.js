@@ -44,14 +44,42 @@ const HTTP_TIMEOUT_MS = Number(process.env.CHAIN_INTEL_HTTP_TIMEOUT_MS || 9000);
  * and on Ethereum ~1200, rather than 15-everywhere.
  */
 export const BLOCK_TIME_MS = {
-  1: 12_000, 56: 3_000, 137: 2_200, 42161: 300, 8453: 2_000,
-  10: 2_000, 43114: 2_000, 59144: 12_000, 146: 330
+  1: 12_000,   // Ethereum
+  56: 3_000,   // BNB Smart Chain
+  137: 2_200,  // Polygon
+  42161: 300,  // Arbitrum One
+  8453: 2_000, // Base
+  10: 2_000,   // Optimism
+  43114: 2_000,// Avalanche
+  59144: 12_000, // Linea
+  146: 330,    // Sonic
+  5000: 1_000,  // Mantle
+  80094: 1_000, // Berachain
+  130: 2_000,  // Unichain
+  143: 300,    // Monad
+  534352: 2_000,// Scroll
+  324: 2_000,  // zkSync Era
+  4663: 2_000  // Robinhood Chain
 };
 
 /** Max blocks a single eth_getLogs may span on public RPC (rate-limit safety). */
 export const LOG_SCAN_MAX_BLOCKS = {
-  1: 4_000, 56: 12_000, 137: 12_000, 42161: 48_000, 8453: 12_000,
-  10: 12_000, 43114: 12_000, 59144: 4_000, 146: 12_000
+  1: 4_000,    // Ethereum
+  56: 12_000,  // BNB Smart Chain
+  137: 12_000, // Polygon
+  42161: 48_000, // Arbitrum One
+  8453: 12_000, // Base
+  10: 12_000,  // Optimism
+  43114: 12_000,// Avalanche
+  59144: 4_000, // Linea
+  146: 12_000, // Sonic
+  5000: 12_000, // Mantle
+  80094: 12_000,// Berachain
+  130: 12_000, // Unichain
+  143: 12_000, // Monad
+  534352: 12_000,// Scroll
+  324: 12_000, // zkSync Era
+  4663: 12_000  // Robinhood Chain
 };
 
 /*
@@ -70,7 +98,15 @@ export const EXPLORER_APIS = {
   10: { api: 'https://api-optimistic.etherscan.io/api', keyEnv: 'OPTIMISTIC_ETHERSCAN_API_KEY' },
   43114: { api: 'https://api.snowtrace.io/api', keyEnv: 'SNOWTRACE_API_KEY' },
   59144: { api: 'https://api.lineascan.build/api', keyEnv: 'LINEASCAN_API_KEY' },
-  146: { api: 'https://api.sonicscan.org/api', keyEnv: 'SONICSCAN_API_KEY' }
+  146: { api: 'https://api.sonicscan.org/api', keyEnv: 'SONICSCAN_API_KEY' },
+  // New chains added 2026-10
+  5000: { api: 'https://api.explorer.mantle.xyz/api', keyEnv: 'MANTLESCAN_API_KEY' },
+  80094: { api: 'https://api.berascan.com/api', keyEnv: 'BERASCAN_API_KEY' },
+  130: { api: 'https://api.uniscan.xyz/api', keyEnv: 'UNISCAN_API_KEY' },
+  143: { api: 'https://api.monadvision.com/api', keyEnv: 'MONADSCAN_API_KEY' },
+  534352: { api: 'https://api.scrollscan.com/api', keyEnv: 'SCROLLSCAN_API_KEY' },
+  324: { api: 'https://api-era.zksync.network/api', keyEnv: 'ZKSYNC_API_KEY' },
+  4663: { api: 'https://api.robinhoodchain.blockscout.com/api', keyEnv: 'ROBINHOODCHAIN_API_KEY' }
 };
 
 /** True when an explorer key for this chain is configured (never exposes it). */

@@ -115,7 +115,24 @@ async function zeroxFetch(path) {
 const ALLOWED = ['chainId', 'sellToken', 'buyToken', 'sellAmount', 'taker', 'slippageBps', 'recipient'];
 
 /** Chains where 0x Gasless is available AND we already support the chain. */
-const SUPPORTED = new Set([1, 10, 56, 137, 8453, 42161, 43114]);
+// Based on 0x API documentation (2026):
+// https://docs.0x.org/docs/introduction/supported-chains
+// Gasless API supported chains: Arbitrum, Avalanche, Base, BSC, Mantle, Monad,
+// Optimism, Polygon, Robinhood, Scroll, zkSync Era
+const SUPPORTED = new Set([
+  1,      // Ethereum
+  10,     // Optimism
+  56,     // BNB Smart Chain
+  137,    // Polygon
+  8453,   // Base
+  42161,  // Arbitrum One
+  43114,  // Avalanche
+  5000,   // Mantle
+  143,    // Monad
+  4663,   // Robinhood Chain
+  534352, // Scroll
+  324     // zkSync Era
+]);
 
 /**
  * GET /api/gasless/price — an indicative quote, no commitment.
