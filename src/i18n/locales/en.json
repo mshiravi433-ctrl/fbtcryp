@@ -869,6 +869,10 @@
       "acknowledge": "Acknowledge risk"
     },
     "gaslessUnavailable": "Swapping without gas is not enabled on this deployment, so this trade still needs {{coin}} for the network fee.",
+    "gaslessChainOff": {
+      "noZeroXChain": "Swapping without gas needs 0x, and 0x does not serve {{chain}} at all — so this trade still needs {{coin}} for the network fee.",
+      "noZeroXGasless": "0x routes {{chain}} swaps but not gasless ones, so this trade still needs {{coin}} for the network fee."
+    },
     "gaslessUsingNormal": "The normal price above still applies.",
     "historyTitle": "Swap history",
     "historyClear": "Clear",
@@ -7049,7 +7053,12 @@
     "priority": "Suggested tip",
     "privateTitle": "Private relay",
     "privateSub": "Prefer {{name}} so this swap stays out of the public mempool",
-    "noRelay": "No public private-mempool relay on this chain yet. Tight slippage is still the best defence."
+    "noRelay": "This chain publishes pending transactions and we could not verify a private relay for it. Tight slippage is still the best defence.",
+    "model": {"public": "This chain publishes pending transactions, so a bot can read your order before it lands.", "private": "This chain has no public mempool — orders go straight to the sequencer, so nobody can queue a trade in front of yours.", "encrypted": "This chain holds orders in an encrypted mempool and builds blocks inside a TEE, so the contents stay hidden until inclusion."},
+    "scoreAdjusted": "The score is discounted for this network.",
+    "privateSubSequencer": "Send through {{name}} — the only entry point on this chain, so nothing is published for bots to read.",
+    "privateSubEncrypted": "Send through {{name}} — the order is encrypted until the block is built.",
+    "noRelayUnknownChain": "We have not verified a private submission path for this network yet. Tight slippage is still the best defence."
   },
   "smart": {
     "title": "Smart Wallet",

@@ -392,7 +392,16 @@ export async function analyzeProtocol(slug) {
 /* -------------------------------------------------------------------------- */
 
 const GOPLUS_V1 = 'https://api.gopluslabs.io/api/v1';
-const GOPLUS_CHAINS = new Set(['1', '56', '137', '42161', '10', '8453', '43114', '59144']);
+/* 2026-10-03: extended to every EVM chain in our registry. GoPlus publishes
+ * chain ids for all eight newer networks (Sonic 146 · Mantle 5000 · Berachain
+ * 80094 · Unichain 130 · Monad 143 · Scroll 534352 · zkSync Era 324 ·
+ * Robinhood Chain 4663 — docs.gopluslabs.io «Response Details», read
+ * 2026-10-03), so approval scanning on those networks no longer has to report
+ * "unsupported". Mirrors server/tokenRisk.js and src/lib/tokenRisk.js. */
+const GOPLUS_CHAINS = new Set([
+  '1', '56', '137', '42161', '10', '8453', '43114', '59144',
+  '146', '5000', '80094', '130', '143', '534352', '324', '4663'
+]);
 
 async function httpJson(url, timeout = 9000) {
   const ctrl = new AbortController();
