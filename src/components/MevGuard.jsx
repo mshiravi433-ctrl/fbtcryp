@@ -1,7 +1,14 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Switch from './Switch';
-import { estimateSandwichRisk, privateRelayFor, simulateSwap, suggestPriorityFee } from '../lib/mev';
+import {
+  chainAdjustedRisk,
+  estimateSandwichRisk,
+  mevChainModel,
+  privateRelayFor,
+  simulateSwap,
+  suggestPriorityFee
+} from '../lib/mev';
 
 /**
  * Pre-send pipeline: Simulation → Expected → Gas → MEV → Execute.
@@ -9,6 +16,17 @@ import { estimateSandwichRisk, privateRelayFor, simulateSwap, suggestPriorityFee
  * The private-relay toggle is a recommendation. We cannot change the wallet's
  * RPC from here; flipping it records the preference and shows the URL the
  * user (or WalletConnect metadata) can use.
+ *
+ * ─── 2026-10-03: THE SENTENCE UNDER THE TOGGLE ─────────────────────────────
+ * The card used to print one sentence for every chain — "Prefer {{name}} so
+ * this swap stays out of the public mempool" — which is false in two different
+ * directions at once. On a chain with no public mempool there is no "public
+ * mempool" to stay out of, and on a chain where the only endpoint we have is a
+ * plain RPC the sentence promises protection the endpoint does not provide.
+ *
+ * So the wording now follows `relay.kind`, and the risk number is discounted
+ * by the chain's own mempool model (see chainAdjustedRisk) rather than being
+ * presented as the same score it would be on Ethereum.
  */
 export default function MevGuard({
   chainId,
@@ -24,8 +42,11 @@ export default function MevGuard({
 }) {
   const { t } = useTranslation();
   const sandwich = useMemo(
-    () => estimateSandwichRisk({ slippagePct, priceImpact, amountUsd, bothStable }),
-    [slippagePct, priceImpact, amountUsd, bothStable]
+    () => chainAdjustedRisk(
+      chainId,
+      estimateSandwichRisk({ slippagePct, priceImpact, amountUsd, bothStable })
+    ),
+    [chainId, slippagePct, priceImpact, amountUsd, bothStable]
   );
   const sim = useMemo(
     () => simulateSwap({
@@ -34,9 +55,19 @@ export default function MevGuard({
     [amountOut, minOut, gasNative, slippagePct, priceImpact, amountUsd, bothStable, chainId]
   );
   const relay = privateRelayFor(chainId);
+  const model = mevChainModel(chainId);
   const tip = suggestPriorityFee({ congested: sandwich.score >= 45 });
 
   if (!sim) return null;
+
+  /* The one sentence that says what the toggle actually does on THIS chain. */
+  const relaySub = !relay
+    ? null
+    : relay.kind === 'sequencer'
+      ? t('mev.privateSubSequencer', { name: relay.name })
+      : relay.kind === 'encrypted'
+        ? t('mev.privateSubEncrypted', { name: relay.name })
+        : t('mev.privateSub', { name: relay.name });
 
   return (
     <div className="card card-tight" style={{ marginTop: 10 }}>
@@ -64,7 +95,10 @@ export default function MevGuard({
         )}
         <div className="row-between">
           <span className="faint">{t('mev.sandwich')}</span>
-          <span className="mono">{sandwich.score}</span>
+          <span className="mono">
+            {sandwich.score}
+            {sandwich.adjusted ? <span className="faint"> / {sandwich.rawScore}</span> : null}
+          </span>
         </div>
         <div className="row-between">
           <span className="faint">{t('mev.priority')}</span>
@@ -72,16 +106,35 @@ export default function MevGuard({
         </div>
       </div>
 
+      {/*
+        HOW THIS CHAIN ORDERS TRANSACTIONS. Printed before the toggle because
+        it is the reason the score above reads the way it does — a discounted
+        number with no explanation is just a smaller number the user has to
+        trust.
+      */}
+      {model && (
+        <p className="faint" style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.7 }}>
+          {t(`mev.model.${model.mempool}`)}
+          {sandwich.adjusted ? ` ${t('mev.scoreAdjusted')}` : ''}
+        </p>
+      )}
+
       {relay ? (
         <div className="set-row" style={{ padding: '10px 0 0' }}>
           <span className="set-row-label">
             <div>{t('mev.privateTitle')}</div>
-            <div className="set-row-sub">{t('mev.privateSub', { name: relay.name })}</div>
+            <div className="set-row-sub">{relaySub}</div>
           </span>
           <Switch on={protectOn} label={t('mev.privateTitle')} onChange={onProtectChange} />
         </div>
       ) : (
-        <p className="faint" style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.7 }}>{t('mev.noRelay')}</p>
+        /* Two different absences, two different sentences. "No relay yet"
+           implies one is coming; on a chain with a public mempool and no
+           documented private relay, the honest statement is that we could not
+           verify one — and that slippage is what is left. */
+        <p className="faint" style={{ marginTop: 8, fontSize: 11.5, lineHeight: 1.7 }}>
+          {model?.mempool === 'public' ? t('mev.noRelay') : t('mev.noRelayUnknownChain')}
+        </p>
       )}
 
       {protectOn && relay && (

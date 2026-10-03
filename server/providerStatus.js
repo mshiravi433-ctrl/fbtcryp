@@ -200,7 +200,11 @@ export function providerStatuses() {
     buildProviderStatus({
       id: '0x-gasless',
       configured: Boolean(env('ZEROX_API_KEY')),
-      supportedChains: [1, 10, 56, 137, 8453, 42161, 43114],
+      /* 2026-10-03: 0x lists a Gasless ✅ for seven more EVM networks we
+         support (Sonic · Mantle · Berachain · Unichain · Monad · Scroll ·
+         Robinhood Chain). zkSync Era and Linea are deliberately absent — see
+         the comment on GASLESS_CHAINS in src/lib/gasless.js. */
+      supportedChains: [1, 10, 56, 137, 8453, 42161, 43114, 146, 5000, 80094, 130, 143, 534352, 4663],
       feeReady: Boolean(env('ZEROX_API_KEY')),
       missingConfiguration: env('ZEROX_API_KEY') ? [] : ['ZEROX_API_KEY'],
       externalApprovalRequired: !env('ZEROX_API_KEY'),
@@ -218,7 +222,11 @@ export function providerStatuses() {
     buildProviderStatus({
       id: '0x-cross-chain',
       configured: Boolean(env('ZEROX_API_KEY')),
-      supportedChains: [1, 10, 56, 137, 8453, 42161, 43114],
+      /* 2026-10-03: read off the Cross-Chain half of the same table. Relay
+         carries every chain 0x lists, so the honest set is "our registry
+         minus zkSync Era" (0x lists no zkSync row at all). server/xchain.js
+         has no allowlist of its own — this row is the report. */
+      supportedChains: [1, 10, 56, 137, 8453, 42161, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 4663],
       feeReady: Boolean(env('ZEROX_API_KEY')),
       missingConfiguration: env('ZEROX_API_KEY') ? [] : ['ZEROX_API_KEY'],
       facts: {
@@ -308,7 +316,10 @@ export function providerStatuses() {
     buildProviderStatus({
       id: 'goplus-token-risk',
       configured: true, // keyless
-      supportedChains: [1, 56, 137, 42161, 10, 8453, 43114, 59144],
+      /* 2026-10-03: GoPlus publishes a chain id for every EVM network we
+         support, so the AI token-security scan is no longer an eight-chain
+         feature. (docs.gopluslabs.io «Response Details», read 2026-10-03.) */
+      supportedChains: [1, 56, 137, 42161, 10, 8453, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663],
       feeReady: false, // not a revenue line
       facts: { authMode: 'keyless', role: 'security-only' }
     })

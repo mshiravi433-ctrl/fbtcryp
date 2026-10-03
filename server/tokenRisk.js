@@ -13,7 +13,23 @@
 
 const GOPLUS = 'https://api.gopluslabs.io/api/v1/token_security';
 
-const ALLOWED = new Set(['1', '56', '137', '42161', '10', '8453', '43114', '59144']);
+/*
+ * 2026-10-03 — the eight newer networks were rejected here too.
+ *
+ * The proxy is the ONLY way the browser reaches GoPlus, so a chain missing
+ * from this set is a chain with no token-security card even when GoPlus
+ * publishes a chain id for it. Added (each verified against GoPlus's own
+ * published chain table, docs.gopluslabs.io «Response Details», read
+ * 2026-10-03): 146 Sonic, 5000 Mantle, 80094 Berachain, 130 Unichain,
+ * 143 Monad, 534352 Scroll, 324 zkSync Era, 4663 Robinhood.
+ *
+ * Mirrors GOPLUS_CHAINS in src/lib/tokenRisk.js and the set in
+ * server/securityIntel.js — the parity probe pins all three together.
+ */
+const ALLOWED = new Set([
+  '1', '56', '137', '42161', '10', '8453', '43114', '59144',
+  '146', '5000', '80094', '130', '143', '534352', '324', '4663'
+]);
 
 function isAddr(s) {
   return /^0x[a-fA-F0-9]{40}$/.test(String(s || ''));

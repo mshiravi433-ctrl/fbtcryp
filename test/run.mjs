@@ -1126,6 +1126,17 @@ console.log('\n▸ probing app ↔ site parity (api base · LI.FI fee · network
   report('app ↔ site parity', parityRows);
 }
 
+/* Network capability parity: the three features the owner reported missing on
+   the eight newer networks — AI token analysis, private relay + MEV risk +
+   protection, and gasless swap. Pins the client and server copies of each
+   capability map to each other and to the swap registry, so a network added
+   later cannot land without them. */
+console.log('\n▸ probing network capability parity (AI scan · MEV · gasless)…');
+{
+  const { default: capRows } = await import('./network-capability-parity-probe.mjs');
+  report('network capability parity', capRows);
+}
+
 /* ------------------------------ 1. units -------------------------------- */
 /* Pure logic first: it is the fastest suite and the one whose failures point
    most precisely at a cause. Bundled with Vite so extensionless imports and
