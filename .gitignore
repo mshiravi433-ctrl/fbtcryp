@@ -65,3 +65,6 @@ film/intent-os/node_modules
 film/intent-os/out/
 film/intent-os/*.mp4
 film/intent-os/work/
+
+# scratch/debug tools (kept locally, not part of the build)
+film/intent-os/tools/_*.mjs

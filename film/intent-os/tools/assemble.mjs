@@ -47,9 +47,21 @@ if (INPUT) {
 }
 
 /* ── segments → one film ──────────────────────────────────────────────── */
+/*
+ * ORDER, NOT ALPHABET.
+ *
+ * Segments are named `seg_<worker>_<start>-<end>.mp4`, so a lexical sort
+ * interleaves the workers (seg_000_0000-0060, seg_000_0300-0360,
+ * seg_001_0060-0120, …) and the film would play scenes out of order. The
+ * start second in the name is the only ordering that means anything.
+ */
 const files = (await fsp.readdir(SEGMENTS))
-  .filter((f) => /^seg_\d+_.*\.mp4$/.test(f))
-  .sort();
+  .filter((f) => /^seg_\d+_\d+-\d+\.mp4$/.test(f))
+  .sort((a, b) => {
+    const sa = Number(/_([0-9]+)-[0-9]+\.mp4$/.exec(a)[1]);
+    const sb = Number(/_([0-9]+)-[0-9]+\.mp4$/.exec(b)[1]);
+    return sa - sb;
+  });
 if (!files.length) throw new Error('no segments in ' + SEGMENTS);
 console.log('[assemble] ' + files.length + ' segments');
 

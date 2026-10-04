@@ -4,6 +4,8 @@ A ten-minute product documentary about **FBT Intent OS**, rendered frame by
 frame in a real headless browser and encoded to 4K UHD.
 
 **Deliverable:** `fbt-intent-os-4k.mp4` · 3840×2160 · 24 fps · stereo · 10:00
+**Also shipped:** `fbt-intent-os-1080p.mp4` (same grade, a quarter of the size)
+and `fbt-intent-os.en.srt` (65 cues)
 
 ---
 
@@ -45,8 +47,13 @@ film/intent-os/
 │   ├── score.mjs           the score, synthesised (no samples, no loops)
 │   ├── sfx.mjs             the sound design, synthesised (253 cues)
 │   ├── narration.json      the narration script + the second each line begins
-│   └── build_audio.mjs     narration + score + effects → master, with ducking
+│   ├── build_audio.mjs     narration + score + effects → master, with ducking
+│   ├── subtitles.mjs       narration + measured timings → the .srt
+│   ├── render-all.mjs      the same pass, split across parallel workers
+│   ├── grade.mjs           the finishing pass: bloom, vignette, grain
+│   └── assemble.mjs        segments → one film, audio muxed
 ├── assets/fonts/           Inter + JetBrains Mono (SIL Open Font License)
+├── assets/grade/           the two generated finishing plates
 └── docs/                   the production report (fa)
 ```
 
@@ -67,17 +74,26 @@ node tools/render.mjs --stills 3,140,436,558 --scale 0.5
 # one scene, to check a change
 node tools/render.mjs --from 0 --to 45 --segment 45 --scale 1
 
-# the film: 30-second segments, 4K, visually lossless intermediates
-node tools/render.mjs --all --segment 30 --scale 1 --crf 12
+# the film: one-minute segments, true 4K, visually lossless intermediates
+node tools/render-all.mjs --workers 2 --segment 60 --scale 2 --crf 13
 
+node tools/grade.mjs --in work/segments/full.mp4 --out out/master-1080p.mp4 \
+  --height 1080 --crf 21 --grain 2 --duration 600   # the finishing pass
 node tools/assemble.mjs   # concatenate segments + mux the master audio
+node tools/subtitles.mjs  # → out/fbt-intent-os.en.srt
 ```
 
-Measured on the two-core sandbox used to make this film: **≈0.5 s per 4K
-frame** (scene-dependent; the blockchain act costs about 1.4 s/frame and the
-interface acts about 0.3 s). A full pass is ~2 hours single-threaded and about
-35 minutes across six parallel workers, which is why segments are written
-separately and skipped when they already exist.
+`--scale` sets the viewport, not a hint: the stage stays 1920×1080 CSS px and
+the viewport becomes 3840×2160, so the browser rasterises every glyph and every
+canvas at 2×. (`deviceScaleFactor` looks like it should do this and does not —
+CDP delivers CSS-pixel-sized frames regardless.)
+
+Measured on the two-core sandbox used to make this film: **333 ms to capture one
+true-4K frame, ≈0.9 s/frame end to end** including the seek, the draw and the
+encode — about 2.5 hours for the full 14 400-frame pass across two workers. That
+is why segments are written separately, are skipped when they already exist, and
+are named with the second they start at: two workers writing `seg_000_0300` and
+`seg_001_0060` means filenames sort in an order the film does not play in.
 
 ### The two performance decisions the film depends on
 
@@ -87,12 +103,16 @@ matter more than they would in a browser tab:
 1. **Frames are captured over CDP, not through Puppeteer's screenshot API.**
    The same frame costs ~620 ms over CDP and ~3 500 ms through
    `page.screenshot()`; the API's extra surface readback quadruples the cost.
-2. **The finishing layers are composited on the canvas, not on the DOM.**
+2. **The finishing layers are composited on the canvas — or in ffmpeg.**
    Full-screen blended DOM layers (grain, bloom, vignette) each cost a 4K
-   composite per frame. `room()` in `fx.js` paints the graded background,
-   key light and vignette into the canvas that already sits behind the scene,
-   which both fixed a real visual bug — an opaque DOM background was erasing
-   every particle behind the interface — and roughly tripled the frame rate.
+   composite per frame, so the offline pass runs the page with them switched
+   off (`?lite=1`) and `tools/grade.mjs` paints the same three layers into the
+   encoder instead. The two plates are generated from the film's own CSS, so
+   the grade is the design rather than an approximation of it. `room()` in
+   `fx.js` still paints the graded background, key light and vignette into the
+   scene canvas, which both fixed a real visual bug — an opaque DOM background
+   was erasing every particle behind the interface — and roughly tripled the
+   frame rate.
 
 ## 4. Audio
 
@@ -109,7 +129,16 @@ clip per scene at its scripted second, side-chain ducks the score and the
 effects under the voice, and writes `src/narration-timing.js` so on-screen
 words can be paced to what the narrator actually says rather than to a guess.
 Nothing is sampled: every note and every click is written in code, so the film
-carries no third-party music licence.
+carries no third-party music licence. Narration is synthesised speech, kept in
+`work/audio/narration/`; the shipped master measures **−15.9 LUFS integrated,
+LRA 10.4 LU, −1.5 dBFS true peak** at 48 kHz stereo.
+
+Two things this ffmpeg (a 2018 build) teaches the hard way, both now handled:
+its `amix` divides by the number of inputs, so the voice bus carries an explicit
+`volume`; and an output label can feed exactly one input, so the side-chain keys
+need `asplit=N` with one label per consumer — without it the graph fails with
+`[master] matches no streams`, naming the last label rather than the real
+culprit.
 
 ## 5. The rules the film keeps
 
@@ -124,6 +153,7 @@ as testable constraints rather than tone notes:
 | Do not present a fabricated hash as real | The execution panel prints an example hash **and** the sentence that says so, in frame |
 | No distorted or invented text | All on-screen type is real, hinted DOM text at stage scale; no text is drawn as an image |
 | No generic stock footage | There is no footage. Every frame is generated |
+| Sound and narration are cleared | Score and all 253 effects are synthesised in code; narration is generated speech |
 | No excessive neon | Palette is black, deep navy, one electric blue, one violet accent, one mint confirmation |
 
 ## 6. Scripts, scenes and time

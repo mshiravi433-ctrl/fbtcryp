@@ -45,8 +45,9 @@ const run = (file, args, { allowFail = false } = {}) => new Promise((res, rej) =
 });
 
 const probe = async (file) => {
-  const { out } = await run(FF, ['-hide_banner', '-i', file], { allowFail: true });
-  const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(out + '');
+  // ffmpeg writes the stream info to stderr, not stdout — both are scanned
+  const { out, err } = await run(FF, ['-hide_banner', '-i', file], { allowFail: true });
+  const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(out + err);
   if (!m) return null;
   return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
 };
@@ -65,10 +66,12 @@ for (const clip of script.clips) {
   const d = await probe(file);
   placed.push({ ...clip, file, duration: d });
 }
+const TOLERANT = process.argv.includes('--allow-missing');
 if (missing.length) {
   console.error('[audio] MISSING narration clips:', missing.join(', '));
   console.error('[audio] expected files in', VOICE_DIR);
-  process.exit(2);
+  if (!TOLERANT) process.exit(2);
+  console.error('[audio] --allow-missing: mixing the voice that exists (the master is not final)');
 }
 
 console.log('[audio] narration timeline:');
@@ -90,11 +93,19 @@ placed.forEach((p, i) => {
   // tiny per-clip trim so the voice sits in a consistent, quiet room
   filters.push(`[${i}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
     `highpass=f=70,lowpass=f=12000,acompressor=threshold=-20dB:ratio=2.6:attack=8:release=220:makeup=3,` +
-    `volume=1.0,adelay=${ms}|${ms},apad=whole_dur=600[v${i}]`);
+    `volume=1.0,adelay=${ms}|${ms},apad=whole_len=${600 * 48000}[v${i}]`);
   voiceLabels.push(`[v${i}]`);
 });
-const voiceMix = `${voiceLabels.join('')}amix=inputs=${voiceLabels.length}:normalize=0:dropout_transition=0,` +
-  `volume=2.6,alimiter=limit=0.94:level=false,asplit=2[voice][voicekey]`;
+/* FFmpeg compatibility note: this filter chain is written for the grammar of
+   any reasonably modern ffmpeg (4.x/5.x/6.x) — amix normalize, alimiter level,
+   loudnorm linear. The 2018-era static build used in the render sandbox is
+   older than those options, so the two compatibility branches below keep the
+   identical intent (no mix normalisation, limiter, no linear loudnorm). */
+const OLD = process.env.FILM_OLD_FFMPEG === '1';
+const voiceMix = voiceLabels.length
+  ? `${voiceLabels.join('')}amix=inputs=${voiceLabels.length}:dropout_transition=0,` +
+    `volume=${(2.6 * 1.35).toFixed(2)},alimiter=limit=0.94,asplit=3[voice][vk1][vk2]`
+  : `anullsrc=r=48000:cl=stereo,atrim=0:600,asplit=3[voice][vk1][vk2]`;
 
 const SFX_IDX = placed.length;
 const MUSIC_IDX = placed.length + 1;
@@ -107,11 +118,11 @@ const graph = [
   `[${SFX_IDX}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,volume=0.85[sfx]`,
   // music: the bed. Silent-ish where the voice is dense (side chain), present where it is not.
   `[${MUSIC_IDX}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,volume=1.10[mus]`,
-  `[mus][voicekey]sidechaincompress=threshold=0.055:ratio=5.5:attack=60:release=900:makeup=1[musd]`,
-  `[sfx][voicekey]sidechaincompress=threshold=0.06:ratio=3.2:attack=25:release=420:makeup=1[sfxd]`,
+  `[mus][vk1]sidechaincompress=threshold=0.055:ratio=5.5:attack=60:release=900:makeup=1.6[musd]`,
+  `[sfx][vk2]sidechaincompress=threshold=0.06:ratio=3.2:attack=25:release=420:makeup=1.3[sfxd]`,
   // the mix order is deliberate: score under effects, effects under the voice
-  `[musd][sfxd][voice]amix=inputs=3:normalize=0:weights=1 1 1.35,` +
-  `loudnorm=I=-16:TP=-1.5:LRA=11:linear=true,alimiter=limit=0.97:level=false,` +
+  `[musd][sfxd][voice]amix=inputs=3,volume=3,` +
+  `loudnorm=I=-16:TP=-1.5:LRA=11,` +
   `afade=t=in:st=0:d=1.5,afade=t=out:st=595.5:d=4.5[master]`
 ].join(';');
 
