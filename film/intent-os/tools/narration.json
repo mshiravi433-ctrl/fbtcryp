@@ -1,0 +1,94 @@
+{
+  "_": "The narration, scene by scene, with the second it must begin. Times are GLOBAL film time (0–600). The voice performance direction from the brief: calm, intelligent, warm, confident, human, slightly cinematic — never an advertisement announcer, never exaggerated. Natural breathing, meaningful pauses, varied pace.",
+  "voice_direction": {
+    "tone": "premium technology documentary",
+    "pace": "measured; slower on the four key lines, never rushing",
+    "note": "Ellipses and blank lines are intentional pauses."
+  },
+  "clips": [
+    {
+      "id": "sc01",
+      "scene": "SCENE 01 — THE COMPLEXITY OF FINANCE",
+      "start": 6.0,
+      "text": "Every second, millions of financial events happen around the world.\n\nPrices change. Liquidity moves. Markets react. Wallets transact. Opportunities appear. And disappear.\n\nThe challenge isn't finding more information. It's understanding what to do with it.\n\nBecause information without context is just noise."
+    },
+    {
+      "id": "sc02",
+      "scene": "SCENE 02 — THE FBT VISION",
+      "start": 46.5,
+      "text": "FBT Intent OS takes a different approach.\n\nInstead of asking users to navigate a world of disconnected financial tools...\n\nit starts with something much simpler.\n\nYou.\n\nYour goal. Your context. Your risk. Your intent."
+    },
+    {
+      "id": "sc03",
+      "scene": "SCENE 03 — ENTERING INTENT OS",
+      "start": 84.0,
+      "text": "Using Intent OS begins exactly where a financial decision begins.\n\nWith a goal.\n\nYou don't need to know which tool to open first. You simply describe what you're trying to accomplish."
+    },
+    {
+      "id": "sc04",
+      "scene": "SCENE 04 — UNDERSTANDING INTENT",
+      "start": 124.0,
+      "text": "Intent OS doesn't simply read the words. It interprets the structure behind them.\n\nWhat are you trying to achieve? How long do you have? What constraints matter? What information is still missing?\n\nWhen something important is missing, the system asks."
+    },
+    {
+      "id": "sc05",
+      "scene": "SCENE 05 — BUILDING CONTEXT",
+      "start": 174.5,
+      "text": "The next layer is context.\n\nWith the user's permission, Intent OS can work with available portfolio and market information.\n\nThis matters, because the same goal can require very different strategies depending on the context.\n\nIntent without context is incomplete."
+    },
+    {
+      "id": "sc06",
+      "scene": "SCENE 06 — FROM INTENT TO PLAN",
+      "start": 233.0,
+      "text": "This is where Intent OS becomes more than a conversation. It turns an objective into a structured workflow.\n\nFirst, understand the current position. Then analyze the environment. Then evaluate possible strategies. Then define what should happen next.\n\nThe goal is not to predict the future with certainty.\n\nThe goal is to make the decision process more structured, transparent and informed."
+    },
+    {
+      "id": "sc07",
+      "scene": "SCENE 07 — CONNECTING FBT INTELLIGENCE",
+      "start": 296.0,
+      "text": "Intent OS can coordinate different capabilities inside FBT.\n\nMarket information can provide one perspective. Signal can add technical context. Smart Money can provide on-chain information. Portfolio data adds personal context.\n\nTogether, they create a broader analytical picture."
+    },
+    {
+      "id": "sc08",
+      "scene": "SCENE 08 — THE USER REMAINS IN CONTROL",
+      "start": 352.0,
+      "text": "But intelligence does not mean losing control.\n\nIntent OS can analyze. It can prepare. It can coordinate.\n\nBut important actions remain subject to user authorization."
+    },
+    {
+      "id": "sc09a",
+      "scene": "SCENE 09 — EXECUTION",
+      "start": 407.5,
+      "text": "Once authorized, the action can move into execution.\n\nBut execution is only one part of the process."
+    },
+    {
+      "id": "sc09b",
+      "scene": "SCENE 09 — VERIFICATION",
+      "start": 443.0,
+      "text": "Verification matters.\n\nIntent OS can follow the workflow from preparation through confirmation, so the user can see what happened — not simply what was requested."
+    },
+    {
+      "id": "sc10",
+      "scene": "SCENE 10 — MONITORING",
+      "start": 460.5,
+      "text": "A financial workflow doesn't end when a transaction is completed.\n\nMarkets continue moving. Risk changes. New information arrives.\n\nAnd when relevant conditions change, Intent OS can bring the information back into the workflow."
+    },
+    {
+      "id": "sc11",
+      "scene": "SCENE 11 — THE COMPLETE INTENT OS LOOP",
+      "start": 502.0,
+      "text": "This is the Intent OS loop.\n\nIntent. Context. Analysis. Strategy. Action. Authorization. Execution. Verification. Monitoring.\n\nAnd when the environment changes...\n\nthe process can begin again."
+    },
+    {
+      "id": "sc12",
+      "scene": "SCENE 12 — THE FUTURE OF FINANCIAL INTERACTION",
+      "start": 552.5,
+      "text": "The future of financial technology may not be about adding more screens.\n\nIt may be about making complex systems easier to understand.\n\nOne intent. One intelligent workflow. One connected environment."
+    },
+    {
+      "id": "sc13",
+      "scene": "SCENE 13 — FINAL BRAND REVEAL",
+      "start": 579.2,
+      "text": "FBT Intent OS.\n\nUnderstand your intent. Structure your plan. Verify every important action. And stay in control.\n\nFBT Swap. The intelligent way to interact with a connected financial world."
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FBT SWAP — INTENT OS · Cinematic Product Film</title>
+<link rel="stylesheet" href="film.css" />
+</head>
+<body>
+  <!--
+    THE STAGE
+    1920x1080 CSS pixels, captured at deviceScaleFactor 2 = 3840x2160 (4K UHD).
+    Every scene is authored at stage scale, the renderer only changes the DPR.
+  -->
+  <div id="viewport">
+    <div id="stage" data-scene="none">
+      <!-- #world is the camera: a single transform dollies the whole film -->
+      <div id="world">
+        <!-- 3D / particle / data-viz layers, drawn by canvas (deterministic) -->
+        <canvas id="fx-back" width="3840" height="2160"></canvas>
+        <!-- scene DOM lives here (built once, posed per frame) -->
+        <div id="scenes"></div>
+        <canvas id="fx-front" width="3840" height="2160"></canvas>
+      </div>
+      <!-- photographic finishing -->
+      <div id="bloom"></div>
+      <div id="vignette"></div>
+      <div id="grain"></div>
+      <div id="letterbox"><span class="lb-top"></span><span class="lb-bottom"></span></div>
+      <div id="flash"></div>
+      <div id="fade"></div>
+    </div>
+  </div>
+  <script type="module" src="film.js"></script>
+</body>
+</html>

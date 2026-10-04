@@ -1,0 +1,333 @@
+/* ==========================================================================
+   FBT SWAP — INTENT OS
+   Cinematic product film · visual language
+   --------------------------------------------------------------------------
+   Palette is deliberately narrow: black → deep navy → electric blue, one
+   violet accent, one mint confirmation, white type. Nothing else. The film
+   must never look like a marketing template, so: no rainbow gradients, no
+   heavy neon, no pastel candy, no rounded-bubble cartoon UI.
+   ========================================================================== */
+
+@font-face { font-family: 'Inter'; font-weight: 300; font-style: normal;
+  src: url('../assets/fonts/Inter_300Light.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'Inter'; font-weight: 400; font-style: normal;
+  src: url('../assets/fonts/Inter_400Regular.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'Inter'; font-weight: 500; font-style: normal;
+  src: url('../assets/fonts/Inter_500Medium.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'Inter'; font-weight: 600; font-style: normal;
+  src: url('../assets/fonts/Inter_600SemiBold.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'Inter'; font-weight: 700; font-style: normal;
+  src: url('../assets/fonts/Inter_700Bold.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'Inter'; font-weight: 800; font-style: normal;
+  src: url('../assets/fonts/Inter_800ExtraBold.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-style: normal;
+  src: url('../assets/fonts/JetBrainsMono_400Regular.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 500; font-style: normal;
+  src: url('../assets/fonts/JetBrainsMono_500Medium.ttf') format('truetype'); font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 700; font-style: normal;
+  src: url('../assets/fonts/JetBrainsMono_700Bold.ttf') format('truetype'); font-display: block; }
+
+:root {
+  /* surfaces */
+  --void: #000000;
+  --ink: #04060c;
+  --ink-2: #060a14;
+  --navy: #08101f;
+  --navy-2: #0b1729;
+  --panel: rgba(9, 15, 27, 0.86);
+  --panel-2: rgba(13, 21, 36, 0.92);
+  --hair: rgba(255, 255, 255, 0.09);
+  --hair-2: rgba(255, 255, 255, 0.16);
+
+  /* light */
+  --blue: #2f7dff;
+  --blue-2: #4d9bff;
+  --blue-3: #7cbaff;
+  --cyan: #5cc9ff;
+  --violet: #7a5cff;
+  --violet-2: #9a86ff;
+  --mint: #46d9a8;
+  --amber: #ffb457;
+  --red: #ff5f78;
+
+  /* type */
+  --white: #ffffff;
+  --text: #e8eeff;
+  --muted: #93a3c4;
+  --dim: #5d6c8c;
+  --faint: #3b4761;
+
+  --glow-blue: 0 0 34px rgba(47, 125, 255, 0.42);
+  --glow-soft: 0 0 60px rgba(47, 125, 255, 0.22);
+  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.62), 0 2px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: #000;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+#viewport { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
+
+#stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  background: var(--ink);
+  overflow: hidden;
+  transform-origin: 50% 50%;
+}
+
+/* ── cinematic layers ─────────────────────────────────────────────────── */
+#fx-back, #fx-front {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  pointer-events: none;
+}
+#fx-front { mix-blend-mode: normal; }
+
+#scenes { position: absolute; inset: 0; }
+
+/* Bloom: a soft screen-blend wash of the brightest areas. The canvas layers
+   already draw their own glow; this adds the last 5% of "expensive lens". */
+#bloom {
+  position: absolute; inset: -60px;
+  background: radial-gradient(60% 45% at 50% 52%, rgba(64, 132, 255, 0.06), transparent 70%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+#vignette {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 50%, transparent 54%, rgba(0,0,0,0.34) 90%, rgba(0,0,0,0.55) 100%),
+    linear-gradient(180deg, rgba(0,0,0,0.35), transparent 22%, transparent 78%, rgba(0,0,0,0.45));
+  pointer-events: none;
+}
+
+#grain {
+  position: absolute; inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  background-repeat: repeat;
+  background-size: 340px 340px;
+}
+
+#letterbox {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0; transition: none;
+}
+#letterbox span { position: absolute; left: 0; right: 0; height: 0; background: #000; }
+#letterbox .lb-top { top: 0; } #letterbox .lb-bottom { bottom: 0; }
+
+#flash { position: absolute; inset: 0; background: #dbe9ff; opacity: 0; pointer-events: none; }
+#fade  { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+
+/* ── type ─────────────────────────────────────────────────────────────── */
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+.kicker {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--blue-2);
+}
+.kicker.dim { color: var(--dim); }
+
+.label {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.label.bright { color: var(--muted); }
+
+.display {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.96;
+  color: var(--white);
+}
+.display.xl { font-size: 104px; }
+.display.lg { font-size: 74px; }
+.display.md { font-size: 54px; }
+.display.sm { font-size: 38px; }
+.display.xs { font-size: 27px; letter-spacing: -0.02em; }
+
+.lead {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--muted);
+  letter-spacing: 0.002em;
+}
+.lead strong { color: var(--text); font-weight: 500; }
+
+.tiny { font-size: 13px; color: var(--dim); line-height: 1.5; }
+
+.glow-text { text-shadow: 0 0 34px rgba(90, 160, 255, 0.55), 0 0 90px rgba(60, 120, 255, 0.25); }
+.blue  { color: var(--blue-2); }
+.cyan  { color: var(--cyan); }
+.mint  { color: var(--mint); }
+.violet{ color: var(--violet-2); }
+.white { color: #fff; }
+.muted { color: var(--muted); }
+.dim   { color: var(--dim); }
+
+/* ── generic UI atoms ─────────────────────────────────────────────────── */
+.card {
+  position: relative;
+  background: linear-gradient(168deg, rgba(14, 22, 38, 0.94), rgba(7, 11, 21, 0.96));
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+.card.flat { background: rgba(10, 16, 29, 0.9); }
+.card.active { border-color: rgba(77, 155, 255, 0.45); box-shadow: var(--shadow-card), 0 0 0 1px rgba(77,155,255,.18), 0 0 60px rgba(47,125,255,.18); }
+
+.hair { height: 1px; background: var(--hair); }
+.chip {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--hair-2);
+  background: rgba(255,255,255,0.035);
+  font-size: 15px; color: var(--text); font-weight: 500;
+  white-space: nowrap;
+}
+.chip.sel { border-color: rgba(90, 165, 255, 0.6); background: rgba(47,125,255,0.14); color: #fff; }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue-2); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px 26px; border-radius: 12px;
+  background: linear-gradient(180deg, #3d86ff, #2064e6);
+  color: #fff; font-weight: 600; font-size: 16px; letter-spacing: -0.01em;
+  box-shadow: 0 10px 30px rgba(38, 105, 230, 0.36);
+}
+.btn.ghost { background: rgba(255,255,255,0.05); border: 1px solid var(--hair-2); box-shadow: none; color: var(--text); }
+.btn.big { padding: 18px 40px; font-size: 19px; border-radius: 14px; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 8px 14px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.045);
+  color: var(--muted);
+}
+.badge.blue { border-color: rgba(77,155,255,.45); color: var(--blue-3); background: rgba(47,125,255,.12); }
+.badge.mint { border-color: rgba(70,217,168,.42); color: var(--mint); background: rgba(70,217,168,.10); }
+.badge.amber{ border-color: rgba(255,180,87,.42); color: var(--amber); background: rgba(255,180,87,.10); }
+.badge.violet{border-color: rgba(154,134,255,.42); color: var(--violet-2); background: rgba(122,92,255,.12); }
+.badge .led { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.row { display: flex; align-items: center; }
+.col { display: flex; flex-direction: column; }
+.between { justify-content: space-between; }
+.center { justify-content: center; align-items: center; }
+
+.kv { display: flex; align-items: baseline; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.kv:last-child { border-bottom: 0; }
+.kv .k { font-size: 14px; color: var(--dim); }
+.kv .v { font-family: 'JetBrains Mono', monospace; font-size: 14.5px; color: var(--text); }
+
+/* scanning sweep used while the engine "thinks" */
+.sweep { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.sweep::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(120, 178, 255, 0.16), transparent);
+  animation: sweep 2.4s linear infinite;
+}
+@keyframes sweep { from { transform: translateX(-120%); } to { transform: translateX(400%); } }
+
+.pulse-ring { position: absolute; border-radius: 50%; border: 1px solid rgba(90,160,255,.5); animation: ring 2.6s ease-out infinite; }
+@keyframes ring { 0% { transform: scale(.4); opacity: .75; } 100% { transform: scale(2.4); opacity: 0; } }
+
+.blink { animation: blink 1.4s steps(2, end) infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+/* ── device frames ────────────────────────────────────────────────────── */
+.window {
+  position: absolute;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #0a1120, #060a13);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 60px 140px rgba(0,0,0,0.75), 0 0 0 1px rgba(0,0,0,0.6);
+  overflow: hidden;
+}
+.window .bar {
+  height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.window .bar .lamp { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,0.14); }
+.window .bar .url {
+  flex: 1; height: 26px; border-radius: 7px; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--muted);
+}
+.window .bar .url .lock { width: 9px; height: 9px; border: 1.4px solid var(--mint); border-radius: 2px; }
+
+.phone {
+  position: absolute;
+  border-radius: 46px;
+  padding: 12px;
+  background: linear-gradient(160deg, #141b2b, #080c15);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 50px 120px rgba(0,0,0,0.8);
+}
+.phone .screen { position: relative; width: 100%; height: 100%; border-radius: 36px; overflow: hidden; background: var(--ink); }
+.phone .notch {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 128px; height: 26px; border-radius: 0 0 16px 16px; background: #05070d; z-index: 5;
+}
+
+/* app chrome inside a window/phone */
+.app { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.app .nav {
+  height: 58px; display: flex; align-items: center; gap: 26px; padding: 0 26px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(6,10,18,0.9);
+}
+.app .nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+.nav-item { font-size: 14px; color: var(--dim); font-weight: 500; padding: 7px 12px; border-radius: 8px; }
+.nav-item.on { color: #fff; background: rgba(47,125,255,0.16); box-shadow: 0 0 0 1px rgba(77,155,255,0.36) inset; }
+.app .body { flex: 1; position: relative; padding: 26px; }
+
+/* cursor */
+.cursor {
+  position: absolute; width: 26px; height: 26px; z-index: 60;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,.6));
+}
+.cursor .ring { position: absolute; inset: 0; border-radius: 50%; border: 1.6px solid rgba(255,255,255,.85); background: rgba(255,255,255,.10); }
+.cursor .arrow { position: absolute; left: -1px; top: -2px; }
+
+/* scrollbar-ish detail strips */
+.meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+
+/* ── the camera ───────────────────────────────────────────────────────── */
+#world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}

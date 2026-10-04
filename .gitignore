@@ -58,3 +58,10 @@ scripts/.vendor-kamino-buffer-shim.generated.mjs
 
 # Intent OS sandbox registry (local dev only, rebuilt every boot)
 data/
+# ── FBT Intent OS film ────────────────────────────────────────────────────
+# The renderer reuses the sandbox toolchain; frames and masters are build
+# artifacts and never belong in git.
+film/intent-os/node_modules
+film/intent-os/out/
+film/intent-os/*.mp4
+film/intent-os/work/
