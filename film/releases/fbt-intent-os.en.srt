@@ -1,0 +1,259 @@
+1
+00:00:06,000 --> 00:00:10,690
+Every second, millions of financial events happen around the world.
+
+2
+00:00:10,690 --> 00:00:15,170
+Prices change. Liquidity moves. Markets react. Wallets transact.
+
+3
+00:00:15,170 --> 00:00:17,690
+Opportunities appear. And disappear.
+
+4
+00:00:17,690 --> 00:00:20,840
+The challenge isn't finding more information.
+
+5
+00:00:20,840 --> 00:00:23,500
+It's understanding what to do with it.
+
+6
+00:00:23,500 --> 00:00:24,940
+Because information without context is just noise.
+
+7
+00:00:25,000 --> 00:00:40,500
+THE FINANCIAL WORLD NEVER STOPS.
+
+8
+00:00:46,500 --> 00:00:49,392
+FBT Intent OS takes a different approach.
+
+9
+00:00:49,392 --> 00:00:54,752
+Instead of asking users to navigate a world of disconnected financial tools…
+
+10
+00:00:54,752 --> 00:00:57,432
+it starts with something much simpler.
+
+11
+00:00:57,432 --> 00:00:59,032
+You.
+
+12
+00:00:59,032 --> 00:01:00,440
+Your goal. Your context. Your risk. Your intent.
+
+13
+00:01:00,500 --> 00:01:14,000
+FBT SWAP · INTENT OS · AI-POWERED FINANCIAL OPERATING SYSTEM
+
+14
+00:01:24,000 --> 00:01:28,046
+Using Intent OS begins exactly where a financial decision begins.
+
+15
+00:01:28,046 --> 00:01:29,646
+With a goal.
+
+16
+00:01:29,646 --> 00:01:32,634
+You don't need to know which tool to open first.
+
+17
+00:01:32,634 --> 00:01:35,430
+You simply describe what you're trying to accomplish.
+
+18
+00:02:04,000 --> 00:02:08,886
+Intent OS doesn't simply read the words. It interprets the structure behind them.
+
+19
+00:02:08,886 --> 00:02:12,084
+What are you trying to achieve? How long do you have?
+
+20
+00:02:12,084 --> 00:02:15,643
+What constraints matter? What information is still missing?
+
+21
+00:02:15,643 --> 00:02:18,840
+When something important is missing, the system asks.
+
+22
+00:02:54,500 --> 00:02:56,139
+The next layer is context.
+
+23
+00:02:56,139 --> 00:03:02,127
+With the user's permission, Intent OS can work with available portfolio and market information.
+
+24
+00:03:02,127 --> 00:03:08,368
+This matters, because the same goal can require very different strategies depending on the context.
+
+25
+00:03:08,368 --> 00:03:10,700
+Intent without context is incomplete.
+
+26
+00:03:33,000 --> 00:03:44,000
+INTENT WITHOUT CONTEXT IS INCOMPLETE.
+
+27
+00:03:53,000 --> 00:03:56,586
+This is where Intent OS becomes more than a conversation.
+
+28
+00:03:56,586 --> 00:03:59,668
+It turns an objective into a structured workflow.
+
+29
+00:03:59,668 --> 00:04:04,009
+First, understand the current position. Then analyze the environment.
+
+30
+00:04:04,009 --> 00:04:08,475
+Then evaluate possible strategies. Then define what should happen next.
+
+31
+00:04:08,475 --> 00:04:11,809
+The goal is not to predict the future with certainty.
+
+32
+00:04:11,809 --> 00:04:17,030
+The goal is to make the decision process more structured, transparent and informed.
+
+33
+00:04:21,000 --> 00:04:50,000
+PROPOSED PLAN ≠ GUARANTEED RESULT
+
+34
+00:04:56,000 --> 00:04:59,921
+Intent OS can coordinate different capabilities inside FBT.
+
+35
+00:04:59,921 --> 00:05:05,304
+Market information can provide one perspective. Signal can add technical context.
+
+36
+00:05:05,304 --> 00:05:10,821
+Smart Money can provide on-chain information. Portfolio data adds personal context.
+
+37
+00:05:10,821 --> 00:05:14,210
+Together, they create a broader analytical picture.
+
+38
+00:05:40,000 --> 00:05:50,000
+MULTI-LAYER ANALYSIS
+
+39
+00:05:52,000 --> 00:05:55,317
+But intelligence does not mean losing control.
+
+40
+00:05:55,317 --> 00:05:59,426
+Intent OS can analyze. It can prepare. It can coordinate.
+
+41
+00:05:59,426 --> 00:06:03,680
+But important actions remain subject to user authorization.
+
+42
+00:06:10,000 --> 00:06:23,500
+USER APPROVAL REQUIRED — the wallet signs, not the AI
+
+43
+00:06:47,500 --> 00:06:50,784
+Once authorized, the action can move into execution.
+
+44
+00:06:50,784 --> 00:06:53,690
+But execution is only one part of the process.
+
+45
+00:07:10,000 --> 00:07:23,000
+ACTION → TRANSACTION → BLOCKCHAIN → VERIFICATION
+
+46
+00:07:23,000 --> 00:07:24,600
+Verification matters.
+
+47
+00:07:24,600 --> 00:07:29,296
+Intent OS can follow the workflow from preparation through confirmation,
+
+48
+00:07:29,296 --> 00:07:33,600
+so the user can see what happened — not simply what was requested.
+
+49
+00:07:40,500 --> 00:07:44,699
+A financial workflow doesn't end when a transaction is completed.
+
+50
+00:07:44,699 --> 00:07:48,440
+Markets continue moving. Risk changes. New information arrives.
+
+51
+00:07:48,500 --> 00:07:48,709
+MARKET CONDITION CHANGED · REVIEW RECOMMENDED
+
+52
+00:07:48,769 --> 00:07:54,970
+And when relevant conditions change, Intent OS can bring the information back into the workflow.
+
+53
+00:08:22,000 --> 00:08:24,293
+This is the Intent OS loop.
+
+54
+00:08:24,293 --> 00:08:28,029
+Intent. Context. Analysis. Strategy. Action.
+
+55
+00:08:28,029 --> 00:08:32,360
+Authorization. Execution. Verification. Monitoring.
+
+56
+00:08:32,360 --> 00:08:35,162
+And when the environment changes…
+
+57
+00:08:35,162 --> 00:08:37,540
+the process can begin again.
+
+58
+00:09:12,500 --> 00:09:17,316
+The future of financial technology may not be about adding more screens.
+
+59
+00:09:17,316 --> 00:09:21,329
+It may be about making complex systems easier to understand.
+
+60
+00:09:21,329 --> 00:09:25,610
+One intent. One intelligent workflow. One connected environment.
+
+61
+00:09:39,200 --> 00:09:40,800
+FBT Intent OS.
+
+62
+00:09:40,800 --> 00:09:44,179
+Understand your intent. Structure your plan.
+
+63
+00:09:44,179 --> 00:09:44,940
+Verify every important action. And stay in control.
+
+64
+00:09:45,000 --> 00:09:48,035
+FBT SWAP · INTENT OS · UNDERSTAND. PLAN. VERIFY. ACT. · FBTSWAP.IR
+
+65
+00:09:48,095 --> 00:09:53,680
+FBT Swap. The intelligent way to interact with a connected financial world.
