@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FBT Intent OS — Cinematic Product Film</title>
+  <style>
+    :root {
+      --navy: #050814;
+      --blue: #3b82f6;
+      --purple: #7c3aed;
+      --white: #f8fafc;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #000; color: var(--white); font-family: "SF Pro Display", Inter, system-ui, sans-serif; overflow: hidden; }
+    #stage {
+      position: relative; width: 100vw; height: 100vh;
+      background: #000;
+    }
+    #bg {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+      filter: saturate(1.05) contrast(1.05);
+      transition: opacity 1.4s ease;
+    }
+    #veil {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,.55) 100%);
+      pointer-events: none;
+    }
+    #copy {
+      position: absolute; left: 8%; right: 8%; bottom: 16%;
+      z-index: 4;
+    }
+    #kicker {
+      letter-spacing: .28em; font-size: 11px; color: #93c5fd; text-transform: uppercase;
+      margin-bottom: 14px; opacity: .9;
+    }
+    #title {
+      font-size: clamp(28px, 4.2vw, 64px); font-weight: 560; line-height: 1.1;
+      text-shadow: 0 10px 40px rgba(0,0,0,.7);
+    }
+    #sub {
+      margin-top: 16px; max-width: 720px; font-size: 18px; line-height: 1.55; color: #cbd5e1;
+    }
+    #web { position: absolute; bottom: 28px; left: 8%; letter-spacing: .2em; font-size: 12px; color: #64748b; z-index: 5; }
+    #hud { position: absolute; top: 28px; right: 8%; font-size: 12px; letter-spacing: .18em; color: #64748b; z-index: 5; }
+    #play {
+      position: absolute; inset: 0; display: grid; place-items: center; z-index: 10; background: #000;
+      cursor: pointer;
+    }
+    #play inner { text-align: center; }
+    #play h1 { font-size: 42px; font-weight: 520; letter-spacing: .08em; }
+    #play p { margin-top: 12px; color: #94a3b8; }
+    #play .cta {
+      margin-top: 28px; display: inline-block; padding: 14px 28px; border: 1px solid #3b82f6;
+      border-radius: 999px; color: #fff; letter-spacing: .16em; font-size: 12px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; display: inline-block; margin-bottom: 18px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+    #bar { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg,#2563eb,#7c3aed); width: 0; z-index: 6; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <img id="bg" alt="" src="img/scene-01.jpg" />
+    <div id="veil"></div>
+    <div id="hud">FBT INTENT OS</div>
+    <div id="copy">
+      <div id="kicker"></div>
+      <div id="title"></div>
+      <div id="sub"></div>
+    </div>
+    <div id="web">fbtswap.ir</div>
+    <div id="bar"></div>
+    <div id="play">
+      <div>
+        <div class="dot"></div>
+        <h1>FBT INTENT OS</h1>
+        <p>Cinematic product film · Understand. Plan. Verify. Act.</p>
+        <div class="cta">PLAY FILM</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const scenes = [
+      { img: "img/scene-01.jpg", audio: "audio/vo-01.mp3", kicker: "01 — Complexity", title: "The financial world never stops.", sub: "Information without context is just noise." },
+      { img: "img/scene-02.jpg", audio: "audio/vo-02.mp3", kicker: "02 — Vision", title: "It starts with you.", sub: "Your goal. Your context. Your risk. Your intent." },
+      { img: "img/scene-ui.jpg", audio: "audio/vo-03.mp3", kicker: "03 — Intent OS", title: "What would you like to achieve?", sub: "You simply describe what you are trying to accomplish." },
+      { img: "img/scene-ui.jpg", audio: "audio/vo-04.mp3", kicker: "04 — Understanding", title: "Structure behind the words.", sub: "When something important is missing, the system asks." },
+      { img: "img/scene-engine.jpg", audio: "audio/vo-05.mp3", kicker: "05 — Context", title: "Intent without context is incomplete.", sub: "Wallet, portfolio and market data — with your permission." },
+      { img: "img/scene-engine.jpg", audio: "audio/vo-06.mp3", kicker: "06 — Plan", title: "A structured workflow. Not a guarantee.", sub: "Understand. Analyze. Evaluate. Define the next step." },
+      { img: "img/scene-loop.jpg", audio: "audio/vo-07.mp3", kicker: "07 — Intelligence", title: "Multi-layer analysis.", sub: "Market. Signal. Smart Money. Portfolio. One picture." },
+      { img: "img/scene-ui.jpg", audio: "audio/vo-08.mp3", kicker: "08 — Control", title: "User approval required.", sub: "Intelligence does not mean losing control." },
+      { img: "img/scene-01.jpg", audio: "audio/vo-09.mp3", kicker: "09 — Verify & monitor", title: "See what happened.", sub: "Preparation → confirmation → monitoring as markets move." },
+      { img: "img/scene-final.jpg", audio: "audio/vo-10.mp3", kicker: "The loop", title: "Understand. Plan. Verify. Act.", sub: "FBT Swap — the intelligent way to interact with a connected financial world." }
+    ];
+
+    const bg = document.getElementById("bg");
+    const kicker = document.getElementById("kicker");
+    const title = document.getElementById("title");
+    const sub = document.getElementById("sub");
+    const bar = document.getElementById("bar");
+    const play = document.getElementById("play");
+    let i = 0;
+    let audio;
+
+    function show(n) {
+      const s = scenes[n];
+      bg.style.opacity = 0;
+      setTimeout(() => { bg.src = s.img; bg.style.opacity = 1; }, 500);
+      kicker.textContent = s.kicker;
+      title.textContent = s.title;
+      sub.textContent = s.sub;
+      if (audio) { audio.pause(); }
+      audio = new Audio(s.audio);
+      audio.play();
+      audio.onended = () => {
+        if (n < scenes.length - 1) show(n + 1);
+      };
+      audio.ontimeupdate = () => {
+        const p = (n + (audio.currentTime / (audio.duration || 1))) / scenes.length;
+        bar.style.width = (p * 100) + "%";
+      };
+    }
+
+    play.addEventListener("click", () => {
+      play.style.display = "none";
+      show(0);
+    });
+  </script>
+</body>
+</html>
