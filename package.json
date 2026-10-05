@@ -26,6 +26,8 @@
     "build": "NODE_OPTIONS=--max-old-space-size=3072 vite build && node scripts/gen-landing.mjs",
     "test:landing": "node scripts/landing-v2/qa-dist.mjs",
     "test:seo": "node --test test/seo-audit.test.mjs",
+    "seo:audit": "node scripts/seo-audit.mjs",
+    "seo:audit:strict": "node scripts/seo-audit.mjs --strict",
     "test:ai-theme": "node test/ai-light-theme-probe.mjs",
     "test:smart-money-intent": "node test/smart-money-intent-monitor-probe.mjs",
     "notify:verify": "node scripts/notify-verify.mjs",
