@@ -22,6 +22,17 @@ import { useTranslation } from 'react-i18next';
 import { ThinkingOrb } from './ThinkingOrb.jsx';
 import { apiBase } from '../../lib/apiBase';
 import { getCapitalFlows } from '../../lib/capitalFlows';
+/*
+ * «FBT جهانی» WORLD CONSOLE upgrade — seven new sub-tabs (world state, globe,
+ * radar, causal, capital-flow map, future tree + challenger, market DNA), all
+ * derived from the payload this panel ALREADY fetched: the upgrade adds
+ * surface, not traffic. The single extra request is the causal tab's lazy,
+ * once-per-session read of the server's own /deep/macro-graph engine.
+ */
+import {
+  WORLD_STYLES, WorldStatePanel, GlobePanel, RadarPanel,
+  CausalPanel, FlowMapPanel, FutureTreePanel, DnaPanel
+} from './worldState/WorldPanels.jsx';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
 const STYLES = `
@@ -107,17 +118,23 @@ const STYLES = `
   .aig-meter i.warn { background:var(--rgb-5); }
   .aig-meter i.off { background:color-mix(in srgb,var(--down) 40%,transparent); }
 
-  /* ── the tab rail ────────────────────────────────────────────────────── */
+  /* ── the tab rail ──────────────────────────────────────────────────────
+     The WORLD CONSOLE upgrade grew the rail from four tabs to eleven, so it
+     became a horizontal scroll rail: every tab keeps its full icon + label
+     (nothing wraps to three lines), and the row itself never grows taller —
+     «به اپ و فضا فشار نیاید». */
   .aig-tabs {
     display:flex; gap:7px; margin:0 0 14px; padding:6px;
     max-width:100%; box-sizing:border-box;
+    overflow-x:auto; scrollbar-width:none;
     background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)), color-mix(in srgb, var(--bg-panel) 88%, transparent);
     border-radius:20px;
     border:1px solid color-mix(in srgb, var(--line) 70%, transparent);
     box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
   }
+  .aig-tabs::-webkit-scrollbar { display:none; }
   .aig-tab {
-    position:relative; flex:1 1 0; min-width:0; min-height:62px; padding:9px 6px;
+    position:relative; flex:0 0 auto; min-width:72px; min-height:62px; padding:9px 8px;
     border-radius:15px; font:inherit; font-size:11px; font-weight:780;
     line-height:1.45; color:var(--text-3); background:transparent;
     border:1px solid transparent; cursor:pointer;
@@ -406,19 +423,40 @@ const STYLES = `
 
 const TABS = [
   { id: 'briefing', icon: 'briefing', marker: '📰' },
-  { id: 'domains', icon: 'domains', marker: '🌍' },
+  /* ── the WORLD CONSOLE sub-tabs (FBT جهانی upgrade) ── */
+  { id: 'world', icon: 'world', marker: '🌐' },
+  { id: 'globe', icon: 'globeMap', marker: '🗺️' },
+  { id: 'radar', icon: 'radar', marker: '📡' },
   { id: 'cross', icon: 'cross', marker: '🔀' },
+  { id: 'causal', icon: 'causal', marker: '⛓️' },
+  { id: 'flows', icon: 'flows', marker: '💸' },
+  { id: 'future', icon: 'future', marker: '🌳' },
+  { id: 'dna', icon: 'dna', marker: '🧬' },
+  { id: 'domains', icon: 'domains', marker: '🌍' },
   { id: 'providers', icon: 'providers', marker: '🔌' }
 ];
 
-function TabIcon({ name }) {
+function TabIcon({ name, size }) {
   const paths = {
     briefing: <><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M2 19h6"/><path d="M12 11h6"/><path d="M12 15h4"/></>,
     domains: <><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></>,
     cross: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
-    providers: <><path d="M19 11v-2a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/><path d="M2 15h20"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 7v4"/><path d="M8 7v4"/><path d="M16 7v4"/></>
+    providers: <><path d="M19 11v-2a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/><path d="M2 15h20"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 7v4"/><path d="M8 7v4"/><path d="M16 7v4"/></>,
+    world: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></>,
+    globeMap: <><circle cx="12" cy="12" r="9"/><path d="M8 5.5c1.5 2 1 4-0.5 5.5S5 13.5 6.2 16"/><path d="M14.5 4.5c-1 2 .5 3.5 2.5 3.5s3 2.5 1.5 4.5-3.5 2-5.5 3.5"/></>,
+    radar: <><path d="M19.07 4.93A10 10 0 1 0 22 12"/><path d="M15.54 8.46A5 5 0 1 0 17 12"/><circle cx="12" cy="12" r="1"/><path d="M12 12l7-7"/></>,
+    causal: <><path d="M9 12h6"/><path d="M4 12a3 3 0 0 1 3-3h1a3 3 0 0 1 0 6H7a3 3 0 0 1-3-3Z"/><path d="M20 12a3 3 0 0 0-3-3h-1a3 3 0 0 0 0 6h1a3 3 0 0 0 3-3Z"/></>,
+    flows: <><path d="M12 3v14"/><path d="m7 13 5 5 5-5"/><path d="M5 21h14"/></>,
+    future: <><path d="M12 3v18"/><path d="M12 8c-2.5 0-4-1.5-4.5-3.5C9.5 4.8 11 6 12 6s2.5-1.2 4.5-1.5C16 6.5 14.5 8 12 8Z"/><path d="M12 14c-3.5 0-5.5-2-6.5-5 3 .5 5 2 6.5 2s3.5-1.5 6.5-2c-1 3-3 5-6.5 5Z"/></>,
+    dna: <><path d="M6 3c0 6 12 6 12 12"/><path d="M18 3c0 6-12 6-12 12"/><path d="M6 15c0 3 2 6 6 6"/><path d="M18 15c0 3-2 6-6 6"/><path d="M8 6.5h8"/><path d="M8 17.5h8"/></>
   };
-  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+/* Coloured section-header variant of the tab icons, used by the WORLD
+   CONSOLE sub-tabs' headers. */
+function TabIconGadget({ name }) {
+  return <span style={{ color: 'var(--rgb-2)', display: 'inline-flex' }}><TabIcon name={name} size={17} /></span>;
 }
 
 /* Domain card glyphs. These were emoji (🧠 🐋 ⛓️ 📰 🏛️ 📈 💱 🛢️): each OS
@@ -1476,6 +1514,18 @@ function AiGlobalIntelligenceInner() {
   const commodityRows = useMemo(() => collectCommodityQuotes(cross, domains), [cross, domains]);
   const tomanReference = useMemo(() => inspectTomanReference(data.tomanRate), [data.tomanRate]);
 
+  /* The WORLD CONSOLE sub-tabs (world state, globe, radar, causal, flow map,
+     future tree + challenger, market DNA) all derive from this SAME pass
+     payload — they add surface, not requests. */
+  const worldData = useMemo(() => ({
+    intelligence: data.intelligence,
+    briefing: data.briefing,
+    cross,
+    flows: data.flows,
+    toman: tomanReference,
+    goldEtfs: data.goldEtfs
+  }), [data.intelligence, data.briefing, cross, data.flows, tomanReference, data.goldEtfs]);
+
   const statusColor = (status) => (status === 'OK' ? '#22c55e' : status === 'PARTIAL' ? '#eab308' : '#6b7280');
   /*
    * The nine cells of the header meter — one per domain, in the same order and
@@ -1546,6 +1596,7 @@ function AiGlobalIntelligenceInner() {
   return (
     <div className="ai-global" dir={isRTL ? 'rtl' : 'ltr'}>
       <style>{STYLES}</style>
+      <style>{WORLD_STYLES}</style>
 
       {/*
         ─── THE HERO ───────────────────────────────────────────────────────
@@ -1597,6 +1648,13 @@ function AiGlobalIntelligenceInner() {
         {TABS.map((t) => (
           <button key={t.id} type="button" className={`aig-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
             <span className="aig-sr">{t.marker}</span><span className="aig-tab-icon"><TabIcon name={t.icon} /></span><span>{t.id === 'briefing' ? L('گزارش وضعیت', 'Briefing')
+              : t.id === 'world' ? L('وضعیت جهان', 'World state')
+              : t.id === 'globe' ? L('کره زمین', 'Globe')
+              : t.id === 'radar' ? L('رادار', 'Radar')
+              : t.id === 'causal' ? L('زنجیره علت', 'Causal')
+              : t.id === 'flows' ? L('جریان سرمایه', 'Flow map')
+              : t.id === 'future' ? L('درخت آینده', 'Future tree')
+              : t.id === 'dna' ? L('DNA بازار', 'Market DNA')
               : t.id === 'domains' ? L('حوزه‌های داده', 'Domains')
               : t.id === 'cross' ? L('اقتصاد و دارایی', 'Cross-asset')
               : L('ارائه‌دهندگان', 'Providers')}</span>
@@ -1666,6 +1724,77 @@ function AiGlobalIntelligenceInner() {
               'A briefing is a recommendation to read — no item carries execution permission. Every number cites its source.'
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── WORLD CONSOLE — the FBT جهانی upgrade sub-tabs ────────────────
+         Everything below is drawn from the pass's own payload (worldData):
+         gauges, weather, the globe, the radar, the causal chain, the capital
+         flow map, the future tree + challenger, and market DNA. */}
+      {tab === 'world' && (
+        <div className="aig-section">
+          <div className="aig-section-title">
+            <TabIconGadget name="world" />
+            {L('وضعیت جهان مالی', 'Global financial state')}
+            {data.intelligence ? <span className="aig-item-kind">{L('زنده از همین دور', 'live from this pass')}</span> : null}
+          </div>
+          <WorldStatePanel world={worldData} L={L} isPersian={isPersian} onGoTab={setTab} />
+        </div>
+      )}
+
+      {tab === 'globe' && (
+        <div className="aig-section">
+          <div className="aig-section-title">
+            <TabIconGadget name="globeMap" />
+            {L('کرهٔ اقتصاد جهانی', 'The global economy globe')}
+          </div>
+          <GlobePanel world={worldData} L={L} isPersian={isPersian} />
+        </div>
+      )}
+
+      {tab === 'radar' && (
+        <div className="aig-section">
+          <div className="aig-section-title">
+            <TabIconGadget name="radar" />
+            {L('رادار جهانی FBT', 'FBT Global Radar')}
+          </div>
+          <RadarPanel world={worldData} L={L} isPersian={isPersian} />
+        </div>
+      )}
+
+      {tab === 'causal' && (
+        <div className="aig-section">
+          <CausalPanel world={worldData} L={L} isPersian={isPersian} />
+        </div>
+      )}
+
+      {tab === 'flows' && (
+        <div className="aig-section">
+          <div className="aig-section-title">
+            <TabIconGadget name="flows" />
+            {L('نقشهٔ جریان سرمایه جهانی', 'Global capital flow map')}
+          </div>
+          <FlowMapPanel world={worldData} L={L} isPersian={isPersian} />
+        </div>
+      )}
+
+      {tab === 'future' && (
+        <div className="aig-section">
+          <div className="aig-section-title">
+            <TabIconGadget name="future" />
+            {L('درخت آینده', 'Possible futures')}
+          </div>
+          <FutureTreePanel world={worldData} L={L} isPersian={isPersian} />
+        </div>
+      )}
+
+      {tab === 'dna' && (
+        <div className="aig-section">
+          <div className="aig-section-title">
+            <TabIconGadget name="dna" />
+            {L('DNA دارایی‌ها', 'Market DNA')}
+          </div>
+          <DnaPanel world={worldData} L={L} isPersian={isPersian} />
         </div>
       )}
 
