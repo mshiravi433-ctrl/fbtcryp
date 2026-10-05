@@ -55,66 +55,80 @@
  * submission silently 403s, and keeping them in one repository where a grep
  * finds both is what prevents that.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const KEY = 'b5187e6cbc36ff99eb5f2b97efcdfb6e';
 
 const HOST = 'fbtswap.ir';
 const ORIGIN = `https://${HOST}`;
 
 /*
- * Only real, server-rendered URLs. In-app routes are hash-based (/#/swap) and
- * a crawler never sees anything after the '#', so submitting fragments
- * would not identify distinct HTML documents and would waste notifications.
+ * ─── THE URL LIST IS DERIVED, NOT MAINTAINED ────────────────────────────────
+ * This used to be a hand-written array of about thirty slugs kept "in step
+ * with gen-landing.mjs by hand". That worked while there were thirty pages.
+ * There are now over 250, and a hand-copied list is a list that is wrong —
+ * silently, in the direction of never telling anyone about the new pages.
  *
- * Kept in step with scripts/gen-landing.mjs by hand. A wiring check asserts
- * the two lists agree, because a landing page added there and forgotten here
- * is a page nobody is ever told about.
+ * So the URLs come from the sitemap the build just wrote. Same source as the
+ * one submitted to Search Console, no second place to forget.
+ *
+ * ─── AND IT SUBMITS ONLY WHAT CHANGED ───────────────────────────────────────
+ * IndexNow's own guidance: "you should publish only URLs changing (added,
+ * updated, or deleted) since the time you start to use IndexNow." Blasting
+ * all 250 URLs on every deploy would ignore that.
+ *
+ * The sitemap now carries a <lastmod> taken from each page's editorial date,
+ * so that guidance is directly actionable: submit the URLs whose content
+ * actually changed recently, and submit nothing at all when nothing did. A
+ * deploy that only touches JavaScript notifies no one, which is correct.
  */
-const SLUGS = [
-  '',
-  'non-custodial-crypto-swap',
-  'crypto-price-alerts-and-dca',
-  'crypto-market-history-analysis',
-  /* The flagship bilingual landing and the two library directories. Every URL
-     is an English path — the Persian pages live under /fa/ with English slugs,
-     because that is what indexes better under the .ir domain. */
-  'decentralized-crypto-exchange',
-  'library',
-  'fa/',
-  'fa/crypto-price-alerts-and-dca',
-  'fa/crypto-market-history-analysis',
-  'fa/non-custodial-wallet',
-  /* The three intents — swap, crypto, investing — in both languages. */
-  'fa/crypto-swap-without-kyc',
-  'crypto-swap-without-kyc',
-  'fa/crypto-investing-yield-and-lending',
-  'crypto-investing-yield-and-lending',
-  'fa/solana-token-swap',
-  'solana-token-swap',
-  /* The guides and the two hubs, written in their own language. */
-  'how-crypto-swap-fees-work',
-  'fa/how-crypto-swap-fees-work',
-  'custodial-vs-non-custodial-wallets',
-  'fa/custodial-vs-non-custodial-wallets',
-  'what-stays-private-without-kyc',
-  'fa/what-stays-private-without-kyc',
-  'blog',
-  'fa/blog',
-  /* Matched discovery pages for learning, API development, markets and equities. */
-  'crypto-education',
-  'fa/crypto-education',
-  'developers',
-  'fa/developers',
-  'crypto-market-charts-signals',
-  'fa/crypto-market-charts-signals',
-  'tokenized-global-stocks',
-  'fa/tokenized-global-stocks'
-];
+const WINDOW_DAYS = 30;
 
-/* Segment-wise encoding: the `/` inside `fa/…` and `fa/` itself must survive
-   as a path separator, not become %2F. */
-const urlList = SLUGS.map((s) =>
-  s ? `${ORIGIN}/${s.split('/').map(encodeURIComponent).join('/')}` : `${ORIGIN}/`
-);
+function readSitemapUrls() {
+  const OUT = 'dist';
+  const root = join(OUT, 'sitemap.xml');
+  if (!existsSync(root)) return [];
+
+  const locs = (xml) => [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => ({
+    loc: /<loc>([^<]+)<\/loc>/.exec(m[1])?.[1]?.trim(),
+    lastmod: /<lastmod>([^<]+)<\/lastmod>/.exec(m[1])?.[1]?.trim() || null
+  }));
+
+  const rootXml = readFileSync(root, 'utf8');
+  const children = [...rootXml.matchAll(/<sitemap>\s*<loc>([^<]+)<\/loc>/g)].map((m) => m[1].trim());
+  if (!children.length) return locs(rootXml);
+
+  const out = [];
+  for (const child of children) {
+    const file = join(OUT, child.replace(`${ORIGIN}/`, ''));
+    if (existsSync(file)) out.push(...locs(readFileSync(file, 'utf8')));
+  }
+  return out;
+}
+
+const all = readSitemapUrls().filter((u) => u.loc);
+const cutoff = Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
+const urlList = all
+  .filter((u) => {
+    if (!u.lastmod) return false; // no editorial date means nothing claimed to change
+    const t = Date.parse(u.lastmod);
+    return Number.isFinite(t) && t >= cutoff;
+  })
+  .map((u) => u.loc)
+  .slice(0, 10000); // protocol maximum per request
+
+if (!all.length) {
+  console.log('▸ IndexNow: no sitemap in dist/ — nothing to submit (run after the build).');
+  process.exit(0);
+}
+if (!urlList.length) {
+  console.log(
+    `▸ IndexNow: ${all.length} URLs published, none with a <lastmod> inside ${WINDOW_DAYS} days — nothing changed, submitting nothing.`
+  );
+  process.exit(0);
+}
+console.log(`▸ IndexNow: submitting ${urlList.length} of ${all.length} published URLs (changed within ${WINDOW_DAYS} days).`);
 
 const body = {
   host: HOST,

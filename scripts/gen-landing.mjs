@@ -49,11 +49,24 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderLandingV2, V2_PAGE } from './landing-v2/index.mjs';
+import { CONTENT_PAGES, CONTENT_ALTERNATES, CLUSTER_INDEX, CLUSTER_ORDER } from './content/index.mjs';
+import {
+  ANSWER_ENGINES,
+  emitRobots,
+  emitSitemaps,
+  emitFeed,
+  emitSecurityTxt,
+  emitLlmsFull,
+  emit404
+} from './content/emit.mjs';
 import {
   MARKET_DASHBOARD_STYLES,
   marketDashboardScript as renderMarketDashboardScript,
   renderMarketDashboard
 } from './landing-v2/market-dashboard.mjs';
+
+/* Reported at the end of the build so a dropped group is visible in the log. */
+const ANSWER_ENGINE_COUNT = ANSWER_ENGINES.length;
 
 /*
  * ─── THE CANONICAL HOME IS NOW fbtswap.ir ───────────────────────────────────
@@ -640,9 +653,9 @@ const PAGES = [
     topic: 'invest',
     lang: 'en',
     route: '/#/farm',
-    title: 'Crypto Investing Without Giving Up Custody — Yield, Lending, Risk | FBT Swap',
+    title: 'Crypto Investing Without Losing Custody: Yield and Lending | FBT Swap',
     description:
-      'Tools for putting crypto to work without handing it over: self-custody, staged buying reminders, liquid staking, lending and yield pools with their data source shown. No promised returns.',
+      'Put crypto to work without handing it over: self-custody, staged buying reminders, liquid staking, lending and yield pools, each with its data source shown.',
     h1: 'Crypto investing: the tools, the yield, and the risk you are taking',
     howTo: [
       [
@@ -776,9 +789,9 @@ const PAGES = [
     topic: 'swap',
     lang: 'en',
     route: '/#/solana',
-    title: 'Solana Token Swap — SPL and Token-2022, Signed in Your Wallet | FBT Swap',
+    title: 'Solana Token Swap — SPL and Token-2022 in Your Wallet | FBT Swap',
     description:
-      'Swap SPL and Token-2022 tokens on Solana from your own wallet. Balances are read from two paths, the rate and the 0.70% fee are shown before you sign, and custody never moves.',
+      'Swap SPL and Token-2022 tokens on Solana from your own wallet. The rate and the 0.70% platform fee are shown before you sign, and custody never moves.',
     h1: 'Solana token swap: SPL and Token-2022, signed by you',
     howTo: [
       [
@@ -870,9 +883,9 @@ const POSTS = [
     lang: 'en',
     route: '/#/swap',
     datePublished: '2026-09-24',
-    title: 'How a crypto swap fee actually works — and what 0.7% does not cover | FBT Swap',
+    title: 'How a Crypto Swap Fee Works, and What 0.70% Does Not Cover | FBT Swap',
     description:
-      'A swap has three separate costs: the network fee, the liquidity provider fee inside the pool price, and the platform fee. Here is who gets each one, and how to check them before you sign.',
+      'Three separate costs in every swap: the network fee, the pool fee inside the price, and the 0.70% platform fee. Who gets each, and how to check before you sign.',
     h1: 'How a swap fee actually works',
     body: [
       'Almost every argument about swap fees compares the wrong number. The percentage a platform advertises is one of three costs in the same transaction, and on a small trade it is usually not the largest one. This page separates them.',
@@ -951,9 +964,9 @@ const POSTS = [
     dir: 'rtl',
     route: '/#/swap',
     datePublished: '2026-09-24',
-    title: 'کارمزد سواپ ارز دیجیتال چطور حساب می‌شود؟ ۰٫۷٪ چه چیزی را پوشش می‌دهد و چه چیزی را نه | FBT Swap',
+    title: 'کارمزد سواپ ارز دیجیتال چطور حساب می‌شود؟ | FBT Swap',
     description:
-      'هر سواپ سه هزینهٔ جدا دارد: کارمزد شبکه، کارمزد تأمین‌کنندهٔ نقدینگی که داخل قیمت است، و کارمزد پلتفرم. این‌جا می‌گوید هر کدام به کی می‌رسد و پیش از امضا کجا باید ببینی‌شان.',
+      'هر سواپ سه هزینهٔ جدا دارد: کارمزد شبکه، کارمزد نقدینگی داخل قیمت، و کارمزد پلتفرم. هر کدام به چه کسی می‌رسد و پیش از امضا کجا باید ببینی‌شان.',
     h1: 'کارمزد سواپ چطور حساب می‌شود',
     body: [
       'تقریباً هر بحثی دربارهٔ کارمزد سواپ، عدد اشتباهی را مقایسه می‌کند. درصدی که یک پلتفرم اعلام می‌کند یکی از سه هزینهٔ همان تراکنش است و در معامله‌های کوچک، معمولاً بزرگ‌ترینشان نیست. این صفحه این سه را از هم جدا می‌کند.',
@@ -1032,9 +1045,9 @@ const POSTS = [
     lang: 'en',
     route: '/#/wallet',
     datePublished: '2026-09-24',
-    title: 'Custodial vs non-custodial wallets: what you actually give up | FBT Swap',
+    title: 'Custodial vs Non-Custodial Wallets: What You Give Up | FBT Swap',
     description:
-      'Custody is not a feature you switch on. It decides who can move your assets, who can freeze them, and who answers when something goes wrong. A plain comparison, including the parts self-custody does not solve.',
+      'Custody decides who can move your assets, who can freeze them, and who answers when something breaks — including what self-custody does not solve.',
     h1: 'Custodial vs non-custodial, without the slogans',
     body: [
       '“Not your keys, not your coins” is true and incomplete. Self-custody removes one class of risk and adds another, and the useful question is not which one is better in the abstract, but which risks you are personally able to carry.',
@@ -1106,7 +1119,7 @@ const POSTS = [
     dir: 'rtl',
     route: '/#/wallet',
     datePublished: '2026-09-24',
-    title: 'تفاوت کیف پول امانی و غیرامانی: چه چیزی را واقعاً از دست می‌دهی؟ | FBT Swap',
+    title: 'تفاوت کیف پول امانی و غیرامانی: چه چیزی را از دست می‌دهی | FBT Swap',
     description:
       'امانت‌داری یک گزینه نیست که روشن و خاموش شود؛ تعیین می‌کند چه کسی می‌تواند دارایی‌ات را جابه‌جا کند، چه کسی می‌تواند مسدودش کند و وقتی مشکلی پیش آمد چه کسی پاسخ می‌دهد.',
     h1: 'امانی و غیرامانی، بدون شعار',
@@ -1182,7 +1195,7 @@ const POSTS = [
     datePublished: '2026-09-24',
     title: 'Swapping without KYC: what stays private and what does not | FBT Swap',
     description:
-      'No account and no identity check is a real difference — and it is not anonymity. Here is exactly what this app never collects, and what the chain, the RPC endpoint and analytics firms can still see.',
+      'No account and no identity check is a real difference — but it is not anonymity. What this app never collects, and what the chain and analytics firms still see.',
     h1: 'Swapping without KYC: what stays private',
     body: [
       '“No KYC” describes what a service asks of you. It does not describe what the rest of the world can observe about the same transaction. Those are different questions, and confusing them is how people end up less private than they assumed.',
@@ -1262,7 +1275,7 @@ const POSTS = [
     datePublished: '2026-09-24',
     title: 'سواپ بدون احراز هویت: چه چیزی خصوصی می‌ماند و چه چیزی نه | FBT Swap',
     description:
-      'بدون حساب کاربری و بدون احراز هویت یک تفاوت واقعی است — و ناشناس‌بودن نیست. این‌جا دقیقاً می‌گوید این برنامه چه چیزی را هرگز جمع نمی‌کند و زنجیره، گرهٔ RPC و شرکت‌های تحلیل داده چه چیزی را می‌بینند.',
+      'بدون حساب و بدون احراز هویت یک تفاوت واقعی است، اما ناشناس‌بودن نیست. این برنامه چه چیزی را هرگز جمع نمی‌کند و زنجیره و شرکت‌های تحلیل داده چه می‌بینند.',
     h1: 'سواپ بدون احراز هویت: چه چیزی خصوصی می‌ماند',
     body: [
       '«بدون احراز هویت» توصیف چیزی است که یک سرویس از تو نمی‌خواهد؛ توصیف آنچه بقیهٔ دنیا می‌تواند دربارهٔ همان تراکنش ببیند نیست. این دو پرسش متفاوت‌اند و قاطی‌کردنشان باعث می‌شود آدم‌ها فکر کنند از آنچه هست خصوصی‌ترند.',
@@ -1364,7 +1377,7 @@ const BLOG_HUBS = [
     lang: 'fa',
     dir: 'rtl',
     route: '/#/help',
-    title: 'وبلاگ ارز دیجیتال و راهنماهای کاربردی | سواپ، کیف پول و بازار | FBT Swap',
+    title: 'وبلاگ ارز دیجیتال: سواپ، کیف پول و بازار | FBT Swap',
     description:
       'راهنماهای FBT Swap دربارهٔ کارمزد سواپ، امنیت و امانت‌داری کیف پول، حریم خصوصی، آموزش پایهٔ کریپتو، API توسعه‌دهندگان، نمودار و سهام توکنی‌شده.',
     h1: 'وبلاگ ارز دیجیتال و راهنماهای کاربردی',
@@ -1677,7 +1690,7 @@ const SEARCH_LANDINGS = [
     route: '/#/signals',
     marketDashboard: true,
     title: 'Crypto Prices, 30 Charts and Market Signals | FBT Swap',
-    description: 'Prices and seven-day charts for up to 30 crypto assets, a market pulse and a transparent trend reading based on 24-hour and seven-day changes — not a forecast or trade advice.',
+    description: 'Prices and seven-day charts for up to 30 crypto assets, a market pulse and a transparent trend reading from 24-hour and seven-day changes — not a forecast.',
     h1: 'Crypto market data: 30 assets, charts and trend readings',
     body: [
       'This page is for inspecting market data, not promising what prices will do next. The live list comes from the public FBT API, follows the market-cap order returned by that response and shows a seven-day line chart alongside each asset.',
@@ -1838,9 +1851,9 @@ const LIBRARY_PAGES = [
     icon: 'grid',
     topic: 'learn',
     route: '/#/swap',
-    title: 'FBT Swap Library — Every Crypto Guide, Tool and Market Page in One Place',
+    title: 'FBT Swap Library — Every Crypto Guide and Market Page',
     description:
-      'The complete directory of FBT Swap pages: non-custodial swap without KYC, price alerts, investing and yield, market charts, developer API, long guides and the blog — in English and Persian.',
+      'The full directory of FBT Swap pages: non-custodial swap without KYC, price alerts, yield, market charts, developer API and long guides, in English and Persian.',
     h1: 'The FBT Swap library — every page, one place',
     body: [
       'Every page FBT Swap publishes for search is listed here, grouped by topic and marked by language. The English pages sit directly under the domain; the Persian pages live under /fa/ with the same English address, so both are easy to read, easy to index and easy to share.',
@@ -1885,6 +1898,16 @@ const LIBRARY_PAGES = [
 SEARCH_LANDINGS.forEach((page) => { page.kind = 'resource'; });
 PAGES.push(...SEARCH_LANDINGS, ...POSTS, ...BLOG_HUBS, ...LIBRARY_PAGES);
 
+/*
+ * The topical-authority layer: ten subject clusters, each a hub page plus the
+ * spokes that answer one question each. They are built and validated in
+ * scripts/content/ — that module refuses to export an article with no cluster,
+ * a cluster with no hub in the article's language, or an hreflang pair whose
+ * other side does not exist. By the time they arrive here they are already
+ * guaranteed to be non-orphan and reciprocally linked.
+ */
+PAGES.push(...CONTENT_PAGES);
+
 const ALTERNATES = [
   /*
    * The old ['non-custodial-crypto-swap', 'decentralized-crypto-exchange'] pair was
@@ -1922,7 +1945,14 @@ const ALTERNATES = [
   ['blog', 'fa/blog'],
   /* The two directories mirror each other exactly — same pages, same order,
      labels translated. */
-  ['library', 'fa/']
+  ['library', 'fa/'],
+  /*
+   * Cluster hubs and article spokes. Generated rather than hand-listed, and
+   * only where BOTH sides exist: scripts/content/index.mjs drops the pair when
+   * an English article has no Persian counterpart, because a declared
+   * alternate pointing at a 404 is worse than no annotation at all.
+   */
+  ...CONTENT_ALTERNATES
 ];
 
 const SOCIAL_CARD = `${SITE}/social-card.png`;
@@ -2012,6 +2042,9 @@ function landingStructuredData(page, url) {
   const faqId = `${url}#faq`;
   const organizationId = `${SITE}/#organization`;
   const websiteId = `${SITE}/#website`;
+  /* Resolved once: the cluster this page belongs to, in this page's language.
+     Drives the extra breadcrumb crumb and the Article -> hub relationship. */
+  const clusterLink = page.cluster ? CLUSTER_INDEX[page.cluster]?.[page.lang || 'en'] : null;
   const graph = [
     {
       '@type': 'Organization',
@@ -2026,7 +2059,38 @@ function landingStructuredData(page, url) {
          and it only works if the account is real — so it is the account that
          exists, and nothing else. */
       sameAs: ['https://x.com/CompanyFbt'],
-      logo: { '@type': 'ImageObject', url: `${SITE}/icon-512.png`, width: 512, height: 512 }
+      logo: { '@type': 'ImageObject', url: `${SITE}/icon-512.png`, width: 512, height: 512 },
+      /*
+       * ─── E-E-A-T, STATED IN MACHINE-READABLE FORM ────────────────────────
+       * A quality rater is told to find out who is responsible for a site
+       * about money, and an answer engine has to decide whether a brand
+       * mention refers to a real, identifiable entity before it will cite it.
+       * Both questions have the same answer, so it is given in schema rather
+       * than only in prose: where the company is, how to reach it, the page
+       * that states the editorial rules, and what the entity is actually
+       * about. Every one of these resolves to a page that exists.
+       */
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Isfahan',
+        addressCountry: 'IR'
+      },
+      contactPoint: {
+        '@type': 'ContactPoint',
+        email: 'fbtswap@gmail.com',
+        contactType: 'customer support',
+        availableLanguage: ['fa', 'en'],
+        url: `${SITE}/trust/contact-and-verification`
+      },
+      publishingPrinciples: `${SITE}/trust/editorial-policy`,
+      knowsAbout: [
+        'Decentralized exchange',
+        'Cryptocurrency swap routing',
+        'Non-custodial wallets',
+        'Blockchain network fees and gas',
+        'Token approvals and on-chain security',
+        'Cross-chain bridging'
+      ]
     },
     {
       '@type': 'WebSite',
@@ -2062,7 +2126,12 @@ function landingStructuredData(page, url) {
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: ui.home, item: `${SITE}/` },
         { '@type': 'ListItem', position: 2, name: ui.library, item: `${SITE}/${slugPath(page.lang === 'fa' ? 'fa/' : 'library')}` },
-        { '@type': 'ListItem', position: 3, name: page.h1, item: url }
+        /* A cluster spoke gets a fourth crumb for its hub, so the subject
+           hierarchy is declared and not merely implied by the link graph. */
+        ...(page.kind === 'article' && clusterLink
+          ? [{ '@type': 'ListItem', position: 3, name: clusterLink.label, item: `${SITE}/${slugPath(clusterLink.hub)}` },
+             { '@type': 'ListItem', position: 4, name: page.h1, item: url }]
+          : [{ '@type': 'ListItem', position: 3, name: page.h1, item: url }])
       ]
     }
   ];
@@ -2119,6 +2188,66 @@ function landingStructuredData(page, url) {
       mainEntityOfPage: { '@id': pageId },
       articleSection: 'Guides',
       image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
+    });
+  }
+
+  /*
+   * A cluster spoke is an Article that explicitly belongs to its pillar. The
+   * `isPartOf` edge is the machine-readable half of the link we also render
+   * visibly — an answer engine deciding whether this page is an authority on
+   * the subject can see it sits inside a complete treatment of that subject
+   * rather than standing alone.
+   */
+  if (page.kind === 'article') {
+    graph.push({
+      '@type': 'Article',
+      '@id': `${url}#article`,
+      headline: page.h1,
+      description: page.description,
+      inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
+      datePublished: page.datePublished,
+      dateModified: page.dateModified || page.datePublished,
+      author: { '@id': organizationId },
+      publisher: { '@id': organizationId },
+      mainEntityOfPage: { '@id': pageId },
+      ...(clusterLink
+        ? {
+            isPartOf: { '@id': `${SITE}/${slugPath(clusterLink.hub)}#collection` },
+            articleSection: clusterLink.label
+          }
+        : {}),
+      image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
+    });
+  }
+
+  /*
+   * The pillar declares the collection and names every spoke it owns. Built
+   * from the slugs the content module validated, so the markup cannot
+   * advertise a page this generator did not write.
+   */
+  if (page.kind === 'cluster' && page.spokeSlugs?.length) {
+    const spokes = page.spokeSlugs
+      .map((slug) => PAGES.find((p) => p.slug === slug))
+      .filter(Boolean);
+    graph.push({
+      '@type': 'CollectionPage',
+      '@id': `${url}#collection`,
+      name: page.h1,
+      description: page.description,
+      inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
+      isPartOf: { '@id': websiteId },
+      publisher: { '@id': organizationId },
+      mainEntity: {
+        '@type': 'ItemList',
+        name: page.h1,
+        numberOfItems: spokes.length,
+        itemListElement: spokes.map((p, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: p.h1,
+          url: `${SITE}/${slugPath(p.slug)}`
+        }))
+      }
     });
   }
 
@@ -2254,7 +2383,14 @@ function render(page) {
    * is built out of <h2> sections rather than one wall of prose, because the
    * outline is what an answer engine extracts and what a reader skims.
    */
-  const isPost = page.kind === 'post';
+  /*
+   * `article` (cluster spoke) and `cluster` (cluster hub) render with the same
+   * dated, sectioned body as a blog post. They are separate kinds because the
+   * JSON-LD differs — a spoke is an Article inside a collection, a hub is a
+   * CollectionPage — but the visible layout is identical, so the flag that
+   * drives byline, date and section rendering covers all three.
+   */
+  const isPost = page.kind === 'post' || page.kind === 'article' || page.kind === 'cluster';
   const postDate = page.datePublished
     ? new Date(page.datePublished).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
         year: 'numeric',
@@ -2376,7 +2512,76 @@ function render(page) {
     </div>
   </section>`
     : '';
-  const bodyExtra = page.kind === 'hub' ? hubIndex : isLibrary ? libraryMarkup : postSections;
+  /*
+   * ─── THE CLUSTER DIRECTORY ────────────────────────────────────────────────
+   * Rendered on the two blog hubs and the two library directories — the four
+   * pages a crawler is most likely to enter on, and (not coincidentally) the
+   * four the audit flagged as thin. They used to describe a handful of
+   * feature pages while 150 guides sat behind them, reachable only from a
+   * sibling list.
+   *
+   * Each cluster gets its hub link, the hub's own description, and every
+   * spoke title inline. That does three things at once: it gives these pages
+   * real substance instead of filler, it puts each hub one click from the
+   * site's highest-authority entry points, and it states the shape of the
+   * topic coverage in a form an answer engine can read in a single pass.
+   *
+   * Spokes resolve through PAGES, so this can never advertise a URL that was
+   * not generated.
+   */
+  const dirBySlug = new Map(PAGES.map((p) => [p.slug, p]));
+  const clusterDirectory =
+    page.kind === 'hub' || isLibrary
+      ? (() => {
+          const blocks = CLUSTER_ORDER.map((id) => {
+            const entry = CLUSTER_INDEX[id]?.[lang];
+            if (!entry) return '';
+            const hub = dirBySlug.get(entry.hub);
+            if (!hub) return '';
+            const spokes = entry.spokes.map((sl) => dirBySlug.get(sl)).filter(Boolean);
+            if (!spokes.length) return '';
+            const count =
+              lang === 'fa'
+                ? `${spokes.length} راهنما`
+                : `${spokes.length} guide${spokes.length === 1 ? '' : 's'}`;
+            return `<div class="cluster-dir-group">
+          <h3><a href="/${slugPath(hub.slug)}">${esc(entry.label)}</a> <span class="cluster-dir-count">${esc(count)}</span></h3>
+          <p>${esc(hub.description)}</p>
+          <ul class="cluster-dir-list">
+            ${spokes
+              .map((sp) => `<li><a href="/${slugPath(sp.slug)}">${esc(sp.h1 || sp.title)}</a></li>`)
+              .join('\n            ')}
+          </ul>
+        </div>`;
+          }).filter(Boolean);
+          if (!blocks.length) return '';
+          const heading = lang === 'fa' ? 'همهٔ راهنماها بر پایهٔ موضوع' : 'Every guide, grouped by topic';
+          const lede =
+            lang === 'fa'
+              ? 'هر موضوع یک صفحهٔ مرجع دارد و زیر آن راهنماهای دقیق‌تر. از هر نقطه‌ای می‌توانی شروع کنی؛ صفحه‌ها به هم پیوند دارند و هیچ‌کدام چیزی را قول نمی‌دهند که محصول انجام نمی‌دهد.'
+              : 'Each topic has one reference page with the detailed guides underneath it. Start anywhere — the pages link to each other, and none of them promises something the product does not do.';
+          return `<section class="cluster-dir panel reveal" aria-labelledby="cluster-dir-heading" style="--delay:160ms">
+      <div class="section-heading">
+        ${iconChip('grid', 'icon-md fx-tilt')}
+        <div class="section-heading-copy">
+          <p class="section-kicker">${esc(lang === 'fa' ? 'کتابخانه' : 'Library')}</p>
+          <h2 id="cluster-dir-heading">${esc(heading)}</h2>
+        </div>
+      </div>
+      <p class="cluster-dir-lede">${esc(lede)}</p>
+      <div class="cluster-dir-grid">
+        ${blocks.join('\n        ')}
+      </div>
+    </section>`;
+        })()
+      : '';
+
+  const bodyExtra =
+    page.kind === 'hub'
+      ? hubIndex + clusterDirectory
+      : isLibrary
+        ? libraryMarkup + clusterDirectory
+        : postSections;
   const codeSamplesMarkup = page.codeSamples?.length
     ? `<section class="code-samples panel reveal" aria-labelledby="code-samples-heading" style="--delay:140ms">
       <div class="section-heading">
@@ -2424,8 +2629,63 @@ function render(page) {
       </div>`
     )
     .join('\n      ');
-  const siblingLinks = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
-    .map((p) => `<a href="/${slugPath(p.slug)}"><span>${esc(p.h1)}</span> <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span></a>`)
+  /*
+   * ── RELATED LINKS ────────────────────────────────────────────────────────
+   * This used to link every page to every other page in its language. With
+   * ~30 pages that was merely untidy. With ~200 it is actively harmful: a
+   * flat mesh gives a crawler no signal about which pages relate to which,
+   * dilutes every link on the page, and adds weight to every document.
+   *
+   * So the graph is now explicit. A cluster spoke links UP to its hub and
+   * ACROSS to its nearest siblings. A hub links DOWN to all of its spokes and
+   * ACROSS to the other hubs. Pages predating the cluster system keep the old
+   * behaviour but capped, so they do not regress into a hairball either.
+   *
+   * The cap exists because link equity divides. Twelve deliberate links beat
+   * two hundred indiscriminate ones, and the ones that matter here are the
+   * ones inside the same subject.
+   */
+  const SIBLING_CAP = 12;
+  const pageBySlug = new Map(PAGES.map((p) => [p.slug, p]));
+  const linkTo = (p) =>
+    `<a href="/${slugPath(p.slug)}"><span>${esc(p.h1)}</span> <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span></a>`;
+
+  let relatedPages = [];
+  const clusterEntry = page.cluster ? CLUSTER_INDEX[page.cluster]?.[lang] : null;
+
+  if (page.kind === 'cluster' && page.spokeSlugs) {
+    /* A hub owns its spokes: list all of them, then point at the other hubs so
+       the ten clusters form a connected graph rather than ten islands. */
+    relatedPages = page.spokeSlugs.map((s) => pageBySlug.get(s)).filter(Boolean);
+    const otherHubs = PAGES.filter(
+      (p) => p.kind === 'cluster' && (p.lang || 'en') === lang && p.slug !== page.slug
+    );
+    relatedPages = [...relatedPages, ...otherHubs];
+  } else if (clusterEntry) {
+    /* A spoke points up to its pillar first — that is the link that tells a
+       crawler which subject this page belongs to — then sideways to the
+       siblings nearest it in the hub's own order, wrapping so that the last
+       article in a cluster still links to the first rather than to nothing. */
+    const hub = pageBySlug.get(clusterEntry.hub);
+    const siblings = clusterEntry.spokes.filter((s) => s !== page.slug);
+    const self = clusterEntry.spokes.indexOf(page.slug);
+    const ordered = self === -1
+      ? siblings
+      : [...clusterEntry.spokes.slice(self + 1), ...clusterEntry.spokes.slice(0, self)];
+    relatedPages = [hub, ...ordered.map((s) => pageBySlug.get(s))].filter(Boolean);
+  } else {
+    /* Pre-cluster pages: same language, hubs first so the new subject pillars
+       are reachable from the older landing pages too. */
+    const pool = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang);
+    relatedPages = [
+      ...pool.filter((p) => p.kind === 'cluster'),
+      ...pool.filter((p) => p.kind !== 'cluster' && p.kind !== 'article')
+    ];
+  }
+
+  const siblingLinks = relatedPages
+    .slice(0, SIBLING_CAP)
+    .map(linkTo)
     .join('\n        ');
   const faqMarkup = page.faqs?.length
     ? `<section class="faq-panel panel reveal" aria-labelledby="faq-heading" style="--delay:140ms">
@@ -3029,6 +3289,47 @@ ${
   }
   .lib-group-title svg { width: 16px; height: 16px; color: var(--vi); }
   .lib-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+
+  /* ── the cluster directory on the blog hubs and the two library pages ── */
+  .cluster-dir-lede { color: var(--muted); margin: 0 0 18px; max-width: 62ch; }
+  .cluster-dir-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .cluster-dir-group {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 17px;
+    background: var(--panel-2);
+  }
+  .cluster-dir-group h3 {
+    margin: 0 0 6px;
+    font-size: 1.02rem;
+    line-height: 1.35;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .cluster-dir-group h3 a { color: var(--text); text-decoration: none; }
+  .cluster-dir-group h3 a:hover,
+  .cluster-dir-group h3 a:focus-visible { color: var(--vi); text-decoration: underline; }
+  .cluster-dir-count {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--quiet);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .cluster-dir-group > p { margin: 0 0 11px; color: var(--muted); font-size: .9rem; line-height: 1.6; }
+  .cluster-dir-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+  .cluster-dir-list li { font-size: .88rem; line-height: 1.5; }
+  .cluster-dir-list li::before { content: "\\2192"; color: var(--quiet); margin-inline-end: 7px; }
+  [dir="rtl"] .cluster-dir-list li::before { content: "\\2190"; }
+  .cluster-dir-list a { color: var(--muted); text-decoration: none; }
+  .cluster-dir-list a:hover,
+  .cluster-dir-list a:focus-visible { color: var(--vi); text-decoration: underline; }
   .lib-card {
     position: relative;
     display: grid;
@@ -3228,6 +3529,7 @@ ${
     .lib-flagship { grid-template-columns: auto minmax(0, 1fr); }
     .lib-flagship .card-arrow { display: none; }
     .post-index-item { grid-template-columns: auto minmax(0, 1fr); }
+    .cluster-dir-grid { grid-template-columns: minmax(0, 1fr); }
     .post-index-item .card-arrow { display: none; }
     .howto-list::before { display: none; }
     .howto-list li { grid-template-columns: 1fr; gap: 12px; }
@@ -3508,50 +3810,62 @@ function main() {
   }
 
   /*
-   * Rewrite the sitemap so the new pages are actually discoverable. Submitting
-   * a sitemap that omits them would leave the whole exercise depending on
-   * Google finding the links on its own.
+   * ─── THE CRAWL SURFACE ────────────────────────────────────────────────────
+   * Sitemap index + per-language children, robots.txt with explicit answer-
+   * engine groups, an RSS feed, security.txt, llms-full.txt and a static 404.
+   * All of it is derived from PAGES, so a page cannot exist without being
+   * advertised and nothing can be advertised that was not written.
+   *
+   * On <lastmod>: it is emitted only from a page's own editorial `date` field.
+   * It is never taken from the clock or the build. This generator runs on
+   * every deployment, including ones that only touch JavaScript, and stamping
+   * "today" onto prose that did not change is exactly the synthetic freshness
+   * signal crawlers learn to ignore. Pages without an editorial date are
+   * listed with no <lastmod>, which is the honest answer.
    */
-  /*
-   * Do not manufacture a <lastmod> date here. This generator runs on every
-   * deployment, including deployments that only change JavaScript or server
-   * code; stamping every landing page with "today" would tell crawlers its
-   * editorial content changed when it did not. Omission is more honest than
-   * stale or synthetic metadata, and new URLs are still discoverable through
-   * this sitemap, robots.txt, internal links and IndexNow.
-   */
-  const urls = [
-    `  <url>\n    <loc>${SITE}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
-    `  <url>\n    <loc>${SITE}/${slugPath(V2_PAGE.slug)}</loc>\n    <changefreq>${V2_PAGE.changefreq}</changefreq>\n    <priority>${V2_PAGE.priority}</priority>\n  </url>`,
-    ...PAGES.map(
-      (p) =>
-        `  <url>\n    <loc>${SITE}/${slugPath(p.slug)}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.8</priority>\n  </url>`
-    )
+  const sitemapExtra = [
+    { slug: '', title: 'FBT Swap', description: '', changefreq: 'daily', priority: '1.0', lang: 'en' },
+    {
+      slug: V2_PAGE.slug,
+      title: V2_PAGE.title,
+      description: V2_PAGE.description || '',
+      changefreq: V2_PAGE.changefreq,
+      priority: V2_PAGE.priority,
+      lang: 'en'
+    }
   ];
 
-  writeFileSync(
-    join(OUT, 'sitemap.xml'),
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Generated by scripts/gen-landing.mjs — do not edit by hand.
+  const counts = emitSitemaps({ out: OUT, site: SITE, slugPath, pages: PAGES, extra: sitemapExtra });
+  emitRobots({ out: OUT, site: SITE });
+  const feedItems = emitFeed({ out: OUT, site: SITE, slugPath, pages: PAGES });
 
-  Only real, server-rendered URLs are listed. In-app routes are hash-based
-  (/#/swap) and a crawler never sees anything after the '#', so listing them
-  would add entries that resolve to the same single document.
--->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join('\n')}
-</urlset>
-`,
-    'utf8'
-  );
+  /*
+   * security.txt must carry a real future Expires (RFC 9116). One year from
+   * the build is the one date here that is *supposed* to move: it is a promise
+   * about the contact channel staying current, not a claim about content.
+   */
+  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  emitSecurityTxt({ out: OUT, site: SITE, expiresISO: expires.toISOString().replace(/\.\d{3}Z$/, 'Z') });
+
+  emitLlmsFull({
+    out: OUT,
+    site: SITE,
+    slugPath,
+    clusterIndex: CLUSTER_INDEX,
+    clusterOrder: CLUSTER_ORDER,
+    pages: PAGES,
+    feeBps: 70,
+    chainCount: 17
+  });
+  emit404({ out: OUT, site: SITE });
 
   // Sanity check: the app's own index must still be there. A generator that
   // overwrote it would take the whole site down.
   readFileSync(join(OUT, 'index.html'), 'utf8');
 
-  console.log(`▸ generated ${PAGES.length + 1} landing pages + sitemap`);
-  for (const p of PAGES) console.log(`  /${p.slug}`);
+  console.log(`▸ generated ${PAGES.length + 1} landing pages`);
+  console.log(`▸ sitemap index: ${counts.en} en + ${counts.fa} fa URLs`);
+  console.log(`▸ robots.txt with ${ANSWER_ENGINE_COUNT} answer-engine groups, feed.xml (${feedItems} items), security.txt, llms-full.txt, 404.html`);
   console.log(`  /${V2_PAGE.slug} (bilingual landing 2.0)`);
 }
 

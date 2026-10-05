@@ -436,8 +436,8 @@ h1 .grad, .grad {
   border: 1px solid rgba(160, 175, 230, 0.13); background: rgba(11, 9, 28, 0.65);
 }
 .mini.wide { grid-column: 1 / -1; }
-.mini h4 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 9px; font-size: 10.5px; font-weight: 750; color: var(--quiet); text-transform: uppercase; letter-spacing: 0.13em; }
-.mini h4 em { font-style: normal; letter-spacing: 0; text-transform: none; font-family: var(--font-mono); font-size: 9.5px; color: #565f7d; }
+.mini .mini-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 9px; font-size: 10.5px; font-weight: 750; color: var(--quiet); text-transform: uppercase; letter-spacing: 0.13em; }
+.mini .mini-label em { font-style: normal; letter-spacing: 0; text-transform: none; font-family: var(--font-mono); font-size: 9.5px; color: #565f7d; }
 .mini-kpi { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--ink); direction: ltr; text-align: start; }
 .mini-kpi small { display: block; font-size: 10px; color: var(--quiet); }
 .mono, .num { font-family: var(--font-mono); }
