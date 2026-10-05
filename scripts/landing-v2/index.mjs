@@ -423,6 +423,14 @@ function hero(site) {
           <ul class="hero-chips reveal" style="--d:240ms">${chips}</ul>
         </div>
 
+        <!--
+          The tile captions below are <p class="mini-label">, not <h4>. This
+          block is a decorative mock of the app UI (aria-hidden), and heading
+          tags here injected an h1 -> h4 jump into the document outline with no
+          h2 or h3 between them. A crawler reads that outline as a broken
+          structure; a screen reader never reached these at all. Styling is
+          unchanged -- .mini-label carries exactly what .mini h4 carried.
+        -->
         <div class="dash reveal-zoom reveal" style="--d:200ms" data-parallax="9" aria-hidden="true">
           <div class="dash-top">
             <span class="traffic"><i></i><i></i><i></i></span>
@@ -431,7 +439,7 @@ function hero(site) {
           </div>
           <div class="dash-grid">
             <div class="mini wide">
-              <h4>${T(COPY.hero.dash.intent)}</h4>
+              <p class="mini-label">${T(COPY.hero.dash.intent)}</p>
               <div class="intent-line">
                 <svg class="spark" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>
                 <span id="tw-intent" class="tw">${esc(firstIntent.en)}</span>
@@ -439,28 +447,28 @@ function hero(site) {
               <div class="flow-mini">${flowMini}</div>
             </div>
             <div class="mini">
-              <h4>${T(COPY.hero.dash.portfolio)}<em>BTC / USD · 7D</em></h4>
+              <p class="mini-label">${T(COPY.hero.dash.portfolio)}<em>BTC / USD · 7D</em></p>
               <span class="mini-kpi" id="dp-price">—</span>
               <span class="chg-arrow flat" id="dp-chg" aria-hidden="true">▬</span>
               <span id="dp-spark"></span>
             </div>
             <div class="mini">
-              <h4>${T(COPY.hero.dash.market)}<em>LIVE</em></h4>
+              <p class="mini-label">${T(COPY.hero.dash.market)}<em>LIVE</em></p>
               ${marketRow('BTC', 'Bitcoin', 'hm-bitcoin')}
               ${marketRow('ETH', 'Ethereum', 'hm-ethereum')}
               ${marketRow('SOL', 'Solana', 'hm-solana')}
               ${marketRow('BNB', 'BNB Chain', 'hm-binance')}
             </div>
             <div class="mini">
-              <h4>${T(COPY.hero.dash.signals)}</h4>
+              <p class="mini-label">${T(COPY.hero.dash.signals)}</p>
               <div>${sig}</div>
             </div>
             <div class="mini">
-              <h4>${T(COPY.hero.dash.smartMoney)}</h4>
+              <p class="mini-label">${T(COPY.hero.dash.smartMoney)}</p>
               ${smRows}
             </div>
             <div class="mini wide">
-              <h4>${T(COPY.hero.dash.yield)}<em>LIVE · DEFILAMA</em></h4>
+              <p class="mini-label">${T(COPY.hero.dash.yield)}<em>LIVE · DEFILAMA</em></p>
               <div id="dy-rows">
                 <div class="mrow"><span class="skel skel-line" style="max-width:190px"></span><span class="skel skel-line sh" style="max-width:56px"></span></div>
                 <div class="mrow"><span class="skel skel-line" style="max-width:150px"></span><span class="skel skel-line sh" style="max-width:48px"></span></div>

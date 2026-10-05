@@ -9,11 +9,31 @@ const OUT = 'dist';
 const SITE = 'https://fbtswap.ir';
 const read = (p) => readFileSync(p, 'utf8');
 const html = (p) => new JSDOM(read(p)).window.document;
+/*
+ * sitemap.xml is a sitemap INDEX: one child per language, so Search Console
+ * reports English and Persian coverage separately. This walks the index down
+ * to the leaf <url> entries, and still accepts a flat <urlset> at the root so
+ * the test does not depend on the split staying in place.
+ */
+const parseSitemap = (file) => {
+  const doc = new JSDOM(read(file), { contentType: 'text/xml' }).window.document;
+  assert.equal(doc.querySelector('parsererror'), null, `${file} is valid XML`);
+  return doc;
+};
 const urls = () => {
   assert.ok(existsSync(join(OUT, 'sitemap.xml')), 'run npm run build before npm run test:seo');
-  const doc = new JSDOM(read(join(OUT, 'sitemap.xml')), { contentType: 'text/xml' }).window.document;
-  assert.equal(doc.querySelector('parsererror'), null, 'sitemap is valid XML');
-  return [...doc.querySelectorAll('url > loc')].map((loc) => loc.textContent);
+  const root = parseSitemap(join(OUT, 'sitemap.xml'));
+  const children = [...root.querySelectorAll('sitemap > loc')].map((loc) => loc.textContent.trim());
+  if (!children.length) return [...root.querySelectorAll('url > loc')].map((loc) => loc.textContent);
+
+  const out = [];
+  for (const child of children) {
+    const rel = child.replace(`${SITE}/`, '');
+    const file = join(OUT, rel);
+    assert.ok(existsSync(file), `child sitemap ${rel} was generated`);
+    out.push(...[...parseSitemap(file).querySelectorAll('url > loc')].map((loc) => loc.textContent));
+  }
+  return out;
 };
 
 // One source of truth for the advertised network count. This test reads the

@@ -653,9 +653,9 @@ const PAGES = [
     topic: 'invest',
     lang: 'en',
     route: '/#/farm',
-    title: 'Crypto Investing Without Giving Up Custody — Yield, Lending, Risk | FBT Swap',
+    title: 'Crypto Investing Without Losing Custody: Yield and Lending | FBT Swap',
     description:
-      'Tools for putting crypto to work without handing it over: self-custody, staged buying reminders, liquid staking, lending and yield pools with their data source shown. No promised returns.',
+      'Put crypto to work without handing it over: self-custody, staged buying reminders, liquid staking, lending and yield pools, each with its data source shown.',
     h1: 'Crypto investing: the tools, the yield, and the risk you are taking',
     howTo: [
       [
@@ -789,9 +789,9 @@ const PAGES = [
     topic: 'swap',
     lang: 'en',
     route: '/#/solana',
-    title: 'Solana Token Swap — SPL and Token-2022, Signed in Your Wallet | FBT Swap',
+    title: 'Solana Token Swap — SPL and Token-2022 in Your Wallet | FBT Swap',
     description:
-      'Swap SPL and Token-2022 tokens on Solana from your own wallet. Balances are read from two paths, the rate and the 0.70% fee are shown before you sign, and custody never moves.',
+      'Swap SPL and Token-2022 tokens on Solana from your own wallet. The rate and the 0.70% platform fee are shown before you sign, and custody never moves.',
     h1: 'Solana token swap: SPL and Token-2022, signed by you',
     howTo: [
       [
@@ -883,9 +883,9 @@ const POSTS = [
     lang: 'en',
     route: '/#/swap',
     datePublished: '2026-09-24',
-    title: 'How a crypto swap fee actually works — and what 0.7% does not cover | FBT Swap',
+    title: 'How a Crypto Swap Fee Works, and What 0.70% Does Not Cover | FBT Swap',
     description:
-      'A swap has three separate costs: the network fee, the liquidity provider fee inside the pool price, and the platform fee. Here is who gets each one, and how to check them before you sign.',
+      'Three separate costs in every swap: the network fee, the pool fee inside the price, and the 0.70% platform fee. Who gets each, and how to check before you sign.',
     h1: 'How a swap fee actually works',
     body: [
       'Almost every argument about swap fees compares the wrong number. The percentage a platform advertises is one of three costs in the same transaction, and on a small trade it is usually not the largest one. This page separates them.',
@@ -964,9 +964,9 @@ const POSTS = [
     dir: 'rtl',
     route: '/#/swap',
     datePublished: '2026-09-24',
-    title: 'کارمزد سواپ ارز دیجیتال چطور حساب می‌شود؟ ۰٫۷٪ چه چیزی را پوشش می‌دهد و چه چیزی را نه | FBT Swap',
+    title: 'کارمزد سواپ ارز دیجیتال چطور حساب می‌شود؟ | FBT Swap',
     description:
-      'هر سواپ سه هزینهٔ جدا دارد: کارمزد شبکه، کارمزد تأمین‌کنندهٔ نقدینگی که داخل قیمت است، و کارمزد پلتفرم. این‌جا می‌گوید هر کدام به کی می‌رسد و پیش از امضا کجا باید ببینی‌شان.',
+      'هر سواپ سه هزینهٔ جدا دارد: کارمزد شبکه، کارمزد نقدینگی داخل قیمت، و کارمزد پلتفرم. هر کدام به چه کسی می‌رسد و پیش از امضا کجا باید ببینی‌شان.',
     h1: 'کارمزد سواپ چطور حساب می‌شود',
     body: [
       'تقریباً هر بحثی دربارهٔ کارمزد سواپ، عدد اشتباهی را مقایسه می‌کند. درصدی که یک پلتفرم اعلام می‌کند یکی از سه هزینهٔ همان تراکنش است و در معامله‌های کوچک، معمولاً بزرگ‌ترینشان نیست. این صفحه این سه را از هم جدا می‌کند.',
@@ -1045,9 +1045,9 @@ const POSTS = [
     lang: 'en',
     route: '/#/wallet',
     datePublished: '2026-09-24',
-    title: 'Custodial vs non-custodial wallets: what you actually give up | FBT Swap',
+    title: 'Custodial vs Non-Custodial Wallets: What You Give Up | FBT Swap',
     description:
-      'Custody is not a feature you switch on. It decides who can move your assets, who can freeze them, and who answers when something goes wrong. A plain comparison, including the parts self-custody does not solve.',
+      'Custody decides who can move your assets, who can freeze them, and who answers when something breaks — including what self-custody does not solve.',
     h1: 'Custodial vs non-custodial, without the slogans',
     body: [
       '“Not your keys, not your coins” is true and incomplete. Self-custody removes one class of risk and adds another, and the useful question is not which one is better in the abstract, but which risks you are personally able to carry.',
@@ -1119,7 +1119,7 @@ const POSTS = [
     dir: 'rtl',
     route: '/#/wallet',
     datePublished: '2026-09-24',
-    title: 'تفاوت کیف پول امانی و غیرامانی: چه چیزی را واقعاً از دست می‌دهی؟ | FBT Swap',
+    title: 'تفاوت کیف پول امانی و غیرامانی: چه چیزی را از دست می‌دهی | FBT Swap',
     description:
       'امانت‌داری یک گزینه نیست که روشن و خاموش شود؛ تعیین می‌کند چه کسی می‌تواند دارایی‌ات را جابه‌جا کند، چه کسی می‌تواند مسدودش کند و وقتی مشکلی پیش آمد چه کسی پاسخ می‌دهد.',
     h1: 'امانی و غیرامانی، بدون شعار',
@@ -1195,7 +1195,7 @@ const POSTS = [
     datePublished: '2026-09-24',
     title: 'Swapping without KYC: what stays private and what does not | FBT Swap',
     description:
-      'No account and no identity check is a real difference — and it is not anonymity. Here is exactly what this app never collects, and what the chain, the RPC endpoint and analytics firms can still see.',
+      'No account and no identity check is a real difference — but it is not anonymity. What this app never collects, and what the chain and analytics firms still see.',
     h1: 'Swapping without KYC: what stays private',
     body: [
       '“No KYC” describes what a service asks of you. It does not describe what the rest of the world can observe about the same transaction. Those are different questions, and confusing them is how people end up less private than they assumed.',
@@ -1275,7 +1275,7 @@ const POSTS = [
     datePublished: '2026-09-24',
     title: 'سواپ بدون احراز هویت: چه چیزی خصوصی می‌ماند و چه چیزی نه | FBT Swap',
     description:
-      'بدون حساب کاربری و بدون احراز هویت یک تفاوت واقعی است — و ناشناس‌بودن نیست. این‌جا دقیقاً می‌گوید این برنامه چه چیزی را هرگز جمع نمی‌کند و زنجیره، گرهٔ RPC و شرکت‌های تحلیل داده چه چیزی را می‌بینند.',
+      'بدون حساب و بدون احراز هویت یک تفاوت واقعی است، اما ناشناس‌بودن نیست. این برنامه چه چیزی را هرگز جمع نمی‌کند و زنجیره و شرکت‌های تحلیل داده چه می‌بینند.',
     h1: 'سواپ بدون احراز هویت: چه چیزی خصوصی می‌ماند',
     body: [
       '«بدون احراز هویت» توصیف چیزی است که یک سرویس از تو نمی‌خواهد؛ توصیف آنچه بقیهٔ دنیا می‌تواند دربارهٔ همان تراکنش ببیند نیست. این دو پرسش متفاوت‌اند و قاطی‌کردنشان باعث می‌شود آدم‌ها فکر کنند از آنچه هست خصوصی‌ترند.',
@@ -1377,7 +1377,7 @@ const BLOG_HUBS = [
     lang: 'fa',
     dir: 'rtl',
     route: '/#/help',
-    title: 'وبلاگ ارز دیجیتال و راهنماهای کاربردی | سواپ، کیف پول و بازار | FBT Swap',
+    title: 'وبلاگ ارز دیجیتال: سواپ، کیف پول و بازار | FBT Swap',
     description:
       'راهنماهای FBT Swap دربارهٔ کارمزد سواپ، امنیت و امانت‌داری کیف پول، حریم خصوصی، آموزش پایهٔ کریپتو، API توسعه‌دهندگان، نمودار و سهام توکنی‌شده.',
     h1: 'وبلاگ ارز دیجیتال و راهنماهای کاربردی',
@@ -1690,7 +1690,7 @@ const SEARCH_LANDINGS = [
     route: '/#/signals',
     marketDashboard: true,
     title: 'Crypto Prices, 30 Charts and Market Signals | FBT Swap',
-    description: 'Prices and seven-day charts for up to 30 crypto assets, a market pulse and a transparent trend reading based on 24-hour and seven-day changes — not a forecast or trade advice.',
+    description: 'Prices and seven-day charts for up to 30 crypto assets, a market pulse and a transparent trend reading from 24-hour and seven-day changes — not a forecast.',
     h1: 'Crypto market data: 30 assets, charts and trend readings',
     body: [
       'This page is for inspecting market data, not promising what prices will do next. The live list comes from the public FBT API, follows the market-cap order returned by that response and shows a seven-day line chart alongside each asset.',
@@ -1851,9 +1851,9 @@ const LIBRARY_PAGES = [
     icon: 'grid',
     topic: 'learn',
     route: '/#/swap',
-    title: 'FBT Swap Library — Every Crypto Guide, Tool and Market Page in One Place',
+    title: 'FBT Swap Library — Every Crypto Guide and Market Page',
     description:
-      'The complete directory of FBT Swap pages: non-custodial swap without KYC, price alerts, investing and yield, market charts, developer API, long guides and the blog — in English and Persian.',
+      'The full directory of FBT Swap pages: non-custodial swap without KYC, price alerts, yield, market charts, developer API and long guides, in English and Persian.',
     h1: 'The FBT Swap library — every page, one place',
     body: [
       'Every page FBT Swap publishes for search is listed here, grouped by topic and marked by language. The English pages sit directly under the domain; the Persian pages live under /fa/ with the same English address, so both are easy to read, easy to index and easy to share.',
@@ -2481,7 +2481,76 @@ function render(page) {
     </div>
   </section>`
     : '';
-  const bodyExtra = page.kind === 'hub' ? hubIndex : isLibrary ? libraryMarkup : postSections;
+  /*
+   * ─── THE CLUSTER DIRECTORY ────────────────────────────────────────────────
+   * Rendered on the two blog hubs and the two library directories — the four
+   * pages a crawler is most likely to enter on, and (not coincidentally) the
+   * four the audit flagged as thin. They used to describe a handful of
+   * feature pages while 150 guides sat behind them, reachable only from a
+   * sibling list.
+   *
+   * Each cluster gets its hub link, the hub's own description, and every
+   * spoke title inline. That does three things at once: it gives these pages
+   * real substance instead of filler, it puts each hub one click from the
+   * site's highest-authority entry points, and it states the shape of the
+   * topic coverage in a form an answer engine can read in a single pass.
+   *
+   * Spokes resolve through PAGES, so this can never advertise a URL that was
+   * not generated.
+   */
+  const dirBySlug = new Map(PAGES.map((p) => [p.slug, p]));
+  const clusterDirectory =
+    page.kind === 'hub' || isLibrary
+      ? (() => {
+          const blocks = CLUSTER_ORDER.map((id) => {
+            const entry = CLUSTER_INDEX[id]?.[lang];
+            if (!entry) return '';
+            const hub = dirBySlug.get(entry.hub);
+            if (!hub) return '';
+            const spokes = entry.spokes.map((sl) => dirBySlug.get(sl)).filter(Boolean);
+            if (!spokes.length) return '';
+            const count =
+              lang === 'fa'
+                ? `${spokes.length} راهنما`
+                : `${spokes.length} guide${spokes.length === 1 ? '' : 's'}`;
+            return `<div class="cluster-dir-group">
+          <h3><a href="/${slugPath(hub.slug)}">${esc(entry.label)}</a> <span class="cluster-dir-count">${esc(count)}</span></h3>
+          <p>${esc(hub.description)}</p>
+          <ul class="cluster-dir-list">
+            ${spokes
+              .map((sp) => `<li><a href="/${slugPath(sp.slug)}">${esc(sp.h1 || sp.title)}</a></li>`)
+              .join('\n            ')}
+          </ul>
+        </div>`;
+          }).filter(Boolean);
+          if (!blocks.length) return '';
+          const heading = lang === 'fa' ? 'همهٔ راهنماها بر پایهٔ موضوع' : 'Every guide, grouped by topic';
+          const lede =
+            lang === 'fa'
+              ? 'هر موضوع یک صفحهٔ مرجع دارد و زیر آن راهنماهای دقیق‌تر. از هر نقطه‌ای می‌توانی شروع کنی؛ صفحه‌ها به هم پیوند دارند و هیچ‌کدام چیزی را قول نمی‌دهند که محصول انجام نمی‌دهد.'
+              : 'Each topic has one reference page with the detailed guides underneath it. Start anywhere — the pages link to each other, and none of them promises something the product does not do.';
+          return `<section class="cluster-dir panel reveal" aria-labelledby="cluster-dir-heading" style="--delay:160ms">
+      <div class="section-heading">
+        ${iconChip('grid', 'icon-md fx-tilt')}
+        <div class="section-heading-copy">
+          <p class="section-kicker">${esc(lang === 'fa' ? 'کتابخانه' : 'Library')}</p>
+          <h2 id="cluster-dir-heading">${esc(heading)}</h2>
+        </div>
+      </div>
+      <p class="cluster-dir-lede">${esc(lede)}</p>
+      <div class="cluster-dir-grid">
+        ${blocks.join('\n        ')}
+      </div>
+    </section>`;
+        })()
+      : '';
+
+  const bodyExtra =
+    page.kind === 'hub'
+      ? hubIndex + clusterDirectory
+      : isLibrary
+        ? libraryMarkup + clusterDirectory
+        : postSections;
   const codeSamplesMarkup = page.codeSamples?.length
     ? `<section class="code-samples panel reveal" aria-labelledby="code-samples-heading" style="--delay:140ms">
       <div class="section-heading">
@@ -3189,6 +3258,47 @@ ${
   }
   .lib-group-title svg { width: 16px; height: 16px; color: var(--vi); }
   .lib-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+
+  /* ── the cluster directory on the blog hubs and the two library pages ── */
+  .cluster-dir-lede { color: var(--muted); margin: 0 0 18px; max-width: 62ch; }
+  .cluster-dir-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .cluster-dir-group {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 17px;
+    background: var(--panel-2);
+  }
+  .cluster-dir-group h3 {
+    margin: 0 0 6px;
+    font-size: 1.02rem;
+    line-height: 1.35;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .cluster-dir-group h3 a { color: var(--text); text-decoration: none; }
+  .cluster-dir-group h3 a:hover,
+  .cluster-dir-group h3 a:focus-visible { color: var(--vi); text-decoration: underline; }
+  .cluster-dir-count {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--quiet);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+  .cluster-dir-group > p { margin: 0 0 11px; color: var(--muted); font-size: .9rem; line-height: 1.6; }
+  .cluster-dir-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+  .cluster-dir-list li { font-size: .88rem; line-height: 1.5; }
+  .cluster-dir-list li::before { content: "\\2192"; color: var(--quiet); margin-inline-end: 7px; }
+  [dir="rtl"] .cluster-dir-list li::before { content: "\\2190"; }
+  .cluster-dir-list a { color: var(--muted); text-decoration: none; }
+  .cluster-dir-list a:hover,
+  .cluster-dir-list a:focus-visible { color: var(--vi); text-decoration: underline; }
   .lib-card {
     position: relative;
     display: grid;
@@ -3388,6 +3498,7 @@ ${
     .lib-flagship { grid-template-columns: auto minmax(0, 1fr); }
     .lib-flagship .card-arrow { display: none; }
     .post-index-item { grid-template-columns: auto minmax(0, 1fr); }
+    .cluster-dir-grid { grid-template-columns: minmax(0, 1fr); }
     .post-index-item .card-arrow { display: none; }
     .howto-list::before { display: none; }
     .howto-list li { grid-template-columns: 1fr; gap: 12px; }
