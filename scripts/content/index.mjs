@@ -53,13 +53,21 @@ import faAi from './fa/ai.mjs';
  */
 import { NETWORK_PAGES } from './networks.mjs';
 
+/*
+ * The E-E-A-T cluster: operator, revenue model, limitations, security
+ * practices, editorial rules and contact verification. For a site about
+ * money, these are ranking signals as much as they are courtesy.
+ */
+import { TRUST_PAGES } from './trust.mjs';
+
 /** Every authored spoke, in cluster order so hub listings are deterministic. */
 export const ARTICLES = [
   ...enSwap, ...enFees, ...enWallets, ...enSecurity, ...enNetworks,
   ...enDefi, ...enMarkets, ...enSolana, ...enAi, ...enTokenized,
   ...faSwap, ...faFees, ...faWallets, ...faSecurity, ...faNetworks,
   ...faDefi, ...faMarkets, ...faSolana, ...faAi,
-  ...NETWORK_PAGES
+  ...NETWORK_PAGES,
+  ...TRUST_PAGES
 ];
 
 const fail = (why) => { throw new Error(`[content/index] ${why}`); };

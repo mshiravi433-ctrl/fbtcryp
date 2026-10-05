@@ -373,5 +373,41 @@ export const HUB_COPY = {
       { q: 'اگر توکن را روی شبکهٔ اشتباه فرستادم، اف‌بی‌تی سواپ می‌تواند برش گرداند؟', a: 'نه. این سرویس غیرحضانتی است و هرگز دارایی تو را نگه نمی‌دارد، پس چیزی برای بازگرداندن ندارد. اینکه اصلاً کاری ممکن باشد یا نه، فقط به این بستگی دارد که آدرس مقصد روی آن شبکهٔ دیگر در کنترل خودت باشد.' },
       { q: 'کارمزد پلتفرم بین شبکه‌ها فرق می‌کند؟', a: 'نه. همه‌جا ۰٫۷۰ درصد از مقدار ورودی است. چیزی که بین شبکه‌ها فرق می‌کند کارمزد شبکه و کارمزد استخر داخل قیمت است که به اعتبارسنج‌ها و تأمین‌کنندگان نقدینگی می‌رسد، نه به اف‌بی‌تی سواپ.' }
     ]
+  },
+
+  /* ── trust: the E-E-A-T pages ───────────────────────────────────────────── */
+  'trust.en': {
+    body: [
+      'FBT Swap is operated by Fanous Bazaar Pishgam Co., a company based in Isfahan, Iran. The product is a non-custodial interface: it reads public blockchain data, requests quotes from public decentralised-exchange aggregators, and builds a transaction that your own wallet signs. It never takes possession of your assets and never holds your keys, which is the fact that determines almost everything else on these pages.',
+      'There is exactly one revenue line: a 0.70% platform fee on the input amount of a swap, shown on screen before you sign. There is no spread added to the quote, no subscription, no sale of user data, and no paid placement in routing — the route shown is the best one among the venues queried, not the one that pays the most.'
+    ],
+    facts: [
+      ['Operator', 'Fanous Bazaar Pishgam Co., Isfahan, Iran'],
+      ['Only official domain', 'fbtswap.ir'],
+      ['Only contact address', 'fbtswap@gmail.com'],
+      ['Revenue', '0.70% platform fee on swap input, disclosed before signing'],
+      ['Custody', 'None — assets never leave your wallet']
+    ],
+    faqs: [
+      { q: 'Will FBT Swap ever contact me first?', a: 'No. We never initiate contact by direct message, phone call or email, never ask for a recovery phrase, and never ask you to move funds to a "safe" address. Any message that does any of those things is not from us, whatever name it uses.' },
+      { q: 'Can FBT Swap freeze, reverse or refund a transaction?', a: 'No. It is non-custodial, so it never holds the funds and has nothing to freeze or return. Once your wallet signs and the network confirms, the transaction is final — including a transfer sent to the wrong address or the wrong network.' }
+    ]
+  },
+  'trust.fa': {
+    body: [
+      'اف‌بی‌تی سواپ را شرکت فانوس بازار پیشگام اداره می‌کند؛ شرکتی مستقر در اصفهان، ایران. این محصول یک رابط غیرحضانتی است: دادهٔ عمومی بلاک‌چین را می‌خواند، از تجمیع‌کننده‌های عمومی صرافی غیرمتمرکز نرخ می‌گیرد و تراکنشی می‌سازد که کیف پول خودت آن را امضا می‌کند. هیچ‌وقت دارایی تو را در اختیار نمی‌گیرد و کلیدهایت را نگه نمی‌دارد، و همین واقعیت تقریباً همهٔ چیزهای دیگر این صفحه‌ها را تعیین می‌کند.',
+      'دقیقاً یک خط درآمد وجود دارد: کارمزد ۰٫۷۰ درصدی پلتفرم روی مقدار ورودی سواپ که پیش از امضا روی صفحه نمایش داده می‌شود. هیچ اختلاف قیمتی به نرخ اضافه نمی‌شود، اشتراکی در کار نیست، دادهٔ کاربر فروخته نمی‌شود و جایگاه پولی در مسیریابی وجود ندارد — مسیری که نشان داده می‌شود بهترین مسیر میان محل‌های پرسیده‌شده است، نه آن‌که بیشترین پول را می‌دهد.'
+    ],
+    facts: [
+      ['اپراتور', 'شرکت فانوس بازار پیشگام، اصفهان، ایران'],
+      ['تنها دامنهٔ رسمی', 'fbtswap.ir'],
+      ['تنها نشانی تماس', 'fbtswap@gmail.com'],
+      ['درآمد', 'کارمزد ۰٫۷۰ درصدی روی ورودی سواپ، اعلام‌شده پیش از امضا'],
+      ['امانت‌داری', 'هیچ — دارایی هرگز از کیف پول تو خارج نمی‌شود']
+    ],
+    faqs: [
+      { q: 'آیا اف‌بی‌تی سواپ هیچ‌وقت اول با من تماس می‌گیرد؟', a: 'نه. ما هرگز با پیام مستقیم، تماس تلفنی یا ایمیل شروع‌کنندهٔ ارتباط نیستیم، هرگز عبارت بازیابی نمی‌خواهیم و هرگز از تو نمی‌خواهیم پول را به آدرس «امن» منتقل کنی. هر پیامی که یکی از این کارها را بکند از ما نیست، با هر نامی که آمده باشد.' },
+      { q: 'اف‌بی‌تی سواپ می‌تواند تراکنش را مسدود، برگردان یا جبران کند؟', a: 'نه. غیرحضانتی است، پس هرگز پول را نگه نمی‌دارد و چیزی برای مسدودکردن یا بازگرداندن ندارد. وقتی کیف پول تو امضا کرد و شبکه تأیید کرد، تراکنش نهایی است — از جمله انتقالی که به آدرس یا شبکهٔ اشتباه رفته باشد.' }
+    ]
   }
 };

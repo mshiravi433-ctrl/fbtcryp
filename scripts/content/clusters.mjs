@@ -356,6 +356,42 @@ export const CLUSTERS = [
         'هر صفحهٔ زیر همان چیزهایی را می‌گوید که کیف پول واقعاً به آن نیاز دارد: شناسهٔ زنجیره‌ای که کیف پول نشان می‌دهد، توکنی که کارمزد را می‌پردازد، جایی که بعداً تراکنش را تأیید کنی، و هشدارهای صادقانه. کارمزد پلتفرم روی همهٔ آن‌ها ۰٫۷۰ درصد از مقدار ورودی است و پیش از هر امضا شبکهٔ انتخاب‌شده نمایش داده می‌شود.'
       ]
     }
+  },
+  {
+    /*
+     * E-E-A-T is not a meta tag. For a finance site it is: say who operates
+     * this, say how it makes money, say what it cannot do, and make all three
+     * easy to find and hard to misread. These pages exist to be checked, by a
+     * cautious user and by a quality rater alike.
+     */
+    id: 'trust',
+    icon: 'shield',
+    topic: 'security',
+    route: '/#/swap',
+    en: {
+      slug: 'trust',
+      label: 'Trust & transparency',
+      title: 'Trust and Transparency — Who Runs FBT Swap | FBT Swap',
+      h1: 'Who runs FBT Swap, and what it cannot do',
+      description:
+        'The operator, the revenue model, the security practices, the editorial rules, and an explicit list of the things this product cannot do for you.',
+      intro: [
+        'Most crypto sites tell you what they can do. The useful information is usually the opposite: who is behind it, how it is paid, and where its power actually ends. A non-custodial product has very specific limits, and a user who learns them after a mistake has learned them too late.',
+        'These pages answer those questions directly and in one place. There is one operator, one official domain, one contact address, and one revenue line — a 0.70% platform fee on the input of a swap, displayed before you sign. Everything else below is detail on those four facts.'
+      ]
+    },
+    fa: {
+      slug: 'fa/trust',
+      label: 'اعتماد و شفافیت',
+      title: 'اعتماد و شفافیت — چه کسی اف‌بی‌تی سواپ را اداره می‌کند | FBT Swap',
+      h1: 'چه کسی اف‌بی‌تی سواپ را اداره می‌کند و چه کاری از آن برنمی‌آید',
+      description:
+        'اپراتور، مدل درآمدی، شیوه‌های امنیتی، قواعد تحریریه، و فهرستی صریح از کارهایی که این محصول نمی‌تواند برایت انجام دهد.',
+      intro: [
+        'بیشتر سایت‌های کریپتو می‌گویند چه کاری می‌توانند بکنند. اطلاعات بهتر معمولاً نقطهٔ مقابل آن است: پشت این سرویس چه کسی است، از کجا پول درمی‌آورد و قدرتش دقیقاً کجا تمام می‌شود. یک محصول غیرحضانتی محدودیت‌های بسیار مشخصی دارد و کاربری که بعد از اشتباه با آن‌ها آشنا شود، دیر آشنا شده است.',
+        'این صفحه‌ها به همین پرسش‌ها مستقیم و یکجا پاسخ می‌دهند. یک اپراتور وجود دارد، یک دامنهٔ رسمی، یک نشانی تماس و یک خط درآمد — کارمزد ۰٫۷۰ درصدی پلتفرم روی مقدار ورودی سواپ که پیش از امضا نمایش داده می‌شود. باقی مطالب زیر، جزئیات همین چهار واقعیت است.'
+      ]
+    }
   }
 ];
 
