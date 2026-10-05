@@ -23,7 +23,7 @@
  * All numbers come from worldModel.js derivations over the pass's payload —
  * the upgrade adds surface, not traffic.
  */
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiBase } from '../../../lib/apiBase.js';
 import {
   buildWorldState, buildWeather, buildRadar, buildCountrySnapshot,
@@ -782,6 +782,22 @@ export function RadarPanel({ world, L, isPersian }) {
    this tab is opened (module-level cache), with the local fallback chain.
    ══════════════════════════════════════════════════════════════════════════ */
 const causalCache = { state: 'idle', body: null };
+let causalPromise = null;
+/* ONE shared read per session: the first open starts it, every later mount —
+   even a remount while it is in flight — simply waits on the same promise. */
+function fetchCausalGraph() {
+  if (!causalPromise) {
+    causalPromise = fetch(`${apiBase()}/deep/macro-graph?asset=BTC`, { headers: { accept: 'application/json' } })
+      .then((r) => r.json())
+      .then((body) => {
+        if (body?.ok && body?.graph?.nodes?.length) { causalCache.state = 'done'; causalCache.body = body; }
+        else causalCache.state = 'error';
+        return causalCache;
+      })
+      .catch(() => { causalCache.state = 'error'; return causalCache; });
+  }
+  return causalPromise;
+}
 const CAUSAL_NODE_FA = {
   'topic:FED': 'فدرال‌رزرو', 'topic:INFLATION': 'تورم', 'topic:GEOPOLITICS': 'ژئوپلیتیک',
   'topic:GROWTH': 'رشد', 'topic:RATES': 'نرخ بهره', 'topic:ECB': 'اروپا', 'topic:POLITICS': 'سیاست',
@@ -796,23 +812,17 @@ const causalLabel = (node, isPersian) => {
 };
 
 export function CausalPanel({ world, L, isPersian }) {
-  const [phase, setPhase] = useState(causalCache.state === 'idle' ? 'idle' : causalCache.state);
-  const mounted = useRef(true);
+  const [phase, setPhase] = useState(() => (
+    causalCache.state === 'done' || causalCache.state === 'error' ? causalCache.state : 'loading'
+  ));
   useEffect(() => {
-    mounted.current = true;
-    if (causalCache.state !== 'idle') { setPhase(causalCache.state); return undefined; }
-    causalCache.state = 'loading'; setPhase('loading');
     let cancelled = false;
-    fetch(`${apiBase()}/deep/macro-graph?asset=BTC`, { headers: { accept: 'application/json' } })
-      .then((r) => r.json())
-      .then((body) => {
-        if (cancelled) return;
-        if (body?.ok && body?.graph?.nodes?.length) { causalCache.state = 'done'; causalCache.body = body; }
-        else { causalCache.state = 'error'; }
-        setPhase(causalCache.state);
-      })
-      .catch(() => { if (!cancelled) { causalCache.state = 'error'; setPhase('error'); } });
-    return () => { cancelled = true; mounted.current = false; };
+    if (causalCache.state === 'done' || causalCache.state === 'error') {
+      setPhase(causalCache.state);
+      return undefined;
+    }
+    fetchCausalGraph().then(() => { if (!cancelled) setPhase(causalCache.state); });
+    return () => { cancelled = true; };
   }, []);
 
   const local = useMemo(() => buildCausalLocal(world), [world]);
