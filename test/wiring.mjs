@@ -3458,8 +3458,40 @@ export default function run() {
      * the new pages leaves the whole exercise depending on Google finding
      * them unaided.
      */
-    t('the sitemap is regenerated', /sitemap\.xml/.test(gen));
-    t('the sitemap does not manufacture a new lastmod on every build', !/<lastmod>/.test(gen));
+    /* The sitemap write moved into scripts/content/emit.mjs when the crawl
+       surface grew a sitemap index, a feed and the AI files. What matters is
+       unchanged: the build regenerates it from PAGES. */
+    t('the sitemap is regenerated from the page list',
+      /emitSitemaps\(/.test(gen) && /pages: PAGES/.test(gen));
+
+    /*
+     * <lastmod> is now emitted, which is a ranking-relevant crawl-scheduling
+     * signal we were simply throwing away. The original form of this check
+     * banned the string outright, because the failure it was written against
+     * was a generator that stamped `new Date()` on all 200 URLs on every
+     * deploy — telling crawlers the whole corpus changed whenever a server
+     * file did. That is still the thing to prevent; banning the tag was only
+     * the cheapest proxy for it while nothing carried a real date.
+     *
+     * The rule enforced instead is the actual one: a <lastmod> may be
+     * interpolated only from a page's own editorial date, never from the
+     * clock. So the emitter is allowed to contain <lastmod>, and is required
+     * to derive it from page metadata -- while the one clock read it is
+     * permitted (security.txt's RFC 9116 Expires, which must be a real future
+     * instant) is confined to gen-landing.mjs and never reaches a sitemap.
+     */
+    const emit = strip(read('scripts/content/emit.mjs'));
+    t('the sitemap emitter stamps lastmod from editorial page metadata',
+      /<lastmod>/.test(emit) &&
+      /editorialDate/.test(emit) &&
+      /dateModified \|\| p\.datePublished/.test(emit));
+    t('...and never from the build clock',
+      !/Date\.now\(\)/.test(emit.split('emitSecurityTxt')[0]) &&
+      !/new Date\(\)/.test(emit));
+    t('the generator itself interpolates no lastmod of its own', !/<lastmod>/.test(gen));
+    t('the only clock read is the security.txt Expires, which RFC 9116 requires',
+      (gen.match(/Date\.now\(\)/g) || []).length === 1 &&
+      /expiresISO/.test(gen));
   }
 
   /* ---- 35. advertised chains must actually exist ------------------------ */
