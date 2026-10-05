@@ -386,6 +386,68 @@ const en = [
       }
     ]
   })
+,
+
+  article({
+    slug: 'trust/press-kit',
+    cluster: C,
+    icon: 'grid',
+    title: 'Press Kit — Brand, Boilerplate and Facts to Cite | FBT Swap',
+    description:
+      'Everything needed to write about FBT Swap accurately: correct naming, copy-ready boilerplate, the facts to cite, and the claims we ask you not to make.',
+    h1: 'Press kit',
+    intro: [
+      'If you are writing about FBT Swap, reviewing it, listing it in a directory or citing it in an answer, this page has the material you need in a form you can copy. It exists because the alternative is being described from a marketing page, and marketing pages are where inaccuracies come from.',
+      'The most important section is the last one. There are specific claims we ask people not to make on our behalf, because they are not true and because a product that lets flattering errors stand is telling you something about its other claims.'
+    ],
+    sections: [
+      [
+        'Naming and identity',
+        [
+          'The product is FBT Swap, two words, both capitalised. FBTSwap as one word is acceptable where a space is impossible, such as a username. In Persian it is اف‌بی‌تی سواپ. The operating company is Fanous Bazaar Pishgam Co., based in Isfahan, Iran, and it is the legal entity behind the product.',
+          'The only official domain is fbtswap.ir, and a link should point there rather than to a mirror, a shortener or an app-store listing. The logo is served at the site root as icon-512.png, and the social card as social-card.png. The brand colour set is in the stylesheet; nothing needs permission to use for editorial purposes.'
+        ]
+      ],
+      [
+        'Boilerplate, copy-ready',
+        [
+          'Short: "FBT Swap is a non-custodial crypto swap interface and portfolio app for Android and the web, covering 16 EVM networks plus Solana in Persian and English."',
+          'Long: "FBT Swap is a non-custodial crypto swap interface and portfolio app built by Fanous Bazaar Pishgam Co. of Isfahan, Iran. It aggregates public decentralised-exchange routes across sixteen EVM networks plus Solana, charges a 0.70% platform fee on the swap input that is displayed before signing, and never takes custody of user assets or recovery phrases. Persian and English are both first-class languages in the product."'
+        ]
+      ],
+      [
+        'Facts worth citing',
+        [
+          'Seventeen supported networks: sixteen EVM chains plus Solana. A 0.70% platform fee on the input amount, identical on every network and shown before the user signs. No account, email or identity document required for the on-chain swap interface. No custody of assets and no access to recovery phrases at any point.',
+          'Three separate costs in a swap with three separate recipients: network gas to the chain, the pool fee to liquidity providers inside the quoted price, and the platform fee to FBT Swap. Each supported network has its own page carrying its chain ID, gas token and block explorer, generated from the application source so the figures cannot drift.'
+        ]
+      ],
+      [
+        'Claims we ask you not to make',
+        [
+          'Please do not describe FBT Swap as an exchange, a broker or a wallet. It is an interface to third-party decentralised exchanges; it runs no order book, holds no liquidity and stores no keys. Please do not say it offers the best price available — the accurate claim is the best route among the venues queried at that moment.',
+          'Please do not describe it as MEV-proof, anonymous, insured, or able to recover lost funds. Routing reduces sandwich exposure without granting immunity. On-chain activity is public and no interface changes that. There is no insurance, and a non-custodial service cannot reverse, freeze or restore anything. We would rather be described accurately and less impressively.'
+        ]
+      ]
+    ],
+    facts: [
+      ['Correct name', 'FBT Swap (اف‌بی‌تی سواپ)'],
+      ['Legal entity', 'Fanous Bazaar Pishgam Co., Isfahan, Iran'],
+      ['Link target', 'https://fbtswap.ir — the only official domain'],
+      ['Logo and social card', '/icon-512.png and /social-card.png'],
+      ['Press contact', 'fbtswap@gmail.com']
+    ],
+    faqs: [
+      {
+        q: 'Do I need permission to use the logo or write about FBT Swap?',
+        a: 'No permission is needed for editorial, review or directory use. We ask only that the name is spelled correctly, the link points at fbtswap.ir, and the claims in the final section of this page are avoided.'
+      },
+      {
+        q: 'Can you provide a quote or review access?',
+        a: 'Email fbtswap@gmail.com. The product is open at fbtswap.ir with no account required, so you can evaluate the swap interface yourself before asking us anything — which is a better basis for a review than a prepared statement.'
+      }
+    ]
+  })
 ];
 
 /* ─── PERSIAN ──────────────────────────────────────────────────────────────── */
@@ -759,6 +821,69 @@ const fa = [
       {
         q: 'چطور مطمئن شوم روی سایت واقعی هستم؟',
         a: 'کل دامنه را با دقت بخوان — fbtswap.ir است و هیچ‌چیز دیگر — و از نشانک خودت به آن برس، نه از لینک یا تبلیغ. دامنه‌های شبیه‌سازی‌شده با حروف جایگزین دقیقاً برای جان‌سالم‌دربردن از یک نگاه سریع ساخته شده‌اند.'
+      }
+    ]
+  })
+,
+
+  article({
+    slug: 'fa/trust/press-kit',
+    cluster: C,
+    lang: 'fa',
+    icon: 'grid',
+    title: 'کیت رسانه‌ای — نام برند، متن آماده و واقعیت‌های قابل ارجاع | FBT Swap',
+    description:
+      'هر چیزی که برای نوشتن دقیق دربارهٔ اف‌بی‌تی سواپ لازم است: نام درست، متن آمادهٔ کپی، واقعیت‌های قابل ارجاع و ادعاهایی که خواهش می‌کنیم مطرح نکنی.',
+    h1: 'کیت رسانه‌ای',
+    intro: [
+      'اگر دربارهٔ اف‌بی‌تی سواپ می‌نویسی، نقدش می‌کنی، در فهرستی ثبتش می‌کنی یا در پاسخی به آن ارجاع می‌دهی، این صفحه همان مطالبی را دارد که لازم داری، به شکلی که بتوانی کپی کنی. وجود دارد چون گزینهٔ دیگر این است که از روی صفحهٔ تبلیغاتی توصیف شویم، و نادرستی‌ها دقیقاً از همان‌جا می‌آیند.',
+      'مهم‌ترین بخش، بخش آخر است. ادعاهای مشخصی هست که خواهش می‌کنیم از طرف ما مطرح نشوند، چون درست نیستند و چون محصولی که اجازه دهد خطاهای به‌نفعش باقی بمانند، دارد چیزی دربارهٔ باقی ادعاهایش می‌گوید.'
+    ],
+    sections: [
+      [
+        'نام و هویت',
+        [
+          'نام محصول در انگلیسی FBT Swap است، دو کلمه با حرف بزرگ. شکل یک‌کلمه‌ای FBTSwap جایی پذیرفتنی است که فاصله ممکن نباشد، مثل نام کاربری. در فارسی «اف‌بی‌تی سواپ» نوشته می‌شود. شرکت گرداننده، فانوس بازار پیشگام مستقر در اصفهان ایران است و همان شخصیت حقوقی پشت محصول است.',
+          'تنها دامنهٔ رسمی fbtswap.ir است و پیوند باید به همان‌جا اشاره کند، نه به آینه، کوتاه‌کنندهٔ لینک یا صفحهٔ فروشگاه برنامه. لوگو روی ریشهٔ سایت با نام icon-512.png و کارت اجتماعی با نام social-card.png سرو می‌شود. استفادهٔ تحریریه از این‌ها به اجازه نیاز ندارد.'
+        ]
+      ],
+      [
+        'متن آماده برای کپی',
+        [
+          'کوتاه: «اف‌بی‌تی سواپ یک رابط سواپ غیرحضانتی و برنامهٔ سبد دارایی برای اندروید و وب است که ۱۶ شبکهٔ EVM به‌همراه سولانا را به فارسی و انگلیسی پوشش می‌دهد.»',
+          'بلند: «اف‌بی‌تی سواپ یک رابط سواپ غیرحضانتی و برنامهٔ سبد دارایی است که شرکت فانوس بازار پیشگام از اصفهان ایران آن را ساخته است. مسیرهای صرافی غیرمتمرکز عمومی را روی شانزده شبکهٔ EVM به‌همراه سولانا تجمیع می‌کند، کارمزد ۰٫۷۰ درصدی پلتفرم را روی مقدار ورودی سواپ می‌گیرد که پیش از امضا نمایش داده می‌شود، و هیچ‌گاه دارایی یا عبارت بازیابی کاربر را در اختیار نمی‌گیرد. فارسی و انگلیسی هر دو در این محصول زبان درجه‌یک‌اند.»'
+        ]
+      ],
+      [
+        'واقعیت‌های قابل ارجاع',
+        [
+          'هفده شبکهٔ پشتیبانی‌شده: شانزده زنجیرهٔ EVM به‌همراه سولانا. کارمزد ۰٫۷۰ درصدی پلتفرم روی مقدار ورودی، یکسان روی همهٔ شبکه‌ها و نمایش‌داده‌شده پیش از امضای کاربر. بدون نیاز به حساب، ایمیل یا مدرک هویتی برای رابط سواپ آن‌چین. بدون امانت‌داری دارایی و بدون دسترسی به عبارت بازیابی در هیچ مرحله‌ای.',
+          'سه هزینهٔ جدا در یک سواپ با سه دریافت‌کنندهٔ جدا: کارمزد شبکه به زنجیره، کارمزد استخر داخل قیمت اعلام‌شده به تأمین‌کنندگان نقدینگی، و کارمزد پلتفرم به اف‌بی‌تی سواپ. هر شبکهٔ پشتیبانی‌شده صفحهٔ خودش را دارد با شناسهٔ زنجیره، توکن کارمزد و کاوشگر بلاک که از کد خود برنامه ساخته می‌شود تا این اعداد نتوانند از اعتبار بیفتند.'
+        ]
+      ],
+      [
+        'ادعاهایی که خواهش می‌کنیم مطرح نکنی',
+        [
+          'لطفاً اف‌بی‌تی سواپ را صرافی، کارگزار یا کیف پول توصیف نکن. این یک رابط برای صرافی‌های غیرمتمرکز شخص ثالث است؛ دفتر سفارش ندارد، نقدینگی نگه نمی‌دارد و کلید ذخیره نمی‌کند. لطفاً نگو بهترین قیمت موجود را می‌دهد — ادعای دقیق این است که بهترین مسیر میان محل‌های پرسیده‌شده در همان لحظه را می‌دهد.',
+          'لطفاً آن را مصون از MEV، ناشناس، بیمه‌شده یا قادر به بازیابی وجوه از دست رفته توصیف نکن. مسیریابی قرارگیری در معرض حملهٔ ساندویچی را کم می‌کند بدون آنکه مصونیت بدهد. فعالیت روی زنجیره عمومی است و هیچ رابطی این را تغییر نمی‌دهد. بیمه‌ای وجود ندارد و سرویس غیرحضانتی نمی‌تواند چیزی را برگرداند، مسدود کند یا احیا کند. ترجیح می‌دهیم دقیق و کم‌هیجان‌تر توصیف شویم.'
+        ]
+      ]
+    ],
+    facts: [
+      ['نام درست', 'اف‌بی‌تی سواپ / FBT Swap'],
+      ['شخصیت حقوقی', 'شرکت فانوس بازار پیشگام، اصفهان، ایران'],
+      ['مقصد پیوند', 'https://fbtswap.ir — تنها دامنهٔ رسمی'],
+      ['لوگو و کارت اجتماعی', 'فایل‌های icon-512.png و social-card.png'],
+      ['تماس رسانه‌ای', 'fbtswap@gmail.com']
+    ],
+    faqs: [
+      {
+        q: 'برای استفاده از لوگو یا نوشتن دربارهٔ اف‌بی‌تی سواپ به اجازه نیاز دارم؟',
+        a: 'برای استفادهٔ تحریریه، نقد یا ثبت در فهرست به اجازه نیاز نیست. فقط خواهش می‌کنیم نام درست نوشته شود، پیوند به fbtswap.ir اشاره کند و از ادعاهای بخش آخر این صفحه پرهیز شود.'
+      },
+      {
+        q: 'می‌توانید نقل‌قول یا دسترسی برای بررسی بدهید؟',
+        a: 'به fbtswap@gmail.com ایمیل بزن. محصول روی fbtswap.ir بدون نیاز به حساب کاربری باز است، پس می‌توانی پیش از هر پرسشی خودت رابط سواپ را ارزیابی کنی — که مبنای بهتری برای نقد است تا یک بیانیهٔ آماده.'
       }
     ]
   })

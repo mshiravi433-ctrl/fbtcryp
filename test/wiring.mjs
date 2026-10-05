@@ -6099,16 +6099,32 @@ export default function run() {
     t('...and can never fail the build', !/process\.exit\(1\)/.test(sub));
 
     /*
-     * The submitted list must match the pages actually generated. A landing
-     * page added to gen-landing.mjs and forgotten here is a page no engine is
-     * ever told about.
+     * ─── THE SUBMITTED LIST MUST COVER THE PAGES ACTUALLY GENERATED ────────
+     * The original form of this check compared a hand-written SLUGS array in
+     * the submitter against every `slug:` literal in gen-landing.mjs. That
+     * was the right rule enforced the only way available at the time, and it
+     * worked while there were thirty pages.
+     *
+     * There are now over 250, and the array was deleted rather than grown:
+     * the submitter reads the sitemap the build just wrote. Coverage is now
+     * structural instead of textual — the sitemap is generated from PAGES, so
+     * a page cannot exist without being in it, and a hand-copied list can no
+     * longer drift out of date because there is no hand-copied list.
+     *
+     * So the check moved with it. What it must prove is that the submitter
+     * still derives from the sitemap, still never hardcodes a slug array, and
+     * still honours IndexNow's own instruction to submit only what changed —
+     * which is possible precisely because the sitemap now carries a <lastmod>
+     * taken from page metadata.
      */
-    const gen = read('scripts/gen-landing.mjs');
-    const genSlugs = [...gen.matchAll(/slug: '([^']+)'/g)].map((m) => m[1]);
-    const subSlugs = [...sub.matchAll(/^\s*'([^']+)'/gm)].map((m) => m[1]).filter(Boolean);
-    const unsubmitted = genSlugs.filter((g) => !subSlugs.includes(g));
-    t(`every generated landing page is submitted${unsubmitted.length ? ` — missing: ${unsubmitted.join(', ')}` : ''}`,
-      unsubmitted.length === 0);
+    t('the submitter derives its URLs from the generated sitemap',
+      /sitemap\.xml/.test(sub) && /readSitemapUrls/.test(sub));
+    t('...and no longer carries a hand-maintained slug list',
+      !/const SLUGS = \[/.test(sub));
+    t('...and submits only URLs whose editorial lastmod actually changed',
+      /lastmod/.test(sub) && /WINDOW_DAYS/.test(sub));
+    t('...and submits nothing at all when nothing changed',
+      /if \(!urlList\.length\)/.test(sub) && /process\.exit\(0\)/.test(sub));
 
     /*
      * ─── THE VERDICT COPY MUST NOT SOUND LIKE WEATHER ───────────────────────

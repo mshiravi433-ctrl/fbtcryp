@@ -2059,7 +2059,38 @@ function landingStructuredData(page, url) {
          and it only works if the account is real — so it is the account that
          exists, and nothing else. */
       sameAs: ['https://x.com/CompanyFbt'],
-      logo: { '@type': 'ImageObject', url: `${SITE}/icon-512.png`, width: 512, height: 512 }
+      logo: { '@type': 'ImageObject', url: `${SITE}/icon-512.png`, width: 512, height: 512 },
+      /*
+       * ─── E-E-A-T, STATED IN MACHINE-READABLE FORM ────────────────────────
+       * A quality rater is told to find out who is responsible for a site
+       * about money, and an answer engine has to decide whether a brand
+       * mention refers to a real, identifiable entity before it will cite it.
+       * Both questions have the same answer, so it is given in schema rather
+       * than only in prose: where the company is, how to reach it, the page
+       * that states the editorial rules, and what the entity is actually
+       * about. Every one of these resolves to a page that exists.
+       */
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Isfahan',
+        addressCountry: 'IR'
+      },
+      contactPoint: {
+        '@type': 'ContactPoint',
+        email: 'fbtswap@gmail.com',
+        contactType: 'customer support',
+        availableLanguage: ['fa', 'en'],
+        url: `${SITE}/trust/contact-and-verification`
+      },
+      publishingPrinciples: `${SITE}/trust/editorial-policy`,
+      knowsAbout: [
+        'Decentralized exchange',
+        'Cryptocurrency swap routing',
+        'Non-custodial wallets',
+        'Blockchain network fees and gas',
+        'Token approvals and on-chain security',
+        'Cross-chain bridging'
+      ]
     },
     {
       '@type': 'WebSite',
