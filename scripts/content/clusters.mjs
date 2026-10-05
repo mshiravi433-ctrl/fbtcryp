@@ -320,6 +320,42 @@ export const CLUSTERS = [
         'این صفحه‌ها ساختار را توضیح می‌دهند، نه تبلیغ را. دسترسی، ریسک ناشر، عمق نقدینگی، ساعت معامله و حق بازخرید هرکدام پوشش داده شده‌اند؛ و جایی که اف‌بی‌تی سواپ فقط به یک بازار عمومی مسیر می‌دهد، صفحه همین را می‌نویسد به‌جای اینکه رابطهٔ کارگزاری‌ای را القا کند که وجود ندارد.'
       ]
     }
+  },
+  {
+    /*
+     * The one cluster whose spokes are generated rather than written by hand:
+     * there is exactly one page per network in src/lib/chains.js, and the
+     * facts on each come from that registry. See networks.mjs for why that is
+     * a feature and not a shortcut.
+     */
+    id: 'chains',
+    icon: 'network',
+    topic: 'networks',
+    route: '/#/swap',
+    en: {
+      slug: 'networks',
+      label: 'Supported networks',
+      title: 'Supported Networks — Swap on 17 Chains | FBT Swap',
+      h1: 'Every network FBT Swap supports',
+      description:
+        'One page per supported network: chain ID, native gas token, block explorer, the DEX liquidity is routed through, and what changes when you switch.',
+      intro: [
+        'FBT Swap routes swaps on seventeen networks. They are not interchangeable. Each one has its own gas token, its own fee behaviour, its own block explorer and its own set of liquidity venues — and the single most expensive mistake in crypto is sending an asset to an address on the wrong one.',
+        'Each page below states the facts a wallet actually needs: the chain ID your wallet will show, the token that pays for gas, where to verify a transaction afterwards, and the honest caveats. The platform fee is 0.70% of the input on every one of them, and the selected network is displayed before every signature.'
+      ]
+    },
+    fa: {
+      slug: 'fa/networks',
+      label: 'شبکه‌های پشتیبانی‌شده',
+      title: 'شبکه‌های پشتیبانی‌شده — سواپ روی ۱۷ شبکه | FBT Swap',
+      h1: 'هر شبکه‌ای که اف‌بی‌تی سواپ پشتیبانی می‌کند',
+      description:
+        'برای هر شبکه یک صفحه: شناسهٔ زنجیره، توکن کارمزد، کاوشگر بلاک، صرافی غیرمتمرکزی که نقدینگی از آن می‌آید و آنچه با تعویض شبکه تغییر می‌کند.',
+      intro: [
+        'اف‌بی‌تی سواپ روی هفده شبکه مسیریابی می‌کند و این شبکه‌ها جایگزین هم نیستند. هرکدام توکن کارمزد خودش، رفتار هزینه‌ای خودش، کاوشگر بلاک خودش و مجموعهٔ استخرهای خودش را دارد؛ و گران‌ترین اشتباه رایج در کریپتو، فرستادن دارایی به آدرسی روی شبکهٔ اشتباه است.',
+        'هر صفحهٔ زیر همان چیزهایی را می‌گوید که کیف پول واقعاً به آن نیاز دارد: شناسهٔ زنجیره‌ای که کیف پول نشان می‌دهد، توکنی که کارمزد را می‌پردازد، جایی که بعداً تراکنش را تأیید کنی، و هشدارهای صادقانه. کارمزد پلتفرم روی همهٔ آن‌ها ۰٫۷۰ درصد از مقدار ورودی است و پیش از هر امضا شبکهٔ انتخاب‌شده نمایش داده می‌شود.'
+      ]
+    }
   }
 ];
 

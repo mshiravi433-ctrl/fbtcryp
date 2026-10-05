@@ -44,12 +44,22 @@ import faMarkets from './fa/markets.mjs';
 import faSolana from './fa/solana.mjs';
 import faAi from './fa/ai.mjs';
 
+/*
+ * The network spokes are generated from src/lib/chains.js rather than authored
+ * by hand, so the chain IDs, gas tokens and explorers on them cannot drift away
+ * from what the app actually ships. They are ordinary article objects from the
+ * same schema, validated by the same rules, and they join the same cluster
+ * machinery as everything else.
+ */
+import { NETWORK_PAGES } from './networks.mjs';
+
 /** Every authored spoke, in cluster order so hub listings are deterministic. */
 export const ARTICLES = [
   ...enSwap, ...enFees, ...enWallets, ...enSecurity, ...enNetworks,
   ...enDefi, ...enMarkets, ...enSolana, ...enAi, ...enTokenized,
   ...faSwap, ...faFees, ...faWallets, ...faSecurity, ...faNetworks,
-  ...faDefi, ...faMarkets, ...faSolana, ...faAi
+  ...faDefi, ...faMarkets, ...faSolana, ...faAi,
+  ...NETWORK_PAGES
 ];
 
 const fail = (why) => { throw new Error(`[content/index] ${why}`); };

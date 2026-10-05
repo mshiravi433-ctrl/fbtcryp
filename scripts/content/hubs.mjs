@@ -339,5 +339,39 @@ export const HUB_COPY = {
       { q: 'Do I own the underlying share or asset?', a: 'No. You hold a token issued against a structure. Even when fully backed, the registered holder is a custodian and your claim is against the issuer.' },
       { q: 'What is the most informative thing to check?', a: 'The redemption terms. Minimum size, fees, eligibility and processing time tell you whether the claim is enforceable by someone holding your position size, which is what backs the price link.' }
     ]
+  },
+
+  /* ── chains: the per-network directory ─────────────────────────────────── */
+  'chains.en': {
+    body: [
+      'Switching network is not a cosmetic setting. It changes which token pays for gas, which pools your order can touch, how long a confirmation takes, and which explorer can prove the transaction happened. A USDC balance on Base and a USDC balance on Arbitrum are different tokens at different addresses, and no interface can merge them for you.',
+      'The pages below exist because the answer to "is this cheap here?" is different on every chain and changes by the hour. What does not change is the structure: gas is paid to the network in its own native token, the pool fee is paid to liquidity providers inside the price, and FBT Swap takes 0.70% of the input, shown before you sign. Three recipients on all seventeen.'
+    ],
+    facts: [
+      ['Networks supported', '16 EVM chains plus Solana'],
+      ['Platform fee', '0.70% of the input, identical on every network'],
+      ['Gas', 'Always the network native token, never deducted by FBT Swap'],
+      ['Shown before every signature', 'The selected network, the rate and the fee']
+    ],
+    faqs: [
+      { q: 'Can FBT Swap recover tokens I sent on the wrong network?', a: 'No. It is non-custodial and never holds your assets, so there is nothing for it to return. Whether anything can be done depends entirely on whether you control the destination address on the other chain.' },
+      { q: 'Does the platform fee change between networks?', a: 'No. It is 0.70% of the input amount everywhere. What changes between networks is gas and the pool fee inside the price, and those are paid to validators and liquidity providers rather than to FBT Swap.' }
+    ]
+  },
+  'chains.fa': {
+    body: [
+      'تعویض شبکه یک تنظیم ظاهری نیست. تعیین می‌کند کدام توکن کارمزد را می‌پردازد، سفارش به کدام استخرها دسترسی دارد، تأیید چقدر طول می‌کشد و کدام کاوشگر می‌تواند ثابت کند تراکنش انجام شده است. موجودی USDC روی بیس و موجودی USDC روی آربیتروم دو توکن متفاوت با دو آدرس متفاوت‌اند و هیچ رابطی نمی‌تواند آن‌ها را یکی کند.',
+      'این صفحه‌ها وجود دارند چون پاسخ پرسش «اینجا ارزان است؟» روی هر شبکه فرق می‌کند و ساعت‌به‌ساعت تغییر می‌کند. چیزی که تغییر نمی‌کند ساختار هزینه است: کارمزد شبکه با توکن بومی به خود شبکه می‌رسد، کارمزد استخر داخل قیمت به تأمین‌کنندگان نقدینگی می‌رسد، و اف‌بی‌تی سواپ ۰٫۷۰ درصد از مقدار ورودی را برمی‌دارد که پیش از امضا نمایش داده می‌شود. سه دریافت‌کننده روی هر هفده شبکه.'
+    ],
+    facts: [
+      ['شبکه‌های پشتیبانی‌شده', '۱۶ شبکهٔ EVM به‌همراه سولانا'],
+      ['کارمزد پلتفرم', '۰٫۷۰ درصد از ورودی، یکسان روی همهٔ شبکه‌ها'],
+      ['کارمزد شبکه', 'همیشه با توکن بومی شبکه، هرگز توسط اف‌بی‌تی سواپ کسر نمی‌شود'],
+      ['پیش از هر امضا', 'شبکهٔ انتخاب‌شده، نرخ و کارمزد نمایش داده می‌شود']
+    ],
+    faqs: [
+      { q: 'اگر توکن را روی شبکهٔ اشتباه فرستادم، اف‌بی‌تی سواپ می‌تواند برش گرداند؟', a: 'نه. این سرویس غیرحضانتی است و هرگز دارایی تو را نگه نمی‌دارد، پس چیزی برای بازگرداندن ندارد. اینکه اصلاً کاری ممکن باشد یا نه، فقط به این بستگی دارد که آدرس مقصد روی آن شبکهٔ دیگر در کنترل خودت باشد.' },
+      { q: 'کارمزد پلتفرم بین شبکه‌ها فرق می‌کند؟', a: 'نه. همه‌جا ۰٫۷۰ درصد از مقدار ورودی است. چیزی که بین شبکه‌ها فرق می‌کند کارمزد شبکه و کارمزد استخر داخل قیمت است که به اعتبارسنج‌ها و تأمین‌کنندگان نقدینگی می‌رسد، نه به اف‌بی‌تی سواپ.' }
+    ]
   }
 };
