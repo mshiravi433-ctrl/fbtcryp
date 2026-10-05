@@ -49,6 +49,7 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderLandingV2, V2_PAGE } from './landing-v2/index.mjs';
+import { CONTENT_PAGES, CONTENT_ALTERNATES, CLUSTER_INDEX } from './content/index.mjs';
 import {
   MARKET_DASHBOARD_STYLES,
   marketDashboardScript as renderMarketDashboardScript,
@@ -1885,6 +1886,16 @@ const LIBRARY_PAGES = [
 SEARCH_LANDINGS.forEach((page) => { page.kind = 'resource'; });
 PAGES.push(...SEARCH_LANDINGS, ...POSTS, ...BLOG_HUBS, ...LIBRARY_PAGES);
 
+/*
+ * The topical-authority layer: ten subject clusters, each a hub page plus the
+ * spokes that answer one question each. They are built and validated in
+ * scripts/content/ — that module refuses to export an article with no cluster,
+ * a cluster with no hub in the article's language, or an hreflang pair whose
+ * other side does not exist. By the time they arrive here they are already
+ * guaranteed to be non-orphan and reciprocally linked.
+ */
+PAGES.push(...CONTENT_PAGES);
+
 const ALTERNATES = [
   /*
    * The old ['non-custodial-crypto-swap', 'decentralized-crypto-exchange'] pair was
@@ -1922,7 +1933,14 @@ const ALTERNATES = [
   ['blog', 'fa/blog'],
   /* The two directories mirror each other exactly — same pages, same order,
      labels translated. */
-  ['library', 'fa/']
+  ['library', 'fa/'],
+  /*
+   * Cluster hubs and article spokes. Generated rather than hand-listed, and
+   * only where BOTH sides exist: scripts/content/index.mjs drops the pair when
+   * an English article has no Persian counterpart, because a declared
+   * alternate pointing at a 404 is worse than no annotation at all.
+   */
+  ...CONTENT_ALTERNATES
 ];
 
 const SOCIAL_CARD = `${SITE}/social-card.png`;
@@ -2012,6 +2030,9 @@ function landingStructuredData(page, url) {
   const faqId = `${url}#faq`;
   const organizationId = `${SITE}/#organization`;
   const websiteId = `${SITE}/#website`;
+  /* Resolved once: the cluster this page belongs to, in this page's language.
+     Drives the extra breadcrumb crumb and the Article -> hub relationship. */
+  const clusterLink = page.cluster ? CLUSTER_INDEX[page.cluster]?.[page.lang || 'en'] : null;
   const graph = [
     {
       '@type': 'Organization',
@@ -2062,7 +2083,12 @@ function landingStructuredData(page, url) {
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: ui.home, item: `${SITE}/` },
         { '@type': 'ListItem', position: 2, name: ui.library, item: `${SITE}/${slugPath(page.lang === 'fa' ? 'fa/' : 'library')}` },
-        { '@type': 'ListItem', position: 3, name: page.h1, item: url }
+        /* A cluster spoke gets a fourth crumb for its hub, so the subject
+           hierarchy is declared and not merely implied by the link graph. */
+        ...(page.kind === 'article' && clusterLink
+          ? [{ '@type': 'ListItem', position: 3, name: clusterLink.label, item: `${SITE}/${slugPath(clusterLink.hub)}` },
+             { '@type': 'ListItem', position: 4, name: page.h1, item: url }]
+          : [{ '@type': 'ListItem', position: 3, name: page.h1, item: url }])
       ]
     }
   ];
@@ -2119,6 +2145,66 @@ function landingStructuredData(page, url) {
       mainEntityOfPage: { '@id': pageId },
       articleSection: 'Guides',
       image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
+    });
+  }
+
+  /*
+   * A cluster spoke is an Article that explicitly belongs to its pillar. The
+   * `isPartOf` edge is the machine-readable half of the link we also render
+   * visibly — an answer engine deciding whether this page is an authority on
+   * the subject can see it sits inside a complete treatment of that subject
+   * rather than standing alone.
+   */
+  if (page.kind === 'article') {
+    graph.push({
+      '@type': 'Article',
+      '@id': `${url}#article`,
+      headline: page.h1,
+      description: page.description,
+      inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
+      datePublished: page.datePublished,
+      dateModified: page.dateModified || page.datePublished,
+      author: { '@id': organizationId },
+      publisher: { '@id': organizationId },
+      mainEntityOfPage: { '@id': pageId },
+      ...(clusterLink
+        ? {
+            isPartOf: { '@id': `${SITE}/${slugPath(clusterLink.hub)}#collection` },
+            articleSection: clusterLink.label
+          }
+        : {}),
+      image: { '@type': 'ImageObject', url: SOCIAL_CARD, width: 1024, height: 500 }
+    });
+  }
+
+  /*
+   * The pillar declares the collection and names every spoke it owns. Built
+   * from the slugs the content module validated, so the markup cannot
+   * advertise a page this generator did not write.
+   */
+  if (page.kind === 'cluster' && page.spokeSlugs?.length) {
+    const spokes = page.spokeSlugs
+      .map((slug) => PAGES.find((p) => p.slug === slug))
+      .filter(Boolean);
+    graph.push({
+      '@type': 'CollectionPage',
+      '@id': `${url}#collection`,
+      name: page.h1,
+      description: page.description,
+      inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
+      isPartOf: { '@id': websiteId },
+      publisher: { '@id': organizationId },
+      mainEntity: {
+        '@type': 'ItemList',
+        name: page.h1,
+        numberOfItems: spokes.length,
+        itemListElement: spokes.map((p, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: p.h1,
+          url: `${SITE}/${slugPath(p.slug)}`
+        }))
+      }
     });
   }
 
@@ -2254,7 +2340,14 @@ function render(page) {
    * is built out of <h2> sections rather than one wall of prose, because the
    * outline is what an answer engine extracts and what a reader skims.
    */
-  const isPost = page.kind === 'post';
+  /*
+   * `article` (cluster spoke) and `cluster` (cluster hub) render with the same
+   * dated, sectioned body as a blog post. They are separate kinds because the
+   * JSON-LD differs — a spoke is an Article inside a collection, a hub is a
+   * CollectionPage — but the visible layout is identical, so the flag that
+   * drives byline, date and section rendering covers all three.
+   */
+  const isPost = page.kind === 'post' || page.kind === 'article' || page.kind === 'cluster';
   const postDate = page.datePublished
     ? new Date(page.datePublished).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
         year: 'numeric',
@@ -2424,8 +2517,63 @@ function render(page) {
       </div>`
     )
     .join('\n      ');
-  const siblingLinks = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang)
-    .map((p) => `<a href="/${slugPath(p.slug)}"><span>${esc(p.h1)}</span> <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span></a>`)
+  /*
+   * ── RELATED LINKS ────────────────────────────────────────────────────────
+   * This used to link every page to every other page in its language. With
+   * ~30 pages that was merely untidy. With ~200 it is actively harmful: a
+   * flat mesh gives a crawler no signal about which pages relate to which,
+   * dilutes every link on the page, and adds weight to every document.
+   *
+   * So the graph is now explicit. A cluster spoke links UP to its hub and
+   * ACROSS to its nearest siblings. A hub links DOWN to all of its spokes and
+   * ACROSS to the other hubs. Pages predating the cluster system keep the old
+   * behaviour but capped, so they do not regress into a hairball either.
+   *
+   * The cap exists because link equity divides. Twelve deliberate links beat
+   * two hundred indiscriminate ones, and the ones that matter here are the
+   * ones inside the same subject.
+   */
+  const SIBLING_CAP = 12;
+  const pageBySlug = new Map(PAGES.map((p) => [p.slug, p]));
+  const linkTo = (p) =>
+    `<a href="/${slugPath(p.slug)}"><span>${esc(p.h1)}</span> <span class="card-arrow" aria-hidden="true">${iconSvg('arrow')}</span></a>`;
+
+  let relatedPages = [];
+  const clusterEntry = page.cluster ? CLUSTER_INDEX[page.cluster]?.[lang] : null;
+
+  if (page.kind === 'cluster' && page.spokeSlugs) {
+    /* A hub owns its spokes: list all of them, then point at the other hubs so
+       the ten clusters form a connected graph rather than ten islands. */
+    relatedPages = page.spokeSlugs.map((s) => pageBySlug.get(s)).filter(Boolean);
+    const otherHubs = PAGES.filter(
+      (p) => p.kind === 'cluster' && (p.lang || 'en') === lang && p.slug !== page.slug
+    );
+    relatedPages = [...relatedPages, ...otherHubs];
+  } else if (clusterEntry) {
+    /* A spoke points up to its pillar first — that is the link that tells a
+       crawler which subject this page belongs to — then sideways to the
+       siblings nearest it in the hub's own order, wrapping so that the last
+       article in a cluster still links to the first rather than to nothing. */
+    const hub = pageBySlug.get(clusterEntry.hub);
+    const siblings = clusterEntry.spokes.filter((s) => s !== page.slug);
+    const self = clusterEntry.spokes.indexOf(page.slug);
+    const ordered = self === -1
+      ? siblings
+      : [...clusterEntry.spokes.slice(self + 1), ...clusterEntry.spokes.slice(0, self)];
+    relatedPages = [hub, ...ordered.map((s) => pageBySlug.get(s))].filter(Boolean);
+  } else {
+    /* Pre-cluster pages: same language, hubs first so the new subject pillars
+       are reachable from the older landing pages too. */
+    const pool = PAGES.filter((p) => p.slug !== page.slug && (p.lang || 'en') === lang);
+    relatedPages = [
+      ...pool.filter((p) => p.kind === 'cluster'),
+      ...pool.filter((p) => p.kind !== 'cluster' && p.kind !== 'article')
+    ];
+  }
+
+  const siblingLinks = relatedPages
+    .slice(0, SIBLING_CAP)
+    .map(linkTo)
     .join('\n        ');
   const faqMarkup = page.faqs?.length
     ? `<section class="faq-panel panel reveal" aria-labelledby="faq-heading" style="--delay:140ms">
