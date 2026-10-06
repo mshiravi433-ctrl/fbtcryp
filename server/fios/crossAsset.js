@@ -849,6 +849,13 @@ export function crossAssetDigest(analysis) {
     coMovement: analysis.regime?.coMovement ?? null,
     observedClasses: analysis.observedClasses,
     divergences: (analysis.divergences || []).map((d) => `${d.classes[0]} ${d.avgChangePct[d.classes[0]]}% vs ${d.classes[1]} ${d.avgChangePct[d.classes[1]]}%`),
+    /* The same pairs for a Persian line — class names and the sign/digits in
+       Persian, so the briefing never prints «crypto 1.2% vs stocks -0.4%»
+       inside a Persian sentence. */
+    divergencesFa: (analysis.divergences || []).map((d) => {
+      const [a, b] = d.classes;
+      return `${NARRATIVE_CLASS_FA[a] || a} ${pctFa(Number(d.avgChangePct[a])) ?? '—'} در برابر ${NARRATIVE_CLASS_FA[b] || b} ${pctFa(Number(d.avgChangePct[b])) ?? '—'}`;
+    }),
     avgChangePct: Object.fromEntries(analysis.observedClasses.map((c) => [c, analysis.classes[c].avgChangePct])),
     /* Phase 211.1 — the economic outlook, bounded: label + score + the two
        strongest named signals (with their evidence). */
@@ -860,7 +867,15 @@ export function crossAssetDigest(analysis) {
             .slice()
             .sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))
             .slice(0, 2)
-            .map((s) => `${s.name}: ${s.evidence}`)
+            .map((s) => `${s.name}: ${s.evidence}`),
+          /* Every signal already carries its Persian pair (nameFa/evidenceFa);
+             the digest used to drop it, which is how an English sentence ended
+             up inside the Persian briefing line. */
+          signalsFa: (analysis.outlook.signals || [])
+            .slice()
+            .sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))
+            .slice(0, 2)
+            .map((s) => `${s.nameFa || s.name}: ${s.evidenceFa || s.evidence}`)
         }
       : null,
     macroIndicators: analysis.macro?.indicators?.length ?? 0

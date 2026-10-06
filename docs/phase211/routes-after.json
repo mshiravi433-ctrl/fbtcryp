@@ -1,9 +1,9 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-10-06T18:17:08.809Z",
+  "generatedAt": "2026-10-06T20:21:24.294Z",
   "frontend": {
-    "routeCount": 68,
+    "routeCount": 69,
     "routes": [
       {
         "path": "*",
@@ -27,7 +27,7 @@
       },
       {
         "path": "/ai-global",
-        "component": "AiGlobalIntelligence"
+        "component": "Navigate"
       },
       {
         "path": "/audit",
@@ -100,6 +100,10 @@
       {
         "path": "/flash-liquidity",
         "component": "FlashLiquidity"
+      },
+      {
+        "path": "/global",
+        "component": "GlobalWorld"
       },
       {
         "path": "/help",
@@ -286,10 +290,6 @@
         "exists": true
       },
       {
-        "spec": "./components/ai/AiGlobalIntelligence",
-        "exists": true
-      },
-      {
         "spec": "./components/IntentAIUnified",
         "exists": true
       },
@@ -363,6 +363,10 @@
       },
       {
         "spec": "./pages/FlashLiquidity",
+        "exists": true
+      },
+      {
+        "spec": "./pages/GlobalWorld",
         "exists": true
       },
       {
@@ -566,6 +570,7 @@
     "/explore-hub",
     "/farm",
     "/flash-liquidity",
+    "/global",
     "/help",
     "/insurance",
     "/insurance/claims",

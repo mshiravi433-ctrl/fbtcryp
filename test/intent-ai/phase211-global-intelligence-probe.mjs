@@ -550,6 +550,39 @@ t('briefing: the cross-asset item carries the economic outlook (the direction)',
   briefing.items.some((i) => i.kind === 'cross_asset'
     && /outlook/i.test(String(i.title))
     && /outlook|چشم‌انداز/i.test(String(i.detail))));
+/* The Persian line must read as Persian: «۱ روز» not «1d», «وارون» not «INVERTED»,
+   Persian digits — only tickers (DXY, XAU/USD, US10Y) stay Latin. */
+const stripTickers = (str) => String(str).replace(/\b[A-Z][A-Z0-9/]*\b/g, '');
+t('briefing: the macro-indicator item reads in Persian — «۱ روز», a Persian curve phrase, Persian digits, no 1d / 7d / INVERTED / pp',
+  briefing.items.some((i) => i.kind === 'macro' && String(i.detail).includes('real quotes')
+    && /روز/.test(i.detailFa) && /منحنی ۲\/۱۰ وارون/.test(i.detailFa)
+    && !/\b(1d|7d|INVERTED|pp|2s10s)\b/.test(i.detailFa)
+    && !/[0-9]/.test(stripTickers(i.detailFa))
+    && !/[0-9]/.test(stripTickers(i.titleFa))));
+{
+  const { crossAssetDigest } = await import('../../server/fios/crossAsset.js');
+  const synthetic = {
+    status: 'OK', at: now,
+    regime: { regime: 'MIXED', coMovement: 0.31, votes: [] },
+    observedClasses: ['crypto', 'stocks'],
+    classes: { crypto: { avgChangePct: 1.2 }, stocks: { avgChangePct: -0.4 } },
+    divergences: [{ classes: ['crypto', 'stocks'], avgChangePct: { crypto: 1.2, stocks: -0.4 }, gapPct: 1.6 }],
+    outlook: { label: 'MIXED_SIGNALS', score: -1, signals: [{ name: 'dollar pressure', nameFa: 'فشار دلار', evidence: 'US Dollar Index 101.8', evidenceFa: 'شاخص دلار ۱۰۱٫۸', value: -0.5, weight: 1 }] },
+    macro: { indicators: [] }
+  };
+  const dg = crossAssetDigest(synthetic);
+  t('briefing: the cross-asset digest carries a Persian pair for every divergence and outlook signal (English fields unchanged)',
+    dg.divergences[0] === 'crypto 1.2% vs stocks -0.4%'
+    && dg.divergencesFa[0] === 'رمزارز +۱.۲۰٪ در برابر سهام \u2212۰.۴۰٪'
+    && dg.outlook.signals[0] === 'dollar pressure: US Dollar Index 101.8'
+    && dg.outlook.signalsFa[0] === 'فشار دلار: شاخص دلار ۱۰۱٫۸');
+  const xItem = buildBriefingItems({ crossAsset: synthetic, now }).items.find((i) => i.kind === 'cross_asset');
+  t('briefing: the cross-asset item reads in Persian end to end — class names, divergence, outlook signal, digits',
+    !!xItem && /رمزارز/.test(xItem.detailFa) && /واگرایی: رمزارز/.test(xItem.detailFa) && /فشار دلار: شاخص دلار/.test(xItem.detailFa)
+    && /امتیاز چشم‌انداز \u2212۱/.test(xItem.detailFa)
+    && !/crypto|stocks|dollar pressure|US Dollar/.test(xItem.detailFa) && !/[0-9]/.test(xItem.detailFa)
+    && /crypto, stocks observed/.test(xItem.detail));
+}
 t('briefing: no item carries execution permission, and the briefing says so',
   briefing.executionAuthorized === false && briefing.items.every((i) => !i.executionAuthorized && !i.execute));
 t('briefing: the briefing is persisted (latest + history) in the Phase 211 collection',

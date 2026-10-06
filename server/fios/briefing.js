@@ -83,6 +83,15 @@ export function usdFa(v) {
   if (n >= 1e3) return `${faDigits(Math.round(n / 1e3))} هزار دلار`;
   return `${faDigits(Math.round(n))} دلار`;
 }
+/* A signed percent a Persian line can hold: Persian digits, the Persian
+   decimal and percent signs, and a real minus (U+2212) — a hyphen-minus in
+   front of Persian digits renders on the wrong side of the number. */
+export function pctFaLine(v) {
+  const n = Number(v);
+  if (v === null || v === undefined || !Number.isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : n < 0 ? '\u2212' : '';
+  return `${sign}${faDigits(trimZero(Math.abs(n).toFixed(2))).replace('.', '٫')}٪`;
+}
 const FA_MACRO_TOPIC = Object.freeze({
   FED: 'فدرال‌رزرو', RATES: 'نرخ بهره', INFLATION: 'تورم', GROWTH: 'رشد اقتصادی',
   ECB: 'بانک مرکزی اروپا', GEOPOLITICS: 'ژئوپلیتیک', CRYPTO_POLICY: 'قانون‌گذاری رمزارز',
@@ -296,12 +305,19 @@ export function buildBriefingItems({
         const curve = macro.curve && macro.curve.spreadPct != null
           ? (macro.curve.spreadPct < 0 ? ` · 2s10s INVERTED ${macro.curve.spreadPct}pp` : ` · 2s10s ${macro.curve.spreadPct}pp`)
           : '';
+        /* The Persian line says the same thing in Persian: «۱ روز» not «1d»,
+           «منحنی ۲/۱۰ وارون» not «2s10s INVERTED», Persian digits throughout. */
+        const fmtQuoteFa = (q) => `${q.symbol} ${q.change1dPct != null ? `${pctFaLine(q.change1dPct)} ۱ روز` : '—'}${q.change7dPct != null ? ` · ${pctFaLine(q.change7dPct)} ۷ روز` : ''}`;
+        const shownFa = macro.quotes.slice(0, 4).map(fmtQuoteFa).join(' · ');
+        const curveFa = macro.curve && macro.curve.spreadPct != null
+          ? ` · منحنی ۲/۱۰ ${macro.curve.spreadPct < 0 ? 'وارون' : 'عادی'} ${pctFaLine(macro.curve.spreadPct).replace('٪', '')} واحد`
+          : '';
         push({
           id: itemId('macro'), kind: 'macro', priority: macro.curve?.spreadPct < 0 ? 'high' : 'info',
           title: `Macro indicators: ${macro.quotes[0].symbol} ${macro.quotes[0].change1dPct != null ? `${macro.quotes[0].change1dPct > 0 ? '+' : ''}${macro.quotes[0].change1dPct}%` : ''} 1d`,
-          titleFa: `نشانگرهای کلان: ${macro.quotes[0].symbol} ${macro.quotes[0].change1dPct != null ? `${macro.quotes[0].change1dPct > 0 ? '+' : ''}${macro.quotes[0].change1dPct}٪` : ''} ۲۴س`,
+          titleFa: `نشانگرهای کلان: ${macro.quotes[0].symbol} ${macro.quotes[0].change1dPct != null ? pctFaLine(macro.quotes[0].change1dPct) : ''} ۲۴س`,
           detail: `real quotes, not headlines: ${shown}${curve} (read-only)`,
-          detailFa: `ارقام واقعی، نه خبر: ${shown}${curve} (فقط‌خواندنی)`,
+          detailFa: `ارقام واقعی، نه خبر: ${shownFa}${curveFa} (فقط‌خواندنی)`,
           evidence: macro.quotes.slice(0, 3).map((q) => ({ source: q.source || 'macroData', at: domains.macro.at })),
           action: { type: 'navigate', to: '/global' },
           source: domains.macro.source || 'macro:classifier', at: domains.macro.at, confidence: 0.6, untrusted: true
@@ -375,7 +391,7 @@ export function buildBriefingItems({
       title: `Cross-asset regime: ${String(digest.regime || 'MIXED').replace(/_/g, ' ').toLowerCase()}${outlookLabel ? ` · outlook: ${outlookLabel.replace(/_/g, ' ').toLowerCase()}` : ''}`,
       titleFa: `رژیم کراس‌است: ${faRegime(digest.regime)}${outlookLabel ? ` · چشم‌انداز: ${faOutlook(outlookLabel)}` : ''}`,
       detail: `${digest.observedClasses.join(', ')} observed${digest.divergences.length ? `; divergence: ${digest.divergences[0]}` : `; co-movement ${(digest.coMovement * 100).toFixed(0)}%`}${outlookLabel ? `; outlook score ${outlook.score > 0 ? '+' : ''}${outlook.score}${(outlook.signals || []).length ? ` (${outlook.signals[0]})` : ''}` : ''}`,
-      detailFa: `${digest.observedClasses.map(faClass).join('، ')} مشاهده شد${digest.divergences.length ? `؛ واگرایی: ${String(digest.divergences[0]).replace(/_/g, ' ')}` : `؛ هم‌حرکتی ${(digest.coMovement * 100).toFixed(0)}٪`}${outlookLabel ? `؛ امتیاز چشم‌انداز ${outlook.score > 0 ? '+' : ''}${outlook.score}${(outlook.signals || []).length ? ` (${outlook.signals[0]})` : ''}` : ''}`,
+      detailFa: `${digest.observedClasses.map(faClass).join('، ')} مشاهده شد${digest.divergences.length ? `؛ واگرایی: ${digest.divergencesFa?.[0] || String(digest.divergences[0]).replace(/_/g, ' ')}` : `؛ هم‌حرکتی ${faDigits((digest.coMovement * 100).toFixed(0))}٪`}${outlookLabel ? `؛ امتیاز چشم‌انداز ${outlook.score > 0 ? '+' : outlook.score < 0 ? '\u2212' : ''}${faDigits(Math.abs(outlook.score))}${(outlook.signalsFa || outlook.signals || []).length ? ` (${(outlook.signalsFa || outlook.signals)[0]})` : ''}` : ''}`,
       evidence: [{ source: 'cross-asset-engine', at: crossAsset.at }],
       action: { type: 'navigate', to: '/global' },
       source: 'cross-asset-engine', at: crossAsset.at, confidence: 0.7, untrusted: outlookLabel !== null

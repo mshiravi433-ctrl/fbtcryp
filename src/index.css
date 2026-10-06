@@ -6867,6 +6867,38 @@ a.wallet-option,
 }
 
 /* ==========================================================================
+   WIDE PAGES — the Global (جهانی) page
+   --------------------------------------------------------------------------
+   «نه جمع شده». Every page above is a phone column on purpose: a list of
+   rows stops being scannable past ~760px. The Global page is the exception —
+   a dashboard of panels — so AppChrome tags its shell `app-shell--wide` and
+   the column opens up instead of leaving a narrow strip in the middle of a
+   wide screen. The console switches to two columns at 900px on its own
+   (GLOBAL_PAGE_STYLES), so this width is used, not just stretched.
+
+   Specificity (two classes) beats the plain `.app-shell` / `.top-bar` rules in
+   every breakpoint above, whatever order they appear in. The bottom nav keeps
+   its own width: it is a dock, and a dock stays centred.
+   ========================================================================== */
+@media (min-width: 600px) and (max-width: 899px) {
+  .app-shell.app-shell--wide,
+  .app-shell.app-shell--wide .top-bar {
+    max-width: 760px;
+  }
+}
+@media (min-width: 900px) {
+  .app-shell.app-shell--wide,
+  .app-shell.app-shell--wide .top-bar {
+    max-width: min(1360px, 100%);
+  }
+}
+/* The console draws its own gutters; the page frame adds none on top of them. */
+.page.page--global {
+  padding: 4px 0 20px;
+  gap: 0;
+}
+
+/* ==========================================================================
    INSTALL PROMPT
    --------------------------------------------------------------------------
    Sits above the bottom nav rather than over it: covering the navigation to

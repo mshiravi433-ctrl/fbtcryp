@@ -2750,12 +2750,17 @@ export function buildDomainsView(domains) {
       out.list = topics.map(([topic, count]) => ({ symbol: topic, symbolFa: TOPIC_FA[topic] || topic, valueUsd: null, count }));
       out.quotes = quotes.slice(0, 10).map((q) => ({ symbol: q.symbol, nameFa: symbolFa(q.symbol), priceUsd: num(q.priceUsd), change1dPct: num(q.change1dPct), source: q.source, sourceFa: q.source ? describeSource(q.source, true) : null }));
       const stale = data.stale === true;
+      /* BOTH leading themes, not one: two equally present themes read as one
+         theme if the line names only the first — the second would hide. */
+      const lead = topics.slice(0, 2);
+      const themesFa = lead.map(([tp]) => TOPIC_FA[tp] || tp).join('، ');
+      const themesEn = lead.map(([tp]) => tp).join(', ');
       out.headlineFa = quotes.length
-        ? `${faNum(quotes.length)} قیمت کلان${topics.length ? ` · موضوع برتر: ${TOPIC_FA[topics[0][0]] || topics[0][0]}` : ''}${stale ? ' · آخرین خوانش سالم' : ''}`
-        : (topics.length ? `قیمت کلان نرسید · موضوع برتر خبر: ${TOPIC_FA[topics[0][0]] || topics[0][0]}` : 'قیمت کلان و خبر کلان در این دور نرسید');
+        ? `${faNum(quotes.length)} قیمت کلان${lead.length ? ` · ${lead.length > 1 ? 'موضوع‌های برتر' : 'موضوع برتر'}: ${themesFa}` : ''}${stale ? ' · آخرین خوانش سالم' : ''}`
+        : (lead.length ? `قیمت کلان نرسید · ${lead.length > 1 ? 'موضوع‌های برتر' : 'موضوع برتر'} خبر: ${themesFa}` : 'قیمت کلان و خبر کلان در این دور نرسید');
       out.headlineEn = quotes.length
-        ? `${quotes.length} macro quotes${topics.length ? ` · top theme: ${topics[0][0]}` : ''}${stale ? ' · last good read' : ''}`
-        : (topics.length ? `no macro quotes · top news theme: ${topics[0][0]}` : 'no macro quotes or headlines this pass');
+        ? `${quotes.length} macro quotes${lead.length ? ` · top ${lead.length > 1 ? 'themes' : 'theme'}: ${themesEn}` : ''}${stale ? ' · last good read' : ''}`
+        : (lead.length ? `no macro quotes · top news ${lead.length > 1 ? 'themes' : 'theme'}: ${themesEn}` : 'no macro quotes or headlines this pass');
       if (quotes.length) stat('قیمت کلان', 'quotes', faNum(quotes.length), String(quotes.length));
       if (num(data.attention) !== null) stat('خبر کلان', 'macro news', faNum(data.attention), String(data.attention));
     } else if (data && arr(data.instruments)) {

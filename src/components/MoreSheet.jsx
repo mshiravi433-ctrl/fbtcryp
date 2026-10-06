@@ -27,7 +27,8 @@ import {
   IconTrophy,
   IconX,
   IconSearch,
-  IconClock
+  IconClock,
+  IconWorld
 } from './Icons';
 
 /**
@@ -177,6 +178,14 @@ const GROUPS = [
        */
       { to: '/smart-money', key: 'sm.title', Icon: IconSmartMoney, hue: 'var(--rgb-7)' },
       { to: '/news', key: 'nav.news', Icon: IconNews, hue: 'var(--rgb-1)' },
+      /*
+       * The world console left the News tabs and is its own page now, named
+       * «جهانی» in this menu. It sits right under News because that is where
+       * people came from, and uses its own icon (a globe with an orbit) so it
+       * never reads as the Ecosystem tile next to it. The /ai-global URL
+       * stays as an alias.
+       */
+      { to: '/global', key: 'nav.global', Icon: IconWorld, hue: 'var(--rgb-2)' },
       { to: '/explore-hub', key: 'exploreHub.title', Icon: IconSearch, hue: 'var(--rgb-4)' },
       /* Auto Orders moved into the Earn group when Intent OS became the raised
          centre action. Keeping this note here prevents a later refactor from

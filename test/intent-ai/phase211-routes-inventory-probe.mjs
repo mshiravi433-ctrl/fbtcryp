@@ -63,18 +63,27 @@ t('FRONTEND: every pre-existing route is still mounted with the same component',
 const addedRoutes = added(beforeRoutes, afterRoutes);
 /* The Phase 211 rule is «هیچ route حذف نشود» — additions are allowed, including
    by later phases (/pay/:code is a later phase's customer landing). What must
-   hold: ≥1 route was added, /ai-global among them, and nothing removed. */
+   hold: ≥1 route was added, /ai-global among them (it stayed as an alias when
+   the console became its own /global page), and nothing removed. */
 t('FRONTEND: Phase 211 only ADDED routes (later phases may add, never remove)',
   addedRoutes.length >= 1 && addedRoutes.some((r) => r.startsWith('/ai-global')), addedRoutes);
+t('FRONTEND: the console is its own page — /global is mounted, and /ai-global forwards to it',
+  addedRoutes.some((r) => r.startsWith('/global →'))
+  && after.frontend.routes.some((r) => r.path === '/ai-global' && r.component === 'Navigate'),
+  addedRoutes);
 
 /* 2. page regression — every lazy import resolves. */
 t('PAGES: every lazy import in App.jsx resolves to a real file (0 missing)',
   after.frontend.lazyImportsMissing.length === 0, after.frontend.lazyImportsMissing);
 const routeComponents = after.frontend.routes.map((r) => r.component);
 const lazySpecs = after.frontend.lazyImports.map((l) => l.spec);
-t('PAGES: the new AI Global Intelligence route resolves through a lazy import that exists',
-  after.frontend.routes.some((r) => r.path === '/ai-global')
-  && lazySpecs.some((s) => s.includes('AiGlobalIntelligence'))
+/* The console is mounted by its page: /global → GlobalWorld (lazy) → AiGlobalIntelligence. */
+const globalPageFile = path.join(ROOT, 'src/pages/GlobalWorld.jsx');
+t('PAGES: the Global page route resolves through a lazy import that exists, and the page mounts the console',
+  after.frontend.routes.some((r) => r.path === '/global' && r.component === 'GlobalWorld')
+  && lazySpecs.some((s) => s.includes('pages/GlobalWorld'))
+  && existsSync(globalPageFile)
+  && readFileSync(globalPageFile, 'utf8').includes('AiGlobalIntelligence')
   && existsSync(path.join(ROOT, 'src/components/ai/AiGlobalIntelligence.jsx')));
 t('PAGES: the route count only grew', after.frontend.routeCount >= before.frontend.routeCount,
   `${before.frontend.routeCount} → ${after.frontend.routeCount}`);
@@ -82,7 +91,8 @@ t('PAGES: the route count only grew', after.frontend.routeCount >= before.fronte
 /* 3. the AI's navigable paths. */
 const removedNav = removed(before.chatNavigation, after.chatNavigation);
 t('CHAT NAV: no navigable path was removed', removedNav.length === 0, removedNav);
-t('CHAT NAV: /ai-global is navigable by the AI', after.chatNavigation.includes('/ai-global'));
+t('CHAT NAV: /global and the /ai-global alias are navigable by the AI',
+  after.chatNavigation.includes('/global') && after.chatNavigation.includes('/ai-global'));
 
 /* 4. backend mounts. */
 const removedMounts = removed(before.backend.mounts, after.backend.mounts);
