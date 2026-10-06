@@ -78,7 +78,7 @@ export function toneFor(kind, z) {
 /** the dial: 0 → 1 over three sigmas, never fully empty once a move was read */
 export const severityFor = (z) => (z === null || z === undefined ? null : Math.min(1, Math.max(0.08, Math.abs(z) / 3)));
 
-/** weekday-safe classification of the 12 station slots, for the board summary */
+/** how many of the board's stations are direct / proxy / level-only / unread — for the summary chips */
 export function summariseStations(stations) {
   const out = { total: stations.length, valid: 0, measured: 0, proxy: 0, level: 0, stale: 0, unread: 0 };
   for (const s of stations) {

@@ -3,7 +3,7 @@
  * Pure (no state): Persian digits, signed percentages, compact dollars and the
  * evidence vocabulary the gauges print next to every direction.
  */
-import { faNum as faNumRaw, pctFa, pctEn, usdCompact, usdFaCompact } from './worldModel.js';
+import { faNum as faNumRaw, pctFa, pctEn, usdCompact, usdFaCompact, REGIME_FA } from './worldModel.js';
 
 export const faNum = faNumRaw;
 
@@ -93,12 +93,29 @@ export function evidenceLabel(key, isPersian) {
 const thousands = (n, isPersian) => {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
-  const text = Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(2);
+  const a = Math.abs(v);
+  /* FX pairs live in the 4th decimal (1.0840), an index in the thousands (5,480) */
+  const text = a >= 1000 ? Math.round(v).toLocaleString('en-US') : a >= 100 ? v.toFixed(1) : a >= 10 ? v.toFixed(2) : String(Number(v.toFixed(4)));
   return isPersian ? faNum(text).replace(/,/g, '\u066c') : text;
 };
 
+/** «24h» → «۲۴ ساعت», «7d» → «۷ روز» */
+const windowText = (v, isPersian) => {
+  const m = String(v).match(/^(\d+)\s*([hd])$/i);
+  if (!m) return isPersian ? faNum(String(v)) : String(v);
+  if (!isPersian) return `${m[1]}${m[2].toLowerCase()}`;
+  return `${faNum(m[1])} ${m[2].toLowerCase() === 'h' ? 'ساعت' : 'روز'}`;
+};
+
+/** a price in the reader's digits with thousands separators */
+export const priceText = (v, isPersian) => thousands(v, isPersian);
+
 export function evidenceValue(key, value, isPersian) {
   if (value === null || value === undefined) return '—';
+  if (key === 'window') return windowText(value, isPersian);
+  if (key === 'regime' && typeof value === 'string') {
+    return isPersian ? (REGIME_FA[value] || faNum(value)) : value.replace(/_/g, ' ').toLowerCase();
+  }
   if (typeof value === 'string') return isPersian ? faNum(value) : value;
   if (MONEY_KEYS.has(key)) return isPersian ? usdFaCompact(value, { signed: false }) : usdCompact(value).replace('+', '');
   if (PCT_KEYS.has(key)) return pct(value, isPersian);

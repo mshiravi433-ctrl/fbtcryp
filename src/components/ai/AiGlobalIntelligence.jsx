@@ -11,10 +11,10 @@
  *   · a provider light marked live means a real result, not a promise
  *   · every briefing item names its source; nothing carries execution
  *
- * This surface is available at /ai-global for existing deep links and is also
- * embedded as the Global tab in News. The standalone More-sheet doorway is
- * intentionally gone; both renderings talk to the FI's own additive
- * endpoints under /api/ai/global/*.
+ * 2026-10: this surface is now its own page — «جهانی» in the More sheet, at
+ * /global (and /ai-global for existing deep links). It is no longer a News tab.
+ * Every rendering talks to the FI's own additive endpoints under
+ * /api/ai/global/*.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -30,11 +30,12 @@ import { getCapitalFlows } from '../../lib/capitalFlows';
  * once-per-session read of the server's own /deep/macro-graph engine.
  */
 import {
-  WORLD_STYLES, WorldStatePanel, GlobePanel, RadarPanel,
+  WORLD_STYLES, GLOBAL_PAGE_STYLES, WorldStatePanel, GlobePanel, RadarPanel,
   CausalPanel, FlowMapPanel, FutureTreePanel, DnaPanel,
-  OutlookPanel, DomainsView, ProvidersPanel,
-  TabIcon as WorldTabIcon, TAB_ACCENTS
+  OutlookPanel, DomainsView, ProvidersPanel, HeroPanel, BriefingPanel,
+  TabIcon as WorldTabIcon, TAB_ACCENTS, faNum as worldFaNum
 } from './worldState/WorldPanels.jsx';
+import { buildBriefingTiles } from './worldState/worldModel.js';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
 const STYLES = `
@@ -623,9 +624,11 @@ const fmtK = (v) => {
 
 const timeAgo = (at, isRTL) => {
   const s = Math.max(0, Math.round((Date.now() - Number(at || 0)) / 1000));
-  if (s < 60) return isRTL ? `${s} ثانیه پیش` : `${s}s ago`;
-  if (s < 3600) return isRTL ? `${Math.round(s / 60)} دقیقه پیش` : `${Math.round(s / 60)}m ago`;
-  return isRTL ? `${Math.round(s / 3600)} ساعت پیش` : `${Math.round(s / 3600)}h ago`;
+  const n = (v) => (isRTL ? worldFaNum(v) : v);
+  if (s < 5) return isRTL ? 'همین حالا' : 'just now';
+  if (s < 60) return isRTL ? `${n(s)} ثانیه پیش` : `${s}s ago`;
+  if (s < 3600) return isRTL ? `${n(Math.round(s / 60))} دقیقه پیش` : `${Math.round(s / 60)}m ago`;
+  return isRTL ? `${n(Math.round(s / 3600))} ساعت پیش` : `${Math.round(s / 3600)}h ago`;
 };
 
 /* ── Modern inline icons ─────────────────────────────────────────────────────
@@ -1326,6 +1329,7 @@ function AiGlobalIntelligenceInner() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
+  const [loadedAt, setLoadedAt] = useState(null);
   const requestId = useRef(0);
   const language = String(i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
   const isPersian = language === 'fa';
@@ -1417,6 +1421,7 @@ function AiGlobalIntelligenceInner() {
         goldEtfs,
         flows
       });
+      setLoadedAt(Date.now());
     } catch (error) {
       if (id === requestId.current) setConnectionError(error?.message || 'NETWORK_ERROR');
     } finally {
@@ -1451,6 +1456,26 @@ function AiGlobalIntelligenceInner() {
     goldEtfs: data.goldEtfs
   }), [data.intelligence, data.briefing, cross, data.flows, tomanReference, data.goldEtfs]);
 
+  /* The status report and the hero read ONE board derived from the same pass
+     payload: every tile is a view of a calibrated station, so the number on a
+     tile and the number on the station board can never disagree. */
+  const board = useMemo(() => buildBriefingTiles(worldData), [worldData]);
+
+  /* the server's own briefing messages, translated and labelled for the board */
+  const briefingMessages = useMemo(() => briefingItems.map((item) => {
+    const conf = item.confidence != null ? Math.round(item.confidence * 100) : null;
+    return {
+      id: item.id, kind: item.kind, priority: item.priority,
+      priorityLabel: mapLabel(AIG_PRIORITY, item.priority, isPersian) || String(item.priority || '').toUpperCase(),
+      kindLabel: mapLabel(AIG_KIND, item.kind, isPersian) || item.kind,
+      title: isPersian && item.titleFa ? item.titleFa : item.title,
+      detail: isPersian && item.detailFa ? item.detailFa : item.detail,
+      sourceLabel: sourceLabel(item.source, isPersian),
+      confidencePct: conf, confidencePctFa: conf === null ? null : worldFaNum(conf),
+      to: item.action?.to || null
+    };
+  }), [briefingItems, isPersian]);
+
   /*
    * The nine cells of the header meter — one per domain, in the same order and
    * from the SAME `status` the domains tab prints, so the two can never
@@ -1469,55 +1494,21 @@ function AiGlobalIntelligenceInner() {
   /* ── per-domain one-line summaries (only what was actually read) ─────── */
 
   return (
-    <div className="ai-global" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="ai-global gw-root" dir={isRTL ? 'rtl' : 'ltr'}>
       <style>{STYLES}</style>
       <style>{WORLD_STYLES}</style>
+      <style>{GLOBAL_PAGE_STYLES}</style>
 
-      {/*
-        ─── THE HERO ───────────────────────────────────────────────────────
-        REPORTED: «تب هوش جهانی fbt را خیلی مدرن‌تر و بی‌نظیرتر کن». The old
-        header was one flat row: an orb, a title and a chip. It stated the score
-        as a fraction inside a pill, which is the least legible way to say «six
-        of nine domains are answering».
-
-        The score is now a METER under the title — nine segments, lit for the
-        domains that answered, amber for the ones that answered partially, red
-        for the ones that did not — so «how alive is this right now» is read in
-        one glance instead of divided in the reader's head. The orb keeps its
-        own frame, because a live status deserves an indicator that is visibly
-        a status indicator.
-      */}
-      <div className="aig-header">
-        <span className={`aig-live ${loading || refreshing ? 'is-working' : ''}`}>
-          <ThinkingOrb state={loading || refreshing ? 'working' : 'idle'} size={26} />
-        </span>
-        <div className="aig-header-copy">
-          <div className="aig-title">{L('هوش جهانی FBT', 'FBT Global Intelligence')}</div>
-          <p className="aig-sub">
-            {L(
-              'نه حوزه داده، یک مغز: هر عددی که پایین می‌بینی از یک خواندن واقعی آمده است.',
-              'Nine data domains, one brain — every figure below came from a real read.'
-            )}
-          </p>
-          {data.intelligence && (
-            /* The meter reads the SAME per-domain statuses the domains tab
-               prints (`d.status`), so the picture at the top and the nine cards
-               below can never disagree. Fallback to the count when the payload
-               carries no domains object: a meter that says «five read» from the
-               count is still true, whereas inventing nine statuses is not. */
-            <div className="aig-meter" role="img" aria-label={`${data.intelligence.available}/9 ${L('دامنه زنده', 'domains live')}`}>
-              {meterCells.map((status, i) => (
-                <i key={i} className={meterClass(status)} />
-              ))}
-            </div>
-          )}
-        </div>
-        {data.intelligence && (
-          <span className={`aig-chip ${data.intelligence.available >= 5 ? '' : data.intelligence.available >= 1 ? 'warn' : 'bad'}`}>
-            {data.intelligence.available}/9 {L('دامنه زنده', 'domains live')}
-          </span>
-        )}
-      </div>
+      <HeroPanel
+        L={L}
+        isPersian={isPersian}
+        working={loading || refreshing}
+        available={data.intelligence ? Number(data.intelligence.available) : null}
+        meterCells={meterCells}
+        meterClass={meterClass}
+        board={board}
+        updatedLabel={loadedAt ? timeAgo(loadedAt, isRTL) : null}
+      />
 
       <div className="aig-tabs">
         {TABS.map((t) => (
@@ -1561,60 +1552,22 @@ function AiGlobalIntelligenceInner() {
         </div>
       ) : null}
 
-      {/* ── BRIEFING — the proactive layer ─────────────────────────────── */}
+      {/* ── BRIEFING — the status report board ───────────────────────────── */}
       {tab === 'briefing' && (
-        <div className="aig-section">
-          <div className="aig-section-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--rgb-2)'}}><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M2 19h6"/><path d="M12 11h6"/><path d="M12 15h4"/></svg>
-            {L('بریفینگ فعال هوش مصنوعی', 'Proactive AI briefing')}
-            {data.briefing?.at ? <span className="aig-item-kind">{timeAgo(data.briefing.at, isRTL)}</span> : null}
-          </div>
-          {briefingItems.length ? briefingItems.map((item) => (
-            <div key={item.id} className="aig-item">
-              <div className="aig-item-top">
-                <span className={`aig-prio ${item.priority}`}>{mapLabel(AIG_PRIORITY, item.priority, isPersian) || String(item.priority || '').toUpperCase()}</span>
-                <span className="aig-item-kind">{mapLabel(AIG_KIND, item.kind, isPersian) || item.kind}</span>
-              </div>
-              <div className="aig-item-title">{isPersian && item.titleFa ? item.titleFa : item.title}</div>
-              {(isPersian && item.detailFa ? item.detailFa : item.detail) ? <div className="aig-item-detail">{isPersian && item.detailFa ? item.detailFa : item.detail}</div> : null}
-              <div className="aig-item-meta">
-                <span>{sourceLabel(item.source, isPersian)}</span>
-                {item.confidence != null ? <span>· {Math.round(item.confidence * 100)}%</span> : null}
-                {item.untrusted ? <span>· {L('داده، نه دستور', 'data, not authority')}</span> : null}
-                {item.action?.to ? (
-                  <span
-                    className="aig-item-action"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(item.action.to)}
-                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate(item.action.to)}
-                  >
-                    {L('باز کن', 'open')} →
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          )) : (
-            <div className="aig-empty">
-              {L(
-                'هنوز چیزی برای گفتن نیست — مغز مالی فقط از چیزی که واقعاً خوانده حرف می‌زند.',
-                'Nothing to report yet — the financial brain only speaks from what it actually read.'
-              )}
-              {data.briefing?.missing?.length ? (
-                <div className="aig-note">{L('ورودی‌های خوانده‌نشده:', 'unread inputs:')} {data.briefing.missing.map((m) => mapLabel(AIG_MISSING, m, isPersian) || m).join(isPersian ? '، ' : ', ')}</div>
-              ) : null}
-            </div>
-          )}
-          <div className="aig-note">
-            {L(
-              'بریفینگ یک توصیه به خواندن است؛ هیچ موردی مجوز اجرا ندارد. هر عدد از منبع خودش آمده.',
-              'A briefing is a recommendation to read — no item carries execution permission. Every number cites its source.'
-            )}
-          </div>
-        </div>
+        <BriefingPanel
+          board={board}
+          messages={briefingMessages}
+          briefingAt={data.briefing?.at || null}
+          ageLabel={data.briefing?.at ? timeAgo(data.briefing.at, isRTL) : null}
+          unreadInputs={data.briefing?.missing?.length ? data.briefing.missing.map((m) => mapLabel(AIG_MISSING, m, isPersian) || m).join(isPersian ? '، ' : ', ') : null}
+          L={L}
+          isPersian={isPersian}
+          onGoTab={setTab}
+          navigate={navigate}
+        />
       )}
 
-      {/* ── WORLD CONSOLE — the FBT جهانی upgrade sub-tabs ────────────────
+      {/* ── WORLD CONSOLE — the sub-tabs ────────────────
          Everything below is drawn from the pass's own payload (worldData):
          gauges, weather, the globe, the radar, the causal chain, the capital
          flow map, the future tree + challenger, and market DNA. */}
@@ -1643,7 +1596,7 @@ function AiGlobalIntelligenceInner() {
         <div className="aig-section">
           <div className="aig-section-title">
             <TabIconGadget name="radar" />
-            {L('رادار جهانی FBT', 'FBT Global Radar')}
+            {L('رادار جهانی', 'Global Radar')}
           </div>
           <RadarPanel world={worldData} L={L} isPersian={isPersian} />
         </div>

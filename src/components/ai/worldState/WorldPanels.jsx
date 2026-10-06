@@ -22,7 +22,10 @@
  * nothing here adds a request to the 60-second refresh loop.
  */
 export { WORLD_STYLES } from './styles.js';
+export { GLOBAL_PAGE_STYLES } from './ui.styles.js';
 
+export { HeroPanel } from './HeroPanel.jsx';
+export { BriefingPanel } from './BriefingPanel.jsx';
 export { WorldStatePanel } from './WeatherPanel.jsx';
 export { GlobePanel } from './GlobePanel.jsx';
 export { RadarPanel } from './RadarPanel.jsx';
@@ -36,6 +39,7 @@ export { ProvidersPanel } from './ProvidersPanel.jsx';
 
 /* the icon + format helpers, re-exported so the host keeps one import path */
 export { WIcon, DirMark, WeatherGlyph, W_PATHS, TAB_PATHS, TabIcon, TAB_ACCENTS } from './icons.jsx';
+export { QualityBadge, Ltr } from './parts.jsx';
 export { faNum, pct, moneyK, timeAgo } from './format.jsx';
 
 export { default } from './WeatherPanel.jsx';

@@ -52,24 +52,68 @@ export const TLT_DURATION = 16.5;
 /** how a raw upstream `source` string should read to a person. */
 const CCY_FA = { EUR: 'یورو', JPY: 'ین', GBP: 'پوند', CAD: 'دلار کانادا', SEK: 'کرون سوئد', CHF: 'فرانک سوئیس' };
 
+/* Every source id the pass can carry, in the reader's language. Full ids
+   first (the domain readers and the engines), then the prefix of an id such as
+   «ostium:XAU/USD». Brand names stay as brands; engine ids become words. */
+const SOURCE_FULL = Object.freeze({
+  'whales:scanner': ['اسکنر نهنگ', 'whale scanner'],
+  'smartmoney:overview': ['پول هوشمند', 'smart money'],
+  'smartmoney:verified-index': ['شاخص تأییدشدهٔ پول هوشمند', 'verified smart-money index'],
+  'macro:classifier': ['طبقه‌بندی خبر کلان', 'macro classifier'],
+  'brain:stocks': ['سهام (Avantis)', 'stocks (Avantis)'],
+  'brain:forex': ['ارز (Ostium)', 'forex (Ostium)'],
+  'brain:commodities': ['کالا (Ostium)', 'commodities (Ostium)'],
+  'brain:rwa': ['دارایی‌های واقعی (Ostium)', 'RWA (Ostium)'],
+  'cross-asset-engine': ['موتور بین‌دارایی', 'cross-asset engine'],
+  'news-engine': ['موتور خبر', 'news engine'],
+  chainintel: ['ردیاب زنجیره', 'chain tracker'],
+  calibration: ['محک مدل', 'model calibration'],
+  'ecb:dxy-basket': ['سبد رسمی بانک مرکزی اروپا', 'ECB official basket'],
+  /* the chain-intel health ledger */
+  blockchain: ['شبکه‌های بلاک‌چین', 'blockchain networks'],
+  bridge: ['پل‌های بین‌زنجیره', 'cross-chain bridges'],
+  'dex-aggregator': ['تجمیع‌کنندهٔ صرافی‌های غیرمتمرکز', 'DEX aggregator'],
+  dydx: ['dYdX', 'dYdX'],
+  'equities-feed': ['خوراک سهام', 'equities feed'],
+  'etf-feed': ['خوراک صندوق‌های قابل‌معامله', 'ETF feed'],
+  'futures-engine': ['موتور قراردادهای آتی', 'futures engine'],
+  'goals-engine': ['موتور اهداف', 'goals engine'],
+  'gold-feed': ['خوراک طلا', 'gold feed'],
+  'lending-protocol': ['پروتکل‌های وام‌دهی', 'lending protocols'],
+  'market-data': ['دادهٔ بازار', 'market data'],
+  'rwa-feed': ['خوراک دارایی‌های واقعی', 'RWA feed'],
+  'token-risk-service': ['سرویس ریسک توکن', 'token-risk service'],
+  'yields-engine': ['موتور بازدهی', 'yields engine'],
+  'ci:markets': ['بازارهای زنجیره', 'chain markets'],
+  'ci:gas': ['کارمزد شبکه', 'network gas']
+});
+const SOURCE_HEAD = Object.freeze({
+  ostium: ['Ostium', 'Ostium'], avantis: ['Avantis', 'Avantis'],
+  treasury: ['خزانه‌داری آمریکا', 'US Treasury'],
+  ecb: ['بانک مرکزی اروپا', 'ECB'],
+  fredcsv: ['FRED', 'FRED'], fred: ['FRED', 'FRED'],
+  stooq: ['Stooq', 'Stooq'], yahoo: ['Yahoo Finance', 'Yahoo Finance'],
+  av: ['Alpha Vantage', 'Alpha Vantage'],
+  coingecko: ['CoinGecko', 'CoinGecko'], defillama: ['DefiLlama', 'DefiLlama'],
+  etf: ['صندوق‌های قابل‌معامله', 'ETF feed'],
+  macrodata: ['میز کلان', 'macro desk'],
+  smartmoney: ['پول هوشمند', 'smart money'], whales: ['اسکنر نهنگ', 'whale scanner'],
+  macro: ['طبقه‌بندی خبر کلان', 'macro classifier'], brain: ['موتور بازار', 'market engine'],
+  ci: ['ردیاب زنجیره', 'chain tracker'], news: ['موتور خبر', 'news engine'],
+  briefing: ['گزارش وضعیت', 'status report']
+});
+
 export function describeSource(source, isPersian = true) {
-  const s = String(source || '');
-  const head = s.split(':')[0].toLowerCase();
-  const table = {
-    ostium: ['Ostium', 'Ostium'],
-    treasury: ['خزانه‌داری آمریکا', 'US Treasury'],
-    ecb: ['بانک مرکزی اروپا', 'ECB'],
-    fredcsv: ['FRED', 'FRED'], fred: ['FRED', 'FRED'],
-    stooq: ['Stooq', 'Stooq'], yahoo: ['Yahoo Finance', 'Yahoo Finance'],
-    av: ['Alpha Vantage', 'Alpha Vantage'],
-    coingecko: ['CoinGecko', 'CoinGecko'], defillama: ['DefiLlama', 'DefiLlama'],
-    macrodata: ['میز کلان', 'macro desk']
-  };
-  const hit = table[head];
-  if (!hit) return s ? s.replace(/[:_]/g, ' ') : null;
-  const label = isPersian ? hit[0] : hit[1];
-  if (head === 'ecb' && /basket/i.test(s)) return isPersian ? 'سبد رسمی ECB' : 'ECB official basket';
-  return label;
+  const s = String(source || '').trim();
+  if (!s) return null;
+  const low = s.toLowerCase();
+  const pick = (hit) => (isPersian ? hit[0] : hit[1]);
+  if (SOURCE_FULL[low]) return pick(SOURCE_FULL[low]);
+  const head = low.split(':')[0];
+  if (SOURCE_FULL[head]) return pick(SOURCE_FULL[head]);
+  if (head === 'ecb' && /basket/i.test(s)) return pick(SOURCE_FULL['ecb:dxy-basket']);
+  if (SOURCE_HEAD[head]) return pick(SOURCE_HEAD[head]);
+  return s.replace(/[:_-]/g, ' ');
 }
 
 /** the quote shape every panel already understands, plus the quality facts. */

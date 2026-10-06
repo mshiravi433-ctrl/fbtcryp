@@ -19,9 +19,10 @@
  * Nothing is filled in to make the panel look complete.
  */
 import { useMemo } from 'react';
-import { buildOutlookReading, usdCompact } from './worldModel.js';
+import { buildOutlookReading, usdCompact, OUTLOOK_LABEL_FA } from './worldModel.js';
 import { WIcon, DirMark } from './icons.jsx';
 import { faNum, pct } from './format.jsx';
+import { describeSource } from './resolve.js';
 
 const SIGNAL_FA = {
   risk_mood: 'حال‌وهوای کلاس‌ها', breadth: 'گستردگی حرکت‌ها', dollar_pressure: 'فشار دلار',
@@ -133,7 +134,7 @@ export function OutlookPanel({ world, L, isPersian }) {
               <span className="aigw-ltr">{o.score === null ? '—' : (o.score > 0 ? '+' : '') + o.score}</span>
             </span>
             {o.engineLabel
-              ? <span className="aigw-pill info">{L(`موتور: ${o.engineLabel}`, `engine: ${o.engineLabel}`)}</span>
+              ? <span className="aigw-pill info">{L(`موتور: ${OUTLOOK_LABEL_FA[o.engineLabel] || o.engineLabel.replace(/_/g, ' ')}`, `engine: ${o.engineLabel.replace(/_/g, ' ').toLowerCase()}`)}</span>
               : <span className="aigw-pill ghost">{L('موتور این دور پاسخ نداد', 'the engine did not answer')}</span>}
             {o.localScore !== null
               ? <span className="aigw-pill flat">{L(`محلی: ${faNum(o.localScore)}`, `local: ${o.localScore}`)}</span>
@@ -202,7 +203,7 @@ export function OutlookPanel({ world, L, isPersian }) {
                       {dirWord(s).kind === 'up' ? L('پشتیبان', 'supportive') : dirWord(s).kind === 'down' ? L('هشداردهنده', 'cautionary') : L('خنثی', 'neutral')}
                     </span>
                   </span>
-                  {s.source ? <span className="aigw-ltr" style={{ fontSize: 8.5, color: 'var(--text-3)' }}>{s.source}</span> : null}
+                  {describeSource(s.source, isPersian) ? <span style={{ fontSize: 8.5, color: 'var(--text-3)' }}>{describeSource(s.source, isPersian)}</span> : null}
                 </div>
                 {s.evidence ? (
                   <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.85 }}>

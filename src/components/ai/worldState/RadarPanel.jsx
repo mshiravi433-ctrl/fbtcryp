@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react';
 import { buildRadar, RADAR_SECTORS, usdCompact } from './worldModel.js';
 import { WIcon, DirMark } from './icons.jsx';
 import { faNum, pct, timeAgo } from './format.jsx';
+import { describeSource } from './resolve.js';
 
 const TONE_META = {
   critical: { fa: 'بحرانی', en: 'Critical', color: '#ef4444' },
@@ -61,7 +62,7 @@ export function RadarPanel({ world, L, isPersian }) {
       <div className="aigw-radar-wrap">
         <div className="aigw-radar-scope">
           <svg className="aigw-radar" viewBox="0 0 320 320" dir="ltr" role="img"
-            aria-label={L('رادار جهانی FBT', 'FBT global radar')}>
+            aria-label={L('رادار جهانی', 'global radar')}>
             <defs>
               <linearGradient id="aigw-sweepg" x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0%" stopColor="#4ade80" stopOpacity="0" />
@@ -184,7 +185,7 @@ export function RadarPanel({ world, L, isPersian }) {
             {blip.detail ? <span className="aigw-pill ghost aigw-ltr">{blip.detail}</span> : null}
             {blip.at ? <span className="aigw-pill ghost">{timeAgo(blip.at, isPersian)}</span> : null}
           </div>
-          {blip.meta ? <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>{L('منبع', 'source')}: {blip.meta}</div> : null}
+          {describeSource(blip.meta, isPersian) ? <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>{L('منبع', 'source')}: {describeSource(blip.meta, isPersian)}</div> : null}
         </div>
       ) : (
         <div className="aig-empty">{L('هنوز سیگنالی در این دور ثبت نشده است.', 'No signal was recorded in this pass yet.')}</div>
@@ -206,7 +207,7 @@ export function RadarPanel({ world, L, isPersian }) {
                 <span className="aigw-tape-title">{isPersian && b.titleFa ? b.titleFa : b.title}</span>
                 <span className="aigw-tape-sub">
                   {isPersian ? RADAR_SECTORS.find((s) => s.id === b.sector)?.fa : RADAR_SECTORS.find((s) => s.id === b.sector)?.en}
-                  {b.meta ? ` · ${b.meta}` : ''}
+                  {describeSource(b.meta, isPersian) ? ` · ${describeSource(b.meta, isPersian)}` : ''}
                 </span>
               </span>
               <span className="aigw-tape-val">{valueText(b, isPersian) || `${Math.round(b.severity * 100)}`}</span>

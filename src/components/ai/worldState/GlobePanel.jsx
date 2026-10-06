@@ -25,6 +25,12 @@ import { buildGlobeModel, COUNTRIES } from './worldModel.js';
 import { landCells } from './landMask.js';
 import { WIcon, DirMark } from './icons.jsx';
 import { faNum, pct } from './format.jsx';
+import { QualityBadge, Ltr } from './parts.jsx';
+
+const KIND_WORD = {
+  direct: { fa: 'مستقیم', en: 'direct' }, proxy: { fa: 'پروکسی', en: 'proxy' }, reference: { fa: 'نرخ مرجع', en: 'reference' },
+  peg: { fa: 'نرخ ثابت', en: 'peg' }, news: { fa: 'خبر', en: 'news' }
+};
 
 const DEG = Math.PI / 180;
 const SPEED = 0.042;           // rad/s — a full turn in ~2.5 minutes («آرام»)
@@ -316,8 +322,8 @@ export function GlobePanel({ world, L, isPersian }) {
         <div className="aigw-globe-hud">
           <span className="aigw-pill info">
             {isPersian
-              ? `${faNum(coverage.read)} کشور با خوانش · ${faNum(coverage.partial)} ناقص · ${faNum(coverage.total)} در تخته`
-              : `${coverage.read} read · ${coverage.partial} partial · ${coverage.total} on board`}
+              ? `${faNum(coverage.read)} از ${faNum(coverage.total)} کشور خوانده شد${coverage.partial ? ` · ${faNum(coverage.partial)} ناقص` : ''}`
+              : `${coverage.read} of ${coverage.total} countries read${coverage.partial ? ` · ${coverage.partial} partial` : ''}`}
           </span>
           <span className="aigw-pill ghost">
             <WIcon name="globe" size={11} />
@@ -369,49 +375,61 @@ export function GlobePanel({ world, L, isPersian }) {
             <span className="aigw-country-name">
               <WIcon name="globe" size={16} style={{ color: 'var(--acc1)' }} />
               {isPersian ? snap.country.fa : snap.country.en}
-              <span className="aigw-ltr" style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700 }}>
-                {snap.country.lat.toFixed(1)}°, {snap.country.lon.toFixed(1)}°
-              </span>
             </span>
             {snap.status === 'unread'
               ? <span className="aigw-pill ghost">{L('خوانده نشد', 'unread')}</span>
               : (
                 <span className={`aigw-pill ${snap.mood === 'up' ? 'up' : snap.mood === 'down' ? 'down' : 'flat'}`}>
                   <DirMark dir={snap.mood} size={9} />
-                  {snap.net !== null ? pct(snap.net, isPersian) : L('خوانده شد', 'read')}
+                  {snap.net !== null ? <Ltr>{pct(snap.net, isPersian)}</Ltr> : L('خوانده شد', 'read')}
                 </span>
               )}
           </div>
 
           <div className="aigw-country-sum">{isPersian ? snap.summaryFa : snap.summaryEn}</div>
 
-          {snap.rows.length ? snap.rows.map((r, i) => (
-            <div key={`${r.sym}-${i}`} className="aigw-country-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="aigw-country-sym">
-                  <span className="aigw-ltr">{r.sym}</span>
-                  {r.name ? <span style={{ color: 'var(--text-2)', fontWeight: 650, fontSize: 10 }}>{r.name}</span> : null}
-                  <span className={`aigw-pill ${r.kind === 'proxy' ? 'warn' : r.kind === 'reference' ? 'flat' : 'info'}`} style={{ fontSize: 9, padding: '1px 6px' }}>
-                    {r.kind === 'proxy' ? L('پروکسی', 'proxy') : r.kind === 'reference' ? L('نرخ مرجع', 'reference') : L('مستقیم', 'direct')}
+          {snap.rows.length ? snap.rows.map((r, i) => {
+            const level = isPersian ? (r.valueFa || r.value) : (r.valueEn || r.value);
+            const sourceName = isPersian ? r.sourceFa : r.sourceEn;
+            const note = isPersian ? (r.noteFa || r.note) : (r.noteEn || r.note);
+            return (
+              <div key={`${r.sym}-${i}`} className={`aigw-country-row k-${r.kind}`}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="aigw-country-sym">
+                    <span className="aigw-country-nm">{isPersian ? (r.nameFa || r.name) : (r.nameEn || r.name)}</span>
+                    {r.kind !== 'news' ? <span className="aigw-ltr aigw-country-tk">{r.sym}</span> : null}
+                    <span className={`aigw-pill ${r.kind === 'proxy' ? 'warn' : r.kind === 'reference' || r.kind === 'peg' ? 'flat' : r.kind === 'news' ? 'ghost' : 'info'}`} style={{ fontSize: 9, padding: '1px 6px' }}>
+                      {KIND_WORD[r.kind] ? (isPersian ? KIND_WORD[r.kind].fa : KIND_WORD[r.kind].en) : r.kind}
+                    </span>
+                    {r.quality === 'proxy' && r.kind !== 'proxy' ? <QualityBadge quality="proxy" isPersian={isPersian} /> : null}
+                  </div>
+                  <div className="aigw-country-sub">
+                    {r.change !== null && level ? <Ltr>{level}</Ltr> : null}
+                    {r.change !== null && level && sourceName ? ' · ' : ''}
+                    {sourceName ? `${L('منبع', 'source')}: ${sourceName}` : ''}
+                    {note ? `${(r.change !== null && level) || sourceName ? ' · ' : ''}${note}` : ''}
+                  </div>
+                  {r.headlines?.length ? (
+                    <ul className="aigw-country-news">
+                      {r.headlines.map((h, j) => (
+                        <li key={j}><bdi dir="auto">{h.title}</bdi>{h.source ? <small> · {h.source}</small> : null}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  {r.change !== null ? (
+                    <span className="aigw-country-bar" aria-hidden="true">
+                      <i className={r.dir === 'down' ? 'down' : 'up'} style={{ width: `${Math.min(48, Math.abs(r.change) * 16)}%` }} />
+                    </span>
+                  ) : null}
+                  <span className="aigw-country-val">
+                    <Ltr>{r.change !== null ? pct(r.change, isPersian) : (level || '—')}</Ltr>
                   </span>
                 </div>
-                <div className="aigw-country-sub">
-                  {r.source ? `${L('منبع', 'source')}: ${r.source}` : ''}
-                  {r.note ? `${r.source ? ' · ' : ''}${r.note}` : ''}
-                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                {r.change !== null ? (
-                  <span className="aigw-country-bar" aria-hidden="true">
-                    <i className={r.dir === 'down' ? 'down' : 'up'} style={{ width: `${Math.min(48, Math.abs(r.change) * 16)}%` }} />
-                  </span>
-                ) : null}
-                <span className="aigw-country-val aigw-ltr">
-                  {r.change !== null ? pct(r.change, isPersian) : (r.value || '—')}
-                </span>
-              </div>
-            </div>
-          )) : (
+            );
+          }) : (
             <div className="aig-empty">{L('در این دور خوانشی برای این کشور ثبت نشد.', 'No reading was recorded for this country in this pass.')}</div>
           )}
 
@@ -423,8 +441,8 @@ export function GlobePanel({ world, L, isPersian }) {
 
       <div className="aigw-note">
         {L(
-          'هر کشور فقط به سازوکارهایی وصل است که این اپ واقعاً می‌خواند (شاخص دلار، بازده‌ها، کالاها، برابری ارزها، نرخ مرجع ریال)؛ نوع هر پیوند — مستقیم، پروکسی یا نرخ مرجع — روی همان ردیف نوشته شده و هرچه خوانده نشد «خوانده نشد» می‌ماند. ماتریس نقطه‌ها کل خشکی‌های زمین است (از Natural Earth، بدون تایل و بدون درخواست شبکه) و کره آرام می‌چرخد؛ ریل بالا اقتصادهای پوشش‌داده‌شدهٔ همین دور را نشان می‌دهد.',
-          'Each country links only to mechanisms this app actually reads (dollar index, yields, commodities, FX parities, the rial reference); every link is labelled direct, proxy or reference on its row, and whatever was not read stays explicitly unread. The dot matrix is the whole planet\u2019s land (baked from Natural Earth, no tiles and no fetch) and the sphere turns slowly — the rail above lists the covered economies of this pass.'
+          'ارز محلی هر کشور در برابر دلار از نرخ‌های مرجع بانک مرکزی اروپا خوانده می‌شود و خوانش مستقیم است؛ کالاها و شاخص‌ها پروکسی‌اند و برچسب دارند؛ کشورهای دارای نرخ ثابت رسمی با همین عنوان نشان داده می‌شوند. «برآیند» فقط از ارز محلی (یا اگر نبود، از پروکسی‌ها) ساخته می‌شود و اعلام می‌کند از کدام. هر چه خوانده نشده باشد خالی می‌ماند و حدس زده نمی‌شود.',
+          'Each country\u2019s own currency against the dollar comes from ECB reference rates and is a direct read; commodities and indices are labelled proxies; officially pegged currencies are shown as such. The «net» is built from the local currency (or, when absent, from proxies) and says which. Whatever was not read stays empty — nothing is guessed.'
         )}
       </div>
     </div>
