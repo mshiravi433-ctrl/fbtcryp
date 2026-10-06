@@ -113,8 +113,8 @@ export const ROUTED_PATHS = Object.freeze([
   '/vault', '/loan',
   // FBT Launch — token & liquidity launchpad (non-custodial module).
   '/launch',
-  // Phase 211 — AI Global Intelligence surface (additive).
-  '/ai-global',
+  // Phase 211 — Global Intelligence («جهانی»): its own page at /global; /ai-global is the alias.
+  '/global', '/ai-global',
   // FBT Insurance OS (protection marketplace) — nested under the shell route.
   '/insurance', '/insurance/marketplace', '/insurance/quote/:quoteId',
   '/insurance/coverage', '/insurance/coverage/:id', '/insurance/claims',

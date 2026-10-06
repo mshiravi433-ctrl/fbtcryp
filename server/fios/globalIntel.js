@@ -92,7 +92,24 @@ const SNAPSHOT_TTL_MS = 60_000;
 const NEWS_FRESH_MS = 48 * 3600_000;
 
 const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+const positive = (v) => { const n = num(v); return n !== null && n > 0 ? n : null; };
 const str = (v, max = 160) => (v === null || v === undefined ? null : String(v).slice(0, max));
+/** A transfer party: the scanner sometimes answers an OBJECT ({ address, label })
+ *  where a string was expected, and `String(object)` is «[object Object]» — the
+ *  literal text that reached the screen. A label wins; an address is shortened;
+ *  anything else is simply «not read». */
+export function partyLabel(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') return str(v.trim(), 24) || null;
+  if (typeof v === 'object') {
+    const label = v.label || v.name || v.entity || v.owner || null;
+    if (typeof label === 'string' && label.trim()) return str(label.trim(), 24);
+    const addr = v.address || v.addr || v.id || null;
+    if (typeof addr === 'string' && addr.length > 12) return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    return typeof addr === 'string' && addr ? str(addr, 24) : null;
+  }
+  return null;
+}
 
 function withTimeout(promise, ms = TIMEOUT_MS, label = 'provider') {
   return Promise.race([
@@ -202,7 +219,7 @@ export function normalizeWhales(out, at = Date.now()) {
       chain: str(e.chainShort || e.chain, 16),
       valueUsd: num(e.valueUsd),
       flow: str(e.flow, 24) || 'transfer',
-      from: str(e.from, 20), to: str(e.to, 20),
+      from: partyLabel(e.from), to: partyLabel(e.to),
       at: num(e.timestamp) || num(e.at)
     })).filter((e) => e.symbol && e.valueUsd !== null),
     note: 'large on-chain transfers observed while the scanner ran — not full chain history'
@@ -303,6 +320,18 @@ export function normalizeMacro(newsDomain, macroQuotes = null, at = Date.now()) 
        not among what a source returned. */
     curve: curve ? { symbol: curve.symbol, spreadPct: curve.priceUsd, change7dPct: curve.change7dPct, source: curve.source } : null,
     sources: { news: newsRead ? 'news-engine' : null, quotes: str(macroQuotes?.source, 40) || null },
+    /* A quote read that is the LAST GOOD one says so, with its age — an old
+       number that admits it is old is useful, one that poses as live is not. */
+    stale: macroQuotes?.stale === true,
+    staleAgeMs: num(macroQuotes?.staleAgeMs),
+    /* per-desk diagnostics: which independent desk answered, which did not */
+    desks: Array.isArray(macroQuotes?.desks)
+      ? macroQuotes.desks.slice(0, 12).map((d) => ({ desk: str(d.desk, 16), role: str(d.role, 16), count: num(d.count), ok: d.ok === true, error: str(d.error, 40) }))
+      : [],
+    /* currency-vs-USD table (ECB reference rates) — feeds the globe */
+    fx: Array.isArray(macroQuotes?.fx)
+      ? macroQuotes.fx.slice(0, 40).map((f) => ({ ccy: str(f.ccy, 4), perUsd: num(f.perUsd), change1dPct: num(f.change1dPct), change7dPct: num(f.change7dPct), at: num(f.at), source: str(f.source, 32) })).filter((f) => f.ccy && f.perUsd !== null)
+      : [],
     untrusted: true
   }, 'macro:classifier', classified.length && quotes.length ? 0.7 : 0.6, { at, partial: !classified.length || !quotes.length });
 }
@@ -320,10 +349,15 @@ export function normalizeStocks(out, at = Date.now()) {
     instruments: instruments.slice(0, 15).map((r) => ({
       symbol: str(r.symbol, 12), name: str(r.name, 80), country: str(r.country, 8),
       logoURI: /^https:\/\//i.test(String(r.logoURI || r.logo || '')) ? str(r.logoURI || r.logo, 300) : null,
-      priceUsd: num(r.priceUsd ?? r.price), change24hPct: num(r.change24hPct ?? r.change24h),
+      /* a price of ZERO is the venue's «no price», not a price: Avantis rows
+         arrived as 0 and the page printed fifteen equities at $0 */
+      priceUsd: positive(r.priceUsd ?? r.price), change24hPct: num(r.change24hPct ?? r.change24h),
       marketOpen: r.marketOpen === true ? true : (r.marketOpen === false ? false : null)
     })).filter((r) => r.symbol)
-  }, str(out.source, 40) || 'brain:stocks', out.stale ? 0.5 : 0.75, { at, partial: out.stale === true });
+  }, str(out.source, 40) || 'brain:stocks', out.stale ? 0.5 : 0.75, {
+    at,
+    partial: out.stale === true || !instruments.some((r) => positive(r.priceUsd ?? r.price) !== null)
+  });
 }
 
 /** forex / commodities / rwa: the brain's Ostium read, bucketed. The 24h
@@ -337,6 +371,8 @@ export function normalizeRwaClass(out, category, at = Date.now()) {
       symbol: str(r.symbol, 20),
       priceUsd: num(r.priceUsd ?? r.price),
       change24hPct: num(r.change24hPct ?? r.change24h),
+      change7dPct: num(r.change7dPct),
+      changeSource: str(r.changeSource, 24),
       category: str(r.category, 20) || category
     }))
     .filter((r) => r.symbol && r.priceUsd !== null)

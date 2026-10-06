@@ -38,6 +38,7 @@ import { proxyKyberRoutes, proxyOoQuote, kyberSlug, ooSlug } from '../swapProxy.
 import { listGoals, marketSnapshot } from '../financialGoals.js';
 import { fetchAvantisEquities } from '../avantis.js';
 import { fetchOstiumPrices } from '../ostium.js';
+import { readOstiumDailyChanges } from '../ostiumDaily.js';
 import { fetchDydxMarkets as dydxMarketsReal } from '../dydx.js';
 import {
   chainTokens, findToken, rpcWithFailover, readUserAccount, readReserve, oraclePrices
@@ -850,6 +851,9 @@ async function goldSpot() {
   };
 }
 
+/** Index perps priced by Ostium — the ones worth a daily-candle read. */
+const OSTIUM_INDEX_PAIR = /^(US500|US100|US30|SPX|NDX|DJI|GER40|DE40|UK100|JP225|HK50|FR40|EU50|AUS200|CN50|NAS100)-/;
+
 async function rwaMarkets() {
   const res = await guarded('rwa-feed', () => fetchOstiumPrices(), { staleKey: 'ci:ostium' });
   if (!res.ok) return { ok: false, code: res.code };
@@ -873,6 +877,7 @@ async function rwaMarkets() {
     const row = { __flat: flat, group: r?.group, assetType: r?.assetType, type: r?.type, category: r?.category };
     return {
       symbol,
+      pair: pairMatch ? `${pairMatch[1]}-${pairMatch[2]}` : null,
       priceUsd,
       change24hPct: numOr(r?.change24hPct ?? r?.change24h ?? r?.priceChangePct ?? r?.changePct),
       category: classifyOstiumRow(row),
@@ -886,10 +891,33 @@ async function rwaMarkets() {
        must hear it as one instead of NO_INSTRUMENTS_IN_CATEGORY. */
     return { ok: false, code: 'RWA_SHAPE_UNUSABLE', venue: 'ostium', rawRows: rows.length, stale: res.stale === true, source: 'rwa-feed:ostium', at: Date.now() };
   }
+  /* ─── THE FEED HAS A LEVEL, NOT A MOVE ───────────────────────────────────
+     `/v1/prices` carries no previous close, so every row used to leave here
+     with `change24hPct: null` and a class of fifteen priced markets could not
+     say whether it was up or down. The same venue's daily candles can: the
+     forex, metals/energy and index rows get last-close vs previous-close,
+     read through one bounded, cached call (see ostiumDaily.js). A pair that
+     cannot be read keeps null — never a carried or guessed move. */
+  const wantsMove = (r) => r.change24hPct === null && r.pair
+    && (r.category === 'forex' || r.category === 'commodities' || OSTIUM_INDEX_PAIR.test(r.pair));
+  try {
+    const targets = mapped.filter(wantsMove).map((r) => r.pair);
+    if (targets.length) {
+      const moves = await readOstiumDailyChanges(targets, { deadlineMs: 3_000 });
+      for (const r of mapped) {
+        const m = r.pair ? moves.get(r.pair) : null;
+        if (m && r.change24hPct === null) {
+          r.change24hPct = m.change1dPct;
+          r.change7dPct = m.change7dPct;
+          r.changeSource = 'ostium:1D-candles';
+        }
+      }
+    }
+  } catch { /* the move stays unread — the level is still real */ }
   return {
     ok: mapped.length > 0,
     venue: 'ostium',
-    rows: mapped.slice(0, 30),
+    rows: mapped.slice(0, 40),
     stale: res.stale === true,
     readOnly: true,
     source: 'rwa-feed:ostium', at: Date.now()
@@ -996,7 +1024,14 @@ const toWei = (amount, decimals) => {
   if (!Number.isFinite(n) || n <= 0) return 0n;
   return BigInt(Math.round(n * 10 ** Number(decimals)));
 };
-const numOr = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+/* `Number(null)` is 0 — so `numOr(null)` used to answer 0, and a venue that
+   returned NO price (Avantis when its price feed is dark) became a price of
+   exactly zero on screen. Null, empty and boolean inputs are «not read». */
+const numOr = (v) => {
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 const round = (v, d = 2) => { const f = 10 ** d; const n = Number(v); return Number.isFinite(n) ? Math.round(n * f) / f : null; };
 const hash = (s) => createHash('sha1').update(String(s)).digest('hex').slice(0, 12);
 const symbolsIn = (title) => {

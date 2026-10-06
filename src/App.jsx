@@ -113,11 +113,13 @@ const IntentOS = lazyRetry(() => import('./pages/IntentOS'));
 const FlashLiquidity = lazyRetry(() => import('./pages/FlashLiquidity'));
 const IntentAIUnified = lazyRetry(() => import('./components/IntentAIUnified'));
 const AiControlCenter = lazyRetry(() => import('./components/ai/AiControlCenter'));
-/* Phase 211 — Global AI Intelligence: the /ai-global surface. ADDITIVE route:
-   the nine global intelligence domains, the cross-asset regime and the
-   proactive briefing, on the FI's own /api/ai/global/* endpoints. Nothing
-   existing is replaced — /ai-control and /intent keep their roles. */
-const AiGlobalIntelligence = lazyRetry(() => import('./components/ai/AiGlobalIntelligence'));
+/* Phase 211 — Global Intelligence («هوش جهانی»). ADDITIVE route: the nine
+   global intelligence domains, the cross-asset regime and the proactive
+   briefing, on the FI's own /api/ai/global/* endpoints. It is its OWN PAGE now
+   — /global, opened from More → «جهانی» — rather than a News tab; /ai-global
+   stays as an alias so older links and the AI's navigation still land.
+   Nothing existing is replaced — /ai-control and /intent keep their roles. */
+const GlobalWorld = lazyRetry(() => import('./pages/GlobalWorld'));
 /*
  * The vault's own route, so the Earn row for it has somewhere to go. The page
  * renders the live <VaultCard /> when a vault is deployed and an honest "none
@@ -330,6 +332,10 @@ function prefetchLikelyRoutes() {
 function AppChrome() {
   const { pathname } = useLocation();
   const headerless = pathname === '/intent' || pathname.startsWith('/pay');
+  /* «نه جمع شده» — the world console is a dashboard, not a phone column. On wide
+     screens its shell opens up (see `.app-shell--wide` in index.css); every
+     other page keeps the narrow centred column it was designed for. */
+  const wide = pathname === '/global' || pathname.startsWith('/global/');
   /*
     ─── THE BOTTOM EDGE BELONGS TO WHOEVER NEEDS IT MOST ───────────────────
     «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود» — on a coin page
@@ -349,7 +355,7 @@ function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
+    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
       {!headerless && <Header />}
       <PullToRefresh>
         <AnimatedRoutes />
@@ -456,7 +462,8 @@ function AnimatedRoutes() {
             <Route path="/intent" element={<IntentAIUnified />} />
             <Route path="/intent-ai" element={<Navigate to="/intent" replace />} />
             <Route path="/ai-control" element={<AiControlCenter />} />
-            <Route path="/ai-global" element={<AiGlobalIntelligence />} />
+            <Route path="/global" element={<GlobalWorld />} />
+            <Route path="/ai-global" element={<Navigate to="/global" replace />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/vault" element={<Vault />} />
             <Route path="/loan" element={<Loan />} />

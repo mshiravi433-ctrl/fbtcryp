@@ -1,11 +1,12 @@
 {
   "probe": "phase211-routes-inventory",
-  "passed": 12,
+  "passed": 13,
   "failed": 0,
-  "total": 12,
+  "total": 13,
   "removedRoutes": [],
   "addedRoutes": [
-    "/ai-global → AiGlobalIntelligence",
+    "/ai-global → Navigate",
+    "/global → GlobalWorld",
     "/launch → Launch",
     "/pay/:code → PayLanding"
   ],
@@ -13,11 +14,11 @@
   "counts": {
     "frontend": {
       "before": 64,
-      "after": 68
+      "after": 69
     },
     "chatNav": {
       "before": 64,
-      "after": 67
+      "after": 68
     },
     "mounts": {
       "before": 30,
@@ -41,7 +42,18 @@
       "name": "FRONTEND: Phase 211 only ADDED routes (later phases may add, never remove)",
       "ok": true,
       "extra": [
-        "/ai-global → AiGlobalIntelligence",
+        "/ai-global → Navigate",
+        "/global → GlobalWorld",
+        "/launch → Launch",
+        "/pay/:code → PayLanding"
+      ]
+    },
+    {
+      "name": "FRONTEND: the console is its own page — /global is mounted, and /ai-global forwards to it",
+      "ok": true,
+      "extra": [
+        "/ai-global → Navigate",
+        "/global → GlobalWorld",
         "/launch → Launch",
         "/pay/:code → PayLanding"
       ]
@@ -51,20 +63,20 @@
       "ok": true
     },
     {
-      "name": "PAGES: the new AI Global Intelligence route resolves through a lazy import that exists",
+      "name": "PAGES: the Global page route resolves through a lazy import that exists, and the page mounts the console",
       "ok": true
     },
     {
       "name": "PAGES: the route count only grew",
       "ok": true,
-      "extra": "64 → 68"
+      "extra": "64 → 69"
     },
     {
       "name": "CHAT NAV: no navigable path was removed",
       "ok": true
     },
     {
-      "name": "CHAT NAV: /ai-global is navigable by the AI",
+      "name": "CHAT NAV: /global and the /ai-global alias are navigable by the AI",
       "ok": true
     },
     {

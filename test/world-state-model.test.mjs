@@ -236,8 +236,8 @@ test('weather stations: the four asked-for measures lead, and unread stays unrea
 
 test('climate: the index is a coverage-weighted blend of real parts only', () => {
   const c = buildClimate(FULL);
-  assert.equal(c.total, 9);
-  assert.ok(c.readCount >= 5 && c.readCount <= 9, 'the fixture answers most parts');
+  assert.equal(c.total, Object.keys(CLIMATE_PART_META).length, 'the denominator is every declared part');
+  assert.ok(c.readCount >= 5 && c.readCount <= c.total, 'the fixture answers most parts');
   assert.ok(c.index >= 0 && c.index <= 100, 'the index is normalised to 0..100');
   assert.ok(c.coverage >= 0.3, 'the fixture has enough coverage to publish a label');
   assert.ok(c.label && TONE_WORD[c.label], 'the label is one of the weather tones');

@@ -134,6 +134,17 @@ const instrumentsOf = (domain) => {
   const data = value && typeof value === 'object' ? value.data : null;
   return Array.isArray(data?.instruments) ? data.instruments : (Array.isArray(data?.rows) ? data.rows : []);
 };
+/** True when a class domain carries at least one instrument with a REAL 24h
+ *  change. A domain can be `OK` and still be price-only (Ostium and Avantis
+ *  answer levels, not moves) — such a class cannot vote in the regime, so the
+ *  macro-desk fallback must be allowed to stand in for it. */
+export function domainHasChange(domain) {
+  if (!domain || domain.status === 'UNAVAILABLE') return false;
+  return instrumentsOf(domain).some((i) => {
+    const v = i?.change24hPct ?? i?.changePct;
+    return v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+  });
+}
 const dataOf = (domain) => {
   const value = domain && typeof domain === 'object' && domain.schema === 'fbt.fi.provenance.v1' ? domain.value : domain;
   return value && typeof value === 'object' ? value.data : null;
@@ -499,6 +510,12 @@ export function analyzeCrossAsset({ world = null, globalIntel = null, cryptoInst
       at: num(q?.at)
     })).filter((q) => q.symbol && q.priceUsd !== null),
     curve: macroData?.curve && typeof macroData.curve === 'object' ? { ...macroData.curve } : null,
+    /* data-quality facts the screens print: is this the LAST GOOD read, how old
+       is it, which desks answered, and the currency-vs-USD table */
+    stale: macroData?.stale === true,
+    staleAgeMs: num(macroData?.staleAgeMs),
+    desks: Array.isArray(macroData?.desks) ? macroData.desks : [],
+    fx: Array.isArray(macroData?.fx) ? macroData.fx : [],
     untrusted: true
   };
   result.outlook = economicOutlook({
@@ -832,6 +849,13 @@ export function crossAssetDigest(analysis) {
     coMovement: analysis.regime?.coMovement ?? null,
     observedClasses: analysis.observedClasses,
     divergences: (analysis.divergences || []).map((d) => `${d.classes[0]} ${d.avgChangePct[d.classes[0]]}% vs ${d.classes[1]} ${d.avgChangePct[d.classes[1]]}%`),
+    /* The same pairs for a Persian line — class names and the sign/digits in
+       Persian, so the briefing never prints «crypto 1.2% vs stocks -0.4%»
+       inside a Persian sentence. */
+    divergencesFa: (analysis.divergences || []).map((d) => {
+      const [a, b] = d.classes;
+      return `${NARRATIVE_CLASS_FA[a] || a} ${pctFa(Number(d.avgChangePct[a])) ?? '—'} در برابر ${NARRATIVE_CLASS_FA[b] || b} ${pctFa(Number(d.avgChangePct[b])) ?? '—'}`;
+    }),
     avgChangePct: Object.fromEntries(analysis.observedClasses.map((c) => [c, analysis.classes[c].avgChangePct])),
     /* Phase 211.1 — the economic outlook, bounded: label + score + the two
        strongest named signals (with their evidence). */
@@ -843,7 +867,15 @@ export function crossAssetDigest(analysis) {
             .slice()
             .sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))
             .slice(0, 2)
-            .map((s) => `${s.name}: ${s.evidence}`)
+            .map((s) => `${s.name}: ${s.evidence}`),
+          /* Every signal already carries its Persian pair (nameFa/evidenceFa);
+             the digest used to drop it, which is how an English sentence ended
+             up inside the Persian briefing line. */
+          signalsFa: (analysis.outlook.signals || [])
+            .slice()
+            .sort((a, b) => Math.abs(b.value * b.weight) - Math.abs(a.value * a.weight))
+            .slice(0, 2)
+            .map((s) => `${s.nameFa || s.name}: ${s.evidenceFa || s.evidence}`)
         }
       : null,
     macroIndicators: analysis.macro?.indicators?.length ?? 0

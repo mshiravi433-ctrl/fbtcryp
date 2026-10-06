@@ -137,7 +137,7 @@ export default function run() {
      * to it.
      */
     '/solana',                  // -> tab inside /swap
-    '/ai-global',               // -> 'global' tab inside /news (AiGlobalIntelligence renders there; the standalone URL is kept as a contract)
+    '/ai-global',               // -> alias that forwards to /global (the console's own page, reached from More → جهانی); kept so old links and the AI's navigation still land
     '/ostium', '/dydx', '/derivatives', // -> derivatives / stocks tabs
     '/portfolio',               // -> Intelligence tile inside /wallet
     /*
@@ -15253,7 +15253,9 @@ export default function run() {
       /S&P 500 ETF/.test(macro) && /Nasdaq-100 ETF/.test(macro) &&
       /USD\/share/.test(macro));
     t('a topped-up instrument keeps the desk that produced it',
-      /macroData:\$\{primary\}\$\{topped \? '\+topup' : ''\}/.test(macro));
+      /`\$\{primary\}\$\{topped \? '\+topup' : ''\}`/.test(macro) &&
+      /source: `macroData:\$\{sourceName\}`/.test(macro) &&
+      /items\.some\(\(i\) => !String\(i\.source \|\| ''\)\.startsWith\(`\$\{primary\}:`\)\)/.test(macro));
     t('no macro desk answering is a throw, never a fabricated quote',
       /throw new Error\('NO_MACRO_DATA_SOURCE'\)/.test(macro) &&
       /MIN_ACCEPTABLE_INSTRUMENTS/.test(macro));

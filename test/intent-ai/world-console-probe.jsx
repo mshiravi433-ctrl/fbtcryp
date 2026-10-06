@@ -1,7 +1,7 @@
 /**
- * FBT WORLD CONSOLE PROBE — the «FBT جهانی» upgrade, rendered.
+ * WORLD CONSOLE PROBE — the «هوش جهانی» console, rendered.
  * ---------------------------------------------------------------------------
- * Proves the seven new sub-tabs inside News → FBT جهانی actually render and
+ * Proves the seven new sub-tabs of the «هوش جهانی» page actually render and
  * stay HONEST:
  *
  *   · world  — the nine GLOBAL FINANCIAL STATE gauges derive from the pass's
@@ -25,15 +25,48 @@
  */
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import i18n, { setLanguage } from '../../src/i18n/index.js';
 import AiGlobalIntelligence from '../../src/components/ai/AiGlobalIntelligence.jsx';
+import { WORLD_STYLES } from '../../src/components/ai/worldState/styles.js';
+import { GLOBAL_PAGE_STYLES } from '../../src/components/ai/worldState/ui.styles.js';
+
+/* the path the router is on — the tile-navigation checks read it */
+let lastPath = '/';
+function LocationSpy() {
+  const loc = useLocation();
+  lastPath = loc.pathname + loc.search;
+  return null;
+}
+/* the LAST declaration of a selector in the combined sheet (what the cascade uses) */
+const SHEET = WORLD_STYLES + GLOBAL_PAGE_STYLES;
+const lastRule = (sel) => {
+  const esc = sel.replace(/[.*+?^$()|[\]\\{}]/g, (c) => `\\${c}`);
+  const re = new RegExp(`${esc}\\s*\\{([^}]*)\\}`, 'g');
+  let m; let last = null;
+  while ((m = re.exec(SHEET))) last = m[1];
+  return last;
+};
+
+/* the property names used inside every `@keyframes <prefix>…` block of the sheet */
+const keyframeProps = (prefix) => {
+  const out = [];
+  const re = new RegExp(`@keyframes\\s+(${prefix}[\\w-]*)\\s*\\{`, 'g');
+  let m;
+  while ((m = re.exec(SHEET))) {
+    let depth = 1; let i = re.lastIndex;
+    while (i < SHEET.length && depth > 0) { if (SHEET[i] === '{') depth += 1; else if (SHEET[i] === '}') depth -= 1; i += 1; }
+    const body = SHEET.slice(re.lastIndex, i - 1);
+    for (const p of body.matchAll(/([a-z-]+)\s*:/g)) out.push([m[1], p[1]]);
+  }
+  return out;
+};
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* The same real envelopes the phase211 probe uses, plus a flows payload. */
 const NOW = Date.now();
-const INTEL = {
+export const INTEL = {
   ok: true, schema: 'fbt.fi.global-intelligence.v1',
   globalIntelligence: {
     schema: 'fbt.fi.global-intelligence.v1', owner: 'dev:probe', at: NOW, status: 'OK',
@@ -52,7 +85,7 @@ const INTEL = {
     providers: {}
   }
 };
-const BRIEFING = {
+export const BRIEFING = {
   ok: true,
   briefing: {
     schema: 'fbt.fi.briefing.v1', at: NOW, status: 'OK', proactive: true, executionAuthorized: false,
@@ -64,7 +97,7 @@ const BRIEFING = {
     counts: { critical: 1, high: 1, normal: 0, info: 1 }, missing: []
   }
 };
-const CROSS = {
+export const CROSS = {
   ok: true,
   crossAsset: {
     schema: 'fbt.fi.cross-asset.v1', at: NOW, status: 'OK',
@@ -97,7 +130,7 @@ const CROSS = {
     }
   }
 };
-const PROVIDERS = {
+export const PROVIDERS = {
   ok: true,
   providers: {
     smart_money: { implemented: true, configured: true, provider_available: true, runtime_ready: true, live: true, status: 'OK' },
@@ -106,13 +139,13 @@ const PROVIDERS = {
     rwa: { implemented: true, configured: false, provider_available: false, runtime_ready: false, live: false, status: 'UNAVAILABLE', reason: 'RWA_VENUE_UNCONFIGURED' }
   }
 };
-const FLOWS = {
+export const FLOWS = {
   ok: true, schema: 'fbt.capital-flows.v1', at: NOW,
   tokenFlows: { status: 'OK', topInflow: { symbol: 'BTC', name: 'Bitcoin', mcapChangeUsd: 1_900_000_000, mcapChangePct: 1.4 }, topOutflow: { symbol: 'XRP', name: 'XRP', mcapChangeUsd: -240_000_000, mcapChangePct: -0.9 }, rows: [] },
   chainFlows: { status: 'OK', net24hUsd: 84_000_000, net24hPct: 0.05, topInflowChain: { chain: 'ethereum', net24hUsd: 92_000_000 }, topOutflowChain: { chain: 'bsc', net24hUsd: -11_000_000 }, chainInflows: [], chainOutflows: [] },
   profitLeaders: { status: 'UNAVAILABLE', reason: 'PROFIT_SOURCE_UNAVAILABLE' }
 };
-const MACRO_GRAPH = {
+export const MACRO_GRAPH = {
   ok: true, schema: 'fbt.fi.macro-graph.v1',
   graph: {
     schema: 'fbt.fi.macro-graph.v1', at: NOW, coverage: { nodes: 9, edges: 11, sources: ['macro:classifier'] },
@@ -142,9 +175,14 @@ const MACRO_GRAPH = {
 
 export async function run(container) {
   const rows = [];
-  const check = (name, ok) => { rows.push([name, !!ok]); console.log(`${ok ? '✓' : '✗'} ${name}`); };
+  const check = (name, ok, detail) => { rows.push([name, !!ok]); console.log(`${ok ? '✓' : '✗'} ${name}${!ok && detail ? `  ← ${detail}` : ''}`); };
   const all = (sel) => Array.from(container.querySelectorAll(sel));
-  const text = () => container.textContent || '';
+  const text = () => {
+    /* what a person can read: the <style> sheets are not part of it */
+    const c = container.cloneNode(true);
+    c.querySelectorAll('style,script').forEach((n) => n.remove());
+    return c.textContent || '';
+  };
   const clickTab = async (marker) => {
     const btn = all('button').find((b) => (b.textContent || '').includes(marker));
     await act(async () => { btn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
@@ -190,7 +228,7 @@ export async function run(container) {
 
   let root = createRoot(container);
   await act(async () => {
-    root.render(<MemoryRouter><AiGlobalIntelligence /></MemoryRouter>);
+    root.render(<MemoryRouter><LocationSpy /><AiGlobalIntelligence /></MemoryRouter>);
   });
   await act(async () => { await sleep(40); });
 
@@ -198,6 +236,52 @@ export async function run(container) {
   check('rail: the four original tabs survived alongside the seven new ones',
     ['📰', '🌐', '🗺️', '📡', '🔀', '⛓️', '💸', '🌳', '🧬', '🌍', '🔌']
       .every((m) => all('button').some((b) => (b.textContent || '').includes(m))));
+
+  /* ── 2026-10 · THE BANNER ─────────────────────────────────────────────── */
+  check('hero: the banner says «Global Intelligence» and never prints FBT',
+    all('.gw-hero').length === 1
+    && (all('.gw-hero-title')[0]?.textContent || '').trim() === 'Global Intelligence'
+    && !/FBT/i.test(all('.gw-hero')[0].textContent || ''));
+  check('hero: an animated SVG instrument (three spinning rings + a sweep) and live KPIs render',
+    all('.gw-hero svg.gw-orbital').length === 1
+    && all('.gw-hero .gw-spin').length >= 3 && all('.gw-hero .gw-sweep').length >= 1
+    && all('.gw-kpi').length >= 3);
+  check('hero: the motion is transform/opacity only and switched off for reduced motion',
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.gw-orbital \.gw-spin[\s\S]*animation: none/.test(GLOBAL_PAGE_STYLES)
+    && keyframeProps('gw-').length >= 10
+    && keyframeProps('gw-').every(([, prop]) => prop === 'transform' || prop === 'opacity'));
+
+  /* ── 2026-10 · THE STATUS REPORT BOARD ────────────────────────────────── */
+  const TILE_IDS = ['climate', 'dollar', 'gold', 'bonds', 'inflation', 'equity', 'crypto', 'institutional', 'whales', 'news', 'risk', 'countries'];
+  check('briefing: twelve tappable tiles — each a button with an inline SVG icon',
+    all('.gw-tile').length === 12
+    && TILE_IDS.every((id) => all(`button.gw-tile[data-tile="${id}"]`).length === 1)
+    && all('.gw-tile').every((t) => !!t.querySelector('svg')));
+  check('briefing: tiles carry real numbers with a calibrated sentence and a quality badge',
+    /\+0\.80%/.test(all('[data-tile="dollar"]')[0]?.textContent || '')
+    && /a normal day/.test(all('[data-tile="dollar"]')[0]?.textContent || '')
+    && all('.gw-tile .aigw-q').length >= 9);
+  check('briefing: a tile whose input was not read says «unread» and is still a link',
+    /unread|خوانده نشد/.test(all('[data-tile="whales"]')[0]?.textContent || '')
+    && all('[data-tile="whales"]')[0]?.tagName === 'BUTTON');
+  check('briefing: the server\u2019s own briefing messages sit below the board, with their headline',
+    all('.gw-msg').length === 3 && /Yield curve inverted/.test(text()));
+  /* tap → the relevant page */
+  await act(async () => { all('[data-tile="dollar"]')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
+  check('briefing: tapping the dollar tile opens the capital-flow tab (the macro table)',
+    all('.aigw-panel.acc-flows').length === 1 && all('.gw-tile').length === 0);
+  await clickTab('📰');
+  await act(async () => { all('[data-tile="climate"]')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
+  check('briefing: tapping the climate tile opens the world-state tab',
+    all('.aigw-panel.acc-weather').length === 1);
+  await clickTab('📰');
+  await act(async () => { all('[data-tile="institutional"]')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
+  check('briefing: tapping the smart-money tile navigates to the smart-money page',
+    lastPath === '/smart-money');
+  await act(async () => { all('.gw-msg')[1]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
+  check('briefing: tapping a server message opens the console tab that explains it',
+    all('.aigw-panel').length === 1);
+  await clickTab('📰');
 
   /* ── WORLD STATE ─────────────────────────────────────────────────────── */
   await clickTab('🌐');
@@ -208,7 +292,7 @@ export async function run(container) {
   check('world: gauges carry their evidence — the direction is justified',
     /stablecoin net|نتیجهٔ استیبل‌کوین/.test(text()) && /outlook score|امتیاز چشم‌انداز/.test(text()));
   check('world: the radar ribbon links to the radar tab',
-    /FBT Global Radar|رادار جهانی FBT/.test(text()) && all('.aigw-ribbon').length === 1);
+    /Global Radar|رادار جهانی/.test(text()) && all('.aigw-ribbon').length === 1);
   /* the weather BOARD (institutional flow / dollar / inflation-energy / risk) */
   check('world: the weather board renders every station with an animated SVG glyph',
     all('.aigw-station').length >= 9 && all('.aigw-glyph-svg').length >= 4);
@@ -221,6 +305,28 @@ export async function run(container) {
       const val = el.querySelector('.aigw-station-val');
       return (ev && (ev.textContent || '').trim().length > 3) && (val && (val.textContent || '').trim().length > 0);
     }));
+  /* the 2026-10 calibration: «ایستگاه‌ها داده معتبر ندارند و باید محک شوند» */
+  check('stations: fourteen calibrated stations, each scored against its own market\u2019s normal day',
+    all('.aigw-station').length === 14 && /\d+(\.\d+)?× a normal day/.test(text()));
+  check('stations: the benchmark legend lists the four bands and the model constants it scores against',
+    all('.aigw-bench').length === 1 && all('.aigw-band').length === 4 && all('.aigw-bench-row').length >= 6
+    && /model constants/.test(text()) && !/۰|۱|۲|۳|۴|۵|۶|۷|۸|۹/.test(all('.aigw-bench')[0].textContent || ''));
+  check('stations: the quality summary counts direct · proxy · level-only · unread, and sums to the board',
+    all('.aigw-sum-chip').length === 4
+    && all('.aigw-sum-chip b').map((b) => Number(b.textContent)).reduce((a, c) => a + c, 0) === 14);
+  check('stations: valid stations carry a quality badge; an unread one says «unread» and has none',
+    all('.aigw-station:not(.tone-na) .aigw-q').length >= 12
+    && all('.aigw-station.tone-na').length >= 1
+    && all('.aigw-station.tone-na').every((el) => /unread/.test(el.textContent || '') && !el.querySelector('.aigw-q')));
+  const stationNamed = (re) => all('.aigw-station').find((el) => re.test((el.querySelector('.aigw-station-name') || {}).textContent || ''));
+  check('stations: dollar, gold and bonds each show a real figure and a calibrated reading',
+    [/Dollar strength/, /Gold/, /Treasury/].every((re) => {
+      const el = stationNamed(re);
+      return el && /[+\-\u2212]\d/.test((el.querySelector('.aigw-station-val') || {}).textContent || '')
+        && /a normal day/.test((el.querySelector('.aigw-station-read') || {}).textContent || '');
+    }));
+  check('stations: the whale scanner was down, so its station is «unread» — not a storm',
+    /unread/.test((stationNamed(/Whale/) || {}).textContent || '') && /tone-na/.test((stationNamed(/Whale/) || { className: '' }).className));
   check('world: the climate strip blends the nine parts and shows its coverage',
     all('.aigw-climate').length === 1
     && all('.aigw-climate-parts').length === 1
@@ -233,6 +339,10 @@ export async function run(container) {
     all('.aigw-globe').length === 1 && all('.aigw-globe-dot').length >= 10 && all('.aigw-orbit-a').length === 1);
   check('globe: the default selection shows a snapshot built from read instruments',
     all('.aigw-country-row').length >= 3 && /DXY/.test(text()));
+  check('globe: every country row names its source and how it was read (direct / proxy / peg / news)',
+    all('.aigw-country-row').length >= 4
+    && all('.aigw-country-row').every((r) => /source|direct|proxy|peg|headline|news|reference/i.test(r.textContent || ''))
+    && !/NaN|undefined|\[object/.test(all('.aigw-country-card')[0]?.textContent || ''));
   /* tap China — copper + oil proxies */
   const cnDot = all('.aigw-globe-dot').find((g) => (g.getAttribute('aria-label') || '').toLowerCase().includes('china'));
   await act(async () => { cnDot?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
@@ -248,7 +358,7 @@ export async function run(container) {
     && all('.aigw-globe-dot[aria-label="china"]').length === 1
     && all('.aigw-globe-dot[aria-selected="true"]').length === 1);
   check('globe: the board states how many economies it read, and the legend explains the dots',
-    /on board/.test(text()) && all('.aigw-globe-legend .aigw-hint').length === 4);
+    /\d+ of \d+ countries read|کشور خوانده شد/.test(text()) && all('.aigw-globe-legend .aigw-hint').length === 4);
   check('globe: the decorative orbit layer and the drag hint are present',
     all('.aigw-globe-svg').length === 1 && all('.aigw-orbit-b').length === 1 && /drag to spin|بکش تا بچرخد/.test(text()));
 
@@ -274,7 +384,10 @@ export async function run(container) {
   check('causal: the server macro-graph renders its node columns',
     all('.aigw-causal-col').length === 4 && all('.aigw-node-chip').length >= 5);
   check('causal: the why-riskier drivers render with model-labelled sensitivities',
-    /Why is BTC riskier|چرا BTC/.test(text()) && /w=-0\.5|w=0\.6/.test(text()));
+    /Why is .* riskier|چرا .* ریسک/.test(text()) && /weight -0\.5|weight 0\.6|وزن/.test(text()));
+  check('causal: the chain of THIS pass is built locally first — six nodes, each naming its source or its stand-in',
+    all('.aigw-chain-node').length >= 6 && all('.aigw-chain-node.state-read').length >= 3
+    && all('.aigw-chain-node.state-model').length >= 1 && /testable links agreed|پیوند قابل‌سنجش/.test(text()));
   check('causal: the honesty note separates real moves from model weights',
     /first-order model sensitivities|حساسیت‌های مرتبهٔ اول/.test(text()));
 
@@ -285,6 +398,23 @@ export async function run(container) {
     all('.aigw-flow-node.on').length >= 5 && all('.aigw-flow-conn.on').length >= 3);
   check('flows: the measured net-flow verdict is the hero, in USD',
     all('.aigw-flow-hero').length === 1 && /\$/.test((all('.aigw-flow-hero-val')[0]?.textContent) || ''));
+  check('flows: the macro table gives dollar, gold and bonds a level, a daily move and a source',
+    all('.aigw-anchor').length >= 8
+    && ['dollar', 'gold', 'us10y'].every((id) => {
+      const el = all(`[data-anchor="${id}"]`)[0];
+      return el && /\d/.test((el.querySelector('.aigw-anchor-level') || {}).textContent || '')
+        && /[+\-\u2212]\d/.test((el.querySelector('.aigw-anchor-move') || {}).textContent || '')
+        && !!el.querySelector('.aigw-anchor-src') && !!el.querySelector('.aigw-q');
+    }));
+  check('flows: an instrument the pass did not read (silver) says so — it is never a zero',
+    /not read this pass/.test((all('[data-anchor="silver"]')[0] || {}).textContent || '')
+    && !/\b0 USD\/oz/.test((all('[data-anchor="silver"]')[0] || {}).textContent || ''));
+  check('wide: on a desktop width the console opens into columns instead of one narrow strip',
+    all('.gw-cols').length === 1 && all('.gw-cols > .gw-col').length === 2
+    && /@media \(min-width: 900px\)[\s\S]*\.gw-cols \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/.test(GLOBAL_PAGE_STYLES)
+    && /\.gw-tiles \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/.test(GLOBAL_PAGE_STYLES)
+    && /\.aigw-stations \{ grid-template-columns: repeat\(auto-fill/.test(GLOBAL_PAGE_STYLES)
+    && /max-width: 1320px/.test(GLOBAL_PAGE_STYLES));
   check('flows: the macro transmission chain marks read / proxy / model nodes',
     all('.aigw-chain-node').length >= 6
     && all('.aigw-chain-node.state-model').length >= 1
@@ -302,11 +432,22 @@ export async function run(container) {
     && /Macro risk|ریسک کلان/.test(text()));
   check('future: scenario weights are auditable — every nudge is listed',
     all('.aigw-tag').length >= 8 && /regime|outlook|curve/.test(text()));
+  check('future: the challenger is calm — at most three observed rows, the rest folded away',
+    all('.aigw-adv-row').length >= 1 && all('.aigw-adv-row').length <= 3
+    && all('.aigw-adv-more').length === 1 && all('.aigw-adv-summary').length === 1
+    && all('.aigw-adv-row').every((r) => !!r.querySelector('.aigw-adv-ev') && !!r.querySelector('.aigw-adv-why')));
+  check('future: «Crypto (class)» (the tree root) has room below it — it never touches the branch box',
+    all('.aigw-tree-root').length === 1
+    && !/margin/.test(all('.aigw-tree-root')[0].getAttribute('style') || '')
+    && /margin-bottom:\s*(1[2-9]|[2-9]\d)px/.test(lastRule('.aigw-tree-root') || '')
+    && /margin-bottom:\s*([89]|\d\d)px/.test(lastRule('.aigw-branch') || ''));
+  check('future: the weight audit prints Persian-safe values — no raw engine enum',
+    !/RECESSION_WATCH|MIXED_SIGNALS|GROWTH_WATCH/.test(all('.aigw-driver-tags')[0]?.textContent || ''));
   check('future: the tree draws three animated limbs with breathing leaves',
     all('.aigw-tree-svg').length === 1 && all('.aigw-branch-tree-path').length >= 3
     && all('.aigw-leaf').length >= 6);
   check('future: the tree names what would flip it, and the challenger attacks with observed risks',
-    all('.aigw-flip').length >= 1 && all('.aigw-adv-row').length >= 4
+    all('.aigw-flip').length >= 1 && all('.aigw-adv-row').length >= 1
     && all('.aigw-adv-ico.observed').length >= 1
     && /why this thesis could be wrong|چرا این فرصت/i.test(text()));
 
@@ -354,6 +495,19 @@ export async function run(container) {
   await act(async () => { macroCard?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
   check('domains: the macro card shows both classified topics and the real DXY move',
     /FED/.test(text()) && /\+0\.8%/.test(text()));
+  check('domains: ONE wide row per domain — a list, not a card grid, one button per row',
+    all('.aigw-domlist').length === 1 && all('.aigw-domrow').length === 9 && all('.aigw-dom-grid').length === 0
+    && all('.aigw-domrow > button.aigw-dom').length === 9
+    && /display:\s*flex;\s*flex-direction:\s*column/.test(lastRule('.aigw-domlist') || ''));
+  let openedEach = true;
+  for (const btn of all('.aigw-dom')) {
+    await act(async () => { btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(10); });
+    openedEach = openedEach && all('.aigw-domrow.open').length === 1 && !!all('.aigw-domrow.open .aigw-dom-open')[0];
+  }
+  check('domains: tapping any of the nine rows opens it in place — the «page encountered a problem» crash is gone',
+    openedEach && all('.aigw-domrow').length === 9);
+  check('domains: rows speak plainly — no raw enum, object, source id or «undefined»',
+    !/UNAVAILABLE|PARTIAL|smart_money|\[object|undefined|NaN|brain:|ci:|whales:scanner|smartMoney:/.test((all('.aigw-domlist')[0] || {}).textContent || ''));
 
   /* ── PROVIDERS — five SVG lamps per domain, no emoji ─────────────────── */
   await clickTab('🔌');
@@ -378,6 +532,34 @@ export async function run(container) {
   check('rail: the panels use inline SVG icons — no emoji inside a console panel',
     all('.aigw-panel').every((el) => !panelEmoji.test(el.textContent || '')));
 
+  /* ── THE SAME PASS, READ IN PERSIAN ──────────────────────────────────── */
+  await act(async () => { await setLanguage('fa'); });
+  await act(async () => { await sleep(30); });
+  await clickTab('📰');
+  check('fa: the banner says «هوش جهانی» — never FBT',
+    (all('.gw-hero-title')[0]?.textContent || '').trim() === 'هوش جهانی' && !/FBT/i.test(text()));
+  check('fa: tile numbers use Persian digits and the Persian percent sign',
+    /۰٫۸۰٪/.test(all('[data-tile="dollar"]')[0]?.textContent || ''));
+  const RAW = /UNAVAILABLE|PARTIAL|RECESSION_WATCH|MIXED_SIGNALS|GROWTH_WATCH|smart_money|\[object|undefined|NaN|brain:|ci:|whales:scanner|smartMoney:|cross-asset-engine|news-engine/;
+  const rawHits = [];
+  for (const m of ['📰', '🌐', '🗺️', '⛓️', '💸', '🌳', '🌍', '🧬', '🔀', '📡', '🔌']) {
+    await clickTab(m);
+    const hit = text().match(RAW);
+    if (hit) rawHits.push(`${m}: ${hit[0]}`);
+  }
+  const rawHit = rawHits.length ? rawHits.join(' | ') : null;
+  check('fa: no raw machine string (enum, object, source id, undefined) on any tab', !rawHit, rawHit);
+  await clickTab('🌐');
+  check('fa: the calibrated board reads in Persian — «خوانش مستقیم», «برابر نوسان معمول», «واحد پایه»',
+    /خوانش مستقیم/.test(text()) && /برابر نوسان معمول/.test(text()) && /واحد پایه/.test(text()) && !/\bbp\b/.test(text()));
+  await clickTab('🌍');
+  let faOpened = true;
+  for (const btn of all('.aigw-dom')) {
+    await act(async () => { btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(10); });
+    faOpened = faOpened && all('.aigw-domrow.open').length === 1;
+  }
+  check('fa: every domain row opens in Persian too, with Persian status words', faOpened && /کامل/.test(text()) && /خوانده نشد/.test(text()));
+
   /* ── DEAD API: every new tab renders empty/unread instead of crashing ── */
   await act(async () => { root.unmount(); });
   global.fetch = async () => ({ ok: false, json: async () => ({ ok: false }) });
@@ -386,10 +568,10 @@ export async function run(container) {
   let crashed = false;
   try {
     await act(async () => {
-      root.render(<MemoryRouter><AiGlobalIntelligence /></MemoryRouter>);
+      root.render(<MemoryRouter><LocationSpy /><AiGlobalIntelligence /></MemoryRouter>);
     });
     await act(async () => { await sleep(40); });
-    for (const marker of ['🌐', '🗺️', '📡', '⛓️', '💸', '🌳', '🧬', '🌍', '🔌', '🔀']) {
+    for (const marker of ['📰', '🌐', '🗺️', '📡', '⛓️', '💸', '🌳', '🧬', '🌍', '🔌', '🔀']) {
       const btn = all('button').find((b) => (b.textContent || '').includes(marker));
       await act(async () => { btn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
     }
@@ -397,7 +579,7 @@ export async function run(container) {
     crashed = true;
     errors.push(`crash on dead API: ${String(err?.message || err)}`);
   }
-  check('dead API: all ten console tabs render their honest empty states without crashing',
+  check('dead API: every tab (the status report included) renders its honest empty state without crashing',
     !crashed && /unread|not read|خوانده نشد|No signal|nothing|هنوز/.test(text()));
 
   await act(async () => { root.unmount(); });

@@ -18,6 +18,7 @@ import { useMemo } from 'react';
 import { buildProvidersView } from './worldModel.js';
 import { WIcon } from './icons.jsx';
 import { faNum, timeAgo } from './format.jsx';
+import { describeSource } from './resolve.js';
 
 const FACE = {
   smart_money: { icon: 'brain', acc1: '#a78bfa', acc2: '#7c3aed' },
@@ -97,8 +98,8 @@ export function ProvidersPanel({ providers, domains, L, isPersian, reasonLabel }
               <div className="aigw-prov-sub">
                 {r.reason
                   ? <span title={r.reason}>{L(`دلیل: ${reasonLabel ? reasonLabel(r.reason, true) : r.reason}`, `reason: ${reasonLabel ? reasonLabel(r.reason, false) : r.reason}`)}</span>
-                  : r.source
-                    ? <span className="aigw-ltr">{r.source}</span>
+                  : describeSource(r.source, isPersian)
+                    ? <span>{describeSource(r.source, isPersian)}</span>
                     : L('بدون منبع اعلام‌شده', 'no source declared')}
                 {r.at ? <span> · {timeAgo(r.at, isPersian)}</span> : null}
               </div>

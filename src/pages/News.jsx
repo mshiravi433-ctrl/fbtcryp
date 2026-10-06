@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
@@ -9,7 +9,6 @@ import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
 import WhaleTrackingPanel from '../components/WhaleTrackingPanel';
-import AiGlobalIntelligence from '../components/ai/AiGlobalIntelligence.jsx';
 import SegIndicator from '../components/SegIndicator';
 import '../styles/whales.css';
 import { useTelegram } from '../context/TelegramContext';
@@ -55,11 +54,15 @@ const TOPIC_CATEGORIES = ['bitcoin', 'ethereum', 'defi'];
 const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
 
 /*
- * The six top-level tabs, in render order. Shared between the button row and
+ * The five top-level tabs, in render order. Shared between the button row and
  * the ?tab= deep link so a URL like #/news?tab=calm cannot open a tab that
  * does not exist, and the row and the URL cannot drift apart.
+ *
+ * «هوش جهانی» is NOT one of them any more: it is its own page (More → «جهانی»,
+ * route /global). A link that still says #/news?tab=global is forwarded there
+ * by the wrapper below — see `News`.
  */
-const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'global', 'calm'];
+const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'calm'];
 
 const CATEGORY_TERMS = {
   bitcoin: ['bitcoin', 'btc', 'satoshi', 'halving'],
@@ -67,7 +70,19 @@ const CATEGORY_TERMS = {
   defi: ['defi', 'dex', 'liquidity', 'yield', 'swap', 'staking', 'uniswap', 'pancake']
 };
 
+/**
+ * The route component. It only decides whether this page should render at all:
+ * an old link, a bookmark or a refreshed WebView that still says
+ * #/news?tab=global belongs to the Global page now. Deciding here — before any
+ * of the page's hooks run — means the redirect costs no news or market request.
+ */
 export default function News() {
+  const [params] = useSearchParams();
+  if (params.get('tab') === 'global') return <Navigate to="/global" replace />;
+  return <NewsPage />;
+}
+
+function NewsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
@@ -224,9 +239,9 @@ export default function News() {
       </motion.div>
 
       <div className="segmented news-mode-tabs">
-        {/* Global Intelligence lives inside News so the market brief and its
-            source headlines share one discoverable destination. Calm remains
-            last because it is about the reader rather than the market. */}
+        {/* Calm stays last because it is about the reader rather than the
+            market. (Global Intelligence used to sit before it; it is its own
+            page now — see NEWS_TABS.) */}
         {/*
           ─── THE COMMUNITY FEED MOVED HERE FROM P2P ───────────────────────
           Asked for directly: «گفتگو نباید در p2p باشد باید در صفحه اخبار باشد».
@@ -242,19 +257,11 @@ export default function News() {
             key={k}
             className={tab === k ? 'active' : ''}
             onClick={() => setTab(k)}
-            title={k === 'global' ? t('aiGlobal.title') : t(`news.tab.${k}`)}
+            title={t(`news.tab.${k}`)}
             style={{ isolation: 'isolate' }}
           >
             {tab === k && <SegIndicator id="newstab" />}
-            {/*
-              «اخبار هوش جهانی در تب جا نمی‌شود» — six tabs share one phone-width
-              rail, and «هوش جهانی» is the longest label of the six, so it
-              wrapped onto three lines and pushed the rail taller than every
-              other tab. The tab keeps the SHORT label; the full name stays as
-              the tooltip and as the heading inside the panel itself, so nothing
-              is lost — the rail just stops overflowing.
-            */}
-            {k === 'global' ? t('aiGlobal.tabShort') : t(`news.tab.${k}`)}
+            {t(`news.tab.${k}`)}
           </button>
         ))}
       </div>
@@ -289,8 +296,6 @@ export default function News() {
           marketsUpdatedAt={marketsUpdatedAt}
           newsUpdatedAt={feed.at}
         />
-      ) : tab === 'global' ? (
-        <AiGlobalIntelligence />
       ) : (
         <>
       <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">

@@ -19,6 +19,8 @@ import { useMemo, useState } from 'react';
 import { buildDna, DNA_ASSETS, DNA_GENE_META, usdCompact } from './worldModel.js';
 import { WIcon, DirMark } from './icons.jsx';
 import { faNum, pct } from './format.jsx';
+import { describeSource } from './resolve.js';
+import { Ltr } from './parts.jsx';
 
 const VOL_FA = { high: 'پرنوسان', medium: 'متوسط', low: 'آرام' };
 const VOL_EN = { high: 'volatile', medium: 'moderate', low: 'calm' };
@@ -126,8 +128,8 @@ export function DnaPanel({ world, L, isPersian }) {
                   {field ? (
                     <span className={`aigw-pill ${field.dir === 'up' ? 'up' : field.dir === 'down' ? 'down' : 'flat'}`} style={{ fontSize: 9, padding: '1px 7px' }}>
                       <DirMark dir={field.dir} size={8} />
-                      <span className="aigw-ltr">{field.value || (field.dir === 'up' ? '+' : field.dir === 'down' ? '−' : '0')}</span>
-                      <span style={{ opacity: .75, fontWeight: 700 }}>{field.source || ''}</span>
+                      <Ltr>{(isPersian ? (field.valueFa || field.value) : field.value) || (field.dir === 'up' ? '+' : field.dir === 'down' ? '−' : '0')}</Ltr>
+                      {describeSource(field.source, isPersian) ? <span className="aigw-dna-src">{describeSource(field.source, isPersian)}</span> : null}
                     </span>
                   ) : (
                     <span className="aigw-pill ghost" style={{ fontSize: 9, padding: '1px 7px' }}>{L('خوانده نشد', 'unread')}</span>
@@ -164,7 +166,7 @@ export function DnaPanel({ world, L, isPersian }) {
           ) : null}
           {dna.observed.whaleTouched ? <span className="aigw-pill info">{L('در جریان‌های برچسب‌دار این دور دیده شد', 'seen in this pass\u2019s labelled flows')}</span> : null}
           {dna.observed.etfLinked ? <span className="aigw-pill flat">{L('پیوند ETF', 'ETF-linked')}</span> : null}
-          {dna.observed.source ? <span className="aigw-pill ghost">{L('منبع', 'source')}: {dna.observed.source}</span> : null}
+          {describeSource(dna.observed.source, isPersian) ? <span className="aigw-pill ghost">{L('منبع', 'source')}: {describeSource(dna.observed.source, isPersian)}</span> : null}
         </div>
       </div>
 

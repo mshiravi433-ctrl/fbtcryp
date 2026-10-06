@@ -17,6 +17,7 @@ export default {
   'nav.wallet': { zh: '钱包', hi: 'वॉलेट', es: 'Cartera', fr: 'Portefeuille', ru: 'Кошелёк', tr: 'Cüzdan', ur: 'والٹ', id: 'Dompet', pt: 'Carteira' },
   'nav.signals': { zh: '信号', hi: 'सिग्नल', es: 'Señales', fr: 'Signaux', ru: 'Сигналы', tr: 'Sinyaller', ur: 'سگنلز', id: 'Sinyal', pt: 'Sinais' },
   'nav.news': { zh: '新闻', hi: 'समाचार', es: 'Noticias', fr: 'Actualités', ru: 'Новости', tr: 'Haberler', ur: 'خبریں', id: 'Berita', pt: 'Notícias' },
+  'nav.global': { zh: '全球', hi: 'ग्लोबल', es: 'Global', fr: 'Mondial', ru: 'Глобальный', tr: 'Küresel', ur: 'عالمی', id: 'Global', pt: 'Global' },
   'nav.more': { zh: '更多', hi: 'और', es: 'Más', fr: 'Plus', ru: 'Ещё', tr: 'Daha', ur: 'مزید', id: 'Lainnya', pt: 'Mais' },
   'nav.settings': { zh: '设置', hi: 'सेटिंग्स', es: 'Ajustes', fr: 'Réglages', ru: 'Настройки', tr: 'Ayarlar', ur: 'ترتیبات', id: 'Pengaturan', pt: 'Definições' },
   'nav.help': { zh: '帮助', hi: 'सहायता', es: 'Ayuda', fr: 'Aide', ru: 'Помощь', tr: 'Yardım', ur: 'مدد', id: 'Bantuan', pt: 'Ajuda' },

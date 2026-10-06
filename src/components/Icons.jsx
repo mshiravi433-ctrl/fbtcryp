@@ -291,6 +291,18 @@ export const IconGlobe = (p) => (
   </svg>
 );
 
+/* The Global Intelligence page: a globe with an orbit around it — «the world,
+   watched». Distinct from IconGlobe (Ecosystem) so the two More tiles never
+   look like the same destination. */
+export const IconWorld = (p) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="6.4" />
+    <path d="M5.6 12h12.8M12 5.6c1.8 1.7 2.8 3.8 2.8 6.4s-1 4.7-2.8 6.4c-1.8-1.7-2.8-3.8-2.8-6.4s1-4.7 2.8-6.4z" />
+    <ellipse cx="12" cy="12" rx="10" ry="3.9" transform="rotate(-24 12 12)" opacity=".55" />
+    <circle cx="20.2" cy="7.3" r="1.15" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const IconBuilding = (p) => (
   <svg {...base} {...p}>
     <rect x="4" y="2" width="16" height="20" rx="2" />

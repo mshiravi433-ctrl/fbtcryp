@@ -1,26 +1,31 @@
 /**
- * PANEL 1 — FBT WORLD STATE: the financial weather board.
+ * PANEL 1 — WORLD STATE: the financial weather board.
  * ---------------------------------------------------------------------------
- * REPORTED: «وضعیت جهان مالی — یک صفحهٔ مدرن از داده‌ها با آیکون‌های جذاب مثل
- * یک صفحهٔ هواشناسی با انیمیشن خیلی جذاب… جریان نهادی، قدرت دلار، فشار تورم
- * (انرژی)، ریسک جهانی».
+ * REPORTED (2026-10): «ایستگاه‌های آب‌وهوای مالی داده معتبر ندارد و باید با
+ * محک درست کالیبره شود».
  *
- * The board is a weather station, and every reading on it is real:
- *   · CLIMATE  — one weighted index of this pass, with its components listed;
- *   · STATIONS — the four headline measures first (institutional flow, dollar
- *                strength, energy/inflation pressure, global risk), then the
- *                rest of the board — each with an animated glyph, a dial and
- *                the evidence rows that produced it;
- *   · the hourly strip, the nine gauges and the radar ribbon.
+ * Every market station is now read against the TYPICAL DAILY MOVE of its own
+ * market (calibration.js): the card says how many «normal days» the move was,
+ * the weather word, the dial and the sentence all come from the same number,
+ * and a legend prints the benchmark constants as exactly what they are —
+ * model constants, not today's measurement. Each value carries a quality badge
+ * (direct read · proxy · level only · last good read) and the provider that
+ * supplied it, so a proxy can never pass for the thing it stands in for.
+ *
+ *   · CLIMATE  — one weighted index of this pass with its components;
+ *   · STATIONS — fourteen stations, the six headline measures first;
+ *   · the compact strip (views of the same stations), the nine gauges and the
+ *     radar ribbon.
  * A station whose input was not read shows «خوانده نشد» and an empty dial.
  */
 import { useMemo } from 'react';
 import {
-  buildClimate, buildWorldState, buildWeather, buildWeatherStations, buildRadar,
-  STATION_META, CLIMATE_PART_META, TONE_WORD
+  buildClimate, buildWorldState, buildWeather, buildWeatherStations, buildRadar, describeSource,
+  STATION_META, CLIMATE_PART_META, TONE_WORD, BENCH, BAND_WORD, summariseStations
 } from './worldModel.js';
 import { WeatherGlyph, WIcon, DirMark } from './icons.jsx';
-import { evidenceText, faNum, pct, usdCompact, moneyK } from './format.jsx';
+import { evidenceLabel, evidenceValue, evidenceText, faNum, pct, usdCompact, usdFaCompact, moneyK } from './format.jsx';
+import { QualityBadge, Ltr } from './parts.jsx';
 
 const METRIC_META = {
   liquidity: { fa: 'نقدینگی جهانی', en: 'Global liquidity' },
@@ -30,7 +35,7 @@ const METRIC_META = {
   cryptoFlow: { fa: 'جریان رمزارز', en: 'Crypto flow' },
   institutional: { fa: 'جریان نهادی', en: 'Institutional flow' },
   geopolitics: { fa: 'ریسک ژئوپلیتیک', en: 'Geopolitical risk' },
-  rwa: { fa: 'پذیرش RWA', en: 'RWA adoption' },
+  rwa: { fa: 'دارایی‌های واقعی (RWA)', en: 'RWA adoption' },
   volatility: { fa: 'نوسان جهانی', en: 'Global volatility' }
 };
 
@@ -50,18 +55,68 @@ const WEATHER_META = {
   liquidity: { fa: 'آسمان نقدینگی', en: 'Liquidity sky' },
   volatility: { fa: 'تلاطم', en: 'Volatility' },
   whales: { fa: 'فعالیت نهنگ‌ها', en: 'Whale activity' },
-  macro: { fa: 'باد کلان', en: 'Macro wind' },
+  macro: { fa: 'ریسک کلان', en: 'Macro risk' },
   chains: { fa: 'افق زنجیره‌ها', en: 'Chain horizon' },
   dollarWind: { fa: 'باد دلار', en: 'Dollar wind' },
   news: { fa: 'دمای خبر', en: 'News temperature' }
 };
 
-/** The four measures the product asked to lead with. */
-const FEATURED = new Set(['institutional', 'dollar', 'inflation', 'risk']);
+/** the six headline measures: smart money, dollar, gold, bonds, oil/inflation, risk */
+const FEATURED = new Set(['institutional', 'dollar', 'gold', 'bonds', 'inflation', 'risk']);
+
+/** the benchmark rows the legend prints (the markets the stations are scored against) */
+const LEGEND_MARKETS = ['dollar', 'gold', 'oil', 'bonds', 'equity', 'crypto'];
+
+function BenchLegend({ L, isPersian }) {
+  const sigmaText = (b) => {
+    const v = isPersian ? faNum(b.sigma) : String(b.sigma);
+    return b.unit === 'bp' ? `${v} ${isPersian ? 'واحد پایه' : 'bp'}` : `${v}${isPersian ? '\u066a' : '%'}`;
+  };
+  return (
+    <details className="aigw-bench">
+      <summary>
+        <WIcon name="target" size={15} />
+        <span>{L('محک: چرا این رنگ؟ چرا این عدد؟', 'Benchmark: why this colour, why this number?')}</span>
+        <i className="aigw-bench-caret" aria-hidden="true" />
+      </summary>
+      <div className="aigw-bench-body">
+        <p>
+          {L(
+            'هر ایستگاه با «روز معمول» همان بازار سنجیده می‌شود: حرکت امروز تقسیم بر نوسان معمول روزانه. «۱٫۰ برابر» یعنی حرکتی کاملاً معمول؛ «۲٫۵ برابر» یعنی روزی حدی.',
+            'Each station is scored against its own market\u2019s normal day: today\u2019s move divided by the typical daily swing. «1.0×» is a perfectly ordinary move; «2.5×» is an extreme day.'
+          )}
+        </p>
+        <div className="aigw-bench-bands">
+          {['calm', 'normal', 'strong', 'extreme'].map((k, i) => (
+            <span key={k} className={`aigw-band b-${k}`}>
+              <b>{isPersian ? BAND_WORD[k].fa : BAND_WORD[k].en}</b>
+              <small>{['<0.5', '<1.5', '<2.5', '≥2.5'].map((t) => (isPersian ? faNum(t) : t))[i]}{isPersian ? ' برابر' : '×'}</small>
+            </span>
+          ))}
+        </div>
+        <div className="aigw-bench-table" role="table" aria-label={L('نوسان معمول روزانه', 'typical daily move')}>
+          {LEGEND_MARKETS.map((k) => (
+            <div key={k} className="aigw-bench-row" role="row">
+              <span role="cell">{isPersian ? BENCH[k].fa : BENCH[k].en}</span>
+              <Ltr>{sigmaText(BENCH[k])}</Ltr>
+            </div>
+          ))}
+        </div>
+        <p className="aigw-bench-note">
+          {L(
+            'این اعداد ثابت‌های مدل‌اند (نوسان معمولِ بلندمدت هر بازار)، نه اندازه‌گیری امروز. ایستگاهِ «پروکسی» یعنی عدد از جایگزین معتبری گرفته شده و برچسب دارد؛ «فقط سطح» یعنی قیمت رسید ولی تغییر روزانه نه.',
+            'These are model constants (each market\u2019s long-run normal swing), not today\u2019s measurement. A «proxy» station took its number from a labelled stand-in; «level only» means a price arrived but no daily change.'
+          )}
+        </p>
+      </div>
+    </details>
+  );
+}
 
 export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
   const climate = useMemo(() => buildClimate(world), [world]);
   const stations = useMemo(() => buildWeatherStations(world), [world]);
+  const summary = useMemo(() => summariseStations(stations), [stations]);
   const model = useMemo(() => buildWorldState(world), [world]);
   const hourly = useMemo(() => buildWeather(world), [world]);
   const radar = useMemo(() => buildRadar(world), [world]);
@@ -95,7 +150,7 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
           </div>
           <div className="aigw-climate-index">
             <b>{climate.index === null ? '—' : (isPersian ? faNum(climate.index) : climate.index)}</b>
-            <span>/۱۰۰</span>
+            <span>{L('از ۱۰۰', '/ 100')}</span>
           </div>
         </div>
 
@@ -107,60 +162,107 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
 
         <div className="aigw-climate-parts">
           {climate.components.length ? climate.components.map((c) => (
-            <span key={c.id} className={`aigw-tag`} title={isPersian ? c.evidenceFa || '' : c.evidence || ''}>
+            <span key={c.id} className="aigw-tag" title={isPersian ? c.evidenceFa || '' : c.evidence || ''}>
               {isPersian ? CLIMATE_PART_META[c.id]?.fa || c.id : CLIMATE_PART_META[c.id]?.en || c.id}
-              <b className="aigw-ltr">{c.contribution > 0 ? '+' : ''}{c.contribution}</b>
+              <b className="aigw-ltr">{c.contribution > 0 ? '+' : ''}{isPersian ? faNum(c.contribution) : c.contribution}</b>
             </span>
           )) : (
             <span className="aigw-tag">{L('هیچ جزئی خوانده نشد', 'no component read')}</span>
           )}
-          <span className="aigw-tag">
-            {L('پوشش وزن', 'weight coverage')} <b className="aigw-ltr">{Math.round((climate.coverage || 0) * 100)}%</b>
+          <span className="aigw-tag" title={L('درصد وزنِ اجزایی که در این دور خوانده شدند', 'share of the component weight that was read this pass')}>
+            {L('پوشش وزن', 'weight coverage')} <b className="aigw-ltr">{isPersian ? faNum(Math.round((climate.coverage || 0) * 100)) : Math.round((climate.coverage || 0) * 100)}{isPersian ? '\u066a' : '%'}</b>
           </span>
         </div>
+        {climate.components.length ? (
+          <div className="aigw-climate-cap">
+            {L(
+              'عدد کنار هر جزء، سهم آن در شاخص اقلیم است؛ منفی یعنی فشار و مثبت یعنی حمایت.',
+              'The figure beside each part is its contribution to the climate index; negative means pressure, positive means support.'
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* ── the station board ────────────────────────────────────────────── */}
       <div className="aigw-sec">
         <WIcon name="gauge" size={17} />
         {L('ایستگاه‌های آب‌وهوای مالی', 'Financial weather stations')}
-        <span className="aigw-sec-sub">{L('خوانش واقعی همین دور', 'real reads of this pass')}</span>
+        <span className="aigw-sec-sub">
+          {isPersian ? `${faNum(summary.valid)} از ${faNum(summary.total)} معتبر` : `${summary.valid} of ${summary.total} valid`}
+        </span>
       </div>
+
+      <div className="aigw-stations-sum" role="status">
+        <span className="aigw-sum-chip s-measured"><i />{L('خوانش مستقیم', 'direct')} <b>{isPersian ? faNum(summary.measured) : summary.measured}</b></span>
+        <span className="aigw-sum-chip s-proxy"><i />{L('پروکسی', 'proxy')} <b>{isPersian ? faNum(summary.proxy) : summary.proxy}</b></span>
+        <span className="aigw-sum-chip s-level"><i />{L('فقط سطح', 'level only')} <b>{isPersian ? faNum(summary.level) : summary.level}</b></span>
+        <span className="aigw-sum-chip s-unread"><i />{L('خوانده نشد', 'unread')} <b>{isPersian ? faNum(summary.unread) : summary.unread}</b></span>
+      </div>
+
+      <BenchLegend L={L} isPersian={isPersian} />
 
       <div className="aigw-stations">
-        {stations.map((s) => (
-          <div key={s.id} className={`aigw-station tone-${s.tone} ${FEATURED.has(s.id) ? 'feature' : ''}`}>
-            <div className="aigw-station-top">
-              <div style={{ minWidth: 0 }}>
-                <div className="aigw-station-name">{isPersian ? STATION_META[s.id]?.fa : STATION_META[s.id]?.en}</div>
-                <div className="aigw-station-cond">{toneWord(s.tone)}</div>
+        {stations.map((s) => {
+          const value = isPersian ? s.valueTextFa : s.valueText;
+          const feature = FEATURED.has(s.id);
+          const chips = (s.evidence || []).filter((e) => e && e.value !== null && e.value !== undefined).slice(0, 3);
+          return (
+            <div key={s.id} className={`aigw-station tone-${s.tone} q-${s.quality || 'none'} ${feature ? 'feature' : ''}`}>
+              <div className="aigw-station-top">
+                <div style={{ minWidth: 0 }}>
+                  <div className="aigw-station-name">{isPersian ? STATION_META[s.id]?.fa : STATION_META[s.id]?.en}</div>
+                  <div className="aigw-station-cond">
+                    {toneWord(s.tone)}
+                    {s.band ? <span className={`aigw-band-dot b-${s.band}`}>{isPersian ? BAND_WORD[s.band].fa : BAND_WORD[s.band].en}</span> : null}
+                  </div>
+                </div>
+                <WeatherGlyph name={s.icon} size={feature ? 48 : 38} />
               </div>
-              <WeatherGlyph name={s.icon} size={FEATURED.has(s.id) ? 48 : 38} />
+              <div className="aigw-station-val">
+                {/* the honesty rule of the board: a station with no reading says
+                    «خوانده نشد» — a bare dash reads like a zero to a user */}
+                {value
+                  ? <><Ltr>{value}</Ltr>{(isPersian ? s.unitFa : s.unitEn) ? <small>{isPersian ? s.unitFa : s.unitEn}</small> : null}</>
+                  : <span className="aigw-station-unread">{L('خوانده نشد', 'unread')}</span>}
+              </div>
+              {s.quality || s.readFa ? (
+                <div className="aigw-station-meta">
+                  <QualityBadge quality={s.quality} isPersian={isPersian} />
+                  {s.readFa ? <span className="aigw-station-read">{isPersian ? s.readFa : s.readEn}</span> : null}
+                </div>
+              ) : null}
+              <div className="aigw-dial" aria-hidden="true">
+                <i style={{ width: `${Math.round((s.severity || 0) * 100)}%` }} />
+              </div>
+              <div className="aigw-station-ev">
+                {chips.length
+                  ? chips.map((e, i) => (
+                    <span key={`${e.key}-${i}`} className="aigw-ev">
+                      <span>{evidenceLabel(e.key, isPersian)}</span>
+                      <Ltr>{isPersian && e.valueFa !== undefined ? e.valueFa : evidenceValue(e.key, e.value, isPersian)}</Ltr>
+                    </span>
+                  ))
+                  : L('در این دور خوانده نشد', 'not read in this pass')}
+              </div>
+              {(isPersian ? s.basisFa : s.basisEn) ? (
+                <div className="aigw-station-basis">{isPersian ? s.basisFa : s.basisEn}</div>
+              ) : null}
+              {(isPersian ? s.noteFa : s.noteEn) && !(isPersian ? s.basisFa : s.basisEn) ? (
+                <div className="aigw-station-basis">{isPersian ? s.noteFa : s.noteEn}</div>
+              ) : null}
+              {s.source ? (
+                <div className="aigw-station-src">{L('منبع', 'source')}: <b>{describeSource(s.source, isPersian)}</b></div>
+              ) : null}
             </div>
-            <div className="aigw-station-val">
-              {/* the honesty rule of the board: a station with no reading says
-                  «خوانده نشد» — a bare dash reads like a zero to a user */}
-              {s.valueText
-                ? s.valueText
-                : <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)' }}>{L('خوانده نشد', 'unread')}</span>}
-              {s.source ? <span style={{ fontSize: 9, color: 'var(--text-3)', marginInlineStart: 6, fontWeight: 700 }}>{s.source}</span> : null}
-            </div>
-            <div className="aigw-dial" aria-hidden="true">
-              <i style={{ width: `${Math.round((s.severity || 0) * 100)}%` }} />
-            </div>
-            <div className="aigw-station-ev">{evidenceText(s.evidence, isPersian) || L('در این دور خوانده نشد', 'not read in this pass')}</div>
-            {s.noteFa || s.noteEn ? (
-              <div className="aigw-station-ev" style={{ color: 'var(--text-2)' }}>{isPersian ? s.noteFa : s.noteEn}</div>
-            ) : null}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* ── the hourly strip (the weather-app gesture) ────────────────────── */}
+      {/* ── the compact strip (views of the same stations) ────────────────── */}
       <div className="aigw-sec" style={{ marginTop: 16 }}>
         <WIcon name="clock" size={17} />
-        {L('نوار ساعتی', 'Hourly strip')}
-        <span className="aigw-sec-sub">{L('همان خوانش‌ها، فشرده', 'same reads, compact')}</span>
+        {L('نوار خلاصه', 'Summary strip')}
+        <span className="aigw-sec-sub">{L('نمای کوتاه همین ایستگاه‌ها', 'a short view of the same stations')}</span>
       </div>
       <div className="aigw-weather" role="list" aria-label={L('آب‌وهوای مالی', 'Financial weather')}>
         {hourly.map((w) => (
@@ -168,7 +270,7 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
             <span className="aigw-weather-icon"><WeatherGlyph name={WEATHER_ICON[w.icon] || 'cloud'} size={30} /></span>
             <div className="aigw-weather-name">{isPersian ? WEATHER_META[w.id]?.fa : WEATHER_META[w.id]?.en}</div>
             <div className="aigw-weather-val">
-              {typeof w.value === 'number' ? pct(w.value, isPersian) : (w.value === null || w.value === undefined ? '—' : String(w.value))}
+              {(isPersian ? w.valueTextFa : w.valueText) || '—'}
             </div>
           </div>
         ))}
@@ -181,7 +283,7 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
         <span className="aigw-sec-sub">{isPersian ? `${faNum(model.okCount)}/${faNum(model.total)} خوانده شد` : `${model.okCount}/${model.total} read`}</span>
       </div>
 
-      <div>
+      <div className="aigw-gauges">
         {model.metrics.map((m) => {
           const meta = METRIC_META[m.id] || { fa: m.id, en: m.id };
           const lit = Math.max(m.status === 'ok' ? 1 : 0, Math.round(m.meter * 5));
@@ -202,7 +304,7 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
                     {m.status === 'ok' ? <DirMark dir={m.dir} size={9} /> : null}
                     {m.status !== 'ok' ? '—'
                       : m.valuePct !== null && m.valuePct !== undefined ? pct(m.valuePct, isPersian)
-                        : m.valueUsd !== null && m.valueUsd !== undefined ? usdCompact(m.valueUsd).replace('+', '')
+                        : m.valueUsd !== null && m.valueUsd !== undefined ? (isPersian ? usdFaCompact(m.valueUsd, { signed: false }) : usdCompact(m.valueUsd).replace('+', ''))
                           : m.dir === 'up' ? L('صعودی', 'rising') : m.dir === 'down' ? L('نزولی', 'falling') : L('خنثی', 'flat')}
                   </span>
                 ) : (
@@ -225,7 +327,7 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
       <button type="button" className="aigw-ribbon" onClick={() => onGoTab && onGoTab('radar')}>
         <WIcon name="radar" size={18} style={{ color: 'var(--acc1)' }} />
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'block', fontSize: 11.5, fontWeight: 900, color: 'var(--text-1)' }}>{L('رادار جهانی FBT', 'FBT Global Radar')}</span>
+          <span style={{ display: 'block', fontSize: 11.5, fontWeight: 900, color: 'var(--text-1)' }}>{L('رادار جهانی', 'Global Radar')}</span>
           <span style={{ display: 'block', fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
             {L('هر سیگنال این دور با ارزش واقعی‌اش — برای نقشهٔ کامل لمس کن', 'every signal of this pass with its real value — tap for the full map')}
           </span>
@@ -239,8 +341,8 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
 
       <div className="aigw-note">
         {L(
-          'هر جهت، سطح و دمای این صفحه از یک خوانش واقعی همین دور آمده و شواهدش کنارش نوشته شده است؛ ردیف «—» یعنی داده‌ای خوانده نشد، نه اینکه عددی پنهان باشد. اقلیم و وزن‌ها مدل‌اند و برچسب خورده‌اند.',
-          'Every direction, level and temperature here comes from a real reading of this pass with its evidence beside it; a «—» row means nothing was read, not that a number is hidden. The climate index and weights are labelled model terms.'
+          'هر جهت، سطح و دمای این صفحه از یک خوانش واقعی همین دور آمده و شواهدش کنارش نوشته شده است؛ «پروکسی» یعنی جایگزین برچسب‌دار، و «خوانده نشد» یعنی دادهٔ معتبری نرسید — هیچ عددی ساخته نمی‌شود. شاخص اقلیم یک ترکیب مدل است، نه پیش‌بینی.',
+          'Every direction, level and temperature here comes from a real reading of this pass with its evidence beside it; «proxy» means a labelled stand-in and «unread» means no valid data arrived — no number is made up. The climate index is a model blend, not a forecast.'
         )}
       </div>
     </div>

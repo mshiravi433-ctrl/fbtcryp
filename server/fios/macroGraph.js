@@ -38,7 +38,18 @@ const INSTRUMENT_NODES = Object.freeze({
   '2Y': { id: 'yields2y', label: '2Y Treasury', kind: 'instrument' },
   '10Y': { id: 'yields10y', label: '10Y Treasury', kind: 'instrument' },
   '2s10s': { id: 'curve2s10s', label: '2s10s spread', kind: 'instrument' },
+  /* The macro desk publishes the yields as US2Y / US10Y and the spread as
+     US2S10S — the graph looked them up as 2Y / 10Y / 2s10s, so the two yield
+     nodes (and every edge through them) NEVER activated, on any day, even with
+     a perfect read. The desk's own symbols are first-class keys now. */
+  US2Y: { id: 'yields2y', label: '2Y Treasury', kind: 'instrument' },
+  US10Y: { id: 'yields10y', label: '10Y Treasury', kind: 'instrument' },
+  US2S10S: { id: 'curve2s10s', label: '2s10s spread', kind: 'instrument' },
   SPX: { id: 'spx', label: 'S&P 500', kind: 'instrument' },
+  /* An ETF stands in for the index only when the index itself was not read
+     (the first read of an id wins) — and its label says ETF. */
+  SPY: { id: 'spx', label: 'S&P 500 (SPY ETF)', kind: 'instrument' },
+  QQQ: { id: 'spx', label: 'Nasdaq-100 (QQQ ETF)', kind: 'instrument' },
   GOLD: { id: 'gold', label: 'Gold', kind: 'instrument' },
   WTI: { id: 'wti', label: 'Oil (WTI)', kind: 'instrument' },
   BTC: { id: 'btc', label: 'Bitcoin', kind: 'asset' },
@@ -127,9 +138,10 @@ export function buildMacroGraph({ globalIntel = null, world = null, financial = 
   if (macroData) {
     for (const quote of macroData.quotes || macroData.instruments || []) {
       const meta = INSTRUMENT_NODES[String(quote.symbol || '').toUpperCase()];
-      if (meta) pushInstrument(quote, meta);
+      /* the first reading of a node wins: SPY never overwrites SPX */
+      if (meta && !nodes.some((n) => n.id === meta.id)) pushInstrument(quote, meta);
     }
-    if (macroData.curve) {
+    if (macroData.curve && !nodes.some((n) => n.id === 'curve2s10s')) {
       nodes.push({ id: 'curve2s10s', label: '2s10s spread', kind: 'instrument', change24hPct: round(num(macroData.curve.change7dPct), 3), spreadPct: round(num(macroData.curve.spreadPct), 3), riskDirection: null });
     }
   }
@@ -154,8 +166,13 @@ export function buildMacroGraph({ globalIntel = null, world = null, financial = 
     if (d?.status !== 'OK') continue;
     const instruments = d.data?.instruments || [];
     if (id === 'rwa' && !nodes.some((n) => n.id === 'rwa')) {
-      const avgChange = instruments.length ? instruments.reduce((a, r) => a + (num(r.change24hPct) || 0), 0) / instruments.length : null;
-      nodes.push({ id: 'rwa', label, kind: 'class', change24hPct: round(avgChange, 3), instruments: instruments.length, riskDirection: null });
+      /* Only instruments that HAVE a change vote. The old average treated a
+         missing change as 0 — so a class with no read at all showed up as a
+         confident «0%» node, which is a number nobody read. */
+      const moves = instruments.map((r) => num(r.change24hPct)).filter((v) => v !== null);
+      if (!moves.length) continue;
+      const avgChange = moves.reduce((a, v) => a + v, 0) / moves.length;
+      nodes.push({ id: 'rwa', label, kind: 'class', change24hPct: round(avgChange, 3), instruments: instruments.length, withChange: moves.length, riskDirection: null });
       readSources.push(`${domain}:${d.source || 'brain'}`);
     }
   }
