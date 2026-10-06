@@ -3,7 +3,7 @@
  * Pure (no state): Persian digits, signed percentages, compact dollars and the
  * evidence vocabulary the gauges print next to every direction.
  */
-import { faNum as faNumRaw, pctFa, pctEn, usdCompact } from './worldModel.js';
+import { faNum as faNumRaw, pctFa, pctEn, usdCompact, usdFaCompact } from './worldModel.js';
 
 export const faNum = faNumRaw;
 
@@ -51,29 +51,66 @@ export const EVIDENCE_META = {
   healthySources: { fa: 'منبع سالم', en: 'healthy sources' },
   downSources: { fa: 'منبع خاموش', en: 'sources down' },
   window: { fa: 'پنجره', en: 'window' },
-  topInflowChain: { fa: 'برترین زنجیرهٔ ورودی', en: 'top inflow chain' },
-  ledgerEvents: { fa: 'رویداد دفتر کل', en: 'ledger events' }
+  topInflowChain: { fa: 'بیشترین ورودی', en: 'top inflow' },
+  topOutflowChain: { fa: 'بیشترین خروجی', en: 'top outflow' },
+  ledgerEvents: { fa: 'رویداد دفتر کل', en: 'ledger events' },
+  /* calibrated stations (2026-10) */
+  dollar1d: { fa: 'دلار (۱ روز)', en: 'dollar 1d' },
+  dollar7d: { fa: 'دلار (۷ روز)', en: 'dollar 7d' },
+  dollarPrice: { fa: 'سطح شاخص', en: 'index level' },
+  gold1d: { fa: 'طلا (۱ روز)', en: 'gold 1d' },
+  gold7d: { fa: 'طلا (۷ روز)', en: 'gold 7d' },
+  goldPrice: { fa: 'قیمت هر اونس', en: 'per ounce' },
+  equity1d: { fa: 'سهام (۱ روز)', en: 'equities 1d' },
+  equity7d: { fa: 'سهام (۷ روز)', en: 'equities 7d' },
+  equityPrice: { fa: 'سطح', en: 'level' },
+  inflationPrice: { fa: 'قیمت نفت', en: 'crude price' },
+  bondsPrice: { fa: 'سطح', en: 'level' },
+  bonds7d: { fa: 'بازده (۷ روز)', en: 'yield 7d' },
+  yieldLevel: { fa: 'بازده ۱۰ ساله', en: '10y yield' },
+  tlt1d: { fa: 'صندوق TLT (۱ روز)', en: 'TLT 1d' },
+  btc1d: { fa: 'بیت‌کوین (۱ روز)', en: 'BTC 1d' },
+  eth1d: { fa: 'اتریوم (۱ روز)', en: 'ETH 1d' },
+  breadthShare: { fa: 'ارز صعودی', en: 'advancing' },
+  marketsRead: { fa: 'بازار خوانده‌شده', en: 'markets read' },
+  maxZ: { fa: 'بیشترین حرکت', en: 'largest move' },
+  topWhale: { fa: 'بزرگ‌ترین انتقال', en: 'largest transfer' },
+  macroHeadlines: { fa: 'خبر کلان', en: 'macro headlines' }
 };
 
 const MONEY_KEYS = new Set(['stablecoinNet', 'smartMoneyNet', 'smartMoneyAcc', 'smartMoneyDist', 'netUsd']);
-const PCT_KEYS = new Set(['stablecoinNetPct', 'wti', 'brent', 'wti1d', 'brent1d', 'wti7d', 'dxy', 'dxy1d', 'dxy7d', 'classAvg', 'avgChange', 'maxClassMove']);
+const PCT_KEYS = new Set([
+  'stablecoinNetPct', 'wti', 'brent', 'wti1d', 'brent1d', 'wti7d', 'dxy', 'dxy1d', 'dxy7d', 'classAvg', 'avgChange', 'maxClassMove',
+  'dollar1d', 'dollar7d', 'gold1d', 'gold7d', 'equity1d', 'equity7d', 'bonds7d', 'tlt1d', 'btc1d', 'eth1d'
+]);
+const PRICE_KEYS = new Set(['dollarPrice', 'goldPrice', 'equityPrice', 'inflationPrice', 'bondsPrice']);
 
 export function evidenceLabel(key, isPersian) {
   const m = EVIDENCE_META[key];
   return m ? (isPersian ? m.fa : m.en) : key;
 }
 
+const thousands = (n, isPersian) => {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  const text = Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(2);
+  return isPersian ? faNum(text).replace(/,/g, '\u066c') : text;
+};
+
 export function evidenceValue(key, value, isPersian) {
   if (value === null || value === undefined) return '—';
-  if (typeof value === 'string') return value;
-  if (MONEY_KEYS.has(key)) return usdCompact(value).replace('+', '');
+  if (typeof value === 'string') return isPersian ? faNum(value) : value;
+  if (MONEY_KEYS.has(key)) return isPersian ? usdFaCompact(value, { signed: false }) : usdCompact(value).replace('+', '');
   if (PCT_KEYS.has(key)) return pct(value, isPersian);
+  if (PRICE_KEYS.has(key)) return thousands(value, isPersian);
+  if (key === 'yieldLevel') return isPersian ? `${faNum(Number(value).toFixed(2))}\u066a` : `${Number(value).toFixed(2)}%`;
+  if (key === 'maxZ') return isPersian ? `\u00d7${faNum(Number(value).toFixed(1))}` : `\u00d7${Number(value).toFixed(1)}`;
   if (key === 'curve2s10s') return isPersian ? `${faNum(value)} واحد` : `${value}pp`;
   return isPersian ? faNum(value) : String(value);
 }
 
 export function evidenceText(evidence, isPersian) {
-  return (evidence || []).map((e) => `${evidenceLabel(e.key, isPersian)}: ${evidenceValue(e.key, e.value, isPersian)}`).join(' · ');
+  return (evidence || []).map((e) => `${evidenceLabel(e.key, isPersian)}: ${isPersian && e.valueFa !== undefined ? e.valueFa : evidenceValue(e.key, e.value, isPersian)}`).join(' · ');
 }
 
 /** A short relative time in the reader's language. */
@@ -93,4 +130,4 @@ export function timeAgo(at, isPersian) {
   return `${h}h ago`;
 }
 
-export { usdCompact, pctFa, pctEn };
+export { usdCompact, usdFaCompact, pctFa, pctEn };
