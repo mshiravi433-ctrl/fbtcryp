@@ -44,7 +44,7 @@
  */
 
 import { resolveMarkets, bondReading, describeSource, QUALITY } from './resolve.js';
-import { BENCH, BAND_WORD, QUALITY_META, zOf, bandOf, toneFor, severityFor, summariseStations } from './calibration.js';
+import { BENCH, BAND_WORD, QUALITY_META, LIQUIDITY_SCALE_USD, zOf, bandOf, toneFor, severityFor, summariseStations } from './calibration.js';
 export { BENCH, BAND_WORD, QUALITY_META, summariseStations };
 export { resolveMarkets, bondReading, describeSource, QUALITY };
 
@@ -914,12 +914,17 @@ export const CLIMATE_PART_META = Object.freeze({
   outlook: { fa: 'چشم‌انداز موتور', en: 'engine outlook' },
   dollar: { fa: 'فشار دلار', en: 'dollar pressure' },
   energy: { fa: 'انرژی/تورم', en: 'energy & inflation' },
+  bonds: { fa: 'بازده اوراق', en: 'bond yields' },
+  equity: { fa: 'سهام آمریکا', en: 'US equities' },
   volatility: { fa: 'تلاطم', en: 'volatility' },
   liquidity: { fa: 'نقدینگی استیبل‌کوین', en: 'stablecoin liquidity' },
   smartMoney: { fa: 'جریان نهادی', en: 'institutional flow' },
   curve: { fa: 'شیب منحنی', en: 'curve slope' },
   geopolitics: { fa: 'ژئوپلیتیک', en: 'geopolitics' }
 });
+
+/** the sum of every weight buildClimate can add — the denominator of «coverage» */
+const CLIMATE_MAX_WEIGHT = 2.0 + 1.6 + 1.2 + 1.0 + 1.0 + 0.8 + 1.2 + 1.4 + 1.0 + 1.0 + 0.8;
 
 export const REGIME_FA = Object.freeze({
   RISK_ON: 'ریسک‌پذیری', RISK_ON_LEANING: 'متمایل به ریسک‌پذیری', RISK_OFF: 'ریسک‌گریزی',
@@ -978,33 +983,54 @@ export function buildClimate(data = {}) {
       `engine outlook ${String(x.outlook.label || '')} at ${score}`,
       `چشم‌انداز موتور ${OUTLOOK_LABEL_FA[String(x.outlook.label)] || ''} با امتیاز ${faNum(score)}`);
   }
+  /* every market part is scored in units of ITS OWN normal day (z = move / σ,
+     see calibration.js) and saturates at 2.5σ — so a dollar tick and an oil
+     swing weigh what they weigh, not what a shared divisor happens to give */
   {
     const dxyChg = num(x.dxy?.change1dPct);
-    if (dxyChg !== null) add('dollar', -clamp(dxyChg / 1.5, -1, 1), 1.2,
-      `DXY ${pctEn(dxyChg)} 1d`, `شاخص دلار ${pctFa(dxyChg)} در ۱ روز`);
+    if (dxyChg !== null) add('dollar', -clamp(zOf(dxyChg, BENCH.dollar.sigma) / 2.5, -1, 1), 1.2,
+      `DXY ${pctEn(dxyChg)} 1d${x.dxy.quality === QUALITY.PROXY ? ' (basket proxy)' : ''}`,
+      `شاخص دلار ${pctFa(dxyChg)} در ۱ روز${x.dxy.quality === QUALITY.PROXY ? ' (پروکسی سبد ارزها)' : ''}`);
   }
   {
     const moves = [num(x.wti?.change1dPct), num(x.brent?.change1dPct)].filter((v) => v !== null);
     if (moves.length) {
       const avg = moves.reduce((a, c) => a + c, 0) / moves.length;
-      add('energy', -clamp(avg / 3, -1, 1), 1.0, `crude ${pctEn(avg)} 1d (energy proxy)`, `نفت ${pctFa(avg)} در ۱ روز (پروکسی انرژی)`);
+      add('energy', -clamp(zOf(avg, BENCH.oil.sigma) / 2.5, -1, 1), 1.0, `crude ${pctEn(avg)} 1d (energy proxy)`, `نفت ${pctFa(avg)} در ۱ روز (پروکسی انرژی)`);
     }
   }
   {
-    const avgs = Object.values(x.classes).map((c) => num(c?.avgChangePct)).filter((v) => v !== null);
-    const spread = avgs.length ? Math.max(...avgs.map(Math.abs)) : null;
-    if (spread !== null) add('volatility', -clamp(spread / 3, -1, 1), 1.2,
-      `widest class move ${pctEn(spread)}`, `بیشترین حرکت کلاس ${pctFa(spread)}`);
+    const yb = x.bond && x.bond.yieldBp !== null ? x.bond.yieldBp : null;
+    if (yb !== null) add('bonds', -clamp(zOf(yb, BENCH.bonds.sigma) / 2.5, -1, 1), 1.0,
+      `10y yield ${yb > 0 ? '+' : ''}${yb}bp${x.bond.estimate ? ' (estimated from TLT)' : ''}`,
+      `بازده ۱۰ ساله ${yb > 0 ? '+' : yb < 0 ? '\u2212' : ''}${faNum(Math.abs(yb))} bp${x.bond.estimate ? ' (تخمین از TLT)' : ''}`);
+  }
+  {
+    const eq = num(x.spx?.change1dPct);
+    if (eq !== null) add('equity', clamp(zOf(eq, BENCH.equity.sigma) / 2.5, -1, 1), 0.8,
+      `equities ${pctEn(eq)} 1d`, `سهام آمریکا ${pctFa(eq)} در ۱ روز`);
+  }
+  {
+    let best = null;
+    for (const [cls, c] of Object.entries(x.classes || {})) {
+      const avg = num(c?.avgChangePct);
+      if (avg === null || !CLASS_SIGMA[cls]) continue;
+      const z = Math.abs(avg / CLASS_SIGMA[cls]);
+      if (best === null || z > best.z) best = { cls, avg, z };
+    }
+    if (best !== null) add('volatility', -clamp(best.z / 3, -1, 1), 1.2,
+      `widest class move ${pctEn(best.avg)} (${best.z.toFixed(1)}x a normal day)`,
+      `بیشترین حرکت کلاس ${pctFa(best.avg)} (${faNum(best.z.toFixed(1))} برابر روز معمول)`);
   }
   {
     const stableNet = num(x.chainFlows?.net24hUsd);
-    if (stableNet !== null) add('liquidity', clamp(stableNet / 200_000_000, -1, 1), 1.4,
-      `stablecoin net ${usdCompact(stableNet)}`, `جریان خالص استیبل‌کوین ${usdCompact(stableNet).replace('+', '')}`);
+    if (stableNet !== null) add('liquidity', clamp(stableNet / LIQUIDITY_SCALE_USD, -1, 1), 1.4,
+      `stablecoin net ${usdCompact(stableNet)}`, `جریان خالص استیبل‌کوین ${usdFaCompact(stableNet, { signed: false })}`);
   }
   {
     const smNet = smartMoneyNet(x);
     if (smNet !== null) add('smartMoney', clamp(smNet / 5_000_000, -1, 1), 1.0,
-      `labelled net ${usdCompact(smNet)}`, `جریان برچسب‌دار ${usdCompact(smNet).replace('+', '')}`);
+      `labelled net ${usdCompact(smNet)}`, `جریان برچسب‌دار ${usdFaCompact(smNet, { signed: false })}`);
   }
   {
     const spread = num(x.curve?.spreadPct);
@@ -1021,7 +1047,7 @@ export function buildClimate(data = {}) {
   const weight = components.reduce((s, c) => s + c.weight, 0);
   const weighted = components.reduce((s, c) => s + c.contribution, 0);
   const score = weight > 0 ? clamp(weighted / weight, -1, 1) : null;
-  const coverage = round(weight / 10.2, 3); // 10.2 = the sum of every weight above
+  const coverage = round(Math.min(1, weight / CLIMATE_MAX_WEIGHT), 3);
   const label = score === null || coverage < 0.3 ? null
     : score >= 0.25 ? 'sun' : score >= 0.05 ? 'partly' : score > -0.25 ? 'cloud' : score > -0.6 ? 'rain' : 'storm';
 
@@ -1032,7 +1058,7 @@ export function buildClimate(data = {}) {
     components,
     coverage,
     readCount: components.length,
-    total: 9,
+    total: Object.keys(CLIMATE_PART_META).length,
     note: 'weighted composite of this pass\u2019s real readings — model, not a forecast'
   };
 }
@@ -2180,6 +2206,22 @@ export function buildFutureTree(data = {}, asset = 'btc') {
    reading behind it) or is a standing risk the model always carries.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** typical daily σ of each asset class's AVERAGE move (model constants, see calibration.js) */
+const CLASS_SIGMA = Object.freeze({ crypto: 2.8, stocks: 1.0, forex: 0.45, commodities: 1.2, rwa: 0.9 });
+const CLASS_NAME_FA = Object.freeze({ crypto: 'رمزارز', stocks: 'سهام', forex: 'ارز', commodities: 'کالا', rwa: 'دارایی واقعی' });
+const CLASS_NAME_EN = Object.freeze({ crypto: 'crypto', stocks: 'stocks', forex: 'forex', commodities: 'commodities', rwa: 'RWA' });
+
+export const CHALLENGE_META = Object.freeze({
+  macro: { fa: 'ریسک کلان', en: 'Macro risk', icon: 'bank', whyFa: 'نشانه‌های کلاسیک احتیاط معمولاً پیش از ضعف دارایی‌های پرریسک می‌آیند.', whyEn: 'classic caution signs usually arrive before risk assets weaken.' },
+  liquidity: { fa: 'خروج نقدینگی', en: 'Liquidity outflow', icon: 'drop', whyFa: 'وقتی دلار از زنجیره‌ها بیرون می‌رود، سوخت خرید کم می‌شود.', whyEn: 'when dollars leave the chains, buying fuel runs low.' },
+  dollar: { fa: 'باد مخالف دلار', en: 'Dollar headwind', icon: 'wind', whyFa: 'دلار قوی‌تر معمولاً به دارایی‌های پرریسک فشار می‌آورد.', whyEn: 'a firmer dollar usually pressures risk assets.' },
+  whale: { fa: 'خروج پول هوشمند', en: 'Smart-money exit', icon: 'waves', whyFa: 'اگر کیف‌پول‌های برچسب‌دار می‌فروشند، صعود ممکن است شکننده باشد.', whyEn: 'if labelled wallets are selling, the rally may be fragile.' },
+  divergence: { fa: 'واگرایی بازارها', en: 'Market divergence', icon: 'swap', whyFa: 'وقتی دو کلاس دارایی جهت مخالف دارند، یکی از آن‌ها اشتباه می‌خواند.', whyEn: 'when two asset classes disagree, one of them is misreading.' },
+  volatility: { fa: 'تلاطم بالا', en: 'Elevated volatility', icon: 'pulse', whyFa: 'حرکت‌های بزرگ‌تر از روز معمول، اعتبار هر سیگنال را کم می‌کند.', whyEn: 'moves larger than a normal day weaken any single signal.' },
+  coverage: { fa: 'شکاف داده', en: 'Data gap', icon: 'eye', whyFa: 'بخشی از جهان در این دور خوانده نشده است؛ نتیجه کامل نیست.', whyEn: 'part of the world was not read this pass; the picture is incomplete.' },
+  model: { fa: 'ریسک مدل', en: 'Model risk', icon: 'gauge', whyFa: 'همهٔ حساسیت‌ها اجزای مرتبهٔ اول مدل‌اند، نه ضرایب اندازه‌گیری‌شده.', whyEn: 'all sensitivities are first-order model terms, not measured betas.' }
+});
+
 export function buildChallenger(data = {}) {
   const x = extractWorldInputs(data);
 
@@ -2187,62 +2229,98 @@ export function buildChallenger(data = {}) {
   let opp = null;
   const cryptoAvg = num(x.crypto?.avgChangePct);
   if (x.tokenFlows?.topInflow && num(x.tokenFlows.topInflow.mcapChangeUsd) > 0) {
-    opp = { id: 'tokenInflow', label: `${x.tokenFlows.topInflow.symbol}`, detail: 'top capital inflow (CoinGecko 24h market-cap delta)', value: `+${round(x.tokenFlows.topInflow.mcapChangePct)}%` };
+    const t0 = x.tokenFlows.topInflow;
+    opp = {
+      id: 'tokenInflow', label: `${t0.symbol}`, detail: 'top capital inflow (CoinGecko 24h market-cap delta)', value: `+${round(t0.mcapChangePct)}%`,
+      kindFa: 'بیشترین ورود سرمایه', kindEn: 'largest capital inflow', subject: t0.symbol,
+      detailFa: `افزایش ارزش بازار در ۲۴ ساعت: ${usdFaCompact(t0.mcapChangeUsd, { signed: false })}`, detailEn: `24h market-cap gain: ${usdCompact(t0.mcapChangeUsd).replace('+', '')}`,
+      valueFa: pctFa(t0.mcapChangePct)
+    };
   } else if (cryptoAvg !== null && cryptoAvg > 0) {
-    opp = { id: 'cryptoClass', label: 'crypto class', detail: 'positive measured 24h class average', value: `+${round(cryptoAvg)}%` };
+    opp = {
+      id: 'cryptoClass', label: 'crypto class', detail: 'positive measured 24h class average', value: `+${round(cryptoAvg)}%`,
+      kindFa: 'صعود کلاس رمزارز', kindEn: 'crypto class rising', subject: null,
+      detailFa: 'میانگین اندازه‌گیری‌شدهٔ ۲۴ ساعتهٔ رمزارزها مثبت است', detailEn: 'the measured 24h class average is positive', valueFa: pctFa(cryptoAvg)
+    };
   } else if (x.chainFlows?.topInflowChain) {
-    opp = { id: 'chainInflow', label: x.chainFlows.topInflowChain.chain, detail: 'top stablecoin inflow chain', value: `$${Math.round(Math.abs(x.chainFlows.topInflowChain.net24hUsd || 0) / 1e6)}M` };
+    const c0 = x.chainFlows.topInflowChain;
+    opp = {
+      id: 'chainInflow', label: c0.chain, detail: 'top stablecoin inflow chain', value: `$${Math.round(Math.abs(c0.net24hUsd || 0) / 1e6)}M`,
+      kindFa: 'بیشترین ورود استیبل‌کوین', kindEn: 'largest stablecoin inflow', subject: c0.chain,
+      detailFa: `ورود خالص استیبل‌کوین به ${chainFa(c0.chain)}`, detailEn: `net stablecoin inflow to ${c0.chain}`,
+      valueFa: usdFaCompact(c0.net24hUsd, { signed: false })
+    };
   }
-  if (!opp) return { opportunity: null, arguments: [], observed: 0 };
+  if (!opp) return { opportunity: null, arguments: [], observed: 0, summary: null };
+  opp.subjectFa = opp.subject ? (opp.id === 'chainInflow' ? chainFa(opp.subject) : opp.subject) : null;
 
   const stableNet = num(x.chainFlows?.net24hUsd);
   const smNet = smartMoneyNet(x);
   const dxyChg = num(x.dxy?.change1dPct);
+  const dxyZ = dxyChg === null ? null : zOf(dxyChg, BENCH.dollar.sigma);
   const inverted = x.curve && num(x.curve.spreadPct) < 0;
-  const spread = (() => {
-    const avgs = Object.values(x.classes).map((c) => num(c?.avgChangePct)).filter((v) => v !== null);
-    return avgs.length ? Math.max(...avgs.map(Math.abs)) : null;
+  const recession = String(x.outlook?.label) === 'RECESSION_WATCH';
+  /* the widest class move, in units of THAT class's normal day */
+  const widest = (() => {
+    let best = null;
+    for (const [cls, c] of Object.entries(x.classes || {})) {
+      const avg = num(c?.avgChangePct);
+      if (avg === null || !CLASS_SIGMA[cls]) continue;
+      const z = avg / CLASS_SIGMA[cls];
+      if (!best || Math.abs(z) > Math.abs(best.z)) best = { cls, avg, z };
+    }
+    return best;
   })();
+  const div0 = x.divergences[0] || null;
+  const missing = x.missingDomains.length || 0;
+
+  const mk = (id, observed, evidence, evidenceFa, severity) => ({
+    id, key: `${id}Risk`, observed: !!observed, evidence: observed ? evidence : (evidence || null), evidenceFa: observed ? evidenceFa : (evidenceFa || null),
+    severity: observed ? clamp(severity ?? 0.5, 0.1, 1) : 0,
+    titleFa: CHALLENGE_META[id].fa, titleEn: CHALLENGE_META[id].en, whyFa: CHALLENGE_META[id].whyFa, whyEn: CHALLENGE_META[id].whyEn, icon: CHALLENGE_META[id].icon
+  });
 
   const args = [
-    {
-      id: 'macro', key: 'macroRisk',
-      observed: String(x.outlook?.label) === 'RECESSION_WATCH' || inverted,
-      evidence: inverted ? `2s10s inverted at ${x.curve.spreadPct}pp` : String(x.outlook?.label || '')
-    },
-    {
-      id: 'liquidity', key: 'liquidityRisk',
-      observed: stableNet !== null && stableNet < 0,
-      evidence: stableNet !== null ? `stablecoin net ${usdCompact(stableNet)}` : null
-    },
-    {
-      id: 'dollar', key: 'dollarHeadwind',
-      observed: dxyChg !== null && dxyChg > 0,
-      evidence: dxyChg !== null ? `DXY ${pctEn(dxyChg)}` : null
-    },
-    {
-      id: 'whale', key: 'whaleExitRisk',
-      observed: smNet !== null && smNet < 0,
-      evidence: smNet !== null ? `labelled net ${usdCompact(smNet)}` : null
-    },
-    {
-      id: 'divergence', key: 'divergenceRisk',
-      observed: x.divergences.length > 0,
-      evidence: x.divergences[0] ? `${arr(x.divergences[0].classes).join(' vs ')} gap ${x.divergences[0].gapPct}pp` : null
-    },
-    {
-      id: 'volatility', key: 'volatilityRisk',
-      observed: spread !== null && spread >= 2,
-      evidence: spread !== null ? `widest class move ${pctEn(spread)}` : null
-    },
-    {
-      id: 'coverage', key: 'dataGapRisk',
-      observed: (x.missingDomains.length || 0) >= 2,
-      evidence: `${x.missingDomains.length || 0} domains unread`
-    },
-    { id: 'model', key: 'modelRisk', observed: false, evidence: 'all sensitivities are first-order model terms' }
+    mk('macro', recession || inverted,
+      inverted ? `2s10s inverted at ${x.curve.spreadPct}pp` : String(x.outlook?.label || ''),
+      inverted ? `منحنی بازده ۲ به ۱۰ وارون است (${faNum(x.curve.spreadPct)} واحد)` : (recession ? 'چشم‌انداز موتور: هشدار رکود' : null),
+      recession && inverted ? 0.9 : recession ? 0.85 : 0.65),
+    mk('liquidity', stableNet !== null && stableNet < 0,
+      stableNet !== null ? `stablecoin net ${usdCompact(stableNet)}` : null,
+      stableNet !== null ? `عرضهٔ استیبل‌کوین ${usdFaCompact(Math.abs(stableNet), { signed: false })} کم شد` : null,
+      stableNet === null ? 0 : Math.abs(stableNet) / LIQUIDITY_SCALE_USD),
+    mk('dollar', dxyZ !== null && dxyZ >= 0.5,
+      dxyChg !== null ? `DXY ${pctEn(dxyChg)}` : null,
+      dxyChg !== null ? `شاخص دلار ${pctFa(dxyChg)} بالا رفت (${faNum(Math.abs(dxyZ).toFixed(1))} برابر روز معمول)` : null,
+      dxyZ === null ? 0 : dxyZ / 2.5),
+    mk('whale', smNet !== null && smNet < 0,
+      smNet !== null ? `labelled net ${usdCompact(smNet)}` : null,
+      smNet !== null ? `جریان خالص برچسب‌دار ${usdFaCompact(smNet)}` : null,
+      smNet === null ? 0 : Math.abs(smNet) / 20_000_000),
+    mk('divergence', x.divergences.length > 0,
+      div0 ? `${arr(div0.classes).join(' vs ')} gap ${div0.gapPct}pp` : null,
+      div0 ? `${arr(div0.classes).map((c) => CLASS_NAME_FA[c] || c).join(' و ')} ${faNum(div0.gapPct)} واحد با هم فاصله دارند` : null,
+      div0 ? num(div0.gapPct) / 4 : 0),
+    mk('volatility', widest !== null && Math.abs(widest.z) >= 1.5,
+      widest ? `widest class move ${pctEn(widest.avg)}` : null,
+      widest ? `${CLASS_NAME_FA[widest.cls]} ${pctFa(widest.avg)} (${faNum(Math.abs(widest.z).toFixed(1))} برابر روز معمول)` : null,
+      widest ? Math.abs(widest.z) / 3 : 0),
+    mk('coverage', missing >= 2,
+      `${missing} domains unread`, `${faNum(missing)} حوزه از ۹ حوزه در این دور خوانده نشد`, 0.35 + missing * 0.05),
+    { ...mk('model', false, 'all sensitivities are first-order model terms', 'همهٔ حساسیت‌ها اجزای مرتبهٔ اول مدل‌اند'), observed: false }
   ];
-  return { opportunity: opp, arguments: args, observed: args.filter((a) => a.observed).length };
+  const observed = args.filter((a) => a.observed);
+  const power = observed.reduce((s, a) => s + a.severity, 0);
+  const strength = observed.length === 0 ? 'none' : power < 0.9 ? 'low' : power < 1.8 ? 'medium' : 'high';
+  return {
+    opportunity: opp, arguments: args, observed: observed.length,
+    summary: {
+      observed: observed.length, total: args.length, strength,
+      /* the three strongest observed risks lead; everything else is «standing» */
+      top: observed.slice().sort((a, b) => b.severity - a.severity).slice(0, 3).map((a) => a.id),
+      standing: args.filter((a) => !a.observed).map((a) => a.id)
+    }
+  };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2546,75 +2624,322 @@ const DOMAIN_LABELS = Object.freeze({
   rwa: { fa: 'دارایی واقعی', en: 'RWA' }
 });
 
+/** what each domain IS, in one calm line (the row's subtitle) */
+const DOMAIN_ROLE = Object.freeze({
+  smart_money: { fa: 'کیف‌پول‌های برچسب‌دار و جریان نهادی', en: 'labelled wallets and institutional flow' },
+  whales: { fa: 'انتقال‌های بزرگ روی زنجیره', en: 'large on-chain transfers' },
+  onchain: { fa: 'سلامت منابع و فعالیت شبکه‌ها', en: 'source health and network activity' },
+  news: { fa: 'سرفصل‌های تازهٔ بازار', en: 'fresh market headlines' },
+  macro: { fa: 'قیمت‌های کلان و موضوع‌های خبری', en: 'macro quotes and news themes' },
+  stocks: { fa: 'سهام‌های شاخص بازار', en: 'benchmark equities' },
+  forex: { fa: 'جفت‌ارزهای اصلی', en: 'major currency pairs' },
+  commodities: { fa: 'فلزات و انرژی', en: 'metals and energy' },
+  rwa: { fa: 'دارایی‌های واقعی روی زنجیره', en: 'tokenised real-world assets' }
+});
+
 export const DOMAIN_KEYS = Object.freeze(Object.keys(DOMAIN_LABELS));
+
+const TOPIC_FA = Object.freeze({
+  FED: 'فدرال‌رزرو', INFLATION: 'تورم', GEOPOLITICS: 'ژئوپلیتیک', GROWTH: 'رشد', RATES: 'نرخ بهره', ECB: 'بانک مرکزی اروپا',
+  POLITICS: 'سیاست', CRYPTO_POLICY: 'قانون‌گذاری رمزارز', 'CRYPTO POLICY': 'قانون‌گذاری رمزارز', JOBS: 'اشتغال', ENERGY: 'انرژی', TRADE: 'تجارت'
+});
+
+/** instrument tickers the Persian reader knows by name (everything else stays a ticker) */
+const SYMBOL_FA = Object.freeze({
+  'EUR/USD': 'یورو / دلار', 'GBP/USD': 'پوند / دلار', 'USD/JPY': 'دلار / ین', 'USD/CAD': 'دلار / دلار کانادا', 'USD/CHF': 'دلار / فرانک سوئیس',
+  'USD/SEK': 'دلار / کرون سوئد', 'USD/MXN': 'دلار / پزوی مکزیک', 'USD/CNH': 'دلار / یوان', 'AUD/USD': 'دلار استرالیا / دلار', 'NZD/USD': 'دلار نیوزیلند / دلار',
+  'XAU/USD': 'طلا', 'XAG/USD': 'نقره', 'XPT/USD': 'پلاتین', 'XPD/USD': 'پالادیوم', 'CL/USD': 'نفت وست‌تگزاس', 'BRENT/USD': 'نفت برنت', 'HG/USD': 'مس',
+  'SPX/USD': 'اس‌اندپی ۵۰۰', 'NDX/USD': 'نزدک ۱۰۰', 'DJI/USD': 'داوجونز', 'DAX/USD': 'داکس آلمان', 'FTSE/USD': 'فوتسی بریتانیا', 'NIK/USD': 'نیکی ژاپن',
+  'HSI/USD': 'هنگ‌سنگ', 'TLT/USD': 'صندوق اوراق بلندمدت', 'HYG/USD': 'صندوق اوراق پربازده',
+  DXY: 'شاخص دلار', GOLD: 'طلا', WTI: 'نفت وست‌تگزاس', BRENT: 'نفت برنت', COPPER: 'مس', SPX: 'اس‌اندپی ۵۰۰', US10Y: 'بازده ۱۰ ساله', US2Y: 'بازده ۲ ساله', US30Y: 'بازده ۳۰ ساله', TLT: 'صندوق اوراق بلندمدت'
+});
+export const symbolFa = (s) => SYMBOL_FA[String(s || '').toUpperCase()] || null;
+
+const SOURCE_FA_DOMAIN = Object.freeze({
+  'news-engine': 'موتور خبر', 'whales:scanner': 'اسکنر نهنگ', 'chainintel': 'ردیاب زنجیره', 'smartmoney:overview': 'پول هوشمند',
+  ostium: 'Ostium', avantis: 'Avantis', macrodata: 'میز کلان', 'cross-asset-engine': 'موتور بین‌دارایی'
+});
+const domainSourceFa = (s) => {
+  if (!s) return null;
+  const raw = String(s);
+  const low = raw.toLowerCase();
+  return SOURCE_FA_DOMAIN[low] || SOURCE_FA_DOMAIN[low.split(':')[0]] || describeSource(raw, true);
+};
+const domainSourceEn = (s) => (s ? describeSource(String(s), false) : null);
+
+const STATUS_PERSIAN = Object.freeze({ OK: 'کامل', PARTIAL: 'ناقص', UNAVAILABLE: 'خوانده نشد', STALE: 'قدیمی' });
+const STATUS_ENGLISH = Object.freeze({ OK: 'complete', PARTIAL: 'partial', UNAVAILABLE: 'unread', STALE: 'stale' });
 
 export function buildDomainsView(domains) {
   if (!domains) return [];
   return Object.keys(DOMAIN_LABELS).map((key) => {
     const env = domains[key] || null;
-    const status = env?.status || 'UNAVAILABLE';
+    let status = env?.status || 'UNAVAILABLE';
     const data = status === 'OK' ? env.data : null;
+    /* a domain the server marked OK whose rows are price-only is «partial» to
+       the reader: it answered, but not with everything this screen needs */
+    if (status === 'OK' && env?.partial === true) status = 'PARTIAL';
     const out = {
-      key, status, reason: env?.reason || null, source: env?.source || null,
+      key, status, statusFa: STATUS_PERSIAN[status] || 'خوانده نشد', statusEn: STATUS_ENGLISH[status] || 'unread',
+      tone: status === 'OK' ? 'ok' : status === 'PARTIAL' ? 'warn' : 'off',
+      reason: env?.reason || null, source: env?.source || null,
+      sourceFa: domainSourceFa(env?.source), sourceEn: domainSourceEn(env?.source),
       at: num(env?.at), confidence: num(env?.confidence),
       stale: data?.stale === true, partial: env?.partial === true,
-      label: DOMAIN_LABELS[key], metrics: [], list: [], listKind: null
+      label: DOMAIN_LABELS[key], role: DOMAIN_ROLE[key],
+      headlineFa: null, headlineEn: null, stats: [],
+      metrics: [], list: [], listKind: null
     };
+    const stat = (fa, en, valueFa, valueEn, dir = 'flat') => out.stats.push({ fa, en, valueFa, valueEn, dir });
 
     if (key === 'smart_money' && data) {
       const net = smartMoneyNet({ sm: data });
-      if (net !== null) out.metrics.push({ key: 'netFlow', fa: 'جریان خالص', en: 'net flow', value: usdCompact(net), dir: signOf(net) });
-      if (num(data.accumulationUsd) !== null) out.metrics.push({ key: 'accumulation', fa: 'انباشت', en: 'accumulation', value: usdCompact(data.accumulationUsd), dir: 'up' });
-      if (num(data.distributionUsd) !== null) out.metrics.push({ key: 'distribution', fa: 'توزیع', en: 'distribution', value: usdCompact(-Math.abs(num(data.distributionUsd))), dir: 'down' });
-      if (num(data.whaleActivity?.count) !== null) out.metrics.push({ key: 'whaleActivity', fa: 'رویداد نهنگ', en: 'whale events', value: String(data.whaleActivity.count), dir: num(data.whaleActivity.changePct) === null ? 'flat' : signOf(data.whaleActivity.changePct) });
-      if (data.window) out.metrics.push({ key: 'window', fa: 'پنجره', en: 'window', value: String(data.window), dir: 'flat' });
+      const proxy = data.whaleTransferProxy || null;
+      const pAcc = num(proxy?.accumulationUsd); const pDist = num(proxy?.distributionUsd);
+      if (net !== null) out.metrics.push({ key: 'netFlow', fa: 'جریان خالص', en: 'net flow', value: usdCompact(net), valueFa: usdFaCompact(net), dir: signOf(net) });
+      if (num(data.accumulationUsd) !== null) out.metrics.push({ key: 'accumulation', fa: 'انباشت', en: 'accumulation', value: usdCompact(data.accumulationUsd), valueFa: usdFaCompact(data.accumulationUsd, { signed: false }), dir: 'up' });
+      if (num(data.distributionUsd) !== null) out.metrics.push({ key: 'distribution', fa: 'توزیع', en: 'distribution', value: usdCompact(-Math.abs(num(data.distributionUsd))), valueFa: usdFaCompact(-Math.abs(num(data.distributionUsd))), dir: 'down' });
+      if (net === null && pAcc !== null && pDist !== null) {
+        out.metrics.push({ key: 'proxyNet', fa: 'تراز انتقال نهنگ‌ها (پروکسی)', en: 'whale-transfer balance (proxy)', value: usdCompact(pAcc - pDist), valueFa: usdFaCompact(pAcc - pDist), dir: signOf(pAcc - pDist) });
+      }
+      const wa = data.whaleActivity || proxy?.whaleActivity || null;
+      if (num(wa?.count) !== null) out.metrics.push({ key: 'whaleActivity', fa: 'رویداد نهنگ', en: 'whale events', value: String(wa.count), valueFa: faNum(wa.count), dir: num(wa.changePct) === null ? 'flat' : signOf(wa.changePct) });
+      if (data.window) out.metrics.push({ key: 'window', fa: 'پنجره', en: 'window', value: String(data.window), valueFa: faNum(String(data.window).replace('h', ' ساعت').replace('d', ' روز')), dir: 'flat' });
       out.listKind = 'tokens';
-      out.list = arr(data.topTokens).map((t) => ({
-        symbol: t.symbol, chain: t.chain, flow: t.signal || t.flow || null,
-        valueUsd: num(t.netUsd) ?? num(t.valueUsd), confidence: num(t.confidence)
+      out.list = arr(data.topTokens).map((tk) => ({
+        symbol: tk.symbol, chain: tk.chain, chainFa: tk.chain ? chainFa(tk.chain) : null, flow: tk.signal || tk.flow || null,
+        valueUsd: num(tk.netUsd) ?? num(tk.valueUsd), confidence: num(tk.confidence)
       }));
+      if (net !== null) {
+        out.headlineFa = `جریان خالص برچسب‌دار ${usdFaCompact(net)}`; out.headlineEn = `labelled net flow ${usdCompact(net)}`;
+        stat('خالص', 'net', usdFaCompact(net), usdCompact(net), signOf(net));
+      } else if (pAcc !== null && pDist !== null) {
+        out.headlineFa = `شواهد تأییدشده کم بود؛ تراز انتقال نهنگ‌ها ${usdFaCompact(pAcc - pDist)} (پروکسی)`;
+        out.headlineEn = `verified evidence was thin; whale-transfer balance ${usdCompact(pAcc - pDist)} (proxy)`;
+        stat('تراز نهنگ‌ها', 'whale balance', usdFaCompact(pAcc - pDist), usdCompact(pAcc - pDist), signOf(pAcc - pDist));
+      } else {
+        out.headlineFa = 'جریان نهادی در این دور محاسبه نشد'; out.headlineEn = 'institutional flow was not computed this pass';
+      }
+      if (num(wa?.count) !== null) stat('رویداد نهنگ', 'whale events', faNum(wa.count), String(wa.count));
     } else if (key === 'whales' && data) {
-      if (num(data.count) !== null) out.metrics.push({ key: 'count', fa: 'رویداد', en: 'events', value: String(data.count), dir: 'flat' });
-      const top = arr(data.events).slice().sort((a, b) => (num(b.valueUsd) || 0) - (num(a.valueUsd) || 0))[0];
-      if (top) out.metrics.push({ key: 'topEvent', fa: 'بزرگ‌ترین انتقال', en: 'largest transfer', value: `${top.symbol} ${usdCompact(top.valueUsd)}`, dir: 'flat' });
+      const evs = arr(data.events);
+      if (num(data.count) !== null) out.metrics.push({ key: 'count', fa: 'رویداد', en: 'events', value: String(data.count), valueFa: faNum(data.count), dir: 'flat' });
+      const top = evs.slice().sort((a, b) => (num(b.valueUsd) || 0) - (num(a.valueUsd) || 0))[0];
+      if (top) out.metrics.push({ key: 'topEvent', fa: 'بزرگ‌ترین انتقال', en: 'largest transfer', value: `${top.symbol} ${usdCompact(top.valueUsd)}`, valueFa: `${top.symbol} ${usdFaCompact(top.valueUsd, { signed: false })}`, dir: 'flat' });
       out.listKind = 'whales';
-      out.list = arr(data.events).map((e) => ({ symbol: e.symbol, chain: e.chain, valueUsd: num(e.valueUsd), flow: e.flow, at: num(e.at) }));
+      out.list = evs.map((e) => ({ symbol: e.symbol, chain: e.chain, chainFa: e.chain ? chainFa(e.chain) : null, valueUsd: num(e.valueUsd), flow: e.flow, from: e.from || null, to: e.to || null, at: num(e.at) }));
+      if (num(data.count) !== null) {
+        out.headlineFa = `${faNum(data.count)} انتقال بزرگ${top ? ` · بزرگ‌ترین ${top.symbol} ${usdFaCompact(top.valueUsd, { signed: false })}` : ''}`;
+        out.headlineEn = `${data.count} large transfers${top ? ` · largest ${top.symbol} ${usdCompact(top.valueUsd).replace('+', '')}` : ''}`;
+        stat('انتقال', 'transfers', faNum(data.count), String(data.count));
+        if (top) stat('بزرگ‌ترین', 'largest', usdFaCompact(top.valueUsd, { signed: false }), usdCompact(top.valueUsd).replace('+', ''));
+      }
     } else if (key === 'onchain' && data) {
       const sources = arr(data.sources);
-      if (num(data.healthySources) !== null) out.metrics.push({ key: 'healthy', fa: 'منبع سالم', en: 'healthy sources', value: `${data.healthySources}/${sources.length}`, dir: 'flat' });
-      if (num(data.downSources) !== null && num(data.downSources) > 0) out.metrics.push({ key: 'down', fa: 'منبع خاموش', en: 'sources down', value: String(data.downSources), dir: 'down' });
-      if (num(data.degradedSources) !== null && num(data.degradedSources) > 0) out.metrics.push({ key: 'degraded', fa: 'منبع نیمه‌سالم', en: 'degraded', value: String(data.degradedSources), dir: 'down' });
-      if (data.scope) out.metrics.push({ key: 'scope', fa: 'دامنهٔ بررسی', en: 'scope', value: String(data.scope), dir: 'flat' });
+      if (sources.length && num(data.healthySources) !== null) out.metrics.push({ key: 'healthy', fa: 'منبع سالم', en: 'healthy sources', value: `${data.healthySources}/${sources.length}`, valueFa: `${faNum(data.healthySources)} از ${faNum(sources.length)}`, dir: 'flat' });
+      if (num(data.downSources) !== null && num(data.downSources) > 0) out.metrics.push({ key: 'down', fa: 'منبع خاموش', en: 'sources down', value: String(data.downSources), valueFa: faNum(data.downSources), dir: 'down' });
+      if (num(data.degradedSources) !== null && num(data.degradedSources) > 0) out.metrics.push({ key: 'degraded', fa: 'منبع نیمه‌سالم', en: 'degraded', value: String(data.degradedSources), valueFa: faNum(data.degradedSources), dir: 'down' });
       out.listKind = 'sources';
       out.list = sources.map((s) => ({ symbol: s.source, status: s.status, failures: num(s.failures), lastOkAt: num(s.lastOkAt) }));
       out.activity = arr(data.activity).slice(0, 6).map((e) => ({ type: e.type, detail: e.detail, source: e.source, at: num(e.at) }));
+      if (sources.length) {
+        out.headlineFa = `${faNum(data.healthySources ?? 0)} از ${faNum(sources.length)} منبع سالم است`; out.headlineEn = `${data.healthySources ?? 0} of ${sources.length} sources healthy`;
+        stat('منبع سالم', 'healthy', `${faNum(data.healthySources ?? 0)}/${faNum(sources.length)}`, `${data.healthySources ?? 0}/${sources.length}`);
+      } else if (out.activity.length) {
+        out.headlineFa = `${faNum(out.activity.length)} رویداد شبکه ثبت شد`; out.headlineEn = `${out.activity.length} network events recorded`;
+      } else {
+        out.headlineFa = 'هیچ منبع زنجیره‌ای در این دور ثبت نشد'; out.headlineEn = 'no on-chain source was recorded this pass';
+      }
     } else if (key === 'news' && data) {
-      if (num(data.count) !== null) out.metrics.push({ key: 'count', fa: 'سرفصل', en: 'headlines', value: String(data.count), dir: 'flat' });
+      if (num(data.count) !== null) out.metrics.push({ key: 'count', fa: 'سرفصل', en: 'headlines', value: String(data.count), valueFa: faNum(data.count), dir: 'flat' });
       out.listKind = 'headlines';
       out.list = arr(data.items).slice(0, 8).map((n) => ({ symbol: n.symbols?.[0] || null, title: n.title, url: n.url, source: n.source, lang: n.lang, at: num(n.at) }));
+      if (num(data.count) !== null) {
+        out.headlineFa = `${faNum(data.count)} سرفصل تازه خوانده شد`; out.headlineEn = `${data.count} fresh headlines read`;
+        stat('سرفصل', 'headlines', faNum(data.count), String(data.count));
+      }
     } else if (key === 'macro' && data) {
-      if (num(data.attention) !== null) out.metrics.push({ key: 'attention', fa: 'توجه خبری', en: 'attention', value: String(data.attention), dir: 'flat' });
+      const quotes = arr(data.instruments).length ? arr(data.instruments) : arr(data.quotes);
+      if (num(data.attention) !== null) out.metrics.push({ key: 'attention', fa: 'خبر کلان', en: 'macro headlines', value: String(data.attention), valueFa: faNum(data.attention), dir: 'flat' });
       const topics = Object.entries(data.byTopic || {}).sort((a, b) => b[1] - a[1]);
       /* both top topics: a single classifier label would hide the second
          theme that was equally present in this pass's headlines */
-      if (topics.length) out.metrics.push({ key: 'topics', fa: 'موضوع‌های برتر', en: 'top topics', value: topics.slice(0, 2).map(([t, n]) => `${t}×${n}`).join(' · '), dir: 'flat' });
-      const quotes = arr(data.instruments).length ? arr(data.instruments) : arr(data.quotes);
-      if (quotes.length) out.metrics.push({ key: 'quotes', fa: 'نقل‌قول', en: 'quotes', value: String(quotes.length), dir: 'flat' });
+      if (topics.length) {
+        out.metrics.push({
+          key: 'topics', fa: 'موضوع‌های برتر', en: 'top topics',
+          value: topics.slice(0, 2).map(([tp, n]) => `${tp}×${n}`).join(' · '),
+          valueFa: topics.slice(0, 2).map(([tp, n]) => `${TOPIC_FA[tp] || tp} \u00d7${faNum(n)}`).join(' · '), dir: 'flat'
+        });
+      }
+      if (quotes.length) out.metrics.push({ key: 'quotes', fa: 'قیمت کلان', en: 'macro quotes', value: String(quotes.length), valueFa: faNum(quotes.length), dir: 'flat' });
       out.listKind = 'topics';
-      out.list = topics.map(([topic, count]) => ({ symbol: topic, valueUsd: null, count }));
-      out.quotes = quotes.slice(0, 8).map((q) => ({ symbol: q.symbol, priceUsd: num(q.priceUsd), change1dPct: num(q.change1dPct), source: q.source }));
+      out.list = topics.map(([topic, count]) => ({ symbol: topic, symbolFa: TOPIC_FA[topic] || topic, valueUsd: null, count }));
+      out.quotes = quotes.slice(0, 10).map((q) => ({ symbol: q.symbol, nameFa: symbolFa(q.symbol), priceUsd: num(q.priceUsd), change1dPct: num(q.change1dPct), source: q.source, sourceFa: q.source ? describeSource(q.source, true) : null }));
+      const stale = data.stale === true;
+      out.headlineFa = quotes.length
+        ? `${faNum(quotes.length)} قیمت کلان${topics.length ? ` · موضوع برتر: ${TOPIC_FA[topics[0][0]] || topics[0][0]}` : ''}${stale ? ' · آخرین خوانش سالم' : ''}`
+        : (topics.length ? `قیمت کلان نرسید · موضوع برتر خبر: ${TOPIC_FA[topics[0][0]] || topics[0][0]}` : 'قیمت کلان و خبر کلان در این دور نرسید');
+      out.headlineEn = quotes.length
+        ? `${quotes.length} macro quotes${topics.length ? ` · top theme: ${topics[0][0]}` : ''}${stale ? ' · last good read' : ''}`
+        : (topics.length ? `no macro quotes · top news theme: ${topics[0][0]}` : 'no macro quotes or headlines this pass');
+      if (quotes.length) stat('قیمت کلان', 'quotes', faNum(quotes.length), String(quotes.length));
+      if (num(data.attention) !== null) stat('خبر کلان', 'macro news', faNum(data.attention), String(data.attention));
     } else if (data && arr(data.instruments)) {
       const inst = arr(data.instruments);
-      if (num(data.instruments) === null && inst.length) out.metrics.push({ key: 'instruments', fa: 'ابزار', en: 'instruments', value: String(inst.length), dir: 'flat' });
       const withChange = inst.filter((i) => num(i.change24hPct) !== null);
+      const priced = inst.filter((i) => num(i.priceUsd) !== null);
       const avg = withChange.length ? withChange.reduce((s, i) => s + num(i.change24hPct), 0) / withChange.length : null;
-      if (avg !== null) out.metrics.push({ key: 'avg', fa: 'میانگین ۲۴س', en: 'avg 24h', value: pctEn(avg), dir: signOf(avg) });
+      if (inst.length) out.metrics.push({ key: 'instruments', fa: 'ابزار', en: 'instruments', value: String(inst.length), valueFa: faNum(inst.length), dir: 'flat' });
+      if (avg !== null) out.metrics.push({ key: 'avg', fa: 'میانگین ۲۴ ساعت', en: 'avg 24h', value: pctEn(avg), valueFa: pctFa(avg), dir: signOf(avg) });
       out.listKind = 'instruments';
-      out.list = inst.slice(0, 8).map((i) => ({ symbol: i.symbol, name: i.name, valueUsd: null, changePct: num(i.change24hPct), priceUsd: num(i.priceUsd) }));
+      out.list = inst.slice(0, 10).map((i) => ({ symbol: i.symbol, nameFa: symbolFa(i.symbol), name: i.name, valueUsd: null, changePct: num(i.change24hPct), change7dPct: num(i.change7dPct), priceUsd: num(i.priceUsd) }));
       out.readOnly = data.readOnly === true;
+      if (inst.length) {
+        out.headlineFa = `${faNum(priced.length || inst.length)} ابزار قیمت‌دار${withChange.length ? ` · ${faNum(withChange.length)} با تغییر روزانه` : ' · بدون تغییر روزانه'}`;
+        out.headlineEn = `${priced.length || inst.length} priced instruments${withChange.length ? ` · ${withChange.length} with a daily change` : ' · no daily change'}`;
+        stat('ابزار', 'instruments', faNum(inst.length), String(inst.length));
+        if (avg !== null) stat('میانگین', 'average', pctFa(avg), pctEn(avg), signOf(avg));
+      }
     }
     return out;
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13b) THE BRIEFING TILES — the status report as a board of boxes.
+   REPORTED: «گزارش وضعیت مدرن‌تر باشد، باکس‌ها اطلاعات درست داشته باشند و با
+   لمس هر باکس به صفحهٔ مربوطه بروم».
+   Each tile is a VIEW of one calibrated station (so the number on the tile and
+   the number on the station board can never disagree) plus WHERE tapping it
+   leads: an in-console tab (the macro table, the causal chain, the globe…) or
+   a real page of the app (smart money, news, the market list, stocks).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const TAB_NAV = Object.freeze({
+  world: { kind: 'tab', tab: 'world', fa: 'وضعیت جهان', en: 'World state' },
+  flows: { kind: 'tab', tab: 'flows', fa: 'جریان سرمایه', en: 'Capital flow' },
+  causal: { kind: 'tab', tab: 'causal', fa: 'زنجیرهٔ علت', en: 'Causal chain' },
+  globe: { kind: 'tab', tab: 'globe', fa: 'کرهٔ زمین', en: 'Globe' },
+  future: { kind: 'tab', tab: 'future', fa: 'درخت آینده', en: 'Future tree' },
+  domains: { kind: 'tab', tab: 'domains', fa: 'حوزه‌های داده', en: 'Data domains' }
+});
+const ROUTE_NAV = Object.freeze({
+  smart: { kind: 'route', to: '/smart-money', fa: 'پول هوشمند', en: 'Smart money' },
+  news: { kind: 'route', to: '/news', fa: 'اخبار', en: 'News' },
+  market: { kind: 'route', to: '/', fa: 'بازار', en: 'Market' },
+  stocks: { kind: 'route', to: '/stocks', fa: 'سهام', en: 'Stocks' }
+});
+
+export function buildBriefingTiles(data = {}) {
+  const x = extractWorldInputs(data);
+  const stations = buildWeatherStations(data);
+  const by = Object.fromEntries(stations.map((s) => [s.id, s]));
+  const climate = buildClimate(data);
+  const chal = buildChallenger(data);
+  const globe = buildGlobeModel(data, { isPersian: true });
+  const summary = summariseStations(stations);
+
+  const fromStation = (id, icon, titleFa, titleEn, nav, extra = {}) => {
+    const st = by[extra.station || id];
+    if (!st) return null;
+    const unread = st.tone === 'na' && !st.valueText && !st.valueTextFa;
+    return {
+      id, icon, tone: st.tone, nav,
+      titleFa, titleEn,
+      status: unread ? 'unread' : (st.quality === QUALITY.LEVEL ? 'level' : 'ok'),
+      valueFa: st.valueTextFa, valueEn: st.valueText, unitFa: st.unitFa, unitEn: st.unitEn,
+      subFa: st.readFa || st.noteFa || null, subEn: st.readEn || st.noteEn || null,
+      quality: st.quality, severity: st.severity, z: st.z,
+      basisFa: st.basisFa, basisEn: st.basisEn,
+      ...extra.override
+    };
+  };
+
+  const tiles = [];
+
+  /* the climate — the one tile that is not a single station */
+  {
+    const word = climate.label ? TONE_WORD[climate.label] : null;
+    tiles.push({
+      id: 'climate', icon: 'sun', wide: true, tone: climate.label || 'na', nav: TAB_NAV.world,
+      titleFa: 'اقلیم مالی این دور', titleEn: 'Financial climate of this pass',
+      status: climate.index === null ? 'unread' : 'ok',
+      valueFa: climate.index === null ? null : faNum(climate.index), valueEn: climate.index === null ? null : String(climate.index),
+      unitFa: climate.index === null ? null : 'از ۱۰۰', unitEn: climate.index === null ? null : '/ 100',
+      wordFa: word?.fa || null, wordEn: word?.en || null,
+      subFa: `${faNum(summary.valid)} از ${faNum(summary.total)} ایستگاه معتبر · ${faNum(summary.proxy)} پروکسی`,
+      subEn: `${summary.valid} of ${summary.total} stations valid · ${summary.proxy} proxy`,
+      quality: climate.index === null ? null : QUALITY.MEASURED, severity: climate.index === null ? null : clamp(climate.index / 100, 0.05, 1), z: null
+    });
+  }
+
+  const defs = [
+    ['dollar', 'bank', 'دلار', 'Dollar', TAB_NAV.flows],
+    ['gold', 'shield', 'طلا', 'Gold', TAB_NAV.flows],
+    ['bonds', 'chart', 'اوراق خزانه', 'Treasuries', TAB_NAV.flows],
+    ['inflation', 'flame', 'نفت و انرژی', 'Oil & energy', TAB_NAV.causal],
+    ['equity', 'thermometer', 'سهام آمریکا', 'US equities', ROUTE_NAV.stocks],
+    ['crypto', 'coin', 'رمزارز', 'Crypto', ROUTE_NAV.market],
+    ['institutional', 'building', 'پول هوشمند', 'Smart money', ROUTE_NAV.smart],
+    ['whales', 'waves', 'نهنگ‌ها', 'Whales', ROUTE_NAV.smart]
+  ];
+  for (const [id, icon, fa, en, nav] of defs) {
+    const tile = fromStation(id, icon, fa, en, nav);
+    if (tile) tiles.push(tile);
+  }
+
+  /* news: headline count + the theme the classifier saw most */
+  {
+    const st = by.news;
+    const topics = Object.entries(x.macroDom?.byTopic || {}).sort((a, b) => b[1] - a[1]);
+    const unread = !st || (st.tone === 'na' && !st.valueText);
+    tiles.push({
+      id: 'news', icon: 'news', tone: st?.tone || 'na', nav: ROUTE_NAV.news,
+      titleFa: 'اخبار بازار', titleEn: 'Market news', status: unread ? 'unread' : 'ok',
+      valueFa: st?.valueTextFa || null, valueEn: st?.valueText || null, unitFa: 'سرفصل', unitEn: 'headlines',
+      subFa: topics.length ? `موضوع برتر: ${TOPIC_FA[topics[0][0]] || topics[0][0]}` : null,
+      subEn: topics.length ? `top theme: ${topics[0][0]}` : null,
+      quality: unread ? null : QUALITY.MEASURED, severity: st?.severity ?? null, z: null
+    });
+  }
+
+  /* the challenger: how many observed risks speak against the pass's thesis */
+  {
+    const observed = chal.arguments.filter((a) => a.observed);
+    const top = chal.summary?.top?.[0] ? chal.arguments.find((a) => a.id === chal.summary.top[0]) : null;
+    const strength = chal.summary?.strength || null;
+    tiles.push({
+      id: 'risk', icon: 'warning', nav: TAB_NAV.future,
+      tone: !chal.opportunity ? 'na' : strength === 'high' ? 'storm' : strength === 'medium' ? 'rain' : strength === 'low' ? 'cloud' : 'sun',
+      titleFa: 'ریسک‌های این دور', titleEn: 'Risks this pass',
+      status: chal.opportunity ? 'ok' : 'unread',
+      valueFa: chal.opportunity ? faNum(observed.length) : null, valueEn: chal.opportunity ? String(observed.length) : null,
+      unitFa: chal.opportunity ? 'ریسک مشاهده‌شده' : null, unitEn: chal.opportunity ? 'observed' : null,
+      subFa: top ? top.evidenceFa : (chal.opportunity ? 'هیچ ریسک مشهودی علیه فرصت این دور دیده نشد' : 'فرصتی برای چالش نبود'),
+      subEn: top ? top.evidence : (chal.opportunity ? 'no observed risk against this pass\u2019s opportunity' : 'no opportunity to challenge'),
+      quality: chal.opportunity ? QUALITY.MEASURED : null, severity: chal.opportunity ? clamp(observed.reduce((s, a) => s + a.severity, 0) / 2, 0.08, 1) : null, z: null
+    });
+  }
+
+  /* countries: the biggest local-currency move on the board */
+  {
+    const movers = globe.snaps.filter((s) => s.netBasis === 'direct' && s.net !== null)
+      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+    const m = movers[0] || null;
+    tiles.push({
+      id: 'countries', icon: 'globe', nav: TAB_NAV.globe,
+      tone: !m ? 'na' : m.net > 0 ? 'sun' : m.net < 0 ? 'cloud' : 'partly',
+      titleFa: 'کشورها', titleEn: 'Countries',
+      status: m ? 'ok' : 'unread',
+      valueFa: m ? m.country.fa : null, valueEn: m ? m.country.en : null,
+      unitFa: m ? pctFa(m.net) : null, unitEn: m ? pctEn(m.net) : null,
+      subFa: m ? `بیشترین حرکت ارز محلی · ${faNum(globe.coverage.read)} از ${faNum(globe.coverage.total)} کشور خوانده شد` : `${faNum(globe.coverage.read)} از ${faNum(globe.coverage.total)} کشور خوانده شد`,
+      subEn: m ? `largest local-currency move · ${globe.coverage.read} of ${globe.coverage.total} countries read` : `${globe.coverage.read} of ${globe.coverage.total} countries read`,
+      quality: m ? QUALITY.MEASURED : null, severity: m ? clamp(Math.abs(m.net) / 1.5, 0.08, 1) : null, z: null
+    });
+  }
+
+  return { tiles, summary, climate, generatedFrom: 'this pass' };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
