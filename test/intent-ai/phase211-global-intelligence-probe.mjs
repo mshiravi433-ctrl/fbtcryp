@@ -538,14 +538,14 @@ t('briefing: items are priority-sorted with kinds, sources and navigation action
   && ['critical', 'high', 'normal', 'info'].some((p) => briefing.items.some((i) => i.priority === p)));
 t('briefing: smart-money direction uses verified distribution and indexed evidence',
   briefing.items.some((i) => i.kind === 'smart_money' && i.title.includes('distribut')
-    && String(i.detail).includes('$3600k') && i.source === 'smartMoney:verified-index'));
+    && String(i.detail).includes('$3.6M') && !String(i.detail).includes('$3600k') && i.source === 'smartMoney:verified-index'));
 t('briefing: the macro item cites its topic counts from classified real headlines',
   briefing.items.some((i) => i.kind === 'macro' && i.untrusted === true && i.source === 'macro:classifier'));
 t('briefing: the macro INDICATORS item quotes the real dollar/gold/crude moves (the data side of macro)',
   briefing.items.some((i) => i.kind === 'macro' && String(i.detail).includes('real quotes')
     && (i.evidence || []).some((e) => String(e.source).includes(':'))));
-t('briefing: the cross-asset regime item navigates to the AI Global Intelligence surface',
-  briefing.items.some((i) => i.kind === 'cross_asset' && i.action.to === '/ai-global'));
+t('briefing: the cross-asset regime item navigates to the standalone Global page (/global; /ai-global stays an alias)',
+  briefing.items.some((i) => i.kind === 'cross_asset' && i.action.to === '/global'));
 t('briefing: the cross-asset item carries the economic outlook (the direction)',
   briefing.items.some((i) => i.kind === 'cross_asset'
     && /outlook/i.test(String(i.title))

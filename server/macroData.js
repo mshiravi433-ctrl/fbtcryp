@@ -46,7 +46,30 @@
  * when the series is too short to know, the change is null, not a guess.
  *
  * This module reads; it never writes, never signs, never holds a key (§50).
+ *
+ * ─── THE INDEPENDENT DESKS (2026-10 — «قیمت دلار، طلا و اوراق خوانده نشد») ──
+ * Production answered `macro.quotes: []` — the dollar, gold, oil and the
+ * yield curve were all unread — because the whole domain hung on ONE
+ * sequential chain (stooq → yahoo → fredcsv, up to 6s each) living inside the
+ * engine's 8s provider timeout. One slow desk spent the budget of the next
+ * and the pass ended with nothing. Three independent, keyless desks now run
+ * IN PARALLEL with that chain under one global deadline:
+ *   · ostium    daily candles (`1D`) of the tokenised metals/energy/index
+ *               markets — the venue the page already prices from;
+ *   · treasury  the U.S. Treasury's own daily par-yield-curve feed (2Y/10Y/30Y
+ *               and the 2s10s spread — the official source FRED republishes);
+ *   · ecb       the ECB reference rates (Frankfurter) — the dollar index is
+ *               COMPUTED from the official ICE basket weights, and the same
+ *               read yields a currency-vs-USD table for the globe.
+ * Merge rule: per symbol, a reading that carries a 1-day change wins; ties go
+ * to the older desks. Every instrument keeps the source that produced it.
+ * When everything is dark the last good read (≤36h, labelled `stale` with its
+ * age) is served instead of «nothing» — an old number that says it is old is
+ * more useful than a blank, and it is never presented as live.
  */
+
+import { readOstiumDailyChanges, _resetOstiumDailyForTests } from './ostiumDaily.js';
+import { blobGet, blobSet } from './blobCache.js';
 
 const TIMEOUT_MS = 6_000;
 const CACHE_TTL_MS = 10 * 60_000;
@@ -390,6 +413,223 @@ function mergeItems(items, added) {
   return out;
 }
 
+/* ── the independent desks ───────────────────────────────────────────────── */
+
+/** One deadline for the whole pass — strictly below the engine's 8s provider
+ *  timeout, so a slow desk can cost its own reading but never the others'. */
+const GLOBAL_DEADLINE_MS = Number(process.env.MACRO_GLOBAL_DEADLINE_MS || 6_800);
+const EXTRA_TIMEOUT_MS = Number(process.env.MACRO_EXTRA_TIMEOUT_MS || 4_500);
+const LAST_GOOD_KEY = 'macro:last-good:v1';
+const LAST_GOOD_MAX_AGE_MS = 36 * 3600_000;
+const LAST_GOOD_WRITE_EVERY_MS = 30 * 60_000;
+const FAIL_BACKOFF_MS = 60_000;
+
+/** Macro symbol → the Ostium pair that prices it (the venue's own daily candles). */
+export const OSTIUM_DESK = Object.freeze({
+  GOLD: 'XAU-USD', SILVER: 'XAG-USD', WTI: 'WTI-USD', BRENT: 'BRENT-USD',
+  COPPER: 'XCU-USD', SPX: 'US500-USD', TLT: 'TLT-USD'
+});
+/** TLT is not a MACRO_SYMBOLS row (the legacy desks must not be asked for it);
+ *  it exists only when the Ostium desk read it, labelled as a bond PROXY. */
+const TLT_ENTRY = Object.freeze({
+  symbol: 'TLT', name: 'Long Treasury ETF (TLT — bond proxy)', kind: 'rate_proxy', unit: 'USD/share'
+});
+
+/** Official ICE dollar-index basket (EUR .576 · JPY .136 · GBP .119 · CAD .091
+ *  · SEK .042 · CHF .036). With a USD base every rate is «foreign per USD», so
+ *  the formula is the product of rate^weight times the index constant. */
+export const DXY_WEIGHTS = Object.freeze({ EUR: 0.576, JPY: 0.136, GBP: 0.119, CAD: 0.091, SEK: 0.042, CHF: 0.036 });
+export const DXY_CONSTANT = 50.14348112;
+
+const ECB_BASE = 'https://api.frankfurter.dev/v1';
+const TREASURY_BASE = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml';
+
+/** ECB `{ rates: { '2026-10-06': { EUR: 0.887, … } } }` → { ccy → ascending [{ts, price}] }. */
+export function parseFrankfurterSeries(json) {
+  const byDate = json?.rates && typeof json.rates === 'object' ? json.rates : {};
+  const series = {};
+  for (const [date, row] of Object.entries(byDate)) {
+    const ts = Date.parse(date);
+    if (!Number.isFinite(ts) || !row || typeof row !== 'object') continue;
+    for (const [ccy, raw] of Object.entries(row)) {
+      const price = num(raw);
+      if (price === null || price <= 0) continue;
+      (series[ccy] || (series[ccy] = [])).push({ ts, price });
+    }
+  }
+  for (const key of Object.keys(series)) series[key].sort((a, b) => a.ts - b.ts);
+  return series;
+}
+
+/** The dollar index per fixing day — only days on which ALL six currencies exist. */
+export function dxySeriesFrom(series) {
+  const days = new Map(); // ts → { ccy → price }
+  for (const ccy of Object.keys(DXY_WEIGHTS)) {
+    for (const r of series?.[ccy] || []) {
+      const row = days.get(r.ts) || {};
+      row[ccy] = r.price;
+      days.set(r.ts, row);
+    }
+  }
+  const out = [];
+  for (const [ts, row] of days) {
+    if (!Object.keys(DXY_WEIGHTS).every((c) => Number.isFinite(row[c]) && row[c] > 0)) continue;
+    let value = DXY_CONSTANT;
+    for (const [ccy, weight] of Object.entries(DXY_WEIGHTS)) value *= row[ccy] ** weight;
+    out.push({ ts, price: Math.round(value * 1000) / 1000 });
+  }
+  return out.sort((a, b) => a.ts - b.ts);
+}
+
+/** Currency-vs-USD strength rows for the globe: a +ve change means the local
+ *  currency GAINED on the dollar (the rate-per-USD fell). */
+export function fxRowsFrom(series) {
+  const rows = [];
+  for (const [ccy, raw] of Object.entries(series || {})) {
+    const inverted = (raw || []).map((r) => ({ ts: r.ts, price: 1 / r.price }));
+    const ch = changesFromSeries(inverted);
+    if (ch.priceUsd === null) continue;
+    const last = raw[raw.length - 1];
+    rows.push({
+      ccy,
+      perUsd: last.price,
+      change1dPct: ch.change1dPct,
+      change7dPct: ch.change7dPct,
+      at: ch.at,
+      source: 'ecb:reference-rates'
+    });
+  }
+  return rows.sort((a, b) => a.ccy.localeCompare(b.ccy));
+}
+
+/** U.S. Treasury daily par-yield XML → { '2Y'|'10Y'|'30Y' → ascending [{ts, price}] }. */
+export function parseTreasuryXml(text) {
+  const xml = String(text || '');
+  const entries = xml.split(/<(?:\w+:)?properties[^>]*>/i).slice(1);
+  const tag = (block, name) => {
+    const m = block.match(new RegExp(`<(?:\\w+:)?${name}[^>]*>([^<]*)<`, 'i'));
+    return m ? m[1].trim() : '';
+  };
+  const out = { '2Y': [], '10Y': [], '30Y': [] };
+  for (const block of entries) {
+    const ts = Date.parse(tag(block, 'NEW_DATE'));
+    if (!Number.isFinite(ts)) continue;
+    for (const [label, field] of [['2Y', 'BC_2YEAR'], ['10Y', 'BC_10YEAR'], ['30Y', 'BC_30YEAR']]) {
+      const price = num(tag(block, field));
+      if (price !== null && price > 0) out[label].push({ ts, price });
+    }
+  }
+  for (const key of Object.keys(out)) out[key].sort((a, b) => a.ts - b.ts);
+  return out;
+}
+
+const entryOf = (symbol) => MACRO_SYMBOLS.find((e) => e.symbol === symbol);
+
+/** A quote from a desk that is not one of the legacy providers. */
+function deskQuote(entry, series, source) {
+  const ch = changesFromSeries(series);
+  if (ch.priceUsd === null) return null;
+  return {
+    symbol: entry.symbol, name: entry.name, kind: entry.kind, unit: entry.unit || null,
+    priceUsd: ch.priceUsd, change1dPct: ch.change1dPct, change7dPct: ch.change7dPct,
+    points: ch.points, source, at: ch.at
+  };
+}
+
+async function readOstiumDesk() {
+  const pairs = Object.values(OSTIUM_DESK);
+  const read = await readOstiumDailyChanges(pairs, { deadlineMs: EXTRA_TIMEOUT_MS });
+  const items = [];
+  for (const [symbol, pair] of Object.entries(OSTIUM_DESK)) {
+    const row = read.get(pair);
+    if (!row) continue;
+    const entry = symbol === 'TLT' ? TLT_ENTRY : entryOf(symbol);
+    if (!entry) continue;
+    items.push({
+      symbol, name: entry.name, kind: entry.kind, unit: entry.unit || null,
+      priceUsd: row.close, change1dPct: row.change1dPct, change7dPct: row.change7dPct,
+      points: row.points, source: `ostium:${pair}`, at: row.at
+    });
+  }
+  return { items };
+}
+
+async function readEcbDesk() {
+  const start = new Date(Date.now() - 16 * DAY).toISOString().slice(0, 10);
+  const text = await fetchText(`${ECB_BASE}/${start}..?base=USD`, EXTRA_TIMEOUT_MS);
+  const series = parseFrankfurterSeries(JSON.parse(text));
+  const items = [];
+  const dxy = deskQuote(
+    { ...entryOf('DXY'), name: 'US Dollar Index (computed from the ECB reference basket)' },
+    dxySeriesFrom(series), 'ecb:DXY-basket'
+  );
+  if (dxy) items.push(dxy);
+  return { items, fx: fxRowsFrom(series) };
+}
+
+async function readTreasuryDesk() {
+  const now = new Date();
+  const ym = (d) => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const months = [ym(prev), ym(now)];
+  const texts = await Promise.allSettled(months.map((m) => fetchText(
+    `${TREASURY_BASE}?data=daily_treasury_yield_curve&field_tdr_date_value_month=${m}`, EXTRA_TIMEOUT_MS
+  )));
+  const merged = { '2Y': [], '10Y': [], '30Y': [] };
+  let anyOk = false;
+  for (const r of texts) {
+    if (r.status !== 'fulfilled') continue;
+    anyOk = true;
+    const parsed = parseTreasuryXml(r.value);
+    for (const k of Object.keys(merged)) merged[k].push(...parsed[k]);
+  }
+  if (!anyOk) throw new Error('TREASURY_UNREACHABLE');
+  for (const k of Object.keys(merged)) merged[k].sort((a, b) => a.ts - b.ts);
+  const items = [];
+  for (const [label, symbol] of [['2Y', 'US2Y'], ['10Y', 'US10Y'], ['30Y', 'US30Y']]) {
+    const q = deskQuote(entryOf(symbol), merged[label], `treasury:BC_${label.replace('Y', 'YEAR')}`);
+    if (q) items.push(q);
+  }
+  const twos = new Map(merged['2Y'].map((r) => [r.ts, r.price]));
+  const spread = merged['10Y']
+    .filter((r) => twos.has(r.ts))
+    .map((r) => ({ ts: r.ts, price: Math.round((r.price - twos.get(r.ts)) * 1000) / 1000 }));
+  const curve = deskQuote(entryOf('US2S10S'), spread, 'treasury:BC_10YEAR-BC_2YEAR');
+  if (curve) items.push(curve);
+  return { items };
+}
+
+/** Run a promise, but give up on it after `ms` — the slow desk costs only itself. */
+function settleWithin(promise, ms, label) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ ok: false, error: `${label}_DEADLINE` }), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve({ ok: true, value }); },
+      (error) => { clearTimeout(timer); resolve({ ok: false, error: String(error?.message || error).slice(0, 60) }); }
+    );
+  });
+}
+
+/** Desk priority for ties — older, better-understood desks first. */
+const DESK_ORDER = Object.freeze(['legacy', 'ostium', 'treasury', 'ecb']);
+
+/** Per symbol: a reading WITH a 1-day change beats one without; ties go to the
+ *  older desk. The chosen quote keeps its own source. */
+export function mergeDeskItems(groups) {
+  const bySymbol = new Map();
+  for (const desk of DESK_ORDER) {
+    for (const item of groups[desk] || []) {
+      if (!item || !item.symbol) continue;
+      const have = bySymbol.get(item.symbol);
+      if (!have) { bySymbol.set(item.symbol, item); continue; }
+      const haveChange = have.change1dPct !== null && have.change1dPct !== undefined;
+      const newChange = item.change1dPct !== null && item.change1dPct !== undefined;
+      if (!haveChange && newChange) bySymbol.set(item.symbol, item);
+    }
+  }
+  return [...bySymbol.values()];
+}
+
 const providersFor = () => [
   'stooq',
   'yahoo',
@@ -398,23 +638,14 @@ const providersFor = () => [
   ...(alphaVantageMacroConfigured() ? ['av'] : [])
 ];
 
-/* ── the provider ─────────────────────────────────────────────────────────── */
-
-let cache = null; // { value, at }
-
-/**
- * The macro quotes for the global intel engine. Real series only; when no
- * upstream answers with ≥3 usable instruments, this THROWS — the engine
- * converts that into the macro domain's honest UNAVAILABLE.
- */
-export async function fetchMacroQuotes() {
-  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.value;
-
+/** The original sequential chain (primary + top-up), unchanged in behaviour.
+ *  It returns what it found instead of throwing so the orchestrator can merge
+ *  it with the independent desks. */
+async function readLegacyChain() {
   const startedAt = Date.now();
   const tried = [];
   let items = [];
   let primary = null;
-
   for (const provider of providersFor()) {
     const missing = new Set(
       MACRO_SYMBOLS.map((e) => e.symbol).filter((symbol) => !items.some((i) => i.symbol === symbol))
@@ -442,31 +673,135 @@ export async function fetchMacroQuotes() {
       if (primary) items = mergeItems(items, read);
     } catch (err) {
       tried.push({
-        provider,
-        count: 0,
-        role: isTopUp ? 'top-up' : 'primary',
+        provider, count: 0, role: isTopUp ? 'top-up' : 'primary',
         error: String(err?.message || err).slice(0, 60)
       });
     }
   }
+  return { items, tried, primary };
+}
 
-  if (!primary || items.length < MIN_ACCEPTABLE_INSTRUMENTS) throw new Error('NO_MACRO_DATA_SOURCE');
+/* ── the provider ─────────────────────────────────────────────────────────── */
 
-  const topped = items.some((i) => !String(i.source || '').startsWith(`${primary}:`));
+let cache = null; // { value, at }
+let lastGood = null; // { value, at } — the last fresh read, kept for «everything is dark»
+let lastGoodPersistedAt = 0;
+let failedAt = 0;
+
+function persistLastGood(value) {
+  if (Date.now() - lastGoodPersistedAt < LAST_GOOD_WRITE_EVERY_MS) return;
+  lastGoodPersistedAt = Date.now();
+  try {
+    Promise.resolve(blobSet(LAST_GOOD_KEY, value, LAST_GOOD_MAX_AGE_MS)).catch(() => {});
+  } catch {
+    /* durable storage is an optimisation, never a dependency */
+  }
+}
+
+async function readLastGood() {
+  let stored = lastGood;
+  if (!stored) {
+    try {
+      const value = await blobGet(LAST_GOOD_KEY);
+      if (value && Array.isArray(value.items) && value.items.length >= MIN_ACCEPTABLE_INSTRUMENTS) {
+        stored = { value, at: Number(value.at) || 0 };
+      }
+    } catch {
+      stored = null;
+    }
+  }
+  if (!stored) return null;
+  const age = Date.now() - (Number(stored.value?.at) || stored.at || 0);
+  if (!Number.isFinite(age) || age < 0 || age > LAST_GOOD_MAX_AGE_MS) return null;
+  return {
+    ...stored.value,
+    stale: true,
+    staleAgeMs: age,
+    source: `${String(stored.value.source || 'macroData').replace(/\(stale\)$/, '')}(stale)`
+  };
+}
+
+/**
+ * The macro quotes for the global intel engine. Real series only. The legacy
+ * chain and the three independent desks run in parallel under one deadline;
+ * when nothing answers, the last good read is served flagged `stale`, and only
+ * when there is none of that either does this THROW — the engine converts that
+ * into the macro domain's honest UNAVAILABLE.
+ */
+export async function fetchMacroQuotes() {
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.value;
+  /* After a total failure, do not make every request wait out the deadline
+     again: serve the last good read (or fail fast) for a minute. */
+  if (failedAt && Date.now() - failedAt < FAIL_BACKOFF_MS) {
+    const stale = await readLastGood();
+    if (stale) return stale;
+    throw new Error('NO_MACRO_DATA_SOURCE');
+  }
+
+  const t0 = Date.now();
+  const timed = (label, promise) => settleWithin(promise, GLOBAL_DEADLINE_MS, label).then((r) => ({ ...r, ms: Date.now() - t0 }));
+  const [legacy, ostium, treasury, ecb] = await Promise.all([
+    timed('LEGACY', readLegacyChain()),
+    timed('OSTIUM', readOstiumDesk()),
+    timed('TREASURY', readTreasuryDesk()),
+    timed('ECB', readEcbDesk())
+  ]);
+
+  const legacyValue = legacy.ok ? legacy.value : { items: [], tried: [{ provider: 'legacy', count: 0, role: 'primary', error: legacy.error }], primary: null };
+  const groups = {
+    legacy: legacyValue.primary ? legacyValue.items : [],
+    ostium: ostium.ok ? ostium.value.items : [],
+    treasury: treasury.ok ? treasury.value.items : [],
+    ecb: ecb.ok ? ecb.value.items : []
+  };
+  const items = mergeDeskItems(groups);
+  const fx = ecb.ok ? ecb.value.fx || [] : [];
+  const desks = [
+    ...legacyValue.tried.map((d) => ({ desk: d.provider, role: d.role, count: d.count, ok: d.count > 0, error: d.error || null })),
+    { desk: 'ostium', role: 'independent', count: groups.ostium.length, ok: ostium.ok && groups.ostium.length > 0, error: ostium.ok ? null : ostium.error, ms: ostium.ms },
+    { desk: 'treasury', role: 'independent', count: groups.treasury.length, ok: treasury.ok && groups.treasury.length > 0, error: treasury.ok ? null : treasury.error, ms: treasury.ms },
+    { desk: 'ecb', role: 'independent', count: groups.ecb.length, ok: ecb.ok && groups.ecb.length > 0, error: ecb.ok ? null : ecb.error, ms: ecb.ms }
+  ];
+
+  if (items.length < MIN_ACCEPTABLE_INSTRUMENTS) {
+    failedAt = Date.now();
+    const stale = await readLastGood();
+    if (stale) return { ...stale, desks, tried: legacyValue.tried };
+    throw new Error('NO_MACRO_DATA_SOURCE');
+  }
+
+  failedAt = 0;
+  const primary = legacyValue.primary;
+  const contributing = ['ostium', 'treasury', 'ecb'].filter((d) => groups[d].some((g) => items.includes(g)));
+  const topped = primary
+    ? items.some((i) => !String(i.source || '').startsWith(`${primary}:`))
+    : false;
+  const sourceName = primary
+    ? `${primary}${topped ? '+topup' : ''}`
+    : contributing.join('+');
   const value = {
     items,
+    fx,
     at: Date.now(),
-    source: `macroData:${primary}${topped ? '+topup' : ''}`,
-    tried,
+    source: `macroData:${sourceName}`,
+    tried: legacyValue.tried,
+    desks,
+    stale: false,
     note: 'real macro quotes: 1d/7d changes from daily series — data, not authority'
   };
   cache = { value, at: Date.now() };
+  lastGood = { value, at: Date.now() };
+  persistLastGood(value);
   return value;
 }
 
 /** Test-only: drop the pass cache, the AV series cache and today's spending. */
 export function _resetMacroDataForTests() {
   cache = null;
+  lastGood = null;
+  lastGoodPersistedAt = 0;
+  failedAt = 0;
+  _resetOstiumDailyForTests();
   avSeriesCache.clear();
   avBudget.day = null;
   avBudget.used = 0;

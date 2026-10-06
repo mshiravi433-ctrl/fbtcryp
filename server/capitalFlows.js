@@ -178,12 +178,46 @@ export function rankTokenCapitalFlows(rows = [], { at = Date.now(), limit = LIST
     else if (row.mcapChangeUsd < 0) outflowUsd += -row.mcapChangeUsd;
   }
 
+  /* ─── ANCHORS + BREADTH FROM THE SAME CALL (no extra request) ────────────
+     The page needed a gold, a bitcoin and an ether move that does not depend
+     on any other desk being up: CoinGecko's top-250 already contains them
+     (PAXG and XAUT are gold-backed tokens, priced against the metal). The
+     breadth of the whole top-250 — how many of 250 coins rose — is a far
+     steadier crypto-temperature than the 40 instruments the class reader sees.
+     Both come from rows this function already holds. */
+  const ANCHOR_IDS = { bitcoin: 'BTC', ethereum: 'ETH', 'pax-gold': 'PAXG', 'tether-gold': 'XAUT' };
+  const anchors = {};
+  const moves = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const change24 = num(row?.price_change_percentage_24h ?? row?.price_change_percentage_24h_in_currency);
+    if (change24 !== null) moves.push(change24);
+    const sym = ANCHOR_IDS[String(row?.id || '')];
+    if (sym && num(row?.current_price) !== null) {
+      anchors[sym] = {
+        symbol: sym,
+        name: String(row?.name || '').slice(0, 40),
+        priceUsd: num(row?.current_price),
+        change24hPct: change24,
+        change7dPct: num(row?.price_change_percentage_7d_in_currency ?? row?.price_change_percentage_7d)
+      };
+    }
+  }
+  const sortedMoves = [...moves].sort((a, b) => a - b);
+  const breadth = moves.length >= 20 ? {
+    count: moves.length,
+    advancing: moves.filter((v) => v > 0).length,
+    declining: moves.filter((v) => v < 0).length,
+    medianChange24hPct: Math.round(sortedMoves[Math.floor(sortedMoves.length / 2)] * 100) / 100
+  } : null;
+
   return {
     status: 'OK',
     source: 'coingecko:/coins/markets',
     metric: 'market_cap_change_24h',
     at,
     count: clean.length,
+    anchors,
+    breadth,
     topInflow,
     topOutflow,
     inflows: desc.filter((r) => r.mcapChangeUsd > 0).slice(0, limit),

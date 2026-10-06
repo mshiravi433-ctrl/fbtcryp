@@ -49,7 +49,7 @@ import { fetchSmartMoneyIntel, buildSmartMoneyIntel, enrichStrategiesWithSmartMo
 import { simulateRoute as phase11SimulateRoute, monitorStrategy as phase11MonitorStrategy } from '../../src/lib/intent-ai/strategyCompetition.js';
 /* Phase 211 — Global AI Intelligence. */
 import { createGlobalIntelEngine, GLOBAL_DOMAINS } from './globalIntel.js';
-import { analyzeCrossAsset, crossAssetDigest } from './crossAsset.js';
+import { analyzeCrossAsset, crossAssetDigest, domainHasChange } from './crossAsset.js';
 import { crossCommentary } from './crossNarrative.js';
 import { createBriefingEngine } from './briefing.js';
 import { createMigrations, CURRENT_MIGRATION_VERSION } from './migrations.js';
@@ -462,7 +462,13 @@ export function createFinancialIntelligence({ stateStore = null, events = null, 
   let macroFallbackMemo = null; // { at, value }
   async function macroFallbacksFor(globalSnapshot) {
     const domains = globalSnapshot?.domains || {};
-    const needFallback = ['stocks', 'forex', 'commodities', 'rwa'].some((cls) => !domains[cls] || domains[cls].status !== 'OK');
+    /* ─── GATE ON «NO CHANGE READ», NOT ON «DOMAIN NOT OK» ───────────────────
+       The Ostium and Avantis feeds answered with prices only: their domains
+       were `OK`, so this gate stayed shut, `breadthOf` found no 24h change in
+       any of them, and four classes stayed «unread» even while the macro desk
+       held gold, the dollar and the S&P. A class that cannot say whether it is
+       up or down is a class that needs the fallback — whatever its status. */
+    const needFallback = ['stocks', 'forex', 'commodities', 'rwa'].some((cls) => !domainHasChange(domains[cls]));
     if (!needFallback) return null;
     if (macroFallbackMemo && now() - macroFallbackMemo.at < 60_000) return macroFallbackMemo.value;
     let quotes = null;

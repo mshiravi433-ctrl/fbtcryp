@@ -134,6 +134,17 @@ const instrumentsOf = (domain) => {
   const data = value && typeof value === 'object' ? value.data : null;
   return Array.isArray(data?.instruments) ? data.instruments : (Array.isArray(data?.rows) ? data.rows : []);
 };
+/** True when a class domain carries at least one instrument with a REAL 24h
+ *  change. A domain can be `OK` and still be price-only (Ostium and Avantis
+ *  answer levels, not moves) — such a class cannot vote in the regime, so the
+ *  macro-desk fallback must be allowed to stand in for it. */
+export function domainHasChange(domain) {
+  if (!domain || domain.status === 'UNAVAILABLE') return false;
+  return instrumentsOf(domain).some((i) => {
+    const v = i?.change24hPct ?? i?.changePct;
+    return v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+  });
+}
 const dataOf = (domain) => {
   const value = domain && typeof domain === 'object' && domain.schema === 'fbt.fi.provenance.v1' ? domain.value : domain;
   return value && typeof value === 'object' ? value.data : null;
@@ -499,6 +510,12 @@ export function analyzeCrossAsset({ world = null, globalIntel = null, cryptoInst
       at: num(q?.at)
     })).filter((q) => q.symbol && q.priceUsd !== null),
     curve: macroData?.curve && typeof macroData.curve === 'object' ? { ...macroData.curve } : null,
+    /* data-quality facts the screens print: is this the LAST GOOD read, how old
+       is it, which desks answered, and the currency-vs-USD table */
+    stale: macroData?.stale === true,
+    staleAgeMs: num(macroData?.staleAgeMs),
+    desks: Array.isArray(macroData?.desks) ? macroData.desks : [],
+    fx: Array.isArray(macroData?.fx) ? macroData.fx : [],
     untrusted: true
   };
   result.outlook = economicOutlook({

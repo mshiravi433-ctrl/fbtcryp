@@ -57,6 +57,32 @@ const FA_FLOW = Object.freeze({
   accumulation: 'انباشت', distribution: 'توزیع', flow: 'جریان'
 });
 const faFlow = (f) => FA_FLOW[String(f || '').toLowerCase()] || String(f || 'انتقال');
+
+/* ─── MONEY THAT READS LIKE MONEY ────────────────────────────────────────────
+   The whale card said «$20975k» / «۲۰۹۷۵ هزار USDC» — thousands, spelled out
+   to five digits, with Latin digits in the Persian line. Amounts are compacted
+   to the unit a person says aloud ($21M · ۲۱ میلیون دلار) and the Persian line
+   carries Persian digits. */
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const faDigits = (v) => String(v).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]);
+const trimZero = (v) => String(v).replace(/\.0$/, '');
+export function usdEn(v) {
+  const n = Math.abs(Number(v));
+  if (!Number.isFinite(n)) return '—';
+  if (n >= 1e9) return `$${trimZero((n / 1e9).toFixed(n >= 1e10 ? 0 : 1))}B`;
+  if (n >= 1e6) return `$${trimZero((n / 1e6).toFixed(n >= 1e7 ? 0 : 1))}M`;
+  if (n >= 1e3) return `$${Math.round(n / 1e3)}K`;
+  return `$${Math.round(n)}`;
+}
+export function usdFa(v) {
+  const n = Math.abs(Number(v));
+  if (!Number.isFinite(n)) return '—';
+  const dec = (x, digits) => faDigits(trimZero(x.toFixed(digits))).replace('.', '٫');
+  if (n >= 1e9) return `${dec(n / 1e9, n >= 1e10 ? 0 : 1)} میلیارد دلار`;
+  if (n >= 1e6) return `${dec(n / 1e6, n >= 1e7 ? 0 : 1)} میلیون دلار`;
+  if (n >= 1e3) return `${faDigits(Math.round(n / 1e3))} هزار دلار`;
+  return `${faDigits(Math.round(n))} دلار`;
+}
 const FA_MACRO_TOPIC = Object.freeze({
   FED: 'فدرال‌رزرو', RATES: 'نرخ بهره', INFLATION: 'تورم', GROWTH: 'رشد اقتصادی',
   ECB: 'بانک مرکزی اروپا', GEOPOLITICS: 'ژئوپلیتیک', CRYPTO_POLICY: 'قانون‌گذاری رمزارز',
@@ -206,8 +232,8 @@ export function buildBriefingItems({
           id: itemId('smart_money'), kind: 'smart_money', priority: 'normal',
           title: accumulating ? 'Smart money is accumulating' : 'Smart money is distributing',
           titleFa: accumulating ? 'پول هوشمند در حال انباشت است' : 'پول هوشمند در حال توزیع است',
-          detail: `Qualified paired swaps over ${sm.window || '24h'}: $${Math.abs(Math.round(net / 1000))}k net ${accumulating ? 'buys' : 'sells'}; sampled index, not a price forecast.`,
-          detailFa: `معاملات جفت‌شدهٔ واجد شرایط در ${sm.window || '24h'}: $${Math.abs(Math.round(net / 1000))} هزار خالص ${accumulating ? 'خرید' : 'فروش'}؛ ایندکس نمونه‌ای، نه پیش‌بینی قیمت.`,
+          detail: `Qualified paired swaps over ${sm.window || '24h'}: ${usdEn(net)} net ${accumulating ? 'buys' : 'sells'}; sampled index, not a price forecast.`,
+          detailFa: `معاملات جفت‌شدهٔ واجد شرایط در ${sm.window || '24h'}: ${usdFa(net)} خالص ${accumulating ? 'خرید' : 'فروش'}؛ ایندکس نمونه‌ای، نه پیش‌بینی قیمت.`,
           evidence: [{ source: 'smartMoney:verified-index', at: sm.indexedAt }],
           action: { type: 'navigate', to: '/smart-money?tab=intelligence' },
           source: 'smartMoney:verified-index', at: sm.indexedAt,
@@ -220,8 +246,8 @@ export function buildBriefingItems({
           id: itemId('smart_money'), kind: 'smart_money', priority: 'info',
           title: `Verified wallet consensus: ${topToken.symbol}`,
           titleFa: `اجماع کیف‌پول‌های تأییدشده: ${topToken.symbol}`,
-          detail: `${topToken.flow || 'flow'} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)}k` : ''} · ${topToken.independentVotes} independent groups`,
-          detailFa: `${faFlow(topToken.flow)} ${topToken.valueUsd != null ? `$${Math.round(topToken.valueUsd / 1000)} هزار` : ''} · ${topToken.independentVotes} گروه مستقل`.trim(),
+          detail: `${topToken.flow || 'flow'} ${topToken.valueUsd != null ? usdEn(topToken.valueUsd) : ''} · ${topToken.independentVotes} independent groups`,
+          detailFa: `${faFlow(topToken.flow)} ${topToken.valueUsd != null ? usdFa(topToken.valueUsd) : ''} · ${faDigits(topToken.independentVotes)} گروه مستقل`.trim(),
           evidence: [{ source: 'smartMoney:verified-index', at: sm.indexedAt }],
           action: { type: 'navigate', to: '/smart-money?tab=intelligence' },
           source: 'smartMoney:verified-index', at: sm.indexedAt, confidence: topToken.confidence / 100
@@ -235,8 +261,8 @@ export function buildBriefingItems({
       if (biggest && num(biggest.valueUsd) >= 500_000) {
         push({
           id: itemId('whale'), kind: 'whale', priority: 'normal',
-          title: `Whale move: $${Math.round(biggest.valueUsd / 1000)}k ${biggest.symbol}`,
-          titleFa: `حرکت نهنگ: $${Math.round(biggest.valueUsd / 1000)} هزار ${biggest.symbol}`,
+          title: `Whale move: ${usdEn(biggest.valueUsd)} ${biggest.symbol}`,
+          titleFa: `حرکت نهنگ: ${usdFa(biggest.valueUsd)} ${biggest.symbol}`,
           detail: `${biggest.flow || 'transfer'} on ${biggest.chain || 'chain'}${wh.count > 1 ? ` — ${wh.count} large transfers observed this window` : ''}`,
           detailFa: `${faFlow(biggest.flow)} در ${biggest.chain || 'زنجیره'}${wh.count > 1 ? ` — ${wh.count} انتقال بزرگ در این بازه دیده شد` : ''}`,
           evidence: [{ source: 'whales:scanner', at: domains.whales.at }],
@@ -277,7 +303,7 @@ export function buildBriefingItems({
           detail: `real quotes, not headlines: ${shown}${curve} (read-only)`,
           detailFa: `ارقام واقعی، نه خبر: ${shown}${curve} (فقط‌خواندنی)`,
           evidence: macro.quotes.slice(0, 3).map((q) => ({ source: q.source || 'macroData', at: domains.macro.at })),
-          action: { type: 'navigate', to: '/ai-global' },
+          action: { type: 'navigate', to: '/global' },
           source: domains.macro.source || 'macro:classifier', at: domains.macro.at, confidence: 0.6, untrusted: true
         });
       }
@@ -351,7 +377,7 @@ export function buildBriefingItems({
       detail: `${digest.observedClasses.join(', ')} observed${digest.divergences.length ? `; divergence: ${digest.divergences[0]}` : `; co-movement ${(digest.coMovement * 100).toFixed(0)}%`}${outlookLabel ? `; outlook score ${outlook.score > 0 ? '+' : ''}${outlook.score}${(outlook.signals || []).length ? ` (${outlook.signals[0]})` : ''}` : ''}`,
       detailFa: `${digest.observedClasses.map(faClass).join('، ')} مشاهده شد${digest.divergences.length ? `؛ واگرایی: ${String(digest.divergences[0]).replace(/_/g, ' ')}` : `؛ هم‌حرکتی ${(digest.coMovement * 100).toFixed(0)}٪`}${outlookLabel ? `؛ امتیاز چشم‌انداز ${outlook.score > 0 ? '+' : ''}${outlook.score}${(outlook.signals || []).length ? ` (${outlook.signals[0]})` : ''}` : ''}`,
       evidence: [{ source: 'cross-asset-engine', at: crossAsset.at }],
-      action: { type: 'navigate', to: '/ai-global' },
+      action: { type: 'navigate', to: '/global' },
       source: 'cross-asset-engine', at: crossAsset.at, confidence: 0.7, untrusted: outlookLabel !== null
     });
   } else if (crossAsset) {
