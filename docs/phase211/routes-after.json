@@ -1,7 +1,7 @@
 {
   "schema": "fbt.phase211.route-inventory.v1",
   "label": "after",
-  "generatedAt": "2026-10-03T08:41:49.425Z",
+  "generatedAt": "2026-10-06T18:17:08.809Z",
   "frontend": {
     "routeCount": 68,
     "routes": [
@@ -721,6 +721,7 @@
         "POST /suggestions"
       ],
       "server/app.js": [
+        "ALL /api/cron/tick",
         "DELETE /api/v1/smart-money/registry/:chain/:address",
         "DELETE /api/v1/smart-money/watchlist/:id",
         "GET /api/ai/diagnose",

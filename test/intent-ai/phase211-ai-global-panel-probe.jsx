@@ -196,6 +196,9 @@ export async function run(container) {
     && /INVERTED|وارون/i.test(text())
     && all('.aig-signal').length >= 2
     && all('.aig-signal-dir').some((el) => /cautionary|هشداردهنده/.test(el.textContent || '')));
+  check('panel: the outlook block names an input it could NOT read, with its reason (never a silent gap)',
+    /inputs not read|ورودی\u200cهای خوانده\u200cنشده/.test(text())
+    && /news classifier unread|دسته\u200cبندی اخبار خوانده نشد/.test(text()));
   check('panel: the macro indicator layer renders the real quotes with 1d/7d and the curve',
     text().includes('DXY') && text().includes('GOLD') && text().includes('US10Y')
     && /\+0\.8% 1d/.test(text()) && /\+2\.1% 7d/.test(text())

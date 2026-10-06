@@ -31,7 +31,9 @@ import { getCapitalFlows } from '../../lib/capitalFlows';
  */
 import {
   WORLD_STYLES, WorldStatePanel, GlobePanel, RadarPanel,
-  CausalPanel, FlowMapPanel, FutureTreePanel, DnaPanel
+  CausalPanel, FlowMapPanel, FutureTreePanel, DnaPanel,
+  OutlookPanel, DomainsView, ProvidersPanel,
+  TabIcon as WorldTabIcon, TAB_ACCENTS
 } from './worldState/WorldPanels.jsx';
 
 /* ── Styles (scoped, same visual language as the AI control center) ────── */
@@ -134,6 +136,11 @@ const STYLES = `
   }
   .aig-tabs::-webkit-scrollbar { display:none; }
   .aig-tab {
+    /* one accent per tab, set inline from TAB_ACCENTS — the rail was eleven
+       identical violet buttons before, which is exactly the «همه بنفش» the
+       report called out. Colour now encodes the tab, and every accent exists
+       in the theme already. */
+    --tab-acc:var(--rgb-2); --tab-acc2:var(--rgb-1);
     position:relative; flex:0 0 auto; min-width:72px; min-height:62px; padding:9px 8px;
     border-radius:15px; font:inherit; font-size:11px; font-weight:780;
     line-height:1.45; color:var(--text-3); background:transparent;
@@ -143,22 +150,24 @@ const STYLES = `
     transition:color .22s cubic-bezier(.4,0,.2,1), background .22s cubic-bezier(.4,0,.2,1), border-color .22s cubic-bezier(.4,0,.2,1), transform .22s cubic-bezier(.4,0,.2,1);
   }
   .aig-tab:hover { color:var(--text-1); background:color-mix(in srgb, var(--bg-raised) 55%, transparent); }
-  .aig-tab-icon { width:24px; height:24px; display:grid; place-items:center; flex:0 0 24px; transition:transform .3s cubic-bezier(.4,0,.2,1), color .22s ease; }
+  .aig-tab-icon { width:24px; height:24px; display:grid; place-items:center; flex:0 0 24px;
+    color:color-mix(in srgb, var(--tab-acc) 70%, var(--text-3));
+    transition:transform .3s cubic-bezier(.4,0,.2,1), color .22s ease; }
   .aig-tab-icon svg { width:100%; height:100%; }
   .aig-sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   .aig-tab.active {
     color:var(--text-1);
-    background:linear-gradient(140deg,color-mix(in srgb,var(--rgb-1) 18%,var(--bg-panel-solid)),color-mix(in srgb,var(--rgb-2) 20%,var(--bg-panel-solid)));
-    border-color:color-mix(in srgb,var(--rgb-2) 44%,transparent);
-    box-shadow:0 12px 26px -18px color-mix(in srgb,var(--rgb-2) 90%,transparent), inset 0 1px 0 rgba(255,255,255,0.08);
+    background:linear-gradient(140deg,color-mix(in srgb,var(--tab-acc) 22%,var(--bg-panel-solid)),color-mix(in srgb,var(--tab-acc2) 14%,var(--bg-panel-solid)));
+    border-color:color-mix(in srgb,var(--tab-acc) 46%,transparent);
+    box-shadow:0 12px 26px -18px color-mix(in srgb,var(--tab-acc) 90%,transparent), inset 0 1px 0 rgba(255,255,255,0.08);
     transform:translateY(-2px);
   }
   .aig-tab.active::after {
-    content:''; position:absolute; inset-inline:22%; bottom:4px; height:2px; border-radius:999px;
-    background:linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
-    box-shadow:0 0 10px color-mix(in srgb,var(--rgb-1) 70%,transparent);
+    content:''; position:absolute; inset-inline:18%; bottom:4px; height:2px; border-radius:999px;
+    background:linear-gradient(90deg, transparent, var(--tab-acc), var(--tab-acc2), transparent);
+    box-shadow:0 0 10px color-mix(in srgb,var(--tab-acc) 70%,transparent);
   }
-  .aig-tab.active .aig-tab-icon { transform:scale(1.12); color:var(--rgb-2); }
+  .aig-tab.active .aig-tab-icon { transform:scale(1.12); color:var(--tab-acc); }
 
   .aig-refresh {
     width:100%; min-height:50px; margin-bottom:16px;
@@ -237,10 +246,8 @@ const STYLES = `
     box-shadow:0 16px 34px -26px color-mix(in srgb,var(--rgb-1) 80%,transparent);
   }
   .aig-card-name { font-size:var(--fs-xs); color:var(--text-2); display:flex; align-items:center; gap:7px; line-height:1.6; }
-  .aig-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; box-shadow:0 0 9px currentColor; }
   .aig-card-value { font-size:var(--fs-lg); font-weight:900; color:var(--text-1); margin-top:7px; line-height:1.35; font-variant-numeric:tabular-nums; }
   .aig-card-sub { font-size:11px; color:var(--text-2); margin-top:4px; line-height:1.65; overflow-wrap:anywhere; }
-  .aig-reason { font-size:10px; color:var(--down); margin-top:5px; text-align:start; overflow-wrap:anywhere; line-height:1.6; }
 
   /* ── providers ───────────────────────────────────────────────────────── */
   .aig-light {
@@ -275,18 +282,6 @@ const STYLES = `
   .aig-regime-label { font-size:var(--fs-lg); font-weight:900; color:var(--text-1); overflow-wrap:anywhere; letter-spacing:-0.01em; }
   .aig-regime-sub,.aig-note { font-size:var(--fs-xs); color:var(--text-2); line-height:1.9; margin-top:7px; }
 
-  .aig-outlook {
-    padding:15px; border-radius:18px; margin-bottom:12px;
-    border:1px solid color-mix(in srgb,var(--line) 80%, transparent);
-    background:linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)), var(--bg-raised);
-  }
-  .aig-outlook.growth { border-color:color-mix(in srgb,var(--up) 30%,var(--line)); background:linear-gradient(160deg, color-mix(in srgb,var(--up) 12%,transparent), transparent), var(--bg-raised); }
-  .aig-outlook.recession { border-color:color-mix(in srgb,var(--down) 30%,var(--line)); background:linear-gradient(160deg, color-mix(in srgb,var(--down) 12%,transparent), transparent), var(--bg-raised); }
-  .aig-outlook-head { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-2); }
-  .aig-outlook-score { display:inline-flex; align-items:center; gap:5px; font-size:var(--fs-sm); font-weight:900; padding:4px 11px; border-radius:999px; background:color-mix(in srgb,var(--rgb-2) 14%,transparent); border:1px solid color-mix(in srgb,var(--rgb-2) 30%,transparent); color:var(--text-1); }
-  .aig-outlook-now { display:flex; align-items:baseline; gap:9px; margin-top:10px; padding:9px 11px; border-radius:12px; background:color-mix(in srgb,var(--bg-panel) 60%,transparent); }
-  .aig-outlook-now-k { flex:0 0 auto; font-size:10px; color:var(--text-3); }
-  .aig-outlook-now-v { min-width:0; font-size:var(--fs-xs); font-weight:800; color:var(--text-1); overflow-wrap:anywhere; line-height:1.7; }
 
   .aig-signal { display:flex; gap:9px; align-items:flex-start; padding:10px 0; border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent); }
   .aig-signal:first-of-type { border-top:none; }
@@ -436,27 +431,21 @@ const TABS = [
   { id: 'providers', icon: 'providers', marker: '🔌' }
 ];
 
+/* The tab glyphs now come from the console's own icon module, so the rail and
+   the panel headers can never drift apart again. */
 function TabIcon({ name, size }) {
-  const paths = {
-    briefing: <><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M2 19h6"/><path d="M12 11h6"/><path d="M12 15h4"/></>,
-    domains: <><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></>,
-    cross: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
-    providers: <><path d="M19 11v-2a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/><path d="M2 15h20"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><path d="M12 7v4"/><path d="M8 7v4"/><path d="M16 7v4"/></>,
-    world: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></>,
-    globeMap: <><circle cx="12" cy="12" r="9"/><path d="M8 5.5c1.5 2 1 4-0.5 5.5S5 13.5 6.2 16"/><path d="M14.5 4.5c-1 2 .5 3.5 2.5 3.5s3 2.5 1.5 4.5-3.5 2-5.5 3.5"/></>,
-    radar: <><path d="M19.07 4.93A10 10 0 1 0 22 12"/><path d="M15.54 8.46A5 5 0 1 0 17 12"/><circle cx="12" cy="12" r="1"/><path d="M12 12l7-7"/></>,
-    causal: <><path d="M9 12h6"/><path d="M4 12a3 3 0 0 1 3-3h1a3 3 0 0 1 0 6H7a3 3 0 0 1-3-3Z"/><path d="M20 12a3 3 0 0 0-3-3h-1a3 3 0 0 0 0 6h1a3 3 0 0 0 3-3Z"/></>,
-    flows: <><path d="M12 3v14"/><path d="m7 13 5 5 5-5"/><path d="M5 21h14"/></>,
-    future: <><path d="M12 3v18"/><path d="M12 8c-2.5 0-4-1.5-4.5-3.5C9.5 4.8 11 6 12 6s2.5-1.2 4.5-1.5C16 6.5 14.5 8 12 8Z"/><path d="M12 14c-3.5 0-5.5-2-6.5-5 3 .5 5 2 6.5 2s3.5-1.5 6.5-2c-1 3-3 5-6.5 5Z"/></>,
-    dna: <><path d="M6 3c0 6 12 6 12 12"/><path d="M18 3c0 6-12 6-12 12"/><path d="M6 15c0 3 2 6 6 6"/><path d="M18 15c0 3-2 6-6 6"/><path d="M8 6.5h8"/><path d="M8 17.5h8"/></>
-  };
-  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+  return <WorldTabIcon name={name} size={size || 24} />;
 }
 
 /* Coloured section-header variant of the tab icons, used by the WORLD
    CONSOLE sub-tabs' headers. */
 function TabIconGadget({ name }) {
-  return <span style={{ color: 'var(--rgb-2)', display: 'inline-flex' }}><TabIcon name={name} size={17} /></span>;
+  const pair = TAB_ACCENTS[name] || [];
+  return (
+    <span style={{ color: pair[0] || 'var(--rgb-2)', display: 'inline-flex' }}>
+      <TabIcon name={name} size={17} />
+    </span>
+  );
 }
 
 /* Domain card glyphs. These were emoji (🧠 🐋 ⛓️ 📰 🏛️ 📈 💱 🛢️): each OS
@@ -534,23 +523,6 @@ const AIG_CLASS = {
   crypto: { fa: 'رمزارز', en: 'crypto' }, stocks: { fa: 'سهام', en: 'stocks' },
   forex: { fa: 'فارکس', en: 'forex' }, commodities: { fa: 'کالاها', en: 'commodities' },
   rwa: { fa: 'دارایی واقعی', en: 'rwa' }
-};
-const AIG_TOPIC = {
-  FED: { fa: 'فدرال‌رزرو', en: 'FED' }, RATES: { fa: 'نرخ بهره', en: 'RATES' },
-  INFLATION: { fa: 'تورم', en: 'INFLATION' }, GROWTH: { fa: 'رشد', en: 'GROWTH' },
-  ECB: { fa: 'اروپا', en: 'ECB' }, GEOPOLITICS: { fa: 'ژئوپلیتیک', en: 'GEOPOLITICS' },
-  CRYPTO_POLICY: { fa: 'قانون رمزارز', en: 'CRYPTO POLICY' },
-  POLITICS: { fa: 'سیاست', en: 'POLITICS' }, CURRENCIES: { fa: 'ارز و پولی', en: 'CURRENCIES' }
-};
-const AIG_OUTLOOK = {
-  GROWTH_WATCH: { fa: 'چشم‌انداز رشد', en: 'growth watch' },
-  RECESSION_WATCH: { fa: 'هشدار رکود', en: 'recession watch' },
-  MIXED_SIGNALS: { fa: 'سیگنال‌های مختلط', en: 'mixed signals' },
-  UNAVAILABLE: { fa: 'دادهٔ کافی نیست', en: 'no data yet' }
-};
-const AIG_DIRECTION = {
-  supportive: { fa: 'پشتیبان', en: 'supportive' }, cautionary: { fa: 'هشداردهنده', en: 'cautionary' },
-  neutral: { fa: 'خنثی', en: 'neutral' }
 };
 const AIG_MISSING = {
   guardian: { fa: 'نگهبان', en: 'guardian' }, financial: { fa: 'وضعیت مالی', en: 'financial' },
@@ -1040,53 +1012,6 @@ function CrossAssetMovement({ cross, L, isPersian }) {
    ECONOMIC OUTLOOK — criteria with an up/down icon, in Persian
    «باکسش خیلی شلوغه باید معیارها با آیکون بالا و پایین و فارسی باشد»
    ══════════════════════════════════════════════════════════════════════════ */
-function EconomicOutlook({ outlook, L, isPersian }) {
-  const signals = Array.isArray(outlook?.signals) ? outlook.signals : [];
-  const labelFa = mapLabel(AIG_OUTLOOK, outlook?.label, isPersian) || String(outlook?.label || '').replace(/_/g, ' ');
-  const scoreDir = Number(outlook?.score) > 0 ? 'up' : Number(outlook?.score) < 0 ? 'down' : 'flat';
-  return (
-    <div className={`aig-outlook ${outlook.label === 'GROWTH_WATCH' ? 'growth' : outlook.label === 'RECESSION_WATCH' ? 'recession' : ''}`}>
-      <div className="aig-outlook-head">
-        <div className="aig-section-title" style={{ marginBottom: 0 }}>
-          <AigIcon name="globe" /> {L('چشم‌انداز اقتصادی', 'Economic outlook')}
-        </div>
-        <span className="aig-outlook-score">
-          <AigDir dir={scoreDir} size={9} />
-          {outlook.label !== 'UNAVAILABLE'
-            ? `${labelFa}${outlook.score != null ? ` · ${isPersian ? faNum(`${outlook.score > 0 ? '+' : ''}${outlook.score}`) : `${outlook.score > 0 ? '+' : ''}${outlook.score}`}` : ''}`
-            : L('دادهٔ کافی نیست', 'no data yet')}
-        </span>
-      </div>
-
-      <div className="aig-outlook-now">
-        <span className="aig-outlook-now-k">{L('وضعیت کنونی', 'now')}</span>
-        <span className="aig-outlook-now-v">
-          {outlook.currentState?.regime ? (mapLabel(AIG_REGIME, outlook.currentState.regime, isPersian) || outlook.currentState.regime) : '—'}
-        </span>
-      </div>
-
-      {signals.map((s) => (
-        <div key={s.id} className="aig-signal">
-          <span className={`aig-signal-dir ${s.direction}`}>
-            <AigDir dir={s.direction === 'supportive' ? 'up' : s.direction === 'cautionary' ? 'down' : 'flat'} size={9} />
-            {mapLabel(AIG_DIRECTION, s.direction, isPersian) || s.direction}
-          </span>
-          <div className="aig-signal-body">
-            <div className="aig-signal-name">
-              {(isPersian && s.nameFa) ? s.nameFa : s.name}
-              {s.source ? <span className="aig-signal-src">{sourceLabel(s.source, isPersian)}</span> : null}
-            </div>
-            <div className="aig-signal-ev">{(isPersian && s.evidenceFa) ? s.evidenceFa : s.evidence}</div>
-          </div>
-        </div>
-      ))}
-
-      <div className="aig-note">
-        {L('ترکیب وزن‌دار خوانش‌های واقعی همین دور — داده، نه پیش‌بینی قطعی.', 'A weighted reading of this pass\u2019s real reads — data, not a guaranteed forecast.')}
-      </div>
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
    GLOBAL ECONOMY LEADERS — from what was actually read
@@ -1526,7 +1451,6 @@ function AiGlobalIntelligenceInner() {
     goldEtfs: data.goldEtfs
   }), [data.intelligence, data.briefing, cross, data.flows, tomanReference, data.goldEtfs]);
 
-  const statusColor = (status) => (status === 'OK' ? '#22c55e' : status === 'PARTIAL' ? '#eab308' : '#6b7280');
   /*
    * The nine cells of the header meter — one per domain, in the same order and
    * from the SAME `status` the domains tab prints, so the two can never
@@ -1543,55 +1467,6 @@ function AiGlobalIntelligenceInner() {
   const regimeClass = cross?.regime?.regime ? String(cross.regime.regime).toLowerCase() : 'partial';
 
   /* ── per-domain one-line summaries (only what was actually read) ─────── */
-  const domainValue = (key, d) => {
-    if (!d || d.status === 'UNAVAILABLE') return { value: L('خوانده نشد', 'unread'), sub: d?.reason || null, bad: true };
-    const v = d.data || {};
-    switch (key) {
-      case 'smart_money': {
-        const net = v.accumulationUsd != null && v.distributionUsd != null ? v.accumulationUsd - v.distributionUsd : null;
-        return {
-          value: net != null ? `${net >= 0 ? '+' : '−'}$${fmtK(Math.abs(net))}` : '—',
-          sub: `${v.whaleActivity?.count ?? '—'} ${L('رویداد نهنگ', 'whale events')} · ${v.window || '24h'}`
-        };
-      }
-      case 'whales':
-        return { value: `${v.count ?? '—'}`, sub: v.events?.[0] ? `${v.events[0].symbol} $${fmtK(v.events[0].valueUsd)}` : null };
-      case 'onchain':
-        return { value: `${v.healthySources ?? 0}/${(v.sources || []).length}`, sub: v.downSources ? `${v.downSources} ${L('منبع خاموش', 'sources down')}` : L('همه سالم', 'all healthy') };
-      case 'news':
-        return { value: `${v.count ?? 0}`, sub: v.items?.[0] ? String(v.items[0].title).slice(0, 46) : null };
-      case 'macro': {
-        /* Phase 211.1 — the macro card shows BOTH sides of the domain: the
-           classified headline topics (politics included) and, when a source
-           answered, the real quote moves (dollar/gold/crude…). */
-        const topics = Object.entries(v.byTopic || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, n]) => `${mapLabel(AIG_TOPIC, t, isPersian) || t}×${n}`).join(' · ');
-        const quotes = Array.isArray(v.instruments) ? v.instruments : (Array.isArray(v.quotes) ? v.quotes : []);
-        const qmover = quotes
-          .filter((q) => q.change1dPct != null)
-          .sort((a, b) => Math.abs(b.change1dPct) - Math.abs(a.change1dPct))[0];
-        const qSub = qmover ? `${qmover.symbol} ${qmover.change1dPct > 0 ? '+' : ''}${qmover.change1dPct}%` : null;
-        return {
-          value: `${v.attention ?? 0}${quotes.length ? `+${quotes.length}` : ''}`,
-          sub: [topics, qSub].filter(Boolean).join(' · ') || null
-        };
-      }
-      case 'stocks':
-      case 'forex':
-      case 'commodities':
-      case 'rwa': {
-        const inst = v.instruments || [];
-        const withChange = inst.filter((i) => i.change24hPct != null);
-        const top = withChange.sort((a, b) => Math.abs(b.change24hPct) - Math.abs(a.change24hPct))[0];
-        return {
-          value: `${inst.length}`,
-          sub: top ? `${top.symbol} ${top.change24hPct > 0 ? '+' : ''}${top.change24hPct.toFixed(1)}%` : L('بدون تغییر ۲۴س', 'no 24h change'),
-          note: L('دسترس فقط‌خواندنی', 'read-only venue')
-        };
-      }
-      default:
-        return { value: '—', sub: null };
-    }
-  };
 
   return (
     <div className="ai-global" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -1646,7 +1521,19 @@ function AiGlobalIntelligenceInner() {
 
       <div className="aig-tabs">
         {TABS.map((t) => (
-          <button key={t.id} type="button" className={`aig-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            type="button"
+            className={`aig-tab ${tab === t.id ? 'active' : ''}`}
+            style={{
+              /* TAB_ACCENTS holds a PAIR per tab (accent + partner). Never assign
+                 the array itself to a custom property: it is not a valid CSS
+                 value and the icon silently falls back to grey. */
+              '--tab-acc': (TAB_ACCENTS[t.icon] || [])[0] || 'var(--rgb-2)',
+              '--tab-acc2': (TAB_ACCENTS[t.icon] || [])[1] || 'var(--rgb-1)'
+            }}
+            onClick={() => setTab(t.id)}
+          >
             <span className="aig-sr">{t.marker}</span><span className="aig-tab-icon"><TabIcon name={t.icon} /></span><span>{t.id === 'briefing' ? L('گزارش وضعیت', 'Briefing')
               : t.id === 'world' ? L('وضعیت جهان', 'World state')
               : t.id === 'globe' ? L('کره زمین', 'Globe')
@@ -1802,30 +1689,11 @@ function AiGlobalIntelligenceInner() {
       {tab === 'domains' && (
         <div className="aig-section">
           <div className="aig-section-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--rgb-1)'}}><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            <TabIconGadget name="domains" />
             {L('حوزه‌های داده هوش جهانی', 'Global intelligence domains')}
           </div>
           {domains ? (
-            <div className="aig-grid">
-              {Object.keys(DOMAIN_META).map((key) => {
-                const d = domains[key];
-                const meta = DOMAIN_META[key];
-                const summary = domainValue(key, d);
-                return (
-                  <div key={key} className="aig-card">
-                    <div className="aig-card-name">
-                      <span className="aig-card-dot" style={{ background: statusColor(d?.status) }} />
-                      <AigIcon name={meta.icon} size={15} /> {isPersian ? meta.fa : meta.en}
-                    </div>
-                    <div className="aig-card-value">{summary.value}</div>
-                    {summary.sub && !summary.bad ? <div className="aig-card-sub">{summary.sub}</div> : null}
-                    {summary.bad && summary.sub ? <div className="aig-reason" title={summary.sub}>{reasonLabel(summary.sub, isPersian)}</div> : null}
-                    {summary.note ? <div className="aig-card-sub">{summary.note}</div> : null}
-                    {d?.data?.stale === true ? <div className="aig-card-sub">{L('آخرین دادهٔ موفق', 'last good data')}</div> : null}
-                  </div>
-                );
-              })}
-            </div>
+            <DomainsView domains={domains} L={L} isPersian={isPersian} reasonLabel={reasonLabel} />
           ) : (
             <div className="aig-empty">{L('اسنپ‌شات جهانی هنوز خوانده نشده.', 'The global snapshot has not been read yet.')}</div>
           )}
@@ -1842,7 +1710,7 @@ function AiGlobalIntelligenceInner() {
       {tab === 'cross' && (
         <div className="aig-section">
           <div className="aig-section-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:'var(--up)'}}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+            <TabIconGadget name="cross" />
             {L('تحلیل اقتصاد و دارایی‌ها', 'Cross-asset intelligence')}
           </div>
           {cross && cross.status !== 'UNAVAILABLE' ? (
@@ -1865,9 +1733,12 @@ function AiGlobalIntelligenceInner() {
               <CrossAssetMovement cross={cross} L={L} isPersian={isPersian} />
 
               {/* ── THE ECONOMIC OUTLOOK (Phase 211.1) — criteria in Persian,
-                     each with its own up/down/neutral marker ──────────── */}
-              {cross.outlook && (cross.outlook.label || cross.outlook.signals?.length) ? (
-                <EconomicOutlook outlook={cross.outlook} L={L} isPersian={isPersian} />
+                     each with its own up/down/neutral marker. Reported again
+                     as «دادهٔ کافی نیست»: the block now shows the weighted
+                     reading, its coverage and every missing input with its
+                     reason, instead of a bare UNAVAILABLE label. ─────────── */}
+              {cross.outlook || cross.status === 'OK' || Object.keys(cross.classes || {}).length ? (
+                <OutlookPanel world={worldData} L={L} isPersian={isPersian} />
               ) : null}
 
               {/* ── THE SYSTEM ANALYSIS — one box: the measured lines and,
@@ -1974,32 +1845,15 @@ function AiGlobalIntelligenceInner() {
       {/* ── PROVIDERS — the five readiness lights per domain ───────────── */}
       {tab === 'providers' && (
         <div className="aig-section">
-          <div className="aig-section-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color:"var(--rgb-4)"}}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg> {L('وضعیت پایداری منابع داده', 'Data provider status')}</div>
-          {data.providers ? (
-            <>
-              {Object.entries(data.providers).map(([name, p]) => (
-                <div key={name} className="aig-light">
-                  <span className="aig-light-name">
-                    {DOMAIN_META[name]?.icon ? <AigIcon name={DOMAIN_META[name].icon} size={14} /> : <span aria-hidden="true">•</span>} {DOMAIN_META[name] ? (isPersian ? DOMAIN_META[name].fa : DOMAIN_META[name].en) : name}
-                    {p.reason ? <div className="aig-reason" title={p.reason}>{reasonLabel(p.reason, isPersian)}</div> : null}
-                  </span>
-                  <span className="aig-light-lamps" title={L('پیاده‌سازی · پیکربندی · دسترس‌پذیری ارائه‌دهنده · آمادهٔ اجرا · زنده', 'implemented · configured · provider_available · runtime_ready · live')}>
-                    {['implemented', 'configured', 'provider_available', 'runtime_ready', 'live'].map((k) => (
-                      <span key={k} className={`aig-lamp ${p[k] ? 'on' : 'off'}`} />
-                    ))}
-                  </span>
-                </div>
-              ))}
-              <div className="aig-note">
-                {L(
-                  'پنج چراغ: پیاده‌سازی · پیکربندی · دسترس‌پذیری ارائه‌دهنده · آمادهٔ اجرا · زنده. «زنده» یعنی نتیجهٔ واقعی در همین فرایند.',
-                  'Five lamps: implemented · configured · provider_available · runtime_ready · live. «live» means a real result in this process.'
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="aig-empty">{L('وضعیت ارائه‌دهنده‌ها هنوز خوانده نشده.', 'Provider status has not been read yet.')}</div>
-          )}
+          <div className="aig-section-title"><TabIconGadget name="providers" /> {L('وضعیت پایداری منابع داده', 'Data provider status')}</div>
+          <ProvidersPanel
+            providers={data.providers}
+            domains={domains}
+            L={L}
+            isPersian={isPersian}
+            reasonLabel={reasonLabel}
+          />
+
         </div>
       )}
     </div>

@@ -43,7 +43,7 @@ const INTEL = {
       whales: { status: 'UNAVAILABLE', reason: 'WHALES_UNAVAILABLE:FEED_DOWN', source: 'whales:scanner', at: NOW, confidence: 0, data: null },
       onchain: { status: 'OK', reason: null, source: 'chainIntel', at: NOW, confidence: 0.8, data: { healthySources: 2, degradedSources: 0, downSources: 0, sources: [{ source: 'ci:markets', status: 'HEALTHY' }, { source: 'ci:gas', status: 'HEALTHY' }] } },
       news: { status: 'OK', reason: null, source: 'news-engine', at: NOW, confidence: 0.7, data: { count: 21, items: [{ title: 'Fed signals patience on rates', url: 'u', source: 'r', lang: 'en', at: NOW }] } },
-      macro: { status: 'OK', reason: null, source: 'macro:classifier', at: NOW, confidence: 0.7, data: { attention: 5, byTopic: { FED: 2, GEOPOLITICS: 2, INFLATION: 1 }, items: [], instruments: [], curve: null, untrusted: true } },
+      macro: { status: 'OK', reason: null, source: 'macro:classifier', at: NOW, confidence: 0.7, data: { attention: 5, byTopic: { FED: 2, GEOPOLITICS: 2, INFLATION: 1 }, items: [], instruments: [{ symbol: 'DXY', name: 'US Dollar Index', kind: 'currency', priceUsd: 108.2, change1dPct: 0.8, change7dPct: 1.2, source: 'stooq:DX.F' }], curve: null, untrusted: true } },
       stocks: { status: 'OK', reason: null, source: 'brain:stocks', at: NOW, confidence: 0.75, data: { venue: 'avantis', readOnly: true, instruments: [{ symbol: 'AAPL', priceUsd: 214.3, change24hPct: 1.2 }] } },
       forex: { status: 'OK', reason: null, source: 'brain:forex', at: NOW, confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [{ symbol: 'EURUSD', priceUsd: 1.084, change24hPct: 0.3 }] } },
       commodities: { status: 'OK', reason: null, source: 'brain:commodities', at: NOW, confidence: 0.7, data: { venue: 'ostium', readOnly: true, instruments: [] } },
@@ -95,6 +95,15 @@ const CROSS = {
       currentState: { regime: 'MIXED', observedClasses: ['crypto', 'stocks'], avgChangePct: {} },
       signals: []
     }
+  }
+};
+const PROVIDERS = {
+  ok: true,
+  providers: {
+    smart_money: { implemented: true, configured: true, provider_available: true, runtime_ready: true, live: true, status: 'OK' },
+    whales: { implemented: true, configured: true, provider_available: false, runtime_ready: true, live: false, status: 'UNAVAILABLE', reason: 'WHALES_UNAVAILABLE:FEED_DOWN' },
+    macro: { implemented: true, configured: true, provider_available: true, runtime_ready: true, live: true, status: 'OK' },
+    rwa: { implemented: true, configured: false, provider_available: false, runtime_ready: false, live: false, status: 'UNAVAILABLE', reason: 'RWA_VENUE_UNCONFIGURED' }
   }
 };
 const FLOWS = {
@@ -164,6 +173,7 @@ export async function run(container) {
       return { ok: true, headers: { get: () => null }, json: async () => ({ ok: true, rows: [{ symbol: 'GLD', name: 'GLD', priceUsd: 312.4, changePct: 0.4, latestTradingDay: '2026-10-01', meta: { stale: false } }], meta: { stale: false, fetchedAt: Date.now() } }) };
     }
     if (path.includes('/insights/flows')) return { ok: true, json: async () => FLOWS };
+    if (path.includes('/global/providers')) return { ok: true, json: async () => PROVIDERS };
     if (path.includes('/deep/macro-graph')) {
       if (!macroGraphReachable) return { ok: false, status: 502, json: async () => ({ ok: false, code: 'FI_ERROR' }) };
       return { ok: true, json: async () => MACRO_GRAPH };
@@ -199,6 +209,23 @@ export async function run(container) {
     /stablecoin net|نتیجهٔ استیبل‌کوین/.test(text()) && /outlook score|امتیاز چشم‌انداز/.test(text()));
   check('world: the radar ribbon links to the radar tab',
     /FBT Global Radar|رادار جهانی FBT/.test(text()) && all('.aigw-ribbon').length === 1);
+  /* the weather BOARD (institutional flow / dollar / inflation-energy / risk) */
+  check('world: the weather board renders every station with an animated SVG glyph',
+    all('.aigw-station').length >= 9 && all('.aigw-glyph-svg').length >= 4);
+  check('world: the four asked-for measures are the featured stations',
+    ['institutional', 'dollar', 'inflation', 'risk']
+      .every((id) => all('.aigw-station.feature').some((el) => (el.getAttribute('class') || '').includes('tone-'))));
+  check('world: every station states its reading or says it was never read',
+    all('.aigw-station').every((el) => {
+      const ev = el.querySelector('.aigw-station-ev');
+      const val = el.querySelector('.aigw-station-val');
+      return (ev && (ev.textContent || '').trim().length > 3) && (val && (val.textContent || '').trim().length > 0);
+    }));
+  check('world: the climate strip blends the nine parts and shows its coverage',
+    all('.aigw-climate').length === 1
+    && all('.aigw-climate-parts').length === 1
+    && all('.aigw-climate-parts > *').length >= 5
+    && /\d+\/9|\d+ از ۹/.test(text()));
 
   /* ── GLOBE ───────────────────────────────────────────────────────────── */
   await clickTab('🗺️');
@@ -216,6 +243,14 @@ export async function run(container) {
   await act(async () => { jpDot?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
   check('globe: an unread instrument stays honest (US10Y read, JPY parity absent)',
     /US10Y/.test(text()));
+  check('globe: the rail carries every economy on the board, not a handful',
+    all('.aigw-globe-dot[role="tab"]').length >= 40
+    && all('.aigw-globe-dot[aria-label="china"]').length === 1
+    && all('.aigw-globe-dot[aria-selected="true"]').length === 1);
+  check('globe: the board states how many economies it read, and the legend explains the dots',
+    /on board/.test(text()) && all('.aigw-globe-legend .aigw-hint').length === 4);
+  check('globe: the decorative orbit layer and the drag hint are present',
+    all('.aigw-globe-svg').length === 1 && all('.aigw-orbit-b').length === 1 && /drag to spin|بکش تا بچرخد/.test(text()));
 
   /* ── RADAR ───────────────────────────────────────────────────────────── */
   await clickTab('📡');
@@ -227,6 +262,11 @@ export async function run(container) {
   await act(async () => { all('.aigw-blip')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
   check('radar: a tapped blip shows its detail card',
     all('.aigw-blip-detail').length === 1);
+  check('radar: the sweep is a two-beam radar, not a single bar',
+    all('.aigw-sweep').length === 1 && all('.aigw-sweep-slow').length === 1);
+  check('radar: the full signal tape lists every blip with its sector and value',
+    all('.aigw-tape-row').length >= 4 && all('.aigw-tape-row').length === all('.aigw-blip').length
+    && all('.aigw-tape-row').every((r) => (r.textContent || '').trim().length > 6));
 
   /* ── CAUSAL (server graph) ───────────────────────────────────────────── */
   await clickTab('⛓️');
@@ -243,6 +283,12 @@ export async function run(container) {
   check('flows: the six-node capital map renders', all('.aigw-flow-node').length === 6);
   check('flows: read nodes light up with real values; connectors animate between read pairs',
     all('.aigw-flow-node.on').length >= 5 && all('.aigw-flow-conn.on').length >= 3);
+  check('flows: the measured net-flow verdict is the hero, in USD',
+    all('.aigw-flow-hero').length === 1 && /\$/.test((all('.aigw-flow-hero-val')[0]?.textContent) || ''));
+  check('flows: the macro transmission chain marks read / proxy / model nodes',
+    all('.aigw-chain-node').length >= 6
+    && all('.aigw-chain-node.state-model').length >= 1
+    && all('.aigw-chain-node.state-read').length >= 1);
 
   /* ── FUTURE TREE + CHALLENGER ────────────────────────────────────────── */
   await clickTab('🌳');
@@ -256,6 +302,13 @@ export async function run(container) {
     && /Macro risk|ریسک کلان/.test(text()));
   check('future: scenario weights are auditable — every nudge is listed',
     all('.aigw-tag').length >= 8 && /regime|outlook|curve/.test(text()));
+  check('future: the tree draws three animated limbs with breathing leaves',
+    all('.aigw-tree-svg').length === 1 && all('.aigw-branch-tree-path').length >= 3
+    && all('.aigw-leaf').length >= 6);
+  check('future: the tree names what would flip it, and the challenger attacks with observed risks',
+    all('.aigw-flip').length >= 1 && all('.aigw-adv-row').length >= 4
+    && all('.aigw-adv-ico.observed').length >= 1
+    && /why this thesis could be wrong|چرا این فرصت/i.test(text()));
 
   /* ── DNA ─────────────────────────────────────────────────────────────── */
   await clickTab('🧬');
@@ -263,6 +316,67 @@ export async function run(container) {
     all('.aigw-dna-row').length === 6 && all('.aigw-dna-helix').length === 1);
   check('dna: observed overlays come from this pass (BTC +2.4% class read, labelled-flow touch)',
     /\+2\.40%|\+۲٫۴۰٪/.test(text()) && /labelled flows|جریان‌های برچسب‌دار/.test(text()));
+  check('dna: the sensitivity hexagon and the animated helix draw the asset shape',
+    all('.aigw-hex').length === 1 && all('.aigw-dna-helix').length === 1 && all('.aigw-rung').length >= 10);
+  check('dna: a gene read this pass carries a marker on its prior bar',
+    all('.aigw-dna-track b').length >= 1 && all('.aigw-dna-row').length === 6);
+  /* switch to DXY — the macro read (+0.80%) must become the observed overlay */
+  const dxyChip = all('.aigw-chip').find((b) => (b.textContent || '').trim() === 'DXY');
+  await act(async () => { dxyChip?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
+  check('dna: switching asset re-reads the overlay from that asset\u2019s own instruments',
+    /DXY/.test(text()) && /\+0\.80%|\+۰٫۸۰٪/.test(text()));
+
+  /* ── THE ECONOMIC OUTLOOK — the gauge, the count, the signals ───────── */
+  await clickTab('🔀');
+  check('outlook: the blended reading draws its arc gauge, coverage and contributing signals',
+    all('.aigw-outlook-arc').length === 1
+    && all('.aigw-outlook-legend').length === 1
+    && all('.aig-signal').length >= 2
+    && /blended score|امتیاز ترکیبی/.test(text())
+    && /input coverage|پوشش ورودی/.test(text()));
+  check('outlook: coverage is a COUNT, and anything missing is named with its reason',
+    /\d+\s*\/\s*9/.test(text())
+    && (all('.aigw-missing .aigw-pill').length === 0 || /inputs not read|ورودی‌های خوانده‌نشده/.test(text())));
+
+  /* ── DOMAINS — every field the pass returned ─────────────────────────── */
+  await clickTab('🌍');
+  check('domains: nine domain cards render, each with an inline SVG icon',
+    all('.aigw-dom').length === 9 && all('.aigw-dom .aigw-dom-ico svg').length === 9);
+  check('domains: an unread domain says so and keeps its reason',
+    /unread|خوانده نشد/.test(text()) && /whale scanner unavailable|اسکنر نهنگ/.test(text()));
+  /* open smart money — the top tokens must be there, not collapsed to one number */
+  const smCard = all('.aigw-dom').find((c) => /Smart money|پول هوشمند/.test(c.textContent || ''));
+  await act(async () => { smCard?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
+  check('domains: the smart-money card opens the labelled top tokens from this pass',
+    all('.aigw-dom-item').length >= 1 && /BTC/.test(text()));
+  /* open macro — the topic labels AND the real quote move */
+  const macroCard = all('.aigw-dom').find((c) => /^Macro|کلان/.test((c.querySelector('.aigw-dom-name') || {}).textContent || ''));
+  await act(async () => { macroCard?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
+  check('domains: the macro card shows both classified topics and the real DXY move',
+    /FED/.test(text()) && /\+0\.8%/.test(text()));
+
+  /* ── PROVIDERS — five SVG lamps per domain, no emoji ─────────────────── */
+  await clickTab('🔌');
+  check('providers: every domain renders five lamps and the legend explains them',
+    all('.aigw-prov').length >= 2 && all('.aigw-lamp').length >= 10
+    && all('.aigw-lamp-legend').length === 1 && all('.aigw-lamp.off').length >= 1);
+  check('providers: each row carries its own accent SVG icon (never an emoji)',
+    all('.aigw-prov').every((r) => !!r.querySelector('.aigw-dom-ico svg')));
+  check('providers: a dead provider keeps its translated reason',
+    /whale scanner unavailable|اسکنر نهنگ/.test(text()));
+
+  /* ── SUB-TAB ICONS + COLOUR — not everything violet ──────────────────── */
+  const accents = all('.aig-tab')
+    .map((b) => b.style.getPropertyValue('--tab-acc').trim())
+    .filter(Boolean);
+  check('rail: each sub-tab carries its own accent colour (not one violet for all)',
+    accents.length === all('.aig-tab').length
+    && new Set(accents).size >= 8
+    && accents.every((c) => /^#[0-9a-f]{3,8}$|^rgba?\(/.test(c)),
+    { accents: accents.slice(0, 4) });
+  const panelEmoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+  check('rail: the panels use inline SVG icons — no emoji inside a console panel',
+    all('.aigw-panel').every((el) => !panelEmoji.test(el.textContent || '')));
 
   /* ── DEAD API: every new tab renders empty/unread instead of crashing ── */
   await act(async () => { root.unmount(); });
@@ -275,7 +389,7 @@ export async function run(container) {
       root.render(<MemoryRouter><AiGlobalIntelligence /></MemoryRouter>);
     });
     await act(async () => { await sleep(40); });
-    for (const marker of ['🌐', '🗺️', '📡', '⛓️', '💸', '🌳', '🧬']) {
+    for (const marker of ['🌐', '🗺️', '📡', '⛓️', '💸', '🌳', '🧬', '🌍', '🔌', '🔀']) {
       const btn = all('button').find((b) => (b.textContent || '').includes(marker));
       await act(async () => { btn?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
     }
@@ -283,7 +397,7 @@ export async function run(container) {
     crashed = true;
     errors.push(`crash on dead API: ${String(err?.message || err)}`);
   }
-  check('dead API: all seven new tabs render their honest empty states without crashing',
+  check('dead API: all ten console tabs render their honest empty states without crashing',
     !crashed && /unread|not read|خوانده نشد|No signal|nothing|هنوز/.test(text()));
 
   await act(async () => { root.unmount(); });
