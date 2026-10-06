@@ -86,11 +86,34 @@ export function usdFa(v) {
 /* A signed percent a Persian line can hold: Persian digits, the Persian
    decimal and percent signs, and a real minus (U+2212) — a hyphen-minus in
    front of Persian digits renders on the wrong side of the number. */
-export function pctFaLine(v) {
+export function pctFaLine(v, digits = 2) {
   const n = Number(v);
   if (v === null || v === undefined || !Number.isFinite(n)) return '—';
   const sign = n > 0 ? '+' : n < 0 ? '\u2212' : '';
-  return `${sign}${faDigits(trimZero(Math.abs(n).toFixed(2))).replace('.', '٫')}٪`;
+  return `${sign}${faDigits(trimZero(Math.abs(n).toFixed(digits))).replace('.', '٫')}٪`;
+}
+/* Numbers inside a Persian line are Persian digits. Only STANDALONE numbers
+   are converted — a digit glued to a letter is a ticker or a term (US10Y,
+   2s10s, 24h) and stays Latin; a hyphen-minus in front of a number becomes a
+   real minus (U+2212); a decimal point becomes «٫». Strings that are not ours
+   to rewrite (a real news headline) never go through here. */
+export function faText(text) {
+  return String(text)
+    .replace(/(^|[\s(،؛:\u2014])-(?=[0-9])/g, '$1\u2212')
+    .replace(/(?<![A-Za-z0-9_/.-])[0-9]+(?:\.[0-9]+)?(?![A-Za-z0-9_])/g, (n) => faDigits(n).replace('.', '٫'));
+}
+/* «24h» / «7d» as a person says it. */
+const faWindow = (w) => {
+  const m = String(w || '24h').match(/^(\d+)\s*([hd])$/i);
+  if (!m) return String(w || '24h');
+  return `${faDigits(m[1])} ${m[2].toLowerCase() === 'h' ? 'ساعت' : 'روز'}`;
+};
+/* The feed's own venue id («ostium+alpha-vantage») as brand names, never as a
+   raw id inside a Persian sentence. Unknown ids pass through unchanged. */
+const FA_VENUE_BRAND = Object.freeze({ ostium: 'Ostium', avantis: 'Avantis', 'alpha-vantage': 'Alpha Vantage', alphavantage: 'Alpha Vantage' });
+export function faVenue(venue) {
+  return String(venue || '').split(/[+,]/).map((v) => v.trim()).filter(Boolean)
+    .map((v) => FA_VENUE_BRAND[v.toLowerCase()] || v).join(' و ');
 }
 const FA_MACRO_TOPIC = Object.freeze({
   FED: 'فدرال‌رزرو', RATES: 'نرخ بهره', INFLATION: 'تورم', GROWTH: 'رشد اقتصادی',
@@ -124,7 +147,12 @@ export function buildBriefingItems({
 } = {}) {
   const items = [];
   const missing = [];
-  const push = (item) => items.push({ confidence: 0.6, ...item });
+  const push = (item) => items.push({
+    confidence: 0.6,
+    ...item,
+    ...(item.titleFa ? { titleFa: faText(item.titleFa) } : {}),
+    ...(item.detailFa && item.kind !== 'news' ? { detailFa: faText(item.detailFa) } : {})
+  });
 
   /* ── guardian first: an emergency outranks everything ─────────────────── */
   if (guardian && typeof guardian === 'object') {
@@ -242,7 +270,7 @@ export function buildBriefingItems({
           title: accumulating ? 'Smart money is accumulating' : 'Smart money is distributing',
           titleFa: accumulating ? 'پول هوشمند در حال انباشت است' : 'پول هوشمند در حال توزیع است',
           detail: `Qualified paired swaps over ${sm.window || '24h'}: ${usdEn(net)} net ${accumulating ? 'buys' : 'sells'}; sampled index, not a price forecast.`,
-          detailFa: `معاملات جفت‌شدهٔ واجد شرایط در ${sm.window || '24h'}: ${usdFa(net)} خالص ${accumulating ? 'خرید' : 'فروش'}؛ ایندکس نمونه‌ای، نه پیش‌بینی قیمت.`,
+          detailFa: `معاملات جفت‌شدهٔ واجد شرایط در ${faWindow(sm.window)}: ${usdFa(net)} خالص ${accumulating ? 'خرید' : 'فروش'}؛ ایندکس نمونه‌ای، نه پیش‌بینی قیمت.`,
           evidence: [{ source: 'smartMoney:verified-index', at: sm.indexedAt }],
           action: { type: 'navigate', to: '/smart-money?tab=intelligence' },
           source: 'smartMoney:verified-index', at: sm.indexedAt,
@@ -366,9 +394,9 @@ export function buildBriefingItems({
           push({
             id: itemId(cls), kind: cls, priority: 'info',
             title: `${clsEn}: ${mover.symbol} ${mover.changePct > 0 ? '+' : ''}${mover.changePct.toFixed(1)}%`,
-            titleFa: `${clsFa}: ${mover.symbol} ${mover.changePct > 0 ? '+' : ''}${mover.changePct.toFixed(1)}٪`,
+            titleFa: `${clsFa}: ${mover.symbol} ${pctFaLine(mover.changePct, 1)}`,
             detail: `biggest 24h mover among ${d.data.instruments.length} ${d.data.venue || ''} instruments (read-only synthetic exposure; the app cannot buy these for you)`,
-            detailFa: `بزرگ‌ترین حرکت ۲۴ ساعته بین ${d.data.instruments.length} ابزار ${d.data.venue || ''} (مواجهه مصنوعی فقط‌خواندنی؛ برنامه نمی‌تواند این‌ها را برای شما بخرد)`,
+            detailFa: `بزرگ‌ترین حرکت ۲۴ ساعته بین ${d.data.instruments.length} ابزار${d.data.venue ? ` ${faVenue(d.data.venue)}` : ''} (مواجهه مصنوعی فقط‌خواندنی؛ برنامه نمی‌تواند این‌ها را برای شما بخرد)`,
             evidence: [{ source: d.source, at: d.at }],
             action: { type: 'navigate', to: cls === 'stocks' ? '/stocks' : '/ostium' },
             source: d.source, at: d.at, confidence: 0.6

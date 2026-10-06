@@ -583,6 +583,43 @@ t('briefing: the macro-indicator item reads in Persian — «۱ روز», a Pers
     && !/crypto|stocks|dollar pressure|US Dollar/.test(xItem.detailFa) && !/[0-9]/.test(xItem.detailFa)
     && /crypto, stocks observed/.test(xItem.detail));
 }
+{
+  /* the same rule for every other Persian line of the board — found on the LIVE
+     briefing: «20 خبر تازه», «USD/MXN -0.6٪», «بین 9 ابزار ostium+alpha-vantage» */
+  const { faText, faVenue, pctFaLine } = await import('../../server/fios/briefing.js');
+  t('briefing: faText turns standalone numbers into Persian digits, keeps tickers and terms Latin, and uses a real minus',
+    faText('20 خبر تازه') === '۲۰ خبر تازه'
+    && faText('فارکس: USD/MXN -0.6٪') === 'فارکس: USD/MXN \u2212۰٫۶٪'
+    && faText('US10Y 5.27 · 2s10s · 24h') === 'US10Y ۵٫۲۷ · 2s10s · 24h'
+    && pctFaLine(-0.6, 1) === '\u2212۰٫۶٪' && pctFaLine(null) === '—');
+  t('briefing: faVenue names a feed as brands — never as a raw id — and passes unknown ids through',
+    faVenue('ostium+alpha-vantage') === 'Ostium و Alpha Vantage' && faVenue('ostium') === 'Ostium'
+    && faVenue('') === '' && faVenue('somefeed') === 'somefeed');
+  const liveShaped = buildBriefingItems({
+    globalIntel: {
+      domains: {
+        forex: { status: 'OK', source: 'rwa-feed:ostium', at: now, data: { venue: 'ostium+alpha-vantage', instruments: [{ symbol: 'USD/MXN', change24hPct: -0.56 }, { symbol: 'EUR/USD', change24hPct: 0.37 }] } },
+        news: { status: 'OK', at: now, data: { items: [{ title: 'Fed cuts 25 bps', url: 'https://example.test/a' }, { title: 'Second headline', url: 'https://example.test/b' }] } },
+        smart_money: { status: 'OK', at: now, data: { verifiedStatus: 'observed', netFlowUsd: -3_600_000, window: '24h', indexedAt: now, topTokens: [] } },
+        whales: { status: 'OK', at: now, data: { count: 40, events: [{ symbol: 'USDC', chain: 'ETH', valueUsd: 47_000_000, flow: 'transfer' }] } }
+      }
+    },
+    now
+  }).items;
+  const mover = liveShaped.find((i) => i.kind === 'forex');
+  const headlines = liveShaped.find((i) => i.kind === 'news');
+  const smart = liveShaped.find((i) => i.kind === 'smart_money');
+  const whale = liveShaped.find((i) => i.kind === 'whale');
+  t('briefing: a class-mover item reads in Persian — brand names, Persian digits and minus, no raw venue id',
+    !!mover && /Ostium و Alpha Vantage/.test(mover.detailFa) && !/ostium|\+alpha/.test(mover.detailFa)
+    && !/[0-9]/.test(stripTickers(mover.detailFa)) && /\u2212۰٫۶٪/.test(mover.titleFa) && !/[0-9]/.test(stripTickers(mover.titleFa))
+    && /ostium\+alpha-vantage instruments/.test(mover.detail), mover && `${mover.titleFa} | ${mover.detailFa}`);
+  t('briefing: counts are Persian digits, and a real headline is left exactly as published',
+    !!headlines && headlines.titleFa === '۲ خبر تازه' && headlines.detailFa === 'Fed cuts 25 bps' && headlines.detail === 'Fed cuts 25 bps'
+    && !!whale && /۴۰ انتقال بزرگ/.test(whale.detailFa) && !/[0-9]/.test(stripTickers(whale.titleFa)));
+  t('briefing: the smart-money window is spoken («۲۴ ساعت»), not «24h»',
+    !!smart && /۲۴ ساعت/.test(smart.detailFa) && !/24h/.test(smart.detailFa) && /over 24h/.test(smart.detail));
+}
 t('briefing: no item carries execution permission, and the briefing says so',
   briefing.executionAuthorized === false && briefing.items.every((i) => !i.executionAuthorized && !i.execute));
 t('briefing: the briefing is persisted (latest + history) in the Phase 211 collection',
