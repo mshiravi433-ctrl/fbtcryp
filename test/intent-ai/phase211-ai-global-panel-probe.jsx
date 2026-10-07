@@ -219,7 +219,9 @@ export async function run(container) {
     all('.aig-commodity-row .aig-market-toman').length === 5
     && /USDT\/TMN/.test(text()) && /نرخ اجرایی USD\/TMN/.test(text()) && /تومان/.test(text()));
   rateAvailable = false;
-  await act(async () => { all('.aig-refresh')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(40); });
+  /* 2026-10-07: the «refresh live data» bar is gone — the globe in the banner
+     (.gw-hero-refresh) is the control that forces a re-read now. */
+  await act(async () => { all('.gw-hero-refresh')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(40); });
   check('panel: missing USDT/TMN data hides toman conversions instead of retaining a stale number',
     all('.aig-commodity-row .aig-market-toman').length === 0
     && /نرخ تازهٔ عمومی USDT\/TMN در دسترس نیست/.test(text()));

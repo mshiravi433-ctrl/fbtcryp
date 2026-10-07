@@ -13,6 +13,15 @@
  *
  * MOTION: transform and opacity only, every loop is slow, and everything is
  * switched off under prefers-reduced-motion (see ui.styles.js).
+ *
+ * 2026-10-07 — REPORTED: «آیکون کره پایین بنر است، برود بالا و سمت چپ؛ دکمهٔ
+ * به‌روزرسانی داده‌های زنده را محو کن و وقتی روی کره می‌زنم به‌روزرسانی انجام
+ * شود». So the instrument moved to the TOP-LEFT corner of the banner (see the
+ * direction-aware grid in ui.styles.js — "physically left" is the LAST column
+ * in RTL and the FIRST in LTR), the wide «refresh live data» bar under the tab
+ * rail is gone, and the globe itself is now that button: it is a real
+ * <button>, it is labelled for screen readers, and while a read is in flight
+ * its rings spin faster instead of the bar showing a spinner.
  */
 import { faNum } from './format.jsx';
 import { TONE_WORD } from './worldModel.js';
@@ -90,7 +99,7 @@ function OrbitalGlobe() {
   );
 }
 
-export function HeroPanel({ L, isPersian, working, available, meterCells, meterClass, board, updatedLabel }) {
+export function HeroPanel({ L, isPersian, working, available, meterCells, meterClass, board, updatedLabel, onRefresh }) {
   const climate = board?.climate || null;
   const summary = board?.summary || null;
   const countries = board?.countries || null;
@@ -117,11 +126,32 @@ export function HeroPanel({ L, isPersian, working, available, meterCells, meterC
     }
   ];
 
+  /* the globe IS the refresh control — its accessible name says what a tap does */
+  const refreshLabel = working
+    ? L('در حال به‌روزرسانی داده‌های زنده…', 'Reading live data…')
+    : L('به‌روزرسانی داده‌های زنده', 'Refresh live data');
+
   return (
     <header className={`gw-hero ${working ? 'is-working' : ''}`}>
       <div className="gw-hero-glow g1" aria-hidden="true" />
       <div className="gw-hero-glow g2" aria-hidden="true" />
-      <div className="gw-hero-art"><OrbitalGlobe /></div>
+
+      {/* TOP-LEFT of the banner, and a <button>: tapping the globe re-reads
+          every domain (`load(true)` in AiGlobalIntelligence). Disabled while a
+          read is in flight — the same guard the retired bar had. */}
+      <button
+        type="button"
+        className={`gw-hero-art gw-hero-refresh ${working ? 'is-refreshing' : ''}`}
+        onClick={onRefresh}
+        disabled={!onRefresh || working}
+        aria-label={refreshLabel}
+        title={refreshLabel}
+      >
+        <OrbitalGlobe />
+        <span className="gw-hero-refresh-hint" aria-hidden="true">
+          {working ? L('در حال خواندن…', 'reading…') : L('به‌روزرسانی', 'refresh')}
+        </span>
+      </button>
 
       <div className="gw-hero-copy">
         <span className="gw-eyebrow">

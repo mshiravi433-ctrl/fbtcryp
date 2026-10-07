@@ -201,9 +201,13 @@ export async function run(container) {
   };
 
   let macroGraphReachable = true;
+  /* how many times the console asked the server for a FORCED read (?refresh=1)
+     — the globe in the banner is that trigger now */
+  let forcedReads = 0;
   await act(async () => { await i18n.changeLanguage('en'); });
   global.fetch = async (url) => {
     const path = String(url);
+    if (path.includes('refresh=1')) forcedReads += 1;
     if (path.includes('/iran/buy/rate')) {
       return { ok: true, json: async () => ({ schema: 'fbt.iran-buy-rate.v1', available: true, buyPrice: '500000', source: 'wallex-public-markets', at: new Date().toISOString() }) };
     }
@@ -250,6 +254,28 @@ export async function run(container) {
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.gw-orbital \.gw-spin[\s\S]*animation: none/.test(GLOBAL_PAGE_STYLES)
     && keyframeProps('gw-').length >= 10
     && keyframeProps('gw-').every(([, prop]) => prop === 'transform' || prop === 'opacity'));
+
+  /* ── 2026-10-07 · the globe moved UP + LEFT and became the refresh button ─ */
+  const orb = all('button.gw-hero-refresh')[0] || null;
+  check('hero: the animated globe is a real button, and the «refresh live data» bar is gone',
+    all('button.gw-hero-refresh').length === 1
+    && !!orb?.querySelector('svg.gw-orbital')
+    && all('.aig-refresh').length === 0
+    && !/Refresh live data/.test(text())
+    && /refresh/i.test(orb?.getAttribute('aria-label') || ''));
+  check('hero: the globe sits in the TOP-LEFT corner of the banner in both writing directions',
+    /\.gw-hero \{[^}]*align-items: start/.test(GLOBAL_PAGE_STYLES)
+    && /\.gw-hero-art \{[^}]*align-self: start/.test(GLOBAL_PAGE_STYLES)
+    /* physically left = the LAST column when dir=rtl, the FIRST when dir=ltr,
+       and in both cases hugging the outer edge of that column */
+    && /\.gw-root\[dir='rtl'\] \.gw-hero-art \{\s*grid-column: 2;\s*grid-row: 1;\s*justify-self: end;\s*\}/.test(GLOBAL_PAGE_STYLES)
+    && /\.gw-root\[dir='ltr'\] \.gw-hero-art \{\s*grid-column: 1;\s*grid-row: 1;\s*justify-self: start;\s*\}/.test(GLOBAL_PAGE_STYLES));
+  /* tap it: the console must ask the server for a FORCED read, exactly what the
+     retired bar did */
+  const readsBeforeTap = forcedReads;
+  await act(async () => { orb?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(40); });
+  check('hero: tapping the globe forces a fresh read of every domain (?refresh=1)',
+    forcedReads > readsBeforeTap, `forced reads stayed at ${forcedReads}`);
 
   /* ── 2026-10 · THE STATUS REPORT BOARD ────────────────────────────────── */
   const TILE_IDS = ['climate', 'dollar', 'gold', 'bonds', 'inflation', 'equity', 'crypto', 'institutional', 'whales', 'news', 'risk', 'countries'];
