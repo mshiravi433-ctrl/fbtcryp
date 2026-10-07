@@ -64,8 +64,14 @@ export const feeBpsToContractUnits = (bps) => {
 
 /* ── subgraph reads ──────────────────────────────────────────────────────── */
 
+/*
+ * NO `subgraphError: allow` — see the note above PAIRS_QUERY in
+ * src/lib/ostium.js. The builder gateway refuses the argument (the official
+ * SDK dropped it in 0.10.0), and a refused query is indistinguishable from an
+ * empty market list to every caller downstream.
+ */
 const PAIRS_QUERY = `query FbtFuturesPairs {
-  pairs(first: 1000, orderBy: id, orderDirection: asc, subgraphError: allow) {
+  pairs(first: 1000, orderBy: id, orderDirection: asc) {
     id from to maxLeverage overnightMaxLeverage takerFeeP makerFeeP
     longOI shortOI maxOI lastFundingRate curFundingLong curFundingShort curRollover lastTradePrice
     group { name maxLeverage }

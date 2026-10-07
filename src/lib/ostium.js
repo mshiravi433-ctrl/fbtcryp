@@ -468,8 +468,24 @@ const OSTIUM_SUBGRAPH = `${API_BASE}/ostium/subgraph`;
  * picker.  The conversion constants below are copied from (and golden-tested
  * against) the SDK: leverage is x100 and takerFeeP is bps x 1e4.
  */
+/*
+ * ─── NO `subgraphError: allow` — THE GATEWAY REFUSED IT ─────────────────────
+ * The query and the argument below were copied from @ostium/builder-sdk 0.7.0.
+ * Ostium's builder gateway is not a plain Graph node — it is a proxy in front
+ * of the deployment — and its validation is stricter: the vendor's own 0.10.0
+ * release dropped `subgraphError` from every query (0.7.0/0.9.0 still sent it),
+ * and its subgraph client now builds queries without that argument.
+ *
+ * In production the difference was fatal rather than cosmetic: /v1/prices on
+ * the same host answered normally while EVERY pairs read came back 502, so the
+ * market list collapsed to "feed unavailable — trading disabled" and pressing
+ * Retry could not help — a query the gateway refuses is refused identically on
+ * the next attempt. The fields requested here are the same fields the 0.10.0
+ * SDK still asks for, so the refused argument was the only difference between
+ * this screen and its catalogue.
+ */
 const PAIRS_QUERY = `query FbtOstiumPairs {
-  pairs(orderBy: id, orderDirection: asc, subgraphError: allow) {
+  pairs(orderBy: id, orderDirection: asc) {
     id from to maxLeverage overnightMaxLeverage takerFeeP
     group { name maxLeverage }
   }

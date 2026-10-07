@@ -73,6 +73,21 @@ import './dydx-onboarding-probe.mjs';
 execFileSync(process.execPath, ['--test', 'test/dydx-wallet-return.test.mjs'], {
   stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
 });
+/*
+ * Ostium's market catalogue had exactly one door and one of them was locked:
+ * every pairs query asked the builder gateway for `subgraphError: allow`
+ * (copied from @ostium/builder-sdk 0.7.0), the strict gateway refused the
+ * argument, and the whole market list — the Stocks «افق جهانی» tab and the
+ * futures provider registry — read as "feed unavailable, trading disabled"
+ * while /v1/prices on the same host stayed healthy. The probe pins the query
+ * shape, the second door (a refused read is retried against the public
+ * deployment the official python SDK reads), and that a catalogue is never
+ * fabricated when both doors are shut. It stubs `fetch` for its whole run, so
+ * like the two probes above it runs as a CHILD process.
+ */
+execFileSync(process.execPath, ['--test', 'test/ostium-subgraph-gateway.test.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
 /* The central brain's turn probe: every §42 scenario (A–J) against the real
    engines with only the external boundary faked. It belongs in `npm test`
    because the failure it catches — a confident answer built on unread data — is a
@@ -1609,6 +1624,24 @@ npx(['vite', 'build', '-c', 'test/vite.futures.mjs', '--logLevel', 'error']);
 installDom();
 const { run: runFuturesOnchain } = await import('./.out/futures/futures-onchain-probe.js');
 report('futures on-chain tab (backend truth · read-only states · confirm gate · signed calldata · fa)', await runFuturesOnchain(document.getElementById('r')));
+
+
+/* ------------------- 4c2. Intent AI → the Activity tab -------------------- */
+/*
+ * «فعالیت‌ها» crashed with the route-level error card («این صفحه به مشکل
+ * خورد») for anyone who had ever created a DCA/limit order, because the order
+ * row rendered `o.fromToken` — an OBJECT — straight into JSX. The AI page has
+ * no internal error boundary, so the render throw took the whole route down
+ * and the tab never opened. The probe seeds the real stored shape (an object
+ * token, exactly what createOrder writes) plus a legacy string order, a
+ * season and an operation, and clicks the tab: the labels must render as
+ * symbols, the legacy row must keep working, and no error may escape.
+ */
+console.log('\n▸ building the Intent AI activity suite…');
+npx(['vite', 'build', '-c', 'test/vite.activity-tab.mjs', '--logLevel', 'error']);
+installDom();
+const { run: runActivityTab } = await import('./.out/activity-tab/activity-tab-orders-probe.js');
+report('intent-ai activity tab (object-token orders · seasons · operations)', await runActivityTab(document.getElementById('r')));
 
 
 /* --------------------------- 5. store-safe build -------------------------- */
