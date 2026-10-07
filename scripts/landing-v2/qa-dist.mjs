@@ -50,6 +50,16 @@ t('launch-app control is not hidden on mobile any more', !/\.nav-cta \{ display:
 t('launch-app control dropped its tiny inline size', !/nav-cta[^>]*style="padding:10px 16px/.test(html));
 t('bottom dock exists with the page menu inside', html.includes('id="page-dock"') && html.includes('id="dock-menu"'));
 t('intent chain draws a scroll-linked meter', html.includes('class="flow-meter"') && /\.flow-meter i \{/.test(html));
+const intentSection = /<section id="intent-os">[\s\S]*?<\/section>/.exec(html)?.[0] || '';
+t('flow meter and step list share one right-hand grid child', (() => {
+  const start = intentSection.indexOf('<div class="intent-flow-column">');
+  const end = start < 0 ? -1 : intentSection.indexOf('</div>', start);
+  const meter = intentSection.indexOf('class="flow-meter"');
+  const steps = intentSection.indexOf('class="flow reveal-r reveal flow-host"');
+  return start >= 0 && end > start && meter > start && meter < end && steps > start && steps < end;
+})());
+t('Intent OS desktop art reuses a sized, lazy local image', /<img src="\/landing\/slide-ai\.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">/.test(intentSection));
+t('Intent OS art respects touch and reduced-motion budgets', html.includes('@media (hover: none), (max-width: 999px)') && html.includes('@media (prefers-reduced-motion: reduce)') && html.includes('.intent-art-path, .intent-art-node, .intent-art-core-glow { animation: none; }'));
 t('dock opens without JavaScript (checkbox + label)', html.includes('type="checkbox" id="dock-state"') && /class="dock-orb"[^>]*for="dock-state"/.test(html));
 t('dock lists the app pages', ['/#/swap', '/#/stocks', '/#/perp', '/#/intent', '/#/wallet'].every((r) => html.includes('href="' + r + '"') || html.includes('href="https://fbtswap.ir' + r + '"')));
 t('dock orb carries a scroll-progress ring', html.includes('id="dock-ring-fill"'));
@@ -280,6 +290,25 @@ const okFetch = () => (url) => {
  * describes content the page does not show, and a Persian page shipping an
  * English string because a default was written in the wrong language.
  */
+console.log('— bilingual mobile library directories —');
+{
+  const pages = [
+    { lang: 'EN', path: 'library', story: 'What you should know', directory: 'Every guide, grouped by topic' },
+    { lang: 'FA', path: 'fa', story: 'چیزی که باید بدانی', directory: 'همهٔ راهنماها بر پایهٔ موضوع' }
+  ];
+  for (const page of pages) {
+    const library = readFileSync(join(process.cwd(), 'dist', page.path, 'index.html'), 'utf8');
+    t(`${page.lang}: story and topic directory both render in order`, (() => {
+      const story = library.indexOf(page.story);
+      const directory = library.indexOf(page.directory);
+      return story >= 0 && directory > story;
+    })());
+    t(`${page.lang}: library cards and grouped guide links are present`, library.includes('class="lib-grid"') && library.includes('class="cluster-dir-grid"') && library.includes('class="cluster-dir-group"'));
+    t(`${page.lang}: guide cards remain two-up on wider screens`, /\.lib-grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/.test(library) && /\.cluster-dir-grid \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/.test(library));
+    t(`${page.lang}: tall library sections are visible on phone scroll`, /html\.js \.library-panel, html\.js \.cluster-dir \{ opacity: 1; transform: none; visibility: visible; \}/.test(library) && /threshold: 0, rootMargin: '0px 0px -7% 0px'/.test(library));
+  }
+}
+
 console.log('— guides —');
 {
   const post = (slug) => readFileSync(join(process.cwd(), 'dist', slug, 'index.html'), 'utf8');
@@ -317,7 +346,11 @@ console.log('— guides —');
   t('no guide promises a return or a ranking', !/guaranteed|risk-free|will rise|سود تضمینی|بدون ریسک/i.test(en + fa));
 
   const sitemap = readFileSync(join(process.cwd(), 'dist', 'sitemap.xml'), 'utf8');
-  t('the sitemap carries all six guides and both hubs', ['how-crypto-swap-fees-work', 'custodial-vs-non-custodial-wallets', 'what-stays-private-without-kyc', 'blog'].every((s) => sitemap.includes(s)));
+  const sitemapEn = readFileSync(join(process.cwd(), 'dist', 'sitemap-en.xml'), 'utf8');
+  const sitemapFa = readFileSync(join(process.cwd(), 'dist', 'sitemap-fa.xml'), 'utf8');
+  const languageSitemaps = sitemapEn + sitemapFa;
+  t('the sitemap index links to separate English and Persian URL sets', sitemap.includes('sitemap-en.xml') && sitemap.includes('sitemap-fa.xml'));
+  t('the language sitemaps carry all six guides and both hubs', ['how-crypto-swap-fees-work', 'custodial-vs-non-custodial-wallets', 'what-stays-private-without-kyc', 'blog'].every((s) => languageSitemaps.includes(s)));
   /* One URL per generated directory, plus the app shell. Counted against the
      build rather than hardcoded: a hardcoded number here would fail on every
      future page and teach people to edit the test instead of reading it. */
@@ -335,7 +368,8 @@ console.log('— guides —');
         return [...here, ...walk(full)];
       });
     const dirs = walk(dist).filter((d) => !readFileSync(join(d, 'index.html'), 'utf8').includes('content="noindex"')).length;
-    return (sitemap.match(/<loc>/g) || []).length === dirs + 1;
+    const urls = (sitemapEn.match(/<loc>/g) || []).length + (sitemapFa.match(/<loc>/g) || []).length;
+    return urls === dirs + 1;
   })());
 }
 

@@ -629,8 +629,33 @@ function intentOS(site) {
             <a class="btn btn-primary" href="${site}/#/intent"><span>${T(COPY.intentOS.cta)}</span>${ICONS.flowArrow}</a>
           </div>
         </div>
-        <span class="flow-meter" aria-hidden="true"><i></i></span>
-        <ol class="flow reveal-r reveal flow-host" aria-label="${esc(COPY.intentOS.kicker)}">${steps}</ol>
+        <div class="intent-flow-column">
+          <figure class="intent-visual" aria-hidden="true">
+            <img src="/landing/slide-ai.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">
+            <span class="intent-visual-shade"></span>
+            <svg class="intent-visual-svg" viewBox="0 0 640 360" focusable="false" aria-hidden="true">
+              <defs>
+                <linearGradient id="intent-route-gradient" x1="0" y1="1" x2="1" y2="0">
+                  <stop offset="0" stop-color="#63f5bb" stop-opacity=".82"/>
+                  <stop offset=".52" stop-color="#4eeaff" stop-opacity=".9"/>
+                  <stop offset="1" stop-color="#b79cff" stop-opacity=".82"/>
+                </linearGradient>
+              </defs>
+              <circle class="intent-art-ring" cx="320" cy="180" r="72"/>
+              <circle class="intent-art-ring intent-art-ring-outer" cx="320" cy="180" r="112"/>
+              <path class="intent-art-path" d="M82 218C165 118 214 110 320 180S480 260 558 156"/>
+              <path class="intent-art-path intent-art-path-alt" d="M106 112C190 200 232 254 320 180S454 104 532 258"/>
+              <circle class="intent-art-node" cx="82" cy="218" r="5"/>
+              <circle class="intent-art-node intent-art-node-2" cx="106" cy="112" r="4"/>
+              <circle class="intent-art-node intent-art-node-3" cx="558" cy="156" r="5"/>
+              <circle class="intent-art-node intent-art-node-4" cx="532" cy="258" r="4"/>
+              <circle class="intent-art-core-glow" cx="320" cy="180" r="26"/>
+              <circle class="intent-art-core" cx="320" cy="180" r="11"/>
+            </svg>
+          </figure>
+          <span class="flow-meter" aria-hidden="true"><i></i></span>
+          <ol class="flow reveal-r reveal flow-host" aria-label="${esc(COPY.intentOS.kicker)}">${steps}</ol>
+        </div>
       </div>
       ${tape}
     </div>

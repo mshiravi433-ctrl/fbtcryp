@@ -181,9 +181,9 @@ export async function run(container) {
   check('width: AppChrome tags the shell «app-shell--wide» on /global',
     /const wide = pathname === '\/global' \|\| pathname\.startsWith\('\/global\/'\);/.test(appSource)
     && /\$\{wide \? ' app-shell--wide' : ''\}/.test(appSource));
-  check('width: the shell opens to ~1360px from 900px and 760px on tablets; the page frame adds no gutter',
+  check('width: the shell opens to ~1360px from 900px and 820px on tablets; the page frame adds no gutter',
     /@media \(min-width: 900px\) \{\s*\.app-shell\.app-shell--wide,\s*\.app-shell\.app-shell--wide \.top-bar \{\s*max-width: min\(1360px, 100%\);/.test(cssSource)
-    && /@media \(min-width: 600px\) and \(max-width: 899px\) \{\s*\.app-shell\.app-shell--wide,\s*\.app-shell\.app-shell--wide \.top-bar \{\s*max-width: 760px;/.test(cssSource)
+    && /@media \(min-width: 600px\) and \(max-width: 899px\) \{\s*\.app-shell\.app-shell--wide,\s*\.app-shell\.app-shell--wide \.top-bar \{\s*max-width: 820px;/.test(cssSource)
     && /\.page\.page--global \{\s*padding: 4px 0 20px;\s*gap: 0;/.test(cssSource));
   const locales = { ar, en, es, fa, fr, hi, id, pt, ru, tr, ur, zh };
   const missing = Object.entries(locales).filter(([, d]) => !d?.nav?.global).map(([k]) => k);

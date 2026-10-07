@@ -332,9 +332,9 @@ function prefetchLikelyRoutes() {
 function AppChrome() {
   const { pathname } = useLocation();
   const headerless = pathname === '/intent' || pathname.startsWith('/pay');
-  /* «نه جمع شده» — the world console is a dashboard, not a phone column. On wide
-     screens its shell opens up (see `.app-shell--wide` in index.css); every
-     other page keeps the narrow centred column it was designed for. */
+  /* «نه جمع شده» — the world console is a dashboard, not a phone column, so it
+     gets the widest shell. All routes keep their phone layout on mobile and
+     gain a wider, centred shell from tablet/desktop breakpoints. */
   const wide = pathname === '/global' || pathname.startsWith('/global/');
   /*
     ─── THE BOTTOM EDGE BELONGS TO WHOEVER NEEDS IT MOST ───────────────────
