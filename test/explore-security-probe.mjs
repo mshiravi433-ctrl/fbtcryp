@@ -24,9 +24,10 @@ export default async function run() {
   const t = (name, ok) => rows.push([name, Boolean(ok)]);
 
   /* ---------------------------- 1. scoring engine ------------------------ */
-  const { computeSecurityScore, SECURITY_FACTORS, DISCLOSURE } = await import(
+  const { computeSecurityScore, summarizeSecurityHealth, SECURITY_FACTORS, DISCLOSURE } = await import(
     resolve(root, 'server/securityIntel.js')
   );
+  const { CHAIN_IDS, recordSourceHealth } = await import(resolve(root, 'server/chainIntel.js'));
 
   const empty = computeSecurityScore({}, { source: 'none' });
   t('no evidence → score is null, not 100', empty.score === null);
@@ -68,6 +69,58 @@ export default async function run() {
   t('one green factor ≠ reassurance: thin coverage → UNKNOWN level', thin.score === 100 && thin.level === 'UNKNOWN');
   t('the disclaimer is attached, not inline-faked', DISCLOSURE.length > 40 && bad.disclaimer === DISCLOSURE);
   t('disclaimer copy states the advisory limit', /not a guarantee.*does not block/i.test(DISCLOSURE));
+
+  const now = Date.now();
+  const healthKey = `security-test-${process.pid}-${now}`;
+  const firstSuccessAt = recordSourceHealth(healthKey, true, null, 12).lastSuccessAt;
+  const failureAt = recordSourceHealth(healthKey, false, 'probe failed', 15).lastFailureAt;
+  const recoveredAt = recordSourceHealth(healthKey, true, null, 9).lastSuccessAt;
+  t('health event timestamps preserve same-millisecond failure ordering',
+    Date.parse(failureAt) > Date.parse(firstSuccessAt)
+    && Date.parse(recoveredAt) > Date.parse(failureAt));
+
+  const observed = (minutesAgo = 1) => ({
+    lastSuccessAt: new Date(now - minutesAgo * 60_000).toISOString(),
+    lastFailureAt: null,
+    okCount: 1,
+    failCount: 0,
+    latencyMs: 75
+  });
+  const emptyHealth = summarizeSecurityHealth({ snapshot: {}, alerts: null, configuredExplorerCount: 0, now });
+  const emptyInfra = emptyHealth.components.find((c) => c.key === 'infrastructure');
+  t('unprobed health is insufficient evidence, never a green score', emptyInfra.score === null && emptyInfra.status === 'INSUFFICIENT_EVIDENCE');
+  t('cold monitor reports STARTING until core sources are observed', emptyHealth.system.status === 'STARTING');
+
+  const healthySnapshot = {};
+  for (const id of CHAIN_IDS) {
+    healthySnapshot[`rpc:${id}`] = observed();
+    healthySnapshot[`contract:${id}`] = observed();
+  }
+  healthySnapshot['llama:protocols'] = observed();
+  healthySnapshot['llama:hacks'] = observed();
+  const healthyOverview = summarizeSecurityHealth({
+    snapshot: healthySnapshot, alerts: [], configuredExplorerCount: 8, now
+  });
+  const component = (report, key) => report.components.find((c) => c.key === key);
+  t('infrastructure coverage uses the complete 16-network registry',
+    component(healthyOverview, 'infrastructure').score === 100 && component(healthyOverview, 'infrastructure').coverage.total === 16);
+  t('bytecode reads and protocol feeds are scored from observed health',
+    component(healthyOverview, 'contractMonitoring').score === 100 && component(healthyOverview, 'protocolMonitoring').score === 100);
+  t('zero alerts do not imply a risk finding; only feed availability is shown',
+    component(healthyOverview, 'threatMonitoring').score === 100 && /not a risk finding/i.test(component(healthyOverview, 'threatMonitoring').basis));
+  t('explorer coverage reports configuration, not assumed live availability',
+    component(healthyOverview, 'dataProviders').score === 50 && component(healthyOverview, 'dataProviders').coverage.healthy === 8);
+
+  const degradedSnapshot = { ...healthySnapshot };
+  degradedSnapshot[`rpc:${CHAIN_IDS[0]}`] = {
+    ...observed(), lastFailureAt: new Date(now - 10_000).toISOString()
+  };
+  degradedSnapshot['llama:hacks'] = observed(7 * 60);
+  const degradedOverview = summarizeSecurityHealth({ snapshot: degradedSnapshot, alerts: [], configuredExplorerCount: 8, now });
+  t('a later failure and a stale feed reduce reported coverage',
+    component(degradedOverview, 'infrastructure').score === 94 && component(degradedOverview, 'protocolMonitoring').score === 50);
+  t('stale incident feed is partial, not proof that no incidents exist',
+    component(degradedOverview, 'threatMonitoring').status === 'PARTIAL');
 
   /* --------------------- 2. classifyQuery (server side) ------------------ */
   const { classifyQuery } = await import(resolve(root, 'server/explorerData.js'));
@@ -172,6 +225,18 @@ export default async function run() {
   t('fa analyzer copy is real Persian, not a key echo',
     typeof get(fa, 'secCenter.advisoryLine') === 'string' && !get(fa, 'secCenter.advisoryLine').startsWith('secCenter.'));
   t('en never-block subtitle present', /never blocks/i.test(en.secCenter.subtitle));
+  const localeCodes = ['ar', 'en', 'es', 'fa', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh'];
+  const localeObjects = localeCodes.map((code) => JSON.parse(readFileSync(resolve(root, `src/i18n/locales/${code}.json`), 'utf8')));
+  t('all locales include the provider-count copy and security coverage labels', localeObjects.every((locale) =>
+    typeof get(locale, 'eco.flow.providerCount') === 'string'
+    && typeof get(locale, 'eco.flow.registryNetworkCount') === 'string'
+    && typeof get(locale, 'eco.flow.networkProbeEvidence') === 'string'
+    && typeof get(locale, 'eco.flow.providerProbeChains') === 'string'
+    && typeof get(locale, 'eco.flow.noRecentProbe') === 'string'
+    && typeof get(locale, 'secCenter.probeLatency') === 'string'
+    && typeof get(locale, 'secCenter.compBasis.infrastructure') === 'string'
+    && typeof get(locale, 'secCenter.systemNote') === 'string'
+  ));
 
   /* ---------------- 10. no Intent OS coupling in the new modules -------- */
   for (const [name, src] of [['securityIntel', secSrc], ['routes', routeSrc], ['Security.jsx', uiSec], ['Explore.jsx', uiExp]]) {

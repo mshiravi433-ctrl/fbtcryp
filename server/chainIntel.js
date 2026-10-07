@@ -136,16 +136,18 @@ const health = new Map(); // key -> { lastSuccessAt, lastFailureAt, lastError, o
 
 export function recordSourceHealth(key, ok, detail = null, latencyMs = null) {
   const cur = health.get(key) || { lastSuccessAt: null, lastFailureAt: null, lastError: null, okCount: 0, failCount: 0, latencyMs: null };
+  const previous = Date.parse(ok ? cur.lastFailureAt || '' : cur.lastSuccessAt || '') || 0;
+  const at = new Date(Math.max(Date.now(), previous + 1)).toISOString();
   if (ok) {
-    cur.lastSuccessAt = new Date().toISOString();
+    cur.lastSuccessAt = at;
     cur.okCount += 1;
-    if (latencyMs != null) cur.latencyMs = Math.round(latencyMs);
     if (cur.failCount && detail?.clearOnError !== false) cur.lastError = null;
   } else {
-    cur.lastFailureAt = new Date().toISOString();
+    cur.lastFailureAt = at;
     cur.failCount += 1;
     cur.lastError = String(detail ?? 'unknown').slice(0, 160);
   }
+  if (latencyMs != null) cur.latencyMs = Math.round(latencyMs);
   health.set(key, cur);
   return cur;
 }
@@ -284,21 +286,22 @@ async function rpcOnce(url, method, params, timeout) {
  * until one answers — the same multi-endpoint discipline that rescued the
  * whale feed from single-RPC outages. Health is recorded per chain id.
  */
-export async function rpcCall(chainId, method, params, { timeout = RPC_TIMEOUT_MS } = {}) {
+export async function rpcCall(chainId, method, params, { timeout = RPC_TIMEOUT_MS, healthKey = null, healthKeys = [] } = {}) {
   const chain = EVM_CHAINS[Number(chainId)];
   if (!chain) throw new IntelError('UNSUPPORTED_CHAIN', `chain ${chainId} is not in the registry`);
-  const key = `rpc:${chainId}`;
+  const keys = [...new Set([healthKey || `rpc:${chainId}`, ...(Array.isArray(healthKeys) ? healthKeys : [])])];
+  const startedAt = Date.now();
   let lastErr = null;
   for (const url of chain.rpc) {
     try {
       const { result, latencyMs } = await rpcOnce(url, method, params, timeout);
-      recordSourceHealth(key, true, null, latencyMs);
+      for (const key of keys) recordSourceHealth(key, true, null, latencyMs);
       return result;
     } catch (err) {
       lastErr = err;
     }
   }
-  recordSourceHealth(key, false, lastErr?.message || String(lastErr));
+  for (const key of keys) recordSourceHealth(key, false, lastErr?.message || String(lastErr), Date.now() - startedAt);
   throw new IntelError('RPC_UNAVAILABLE', `all endpoints failed for chain ${chainId}: ${lastErr?.message || lastErr}`);
 }
 

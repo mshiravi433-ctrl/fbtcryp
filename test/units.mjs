@@ -8,7 +8,7 @@ import { syncWatches } from '../src/lib/orders.js';
  */
 import { searchTokens, tokenKey, getTokensSync, loadTokens } from '../src/lib/tokenLists.js';
 import { FAMILY, isValidFor, resolvePayout, payoutTable, PAYOUT_ADDRESSES } from '../src/lib/payout.js';
-import { buildEcosystemData } from '../src/lib/ecosystemData.js';
+import { buildEcosystemData, mergeProbeEvidence, NETWORK_REGISTRY } from '../src/lib/ecosystemData.js';
 import { localAnswer } from '../src/lib/faqLocal.js';
 import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
@@ -2939,6 +2939,26 @@ export default async function run() {
     t('deBridge DLN bridge fee is exposed at 0.4%', dln.fee.active && dln.fee.bps === 40 && dln.fee.percent === 0.4);
     t('0x Cross-Chain bridge fee is exposed when ready', xchain.fee.active && xchain.fee.bps === 30);
     t('THORChain stays fail-closed without THOR_NAME', thor.status === 'OFFLINE' && thor.fee.active === false);
+    t('network catalog contains 16 EVM networks plus Solana', NETWORK_REGISTRY.filter((n) => n.type === 'EVM').length === 16 && NETWORK_REGISTRY.filter((n) => n.type === 'Non-EVM').length === 1);
+    const base = report.sections.networks.find((n) => n.chainId === 8453);
+    t('provider chain metadata without a chain-specific probe stays unverified', base?.status === 'UNKNOWN' && base.supportedProviderCount > 0);
+
+    const evidence = mergeProbeEvidence(
+      { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: true, chainIds: [8453] }] },
+      { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: true, chainIds: [1] }] }
+    );
+    t('independent probe results retain all chain-specific successes', evidence.results[0].chainIds.length === 2);
+    const probed = buildEcosystemData({
+      status: 'success',
+      data: { providers: [
+        { id: 'kyberswap', configured: true, reachable: false, supportedChains: [1, 8453] },
+        { id: 'openocean', configured: true, reachable: false, supportedChains: [8453] }
+      ] }
+    }, evidence);
+    const probedEthereum = probed.sections.networks.find((n) => n.chainId === 1);
+    const probedBase = probed.sections.networks.find((n) => n.chainId === 8453);
+    t('a verified probe is scoped to the network actually tested', probedEthereum?.status === 'OPERATIONAL' && probedBase?.status === 'PARTIAL');
+    t('network summary counts probes instead of assuming every network is live', probed.summary.networks.operational === 1 && probed.summary.networks.partial === 1);
   }
 
   /* ----------------------- the OpenOcean adapter ------------------------ */
@@ -6535,7 +6555,7 @@ export default async function run() {
     t('two stables at tight slippage are not', estimateSandwichRisk({ slippagePct: 0.1, bothStable: true }).level === 'low');
     t('unknown inputs are not reported as zero risk', estimateSandwichRisk({}).level === 'unknown');
     t('Ethereum has a private relay', privateRelayFor(1)?.rpc.startsWith('https://'));
-    t('BNB Chain does not invent one', privateRelayFor(56) === null);
+    t('BNB Chain uses the configured dRPC private relay', privateRelayFor(56)?.rpc === 'https://bsc.drpc.org');
     t('a missing quote simulates to null', simulateSwap({}) === null);
     const sim = simulateSwap({ amountOut: 100, minOut: 99, slippagePct: 1, chainId: 1 });
     t('a real quote produces a simulation', sim.ready && sim.expectedOut === 100 && sim.privateRelay === true);

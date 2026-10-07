@@ -457,38 +457,38 @@ function PipelineVisualizer() {
   const steps = [
     {
       id: 'chain',
-      title: t('sm.engine.pipeline.chain', { defaultValue: 'رسید زنجیره' }),
+      title: t('sm.engine.pipeline.chain'),
       icon: '⛓️',
-      badge: 'On-Chain Proof',
-      desc: 'استخراج رویدادهای تراکنش‌ها مستقیماً از نودهای RPC و تطبیق هش معامله با اکسپلوررهای تایید شده (Etherscan, Basescan, Arbiscan).'
+      badge: t('sm.engine.pipeline.chainBadge'),
+      desc: t('sm.engine.pipeline.chainDesc')
     },
     {
       id: 'ledger',
-      title: t('sm.engine.pipeline.ledger', { defaultValue: 'دفتر معاملات جفت‌شده' }),
+      title: t('sm.engine.pipeline.ledger'),
       icon: '📑',
-      badge: 'DEX Swaps',
-      desc: 'بازسازی کامل معاملات جفت‌شدهٔ استیبل‌کوین با توکن در استخرهای یونی‌سواپ، ائرودروم و کرو و حذف تراکنش‌های نویز و آربیتراژ MEV.'
+      badge: t('sm.engine.pipeline.ledgerBadge'),
+      desc: t('sm.engine.pipeline.ledgerDesc')
     },
     {
       id: 'score',
-      title: t('sm.engine.pipeline.score', { defaultValue: 'سود محقق‌شده و پوشش' }),
+      title: t('sm.engine.pipeline.score'),
       icon: '🎯',
-      badge: 'Wallet Alpha',
-      desc: 'محاسبهٔ سود واقعی پوزیشن‌های بسته‌شده (حداقل ۵ معامله)، نرخ برد (Win Rate) و پوشش تاریخی برای تفکیک پول هوشمند واقعی از نهنگ‌های خرد.'
+      badge: t('sm.engine.pipeline.scoreBadge'),
+      desc: t('sm.engine.pipeline.scoreDesc')
     },
     {
       id: 'consensus',
-      title: t('sm.engine.pipeline.consensus', { defaultValue: 'اجماع مستقل' }),
+      title: t('sm.engine.pipeline.consensus'),
       icon: '🤝',
-      badge: 'Cluster Check',
-      desc: 'شرط وقوع حداقل ۳ خرید/فروش همزمان از خوشه‌های کاملاً مجزا و مستقل برای صدور سیگنال انباشت (Accumulation) یا توزیع (Distribution).'
+      badge: t('sm.engine.pipeline.consensusBadge'),
+      desc: t('sm.engine.pipeline.consensusDesc')
     },
     {
       id: 'intent',
-      title: t('sm.engine.pipeline.intent', { defaultValue: 'سیگنال قابل‌پیگیری' }),
+      title: t('sm.engine.pipeline.intent'),
       icon: '⚡',
-      badge: 'Intent OS',
-      desc: 'تبدیل شواهد اجماع به سیگنال‌های قابل پایش و امکان انتقال مستقیم به موتور معاملاتی Intent OS برای استراتژی‌های خودکار و هشدارهای دقیق.'
+      badge: t('sm.engine.pipeline.intentBadge'),
+      desc: t('sm.engine.pipeline.intentDesc')
     }
   ];
 
@@ -520,7 +520,10 @@ function PipelineVisualizer() {
               <small>{current.badge}</small>
             </div>
           </div>
-          <span className="smi-pipe-step-tag">Step {steps.findIndex((s) => s.id === activeStep) + 1} / 5</span>
+          <span className="smi-pipe-step-tag">{t('sm.engine.pipeline.step', {
+            step: steps.findIndex((s) => s.id === activeStep) + 1,
+            total: steps.length
+          })}</span>
         </div>
         <p className="smi-pipe-detail-desc">{current.desc}</p>
       </div>

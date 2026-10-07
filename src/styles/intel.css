@@ -330,6 +330,17 @@
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
 }
 .intel-component-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.intel-component-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 7px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.intel-component-evidence > span { white-space: nowrap; }
 .intel-pct-track { height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; margin-top: 9px; }
 .intel-pct-track > span { display: block; height: 100%; border-radius: inherit; min-width: 2px; transition: width 0.4s ease; }
 

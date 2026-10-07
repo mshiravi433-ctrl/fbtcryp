@@ -125,105 +125,8 @@ function Skeleton({ count = 3, className = '' }) {
 /* ─── Protocol Drawer (lazy loaded) ─────────────────────────────────────────── */
 const ProtocolDrawer = lazy(() => import('../components/ecosystem/ProtocolDrawer'));
 
-/* ─── Liquidity Visualization ───────────────────────────────────────────────── */
-function LiquidityVisualization({ t }) {
-  return (
-    <div className="eco-viz-container" role="img" aria-label={t('eco.viz.ariaLabel')}>
-      <svg className="eco-viz-svg" viewBox="0 0 400 280" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Background grid */}
-        <defs>
-          <linearGradient id="eco-glow-cyan" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="var(--rgb-1)" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="var(--rgb-2)" stopOpacity="0.6" />
-          </linearGradient>
-          <linearGradient id="eco-glow-violet" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="var(--rgb-2)" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="var(--rgb-3)" stopOpacity="0.4" />
-          </linearGradient>
-          <filter id="eco-glow">
-            <feGaussianBlur stdDeviation="2" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* Node: User Wallet (top) */}
-        <rect x="150" y="10" width="100" height="32" rx="16" fill="var(--bg-panel)" stroke="var(--rgb-1)" strokeWidth="1" opacity="0.8" />
-        <text x="200" y="30" textAnchor="middle" fill="var(--text-2)" fontSize="10" fontFamily="var(--font-mono)">WALLET</text>
-
-        {/* Node: FBT Swap */}
-        <rect x="140" y="62" width="120" height="32" rx="16" fill="var(--bg-panel)" stroke="var(--rgb-1)" strokeWidth="1.5" filter="url(#eco-glow)" />
-        <text x="200" y="82" textAnchor="middle" fill="var(--text-1)" fontSize="10" fontWeight="600" fontFamily="var(--font-mono)">FBT SWAP</text>
-
-        {/* Connection: Wallet → FBT */}
-        <line x1="200" y1="42" x2="200" y2="62" stroke="var(--rgb-1)" strokeWidth="1" strokeDasharray="3 2" opacity="0.6">
-          <animate attributeName="stroke-dashoffset" values="5;0" dur="1.5s" repeatCount="indefinite" />
-        </line>
-
-        {/* Node: Router */}
-        <rect x="135" y="118" width="130" height="32" rx="16" fill="var(--bg-panel)" stroke="var(--rgb-2)" strokeWidth="1" opacity="0.8" />
-        <text x="200" y="138" textAnchor="middle" fill="var(--text-2)" fontSize="10" fontFamily="var(--font-mono)">ROUTER ENGINE</text>
-
-        {/* Connection: FBT → Router */}
-        <line x1="200" y1="94" x2="200" y2="118" stroke="var(--rgb-2)" strokeWidth="1" strokeDasharray="3 2" opacity="0.6">
-          <animate attributeName="stroke-dashoffset" values="5;0" dur="1.2s" repeatCount="indefinite" />
-        </line>
-
-        {/* DEX nodes */}
-        <rect x="30" y="175" width="80" height="28" rx="14" fill="var(--bg-panel)" stroke="var(--rgb-4)" strokeWidth="0.8" opacity="0.7" />
-        <text x="70" y="193" textAnchor="middle" fill="var(--text-2)" fontSize="9" fontFamily="var(--font-mono)">DEX A</text>
-
-        <rect x="160" y="175" width="80" height="28" rx="14" fill="var(--bg-panel)" stroke="var(--rgb-4)" strokeWidth="0.8" opacity="0.7" />
-        <text x="200" y="193" textAnchor="middle" fill="var(--text-2)" fontSize="9" fontFamily="var(--font-mono)">DEX B</text>
-
-        <rect x="290" y="175" width="80" height="28" rx="14" fill="var(--bg-panel)" stroke="var(--rgb-4)" strokeWidth="0.8" opacity="0.7" />
-        <text x="330" y="193" textAnchor="middle" fill="var(--text-2)" fontSize="9" fontFamily="var(--font-mono)">DEX C</text>
-
-        {/* Connections: Router → DEXs */}
-        <line x1="175" y1="150" x2="70" y2="175" stroke="url(#eco-glow-violet)" strokeWidth="0.8" strokeDasharray="2 2">
-          <animate attributeName="stroke-dashoffset" values="4;0" dur="2s" repeatCount="indefinite" />
-        </line>
-        <line x1="200" y1="150" x2="200" y2="175" stroke="url(#eco-glow-violet)" strokeWidth="0.8" strokeDasharray="2 2">
-          <animate attributeName="stroke-dashoffset" values="4;0" dur="1.8s" repeatCount="indefinite" />
-        </line>
-        <line x1="225" y1="150" x2="330" y2="175" stroke="url(#eco-glow-violet)" strokeWidth="0.8" strokeDasharray="2 2">
-          <animate attributeName="stroke-dashoffset" values="4;0" dur="2.2s" repeatCount="indefinite" />
-        </line>
-
-        {/* Bottom: Best Route → Blockchain */}
-        <rect x="140" y="225" width="120" height="28" rx="14" fill="var(--bg-panel)" stroke="var(--rgb-3)" strokeWidth="0.8" opacity="0.7" />
-        <text x="200" y="243" textAnchor="middle" fill="var(--text-2)" fontSize="9" fontFamily="var(--font-mono)">BLOCKCHAIN</text>
-
-        {/* Connections: DEXs → Blockchain */}
-        <line x1="70" y1="203" x2="165" y2="225" stroke="var(--rgb-3)" strokeWidth="0.5" strokeDasharray="2 3" opacity="0.4">
-          <animate attributeName="stroke-dashoffset" values="5;0" dur="2.5s" repeatCount="indefinite" />
-        </line>
-        <line x1="200" y1="203" x2="200" y2="225" stroke="var(--rgb-3)" strokeWidth="0.5" strokeDasharray="2 3" opacity="0.4">
-          <animate attributeName="stroke-dashoffset" values="5;0" dur="2s" repeatCount="indefinite" />
-        </line>
-        <line x1="330" y1="203" x2="235" y2="225" stroke="var(--rgb-3)" strokeWidth="0.5" strokeDasharray="2 3" opacity="0.4">
-          <animate attributeName="stroke-dashoffset" values="5;0" dur="2.3s" repeatCount="indefinite" />
-        </line>
-
-        {/* Animated dots flowing along paths */}
-        <circle r="2" fill="var(--rgb-1)" opacity="0.8">
-          <animateMotion dur="3s" repeatCount="indefinite" path="M200,42 L200,62 L200,94 L200,118 L200,175 L200,225" />
-        </circle>
-        <circle r="2" fill="var(--rgb-2)" opacity="0.6">
-          <animateMotion dur="4s" repeatCount="indefinite" path="M200,118 L70,175 L165,225" />
-        </circle>
-        <circle r="1.5" fill="var(--rgb-3)" opacity="0.5">
-          <animateMotion dur="4.5s" repeatCount="indefinite" path="M200,118 L330,175 L235,225" />
-        </circle>
-      </svg>
-    </div>
-  );
-}
-
-/* ─── How FBT Works Flow ────────────────────────────────────────────────────── */
-function HowFbtWorks({ t }) {
+/* ─── Data-backed swap flow ─────────────────────────────────────────────────── */
+function HowFbtWorks({ t, providers = [], networks = [] }) {
   const steps = [
     { id: 'wallet', label: t('eco.flow.wallet'), desc: t('eco.flow.walletDesc') },
     { id: 'fbt', label: t('eco.flow.fbt'), desc: t('eco.flow.fbtDesc') },
@@ -232,33 +135,97 @@ function HowFbtWorks({ t }) {
     { id: 'blockchain', label: t('eco.flow.blockchain'), desc: t('eco.flow.blockchainDesc') },
     { id: 'verification', label: t('eco.flow.verification'), desc: t('eco.flow.verificationDesc') }
   ];
+  const sources = providers
+    .filter((provider) => provider.capabilities?.includes('quote'))
+    .sort((a, b) => Number(b.status === 'OPERATIONAL') - Number(a.status === 'OPERATIONAL') || a.name.localeCompare(b.name));
 
   return (
     <div className="eco-flow-container">
-      {steps.map((step, i) => (
-        <motion.div
-          key={step.id}
-          className="eco-flow-step"
-          variants={riseIn}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, margin: '-20px' }}
-          transition={{ delay: i * 0.08 }}
-        >
-          <div className="eco-flow-step-header">
-            <span className="eco-flow-step-number">{String(i + 1).padStart(2, '0')}</span>
-            <span className="eco-flow-step-label">{step.label}</span>
-          </div>
-          <p className="eco-flow-step-desc">{step.desc}</p>
-          {i < steps.length - 1 && (
-            <div className="eco-flow-connector">
-              <svg width="2" height="24" viewBox="0 0 2 24" fill="none">
-                <line x1="1" y1="0" x2="1" y2="24" stroke="var(--line-strong)" strokeWidth="1" strokeDasharray="4 3" />
-              </svg>
+      <div className="eco-flow-timeline">
+        {steps.map((step, index) => (
+          <motion.article
+            key={step.id}
+            className="eco-flow-step"
+            variants={riseIn}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, margin: '-20px' }}
+            transition={{ delay: index * 0.06 }}
+          >
+            <div className="eco-flow-step-header">
+              <span className="eco-flow-step-number">{String(index + 1).padStart(2, '0')}</span>
+              <span className="eco-flow-step-label">{step.label}</span>
             </div>
-          )}
-        </motion.div>
-      ))}
+            <p className="eco-flow-step-desc">{step.desc}</p>
+          </motion.article>
+        ))}
+      </div>
+
+      <section className="eco-route-evidence" aria-label={t('eco.sectionRouting', 'Live routing sources')}>
+        <div className="eco-route-section-head">
+          <div>
+            <strong>{t('eco.sectionRouting', 'Live routing sources')}</strong>
+            <span>{t('eco.flow.providerCount', { count: sources.length })}</span>
+          </div>
+          <span className="eco-route-count">{t('eco.flow.registryNetworkCount', { count: networks.length, total: NETWORK_REGISTRY.length })}</span>
+        </div>
+
+        {sources.length ? (
+          <div className="eco-route-provider-grid">
+            {sources.map((provider) => {
+              const statusKey = STATUS_LABELS[provider.status] || STATUS_LABELS.UNKNOWN;
+              const canExecute = provider.capabilities?.includes('execute');
+              const mode = canExecute
+                ? (provider.feeReady ? t('eco.flow.executorReady') : t('eco.flow.executorSetup'))
+                : t('eco.flow.quoteOnly');
+              const probedNames = (provider.probeNetworks || []).map((network) => network.name).join(', ');
+              return (
+                <div className="eco-route-provider" key={provider.id}>
+                  <span className="eco-route-provider-dot" style={{ background: STATUS_COLORS[provider.status] || STATUS_COLORS.UNKNOWN }} />
+                  <span className="eco-route-provider-copy">
+                    <strong>{provider.name}</strong>
+                    <small>{mode} · {t(statusKey)}</small>
+                    <small className="eco-route-provider-probe">
+                      {probedNames
+                        ? t('eco.flow.providerProbeChains', { networks: probedNames })
+                        : t('eco.flow.noRecentProbe')}
+                    </small>
+                  </span>
+                  <span className="eco-route-provider-chains">{t('eco.flow.providerChains', { count: provider.networks?.length || 0 })}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="eco-route-empty">{t('eco.flow.noProviderData')}</p>
+        )}
+
+        {networks.length > 0 && (
+          <div className="eco-route-network-area">
+            <strong>{t('eco.flow.networkCoverage', { count: networks.length })}</strong>
+            <div className="eco-route-network-list">
+              {networks.map((network) => {
+                const probeCounts = {
+                  ready: network.reachableProviderCount || 0,
+                  supported: network.supportedProviderCount || 0
+                };
+                return (
+                  <span
+                    className="eco-route-network-chip"
+                    key={network.id}
+                    title={`${network.name}${network.chainId ? ` · ${network.chainId}` : ''} · ${t('eco.flow.networkProbeEvidence', probeCounts)}`}
+                  >
+                    <StatusDot status={network.status || 'UNKNOWN'} size={6} />
+                    <span>{network.name}</span>
+                    <small>{probeCounts.ready}/{probeCounts.supported}</small>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <p className="eco-route-disclaimer">{t('eco.flow.routeNote')}</p>
+      </section>
     </div>
   );
 }
@@ -497,7 +464,7 @@ export default function Ecosystem() {
             <StatusRow
               label={t('eco.dataInfra', 'Data Infra')}
               value={`${summary.dataInfra.operational}/${summary.dataInfra.total}`}
-              status="OPERATIONAL"
+              status={summaryStatus(summary.dataInfra)}
               t={t}
             />
           </div>
@@ -595,14 +562,6 @@ export default function Ecosystem() {
               <ProtocolCard key={protocol.id} item={protocol} onSelect={setSelectedItem} t={t} />
             ))}
           </div>
-        </motion.section>
-      )}
-
-      {/* ─── Liquidity Visualization ─── */}
-      {categoryFilter === 'all' && sections?.dex?.length > 0 && (
-        <motion.section className="eco-section" variants={riseIn} initial="hidden" whileInView="show" viewport={{ once: true }}>
-          <SectionHeader title={t('eco.sectionRouting', 'Liquidity Routing')} />
-          <LiquidityVisualization t={t} />
         </motion.section>
       )}
 
@@ -718,7 +677,11 @@ export default function Ecosystem() {
       {categoryFilter === 'all' && (
         <motion.section className="eco-section" variants={riseIn} initial="hidden" whileInView="show" viewport={{ once: true }}>
           <SectionHeader title={t('eco.sectionHowItWorks', 'How FBT Swap Works')} />
-          <HowFbtWorks t={t} />
+          <HowFbtWorks
+            t={t}
+            providers={[...(sections?.dex || []), ...(sections?.bridges || [])]}
+            networks={sections?.networks || []}
+          />
         </motion.section>
       )}
 
@@ -769,12 +732,14 @@ function SectionHeader({ title, count }) {
   );
 }
 
-/** OPERATIONAL when every source answered, PARTIAL when some did, DEGRADED when none. */
+/** UNKNOWN before probes, OPERATIONAL only on full evidence, PARTIAL on mixed coverage. */
 function summaryStatus(group) {
   const total = Number(group?.total || 0);
   const ok = Number(group?.operational || 0);
-  if (total > 0 && ok >= total) return 'OPERATIONAL';
-  if (ok > 0) return 'PARTIAL';
+  const observed = group?.observed == null ? total : Number(group.observed || 0);
+  if (total <= 0 || observed <= 0) return 'UNKNOWN';
+  if (ok >= total) return 'OPERATIONAL';
+  if (ok > 0 || observed < total) return 'PARTIAL';
   return 'DEGRADED';
 }
 

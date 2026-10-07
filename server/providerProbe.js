@@ -37,6 +37,19 @@ const USDC_ARB = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const USDC_SOL = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
+// Chain ids are attached only to probes that request a quote on those chains.
+// Registration/configuration checks (LI.FI and 0x Cross-Chain) prove no chain.
+const PROBE_CHAIN_IDS = {
+  kyberswap: [8453],
+  openocean: [8453],
+  velora: [8453],
+  '0x-gasless': [56],
+  'solana-openocean': ['solana'],
+  lifi: [],
+  'debridge-dln': [8453, 42161],
+  '0x-cross-chain': []
+};
+
 /** A valid EVM address to satisfy taker validation in the quote-only probe. */
 const PROBE_TAKER = '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
 
@@ -158,6 +171,9 @@ export async function probeProviderStatuses() {
   return {
     schema: 'fbt.provider-probe.v1',
     generatedAt: new Date().toISOString(),
-    results: results.map((r) => (r.status === 'fulfilled' ? r.value : { ok: false, error: 'PROBE_INTERNAL' }))
+    results: results.map((r) => {
+      const result = r.status === 'fulfilled' ? r.value : { ok: false, error: 'PROBE_INTERNAL' };
+      return { ...result, chainIds: PROBE_CHAIN_IDS[result.provider] || [] };
+    })
   };
 }
