@@ -170,20 +170,8 @@ const STYLES = `
   }
   .aig-tab.active .aig-tab-icon { transform:scale(1.12); color:var(--tab-acc); }
 
-  .aig-refresh {
-    width:100%; min-height:50px; margin-bottom:16px;
-    color:#fff; font:inherit; font-size:var(--fs-sm); font-weight:850; cursor:pointer;
-    background:linear-gradient(135deg, var(--rgb-1), var(--rgb-2));
-    border:1px solid color-mix(in srgb,var(--rgb-1) 45%,transparent);
-    border-radius:16px;
-    box-shadow:0 14px 30px -20px var(--rgb-1), inset 0 1px 0 rgba(255,255,255,0.25);
-    display:flex; align-items:center; justify-content:center; gap:9px;
-    transition:transform .18s ease, filter .18s ease, box-shadow .18s ease;
-  }
-  .aig-refresh:hover:not(:disabled) { filter:brightness(1.07); transform:translateY(-1px); }
-  .aig-refresh:active:not(:disabled) { transform:scale(.99); }
-  .aig-refresh:disabled { opacity:.62; cursor:wait; filter:saturate(.7); }
-  @keyframes spin { 100% { transform:rotate(360deg); } }
+  /* the «refresh live data» bar was retired on 2026-10-07: the animated globe
+     in the hero banner is that control now (.gw-hero-refresh in ui.styles.js) */
 
   .aig-connection {
     display:flex; align-items:center; gap:9px; margin-bottom:12px; padding:11px 13px;
@@ -412,7 +400,7 @@ const STYLES = `
   }
   @media (prefers-reduced-motion: reduce) {
     .aig-live.is-working { animation:none; }
-    .aig-tab, .aig-card, .aig-refresh { transition:none; }
+    .aig-tab, .aig-card { transition:none; }
     .aig-card:hover, .aig-tab.active { transform:none; }
   }
 `;
@@ -1508,6 +1496,9 @@ function AiGlobalIntelligenceInner() {
         meterClass={meterClass}
         board={board}
         updatedLabel={loadedAt ? timeAgo(loadedAt, isRTL) : null}
+        /* the globe in the banner IS the refresh control now — the wide bar
+           under the tab rail is gone (2026-10-07). Same forced re-read. */
+        onRefresh={() => load(true)}
       />
 
       <div className="aig-tabs">
@@ -1539,16 +1530,12 @@ function AiGlobalIntelligenceInner() {
           </button>
         ))}
       </div>
-      <button type="button" className="aig-refresh" onClick={() => load(true)} disabled={refreshing}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
-          <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-        </svg>
-        {refreshing ? L('در حال دریافت داده…', 'Reading live data…') : L('به‌روزرسانی داده‌های زنده', 'Refresh live data')}
-      </button>
+      {/* The «refresh live data» bar used to sit here. 2026-10-07: retired —
+          the globe in the banner is that button now (see HeroPanel). */}
       {connectionError ? (
         <div className="aig-connection" role="status">
           <span aria-hidden="true">●</span>
-          <span>{L('ارتباط با سرور برقرار نشد. برای تلاش دوباره، به‌روزرسانی را بزنید.', 'Server connection failed. Tap refresh to try again.')}</span>
+          <span>{L('ارتباط با سرور برقرار نشد. برای تلاش دوباره، کرهٔ بالای صفحه را بزنید.', 'Server connection failed. Tap the globe at the top to try again.')}</span>
         </div>
       ) : null}
 

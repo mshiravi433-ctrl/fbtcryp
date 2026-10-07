@@ -28,7 +28,7 @@ export const GLOBAL_PAGE_STYLES = `
   /* ══ the hero ═════════════════════════════════════════════════════════ */
   .gw-hero {
     position: relative; isolation: isolate; overflow: hidden;
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px;
     margin-bottom: 14px; padding: 18px 16px; border-radius: 28px;
     border: 1px solid color-mix(in srgb, var(--rgb-1) 30%, var(--line));
     background:
@@ -76,8 +76,46 @@ export const GLOBAL_PAGE_STYLES = `
   .gw-kpi b { display: block; font-size: 18px; font-weight: 950; line-height: 1.2; color: var(--text-1); }
   .gw-kpi span { display: block; margin-top: 3px; font-size: 9.5px; font-weight: 750; color: var(--text-3); line-height: 1.5; }
 
-  .gw-hero-art { width: 96px; height: 96px; flex: 0 0 auto; }
-  .gw-orbital { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 14px 28px color-mix(in srgb, var(--rgb-2) 38%, transparent)); }
+  /* ── the globe: TOP-LEFT of the banner, and it IS the refresh control ──
+     2026-10-07: it used to sit vertically centred in the first grid column,
+     which in RTL is the RIGHT side, and the «refresh live data» bar lived
+     under the tab rail. Now the instrument is the button.
+
+     Grid columns run along the inline axis, so "physically left" is the LAST
+     column when dir=rtl and the FIRST when dir=ltr — hence the two mirrors. */
+  .gw-hero-art { width: 96px; align-self: start; }
+  .gw-root[dir='rtl'] .gw-hero { grid-template-columns: minmax(0, 1fr) auto; }
+  .gw-root[dir='rtl'] .gw-hero-art { grid-column: 2; grid-row: 1; justify-self: end; }
+  .gw-root[dir='rtl'] .gw-hero-copy { grid-column: 1; grid-row: 1; }
+  .gw-root[dir='ltr'] .gw-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .gw-root[dir='ltr'] .gw-hero-art { grid-column: 1; grid-row: 1; justify-self: start; }
+  .gw-root[dir='ltr'] .gw-hero-copy { grid-column: 2; grid-row: 1; }
+
+  /* a <button> that must look exactly like the instrument it replaced */
+  .gw-hero-refresh {
+    display: block; min-width: 0; padding: 0; border: 0; border-radius: 50%;
+    background: none; color: inherit; font: inherit; text-align: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: transform .22s cubic-bezier(.4,0,.2,1), opacity .22s ease;
+  }
+  .gw-hero-refresh:hover:not(:disabled) { transform: translateY(-2px) scale(1.03); }
+  .gw-hero-refresh:active:not(:disabled) { transform: scale(.97); }
+  .gw-hero-refresh:focus-visible { outline: 2px solid var(--rgb-2); outline-offset: 4px; }
+  .gw-hero-refresh:disabled { cursor: progress; opacity: .8; }
+  .gw-hero-refresh-hint {
+    display: block; margin-top: 6px; font-size: 8.5px; font-weight: 850; line-height: 1.6;
+    color: var(--text-3); opacity: .7; transition: opacity .2s ease, color .2s ease;
+  }
+  .gw-hero-refresh:hover:not(:disabled) .gw-hero-refresh-hint { opacity: 1; color: var(--rgb-1); }
+  /* a read in flight: the rings and the sweep speed up, so the globe itself
+     says «working» where the retired bar used to spin an icon */
+  .gw-hero-refresh.is-refreshing .gw-spin.s1 { animation-duration: 2.4s; }
+  .gw-hero-refresh.is-refreshing .gw-spin.s2 { animation-duration: 3.2s; }
+  .gw-hero-refresh.is-refreshing .gw-spin.s3 { animation-duration: 1.7s; }
+  .gw-hero-refresh.is-refreshing .gw-sweep { animation-duration: 1.5s; }
+  .gw-hero-refresh.is-refreshing .gw-pulse { animation-duration: 1.3s; }
+
+  .gw-orbital { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(0 14px 28px color-mix(in srgb, var(--rgb-2) 38%, transparent)); }
   .gw-orbital .gw-spin, .gw-orbital .gw-sweep, .gw-orbital .gw-pulse, .gw-orbital .gw-land { transform-box: view-box; }
   .gw-orbital .gw-spin.s1 { animation: gw-rot 17s linear infinite; }
   .gw-orbital .gw-spin.s2 { animation: gw-rot 29s linear infinite reverse; }
@@ -375,7 +413,7 @@ export const GLOBAL_PAGE_STYLES = `
   .gw-cols { display: block; }
   @media (min-width: 560px) {
     .gw-hero { padding: 22px 22px; }
-    .gw-hero-art { width: 128px; height: 128px; }
+    .gw-hero-art { width: 128px; }
     .gw-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .gw-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .gw-tile.wide { grid-column: span 3; }
@@ -391,8 +429,10 @@ export const GLOBAL_PAGE_STYLES = `
   }
   @media (min-width: 900px) {
     .ai-global.gw-root { padding: 18px 28px 40px; }
-    .gw-hero { padding: 28px 34px; grid-template-columns: minmax(0, 1fr) 270px; gap: 24px; border-radius: 32px; }
-    .gw-hero-art { width: 250px; height: 250px; justify-self: center; }
+    .gw-hero { padding: 28px 34px; gap: 24px; border-radius: 32px; }
+    .gw-root[dir='rtl'] .gw-hero { grid-template-columns: minmax(0, 1fr) 270px; }
+    .gw-root[dir='ltr'] .gw-hero { grid-template-columns: 270px minmax(0, 1fr); }
+    .gw-hero-art { width: 250px; }
     .gw-hero-title { font-size: clamp(34px, 3.6vw, 50px); }
     .gw-hero-sub { font-size: 12.5px; }
     .gw-kpi b { font-size: 22px; }
@@ -431,11 +471,12 @@ export const GLOBAL_PAGE_STYLES = `
     .gw-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .gw-tile.wide { grid-column: span 2; }
     .aigw-stations { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
-    .gw-hero-art { width: 280px; height: 280px; }
-    .gw-hero { grid-template-columns: minmax(0, 1fr) 300px; }
+    .gw-hero-art { width: 280px; }
+    .gw-root[dir='rtl'] .gw-hero { grid-template-columns: minmax(0, 1fr) 300px; }
+    .gw-root[dir='ltr'] .gw-hero { grid-template-columns: 300px minmax(0, 1fr); }
   }
   @media (max-width: 420px) {
-    .gw-hero-art { width: 84px; height: 84px; }
+    .gw-hero-art { width: 84px; }
     .gw-tile-value .gw-v { font-size: 19px; }
     .gw-tile.wide .gw-tile-value .gw-v { font-size: 30px; }
     .aigw-bench-bands { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -460,8 +501,8 @@ export const GLOBAL_PAGE_STYLES = `
   @media (prefers-reduced-motion: reduce) {
     .gw-hero-glow, .gw-orbital .gw-spin, .gw-orbital .gw-sweep, .gw-orbital .gw-pulse, .gw-orbital .gw-land, .gw-orbital .gw-tw,
     .gw-live::after, .gw-hero-title::before, .aigw-dom-open { animation: none; }
-    .gw-tile, .gw-msg, .gw-tile-go, .aigw-domrow, .aigw-dom-caret, .aigw-bench-caret { transition: none; }
-    .gw-tile:hover, .gw-msg:hover, .gw-tile:active { transform: none; }
+    .gw-tile, .gw-msg, .gw-tile-go, .aigw-domrow, .aigw-dom-caret, .aigw-bench-caret, .gw-hero-refresh, .gw-hero-refresh-hint { transition: none; }
+    .gw-tile:hover, .gw-msg:hover, .gw-tile:active, .gw-hero-refresh:hover:not(:disabled), .gw-hero-refresh:active:not(:disabled) { transform: none; }
     .gw-orbital .gw-tw { opacity: .7; }
   }
 `;
