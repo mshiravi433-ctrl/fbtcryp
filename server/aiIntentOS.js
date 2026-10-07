@@ -166,6 +166,16 @@ import { composeSocialTurn } from './aiSocial.js';
 import { respondIn } from '../src/lib/intent-ai/os/conversation/languageSense.js';
 import { answerGap, escalateToProviders, ESCALATION_SCHEMA } from './aiEscalation.js';
 import { fetchNews } from './news.js';
+/* Upgrade 14 — the reasoning graph: plan (what data is needed) → tools (the
+   FBT reads this turn actually needs) → N independent models → judge (evidence
+   first, disagreement resolved, dissent kept) → decide → learn. Read-only by
+   construction and strictly additive: when it cannot beat the deterministic
+   reply inside its deadline, the Upgrade-13 escalation ladder below still runs
+   exactly as before. */
+import { orchestratorEnabled, ORCHESTRATOR_SCHEMA } from './aiOrchestrator.js';
+/* The process-level orchestrator singleton lives with its routes (that is
+   where `_setOrchestrator` lets a probe or an operator swap it). */
+import { getOrchestrator } from './aiOrchestratorRoutes.js';
 
 const router = Router();
 
@@ -1672,6 +1682,7 @@ router.post('/chat', async (req, res) => {
   if (!message.trim()) return res.status(400).json({ ok: false, error: 'EMPTY_MESSAGE' });
   /* Only this route asks for a semantic recall — it is the only one where a
      human is waiting for an answer that could use it. */
+  const turnStartedAt = Date.now();
   const context = await buildAIContext(req, req.body || {}, { longTermQuery: message });
   const locale = safe(req.body?.locale, 5) || null;
   const conversationId = safe(req.body?.conversationId, 64) || null;
@@ -2181,6 +2192,7 @@ router.post('/chat', async (req, res) => {
    *     escalation can only improve an answer, never replace one with silence
    */
   let escalation = null;
+  let orchestration = null;
   const gap = answerGap({
     message,
     text: finalText,
@@ -2192,15 +2204,63 @@ router.post('/chat', async (req, res) => {
     socialHandled: Boolean(socialTurn.handled)
   });
   if (gap.escalate) {
-    escalation = await escalateToProviders({
-      message,
-      locale: socialTurn.social?.lang || u5.social?.lang || locale || 'fa',
-      context,
-      exclude: [...new Set([...(collaboration?.providersUsed || []), ...(llm?.provider ? [llm.provider] : [])])],
-      taskType: u5.taskTypes?.includes('market') ? 'market' : 'general'
-    }).catch(() => null);
-    if (escalation?.ok && String(escalation.answer || '').trim().length > 20) {
-      finalText = escalation.answer;
+    /*
+     * ─── UPGRADE 14 — THE GAP IS FILLED BY EVIDENCE FIRST, MODELS SECOND ────
+     * The ladder below asks the fleet whether anyone can answer. This step
+     * does the thing the ladder was missing: it decides WHICH FACTS the turn
+     * needs, reads them with FBT's own tools, then asks the models to reason
+     * over those facts and hands their disagreement to a judge.
+     *
+     * Order of preference, and why:
+     *   1. the orchestrator — because it can produce a grounded answer with a
+     *      stated confidence, or honestly abstain;
+     *   2. the escalation ladder — unchanged, for the turns where the graph
+     *      produced nothing usable (no provider, budget spent, abstaining);
+     *   3. the deterministic reply — which always stands underneath both.
+     * A turn is never worse than it was before this block existed.
+     */
+    if (orchestratorEnabled()) {
+      try {
+        /* The graph gets a slice of the TURN, not a budget of its own: the
+           escalation ladder below must still have room if the graph abstains
+           or runs out of it. So the graph is capped by both the configured
+           chat budget and whatever is left of the turn after the ladder's
+           floor is reserved. */
+        const ladderFloorMs = Number(process.env.AI_ESCALATION_DEADLINE_MS || 9000);
+        const chatBudgetMs = Number(process.env.AI_ORCH_CHAT_DEADLINE_MS || 8000);
+        const elapsedMs = Date.now() - turnStartedAt;
+        const roomForLadder = Math.max(2500, 26000 - ladderFloorMs - elapsedMs);
+        orchestration = await getOrchestrator().run({
+          message,
+          context,
+          entities: u4?.entities || {},
+          intentType: human.intent?.type || intent || 'GENERAL',
+          owner: ownerFor(req),
+          clientData: { wallet: context.wallet || null, portfolio: context.portfolio || null },
+          locale: socialTurn.social?.lang || u5.social?.lang || locale || 'fa',
+          deadlineMs: Math.max(2500, Math.min(chatBudgetMs, roomForLadder))
+        });
+      } catch (err) {
+        logInternal('orchestrator-error', { error: String(err?.message || err).slice(0, 160) });
+        orchestration = null;
+      }
+      if (orchestration?.answer && String(orchestration.answer).trim().length > 20) {
+        finalText = orchestration.answer;
+      } else {
+        orchestration = orchestration ? { ...orchestration, used: false } : null;
+      }
+    }
+    if (!orchestration?.answer) {
+      escalation = await escalateToProviders({
+        message,
+        locale: socialTurn.social?.lang || u5.social?.lang || locale || 'fa',
+        context,
+        exclude: [...new Set([...(collaboration?.providersUsed || []), ...(llm?.provider ? [llm.provider] : [])])],
+        taskType: u5.taskTypes?.includes('market') ? 'market' : 'general'
+      }).catch(() => null);
+      if (escalation?.ok && String(escalation.answer || '').trim().length > 20) {
+        finalText = escalation.answer;
+      }
     }
   }
 
@@ -2266,7 +2326,26 @@ router.post('/chat', async (req, res) => {
         providersTried: (escalation.tried || []).map((t) => ({ provider: t.provider, status: t.status })),
         gapReasons: gap.reasons || [],
         executionAuthorized: false
-      } : (gap.reasons?.length ? { used: 0, gapReasons: gap.reasons, executionAuthorized: false } : null)
+      } : (gap.reasons?.length ? { used: 0, gapReasons: gap.reasons, executionAuthorized: false } : null),
+      /* Upgrade 14 — what the reasoning graph did on this turn: which facts it
+         read, how many models were consulted, what the judge decided and how
+         confident it was. Present only when the graph actually ran, so nothing
+         changes for existing turns. */
+      orchestrator: orchestration ? {
+        schema: ORCHESTRATOR_SCHEMA,
+        used: Boolean(orchestration.answer),
+        decision: orchestration.decision || null,
+        confidence: orchestration.confidence ?? null,
+        band: orchestration.band || null,
+        answerSource: orchestration.answerSource || null,
+        evidence: (orchestration.evidence || []).map((e) => ({ facet: e.facetId, tool: e.tool, status: e.status })),
+        seats: (orchestration.seats || []).filter((s) => s.ok).map((s) => s.provider),
+        seatErrors: orchestration.seatErrors || [],
+        dissent: (orchestration.dissent || []).length,
+        limits: (orchestration.limits || []).map((l) => l.code),
+        latencyMs: orchestration.latencyMs || 0,
+        executionAuthorized: false
+      } : null
     },
     ui: human.ui,
     card: human.card || tokenCard,

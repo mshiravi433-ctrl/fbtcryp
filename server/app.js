@@ -225,6 +225,7 @@ import { aiConfigured, aiProvider, aiSelfTest, answerSupportQuestion, generateMa
 import { getAvailableProviders, getFleetSummary, getProviderHealth, normalizeSecretValue } from './aiGateway.js';
 import aiCommandRoutes from './aiCommand.js';
 import aiIntentOSRoutes from './aiIntentOS.js';
+import aiOrchestratorRoutes from './aiOrchestratorRoutes.js';
 import intentOsUpgrade8Routes from './intentOsUpgrade8.js';
 import { createCentralIntelligence } from './ci/api.js';
 import { createFinancialIntelligence } from './fios/index.js';
@@ -6424,6 +6425,19 @@ app.use('/api/v1/ai/os', intentOsUpgrade8Routes);
  * the execute endpoint returns a real venue/wallet hand-off.
  */
 app.use('/api/v1/ai', aiIntentOSRoutes);
+
+/* --------- FBT AI ORCHESTRATOR — reasoning graph (Upgrade 14) --------- */
+/*
+ * Additive by construction: the orchestration endpoints (plan / run / judge /
+ * memory / learning) live under the SAME prefix and the SAME rate budget as the
+ * AI gateway above, and they add nothing to it — no existing route is renamed,
+ * moved or re-implemented. The graph is read-only: it plans which facts a turn
+ * needs, reads them through the FBT tool broker, asks N independent models,
+ * judges the disagreement with evidence first, and records what it learned.
+ * It cannot sign, approve or execute, and its chat integration falls back to
+ * the previous behaviour whenever it cannot produce something better.
+ */
+app.use('/api/v1/ai', aiOrchestratorRoutes);
 
 /* ----------------- FBT CENTRAL INTELLIGENCE OS — the central brain ---------------- */
 /*
