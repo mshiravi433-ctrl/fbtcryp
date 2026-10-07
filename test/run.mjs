@@ -1893,6 +1893,14 @@ console.log('\n▸ checking body scroll lock…');
 }
 
 /*
+ * Serverless cold starts must never install a background probe loop. This
+ * deterministic timer-injection test runs without importing the Express app or
+ * making any network calls.
+ */
+console.log('\n▸ checking serverless background evidence scheduling…');
+await import('./intent-background-evidence-probe.mjs');
+
+/*
  * Wiring audit — pure file analysis, no bundler or DOM needed, so it runs
  * first and fails fast. Catches the class of bug where everything renders and
  * the build is green but a button does nothing or shows a raw key.

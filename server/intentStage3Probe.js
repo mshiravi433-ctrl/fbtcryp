@@ -54,7 +54,10 @@ export const STAGE3_KINDS = Object.freeze([
   'bridge-provider'
 ]);
 
-const TTL_MS = 24 * 3600_000;
+// Daily cron refresh plus a two-hour grace window for scheduler delays.
+// Manual/API probes keep a 24-hour lifetime; the daily cron passes 26 hours.
+const DEFAULT_TTL_HOURS = 24;
+const HOUR_MS = 3600_000;
 const MIN_INTERVAL_MS = 60_000;
 const QUOTE_DEADLINE_MS = 8_000;
 const STORE_TIMEOUT_MS = 8_000;
@@ -104,13 +107,13 @@ function withDeadline(promise, ms, code) {
   ]);
 }
 
-function evidenceRecord({ kind, providerId, digest, now }) {
+function evidenceRecord({ kind, providerId, digest, now, ttlHours = DEFAULT_TTL_HOURS }) {
   return {
     kind,
     providerId,
     digest,
     checkedAt: now,
-    expiresAt: now + TTL_MS,
+    expiresAt: now + ttlHours * HOUR_MS,
     status: 'verified',
     health: 'healthy',
     attested: true
@@ -195,7 +198,7 @@ async function readAcceptedReview() {
   }
 }
 
-export async function acceptSignedReview(body = {}, { now = Date.now() } = {}) {
+export async function acceptSignedReview(body = {}, { now = Date.now(), ttlHours = DEFAULT_TTL_HOURS } = {}) {
   const reviewerId = String(body?.reviewerId || '').trim();
   const signatureHex = String(body?.signature || '').trim().toLowerCase();
   const algorithm = String(body?.algorithm || 'Ed25519').trim();
@@ -253,7 +256,8 @@ export async function acceptSignedReview(body = {}, { now = Date.now() } = {}) {
     kind: 'independent-security-review',
     providerId: reviewerId,
     digest,
-    now
+    now,
+    ttlHours
   });
   const checked = normalizeEvidence(record, { now });
   if (!checked.ok) return { ok: false, code: checked.code || 'EVIDENCE_MALFORMED' };
@@ -292,7 +296,7 @@ export async function handleStage3Review(req, res) {
   }
 }
 
-async function probeIndependentReview({ now }) {
+async function probeIndependentReview({ now, ttlHours }) {
   const digest = reviewPackageDigest();
   const stored = await readAcceptedReview();
   if (!stored) {
@@ -308,7 +312,7 @@ async function probeIndependentReview({ now }) {
     signed: true,
     algorithm: stored.algorithm || 'Ed25519',
     signature: stored.signature
-  }, { now });
+  }, { now, ttlHours });
   if (!replay.ok) {
     return missing(
       'independent-security-review',
@@ -380,7 +384,7 @@ export function productionSignerStatus() {
   };
 }
 
-async function probeProductionSigner({ now }) {
+async function probeProductionSigner({ now, ttlHours }) {
   const mutated = policyBoundSign({ ...AUTHORIZED_ENVELOPE, value: '999999999' });
   if (mutated.ok === true) {
     return missing('production-signer', 'SIGNER_REJECTS_MUTATED_ENVELOPE', 'Policy-bound signer accepted a mutated envelope.');
@@ -429,7 +433,7 @@ async function probeProductionSigner({ now }) {
     providerId,
     digest,
     checkedAt: now,
-    expiresAt: now + TTL_MS
+    expiresAt: now + ttlHours * HOUR_MS
   }, { now });
   if (!verdict.ok) return missing('production-signer', verdict.code || 'SIGNER_WITHOUT_POLICY');
   return {
@@ -457,7 +461,7 @@ function guardianPublicId() {
   return `g-${sha256Bytes(spki).slice(0, 16)}`;
 }
 
-function probeSmartWalletAndGuardian({ now }) {
+function probeSmartWalletAndGuardian({ now, ttlHours }) {
   const userId = 'intent-user';
   const guardianId = guardianPublicId();
   if (guardianId === userId) {
@@ -554,13 +558,14 @@ function probeSmartWalletAndGuardian({ now }) {
     providerId: 'policy-smart-wallet',
     digest,
     checkedAt: now,
-    expiresAt: now + TTL_MS
+    expiresAt: now + ttlHours * HOUR_MS
   }, { now });
   const guardianVerdict = normalizeEvidence(evidenceRecord({
     kind: 'independent-guardian',
     providerId: 'process-guardian',
     digest,
-    now
+    now,
+    ttlHours
   }), { now });
 
   return {
@@ -575,7 +580,7 @@ function probeSmartWalletAndGuardian({ now }) {
 
 /* ── broker ─────────────────────────────────────────────────────────────── */
 
-function probeBroker({ now }) {
+function probeBroker({ now, ttlHours }) {
   const handle = 'trade-only-local';
   bindBrokerHandle(handle, { withdrawals: false });
   const withdraw = brokerSubmit({
@@ -609,7 +614,7 @@ function probeBroker({ now }) {
     attested: true,
     health: 'healthy',
     checkedAt: now,
-    expiresAt: now + TTL_MS
+    expiresAt: now + ttlHours * HOUR_MS
   }, { now });
   if (!verdict.ok) return missing('broker-provider', verdict.code || 'PROVIDER_HEALTH_FAILURE');
   return {
@@ -624,7 +629,7 @@ function probeBroker({ now }) {
 
 /* ── bridge (live deBridge, never the simulated helper) ─────────────────── */
 
-async function probeBridge({ now }) {
+async function probeBridge({ now, ttlHours }) {
   try {
     const quoted = await withDeadline(
       dlnQuote({
@@ -653,7 +658,7 @@ async function probeBridge({ now }) {
       attested: true,
       health: 'healthy',
       checkedAt: now,
-      expiresAt: now + TTL_MS
+      expiresAt: now + ttlHours * HOUR_MS
     }, { now });
     if (!verdict.ok) return missing('bridge-provider', verdict.code || 'PROVIDER_HEALTH_FAILURE');
     return {
@@ -733,13 +738,14 @@ export function ensureStage3Hydrated({ now = Date.now() } = {}) {
   return hydration;
 }
 
-export async function runStage3Probe({ now = Date.now(), store = true } = {}) {
+export async function runStage3Probe({ now = Date.now(), store = true, ttlHours = DEFAULT_TTL_HOURS } = {}) {
+  const probeOptions = { now, ttlHours };
   const [review, signer, walletPair, broker, bridge] = await Promise.all([
-    probeIndependentReview({ now }),
-    probeProductionSigner({ now }),
-    Promise.resolve(probeSmartWalletAndGuardian({ now })),
-    Promise.resolve(probeBroker({ now })),
-    probeBridge({ now })
+    probeIndependentReview(probeOptions),
+    probeProductionSigner(probeOptions),
+    Promise.resolve(probeSmartWalletAndGuardian(probeOptions)),
+    Promise.resolve(probeBroker(probeOptions)),
+    probeBridge(probeOptions)
   ]);
 
   const rows = {

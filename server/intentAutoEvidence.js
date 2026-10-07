@@ -1,8 +1,9 @@
 /**
  * FBT INTENT AI — Auto-evidence collector.
  *
- * On server start (and periodically), refreshes the public evidence snapshot
- * for the operational facts this process can VERIFY BY ITSELF.
+ * On the authenticated daily cron (or an explicitly opted-in long-lived
+ * server), refreshes the public evidence snapshot for operational facts this
+ * process can VERIFY BY ITSELF.
  *
  * The hard rule, and the reason this file was rewritten:
  *
@@ -46,7 +47,9 @@
 
 import { createHash } from 'node:crypto';
 
-const EVIDENCE_TTL = 5 * 3600_000; // 5 hours
+/* The Vercel daily cron refreshes this local snapshot once per day; keep a
+   small grace window so minor schedule delays do not drop it between runs. */
+const EVIDENCE_TTL = 26 * 3600_000; // 26 hours
 
 /* Kinds this process is allowed to attest on its own. Anything outside this
    list is an external attestation and is never self-issued. */
@@ -143,7 +146,8 @@ export async function collectLocalEvidence({ now = Date.now() } = {}) {
 
 /**
  * Auto-inject collected evidence into the store.
- * Called on server start and periodically.
+ * Called from the authenticated daily cron and, when explicitly enabled,
+ * the long-lived server's periodic worker.
  */
 export async function autoInjectEvidence() {
   try {
@@ -153,12 +157,14 @@ export async function autoInjectEvidence() {
       // Update global registry for cross-module access
       globalThis.__fbtOperatorEvidence = evidence;
 
-      // Also update the in-memory evidence store
+      // Store the whole snapshot with one durable write, not one Blob write per
+      // record. This collector runs from the once-daily Vercel cron.
       try {
-        const { autoStoreEvidence } = await import('./intentOperatorEvidence.js');
+        const evidenceStore = await import('./intentOperatorEvidence.js');
         for (const ev of evidence) {
-          autoStoreEvidence(ev);
+          evidenceStore.autoStoreEvidence(ev, { persist: false });
         }
+        await evidenceStore.persistOperatorEvidence();
       } catch { /* store not available yet */ }
     }
 

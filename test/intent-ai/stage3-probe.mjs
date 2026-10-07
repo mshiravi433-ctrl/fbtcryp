@@ -54,6 +54,8 @@ check('SELF_PROBE_KINDS stays at 4 measurable kinds', SELF_PROBE_KINDS.length ==
 
 const dry = await runStage3Probe({ store: false });
 check('schema is the live probe schema', dry.schema === 'fbt.stage3-probe.v1');
+check('manual stage-3 probes keep the 24-hour default TTL',
+  dry.earned.every((record) => record.expiresAt === dry.checkedAt + 24 * 3600_000));
 check('independent-security-review is never self-issued',
   !dry.earned.some((e) => e.kind === 'independent-security-review'));
 check('independent review stays SECURITY_REVIEW_NOT_INDEPENDENT',
@@ -177,7 +179,9 @@ check('verifyIndependentReview accepts the allowlisted reviewer',
   verifyIndependentReview({ independent: true, signed: true, reviewerId: 'acme-audit' }).ok === true);
 
 resetStage3ProbeCache();
-const afterReview = await runStage3Probe({ store: false });
+const afterReview = await runStage3Probe({ store: false, ttlHours: 26 });
+check('daily cron can extend stage-3 evidence to 26 hours',
+  afterReview.earned.every((record) => record.expiresAt === afterReview.checkedAt + 26 * 3600_000));
 check('probe earns independent-security-review only after a signed intake',
   afterReview.earned.some((e) => e.kind === 'independent-security-review' && e.providerId === 'acme-audit'));
 check('the review evidence digest is the current package',

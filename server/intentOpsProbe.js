@@ -103,8 +103,8 @@ export function ensureOpsHydrated({ now = Date.now() } = {}) {
   return hydration;
 }
 
-export async function runOpsProbe({ now = Date.now(), store = true } = {}) {
-  const drills = await runAllOperationalDrills({ now });
+export async function runOpsProbe({ now = Date.now(), store = true, ttlHours = 6 } = {}) {
+  const drills = await runAllOperationalDrills({ now, ttlHours });
   const earned = drills.earned;
 
   let persistence = { persisted: false, code: 'NOT_ATTEMPTED' };

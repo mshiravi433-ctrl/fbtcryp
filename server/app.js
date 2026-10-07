@@ -442,6 +442,7 @@ import {
 } from './intentLaterPhaseProbe.js';
 import { venueHealthEvidence, probeAllVenues, venueHealthStatus } from './intentVenueHealth.js';
 import { bridgeProviderEvidence, bridgeStatus as intentBridgeStatus, getBridgeQuote } from './intentBridgeQuote.js';
+import { startIntentBackgroundEvidence } from './intentBackgroundEvidence.js';
 
 /*
  * normalizeBotToken(): a trailing newline, stray spaces, wrapping quotes or an
@@ -7283,6 +7284,8 @@ async function readFcmTokensSafe() {
  * (VAPID) or FCM by the device's identity. A wiring check asserts it stays
  * passed here so the fix cannot regress into a silent feature removal.
  */
+const DAILY_EVIDENCE_TTL_HOURS = 26;
+
 app.get('/api/cron/daily', async (req, res) => {
   if (!cronAuthorized(req)) return res.status(401).json({ error: 'UNAUTHORIZED' });
   /*
@@ -7305,18 +7308,19 @@ app.get('/api/cron/daily', async (req, res) => {
    * Both are settled, never awaited into the failure path: a registry chore
    * must not be able to stop the daily notifications from going out.
    */
-  /* Evidence freshness. On Vercel the only re-runs happen at cold start, so a
-     5–6 h TTL would silently drop an activated release back to partial before
-     the next deployment. Re-verify the four measurable kinds, the four
-     operational drills and the stage-3 kinds here, on the existing daily
-     slot — self-verifiable facts only, never a manufactured record. Each run
-     rebuilds the durable snapshot through the normal store. */
+  /* Evidence refresh belongs on this once-daily, authenticated Vercel cron,
+     not on every serverless cold start. Give these records a 26-hour lifetime
+     (one day plus a small scheduling grace period); explicit manual probes
+     retain their shorter default TTLs. */
   await Promise.all([
     ensureOperatorEvidenceHydrated().catch(() => {}),
     ensureHydrated().catch(() => {}),
     ensureOpsHydrated().catch(() => {}),
     ensureStage3Hydrated().catch(() => {})
   ]);
+  await import('./intentAutoEvidence.js')
+    .then(({ autoInjectEvidence }) => autoInjectEvidence())
+    .catch(() => []);
   const [web, fcm, watch, monitors, smartMoneyAlerts, certs, reputation, selfProbe, opsProbe, stage3] = await Promise.allSettled([
     sendDailyPromo(),
     sendDailyFcm(),
@@ -7326,9 +7330,9 @@ app.get('/api/cron/daily', async (req, res) => {
       deliverStagePush(endpoint, { title: payload.title, body: payload.body, url: payload.url, tag: payload.tag, lang })),
     sweepCertifications(),
     getReputationSnapshot({ force: true }),
-    runSelfProbe({}),
-    runOpsProbe({}),
-    runStage3Probe({})
+    runSelfProbe({ ttlHours: DAILY_EVIDENCE_TTL_HOURS, certTtlHours: DAILY_EVIDENCE_TTL_HOURS }),
+    runOpsProbe({ ttlHours: DAILY_EVIDENCE_TTL_HOURS }),
+    runStage3Probe({ ttlHours: DAILY_EVIDENCE_TTL_HOURS })
   ]);
   const settled = (result, shape) => result.status === 'fulfilled' ? shape(result.value) : { error: String(result.reason).slice(0, 120) };
   res.json({
@@ -7537,78 +7541,50 @@ app.get('/api/cron/train', async (req, res) => {
  * nothing loses its static layer by keeping the reference out of app.js.
  */
 
-/* ── Wave 2: Auto-evidence collection on server start ─────────────────── */
-/* Collects REAL evidence from local services and registers them in-memory.
-   Non-blocking: runs in background, never delays server startup.
-   Only runs in production (Vercel or explicit opt-in) — never in tests. */
-if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
-  setTimeout(() => {
-    import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
-      autoInjectEvidence().then((evidence) => {
-        if (typeof process.stdout.write === 'function') {
-          console.log(`[activation] self-verified ${evidence?.length || 0}/21 evidence kinds; the remainder require operator injection`);
-        }
-      }).catch(() => {});
-    }).catch(() => {});
+/*
+ * Process-local evidence refreshes are useful on a dedicated, long-lived Node
+ * host, but they do not belong in a serverless function: importing this shared
+ * app on every Vercel cold start used to launch five probes and install a
+ * four-hour timer in every warm instance. Vercel instead runs the measurable
+ * evidence checks from the authenticated /api/cron/daily route; all probe
+ * routes remain available for an explicit operator check.
+ *
+ * Set INTENT_BACKGROUND_EVIDENCE=1 only on a long-lived non-Vercel server if
+ * the periodic worker is wanted. The scheduler itself hard-disables on Vercel.
+ */
+async function refreshIntentBackgroundEvidence() {
+  await Promise.all([
+    ensureHydrated().catch(() => {}),
+    ensureOpsHydrated().catch(() => {}),
+    ensureStage3Hydrated().catch(() => {})
+  ]);
 
-    /* The four measurable kinds are earned by the deployment itself. Boot is
-       the earliest honest moment to try: the TLS and venue probes need only
-       network access, while SLO and audit stay unearned until there is real
-       traffic and a durable store. Failures are silent by design — an
-       unreachable venue must not make the process noisy or unhealthy. */
-    import('./intentSelfProbe.js').then(({ runSelfProbe, ensureHydrated: hydrate }) => {
-      hydrate().catch(() => {});
-      runSelfProbe({}).then((report) => {
-        console.log(`[activation] self-probe earned ${report.earnedCount}/${report.totalKinds} measurable kinds`);
-      }).catch(() => {});
-    }).catch(() => {});
+  let localEvidence = [];
+  try {
+    const { autoInjectEvidence } = await import('./intentAutoEvidence.js');
+    localEvidence = await autoInjectEvidence();
+  } catch { /* diagnostics must never affect API traffic */ }
 
-    /* The four operational drills actually write, restore, isolate and hash.
-       Boot is the earliest honest moment; failures stay silent. */
-    import('./intentOpsProbe.js').then(({ runOpsProbe, ensureOpsHydrated: hydrateOps }) => {
-      hydrateOps().catch(() => {});
-      runOpsProbe({}).then((report) => {
-        console.log(`[activation] ops-probe earned ${report.earnedCount}/${report.totalKinds} operational drills`);
-      }).catch(() => {});
-    }).catch(() => {});
+  const results = await Promise.allSettled([
+    runSelfProbe({}),
+    runOpsProbe({}),
+    runStage3Probe({}),
+    runLaterPhaseProbe({})
+  ]);
+  if (typeof process.stdout.write !== 'function') return;
 
-    /* Stage 3: policy-bound signer, guardian, broker, live bridge quote.
-       independent-security-review stays missing until a signed intake lands. */
-    import('./intentStage3Probe.js').then(({ runStage3Probe, ensureStage3Hydrated: hydrateStage3 }) => {
-      hydrateStage3().catch(() => {});
-      runStage3Probe({}).then((report) => {
-        console.log(`[activation] stage3-probe earned ${report.earnedCount}/${report.totalKinds} kinds`);
-      }).catch(() => {});
-    }).catch(() => {});
-
-    /* Later-phase 31–100: in-process proofs only. Never stored as 21/21 kinds. */
-    import('./intentLaterPhaseProbe.js').then(({ runLaterPhaseProbe: runLater }) => {
-      runLater({}).then((report) => {
-        console.log(`[activation] later-phase proven ${report.provenCount}/${report.totalChecks} checks; launchAllowed=false`);
-      }).catch(() => {});
-    }).catch(() => {});
-
-    /* Re-collect every 4 hours to keep evidence fresh */
-    const timer = setInterval(() => {
-      import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
-        autoInjectEvidence().catch(() => {});
-      }).catch(() => {});
-      import('./intentSelfProbe.js').then(({ runSelfProbe }) => {
-        runSelfProbe({}).catch(() => {});
-      }).catch(() => {});
-      import('./intentOpsProbe.js').then(({ runOpsProbe }) => {
-        runOpsProbe({}).catch(() => {});
-      }).catch(() => {});
-      import('./intentStage3Probe.js').then(({ runStage3Probe }) => {
-        runStage3Probe({}).catch(() => {});
-      }).catch(() => {});
-      import('./intentLaterPhaseProbe.js').then(({ runLaterPhaseProbe: runLater }) => {
-        runLater({}).catch(() => {});
-      }).catch(() => {});
-    }, 4 * 3600_000);
-    if (timer.unref) timer.unref();
-  }, 200);
+  console.log(`[activation] self-verified ${localEvidence?.length || 0}/21 local evidence kinds; the remainder require operator injection`);
+  const labels = ['self-probe', 'ops-probe', 'stage3-probe', 'later-phase'];
+  results.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return;
+    const report = result.value;
+    const count = report?.earnedCount ?? report?.provenCount ?? 0;
+    const total = report?.totalKinds ?? report?.totalChecks ?? 0;
+    console.log(`[activation] ${labels[index]} earned ${count}/${total}`);
+  });
 }
+
+startIntentBackgroundEvidence({ collect: refreshIntentBackgroundEvidence });
 
 import { businessFinanceRouter } from './businessFinance.js';
 import { structuredProductsRouter } from './structuredProducts.js';

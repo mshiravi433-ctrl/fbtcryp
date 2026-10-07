@@ -88,7 +88,7 @@ function fail(code, detail = {}) {
  * monotonic nonce, the wall clock, and a digest of the files that make up
  * the Intent OS policy surface. Nothing secret is written.
  */
-export async function runBackupRestoreDrill({ now = Date.now() } = {}) {
+export async function runBackupRestoreDrill({ now = Date.now(), ttlHours = 6 } = {}) {
   const started = now;
   let snapshot;
   try {
@@ -158,7 +158,8 @@ export async function runBackupRestoreDrill({ now = Date.now() } = {}) {
       kind: 'backup-restore-drill',
       providerId: 'local-backup-store',
       digest: backupHash,
-      now
+      now,
+      ttlHours
     })
   };
 }
@@ -185,7 +186,7 @@ function hashPolicySurface() {
  * the restored artifact matches the previous snapshot and the process is
  * still healthy.
  */
-export async function runRollbackDrill({ now = Date.now() } = {}) {
+export async function runRollbackDrill({ now = Date.now(), ttlHours = 6 } = {}) {
   const good = {
     schema: 'fbt.release-snapshot.v1',
     version: 'good',
@@ -263,7 +264,8 @@ export async function runRollbackDrill({ now = Date.now() } = {}) {
       kind: 'rollback-drill',
       providerId: 'local-release-plane',
       digest,
-      now
+      now,
+      ttlHours
     })
   };
 }
@@ -357,7 +359,7 @@ function runVmSandbox() {
   }
 }
 
-export async function runSandboxOperatorDrill({ now = Date.now() } = {}) {
+export async function runSandboxOperatorDrill({ now = Date.now(), ttlHours = 6 } = {}) {
   let isolated = await spawnIsolatedChild();
   if (!isolated.ok) {
     isolated = runVmSandbox();
@@ -382,7 +384,7 @@ export async function runSandboxOperatorDrill({ now = Date.now() } = {}) {
       String(now)
     ),
     checkedAt: now,
-    expiresAt: now + 6 * HOUR
+    expiresAt: now + ttlHours * HOUR
   };
 
   const verdict = verifySandboxOperator(input, { now });
@@ -403,7 +405,8 @@ export async function runSandboxOperatorDrill({ now = Date.now() } = {}) {
       kind: 'sandbox-operator',
       providerId: 'node-isolated-sandbox',
       digest: input.digest,
-      now
+      now,
+      ttlHours
     })
   };
 }
@@ -580,7 +583,7 @@ async function observeOnChainContract({
   }
 }
 
-export async function runPolicyContractDrill({ now = Date.now() } = {}) {
+export async function runPolicyContractDrill({ now = Date.now(), ttlHours = 6 } = {}) {
   const local = readFeeRouterArtifact();
   if (!local.ok) {
     return fail(local.code, local.detail || {});
@@ -612,7 +615,7 @@ export async function runPolicyContractDrill({ now = Date.now() } = {}) {
     expectedCodeHash: local.expectedCodeHash,
     observedCodeHash: onChain?.ok ? local.expectedCodeHash : local.expectedCodeHash,
     checkedAt: now,
-    expiresAt: now + 6 * HOUR
+    expiresAt: now + ttlHours * HOUR
   }, { now });
 
   if (!verdict.ok) {
@@ -627,7 +630,7 @@ export async function runPolicyContractDrill({ now = Date.now() } = {}) {
     providerId: 'compiled-FeeRouter',
     digest: local.expectedCodeHash,
     checkedAt: now,
-    expiresAt: now + 6 * HOUR,
+    expiresAt: now + ttlHours * HOUR,
     attested: true,
     status: 'verified',
     health: 'healthy'
@@ -654,7 +657,8 @@ export async function runPolicyContractDrill({ now = Date.now() } = {}) {
       kind: 'policy-contract',
       providerId: 'compiled-FeeRouter',
       digest: local.expectedCodeHash,
-      now
+      now,
+      ttlHours
     })
   };
 }
@@ -668,11 +672,11 @@ export const OPS_DRILL_KINDS = Object.freeze([
   'policy-contract'
 ]);
 
-export async function runAllOperationalDrills({ now = Date.now() } = {}) {
-  const backup = await runBackupRestoreDrill({ now });
-  const rollback = await runRollbackDrill({ now });
-  const sandbox = await runSandboxOperatorDrill({ now });
-  const policy = await runPolicyContractDrill({ now });
+export async function runAllOperationalDrills({ now = Date.now(), ttlHours = 6 } = {}) {
+  const backup = await runBackupRestoreDrill({ now, ttlHours });
+  const rollback = await runRollbackDrill({ now, ttlHours });
+  const sandbox = await runSandboxOperatorDrill({ now, ttlHours });
+  const policy = await runPolicyContractDrill({ now, ttlHours });
 
   const byKind = {
     'backup-restore-drill': backup,

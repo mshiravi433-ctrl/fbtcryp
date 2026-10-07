@@ -102,6 +102,7 @@
     "test:goal-pipeline": "node test/intent-ai/goal-pipeline-probe.mjs",
     "test:autonomy-cards": "vite build -c test/vite.autonomycards.mjs --logLevel error && node test/run-one-probe.mjs ./.out/autonomycards/autonomy-cards-probe.js",
     "test:ops-drills": "node test/intent-ai/ops-drill-probe.mjs",
+    "test:background-evidence": "node test/intent-background-evidence-probe.mjs",
     "test:stage3": "node test/intent-ai/stage3-probe.mjs",
     "test:later-phase": "node test/intent-ai/later-phase-probe.mjs",
     "test:navigation": "node test/intent-ai/chat-navigation-probe.mjs",

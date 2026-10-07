@@ -458,9 +458,10 @@ export function getStoredEvidence({ now = Date.now(), env = process.env } = {}) 
 
 /**
  * Auto-store evidence (bypasses dual-operator auth — for local service collection only).
- * Used by intentAutoEvidence.js on server start and periodically.
+ * Used by intentAutoEvidence.js from the daily cron or an opted-in
+ * long-lived server worker.
  */
-export function autoStoreEvidence(record) {
+export function autoStoreEvidence(record, { persist = true } = {}) {
   if (!record || !record.kind || !EVIDENCE_KINDS.includes(record.kind)) return;
   if (record.expiresAt <= Date.now()) return;
   /* A self-collected heartbeat must never overwrite a reviewed record that an
@@ -492,8 +493,9 @@ export function autoStoreEvidence(record) {
   getStoredEvidence();
 
   /* Self-collected records are still part of the snapshot; persist them so a
-     cold instance can restore them without waiting for the next boot scan. */
-  persistOperatorEvidence().catch(() => {});
+     cold instance can restore them. Batch collectors may defer this write
+     until the complete snapshot has been assembled. */
+  if (persist) persistOperatorEvidence().catch(() => {});
 }
 
 /**

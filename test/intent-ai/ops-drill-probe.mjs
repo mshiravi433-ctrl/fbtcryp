@@ -130,8 +130,11 @@ const ops = await runOpsProbe({ store: true });
 check('ops-probe earns all four drill kinds', ops.earnedCount === 4 && ops.missing.length === 0);
 check('ops-probe never emits a kind it did not earn', ops.earned.every((e) => OPS_DRILL_KINDS.includes(e.kind) && /^[0-9a-f]{64}$/.test(e.digest)));
 
-const aggregate = await runAllOperationalDrills();
+const aggregateNow = Date.now();
+const aggregate = await runAllOperationalDrills({ now: aggregateNow, ttlHours: 26 });
 check('aggregate reports one entry per kind', Object.keys(aggregate.byKind).length === 4);
+check('the daily cron can give drill evidence a 26-hour refresh window',
+  aggregate.earned.every((record) => record.expiresAt === aggregateNow + 26 * 3600_000));
 for (const record of aggregate.earned) {
   check(`ops-probe ${record.kind} normalizes to verified`, normalizeEvidence(record).ok === true);
 }
