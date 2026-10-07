@@ -299,132 +299,134 @@ export default function Market() {
 
       {isOffline && <div className="notice">{t('common.offlineData')}</div>}
 
-      {/* ---------- global market card ---------- */}
-      <motion.section
-        className="card card-rgb card-glow-cyan"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-      >
-        <div className="sheen" />
-        <div className="row-between" style={{ marginBottom: 10 }}>
-          <div>
-            <div className="faint">{t('market.totalMcap')}</div>
-            <div className="stat-value">
-              <AnimatedNumber value={global?.mcap ?? 0} format={(v) => fmtCompact(v)} />
-            </div>
-          </div>
-          <span className={`pill ${(global?.mcapChange ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`}>
-            {fmtPct(global?.mcapChange ?? 0, 2)}
-          </span>
-        </div>
-
-        <div className="grid-3">
-          <div>
-            <div className="faint">{t('market.volume24h')}</div>
-            <div className="mono" style={{ fontSize: 13 }}>{fmtCompact(global?.volume ?? 0)}</div>
-          </div>
-          <div>
-            <div className="faint">{t('market.btcDominance')}</div>
-            <div className="mono" style={{ fontSize: 13 }}>{(global?.btcDominance ?? 0).toFixed(2)}%</div>
-          </div>
-          <div>
-            <div className="faint">{t('market.ethDominance')}</div>
-            <div className="mono" style={{ fontSize: 13 }}>{(global?.ethDominance ?? 0).toFixed(2)}%</div>
-          </div>
-        </div>
-
-        <div className="progress" style={{ marginTop: 12 }}>
-          <motion.div
-            className="progress-fill"
-            initial={{ width: 0 }}
-            animate={{ width: `${global?.btcDominance ?? 50}%` }}
-            transition={{ duration: 1, ease: 'easeOut' }}
-          />
-        </div>
-
-        {/*
-          7-day shape of the total. Reported as: "does the global market
-          card not need a chart?" It did. Five figures about right now, with no
-          way to see whether the number was climbing or falling into them.
-
-          The series is rebuilt from the loaded coins, not fetched: there is no
-          free historical endpoint for total market cap. The caption names the
-          coins and the method, because a chart that looks authoritative while
-          covering only the top of the book is worse than none.
-        */}
-        {trend && (
-          <div className="market-trend" data-testid="global-market-trend">
-            <div className="market-trend-head">
-              <span className="faint">
-                {t('market.trendTitle', {
-                  defaultValue: `Total market cap · ${trend.days} days`,
-                  days: trend.days
-                })}
-              </span>
-              <span className={`mono ${trend.changePct >= 0 ? 'up' : 'down'}`}>
-                {fmtPct(trend.changePct, 2)}
-              </span>
-            </div>
-            <TrendChart
-              points={trend.points}
-              height={76}
-              up={trend.changePct >= 0}
-              formatValue={(v) => fmtCompact(v)}
-              testId="global-market-trend-chart"
-            />
-            <p className="faint market-trend-note">
-              {t('market.trendNote', {
-                defaultValue: 'Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window.',
-                n: trend.coins
-              })}
-            </p>
-          </div>
-        )}
-      </motion.section>
-
-      <motion.div className="grid-3" variants={stagger} initial="hidden" animate="show">
-        <StatTile label={t('market.coins')} value={fmtNum(global?.coins ?? 0)} />
-        <StatTile label={t('market.markets')} value={fmtNum(global?.markets ?? 0)} />
-        <StatTile
-          label={t('market.avgChange')}
-          value={fmtPct(global?.avgChange ?? 0, 2)}
-          tone={(global?.avgChange ?? 0) >= 0 ? 'up' : 'down'}
-        />
-      </motion.div>
-
-      {/* ---------- hero coin ---------- */}
-      {hero && (
+      <div className={`market-overview${hero ? ' has-hero' : ''}`}>
+        {/* ---------- global market card ---------- */}
         <motion.section
-          className="card"
+          className="card card-rgb card-glow-cyan market-global-card"
           variants={riseIn}
           initial="hidden"
           animate="show"
-          onClick={() => navigate(`/coin/${hero.id}`)}
-          style={{ cursor: 'pointer' }}
         >
-          <div className="row-between">
-            <div className="row">
-              <CoinLogo coin={hero} />
-              <div>
-                <div style={{ fontWeight: 700 }}>{hero.name}</div>
-                <div className="faint">{hero.symbol} / {vs.toUpperCase()}</div>
+          <div className="sheen" />
+          <div className="row-between" style={{ marginBottom: 10 }}>
+            <div>
+              <div className="faint">{t('market.totalMcap')}</div>
+              <div className="stat-value">
+                <AnimatedNumber value={global?.mcap ?? 0} format={(v) => fmtCompact(v)} />
               </div>
             </div>
-            <div style={{ textAlign: 'end' }}>
-              <div className="stat-mini">
-                <AnimatedNumber value={hero.price} format={(v) => fmtUsd(v)} />
-              </div>
-              <div className={`mono ${hero.change24h >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
-                {fmtPct(hero.change24h)}
-              </div>
+            <span className={`pill ${(global?.mcapChange ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`}>
+              {fmtPct(global?.mcapChange ?? 0, 2)}
+            </span>
+          </div>
+
+          <div className="grid-3">
+            <div>
+              <div className="faint">{t('market.volume24h')}</div>
+              <div className="mono" style={{ fontSize: 13 }}>{fmtCompact(global?.volume ?? 0)}</div>
+            </div>
+            <div>
+              <div className="faint">{t('market.btcDominance')}</div>
+              <div className="mono" style={{ fontSize: 13 }}>{(global?.btcDominance ?? 0).toFixed(2)}%</div>
+            </div>
+            <div>
+              <div className="faint">{t('market.ethDominance')}</div>
+              <div className="mono" style={{ fontSize: 13 }}>{(global?.ethDominance ?? 0).toFixed(2)}%</div>
             </div>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <Sparkline data={hero.sparkline ?? []} up={hero.change24h >= 0} width={470} height={64} strokeWidth={2} />
+
+          <div className="progress" style={{ marginTop: 12 }}>
+            <motion.div
+              className="progress-fill"
+              initial={{ width: 0 }}
+              animate={{ width: `${global?.btcDominance ?? 50}%` }}
+              transition={{ duration: 1, ease: 'easeOut' }}
+            />
           </div>
+
+          {/*
+            7-day shape of the total. Reported as: "does the global market
+            card not need a chart?" It did. Five figures about right now, with no
+            way to see whether the number was climbing or falling into them.
+
+            The series is rebuilt from the loaded coins, not fetched: there is no
+            free historical endpoint for total market cap. The caption names the
+            coins and the method, because a chart that looks authoritative while
+            covering only the top of the book is worse than none.
+          */}
+          {trend && (
+            <div className="market-trend" data-testid="global-market-trend">
+              <div className="market-trend-head">
+                <span className="faint">
+                  {t('market.trendTitle', {
+                    defaultValue: `Total market cap · ${trend.days} days`,
+                    days: trend.days
+                  })}
+                </span>
+                <span className={`mono ${trend.changePct >= 0 ? 'up' : 'down'}`}>
+                  {fmtPct(trend.changePct, 2)}
+                </span>
+              </div>
+              <TrendChart
+                points={trend.points}
+                height={76}
+                up={trend.changePct >= 0}
+                formatValue={(v) => fmtCompact(v)}
+                testId="global-market-trend-chart"
+              />
+              <p className="faint market-trend-note">
+                {t('market.trendNote', {
+                  defaultValue: 'Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window.',
+                  n: trend.coins
+                })}
+              </p>
+            </div>
+          )}
         </motion.section>
-      )}
+
+        <motion.div className="grid-3 market-stat-grid" variants={stagger} initial="hidden" animate="show">
+          <StatTile label={t('market.coins')} value={fmtNum(global?.coins ?? 0)} />
+          <StatTile label={t('market.markets')} value={fmtNum(global?.markets ?? 0)} />
+          <StatTile
+            label={t('market.avgChange')}
+            value={fmtPct(global?.avgChange ?? 0, 2)}
+            tone={(global?.avgChange ?? 0) >= 0 ? 'up' : 'down'}
+          />
+        </motion.div>
+
+        {/* ---------- hero coin ---------- */}
+        {hero && (
+          <motion.section
+            className="card market-hero-card"
+            variants={riseIn}
+            initial="hidden"
+            animate="show"
+            onClick={() => navigate(`/coin/${hero.id}`)}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className="row-between">
+              <div className="row">
+                <CoinLogo coin={hero} />
+                <div>
+                  <div style={{ fontWeight: 700 }}>{hero.name}</div>
+                  <div className="faint">{hero.symbol} / {vs.toUpperCase()}</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'end' }}>
+                <div className="stat-mini">
+                  <AnimatedNumber value={hero.price} format={(v) => fmtUsd(v)} />
+                </div>
+                <div className={`mono ${hero.change24h >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
+                  {fmtPct(hero.change24h)}
+                </div>
+              </div>
+            </div>
+            <div className="market-hero-chart" style={{ marginTop: 10 }}>
+              <Sparkline data={hero.sparkline ?? []} up={hero.change24h >= 0} width={470} height={64} strokeWidth={2} />
+            </div>
+          </motion.section>
+        )}
+      </div>
 
       <AdBanner slot="signals" />
 
@@ -455,7 +457,7 @@ export default function Market() {
       )}
 
       {/* ---------- list ---------- */}
-      <section>
+      <section className="market-list-section">
         <div className="row-between" style={{ alignItems: 'center' }}>
           <p className="section-label" style={{ margin: 0 }}>{t('market.allCoins')}</p>
           <button
@@ -511,7 +513,7 @@ export default function Market() {
         </div>
 
         {loading && !list.length ? (
-          <div className="stack">
+          <div className="stack market-coin-grid">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="skel" style={{ height: 58 }} />
             ))}
@@ -522,7 +524,7 @@ export default function Market() {
             {sectorLoading ? t('market.loadingSector') : sector ? t('market.sectorEmpty') : searching ? t('market.searching') : t('market.noResults')}
           </div>
         ) : (
-          <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
+          <motion.div className="stack market-coin-grid" variants={stagger} initial="hidden" animate="show">
             {list.slice(0, visibleCount).map((c, i) => {
               /*
                 ─── ONE TAP, TWO ANSWERS ───────────────────────────────────
@@ -542,7 +544,7 @@ export default function Market() {
               const resolved = !curated && venue?.tradeable ? venueRoute({ ...venue }) : null;
               const swapUrl = curated ? swapUrlFor(c.id, 'buy') : resolved?.href ?? null;
               return (
-                <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+                <div key={c.id} className="row market-coin-row" style={{ gap: 8, alignItems: 'center' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <CoinRow coin={c} rank={c.rank || i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
                   </div>
@@ -564,7 +566,7 @@ export default function Market() {
             })}
 
             {(list.length > visibleCount || (!sector && filter === 'all' && !query && !pageDone && coins.length >= MARKET_PAGE_SIZE)) && (
-              <button type="button" className="tag" disabled={pageLoading}
+              <button type="button" className="tag market-show-more" disabled={pageLoading}
                 onClick={() => (list.length > visibleCount ? setVisibleCount((n) => n + 60) : loadNextPage())}>
                 {pageLoading ? t('market.loadingSector') : t('market.showMore', { count: Math.max(0, list.length - visibleCount) || 250 })}
               </button>
@@ -578,7 +580,7 @@ export default function Market() {
                   const resolved = !curated && venue?.tradeable ? venueRoute({ ...venue }) : null;
                   const swapUrl = curated ? swapUrlFor(c.id, 'buy') : resolved?.href ?? null;
                   return (
-                    <div key={c.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+                    <div key={c.id} className="row market-coin-row" style={{ gap: 8, alignItems: 'center' }}>
                       <button
                         className="coin-row"
                         onClick={() => navigate(`/coin/${c.id}`)}

@@ -6794,23 +6794,22 @@ a.wallet-option,
 }
 
 /* ---------------------------------------------------------------------------
-   DESKTOP / WIDE SCREENS
+   TABLET / DESKTOP SHELL
 
-   The shell is capped at 520px, which is right on a phone and looks like a
-   mistake on a 1920px monitor - a narrow strip of app floating in empty space.
-   Now that the manifest allows installation as a desktop PWA, that is the
-   first impression on Windows, macOS and ChromeOS.
-
-   Deliberately NOT a rewrite into a multi-column desktop layout. That would
-   mean maintaining two designs and re-testing every screen, and this app's
-   users are overwhelmingly on phones. This widens the column, centres it
-   properly, and makes the fixed bottom nav stop stretching edge-to-edge -
-   cheap changes that remove the "phone app stuck in a browser" feeling
-   without creating a second layout to keep in sync.
+   Keep the phone layout exactly as-is. From tablet widths upward, let the
+   shell and its page gutters use the available space; at desktop widths the
+   Market overview and coin list also adopt purpose-built multi-column grids.
+   The fixed bottom navigation remains a centred dock rather than stretching
+   across the wider content area.
    --------------------------------------------------------------------------- */
 @media (min-width: 900px) {
   .app-shell {
-    max-width: 680px;
+    max-width: min(1280px, calc(100% - 48px));
+  }
+
+  .page:not(.page--global) {
+    padding: 20px clamp(28px, 3vw, 52px) 38px;
+    gap: 18px;
   }
 
   /* The nav is position:fixed, so it spans the whole viewport unless it is
@@ -6842,7 +6841,8 @@ a.wallet-option,
      with the column and the nav below it.
      --------------------------------------------------------------------- */
   .top-bar {
-    max-width: 680px;
+    width: 100%;
+    max-width: min(1280px, calc(100% - 48px));
     margin-inline: auto;
     /* env() repeated here on purpose: this block re-writes the shorthand, and
        a wide-screen iPad launched from its home-screen icon has a real inset. */
@@ -6856,34 +6856,33 @@ a.wallet-option,
   }
 }
 
-/* Large desktop: a little wider still, but capped. Beyond ~760px a single
-   column of financial rows becomes hard to scan - the eye loses the line. */
+/* Large desktop: keep comfortable outer margins while allowing dashboards and
+   the Market's two-column rows to breathe. The floating nav stays dock-sized. */
 @media (min-width: 1400px) {
   .app-shell,
-  .bottom-nav,
   .top-bar {
-    max-width: 760px;
+    max-width: min(1440px, calc(100% - 96px));
   }
+
+  .bottom-nav { max-width: 760px; }
 }
 
 /* ==========================================================================
-   WIDE PAGES — the Global (جهانی) page
+   WIDE PAGES — the Global (جهانی) dashboard
    --------------------------------------------------------------------------
-   «نه جمع شده». Every page above is a phone column on purpose: a list of
-   rows stops being scannable past ~760px. The Global page is the exception —
-   a dashboard of panels — so AppChrome tags its shell `app-shell--wide` and
-   the column opens up instead of leaving a narrow strip in the middle of a
-   wide screen. The console switches to two columns at 900px on its own
-   (GLOBAL_PAGE_STYLES), so this width is used, not just stretched.
+   Every route now grows from its original phone layout into a wider tablet and
+   desktop shell. The Global page is a panel dashboard and receives the
+   roomiest route-specific cap; its own layout switches to two columns at 900px
+   (GLOBAL_PAGE_STYLES), so the extra width is used rather than merely stretched.
 
    Specificity (two classes) beats the plain `.app-shell` / `.top-bar` rules in
-   every breakpoint above, whatever order they appear in. The bottom nav keeps
-   its own width: it is a dock, and a dock stays centred.
+   every breakpoint above. The bottom nav keeps its own dock width and remains
+   centred beneath the wider page.
    ========================================================================== */
 @media (min-width: 600px) and (max-width: 899px) {
   .app-shell.app-shell--wide,
   .app-shell.app-shell--wide .top-bar {
-    max-width: 760px;
+    max-width: 820px;
   }
 }
 @media (min-width: 900px) {
@@ -7026,9 +7025,11 @@ a.wallet-option,
         tapped card stays lit. Gating them behind `(hover: hover)` is the fix,
         and it also means a mouse gets richer feedback than a finger.
 
-   Deliberately NOT a multi-column desktop redesign. Two layouts means two sets
-   of bugs and two sets of screenshots, and the users are overwhelmingly on
-   phones. This makes one column scale honestly across all three form factors.
+   Do not force every route into the same multi-column template. The shared
+   shell opens up at tablet and desktop widths; dashboards and card grids opt
+   into wider layouts where that space improves scanning, while focused flows
+   keep their existing reading order. All new reflows are gated above phone
+   widths so the established mobile sizing remains unchanged.
    ========================================================================== */
 
 /* ---- Small phones (iPhone SE, 320–360px) --------------------------------- */
@@ -7043,10 +7044,22 @@ a.wallet-option,
 /* ---- Tablet portrait: iPad 768/810/834, Android 800 ---------------------- */
 @media (min-width: 600px) and (max-width: 899px) {
   .app-shell,
-  .bottom-nav,
   .top-bar {
+    max-width: 820px;
+    margin-inline: auto;
+  }
+  /* Auto margins centre the header at this breakpoint; keep its box stretched
+     to the available shell width rather than shrink-wrapping its contents. */
+  .top-bar { width: 100%; }
+
+  .bottom-nav {
     max-width: 600px;
     margin-inline: auto;
+  }
+
+  .page:not(.page--global) {
+    padding: 16px clamp(18px, 3vw, 30px) 30px;
+    gap: 16px;
   }
 
   /* A step between phone and desktop: the bar keeps the base phone sizing
@@ -15257,6 +15270,83 @@ button.settings-quick-action {
 .market-swap-btn:hover { filter: brightness(1.08); }
 .market-swap-btn:active { transform: scale(.94); }
 :root[data-theme='light'] .market-swap-btn { color: #fff; }
+
+/* ─── RESPONSIVE MARKET DASHBOARD ─────────────────────────────────────────
+   Preserve the phone's one-column reading order. As soon as there is desktop
+   room, pair the global snapshot with its metrics and hero coin, then use two
+   equal, min-width-safe columns for the market rows. */
+.market-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.market-overview > * { min-width: 0; }
+.market-coin-grid { gap: 8px; }
+.market-coin-row { min-width: 0; }
+.market-coin-grid > .section-label { grid-column: 1 / -1; }
+
+@media (min-width: 900px) {
+  .market-overview.has-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.28fr) minmax(320px, .9fr);
+    grid-template-areas: "global stats" "global hero";
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .market-global-card {
+    grid-area: global;
+    min-width: 0;
+    height: 100%;
+    padding: clamp(20px, 2vw, 30px);
+  }
+
+  .market-stat-grid {
+    grid-area: stats;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-self: stretch;
+    gap: 12px;
+  }
+  .market-stat-grid > * { min-width: 0; }
+
+  .market-hero-card {
+    grid-area: hero;
+    min-width: 0;
+    height: 100%;
+    padding: clamp(16px, 1.6vw, 22px);
+  }
+  .market-hero-chart svg { display: block; width: 100%; height: auto; }
+  .market-trend-note { max-width: 76ch; font-size: 10px; }
+
+  .market-coin-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 12px;
+  }
+  .market-coin-row { min-width: 0; align-items: stretch; }
+  .market-coin-row > div { flex: 1; min-width: 0; }
+  .market-coin-row .coin-row {
+    width: 100%;
+    min-width: 0;
+    padding: 12px 10px;
+    gap: 8px;
+  }
+  .market-coin-row .coin-meta { min-width: 0; }
+  .market-coin-row .coin-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .market-coin-row .market-swap-btn { padding-inline: 10px; }
+  .market-coin-grid > .section-label,
+  .market-show-more { grid-column: 1 / -1; }
+  .market-show-more { justify-self: center; width: min(100%, 260px); }
+}
+
+@media (min-width: 1400px) {
+  .market-overview.has-hero { grid-template-columns: minmax(0, 1.35fr) minmax(400px, .85fr); }
+  .market-stat-grid { gap: 14px; }
+  .market-coin-grid { gap: 14px; }
+  .market-coin-row .coin-row { padding: 14px 12px; gap: 11px; }
+}
 
 /* ─── THE STICKY SWAP DOCK TAKES THE NAV'S PLACE ──────────────────────────
    The dock and the nav are never both on screen (useSwapDockStore), so the

@@ -46,6 +46,9 @@ import './solana-deeplink-probe.mjs';
    channel ids in server/fcm.js, and the local-notification path agreeing.
    A chain with one missing link is silent, so all of it is asserted. */
 import './notification-sound-probe.mjs';
+/* The Market dashboard and Intent OS scale up only at tablet/desktop widths,
+   while the established mobile shell and page gutters remain pinned. */
+import './responsive-layout-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the

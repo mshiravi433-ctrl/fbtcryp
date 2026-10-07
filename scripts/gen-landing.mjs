@@ -3530,6 +3530,10 @@ ${
     .lib-flagship .card-arrow { display: none; }
     .post-index-item { grid-template-columns: auto minmax(0, 1fr); }
     .cluster-dir-grid { grid-template-columns: minmax(0, 1fr); }
+    /* The library and its topic directory are unusually tall on phones. Let
+       readers see them as soon as they scroll there instead of requiring a
+       minimum intersection ratio the viewport may never reach. */
+    html.js .library-panel, html.js .cluster-dir { opacity: 1; transform: none; visibility: visible; }
     .post-index-item .card-arrow { display: none; }
     .howto-list::before { display: none; }
     .howto-list li { grid-template-columns: 1fr; gap: 12px; }
@@ -3706,11 +3710,14 @@ ${
       els.forEach(function (el) { el.classList.add('in'); });
       return;
     }
+    /* Large library sections can be taller than a phone viewport; a nonzero
+       threshold may leave them hidden forever because the whole panel never
+       intersects in the required proportion. Reveal on first entry instead. */
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
       });
-    }, { threshold: 0.06, rootMargin: '0px 0px -7% 0px' });
+    }, { threshold: 0, rootMargin: '0px 0px -7% 0px' });
     els.forEach(function (el) { io.observe(el); });
   })();
 </script>

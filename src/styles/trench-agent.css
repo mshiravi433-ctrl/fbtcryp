@@ -1342,3 +1342,21 @@ html[lang='fa'] .iaos-title-sub {
   color: #1f2937;
 }
 
+/*
+ * Tablet/desktop Intent OS width. The chat deliberately stays phone-sized on
+ * phones; wider viewports use the shell the app now provides and give the
+ * conversation and execution cards room to follow it instead of leaving a
+ * narrow 620px island in the middle of a monitor.
+ */
+@media (min-width: 600px) and (max-width: 899px) {
+  .iaos-page.tag-page .iaos-shell { width: min(760px, calc(100% - 32px)); }
+  .iaos-page.tag-page .iaos-bubble { max-width: min(88%, 720px); }
+  .iaos-page.tag-page .iaos-exec-card { max-width: 760px; }
+}
+
+@media (min-width: 900px) {
+  .iaos-page.tag-page .iaos-shell { width: min(1160px, calc(100% - 48px)); }
+  .iaos-page.tag-page .iaos-bubble { max-width: min(88%, 920px); }
+  .iaos-page.tag-page .iaos-exec-card { max-width: 940px; }
+}
+

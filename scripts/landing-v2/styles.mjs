@@ -590,6 +590,34 @@ html[dir="rtl"] .card .go { transform: scaleX(-1); }
 .stamp { position: absolute; inset-block-start: 14px; inset-inline-end: 14px; }
 
 /* vertical AI pipeline */
+.intent-flow-column { min-width: 0; }
+.intent-visual {
+  display: none; position: relative; isolation: isolate; aspect-ratio: 16 / 8.8;
+  margin: 0 0 15px; overflow: hidden; border: 1px solid rgba(132, 157, 218, .24);
+  border-radius: 21px; background: #080b1a; box-shadow: 0 18px 44px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+.intent-visual img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: .78; }
+.intent-visual-shade { position: absolute; inset: 0; z-index: 1; background: linear-gradient(110deg, rgba(7, 10, 24, .12), rgba(7, 10, 24, .06) 46%, rgba(7, 10, 24, .44)), linear-gradient(0deg, rgba(5, 8, 20, .36), transparent 54%); pointer-events: none; }
+.intent-visual-svg { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; pointer-events: none; }
+.intent-art-ring { fill: none; stroke: rgba(112, 230, 255, .32); stroke-width: 1; stroke-dasharray: 2 8; }
+.intent-art-ring-outer { stroke: rgba(183, 156, 255, .2); stroke-dasharray: 1 11; }
+.intent-art-path { fill: none; stroke: url(#intent-route-gradient); stroke-width: 1.7; stroke-linecap: round; stroke-dasharray: 2 11; }
+.intent-art-path-alt { opacity: .6; }
+.intent-art-node { fill: #8bf6d5; opacity: .78; transform-box: fill-box; transform-origin: center; animation: intent-node-breathe 5.8s ease-in-out infinite; }
+.intent-art-node-2 { animation-delay: -1.3s; }
+.intent-art-node-3 { fill: #80eaff; animation-delay: -2.7s; }
+.intent-art-node-4 { fill: #c2a9ff; animation-delay: -4.1s; }
+.intent-art-core-glow { fill: rgba(106, 234, 255, .08); stroke: rgba(106, 234, 255, .62); stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: intent-core-breathe 5s ease-in-out infinite; }
+.intent-art-core { fill: #9ef9e5; stroke: rgba(245, 255, 255, .86); stroke-width: 1.5; }
+@keyframes intent-node-breathe { 0%, 100% { opacity: .54; } 50% { opacity: .92; } }
+@keyframes intent-core-breathe { 0%, 100% { transform: scale(.96); opacity: .68; } 50% { transform: scale(1.08); opacity: .94; } }
+@media (min-width: 1000px) { .intent-visual { display: block; } }
+@media (hover: none), (max-width: 999px) {
+  .intent-art-path, .intent-art-node, .intent-art-core-glow { animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intent-art-path, .intent-art-node, .intent-art-core-glow { animation: none; }
+}
 .flow { position: relative; display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
 .flow li {
   position: relative; display: flex; align-items: center; gap: 14px;
