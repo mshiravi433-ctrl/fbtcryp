@@ -814,12 +814,12 @@
     "path": "Partnership path",
     "stats": {
       "networks": {
-        "value": "10",
+        "value": "{{count}}",
         "label": "Active networks",
-        "sub": "BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche · Linea · Sonic · Solana"
+        "sub": "{{evmCount}} сети EVM · Solana"
       },
       "fee": {
-        "value": "0.10%",
+        "value": "{{fee}}%",
         "label": "Transparent fee",
         "sub": "Shown before signing"
       },
@@ -840,7 +840,7 @@
       },
       "revenue": {
         "title": "Transparent revenue",
-        "body": "The 0.10% builder fee on notional is shown to the user before signing on every supported trading screen."
+        "body": "The {{fee}} builder fee on notional is shown before signing on supported trading screens."
       }
     },
     "steps": {
@@ -2070,7 +2070,22 @@
   },
   "sm": {
     "checking": "Connecting…",
-    "offlineShort": "Offline"
+    "offlineShort": "Offline",
+    "engine": {
+      "pipeline": {
+        "chainDesc": "Candidates come from a public operator registry or sampled stablecoin activity. History is read from Blockscout where available, with configured explorer APIs as fallback; a label does not prove who controls a wallet.",
+        "ledgerDesc": "A swap is admitted only when one successful transaction contains exactly one target-token leg and one allowlisted USD-stablecoin leg, plus a recognized router or swap method. Failed, ambiguous, unpaired and unknown-quote flows are excluded.",
+        "scoreDesc": "Closed-trade results are reconstructed from the loaded history. Scoring needs at least five closed swaps across two days and core-factor coverage; qualification also requires score ≥70, positive realized P&L and win rate ≥55%. This is a sample, not lifetime or future performance.",
+        "consensusDesc": "A token consensus needs at least three independent, performance-qualified wallets with paired swaps. Below that threshold the result stays insufficient-evidence; it is not a zero-flow finding or a price forecast.",
+        "intentDesc": "This hand-off creates a monitor or alert in Intent OS. It does not submit a trade or request a wallet signature; any transaction remains a separate, user-reviewed action.",
+        "chainBadge": "Indexed sources",
+        "ledgerBadge": "Swap verification",
+        "scoreBadge": "Sample qualification",
+        "consensusBadge": "Independent wallets",
+        "intentBadge": "Monitoring hand-off",
+        "step": "Step {{step}} of {{total}}"
+      }
+    }
   },
   "iranBuy": {
     "unavailableBody": "This Wallex Toman checkout is not live on this server yet. The tab is here so Iranian users can find it; no payment is taken until settlement is actually configured."
@@ -2709,6 +2724,68 @@
         "t": "Комиссия платится на входе и выходе",
         "d": "Точная разбивка показывается до подтверждения, а весь ордер строит и проверяет на риски это же приложение — после чего вы подписываете его своим кошельком. Приложение никогда не хранит ваши средства и ключи."
       }
+    }
+  },
+  "secCenter": {
+    "systemNote": "Статус основан на ограниченных проверках источников, выполненных этим экземпляром API. Это не оценка безопасности контракта, и транзакции не блокируются.",
+    "coverage": "{{covered}} / {{total}}",
+    "compBasis": {
+      "infrastructure": "RPC-чтения получили ответ в {{healthy}} из {{total}} поддерживаемых EVM-сетей. Доступность RPC не является вердиктом безопасности.",
+      "contractMonitoring": "Чтение байткода настроенного wrapped-токена получило ответ в {{healthy}} из {{total}} сетей. Это не проверяет исходный код и все контракты.",
+      "protocolMonitoring": "Ответили {{healthy}} из {{total}} лент каталога протоколов и инцидентов. Пустой журнал не доказывает отсутствие инцидентов.",
+      "threatMonitoring": "За последние 24 часа: {{alerts}} строк оповещений; лента инцидентов {{feedState}}. Доступность ленты не означает отсутствия риска.",
+      "dataProviders": "API-ключи обозревателей настроены для {{healthy}} из {{total}} сетей; без ключа индексированная история или проверка исходного кода может быть недоступна."
+    },
+    "feedState": {
+      "available": "доступен",
+      "unavailable": "недоступен",
+      "unknown": "не проверялся"
+    },
+    "protocolCatalog": "Live protocol catalog",
+    "protocolCatalogNote": "Catalog metadata and TVL come from DeFiLlama; they are not an audit or safety certification.",
+    "protocolCatalogCount": "{{shown}} shown · {{total}} listed",
+    "protocolCatalogSearch": "Search protocol name or slug",
+    "protocolCatalogEmpty": "No protocols match this search.",
+    "protocolCatalogLoadMore": "Load more protocols",
+    "protocolRiskDetails": "Protocol risk evidence",
+    "protocolSelectNote": "Choose a protocol from the catalog to load its latest available risk evidence.",
+    "protocolTvl": "Reported TVL",
+    "protocolVolume": "24h volume",
+    "protocolChange1d": "24h TVL change",
+    "protocolChange7d": "7d TVL change",
+    "protocolAudits": "Audits listed",
+    "protocolChains": "Chains",
+    "protocolSource": "Open protocol website",
+    "protocolDetailUnavailable": "Risk data for this protocol is unavailable. Missing data is not a clean result.",
+    "probeLatency": "{{ms}} мс",
+    "comp": {
+      "infrastructure": "Инфраструктура данных",
+      "contractMonitoring": "Мониторинг контрактов",
+      "protocolMonitoring": "Мониторинг протоколов",
+      "threatMonitoring": "Мониторинг угроз",
+      "dataProviders": "Поставщики данных"
+    }
+  },
+  "eco": {
+    "flow": {
+      "walletDesc": "Connect a self-custody wallet; its keys and final transaction signature stay under your control.",
+      "fbtDesc": "Choose assets and network, review the available quote and disclosed fee before signing.",
+      "intelligenceDesc": "The swap engine queries supported quote sources concurrently and compares usable results.",
+      "liquidityDesc": "Available providers vary by network and current reachability; quote-only sources cannot become signed transactions.",
+      "blockchainDesc": "Your wallet submits the selected transaction on its destination network; FBT does not custody funds.",
+      "verificationDesc": "The app reads the transaction receipt/status and updates the swap record; this is not a guarantee of finality.",
+      "executorReady": "Fee-ready execution",
+      "executorSetup": "Execution needs setup",
+      "quoteOnly": "Quote only",
+      "noProviderData": "No provider status has been observed yet.",
+      "networkCoverage": "{{count}} сетей в метаданных маршрутизаторов",
+      "providerChains": "Заявлено сетей: {{count}}",
+      "routeNote": "Доступность провайдера проверяется глобально; числа по сетям ниже учитывают только недавние проверки котировок именно в этой сети. Заявленная поддержка сети — это метаданные, а не обещание доступности каждого провайдера или маршрута. Приложение сравнивает полученные котировки; пользователь проверяет и подписывает транзакцию в кошельке.",
+      "providerCount": "Показано провайдеров: {{count}}; поддержка маршрутов зависит от сети и запроса.",
+      "networkProbeEvidence": "У {{ready}} из {{supported}} заявленных провайдеров есть успешная проверка котировки в этой сети (снимок проверок).",
+      "providerProbeChains": "Последняя проверка котировки ответила в сетях: {{networks}}",
+      "noRecentProbe": "Нет недавней успешной проверки котировки для этой сети",
+      "registryNetworkCount": "В метаданных маршрутизаторов указано {{count}} из {{total}} зарегистрированных сетей"
     }
   }
 }

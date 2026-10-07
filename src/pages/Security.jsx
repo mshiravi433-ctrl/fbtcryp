@@ -155,7 +155,7 @@ function useIntel(loader, deps, { intervalMs = 0, auto = true } = {}) {
 /* -------------------------------------------------------------------------- */
 
 function componentTone(status) {
-  if (!status) return 'status-starting';
+  if (!status || status === 'STARTING' || status === 'INSUFFICIENT_EVIDENCE') return 'status-starting';
   if (status.startsWith('OPERATIONAL') && !status.includes('GAPS')) return 'status-operational';
   if (status.includes('PARTIAL')) return 'status-degraded';
   if (status === 'IMPAIRED') return 'status-impaired';
@@ -203,38 +203,60 @@ function DashboardSection() {
             <IconRefresh width={14} height={14} className={overview.loading ? 'intel-spin' : undefined} />
           </button>
         </div>
-        {d?.system?.note && <p className="faint" style={{ fontSize: 10.8, margin: '10px 2px 0', lineHeight: 1.65 }}>{d.system.note}</p>}
+        {d?.system && <p className="faint" style={{ fontSize: 10.8, margin: '10px 2px 0', lineHeight: 1.65 }}>{t('secCenter.systemNote')}</p>}
         <MetaLine meta={overview.data?.meta} />
-        {overview.error && <ErrorState code={intelErrorCode(overview.error)} onRetry={overview.reload} t={t} />}
       </motion.section>
+
+      {overview.loading && !d && <LoadingState />}
+      {overview.error && !d && <ErrorState code={intelErrorCode(overview.error)} onRetry={overview.reload} t={t} />}
+      {!overview.loading && !overview.error && !d && <EmptyState icon="◷" title={t('intel.noData')} note={t('secCenter.systemNote')} />}
 
       {d && (
         <motion.section className="stack" style={{ gap: 8 }} variants={riseIn} initial="hidden" animate="show">
-          {(d.components || []).map((c) => (
-            <div key={c.key} className="intel-component">
-              <div className="intel-component-head">
-                <span style={{ fontWeight: 700, fontSize: 12.6 }}>{t(`secCenter.comp.${c.key}`)}</span>
-                <span className="row" style={{ gap: 8 }}>
-                  <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: c.score == null ? 'var(--text-3)' : c.score >= 90 ? 'var(--up)' : c.score >= 60 ? 'var(--rgb-5)' : 'var(--down)' }}>
-                    {c.score == null ? <span className="faint">—</span> : c.score}
-                    {c.score != null && <span className="faint" style={{ fontSize: 10 }}> /100</span>}
+          {(d.components || []).map((c) => {
+            const coverage = c.coverage || null;
+            const formatNumber = (value) => new Intl.NumberFormat(i18n.language || 'en').format(Number(value) || 0);
+            const feedStateKey = !coverage?.observed
+              ? 'unknown'
+              : coverage.healthy >= coverage.total ? 'available' : 'unavailable';
+            const basis = t(`secCenter.compBasis.${c.key}`, {
+              defaultValue: c.basis || t('intel.noData'),
+              healthy: formatNumber(coverage?.healthy ?? c.evidence ?? 0),
+              total: formatNumber(coverage?.total ?? 0),
+              alerts: formatNumber(c.evidence ?? 0),
+              feedState: t(`secCenter.feedState.${feedStateKey}`)
+            });
+            return (
+              <div key={c.key} className="intel-component">
+                <div className="intel-component-head">
+                  <span style={{ fontWeight: 700, fontSize: 12.6 }}>{t(`secCenter.comp.${c.key}`)}</span>
+                  <span className="row" style={{ gap: 8 }}>
+                    <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: c.score == null ? 'var(--text-3)' : c.score >= 90 ? 'var(--up)' : c.score >= 60 ? 'var(--rgb-5)' : 'var(--down)' }}>
+                      {c.score == null ? <span className="faint">—</span> : c.score}
+                      {c.score != null && <span className="faint" style={{ fontSize: 10 }}> /100</span>}
+                    </span>
+                    <span className={`pill pill-neutral ${componentTone(c.status)}`} style={{ fontSize: 9.5 }}>
+                      {t(`secCenter.status.${String(c.status).split(' ')[0]}`, c.status)}
+                    </span>
                   </span>
-                  <span className={`pill pill-neutral ${componentTone(c.status)}`} style={{ fontSize: 9.5 }}>
-                    {t(`secCenter.status.${String(c.status).split(' ')[0]}`, c.status)}
-                  </span>
-                </span>
+                </div>
+                <div className="intel-pct-track" role="presentation">
+                  <span
+                    style={{
+                      width: `${c.score == null ? 0 : c.score}%`,
+                      background: c.score == null ? 'var(--text-3)' : c.score >= 90 ? 'var(--up)' : c.score >= 60 ? 'var(--rgb-5)' : 'var(--down)'
+                    }}
+                  />
+                </div>
+                <div className="intel-component-evidence">
+                  {coverage && <span>{t('secCenter.coverage', { covered: formatNumber(coverage.healthy), total: formatNumber(coverage.total) })}</span>}
+                  {c.latencyMs != null && <span>{t('secCenter.probeLatency', { ms: formatNumber(c.latencyMs) })}</span>}
+                  {c.lastCheckedAt && <span>{timeAgo(Date.parse(c.lastCheckedAt), i18n.language)}</span>}
+                </div>
+                <p className="faint" style={{ fontSize: 10.8, margin: '7px 0 0', lineHeight: 1.6 }}>{basis}</p>
               </div>
-              <div className="intel-pct-track" role="presentation">
-                <span
-                  style={{
-                    width: `${c.score == null ? 0 : c.score}%`,
-                    background: c.score == null ? 'var(--text-3)' : c.score >= 90 ? 'var(--up)' : c.score >= 60 ? 'var(--rgb-5)' : 'var(--down)'
-                  }}
-                />
-              </div>
-              <p className="faint" style={{ fontSize: 10.8, margin: '7px 0 0', lineHeight: 1.6 }}>{c.basis}</p>
-            </div>
-          ))}
+            );
+          })}
           <Notices notices={overview.data?.notices} />
         </motion.section>
       )}
@@ -795,132 +817,128 @@ const AUDITED = [
 ];
 
 function PolicySection() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || 'en';
+  const feeLabel = new Intl.NumberFormat(locale, {
+    style: 'percent',
+    maximumFractionDigits: 2
+  }).format(FEE_BPS / 10_000);
+
   return (
-    <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
-      <motion.section className="card" variants={riseIn} style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), transparent)', border: '1px solid rgba(16,185,129,0.25)' }}>
-        <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
-          <div style={{ width: 42, height: 42, borderRadius: 999, background: 'rgba(16,185,129,0.2)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            <IconShield width={22} height={22} color="#10b981" />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 6, color: '#10b981' }}>{t('audit.nonCustodial')}</div>
-            <p className="prose-sm" style={{ lineHeight: 1.65 }}>{t('audit.nonCustodialBody')}</p>
-          </div>
+    <motion.div className="stack security-policy" style={{ gap: 14 }} variants={stagger} initial="hidden" animate="show">
+      <motion.section className="docs-card security-policy-hero" data-open="true" variants={riseIn}>
+        <span className="security-policy-hero-icon"><IconShield width={22} height={22} /></span>
+        <div className="security-policy-hero-copy">
+          <span className="security-policy-eyebrow">{t('secCenter.tab.policy')}</span>
+          <h2>{t('audit.nonCustodial')}</h2>
+          <p>{t('audit.nonCustodialBody')}</p>
+          <span className="security-policy-advisory">{t('secCenter.notGuarantee')}</span>
         </div>
       </motion.section>
 
-      <section>
-        <p className="section-label">{t('audit.howProtected')}</p>
-        <motion.div className="stack" style={{ gap: 9, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-          {PROTECTIONS.map((k) => (
-            <motion.div key={k} className="card card-tight" variants={riseIn}>
-              <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                <span style={{ color: 'var(--rgb-1)', flexShrink: 0, marginTop: 1 }}>
-                  <IconLock width={16} height={16} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12.8 }}>{t(`audit.prot.${k}.title`)}</div>
-                  <p className="prose-sm" style={{ marginTop: 4, fontSize: 12.2 }}>{t(`audit.prot.${k}.body`)}</p>
-                  <p className="prose-sm" style={{ marginTop: 6, fontSize: 11.8, color: 'var(--rgb-5)', borderInlineStart: '2px solid var(--rgb-5)', paddingInlineStart: 9 }}>
-                    {t(`audit.prot.${k}.limit`)}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
+      <section className="security-policy-section">
+        <div className="security-policy-heading">
+          <span><IconLock width={17} height={17} /></span>
+          <h3>{t('audit.howProtected')}</h3>
+        </div>
+        <motion.div className="security-policy-grid" variants={stagger} initial="hidden" animate="show">
+          {PROTECTIONS.map((key) => (
+            <motion.article key={key} className="card security-policy-card" variants={riseIn}>
+              <h4>{t(`audit.prot.${key}.title`)}</h4>
+              <p>{t(`audit.prot.${key}.body`)}</p>
+              <p className="security-policy-limit">{t(`audit.prot.${key}.limit`)}</p>
+            </motion.article>
           ))}
         </motion.div>
       </section>
 
-      <section>
-        <p className="section-label">{t('audit.threats')}</p>
-        <p className="prose-sm" style={{ marginTop: 6, marginBottom: 9 }}>{t('audit.threatsIntro')}</p>
-        <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
-          {THREATS.map((k, i) => (
-            <motion.div key={k} className="card card-tight" variants={riseIn}>
-              <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                <span className="mono" style={{ minWidth: 20, height: 20, borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0, background: 'rgba(255,59,107,.16)', color: 'var(--down)' }}>
-                  {i + 1}
-                </span>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 12.6 }}>{t(`audit.threat.${k}.title`)}</div>
-                  <p className="prose-sm" style={{ marginTop: 3, fontSize: 12.2 }}>{t(`audit.threat.${k}.body`)}</p>
-                </div>
+      <section className="security-policy-section">
+        <div className="security-policy-heading security-policy-heading--risk">
+          <span>!</span>
+          <h3>{t('audit.threats')}</h3>
+        </div>
+        <p className="prose-sm security-policy-intro">{t('audit.threatsIntro')}</p>
+        <motion.div className="security-policy-grid security-policy-grid--threats" variants={stagger} initial="hidden" animate="show">
+          {THREATS.map((key, index) => (
+            <motion.article key={key} className="card security-policy-card security-policy-card--risk" variants={riseIn}>
+              <span className="security-policy-index">{String(index + 1).padStart(2, '0')}</span>
+              <div>
+                <h4>{t(`audit.threat.${key}.title`)}</h4>
+                <p>{t(`audit.threat.${key}.body`)}</p>
               </div>
-            </motion.div>
+            </motion.article>
           ))}
         </motion.div>
       </section>
 
-      <section>
-        <p className="section-label">{t('audit.audited')}</p>
-        <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-          {AUDITED.map((a) => (
-            <motion.button key={a.id} className="wallet-option" variants={riseIn} whileTap={{ scale: 0.985 }} onClick={() => openUrl(a.url)}>
-              <span className="wallet-badge" style={{ color: 'var(--up)' }}><IconShield width={19} height={19} /></span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontWeight: 700, fontSize: 13 }}>{t(`audit.item.${a.id}.name`)}</span>
-                <span className="set-row-sub">{t(`audit.item.${a.id}.desc`)}</span>
+      <section className="security-policy-section">
+        <div className="security-policy-heading">
+          <span><IconExternal width={16} height={16} /></span>
+          <h3>{t('audit.audited')}</h3>
+        </div>
+        <motion.div className="security-policy-audits" variants={stagger} initial="hidden" animate="show">
+          {AUDITED.map((audit) => (
+            <motion.button key={audit.id} type="button" className="card security-policy-audit-link" variants={riseIn} onClick={() => openUrl(audit.url)}>
+              <span className="security-policy-audit-icon"><IconShield width={17} height={17} /></span>
+              <span>
+                <strong>{t(`audit.item.${audit.id}.name`)}</strong>
+                <small>{t(`audit.item.${audit.id}.desc`)}</small>
               </span>
-              <IconExternal width={16} height={16} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+              <IconExternal width={14} height={14} />
             </motion.button>
           ))}
         </motion.div>
-        <p className="faint" style={{ fontSize: 10.5, margin: '8px 0 0', lineHeight: 1.6 }}>{t('secCenter.auditVsSafe')}</p>
+        <p className="faint security-policy-footnote">{t('secCenter.auditVsSafe')}</p>
       </section>
 
-      <section>
-        <p className="section-label">{t('audit.feeTransparency')}</p>
-        <motion.div className="card stack" style={{ gap: 8, marginTop: 8 }} variants={riseIn} initial="hidden" animate="show">
-          <div className="row-between">
-            <span className="faint">{t('audit.feeRate')}</span>
-            <span className="mono">{FEE_BPS / 100}%</span>
+      <section className="security-policy-section">
+        <div className="security-policy-heading">
+          <span><IconKey width={16} height={16} /></span>
+          <h3>{t('audit.feeTransparency')}</h3>
+        </div>
+        <motion.div className="docs-card security-policy-fees" data-open="false" variants={riseIn}>
+          <div className="security-policy-fee-line">
+            <span>{t('audit.feeRate')}</span>
+            <strong className="mono">{feeLabel}</strong>
           </div>
-          <div className="row-between">
-            <span className="faint">{t('audit.feeWallet')}</span>
-            <span className="mono" style={{ fontSize: 10.5 }}>{FEE_RECIPIENT.slice(0, 10)}…{FEE_RECIPIENT.slice(-6)}</span>
+          <div className="security-policy-fee-line">
+            <span>{t('audit.feeWallet')}</span>
+            <strong className="mono security-policy-address">{FEE_RECIPIENT.slice(0, 10)}…{FEE_RECIPIENT.slice(-6)}</strong>
           </div>
-          <div className="stack" style={{ gap: 6, marginTop: 4 }}>
-            <span className="faint">{t('audit.network')}</span>
+          <div className="security-policy-payouts">
+            <span className="security-policy-payout-title">{t('audit.network')}</span>
             {payoutTable().map((row) => (
-              <div className="row-between" key={row.id} style={{ gap: 10 }}>
-                <span className="row" style={{ gap: 7, minWidth: 0 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{row.label}</span>
+              <div className="security-policy-fee-line" key={row.id}>
+                <span className="security-policy-payout-name">
+                  <i style={{ background: row.color }} />
+                  {row.label}
                 </span>
-                <span className="mono faint" style={{ fontSize: 10, direction: 'ltr' }}>
-                  {row.address.slice(0, 6)}…{row.address.slice(-4)} · {row.gas}
-                </span>
+                <strong className="mono security-policy-address">{row.address.slice(0, 6)}…{row.address.slice(-4)} · {row.gas}</strong>
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4 }} onClick={() => openUrl(`${EVM_CHAINS[56].explorer}/address/${FEE_RECIPIENT}`)}>
-            <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
-              <IconExternal width={14} height={14} /> {t('audit.viewOnChain')}
-            </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => openUrl(`${EVM_CHAINS[56].explorer}/address/${FEE_RECIPIENT}`)}>
+            <IconExternal width={14} height={14} /> {t('audit.viewOnChain')}
           </button>
         </motion.div>
       </section>
 
-      <motion.section className="card" variants={riseIn}>
-        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ color: 'var(--rgb-2)' }}><IconKey width={19} height={19} /></span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('audit.disclosure')}</div>
-            <p className="prose-sm">{t('audit.bounty')}</p>
-          </div>
+      <motion.section className="card security-policy-disclosure" variants={riseIn}>
+        <span><IconKey width={18} height={18} /></span>
+        <div>
+          <h3>{t('audit.disclosure')}</h3>
+          <p className="prose-sm">{t('audit.bounty')}</p>
         </div>
       </motion.section>
 
-      {/* the one old section that only made sense on the dedicated page */}
-      <motion.section className="card" variants={riseIn}>
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('audit.ours')}</p>
-        <div className="row-between" style={{ marginBottom: 6 }}>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>FeeRouter.sol</span>
+      <motion.section className="docs-card security-policy-contract" data-open="false" variants={riseIn}>
+        <div className="security-policy-contract-head">
+          <h3>{t('audit.ours')}</h3>
           <span className="pill pill-down">{t('audit.notAudited')}</span>
         </div>
+        <strong>FeeRouter.sol</strong>
         <p className="prose-sm">{t('audit.ourContractBody')}</p>
-        <p className="prose-sm" style={{ marginTop: 9 }}>{t('audit.sourceNote')}</p>
+        <p className="prose-sm">{t('audit.sourceNote')}</p>
       </motion.section>
     </motion.div>
   );

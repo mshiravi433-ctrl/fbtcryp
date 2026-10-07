@@ -20,7 +20,7 @@ import {
   ethCall, explorerQuery, explorerConfigured, formatUnitsBig, hexToBig,
   isAddress, isTxHash, METHOD_TABLE, nativeBalance, normAddr, recentTransferLogs,
   registryToken, rpcCall, solanaRpc, tokenMeta,
-  TOPICS, EIP1967, topicToAddr, isUnlimitedAllowance, UNLIMITED
+  TOPICS, EIP1967, topicToAddr, isUnlimitedAllowance, UNLIMITED, recordSourceHealth
 } from './chainIntel.js';
 import { fetchSimplePrices } from './providers.js';
 import { fetchTokenRisk } from './tokenRisk.js';
@@ -807,13 +807,19 @@ export async function registryTokens() {
 const LLAMA = 'https://api.llama.fi';
 const HTTP = { timeout: Number(process.env.LLAMA_TIMEOUT_MS || 12_000) };
 
-async function httpJson(url, { timeout = HTTP.timeout } = {}) {
+async function httpJson(url, { timeout = HTTP.timeout, healthKey = null } = {}) {
   const ctrl = new AbortController();
+  const startedAt = Date.now();
   const t = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json' } });
     if (!res.ok) throw new IntelError('UPSTREAM', `http ${res.status} from ${new URL(url).host}`);
-    return await res.json();
+    const body = await res.json();
+    if (healthKey) recordSourceHealth(healthKey, true, null, Date.now() - startedAt);
+    return body;
+  } catch (err) {
+    if (healthKey) recordSourceHealth(healthKey, false, err?.message || String(err), Date.now() - startedAt);
+    throw err;
   } finally {
     clearTimeout(t);
   }
@@ -825,10 +831,13 @@ async function httpJson(url, { timeout = HTTP.timeout } = {}) {
  * exactly the yields.js discipline. Only fields the feed actually carries are
  * emitted; users, contract-level volume, etc. stay null (N/A) when absent.
  */
-export async function llamaProtocols() {
+export async function llamaProtocols({ timeout = HTTP.timeout } = {}) {
   return cachedMeta('llama:protocols', CACHE.protocols, async () => {
-    const raw = await httpJson(`${LLAMA}/protocols`);
-    if (!Array.isArray(raw)) throw new IntelError('UPSTREAM', 'unexpected /protocols payload');
+    const raw = await httpJson(`${LLAMA}/protocols`, { timeout, healthKey: 'llama:protocols' });
+    if (!Array.isArray(raw)) {
+      recordSourceHealth('llama:protocols', false, 'unexpected /protocols payload shape');
+      throw new IntelError('UPSTREAM', 'unexpected /protocols payload');
+    }
     const protocols = raw
       .map((p) => ({
         slug: p.slug,
@@ -955,11 +964,11 @@ export async function trendingBuckets() {
   };
 }
 
-export async function protocolDetail(slug) {
+export async function protocolDetail(slug, { timeout = HTTP.timeout } = {}) {
   const s = String(slug || '').trim();
   if (!/^[\w-]{1,64}$/.test(s)) throw new IntelError('BAD_SLUG', 'unknown protocol id');
   return cachedMeta(`llama:protocol:${s}`, CACHE.protocolDetail, async () => {
-    const raw = await httpJson(`${LLAMA}/protocol/${encodeURIComponent(s)}`);
+    const raw = await httpJson(`${LLAMA}/protocol/${encodeURIComponent(s)}`, { timeout, healthKey: 'llama:protocol' });
     const cat = await llamaProtocols().catch(() => null);
     const listRow = cat?.data?.protocols?.find((p) => p.slug === s) || null;
     const tvls = Array.isArray(raw?.tvl) ? raw.tvl : [];
@@ -1001,10 +1010,13 @@ export async function protocolDetail(slug) {
 /* Incident feed (used by Security; shared here so both pages cite one source) */
 /* -------------------------------------------------------------------------- */
 
-export async function hacksIndex() {
+export async function hacksIndex({ timeout = HTTP.timeout } = {}) {
   return cachedMeta('llama:hacks', CACHE.hacks, async () => {
-    const raw = await httpJson(`${LLAMA}/hacks`);
-    if (!Array.isArray(raw)) throw new IntelError('UPSTREAM', 'unexpected /hacks payload');
+    const raw = await httpJson(`${LLAMA}/hacks`, { timeout, healthKey: 'llama:hacks' });
+    if (!Array.isArray(raw)) {
+      recordSourceHealth('llama:hacks', false, 'unexpected /hacks payload shape');
+      throw new IntelError('UPSTREAM', 'unexpected /hacks payload');
+    }
     const incidents = raw.map((e) => {
       const d = String(e.date ?? '');
       // The feed has shipped both "YYYY-MM-DD" and epoch-seconds dates.

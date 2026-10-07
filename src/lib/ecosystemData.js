@@ -1,4 +1,5 @@
 import { PAYOUT_ADDRESSES } from './payout.js';
+import { FEE_BPS as FBT_SWAP_FEE_BPS } from './feeBps.js';
 
 /**
  * ECOSYSTEM DATA ADAPTER
@@ -46,6 +47,13 @@ export const NETWORK_REGISTRY = [
   { id: 'avalanche', name: 'Avalanche', chainId: 43114, type: 'EVM', chainType: 'Mainnet', short: 'AVAX', hue: '#e84142' },
   { id: 'linea', name: 'Linea', chainId: 59144, type: 'EVM', chainType: 'Layer 2', short: 'LINEA', hue: '#6ce0e0' },
   { id: 'sonic', name: 'Sonic', chainId: 146, type: 'EVM', chainType: 'Mainnet', short: 'SONIC', hue: '#ff5722' },
+  { id: 'mantle', name: 'Mantle', chainId: 5000, type: 'EVM', chainType: 'Layer 2', short: 'MNT', hue: '#f0b90b' },
+  { id: 'berachain', name: 'Berachain', chainId: 80094, type: 'EVM', chainType: 'Mainnet', short: 'BERA', hue: '#a855f7' },
+  { id: 'unichain', name: 'Unichain', chainId: 130, type: 'EVM', chainType: 'Layer 2', short: 'UNI', hue: '#ff007a' },
+  { id: 'monad', name: 'Monad', chainId: 143, type: 'EVM', chainType: 'Mainnet', short: 'MON', hue: '#7c3aed' },
+  { id: 'scroll', name: 'Scroll', chainId: 534352, type: 'EVM', chainType: 'Layer 2', short: 'SCR', hue: '#f1c27d' },
+  { id: 'zksync-era', name: 'zkSync Era', chainId: 324, type: 'EVM', chainType: 'Layer 2', short: 'ZK', hue: '#8c8dfc' },
+  { id: 'robinhood-chain', name: 'Robinhood Chain', chainId: 4663, type: 'EVM', chainType: 'Layer 2', short: 'HOOD', hue: '#00c805' },
   { id: 'solana', name: 'Solana', chainId: null, type: 'Non-EVM', chainType: 'Mainnet', short: 'SOL', hue: '#9945ff' }
 ];
 
@@ -62,7 +70,6 @@ export const NETWORK_REGISTRY = [
  */
 const FBT_FEE_EVM = PAYOUT_ADDRESSES.evm;
 const FBT_FEE_SOLANA = PAYOUT_ADDRESSES.solana;
-const FBT_SWAP_FEE_BPS = 70;
 const OPENOCEAN_CUT_PERCENT = 20;
 
 const PROVIDER_CATEGORIES = {
@@ -245,6 +252,16 @@ const PROBE_USDC_ARB = '0xaf88d065e77c8cc2239327c5edb3a432268e5831';
 const PROBE_SOL_MINT = 'So11111111111111111111111111111111111111112';
 const PROBE_USDC_SOL = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const PROBE_TAKER = PAYOUT_ADDRESSES.evm;
+const PROBE_CHAIN_IDS = {
+  kyberswap: [8453],
+  openocean: [8453],
+  velora: [8453],
+  '0x-gasless': [56],
+  'solana-openocean': ['solana'],
+  lifi: [],
+  'debridge-dln': [8453, 42161],
+  '0x-cross-chain': []
+};
 
 async function probeFetchJson(url, { timeout = 12000, headers = {} } = {}) {
   const ctrl = new AbortController();
@@ -317,7 +334,10 @@ export async function probeProvidersFromBrowser({ force = false } = {}) {
   const body = {
     schema: 'fbt.provider-probe.browser.v1',
     generatedAt: new Date().toISOString(),
-    results: settled.map((r) => (r.status === 'fulfilled' ? r.value : { ok: false, error: 'PROBE_INTERNAL' }))
+    results: settled.map((r) => {
+      const result = r.status === 'fulfilled' ? r.value : { ok: false, error: 'PROBE_INTERNAL' };
+      return { ...result, chainIds: PROBE_CHAIN_IDS[result.provider] || [] };
+    })
   };
   lastBrowserProbeAt = Date.now();
   lastBrowserProbeBody = body;
@@ -335,7 +355,16 @@ export function mergeProbeEvidence(...probes) {
     for (const r of p.results) {
       if (!r?.provider) continue;
       const prev = byId.get(r.provider);
-      if (!prev || (!prev.ok && r.ok)) byId.set(r.provider, r);
+      if (!prev) {
+        byId.set(r.provider, r);
+        continue;
+      }
+      const preferred = !prev.ok && r.ok ? r : prev;
+      const chainIds = [...new Set([
+        ...(prev.ok && Array.isArray(prev.chainIds) ? prev.chainIds : []),
+        ...(r.ok && Array.isArray(r.chainIds) ? r.chainIds : [])
+      ])];
+      byId.set(r.provider, { ...preferred, chainIds });
     }
   }
   return { schema: 'fbt.provider-probe.merged.v1', generatedAt, results: [...byId.values()] };
@@ -358,7 +387,16 @@ export function applyProbeEvidence(providerReport, probe) {
 
   const okById = new Map();
   for (const r of probe.results || []) {
-    if (r?.provider && r?.ok) okById.set(r.provider, r);
+    if (!r?.provider || !r?.ok) continue;
+    const previous = okById.get(r.provider);
+    okById.set(r.provider, {
+      ...(previous || {}),
+      ...r,
+      chainIds: [...new Set([
+        ...(previous?.chainIds || []),
+        ...(Array.isArray(r.chainIds) ? r.chainIds : [])
+      ])]
+    });
   }
   if (okById.size === 0) return providerReport;
 
@@ -375,6 +413,10 @@ export function applyProbeEvidence(providerReport, probe) {
       reachable: true,
       authenticated: true,
       feeReady: p.feeReady == null ? true : p.feeReady,
+      probeChainIds: [...new Set([
+        ...(Array.isArray(p.probeChainIds) ? p.probeChainIds : []),
+        ...(Array.isArray(ev.chainIds) ? ev.chainIds : [])
+      ])],
       lastSuccessAt: probe.generatedAt || data.generatedAt || p.lastSuccessAt,
       lastFailureAt: null,
       lastError: null,
@@ -403,6 +445,13 @@ export function buildEcosystemData(providerReport, probeEvidence) {
 
   const report = (applyProbeEvidence(providerReport, probeEvidence) || providerReport).data;
   const providers = report?.providers || [];
+  const routeProviders = providers.filter((provider) => ['dex', 'bridge'].includes(PROVIDER_CATEGORIES[provider.id]?.section));
+  const supportsNetwork = (provider, network) => (provider.supportedChains || []).some((chain) =>
+    network.id === 'solana' ? String(chain).toLowerCase() === 'solana' : Number(chain) === Number(network.chainId)
+  );
+  const probedNetwork = (provider, network) => (provider.probeChainIds || []).some((chain) =>
+    network.id === 'solana' ? String(chain).toLowerCase() === 'solana' : Number(chain) === Number(network.chainId)
+  );
 
   // Map providers to ecosystem sections
   const dex = [];
@@ -413,12 +462,8 @@ export function buildEcosystemData(providerReport, probeEvidence) {
     const meta = PROVIDER_CATEGORIES[provider.id];
     if (!meta) continue;
 
-    const networks = (provider.supportedChains || [])
-      .map(chainId => {
-        if (chainId === 'solana') return NETWORK_REGISTRY.find(n => n.id === 'solana');
-        return NETWORK_REGISTRY.find(n => n.chainId === chainId);
-      })
-      .filter(Boolean);
+    const networks = NETWORK_REGISTRY.filter((network) => supportsNetwork(provider, network));
+    const probeNetworks = NETWORK_REGISTRY.filter((network) => probedNetwork(provider, network));
 
     const entry = {
       id: provider.id,
@@ -429,6 +474,8 @@ export function buildEcosystemData(providerReport, probeEvidence) {
       capabilities: meta.capabilities,
       networks,
       networkIds: networks.map(n => n.id),
+      probeNetworks,
+      probeChainIds: Array.isArray(provider.probeChainIds) ? provider.probeChainIds : [],
       configured: provider.configured,
       reachable: provider.reachable,
       authenticated: provider.authenticated,
@@ -447,24 +494,26 @@ export function buildEcosystemData(providerReport, probeEvidence) {
     else if (meta.section === 'data') dataProviders.push(entry);
   }
 
-  // Networks actually in use
-  const usedChainIds = new Set();
-  for (const provider of providers) {
-    for (const chain of (provider.supportedChains || [])) {
-      if (chain === 'solana') usedChainIds.add('solana');
-      else usedChainIds.add(chain);
-    }
-  }
-
-  const activeNetworks = NETWORK_REGISTRY.filter(n => {
-    if (n.chainId && usedChainIds.has(n.chainId)) return true;
-    if (n.id === 'solana' && usedChainIds.has('solana')) return true;
-    return false;
-  }).map(n => ({
-    ...n,
-    status: 'OPERATIONAL',
-    capabilities: getNetworkCapabilities(n.id, providers)
-  }));
+  // The list is registry support advertised by routing providers, not a claim
+  // that every provider is reachable on every chain. Network status is based
+  // only on chain-specific successful quote probes carried by this response.
+  const activeNetworks = NETWORK_REGISTRY.filter((network) =>
+    routeProviders.some((provider) => supportsNetwork(provider, network))
+  ).map((network) => {
+    const supporting = routeProviders.filter((provider) => supportsNetwork(provider, network));
+    const probed = supporting.filter((provider) => probedNetwork(provider, network));
+    const reachableProviderCount = probed.filter((provider) => provider.reachable).length;
+    const status = reachableProviderCount === 0 ? 'UNKNOWN'
+      : reachableProviderCount === supporting.length ? 'OPERATIONAL' : 'PARTIAL';
+    return {
+      ...network,
+      status,
+      supportedProviderCount: supporting.length,
+      probedProviderCount: probed.length,
+      reachableProviderCount,
+      capabilities: getNetworkCapabilities(network.id, routeProviders)
+    };
+  });
 
   // Summary
   const totalProviders = providers.length;
@@ -472,11 +521,25 @@ export function buildEcosystemData(providerReport, probeEvidence) {
   const reachableCount = providers.filter(p => p.reachable).length;
 
   const summary = {
-    networks: { total: activeNetworks.length, operational: activeNetworks.length },
-    dex: { total: dex.length, operational: dex.filter(d => d.status === 'OPERATIONAL').length },
-    bridges: { total: bridges.length, operational: bridges.filter(b => b.status === 'OPERATIONAL').length },
+    networks: {
+      total: activeNetworks.length,
+      operational: activeNetworks.filter((network) => network.status === 'OPERATIONAL').length,
+      partial: activeNetworks.filter((network) => network.status === 'PARTIAL').length,
+      unverified: activeNetworks.filter((network) => network.status === 'UNKNOWN').length,
+      observed: activeNetworks.filter((network) => network.probedProviderCount > 0).length
+    },
+    dex: {
+      total: dex.length,
+      operational: dex.filter((provider) => provider.status === 'OPERATIONAL').length,
+      observed: dex.filter((provider) => provider.status !== 'UNKNOWN').length
+    },
+    bridges: {
+      total: bridges.length,
+      operational: bridges.filter((provider) => provider.status === 'OPERATIONAL').length,
+      observed: bridges.filter((provider) => provider.status !== 'UNKNOWN').length
+    },
     providers: { total: totalProviders, configured: configuredCount, reachable: reachableCount },
-    dataInfra: { total: DATA_INFRASTRUCTURE.length, operational: DATA_INFRASTRUCTURE.length },
+    dataInfra: { total: DATA_INFRASTRUCTURE.length, operational: 0, observed: 0 },
     generatedAt: report?.generatedAt || new Date().toISOString()
   };
 
@@ -487,9 +550,9 @@ export function buildEcosystemData(providerReport, probeEvidence) {
       dex,
       bridges,
       dataProviders,
-      dataInfrastructure: DATA_INFRASTRUCTURE.map(d => ({ ...d, status: 'OPERATIONAL' })),
-      wallets: WALLET_INTEGRATIONS.map(w => ({ ...w, status: 'OPERATIONAL' })),
-      ai: AI_INFRASTRUCTURE.map(a => ({ ...a, status: 'OPERATIONAL' }))
+      dataInfrastructure: DATA_INFRASTRUCTURE.map((item) => ({ ...item, status: 'UNKNOWN' })),
+      wallets: WALLET_INTEGRATIONS.map((item) => ({ ...item, status: 'UNKNOWN' })),
+      ai: AI_INFRASTRUCTURE.map((item) => ({ ...item, status: 'UNKNOWN' }))
     },
     summary,
     healthRatio: report?.summary?.healthRatio ?? 0,
@@ -524,8 +587,13 @@ function deriveFee(meta, provider) {
 
 function deriveStatus(provider) {
   if (!provider.configured) return 'OFFLINE';
-  if (provider.reachable) return 'OPERATIONAL';
-  if (provider.lastFailureAt) return 'DEGRADED';
+  const now = Date.now();
+  const successAt = provider.lastSuccessAt ? Date.parse(provider.lastSuccessAt) : NaN;
+  const failureAt = provider.lastFailureAt ? Date.parse(provider.lastFailureAt) : NaN;
+  const successFresh = Number.isFinite(successAt) && successAt <= now && now - successAt <= 15 * 60_000;
+  const failureFresh = Number.isFinite(failureAt) && failureAt <= now && now - failureAt <= 15 * 60_000;
+  if (provider.reachable && successFresh && (!Number.isFinite(failureAt) || successAt >= failureAt)) return 'OPERATIONAL';
+  if (failureFresh) return 'DEGRADED';
   return 'UNKNOWN';
 }
 
@@ -551,9 +619,9 @@ function getNetworkCapabilities(networkId, providers) {
     const meta = PROVIDER_CATEGORIES[p.id];
     if (!meta) continue;
     const supportsNetwork = p.supportedChains?.some(c => {
-      if (networkId === 'solana') return c === 'solana';
+      if (networkId === 'solana') return String(c).toLowerCase() === 'solana';
       const net = NETWORK_REGISTRY.find(n => n.id === networkId);
-      return net && c === net.chainId;
+      return net && Number(c) === Number(net.chainId);
     });
     if (supportsNetwork) {
       if (meta.section === 'dex') caps.add('Swap');

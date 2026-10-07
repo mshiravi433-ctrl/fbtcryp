@@ -4357,17 +4357,29 @@
     },
     "flow": {
       "wallet": "Wallet",
-      "walletDesc": "Non-custodial user-controlled wallet.",
+      "walletDesc": "Connect a self-custody wallet; its keys and final transaction signature stay under your control.",
       "fbt": "FBT Swap",
-      "fbtDesc": "Interface and execution layer.",
+      "fbtDesc": "Choose assets and network, review the available quote and disclosed fee before signing.",
       "intelligence": "Intelligence / Router",
-      "intelligenceDesc": "Finds available routes and liquidity.",
+      "intelligenceDesc": "The swap engine queries supported quote sources concurrently and compares usable results.",
       "liquidity": "Protocols & Liquidity",
-      "liquidityDesc": "DEX / DeFi / Bridge infrastructure.",
+      "liquidityDesc": "Available providers vary by network and current reachability; quote-only sources cannot become signed transactions.",
       "blockchain": "Blockchain",
-      "blockchainDesc": "Final settlement.",
+      "blockchainDesc": "Your wallet submits the selected transaction on its destination network; FBT does not custody funds.",
       "verification": "Verification",
-      "verificationDesc": "Confirms transaction and updates state."
+      "verificationDesc": "The app reads the transaction receipt/status and updates the swap record; this is not a guarantee of finality.",
+      "executorReady": "Fee-ready execution",
+      "executorSetup": "Execution needs setup",
+      "quoteOnly": "Quote only",
+      "noProviderData": "No provider status has been observed yet.",
+      "networkCoverage": "{{count}} networks in routing-provider metadata",
+      "providerChains": "{{count}} listed networks",
+      "routeNote": "Provider reachability is global; the network counts below include only recent network-specific quote probes. Advertised chain support is metadata, not a promise that every provider or route is available. The app compares returned quotes; you review and sign in your wallet.",
+      "providerCount": "{{count}} providers shown; route support varies by network and request.",
+      "networkProbeEvidence": "{{ready}} of {{supported}} listed providers had a successful quote probe on this network (probe snapshot).",
+      "providerProbeChains": "Recent quote probe succeeded on {{networks}}",
+      "noRecentProbe": "No recent chain-specific quote success",
+      "registryNetworkCount": "{{count}} of {{total}} registered networks are listed by routing providers"
     },
     "drawer": {
       "type": "Type",
@@ -4420,12 +4432,12 @@
     "path": "Partnership path",
     "stats": {
       "networks": {
-        "value": "10",
+        "value": "{{count}}",
         "label": "Active networks",
-        "sub": "BNB · ETH · Polygon · Arbitrum · Base · Optimism · Avalanche · Linea · Sonic · Solana"
+        "sub": "{{evmCount}} EVM networks · Solana"
       },
       "fee": {
-        "value": "0.10%",
+        "value": "{{fee}}%",
         "label": "Transparent fee",
         "sub": "Shown before signing"
       },
@@ -4446,7 +4458,7 @@
       },
       "revenue": {
         "title": "Transparent revenue",
-        "body": "The 0.10% builder fee on notional is shown to the user before signing on every supported trading screen."
+        "body": "The {{fee}} builder fee on notional is shown before signing on supported trading screens."
       }
     },
     "steps": {
@@ -7093,7 +7105,11 @@
     "privateTitle": "Private relay",
     "privateSub": "Prefer {{name}} so this swap stays out of the public mempool",
     "noRelay": "This chain publishes pending transactions and we could not verify a private relay for it. Tight slippage is still the best defence.",
-    "model": {"public": "This chain publishes pending transactions, so a bot can read your order before it lands.", "private": "This chain has no public mempool — orders go straight to the sequencer, so nobody can queue a trade in front of yours.", "encrypted": "This chain holds orders in an encrypted mempool and builds blocks inside a TEE, so the contents stay hidden until inclusion."},
+    "model": {
+      "public": "This chain publishes pending transactions, so a bot can read your order before it lands.",
+      "private": "This chain has no public mempool — orders go straight to the sequencer, so nobody can queue a trade in front of yours.",
+      "encrypted": "This chain holds orders in an encrypted mempool and builds blocks inside a TEE, so the contents stay hidden until inclusion."
+    },
     "scoreAdjusted": "The score is discounted for this network.",
     "privateSubSequencer": "Send through {{name}} — the only entry point on this chain, so nothing is published for bots to read.",
     "privateSubEncrypted": "Send through {{name}} — the order is encrypted until the block is built.",
@@ -11091,7 +11107,18 @@
         "ledger": "Paired-swap ledger",
         "score": "Realised PnL + coverage",
         "consensus": "Independent consensus",
-        "intent": "Intent OS"
+        "intent": "Intent OS",
+        "chainDesc": "Candidates come from a public operator registry or sampled stablecoin activity. History is read from Blockscout where available, with configured explorer APIs as fallback; a label does not prove who controls a wallet.",
+        "ledgerDesc": "A swap is admitted only when one successful transaction contains exactly one target-token leg and one allowlisted USD-stablecoin leg, plus a recognized router or swap method. Failed, ambiguous, unpaired and unknown-quote flows are excluded.",
+        "scoreDesc": "Closed-trade results are reconstructed from the loaded history. Scoring needs at least five closed swaps across two days and core-factor coverage; qualification also requires score ≥70, positive realized P&L and win rate ≥55%. This is a sample, not lifetime or future performance.",
+        "consensusDesc": "A token consensus needs at least three independent, performance-qualified wallets with paired swaps. Below that threshold the result stays insufficient-evidence; it is not a zero-flow finding or a price forecast.",
+        "intentDesc": "This hand-off creates a monitor or alert in Intent OS. It does not submit a trade or request a wallet signature; any transaction remains a separate, user-reviewed action.",
+        "chainBadge": "Indexed sources",
+        "ledgerBadge": "Swap verification",
+        "scoreBadge": "Sample qualification",
+        "consensusBadge": "Independent wallets",
+        "intentBadge": "Monitoring hand-off",
+        "step": "Step {{step}} of {{total}}"
       },
       "methodNote": "Eligibility requires repeated observed outcomes and sufficient priced trade coverage. Labels are sourced, not inferred by AI. Consensus excludes whales merely moving funds, unpaired transfers and related-wallet duplicates.",
       "identityCaveat": "Identity labels are not proof of control",
@@ -13545,7 +13572,38 @@
       "incidentHistory": "Incident history",
       "activityAnomaly": "Recent activity"
     },
-    "systemTitle": "Monitoring system"
+    "systemTitle": "Monitoring system",
+    "systemNote": "Status reflects bounded source checks observed by this API instance. It is not a contract-safety rating and never gates a transaction.",
+    "coverage": "{{covered}} / {{total}}",
+    "compBasis": {
+      "infrastructure": "RPC read probes answered on {{healthy}} of {{total}} supported EVM networks. RPC reachability is not a safety verdict.",
+      "contractMonitoring": "A bytecode read of the configured wrapped token answered on {{healthy}} of {{total}} networks. This does not verify source code or every contract.",
+      "protocolMonitoring": "The protocol catalog and incident feed responded: {{healthy}} of {{total}} feeds. An empty incident log is not proof of no incidents.",
+      "threatMonitoring": "{{alerts}} alert rows in the last 24 hours; incident feed: {{feedState}}. Feed health is not a risk-free finding.",
+      "dataProviders": "Explorer API keys are configured on {{healthy}} of {{total}} networks; without a key, indexed history or source verification may be unavailable."
+    },
+    "feedState": {
+      "available": "available",
+      "unavailable": "unavailable",
+      "unknown": "not checked"
+    },
+    "protocolCatalog": "Live protocol catalog",
+    "protocolCatalogNote": "Catalog metadata and TVL come from DeFiLlama; they are not an audit or safety certification.",
+    "protocolCatalogCount": "{{shown}} shown · {{total}} listed",
+    "protocolCatalogSearch": "Search protocol name or slug",
+    "protocolCatalogEmpty": "No protocols match this search.",
+    "protocolCatalogLoadMore": "Load more protocols",
+    "protocolRiskDetails": "Protocol risk evidence",
+    "protocolSelectNote": "Choose a protocol from the catalog to load its latest available risk evidence.",
+    "protocolTvl": "Reported TVL",
+    "protocolVolume": "24h volume",
+    "protocolChange1d": "24h TVL change",
+    "protocolChange7d": "7d TVL change",
+    "protocolAudits": "Audits listed",
+    "protocolChains": "Chains",
+    "protocolSource": "Open protocol website",
+    "protocolDetailUnavailable": "Risk data for this protocol is unavailable. Missing data is not a clean result.",
+    "probeLatency": "{{ms}} ms"
   },
   "iranBuy": {
     "tab": "Iranian users only",

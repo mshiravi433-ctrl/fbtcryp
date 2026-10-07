@@ -11,6 +11,8 @@ import { publicAppUrl } from '../lib/nativeShell';
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
 import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
+import { NETWORK_REGISTRY } from '../lib/ecosystemData';
+import { FEE_BPS, feePercentString } from '../lib/feeBps.js';
 import '../styles/docs-modern.css';
 
 const SITE_URL = publicAppUrl('');
@@ -32,11 +34,27 @@ const BENEFITS = [
 
 const STEPS = ['conversation', 'proposal', 'launch'];
 
+function localizedFee(locale) {
+  return new Intl.NumberFormat(locale || 'en', {
+    style: 'percent',
+    maximumFractionDigits: 2
+  }).format(FEE_BPS / 10_000);
+}
+
+function localizedCount(value, locale) {
+  return new Intl.NumberFormat(locale || 'en').format(value);
+}
 
 export default function Business() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg } = useTelegram();
+  const locale = i18n.resolvedLanguage || i18n.language || 'en';
+  const feeNumber = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 })
+    .format(Number(feePercentString(FEE_BPS)));
+  const feeLabel = localizedFee(locale);
+  const networkCount = NETWORK_REGISTRY.length;
+  const evmNetworkCount = NETWORK_REGISTRY.filter((network) => network.type === 'EVM').length;
 
   const [interest, setInterest] = useState('listing');
   const [form, setForm] = useState({ company: '', name: '', email: '', phone: '', message: '' });
@@ -88,9 +106,9 @@ export default function Business() {
   };
 
   return (
-    <PageTransition>
+    <PageTransition className="page biz-page">
       {/* Header */}
-      <motion.div className="row" style={{ gap: 12 }} variants={riseIn} initial="hidden" animate="show">
+      <motion.div className="row biz-header" style={{ gap: 12 }} variants={riseIn} initial="hidden" animate="show">
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <IconChevronLeft width={18} height={18} />
         </button>
@@ -99,7 +117,7 @@ export default function Business() {
       </motion.div>
 
       {/* Hero */}
-      <motion.section className="docs-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+      <motion.section className="docs-hero biz-hero" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
         <div style={{ fontWeight: 900, fontSize: 20, lineHeight: 1.2 }} className="gradient-text">{t('about.companyFull')}</div>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: 'var(--text-3)', marginTop: 4 }}>{t('about.tagline')}</div>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.9, marginTop: 10 }}>{t('biz.intro')}</p>
@@ -114,14 +132,24 @@ export default function Business() {
       </motion.section>
 
       {/* Stats — functional: credibility at a glance */}
-      <motion.div className="stack" variants={stagger} initial="hidden" animate="show" style={{ gap: 0, marginTop: 16 }}>
+      <motion.div className="stack biz-stats" variants={stagger} initial="hidden" animate="show" style={{ gap: 0, marginTop: 16 }}>
         <p className="section-label" style={{ marginBottom: 10 }}>{t('biz.atGlance')}</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <div className="biz-stat-grid">
           {STATS.map((id) => (
-            <motion.div key={id} className="card" variants={riseIn} style={{ padding: 12, textAlign: 'center' }}>
-              <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: -0.3 }}>{t(`biz.stats.${id}.value`)}</div>
-              <div style={{ fontWeight: 700, fontSize: 11.5, marginTop: 2 }}>{t(`biz.stats.${id}.label`)}</div>
-              <div className="faint" style={{ fontSize: 10.5, marginTop: 4, lineHeight: 1.6 }}>{t(`biz.stats.${id}.sub`)}</div>
+            <motion.div key={id} className={`card biz-stat-card biz-stat-card--${id}`} variants={riseIn}>
+              <div className="biz-stat-value">
+                {id === 'networks'
+                  ? t('biz.stats.networks.value', { count: localizedCount(networkCount, locale) })
+                  : id === 'fee'
+                    ? t('biz.stats.fee.value', { fee: feeNumber })
+                    : t(`biz.stats.${id}.value`)}
+              </div>
+              <div className="biz-stat-label">{t(`biz.stats.${id}.label`)}</div>
+              <div className="biz-stat-sub">
+                {id === 'networks'
+                  ? t('biz.stats.networks.sub', { evmCount: localizedCount(evmNetworkCount, locale) })
+                  : t(`biz.stats.${id}.sub`)}
+              </div>
             </motion.div>
           ))}
         </div>
@@ -169,13 +197,15 @@ export default function Business() {
         <p className="section-label" style={{ marginBottom: 10 }}>{t('biz.whyUs')}</p>
         <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
           {BENEFITS.map((b) => (
-            <motion.div key={b.id} className="card" variants={riseIn} style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'flex-start', width: '100%', boxSizing: 'border-box' }}>
+            <motion.div key={b.id} className="card biz-benefit-card" variants={riseIn} style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'flex-start', width: '100%', boxSizing: 'border-box' }}>
               <span className="docs-icon" style={{ '--card-hue': b.hue, width: 40, height: 40, borderRadius: 12 }}>
                 <b.Icon width={18} height={18} />
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 13.5 }}>{t(`biz.benefits.${b.id}.title`)}</div>
-                <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, margin: '4px 0 0' }}>{t(`biz.benefits.${b.id}.body`)}</p>
+                <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, margin: '4px 0 0' }}>
+                  {t(`biz.benefits.${b.id}.body`, { fee: feeLabel })}
+                </p>
               </div>
             </motion.div>
           ))}
@@ -199,7 +229,7 @@ export default function Business() {
       </section>
 
       {/* Inline Business Form — functional */}
-      <motion.section id="biz-form" className="docs-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18, '--card-hue': 'var(--rgb-1)', padding: 18 }}>
+      <motion.section id="biz-form" className="docs-card biz-form-card" data-open="true" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 18, '--card-hue': 'var(--rgb-1)', padding: 18 }}>
         <div style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="docs-icon" style={{ width: 36, height: 36, borderRadius: 10 }}><IconMail width={18} height={18} /></span>
           {t('biz.form.title')}
@@ -226,7 +256,7 @@ export default function Business() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="biz-form-grid">
             <label style={{ display: 'grid', gap: 6 }}>
               <span className="field-label">{t('biz.form.company')} *</span>
               <input value={form.company} onChange={(e) => setField('company', e.target.value)} placeholder={t('biz.form.companyPlaceholder')} />
@@ -237,7 +267,7 @@ export default function Business() {
             </label>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="biz-form-grid">
             <label style={{ display: 'grid', gap: 6 }}>
               <span className="field-label">{t('biz.form.workEmail')} *</span>
               <input type="email" inputMode="email" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="name@company.com" dir="ltr" />

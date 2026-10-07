@@ -28,10 +28,10 @@
 import {
   CHAIN_IDS, EVM_CHAINS, IntelError, cachedMeta, decodeUint, encodeCall,
   ethCall, explorerConfigured, healthSnapshot, isAddress, normAddr,
-  recordIntelEvent, registryToken, SELECTORS, tokenMeta
+  recordIntelEvent, recordSourceHealth, registryToken, SELECTORS, tokenMeta
 } from './chainIntel.js';
 import { fetchTokenRisk } from './tokenRisk.js';
-import { hacksIndex, protocolDetail, contractProfile } from './explorerData.js';
+import { hacksIndex, llamaProtocols, protocolDetail, contractProfile } from './explorerData.js';
 import { storeGet, storeSet } from './store.js';
 
 const SEC_TTL = {
@@ -598,7 +598,7 @@ async function pushAlerts(list) {
  * deliberately no `blocked`, `prevented` or `disabled` field anywhere in this
  * payload shape, and the probe suite asserts it.
  */
-export async function securityAlerts({ wallet = null, chainId = null, limit = 40 } = {}) {
+export async function securityAlerts({ wallet = null, chainId = null, limit = 40, incidentFeedTimeout = null } = {}) {
   const notices = [];
   const alerts = [];
   // 1. watch diffs (memory + durable)
@@ -616,7 +616,8 @@ export async function securityAlerts({ wallet = null, chainId = null, limit = 40
   }
   // 2. incident feed, last 30 days
   try {
-    const hacks = (await hacksIndex()).data.incidents || [];
+    const feedOptions = incidentFeedTimeout == null ? {} : { timeout: incidentFeedTimeout };
+    const hacks = (await hacksIndex(feedOptions)).data.incidents || [];
     const cutoff = Date.now() - 30 * 86_400_000;
     for (const h of hacks.filter((x) => x.at && x.at >= cutoff).slice(0, 25)) {
       alerts.push({
@@ -667,54 +668,168 @@ export async function securityAlerts({ wallet = null, chainId = null, limit = 40
 /* Overview — the dashboard's six component cards, computed from health        */
 /* -------------------------------------------------------------------------- */
 
-function pctOk(list) {
-  const good = list.filter(Boolean).length;
-  return list.length ? Math.round((good / list.length) * 100) : null;
+function currentSourceHealth(row, maxAgeMs, now) {
+  if (!row || !(row.okCount > 0) || !row.lastSuccessAt) return false;
+  const successAt = Date.parse(row.lastSuccessAt);
+  const failureAt = row.lastFailureAt ? Date.parse(row.lastFailureAt) : null;
+  return Number.isFinite(successAt) && successAt <= now && now - successAt <= maxAgeMs
+    && (!Number.isFinite(failureAt) || successAt >= failureAt);
+}
+
+function latestHealthAt(rows) {
+  const stamps = rows.flatMap((row) => [row?.lastSuccessAt, row?.lastFailureAt])
+    .filter((value) => value && Number.isFinite(Date.parse(value)));
+  return stamps.length ? stamps.sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1) : null;
+}
+
+function averageLatency(rows) {
+  const values = rows.map((row) => row?.latencyMs).filter((value) => Number.isFinite(value));
+  return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+}
+
+function statusForCoverage(score) {
+  return score == null ? 'INSUFFICIENT_EVIDENCE'
+    : score >= 90 ? 'OPERATIONAL'
+      : score >= 60 ? 'DEGRADED' : 'IMPAIRED';
+}
+
+/** Pure summary of observed source health; exported so the UI contract can be
+ * tested without live RPC, explorer keys, or provider credentials. */
+export function summarizeSecurityHealth({ snapshot = {}, alerts = null, configuredExplorerCount = null, now = Date.now() } = {}) {
+  const totalChains = CHAIN_IDS.length;
+  const rpcRows = CHAIN_IDS.map((id) => snapshot[`rpc:${id}`] || null);
+  const contractRows = CHAIN_IDS.map((id) => snapshot[`contract:${id}`] || null);
+  const rpcObserved = rpcRows.filter(Boolean).length;
+  const contractObserved = contractRows.filter(Boolean).length;
+  const rpcHealthy = CHAIN_IDS.filter((id) => currentSourceHealth(snapshot[`rpc:${id}`], 120_000, now)).length;
+  const contractHealthy = CHAIN_IDS.filter((id) => {
+    const row = snapshot[`contract:${id}`];
+    return currentSourceHealth(row, 120_000, now) && row.latencyMs != null && row.latencyMs < 6000;
+  }).length;
+  const infraScore = rpcObserved ? Math.round((rpcHealthy / totalChains) * 100) : null;
+  const contractScore = contractObserved ? Math.round((contractHealthy / totalChains) * 100) : null;
+
+  const feedSpecs = [
+    { key: 'llama:protocols', ttl: 60 * 60_000 },
+    { key: 'llama:hacks', ttl: 6 * 60 * 60_000 }
+  ];
+  const feedObserved = feedSpecs.filter(({ key }) => snapshot[key]).length;
+  const feedHealthy = feedSpecs.filter(({ key, ttl }) => currentSourceHealth(snapshot[key], ttl, now)).length;
+  const feedScore = feedObserved ? Math.round((feedHealthy / feedSpecs.length) * 100) : null;
+  const incidentsHealthy = currentSourceHealth(snapshot['llama:hacks'], 6 * 60 * 60_000, now);
+
+  const alertRows = Array.isArray(alerts) ? alerts : null;
+  const alertCount = alertRows?.length ?? 0;
+  const threatScore = alertRows == null ? null : incidentsHealthy ? 100 : 50;
+  const threatStatus = alertRows == null ? 'INSUFFICIENT_EVIDENCE' : incidentsHealthy ? 'OPERATIONAL' : 'PARTIAL';
+
+  const configured = configuredExplorerCount == null
+    ? CHAIN_IDS.filter((id) => explorerConfigured(id)).length
+    : Math.max(0, Math.min(totalChains, Number(configuredExplorerCount) || 0));
+  const explorerScore = totalChains ? Math.round((configured / totalChains) * 100) : null;
+  const explorerStatus = configured === totalChains ? 'OPERATIONAL' : 'PARTIAL';
+  const label = statusForCoverage;
+
+  const components = [
+    {
+      key: 'infrastructure', label: 'Infrastructure', score: infraScore, status: label(infraScore),
+      basis: `${rpcHealthy}/${totalChains} supported EVM RPC reads answered within the freshness window.`,
+      evidence: rpcHealthy, coverage: { healthy: rpcHealthy, total: totalChains, observed: rpcObserved },
+      lastCheckedAt: latestHealthAt(rpcRows), latencyMs: averageLatency(rpcRows)
+    },
+    {
+      key: 'contractMonitoring', label: 'Smart contract monitoring', score: contractScore, status: label(contractScore),
+      basis: `${contractHealthy}/${totalChains} configured wrapped-token bytecode reads returned within budget; this does not verify source code.`,
+      evidence: contractHealthy, coverage: { healthy: contractHealthy, total: totalChains, observed: contractObserved },
+      lastCheckedAt: latestHealthAt(contractRows), latencyMs: averageLatency(contractRows)
+    },
+    {
+      key: 'protocolMonitoring', label: 'Protocol monitoring', score: feedScore, status: label(feedScore),
+      basis: `${feedHealthy}/${feedSpecs.length} live protocol/incident feeds answered within their cache freshness windows.`,
+      evidence: feedHealthy, coverage: { healthy: feedHealthy, total: feedSpecs.length, observed: feedObserved },
+      lastCheckedAt: latestHealthAt(feedSpecs.map(({ key }) => snapshot[key])),
+      latencyMs: averageLatency(feedSpecs.map(({ key }) => snapshot[key]))
+    },
+    {
+      key: 'threatMonitoring', label: 'Threat monitoring', score: threatScore, status: threatStatus,
+      basis: `${alertCount} alert row(s) in the last 24h; incident feed ${incidentsHealthy ? 'available' : 'unavailable or stale'}. Feed health is not a risk finding.`,
+      evidence: alertCount, coverage: { healthy: alertRows == null ? 0 : 1 + Number(incidentsHealthy), total: 2, observed: alertRows == null ? 0 : 1 + Number(Boolean(snapshot['llama:hacks'])) },
+      lastCheckedAt: snapshot['llama:hacks'] ? latestHealthAt([snapshot['llama:hacks']]) : null,
+      latencyMs: snapshot['llama:hacks']?.latencyMs ?? null
+    },
+    {
+      key: 'dataProviders', label: 'Data providers', score: explorerScore, status: explorerStatus,
+      basis: `${configured}/${totalChains} networks have an explorer API key configured; indexed history and source verification may be unavailable without one.`,
+      evidence: configured, coverage: { healthy: configured, total: totalChains, observed: configured },
+      lastCheckedAt: new Date(now).toISOString(), latencyMs: null
+    }
+  ];
+
+  const statuses = components.map((component) => component.status);
+  const coreStatuses = components.filter((component) => component.key !== 'dataProviders').map((component) => component.status);
+  const systemStatus = coreStatuses.every((status) => status === 'INSUFFICIENT_EVIDENCE') ? 'STARTING'
+    : statuses.includes('IMPAIRED') ? 'DEGRADED'
+      : statuses.some((status) => ['DEGRADED', 'PARTIAL'].includes(status)) ? 'OPERATIONAL_WITH_GAPS' : 'OPERATIONAL';
+  return {
+    system: {
+      status: systemStatus,
+      checkedAt: new Date(now).toISOString(),
+      note: 'Status reflects bounded source checks observed by this API instance. It is not a contract-safety rating and never gates a transaction.'
+    },
+    components
+  };
 }
 
 /**
- * Dashboard metrics. Every component's number is derived from the health map
- * chainIntel records as calls actually succeed or fail: reachable chains,
- * feed freshness, explorer coverage, alert load. On a cold instance that
- * hasn't observed anything yet, components report null with
- * `insufficient-evidence` — the UI shows "—", not 100.
+ * Overview probes the actual read surfaces on a cold API instance: one bounded
+ * `eth_getCode` per supported EVM chain, plus the protocol catalog and incident
+ * feed. The same code read proves RPC reachability and contract-read coverage;
+ * no transaction is signed, simulated, sent, or gated.
  */
 export async function securityOverview() {
   return cachedMeta('sec:overview', SEC_TTL.overview, async () => {
     const startedAt = new Date();
+    const rpcProbes = CHAIN_IDS.map(async (chainId) => {
+      const address = EVM_CHAINS[chainId]?.wrapped;
+      if (!address) return;
+      try {
+        const bytecode = await rpcCall(chainId, 'eth_getCode', [normAddr(address), 'latest'], {
+          timeout: 1400, healthKeys: [`contract:${chainId}`]
+        });
+        if (typeof bytecode !== 'string' || /^0x0*$/i.test(bytecode)) {
+          recordSourceHealth(`contract:${chainId}`, false, 'configured wrapped-token address returned no bytecode');
+        }
+      } catch { /* source health records the failure; other networks continue */ }
+    });
+    const [rpcResults, catalogResult, alertsResult] = await Promise.all([
+      Promise.allSettled(rpcProbes),
+      llamaProtocols({ timeout: 4500 }).then((value) => ({ ok: true, value }), () => ({ ok: false, value: null })),
+      securityAlerts({ limit: ALERT_CAP, incidentFeedTimeout: 4500 })
+        .then((value) => ({ ok: true, value }), () => ({ ok: false, value: null }))
+    ]);
     const snapshot = healthSnapshot();
-    const chainKeys = CHAIN_IDS.map((id) => snapshot[`rpc:${id}`] || null);
-    const observedChains = chainKeys.filter(Boolean);
-    const infraScore = observedChains.length
-      ? pctOk(observedChains.map((h) => h.okCount > 0 && (!h.lastFailureAt || (h.lastSuccessAt && h.lastSuccessAt >= h.lastFailureAt))))
+    const now = Date.now();
+    const cutoff = now - 86_400_000;
+    const alertRows = alertsResult.value?.data?.alerts;
+    const alerts24 = Array.isArray(alertRows)
+      ? alertRows.filter((row) => row.at && Date.parse(row.at) >= cutoff)
       : null;
-    const explorerCoverage = pctOk(CHAIN_IDS.map((id) => explorerConfigured(id)));
-    const feeds = ['llama:protocols', 'llama:hacks', 'llama:protocol'].map((k) => snapshot[k]).filter(Boolean);
-    const feedScore = feeds.length ? pctOk(feeds.map((f) => f.okCount > 0 && (!f.lastFailureAt || (f.lastSuccessAt && f.lastSuccessAt >= f.lastFailureAt)))) : null;
-    let alerts24 = null;
-    try {
-      const { data } = await securityAlerts({ limit: ALERT_CAP });
-      const cutoff = Date.now() - 86_400_000;
-      alerts24 = (data.alerts || []).filter((a) => a.at && Date.parse(a.at) >= cutoff);
-    } catch { /* alert count stays null → component UNKNOWN */ }
-    const threatScore = alerts24 != null ? Math.max(0, 100 - alerts24.filter((a) => a.severity === 'HIGH').length * 10 - alerts24.filter((a) => a.severity === 'MEDIUM').length * 5) : null;
-    const contractCoverage = observedChains.length ? pctOk(observedChains.map((h) => h.latencyMs != null && h.latencyMs < 6000)) : null;
-
-    const label = (s) => s == null ? 'INSUFFICIENT_EVIDENCE' : s >= 90 ? 'OPERATIONAL' : s >= 60 ? 'DEGRADED' : 'IMPAIRED';
-    const components = [
-      { key: 'infrastructure', label: 'Infrastructure', score: infraScore, status: label(infraScore), basis: observedChains.length ? `${observedChains.filter((h) => h.okCount > 0).length}/${observedChains.length} chains answering` : 'No chain calls observed yet in this process.', evidence: CHAIN_IDS.length },
-      { key: 'contractMonitoring', label: 'Smart contract monitoring', score: contractCoverage, status: label(contractCoverage), basis: 'Chain latency within budget across observed RPC calls.', evidence: observedChains.length },
-      { key: 'protocolMonitoring', label: 'Protocol monitoring', score: feedScore, status: label(feedScore), basis: feeds.length ? `${feeds.length} protocol feed(s) checked` : 'Protocol feeds not yet exercised in this process.', evidence: feeds.length },
-      { key: 'threatMonitoring', label: 'Threat monitoring', score: threatScore, status: label(threatScore), basis: alerts24 != null ? `${alerts24.length} alert(s) in the last 24h` : 'Alert engine not yet exercised.', evidence: alerts24?.length ?? 0 },
-      { key: 'dataProviders', label: 'Data providers', score: explorerCoverage, status: explorerCoverage == null ? 'INSUFFICIENT_EVIDENCE' : explorerCoverage >= 50 ? 'OPERATIONAL' : 'PARTIAL', basis: `${CHAIN_IDS.filter((id) => explorerConfigured(id)).length}/${CHAIN_IDS.length} chains have an explorer API key (verification, creation dates, indexed history depend on it).`, evidence: CHAIN_IDS.length }
+    const summary = summarizeSecurityHealth({ snapshot, alerts: alerts24, now });
+    const catalogStale = catalogResult.value?.meta?.freshness === 'STALE';
+    const notices = [
+      ...(!catalogResult.ok || catalogStale ? [{ code: 'PROTOCOL_CATALOG_UNAVAILABLE', detail: 'The protocol catalog is unavailable or stale; this is not a clean security result.' }] : []),
+      ...(!alertsResult.ok ? [{ code: 'INCIDENT_FEED_UNAVAILABLE', detail: 'Security alerts could not be assembled; threat coverage is unknown.' }] : alertsResult.value?.notices || [])
     ];
-    const systemStatus = components.some((c) => c.status === 'IMPAIRED') ? 'DEGRADED' : components.every((c) => c.status === 'INSUFFICIENT_EVIDENCE') ? 'STARTING' : components.some((c) => c.status === 'DEGRADED' || c.status === 'PARTIAL') ? 'OPERATIONAL_WITH_GAPS' : 'OPERATIONAL';
+    if (rpcResults.some((result) => result.status === 'rejected')) {
+      notices.push({ code: 'RPC_PROBE_INCOMPLETE', detail: 'Some configured network read probes did not finish.' });
+    }
     return {
       data: {
-        system: { status: systemStatus, startedAt: startedAt.toISOString(), note: 'Status reflects monitoring health observed by this API instance, not a guarantee about any contract.' },
-        components,
+        system: { ...summary.system, startedAt: startedAt.toISOString() },
+        components: summary.components,
         walletNote: { localOnly: true, note: 'Wallet-local posture (lock, biometrics, 2FA) is computed on the device and shown in the wallet security card; the server never receives those settings.' }
       },
+      notices,
       cachedAt: new Date().toISOString()
     };
   }, 'observed-health');
