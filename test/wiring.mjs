@@ -15316,5 +15316,38 @@ export default function run() {
       existsSync('test/capital-flows-probe.mjs'));
   }
 
+  /*
+   * ─── «تب فعالیت‌ها ارور می‌دهد» ────────────────────────────────────────────
+   * Two classes of failure that only show in the user's hands, both of which
+   * shipped and had to be fixed here:
+   *
+   *   1. The activity feed rendered `o.fromToken` — the token OBJECT — into
+   *      JSX. React refuses an object as a child, the throw escaped the route
+   *      (the AI page has no inner boundary), and «فعالیت‌ها» became the crash
+   *      card for everyone who had ever created an order. The mounted probe
+   *      (test/intent-ai/activity-tab-orders-probe.jsx) reproduces it; these
+   *      two lines make "one raw field slips back in" a wiring failure too.
+   *
+   *   2. `handleStartNewChat` called two names that do not exist —
+   *      `recordHistoryItem` and `initConversationState` — inside a try/catch,
+   *      so starting a new chat silently kept the FINISHED conversation's
+   *      state and never saved the fresh snapshot. A swallowed ReferenceError
+   *      is invisible to every renderer, so it is pinned in the source.
+   */
+  {
+    const intentSrc = read('src/components/IntentAIUnified.jsx');
+    t('the activity order row labels tokens through the shared helper, never the raw field',
+      intentSrc.includes('{tagTokenLabel(o.fromToken)} → {tagTokenLabel(o.toToken)}')
+      && !intentSrc.includes("{o.fromToken || '—'}")
+      && /const tagTokenLabel = \(token\) => \{[\s\S]{0,220}?typeof token === 'string'/.test(intentSrc));
+    /* Comments in this file NAME both dead identifiers on purpose (they
+       explain why the calls are gone); only the executable lines are pinned. */
+    const intentCode = intentSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+    t('the new-chat handler resets state through a name that exists',
+      !/\brecordHistoryItem\s*\(/.test(intentCode)
+      && !/\binitConversationState\s*\(/.test(intentCode)
+      && /createConversationState\(\{\s*sessionId: convStateRef\.current\?\.sessionId/.test(intentCode));
+  }
+
   return rows;
 }

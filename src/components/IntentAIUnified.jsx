@@ -442,6 +442,24 @@ const fmtUsd = (v) => (Number.isFinite(Number(v))
 const fmtPct = (v, d = 2) => (Number.isFinite(Number(v)) ? `${Number(v).toFixed(d)}٪` : '—');
 
 /*
+ * ─── «تب فعالیت‌ها ارور می‌دهد» ──────────────────────────────────────────────
+ * A stored order keeps the WHOLE token object (`createOrder` in
+ * src/lib/orders.js copies `input.fromToken`/`toToken`, and every other screen
+ * reads `o.fromToken.symbol`). The activity row rendered the field itself, and
+ * React refuses an object as a child — «Objects are not valid as a React
+ * child» — which threw out of the activity tab and took the whole page to the
+ * crash boundary for anyone who had ever created an order. Every order label
+ * now goes through one helper that reads the symbol whichever shape the record
+ * carries: the object the app writes today, or a legacy row that kept only the
+ * ticker string.
+ */
+const tagTokenLabel = (token) => {
+  if (!token) return '—';
+  if (typeof token === 'string') return token || '—';
+  return String(token.symbol || token.name || '—');
+};
+
+/*
  * «بررسی» must ANSWER, not nod. The evaluate endpoint returns the live
  * reading, the threshold and whether the condition holds — this turns that
  * into «قیمت الان X است، شرطت Y، این‌قدر فاصله داری» (or the yield version),
@@ -1222,19 +1240,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const isSessionFull = userTaskCount >= 10;
 
   const handleStartNewChat = useCallback(() => {
-    try {
-      if (messages.length > 1) {
-        const firstUserMsg = messages.find((m) => m.sender === 'user' || m.role === 'user');
-        recordHistoryItem({
-          id: `hist-${Date.now()}`,
-          timestamp: Date.now(),
-          type: 'chat_session',
-          title: firstUserMsg?.content?.slice(0, 45) || (locale.startsWith('fa') ? 'گفتگوی قبلی هوش مصنوعی' : 'Past AI Session'),
-          status: 'completed',
-          turns: messages.filter((m) => m.sender === 'user' || m.role === 'user').length
-        });
-      }
-    } catch {}
+    /*
+     * No "record the finished session" call here on purpose. Every message is
+     * already archived the moment it renders (the persistence effect below
+     * calls appendConversation with the message id as `sourceId`, and
+     * appendSeason rolls it into the season row), so a second summary row
+     * would either duplicate the archive or — as the previous code did — call
+     * a name that does not exist (`recordHistoryItem`) and silently do
+     * nothing at all inside this catch. One writer, one source of truth.
+     */
     const freshHello = {
       id: makeId(),
       role: 'ai',
@@ -1244,7 +1258,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     };
     setMessages([freshHello]);
     try {
-      convStateRef.current = initConversationState();
+      /* `initConversationState()` did not exist either: the ReferenceError was
+         swallowed by this catch, so "new chat" kept pointing convStateRef at
+         the FINISHED conversation and never saved the fresh hello snapshot —
+         the old thread's slots and pending intent leaked into the new one. */
+      convStateRef.current = createConversationState({
+        sessionId: convStateRef.current?.sessionId,
+        currentRoute: currentPage
+      });
       saveThreadSnapshot(visitInfo.seasonId, [freshHello]);
     } catch {}
     setInput('');
@@ -6296,7 +6317,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     }
     const sync = await syncOrderWatches();
     const order = made.order;
-    setActiveContext({ type: 'order', id: order.id, label: `${order.toToken.symbol} @ ${order.targetRate}` });
+    setActiveContext({ type: 'order', id: order.id, label: `${tagTokenLabel(order.toToken)} @ ${order.targetRate}` });
     pushTurn({
       id: makeId(),
       role: 'ai',
@@ -6310,8 +6331,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     appendOp({
       kind: 'ORDER_CREATE',
       status: sync === 'synced' ? 'ACTIVE' : 'WARNING',
-      title: `${order.toToken.symbol} conditional buy`,
-      detail: `${order.direction === 'above' ? '≥' : '≤'} ${order.targetRate} USD · ${order.amountIn} ${order.fromToken.symbol} · ${order.id}`,
+      title: `${tagTokenLabel(order.toToken)} conditional buy`,
+      detail: `${order.direction === 'above' ? '≥' : '≤'} ${order.targetRate} USD · ${order.amountIn} ${tagTokenLabel(order.fromToken)} · ${order.id}`,
       ref: order.id,
       refKind: 'order'
     });
@@ -7842,7 +7863,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                   <div key={o.id || i} className="tag-row" style={{ cursor: 'default' }}>
                     <span className="tag-row-glyph" aria-hidden="true">⇄</span>
                     <span className="tag-row-copy">
-                      <span className="tag-row-title">{o.fromToken || '—'} → {o.toToken || '—'}</span>
+                      <span className="tag-row-title">{tagTokenLabel(o.fromToken)} → {tagTokenLabel(o.toToken)}</span>
                       <span className="tag-row-sub">{String(o.type || 'order').toUpperCase()} · {o.status === 'active' ? (fa ? 'فعال' : 'active') : o.status === 'paused' ? (fa ? 'متوقف' : 'paused') : (o.status || '')}{o.runsDone ? ` · ${o.runsDone} ${fa ? 'اجرا' : 'runs'}` : ''}</span>
                     </span>
                     <span className="tag-row-end">{tagFmtTime(o.createdAt)}</span>
