@@ -34,6 +34,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { POINT_VALUES } from '../lib/ranks';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 /**
  * THORChain panel — quote for every chain, SIGN HERE for EVM sources.
@@ -277,8 +278,10 @@ export default function ThorPanel({ initialFrom, initialTo } = {}) {
       } catch { /* keep the last known state */ }
     };
     tick();
-    const id = setInterval(tick, 12000);
-    return () => { alive = false; clearInterval(id); };
+    /* A transaction status is only worth polling while somebody is watching
+       the screen it is written on (lib/visibilityPoll.js). */
+    const stopPoll = pollWhileVisible(tick, 12000);
+    return () => { alive = false; stopPoll(); };
   }, [depositTx, thorStatus?.delivered]);
 
   /*

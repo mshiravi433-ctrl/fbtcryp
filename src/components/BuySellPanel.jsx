@@ -33,6 +33,7 @@ import {
   normalizeWalletInput
 } from '../lib/guidedCheckout';
 import { IconCheck, IconChevronRight, IconClock, IconRefresh, IconShield, IconWallet } from './Icons';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 const POLL_MS = 15_000;
 
@@ -442,8 +443,10 @@ export default function BuySellPanel({ initialOrderId = null }) {
 
   useEffect(() => {
     if (!order || order.status === 'COMPLETED' || /FAILED|CANCELLED|MANUAL_REVIEW/.test(order.status)) return undefined;
-    const timer = setInterval(() => { refreshOrder(); }, POLL_MS);
-    return () => clearInterval(timer);
+    /* Visible-tab polling; the status re-reads the instant the tab returns
+       (lib/visibilityPoll.js). The 1 s countdown above stays untouched — it
+       is local arithmetic, not a request. */
+    return pollWhileVisible(() => { refreshOrder(); }, POLL_MS);
   }, [order, refreshOrder]);
 
   const changeSide = (next) => { setSide(next); resetQuote(); };

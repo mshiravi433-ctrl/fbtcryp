@@ -32,6 +32,7 @@ import { perksFor } from '../lib/perks';
 import { rewardsSummary, bindRewardCode } from '../lib/rewards/rewardsApi';
 import { siteInviteUrl } from '../lib/referral';
 import { copyText } from '../lib/share';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 import {
   IconActivity, IconCheck, IconChevronRight, IconCopy, IconGift, IconLink,
   IconLock, IconPools, IconSparkle, IconSwap, IconTrophy, IconUser, IconWallet
@@ -108,13 +109,14 @@ export default function RewardsDashboard({ embedded = false }) {
     void run();
     const onRefresh = () => void run();
     window.addEventListener('focus', onRefresh);
-    document.addEventListener('visibilitychange', onRefresh);
-    const iv = setInterval(onRefresh, 60000);
+    /* Only a tab that is actually visible needs this: `focus` already covers
+       the desktop, and the interval no longer ticks from a hidden phone
+       (lib/visibilityPoll.js fires it once on return). */
+    const stopPoll = pollWhileVisible(onRefresh, 60000);
     return () => {
       alive = false;
       window.removeEventListener('focus', onRefresh);
-      document.removeEventListener('visibilitychange', onRefresh);
-      clearInterval(iv);
+      stopPoll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

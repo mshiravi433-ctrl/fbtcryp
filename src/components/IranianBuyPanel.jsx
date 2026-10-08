@@ -42,6 +42,7 @@ import {
   verifyIranBuyPayment
 } from '../lib/iranBuy';
 import { riseIn } from './PageTransition';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 const POLL_MS = 15_000;
 const RATE_POLL_MS = 60_000;
@@ -189,8 +190,10 @@ function useIranBuyRate() {
   useEffect(() => {
     live.current = true;
     load();
-    const timer = setInterval(load, RATE_POLL_MS);
-    return () => { live.current = false; clearInterval(timer); };
+    /* The toman rate is a screen the user is looking at; a hidden tab asking
+       for it every minute is pure phantom traffic (lib/visibilityPoll.js). */
+    const stopPoll = pollWhileVisible(load, RATE_POLL_MS);
+    return () => { live.current = false; stopPoll(); };
   }, [load]);
 
   return { rate, loading, refresh: load };
@@ -720,8 +723,10 @@ export default function IranianBuyPanel({ capability }) {
 
   useEffect(() => {
     if (!order || orderIsFinal(order)) return undefined;
-    const timer = setInterval(() => { refreshOrder(); }, POLL_MS);
-    return () => clearInterval(timer);
+    /* An order still being watched is watched from a VISIBLE tab: the poll
+       resumes (and fires at once) the moment the user comes back, and a
+       backgrounded phone stops paying for a status it cannot display. */
+    return pollWhileVisible(() => { refreshOrder(); }, POLL_MS);
   }, [order, refreshOrder]);
 
   useEffect(() => {

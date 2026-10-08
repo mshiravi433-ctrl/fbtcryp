@@ -185,6 +185,8 @@ export function openEventStream({ onEvent, onTransport } = {}) {
   let closed = false;
   let poll = null;
   let source = null;
+  let paused = false;
+  let last = 0;
   const seen = new Set();
 
   const deliver = (evt) => {
@@ -195,50 +197,106 @@ export function openEventStream({ onEvent, onTransport } = {}) {
     return true;
   };
 
-  const startPolling = (why) => {
-    if (closed || poll) return;
-    onTransport?.({ transport: 'polling', reason: why || null });
-    let last = 0;
-    poll = setInterval(async () => {
-      const out = await recentEvents(20);
-      if (!out.ok) return;
-      for (const evt of out.events || []) {
-        if ((evt.at || 0) > last) last = evt.at || 0;
-        if (!evt.id) {
-          /* The ring buffer only ids events for the stream; a polled event still
-             has to be deduplicated or a refresh would fire once per interval. */
-          deliver({ ...evt, id: `${evt.type}:${evt.at}:${evt.owner || ''}` });
-        } else deliver(evt);
-      }
-    }, 15000);
+  const readOnce = async () => {
+    if (closed) return;
+    const out = await recentEvents(20).catch(() => null);
+    if (!out?.ok) return;
+    for (const evt of out.events || []) {
+      if ((evt.at || 0) > last) last = evt.at || 0;
+      if (!evt.id) {
+        /* The ring buffer only ids events for the stream; a polled event still
+           has to be deduplicated or a refresh would fire once per interval. */
+        deliver({ ...evt, id: `${evt.type}:${evt.at}:${evt.owner || ''}` });
+      } else deliver(evt);
+    }
   };
 
-  try {
-    if (typeof EventSource === 'undefined') {
-      startPolling('NO_EVENTSOURCE');
-    } else {
-      source = new EventSource(`${base()}/brain/system/stream`, { withCredentials: false });
-      source.onopen = () => onTransport?.({ transport: 'sse', reason: null });
-      source.onerror = () => {
-        try {
-          source?.close();
-        } catch {
-          /* already down */
-        }
-        source = null;
-        startPolling('SSE_ERROR');
-      };
-      source.onmessage = (msg) => {
-        try {
-          deliver(JSON.parse(msg.data));
-        } catch {
-          /* a heartbeat frame carries no JSON; it is proof the pipe is alive */
-        }
-      };
+  const stopTransports = () => {
+    try {
+      source?.close();
+    } catch {
+      /* already down */
     }
-  } catch {
-    startPolling('SSE_UNSUPPORTED');
+    source = null;
+    if (poll) {
+      clearInterval(poll);
+      poll = null;
+    }
+  };
+
+  const startPolling = (why) => {
+    if (closed || paused || poll) return;
+    onTransport?.({ transport: 'polling', reason: why || null });
+    poll = setInterval(() => { void readOnce(); }, 15000);
+  };
+
+  const connect = () => {
+    if (closed || paused) return;
+    stopTransports();
+    try {
+      if (typeof EventSource === 'undefined') {
+        startPolling('NO_EVENTSOURCE');
+      } else {
+        source = new EventSource(`${base()}/brain/system/stream`, { withCredentials: false });
+        source.onopen = () => onTransport?.({ transport: 'sse', reason: null });
+        source.onerror = () => {
+          try {
+            source?.close();
+          } catch {
+            /* already down */
+          }
+          source = null;
+          startPolling('SSE_ERROR');
+        };
+        source.onmessage = (msg) => {
+          try {
+            deliver(JSON.parse(msg.data));
+          } catch {
+            /* a heartbeat frame carries no JSON; it is proof the pipe is alive */
+          }
+        };
+      }
+    } catch {
+      startPolling('SSE_UNSUPPORTED');
+    }
+  };
+
+  /*
+   * ─── NO EVENT TRAFFIC FROM A HIDDEN TAB ─────────────────────────────────
+   * This subscription is mounted ABOVE the router (CentralBrainContext), so it
+   * exists on every screen of the app, for the whole session. On the deployed
+   * host the SSE stream is cut at the function's max duration and the client
+   * degrades to `/system/events` every 15 s — 5,760 requests per day per open
+   * tab, each one waking the brain, for a banner nobody could see. Measured
+   * across the app's other pollers this was the single largest request source
+   * in the whole client, and none of it was being read.
+   *
+   * So the transports are torn down while the tab is hidden (the last reported
+   * transport is deliberately NOT overwritten — "hidden" is not "offline", and
+   * a panel that flashed «قطع» every time the user switched tabs would be
+   * lying). Becoming visible reconnects and catches up immediately through one
+   * `readOnce()`, so no event published while the tab slept is missed and the
+   * screen is never stale on return.
+   */
+  const doc = typeof document === 'undefined' ? null : document;
+  const onVisibilityChange = () => {
+    if (closed || !doc) return;
+    if (doc.visibilityState === 'hidden') {
+      paused = true;
+      stopTransports();
+      return;
+    }
+    if (!paused) return;
+    paused = false;
+    connect();
+    void readOnce();
+  };
+  if (doc && typeof doc.addEventListener === 'function') {
+    doc.addEventListener('visibilitychange', onVisibilityChange);
+    if (doc.visibilityState === 'hidden') paused = true;
   }
+
+  if (!paused) connect();
 
   return {
     get transport() {
@@ -246,12 +304,10 @@ export function openEventStream({ onEvent, onTransport } = {}) {
     },
     close() {
       closed = true;
-      try {
-        source?.close();
-      } catch {
-        /* ignore */
+      if (doc && typeof doc.removeEventListener === 'function') {
+        doc.removeEventListener('visibilitychange', onVisibilityChange);
       }
-      if (poll) clearInterval(poll);
+      stopTransports();
     }
   };
 }

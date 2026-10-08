@@ -24,8 +24,12 @@ const t = (name, ok, detail = '') => rows.push([`${name}${ok || !detail ? '' : `
 const appSrc = readFileSync(join(repoRoot, 'server/app.js'), 'utf8');
 const routerSrc = readFileSync(join(repoRoot, 'server/intentOsUpgrade8.js'), 'utf8');
 
+/* Lazy form on purpose: the mount keeps its position and prefix, and the
+   module is imported on the first request that reaches it (a cold start must
+   not compile the whole AI stack — see the lazyMount note in server/app.js). */
 t('server/app.js mounts the Upgrade 8 router under /api/v1/ai/os',
-  appSrc.includes("app.use('/api/v1/ai/os', intentOsUpgrade8Routes)"));
+  appSrc.includes("app.use('/api/v1/ai/os', lazyMount('ai-os-sessions', () => import('./intentOsUpgrade8.js')))")
+  && appSrc.includes("app.use('/api/v1/ai/os'"));
 t('server/intentOsUpgrade8.js exposes GET /state', routerSrc.includes("router.get('/state'"));
 t('server/intentOsUpgrade8.js exposes POST /state', routerSrc.includes("router.post('/state'"));
 t('server/intentOsUpgrade8.js exposes POST /questions/:id/answers', routerSrc.includes("router.post('/questions/:id/answers'"));

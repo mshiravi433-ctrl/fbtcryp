@@ -4,6 +4,7 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { useTelegram } from '../context/TelegramContext';
 import { fmtPrice, fmtUsd } from '../lib/format';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 import {
   getFuturesMarkets,
   getFuturesPositions,
@@ -183,9 +184,13 @@ export default function FuturesPositionsCard() {
      * is a screen a user is watching; this is a card at the foot of a pair
      * list, and polling it every second would buy nothing and cost a venue
      * read per second per open tab.
+     *
+     * And only while that screen is actually VISIBLE: each tick reads every
+     * venue for this wallet, so a hidden tab was paying that cost (and a
+     * serverless invocation with it) for numbers nobody was reading. The first
+     * tick after the tab comes back runs immediately, so nothing looks stale.
      */
-    const id = setInterval(refresh, 10_000);
-    return () => clearInterval(id);
+    return pollWhileVisible(refresh, 10_000);
   }, [refresh]);
 
   /**

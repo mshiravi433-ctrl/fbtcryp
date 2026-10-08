@@ -223,20 +223,27 @@ import {
 } from './store.js';
 import { aiConfigured, aiProvider, aiSelfTest, answerSupportQuestion, generateMarketBrief, generateOutlook, ignoredAiEnvVarsPresent, newsConfigured } from './ai.js';
 import { getAvailableProviders, getFleetSummary, getProviderHealth, normalizeSecretValue } from './aiGateway.js';
-import aiCommandRoutes from './aiCommand.js';
-import aiIntentOSRoutes from './aiIntentOS.js';
-import aiOrchestratorRoutes from './aiOrchestratorRoutes.js';
-import intentOsUpgrade8Routes from './intentOsUpgrade8.js';
-import { createCentralIntelligence } from './ci/api.js';
-import { createFinancialIntelligence } from './fios/index.js';
-import { createBrainRouter } from './brain/index.js';
-import { installCentralOS, centralRouter } from './central/index.js';
-import { lendingRouter } from './lending.js';
-import { solanaLendingRouter } from './solanaLending.js';
-import { futuresRouter } from './futures/router.js';
-import { rewardsRouter } from './rewards/index.js';
-import { insuranceRouter } from './insurance/index.js';
-import { protocolRouter } from './protocolRoutes.js';
+/*
+ * ─── LAZY ROUTE MODULES: WHAT A COLD START MUST NOT PAY FOR ────────────────
+ * The sixteen imports that used to sit here (AI command center, the Intent OS
+ * gateway, the orchestrator routes, the central intelligence API, the
+ * financial OS, the predictive brain, the central OS itself, the lending /
+ * Solana-lending / futures / rewards / insurance / protocol routers) were
+ * measured on a cold process: importing them costs ~470 ms of CPU on top of
+ * the ~320 ms the rest of the app needs, i.e. most of a serverless cold start.
+ *
+ * A cold start happens for the FIRST request of a new instance, and that
+ * request is usually /api/health, a price read or a landing-page fetch — none
+ * of which can reach a single route in those modules. Compiling them anyway
+ * is what turned a free-tier CPU budget into a bill: on Vercel, Fluid Active
+ * CPU is charged for exactly this work, once per instance.
+ *
+ * So each heavy module is now mounted through `lazyMount()` below: the mount
+ * keeps its position in the middleware stack (route order is unchanged) and
+ * its module is imported on the first request that actually reaches it.
+ * Nothing about the routes themselves is different.
+ * See docs/CPU-BUDGET-2026-10-07-FA.md for the measurements.
+ */
 import { fetchTokenRisk } from './tokenRisk.js';
 /*
  * EXPLORE + SECURITY CENTER — the blockchain-intelligence and
@@ -421,7 +428,7 @@ import { simulatorEvidence } from './intentSimulator.js';
 import { monitorEvidence, recordHeartbeat } from './intentMonitor.js';
 import { schedulerEvidence } from './intentScheduler.js';
 import { backupRestoreDrill, reproducibleBuildCheck, rollbackDrill, sloMeasurement } from './intentDrill.js';
-import { sloMeterMiddleware, sloSnapshot } from './intentSloMeter.js';
+import { sloMeterMiddleware, sloSnapshot, sloStallSnapshot } from './intentSloMeter.js';
 import { selfProbeReport, runSelfProbe, ensureHydrated, SELF_PROBE_KINDS } from './intentSelfProbe.js';
 import { opsProbeReport, runOpsProbe, ensureOpsHydrated, OPS_DRILL_KINDS } from './intentOpsProbe.js';
 import {
@@ -1749,6 +1756,25 @@ app.get('/api/version', (_req, res) => {
 
 app.get('/api/health', (_req, res) => {
   /*
+   * ─── WHY THE TINIEST ENDPOINT NOW HAS A CACHE HEADER ────────────────────
+   * /api/health had NO cache directive, so Vercel's edge treated every call as
+   * private and woke the function — and `ConnectivityAlert` calls it every 45
+   * seconds per open client (it used to add `?_fbt_probe=<timestamp>`, which
+   * made even a future s-maxage useless: a unique query string is a unique
+   * cache key). A tab left open therefore cost ~1,920 function invocations a
+   * day, each one a chance to pay a full cold start.
+   *
+   * The directive below lets the EDGE answer the heartbeat: the browser still
+   * makes a real HTTPS round trip to the deployment (which is what the
+   * connectivity check is really asking), while the function stays asleep.
+   * The TTLs are deliberately short — 5 s for the browser, 15 s at the edge,
+   * 45 s of stale-while-revalidate — so a monitor can still tell the site
+   * died within a minute, and the numbers in the payload (uptime, cache
+   * stats) are allowed to be a few seconds old, which they already were by
+   * the time the JSON was parsed.
+   */
+  res.set('cache-control', 'public, max-age=5, s-maxage=15, stale-while-revalidate=45');
+  /*
    * Learning metrics ride on the existing health endpoint rather than a new
    * admin page. Everything here is a synchronous in-memory read — the
    * snapshot the loader already holds — so health stays as cheap as before.
@@ -2429,7 +2455,13 @@ app.get('/api/intents/v1/external-providers', async (_req, res) => {
 /* ── Wave 2: SLO measurement (real traffic) ───────────────────── */
 app.get('/api/intents/v1/slo-status', (_req, res) => {
   res.set('cache-control', 'public, max-age=5, s-maxage=5');
-  return res.json(sloSnapshot());
+  /* `stalls` is the part of the picture the percentiles cannot show: requests
+     still running past the threshold have no duration to average, and on a
+     serverless host each one is billed for as long as it is held. This is the
+     instrument that would have caught the /api/v1/ai mount that never called
+     next() — it held every request until the function timed out while p99
+     reported a healthy site. */
+  return res.json({ ...sloSnapshot(), stalls: sloStallSnapshot() });
 });
 
 app.get('/api/intents/v1/drill-status', async (_req, res) => {
@@ -6390,6 +6422,173 @@ app.post('/api/ai/ask', async (req, res) => {
   }
 });
 
+/* ═══════════════════ LAZY ROUTE MOUNTS (cold-start budget) ════════════════
+ *
+ * WHY THIS EXISTS, IN ONE PARAGRAPH WITH NUMBERS
+ * ---------------------------------------------------------------------------
+ * `node -e "await import('./server/app.js')"` on a cold process costs ~790 ms
+ * of CPU. Of that, ~470 ms is spent compiling and evaluating sixteen route
+ * modules — the AI command center, the Intent OS gateway, the orchestrator,
+ * the central intelligence API, the financial OS, the brain, the central OS
+ * and the six desk routers — and a serverless cold start pays it BEFORE the
+ * first byte of the first request (usually /api/health or a price read, which
+ * cannot reach any of them). Fluid Active CPU is billed for that work.
+ *
+ * `lazyMount()` defers the import to the first request that actually reaches
+ * the mount, and keeps everything else about Express' behaviour:
+ *
+ *   · ROUTE ORDER IS UNCHANGED. The wrapper sits exactly where the router was
+ *     mounted, so an earlier mount still wins a path it owns.
+ *   · THE PREFIX STRIP IS PRESERVED. `app.use(prefix, wrapper)` has already
+ *     trimmed `req.url` by the time the wrapper runs; the imported router is
+ *     mounted INSIDE a private holder router at '/', so it sees the same
+ *     trimmed url and the same `req.baseUrl` it would have seen if it had
+ *     been mounted directly. (`row.handle` below is Express' own dispatcher —
+ *     Router instances are middleware functions, so this is not a re-route.)
+ *   · ERRORS ARE THE ROUTER'S. Once warm, requests are dispatched by Express
+ *     exactly as before; before that, an import failure goes to `next(err)`
+ *     instead of hanging, so a broken module is a 500, never a dead socket.
+ *   · CONCURRENCY IS SINGLE-FLIGHT. Ten requests arriving during the first
+ *     import share one promise; the module is created once.
+ */
+const lazyMount = (label, loader) => {
+  const holder = express.Router();
+  let loaded = null;
+  const warm = () => {
+    if (!loaded) {
+      loaded = Promise.resolve()
+        .then(loader)
+        .then((mod) => {
+          const router = mod?.default ?? mod?.router ?? mod;
+          /*
+           * A MIDDLEWARE OR A ROUTER — NOT A FACTORY.
+           *
+           * `typeof === 'function'` is not enough, and that mistake cost the
+           * Upgrade-14 routes their whole HTTP surface: a router FACTORY is
+           * also a function, Express calls it as middleware, it returns a
+           * router nobody mounts and it never calls next() — so the request
+           * hangs until the function times out (see the note at the bottom of
+           * server/aiOrchestratorRoutes.js). Express middleware and routers
+           * both take (req, res, next); a factory takes 0-1 arguments. Fail
+           * loudly here instead of hanging silently at request time.
+           */
+          if (typeof router !== 'function' || router.length < 2) {
+            throw new Error(
+              `lazy-mount:${label}:NOT_A_MIDDLEWARE (arity ${typeof router === 'function' ? router.length : typeof router})`
+            );
+          }
+          holder.use(router);
+          return router;
+        })
+        .catch((err) => {
+          /* A failed import must be retryable: the next request tries again
+             (a transient failure during a cold start must not poison the
+             instance for its whole life) — but the current caller gets the
+             error now. */
+          loaded = null;
+          err.message = `lazy-mount:${label}:${err.message}`;
+          throw err;
+        });
+    }
+    return loaded;
+  };
+  const mounted = (req, res, next) => {
+    warm().then(() => holder.handle(req, res, next)).catch(next);
+  };
+  mounted.__lazyMount = label;
+  return mounted;
+};
+
+/*
+ * THE FOUR SINGLETONS THE LAZY MOUNTS SHARE.
+ *
+ * The central OS registers the module adapters; the central intelligence API
+ * is built on that registry; the financial OS and the predictive brain are
+ * built on the central API (state store, event bus, brain, owner derivation).
+ * Lazy loading must not invert that dependency, so each `ensure*` memoises the
+ * exact construction order the eager version used, and every `ensure*` waits
+ * for the one it depends on. `app.set('centralIntelligence'/'financialIntelligence')`
+ * still happens — just when the instance exists rather than at boot.
+ */
+let centralOsPromise = null;
+const ensureCentralOS = () => {
+  if (!centralOsPromise) {
+    centralOsPromise = import('./central/index.js')
+      .then(({ installCentralOS, centralRouter }) => {
+        installCentralOS();
+        return centralRouter;
+      })
+      .catch((err) => {
+        centralOsPromise = null;
+        throw err;
+      });
+  }
+  return centralOsPromise;
+};
+
+let centralIntelligencePromise = null;
+const ensureCentralIntelligence = () => {
+  if (!centralIntelligencePromise) {
+    centralIntelligencePromise = (async () => {
+      /* Adapters first: the API's tool routes answer MODULE_NOT_REGISTERED
+         until the central OS has registered them, and the eager version had
+         them registered before any request could arrive. */
+      await ensureCentralOS();
+      const { createCentralIntelligence } = await import('./ci/api.js');
+      const ci = createCentralIntelligence({ log: (line) => app.locals.ciLog?.push?.(line) });
+      app.set('centralIntelligence', ci);
+      return ci;
+    })().catch((err) => {
+      centralIntelligencePromise = null;
+      throw err;
+    });
+  }
+  return centralIntelligencePromise;
+};
+
+let financialIntelligencePromise = null;
+const ensureFinancialIntelligence = () => {
+  if (!financialIntelligencePromise) {
+    financialIntelligencePromise = (async () => {
+      const ci = await ensureCentralIntelligence();
+      const { createFinancialIntelligence } = await import('./fios/index.js');
+      const fi = createFinancialIntelligence({
+        stateStore: ci.stateStore,
+        events: ci.events,
+        brain: ci.brain,
+        ownerFor: ci.ownerFor,
+        log: (line) => app.locals.ciLog?.push?.(line)
+      });
+      app.set('financialIntelligence', fi);
+      return fi;
+    })().catch((err) => {
+      financialIntelligencePromise = null;
+      throw err;
+    });
+  }
+  return financialIntelligencePromise;
+};
+
+let brainRouterPromise = null;
+const ensureBrainRouter = () => {
+  if (!brainRouterPromise) {
+    brainRouterPromise = (async () => {
+      const ci = await ensureCentralIntelligence();
+      const { createBrainRouter } = await import('./brain/index.js');
+      return createBrainRouter({
+        kernel: ci.kernel,
+        stateStore: ci.stateStore,
+        events: ci.events,
+        log: (line) => app.locals.ciLog?.push?.(line)
+      });
+    })().catch((err) => {
+      brainRouterPromise = null;
+      throw err;
+    });
+  }
+  return brainRouterPromise;
+};
+
 /* --------------------- AI COMMAND CENTER (AI page backend) --------------- */
 /*
  * The eight routes the AI page runs on, in one module: chat, dashboard, plan,
@@ -6407,7 +6606,7 @@ app.post('/api/ai/ask', async (req, res) => {
  * stop there. The existing /api/ai budget (AI_RATE_LIMIT, 10/min by default)
  * already covers these paths, since this mount sits under that middleware.
  */
-app.use('/api/ai', aiCommandRoutes);
+app.use('/api/ai', lazyMount('ai-command', () => import('./aiCommand.js')));
 
 /* ---------------------- FBT INTENT AI OS (unified V1) ---------------------- */
 /*
@@ -6416,7 +6615,7 @@ app.use('/api/ai', aiCommandRoutes);
  * The state row is still wallet-safe: no signer, no secrets, no private key
  * material ever persists.
  */
-app.use('/api/v1/ai/os', intentOsUpgrade8Routes);
+app.use('/api/v1/ai/os', lazyMount('ai-os-sessions', () => import('./intentOsUpgrade8.js')));
 /*
  * The single AI gateway introduced by the AI OS refactor. It is mounted on
  * /api/v1/ai so it coexists with the older /api/ai command-center routes
@@ -6424,7 +6623,7 @@ app.use('/api/v1/ai/os', intentOsUpgrade8Routes);
  * no fabricated transaction — the chat builds context + plan + suggestion and
  * the execute endpoint returns a real venue/wallet hand-off.
  */
-app.use('/api/v1/ai', aiIntentOSRoutes);
+app.use('/api/v1/ai', lazyMount('ai-intent-os', () => import('./aiIntentOS.js')));
 
 /* --------- FBT AI ORCHESTRATOR — reasoning graph (Upgrade 14) --------- */
 /*
@@ -6437,7 +6636,7 @@ app.use('/api/v1/ai', aiIntentOSRoutes);
  * It cannot sign, approve or execute, and its chat integration falls back to
  * the previous behaviour whenever it cannot produce something better.
  */
-app.use('/api/v1/ai', aiOrchestratorRoutes);
+app.use('/api/v1/ai', lazyMount('ai-orchestrator', () => import('./aiOrchestratorRoutes.js')));
 
 /* ----------------- FBT CENTRAL INTELLIGENCE OS — the central brain ---------------- */
 /*
@@ -6459,7 +6658,9 @@ app.use('/api/v1/ai', aiOrchestratorRoutes);
  * why nothing under this mount needs a key, a seed, or a mnemonic — and why none
  * of these handlers can be talked into producing one.
  */
-const centralIntelligence = createCentralIntelligence({ log: (line) => app.locals.ciLog?.push?.(line) });
+/* The instance itself is built on the first /api/brain request (see
+   ensureCentralIntelligence above). The limiter below stays synchronous and
+   eager on purpose: it must be able to answer 429 without loading anything. */
 const ciHits = new Map();
 const CI_WRITE_MAX = Number(process.env.BRAIN_RATE_LIMIT || 30);
 const CI_TOOL_MAX = Number(process.env.BRAIN_TOOL_RATE_LIMIT || 120);
@@ -6487,13 +6688,15 @@ app.use('/api/brain', (req, res, next) => {
     return res.status(429).json({
       ok: false, code: 'BRAIN_RATE_LIMITED', retryAfterMs: rec.reset - now,
       detail: isTool ? 'too many direct tool calls for this device' : 'too many intents for this device',
-      brain: centralIntelligence.schema
+      /* Same value server/ci/api.js exports as CI_ROUTES_SCHEMA. Kept as a
+         literal so a throttled caller is answered without importing the very
+         module the throttle exists to protect. */
+      brain: 'fbt.central-api.v1'
     });
   }
   return next();
 });
-app.set('centralIntelligence', centralIntelligence);
-app.use('/api/brain', centralIntelligence.router);
+app.use('/api/brain', lazyMount('central-intelligence', () => ensureCentralIntelligence().then((ci) => ci.router)));
 
 /* ─── FBT FINANCIAL INTELLIGENCE OS (batch 7) ────────────────────────────
  * The Financial Intelligence OS composes the central brain's state store
@@ -6512,31 +6715,20 @@ app.use('/api/brain', centralIntelligence.router);
  * /learning{,/calibration}, /preferences{,/statement}.
  * /agents and /status belong to the command center — FI deliberately does
  * not touch them. */
-/* PHASE 211 FIX: Synchronous registration for Financial Intelligence & Brain routes.
- * Mounted directly so they are immediately available on cold-start and Vercel
- * serverless execution without async race conditions. */
-const fi = createFinancialIntelligence({
-  stateStore: centralIntelligence.stateStore,
-  events: centralIntelligence.events,
-  brain: centralIntelligence.brain,
-  ownerFor: centralIntelligence.ownerFor,
-  log: (line) => app.locals.ciLog?.push?.(line)
-});
-app.set('financialIntelligence', fi);
-app.use('/api/ai', fi.router);
+/* PHASE 211 FIX: registration no longer waits for a synchronous module load —
+ * see ensureFinancialIntelligence(): the instance is still created exactly
+ * once, with the central brain's own state store / event bus / owner
+ * derivation, and app.set('financialIntelligence') still happens before the
+ * first route answers. What changed is WHEN: on the first request that reaches
+ * /api/ai, not on every cold start of the whole function. */
+app.use('/api/ai', lazyMount('financial-intelligence', () => ensureFinancialIntelligence().then((fi) => fi.router)));
 
 /* ─── FBT FINANCIAL OS — Upgrade 11+12 Brain Routes ──────────────────────
  * Predictive Brain, Opportunity Engine, Financial Guardian, Daily Brief,
  * Knowledge Graph, Ecosystem Router, and Cross-Module Workflows.
  * Mounted on /api/brain alongside the existing central intelligence.
  * ─────────────────────────────────────────────────────────────────────────── */
-const brainRouter = createBrainRouter({
-  kernel: centralIntelligence.kernel,
-  stateStore: centralIntelligence.stateStore,
-  events: centralIntelligence.events,
-  log: (line) => app.locals.ciLog?.push?.(line)
-});
-app.use('/api/brain', brainRouter);
+app.use('/api/brain', lazyMount('predictive-brain', () => ensureBrainRouter()));
 
 setInterval(() => {
   const now = Date.now();
@@ -6570,8 +6762,7 @@ setInterval(() => {
  * and the brain answers from REAL module state, never from an LLM guess.
  * Mounted after express.json and the rate limiter; adapters self-register.
  */
-installCentralOS();
-app.use('/api', centralRouter);
+app.use('/api', lazyMount('central-os', () => ensureCentralOS()));
 
 /* ------------------------------ lending BFF --------------------------------- */
 /*
@@ -6598,9 +6789,9 @@ app.use('/api', centralRouter);
  * relay next door refuses it too. §30 stands: the wallet signs and the wallet
  * sends.
  */
-app.use('/api/lending/solana', solanaLendingRouter());
+app.use('/api/lending/solana', lazyMount('lending-solana', () => import('./solanaLending.js').then((m) => m.solanaLendingRouter())));
 
-app.use('/api/lending', lendingRouter());
+app.use('/api/lending', lazyMount('lending', () => import('./lending.js').then((m) => m.lendingRouter())));
 
 /* ------------------------------ futures BFF -------------------------------- */
 /*
@@ -6612,7 +6803,7 @@ app.use('/api/lending', lendingRouter());
  * provider status is derived from live probes, and every value the UI shows
  * has a backend source. No signer, no key, no CEX trading API exists here.
  */
-app.use('/api/v1/futures', futuresRouter());
+app.use('/api/v1/futures', lazyMount('futures', () => import('./futures/router.js').then((m) => m.futuresRouter())));
 
 /* ------------------------------ FBT REWARDS ------------------------------- */
 /*
@@ -6624,7 +6815,7 @@ app.use('/api/v1/futures', futuresRouter());
  * single-use nonces until a reward distributor contract is configured
  * (FBT_REWARDS_DISTRIBUTOR_*). No key, no custody, no broadcast.
  */
-app.use('/api/v1/rewards', rewardsRouter());
+app.use('/api/v1/rewards', lazyMount('rewards', () => import('./rewards/index.js').then((m) => m.rewardsRouter())));
 
 /* ---------------------------- FBT INSURANCE OS ----------------------------- */
 /*
@@ -6636,8 +6827,8 @@ app.use('/api/v1/rewards', rewardsRouter());
  * AI only recommends and never auto-executes (§15/§54). Sandbox providers only
  * in v1 — real providers are wired after their docs/contracts are verified.
  */
-app.use('/api/insurance', insuranceRouter());
-app.use('/api', protocolRouter);
+app.use('/api/insurance', lazyMount('insurance', () => import('./insurance/index.js').then((m) => m.insuranceRouter())));
+app.use('/api', lazyMount('protocol', () => import('./protocolRoutes.js').then((m) => m.protocolRouter)));
 
 /* ------------------------------ order watch -------------------------------- */
 /*
@@ -7537,11 +7728,58 @@ app.get('/api/cron/train', async (req, res) => {
  * nothing loses its static layer by keeping the reference out of app.js.
  */
 
-/* ── Wave 2: Auto-evidence collection on server start ─────────────────── */
-/* Collects REAL evidence from local services and registers them in-memory.
-   Non-blocking: runs in background, never delays server startup.
-   Only runs in production (Vercel or explicit opt-in) — never in tests. */
-if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
+/* ── Wave 2: Auto-evidence collection on server start (LONG-LIVED ONLY) ── */
+/*
+ * ─── WHY THIS BLOCK IS OFF ON SERVERLESS: IT WAS THE CPU BILL ──────────────
+ * These five probes were run 200 ms after EVERY boot, on every instance,
+ * forever (and again every four hours per warm instance). Measured on a cold
+ * process (node v22, this repo), they cost:
+ *
+ *     autoInjectEvidence      187 ms CPU
+ *     runSelfProbe             84 ms CPU   (real TLS handshake + venue request)
+ *     runOpsProbe             106 ms CPU   (writes, restores, isolates, hashes)
+ *     runStage3Probe          117 ms CPU
+ *     runLaterPhaseProbe      186 ms CPU   (36 in-process checks)
+ *     + ~38 ms of module import
+ *     ------------------------------------
+ *     up to ≈ 720 ms CPU per cold start IF every probe really ran — that is
+ *     the un-throttled sum, and it is what a host without the probes' own
+ *     MIN_INTERVAL_MS short-circuit pays. Measured on the boot path of this
+ *     repo the gate removes ≈ 36 cpu-ms when the probes short-circuit and the
+ *     full ≈ 200–300 cpu-ms per instance when they do not (both measured, see
+ *     docs/CPU-BUDGET-2026-10-07-FA.md) — on top of the ≈ 500 cpu-ms the
+ *     module graph itself needs, i.e. a large share of what a Vercel Fluid
+ *     Active CPU second buys, spent on a status dashboard the request never
+ *     asked about.
+ *     On Vercel the ops-probe also performed a durable read-modify-write
+ *     (fbt.intent-evidence.v1/ops-probe.json) on every cold start.
+ *
+ * Nothing is lost by moving them: every one of these kinds is still earned by
+ *   · the DAILY CRON — /api/cron/daily re-runs all five and stores the
+ *     snapshot (see the "Evidence freshness" block in that handler), which is
+ *     the honest place for periodic work on a serverless host;
+ *   · the ON-DEMAND endpoints — /api/intents/v1/self-probe, /ops-probe,
+ *     /stage3-digest (?dry=1 reports without storing), and
+ *     /api/intents/v1/evidence-status, which HYDRATES the stored records into
+ *     the instance before reporting, so a cold instance still shows what the
+ *     deployment has actually earned.
+ *
+ * Local / self-hosted / APK-hosted servers keep the original behaviour: they
+ * are long-lived processes where a boot probe is a one-off cost and the
+ * four-hour refresh is genuinely useful. Override either way with
+ * INTENT_BOOT_PROBES=1 (force on) or INTENT_BOOT_PROBES=0 (force off).
+ */
+const BOOT_PROBES_SETTING = String(process.env.INTENT_BOOT_PROBES ?? '').trim();
+/* VERCEL is injected by the platform; VERCEL_ENV covers preview/production.
+   Vercel's own guidance is to gate background work on exactly this. */
+const SERVERLESS_RUNTIME = Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const BOOT_PROBES_ENABLED = BOOT_PROBES_SETTING === '1'
+  ? true
+  : BOOT_PROBES_SETTING === '0'
+    ? false
+    : !SERVERLESS_RUNTIME;
+
+if (BOOT_PROBES_ENABLED && process.env.NODE_ENV !== 'test') {
   setTimeout(() => {
     import('./intentAutoEvidence.js').then(({ autoInjectEvidence }) => {
       autoInjectEvidence().then((evidence) => {
@@ -7608,6 +7846,10 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
     }, 4 * 3600_000);
     if (timer.unref) timer.unref();
   }, 200);
+} else if (SERVERLESS_RUNTIME) {
+  /* One honest line instead of a silent skip: the operator should be able to
+     read the log and know where the evidence comes from on this host. */
+  console.log('  (serverless host: boot probes skipped — evidence is earned by /api/cron/daily and the on-demand /api/intents/v1/*-probe routes; set INTENT_BOOT_PROBES=1 to force them here)');
 }
 
 import { businessFinanceRouter } from './businessFinance.js';

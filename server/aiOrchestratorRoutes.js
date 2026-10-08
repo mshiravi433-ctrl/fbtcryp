@@ -268,4 +268,29 @@ export function createOrchestratorRouter({ orchestrator = null, rag = null, ledg
   return router;
 }
 
-export default createOrchestratorRouter;
+/*
+ * ─── WHY THE DEFAULT EXPORT IS AN INSTANCE, NOT THE FACTORY ────────────────
+ * This file used to end with `export default createOrchestratorRouter;` and
+ * server/app.js mounted that default with `app.use('/api/v1/ai', …)`.
+ *
+ * Express treats ANY function as middleware: it called the factory as
+ * `createOrchestratorRouter(req, res, next)`, the factory destructured the
+ * request object (finding no options), returned a brand-new router that
+ * Express discarded, and — because a router factory never calls `next()` —
+ * the request stopped there. Two consequences, both measured on a live boot:
+ *
+ *   · the whole Upgrade-14 surface (/orchestrator/graph, /orchestrator/plan,
+ *     /orchestrator/run, /memory/*) was UNREACHABLE: every call hung until the
+ *     serverless function hit maxDuration;
+ *   · every request that did not match an earlier router — a crawler probing
+ *     /api/v1/ai/<anything>, an old client — hung the same way, holding an
+ *     instance for the full timeout. That is invisible in the logs and pure
+ *     billed CPU time on Vercel.
+ *
+ * Every other AI router in this repo (aiCommand.js, aiIntentOS.js,
+ * intentOsUpgrade8.js, central/router.js) exports a router INSTANCE as its
+ * default, so mounting is uniform. This one now does too. `_setOrchestrator()`
+ * still swaps the singleton the handlers read, so the probes keep injecting
+ * fakes exactly as before.
+ */
+export default createOrchestratorRouter();

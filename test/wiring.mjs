@@ -986,8 +986,18 @@ export default function run() {
     const mounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*([a-zA-Z][\w.]*(?:\(\))?)\s*\)/g)]
       .filter(([, , handler]) => /Router(?:\(\))?$|Routes$|\.router$/.test(handler))
       .map(([, p]) => p);
+    /*
+     * LAZY MOUNTS COUNT TOO — and they must, or this audit would report a
+     * routed path as unrouted the moment a heavy router stopped being imported
+     * at boot (server/app.js lazily mounts the AI stack and the desk routers so
+     * a cold start does not compile them; see the lazyMount note there). The
+     * mount is what this check is about: the subtree's own routes are asserted
+     * by each router's HTTP probe, exactly as for `futuresRouter()` above.
+     */
+    const lazyMounted = [...serverSrc.matchAll(/app\.use\(\s*'\/api\/([^']+)'\s*,\s*lazyMount\(/g)].map(([, p]) => p);
+    const mounts = [...mounted, ...lazyMounted];
     const unrouted = [...called].filter(
-      (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p)) && !mounted.some((m) => p === m || p.startsWith(`${m}/`))
+      (p) => !prefixes.has(p) && !declared.some((d) => d.re.test(p)) && !mounts.some((m) => p === m || p.startsWith(`${m}/`))
     );
     // Explicit coverage for the On-Chain Intelligence Layer surface: every
     // route must really be declared in server/app.js (the grep below would
@@ -13699,7 +13709,10 @@ export default function run() {
       /`\$\{API_BASE\}\/v1\/futures`/.test(client) && /'\/providers'/.test(client) && /'\/quote'/.test(client) && /'\/prepare'/.test(client) && /'\/verify'/.test(client));
     t('the client keeps no offline catalogue or saved price',
       (() => { const code = client.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''); return !/offline|Offline|FALLBACK_|mockData|demo|localStorage\.setItem\((?!DEVICE_KEY)/.test(code); })());
-    t('the server mounts the futures router', /app\.use\('\/api\/v1\/futures', futuresRouter\(\)\)/.test(server) && /from '\.\/futures\/router\.js'/.test(server));
+    /* Lazy form: the mount keeps its path, the module is imported on the first
+       request that reaches it (see the lazyMount note in server/app.js). */
+    t('the server mounts the futures router',
+      /app\.use\('\/api\/v1\/futures', lazyMount\('futures', \(\) => import\('\.\/futures\/router\.js'\)\.then\(\(m\) => m\.futuresRouter\(\)\)\)\)/.test(server));
     for (const route of ['/providers', '/health', '/markets', '/candles', '/funding', '/open-interest', '/positions/:wallet', '/account/:wallet', '/fees', '/fees/ledger', '/executions/:wallet']) {
       t(`GET ${route} is declared in the router`, router.includes(`router.get('${route}'`));
     }

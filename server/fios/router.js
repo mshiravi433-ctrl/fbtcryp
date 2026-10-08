@@ -45,6 +45,35 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     return `ip:${String(req?.ip || 'anon').slice(0, 48)}`;
   };
 
+  /*
+   * ─── A CACHE DIRECTIVE FOR A PER-OWNER READ ──────────────────────────────
+   * These reads are OWNER-SCOPED (device header or IP, see ownerOf above), so
+   * they must never be put in a shared CDN cache: `public` would hand one
+   * device's snapshot to another. That is the whole reason they used to carry
+   * no directive at all — and "no directive" is not "uncacheable", it means
+   * Vercel's edge cannot answer and every poll of the /global/* console wakes
+   * the API function (~40 cpu-ms of a real snapshot rebuild per cold instance).
+   *
+   * `private` is the honest middle ground: only THIS browser may reuse the
+   * response, for seconds, and only for reads that were not asked to refresh.
+   * A `?refresh=1` read (the globe's refresh button, a user pressing for live
+   * data) is `no-store` — a forced refresh that silently replayed a cached
+   * body would be a lie about what the user just asked for.
+   *
+   * Server-side, the expensive part is already single-flighted per owner
+   * (globalIntel.js SNAPSHOT_TTL_MS 60 s + in-flight dedupe), so the browser
+   * window only has to cover the burst — a remount, a tab switch, two
+   * components reading the same snapshot within one second.
+   */
+  const cacheOwnerRead = (res, seconds, { forced = false } = {}) => {
+    res.set(
+      'cache-control',
+      forced
+        ? 'no-store'
+        : `private, max-age=${seconds}, stale-while-revalidate=${seconds * 2}`
+    );
+  };
+
   /* Per-owner lazy migration, once in flight at a time per owner. A failed
      migration must not take the API down: the route proceeds, and the next
      call retries the (idempotent) steps. */
@@ -977,6 +1006,7 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
   router.get('/global/intelligence', route(async (req, res, owner) => {
     await ensureMigrated(owner);
     const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
+    cacheOwnerRead(res, 20, { forced: refresh });
     const snapshot = await fi.globalIntelFor(owner, { refresh });
     return {
       ok: true,
@@ -989,6 +1019,7 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
   router.get('/global/briefing', route(async (req, res, owner) => {
     await ensureMigrated(owner);
     const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
+    cacheOwnerRead(res, 60, { forced: refresh });
     const briefing = await fi.briefingFor(owner, { refresh });
     return {
       ok: true,
@@ -1014,6 +1045,7 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
     const al = String(req.query.lang || req.get?.('accept-language') || 'fa').toLowerCase();
     const language = al.split(',').map((s) => s.trim().split('-')[0]).find((c) => ['fa', 'en'].includes(c)) || 'fa';
     const refresh = String(req.query.refresh || '') === '1' || String(req.query.refresh || '').toLowerCase() === 'true';
+    cacheOwnerRead(res, 60, { forced: refresh });
     const analysis = await fi.crossAssetFor(owner, { refresh, language });
     return {
       ok: true,
@@ -1029,6 +1061,7 @@ export function createFiRouter({ fi, ownerFor, log = () => {} } = {}) {
    * (a live:true is a result this process actually produced). */
   router.get('/global/providers', route(async (req, res, owner) => {
     await ensureMigrated(owner);
+    cacheOwnerRead(res, 30);
     const snapshot = await fi.globalIntelFor(owner, {});
     return {
       ok: true,

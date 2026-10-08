@@ -233,9 +233,29 @@ await t('a malformed body is rejected by the JSON parser before any brain runs',
 
 await t('every new endpoint is POST/GET under /api/v1/ai — the mount is unchanged', async () => {
   const rows = read('server/app.js');
-  assert.ok(rows.includes("app.use('/api/v1/ai', aiOrchestratorRoutes)"), 'the orchestrator router is mounted under the SAME prefix');
-  assert.ok(rows.includes("import aiOrchestratorRoutes from './aiOrchestratorRoutes.js'"));
-  assert.ok(rows.includes("app.use('/api/v1/ai', aiIntentOSRoutes)"), 'the existing AI router is untouched');
+  /*
+   * The mount is asserted in its LAZY form: server/app.js now imports this
+   * router on the first request that reaches /api/v1/ai (see the lazyMount
+   * note there — a cold start must not compile the whole AI stack). Position,
+   * prefix and the shared budget middleware are unchanged, and the count
+   * assertion still catches an extra router appearing on the prefix.
+   *
+   * This is also the probe that would have caught the original mounting bug if
+   * it had exercised HTTP through server/app.js instead of a router the probe
+   * built itself: the module's default export used to be the FACTORY, so
+   * `app.use('/api/v1/ai', aiOrchestratorRoutes)` mounted a router factory as
+   * middleware — Express called it, threw the router away and never called
+   * next(), so every one of these endpoints hung instead of answering. See the
+   * note at the foot of server/aiOrchestratorRoutes.js.
+   */
+  assert.ok(
+    rows.includes("lazyMount('ai-orchestrator', () => import('./aiOrchestratorRoutes.js'))"),
+    'the orchestrator router is mounted under the SAME prefix'
+  );
+  assert.ok(
+    rows.includes("lazyMount('ai-intent-os', () => import('./aiIntentOS.js'))"),
+    'the existing AI router is untouched'
+  );
   const mountCount = rows.split("app.use('/api/v1/ai'").length - 1;
   /* the shared rate limiter + the existing router + the additive one */
   assert.equal(mountCount, 3, 'the prefix keeps its limiter and gains exactly one additive router');
