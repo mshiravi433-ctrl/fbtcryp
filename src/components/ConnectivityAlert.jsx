@@ -103,9 +103,29 @@ export default function ConnectivityAlert() {
 
       try {
         const base = apiBase().replace(/\/+$/, '');
-        const response = await fetch(`${base}/health?_fbt_probe=${startedAt}`, {
+        /*
+         * ─── A REAL ROUND TRIP, WITHOUT WAKING THE FUNCTION EVERY TIME ──────
+         * This probe used to request `/health?_fbt_probe=<timestamp>` with
+         * `cache: 'no-store'`. The unique query string is a unique cache key,
+         * so EVERY check — one per open tab every 45 s — had to reach the API
+         * function, and on a serverless host each of those is a chance to pay
+         * a full cold start. That is ~1,920 invocations a day per open client
+         * for a heartbeat.
+         *
+         * Now the URL is stable and /api/health answers with
+         * `max-age=5, s-maxage=15, stale-while-revalidate=45`, so:
+         *   · the fetch still goes out over the network (this is the whole
+         *     point of the check: DNS, captive portal, TLS, routing);
+         *   · the browser cache is fresh for at most 5 s, so any check that
+         *     matters — the 45 s heartbeat, or the 2.5 s retry after a slow
+         *     response — is a genuine request;
+         *   · the edge may answer it without invoking the function.
+         * The cost of that trade is bounded staleness: if the API breaks, the
+         * banner can be up to ~1 minute late (15 s edge TTL + 45 s SWR), which
+         * is well inside the window this alert is designed for.
+         */
+        const response = await fetch(`${base}/health`, {
           method: 'GET',
-          cache: 'no-store',
           credentials: 'omit',
           headers: { Accept: 'application/json' },
           signal: controller.signal

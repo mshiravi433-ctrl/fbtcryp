@@ -6,6 +6,7 @@
  * by design — this surface observes the brain, it does not drive it.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 import {
   centralCapabilities,
   centralEvents,
@@ -64,8 +65,10 @@ export default function CentralBrainPanel({ refreshMs = 15000 }) {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, refreshMs);
-    return () => clearInterval(t);
+    /* A hidden tab reading the brain every 15 s is a serverless invocation
+       nobody asked for (lib/visibilityPoll.js); returning to the tab re-reads
+       immediately, so the panel is never stale when it can be seen. */
+    return pollWhileVisible(load, refreshMs);
   }, [load, refreshMs]);
 
   const counts = useMemo(() => {

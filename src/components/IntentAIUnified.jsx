@@ -114,6 +114,7 @@ import {
 import { createAutonomyEngine, AUTONOMY_MODES } from '../lib/intent-ai/autonomy/botLoop.js';
 import { BUILTIN_STRATEGIES, backtestStrategy } from '../lib/intent-ai/autonomy/strategyKit.js';
 import { getOhlc } from '../lib/api';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 /*
  * Candles for the autonomy loop and its backtester.
@@ -5847,14 +5848,19 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   useEffect(() => {
     void refreshMonitors();
     void refreshStatus();
-    const t = setInterval(() => {
+    /* This tick READS the monitor board and then hands the server work: every
+       ACTIVE monitor on a ≤15-minute cadence is evaluated. Running that from a
+       hidden tab is the worst kind of phantom load — the user cannot see the
+       result, but the brain still runs the evaluation (lib/visibilityPoll.js
+       stops the tick while hidden and fires one immediately on return). */
+    const stopPoll = pollWhileVisible(() => {
       void refreshMonitors();
       void refreshStatus();
       for (const m of monitors) {
         if (m.status === 'ACTIVE' && m.intervalMinutes <= 15) void apiEvaluateMonitor(m.id).catch(() => {});
       }
     }, 60000);
-    return () => clearInterval(t);
+    return () => stopPoll();
   }, [refreshMonitors, refreshStatus]);
 
   const openEcosystem = useCallback((kind = 'agent') => {

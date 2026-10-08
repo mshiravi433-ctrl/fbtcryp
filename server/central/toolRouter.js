@@ -18,6 +18,27 @@ import { PERMISSION_LEVELS } from './constants.js';
 const OP_TIMEOUT_MS = 12_000;
 const OP_ORDER = ['read', 'quote', 'prepare', 'simulate', 'execute', 'verify'];
 
+/*
+ * LAZY ADAPTER INSTALLATION.
+ * server/central/adapters.js registers the module adapters through
+ * installCentralOS(); server/app.js calls that lazily now (see the lazy route
+ * mounts there — a cold start must not import the whole app), so a tool call
+ * can legitimately arrive before the installer has run. Importing the
+ * installer from here would be a cycle at module scope (adapters.js imports
+ * this registry), which is exactly why it is a dynamic import guarded by a
+ * memoised promise: once per process, and only when an adapter is genuinely
+ * missing.
+ */
+let adaptersInstalled = null;
+async function ensureAdaptersInstalled() {
+  if (!adaptersInstalled) {
+    adaptersInstalled = import('./adapters.js')
+      .then((m) => { try { m.installAdapters(); } catch { /* idempotent best-effort */ } })
+      .catch(() => { adaptersInstalled = null; });
+  }
+  return adaptersInstalled;
+}
+
 const levelOf = (op) => (op === 'read' ? 'READ' : op === 'execute' ? 'EXECUTE' : 'PREPARE');
 
 /*
@@ -103,7 +124,17 @@ export async function runTool({ module, operation, input = {}, ctx = null, permi
   }
 
   /* ── capability check ─────────────────────────────────────────────────── */
-  const adapter = getModule(module);
+  /* The registry is filled by installCentralOS(), which server/app.js now runs
+     lazily (on the first request that needs the central OS), so "no adapter"
+     is no longer proof that the module does not exist — it can simply mean the
+     boot path has not run yet in this instance. Install once, here, before
+     answering MODULE_NOT_REGISTERED: the installer is idempotent and this is a
+     no-op in the common case where the adapter is already registered. */
+  let adapter = getModule(module);
+  if (!adapter) {
+    await ensureAdaptersInstalled();
+    adapter = getModule(module);
+  }
   if (!adapter) return finish({ ok: false, status: 'MODULE_NOT_REGISTERED', error: 'MODULE_NOT_REGISTERED', checks: gate.checks });
   const cap = await capabilityOf(adapter.id, ctx);
   gate.checks.capability = cap.status;

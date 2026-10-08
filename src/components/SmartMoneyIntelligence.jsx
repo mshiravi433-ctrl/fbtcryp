@@ -6,6 +6,7 @@ import { getTracked, trackWallet } from '../lib/smartMoneyWatch';
 import { openUrl } from '../lib/browser';
 import TokenIcon from '../lib/tokenIcon';
 import ModernSelect from './ModernSelect';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 const WINDOWS = ['30m', '24h', '7d'];
 const badge = (signal) => signal === 'ACCUMULATION' ? 'up' : signal === 'DISTRIBUTION' ? 'down' : 'idle';
@@ -92,14 +93,16 @@ export function VerifiedWallets() {
         });
     setError(false);
     run();
-    const iv = setInterval(() => {
-      if (ctrl.signal.aborted || typeof document !== 'undefined' && document.hidden) return;
+    /* Same rule as everywhere else, through one helper: no reads from a hidden
+       tab, one immediate run when it comes back (lib/visibilityPoll.js). */
+    const stopPoll = pollWhileVisible(() => {
+      if (ctrl.signal.aborted) return;
       if (emptyRef.current) run();
     }, 30_000);
     return () => {
       alive = false;
       ctrl.abort();
-      clearInterval(iv);
+      stopPoll();
     };
   }, []);
 
@@ -565,8 +568,8 @@ export default function SmartMoneyIntelligence() {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    const interval = setInterval(() => load(ctrl.signal), building ? 20_000 : 90_000);
-    return () => { clearInterval(interval); ctrl.abort(); };
+    const stopPoll = pollWhileVisible(() => load(ctrl.signal), building ? 20_000 : 90_000);
+    return () => { stopPoll(); ctrl.abort(); };
   }, [load, building]);
 
   const rows = useMemo(() => (data?.consensus || []).filter((r) => chain === 'all' || String(r.chain) === chain), [data, chain]);

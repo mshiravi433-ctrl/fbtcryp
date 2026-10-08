@@ -38,6 +38,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiBase } from '../lib/apiBase.js';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 /*
  * Cube states, painted from the runtime report — never invented here.
@@ -136,14 +137,13 @@ export function ActivationDashboard() {
   useEffect(() => { load(); }, [load]);
 
   /*
-   * The refresh is deliberately NOT a poll. Polling a screen nobody is looking
-   * at burns a phone's battery to display a number that has not moved; the
-   * sections below re-read on demand, from the button.
+   * A one-minute refresh, but only for a tab somebody is looking at: the
+   * activation board is a status screen, and polling it from a pocket burns
+   * the phone's battery and a serverless invocation for a number that has not
+   * moved (lib/visibilityPoll.js). The button below still forces a full
+   * re-read on demand, and coming back to the tab triggers one immediately.
    */
-  useEffect(() => {
-    const id = setInterval(load, 60000);
-    return () => clearInterval(id);
-  }, [load]);
+  useEffect(() => pollWhileVisible(load, 60000), [load]);
 
   /*
    * ─── THE BUTTON ────────────────────────────────────────────────────────

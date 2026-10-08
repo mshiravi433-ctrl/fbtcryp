@@ -18,6 +18,7 @@ import {
   orchestrateBrain
 } from '../../lib/brain/index.js';
 import { apiBase } from '../../lib/apiBase.js';
+import { pollWhileVisible } from '../../lib/visibilityPoll';
 
 /* ── Styles (scoped to this component) ─────────────────────────────────── */
 const STYLES = `
@@ -124,8 +125,10 @@ function AiControlCenterInner() {
       }
     }
     fetchBrainState();
-    const timer = setInterval(fetchBrainState, 30_000);
-    return () => { cancelled = true; clearInterval(timer); };
+    /* Visible-tab only: each tick reads the brain's state over HTTP, and a
+       hidden AI panel was still paying for it (see lib/visibilityPoll.js). */
+    const stopPoll = pollWhileVisible(fetchBrainState, 30_000);
+    return () => { cancelled = true; stopPoll(); };
   }, []);
 
   const brainOnline = brain?.transport === 'sse' || brain?.transport === 'polling';

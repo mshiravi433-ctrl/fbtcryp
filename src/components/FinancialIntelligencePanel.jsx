@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import fi from '../lib/financialIntelligence.js';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 const VERDICT_COLOR = {
   APPROVE: '#34d399',
@@ -90,8 +91,8 @@ export default function FinancialIntelligencePanel({ refreshMs = 30000 }) {
 
   useEffect(() => {
     loadBaseline();
-    const t = setInterval(loadBaseline, refreshMs);
-    return () => clearInterval(t);
+    /* Visible-tab only, one immediate re-read on return (lib/visibilityPoll). */
+    return pollWhileVisible(loadBaseline, refreshMs);
   }, [loadBaseline, refreshMs]);
 
   const decide = useCallback(async () => {

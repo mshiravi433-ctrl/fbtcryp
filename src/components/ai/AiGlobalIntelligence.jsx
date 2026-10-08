@@ -1420,10 +1420,35 @@ function AiGlobalIntelligenceInner() {
     }
   }, [language]);
 
+  /*
+   * ─── THE POLL CADENCE OF THE WORLD CONSOLE ──────────────────────────────
+   * This page reads SEVEN endpoints per pass (intelligence, briefing,
+   * cross-asset, providers, the toman rate, gold ETFs and the shared capital
+   * flows) and every one of them is owner-scoped, so none of them may be
+   * edge-cached: each pass wakes the API function. At 60 s a tab left open in
+   * the background cost ~1,440 passes a day — the single most request-hungry
+   * surface in the app — which is why three minutes now, and why a hidden tab
+   * stops polling entirely (the console shows a dashboard, not a heartbeat:
+   * nobody is reading a page that is not on screen, and the moment it becomes
+   * visible again the load below runs).
+   *
+   * Freshness the user actually asked for is unaffected: the globe in the hero
+   * is a real refresh button, and pressing it forces `load(true)` — i.e.
+   * `?refresh=1` on every endpoint — regardless of this timer.
+   */
+  const REFRESH_MS = 3 * 60_000;
   useEffect(() => {
     load(false);
-    const timer = setInterval(() => load(false), 60_000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      load(false);
+    }, REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(false); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [load]);
 
   const domains = useMemo(() => data.intelligence?.domains || null, [data.intelligence]);

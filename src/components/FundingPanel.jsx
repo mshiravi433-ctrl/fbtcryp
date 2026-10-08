@@ -6,6 +6,7 @@ import SegIndicator from './SegIndicator';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { bestVenue, fundingCost, getPerpMarkets } from '../lib/perp';
 import '../styles/funding-panel.css';
+import { pollWhileVisible } from '../lib/visibilityPoll';
 
 /**
  * LIVE FUNDING RATES, PER VENUE.
@@ -85,10 +86,12 @@ export default function FundingPanel() {
     };
 
     load();
-    const id = setInterval(load, REFRESH_MS);
+    /* Funding rates move slowly and cost a venue read each — poll while the
+       tab is visible, and re-read the moment it comes back (lib/visibilityPoll). */
+    const stopPoll = pollWhileVisible(load, REFRESH_MS);
     return () => {
       alive = false;
-      clearInterval(id);
+      stopPoll();
     };
   }, []);
 
