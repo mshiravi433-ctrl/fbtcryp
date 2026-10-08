@@ -2777,8 +2777,8 @@
       "networkCoverage": "{{count}} réseaux selon les métadonnées des fournisseurs de routage",
       "providerChains": "{{count}} réseaux déclarés",
       "routeNote": "La disponibilité d’un fournisseur est globale ; les nombres par réseau ci-dessous ne reflètent que des contrôles récents de devis sur ce réseau. Les réseaux déclarés sont des métadonnées, pas la garantie que chaque fournisseur ou itinéraire soit disponible. L’application compare les devis reçus ; vous vérifiez et signez dans votre portefeuille.",
-      "providerCount": "{{count}} fournisseurs affichés ; la prise en charge des itinéraires varie selon le réseau et la demande.",
-      "networkProbeEvidence": "{{ready}} fournisseurs sur {{supported}} ont obtenu un devis sur ce réseau (instantané des contrôles).",
+      "providerCount": "{{count}} sources de routage",
+      "networkProbeEvidence": "{{ready}} source(s) sondée(s) sur {{probed}} ont répondu sur ce réseau ; {{supported}} sources de routage y sont répertoriées.",
       "providerProbeChains": "Le dernier contrôle de devis a répondu sur {{networks}}",
       "noRecentProbe": "Aucun succès récent de devis propre à ce réseau",
       "registryNetworkCount": "{{count}} réseaux enregistrés sur {{total}} sont déclarés par les fournisseurs de routage"

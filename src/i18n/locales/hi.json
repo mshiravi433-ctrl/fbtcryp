@@ -2777,8 +2777,8 @@
       "networkCoverage": "रूटिंग प्रदाताओं के मेटाडेटा में {{count}} नेटवर्क",
       "providerChains": "{{count}} घोषित नेटवर्क",
       "routeNote": "प्रदाता की उपलब्धता वैश्विक है; नीचे के नेटवर्क आँकड़े केवल हाल की उसी नेटवर्क की quote probes गिनते हैं। घोषित chain support मेटाडेटा है, हर प्रदाता या route उपलब्ध होने की गारंटी नहीं। ऐप मिले हुए quotes की तुलना करता है; समीक्षा और हस्ताक्षर आपके वॉलेट में होते हैं।",
-      "providerCount": "{{count}} प्रदाता दिखाए गए हैं; रूट समर्थन नेटवर्क और अनुरोध के अनुसार बदलता है।",
-      "networkProbeEvidence": "इस नेटवर्क पर {{supported}} घोषित प्रदाताओं में से {{ready}} की quote probe सफल रही (probe snapshot)।",
+      "providerCount": "{{count}} रूटिंग स्रोत",
+      "networkProbeEvidence": "इस नेटवर्क पर जाँचे गए {{probed}} में से {{ready}} स्रोत ने उत्तर दिया; इसके लिए {{supported}} रूटिंग स्रोत सूचीबद्ध हैं।",
       "providerProbeChains": "हाल की quote probe {{networks}} पर सफल रही",
       "noRecentProbe": "इस नेटवर्क के लिए हाल की सफल quote probe नहीं",
       "registryNetworkCount": "पंजीकृत {{total}} नेटवर्क में से {{count}} रूटिंग प्रदाताओं के मेटाडेटा में सूचीबद्ध हैं"

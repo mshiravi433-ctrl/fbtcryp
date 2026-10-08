@@ -14303,6 +14303,22 @@ button.settings-quick-action {
 .eco-route-section-head strong { font-size: 12.5px; }
 .eco-route-section-head span,
 .eco-route-provider-chains { color: var(--text-3); font-size: 10px; }
+/*
+ * The sub-line under «مسیریابی نقدینگی» must be ONE line at every width.
+ * It was a sentence set in 10px inside a half-width grid cell, so on a phone
+ * it wrapped to three lines and looked like broken layout beside the count
+ * pill. The copy is one short phrase now; this rule guarantees the shape even
+ * if a translation runs long — the overflow is clipped with an ellipsis
+ * rather than folded, and the full caveat stays in the element's title.
+ */
+.eco-route-section-head > div > .eco-route-subcount {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .eco-route-count {
   padding: 5px 8px;
   border: 1px solid var(--line);

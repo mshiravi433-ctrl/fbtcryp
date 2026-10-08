@@ -2777,8 +2777,8 @@
       "networkCoverage": "{{count}} redes según los metadatos de los proveedores de rutas",
       "providerChains": "{{count}} redes declaradas",
       "routeNote": "La disponibilidad del proveedor es global; los recuentos de red solo incluyen sondeos recientes de cotizaciones específicos de cada red. El soporte declarado es metadato, no una promesa de que todas las rutas estén disponibles. La app compara cotizaciones recibidas; tú revisas y firmas en tu cartera.",
-      "providerCount": "Se muestran {{count}} proveedores; el soporte de rutas varía según la red y la solicitud.",
-      "networkProbeEvidence": "{{ready}} de {{supported}} proveedores declarados obtuvieron una cotización en esta red (muestra de sondeo).",
+      "providerCount": "{{count}} fuentes de ruta",
+      "networkProbeEvidence": "Respondieron {{ready}} de {{probed}} fuentes sondeadas en esta red; hay {{supported}} fuentes de ruta listadas.",
       "providerProbeChains": "La última prueba de cotización respondió en {{networks}}",
       "noRecentProbe": "Sin una prueba reciente de cotización específica de esta red",
       "registryNetworkCount": "{{count}} de {{total}} redes registradas aparecen en los metadatos de los proveedores"

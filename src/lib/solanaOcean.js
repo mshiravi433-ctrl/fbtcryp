@@ -95,6 +95,16 @@ async function ofetch(url) {
 }
 
 /**
+ * The same deadline-and-tag fetch, shared with the LI.FI Solana route.
+ *
+ * Exported rather than copied: two Solana quote paths that disagree about what
+ * counts as a network failure would produce two different screens for the same
+ * dead connection — one saying "check your connection" and the other "no route
+ * between these tokens".
+ */
+export const solanaApiFetch = ofetch;
+
+/**
  * Is the OpenOcean route configured to pay us?
  *
  * Unlike Jupiter's equivalent this is answered by the SERVER, because the

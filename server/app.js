@@ -111,6 +111,7 @@ import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
 import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail, solanaTokenUniverse } from './solanaTokenMeta.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
+import { lifiSolanaStatus, lifiSolanaSwapQuote } from './solanaLifi.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoDecode, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
@@ -6144,6 +6145,30 @@ app.get('/api/solana/oo/quote', async (req, res) => {
 app.get('/api/solana/oo/swap', async (req, res) => {
   const r = await oceanSwap(req.query);
   recordProviderHealth('solana-openocean', r);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * Solana via LI.FI — the SECOND fee-earning route, and the one that works
+ * without an upstream key.
+ *
+ * The De¹ gateway above authenticates every call; when its key is missing,
+ * refused or rotated, every Solana quote used to fall through to Jupiter,
+ * which earns nothing. LI.FI pays the receiver named in the request itself
+ * (see the header of server/solanaLifi.js for the live quote that proves our
+ * 70 bps lands in our wallet), so this route stays available with nothing but
+ * the public API — and the fee echo is still verified here, server-side,
+ * before any transaction reaches a signer.
+ *
+ * The health event is recorded under `lifi`: it is the same integration the
+ * bridge and the EVM swap source use, and a Solana quote that came back IS
+ * evidence that LI.FI answers.
+ */
+app.get('/api/solana/lifi/status', (_req, res) => res.json(lifiSolanaStatus()));
+
+app.get('/api/solana/lifi/quote', async (req, res) => {
+  const r = await lifiSolanaSwapQuote(req.query);
+  recordProviderHealth('lifi', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 

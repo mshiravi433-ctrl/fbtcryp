@@ -2943,22 +2943,48 @@ export default async function run() {
     const base = report.sections.networks.find((n) => n.chainId === 8453);
     t('provider chain metadata without a chain-specific probe stays unverified', base?.status === 'UNKNOWN' && base.supportedProviderCount > 0);
 
+    /*
+     * ─── WHAT A NETWORK LIGHT MEANS (2026-10-08) ─────────────────────────────
+     * Reported: «هیچ‌کدام شبکه‌ها چراغشون روشن نیست و همه را زده ناقص».
+     *
+     * The rule this block pins: a network light is judged ONLY by probes
+     * attempted ON THAT CHAIN. One real quote ⇒ OPERATIONAL (the chain routes);
+     * probes attempted and none answered ⇒ DEGRADED; nothing probed ⇒ UNKNOWN.
+     * The previous rule compared the chains that answered against EVERY
+     * provider that advertises the network, so a chain where everything we
+     * asked answered could still only ever be PARTIAL — which is what every
+     * network on the page showed.
+     */
     const evidence = mergeProbeEvidence(
       { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: true, chainIds: [8453] }] },
-      { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: true, chainIds: [1] }] }
+      { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: true, chainIds: [1] }] },
+      /* A chain that WAS asked and did not answer — the DEGRADED case. */
+      { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: false, chainIds: [137], okChainIds: [] }] }
     );
-    t('independent probe results retain all chain-specific successes', evidence.results[0].chainIds.length === 2);
+    t('independent probe results keep attempted and answered chains apart',
+      evidence.results[0].chainIds.length === 3 && evidence.results[0].okChainIds.length === 2);
     const probed = buildEcosystemData({
       status: 'success',
       data: { providers: [
-        { id: 'kyberswap', configured: true, reachable: false, supportedChains: [1, 8453] },
-        { id: 'openocean', configured: true, reachable: false, supportedChains: [8453] }
+        { id: 'kyberswap', configured: true, reachable: false, supportedChains: [1, 8453, 137] },
+        { id: 'openocean', configured: true, reachable: false, supportedChains: [8453, 10] }
       ] }
     }, evidence);
     const probedEthereum = probed.sections.networks.find((n) => n.chainId === 1);
     const probedBase = probed.sections.networks.find((n) => n.chainId === 8453);
-    t('a verified probe is scoped to the network actually tested', probedEthereum?.status === 'OPERATIONAL' && probedBase?.status === 'PARTIAL');
-    t('network summary counts probes instead of assuming every network is live', probed.summary.networks.operational === 1 && probed.summary.networks.partial === 1);
+    const probedPolygon = probed.sections.networks.find((n) => n.chainId === 137);
+    const neverAsked = probed.sections.networks.find((n) => n.chainId === 10);
+    t('a network that answered a real quote on that chain is OPERATIONAL',
+      probedEthereum?.status === 'OPERATIONAL' && probedBase?.status === 'OPERATIONAL');
+    t('a network whose probes all failed is DEGRADED, not silently green',
+      probedPolygon?.status === 'DEGRADED' && probedPolygon.probedProviderCount === 1);
+    t('a network nobody probed on stays UNKNOWN', neverAsked?.status === 'UNKNOWN' && neverAsked.probedProviderCount === 0);
+    t('the chip counter reads answered/probed, never answered/advertised',
+      probedBase?.reachableProviderCount === 1 && probedBase?.probedProviderCount === 1
+      && probedBase?.supportedProviderCount === 2);
+    t('network summary counts probes instead of assuming every network is live',
+      probed.summary.networks.operational === 2 && probed.summary.networks.partial === 1
+      && probed.summary.networks.unverified === 1);
   }
 
   /* ----------------------- the OpenOcean adapter ------------------------ */

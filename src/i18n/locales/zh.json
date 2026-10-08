@@ -2770,8 +2770,8 @@
       "networkCoverage": "路由提供方元数据中的 {{count}} 个网络",
       "providerChains": "提供方声明支持 {{count}} 个网络",
       "routeNote": "提供方可达性是全局状态；下方网络计数仅包含近期在对应网络进行的报价探测。声明的网络支持只是元数据，不保证每个提供方或路由都可用。应用比较实际返回的报价；由你在钱包中审核并签名。",
-      "providerCount": "显示 {{count}} 个提供方；路由支持因网络和请求而异。",
-      "networkProbeEvidence": "已列出的 {{supported}} 个提供方中有 {{ready}} 个在此网络成功返回报价（探测快照）。",
+      "providerCount": "{{count}} 个路由来源",
+      "networkProbeEvidence": "该网络上已探测的 {{probed}} 个来源中有 {{ready}} 个响应；共列出 {{supported}} 个路由来源。",
       "providerProbeChains": "最近的报价探测在以下网络成功：{{networks}}",
       "noRecentProbe": "近期没有此网络专属的成功报价探测",
       "registryNetworkCount": "注册的 {{total}} 个网络中有 {{count}} 个列于路由提供方元数据"

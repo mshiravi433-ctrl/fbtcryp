@@ -8130,8 +8130,32 @@ export default function run() {
       quoteCode.indexOf('getOceanQuote(') < quoteCode.indexOf('getSolanaOrder('));
     t('...and falls back to Jupiter when OpenOcean cannot price the pair',
       /getSolanaOrder\(/.test(quoteCode));
+    /*
+     * 2026-10-08 — the screen gained a THIRD source (LI.FI Solana, the
+     * keyless fee-earning route) and the old assertion pinned the two-way
+     * ternary that had to be rewritten for it. What must hold now is the
+     * property, not the string: the provider that PRICED the swap builds
+     * first, the fee-earning sources rank above the free Jupiter fallback,
+     * and the router label is keyed off the same id — never a hardcoded
+     * 'Jupiter' printed over an OpenOcean quote (the bug this class of check
+     * exists for).
+     */
     t('the swap keeps the quote\'s provider first when it builds',
-      /order\.provider === 'jupiter'/.test(pageCode));
+      /\[order\.provider, \.\.\.PROVIDERS\.filter/.test(pageCode)
+      && /PROVIDERS = \['openocean', 'lifi', 'jupiter'\]/.test(pageCode));
+    t('...and it knows how to build every fee-earning Solana source',
+      /const buildLifiSwap/.test(pageCode) && /getLifiSolanaQuote\(/.test(pageCode)
+      && /getOceanSwap\(/.test(pageCode) && /buildJupiterSwap\(/.test(pageCode));
+    t('...and the router label is keyed off the quote, never hardcoded',
+      /ROUTER_LABEL\[order\.provider\]/.test(pageCode)
+      && /ROUTER_LABEL = \{[^}]*openocean[^}]*lifi[^}]*jupiter/.test(pageCode));
+    t('the LI.FI Solana client calls OUR api, so the fee fields stay unforgeable',
+      existsSync('src/lib/solanaLifi.js')
+      && /\/solana\/lifi\/quote/.test(code(read('src/lib/solanaLifi.js')))
+      && !/li\.quest/.test(code(read('src/lib/solanaLifi.js'))));
+    t('the fee notice falls back from the LI.FI total to the route\'s own rate',
+      /order\.totalFeeBps \?\? order\.feeBps/.test(pageCode)
+      && /order\.totalFeeBps/.test(pageCode));
     t('the Jupiter execution is success-checked before any signature is shown',
       /executeSolanaOrder\(/.test(pageCode) && /executeSucceeded\(/.test(pageCode));
 
