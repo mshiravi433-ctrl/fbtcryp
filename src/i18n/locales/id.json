@@ -2777,8 +2777,8 @@
       "networkCoverage": "{{count}} jaringan dalam metadata penyedia perutean",
       "providerChains": "{{count}} jaringan yang tercantum",
       "routeNote": "Keterjangkauan penyedia bersifat global; jumlah jaringan di bawah hanya mencakup probe kuotasi terbaru yang spesifik untuk jaringan tersebut. Dukungan chain yang tercantum adalah metadata, bukan jaminan setiap penyedia atau rute tersedia. Aplikasi membandingkan kuotasi yang diterima; Anda meninjau dan menandatangani di dompet.",
-      "providerCount": "{{count}} penyedia ditampilkan; dukungan rute berbeda menurut jaringan dan permintaan.",
-      "networkProbeEvidence": "{{ready}} dari {{supported}} penyedia yang tercantum berhasil melakukan probe kuotasi di jaringan ini (snapshot probe).",
+      "providerCount": "{{count}} sumber rute",
+      "networkProbeEvidence": "{{ready}} dari {{probed}} sumber yang diuji di jaringan ini menjawab; {{supported}} sumber rute terdaftar untuknya.",
       "providerProbeChains": "Probe kuotasi terbaru berhasil di {{networks}}",
       "noRecentProbe": "Belum ada keberhasilan kuotasi khusus jaringan ini baru-baru ini",
       "registryNetworkCount": "{{count}} dari {{total}} jaringan terdaftar tercantum dalam metadata penyedia perutean"

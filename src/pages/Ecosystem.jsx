@@ -165,7 +165,18 @@ function HowFbtWorks({ t, providers = [], networks = [] }) {
         <div className="eco-route-section-head">
           <div>
             <strong>{t('eco.sectionRouting', 'Live routing sources')}</strong>
-            <span>{t('eco.flow.providerCount', { count: sources.length })}</span>
+            {/*
+              ONE SHORT LINE. This used to be a full sentence — «{{count}}
+              فراهمکننده نمایش داده میشود؛ پشتیبانی مسیر بر اساس شبکه و
+              درخواست متفاوت است.» — in 10px type inside a half-width grid
+              cell, so it wrapped onto three lines and read as broken layout
+              next to the pill on the right. The caveat itself is still true
+              and still one hover (or one glance at the notice below) away, so
+              it moved to the `title` instead of being deleted.
+            */}
+            <span className="eco-route-subcount" title={t('eco.flow.routeNote')}>
+              {t('eco.flow.providerCount', { count: sources.length })}
+            </span>
           </div>
           <span className="eco-route-count">{t('eco.flow.registryNetworkCount', { count: networks.length, total: NETWORK_REGISTRY.length })}</span>
         </div>
@@ -205,8 +216,20 @@ function HowFbtWorks({ t, providers = [], networks = [] }) {
             <strong>{t('eco.flow.networkCoverage', { count: networks.length })}</strong>
             <div className="eco-route-network-list">
               {networks.map((network) => {
+                /*
+                 * THE COUNTER FOLLOWS THE EVIDENCE, NOT THE ADVERTISING.
+                 *
+                 * It used to read "answered / advertised" — e.g. «1/7» on a
+                 * network where Base-only probes had answered and seven
+                 * providers merely list the chain. Every network looked like it
+                 * was failing five sixths of the time. It now reads
+                 * "answered / probed on this chain", so «0/0» cannot happen
+                 * (it renders as «—») and «1/1» means what the user will think
+                 * it means: we asked once here and got a real quote.
+                 */
                 const probeCounts = {
                   ready: network.reachableProviderCount || 0,
+                  probed: network.probedProviderCount || 0,
                   supported: network.supportedProviderCount || 0
                 };
                 return (
@@ -217,7 +240,7 @@ function HowFbtWorks({ t, providers = [], networks = [] }) {
                   >
                     <StatusDot status={network.status || 'UNKNOWN'} size={6} />
                     <span>{network.name}</span>
-                    <small>{probeCounts.ready}/{probeCounts.supported}</small>
+                    <small>{probeCounts.probed > 0 ? `${probeCounts.ready}/${probeCounts.probed}` : '—'}</small>
                   </span>
                 );
               })}

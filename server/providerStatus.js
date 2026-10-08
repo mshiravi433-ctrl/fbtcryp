@@ -36,7 +36,7 @@
 
 import { feeReceiver as solanaFeeReceiver, feeBps as solanaFeeBps } from './solanaOcean.js';
 import { feeRecipient as gaslessFeeRecipient, feeBps as gaslessFeeBps } from './gasless.js';
-import { bridgeFee, bridgeFeeReady, integratorId } from './lifi.js';
+import { bridgeFee, bridgeFeeReady, integratorId, swapFee } from './lifi.js';
 import { dlnFeePercent, dlnFeeRecipient } from './dln.js';
 import { feeBps as xchainFeeBps, feeRecipientFor as xchainFeeRecipientFor, crossChainConfigured } from './xchain.js';
 
@@ -153,6 +153,16 @@ export function buildProviderStatus({
 
 const EVM_CHAINS_ALL = [1, 10, 56, 137, 8453, 42161, 43114, 59144, 146];
 
+/*
+ * Every EVM chain the app can sign on (src/lib/chains.js#EVM_CHAIN_ORDER), for
+ * the integrations that genuinely serve all of them. LI.FI routes same-chain
+ * swaps on the five 2026-09 networks and is the PRIMARY source on Mantle /
+ * Scroll / zkSync Era (see the header of src/lib/lifi.js) — reporting it as a
+ * nine-chain integration made the Ecosystem page count every one of those
+ * networks against a provider it said did not serve them.
+ */
+const EVM_CHAINS_FULL = [1, 10, 56, 137, 8453, 42161, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663];
+
 /* Public (never secret) fee metadata for the DEX & Liquidity section. */
 const EVM_FEE_RECEIVER = env('ZEROX_FEE_RECIPIENT') || env('VITE_PAYOUT_EVM') || '0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6';
 const SWAP_FEE_BPS = (() => {
@@ -245,12 +255,27 @@ export function providerStatuses() {
     buildProviderStatus({
       id: 'lifi',
       configured: true, // integrator id is compiled in, keyless
-      supportedChains: EVM_CHAINS_ALL,
+      /*
+       * 2026-10-08: the full EVM list PLUS Solana. LI.FI routes same-chain
+       * swaps on every chain in src/lib/lifi.js's registry and — since this
+       * change — carries the Solana swap route's 70 bps with a
+       * per-request `distributionFees` receiver (verified live: the quote
+       * echoed a `Distributions` feeCosts entry paying our Solana wallet, see
+       * server/solanaLifi.js). Listing nine chains understated the
+       * integration on exactly the networks where it is the only source.
+       */
+      supportedChains: [...EVM_CHAINS_FULL, 'solana'],
       feeReady: bridgeFeeReady(),
       missingConfiguration: bridgeFeeReady() ? [] : ['LIFI_FEE_READY=true'],
       facts: {
         authMode: 'integrator-id',
         integrator: integratorId(),
+        /* Both fee paths are ours and both are public facts, so both are
+           reported: the bridge rate (LIFI_FEE, fail-closed on LIFI_FEE_READY)
+           and the swap rate (LIFI_SWAP_FEE, verified per quote by the echo
+           gate). The UI shows the bridge rate on the card. */
+        swapFeeBps: Math.round(swapFee() * 10000),
+        solanaSwapFeeBps: Math.round(swapFee() * 10000),
         fee: {
           bps: Math.round(bridgeFee() * 10000),
           receiver: EVM_FEE_RECEIVER,

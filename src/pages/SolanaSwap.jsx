@@ -23,6 +23,7 @@ import {
   toBaseUnits
 } from '../lib/solana';
 import { getOceanQuote, getOceanSwap } from '../lib/solanaOcean';
+import { getLifiSolanaQuote } from '../lib/solanaLifi';
 import { useSettingsStore } from '../store/useSettingsStore';
 import {
   signAndSendSolana,
@@ -61,6 +62,15 @@ import { POINT_VALUES } from '../lib/ranks';
  * Most Solana volume that matters to this app is memecoins, and those are
  * found by contract address, not by browsing a curated list.
  */
+
+/**
+ * The name of the route the user is about to take.
+ *
+ * Kept as a map rather than a ternary so a new provider cannot ship with the
+ * previous one's name on screen — the exact bug class that put "OpenOcean" on
+ * Jupiter quotes before this screen grew a third source.
+ */
+const ROUTER_LABEL = { openocean: 'OpenOcean', lifi: 'LI.FI', jupiter: 'Jupiter' };
 
 /** Curated starting points. Everything else arrives by pasted mint address. */
 /* The curated list lives in lib/solanaUniverse.js — one list, two screens. */
@@ -693,22 +703,93 @@ export default function SolanaSwap({ embedded = false }) {
         let q = null;
         let err = null;
 
-        try {
-          const oq = await getOceanQuote({
+        /*
+         * ─── THE FEE-EARNING ROUTES ARE ASKED *IN PARALLEL* ──────────────────
+         * De¹ and LI.FI both pay us and both are real quotes; asking them one
+         * after the other would make the screen wait for a timeout before
+         * showing a price it already had. Whichever answers better WINS — the
+         * comparison is on the output the user actually receives, which is the
+         * only honest way to pick between two fee-paying routes.
+         *
+         * LI.FI needs the wallet address even to price (its quote carries the
+         * transaction), so it joins only once an account is connected. Until
+         * then De¹ is asked alone, exactly as before.
+         */
+        const attempts = [
+          getOceanQuote({
             inputMint: fromToken.mint,
             outputMint: toToken.mint,
             amount: base,
             /* The user's setting, finally reaching the request. */
             slippageBps
-          });
-          if (oq?.outAmount && oq.outAmount !== '0') {
-            q = { ...oq, provider: 'openocean' };
-          } else {
-            err = new Error('NO_ROUTE');
-          }
-        } catch (e) {
-          err = e; // remembered; Jupiter's verdict wins if it can answer
+          })
+            .then((oq) => ((oq?.outAmount && oq.outAmount !== '0')
+              ? { ...oq, provider: 'openocean' }
+              : Promise.reject(new Error('NO_ROUTE'))))
+        ];
+        if (address) {
+          attempts.push(
+            getLifiSolanaQuote({
+              inputMint: fromToken.mint,
+              outputMint: toToken.mint,
+              amount: base,
+              account: address,
+              slippageBps
+            })
+              .then((lq) => ((lq?.outAmount && lq.outAmount !== '0')
+                ? { ...lq, provider: 'lifi' }
+                : Promise.reject(new Error('NO_ROUTE'))))
+          );
         }
+
+        /*
+         * Which answer wins, and how long we wait for the better one.
+         *
+         * Both routes are fee-paying, so the user gets the LARGER output (an
+         * exact tie keeps De¹, whose total charge is lower because LI.FI adds
+         * its own 25 bps). The wait is bounded on purpose: each source has its
+         * own 15-second deadline, and without a grace window a dead LI.FI would
+         * hold an already-priced screen for its full timeout — the regression
+         * this bound exists to prevent. The first SUCCESS starts the window
+         * (a failure waits for the other source), and the hard cap keeps the
+         * worst case inside the screen's own patience.
+         */
+        const GRACE_MS = 2500;
+        const WINDOW_CAP_MS = 12000;
+        const startedAt = Date.now();
+        let firstSuccessAt = 0;
+        const asOut = (v) => {
+          try {
+            return BigInt(v);
+          } catch {
+            return null;
+          }
+        };
+        const consider = (v) => {
+          firstSuccessAt = firstSuccessAt || Date.now();
+          if (!q) {
+            q = v;
+            return;
+          }
+          const candidate = asOut(v.outAmount);
+          const current = asOut(q.outAmount);
+          if (candidate != null && (current == null || candidate > current)) q = v;
+        };
+        const track = attempts.map((p) => p.then(consider, (e) => {
+          if (!err) err = e;
+        }));
+        await Promise.race([
+          Promise.all(track),
+          new Promise((resolve) => {
+            const timer = setInterval(() => {
+              const graceElapsed = firstSuccessAt && Date.now() - firstSuccessAt >= GRACE_MS;
+              if (graceElapsed || Date.now() - startedAt >= WINDOW_CAP_MS) {
+                clearInterval(timer);
+                resolve();
+              }
+            }, 100);
+          })
+        ]);
 
         if (!q) {
           try {
@@ -813,6 +894,35 @@ export default function SolanaSwap({ embedded = false }) {
     };
   };
 
+  /**
+   * LI.FI half of the build.
+   *
+   * One request, like the quote above but with the confirmed wallet as the
+   * signer: LI.FI returns price AND the unsigned versioned transaction, with
+   * our fee already proven inside it by the server's echo gate. The client
+   * signs and BROADCASTS (there is no /execute on this route), which is why
+   * this lands on the same `signAndSendSolana` call the De¹ path uses.
+   */
+  const buildLifiSwap = async ({ inputMint, outputMint, amount, account, slippageBps }) => {
+    const lq = await getLifiSolanaQuote({
+      inputMint,
+      outputMint,
+      amount,
+      account,
+      slippageBps
+    });
+    if (!lq?.transaction) throw new Error('NO_TRANSACTION');
+    return {
+      provider: 'lifi',
+      transaction: lq.transaction,
+      versioned: lq.versioned !== false,
+      outAmount: lq.outAmount ?? null,
+      /* What the USER pays: our share plus LI.FI's fixed 25 bps, both stated
+         by the server from the feeCosts array it verified. */
+      feeBps: lq.totalFeeBps ?? lq.feeBps ?? null
+    };
+  };
+
   const swap = async () => {
     if (!order || busy || !address) return;
     setBusy(true);
@@ -886,9 +996,18 @@ export default function SolanaSwap({ embedded = false }) {
        * the first provider is remembered and only surfaces if the second one
        * also fails, so the user sees the real reason, not a mystery.
        */
-      const providers = order.provider === 'jupiter'
-        ? ['jupiter', 'openocean']
-        : ['openocean', 'jupiter'];
+      /*
+       * THE PRICING PROVIDER COMES FIRST, THEN THE OTHER TWO.
+       *
+       * The number the user consented to is the pricing provider's number, so
+       * it builds first; the others are fallbacks for the case where that
+       * route's upstream degrades between the quote and the tap. All three are
+       * ordered deliberately: the two FEE-earning routes before the free
+       * Jupiter one, so a failure never quietly converts a paid route into a
+       * free one while a paid one was still available.
+       */
+      const PROVIDERS = ['openocean', 'lifi', 'jupiter'];
+      const providers = [order.provider, ...PROVIDERS.filter((p) => p !== order.provider)];
       let built = null;
       let buildErr = null;
       for (const p of providers) {
@@ -906,16 +1025,24 @@ export default function SolanaSwap({ embedded = false }) {
                */
               slippageBps
             })
-            : {
-              provider: 'openocean',
-              ...(await getOceanSwap({
+            : p === 'lifi'
+              ? await buildLifiSwap({
                 inputMint: fromToken.mint,
                 outputMint: toToken.mint,
                 amount: toBaseUnits(amount, fromToken.decimals),
                 account: address,
                 slippageBps
-              }))
-            };
+              })
+              : {
+                provider: 'openocean',
+                ...(await getOceanSwap({
+                  inputMint: fromToken.mint,
+                  outputMint: toToken.mint,
+                  amount: toBaseUnits(amount, fromToken.decimals),
+                  account: address,
+                  slippageBps
+                }))
+              };
           if (!built?.transaction) throw new Error('NO_TRANSACTION');
           break;
         } catch (e) {
@@ -1368,13 +1495,23 @@ export default function SolanaSwap({ embedded = false }) {
                 quote came from a route that was just rejected.
               */}
               <span className="mono" style={{ fontSize: 12 }}>
-                {order.provider === 'jupiter' ? 'Jupiter' : 'OpenOcean'}
+                {ROUTER_LABEL[order.provider] || ROUTER_LABEL.openocean}
               </span>
             </div>
             <div className="row-between">
               <span className="faint">{t('swap.networkFee')}</span>
               <span className="mono" style={{ fontSize: 12 }}>
-                {order.feeBps != null ? `${order.feeBps / 100}%` : '—'}
+                {/*
+                  The TOTAL the user pays, when the quote knows it: a LI.FI
+                  Solana route charges our 70 bps AND LI.FI's own fixed 25 bps,
+                  and the server reads both out of the feeCosts array it
+                  verified. Showing only our share would understate the price
+                  of the swap on screen — the dangerous direction to be wrong
+                  in, because it is discovered after signing.
+                */}
+                {order.totalFeeBps != null
+                  ? `${order.totalFeeBps / 100}%`
+                  : order.feeBps != null ? `${order.feeBps / 100}%` : '—'}
               </span>
             </div>
           </div>
@@ -1563,8 +1700,8 @@ export default function SolanaSwap({ embedded = false }) {
             number the server put in the request, so the announcement and the
             charge cannot drift apart.
           */}
-          {order?.feeBps
-            ? t('solana.feeNotice', { fee: order.feeBps / 100 })
+          {order?.totalFeeBps || order?.feeBps
+            ? t('solana.feeNotice', { fee: (order.totalFeeBps ?? order.feeBps) / 100 })
             : t('solana.feeNoneNotice')}
         </p>
         {/*

@@ -2777,8 +2777,8 @@
       "networkCoverage": "{{count}} redes nos metadados dos provedores de rota",
       "providerChains": "{{count}} redes declaradas",
       "routeNote": "A disponibilidade do provedor é global; as contagens por rede abaixo incluem apenas sondagens recentes de cotação naquela rede. O suporte de rede declarado é metadado, não uma promessa de disponibilidade de todos os provedores ou rotas. O app compara as cotações recebidas; você revisa e assina na sua carteira.",
-      "providerCount": "{{count}} provedores exibidos; o suporte de rotas varia conforme a rede e a solicitação.",
-      "networkProbeEvidence": "{{ready}} de {{supported}} provedores listados tiveram uma cotação bem-sucedida nesta rede (amostra de sondagem).",
+      "providerCount": "{{count}} fontes de rota",
+      "networkProbeEvidence": "{{ready}} de {{probed}} fontes testadas nesta rede responderam; há {{supported}} fontes de rota listadas.",
       "providerProbeChains": "A sondagem recente de cotação respondeu em {{networks}}",
       "noRecentProbe": "Sem sucesso recente de cotação específico desta rede",
       "registryNetworkCount": "{{count}} de {{total}} redes registradas constam nos metadados dos provedores"

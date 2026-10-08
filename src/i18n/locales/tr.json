@@ -2777,8 +2777,8 @@
       "networkCoverage": "Yönlendirme sağlayıcısı metaverisinde {{count}} ağ",
       "providerChains": "Listelenen ağ sayısı: {{count}}",
       "routeNote": "Sağlayıcı erişilebilirliği genel olarak ölçülür; aşağıdaki ağ sayıları yalnızca o ağda yapılan yakın tarihli fiyat teklifi sorgularını içerir. Bildirilen ağ desteği metaveridir; her sağlayıcının veya rotanın kullanılabilir olacağı anlamına gelmez. Uygulama alınan teklifleri karşılaştırır; inceleme ve imza cüzdanınızda yapılır.",
-      "providerCount": "{{count}} sağlayıcı gösteriliyor; rota desteği ağa ve isteğe göre değişir.",
-      "networkProbeEvidence": "Listelenen {{supported}} sağlayıcının {{ready}} tanesi bu ağda başarılı bir fiyat teklifi sorgusu verdi (sorgu anlık görüntüsü).",
+      "providerCount": "{{count}} yönlendirme kaynağı",
+      "networkProbeEvidence": "Bu ağda denenen {{probed}} kaynaktan {{ready}} tanesi yanıt verdi; ağ için {{supported}} yönlendirme kaynağı listelenmiş.",
       "providerProbeChains": "Son fiyat teklifi sorgusu {{networks}} ağlarında başarılı oldu",
       "noRecentProbe": "Bu ağa özgü yakın tarihli başarılı bir fiyat teklifi sorgusu yok",
       "registryNetworkCount": "Kayıtlı {{total}} ağın {{count}} tanesi yönlendirme sağlayıcılarının metaverisinde listeleniyor"

@@ -4375,8 +4375,8 @@
       "networkCoverage": "{{count}} networks in routing-provider metadata",
       "providerChains": "{{count}} listed networks",
       "routeNote": "Provider reachability is global; the network counts below include only recent network-specific quote probes. Advertised chain support is metadata, not a promise that every provider or route is available. The app compares returned quotes; you review and sign in your wallet.",
-      "providerCount": "{{count}} providers shown; route support varies by network and request.",
-      "networkProbeEvidence": "{{ready}} of {{supported}} listed providers had a successful quote probe on this network (probe snapshot).",
+      "providerCount": "{{count}} routing sources",
+      "networkProbeEvidence": "{{ready}} of {{probed}} sources probed on this network answered; {{supported}} routing sources are listed for it.",
       "providerProbeChains": "Recent quote probe succeeded on {{networks}}",
       "noRecentProbe": "No recent chain-specific quote success",
       "registryNetworkCount": "{{count}} of {{total}} registered networks are listed by routing providers"
