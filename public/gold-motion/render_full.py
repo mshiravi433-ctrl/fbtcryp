@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Full gold purchase motion film: logo, comparison, buy, disclosure, close."""
+"""Light glass gold film — Persian VO + captions. Transparent logo on first/last."""
 import math, os, subprocess, tempfile, re, struct, wave
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 import arabic_reshaper
 from bidi.algorithm import get_display
 
@@ -10,16 +10,15 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 IMG = os.path.join(ROOT, "img")
 AUD = os.path.join(ROOT, "audio")
 OUT = os.path.join(ROOT, "FBT-Gold-Purchase-Motion.mp4")
-APP_LOGO = os.path.join(os.path.dirname(ROOT), "icon-512.png")
 W, H, FPS = 1920, 1080, 24
 FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 SR = 44100
 
 QUESTIONS = [
-    "What is the final\npurchase price?",
-    "What fees and\nspreads apply?",
-    "How does delivery\nor settlement work?",
+    "قیمت نهایی خرید چیست؟",
+    "کارمزد و اسپرد چقدر است؟",
+    "تسویه چطور انجام می‌شود؟",
 ]
 
 
@@ -43,15 +42,19 @@ def duration(path):
     return h * 3600 + mi * 60 + s
 
 
-def knock_black(im, thresh=28):
+def knock(im, dark=True, thresh=240):
     im = im.convert("RGBA")
     px = im.load()
     w, h = im.size
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
-            if r < thresh and g < thresh and b < thresh:
-                px[x, y] = (0, 0, 0, 0)
+            if dark:
+                if r < 22 and g < 22 and b < 22:
+                    px[x, y] = (0, 0, 0, 0)
+            else:
+                if r > thresh and g > thresh and b > thresh:
+                    px[x, y] = (255, 255, 255, 0)
     return im
 
 
@@ -59,7 +62,7 @@ def load_rgb(name, size=None):
     im = Image.open(os.path.join(IMG, name)).convert("RGB")
     if size:
         im = im.resize(size, Image.Resampling.LANCZOS)
-    return im
+    return ImageEnhance.Brightness(im).enhance(1.12)
 
 
 def paste(base, spr, cx, cy, scale=1.0, alpha=1.0):
@@ -79,16 +82,13 @@ def paste(base, spr, cx, cy, scale=1.0, alpha=1.0):
 def glass_panel(w, h, title, t_glow=1.0):
     im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    d.rounded_rectangle((2, 2, w - 3, h - 3), radius=22, fill=(28, 16, 48, int(155 * t_glow)))
-    d.rounded_rectangle((2, 2, w - 3, h - 3), radius=22, outline=(186, 140, 255, int(220 * t_glow)), width=2)
-    d.rounded_rectangle((8, 8, w - 9, h - 9), radius=18, outline=(230, 210, 255, int(80 * t_glow)), width=1)
-    font = ImageFont.truetype(FONT, 28)
-    lines = title.split("\n")
-    y = h // 2 - 18 * len(lines)
-    for line in lines:
-        tw = d.textlength(line, font=font)
-        d.text(((w - tw) / 2, y), line, font=font, fill=(245, 240, 255, int(255 * t_glow)))
-        y += 38
+    d.rounded_rectangle((2, 2, w - 3, h - 3), radius=26, fill=(255, 255, 255, int(165 * t_glow)))
+    d.rounded_rectangle((2, 2, w - 3, h - 3), radius=26, outline=(168, 120, 230, int(230 * t_glow)), width=2)
+    d.rounded_rectangle((10, 10, w - 11, h - 11), radius=20, outline=(210, 180, 255, int(120 * t_glow)), width=1)
+    font = ImageFont.truetype(FONT_B, 30)
+    txt = fa(title)
+    tw = d.textlength(txt, font=font)
+    d.text(((w - tw) / 2, h / 2 - 18), txt, font=font, fill=(72, 40, 120, int(255 * t_glow)))
     return im
 
 
@@ -97,149 +97,121 @@ def caption(canvas, kicker, title, body, alpha=1.0):
         return
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(overlay)
-    d.rectangle((0, int(H * 0.62), W, H), fill=(8, 6, 18, int(200 * alpha)))
-    fk = ImageFont.truetype(FONT, 24)
-    ft = ImageFont.truetype(FONT_B, 42)
+    d.rounded_rectangle((40, 640, W - 40, H - 36), radius=28, fill=(255, 255, 255, int(200 * alpha)))
+    fk = ImageFont.truetype(FONT, 22)
+    ft = ImageFont.truetype(FONT_B, 38)
     fb = ImageFont.truetype(FONT, 26)
-    d.text((70, 70), "FBT GOLD", font=fk, fill=(212, 175, 55, int(230 * alpha)))
-    d.text((70, 700), kicker, font=fk, fill=(186, 140, 255, int(230 * alpha)))
-    d.text((70, 740), title, font=ft, fill=(250, 246, 255, int(255 * alpha)))
-    y = 800
-    words = body.split()
-    line, font = "", fb
-    for w_ in words:
-        t = (line + " " + w_).strip()
-        if d.textlength(t, font=font) > W - 140:
-            d.text((70, y), line, font=font, fill=(210, 200, 220, int(240 * alpha)))
+    d.text((70, 70), fa("طلای اف‌بی‌تی"), font=fk, fill=(140, 90, 210, int(240 * alpha)))
+    d.text((70, 665), fa(kicker), font=fk, fill=(120, 70, 190, int(240 * alpha)))
+    t1 = fa(title)
+    d.text((70, 705), t1, font=ft, fill=(40, 24, 80, int(255 * alpha)))
+    y = 760
+    font = fb
+    line = ""
+    for w_ in body.split():
+        trial = (line + " " + w_).strip()
+        shaped = fa(trial)
+        if d.textlength(shaped, font=font) > W - 160:
+            d.text((70, y), fa(line), font=font, fill=(70, 50, 110, int(245 * alpha)))
             y += 34
             line = w_
         else:
-            line = t
+            line = trial
     if line:
-        d.text((70, y), line, font=font, fill=(210, 200, 220, int(240 * alpha)))
-    d.text((70, H - 48), "fbtswap.ir", font=fk, fill=(160, 150, 190, int(200 * alpha)))
+        d.text((70, y), fa(line), font=font, fill=(70, 50, 110, int(245 * alpha)))
+    d.text((70, H - 70), "fbtswap.ir", font=fk, fill=(130, 90, 180, int(220 * alpha)))
     canvas.alpha_composite(overlay)
 
 
-def scene1(t, dur, assets):
-    canvas = assets["bg"].copy().convert("RGBA")
-    a = ease(t / 0.6) * (1 - 0.4 * ease((t - (dur - 0.5)) / 0.5) if t > dur - 0.5 else 1)
-    logo = assets["logo"]
-    paste(canvas, logo, W / 2, 340, 1.0 + 0.04 * math.sin(t * 1.2), a)
-    bar_a = ease((t - 0.4) / 0.6)
-    paste(canvas, assets["bar"], W / 2, 720, 0.55 + 0.05 * math.sin(t), bar_a * a)
+def center_text(d, txt, y, font, fill):
+    tw = d.textlength(txt, font=font)
+    d.text(((W - tw) / 2, y), txt, font=font, fill=fill)
+
+
+def scene1(t, dur, A):
+    canvas = A["bg"].copy().convert("RGBA")
+    a = ease(t / 0.5)
+    paste(canvas, A["logo"], W / 2, 340, 1.05 + 0.03 * math.sin(t * 1.4), a)
+    paste(canvas, A["bar"], W / 2, 700, 0.62, ease((t - 0.3) / 0.5) * a)
     d = ImageDraw.Draw(canvas)
-    ft = ImageFont.truetype(FONT_B, 64)
-    fb = ImageFont.truetype(FONT_B, 36)
-    fs = ImageFont.truetype(FONT, 30)
-
-    def c(txt, y, font, fill):
-        tw = d.textlength(txt, font=font)
-        d.text(((W - tw) / 2, y), txt, font=font, fill=fill)
-
-    fa_a = int(255 * ease((t - 0.8) / 0.4) * a)
-    c("FBT SWAP", 820, ft, (250, 246, 255, fa_a))
-    c("GOLD", 890, fb, (212, 175, 55, fa_a))
-    c("fbtswap.ir", 950, fs, (220, 210, 230, fa_a))
+    fa_a = int(255 * ease((t - 0.6) / 0.4) * a)
+    center_text(d, fa("اف‌بی‌تی سواپ"), 800, ImageFont.truetype(FONT_B, 58), (50, 30, 90, fa_a))
+    center_text(d, fa("طلا"), 870, ImageFont.truetype(FONT_B, 40), (160, 110, 40, fa_a))
+    center_text(d, "fbtswap.ir", 930, ImageFont.truetype(FONT, 30), (90, 60, 140, fa_a))
     return canvas.convert("RGB")
 
 
-def scene2(t, dur, assets):
-    canvas = assets["bg"].copy().convert("RGBA")
-    drift = 8 * math.sin(t * 0.7)
-    coin_s = 0.92 + 0.04 * math.sin(t * 2.2)
-    paste(canvas, assets["coin"], W / 2 + drift * 0.3, H / 2 - 10 + 6 * math.sin(t * 1.6), coin_s, ease((t - 0.1) / 0.4))
-    starts = [(W * 0.22, H * 1.15), (W * 0.78, H * 1.15), (W * 0.50, H * 1.20)]
-    float_pos = [
-        (W * 0.22 + drift, H * 0.38),
-        (W * 0.78 - drift, H * 0.34),
-        (W * 0.50, H * 0.78),
-    ]
-    gather = [(W * 0.32, H * 0.42), (W * 0.68, H * 0.42), (W * 0.50, H * 0.72)]
-    delays = [0.25, 0.45, 0.65]
+def scene2(t, dur, A):
+    canvas = A["bg"].copy().convert("RGBA")
+    caption(canvas, "چرا از ما؟", "شمش دست ما نیست. توکن در کیف پول شماست.",
+            "در بسیاری از سایت‌های ایرانی موجودی پیش فروشنده می‌ماند. اینجا حضانت نداریم.",
+            ease((t - 0.15) / 0.35))
+    paste(canvas, A["coin"], W / 2, 360, 0.9 + 0.04 * math.sin(t * 2), ease(t / 0.4))
+    return canvas.convert("RGB")
+
+
+def scene3(t, dur, A):
+    canvas = A["bg"].copy().convert("RGBA")
+    drift = 6 * math.sin(t * 0.8)
+    paste(canvas, A["coin"], W / 2, H / 2 - 20, 0.85, 0.95)
+    starts = [(W * 0.2, H * 1.1), (W * 0.8, H * 1.1), (W * 0.5, H * 1.15)]
+    mid = [(W * 0.22 + drift, 280), (W * 0.78 - drift, 280), (W * 0.5, 520)]
+    gather = [(W * 0.32, 340), (W * 0.68, 340), (W * 0.5, 560)]
+    delays = [0.2, 0.4, 0.6]
     for n, q in enumerate(QUESTIONS):
-        enter = ease((t - delays[n]) / 0.65)
-        g = ease((t - dur * 0.48) / 1.2)
-        x = lerp(lerp(starts[n][0], float_pos[n][0], enter), gather[n][0], g)
-        y = lerp(lerp(starts[n][1], float_pos[n][1], enter), gather[n][1], g)
-        a = min(1.0, enter)
-        if t > dur - 1.6:
-            a *= 1 - ease((t - (dur - 1.6)) / 1.4) * 0.8
-        paste(canvas, glass_panel(420, 200, q, a), x, y, 1.0, a)
-    bar_in = ease((t - dur * 0.45) / 0.8)
-    zoom = 1.0 + (1.6 * ease((t - (dur - 1.5)) / 1.5) if t > dur - 1.5 else 0)
-    paste(canvas, assets["bar"], W / 2, H / 2 + 36, (0.55 + 0.1 * bar_in) * zoom, bar_in)
-    if t > dur * 0.62:
-        ha = ease((t - dur * 0.62) / 0.4)
-        if t > dur - 0.8:
-            ha *= 1 - ease((t - (dur - 0.8)) / 0.7)
+        enter = ease((t - delays[n]) / 0.55)
+        g = ease((t - dur * 0.5) / 1.1)
+        x = lerp(lerp(starts[n][0], mid[n][0], enter), gather[n][0], g)
+        y = lerp(lerp(starts[n][1], mid[n][1], enter), gather[n][1], g)
+        paste(canvas, glass_panel(460, 150, q, min(1, enter)), x, y, 1.0, min(1, enter))
+    paste(canvas, A["bar"], W / 2, 430, (0.5 + 0.9 * ease((t - dur + 1.4) / 1.3)) if t > dur - 1.4 else 0.5 * ease((t - dur * 0.45) / 0.7),
+          ease((t - dur * 0.42) / 0.6))
+    if t > dur * 0.58:
+        ha = ease((t - dur * 0.58) / 0.35)
         d = ImageDraw.Draw(canvas)
-        font = ImageFont.truetype(FONT_B, 64)
         txt = fa("قیمت، کارمزد، تسویه")
-        tw = d.textlength(txt, font=font)
-        d.text(((W - tw) / 2, 72), txt, font=font, fill=(250, 246, 255, int(255 * ha)))
-        sub = ImageFont.truetype(FONT, 22)
-        s = "Price  ·  Fees  ·  Settlement"
-        sw = d.textlength(s, font=sub)
-        d.text(((W - sw) / 2, 148), s, font=sub, fill=(200, 180, 230, int(200 * ha)))
-    d = ImageDraw.Draw(canvas)
-    d.text((60, H - 48), "FBT SWAP   ·   fbtswap.ir", font=ImageFont.truetype(FONT, 18), fill=(160, 150, 190, 180))
+        center_text(d, txt, 70, ImageFont.truetype(FONT_B, 56), (70, 40, 120, int(255 * ha)))
     return canvas.convert("RGB")
 
 
-def ken(base, t, dur, zoom0=1.0, zoom1=1.12):
-    z = lerp(zoom0, zoom1, t / max(dur, 0.01))
-    bw, bh = base.size
+def ken(base, t, dur, z0=1.0, z1=1.1):
+    z = lerp(z0, z1, t / max(dur, 0.01))
     nw, nh = int(W * z), int(H * z)
     im = base.resize((nw, nh), Image.Resampling.LANCZOS)
-    x = (nw - W) // 2
-    y = (nh - H) // 2 + int(10 * math.sin(t * 0.6))
+    x, y = (nw - W) // 2, (nh - H) // 2
     return im.crop((x, y, x + W, y + H)).convert("RGBA")
 
 
-def scene3(t, dur, assets):
-    canvas = ken(assets["grid"], t, dur, 1.02, 1.14)
-    # buy UI slides in
-    ui_t = ease((t - 1.2) / 0.8)
-    ui = assets["buy"].resize((980, 560), Image.Resampling.LANCZOS).convert("RGBA")
-    ui.putalpha(Image.new("L", ui.size, int(230 * ui_t)))
-    paste(canvas, ui, W * 0.62, H * 0.42, 1.0, ui_t)
-    caption(
-        canvas, "BUY ON FBT", "PAXG  ·  XAUt  ·  A FRACTION OF AN OUNCE.",
-        "Swap like any ERC-20. Rate, fee and minimum received before you sign. No dealer appointment. FBT holds nothing.",
-        ease((t - 0.3) / 0.4) * (1 if t < dur - 0.4 else 1 - ease((t - (dur - 0.4)) / 0.4)),
-    )
+def scene4(t, dur, A):
+    canvas = ken(A["grid"], t, dur, 1.02, 1.12)
+    ui_t = ease((t - 0.8) / 0.7)
+    ui = A["buy"].resize((920, 540), Image.Resampling.LANCZOS).convert("RGBA")
+    paste(canvas, ui, W * 0.62, 380, 1.0, ui_t)
+    caption(canvas, "خرید داخل اپ", "پکس‌جی و تتر گلد. کسری از اونس.",
+            "نرخ، کارمزد و حداقل دریافتی قبل از امضا. بدون مراجعه به طلافروشی.",
+            ease((t - 0.2) / 0.4))
     return canvas.convert("RGB")
 
 
-def scene4(t, dur, assets):
-    a = ken(assets["vault"], t, dur, 1.0, 1.1)
-    b = ken(assets["wallet"], t, dur, 1.08, 1.0)
-    mix = ease((t - dur * 0.45) / 0.9)
-    canvas = Image.blend(a.convert("RGBA"), b.convert("RGBA"), mix)
-    caption(
-        canvas, "SETTLEMENT  ·  DISCLOSURE",
-        "A CLAIM ON ISSUER GOLD. NOT A BAR IN YOUR HAND.",
-        "Paxos or Tether can freeze or burn a balance. That is a real difference from ETH, BTC, or bullion you hold. Read it before you buy.",
-        ease((t - 0.2) / 0.4),
-    )
+def scene5(t, dur, A):
+    canvas = ken(A["wallet"], t, dur, 1.0, 1.08)
+    caption(canvas, "امنیت یعنی حضانت نداشتن ما",
+            "طلا پیش اف‌بی‌تی نیست. کلید پیش شماست.",
+            "توکن ادعای طلا نزد ناشر است نه شمش خانه. ناشر ممکن است آدرس را مسدود کند. قبل از خرید بخوانید.",
+            ease((t - 0.15) / 0.35))
     return canvas.convert("RGB")
 
 
-def scene5(t, dur, assets):
-    canvas = assets["bg"].copy().convert("RGBA")
-    a = ease(t / 0.5)
-    paste(canvas, assets["logo"], W / 2, 300, 1.0, a)
-    paste(canvas, assets["bar"], W / 2, 620, 0.7 + 0.15 * ease(t / dur), a)
+def scene6(t, dur, A):
+    canvas = A["bg"].copy().convert("RGBA")
+    a = ease(t / 0.45)
+    paste(canvas, A["logo"], W / 2, 300, 1.08, a)
+    paste(canvas, A["bar"], W / 2, 600, 0.7, a)
     d = ImageDraw.Draw(canvas)
-    ft = ImageFont.truetype(FONT_B, 56)
-    fb = ImageFont.truetype(FONT, 28)
-    txt = "YOU SIGN.  IT LANDS IN YOUR WALLET."
-    tw = d.textlength(txt, font=ft)
-    d.text(((W - tw) / 2, 780), txt, font=ft, fill=(250, 246, 255, int(255 * ease((t - 0.4) / 0.4))))
-    s = "FBT SWAP  ·  GOLD  ·  fbtswap.ir"
-    sw = d.textlength(s, font=fb)
-    d.text(((W - sw) / 2, 860), s, font=fb, fill=(212, 175, 55, int(255 * ease((t - 0.6) / 0.4))))
+    center_text(d, fa("شما امضا می‌کنید. توکن در کیف پولتان می‌نشیند."), 780,
+                ImageFont.truetype(FONT_B, 36), (50, 30, 90, int(255 * ease((t - 0.4) / 0.4))))
+    center_text(d, fa("اف‌بی‌تی سواپ  ·  طلا") + "  ·  fbtswap.ir", 850,
+                ImageFont.truetype(FONT, 28), (140, 90, 40, int(255 * ease((t - 0.55) / 0.4))))
     return canvas.convert("RGB")
 
 
@@ -252,12 +224,12 @@ def music(path, seconds):
         buf = bytearray()
         for i in range(n):
             t = i / SR
-            env = 0.34 + 0.1 * math.sin(2 * math.pi * t / 10)
-            if t > seconds - 5:
-                env *= max(0.05, (seconds - t) / 5)
-            s = (0.18 * math.sin(2 * math.pi * 49 * t) + 0.1 * math.sin(2 * math.pi * 73.5 * t) + 0.06 * math.sin(2 * math.pi * 98 * t)) * env
-            v = int(max(-0.95, min(0.95, s)) * 18000)
-            buf += struct.pack("<hh", v, int(v * 0.9))
+            env = 0.28 + 0.08 * math.sin(2 * math.pi * t / 9)
+            if t > seconds - 4:
+                env *= max(0.05, (seconds - t) / 4)
+            s = (0.16 * math.sin(2 * math.pi * 52 * t) + 0.09 * math.sin(2 * math.pi * 78 * t)) * env
+            v = int(max(-0.95, min(0.95, s)) * 16000)
+            buf += struct.pack("<hh", v, int(v * 0.92))
             if len(buf) > 400000:
                 w.writeframes(bytes(buf))
                 buf.clear()
@@ -266,32 +238,29 @@ def music(path, seconds):
 
 
 def main():
-    vos = [f"vo-{i:02d}.mp3" for i in range(5)]
+    vos = [f"vo-{i:02d}.mp3" for i in range(6)]
     durs = [duration(os.path.join(AUD, v)) for v in vos]
     print("durs", [round(d, 2) for d in durs], "total", round(sum(durs), 2))
-    bg = load_rgb("bg.jpg", (W, H))
-    bg = ImageEnhance.Brightness(bg).enhance(0.5)
-    coin = knock_black(Image.open(os.path.join(IMG, "coin.jpg")))
-    coin.thumbnail((280, 280), Image.Resampling.LANCZOS)
-    bar = knock_black(Image.open(os.path.join(IMG, "bar.jpg")))
-    bar.thumbnail((520, 320), Image.Resampling.LANCZOS)
-    logo = Image.open(APP_LOGO).convert("RGBA").resize((380, 380), Image.Resampling.LANCZOS)
-    assets = {
+    bg = load_rgb("bg-light.jpg", (W, H))
+    coin = knock(Image.open(os.path.join(IMG, "coin-light.jpg")), dark=False)
+    coin.thumbnail((300, 300), Image.Resampling.LANCZOS)
+    bar = knock(Image.open(os.path.join(IMG, "bar-light.jpg")), dark=False)
+    bar.thumbnail((540, 340), Image.Resampling.LANCZOS)
+    logo = Image.open(os.path.join(IMG, "logo.png")).convert("RGBA").resize((400, 400), Image.Resampling.LANCZOS)
+    A = {
         "bg": bg, "coin": coin, "bar": bar, "logo": logo,
-        "grid": load_rgb("grid.jpg", (W, H)),
-        "buy": Image.open(os.path.join(IMG, "buy.jpg")).convert("RGBA"),
-        "vault": load_rgb("vault.jpg", (W, H)),
-        "wallet": load_rgb("wallet.jpg", (W, H)),
+        "grid": load_rgb("grid-light.jpg", (W, H)),
+        "buy": Image.open(os.path.join(IMG, "buy-light.jpg")).convert("RGBA"),
+        "wallet": load_rgb("wallet-light.jpg", (W, H)),
     }
-    scenes = [scene1, scene2, scene3, scene4, scene5]
-    tmp = tempfile.mkdtemp(prefix="goldfull-")
+    scenes = [scene1, scene2, scene3, scene4, scene5, scene6]
+    tmp = tempfile.mkdtemp(prefix="goldfa-")
     idx = 0
     for si, (fn, dur) in enumerate(zip(scenes, durs)):
         nf = max(1, int(round(dur * FPS)))
-        print("scene", si, "frames", nf, "dur", round(dur, 2))
+        print("scene", si, nf)
         for i in range(nf):
-            t = i / FPS
-            fr = fn(t, dur, assets)
+            fr = fn(i / FPS, dur, A)
             fr.save(os.path.join(tmp, f"f{idx:05d}.jpg"), quality=86)
             idx += 1
     raw = os.path.join(tmp, "raw.mp4")
@@ -310,9 +279,9 @@ def main():
     subprocess.check_call([
         FF, "-y", "-i", raw, "-i", speech, "-i", mus,
         "-filter_complex",
-        "[2:a]volume=0.2,afade=t=in:st=0:d=1,afade=t=out:st=" + f"{max(1, sum(durs)-4):.1f}" + ":d=3.5[m];"
-        "[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,volume=1.12[v];"
-        "[v][m]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0.45[a]",
+        "[2:a]volume=0.16,afade=t=in:st=0:d=1,afade=t=out:st=" + f"{max(1, sum(durs)-4):.1f}" + ":d=3[m];"
+        "[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,volume=1.2[v];"
+        "[v][m]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0.4[a]",
         "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", OUT,
     ])
     print("wrote", OUT, os.path.getsize(OUT))
