@@ -8133,22 +8133,60 @@ export default function run() {
     /*
      * 2026-10-08 — the screen gained a THIRD source (LI.FI Solana, the
      * keyless fee-earning route) and the old assertion pinned the two-way
-     * ternary that had to be rewritten for it. What must hold now is the
-     * property, not the string: the provider that PRICED the swap builds
-     * first, the fee-earning sources rank above the free Jupiter fallback,
-     * and the router label is keyed off the same id — never a hardcoded
-     * 'Jupiter' printed over an OpenOcean quote (the bug this class of check
-     * exists for).
+     * ternary that had to be rewritten for it.
+     *
+     * 2026-10-10 — a FOURTH joined (Jupiter's own Swap API with our platform
+     * fee), and with four routes the ordering stopped being a line of JSX and
+     * became a decision worth pinning on its own: it moved to
+     * lib/solana/routeOrder.js, where test/solana-fee-route.test.js asserts the
+     * actual function rather than a string. What is checked HERE is the link —
+     * the page must ask that module, and not carry its own order.
      */
     t('the swap keeps the quote\'s provider first when it builds',
-      /\[order\.provider, \.\.\.PROVIDERS\.filter/.test(pageCode)
-      && /PROVIDERS = \['openocean', 'lifi', 'jupiter'\]/.test(pageCode));
+      /const providers = solanaBuildOrder\(order\.provider\)/.test(pageCode)
+      && !/\[order\.provider, \.\.\./.test(pageCode));
+    t('...and the order itself ranks every fee-earning route above the free one',
+      existsSync('src/lib/solana/routeOrder.js')
+      && /SOLANA_ROUTE_PROVIDERS = \['openocean', 'lifi', 'jupfee', 'jupiter'\]/
+        .test(code(read('src/lib/solana/routeOrder.js')))
+      && /PAID_SOLANA_PROVIDERS = \['openocean', 'lifi', 'jupfee'\]/
+        .test(code(read('src/lib/solana/routeOrder.js'))));
     t('...and it knows how to build every fee-earning Solana source',
       /const buildLifiSwap/.test(pageCode) && /getLifiSolanaQuote\(/.test(pageCode)
-      && /getOceanSwap\(/.test(pageCode) && /buildJupiterSwap\(/.test(pageCode));
+      && /getOceanSwap\(/.test(pageCode) && /buildJupiterSwap\(/.test(pageCode)
+      && /buildJupFeeSwap\(/.test(pageCode));
     t('...and the router label is keyed off the quote, never hardcoded',
-      /ROUTER_LABEL\[order\.provider\]/.test(pageCode)
-      && /ROUTER_LABEL = \{[^}]*openocean[^}]*lifi[^}]*jupiter/.test(pageCode));
+      /solanaRouteLabel\(order\.provider\)/.test(pageCode)
+      && /ROUTER_LABEL = \{[^}]*openocean[^}]*lifi[^}]*jupfee[^}]*jupiter/
+        .test(code(read('src/lib/solana/routeOrder.js'))));
+    /*
+     * THE SCREEN FOLLOWS THE TRANSACTION. A build that falls back to another
+     * route is another provider, another output and — the part that matters —
+     * another fee. Printing the pricing provider's label and rate over a
+     * transaction that came from somewhere else understates what the user pays,
+     * which is the one direction a fee display must never be wrong in.
+     */
+    t('...and a fallback build rewrites the route and the fee on screen',
+      /built\.provider !== order\.provider/.test(pageCode)
+      && /if \(rerouted\) setOrder\(executed\)/.test(pageCode));
+    /*
+     * The Jupiter fee route's client must go through our server, exactly like
+     * the other two: `feeAccount` decides where our revenue lands and
+     * `platformFeeBps` decides what the user pays on top of the route.
+     */
+    t('the Jupiter fee client calls OUR api, so the fee fields stay unforgeable',
+      existsSync('src/lib/solanaJupFee.js')
+      && /\/solana\/jupfee\/quote/.test(code(read('src/lib/solanaJupFee.js')))
+      && /\/solana\/jupfee\/swap/.test(code(read('src/lib/solanaJupFee.js')))
+      && !/api\.jup\.ag/.test(code(read('src/lib/solanaJupFee.js'))));
+    t('...and its server half takes the fee account from env, never from the caller',
+      existsSync('server/solanaJupFee.js')
+      && /feeAccount: quoted\.quote\.feeAccount/.test(code(read('server/solanaJupFee.js')))
+      && /platformFeeBps/.test(code(read('server/solanaJupFee.js'))));
+    t('...and the page asks it in the quote race, not only at build time',
+      /getJupFeeQuote\(/.test(quoteCode));
+    t('...and the free Jupiter route is the fallback, never a racer',
+      quoteCode.indexOf('getJupFeeQuote(') < quoteCode.indexOf('getSolanaOrder('));
     t('the LI.FI Solana client calls OUR api, so the fee fields stay unforgeable',
       existsSync('src/lib/solanaLifi.js')
       && /\/solana\/lifi\/quote/.test(code(read('src/lib/solanaLifi.js')))
@@ -8201,14 +8239,23 @@ export default function run() {
       /order\?\.feeBps/.test(pageCode) &&
       /t\('solana\.feeNotice'/.test(pageCode) && /t\('solana\.feeNoneNotice'\)/.test(pageCode));
     /*
-     * The same property on the fallback side: a Jupiter quote may only CARRY
-     * a fee number when it will actually REQUEST it. solanaFeeReady() is the
-     * flag that decides the request (lib/solana.js attaches the referral
-     * params with it), so it must be the same flag that decides the claim —
-     * anything else re-opens "announced 0.70%, charged 0".
+     * The same property on the fallback side, and it got STRICTER.
+     *
+     * It used to be pinned to `solanaFeeReady() ? referralFeeBps()` — the
+     * build-time flag. That was already wrong in a way nobody could see: the
+     * referral parameters are attached by our SERVER from ITS environment
+     * (JUP_REFERRAL_ACCOUNT), so a bundle built with VITE_JUP_REFERRAL_ACCOUNT
+     * and a server without it announced 0.70% on screen while nothing collected
+     * it. The claim now comes from Jupiter's own echo — `referralAccount`
+     * present AND `feeBps` > 0 — which is the only source that cannot disagree
+     * with the request that was actually sent.
      */
     t('the Jupiter fallback claims the fee only when it requests it',
-      /solanaFeeReady\(\) \? referralFeeBps\(\)/.test(pageCode));
+      /feeBps: jupiterEchoedFeeBps\(jo\)/.test(pageCode)
+      && !/solanaFeeReady\(\) \? referralFeeBps\(\)/.test(pageCode));
+    t('...and that claim needs BOTH the echoed referral account and the rate',
+      /if \(!isSolanaAddress\(order\.referralAccount\)\) return null;/.test(code(read('src/lib/solana.js')))
+      && /export function jupiterEchoedFeeBps/.test(code(read('src/lib/solana.js'))));
   }
 
   /* ---- 76. cross-chain / Tron, and the fee that must cross families ----- */

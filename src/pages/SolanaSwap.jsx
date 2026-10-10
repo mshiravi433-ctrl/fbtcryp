@@ -16,14 +16,21 @@ import {
   executeSignature,
   executeSucceeded,
   isSolanaAddress,
+  jupiterEchoedFeeBps,
   orderErrorKey,
   orderQuote,
-  referralFeeBps,
-  solanaFeeReady,
   toBaseUnits
 } from '../lib/solana';
-import { getOceanQuote, getOceanSwap } from '../lib/solanaOcean';
+import { getOceanQuote, getOceanSwap, solanaRouteStatus } from '../lib/solanaOcean';
 import { getLifiSolanaQuote } from '../lib/solanaLifi';
+import { buildJupFeeSwap, getJupFeeQuote } from '../lib/solanaJupFee';
+import {
+  isPaidSolanaProvider,
+  solanaBuildOrder,
+  solanaQuoteProviders,
+  solanaRouteLabel,
+  solanaSkippedReasons
+} from '../lib/solana/routeOrder';
 import { useSettingsStore } from '../store/useSettingsStore';
 import {
   signAndSendSolana,
@@ -64,13 +71,14 @@ import { POINT_VALUES } from '../lib/ranks';
  */
 
 /**
- * The name of the route the user is about to take.
+ * The route names, the build order and the "which routes can pay us" filters
+ * live in lib/solana/routeOrder.js.
  *
- * Kept as a map rather than a ternary so a new provider cannot ship with the
- * previous one's name on screen — the exact bug class that put "OpenOcean" on
- * Jupiter quotes before this screen grew a third source.
+ * They moved out of this file for one reason: the decision they encode is a
+ * money decision, and a money decision that can only be exercised through a
+ * browser, a connected wallet and four live upstreams is a decision nobody can
+ * pin down. There it is a pure function with tests; here it is an import.
  */
-const ROUTER_LABEL = { openocean: 'OpenOcean', lifi: 'LI.FI', jupiter: 'Jupiter' };
 
 /** Curated starting points. Everything else arrives by pasted mint address. */
 /* The curated list lives in lib/solanaUniverse.js — one list, two screens. */
@@ -327,6 +335,35 @@ export default function SolanaSwap({ embedded = false }) {
   /* Bumped by the retry button under a failed quote; re-arms the quoting
      effect without requiring the user to edit the amount. */
   const [quoteNonce, setQuoteNonce] = useState(0);
+
+  /*
+   * Which routes our OWN server can pay us with — the answer of
+   * GET /api/solana/routes, read once per mount.
+   *
+   * Reported 2026-10-10: «قبلا با OpenOcean بود که کارمزد داشتیم برای هر
+   * سواپ، الان اومده روی ژوپیتر که کارمزد صفره». The screen could not answer
+   * that, because the reason lived in server configuration it never looked at:
+   * the De¹ gateway needs an API key, LI.FI needs a fee receiver, and Jupiter's
+   * own fee needs a token account — and when none of the three was usable the
+   * screen quietly priced and executed every swap for free.
+   *
+   * Null means "we could not ask" (an old backend, a blocked call), and null is
+   * deliberately treated as UNKNOWN rather than as "nothing is configured": the
+   * quoting effect then asks every route exactly as it did before.
+   */
+  const [routes, setRoutes] = useState(null);
+  /* Why each paid route did not price this pair — { openocean: 'NO_API_KEY',
+     lifi: 'UPSTREAM_FAILED', … }. Shown only when the FREE route runs, which
+     is the only moment the user is owed an explanation. */
+  const [routeNotes, setRouteNotes] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    solanaRouteStatus()
+      .then((r) => { if (alive && r && typeof r === 'object') setRoutes(r); })
+      .catch(() => { /* unknown stays unknown; every route is still asked */ });
+    return () => { alive = false; };
+  }, []);
 
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -705,42 +742,64 @@ export default function SolanaSwap({ embedded = false }) {
 
         /*
          * ─── THE FEE-EARNING ROUTES ARE ASKED *IN PARALLEL* ──────────────────
-         * De¹ and LI.FI both pay us and both are real quotes; asking them one
-         * after the other would make the screen wait for a timeout before
-         * showing a price it already had. Whichever answers better WINS — the
-         * comparison is on the output the user actually receives, which is the
-         * only honest way to pick between two fee-paying routes.
+         * All three pay us and all three are real quotes; asking them one after
+         * the other would make the screen wait for a timeout before showing a
+         * price it already had. Whichever answers better WINS — the comparison
+         * is on the output the user actually receives, which is the only honest
+         * way to choose between fee-paying routes.
          *
-         * LI.FI needs the wallet address even to price (its quote carries the
-         * transaction), so it joins only once an account is connected. Until
-         * then De¹ is asked alone, exactly as before.
+         * The third of them is new, and it is the one that ends the report this
+         * screen was filed for («الان اومده روی ژوپیتر که کارمزد صفره»): Jupiter
+         * through its OWN Swap API, with our `platformFeeBps` paid into a fee
+         * token account we own. No upstream key, no referral accounts to create
+         * on-chain, and it routes every pair Jupiter can route — the pasted
+         * memecoins included, which is exactly the volume LI.FI often has no
+         * route for. It is what turns "the fallback is free" into "the fallback
+         * pays too".
+         *
+         * Which of the three are asked at all comes from lib/solana/routeOrder:
+         * a route our own server says it cannot pay with is not asked (a 503 per
+         * keystroke is a wasted round trip on the networks our users are on),
+         * and LI.FI joins only once a wallet is connected, because its quote
+         * needs an address even to price.
+         *
+         * The FREE Jupiter route (/order) is deliberately NOT in this race: it
+         * is the fallback below. Racing it would let the fastest answer win on
+         * latency alone, which is precisely how this screen came to show zero
+         * fees while paid routes were still alive.
          */
-        const attempts = [
-          getOceanQuote({
+        const asked = solanaQuoteProviders({ address, routes });
+        /* Why the others were not asked, so the free-route note can say more
+           than "we did not earn anything". */
+        const notes = { ...solanaSkippedReasons({ address, routes }) };
+        /** A quote is only a quote when it has an output; otherwise it is a
+            refusal, and the refusal must carry the provider that refused. */
+        const priced = (provider) => (r) => ((r?.outAmount && String(r.outAmount) !== '0')
+          ? { ...r, provider }
+          : Promise.reject(new Error('NO_ROUTE')));
+        const QUOTE_CALLS = {
+          openocean: () => getOceanQuote({
             inputMint: fromToken.mint,
             outputMint: toToken.mint,
             amount: base,
             /* The user's setting, finally reaching the request. */
             slippageBps
+          }),
+          lifi: () => getLifiSolanaQuote({
+            inputMint: fromToken.mint,
+            outputMint: toToken.mint,
+            amount: base,
+            account: address,
+            slippageBps
+          }),
+          jupfee: () => getJupFeeQuote({
+            inputMint: fromToken.mint,
+            outputMint: toToken.mint,
+            amount: base,
+            slippageBps
           })
-            .then((oq) => ((oq?.outAmount && oq.outAmount !== '0')
-              ? { ...oq, provider: 'openocean' }
-              : Promise.reject(new Error('NO_ROUTE'))))
-        ];
-        if (address) {
-          attempts.push(
-            getLifiSolanaQuote({
-              inputMint: fromToken.mint,
-              outputMint: toToken.mint,
-              amount: base,
-              account: address,
-              slippageBps
-            })
-              .then((lq) => ((lq?.outAmount && lq.outAmount !== '0')
-                ? { ...lq, provider: 'lifi' }
-                : Promise.reject(new Error('NO_ROUTE'))))
-          );
-        }
+        };
+        const attempts = asked.map((provider) => QUOTE_CALLS[provider]().then(priced(provider)));
 
         /*
          * Which answer wins, and how long we wait for the better one.
@@ -775,7 +834,17 @@ export default function SolanaSwap({ embedded = false }) {
           const current = asOut(q.outAmount);
           if (candidate != null && (current == null || candidate > current)) q = v;
         };
-        const track = attempts.map((p) => p.then(consider, (e) => {
+        const track = attempts.map((p, i) => p.then(consider, (e) => {
+          /*
+           * Which paid route refused, and with what code.
+           *
+           * This is the only record of it anywhere, and without it a swap that
+           * ran for free is indistinguishable from one that was priced for free
+           * — the difference between them is our revenue, and the reason is a
+           * missing key or a missing fee account that nobody can find from the
+           * outside. Both are surfaced on screen when the free route runs.
+           */
+          notes[asked[i]] = e?.code || e?.message || 'FAILED';
           if (!err) err = e;
         }));
         await Promise.race([
@@ -819,9 +888,7 @@ export default function SolanaSwap({ embedded = false }) {
               outAmount: cq.outAmount,
               minOutAmount: cq.otherAmountThreshold ?? null,
               priceImpact: cq.priceImpactPct ?? null,
-              /* Claim the fee only when we will actually request it —
-                 solanaFeeReady() is the same flag that decides the request. */
-              feeBps: solanaFeeReady() ? referralFeeBps() : null,
+              feeBps: jupiterEchoedFeeBps(jo),
               provider: 'jupiter'
             };
           } catch (e2) {
@@ -830,6 +897,14 @@ export default function SolanaSwap({ embedded = false }) {
         }
 
         if (reqSeq.current !== seq) return; // a newer request won
+        /*
+         * Why each paid route did not price this pair. Kept even when a paid
+         * route DID win: the tooltip on the route name is the only place an
+         * operator can see a paid route failing while another one covers for
+         * it, which is exactly the situation that earns less than it should and
+         * looks completely healthy.
+         */
+        setRouteNotes(Object.keys(notes).length ? { ...notes } : null);
         if (!q) {
           /*
            * A network-level failure (timeout, DNS, backend unreachable) is a
@@ -889,7 +964,14 @@ export default function SolanaSwap({ embedded = false }) {
       requestId: jo.requestId,
       /* Flat V2 answer again — the pricing fields are top-level. */
       outAmount: orderQuote(jo)?.outAmount ?? null,
-      feeBps: solanaFeeReady() ? referralFeeBps() : null,
+      /*
+       * The fee THIS ORDER carries, read from Jupiter's own echo — not from a
+       * build-time flag. `solanaFeeReady()` answers "was the bundle built with
+       * VITE_JUP_REFERRAL_ACCOUNT", while the referral parameters are attached
+       * by our SERVER from ITS environment; the two can disagree, and when they
+       * did, the screen announced a platform fee nothing was collecting.
+       */
+      feeBps: jupiterEchoedFeeBps(jo),
       versioned: true
     };
   };
@@ -997,52 +1079,76 @@ export default function SolanaSwap({ embedded = false }) {
        * also fails, so the user sees the real reason, not a mystery.
        */
       /*
-       * THE PRICING PROVIDER COMES FIRST, THEN THE OTHER TWO.
+       * THE PRICING PROVIDER COMES FIRST, THEN THE OTHERS — PAID BEFORE FREE.
        *
-       * The number the user consented to is the pricing provider's number, so
-       * it builds first; the others are fallbacks for the case where that
-       * route's upstream degrades between the quote and the tap. All three are
-       * ordered deliberately: the two FEE-earning routes before the free
-       * Jupiter one, so a failure never quietly converts a paid route into a
-       * free one while a paid one was still available.
+       * The order itself lives in lib/solana/routeOrder.js, where it can be
+       * asserted without a browser: the priced provider first (that is the
+       * number the user consented to), then the remaining FEE-earning routes,
+       * then the free Jupiter one. A paid route that is still alive must win
+       * over a free one; the free route is what keeps the swap possible when
+       * nothing else can build it, never a preference.
        */
-      const PROVIDERS = ['openocean', 'lifi', 'jupiter'];
-      const providers = [order.provider, ...PROVIDERS.filter((p) => p !== order.provider)];
+      const providers = solanaBuildOrder(order.provider);
+      const baseAmount = toBaseUnits(amount, fromToken.decimals);
+      /*
+       * One builder per route, keyed by provider id.
+       *
+       * A map, not a nested ternary: with four routes the ternary was already
+       * three levels deep, and the way it fails when a fifth arrives is by
+       * silently dropping the new id into the LAST branch — OpenOcean's shape.
+       * Signing that would be a broken transaction under a confident UI. An id
+       * this map has never seen is skipped instead of guessed.
+       *
+       * Note the two Jupiter entries differ in HOW they are signed: `jupfee`
+       * (the Swap API) returns a transaction WE broadcast, `jupiter` (V2
+       * /order) signs only and lands through Jupiter's own /execute, because an
+       * RFQ route needs a market-maker signature added after ours.
+       */
+      const BUILDERS = {
+        openocean: async () => ({
+          provider: 'openocean',
+          ...(await getOceanSwap({
+            inputMint: fromToken.mint,
+            outputMint: toToken.mint,
+            amount: baseAmount,
+            account: address,
+            slippageBps
+          }))
+        }),
+        lifi: () => buildLifiSwap({
+          inputMint: fromToken.mint,
+          outputMint: toToken.mint,
+          amount: baseAmount,
+          account: address,
+          slippageBps
+        }),
+        jupfee: () => buildJupFeeSwap({
+          inputMint: fromToken.mint,
+          outputMint: toToken.mint,
+          amount: baseAmount,
+          account: address,
+          slippageBps
+        }),
+        jupiter: () => buildJupiterSwap({
+          inputMint: fromToken.mint,
+          outputMint: toToken.mint,
+          amount: baseAmount,
+          account: address,
+          /*
+           * MUST match the quote above. Building the signable transaction with
+           * a different tolerance than the one priced would mean the user
+           * consented to one number and signed another.
+           */
+          slippageBps
+        })
+      };
       let built = null;
       let buildErr = null;
       for (const p of providers) {
+        const build = BUILDERS[p];
+        if (!build) continue;
         try {
-          built = p === 'jupiter'
-            ? await buildJupiterSwap({
-              inputMint: fromToken.mint,
-              outputMint: toToken.mint,
-              amount: toBaseUnits(amount, fromToken.decimals),
-              account: address,
-              /*
-               * MUST match the quote above. Building the signable transaction
-               * with a different tolerance than the one priced would mean the
-               * user consented to one number and signed another.
-               */
-              slippageBps
-            })
-            : p === 'lifi'
-              ? await buildLifiSwap({
-                inputMint: fromToken.mint,
-                outputMint: toToken.mint,
-                amount: toBaseUnits(amount, fromToken.decimals),
-                account: address,
-                slippageBps
-              })
-              : {
-                provider: 'openocean',
-                ...(await getOceanSwap({
-                  inputMint: fromToken.mint,
-                  outputMint: toToken.mint,
-                  amount: toBaseUnits(amount, fromToken.decimals),
-                  account: address,
-                  slippageBps
-                }))
-              };
+          built = await build();
           if (!built?.transaction) throw new Error('NO_TRANSACTION');
           break;
         } catch (e) {
@@ -1050,6 +1156,33 @@ export default function SolanaSwap({ embedded = false }) {
         }
       }
       if (!built) throw buildErr || new Error('NO_TRANSACTION');
+
+      /*
+       * ─── THE SCREEN FOLLOWS THE TRANSACTION, NOT THE OTHER WAY ROUND ──────
+       * A fallback build is a DIFFERENT route than the one that priced the
+       * screen: another provider, another output, and — the part that matters —
+       * another fee. Until now the label and the fee line kept showing the
+       * pricing provider's numbers after the transaction came from somewhere
+       * else, so a swap that fell back to the free Jupiter route still read
+       * «LI.FI · 0.95%» on its way to the wallet prompt. Understating what a
+       * user pays is the one direction a fee display must never be wrong in,
+       * and the history record has to carry the same number for the same
+       * reason.
+       */
+      const rerouted = built.provider !== order.provider;
+      const executed = rerouted
+        ? {
+          ...order,
+          provider: built.provider,
+          outAmount: built.outAmount ?? order.outAmount,
+          feeBps: built.feeBps ?? null,
+          totalFeeBps: built.totalFeeBps ?? null
+        }
+        : order;
+      if (rerouted) setOrder(executed);
+      const execOut = executed?.outAmount
+        ? fromBaseUnits(executed.outAmount, toToken.decimals)
+        : outAmount;
 
       let signature;
       /* Record a pending Solana swap on the device ledger before signing, so
@@ -1060,10 +1193,12 @@ export default function SolanaSwap({ embedded = false }) {
         chainName: 'Solana',
         from: amount,
         fromSymbol: fromToken.symbol,
-        to: outAmount,
+        /* The number the transaction we are about to sign produces — which, on
+           a fallback build, is not the number that was on screen. */
+        to: execOut,
         toSymbol: toToken.symbol,
         amountIn: Number(amount),
-        amountOut: outAmount != null ? Number(outAmount) : null,
+        amountOut: execOut != null ? Number(execOut) : null,
         status: 'pending'
       }).id;
 
@@ -1208,6 +1343,25 @@ export default function SolanaSwap({ embedded = false }) {
   const outAmount = order?.outAmount
     ? fromBaseUnits(order.outAmount, toToken.decimals)
     : null;
+
+  /*
+   * Why the paid routes did not price this pair, as one line.
+   *
+   * Deliberately a TOOLTIP on the route name and not a banner: this screen
+   * already had an operator-facing red warning removed from it, correctly —
+   * «به مشتری مربوط نیست». A customer needs the fee they will pay (the notice
+   * below states it exactly, including when it is zero); the person who has to
+   * fix an unconfigured key needs the reason, and a tooltip is where those two
+   * stop competing. Provider ids rather than display names, because two of the
+   * four routes are both called "Jupiter" and only one of them pays us.
+   */
+  const routeReason = useMemo(() => {
+    if (!routeNotes) return '';
+    return Object.entries(routeNotes)
+      .filter(([provider]) => isPaidSolanaProvider(provider))
+      .map(([provider, code]) => `${provider}: ${code}`)
+      .join(' · ');
+  }, [routeNotes]);
   const sourceBalance = walletBalances
     ? fromBaseUnits(
       walletBalances.sourceRaw.toString(),
@@ -1493,9 +1647,13 @@ export default function SolanaSwap({ embedded = false }) {
                 the one we prefer. Since the OpenOcean → Jupiter fallback,
                 hard-coding "OpenOcean" here would have told the user their
                 quote came from a route that was just rejected.
+
+                It is also re-set when the BUILD falls back to another route
+                (see `rerouted` in swap()), so this label and the fee below can
+                never describe a transaction the user is not about to sign.
               */}
-              <span className="mono" style={{ fontSize: 12 }}>
-                {ROUTER_LABEL[order.provider] || ROUTER_LABEL.openocean}
+              <span className="mono" style={{ fontSize: 12 }} title={routeReason || undefined}>
+                {solanaRouteLabel(order.provider)}
               </span>
             </div>
             <div className="row-between">
