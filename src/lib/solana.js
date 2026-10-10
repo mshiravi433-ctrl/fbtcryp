@@ -326,6 +326,40 @@ export function orderQuote(order) {
 }
 
 /**
+ * The integrator fee THIS ORDER actually carries, in bps — or null when it
+ * carries none.
+ *
+ * ─── WHY THIS FUNCTION EXISTS ──────────────────────────────────────────────
+ * The Solana screen used to print `solanaFeeReady() ? referralFeeBps() : null`,
+ * i.e. "the bundle was built with VITE_JUP_REFERRAL_ACCOUNT, so 70 bps". But
+ * the request is assembled by OUR SERVER (server/solana.js), which reads
+ * JUP_REFERRAL_ACCOUNT from its own environment and attaches `referralAccount`
+ * only when that is set. A build-time value with no matching server value
+ * therefore printed a platform fee on the one screen where users read numbers,
+ * for a fee nothing was collecting — and it did so in the direction that is
+ * discovered only after signing.
+ *
+ * Jupiter echoes both fields in the /order response, so the echo is the only
+ * honest source:
+ *   • `referralAccount` is present only when a referral account was passed. Its
+ *     absence means no fee was requested, whatever the bundle believes.
+ *   • `feeBps` is the total rate the order carries.
+ *
+ * Both are required: `feeBps` alone can be non-zero from Jupiter's own platform
+ * fee, which is not ours to claim.
+ *
+ * @param {object|null} order  the V2 /order response (flat, see orderQuote)
+ * @returns {number|null}
+ */
+export function jupiterEchoedFeeBps(order) {
+  if (!order || typeof order !== 'object') return null;
+  if (!isSolanaAddress(order.referralAccount)) return null;
+  const bps = Number(order.feeBps);
+  if (!Number.isFinite(bps) || bps <= 0) return null;
+  return Math.round(bps);
+}
+
+/**
  * Human-readable reason an order could not be built.
  *
  * Jupiter returns `transaction: ""` with an errorCode whose MEANING DEPENDS ON

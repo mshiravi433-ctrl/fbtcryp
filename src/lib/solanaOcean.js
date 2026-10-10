@@ -47,14 +47,26 @@ export function isSolanaAddress(addr) {
  * Failures that happen at the network layer (timeout, DNS, refused, offline)
  * are tagged `err.network = true` so the UI can say "check your connection /
  * try again" instead of the misleading "no route between these tokens".
+ *
+ * `options` carries `method` and a stringified `body`, which is what the
+ * Jupiter fee route's build call needs (POST /api/solana/jupfee/swap). It is
+ * shared rather than re-implemented so that all three Solana providers keep
+ * ONE definition of "the network is broken" — two definitions would produce
+ * two different screens for the same dead connection.
  */
-async function ofetch(url) {
+async function ofetch(url, options = {}) {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
+  const method = String(options.method || 'GET').toUpperCase();
   let res;
   try {
     res = await fetch(url, {
-      headers: { accept: 'application/json' },
+      method,
+      headers: {
+        accept: 'application/json',
+        ...(options.body ? { 'content-type': 'application/json' } : {})
+      },
+      ...(options.body ? { body: options.body } : {}),
       ...(ctrl ? { signal: ctrl.signal } : {})
     });
   } catch (err) {
@@ -80,6 +92,15 @@ async function ofetch(url) {
   if (!res.ok) {
     const err = new Error(body?.error || body?.detail || `HTTP ${res.status}`);
     err.status = res.status;
+    /*
+     * The upstream's own error CODE, kept separately from the message.
+     *
+     * The screen now has to tell the user WHY a paid route did not run («مسیر
+     * کارمزددار در دسترس نبود»), and a message can be an upstream's HTML while
+     * the code is the one stable thing our own API guarantees. Providers that
+     * answer without a code leave this null.
+     */
+    err.code = typeof body?.error === 'string' && body.error ? body.error : null;
     // A gateway-level failure of OUR backend (404 in a build with no API,
     // 5xx, geo-block) is a connectivity problem, not a verdict on the pair.
     // 401 joins the list now that Solana sits behind OpenOcean's whitelist:
@@ -88,6 +109,23 @@ async function ofetch(url) {
     // path — the caller's provider fallback then decides the real answer.
     if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
       err.network = true;
+    }
+    /*
+     * …except our OWN "this route is not configured for a fee" answers.
+     *
+     * 503 JUP_FEE_NOT_CONFIGURED / SOLANA_FEE_NOT_CONFIGURED are a statement
+     * about our configuration, not about the connection: nothing is broken,
+     * the paid route simply does not exist for this pair. Reporting them as a
+     * connectivity failure would tell every user on every network to "check
+     * your connection" for a swap that is about to succeed for free — and the
+     * screen's honest «no platform fee» note would never be reached, because
+     * the caller would believe the network was down.
+     */
+    if (
+      res.status === 503 &&
+      (err.code === 'JUP_FEE_NOT_CONFIGURED' || err.code === 'SOLANA_FEE_NOT_CONFIGURED')
+    ) {
+      err.network = false;
     }
     throw err;
   }
@@ -114,6 +152,23 @@ export const solanaApiFetch = ofetch;
  */
 export async function oceanStatus() {
   return ofetch(`${apiBase()}/solana/oo/status`);
+}
+
+/**
+ * Which Solana routes can pay us right now — all four, one call.
+ *
+ * The Solana screen asks this once per mount and uses it for two things: not
+ * asking a paid route that our own server says it cannot pay with (a 503 per
+ * keystroke, on the networks our users are on), and naming the reason on screen
+ * when the free Jupiter route ends up running.
+ *
+ * A failure here is NOT fatal and must not be: an unreachable status endpoint
+ * means "unknown", and the caller then asks every route as it did before this
+ * existed. Refusing to try because we could not confirm is how a working paid
+ * route gets skipped.
+ */
+export async function solanaRouteStatus() {
+  return ofetch(`${apiBase()}/solana/routes`);
 }
 
 /**

@@ -112,6 +112,7 @@ import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail, s
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { lifiSolanaStatus, lifiSolanaSwapQuote } from './solanaLifi.js';
+import { jupFeeQuote, jupFeeStatus, jupFeeSwapQuote } from './solanaJupFee.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoDecode, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
@@ -6170,6 +6171,73 @@ app.get('/api/solana/lifi/quote', async (req, res) => {
   const r = await lifiSolanaSwapQuote(req.query);
   recordProviderHealth('lifi', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * Solana via Jupiter's OWN Swap API — the THIRD fee-earning route, and the one
+ * that covers every pair Jupiter can route.
+ *
+ * Reported 2026-10-10: «قبلا با OpenOcean بود که کارمزد داشتیم برای هر سواپ،
+ * الان اومده روی ژوپیتر که کارمزد صفره». The free Jupiter route below
+ * (/api/solana/order) is Jupiter's V2 `/order`, whose integrator fee is the
+ * Referral Program — on-chain accounts the payout wallet has no SOL to create,
+ * and a failure Jupiter documents as SILENT. The Metis Swap API used here
+ * collects `platformFeeBps` into a plain token account we own, with no referral
+ * program and no upstream key, so the widest Solana routing there is stops
+ * being the route that earns nothing.
+ *
+ * The fee fields are attached from server env and verified against the
+ * upstream echo before a transaction is returned: a caller can supply the pair,
+ * the amount and their own address, and nothing that decides our revenue.
+ */
+app.get('/api/solana/jupfee/status', (req, res) => res.json(jupFeeStatus(req.query ?? {})));
+
+app.get('/api/solana/jupfee/quote', async (req, res) => {
+  const r = await jupFeeQuote(req.query);
+  recordProviderHealth('solana-jupiter-fee', r);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+app.post('/api/solana/jupfee/swap', async (req, res) => {
+  const r = await jupFeeSwapQuote(req.body ?? {});
+  recordProviderHealth('solana-jupiter-fee', r);
+  return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
+});
+
+/*
+ * GET /api/solana/routes — one call that answers "which Solana route can pay
+ * us right now, and why not the others".
+ *
+ * This exists because the failure it replaces was invisible: the screen fell
+ * back to the free Jupiter route and looked perfectly healthy while every swap
+ * earned zero, for as long as an upstream key stayed unconfigured. Every field
+ * here is configuration, not reachability, so the answer costs no upstream call
+ * and cannot be wrong because a provider was briefly slow. Reachability is
+ * what /api/providers/status and the Ecosystem lights are for.
+ *
+ * The client uses it to stop asking routes that cannot pay (a 503 per keystroke
+ * is a wasted round trip on the networks our users are on), and to name the
+ * reason on screen when the free route ends up running.
+ */
+app.get('/api/solana/routes', (req, res) => {
+  const q = req.query ?? {};
+  const pair = q.inputMint && q.outputMint ? { inputMint: q.inputMint, outputMint: q.outputMint } : {};
+  const ref = String(referralAccount() || '');
+  return res.json({
+    /* The house rate, once, so the three routes cannot drift apart on screen. */
+    houseFeeBps: jupFeeStatus().feeBps,
+    de1: oceanStatus(),
+    lifi: lifiSolanaStatus(),
+    jupfee: jupFeeStatus(pair),
+    /* The free route: it exists, it routes the widest, and it pays us only
+       when a referral account is configured — which needs on-chain accounts. */
+    jupiter: {
+      provider: 'jupiter',
+      keyConfigured: jupiterConfigured(),
+      referralConfigured: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(ref),
+      earns: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(ref)
+    }
+  });
 });
 
 /*
