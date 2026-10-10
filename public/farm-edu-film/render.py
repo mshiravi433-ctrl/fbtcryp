@@ -21,7 +21,8 @@ HEADS = [
     ("چطور مشارکت کنیم؟", "نمونهٔ آموزشی — اول بررسی کن"),
     ("پاداش را بفهم. ریسک را بفهم.", "ضرر ناپایدار واقعی است"),
     ("کشف کن. بفهم. مسئولانه وارد شو.", "فقط ویژگی واقعی پلتفرم"),
-    ("اف‌بی‌تی سواپ", "کشف دنیای دیفای  ·  fbtswap.ir"),
+    ("اف‌بی‌تی سواپ", "کشف دنیای دیفای"),
+    ("اف‌بی‌تی سواپ", "تصمیم با توست  ·  fbtswap.ir"),
 ]
 BODIES = [
     "اگر دارایی فقط در کیف پول نماند چه می‌شود؟",
@@ -31,6 +32,7 @@ BODIES = [
     "قیمت، پاداش متغیر، آسیب‌پذیری قرارداد.",
     "تصمیم آگاهانه. بدون عدد ساختگی سود.",
     "مسئولانه کشف کنید. هر تصمیم را جدی بگیرید.",
+    "استخر را بشناس، فارم را بفهم، با کیف پول خودت وارد شو.",
 ]
 
 
@@ -84,10 +86,12 @@ def paste(base, spr, cx, cy, sc=1, a=1, rot=0):
 
 
 def frame(si, t, dur, A):
-    c = ken(A[si], t, dur)
+    img_i = min(si, 6)
+    c = ken(A[img_i], t, dur)
     cap(c, si, ease(min(1, t / 0.35)))
-    if si == 0 or si == 6:
-        paste(c, A["logo"], W / 2, 360, 0.85 + 0.08 * math.sin(t * 2), 0.95, rot=t * 12)
+    if si in (0, 6, 7):
+        sc = 1.15 if si == 7 else 0.85
+        paste(c, A["logo"], W / 2, 340, sc + 0.08 * math.sin(t * 2), 0.98, rot=t * (18 if si == 7 else 12))
     return c.convert("RGB")
 
 
@@ -114,13 +118,9 @@ def music(path, seconds):
 
 
 def main():
-    vos = [f"vo-{i:02d}.mp3" for i in range(1, 8)]
+    vos = [f"vo-{i:02d}.mp3" for i in range(1, 9)]
     durs = [duration(os.path.join(AUD, v)) for v in vos]
-    # stretch last scene if under 90s
-    gap = 90.0 - sum(durs)
-    if gap > 0:
-        durs[-1] += gap
-    print("durs", [round(x, 2) for x in durs], sum(durs))
+    print("durs", [round(x, 2) for x in durs], "total", round(sum(durs), 2))
     A = {i: Image.open(os.path.join(IMG, f"s{i+1}.jpg")).resize((W, H)) for i in range(7)}
     A["logo"] = Image.open(os.path.join(IMG, "logo.png")).convert("RGBA").resize((380, 380))
     tmp = tempfile.mkdtemp(prefix="farmedu-")
@@ -143,10 +143,10 @@ def main():
     mus = os.path.join(tmp, "m.wav")
     music(mus, sum(durs) + 1)
     subprocess.check_call([
-        FF, "-y", "-i", raw, "-i", speech, "-i", mus, "-t", "90",
+        FF, "-y", "-i", raw, "-i", speech, "-i", mus,
         "-filter_complex",
-        "[1:a]apad=whole_dur=90,aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,volume=1.18[v];"
-        "[2:a]volume=0.2,afade=t=in:st=0:d=1,afade=t=out:st=85:d=5[m];"
+        "[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo,volume=1.18[v];"
+        "[2:a]volume=0.2,afade=t=in:st=0:d=1,afade=t=out:st=" + f"{max(1, sum(durs)-5):.1f}" + ":d=4[m];"
         "[v][m]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0.45[a]",
         "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", OUT16,
     ])
