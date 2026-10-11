@@ -13223,6 +13223,38 @@
       "needCountry": "Enter your two-letter country code so the provider can price your order.",
       "nextTo": "Next: {{step}}"
     },
+    "ramp": {
+      "recommended": "Suggested",
+      "open": "Continue on {{provider}}",
+      "prefillFull": "Your amount, currency and wallet address are pre-filled on their page.",
+      "prefillPartial": "Currency and amount are pre-filled; you pick the asset and paste your wallet address on their page.",
+      "prefillNone": "You choose everything on their page.",
+      "coverageListed": "Your country is on this provider's own published list.",
+      "coverageDecides": "This provider publishes no country list — it decides on its own site.",
+      "coverageUnverified": "None of the options above publish a supported-country list, so any of them may still say on its own page that it does not serve your country.",
+      "countryUnknown": "No country set — the provider decides on its own site.",
+      "kycNote": "Verification, payment, fees and limits are all handled on the provider's own site.",
+      "noneTitle": "No card rail is open for this country.",
+      "noneBody": "Every provider we know either does not serve this country or does not support this currency. The peer-to-peer rails below need no verification and work everywhere.",
+      "p2pTitle": "Peer-to-peer rails (no verification)",
+      "p2pNote": "Trade directly with escrow — slower and mostly bitcoin, but no provider can close the door.",
+      "p2pInApp": "Right here in the app · multisig escrow",
+      "p2pDesktop": "Desktop app · fully decentralised",
+      "p2pLightning": "Web · Lightning · small amounts",
+      "p2pMobile": "Mobile · bank transfer",
+      "noPromiseNote": "We cannot see the payment status with the provider (there is no webhook on this rail). The report below states only what the blockchain shows: \"a transfer in your order's direction was detected\" — never \"payment confirmed\".",
+      "reasons": {
+        "COUNTRY_EXCLUDED": "Does not serve this country (per its own list)",
+        "SIDE_UNSUPPORTED": "Does not offer this direction",
+        "NOT_CONFIGURED": "Needs a public id that is not configured",
+        "ASSET_UNSUPPORTED": "Does not cover this asset or network",
+        "FIAT_UNSUPPORTED": "Does not support this currency",
+        "AMOUNT_REQUIRED": "Needs a valid amount",
+        "WALLET_REQUIRED": "Needs a valid wallet address",
+        "PROVIDER_DISABLED": "Disabled",
+        "UNAVAILABLE": "Unavailable"
+      }
+    },
     "watch": {
       "titleBuy": "On-chain deposit report",
       "titleSell": "On-chain withdrawal report",

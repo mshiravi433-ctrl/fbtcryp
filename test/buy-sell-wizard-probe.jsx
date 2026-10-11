@@ -27,6 +27,7 @@
  */
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
+import { MemoryRouter } from 'react-router-dom';
 import '../src/i18n/index.js';
 import BuySellPanel from '../src/components/BuySellPanel.jsx';
 import { GUIDED_PROVIDER, RAMP_PUBLIC_HOST_API_KEY } from '../src/lib/guidedCheckout.js';
@@ -143,7 +144,10 @@ export async function run(container) {
     stubFetch(providers);
     container.innerHTML = '';
     const root = createRoot(container);
-    await act(async () => { root.render(<BuySellPanel />); });
+    /* Inside the app this panel is always under the router. The probe mounts
+       it bare, and the ramp directory's in-app rail calls useNavigate() — so
+       the mount supplies the router the real app supplies. */
+    await act(async () => { root.render(<MemoryRouter><BuySellPanel /></MemoryRouter>); });
     await act(async () => { await sleep(60); });
     return root;
   };
@@ -228,6 +232,25 @@ export async function run(container) {
     t('...and Back is still there beside it', Boolean(backBtn()));
     t('the guided hand-off names the destination provider', /Ramp/.test(nextBtn().textContent));
 
+    /* ── the ramp directory: every door open to THIS country, and the ones
+       that are shut, named. Rendered on the same review step. ── */
+    const rampRows = () => [...container.querySelectorAll('.bsw-ramp-row')];
+    const closedRows = () => [...container.querySelectorAll('.bsw-ramp-closed li')];
+    const p2pRows = () => [...container.querySelectorAll('.bsw-ramp-p2p-row')];
+    t('the review step lists the keyless doors, not a single hard-coded one', rampRows().length >= 2);
+    t('the fully pre-filled door is marked as the suggestion', Boolean(container.querySelector('.bsw-ramp-row.is-recommended')));
+    t('every listed door carries its own open button naming the provider',
+      rampRows().every((row) => {
+        const btn = row.querySelector('.bsw-ramp-open');
+        return btn && btn.textContent.trim().length > 3;
+      }));
+    t('every listed door states what is pre-filled and who does the KYC',
+      rampRows().every((row) => row.querySelectorAll('.bsw-ramp-note').length >= 2));
+    t('doors that are closed are shown with a reason, never hidden',
+      closedRows().every((row) => (row.querySelector('.bsw-ramp-closed-reason')?.textContent || '').trim().length > 2));
+    t('the peer-to-peer rails are offered to everyone', p2pRows().length >= 3);
+    t('the in-app peer-to-peer rail is offered first', /Hodl/i.test(p2pRows()[0]?.textContent || ''));
+
     await click(nextBtn());
     t('pressing it opens the provider checkout', typeof opened === 'string'
       && Object.values(GUIDED_PROVIDER.hosts).every((host) => host.endsWith('/landing'))
@@ -243,6 +266,16 @@ export async function run(container) {
     t('the prefilled hand-off carries the wallet address', String(opened).toLowerCase().includes(WALLET.toLowerCase()));
     t('after the hand-off the action bar is still complete', Boolean(backBtn()) && Boolean(nextBtn()));
     t('...and the action becomes "reopen", so the screen is never a dead end', nextBtn().disabled === false);
+
+    /* The peer-to-peer rails are reachable, and each kind behaves correctly:
+       the in-app rail navigates within the app, an external rail leaves it
+       over https. Neither one is ever presented as a provider payment. */
+    const openedBefore = opened;
+    await click(p2pRows()[0]);
+    t('tapping the in-app rail stays in the app instead of opening a tab', opened === openedBefore);
+    const externalRail = p2pRows().find((row) => /Bisq/i.test(row.textContent));
+    await click(externalRail);
+    t('tapping an external rail opens it over https', typeof opened === 'string' && opened.startsWith('https://bisq.network/'));
 
     await click(backBtn());
     t('Back still works from the review step', activeStep() === 2);
