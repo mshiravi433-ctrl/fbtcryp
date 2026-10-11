@@ -145,12 +145,14 @@
   border-color: rgba(136, 207, 220, .22);
   background: rgba(10, 27, 40, .93);
   backdrop-filter: blur(12px);
-  /* Centered compact pill — fixes left drift & oversized boxes */
-  left: 50%;
-  right: auto;
-  inset-inline-start: auto;
-  inset-inline-end: auto;
-  transform: translateX(-50%);
+  /* Centered compact pill — fixes left drift & oversized boxes.
+     RTL: margin-inline: auto on a stretched (left:0; right:0) bar centres it
+     directionally. translateX(-50%) is a physical axis and pulls the bar to
+     the wrong side on RTL pages, clipping two tabs off the left. */
+  left: 0;
+  right: 0;
+  inset-inline: 0;
+  margin-inline: auto;
   width: min(380px, calc(100% - 20px));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -215,10 +217,15 @@
 @media (min-width: 900px) {
   .nc-page { --nc-rail: 224px; }
   .nc-page[data-rail-collapsed='true'] { --nc-rail: 76px; }
+  /* RTL: the rail docks to the END edge (right in Persian/Farsi) and the
+     shell reserves space on that same edge. Using logical properties means
+     one rule works for both directions. */
   .iaos-page.nc-page .iaos-shell { width: min(1120px, calc(100% - var(--nc-rail) - 72px));
-    margin-inline-start: calc(var(--nc-rail) + 36px); margin-inline-end: auto;
+    margin-inline-end: calc(var(--nc-rail) + 36px); margin-inline-start: auto;
     padding-bottom: 30px; }
-  .nc-page .tag-tabbar { top: 18px; bottom: 18px; inset-inline-start: 18px; left: auto; right: auto; inset-inline-start: 18px; transform: none;
+  .nc-page .tag-tabbar {
+    top: 18px; bottom: 18px; inset-inline-end: 18px; inset-inline-start: auto;
+    left: auto; right: auto; transform: none;
     width: calc(var(--nc-rail) - 36px); display: flex; flex-direction: column; align-items: stretch; padding: 12px 8px;
     border-radius: 18px; box-shadow: var(--nc-shadow); }
   .nc-page .tag-tab { flex-direction: row; justify-content: flex-start; min-height: 48px; gap: 12px; padding: 10px 12px; }
@@ -254,12 +261,7 @@
   .nc-page .nc-model-status { display: none; }
   .nc-page .tag-tabbar {
     bottom: calc(env(safe-area-inset-bottom) + 10px);
-    width: min(380px, calc(100% - 20px));
-    left: 50%;
-    right: auto;
-    inset-inline-start: auto;
-    inset-inline-end: auto;
-    transform: translateX(-50%);
+    /* base rule already centres with margin-inline: auto on a stretched bar */
   }
   .nc-page .iaos-composer { bottom: calc(84px + env(safe-area-inset-bottom)); }
 }

@@ -409,15 +409,19 @@
 
 /* ── 6. Bottom tab bar: chat · agents · activity · more — CENTERED COMPACT ──
    Fixed: was 480px wide with large gaps on desktop, rail artefacts inside
-   caused left drift. Now 380px max, centered, 52px tall tabs, tight gap. */
+   caused left drift. Now 380px max, centered, 52px tall tabs, tight gap.
+
+   RTL FIX: the previous `left:50%; transform: translateX(-50%)` is a physical
+   transform and pulls the bar the WRONG way on RTL pages, cutting two tabs
+   off the left and making the pill look like it drifted. margin-inline:auto
+   on a bar stretched to both edges centres it directionally (LTR & RTL). */
 .tag-tabbar {
   position: fixed;
   bottom: calc(env(safe-area-inset-bottom) + 10px);
-  left: 50%;
-  right: auto;
-  inset-inline-start: auto;
-  inset-inline-end: auto;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  inset-inline: 0;
+  margin-inline: auto;
   width: min(380px, calc(100% - 20px));
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
