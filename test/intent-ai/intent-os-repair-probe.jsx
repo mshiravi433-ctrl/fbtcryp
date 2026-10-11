@@ -14,7 +14,7 @@ import { getCurrentSlot, MULTI_SLOT_KEY } from '../../src/lib/intent-ai/chat/mul
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const setter = (input, value) => {
-  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value);
+  Object.getOwnPropertyDescriptor((input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement : window.HTMLInputElement).prototype, 'value').set.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
 const json = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -33,7 +33,7 @@ export async function run(container) {
   };
   const click = async (element) => { if (element && !element.disabled) await act(async () => { element.click(); }); };
   const send = async (text) => {
-    await act(async () => { setter(q('.iaos-composer input.iaos-input'), text); });
+    await act(async () => { setter(q('.iaos-composer textarea.iaos-input'), text); });
     await click(q('.iaos-composer .iaos-send'));
     await wait(() => !q('.iaos-thinking'));
     await act(async () => { await sleep(80); });

@@ -239,6 +239,14 @@ import {
   isEvmAddress as guidedIsEvmAddress,
   toBaseUnits as guidedToBaseUnits
 } from '../src/lib/guidedCheckout.js';
+import {
+  P2P_RAILS,
+  RAMP_DIRECTORY,
+  RAMP_EXCLUDED_COUNTRIES,
+  coverageState,
+  normalizeCountry,
+  rampOptions
+} from '../src/lib/rampDirectory.js';
 import { createDeltaTracker } from '../src/lib/buySellWatch.js';
 import { buildHostedCheckoutUrl } from '../server/providers/rampNetwork.js';
 import { STATIONS, parseAudioFeed } from '../server/audio.js';
@@ -9810,6 +9818,97 @@ export default async function run() {
       codeOf(() => buildGuidedCheckoutUrl({ side: 'BUY', asset: 'USDT', network: 'arbitrum', walletAddress: wallet, fiatCurrency: 'XYZ', fiatAmount: 100 })) === 'GUIDED_FIAT_INVALID');
     t('the EVM address gate accepts 0x+40hex and nothing else',
       guidedIsEvmAddress(wallet) && !guidedIsEvmAddress('0x123') && !guidedIsEvmAddress('') && !guidedIsEvmAddress(null));
+  }
+
+  /* ================================================================== */
+  /* RAMP DIRECTORY — every keyless door, and the ones that are shut    */
+  /* ================================================================== */
+  {
+    const wallet = '0x000000000000000000000000000000000000dead';
+    const base = { asset: 'USDT', network: 'arbitrum', walletAddress: wallet, fiatCurrency: 'USD', fiatAmount: 100 };
+    const mercuryoConfigured = Boolean(import.meta.env?.VITE_MERCURYO_WIDGET_ID);
+    const originOf = (id) => RAMP_DIRECTORY.find((row) => row.id === id)?.origin;
+
+    /* ---- rule 1: no invented coverage ---- */
+    t('every directory row states where its coverage claim comes from',
+      RAMP_DIRECTORY.every((row) => typeof row.coverage?.source === 'string' && row.coverage.source.startsWith('https://')));
+    t('exactly one row carries a per-country list, and it is the one transcribed from the provider',
+      RAMP_DIRECTORY.filter((row) => row.coverage?.mode === 'exclusion').length === 1
+      && RAMP_DIRECTORY.find((row) => row.coverage?.mode === 'exclusion')?.id === 'ramp');
+    t('a row with no published list never grows an invented one',
+      RAMP_DIRECTORY.filter((row) => row.coverage?.mode === 'unknown').every((row) => !Array.isArray(row.coverage.excluded)));
+    t('the transcribed list is ISO-3166 alpha-2 throughout, and Iran is on it',
+      RAMP_EXCLUDED_COUNTRIES.every((code) => /^[A-Z]{2}$/.test(code)) && RAMP_EXCLUDED_COUNTRIES.includes('IR'));
+
+    /* ---- rule 2: no credential of ours, no host we do not own ---- */
+    t('every row is https and every built URL stays on its own row origin',
+      ['DE', 'TR', 'AE', 'US', 'IR', null].every((code) => rampOptions({ ...base, country: code }).options.every((option) => {
+        const origin = originOf(option.id);
+        return origin && option.url.startsWith('https://') && option.url.startsWith(origin);
+      })));
+    t('a row that needs a public id is never offered without it',
+      mercuryoConfigured
+        || rampOptions({ ...base, country: 'DE' }).options.every((option) => option.id !== 'mercuryo'));
+    t('an id-less mercuryo is reported as NOT_CONFIGURED, not silently dropped',
+      mercuryoConfigured
+        || rampOptions({ ...base, country: 'DE' }).unavailable.some((row) => row.id === 'mercuryo' && row.reason === 'NOT_CONFIGURED'));
+
+    /* ---- rule 3: nothing is bypassed ---- */
+    const iran = rampOptions({ ...base, country: 'IR' });
+    t('a country on the provider’s own exclusion list loses that provider',
+      iran.options.every((option) => option.id !== 'ramp'));
+    t('the exclusion is named and sourced, never hidden',
+      iran.unavailable.some((row) => row.id === 'ramp' && row.reason === 'COUNTRY_EXCLUDED' && /^https:\/\//.test(row.source || '')));
+    t('Iran is not left with nothing: the peer-to-peer rails are always returned',
+      iran.p2p.length === P2P_RAILS.length && iran.p2p.every((rail) => rail.url.startsWith('/') || rail.url.startsWith('https://')));
+    t('an unsupported country is never converted into a supported one by guessing',
+      coverageState(RAMP_DIRECTORY.find((row) => row.id === 'ramp'), 'IR').state === 'excluded'
+      && coverageState(RAMP_DIRECTORY.find((row) => row.id === 'ramp'), 'DE').state === 'listed'
+      && coverageState(RAMP_DIRECTORY.find((row) => row.id === 'guardarian'), 'IR').state === 'unknown');
+    t('an unknown country claims nothing about any provider',
+      rampOptions({ ...base, country: null }).unavailable.every((row) => row.reason !== 'COUNTRY_EXCLUDED'));
+
+    /* ---- ranking is about typing, not about which provider is better ---- */
+    const germany = rampOptions({ ...base, country: 'DE' });
+    t('the fully pre-filled door is offered first', germany.recommended === 'ramp'
+      && germany.options.find((option) => option.id === 'ramp')?.tier === 'full');
+    t('a German order never advertises a closed door as open',
+      germany.unavailable.every((row) => row.reason !== 'COUNTRY_EXCLUDED' || row.id !== 'ramp'));
+    t('when no open row verified the country, the result says so instead of implying it did',
+      germany.coverageVerified === true && iran.coverageVerified === false);
+
+    /* ---- path-carried pairs, and nothing else in the path ---- */
+    t('Swapzone carries the pair in the path: /buy/{fiat}/{crypto} and /sell/{crypto}/{fiat}',
+      rampOptions({ ...base, country: 'DE', side: 'BUY' }).options.find((option) => option.id === 'swapzone')?.url === 'https://swapzone.io/buy/usd/usdt'
+      && rampOptions({ ...base, country: 'DE', side: 'SELL', cryptoAmount: '100' }).options.find((option) => option.id === 'swapzone')?.url === 'https://swapzone.io/sell/usdt/usd');
+    t('a hostile asset string never reaches a URL path',
+      rampOptions({ ...base, country: 'DE', asset: 'USDT"></script><script>' }).options.every((option) => !/script/i.test(option.url)));
+
+    /* ---- Mercuryo's two different amount fields ----
+       Their parameter reference is explicit: `amount` is the CRYPTO figure and
+       `fiat_amount` the FIAT one. Sending a fiat number as `amount` would ask
+       the widget for 100 coins instead of 100 euros, so the two sides are
+       asserted separately the moment the row is configured. */
+    if (mercuryoConfigured) {
+      const buy = rampOptions({ ...base, country: 'DE', side: 'BUY', fiatAmount: 100 })
+        .options.find((option) => option.id === 'mercuryo');
+      const sell = rampOptions({ ...base, country: 'DE', side: 'SELL', cryptoAmount: '100' })
+        .options.find((option) => option.id === 'mercuryo');
+      t('a configured Mercuryo buy link carries the fiat figure in fiat_amount, not amount',
+        Boolean(buy) && /[?&]fiat_amount=100(&|$)/.test(buy.url) && !/[?&]amount=/.test(buy.url));
+      t('a configured Mercuryo sell link carries the crypto figure in amount',
+        Boolean(sell) && /[?&]amount=100(&|$)/.test(sell.url) && /[?&]type=sell(&|$)/.test(sell.url));
+      t('Mercuryo never receives a wallet address we cannot tie to a verified network',
+        [buy, sell].every((option) => Boolean(option) && !/[?&]address=/.test(option.url)));
+      t('a row that leaves the destination to the provider is never ranked as fully pre-filled',
+        [buy, sell].every((option) => !option || option.tier === 'partial'));
+    }
+
+    /* ---- input hygiene ---- */
+    t('the country gate is two letters or nothing',
+      normalizeCountry('de') === 'DE' && normalizeCountry('DEU') === null && normalizeCountry('') === null && normalizeCountry(null) === null);
+    t('an order with no wallet still gets honest reasons, not empty promises',
+      rampOptions({ ...base, walletAddress: null, country: 'DE' }).unavailable.some((row) => row.id === 'ramp' && row.reason === 'WALLET_REQUIRED'));
   }
 
   /* ================================================================== */

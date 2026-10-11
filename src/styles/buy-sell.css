@@ -409,3 +409,75 @@
 :root[data-theme='light'] .buy-sell-amount-input select,
 :root[data-theme='light'] .buy-sell-amount-input input { background-color: #ffffff; }
 [dir='rtl'] .bsw-amount .buy-sell-currency .modern-select-trigger { border-radius: 0; }
+
+/* ─── RAMP DIRECTORY — the list of doors that are open for this country ────
+   One card per provider: what it pre-fills, what we know about its coverage,
+   and the reason when it is closed. The muted rows underneath are the closed
+   doors — they are shown, never hidden, because a user deserves to see that
+   we checked and what the answer was. */
+.bsw-ramp { margin-top: 12px; }
+.bsw-ramp-list { display: grid; gap: 9px; margin-top: 10px; }
+.bsw-ramp-row {
+  padding: 11px 12px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  border-radius: 14px;
+  background: var(--bg-panel, rgba(255, 255, 255, 0.025));
+}
+.bsw-ramp-row.is-recommended { border-color: rgba(0, 229, 255, 0.28); background: rgba(0, 229, 255, 0.045); }
+.bsw-ramp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bsw-ramp-name { color: var(--text-1); font-size: 12.4px; font-weight: 800; }
+.bsw-ramp-pill {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 229, 255, 0.14);
+  color: var(--rgb-4, var(--up));
+  font-size: 9.5px;
+  font-weight: 800;
+}
+.bsw-ramp-note { margin: 5px 0 0; color: var(--text-3); font-size: 10.8px; line-height: 1.7; }
+.bsw-ramp-kyc { color: var(--text-3); opacity: .85; }
+.bsw-ramp-open { width: 100%; min-height: 40px; margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; }
+.bsw-ramp-empty { margin-top: 10px; padding: 11px 12px; border: 1px solid rgba(255, 176, 32, .28); border-radius: 14px; background: rgba(255, 176, 32, .07); }
+.bsw-ramp-empty p { margin: 0; color: var(--text-2); font-size: 11.4px; line-height: 1.8; }
+.bsw-ramp-empty p b { display: block; color: var(--text-1); font-size: 12.2px; margin-bottom: 3px; }
+.bsw-ramp-closed { margin: 11px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.bsw-ramp-closed li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--text-3); }
+.bsw-ramp-closed-name { font-weight: 700; opacity: .8; text-decoration: line-through; text-decoration-color: rgba(255, 59, 107, .5); }
+.bsw-ramp-closed-reason { flex: 0 1 auto; text-align: end; opacity: .8; }
+.bsw-ramp-p2p { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, rgba(255, 255, 255, 0.09)); }
+.bsw-ramp-p2p-rows { display: grid; gap: 7px; margin-top: 8px; }
+.bsw-ramp-p2p-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color .15s ease, background .15s ease;
+}
+.bsw-ramp-p2p-row:hover:not(:disabled) { border-color: rgba(0, 229, 255, .3); background: rgba(0, 229, 255, .04); }
+.bsw-ramp-p2p-row:disabled { opacity: .55; cursor: default; }
+.bsw-ramp-p2p-row .bsw-ramp-name { flex: 0 0 auto; }
+.bsw-ramp-p2p-note { flex: 1 1 auto; color: var(--text-3); font-size: 10.5px; line-height: 1.6; }
+.bsw-ramp-p2p-row svg { flex: 0 0 auto; color: var(--text-3); }
+
+/* Light theme: the ramp cards are the only new surface on this screen, so the
+   same trap applies — every border above is a token, and the pill keeps its
+   accent instead of turning into a white box. */
+:root[data-theme='light'] .bsw-ramp-row { background: #f6f8fc; border-color: rgba(15, 23, 42, 0.14); }
+:root[data-theme='light'] .bsw-ramp-row.is-recommended { background: #eaf7ff; border-color: rgba(14, 116, 144, .45); }
+:root[data-theme='light'] .bsw-ramp-pill { background: rgba(14, 116, 144, .14); color: #0b3b52; }
+:root[data-theme='light'] .bsw-ramp-note,
+:root[data-theme='light'] .bsw-ramp-closed li { color: #475569; }
+:root[data-theme='light'] .bsw-ramp-empty { background: rgba(180, 83, 9, .08); border-color: rgba(180, 83, 9, .35); }
+:root[data-theme='light'] .bsw-ramp-empty p { color: #334155; }
+:root[data-theme='light'] .bsw-ramp-empty p b { color: #0f172a; }
+:root[data-theme='light'] .bsw-ramp-p2p-row { border-color: rgba(15, 23, 42, 0.14); color: #334155; }
+:root[data-theme='light'] .bsw-ramp-p2p-row:hover:not(:disabled) { background: #eef6fb; border-color: rgba(14, 116, 144, .4); }
+:root[data-theme='light'] .bsw-ramp-p2p-note { color: #475569; }

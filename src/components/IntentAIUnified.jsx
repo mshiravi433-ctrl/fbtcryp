@@ -204,10 +204,12 @@ import '../styles/intent-ai-os.css';
  * intent-ai-os.css on purpose: same-specificity rules there must lose.
  */
 import '../styles/trench-agent.css';
+import '../styles/neural-command.css';
 /*
  * FBT NEURAL COMMAND skin: the ultra-premium command-center reskin. Scoped
  * under `.fbt-neural`, loaded last so it wins by specificity — no other
  * screen, language or spacing can shift. All behaviour stays in this file.
+ * (Both neural skins coexist: `.nc-page` utilities + `.fbt-neural` skin.)
  */
 import '../styles/fbt-neural-command.css';
 import NeuralCore, { resolveCoreState } from './intent-neural/NeuralCore';
@@ -215,7 +217,8 @@ import NeuralEmptyState from './intent-neural/NeuralEmptyState';
 import NeuralMoreMenu from './intent-neural/NeuralMoreMenu';
 import NeuralTimeline from './intent-neural/NeuralTimeline';
 import NeuralAgentGraph from './intent-neural/NeuralAgentGraph';
-import { SPECULATION_ENABLED } from '../lib/features';
+import ChatNeuralCore from './chat/NeuralCore.jsx';
+import { SPECULATION_ENABLED } from '../lib/features.js';
 
 // Existing OS
 import { getIntentOS, upgrade7 as upgrade7ns } from '../lib/intent-ai/os/index.js';
@@ -603,7 +606,8 @@ function mapPlanStepsForTimeline(steps) {
     // Only the public label travels with the step; internal reasoning never
     // leaves the planner (the status view strips it at the source).
     label: s?.label || '',
-    status: s?.status === 'running' ? 'active' : (s?.status || 'pending')
+    status: s?.status === 'running' ? 'active' : (s?.status || 'pending'),
+    at: s?.at || s?.timestamp || null
   }));
 }
 
@@ -850,7 +854,7 @@ export const ConversationRow = memo(function ConversationRow({
           </div>
         ) : null}
         {m.upgrade7?.plan?.steps?.length ? (
-          <AIActivityTimeline steps={mapPlanStepsForTimeline(m.upgrade7.plan.steps)} locale={locale} final />
+          <AIActivityTimeline steps={mapPlanStepsForTimeline(m.upgrade7.plan.steps)} locale={locale} />
         ) : null}
         {/*
           * The confidence meter («اطمینان: پایین · 36%»), its unverified-data
@@ -1044,6 +1048,37 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * monitors, history, panels) — nothing here introduces a second brain.
    */
   const [aiTab, setAiTab] = useState('chat');
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const composerInputRef = useRef(null);
+  const viewportHeightRef = useRef(null);
+  useEffect(() => {
+    const field = composerInputRef.current;
+    if (!field) return;
+    field.style.height = 'auto';
+    field.style.height = `${Math.min(field.scrollHeight, 134)}px`;
+  }, [input, aiTab]);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => {
+      const focused = document.activeElement === composerInputRef.current;
+      if (viewportHeightRef.current == null || (!focused && viewport.height > viewportHeightRef.current)) {
+        viewportHeightRef.current = viewport.height;
+      }
+      const short = focused && (window.innerHeight - viewport.height > 130
+        || viewportHeightRef.current - viewport.height > 130);
+      setKeyboardOpen(short);
+      // visualViewport height excludes the soft keyboard on mobile browsers.
+      document.documentElement.style.setProperty('--vv-height', `${viewport.height}px`);
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      document.documentElement.style.removeProperty('--vv-height');
+    };
+  }, []);
   const still = useStill();
   const [thinkingState, setThinkingState] = useState('idle'); // §28 smart thinking state
   const [thinking, setThinking] = useState([]); // legacy for fallback
@@ -2857,7 +2892,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         });
         addL1Message(reviewMessage);
         busV6.emit(EVENTS_V6.AI_RESPONSE, { message: reviewMessage.content, intentType: reviewMessage.intentType });
-        setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        setActivitySteps((prev) => prev.map((s) => s.status === 'active' ? { ...s, status: 'completed' } : s));
         setThinkingState('idle');
         stateMachineRef.current.transition(STATES.READY, { reason: 'lending_review_ready' });
         return true;
@@ -3079,7 +3114,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         busV6.emit(EVENTS_V6.AI_RESPONSE, { message: finalMessage, intentType: osResult.intent?.type });
 
         if (localBridgeUnavailable) setActivitySteps([]);
-        else setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        else setActivitySteps((prev) => prev.map((s) => s.status === 'active' ? { ...s, status: 'completed' } : s));
         setThinkingState('idle');
         if (!localBridgeUnavailable) setTimeout(() => setActivitySteps([]), 2000);
 
@@ -3449,7 +3484,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
     } finally {
       setThinking([]);
       setThinkingState('idle');
-      setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+      setActivitySteps((prev) => prev.map((s) => s.status === 'active' ? { ...s, status: 'completed' } : s));
       setTimeout(() => setActivitySteps([]), 1500);
       busyRef.current = false;
       // Scroll handling — intelligent auto scroll (§24)
@@ -5119,7 +5154,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         obsRef.current.log({ intentId: pendingExecution.intentId, type: 'COMPLETION', payload: { status: 'COMPLETED' } });
         busV6.emit(EVENTS_V6.EXECUTION_COMPLETED, { success: true, intentId: pendingExecution.intentId });
         stateMachineRef.current.transition(STATES.VERIFYING, { reason: 'execution_done' });
-        setActivitySteps((prev) => prev.map((s) => ({ ...s, status: 'completed' })));
+        setActivitySteps((prev) => prev.map((s) => s.status === 'active' ? { ...s, status: 'completed' } : s));
         setTimeout(() => {
           stateMachineRef.current.transition(STATES.COMPLETED, { reason: 'verified' });
           setActivitySteps([]);
@@ -5479,8 +5514,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       handleStartNewChat();
       return;
     }
+    if (thinkingState !== 'idle' || multiSlot.slot) return;
     if (input.trim()) void sendMessage(input);
-  }, [input, sendMessage, isSessionFull, handleStartNewChat]);
+  }, [input, sendMessage, isSessionFull, handleStartNewChat, thinkingState, multiSlot.slot]);
 
   /*
    * ─── UPGRADE 13 — VOICE INPUT ON THE SURFACE PEOPLE ACTUALLY USE ────────
@@ -7254,7 +7290,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
      are the agent cards, seasons/orders/operations are the activity feed. */
   const fa = locale.startsWith('fa');
   const tagFmtTime = (ts) => {
-    const n = Number(ts);
+    const n = typeof ts === 'string' && !/^\d+$/.test(ts) ? Date.parse(ts) : Number(ts);
     if (!Number.isFinite(n) || n <= 0) return '';
     const d = new Date(n < 1e12 ? n * 1000 : n);
     const diff = Date.now() - d.getTime();
@@ -7296,7 +7332,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       kind: 'automation',
       raw: a,
       name: `${a.asset || '—'} ${String(a.kind || a.type || '').toUpperCase()}`,
-      status: a.status || 'ACTIVE',
+      status: a.status || 'UNKNOWN',
       meta: [a.frequency || a.cadence || null, a.amountUsd != null ? `$${a.amountUsd}` : null]
     })),
     ...(Array.isArray(monitors) ? monitors : []).map((m) => ({
@@ -7304,11 +7340,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       kind: 'monitor',
       raw: m,
       name: m.label || m.asset?.symbol || (fa ? 'دیده‌بان' : 'Monitor'),
-      status: m.status || 'ACTIVE',
+      status: m.status || 'UNKNOWN',
       meta: [m.metric || null, m.asset?.symbol || null]
     }))
   ];
-  const agentActiveCount = agentCards.filter((c) => (c.kind === 'monitor' ? isMonitorLive(c.raw) : c.status === 'ACTIVE')).length;
+  const agentActiveCount = agentCards.filter((c) => c.status === 'ACTIVE').length;
 
   /* ── FBT NEURAL COMMAND: state + handlers for the command skin ──────────
    * Everything below READS state this component already owns. No new data
@@ -7409,17 +7445,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   }, [wallet, walletConnected, solanaAddressLive, locale]);
 
   /* Multiline composer autosize (capped; reset when the draft clears). */
-  const composerRef = useRef(null);
-  useEffect(() => {
-    const el = composerRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    if (!input) return;
-    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
-  }, [input]);
-
   return (
-    <div className="iaos-page iaos-page-v6 tag-page fbt-neural" data-ai-tab={aiTab} data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+    <div className={`iaos-page iaos-page-v6 tag-page nc-page fbt-neural ${keyboardOpen ? 'keyboard-open' : ''}`} data-ai-tab={aiTab} data-rail-collapsed={railCollapsed ? 'true' : 'false'} data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <div className="iaos-shell">
         <header className="iaos-header">
           <div className="iaos-title">
@@ -7543,7 +7570,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                     <ThinkingOrb state={thinkingState} size={28} locale={locale} showLabel={true} />
                   </div>
                   {activitySteps.length ? (
-                    <AIActivityTimeline steps={activitySteps} locale={locale} />
+                    <AIActivityTimeline steps={activitySteps.filter((step) => step.status !== 'pending')} locale={locale} />
                   ) : (
                     <div className="iaos-thinking-legacy" style={{ fontSize: 12, color: 'rgba(226,232,240,0.7)' }}>
                       {thinking.map((s) => <span key={s} className="iaos-think-row">{s}</span>)}
@@ -7561,6 +7588,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               </div>
             ) : null}
 
+            {pendingExecution ? (
+              <div className="nc-approval-workflow">
+                <AIActivityTimeline steps={[{
+                  id: executing ? 'execution' : 'approval',
+                  labelFa: executing ? 'در حال اجرا — نتیجه هنوز تأیید نشده' : 'منتظر تأیید کاربر — هنوز اجرا نشده',
+                  labelEn: executing ? 'Executing — result not yet verified' : 'Awaiting your approval — nothing executed',
+                  status: 'active'
+                }]} locale={locale} defaultOpen />
+              </div>
+            ) : null}
             {pendingExecution ? (
               <div className="iaos-exec-card" role="group" data-testid="intent-ai-action-card">
                 <div className="iaos-exec-title">
@@ -7761,7 +7798,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </button>
           ) : null}
           <textarea
-            ref={composerRef}
+            ref={composerInputRef}
             className="iaos-input"
             rows={1}
             value={input}
@@ -7782,19 +7819,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
             aria-busy={thinkingState !== 'idle'}
             enterKeyHint="send"
+            dir="auto"
             disabled={Boolean(multiSlot.slot)}
           />
           <button
             type="submit"
             className="iaos-send"
             data-busy={thinkingState !== 'idle' ? 'true' : 'false'}
+            aria-busy={thinkingState !== 'idle'}
             aria-label={t('intentAIOS.send', { defaultValue: 'Send' })}
             disabled={!input.trim() || thinkingState !== 'idle' || Boolean(multiSlot.slot)}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 19V5" />
-              <path d="m5 12 7-7 7 7" />
-            </svg>
+            {thinkingState !== 'idle' ? <span className="nc-send-spinner" aria-hidden="true" /> : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
+              </svg>
+            )}
           </button>
         </form>
         {dictationNote ? (
@@ -7846,13 +7886,23 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                       {c.kind === 'monitor' && c.raw?.intervalMinutes ? (
                         <span>{fa ? `هر ${c.raw.intervalMinutes} دقیقه` : `every ${c.raw.intervalMinutes}m`}</span>
                       ) : null}
-                      {(c.raw?.updatedAt || c.raw?.lastEvaluatedAt || c.raw?.lastRunAt) ? (
-                        <span>{fa ? 'آخرین فعالیت: ' : 'last touch: '}{tagFmtTime(c.raw.updatedAt || c.raw.lastEvaluatedAt || c.raw.lastRunAt)}</span>
+                      {(c.raw?.updatedAt || c.raw?.lastEvaluatedAt || c.raw?.lastRunAt || c.raw?.lastExecutedAt) ? (
+                        <span>{fa ? 'آخرین فعالیت: ' : 'last touch: '}{tagFmtTime(c.raw.updatedAt || c.raw.lastEvaluatedAt || c.raw.lastRunAt || c.raw.lastExecutedAt)}</span>
+                      ) : null}
+                      {(c.raw?.lastError || c.raw?.error) ? (
+                        <span className="nc-error" role="status">{String(c.raw.lastError || c.raw.error).slice(0, 160)}</span>
                       ) : null}
                       <span>{c.kind === 'monitor'
                         ? (fa ? 'پایش بازار · فقط اعلان' : 'market watch · notify only')
                         : (fa ? 'خودکارسازی · اجرا با تأیید شما' : 'automation · runs on your approval')}</span>
                     </div>
+                    <details className="nc-agent-details">
+                      <summary>{fa ? 'جزئیات ایجنت' : 'Agent details'}</summary>
+                      <div>{fa ? 'وظیفه: ' : 'Task: '}{c.name}</div>
+                      {c.raw.lastResult ? <div>{fa ? 'آخرین نتیجه: ' : 'Last result: '}{typeof c.raw.lastResult === 'string' ? c.raw.lastResult : c.raw.lastResult.status || '—'}</div> : null}
+                      {Array.isArray(c.raw.tools) && c.raw.tools.length ? <div>{fa ? 'ابزارها: ' : 'Tools: '}{c.raw.tools.join(' · ')}</div> : null}
+                      {Array.isArray(c.raw.permissions) && c.raw.permissions.length ? <div>{fa ? 'مجوزها: ' : 'Permissions: '}{c.raw.permissions.join(' · ')}</div> : null}
+                    </details>
                     <div className="tag-card-actions">
                       {c.kind === 'automation' ? (
                         <>
@@ -7898,29 +7948,36 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                       {c.kind === 'monitor' && c.raw?.intervalMinutes ? (
                         <span>{fa ? `هر ${c.raw.intervalMinutes} دقیقه` : `every ${c.raw.intervalMinutes}m`}</span>
                       ) : null}
-                      {(c.raw?.updatedAt || c.raw?.lastEvaluatedAt || c.raw?.lastRunAt) ? (
-                        <span>{fa ? 'آخرین فعالیت: ' : 'last touch: '}{tagFmtTime(c.raw.updatedAt || c.raw.lastEvaluatedAt || c.raw.lastRunAt)}</span>
+                      {(c.raw?.updatedAt || c.raw?.lastEvaluatedAt || c.raw?.lastRunAt || c.raw?.lastExecutedAt) ? (
+                        <span>{fa ? 'آخرین فعالیت: ' : 'last touch: '}{tagFmtTime(c.raw.updatedAt || c.raw.lastEvaluatedAt || c.raw.lastRunAt || c.raw.lastExecutedAt)}</span>
                       ) : null}
-                      {c.raw?.lastError || c.raw?.error ? (
-                        <span>{fa ? 'آخرین خطا: ' : 'last error: '}{String(c.raw.lastError || c.raw.error).slice(0, 60)}</span>
+                      {(c.raw?.lastError || c.raw?.error) ? (
+                        <span className="nc-error" role="status">{fa ? 'آخرین خطا: ' : 'last error: '}{String(c.raw.lastError || c.raw.error).slice(0, 160)}</span>
                       ) : null}
                     </div>
+                    <details className="nc-agent-details">
+                      <summary>{fa ? 'جزئیات ایجنت' : 'Agent details'}</summary>
+                      <div>{fa ? 'وظیفه: ' : 'Task: '}{c.name}</div>
+                      {c.raw.lastResult ? <div>{fa ? 'آخرین نتیجه: ' : 'Last result: '}{typeof c.raw.lastResult === 'string' ? c.raw.lastResult : c.raw.lastResult.status || '—'}</div> : null}
+                      {Array.isArray(c.raw.tools) && c.raw.tools.length ? <div>{fa ? 'ابزارها: ' : 'Tools: '}{c.raw.tools.join(' · ')}</div> : null}
+                      {Array.isArray(c.raw.permissions) && c.raw.permissions.length ? <div>{fa ? 'مجوزها: ' : 'Permissions: '}{c.raw.permissions.join(' · ')}</div> : null}
+                    </details>
                     <div className="tag-card-actions">
                       {c.kind === 'automation' ? (
                         <>
-                          <button type="button" className="tag-icon-btn" onClick={() => toggleAutomation(c.raw)}>
+                          {c.status === 'PAUSED' ? <button type="button" className="tag-icon-btn" onClick={() => toggleAutomation(c.raw)}>
                             {fa ? 'ادامه' : 'Resume'}
-                          </button>
-                          <button type="button" className="tag-icon-btn" onClick={() => runAutomationNow(c.raw)}>{fa ? 'اجرا' : 'Run'}</button>
+                          </button> : null}
+                          {c.status === 'PAUSED' ? <button type="button" className="tag-icon-btn" onClick={() => runAutomationNow(c.raw)}>{fa ? 'اجرا' : 'Run'}</button> : null}
                           <button type="button" className="tag-icon-btn" data-variant="danger" onClick={() => deleteAutomationRow(c.raw)}>{fa ? 'حذف' : 'Delete'}</button>
                         </>
                       ) : (
                         <>
-                          <button type="button" className="tag-icon-btn" onClick={() => handleMonitorAction(c.raw, 'resume')}>
+                          {c.status === 'PAUSED' ? <button type="button" className="tag-icon-btn" onClick={() => handleMonitorAction(c.raw, 'resume')}>
                             {fa ? 'ادامه' : 'Resume'}
-                          </button>
-                          <button type="button" className="tag-icon-btn" onClick={() => handleMonitorAction(c.raw, 'evaluate')}>{fa ? 'بررسی' : 'Check'}</button>
-                          <button type="button" className="tag-icon-btn" data-variant="danger" onClick={() => handleMonitorAction(c.raw, 'cancel')}>{fa ? 'لغو' : 'Cancel'}</button>
+                          </button> : null}
+                          {c.status === 'PAUSED' ? <button type="button" className="tag-icon-btn" onClick={() => handleMonitorAction(c.raw, 'evaluate')}>{fa ? 'بررسی' : 'Check'}</button> : null}
+                          {isMonitorLive(c.raw) ? <button type="button" className="tag-icon-btn" data-variant="danger" onClick={() => handleMonitorAction(c.raw, 'cancel')}>{fa ? 'لغو' : 'Cancel'}</button> : null}
                         </>
                       )}
                     </div>
@@ -7998,7 +8055,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                       {messages.find((m) => m.sender === 'user' || m.role === 'user')?.content?.slice(0, 50) || (fa ? 'گفتگوی جاری هوش مصنوعی' : 'Current Chat')}
                     </span>
                     <span className="tag-row-sub">
-                      {userTaskCount} {fa ? 'فرمان ثبت‌شده · در حال اجرا' : 'tasks recorded · Active'}
+                      {userTaskCount} {fa ? 'فرمان ثبت‌شده' : 'tasks recorded'}
                     </span>
                   </span>
                   <span className="tag-row-end" style={{ color: '#00e5ff', fontWeight: 700 }}>
@@ -8096,6 +8153,12 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
 
       {/* ── Bottom tabs: chat · agents · activity · more ──────────────────── */}
       <nav className="tag-tabbar" aria-label={fa ? 'تب‌های دستیار' : 'Assistant tabs'}>
+        <div className="nc-rail-brand">
+          <ChatNeuralCore state={serverReachable === false ? 'warning' : thinkingState !== 'idle' ? 'processing' : 'idle'} />
+          <span className="nc-rail-name">FBT <b>AGENT</b><small>NEURAL COMMAND</small></span>
+          <button type="button" className="nc-rail-toggle" onClick={() => setRailCollapsed((v) => !v)} aria-label={fa ? 'تغییر عرض نوار کناری' : 'Toggle sidebar'} aria-expanded={!railCollapsed}>☰</button>
+        </div>
+        <span className="nc-rail-caption">{fa ? 'فضای کار' : 'WORKSPACE'}</span>
         <button type="button" className="tag-tab" data-active={aiTab === 'chat'} onClick={() => setAiTab('chat')}>
           <AnimatedChat active={aiTab === 'chat'} still={still} width={21} height={21} strokeWidth={aiTab === 'chat' ? 1.9 : 1.7} />
           <span className="tag-tab-label">{fa ? 'چت' : 'Chat'}</span>
@@ -8113,6 +8176,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           <AnimatedPlus active={aiTab === 'more'} still={still} width={21} height={21} strokeWidth={2} />
           <span className="tag-tab-label">{fa ? 'بیشتر' : 'More'}</span>
         </button>
+        <div className="nc-rail-footer">{serverReachable == null ? (fa ? 'وضعیت سرور نامشخص' : 'Server status unknown') : serverReachable ? (fa ? 'سرور در دسترس' : 'Server available') : (fa ? 'سرور در دسترس نیست' : 'Server unavailable')}</div>
       </nav>
 
       {/* ── Desktop command sidebar (≥1024px): nav + live detail ──────────

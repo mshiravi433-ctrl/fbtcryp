@@ -44,7 +44,7 @@ const USDC = TOKENS[CHAIN].find((t) => t.symbol === 'USDC');
 const coder = AbiCoder.defaultAbiCoder();
 const erc20Iface = new Interface(ERC20_MIN_ABI);
 const setInputValue = (input, value) => {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  const setter = Object.getOwnPropertyDescriptor((input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement : window.HTMLInputElement).prototype, 'value').set;
   setter.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
@@ -183,7 +183,7 @@ export async function run(container) {
 
   /* ── 1. plan, preflight, hand-off — the same path as the wallet probe ─── */
   await mount();
-  const input = q('.iaos-composer input.iaos-input');
+  const input = q('.iaos-composer textarea.iaos-input');
   await act(async () => { setInputValue(input, 'من ۱۰۰۰ دلار دارم، در ۲۰ روز ۲۰٪ سود می‌خواهم، ریسک متوسط'); });
   const send = q('.iaos-composer button.iaos-send');
   if (send) await act(async () => { send.click(); });
