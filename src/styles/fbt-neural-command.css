@@ -61,7 +61,7 @@
   --fbt-motion-slow: 480ms;
   --fbt-ease: cubic-bezier(0.22, 0.8, 0.28, 1);
   --fbt-ease-spring: cubic-bezier(0.34, 1.4, 0.44, 1);
-  --fbt-tabbar-h: 68px;
+  --fbt-tabbar-h: 62px;
   --fbt-max-chat: 760px;
   --fbt-max-wide: 1180px;
 }
@@ -92,7 +92,7 @@
 .fbt-neural.tag-page .iaos-shell {
   width: min(var(--fbt-max-chat), calc(100% - 20px));
   margin-inline: auto;
-  padding-bottom: calc(var(--fbt-tabbar-h) + env(safe-area-inset-bottom) + 26px);
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
   gap: var(--fbt-space-3);
 }
 
@@ -618,10 +618,12 @@
   color: var(--fbt-dim);
 }
 
-/* ── 6. COMMAND COMPOSER ────────────────────────────────────────────────── */
+/* ── 6. COMMAND COMPOSER ──────────────────────────────────────────────────
+   Composer sits 10px above the centered pill tabbar (pill bottom 10px +
+   pill height ~64px + 10px gap). */
 .fbt-neural.tag-page .iaos-composer {
   position: sticky;
-  bottom: calc(var(--fbt-tabbar-h) + env(safe-area-inset-bottom) + 10px);
+  bottom: calc(84px + env(safe-area-inset-bottom));
   z-index: 25;
   display: flex;
   align-items: flex-end;
@@ -751,61 +753,93 @@
   border-radius: 6px;
 }
 
-/* ── 7. BOTTOM COMMAND BAR ──────────────────────────────────────────────── */
+/* ── 7. BOTTOM COMMAND BAR — CENTERED, COMPACT, FIXED ───────────────────
+   Problem: was full-width flex space-around with 60px tall tabs → left drift
+   in RTL, huge gaps on desktop, boxes too big.
+   Fix: centered pill (380px max), grid 4 equal columns, 54px tall tabs,
+   proper gap, no top-line indicator, active state is a soft fill.
+   Also hides the desktop rail leftovers (nc-rail-brand etc) on mobile so
+   the grid always has exactly 4 cells. */
 .fbt-neural .tag-tabbar {
   position: fixed;
-  bottom: 0;
-  inset-inline: 0;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  left: 50%;
+  right: auto;
+  inset-inline-start: auto;
+  inset-inline-end: auto;
+  transform: translateX(-50%);
+  width: min(380px, calc(100% - 20px));
+  min-height: 0;
+  height: auto;
   z-index: 40;
-  display: flex;
-  justify-content: space-around;
-  align-items: stretch;
-  min-height: calc(var(--fbt-tabbar-h) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
-  background: linear-gradient(180deg, rgba(7, 11, 22, 0.78), rgba(4, 6, 12, 0.94));
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
-  backdrop-filter: blur(22px) saturate(1.4);
-  border-top: 1px solid var(--fbt-line-soft);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(16, 24, 46, 0.92), rgba(7, 11, 22, 0.98));
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid rgba(148, 197, 255, 0.14);
+  box-shadow: 0 12px 36px rgba(2, 6, 18, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  justify-content: center;
+  align-items: center;
+}
+/* Hide desktop rail artefacts inside the same nav on mobile/tablet */
+.fbt-neural .tag-tabbar .nc-rail-brand,
+.fbt-neural .tag-tabbar .nc-rail-caption,
+.fbt-neural .tag-tabbar .nc-rail-footer {
+  display: none !important;
 }
 .fbt-neural .tag-tab {
   position: relative;
-  flex: 1 1 0;
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 10px 4px 9px;
-  border: none;
-  background: none;
+  padding: 6px 2px 5px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--fbt-dim);
   cursor: pointer;
-  min-height: 60px;
-  transition: color var(--fbt-motion-fast) var(--fbt-ease);
+  min-height: 0;
+  height: 52px;
+  border-radius: 14px;
+  transition: color var(--fbt-motion-fast) var(--fbt-ease), background var(--fbt-motion-fast) var(--fbt-ease), border-color var(--fbt-motion-fast) var(--fbt-ease), transform var(--fbt-motion-fast) var(--fbt-ease);
 }
-.fbt-neural .tag-tab::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  width: 34px;
-  height: 2px;
-  border-radius: var(--fbt-r-pill);
-  background: transparent;
-  transition: background var(--fbt-motion-med) var(--fbt-ease), box-shadow var(--fbt-motion-med) var(--fbt-ease);
+.fbt-neural .tag-tab::before { content: none !important; }
+.fbt-neural .tag-tab svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex: none;
 }
-.fbt-neural .tag-tab[data-active='true'] { color: var(--fbt-cyan-soft); }
-.fbt-neural .tag-tab[data-active='true']::before {
-  background: var(--fbt-grad-accent);
-  box-shadow: 0 0 12px rgba(34, 211, 238, 0.7);
+.fbt-neural .tag-tab[data-active='true'] {
+  color: var(--fbt-cyan-soft);
+  background: rgba(34, 211, 238, 0.11);
+  border-color: rgba(34, 211, 238, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.fbt-neural .tag-tab:hover:not([data-active='true']) {
+  color: var(--fbt-text-2);
+  background: rgba(148, 197, 255, 0.06);
 }
 .fbt-neural .tag-tab:active { transform: scale(0.96); }
-.fbt-neural .tag-tab-label { font-size: 10.5px; font-weight: 700; }
+.fbt-neural .tag-tab-label {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
 .fbt-neural .tag-tab-badge {
   position: absolute;
-  top: 12px;
-  inset-inline-end: calc(50% - 20px);
-  width: 7px;
-  height: 7px;
+  top: 7px;
+  inset-inline-end: calc(50% - 18px);
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--fbt-cyan);
   box-shadow: 0 0 8px var(--fbt-cyan);
@@ -853,9 +887,10 @@
 .fbt-neural .tag-card {
   border: 1px solid var(--fbt-line);
   background: linear-gradient(180deg, rgba(18, 28, 54, 0.66), rgba(10, 16, 32, 0.6));
-  border-radius: var(--fbt-r-lg);
+  border-radius: 14px;
   box-shadow: var(--fbt-shadow-card);
-  padding: var(--fbt-space-3) var(--fbt-space-4);
+  padding: 12px 13px;
+  gap: 8px;
   animation: fbt-rise var(--fbt-motion-med) var(--fbt-ease) both;
 }
 .fbt-neural .tag-card-head { display: flex; align-items: center; gap: 9px; }
@@ -1297,7 +1332,9 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
 :root[data-theme='light'] .fbt-neural.tag-page .iaos-exec-actions .iaos-btn.iss-solid { color: #ffffff; }
 :root[data-theme='light'] .fbt-neural.tag-page .iaos-mic[data-listening='true'] { color: #ffffff; }
 :root[data-theme='light'] .fbt-neural .tag-tabbar {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(240, 245, 251, 0.96));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(240, 245, 251, 0.98));
+  border-color: rgba(15, 60, 110, 0.12);
+  box-shadow: 0 12px 32px rgba(30, 64, 120, 0.14), inset 0 1px 0 rgba(255,255,255,0.7);
 }
 :root[data-theme='light'] .fbt-neural .tag-card {
   background: linear-gradient(180deg, #ffffff, #f3f7fc);

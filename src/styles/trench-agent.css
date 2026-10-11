@@ -38,7 +38,7 @@
   --tag-amber: #fbbf24;
   --tag-red: #f87171;
   --tag-blue: #7dd3fc;
-  --tag-tab-h: 64px;
+  --tag-tab-h: 62px;
   /* Declared here (dark value) so the light-theme block below can re-declare
      it: `var(--tag-shadow)` must resolve in BOTH themes. See test/run.mjs —
      "no stylesheet may reference a custom property that is never defined". */
@@ -323,7 +323,7 @@
   border-radius: 12px;
 }
 
-/* ── 5. Composer: black pill · + actions · send ──────────────────────────── */
+/* ── 5. Composer: black pill · + actions · send — sits above centered tabbar */
 .tag-page .iaos-composer {
   background: var(--tag-card);
   border: 1px solid var(--tag-line);
@@ -332,7 +332,7 @@
   gap: 6px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
   position: sticky;
-  bottom: calc(var(--tag-tab-h) + env(safe-area-inset-bottom) + 10px);
+  bottom: calc(84px + env(safe-area-inset-bottom));
   z-index: 15;
 }
 
@@ -407,18 +407,24 @@
   transform: scale(1.06);
 }
 
-/* ── 6. Bottom tab bar: chat · agents · activity · more ──────────────────── */
+/* ── 6. Bottom tab bar: chat · agents · activity · more — CENTERED COMPACT ──
+   Fixed: was 480px wide with large gaps on desktop, rail artefacts inside
+   caused left drift. Now 380px max, centered, 52px tall tabs, tight gap. */
 .tag-tabbar {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom) + 8px);
+  bottom: calc(env(safe-area-inset-bottom) + 10px);
   left: 50%;
+  right: auto;
+  inset-inline-start: auto;
+  inset-inline-end: auto;
   transform: translateX(-50%);
-  width: min(480px, calc(100% - 20px));
+  width: min(380px, calc(100% - 20px));
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  padding: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
   border-radius: 22px;
-  background: rgba(14, 14, 19, 0.88);
+  background: rgba(14, 14, 19, 0.92);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.10);
@@ -427,8 +433,14 @@
     0 2px 8px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   z-index: 40;
+  justify-content: center;
+  align-items: center;
 }
-
+.tag-tabbar .nc-rail-brand,
+.tag-tabbar .nc-rail-caption,
+.tag-tabbar .nc-rail-footer {
+  display: none !important;
+}
 .tag-tab {
   position: relative;
   display: flex;
@@ -436,18 +448,22 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 7px 4px 6px;
-  border-radius: 16px;
+  padding: 6px 2px 5px;
+  border-radius: 14px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--tag-dim);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   font: inherit;
+  min-height: 0;
+  height: 52px;
 }
 
 .tag-tab svg {
   display: block;
+  width: 20px;
+  height: 20px;
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -455,6 +471,7 @@
   font-size: 10px;
   letter-spacing: 0.02em;
   font-weight: 600;
+  line-height: 1;
 }
 
 .tag-tab[data-active='true'] {
@@ -470,15 +487,15 @@
 
 .tag-tab:hover:not([data-active='true']) {
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .tag-tab-badge {
   position: absolute;
   top: 6px;
-  inset-inline-end: calc(50% - 20px);
-  width: 7px;
-  height: 7px;
+  inset-inline-end: calc(50% - 18px);
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--tag-mint);
   box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);

@@ -141,11 +141,44 @@
 .nc-page .tag-spawn { border-radius: 10px; background: #75e7e9; color: #062631; min-height: 40px; }
 .nc-error { color: #ffacb8; }
 .nc-page .tag-empty { background: var(--nc-surface); border: 1px solid var(--nc-line); border-radius: var(--nc-radius); }
-.nc-page .tag-tabbar { border-color: rgba(136, 207, 220, .22); background: rgba(10, 27, 40, .93); backdrop-filter: blur(12px); }
-.nc-page .tag-tab { min-height: 50px; color: var(--nc-muted); }
-.nc-page .tag-tab[data-active='true'] { color: var(--nc-cyan-strong); background: rgba(70, 206, 220, .1); border-color: rgba(93, 231, 238, .27); box-shadow: inset 0 1px rgba(120, 234, 240, .14); }
-.nc-page .tag-tab:hover:not([data-active='true']) { color: var(--nc-ink); }
+.nc-page .tag-tabbar {
+  border-color: rgba(136, 207, 220, .22);
+  background: rgba(10, 27, 40, .93);
+  backdrop-filter: blur(12px);
+  /* Centered compact pill — fixes left drift & oversized boxes */
+  left: 50%;
+  right: auto;
+  inset-inline-start: auto;
+  inset-inline-end: auto;
+  transform: translateX(-50%);
+  width: min(380px, calc(100% - 20px));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border-radius: 22px;
+  justify-content: center;
+  align-items: center;
+}
+.nc-page .tag-tab {
+  min-height: 0;
+  height: 52px;
+  padding: 6px 2px 5px;
+  border-radius: 14px;
+  color: var(--nc-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.nc-page .tag-tab svg { width: 20px; height: 20px; }
+.nc-page .tag-tab-label { font-size: 10px; line-height: 1; }
+.nc-page .tag-tab[data-active='true'] { color: var(--nc-cyan-strong); background: rgba(70, 206, 220, .14); border-color: rgba(93, 231, 238, .32); box-shadow: inset 0 1px rgba(120, 234, 240, .14); }
+.nc-page .tag-tab:hover:not([data-active='true']) { color: var(--nc-ink); background: rgba(255,255,255,0.05); }
 .nc-rail-brand, .nc-rail-caption, .nc-rail-footer { display: none; }
+/* When fbt-neural is also present, its own centered pill wins — keep rail hidden on mobile */
+.fbt-neural .nc-rail-brand, .fbt-neural .nc-rail-caption, .fbt-neural .nc-rail-footer { display: none !important; }
 .nc-page :is(button, a, textarea):focus-visible { outline: 2px solid var(--nc-cyan-strong); outline-offset: 2px; }
 .nc-page .iaos-drawer { background: #0b1c2a; border-color: var(--nc-line); }
 .nc-page .iaos-drawer-item { border-color: var(--nc-line); }
@@ -219,8 +252,16 @@
 }
 @media (max-width: 899px) {
   .nc-page .nc-model-status { display: none; }
-  .nc-page .tag-tabbar { bottom: calc(env(safe-area-inset-bottom) + 6px); width: min(500px, calc(100% - 16px)); }
-  .nc-page .iaos-composer { bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .nc-page .tag-tabbar {
+    bottom: calc(env(safe-area-inset-bottom) + 10px);
+    width: min(380px, calc(100% - 20px));
+    left: 50%;
+    right: auto;
+    inset-inline-start: auto;
+    inset-inline-end: auto;
+    transform: translateX(-50%);
+  }
+  .nc-page .iaos-composer { bottom: calc(84px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 768px) {
   .iaos-page.nc-page[data-ai-tab='chat'] { height: var(--vv-height, 100dvh) !important;
