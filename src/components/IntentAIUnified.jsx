@@ -204,6 +204,18 @@ import '../styles/intent-ai-os.css';
  * intent-ai-os.css on purpose: same-specificity rules there must lose.
  */
 import '../styles/trench-agent.css';
+/*
+ * FBT NEURAL COMMAND skin: the ultra-premium command-center reskin. Scoped
+ * under `.fbt-neural`, loaded last so it wins by specificity — no other
+ * screen, language or spacing can shift. All behaviour stays in this file.
+ */
+import '../styles/fbt-neural-command.css';
+import NeuralCore, { resolveCoreState } from './intent-neural/NeuralCore';
+import NeuralEmptyState from './intent-neural/NeuralEmptyState';
+import NeuralMoreMenu from './intent-neural/NeuralMoreMenu';
+import NeuralTimeline from './intent-neural/NeuralTimeline';
+import NeuralAgentGraph from './intent-neural/NeuralAgentGraph';
+import { SPECULATION_ENABLED } from '../lib/features';
 
 // Existing OS
 import { getIntentOS, upgrade7 as upgrade7ns } from '../lib/intent-ai/os/index.js';
@@ -7298,40 +7310,138 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   ];
   const agentActiveCount = agentCards.filter((c) => (c.kind === 'monitor' ? isMonitorLive(c.raw) : c.status === 'ACTIVE')).length;
 
+  /* ── FBT NEURAL COMMAND: state + handlers for the command skin ──────────
+   * Everything below READS state this component already owns. No new data
+   * source, no fabricated status — the skin only re-presents real facts. */
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const showEmpty = messages.length <= 1 && messages.every((m) => m?.kind === 'hello');
+  const visibleMessages = showEmpty ? [] : messages;
+  const neuralHasError = messages.length > 0 && messages[messages.length - 1]?.kind === 'error';
+  const coreState = resolveCoreState({ thinkingState, serverReachable, hasError: neuralHasError === true });
+
+  /* The six empty-state quick actions → the real capability each one names. */
+  const handleNeuralQuickAction = useCallback((id) => {
+    if (busyRef.current || thinkingState !== 'idle') return;
+    setAiTab('chat');
+    setPanel(null);
+    const F = locale.startsWith('fa');
+    if (id === 'markets') { openBubbleRoute('/global'); return; }
+    if (id === 'smartmoney') { openBubbleRoute('/smart-money'); return; }
+    if (id === 'swap') { openBubbleRoute('/swap'); return; }
+    if (id === 'futures') {
+      if (SPECULATION_ENABLED) { openBubbleRoute('/perp'); return; }
+      void sendMessage(F ? 'بازار فیوچرز را تحلیل کن' : 'Analyze the futures market', { skipFormIntercept: true });
+      return;
+    }
+    if (id === 'risk') {
+      void sendMessage(F ? 'ریسک پرتفوی من را بازبینی کن' : 'Review my portfolio risk', { skipFormIntercept: true });
+      return;
+    }
+    if (id === 'strategy') {
+      try {
+        const started = startForm({ formId: 'STRATEGY_GOAL', conversationId, locale, restart: true });
+        if (started?.ok) {
+          setMultiSlot({ slot: getCurrentSlot({ conversationId, locale }), ack: null });
+          setMultiSlotParseError(null);
+          return;
+        }
+      } catch { /* fall through to the plain prompt */ }
+      void sendMessage(F ? 'یک استراتژی سرمایه‌گذاری برایم بساز' : 'Build me an investment strategy');
+    }
+  }, [locale, thinkingState, conversationId, sendMessage]);
+
+  /* "More" rows without a standalone route land in the chat instead. */
+  const handleNeuralChatAction = useCallback((target) => {
+    setPanel(null);
+    setAiTab('chat');
+    if (target === 'strategy-intake') handleNeuralQuickAction('strategy');
+    else if (target === 'risk-review') handleNeuralQuickAction('risk');
+  }, [handleNeuralQuickAction]);
+
+  /* Timeline facts: only stages the workflow really has are ever listed. */
+  const timelineFacts = useMemo(() => {
+    const thread = messagesRef.current || messages;
+    const hasUserTurn = thread.some((m) => m?.role === 'user')
+      || thinkingState !== 'idle' || Boolean(pendingExecution) || Boolean(progress);
+    if (!hasUserTurn) return null;
+    const last = thread[thread.length - 1];
+    const review = pendingExecution?.quoteReview || pendingExecution?.card?.review || null;
+    const rowsCount = aiContext?.portfolio?.rowsCount;
+    return {
+      hasUserTurn: true,
+      activitySteps,
+      hasSimulation: Boolean(review),
+      simulationStatus: review ? 'passed' : null,
+      approval: pendingExecution ? (executing ? 'confirmed' : 'waiting') : 'none',
+      execution: executing || progress ? 'running' : 'none',
+      verification: 'none',
+      terminal: convState?.intentStatus === 'completed' ? { status: 'completed', label: null } : null,
+      error: last?.kind === 'error' ? String(last?.content || '').slice(0, 160) : null,
+      evidence: {
+        context: Number.isFinite(rowsCount) ? [(locale.startsWith('fa') ? `${rowsCount} دارایی خوانده شد` : `${rowsCount} holding(s) read`)] : [],
+        analysis: convState?.currentIntent ? [`intent: ${convState.currentIntent}`] : [],
+        simulation: review ? [quoteReviewSummary(review, locale, t)] : [],
+        approval: pendingExecution?.action?.type ? [`action: ${pendingExecution.action.type}`] : [],
+        execution: progressLine ? [progressLine] : []
+      }
+    };
+  }, [messages, thinkingState, pendingExecution, progress, executing, activitySteps, convState, aiContext, locale, t, progressLine]);
+
+  /* Fleet chip: shown only from the real gateway read (never guessed). */
+  const fleetChip = useMemo(() => {
+    if (providersStatus === 'loading') return { tone: 'warn', text: locale.startsWith('fa') ? 'مدل‌ها…' : 'models…' };
+    if (providersStatus === 'ready' && Array.isArray(aiProviders)) {
+      const active = aiProviders.filter((p) => p?.status === 'ACTIVE').length;
+      const total = aiFleetSummary?.total ?? aiProviders.length;
+      return { tone: active > 0 ? 'ok' : 'warn', text: locale.startsWith('fa') ? `${active} از ${total} مدل فعال` : `${active}/${total} models live` };
+    }
+    if (providersStatus === 'error') return { tone: 'bad', text: locale.startsWith('fa') ? 'مدل‌ها خوانده نشد' : 'models unreadable' };
+    return null;
+  }, [providersStatus, aiProviders, aiFleetSummary, locale]);
+
+  const walletChip = useMemo(() => {
+    if (wallet?.locked && wallet?.address) return { tone: 'warn', text: locale.startsWith('fa') ? 'کیف پول قفل است' : 'wallet locked' };
+    if (walletConnected && (wallet?.address || solanaAddressLive)) {
+      const addr = wallet?.address || solanaAddressLive;
+      return { tone: 'ok', text: `${String(addr).slice(0, 6)}…${String(addr).slice(-4)}` };
+    }
+    return { tone: null, text: locale.startsWith('fa') ? 'کیف پول وصل نیست' : 'wallet off' };
+  }, [wallet, walletConnected, solanaAddressLive, locale]);
+
+  /* Multiline composer autosize (capped; reset when the draft clears). */
+  const composerRef = useRef(null);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    if (!input) return;
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  }, [input]);
+
   return (
-    <div className="iaos-page iaos-page-v6 tag-page" data-ai-tab={aiTab}>
+    <div className="iaos-page iaos-page-v6 tag-page fbt-neural" data-ai-tab={aiTab} data-sidebar={sidebarOpen ? 'open' : 'closed'}>
       <div className="iaos-shell">
         <header className="iaos-header">
           <div className="iaos-title">
-            <span className="iaos-mark iaos-mark-logo" aria-hidden="true">
-              <svg width="32" height="32" viewBox="0 0 40 40" fill="none" role="img" aria-label="FBT Agent">
-                <defs>
-                  <linearGradient id="iaosBrandGrad" x1="3" y1="3" x2="37" y2="37" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#34d399" />
-                    <stop offset="0.52" stopColor="#22d3ee" />
-                    <stop offset="1" stopColor="#a78bfa" />
-                  </linearGradient>
-                  <linearGradient id="iaosBrandFill" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#101014" />
-                    <stop offset="1" stopColor="#08080c" />
-                  </linearGradient>
-                </defs>
-                {/* Rounded squircle plate with smooth corners and minimal AI Sparkle mark */}
-                <rect className="iaos-logo-plate" x="2.5" y="2.5" width="35" height="35" rx="12" fill="url(#iaosBrandFill)" stroke="url(#iaosBrandGrad)" strokeWidth="1.4" />
-                <path
-                  d="M20 8.5C20 13.8 15.8 18 10.5 18C15.8 18 20 22.2 20 27.5C20 22.2 24.2 18 29.5 18C24.2 18 20 13.8 20 8.5Z"
-                  stroke="url(#iaosBrandGrad)"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="20" cy="18" r="2.2" fill="url(#iaosBrandGrad)" />
-                <circle cx="28.5" cy="9.5" r="1.3" fill="#34d399" />
-              </svg>
-            </span>
+            <NeuralCore
+              state={coreState}
+              size={40}
+              label={fa ? 'هسته عصبی FBT' : 'FBT Neural Core'}
+            />
             <span className="iaos-title-copy">
               <h1>FBT AGENT</h1>
-              <span className="iaos-title-sub">{locale.startsWith('fa') ? 'سیستم عامل ایجنت' : 'AGENT OS'}</span>
+              <span className="iaos-title-sub">{fa ? 'فرماندهی عصبی' : 'NEURAL COMMAND'}</span>
+            </span>
+            {/* Real system availability: fleet read + wallet link. Nothing invented. */}
+            <span className="fbt-head-meta" aria-live="polite">
+              {fleetChip ? (
+                <span className="fbt-chip fbt-chip-hide-sm" data-tone={fleetChip.tone} data-testid="neural-fleet-chip">
+                  <i aria-hidden="true" />{fleetChip.text}
+                </span>
+              ) : null}
+              <span className="fbt-chip fbt-chip-hide-sm" data-tone={walletChip.tone || 'idle'} data-testid="neural-wallet-chip">
+                <i aria-hidden="true" />{walletChip.text}
+              </span>
             </span>
             {/* Thinking Orb in header when active */}
             {thinkingState !== 'idle' ? (
@@ -7384,7 +7494,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
         {/* UPGRADE 6 — Chat container redesigned per §23 */}
         <div className="iaos-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', flex: '1 1 auto', minHeight: 0 }}>
           <div className="iaos-conversation iaos-conversation-v6" ref={threadRef} onScroll={handleThreadScroll} aria-live="polite">
-            {messages.map((m) => (
+            {/* Neural welcome: only while the thread holds the greeting alone. */}
+            {showEmpty ? (
+              <NeuralEmptyState
+                locale={locale}
+                coreState={coreState}
+                disabled={busyRef.current || thinkingState !== 'idle'}
+                onAction={handleNeuralQuickAction}
+              />
+            ) : null}
+            {visibleMessages.map((m) => (
               <ConversationRow
                 key={m.id}
                 m={m}
@@ -7430,6 +7549,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                       {thinking.map((s) => <span key={s} className="iaos-think-row">{s}</span>)}
                     </div>
                   )}
+                  {/* Neural execution timeline: only stages this turn really has. */}
+                  {timelineFacts ? <NeuralTimeline locale={locale} facts={timelineFacts} /> : null}
                 </div>
               </div>
             ) : null}
@@ -7639,22 +7760,34 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 : (locale.startsWith('fa') ? 'حرف بزن' : 'Speak')}</span>
             </button>
           ) : null}
-          <input
+          <textarea
+            ref={composerRef}
             className="iaos-input"
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              /* Enter sends, Shift+Enter breaks the line; IME composition
+                 (Persian keyboards) must never submit mid-word. */
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
             placeholder={multiSlot.slot
               ? (locale.startsWith('fa') ? 'لطفاً در باکس سبز بالا پاسخ بده…' : 'Please answer in the green box above…')
               : (dictating
                 ? t('intentAIOS.listening', { defaultValue: locale.startsWith('fa') ? 'دارم گوش می‌دم…' : 'Listening…' })
                 : t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' }))}
             aria-label={t('intentAIOS.placeholder', { defaultValue: 'Ask Intent AI…' })}
+            aria-busy={thinkingState !== 'idle'}
             enterKeyHint="send"
             disabled={Boolean(multiSlot.slot)}
           />
           <button
             type="submit"
             className="iaos-send"
+            data-busy={thinkingState !== 'idle' ? 'true' : 'false'}
             aria-label={t('intentAIOS.send', { defaultValue: 'Send' })}
             disabled={!input.trim() || thinkingState !== 'idle' || Boolean(multiSlot.slot)}
           >
@@ -7688,10 +7821,18 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
               </button>
             </div>
 
+            {/* Neural orchestration graph: desktop only, same live agents. */}
+            <NeuralAgentGraph
+              locale={locale}
+              agents={agentCards}
+              activeCount={agentActiveCount}
+              totalCount={agentCards.length}
+            />
+
             {/* بخش ۱: در حال انجام */}
             <div className="tag-section">{fa ? 'در حال انجام (فعال)' : 'In Progress (Active)'}</div>
             {agentCards.filter((c) => c.status === 'ACTIVE').length ? (
-              <div data-testid="intent-ai-active-automations">
+              <div data-testid="intent-ai-active-automations" className="tag-card-grid">
                 {agentCards.filter((c) => c.status === 'ACTIVE').map((c) => (
                   <div key={c.id} className="tag-card">
                     <div className="tag-card-head">
@@ -7702,6 +7843,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                     <div className="tag-card-meta">
                       {c.meta.filter(Boolean).map((m, i) => <span key={i}>{m}</span>)}
                       <span>{fa ? 'در حال اجرا' : 'running'}</span>
+                      {c.kind === 'monitor' && c.raw?.intervalMinutes ? (
+                        <span>{fa ? `هر ${c.raw.intervalMinutes} دقیقه` : `every ${c.raw.intervalMinutes}m`}</span>
+                      ) : null}
+                      {(c.raw?.updatedAt || c.raw?.lastEvaluatedAt || c.raw?.lastRunAt) ? (
+                        <span>{fa ? 'آخرین فعالیت: ' : 'last touch: '}{tagFmtTime(c.raw.updatedAt || c.raw.lastEvaluatedAt || c.raw.lastRunAt)}</span>
+                      ) : null}
+                      <span>{c.kind === 'monitor'
+                        ? (fa ? 'پایش بازار · فقط اعلان' : 'market watch · notify only')
+                        : (fa ? 'خودکارسازی · اجرا با تأیید شما' : 'automation · runs on your approval')}</span>
                     </div>
                     <div className="tag-card-actions">
                       {c.kind === 'automation' ? (
@@ -7734,7 +7884,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             {/* بخش ۲: تاریخچه اجراها */}
             <div className="tag-section">{fa ? 'تاریخچه اجراها و ایجنت‌های متوقف' : 'Execution History & Paused Agents'}</div>
             {agentCards.filter((c) => c.status !== 'ACTIVE').length ? (
-              <div>
+              <div className="tag-card-grid">
                 {agentCards.filter((c) => c.status !== 'ACTIVE').map((c) => (
                   <div key={c.id} className="tag-card">
                     <div className="tag-card-head">
@@ -7745,6 +7895,15 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                     <div className="tag-card-meta">
                       {c.meta.filter(Boolean).map((m, i) => <span key={i}>{m}</span>)}
                       <span>{c.status === 'PAUSED' ? (fa ? 'متوقف' : 'paused') : c.status}</span>
+                      {c.kind === 'monitor' && c.raw?.intervalMinutes ? (
+                        <span>{fa ? `هر ${c.raw.intervalMinutes} دقیقه` : `every ${c.raw.intervalMinutes}m`}</span>
+                      ) : null}
+                      {(c.raw?.updatedAt || c.raw?.lastEvaluatedAt || c.raw?.lastRunAt) ? (
+                        <span>{fa ? 'آخرین فعالیت: ' : 'last touch: '}{tagFmtTime(c.raw.updatedAt || c.raw.lastEvaluatedAt || c.raw.lastRunAt)}</span>
+                      ) : null}
+                      {c.raw?.lastError || c.raw?.error ? (
+                        <span>{fa ? 'آخرین خطا: ' : 'last error: '}{String(c.raw.lastError || c.raw.error).slice(0, 60)}</span>
+                      ) : null}
                     </div>
                     <div className="tag-card-actions">
                       {c.kind === 'automation' ? (
@@ -7814,6 +7973,14 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 {fa ? 'تاریخچه کامل' : 'Full history'}
               </button>
             </div>
+
+            {/* Live execution timeline for the current Intent, when there is one. */}
+            {timelineFacts && (thinkingState !== 'idle' || pendingExecution || progress) ? (
+              <>
+                <div className="tag-section">{fa ? 'مسیر اجرای اینتنت جاری' : 'Current Intent timeline'}</div>
+                <NeuralTimeline locale={locale} facts={timelineFacts} />
+              </>
+            ) : null}
 
             {/* Current Active Conversation */}
             {userTaskCount > 0 && (
@@ -7904,103 +8071,25 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           </section>
         ) : null}
 
-        {/* ── MORE: modern rows with clean SVG icons ── */}
+        {/* ── MORE: Neural Command grouped destinations ──
+            Every row resolves against a route/panel/chat capability that
+            REALLY exists (see NeuralMoreMenu audit notes). Rows without a
+            standalone route land in the chat instead of dead links. */}
         {aiTab === 'more' ? (
           <section className="tag-view" data-testid="tag-view-more">
             <div className="tag-view-head">
               <div>
                 <h2>{fa ? 'بیشتر' : 'More'}</h2>
-                <span className="tag-view-sub">{fa ? 'عملیات، تاریخچه و تنظیمات هوش' : 'Operations, history & intelligence'}</span>
+                <span className="tag-view-sub">{fa ? 'هوش، سرمایه، معامله و سیستم' : 'Intelligence, capital, trading & system'}</span>
               </div>
             </div>
-
-            <button type="button" className="tag-row" data-testid="intent-ai-operations" onClick={() => openPanel('operations')}>
-              <span className="tag-row-glyph" aria-hidden="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              </span>
-              <span className="tag-row-copy">
-                <span className="tag-row-title">{opsText('ops.aria', locale)}</span>
-                <span className="tag-row-sub">{fa ? 'مونیتور، سفارش و خودکارسازی' : 'Monitors, orders & automations'}</span>
-              </span>
-              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
-            </button>
-            <button type="button" className="tag-row" data-testid="intent-ai-history" onClick={() => openPanel('history')}>
-              <span className="tag-row-glyph" aria-hidden="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </span>
-              <span className="tag-row-copy">
-                <span className="tag-row-title">{opsText('hist.title', locale)}</span>
-                <span className="tag-row-sub">{fa ? 'سشن‌ها و گفتگوهای قبلی' : 'Past seasons & conversations'}</span>
-              </span>
-              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
-            </button>
-            <button type="button" className="tag-row" data-testid="intent-ai-intelligence" onClick={() => openPanel('intelligence')}>
-              <span className="tag-row-glyph" aria-hidden="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-              </span>
-              <span className="tag-row-copy">
-                <span className="tag-row-title">{opsText('menu.multiAi', locale)}</span>
-                <span className="tag-row-sub">{fa ? 'مدل‌ها، اجماع و اعتماد پاسخ‌ها' : 'Models, consensus & confidence'}</span>
-              </span>
-              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
-            </button>
-            <button type="button" className="tag-row" data-testid="intent-ai-ecosystem" onClick={() => openEcosystem('agent')}>
-              <span className="tag-row-glyph" aria-hidden="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-              </span>
-              <span className="tag-row-copy">
-                <span className="tag-row-title">{opsText('eco.menu', locale)}</span>
-                <span className="tag-row-sub">{fa ? 'ایجنت‌ها و استراتژی‌های ثبت‌شده' : 'Registered agents & strategies'}</span>
-              </span>
-              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
-            </button>
-            <button type="button" className="tag-row" onClick={() => openPanel('status')}>
-              <span className="tag-row-glyph" aria-hidden="true">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-              </span>
-              <span className="tag-row-copy">
-                <span className="tag-row-title">{fa ? 'وضعیت سیستم' : 'System status'}</span>
-                <span className="tag-row-sub">{fa ? 'موتور، ابزارها و اتصال سرور' : 'Engine, tools & server link'}</span>
-              </span>
-              <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
-            </button>
-
-            <div className="tag-section">{fa ? 'اپلیکیشن' : 'App'}</div>
-            {[
-              {
-                to: '/',
-                title: fa ? 'بازار' : 'Market',
-                sub: fa ? 'قیمت‌ها و جریان بازار' : 'Prices & market flow',
-                svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-              },
-              {
-                to: '/portfolio',
-                title: fa ? 'پرتفوی' : 'Portfolio',
-                sub: fa ? 'دارایی‌ها و عملکرد' : 'Holdings & performance',
-                svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
-              },
-              {
-                to: '/wallet',
-                title: fa ? 'کیف پول' : 'Wallet',
-                sub: fa ? 'موجودی و تراکنش‌ها' : 'Balances & transactions',
-                svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg>
-              },
-              {
-                to: '/swap',
-                title: fa ? 'سواپ' : 'Swap',
-                sub: fa ? 'تبادل توکن' : 'Token exchange',
-                svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
-              }
-            ].map((r) => (
-              <button key={r.to} type="button" className="tag-row" onClick={() => { try { navigate(r.to); } catch { /* router ready */ } }}>
-                <span className="tag-row-glyph" aria-hidden="true">{r.svg}</span>
-                <span className="tag-row-copy">
-                  <span className="tag-row-title">{r.title}</span>
-                  <span className="tag-row-sub">{r.sub}</span>
-                </span>
-                <span className="tag-row-chevron" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg></span>
-              </button>
-            ))}
+            <NeuralMoreMenu
+              locale={locale}
+              onNavigate={(route) => { try { openBubbleRoute(route); } catch { /* router ready */ } }}
+              onPanel={(name) => openPanel(name)}
+              onChatAction={handleNeuralChatAction}
+              onEcosystem={(kind) => openEcosystem(kind || 'agent')}
+            />
           </section>
         ) : null}
       </div>
@@ -8025,6 +8114,65 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           <span className="tag-tab-label">{fa ? 'بیشتر' : 'More'}</span>
         </button>
       </nav>
+
+      {/* ── Desktop command sidebar (≥1024px): nav + live detail ──────────
+          Mobile/tablet keep the bottom bar; this aside is display:none there. */}
+      <aside className="fbt-sidebar" aria-label={fa ? 'ناوبری فرماندهی' : 'Command navigation'}>
+        <div className="fbt-side-core-row">
+          <NeuralCore state={coreState} size={30} label={fa ? 'هسته عصبی FBT' : 'FBT Neural Core'} />
+          <span>FBT AGENT</span>
+        </div>
+        <nav className="fbt-side-nav" aria-label={fa ? 'بخش‌ها' : 'Sections'}>
+          <button type="button" className="fbt-side-btn" data-active={aiTab === 'chat'} onClick={() => setAiTab('chat')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z" /></svg>
+            <span className="fbt-side-label">{fa ? 'چت' : 'Chat'}</span>
+          </button>
+          <button type="button" className="fbt-side-btn" data-active={aiTab === 'agents'} onClick={() => setAiTab('agents')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><circle cx="12" cy="12" r="2.5" /></svg>
+            <span className="fbt-side-label">{fa ? 'ایجنت‌ها' : 'Agents'}</span>
+            {agentActiveCount > 0 ? <span className="fbt-side-dot" aria-hidden="true" /> : null}
+          </button>
+          <button type="button" className="fbt-side-btn" data-active={aiTab === 'activity'} onClick={() => setAiTab('activity')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
+            <span className="fbt-side-label">{fa ? 'فعالیت' : 'Activity'}</span>
+          </button>
+          <button type="button" className="fbt-side-btn" data-active={aiTab === 'more'} onClick={() => setAiTab('more')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2.2" /><circle cx="19" cy="5" r="2.2" /><circle cx="5" cy="19" r="2.2" /><circle cx="19" cy="19" r="2.2" /></svg>
+            <span className="fbt-side-label">{fa ? 'بیشتر' : 'More'}</span>
+          </button>
+        </nav>
+        <div className="fbt-side-status" aria-live="polite">
+          <div className="fbt-side-status-row">
+            <span>{fa ? 'اینتنت جاری' : 'Live intent'}</span>
+            <b>{convState?.currentIntent ? `${convState.currentIntent} · ${convState.intentStatus || ''}` : '—'}</b>
+          </div>
+          <div className="fbt-side-status-row">
+            <span>{fa ? 'ایجنت فعال' : 'Agents live'}</span>
+            <b>{agentActiveCount} / {agentCards.length}</b>
+          </div>
+          <div className="fbt-side-status-row">
+            <span>{fa ? 'پایش زنده' : 'Monitors live'}</span>
+            <b>{countLiveMonitors(monitors)} / {Array.isArray(monitors) ? monitors.length : 0}</b>
+          </div>
+          <div className="fbt-side-status-row">
+            <span>{fa ? 'سرور' : 'Server'}</span>
+            <b>{serverReachable == null ? '—' : serverReachable ? (fa ? 'آنلاین' : 'Online') : (fa ? 'آفلاین' : 'Offline')}</b>
+          </div>
+          <div className="fbt-side-status-row">
+            <span>{fa ? 'کیف پول' : 'Wallet'}</span>
+            <b>{walletChip.text}</b>
+          </div>
+          {pendingExecution ? (
+            <div className="fbt-side-status-row">
+              <span>{fa ? 'در انتظار تأیید' : 'Awaiting approval'}</span>
+              <b>{pendingExecution?.action?.type || '—'}</b>
+            </div>
+          ) : null}
+          <button type="button" className="fbt-side-collapse" onClick={() => setSidebarOpen((v) => !v)}>
+            {sidebarOpen ? (fa ? '← جمع‌کردن' : '← Collapse') : (fa ? '→' : '→')}
+          </button>
+        </div>
+      </aside>
 
       {drawerOpen ? (
         <div className="iaos-overlay" role="dialog" aria-modal="true" aria-label={t('intentAIOS.actions', { defaultValue: 'Actions' })}>
