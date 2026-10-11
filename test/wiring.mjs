@@ -290,15 +290,18 @@ export default function run() {
     t('the trench rows/cards do not paint near-white text in light mode',
       /:root\[data-theme='light'\] \.tag-page \.iaos-title-copy h1\s*\{[^}]*color:\s*var\(--tag-text\)/.test(trench));
 
-    /* The logo tile: it must be a fixed-size box the header lays out around,
-       and its plate must be repaintable — `fill` as a presentation attribute
-       loses to any CSS rule, which is what makes the light tile white. */
+    /* The signature core replaces the old logo plate. It remains bounded on
+       narrow phones and keeps its theme/motion states inside /intent. */
     const intentUi = read('src/components/IntentAIUnified.jsx');
-    t('the AI logo plate is a classed element', intentUi.includes('className="iaos-logo-plate"'));
-    t('the light theme repaints the logo plate instead of leaving it black',
-      /:root\[data-theme='light'\] \.iaos-logo-plate\s*\{[^}]*fill:\s*#ffffff/.test(trench));
-    t('the logo wrapper is pinned so the header cannot overflow the shell',
-      /\.tag-page \.iaos-mark\.iaos-mark-logo\s*\{[^}]*flex: 0 0 auto/.test(trench));
+    const core = read('src/components/chat/NeuralCore.jsx');
+    const neuralCss = read('src/styles/neural-command.css');
+    t('the AI header uses the actual-state neural core',
+      intentUi.includes('<NeuralCore state={serverReachable === false')
+      && core.includes("data-state={state}"));
+    t('the neural core has a fixed-size wrapper',
+      /\.nc-core\s*\{[^}]*flex: 0 0 42px/.test(neuralCss));
+    t('the core respects reduced motion',
+      neuralCss.includes('@media (prefers-reduced-motion: reduce)'));
     t('the header title is the only part allowed to shrink',
       /\.tag-page \.iaos-title\s*\{[^}]*min-width: 0/.test(trench)
         && /\.tag-page \.iaos-header-status\s*\{[^}]*flex: 0 0 auto/.test(trench));

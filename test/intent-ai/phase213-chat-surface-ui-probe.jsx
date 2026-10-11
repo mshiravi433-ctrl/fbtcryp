@@ -36,7 +36,7 @@ import { offlineSocialFallback } from '../../src/lib/intent-ai/chat/socialChat.j
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const setInputValue = (input, value) => {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  const setter = Object.getOwnPropertyDescriptor((input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement : window.HTMLInputElement).prototype, 'value').set;
   setter.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
@@ -101,7 +101,7 @@ export async function run(container) {
   for (let i = 0; i < 4; i += 1) await act(async () => { await sleep(20); });
 
   const send = async (text, waitMs = 900) => {
-    const input = q('.iaos-composer input.iaos-input');
+    const input = q('.iaos-composer textarea.iaos-input');
     await act(async () => { setInputValue(input, text); });
     await act(async () => { await sleep(10); });
     const btn = q('.iaos-composer button.iaos-send');
