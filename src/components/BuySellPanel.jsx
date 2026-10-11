@@ -22,6 +22,7 @@ import {
   storedOrderAccessToken
 } from '../lib/buySell';
 import { getIranBuyCapability, readIranBuyGatewayReturn } from '../lib/iranBuy';
+import RampProviderList from './RampProviderList';
 import {
   GUIDED_CATALOG,
   GUIDED_FIAT,
@@ -223,6 +224,9 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const [quoteExpiry, setQuoteExpiry] = useState(false);
   const [order, setOrder] = useState(null);
   const [guidedOpened, setGuidedOpened] = useState(false);
+  /* Which door the user actually walked through, so the "you left for …"
+     message names the right one instead of always saying Ramp. */
+  const [lastProviderName, setLastProviderName] = useState('');
   const [watchKick, setWatchKick] = useState(0);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState(null);
@@ -419,6 +423,19 @@ export default function BuySellPanel({ initialOrderId = null }) {
     } catch (requestError) { setError(errorKey(requestError)); }
     finally { setLoading(''); }
   }, [asset, cryptoAmount, fiatAmount, fiatCurrency, network, side, walletAddress]);
+
+  /* The directory rail: the same guarantees, provider-agnostic. The on-chain
+     report underneath does not care WHICH door the user used — it watches the
+     wallet the wizard collected — so it starts for every fiat hand-off. An
+     in-app P2P rail is a navigation, not a hand-off: there is no provider
+     page to leave for, so no watch is kicked. */
+  const handleRampOpened = useCallback((option) => {
+    const name = String(option?.name || '').trim();
+    setGuidedOpened(true);
+    if (name) setLastProviderName(name);
+    if (!option?.internal) setWatchKick((n) => n + 1);
+    emitEvent('buySell.guidedHandoff', { provider: option?.id || null, asset, network, side }, 'buy-sell');
+  }, [asset, network, side]);
 
   const refreshOrder = useCallback(async () => {
     if (!order?.orderId) return;
@@ -757,17 +774,32 @@ export default function BuySellPanel({ initialOrderId = null }) {
                           <p className="buy-sell-hosted-note">{t('buySell.hostedCheckoutNote', { provider: providerName || GUIDED_PROVIDER.name })}</p>
                         </>
                       ) : (
+                        /* THE NO-CONTRACT RAIL. The wizard's answers are
+                           already collected above; this list names every
+                           keyless door open to the country on the order, the
+                           ones that are closed (with the provider's own
+                           reason), and the peer-to-peer rails that answer
+                           when a country has no card rail at all. */
                         <>
-                          <div className="bsw-guided-badge"><IconShield width={13} height={13} /> {t('buySell.wizard.noRegistration')}</div>
-                          <p className="bsw-hint">{t('buySell.wizard.guidedNote', { provider: GUIDED_PROVIDER.name })}</p>
                           {configurationRequired && <p className="bsw-hint">{t('buySell.wizard.trackedUnavailable')}</p>}
                           {error && <div className="notice notice-danger buy-sell-error">{t(`buySell.errors.${error}`, { defaultValue: t('buySell.errors.REQUEST_FAILED') })}</div>}
                           {guidedOpened && (
                             <div className="buy-sell-confirm">
-                              <p><b>{t('buySell.wizard.guidedOpenedTitle')}</b>{t('buySell.wizard.guidedOpenedBody', { provider: GUIDED_PROVIDER.name })}</p>
+                              <p><b>{t('buySell.wizard.guidedOpenedTitle')}</b>{t('buySell.wizard.guidedOpenedBody', { provider: lastProviderName || GUIDED_PROVIDER.name })}</p>
                             </div>
                           )}
-                          <p className="buy-sell-hosted-note">{t('buySell.wizard.guidedPrefillNote', { provider: GUIDED_PROVIDER.name })}</p>
+                          <RampProviderList
+                            side={side}
+                            asset={asset}
+                            network={network}
+                            walletAddress={walletAddress}
+                            fiatCurrency={fiatCurrency}
+                            fiatAmount={fiatAmount}
+                            cryptoAmount={cryptoAmount}
+                            country={country}
+                            onOpened={handleRampOpened}
+                            onError={(code) => setError(code)}
+                          />
                         </>
                       )}
                       <p className="buy-sell-powered-by">{t('buySell.poweredBy', { provider: providerName || GUIDED_PROVIDER.name })}</p>
