@@ -72,20 +72,16 @@ function CentreAction({ active, still, label, onClick }) {
       onClick={onClick}
       aria-label={label}
       /*
-       * ─── THE "IT JUMPS RIGHT WHEN TAPPED" BUG ──────────────────────────
+       * ─── THE "IT JUMPS WHEN TAPPED" BUG ────────────────────────────────
        * This used to be `whileTap={{ scale: 0.88 }}` on the button itself.
        *
-       * The button is centred with `transform: translateX(-50%)` in CSS.
-       * Framer Motion does not ADD to an existing transform — it writes the
-       * whole property from the values it is animating. So the moment the
-       * tap began, `transform` became `scale(0.88)` and the `-50%` vanished,
-       * shoving the button 22px (half its width) to the right. It never came
-       * back because Framer keeps owning the property afterwards.
-       *
-       * The fix is to scale the CHILD instead. `.nav-centre-drop` has no
-       * centring transform of its own, so Framer can own its transform
-       * completely without destroying anything. The button's own
-       * `translateX(-50%)` is never touched by JS again.
+       * The centre droplet is now centred with `margin-inline: auto` on a
+       * horizontally-stretched bar (which is RTL-safe) so Framer owning
+       * the button's `transform` for a press would no longer un-centre it;
+       * but the button STILL must not carry scale itself — Framer would
+       * still compete with the nav-float animation's translateY and cause
+       * a jitter. Scaling the CHILD keeps every compositing layer happy
+       * and is unchanged.
        */
       whileTap={still ? undefined : 'pressed'}
       initial={false}

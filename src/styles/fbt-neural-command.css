@@ -756,19 +756,25 @@
 /* ── 7. BOTTOM COMMAND BAR — CENTERED, COMPACT, FIXED ───────────────────
    Problem: was full-width flex space-around with 60px tall tabs → left drift
    in RTL, huge gaps on desktop, boxes too big.
-   Fix: centered pill (380px max), grid 4 equal columns, 54px tall tabs,
+   Fix: centered pill (380px max), grid 4 equal columns, 52px tall tabs,
    proper gap, no top-line indicator, active state is a soft fill.
    Also hides the desktop rail leftovers (nc-rail-brand etc) on mobile so
-   the grid always has exactly 4 cells. */
+   the grid always has exactly 4 cells.
+
+   RTL FIX: `left: 50%` + `translateX(-50%)` does NOT auto-flip in RTL —
+   translateX is a physical axis, so on a right-to-left page the bar shifted
+   by its own half-width OFF the left edge, cutting the two leftmost tabs out
+   of view and leaving a shifted-looking pill. Using margin-inline:auto on a
+   block-stretched element centres it directionally in both LTR and RTL
+   without any transform at all. Same pattern used in .bottom-nav. */
 .fbt-neural .tag-tabbar {
   position: fixed;
   bottom: calc(10px + env(safe-area-inset-bottom));
-  left: 50%;
-  right: auto;
-  inset-inline-start: auto;
-  inset-inline-end: auto;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  inset-inline: 0;
   width: min(380px, calc(100% - 20px));
+  margin-inline: auto;
   min-height: 0;
   height: auto;
   z-index: 40;
@@ -1162,24 +1168,36 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
 
 /* ── 12. DESKTOP COMMAND CENTER (≥1024px) · TABLET (768–1023) ───────────── */
 .fbt-sidebar { display: none; }
-@media (min-width: 768px) and (max-width: 1023px) {
+@media (min-width: 768px) and (max-width: 899px) {
   .fbt-neural.tag-page .iaos-shell { width: min(680px, calc(100% - 32px)); }
   .fbt-neural.tag-page .iaos-bubble { max-width: min(88%, 600px); }
 }
-@media (min-width: 1024px) {
+/* ── DESKTOP COMMAND SIDEBAR (≥900px) ──────────────────────────────────────
+   The side-rail appears at 900px (matching the .nc-page breakpoint in
+   neural-command.css, which previously kicked in at 900px and left fbt-neural
+   without a rail between 900–1023px → visible as «منو در دستکاپ به وسط اومده،
+   تب‌ها افقی شده»). From 900px up the bottom pill is hidden and the
+   command navigation becomes a VERTICAL rail anchored to the RIGHT edge in
+   RTL / LEFT edge in LTR (inset-inline-end in RTL is the visual right).
+
+   RTL: the user's report confirmed the desktop rail should sit on the RIGHT
+   (سمت راست). Using inset-inline-end + margin-inline-end keeps everything
+   directionally correct without any !important. */
+@media (min-width: 900px) {
   .fbt-neural.tag-page .iaos-shell {
     width: min(var(--fbt-max-wide), calc(100% - 300px));
-    margin-inline-start: 284px;
-    margin-inline-end: auto;
+    margin-inline-end: 284px;
+    margin-inline-start: auto;
     padding-inline: var(--fbt-space-5);
+    padding-bottom: 26px;
+    min-height: calc(100dvh - 40px);
   }
   .fbt-neural.tag-page[data-sidebar='closed'] .iaos-shell {
     width: min(var(--fbt-max-wide), calc(100% - 96px));
-    margin-inline-start: 80px;
+    margin-inline-end: 80px;
   }
-  .fbt-neural .tag-tabbar { display: none; }
+  .fbt-neural .tag-tabbar { display: none !important; }
   .fbt-neural.tag-page .iaos-composer { bottom: 18px; }
-  .fbt-neural.tag-page .iaos-shell { padding-bottom: 26px; min-height: calc(100dvh - 40px); }
   .fbt-neural.tag-page .iaos-bubble { max-width: min(80%, 640px); font-size: 14px; }
   .fbt-graph { display: block; }
   .fbt-sidebar {
@@ -1187,7 +1205,8 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
     flex-direction: column;
     gap: var(--fbt-space-3);
     position: fixed;
-    inset-inline-start: 12px;
+    inset-inline-end: 12px;
+    inset-inline-start: auto;
     top: 12px;
     bottom: 12px;
     width: 256px;
@@ -1234,7 +1253,7 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
   .fbt-side-btn[data-active='true']::before {
     content: '';
     position: absolute;
-    inset-inline-start: -9px;
+    inset-inline-end: -9px;
     top: 22%;
     bottom: 22%;
     width: 3px;
@@ -1264,6 +1283,9 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
     padding: 7px;
     cursor: pointer;
     font-family: inherit;
+    direction: ltr; /* keep the collapse chevron pointing consistently with the rail */
+    text-align: center;
+    letter-spacing: 0.04em;
   }
   .fbt-side-collapse:hover { color: var(--fbt-text); border-color: var(--fbt-line-bright); }
   .fbt-neural .tag-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1364,7 +1386,7 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
   background-clip: text;
   color: transparent;
 }
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
   :root[data-theme='light'] .fbt-sidebar {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(240, 245, 251, 0.96));
   }

@@ -1267,13 +1267,16 @@ select option {
 .bottom-nav {
   position: fixed;
   bottom: calc(14px + env(safe-area-inset-bottom));
-  left: 50%;
-  /* `translate`, not `transform`. The float animation owns `transform`, and a
-     keyframe replaces that property outright — so centring parked there had
-     to be repeated inside every keyframe, which in turn made it impossible to
-     override on wide screens. `translate` is an independent property, so the
-     two compose and each can be changed alone. */
-  translate: -50% 0;
+  /* RTL-safe centring: stretch both edges then `margin-inline: auto`. Using
+     `left:50%` + `translateX(-50%)` (or the `translate` shorthand below) is a
+     PHYSICAL offset and on an RTL page it pulls the bar the wrong way,
+     producing the «منو زیرین در موبایل به چپ رفته و وسط نیست» drift. The
+     nav-float animation keeps owning `transform` (only Y), so the two do not
+     collide with this centring method. */
+  left: 0;
+  right: 0;
+  inset-inline: 0;
+  margin-inline: auto;
   width: calc(100% - 28px);
   max-width: 440px;
   display: flex;
@@ -1372,45 +1375,29 @@ select option {
 
 .nav-centre {
   position: fixed;
-  left: 50%;
-  /*
-     ─── THE ALIGNMENT, DERIVED NOT GUESSED ──────────────────────────────
-     The notch is cut at the bar's TOP EDGE, which sits at:
-        14px (bar offset) + 64px (9 padding + 46 item + 9 padding) = 78px
-     For the drop to sit centred in that hollow its own centre must be at
-     78px too, so its bottom offset is 78 - 44/2 = 56px.
-
-     The first attempt used 48px, which put the centre at 70 — eight pixels
-     BELOW the notch centre, so the drop sank into the bar instead of
-     resting in the hollow. That is exactly the "merged into the menu" look
-     that was reported, reintroduced by arithmetic rather than by styling.
-  */
+  /* RTL-safe centre: stretch horizontally then let margin-inline:auto centre
+     the 56px button. The old `left:50%; transform:translateX(-50%)` is a
+     physical offset and on RTL pages it pulls the drop to the wrong side
+     together with the bar itself. */
+  left: 0;
+  right: 0;
+  inset-inline: 0;
+  margin-inline: auto;
   /*
      ─── THE CIRCLE MUST FILL THE HOLLOW, NOT FLOAT INSIDE IT ─────────────
      Reported: «دایره وسط منو پایین صفحه به اندازه همون حفره باشد ... و حفره
      را پر کند» — make the circle the size of the hollow and fill it.
 
-     The arithmetic was the whole problem, and it is worth writing down:
+     The arithmetic was the whole problem: notch radius 31px → hollow 62px;
+     circle 56px leaves a 3px ring of clearance so the antialiased seam
+     between the mask feather and the circle's edge never shimmers during
+     the nav-float animation.
 
-        notch radius   31px  ->  hollow diameter 62px
-        circle                            42px
-        gap, every side                   10px
-
-     Ten pixels of empty bar visible all the way around, which reads as a
-     small button sitting in an oversized hole rather than one element.
-
-     Now 56px: it fills the 62px hollow with a 3px ring of clearance left.
-     That ring is deliberate and must not go to zero — the mask's cut edge
-     is feathered over 1.5px, so a circle flush to 62 would have its own
-     antialiased edge overlapping the feather and the seam would shimmer as
-     the bar animates.
-
-     Bottom offset re-derived, not adjusted by feel. The bar's top edge is
-     at 14 (offset) + 64 (9 + 46 + 9) = 78px, and the notch is cut at that
-     edge, so the circle's centre must also sit at 78:  78 - 56/2 = 50.
+     Bottom offset re-derived from geometry: the bar's top edge sits at
+     14 (offset) + 64 (9 + 46 + 9) = 78px. The notch is cut at that edge,
+     so the circle's centre must also sit at 78px: 78 - 56/2 = 50.
   */
   bottom: calc(50px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
   width: 56px;
   height: 56px;
   border: none;
@@ -6812,21 +6799,11 @@ a.wallet-option,
     gap: 18px;
   }
 
-  /* The nav is position:fixed, so it spans the whole viewport unless it is
-     given the same width and centring as the shell.
-
-     `left/right/transform` are reset for the reason spelled out in the
-     600-899px block above: the base rule centres with translateX(-50%), and
-     leaving that transform in place while switching to margin-based centring
-     pushes the bar half its own width off screen. That is the reported
-     «نصفش میاد». */
+  /* The nav is position:fixed; the base rule already stretches both edges and
+     centres with margin-inline:auto. Tablet/desktop just widen the cap and
+     flatten the top corners for a docked look. */
   .bottom-nav {
     max-width: 680px;
-    left: auto;
-    right: auto;
-    translate: none;
-    inset-inline: 0;
-    margin-inline: auto;
     border-radius: 18px 18px 0 0;
   }
 
@@ -7054,42 +7031,14 @@ a.wallet-option,
 
   .bottom-nav {
     max-width: 600px;
-    margin-inline: auto;
+    border-radius: 20px 20px 0 0;
+    /* base rule handles centring with margin-inline:auto on a stretched bar;
+       no translate/transform to cancel here anymore. */
   }
 
   .page:not(.page--global) {
     padding: 16px clamp(18px, 3vw, 30px) 30px;
     gap: 16px;
-  }
-
-  /* A step between phone and desktop: the bar keeps the base phone sizing
-     (an earlier 34px-mark bump here was reverted with the other header
-     enlargement — «لوگو هیدر بزرگ شده، کلا بیار روی قبل»), only the column
-     centring applies. */
-
-  /* The nav is position:fixed, so without inset-inline + margin it spans the
-     whole viewport and floats detached from the column above it. */
-  .bottom-nav {
-    /* ─── left AND transform MUST BE CANCELLED, NOT JUST OVERRIDDEN ────────
-       Reported: «منو زیری در لپتاپ نصفش میاد» — on a laptop only half the
-       bottom menu is visible.
-
-       The base rule centres the bar with `left: 50%` + `translateX(-50%)`.
-       Setting `inset-inline: 0` here does NOT undo that: `inset-inline` is
-       shorthand for left/right, so it does reset `left`, but the -50%
-       TRANSFORM survives and shifts the whole bar half its own width off
-       centre. With `margin-inline: auto` also applied the two mechanisms
-       fight, and the bar lands half off the edge.
-
-       This is the identical class of bug already documented for `.more-layer`
-       and `.ap` in this file: a transform-based centring silently broken by a
-       second centring mechanism. Cancelling the transform explicitly is the
-       fix that works in every combination. */
-    left: auto;
-    right: auto;
-    translate: none;
-    inset-inline: 0;
-    border-radius: 20px 20px 0 0;
   }
 
   /* More room means more columns, not bigger cards: a 300px-wide market row

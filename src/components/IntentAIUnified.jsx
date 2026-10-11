@@ -8233,7 +8233,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </div>
           ) : null}
           <button type="button" className="fbt-side-collapse" onClick={() => setSidebarOpen((v) => !v)}>
-            {sidebarOpen ? (fa ? '← جمع‌کردن' : '← Collapse') : (fa ? '→' : '→')}
+            {sidebarOpen
+              ? (fa ? 'جمع‌کردن ›' : '‹ Collapse')
+              : (fa ? '‹' : '›')}
           </button>
         </div>
       </aside>
