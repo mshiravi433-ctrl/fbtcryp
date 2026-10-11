@@ -1425,3 +1425,96 @@ button.fbt-neural .tag-row, .fbt-neural button.tag-row { font-family: inherit; f
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
 }
+
+/*
+ * ── 14. VIEWPORT DOCK — «چت تا آخر پایین اسکرول می‌شود، کامپوزر چسبیده به منو»
+ * ---------------------------------------------------------------------------
+ * Report (2026-10-11): on mobile the chat page only scrolled a little and an
+ * empty strip sat between the composer and the bottom tab bar; on desktop the
+ * chat filled only part of the window, the rest plain black.
+ *
+ * Measured root causes, all in CSS — no component logic changes:
+ *
+ *  1. `.iaos-composer` was `position: sticky; bottom: 84px` INSIDE the
+ *     `overflow: hidden` shell. An overflow:hidden box is a scrollport for
+ *     sticky, so the composer was pinned 84px above the shell's content edge —
+ *     a permanent dead gap above the fixed tab bar (measured: composer bottom
+ *     682, tab-bar top 768 on a 390×844 viewport). Sticky was only ever needed
+ *     when the DOCUMENT scrolled; in this locked flex column the flow position
+ *     is already the bottom, so `position: relative; bottom: auto` docks it.
+ *  2. `.iaos-conversation` (intent-ai-os.css) still carried the document-scroll
+ *     era cap `max-height: min(62vh, 620px)`. On a 900px desktop window that
+ *     capped the thread at 558px inside a 711px column — the «نصف صفحه چت»
+ *     report. The thread is a flex child of a locked page, so it must fill the
+ *     column and scroll internally instead.
+ *  3. `.app-shell` (index.css) caps every page at `min(1280px, 100% - 48px)`
+ *     from 900px and `min(1440px, 100% - 96px)` from 1400px — the phone column
+ *     gutter. On the full-window /intent page that left 48px dead black bands
+ *     left and right. Only the chat is released to full bleed; `/pay` (the
+ *     other headerless route) keeps its cap via `:has(.iaos-page)`.
+ *  4. `.iaos-suggestions-row` was `max-height: 44px` over `flex-wrap: wrap`
+ *     content (measured 146px of chips in a 44px window) — clipped, unreachable
+ *     suggestion rows. One nowrap line that scrolls horizontally shows every
+ *     chip («پیشنهادها را نشان بدهد»).
+ */
+
+/* ── 14.1 The thread fills the chat column and scrolls inside it ─────────── */
+.fbt-neural.tag-page .iaos-conversation,
+.fbt-neural.tag-page .iaos-conversation.iaos-conversation-v6 {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+/* ── 14.2 Composer docked: flow bottom of the column, right above the bar ── */
+.fbt-neural.tag-page .iaos-composer {
+  position: relative;
+  bottom: auto;
+  flex: none;
+}
+
+/* Room between the docked composer and the fixed tab bar (mobile + tablet).
+   `!important` is required to outrank the keyboard rules in neural-command.css,
+   which use it; the keyboard-open companion below restores the small padding
+   while typing. Chat tab only — the composer exists nowhere else. */
+@media (max-width: 899px) {
+  .iaos-page.fbt-neural.tag-page[data-ai-tab='chat'] .iaos-shell {
+    padding-bottom: calc(var(--fbt-tabbar-h) + 24px + env(safe-area-inset-bottom)) !important;
+  }
+}
+@media (max-width: 768px) {
+  .iaos-page.fbt-neural.keyboard-open[data-ai-tab='chat'] .iaos-shell {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* ── 14.3 Suggestions: one full-width line, every chip visible ───────────── */
+.fbt-neural.tag-page .iaos-suggestions {
+  flex: none;
+}
+.fbt-neural.tag-page .iaos-suggestions-row {
+  flex-wrap: nowrap;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.fbt-neural.tag-page .iaos-suggestions-row::-webkit-scrollbar { display: none; }
+.fbt-neural.tag-page .iaos-suggestion {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ── 14.4 Full-bleed window on desktop — the chat owns the whole screen ──── */
+/* `:has(.iaos-page)` keeps `/pay/:code` (headerless too) under the phone cap. */
+@media (min-width: 900px) {
+  .app-shell--headerless:has(.iaos-page) {
+    max-width: 100%;
+  }
+}
+@media (min-width: 1400px) {
+  .app-shell--headerless:has(.iaos-page) {
+    max-width: 100%;
+  }
+}
