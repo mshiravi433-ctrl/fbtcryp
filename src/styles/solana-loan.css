@@ -102,3 +102,552 @@
   .sol-loan-amount-field .sol-loan-amount-input { font-size: 18px !important; padding: 0 11px; }
   .sol-loan-amount-asset { padding: 0 10px; }
 }
+
+/* ==========================================================================
+   SOLANA LENDING — the modern shell: hero, tabs, collapsible boxes, tokens
+   --------------------------------------------------------------------------
+   Asked for: «در بخش وام سولانا وام‌دهی سولانا — باکس‌ها، توکن‌ها، تحلیل‌ها،
+   توکن‌ها در باکس بازشونده شود و همه چیز صفحه و تب مدرن‌تر و به‌روزتر شود».
+
+   ─── THE ONE RULE THAT SHAPED ALL OF THIS ──────────────────────────────────
+   Collapsing something must never HIDE a number the user needs. So every box
+   header carries chips with the live values behind it (health factor, debt,
+   the rate), and the four tabs keep their own state. A closed box is a tidy
+   summary; an open one is the detail.
+
+   Colours come from the Solana accent already used on this panel (violet
+   #9945ff → teal #14b8a6) plus the app's tokens, so it matches Swap and the
+   EVM loan screen in both themes.
+   ========================================================================== */
+
+.sol-loan { display: block; }
+
+/* ---- hero ---------------------------------------------------------------- */
+
+.sol-loan-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(153, 69, 255, 0.28);
+  background:
+    radial-gradient(120% 130% at 100% 0%, rgba(20, 184, 166, 0.16) 0%, transparent 58%),
+    linear-gradient(140deg, rgba(153, 69, 255, 0.24), rgba(20, 184, 166, 0.10) 68%, rgba(255, 255, 255, 0.03));
+  box-shadow: 0 18px 44px rgba(80, 30, 160, 0.22);
+}
+
+.sol-loan-hero-top { display: flex; align-items: flex-start; gap: 11px; }
+
+.sol-loan-hero-art { position: relative; width: 46px; height: 46px; flex-shrink: 0; }
+
+.sol-loan-hero-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 19px;
+  border: 1px solid rgba(153, 69, 255, 0.35);
+  animation: sol-loan-ring 4.5s ease-in-out infinite;
+}
+
+@keyframes sol-loan-ring {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.04); }
+}
+
+.sol-loan-hero-text { flex: 1; min-width: 0; }
+.sol-loan-hero-title { font-weight: 900; font-size: 17px; }
+.sol-loan-hero-sub { color: var(--text-2); font-size: 11.5px; line-height: 1.65; margin-top: 3px; }
+.sol-loan-via { color: var(--text-3); font-size: 10px; line-height: 1.6; margin-top: 5px; }
+
+.sol-loan-hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.sol-loan-hero-metrics > *:nth-child(4) { grid-column: span 3; }
+
+.sol-loan-wallet {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 10.5px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sol-loan-wallet-dot {
+  width: 7px; height: 7px; border-radius: 99px; flex: 0 0 auto;
+  background: var(--rgb-4, #00ff9d);
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.6);
+}
+
+.sol-loan-retry-inline {
+  width: 100%;
+  margin-top: 9px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.10);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
+/* ---- the status badge ---------------------------------------------------- */
+
+.sol-loan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  flex: 0 0 auto;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+}
+
+.sol-loan-badge[data-live='true'] {
+  color: #86efac;
+  background: rgba(74, 222, 128, 0.12);
+  border-color: rgba(74, 222, 128, 0.24);
+}
+
+.sol-loan-badge-dot {
+  width: 6px; height: 6px; border-radius: 99px; background: currentColor;
+}
+
+.sol-loan-badge[data-live='true'] .sol-loan-badge-dot {
+  animation: sol-loan-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sol-loan-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* ---- tabs ---------------------------------------------------------------- */
+
+.sol-loan-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 15px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sol-loan-tab {
+  position: relative;
+  flex: 1;
+  min-height: 38px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  isolation: isolate;
+}
+
+.sol-loan-tab.is-active { color: var(--text-1); font-weight: 800; }
+
+.sol-loan-tab-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 11px;
+  background: linear-gradient(140deg, rgba(153, 69, 255, 0.30), rgba(20, 184, 166, 0.18));
+  border: 1px solid rgba(153, 69, 255, 0.34);
+}
+
+.sol-loan-tab-label { position: relative; }
+
+/* ---- the collapsible box ------------------------------------------------- */
+
+.sol-box {
+  position: relative;
+  border-radius: 18px;
+  margin-bottom: 11px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.15);
+}
+
+.sol-box.is-open { border-color: rgba(153, 69, 255, 0.26); }
+
+.sol-box-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.sol-box-icon {
+  width: 30px; height: 30px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  color: #c4b5fd;
+  background: linear-gradient(140deg, rgba(153, 69, 255, 0.20), rgba(20, 184, 166, 0.14));
+  border: 1px solid rgba(153, 69, 255, 0.26);
+}
+
+.sol-box-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.sol-box-title { font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 7px; }
+.sol-box-sub { font-size: 10.5px; line-height: 1.6; color: var(--text-3); }
+
+.sol-box-badge {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 99px;
+  color: #a5b4fc;
+  background: rgba(129, 140, 248, 0.14);
+  border: 1px solid rgba(129, 140, 248, 0.24);
+}
+
+.sol-box-chips { display: flex; gap: 5px; flex: 0 0 auto; }
+
+@media (max-width: 430px) {
+  .sol-box-chips > *:nth-child(2) { display: none; }
+}
+
+.sol-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 8px; border-radius: 99px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  font-size: 9.5px; white-space: nowrap;
+}
+
+.sol-chip-label { color: var(--text-3); }
+.sol-chip-value { font-weight: 800; font-family: var(--font-mono); color: var(--text-1); }
+
+.sol-box-chev {
+  width: 24px; height: 24px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sol-box-body { padding: 0 13px 13px; display: grid; gap: 10px; }
+
+/* ---- metrics ------------------------------------------------------------- */
+
+.sol-loan-metric {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sol-loan-metric-label { font-size: 10px; color: var(--text-3); margin-bottom: 5px; }
+.sol-loan-metric-value {
+  font-size: 15px; font-weight: 850; font-family: var(--font-mono);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.sol-loan-metric-sub { font-size: 9.5px; color: var(--text-3); margin-top: 3px; }
+
+.sol-loan-metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.sol-loan-metric-grid.is-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 380px) {
+  .sol-loan-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---- tokens -------------------------------------------------------------- */
+
+.sol-loan-assets { display: grid; gap: 8px; }
+
+.sol-asset {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sol-asset.is-selected {
+  border-color: rgba(153, 69, 255, 0.60);
+  background: linear-gradient(135deg, rgba(153, 69, 255, 0.20), rgba(20, 184, 166, 0.08));
+  box-shadow: 0 10px 26px rgba(120, 40, 200, 0.18);
+}
+
+.sol-asset-row { display: flex; align-items: stretch; }
+
+.sol-asset-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.sol-asset-art { width: 38px; height: 38px; flex: 0 0 auto; display: block; }
+.sol-asset-id { flex: 1; min-width: 0; }
+.sol-asset-symbol { display: block; font-size: 13.5px; font-weight: 800; }
+.sol-asset-sub { display: block; color: var(--text-3); font-size: 10.5px; margin-top: 2px; }
+
+.sol-asset-rates { text-align: end; font-family: var(--font-mono); flex: 0 0 auto; }
+.sol-asset-supply { display: block; color: #86efac; font-size: 11px; font-weight: 800; }
+.sol-asset-borrow { display: block; color: #fca5a5; font-size: 10px; margin-top: 2px; }
+
+.sol-asset-toggle {
+  flex: 0 0 auto;
+  width: 42px;
+  border: 0;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.sol-asset-toggle:hover { color: var(--text-1); background: rgba(255, 255, 255, 0.05); }
+
+.sol-asset-detail {
+  padding: 10px 12px 12px;
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.sol-asset-detail-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sol-asset-detail-label { font-size: 10.4px; color: var(--text-3); }
+.sol-asset-detail-value { font-size: 10.8px; font-weight: 800; font-family: var(--font-mono); }
+
+/* ---- the analysis facts -------------------------------------------------- */
+
+.sol-loan-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+
+.sol-loan-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  font-size: 11.6px;
+  line-height: 1.75;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+}
+
+.sol-loan-fact-dot {
+  width: 6px; height: 6px; border-radius: 99px; margin-top: 7px; flex: 0 0 auto;
+  background: var(--text-3);
+}
+
+.sol-loan-fact.is-notable { color: var(--text-1); border-color: rgba(0, 229, 255, 0.22); }
+.sol-loan-fact.is-notable .sol-loan-fact-dot { background: var(--ink-cyan); box-shadow: 0 0 8px rgba(0, 229, 255, 0.5); }
+.sol-loan-fact.is-caution { border-color: rgba(255, 179, 0, 0.24); }
+.sol-loan-fact.is-caution .sol-loan-fact-dot { background: var(--ink-amber); box-shadow: 0 0 8px rgba(255, 179, 0, 0.5); }
+
+.sol-loan-facts-note { margin: 2px 0 0; font-size: 9.8px; line-height: 1.7; color: var(--text-3); }
+
+/* ---- the action form ----------------------------------------------------- */
+
+.sol-loan-form { display: grid; gap: 9px; }
+.sol-loan-form-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.sol-loan-form-asset {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 800;
+}
+
+.sol-loan-max {
+  font-size: 10.5px; font-weight: 700; color: var(--text-2);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px; padding: 3px 8px; cursor: pointer;
+}
+
+.sol-loan-hint, .sol-loan-warn-line { font-size: 10.5px; line-height: 1.7; color: var(--text-3); margin: 0; }
+.sol-loan-warn-line { color: #fbbf24; }
+.sol-loan-empty-line { font-size: 11.5px; color: var(--text-3); margin: 0; }
+
+.sol-loan-action-error { color: #fca5a5; font-size: 11px; line-height: 1.6; margin: 0; }
+
+.sol-loan-evidence {
+  margin: 0;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  direction: ltr;
+  unicode-bidi: isolate;
+  word-break: break-word;
+  opacity: 0.75;
+  color: var(--text-3);
+}
+
+.sol-loan-tx {
+  display: block;
+  color: #a78bfa;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  text-decoration: none;
+}
+
+/* ---- pending / cards ----------------------------------------------------- */
+
+.sol-loan-pending, .sol-loan-card {
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+
+.sol-loan-card-warn, .sol-loan-pending {
+  background: rgba(251, 191, 36, 0.10);
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
+.sol-loan-pending-title { color: #fbbf24; font-size: 11.5px; font-weight: 800; margin-bottom: 4px; }
+.sol-loan-pending-body { color: var(--text-2); font-size: 10.5px; line-height: 1.7; margin: 0 0 8px; }
+.sol-loan-pending-actions { display: flex; gap: 7px; }
+.sol-loan-pending-actions > * { flex: 1; }
+
+.sol-loan-positions { display: grid; gap: 10px; }
+.sol-loan-position-actions { display: flex; gap: 7px; }
+.sol-loan-position-actions > * { flex: 1; }
+.sol-loan-empty-text { color: var(--text-2); font-size: 12px; line-height: 1.7; }
+
+.sol-loan-footnote {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border-radius: 14px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1.75;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+}
+
+/* ---- loading skeleton ---------------------------------------------------- */
+
+.sol-loan-skeleton {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+
+.sol-loan-skeleton-bar {
+  height: 12px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  background-size: 200% 100%;
+  animation: sol-loan-shimmer 1.3s linear infinite;
+}
+
+.sol-loan-skeleton-bar.is-short { width: 55%; }
+.sol-loan-loading-text { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+@keyframes sol-loan-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- error card ---------------------------------------------------------- */
+
+.sol-loan-error {
+  border-radius: 18px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: linear-gradient(155deg, rgba(248, 113, 113, 0.12), rgba(153, 69, 255, 0.06) 60%, rgba(0, 0, 0, 0.10));
+}
+
+.sol-loan-error-head { display: flex; align-items: center; gap: 9px; padding: 13px 13px 0; }
+
+.sol-loan-error-mark {
+  width: 30px; height: 30px; border-radius: 10px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.16);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+}
+
+.sol-loan-error-title { flex: 1; font-weight: 800; color: #fca5a5; font-size: 13px; }
+
+.sol-loan-code {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 99px; padding: 3px 8px;
+}
+
+.sol-loan-error-reason { margin: 10px 13px 6px; color: var(--text-1); font-size: 12.5px; font-weight: 700; line-height: 1.75; }
+.sol-loan-error-note { margin: 0 13px 6px; color: var(--text-3); font-size: 11px; line-height: 1.75; }
+.sol-loan-warn { color: #fbbf24; }
+.sol-loan-server-door { margin: 8px 13px 0; }
+.sol-loan-error .sol-loan-evidence { margin: 4px 13px 0; }
+.sol-loan-error .sol-loan-error-retry {
+  width: 100%;
+  border-radius: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 11px;
+  margin-top: 8px;
+}
+
+/* ---- light theme --------------------------------------------------------- */
+
+:root[data-theme='light'] .sol-loan-hero {
+  background:
+    radial-gradient(120% 130% at 100% 0%, rgba(20, 184, 166, 0.14) 0%, transparent 58%),
+    linear-gradient(140deg, rgba(153, 69, 255, 0.16), rgba(20, 184, 166, 0.08) 68%, #ffffff);
+  box-shadow: 0 12px 30px rgba(80, 30, 160, 0.12);
+}
+
+:root[data-theme='light'] .sol-loan-tabs { background: rgba(20, 32, 58, 0.04); border-color: rgba(20, 32, 58, 0.08); }
+:root[data-theme='light'] .sol-loan-metric { background: rgba(20, 32, 58, 0.03); border-color: rgba(20, 32, 58, 0.06); }
+:root[data-theme='light'] .sol-box,
+:root[data-theme='light'] .sol-asset { background: #ffffff; border-color: rgba(20, 32, 58, 0.10); }
+:root[data-theme='light'] .sol-asset-toggle { border-inline-start-color: rgba(20, 32, 58, 0.10); background: rgba(20, 32, 58, 0.02); }
+:root[data-theme='light'] .sol-asset-detail { background: rgba(20, 32, 58, 0.03); border-top-color: rgba(20, 32, 58, 0.08); }
+:root[data-theme='light'] .sol-chip { background: rgba(20, 32, 58, 0.03); }
+:root[data-theme='light'] .sol-box-chev { background: rgba(20, 32, 58, 0.04); }
+
+/* ---- motion budget ------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .sol-loan-hero-ring,
+  .sol-loan-badge-dot,
+  .sol-loan-skeleton-bar { animation: none !important; }
+  .sol-box-chev, .sol-asset-toggle { transition: none !important; }
+}

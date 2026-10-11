@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSolanaWallet } from '../hooks/useSolanaWallet.js';
 import AssetIcon from './AssetIcon.jsx';
+import { IconChart, IconChevronRight, IconCoins, IconPools, IconTrend } from './Icons.jsx';
 import '../styles/solana-loan.css';
 import { loanErrorText } from '../lib/loanErrors.js';
 import { mapRawError } from '../lib/lending-engine/errors.js';
+import { riskLevel } from '../lib/lending-engine/health.js';
+import { solanaLendingFacts } from '../lib/solanaLendingInsights.js';
 import {
   buildSolanaLendingTransactions,
   readSolanaLendingMarket,
@@ -155,59 +159,193 @@ const fmt = (value, digits = 2) => value == null || !Number.isFinite(Number(valu
   );
 
 function DataBadge({ t, status }) {
+  const live = status === 'live' || status === 'ok';
   return (
     <span
       data-testid="solana-loan-data-status"
       data-status={status}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 800,
-        color: status === 'live' ? '#86efac' : '#fbbf24',
-        background: status === 'live' ? 'rgba(74,222,128,0.12)' : 'rgba(251,191,36,0.12)',
-      }}
+      className="sol-loan-badge"
+      data-live={live ? 'true' : 'false'}
     >
-      <span style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
-      {t(status === 'live' ? 'loan.status.live' : 'loan.status.unavailable')}
+      <span className="sol-loan-badge-dot" aria-hidden="true" />
+      {t(live ? 'loan.status.live' : 'loan.status.unavailable')}
     </span>
   );
 }
 
-function Metric({ label, value, sub }) {
+/**
+ * One measured number.
+ *
+ * `tone` is optional and only ever set from a value the engine already
+ * computed (a risk band colour, a rate direction) — never to decorate.
+ */
+function Metric({ label, value, sub, tone = null }) {
   return (
-    <div style={{ minWidth: 0, padding: '10px 11px', borderRadius: 13, background: 'rgba(0,0,0,0.15)' }}>
-      <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 5 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 850, fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-      {sub ? <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div> : null}
+    <div className="sol-loan-metric">
+      <div className="sol-loan-metric-label">{label}</div>
+      <div className="sol-loan-metric-value" style={tone ? { color: tone } : undefined}>{value}</div>
+      {sub ? <div className="sol-loan-metric-sub" style={tone ? { color: tone } : undefined}>{sub}</div> : null}
     </div>
   );
 }
 
-function SolanaAssetCard({ asset, selected, onSelect, t }) {
-  const active = selected?.id === asset.id;
+/**
+ * A COLLAPSIBLE BOX.
+ *
+ * Asked for directly: «در بخش وام سولانا … باکس‌ها، توکن‌ها، تحلیل‌ها … در
+ * باکس بازشونده شود».
+ *
+ * ─── WHY THE HEADER CARRIES LIVE VALUES ─────────────────────────────────────
+ * A disclosure whose header says only «Market» makes the user open it to learn
+ * anything, which is worse than not collapsing it. The header therefore carries
+ * CHIPS — the health factor, the debt, the count — so the closed state is still
+ * a true, current summary and the open state is the detail.
+ *
+ * The chevron is the only thing that animates, and the body is a height/opacity
+ * transition: both are composited, and both are disabled under
+ * prefers-reduced-motion (see the stylesheet).
+ */
+function SolBox({
+  id, testId, title, subtitle, icon, chips = [], badge = null, defaultOpen = false, children
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <button
-      type="button"
-      data-testid={`solana-loan-asset-${asset.symbol.toLowerCase()}`}
-      onClick={() => onSelect(asset)}
-      style={{
-        ...card, width: '100%', textAlign: 'start', cursor: 'pointer',
-        padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 12,
-        borderColor: active ? '#9945ff99' : 'rgba(255,255,255,0.09)',
-        background: active ? 'linear-gradient(135deg, rgba(153,69,255,0.20), rgba(20,184,166,0.08))' : card.background,
-      }}
-    >
-      <span style={{ width: 39, height: 39, flexShrink: 0, display: 'block' }}>
-        <AssetIcon symbol={asset.symbol} chain="solana" size={39} radius={14} alt={asset.symbol} />
-      </span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800 }}>{asset.symbol}</span>
-        <span style={{ display: 'block', color: 'var(--text-3)', fontSize: 10.5, marginTop: 2 }}>{t('loan.solana.marketReserve')}</span>
-      </span>
-      <span style={{ textAlign: 'end', fontFamily: 'var(--font-mono)' }}>
-        <span style={{ display: 'block', color: '#86efac', fontSize: 11, fontWeight: 800 }}>{asset.supplyApyPct == null ? '—' : `+${fmt(asset.supplyApyPct)}%`}</span>
-        <span style={{ display: 'block', color: '#fca5a5', fontSize: 10, marginTop: 2 }}>{asset.borrowApyPct == null ? '—' : `${fmt(asset.borrowApyPct)}%`}</span>
-      </span>
-    </button>
+    <section className={`sol-box ${open ? 'is-open' : ''}`} data-testid={testId} data-box={id} data-open={open}>
+      <button
+        type="button"
+        className="sol-box-head"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="sol-box-icon" aria-hidden="true">{icon}</span>
+        <span className="sol-box-text">
+          <span className="sol-box-title">
+            {title}
+            {badge ? <span className="sol-box-badge">{badge}</span> : null}
+          </span>
+          {subtitle ? <span className="sol-box-sub">{subtitle}</span> : null}
+        </span>
+        {chips.length > 0 && (
+          <span className="sol-box-chips">
+            {chips.slice(0, 2).map((chip) => (
+              <span key={`${chip.label}-${chip.value}`} className="sol-chip">
+                <span className="sol-chip-label">{chip.label}</span>
+                <span className="sol-chip-value" style={chip.tone ? { color: chip.tone } : undefined}>{chip.value}</span>
+              </span>
+            ))}
+          </span>
+        )}
+        <motion.span
+          className="sol-box-chev"
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={{ duration: 0.18 }}
+          aria-hidden="true"
+        >
+          <IconChevronRight width={16} height={16} />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="sol-box-body">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+/**
+ * ONE TOKEN — selectable, and expandable.
+ *
+ * The row's main surface SELECTS the token for the form (the behaviour the
+ * tests and the user already rely on). The chevron is a separate control that
+ * opens this token's OWN detail: both APYs, the asset's LTV and liquidation
+ * threshold, what the reserve actually holds, its caps, and the wallet's
+ * spendable balance.
+ *
+ * Two controls rather than one because a tap that both changes the selection
+ * and expands a panel is a tap the user cannot predict. The chevron stops the
+ * event, so nothing happens twice.
+ */
+function SolanaAssetCard({ asset, position, selected, expanded, onSelect, onToggle, t }) {
+  const active = selected?.id === asset.id;
+  const rows = [
+    [t('loan.supplyApyLine'), asset.supplyApyPct == null ? '—' : `${fmt(asset.supplyApyPct)}%`],
+    [t('loan.borrowApyLine'), asset.borrowApyPct == null ? '—' : `${fmt(asset.borrowApyPct)}%`],
+    [t('loan.maxLtv'), asset.loanToValuePct == null ? '—' : `${fmt(asset.loanToValuePct)}%`],
+    [t('loan.liquidationThreshold'), asset.liquidationThresholdPct == null ? '—' : `${fmt(asset.liquidationThresholdPct)}%`],
+    [t('loan.availableLiquidity'), asset.availableLiquidity == null ? '—' : fmt(asset.availableLiquidity, 4)],
+    [t('loan.solana.borrowed'), asset.borrowed == null ? '—' : fmt(asset.borrowed, 4)],
+    [t('loan.solana.supplyCap'), asset.supplyCap == null ? '—' : fmt(asset.supplyCap, 2)],
+    [t('loan.solana.borrowCap'), asset.borrowCap == null ? '—' : fmt(asset.borrowCap, 2)],
+    [t('loan.solana.walletBalance'), position?.walletBalance == null ? '—' : fmt(position.walletBalance, 6)]
+  ];
+
+  return (
+    <div className={`sol-asset ${active ? 'is-selected' : ''}`} data-asset={asset.symbol.toLowerCase()}>
+      <div className="sol-asset-row">
+        <button
+          type="button"
+          className="sol-asset-main"
+          data-testid={`solana-loan-asset-${asset.symbol.toLowerCase()}`}
+          onClick={() => onSelect(asset)}
+        >
+          <span className="sol-asset-art">
+            <AssetIcon symbol={asset.symbol} chain="solana" size={38} radius={14} alt={asset.symbol} />
+          </span>
+          <span className="sol-asset-id">
+            <span className="sol-asset-symbol">{asset.symbol}</span>
+            <span className="sol-asset-sub">{t('loan.solana.marketReserve')}</span>
+          </span>
+          <span className="sol-asset-rates">
+            <span className="sol-asset-supply">{asset.supplyApyPct == null ? '—' : `+${fmt(asset.supplyApyPct)}%`}</span>
+            <span className="sol-asset-borrow">{asset.borrowApyPct == null ? '—' : `${fmt(asset.borrowApyPct)}%`}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="sol-asset-toggle"
+          data-testid={`solana-loan-asset-toggle-${asset.symbol.toLowerCase()}`}
+          aria-expanded={expanded}
+          aria-label={`${t('loan.solana.details')} · ${asset.symbol}`}
+          onClick={() => onToggle(expanded ? null : asset.id)}
+        >
+          <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.18 }} style={{ display: 'inline-flex' }}>
+            <IconChevronRight width={15} height={15} style={{ transform: 'rotate(90deg)' }} />
+          </motion.span>
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="detail"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="sol-asset-detail" data-testid={`solana-loan-asset-detail-${asset.symbol.toLowerCase()}`}>
+              {rows.map(([label, value]) => (
+                <div key={label} className="sol-asset-detail-row">
+                  <span className="sol-asset-detail-label">{label}</span>
+                  <span className="sol-asset-detail-value">{value}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -226,6 +364,9 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
      the answer to yet. `waiting` is display state; the proof that it is still
      ours lives in storage, because the wallet's return replaces this document. */
   const [waiting, setWaiting] = useState(() => readPending());
+  /* Which token's own detail is open. One at a time: a list where every row can
+     be open at once stops being scannable the moment there are four tokens. */
+  const [expandedAssetId, setExpandedAssetId] = useState(null);
   const claimingRef = useRef(false);
 
   /* `opts.fresh` after a transaction: skip the server's short snapshot cache so
@@ -361,6 +502,11 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
       ? (Number(currentPosition.borrowed) > 0 ? currentPosition.borrowed : currentPosition.supplied)
       : null;
 
+  /* The obligation was read, and is not "unknown": the figures are real (a
+     wallet that never deposited reads as a KNOWN empty position, not a failed
+     read — see test/solana-loan-positions-amount.test.jsx). */
+  const accountKnown = Boolean(snapshot?.account) && !snapshot.account.unknown;
+
   const connect = async () => {
     setActionError(null);
     setActionDetail(null);
@@ -440,133 +586,179 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
     ['positions', t('loan.tabPositions')]
   ];
 
+  /*
+   * ─── WHAT THE NUMBERS SAY ──────────────────────────────────────────────────
+   * «در بخش وام سولانا … تحلیل‌ها … مدرن‌تر و به‌روزتر شود»
+   *
+   * Every fact below is computed from the snapshot already on screen by
+   * lib/solanaLendingInsights.js — utilisation, the borrow-over-supply spread,
+   * how full the reserve's deposit limit is, how far the position is from the
+   * liquidation point. No extra request, no second risk engine, no forecast:
+   * the panel is not allowed to say anything the pool did not report.
+   *
+   * The amount typed feeds the depth fact, so it re-renders as the user types —
+   * that is the one input that changes what the analysis can say.
+   */
+  const typedUsd = useMemo(() => {
+    if (!selected) return null;
+    const price = Number(selected.priceUsd);
+    const units = toSolanaUnits(amount, Number(selected.decimals || 0));
+    if (!Number.isFinite(price) || price <= 0 || units == null) return null;
+    return Number(units) / (10 ** Number(selected.decimals || 0)) * price;
+  }, [selected?.id, selected?.priceUsd, selected?.decimals, amount]);
+
+  const analysis = useMemo(
+    () => solanaLendingFacts({ snapshot, asset: selected, amountUsd: typedUsd }),
+    [snapshot, selected?.id, typedUsd]
+  );
+
+  const health = useMemo(() => {
+    const hf = Number(snapshot?.account?.healthFactor);
+    return Number.isFinite(hf) ? hf : null;
+  }, [snapshot?.account?.healthFactor]);
+
   return (
-    <section data-testid="solana-lending-panel" dir="inherit">
-      <div style={{ ...card, padding: '16px', marginBottom: 12, background: 'linear-gradient(140deg, rgba(153,69,255,0.20), rgba(20,184,166,0.10) 70%, rgba(255,255,255,0.03))' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
-          <div style={{ width: 46, height: 46, flexShrink: 0 }}><AssetIcon symbol="SOL" chain="solana" size={46} radius={15} alt="SOL" /></div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 900, fontSize: 17 }}>{t('loan.solana.title')}</div>
-            <div style={{ color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.65, marginTop: 3 }}>{t('loan.solana.subtitle')}</div>
+    <section data-testid="solana-lending-panel" dir="inherit" className="sol-loan">
+      {/* ── the market, as a header card ─────────────────────────────────── */}
+      <div className="sol-loan-hero">
+        <div className="sol-loan-hero-top">
+          <span className="sol-loan-hero-art">
+            <AssetIcon symbol="SOL" chain="solana" size={46} radius={15} alt="SOL" />
+            <span className="sol-loan-hero-ring" aria-hidden="true" />
+          </span>
+          <div className="sol-loan-hero-text">
+            <div className="sol-loan-hero-title">{t('loan.solana.title')}</div>
+            <div className="sol-loan-hero-sub">{t('loan.solana.subtitle')}</div>
             {/* Which door served these numbers. When the public nodes refused
                 this network path and our own backend answered instead, the user
                 is told so — a figure that arrived by another route should not
                 look like the route that failed a minute ago. */}
             {snapshot?.via === 'server' ? (
-              <div data-testid="solana-loan-via-server" style={{ color: 'var(--text-3)', fontSize: 10, lineHeight: 1.6, marginTop: 5 }}>
+              <div data-testid="solana-loan-via-server" className="sol-loan-via">
                 {t('loan.solana.serverDoor')}
               </div>
             ) : null}
           </div>
           <DataBadge t={t} status={snapshot?.dataStatus || 'unavailable'} />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, marginTop: 14 }}>
+
+        <div className="sol-loan-hero-metrics">
           {/* When the obligation could not be READ, its figures are placeholder
               zeros — they render as '—' with a retry, never as $0.00 that reads
               as "you have no position". */}
-          <Metric label={t('loan.collateral')} value={snapshot?.account && !snapshot.account.unknown ? `$${fmt(snapshot.account.totalCollateralUsd)}` : '—'} />
-          <Metric label={t('loan.debt')} value={snapshot?.account && !snapshot.account.unknown ? `$${fmt(snapshot.account.totalDebtUsd)}` : '—'} />
-          <Metric label={t('loan.borrowPower')} value={snapshot?.account && !snapshot.account.unknown ? `$${fmt(snapshot.account.availableBorrowsUsd)}` : '—'} />
+          <Metric label={t('loan.collateral')} value={accountKnown ? `$${fmt(snapshot.account.totalCollateralUsd)}` : '—'} />
+          <Metric label={t('loan.debt')} value={accountKnown ? `$${fmt(snapshot.account.totalDebtUsd)}` : '—'} />
+          <Metric label={t('loan.borrowPower')} value={accountKnown ? `$${fmt(snapshot.account.availableBorrowsUsd)}` : '—'} />
+          {health != null && (
+            <Metric
+              label={t('loan.healthFactorNow')}
+              value={health.toFixed(2)}
+              sub={t(`loan.riskLevel.${riskLevel(health).level}`)}
+              tone={riskLevel(health).color}
+            />
+          )}
         </div>
+
         {snapshot?.account?.unknown && (
           <button
             type="button"
+            className="sol-loan-retry-inline"
             data-testid="solana-loan-position-retry"
             onClick={refresh}
-            style={{
-              width: '100%', marginTop: 9, padding: '9px 10px', borderRadius: 11, cursor: 'pointer',
-              fontSize: 11, fontWeight: 700, color: '#fbbf24',
-              background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.28)',
-            }}
           >
             {loanErrorText(t, 'RPC_ERROR')} · {t('loan.retry')}
           </button>
         )}
+
         {!wallet.address ? (
           <button type="button" className="btn btn-primary" data-testid="solana-loan-connect" onClick={connect} style={{ width: '100%', marginTop: 13 }}>{t('loan.connectWallet')}</button>
         ) : (
-          <div style={{ marginTop: 12, padding: '8px 10px', borderRadius: 11, background: 'rgba(0,0,0,0.16)', fontSize: 10.5, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div className="sol-loan-wallet">
+            <span className="sol-loan-wallet-dot" aria-hidden="true" />
             {wallet.walletName || 'Solana'} · {wallet.address.slice(0, 6)}…{wallet.address.slice(-5)}
           </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 5, padding: 4, borderRadius: 14, marginBottom: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-        {tabs.map(([id, label]) => <button key={id} type="button" data-testid={`solana-loan-tab-${id}`} onClick={() => setTab(id)} style={{ flex: 1, border: 0, borderRadius: 10, padding: '9px 5px', background: tab === id ? 'rgba(153,69,255,0.20)' : 'transparent', color: tab === id ? 'var(--text-1)' : 'var(--text-3)', fontWeight: tab === id ? 800 : 500, fontSize: 11.5 }}>{label}</button>)}
+      {/* ── the tabs, as a modern segmented control ──────────────────────── */}
+      <div className="sol-loan-tabs" role="tablist">
+        {tabs.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            data-testid={`solana-loan-tab-${id}`}
+            className={`sol-loan-tab ${tab === id ? 'is-active' : ''}`}
+            onClick={() => setTab(id)}
+          >
+            {tab === id && <motion.span layoutId="sol-loan-tab-pill" className="sol-loan-tab-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+            <span className="sol-loan-tab-label">{label}</span>
+          </button>
+        ))}
       </div>
 
-      {loading && <div style={{ ...card, padding: 18, textAlign: 'center', color: 'var(--text-2)', fontSize: 12 }}>{t('loan.solana.loading')}</div>}
+      {loading && (
+        <div className="sol-loan-skeleton" data-testid="solana-loan-loading">
+          <span className="sol-loan-skeleton-bar" />
+          <span className="sol-loan-skeleton-bar" />
+          <span className="sol-loan-skeleton-bar is-short" />
+          <span className="sol-loan-loading-text">{t('loan.solana.loading')}</span>
+        </div>
+      )}
+
       {!loading && error && (
         <div
           data-testid="solana-loan-error"
           data-code={error.code}
-          style={{
-            ...card, padding: 0, overflow: 'hidden',
-            borderColor: 'rgba(248,113,113,0.35)',
-            background: 'linear-gradient(155deg, rgba(248,113,113,0.12), rgba(153,69,255,0.06) 60%, rgba(0,0,0,0.10))',
-          }}
+          className="sol-loan-error"
         >
-          <div style={{ padding: '14px 14px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
-              <span style={{
-                width: 30, height: 30, borderRadius: 10, flexShrink: 0,
-                display: 'grid', placeItems: 'center',
-                background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.28)',
-                color: '#fca5a5', fontSize: 14,
-              }}>⚠</span>
-              <span style={{ fontWeight: 800, color: '#fca5a5', fontSize: 13, flex: 1 }}>
-                {error.hosts?.length ? t('loan.rpc.title') : t('loan.unavailableTitle')}
-              </span>
-              <span
-                dir="ltr"
-                style={{
-                  fontSize: 9, fontWeight: 800, letterSpacing: '.04em',
-                  fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate',
-                  color: 'var(--text-3)', background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.10)', borderRadius: 99, padding: '3px 8px',
-                }}
-              >{error.code}</span>
-            </div>
-            {/* The localized reason comes first; the protocol sentence stays
-                as context beneath it, never the other way around. */}
-            <p data-testid="solana-loan-error-reason" style={{ margin: '0 0 6px', color: 'var(--text-1)', fontSize: 12.5, fontWeight: 700, lineHeight: 1.75 }}>
-              {/* Always a sentence: a code with no translation renders as the
-                  localized generic WITH the code attached, never as itself. */}
-              {loanErrorText(t, error.code || 'PROTOCOL_UNAVAILABLE')}
-            </p>
-            <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 11, lineHeight: 1.75 }}>{t('loan.solana.unavailable')}</p>
-            <RpcIncident hosts={error.hosts} t={t} />
-            {/* The second door's own verdict, when it was tried. Nine public
-                refusals and one line saying nothing else was attempted reads as
-                «the app is broken»; the honest report is that our server was
-                asked too, and here is what it said. */}
-            {error.serverTried ? (
-              <div data-testid="solana-loan-server-door" style={{ marginTop: 8 }}>
-                <p style={{ margin: '0 0 4px', color: 'var(--text-2)', fontSize: 11, lineHeight: 1.7 }}>{t('loan.rpc.serverTried')}</p>
-                <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 11, lineHeight: 1.65 }}>
-                  {t('loan.rpc.serverHost')}
-                  {' — '}
-                  <span style={{ color: '#fbbf24' }}>{loanErrorText(t, error.serverCode || 'SERVER_UNAVAILABLE')}</span>
-                </p>
-                {error.serverDetail && error.serverDetail !== error.serverCode ? (
-                  <p dir="ltr" className="faint" style={{ margin: '4px 0 0', fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', wordBreak: 'break-word', opacity: 0.7 }}>
-                    {error.serverDetail}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {error.detail && error.detail !== error.code && !error.hosts?.length ? (
-              <p dir="ltr" className="faint" style={{ margin: '8px 0 0', fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', wordBreak: 'break-word', opacity: 0.75 }}>
-                {error.detail}
-              </p>
-            ) : null}
+          <div className="sol-loan-error-head">
+            <span className="sol-loan-error-mark" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v5M12 17.5h.01" />
+                <path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+              </svg>
+            </span>
+            <span className="sol-loan-error-title">
+              {error.hosts?.length ? t('loan.rpc.title') : t('loan.unavailableTitle')}
+            </span>
+            <span className="sol-loan-code" dir="ltr">{error.code}</span>
           </div>
+          {/* The localized reason comes first; the protocol sentence stays
+              as context beneath it, never the other way around. */}
+          <p data-testid="solana-loan-error-reason" className="sol-loan-error-reason">
+            {/* Always a sentence: a code with no translation renders as the
+                localized generic WITH the code attached, never as itself. */}
+            {loanErrorText(t, error.code || 'PROTOCOL_UNAVAILABLE')}
+          </p>
+          <p className="sol-loan-error-note">{t('loan.solana.unavailable')}</p>
+          <RpcIncident hosts={error.hosts} t={t} />
+          {/* The second door's own verdict, when it was tried. Nine public
+              refusals and one line saying nothing else was attempted reads as
+              «the app is broken»; the honest report is that our server was
+              asked too, and here is what it said. */}
+          {error.serverTried ? (
+            <div data-testid="solana-loan-server-door" className="sol-loan-server-door">
+              <p className="sol-loan-error-note">{t('loan.rpc.serverTried')}</p>
+              <p className="sol-loan-error-note">
+                {t('loan.rpc.serverHost')}
+                {' — '}
+                <span className="sol-loan-warn">{loanErrorText(t, error.serverCode || 'SERVER_UNAVAILABLE')}</span>
+              </p>
+              {error.serverDetail && error.serverDetail !== error.serverCode ? (
+                <p dir="ltr" className="sol-loan-evidence">{error.serverDetail}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {error.detail && error.detail !== error.code && !error.hosts?.length ? (
+            <p dir="ltr" className="sol-loan-evidence">{error.detail}</p>
+          ) : null}
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm sol-loan-error-retry"
             data-testid="solana-loan-error-retry"
             onClick={refresh}
-            style={{ width: '100%', borderRadius: 0, borderTop: '1px solid rgba(255,255,255,0.07)', padding: '11px' }}
           >
             {t('loan.retry')}
           </button>
@@ -575,97 +767,244 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
 
       {!loading && !error && tab !== 'positions' && (
         <>
-          <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-            {assets.map((asset) => <SolanaAssetCard key={asset.id} asset={asset} selected={selected} onSelect={setSelected} t={t} />)}
-          </div>
+          {/*
+            ── THE MARKET BOX ───────────────────────────────────────────────
+            Collapsed = a title, a live chip and the health factor. Open = the
+            full picture. The chips are on the HEADER on purpose: a closed box
+            still has to say something true and current, or collapsing it hides
+            information instead of tidying it.
+          */}
+          <SolBox
+            id="sol-market"
+            testId="solana-loan-box-market"
+            title={t('loan.solana.box.market')}
+            subtitle={t('loan.solana.box.marketSub')}
+            icon={<IconPools width={17} height={17} />}
+            chips={[
+              health != null
+                ? { label: t('loan.healthFactorNow'), value: health.toFixed(2), tone: riskLevel(health).color }
+                : null,
+              accountKnown
+                ? { label: t('loan.debt'), value: `$${fmt(snapshot.account.totalDebtUsd)}` }
+                : null,
+              { label: t('loan.solana.reserves'), value: String(assets.length) }
+            ].filter(Boolean)}
+            defaultOpen
+          >
+            <div className="sol-loan-metric-grid">
+              <Metric label={t('loan.collateral')} value={accountKnown ? `$${fmt(snapshot.account.totalCollateralUsd)}` : '—'} />
+              <Metric label={t('loan.debt')} value={accountKnown ? `$${fmt(snapshot.account.totalDebtUsd)}` : '—'} />
+              <Metric label={t('loan.borrowPower')} value={accountKnown ? `$${fmt(snapshot.account.availableBorrowsUsd)}` : '—'} />
+              <Metric
+                label={t('loan.liquidationThreshold')}
+                value={accountKnown && snapshot.account.liquidationThresholdPct != null ? `${fmt(snapshot.account.liquidationThresholdPct)}%` : '—'}
+              />
+              <Metric
+                label={t('loan.currentLtv')}
+                value={accountKnown && snapshot.account.ltvPct != null ? `${fmt(snapshot.account.ltvPct)}%` : '—'}
+              />
+              <Metric label={t('loan.solana.slot')} value={snapshot?.slot == null ? '—' : String(snapshot.slot)} />
+            </div>
+            {/* The obligation could not be read: every figure above is a
+                placeholder, and the panel says which read failed rather than
+                letting the dashes look like an empty position. */}
+            {snapshot?.failures?.length ? (
+              <p className="sol-loan-warn-line">
+                {t('loan.solana.partial', { n: snapshot.failures.length })}
+              </p>
+            ) : null}
+          </SolBox>
+
+          {/*
+            ── THE TOKENS BOX ───────────────────────────────────────────────
+            «باکس ها ، توکن ها ،تحلیل ها … در باکس بازشونده شود» — the tokens
+            are now a collapsible box, and EVERY token inside it opens its own
+            detail (APYs, the asset's own LTV and liquidation threshold, what
+            the reserve actually holds, caps, the wallet's spendable balance).
+
+            The row's main surface still SELECTS the token, exactly as before —
+            the chevron is a separate control, so a tap on the row cannot both
+            select and expand by accident.
+          */}
+          <SolBox
+            id="sol-tokens"
+            testId="solana-loan-box-tokens"
+            title={tab === 'borrow' ? t('loan.chooseBorrowAsset') : t('loan.chooseAsset')}
+            subtitle={t('loan.solana.box.tokensSub')}
+            icon={<IconCoins width={17} height={17} />}
+            chips={[{ label: t('loan.solana.reserves'), value: String(assets.length) }]}
+            defaultOpen
+          >
+            <div className="sol-loan-assets">
+              {assets.map((asset) => (
+                <SolanaAssetCard
+                  key={asset.id}
+                  asset={asset}
+                  position={snapshot?.positions?.[asset.id]}
+                  selected={selected}
+                  expanded={expandedAssetId === asset.id}
+                  onSelect={setSelected}
+                  onToggle={(next) => setExpandedAssetId(next)}
+                  t={t}
+                />
+              ))}
+              {assets.length === 0 && (
+                <p className="sol-loan-empty-line">{t('loan.noAssetsOnChain', { chain: 'Solana' })}</p>
+              )}
+            </div>
+          </SolBox>
+
+          {/*
+            ── THE ANALYSIS BOX ─────────────────────────────────────────────
+            Every line is measured from the snapshot already on screen (see
+            lib/solanaLendingInsights.js) — utilisation, the spread between
+            borrowing and depositing, how full the deposit limit is, how big the
+            typed amount is against real liquidity, and how far the position is
+            from its liquidation point. No request, no forecast, and nothing
+            rendered when there is nothing to measure.
+          */}
+          {analysis.length > 0 && (
+            <SolBox
+              id="sol-analysis"
+              testId="solana-loan-box-analysis"
+              title={t('loan.solana.box.analysis')}
+              subtitle={t('loan.solana.box.analysisSub', { symbol: selected?.symbol ?? '—' })}
+              icon={<IconChart width={17} height={17} />}
+              defaultOpen={false}
+            >
+              <ul className="sol-loan-facts">
+                {analysis.map((fact) => (
+                  <li key={fact.id} className={`sol-loan-fact is-${fact.kind}`} data-testid={`solana-loan-fact-${fact.id}`}>
+                    <span className="sol-loan-fact-dot" aria-hidden="true" />
+                    <span>{t(`loan.solana.analysis.${fact.id}`, fact.values)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="sol-loan-facts-note">{t('loan.solana.analysis.notAdvice')}</p>
+            </SolBox>
+          )}
+
+          {/*
+            ── THE ACTION BOX ───────────────────────────────────────────────
+            The form itself, unchanged in behaviour (preflight, MAX, the deep
+            link hand-over, the pending card) and modernised in shape.
+          */}
           {selected && (
-            <div style={{ ...card, padding: 15 }}>
-              <div className="row-between" style={{ gap: 8, marginBottom: 10 }}>
-                <div style={{ fontWeight: 850 }}>{tab === 'borrow' ? t('loan.chooseBorrowAsset') : t('loan.chooseAsset')}</div>
-                <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>{selected.symbol}</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, marginBottom: 11 }}>
-                <Metric label={t('loan.supplyApyLine')} value={selected.supplyApyPct == null ? '—' : `${fmt(selected.supplyApyPct)}%`} />
-                <Metric label={t('loan.borrowApyLine')} value={selected.borrowApyPct == null ? '—' : `${fmt(selected.borrowApyPct)}%`} />
-                <Metric label={t('loan.maxLtv')} value={selected.loanToValuePct == null ? '—' : `${fmt(selected.loanToValuePct)}%`} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
-                <label style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{t('loan.amount')} · {selected.symbol}</label>
-                {/* MAX means the wallet's real spendable balance — the number
-                    the preflight checks the transaction against. Unreadable
-                    balance renders no MAX rather than zero. */}
-                {tab !== 'borrow' && currentPosition?.walletBalance != null && (
+            <SolBox
+              id="sol-action"
+              testId="solana-loan-box-action"
+              title={tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}
+              subtitle={t('loan.solana.box.actionSub')}
+              icon={<IconTrend width={17} height={17} />}
+              chips={[
+                selected.supplyApyPct != null ? { label: t('loan.supplyApyLine'), value: `+${fmt(selected.supplyApyPct)}%`, tone: '#86efac' } : null,
+                selected.borrowApyPct != null ? { label: t('loan.borrowApyLine'), value: `${fmt(selected.borrowApyPct)}%`, tone: '#fca5a5' } : null
+              ].filter(Boolean)}
+              defaultOpen
+            >
+              <div className="sol-loan-form">
+                <div className="sol-loan-form-head">
+                  <span className="sol-loan-form-asset">
+                    <AssetIcon symbol={selected.symbol} chain="solana" size={22} radius={8} alt={selected.symbol} />
+                    {selected.symbol}
+                  </span>
+                  {/* MAX means the wallet's real spendable balance — the number
+                      the preflight checks the transaction against. Unreadable
+                      balance renders no MAX rather than zero. */}
+                  {tab !== 'borrow' && currentPosition?.walletBalance != null && (
+                    <button
+                      type="button"
+                      className="sol-loan-max"
+                      data-testid="solana-loan-max"
+                      onClick={() => setAmount(String(currentPosition.walletBalance))}
+                    >
+                      {t('loan.maxOf', { amount: currentPosition.walletBalance, symbol: selected.symbol })}
+                    </button>
+                  )}
+                </div>
+
+                {/*
+                  The amount field owns its row. It used to share a flex row
+                  with the action button — and `.btn` is `width: 100%`
+                  globally, so the button took the whole line and squeezed the
+                  input down to a tiny rounded pill («خیلی کوچیک و تخم‌مرغی»).
+                */}
+                <div className="sol-loan-amount-field" data-testid="solana-loan-amount-field">
+                  <input
+                    data-testid="solana-loan-amount"
+                    className="sol-loan-amount-input"
+                    value={amount}
+                    onChange={(event) => setAmount(normalizeAmountInput(event.target.value))}
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="0.00"
+                    dir="ltr"
+                    aria-label={`${t('loan.amount')} · ${selected.symbol}`}
+                  />
+                  <span className="sol-loan-amount-asset">
+                    <AssetIcon symbol={selected.symbol} chain="solana" size={20} radius={7} alt={selected.symbol} />
+                    {selected.symbol}
+                  </span>
+                </div>
+
+                {!wallet.address ? (
+                  <button type="button" className="btn btn-primary sol-loan-action" data-testid="solana-loan-action-connect" onClick={connect}>{t('loan.connectWallet')}</button>
+                ) : (
                   <button
                     type="button"
-                    data-testid="solana-loan-max"
-                    onClick={() => setAmount(String(currentPosition.walletBalance))}
-                    style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-2)', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '3px 8px', cursor: 'pointer' }}
+                    className="btn btn-primary sol-loan-action"
+                    data-testid="solana-loan-action"
+                    disabled={Boolean(action)}
+                    onClick={() => runAction(tab === 'borrow' ? 'borrow' : 'supply')}
                   >
-                    {t('loan.maxOf', { amount: currentPosition.walletBalance, symbol: selected.symbol })}
+                    {action ? t('loan.running') : tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}
                   </button>
                 )}
-              </div>
-              {/* The amount field owns its row. It used to share a flex row with
-                  the action button — and `.btn` is `width: 100%` globally, so the
-                  button took the whole line and squeezed the input down to a
-                  tiny rounded pill («خیلی کوچیک و تخم‌مرغی»). */}
-              <div className="sol-loan-amount-field" data-testid="solana-loan-amount-field">
-                <input
-                  data-testid="solana-loan-amount"
-                  className="sol-loan-amount-input"
-                  value={amount}
-                  onChange={(event) => setAmount(normalizeAmountInput(event.target.value))}
-                  inputMode="decimal"
-                  autoComplete="off"
-                  placeholder="0.00"
-                  dir="ltr"
-                  aria-label={`${t('loan.amount')} · ${selected.symbol}`}
-                />
-                <span className="sol-loan-amount-asset">
-                  <AssetIcon symbol={selected.symbol} chain="solana" size={20} radius={7} alt={selected.symbol} />
-                  {selected.symbol}
-                </span>
-              </div>
-              {!wallet.address ? (
-                <button type="button" className="btn btn-primary sol-loan-action" data-testid="solana-loan-action-connect" onClick={connect}>{t('loan.connectWallet')}</button>
-              ) : (
-                <button type="button" className="btn btn-primary sol-loan-action" data-testid="solana-loan-action" disabled={Boolean(action)} onClick={() => runAction(tab === 'borrow' ? 'borrow' : 'supply')}>{action ? t('loan.running') : tab === 'borrow' ? t('loan.borrowBtn', { symbol: selected.symbol }) : t('loan.supplyBtn', { symbol: selected.symbol })}</button>
-              )}
-              {tab !== 'borrow' && wallet.address && currentPosition?.walletBalance == null && (
-                <p data-testid="solana-loan-balance-unknown" style={{ color: '#fbbf24', fontSize: 10.5, margin: '8px 0 0' }}>{loanErrorText(t, 'BALANCE_UNKNOWN')}</p>
-              )}
-              {snapshot?.account && tab === 'borrow' && <p style={{ color: 'var(--text-3)', fontSize: 10.5, margin: '8px 0 0' }}>{t('loan.maxBorrowHint', { max: `$${fmt(snapshot.account.availableBorrowsUsd)}` })}</p>}
-              {waiting?.id && (
-                <div
-                  data-testid="solana-loan-pending"
-                  data-request={waiting.id}
-                  style={{ marginTop: 9, padding: '9px 10px', borderRadius: 11, background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.28)' }}
-                >
-                  <div style={{ color: '#fbbf24', fontSize: 11.5, fontWeight: 800, marginBottom: 3 }}>{t('loan.solana.pendingTitle')}</div>
-                  <p style={{ color: 'var(--text-2)', fontSize: 10.5, lineHeight: 1.7, margin: '0 0 8px' }}>{t('loan.solana.pendingBody')}</p>
-                  <div style={{ display: 'flex', gap: 7 }}>
-                    <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-pending-reopen" style={{ flex: 1 }} onClick={async () => {
-                      const { reopenDeeplinkRequest } = await import('../lib/solana/deeplink.js');
-                      try { reopenDeeplinkRequest(waiting.id); } catch { /* the wallet app decides */ }
-                    }}>{t('loan.solana.pendingReopen')}</button>
-                    <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-pending-check" style={{ flex: 1 }} onClick={() => { claimPendingSignature(); }}>{t('loan.solana.pendingCheck')}</button>
+
+                {tab !== 'borrow' && wallet.address && currentPosition?.walletBalance == null && (
+                  <p data-testid="solana-loan-balance-unknown" className="sol-loan-warn-line">{loanErrorText(t, 'BALANCE_UNKNOWN')}</p>
+                )}
+                {snapshot?.account && tab === 'borrow' && (
+                  <p className="sol-loan-hint">{t('loan.maxBorrowHint', { max: `$${fmt(snapshot.account.availableBorrowsUsd)}` })}</p>
+                )}
+
+                {waiting?.id && (
+                  <div
+                    className="sol-loan-pending"
+                    data-testid="solana-loan-pending"
+                    data-request={waiting.id}
+                  >
+                    <div className="sol-loan-pending-title">{t('loan.solana.pendingTitle')}</div>
+                    <p className="sol-loan-pending-body">{t('loan.solana.pendingBody')}</p>
+                    <div className="sol-loan-pending-actions">
+                      <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-pending-reopen" onClick={async () => {
+                        const { reopenDeeplinkRequest } = await import('../lib/solana/deeplink.js');
+                        try { reopenDeeplinkRequest(waiting.id); } catch { /* the wallet app decides */ }
+                      }}>{t('loan.solana.pendingReopen')}</button>
+                      <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-pending-check" onClick={() => { claimPendingSignature(); }}>{t('loan.solana.pendingCheck')}</button>
+                    </div>
                   </div>
-                </div>
-              )}
-              {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11, lineHeight: 1.6, margin: '9px 0 0' }}>{loanErrorText(t, actionError)}</p>}
-              {actionError && actionDetail && <p dir="ltr" className="faint" style={{ fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', margin: '3px 0 0', opacity: 0.75, wordBreak: 'break-word' }}>{actionDetail}</p>}
-              <WalletIncident code={actionError} t={t} />
-              {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ display: 'block', color: '#a78bfa', fontSize: 10.5, marginTop: 9, fontFamily: 'var(--font-mono)' }}>{t('loan.solana.viewTransaction')} · {lastSignature.slice(0, 10)}…</a>}
-            </div>
+                )}
+
+                {actionError && <p data-testid="solana-loan-action-error" className="sol-loan-action-error">{loanErrorText(t, actionError)}</p>}
+                {actionError && actionDetail && <p dir="ltr" className="sol-loan-evidence">{actionDetail}</p>}
+                <WalletIncident code={actionError} t={t} />
+                {lastSignature && (
+                  <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" className="sol-loan-tx">
+                    {t('loan.solana.viewTransaction')} · {lastSignature.slice(0, 10)}…
+                  </a>
+                )}
+              </div>
+            </SolBox>
           )}
         </>
       )}
 
       {!loading && !error && tab === 'positions' && (
-        <div style={{ display: 'grid', gap: 9 }}>
+        <div className="sol-loan-positions">
           {snapshot?.account?.unknown ? (
-            <div style={{ ...card, padding: 15, borderColor: 'rgba(251,191,36,0.30)' }}>
-              <div style={{ color: '#fbbf24', fontSize: 12, fontWeight: 700, lineHeight: 1.7 }}>{loanErrorText(t, 'RPC_ERROR')}</div>
+            <div className="sol-loan-card sol-loan-card-warn">
+              <div className="sol-loan-warn-line">{loanErrorText(t, 'RPC_ERROR')}</div>
               <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-positions-retry" onClick={refresh} style={{ width: '100%', marginTop: 10 }}>
                 {t('loan.retry')}
               </button>
@@ -673,49 +1012,71 @@ export default function SolanaLendingPanel({ t, tab, setTab, preset }) {
           ) : !wallet.address ? (
             /* Positions belong to a wallet: say so and offer the door, instead of
                «no position» that reads as «you have nothing here». */
-            <div className="sol-loan-empty" data-testid="solana-loan-positions-connect" style={{ ...card, padding: 17 }}>
-              <div style={{ color: 'var(--text-2)', fontSize: 12, lineHeight: 1.7 }}>{t('loan.solana.noPosition')}</div>
+            <div className="sol-loan-empty" data-testid="solana-loan-positions-connect">
+              <div className="sol-loan-empty-text">{t('loan.solana.noPosition')}</div>
               <button type="button" className="btn btn-primary" onClick={connect}>{t('loan.connectWallet')}</button>
             </div>
           ) : !hasOpenPosition ? (
-            <div data-testid="solana-loan-positions-empty" style={{ ...card, padding: 17, color: 'var(--text-2)', fontSize: 12, lineHeight: 1.7 }}>{t('loan.solana.noPosition')}</div>
+            <div className="sol-loan-card sol-loan-empty-text" data-testid="solana-loan-positions-empty">{t('loan.solana.noPosition')}</div>
           ) : null}
+
           {assets.map((asset) => {
             const position = snapshot.positions?.[asset.id];
             const supplied = Number(position?.supplied || 0);
             const borrowed = Number(position?.borrowed || 0);
             if (supplied <= 0 && borrowed <= 0) return null;
             return (
-              <div key={asset.id} style={{ ...card, padding: 14 }}>
-                <div className="row-between" style={{ gap: 8 }}><strong>{asset.symbol}</strong><span style={{ color: '#a78bfa', fontSize: 10 }}>Kamino</span></div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginTop: 10 }}>
+              <SolBox
+                key={asset.id}
+                id={`sol-position-${asset.id}`}
+                testId={`solana-loan-position-${asset.symbol.toLowerCase()}`}
+                title={asset.symbol}
+                subtitle={t('loan.solana.marketReserve')}
+                icon={<AssetIcon symbol={asset.symbol} chain="solana" size={24} radius={9} alt={asset.symbol} />}
+                chips={[
+                  borrowed > 0 ? { label: t('loan.borrowed'), value: fmt(borrowed, 6), tone: '#fca5a5' } : null,
+                  supplied > 0 ? { label: t('loan.supplied'), value: fmt(supplied, 6), tone: '#86efac' } : null
+                ].filter(Boolean)}
+                badge={t('loan.solana.protocolBadge')}
+                defaultOpen
+              >
+                <div className="sol-loan-metric-grid is-two">
                   <Metric label={t('loan.supplied')} value={fmt(supplied, 6)} sub={supplied > 0 && Number(position?.suppliedUsd) > 0 ? `$${fmt(position.suppliedUsd)}` : undefined} />
                   <Metric label={t('loan.borrowed')} value={fmt(borrowed, 6)} sub={borrowed > 0 && Number(position?.borrowedUsd) > 0 ? `$${fmt(position.borrowedUsd)}` : undefined} />
                 </div>
-                <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
-                  {supplied > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(asset); setAmount(String(supplied)); runAction('withdraw', { asset, value: String(supplied) }); }} style={{ flex: 1 }}>{t('loan.withdraw')}</button>}
-                  {borrowed > 0 && <button type="button" className="btn btn-primary btn-sm" onClick={() => { setSelected(asset); setAmount(String(borrowed)); runAction('repay', { asset, value: String(borrowed) }); }} style={{ flex: 1 }}>{t('loan.repay')}</button>}
+                <div className="sol-loan-position-actions">
+                  {supplied > 0 && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(asset); setAmount(String(supplied)); runAction('withdraw', { asset, value: String(supplied) }); }}>{t('loan.withdraw')}</button>
+                  )}
+                  {borrowed > 0 && (
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => { setSelected(asset); setAmount(String(borrowed)); runAction('repay', { asset, value: String(borrowed) }); }}>{t('loan.repay')}</button>
+                  )}
                 </div>
-              </div>
+              </SolBox>
             );
           })}
+
           {waiting?.id && (
-            <div data-testid="solana-loan-pending" data-request={waiting.id} style={{ ...card, padding: '11px 13px', borderColor: 'rgba(251,191,36,0.30)' }}>
-              <div style={{ color: '#fbbf24', fontSize: 11.5, fontWeight: 800 }}>{t('loan.solana.pendingTitle')}</div>
-              <p style={{ color: 'var(--text-2)', fontSize: 10.5, lineHeight: 1.7, margin: '4px 0 8px' }}>{t('loan.solana.pendingBody')}</p>
+            <div className="sol-loan-card sol-loan-card-warn" data-testid="solana-loan-pending" data-request={waiting.id}>
+              <div className="sol-loan-pending-title">{t('loan.solana.pendingTitle')}</div>
+              <p className="sol-loan-pending-body">{t('loan.solana.pendingBody')}</p>
               <button type="button" className="btn btn-ghost btn-sm" data-testid="solana-loan-pending-check" onClick={() => { claimPendingSignature(); }} style={{ width: '100%' }}>{t('loan.solana.pendingCheck')}</button>
             </div>
           )}
-          {actionError && <p data-testid="solana-loan-action-error" style={{ color: '#fca5a5', fontSize: 11 }}>{loanErrorText(t, actionError)}</p>}
-          {actionError && actionDetail && <p dir="ltr" className="faint" style={{ fontSize: 9.5, fontFamily: 'var(--font-mono)', direction: 'ltr', unicodeBidi: 'isolate', margin: '3px 0 0', opacity: 0.75, wordBreak: 'break-word' }}>{actionDetail}</p>}
+
+          {actionError && <p data-testid="solana-loan-action-error" className="sol-loan-action-error">{loanErrorText(t, actionError)}</p>}
+          {actionError && actionDetail && <p dir="ltr" className="sol-loan-evidence">{actionDetail}</p>}
           <WalletIncident code={actionError} t={t} />
-          {lastSignature && <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa', fontSize: 10.5 }}>{t('loan.solana.viewTransaction')}</a>}
+          {lastSignature && (
+            <a data-testid="solana-loan-tx" href={`${SOLANA_LENDING_EXPLORER}/tx/${lastSignature}`} target="_blank" rel="noreferrer" className="sol-loan-tx">
+              {t('loan.solana.viewTransaction')}
+            </a>
+          )}
         </div>
       )}
 
-      <div style={{ ...card, padding: '11px 13px', marginTop: 12, color: 'var(--text-3)', fontSize: 10.5, lineHeight: 1.75 }}>
-        {t('loan.solana.securityNote')}
-      </div>
+      {/* The safety note stays last, and stays closed until asked. */}
+      <div className="sol-loan-footnote">{t('loan.solana.securityNote')}</div>
     </section>
   );
 }

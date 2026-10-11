@@ -5813,7 +5813,26 @@
       "windowChange": "Over these {{days}} days the price moved {{pct}}%.",
       "avgDailyMove": "Its average day moved {{pct}}%. Roughly two days in three stay inside double that.",
       "extremes": "The best day was +{{best}}% and the worst day was {{worst}}%."
-    }
+    },
+    "chipSample": "Sample",
+    "chipSampleValue": "{{n}} points",
+    "chipLevels": "Levels",
+    "chipLevelsValue": "{{n}} repeated levels",
+    "chipTypicalDay": "Typical day",
+    "chipTypicalDayValue": "{{pct}}%",
+    "gaugeNow": "{{pct}}% of the range",
+    "levelsTitle": "Levels near this price",
+    "levelDistanceChip": "{{pct}}% away · held {{held}} of {{tested}} tests",
+    "levelDistance": "The nearest measured level is {{price}} — {{pct}}% {{side}} the current price, with {{touches}} recorded touches.",
+    "drawdownRecovered": "{{pct}}% of that fall has been given back. That describes where today sits, not that the recovery continues.",
+    "volatility": "The average day moved {{avg}}%, and half of the days stayed inside {{median}}%. {{calm}}% of days moved less than twice the average.",
+    "streak": "{{days}} days in a row {{dir}} — a run that has lasted to today, not a due date for a reversal.",
+    "aboveAverage": "It closed above its own {{window}}-day average on {{above}} of {{total}} days ({{pct}}%).",
+    "sideAbove": "above",
+    "sideBelow": "below",
+    "dirUp": "up",
+    "dirDown": "down",
+    "footSample": "Every number above is measured from {{points}} price points over {{days}} days — the same data this chart draws."
   },
   "lab": {
     "title": "Lab"
@@ -10991,7 +11010,36 @@
       "pendingTitle": "The request is in your wallet",
       "pendingBody": "We handed the signature to your wallet app. Approve it there — when you come back we claim the answer ourselves, confirm it on-chain and update your position. Nothing is lost by leaving this screen.",
       "pendingReopen": "Open the wallet again",
-      "pendingCheck": "Check the result"
+      "pendingCheck": "Check the result",
+      "box": {
+        "market": "The Kamino market",
+        "marketSub": "The same reserves the protocol reports — every figure read from the chain.",
+        "tokensSub": "Tap a token to select it, or the arrow to open that token's own detail.",
+        "analysis": "What the numbers say",
+        "analysisSub": "Measured from Kamino's own figures for {{symbol}} — no forecast.",
+        "actionSub": "Type an amount; the checks and the costs are shown before anything is signed."
+      },
+      "reserves": "Reserves",
+      "slot": "Slot",
+      "partial": "{{n}} reserves could not be read; the list is incomplete and no number was invented in their place.",
+      "walletBalance": "Wallet balance",
+      "supplyCap": "Reserve deposit limit",
+      "borrowCap": "Reserve borrow limit",
+      "details": "Details",
+      "protocolBadge": "Kamino KLend",
+      "analysis": {
+        "notAdvice": "These are measurements of the pool at this moment — not advice and not a forecast. The rates are variable and move with every deposit and borrow.",
+        "utilization": "{{pct}}% of the {{symbol}} supply is already lent out — that is the number that explains this reserve's rate.",
+        "rateSpread": "The gap between borrowing and depositing {{symbol}} is {{spread}} percentage points (borrow {{borrow}}% · deposit {{supply}}%).",
+        "depositCap": "{{pct}}% of this reserve's deposit limit is used; a reserve near its limit can refuse new deposits.",
+        "liquidityDepth": "The amount you typed is about {{pct}}% of the available {{symbol}} liquidity.",
+        "ltvBuffer": "{{symbol}} can be borrowed against up to {{ltv}}%, and liquidation starts at {{threshold}}% — a gap of {{gap}} points.",
+        "positionHealth": "The position's health factor is {{hf}}, against ${{collateral}} of collateral and ${{debt}} of debt.",
+        "liquidationBuffer": "If your collateral's value fell about {{pct}}%, the position would reach the liquidation point — at today's prices.",
+        "ltvUsed": "{{pct}}% of this position's allowance is used (LTV now {{ltv}}% against a {{threshold}}% threshold).",
+        "borrowRoom": "About ${{usd}} of borrowing power is still unspent; that figure is priced at today's prices and moves with them."
+      },
+      "borrowed": "Reserve borrowed"
     },
     "marketHalted": {
       "title": "This market is closed by the protocol",
@@ -11037,7 +11085,26 @@
       "simulate": "simulation",
       "execute": "execution"
     },
-    "simRevertRaw": "raw revert text"
+    "simRevertRaw": "raw revert text",
+    "healthFactorNow": "Health factor now",
+    "liquidationTouch": "A fall of about {{drop}}% in collateral value — or a {{rise}}% rise in the borrowed asset — reaches the liquidation point at the prices read just now.",
+    "riskConnectHint": "Connect a wallet to read YOUR position. Collateral and debt are read from the pool itself, never from a copy cached in the app.",
+    "cost": {
+      "title": "What holding this position costs (at today's rate)",
+      "approx": "≈",
+      "perDay": "per day",
+      "overDays": "over {{days}} days",
+      "rateIsVariable": "The borrow rate is variable; this used the {{apy}}% read just now, not a rate anybody can promise for next week.",
+      "interestPerDay": "Added to the debt every day",
+      "interestHorizon": "Interest over the coming period",
+      "savedPerDay": "Stopped every day by this repayment",
+      "savedHorizon": "Stopped over the coming period",
+      "earnPerDay": "Earned every day",
+      "earnHorizon": "Earned over the coming period",
+      "priceFall": "Collateral drop that reaches liquidation",
+      "priceRise": "Rise in the borrowed asset that reaches liquidation",
+      "ltvAfter": "LTV after this action"
+    }
   },
   "sm": {
     "engine": {

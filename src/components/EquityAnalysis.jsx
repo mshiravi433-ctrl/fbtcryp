@@ -7,6 +7,7 @@ import TokenIcon from '../lib/tokenIcon';
 import { IconSwap, IconX } from './Icons';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { equitySeriesFacts, equityStats } from '../lib/equityAnalysis';
+import { historyFactKey } from '../lib/history';
 import { fetchEquityChartWindowed, isUsableSeries } from '../lib/equityChart';
 import { usePoll } from '../hooks/useMarket';
 import { lockBodyScroll } from '../lib/scrollLock';
@@ -120,7 +121,15 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
     for (const key of ['price', 'low', 'high']) {
       if (v[key] != null) v[key] = fmtPrice(v[key]);
     }
-    return t(`history.equity.${id}`, v);
+    if (v.side === 'above' || v.side === 'below') v.side = t(`history.side${v.side === 'above' ? 'Above' : 'Below'}`);
+    if (v.dir === 'up' || v.dir === 'down') v.dir = t(`history.dir${v.dir === 'up' ? 'Up' : 'Down'}`);
+    /*
+     * Only the THREE equity-only ids live under `history.equity.*`; everything
+     * else came from historyFacts() and belongs to `history.*`. Formatting all
+     * of them with the equity prefix printed raw key paths on screen — see
+     * historyFactKey() in lib/history.js.
+     */
+    return t(historyFactKey(id, { equity: true }), v);
   };
 
   if (typeof document === 'undefined') return null;

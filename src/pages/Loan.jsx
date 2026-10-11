@@ -67,6 +67,7 @@ import {
   readMarketState, getMaxBorrow, projectActionRisk, evaluateAction,
   simulateLendingPlan, estimateNetworkFee, executeLendingPlan,
   createMarketCache, createTransactionHistory,
+  liquidationTouchPoints, actionCostBreakdown,
   DATA_STATUS, TX_STATUS, MARKET_POLL_MS, MARKET_STALE_AFTER_MS,
   MIN_HEALTH_FACTOR_AFTER_BORROW, chainNativeSymbol
 } from '../lib/lending-service';
@@ -88,8 +89,11 @@ import {
   IconLock,
   IconCoins,
   IconUser,
-  IconBank
+  IconBank,
+  IconBell,
+  IconRefresh
 } from '../components/Icons';
+import '../styles/loan-risk.css';
 
 const CHAIN_DOT = {
   1: '#627eea', 56: '#f3ba2f', 137: '#8247e5', 42161: '#28a0f0',
@@ -440,70 +444,226 @@ function MarketDepth({ reserve, asset, t }) {
    raise a "critical" alert from the bell.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function RiskMeter({ projection, account, t }) {
+/**
+ * THE RISK + COST PANEL — the box titled «این عملیات چه هزینه‌ای می‌تواند
+ * داشته باشد».
+ *
+ * ─── WHAT WAS WRONG WITH THE OLD ONE ────────────────────────────────────────
+ * Reported, in the user's words:
+ *
+ *   «این عملیات چه هزینه‌ای می‌تواند داشته باشد — اطلاعات ان ناقص است … هم
+ *    ارور ریسک پس از این عملیات قابل پیش‌بینی نبود می‌دهد و اطلاعات LTV فعلی،
+ *    حداکثر LTV، آستانه لیکوئید شدن، loan.healthFactorNow نداره و آخرین با
+ *    استرینگ هست حتی با وجود زبان فارسی انگلیسی نشان می‌دهد»
+ *
+ * Four real defects, all of them in THIS component:
+ *
+ *   1. `t('loan.healthFactorNow')` — the key did not exist in any locale file,
+ *      so i18next returned the key itself and a Persian user read the literal
+ *      string "loan.healthFactorNow" on screen. That is the "استرینگ … انگلیسی"
+ *      in the report.
+ *   2. The panel rendered ONLY when the projection succeeded. A wallet that had
+ *      not been read, or a reserve whose oracle price was missing, produced one
+ *      amber sentence and NO numbers at all — including the ones that were
+ *      perfectly available: the reserve's OWN max LTV and liquidation
+ *      threshold, which need no wallet to read.
+ *   3. It never said what the borrow COSTS. Not the interest that accrues every
+ *      day at the pool's own rate, and not how far the collateral price can
+ *      fall before the liquidation point — the two numbers a borrower actually
+ *      decides on.
+ *   4. "Max LTV" was fed `account.ltvPct`, which is the CURRENT loan-to-value.
+ *      Two rows printed the same number and one of them was labelled wrongly.
+ *
+ * ─── WHAT THIS VERSION DOES INSTEAD ─────────────────────────────────────────
+ *   · three tiers of information, each labelled for what it is:
+ *       READ FROM THE POOL      health factor, LTV, threshold, distance
+ *       MEASURED FOR THIS TAP   what the action changes, and what it costs
+ *       NOT AVAILABLE           named with the reason, instead of a blank box
+ *   · the reserve's own parameters fill the rows an unread wallet cannot
+ *     answer, so the panel is never empty on a connected screen
+ *   · a health-factor scale with the liquidation point at 1.00 and the
+ *     before/after positions drawn on it
+ *   · the interest cost of holding the loan at today's rate (per day and per
+ *     month), and the collateral-price distance to the liquidation point
+ *   · every label is a real translation key — nothing renders as its own key
+ */
+function RiskMeter({ projection, account, t, reserve = null, cost = null }) {
   const before = projection?.healthFactorBefore ?? account?.healthFactor ?? null;
   const after = projection?.healthFactorAfter ?? null;
   const bandBefore = riskLevel(before);
   const bandAfter = after == null ? null : riskLevel(after);
-  const threshold = projection?.liquidationThresholdPct ?? account?.liquidationThresholdPct ?? null;
-  const risk = account?.ok ? assessPosition({
-    healthFactor: account.healthFactor,
-    totalDebtUsd: account.totalDebtUsd,
-    totalCollateralUsd: account.totalCollateralUsd,
-    liquidationThresholdPct: account.liquidationThresholdPct
-  }) : null;
+  const band = bandAfter ?? bandBefore;
+
+  /*
+   * Each number comes from the source that actually owns it:
+   *   liquidation threshold — the projection's (it read the account), else the
+   *     account's, else the RESERVE's own configuration, which is readable
+   *     without a wallet and is the parameter the pool will use for this asset.
+   *   max LTV — the reserve's parameter, NEVER the account's current LTV (that
+   *     was defect 4 above).
+   */
+  const threshold = projection?.liquidationThresholdPct
+    ?? account?.liquidationThresholdPct
+    ?? reserve?.liquidationThresholdPct
+    ?? null;
+  const maxLtvPct = reserve?.ltvPct ?? null;
+
+  const risk = account?.ok
+    ? assessPosition({
+      healthFactor: account.healthFactor,
+      totalDebtUsd: account.totalDebtUsd,
+      totalCollateralUsd: account.totalCollateralUsd,
+      liquidationThresholdPct: account.liquidationThresholdPct
+    })
+    : null;
+  const currentLtvPct = risk?.ltvPct ?? (Number.isFinite(Number(account?.ltvPct)) ? Number(account.ltvPct) : null);
+
+  /*
+   * Distance to liquidation is computed from the health factor THIS PANEL
+   * shows, so the sentence and the number above it can never disagree.
+   */
+  const touch = liquidationTouchPoints({ healthFactor: after ?? before });
+
+  const hf = (value) => (value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toFixed(2));
+  const pct = (value, digits = 1) => (value == null || !Number.isFinite(Number(value)) ? '—' : `${Number(value).toFixed(digits)}%`);
 
   const rows = [
-    ['loan.healthFactorNow', before == null ? t('loan.healthNone') : before.toFixed(2), bandBefore?.color],
-    after != null
-      ? ['loan.healthFactorAfter', after.toFixed(2), bandAfter?.color]
-      : null,
-    ['loan.liquidationThreshold', threshold != null ? `${Number(threshold).toFixed(1)}%` : '—', null],
-    ['loan.currentLtv', risk?.ltvPct != null ? `${risk.ltvPct.toFixed(1)}%` : '—', null],
-    ['loan.maxLtv', account?.ltvPct != null ? `${Number(account.ltvPct).toFixed(1)}%` : '—', null],
-    ['loan.liqDistance', risk?.liquidationDistancePct != null ? `${risk.liquidationDistancePct.toFixed(1)}%` : '—', null]
+    ['loan.healthFactorNow', before == null ? t('loan.healthNone') : hf(before), bandBefore?.color, 'hf-now'],
+    after != null ? ['loan.healthFactorAfter', hf(after), bandAfter?.color, 'hf-after'] : null,
+    ['loan.currentLtv', pct(currentLtvPct), null, 'ltv-now'],
+    ['loan.maxLtv', pct(maxLtvPct), null, 'max-ltv'],
+    ['loan.liquidationThreshold', pct(threshold), null, 'threshold'],
+    ['loan.liqDistance', pct(risk?.liquidationDistancePct), null, 'distance']
   ].filter(Boolean);
+
+  /*
+   * The scale the health factor is drawn on. 1.00 is the liquidation point and
+   * is always on the scale; 3.00 is a ceiling chosen only because above it the
+   * difference between 4 and 6 stops meaning anything to a person.
+   */
+  const SCALE_MAX = 3;
+  const scalePos = (value) => (value == null ? null : Math.max(0, Math.min(100, ((Number(value) - 1) / (SCALE_MAX - 1)) * 100)));
+  const beforePos = scalePos(before);
+  const afterPos = scalePos(after);
+
+  /*
+   * The value line for one cost row. Each id means a different unit — dollars
+   * per day, dollars per month, a percentage — so the formatting lives here
+   * rather than in a generic interpolator that would print "0.0123".
+   */
+  const costValue = (row) => {
+    const v = row.values ?? {};
+    switch (row.id) {
+      case 'interestPerDay':
+      case 'savedPerDay':
+      case 'earnPerDay':
+        return `${t('loan.cost.approx')} ${fmtUsd(v.usd)} ${t('loan.cost.perDay')}`;
+      case 'interestHorizon':
+      case 'savedHorizon':
+      case 'earnHorizon':
+        return `${t('loan.cost.approx')} ${fmtUsd(v.usd)} ${t('loan.cost.overDays', { days: v.days })}`;
+      case 'priceFall':
+      case 'priceRise':
+      case 'ltvAfter':
+        return pct(v.pct);
+      default:
+        return t(`loan.cost.${row.id}Value`, v);
+    }
+  };
 
   return (
     <div
       data-testid="loan-risk-meter"
-      data-band={bandAfter?.level ?? bandBefore?.level ?? 'none'}
-      style={{
-        borderRadius: 12, padding: '10px 12px', marginBottom: 12,
-        background: `${bandAfter?.color ?? bandBefore?.color ?? '#60a5fa'}0f`,
-        border: `1px solid ${bandAfter?.color ?? bandBefore?.color ?? '#60a5fa'}33`,
-      }}
+      data-band={band?.level ?? 'none'}
+      className="loan-risk-card"
+      style={{ '--band': band?.color ?? '#60a5fa' }}
     >
-      <div className="row-between" style={{ gap: 8, marginBottom: 7 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-2)' }}>
-          {t('loan.riskTitle2')}
-        </span>
-        <span data-testid="loan-risk-level" style={{ fontSize: 10.5, fontWeight: 800, color: bandAfter?.color ?? bandBefore?.color }}>
-          {t(`loan.riskLevel.${bandAfter?.level ?? bandBefore?.level ?? 'none'}`)}
+      <div className="loan-risk-head">
+        <span className="loan-risk-title">{t('loan.riskTitle2')}</span>
+        <span
+          data-testid="loan-risk-level"
+          className="loan-risk-level"
+          style={{
+            color: band?.color ?? 'var(--text-2)',
+            borderColor: `${band?.color ?? '#60a5fa'}55`,
+            background: `${band?.color ?? '#60a5fa'}18`
+          }}
+        >
+          {t(`loan.riskLevel.${band?.level ?? 'none'}`)}
         </span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 10px' }}>
-        {rows.map(([key, value, color]) => (
-          <div key={key} className="row-between" style={{ gap: 6 }}>
-            <span className="faint" style={{ fontSize: 10 }}>{t(key)}</span>
-            <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--font-mono)', color: color || 'var(--text-1)' }}>{value}</span>
+
+      {/* ── the health-factor scale, with the liquidation point marked ──── */}
+      {before != null && (
+        <div className="loan-hf-scale" data-testid="loan-hf-scale">
+          <div className="loan-hf-track">
+            {afterPos != null && <span className="loan-hf-band" style={{ width: `${Math.max(beforePos ?? 0, afterPos)}%` }} />}
+            {beforePos != null && (
+              <span className="loan-hf-marker is-before" style={{ insetInlineStart: `${beforePos}%` }} title={t('loan.healthFactorNow')} />
+            )}
+            {afterPos != null && (
+              <span className="loan-hf-marker is-after" style={{ insetInlineStart: `${afterPos}%` }} title={t('loan.healthFactorAfter')} />
+            )}
+            <span className="loan-hf-liq" aria-hidden="true" />
+          </div>
+          <div className="loan-hf-legend">
+            <span className="loan-hf-liq-label">{t('loan.liquidationPoint')} 1.00</span>
+            <span className="loan-hf-scale-max">{SCALE_MAX}.00</span>
+          </div>
+        </div>
+      )}
+
+      <div className="loan-risk-grid">
+        {rows.map(([key, value, color, testId]) => (
+          <div key={key} className="loan-risk-row" data-testid={`loan-risk-${testId}`}>
+            <span className="loan-risk-label">{t(key)}</span>
+            <span className="loan-risk-value" style={color ? { color } : undefined}>{value}</span>
           </div>
         ))}
       </div>
-      {after != null && before != null && (
-        <p data-testid="loan-risk-delta" style={{ fontSize: 10.5, lineHeight: 1.6, color: 'var(--text-2)', margin: '7px 0 0' }}>
-          {t('loan.riskDelta', { before: before.toFixed(2), after: after.toFixed(2), liq: '1.00' })}
+
+      {/* ── what this can cost, from the pool's own numbers ─────────────── */}
+      {cost?.rows?.length > 0 && (
+        <div className="loan-cost-block" data-testid="loan-cost-block">
+          <div className="loan-cost-title">{t('loan.cost.title')}</div>
+          {cost.rows.map((row) => (
+            <div key={row.id} className="loan-cost-row" data-testid={`loan-cost-${row.id}`}>
+              <span className="loan-cost-label">{t(`loan.cost.${row.id}`)}</span>
+              <span className="loan-cost-value">{costValue(row)}</span>
+            </div>
+          ))}
+          {cost.interest && (
+            <p className="loan-cost-note">
+              {t('loan.cost.rateIsVariable', { apy: Number(cost.interest.apyPct).toFixed(2) })}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* The distance to liquidation, in the units of a price move. */}
+      {touch.ok && (
+        <p className="loan-touch" data-testid="loan-liquidation-touch">
+          {t('loan.liquidationTouch', {
+            drop: touch.collateralDropPct.toFixed(1),
+            rise: touch.debtRisePct.toFixed(1)
+          })}
         </p>
       )}
+
+      {/* ── what could not be computed, and why ─────────────────────────── */}
       {projection && !projection.ok && (
-        <p data-testid="loan-risk-unavailable" style={{ fontSize: 10.5, lineHeight: 1.6, color: '#fbbf24', margin: '7px 0 0' }}>
+        <p className="loan-risk-unavailable" data-testid="loan-risk-unavailable">
           {t('loan.riskUnavailable', { reason: loanErrorText(t, projection.reason) })}
         </p>
       )}
+      {!account?.ok && (
+        <p className="loan-risk-hint" data-testid="loan-risk-connect-hint">
+          {t('loan.riskConnectHint')}
+        </p>
+      )}
+
       {/* §41 — never a guarantee. */}
-      <p className="faint" style={{ fontSize: 9.5, lineHeight: 1.6, margin: '7px 0 0' }}>
-        {t('loan.riskNoGuarantee')}
-      </p>
+      <p className="loan-risk-note">{t('loan.riskNoGuarantee')}</p>
     </div>
   );
 }
@@ -1085,7 +1245,13 @@ function ExecutionSheet({ exec, asset, machine, onConfirm, onCancel, onDone, onR
                 numbers: current health factor, the health factor after, the
                 liquidation threshold and the distance to it. */}
             {exec?.risk?.ok && (exec.risk.healthFactorAfter != null || exec.risk.healthFactorBefore != null) && (
-              <RiskMeter projection={exec.risk} account={exec.account ?? null} t={t} />
+              <RiskMeter
+                projection={exec.risk}
+                account={exec.account ?? null}
+                t={t}
+                reserve={exec.reserve ?? null}
+                cost={exec.cost ?? null}
+              />
             )}
             {exec?.risk && !exec.risk.ok && (
               <p data-testid="loan-exec-risk-unavailable" style={{
@@ -1800,6 +1966,35 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
     })
     : null), [market, selected, amountWei?.toString(), collateralWei?.toString(), collateralAsset]);
 
+  /*
+   * The cost side of this exact borrow, computed from what is typed — the
+   * interest that will accrue per day and per month at the pool's CURRENT
+   * variable rate, and the collateral-price distance to the liquidation point.
+   *
+   * It needs no wallet: the rate comes from the reserve, the health factor from
+   * the projection when there is one and from the account when there is not.
+   * That is why the panel is useful BEFORE a wallet is connected, which is
+   * where the old version showed nothing at all.
+   */
+  const borrowCost = useMemo(() => {
+    if (!selected) return null;
+    const pricedUsd = Number(projected?.addDebtUsd);
+    const typedUsd = Number.isFinite(pricedUsd) && pricedUsd > 0
+      ? pricedUsd
+      : (amountWei != null && amountWei > 0n && prices?.[selected.id]?.usd != null
+        ? Number(fromUnits(amountWei, decimals)) * Number(prices[selected.id].usd)
+        : null);
+    return actionCostBreakdown({
+      action: 'borrow',
+      amountUsd: typedUsd,
+      apyPct: reserve?.borrowApyPct ?? null,
+      healthFactorBefore: projected?.healthFactorBefore ?? account?.healthFactor ?? null,
+      healthFactorAfter: projected?.healthFactorAfter ?? null,
+      assessmentAfter: projected?.assessmentAfter ?? null,
+      horizonDays: 30
+    });
+  }, [selected?.id, amountWei?.toString(), projected, reserve?.borrowApyPct, account?.healthFactor, prices, decimals]);
+
   /* §9/§11/§20 — the whole pre-flight. Blocks on: paused/frozen reserve,
      borrowing disabled, amount above the pool's liquidity, above the borrow
      cap, above the user's capacity, a resulting health factor below the floor,
@@ -2041,9 +2236,19 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
                 <p style={{ fontSize: 11.5, color: '#fbbf24', margin: '0 0 10px' }}>{t('loan.needCollateralFirst')}</p>
               )}
 
-              {/* §13/§14 — the numbers behind the warning, before the signature. */}
-              {account?.ok && (
-                <RiskMeter projection={projected} account={account} t={t} />
+              {/* §13/§14 — the numbers behind the warning, before the signature.
+                  It renders whether or not a wallet is connected: the reserve's
+                  own parameters (max LTV, liquidation threshold) and the cost of
+                  the amount typed are available WITHOUT an account, and hiding
+                  them behind an unread wallet is the "اطلاعات ناقص" report. */}
+              {selected && (
+                <RiskMeter
+                  projection={walletState === 'connected' ? projected : null}
+                  account={account}
+                  t={t}
+                  reserve={reserve}
+                  cost={borrowCost}
+                />
               )}
 
               <ReasonList items={decision.blocked} tone="danger" t={t} lang={lang} testId="loan-borrow-blocked" />
@@ -2999,10 +3204,45 @@ export default function Loan() {
       })()
       : projectActionRisk({
         market: { chainId: chain, reserves, prices, account, userConfiguration, oracleStatus },
-        action, amountWei, asset,
+        action,
+        /*
+         * §16/§17 — a MAX action SIGNS the protocol's "all of it" sentinel. The
+         * projection must be told which sentinel it is looking at and what the
+         * real balance/debt behind it is, because the sentinel itself is 2^256-1:
+         * pricing that number directly would print an absurd USD figure and a
+         * health factor that looks authoritative while meaning nothing. Passing
+         * the resolved `maxWei` as `amountWei` alone would hide the fact that
+         * this is a MAX at all — a full repay would then be projected as an
+         * ordinary repayment of today's debt, instead of "no debt left".
+         */
+        amountWei: isMax && maxWei != null ? 'max' : amountWei,
+        maxAmountWei: isMax ? maxWei : null,
+        asset,
         collateralAmountWei: collateralWei,
         collateralAsset: collateralAsset ?? asset
       });
+
+    /*
+     * §13/§14 — what this action costs, computed before the sheet opens so the
+     * review shows it without a second round-trip: the interest the pool will
+     * charge at its current rate (per day and per 30 days), and how far the
+     * collateral price can move before the liquidation point. `addDebtUsd` /
+     * `addCollateralUsd` on the projection are the amounts ALREADY PRICED by
+     * the protocol oracle, so the cost figures cannot disagree with the risk
+     * figures beside them.
+     */
+    const pricedUsd = action === 'borrow' || action === 'repay'
+      ? Math.abs(Number(risk?.addDebtUsd) || 0)
+      : Math.abs(Number(risk?.addCollateralUsd) || 0);
+    const cost = actionCostBreakdown({
+      action,
+      amountUsd: pricedUsd > 0 ? pricedUsd : null,
+      apyPct: action === 'borrow' || action === 'repay' ? reserve?.borrowApyPct ?? null : reserve?.supplyApyPct ?? null,
+      healthFactorBefore: risk?.healthFactorBefore ?? account?.healthFactor ?? null,
+      healthFactorAfter: risk?.healthFactorAfter ?? null,
+      assessmentAfter: risk?.assessmentAfter ?? null,
+      horizonDays: 30
+    });
 
     const review = [
       [t('loan.asset'), asset.symbol],
@@ -3070,6 +3310,8 @@ export default function Loan() {
       review,
       plan,
       risk,
+      cost,
+      reserve,
       account,
       warnings: decision.warnings,
       simulation: null,
@@ -3413,44 +3655,61 @@ export default function Loan() {
           <h1 className="h1" style={{ margin: 0, fontSize: 20 }}>{t('loan.pageTitle')}</h1>
           <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>{t('loan.pageSubtitle')}</p>
         </div>
-        {/* §23 — the alert bell: count only, no white border. */}
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          data-testid="loan-alerts-bell"
-          data-count={alerts.length}
-          aria-label={t('loan.alerts.title')}
-          onClick={() => { haptic?.('light'); setAlertsOpen((open) => !open); }}
-          style={{ position: 'relative' }}
-        >
-          <span style={{ fontSize: 13 }}>🔔</span>
-          {alerts.length > 0 && (
-            <span
-              style={{
-                position: 'absolute', top: -4, right: -4, minWidth: 15, height: 15, borderRadius: 99,
-                background: alerts.some((a) => a.severity === 'critical') ? '#f87171' : '#fbbf24',
-                color: '#0b0b10', fontSize: 9, fontWeight: 800,
-                display: 'grid', placeItems: 'center', padding: '0 3px',
-              }}
+        {/*
+          §23 — the alert bell, as a real control.
+
+          Reported: «آیکون زنگوله و اپدیت را مدرن‌تر کن … با انیمیشن و svg خیلی
+          زیباتر». The glyph here used to be the literal emoji character 🔔,
+          which renders as a different picture on every OS, cannot be coloured,
+          and is exactly what made the header look dated. It is now the app's
+          own line-art SVG inside a gradient control whose colour follows the
+          WORST alert severity — amber for a watch item, red for critical — so
+          the header says how bad it is before it is opened. The badge is a
+          gradient pill carrying the count, and the bell swings only while
+          there is something to read.
+        */}
+        {(() => {
+          const critical = alerts.some((a) => a.severity === 'critical');
+          return (
+            <button
+              type="button"
+              className="loan-icon-btn is-bell"
+              data-testid="loan-alerts-bell"
+              data-count={alerts.length}
+              data-critical={critical ? 'true' : 'false'}
+              aria-label={t('loan.alerts.title')}
+              aria-expanded={alertsOpen}
+              onClick={() => { haptic?.('light'); setAlertsOpen((open) => !open); }}
             >
-              {alerts.length}
-            </span>
-          )}
-        </button>
+              <span className="loan-bell-halo" aria-hidden="true" />
+              <span className="loan-bell-swing">
+                <IconBell width={19} height={19} />
+              </span>
+              {alerts.length > 0 && (
+                <span className="loan-icon-badge" data-testid="loan-alerts-count">{alerts.length}</span>
+              )}
+            </button>
+          );
+        })()}
+
+        {/*
+          Refresh: the same control language, with motion that MEANS something —
+          the glyph turns only while a read is actually in flight, and the ring
+          around the button sweeps with it. Nothing spins when nothing is
+          loading, which is the property that makes the spin readable.
+        */}
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="loan-icon-btn is-refresh"
           onClick={refresh}
           data-testid="loan-refresh"
+          data-loading={loading ? 'true' : 'false'}
           aria-label={t('common.refresh', { defaultValue: 'Refresh' })}
         >
-          <motion.span
-            animate={loading ? { rotate: 360 } : { rotate: 0 }}
-            transition={loading ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { duration: 0.2 }}
-            style={{ display: 'inline-flex' }}
-          >
-            <IconSwap width={13} height={13} />
-          </motion.span>
+          <span className="loan-icon-ring" aria-hidden="true" />
+          <span className="loan-icon-spin">
+            <IconRefresh width={18} height={18} />
+          </span>
         </button>
       </motion.div>
 
