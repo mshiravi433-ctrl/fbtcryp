@@ -7274,6 +7274,339 @@ body { overflow-x: clip; }
 .hist-caution .hist-dot { background: var(--ink-amber); }
 .hist-notable { color: var(--text-1); }
 
+/* ==========================================================================
+   WHAT THE PAST SAYS — the modern box (.hist-card and its parts)
+   --------------------------------------------------------------------------
+   «گذشته چه می‌گوید را باکس را مدرن‌تر … و با تحلیل‌های به‌روز و درست‌تر کن»
+
+   A redesign of PRESENTATION ONLY. The measurement layer (lib/history.js) is
+   untouched by styling decisions, and every visual here renders a number that
+   was already computed — nothing is animated into looking like a signal.
+
+   ─── THE THREE RULES THIS DESIGN FOLLOWS ───────────────────────────────────
+   1. NOTHING GLOWS MEANING. There is no green/red. Tone is carried by the two
+      INK accents already in the palette (cyan = notable, amber = caution), the
+      same restraint the old dot list had, so a measurement can never read as
+      a recommendation.
+   2. THE SAMPLE COMES FIRST. The chips (sample size, measured levels, typical
+      day) sit above the facts, because every fact below is measured from them.
+   3. IT CLOSES. The box is a disclosure: open on the full token page, closed
+      in the watchlist rows, with the header staying informative either way.
+   ========================================================================== */
+
+.hist-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(0, 229, 255, 0.07) 0%, transparent 58%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* A hairline of the RGB spectrum along the top edge — the box reads as part of
+   the product without any of it implying direction. */
+.hist-card::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--rgb-2), var(--rgb-1), transparent);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.hist-card .hist-head {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 13px 14px;
+  text-align: start;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: inherit;
+  font-family: inherit;
+}
+
+.hist-glyph {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--rgb-1);
+  background: linear-gradient(140deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.14));
+  border: 1px solid rgba(0, 229, 255, 0.22);
+}
+
+.hist-glyph-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.hist-card.is-open .hist-glyph-ring { opacity: 1; }
+
+.hist-head-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.hist-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.hist-sub {
+  font-size: 10.8px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+
+.hist-chev {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+
+.hist-body {
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 12px;
+}
+
+/* ---- the sample, stated first -------------------------------------------- */
+
+.hist-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  font-size: 10.2px;
+}
+
+.hist-chip-label { color: var(--text-3); }
+.hist-chip-value { color: var(--text-1); font-weight: 800; font-family: var(--font-mono); }
+
+/* ---- where the price sits in the window ---------------------------------- */
+
+.hist-gauge { display: grid; gap: 6px; }
+
+.hist-gauge-track {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: visible;
+}
+
+.hist-gauge-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, rgba(124, 77, 255, 0.65), rgba(0, 229, 255, 0.65));
+}
+
+.hist-gauge-pin {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--text-1);
+  box-shadow: 0 0 0 4px rgba(0, 229, 255, 0.18), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.hist-gauge-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.hist-gauge-now {
+  font-weight: 800;
+  color: var(--rgb-1);
+  font-size: 10.4px;
+}
+
+/* ---- the levels within reach --------------------------------------------- */
+
+.hist-ladder { display: grid; gap: 6px; }
+
+.hist-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.hist-ladder-row {
+  display: grid;
+  grid-template-columns: 14px minmax(72px, auto) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.hist-ladder-arrow { font-size: 9px; line-height: 1; }
+.hist-ladder-arrow.down { color: var(--ink-cyan); }
+.hist-ladder-arrow.up { color: var(--ink-violet, #a78bfa); }
+
+.hist-ladder-price { color: var(--text-1); font-weight: 700; font-size: 11.5px; }
+
+.hist-ladder-track {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.hist-ladder-track > span {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.8), rgba(124, 77, 255, 0.7));
+}
+
+.hist-ladder-meta { color: var(--text-3); font-size: 10px; white-space: nowrap; }
+
+/* ---- the facts ------------------------------------------------------------ */
+
+.hist-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+@media (min-width: 560px) {
+  .hist-grid { grid-template-columns: 1fr 1fr; }
+  .hist-grid .hist-item { align-items: flex-start; }
+}
+
+.hist-card .hist-item {
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  gap: 8px;
+}
+
+.hist-item-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.hist-item-text { flex: 1; min-width: 0; }
+
+.hist-card .hist-notable {
+  color: var(--text-1);
+  border-color: rgba(0, 229, 255, 0.22);
+  background: linear-gradient(120deg, rgba(0, 229, 255, 0.08), rgba(255, 255, 255, 0.025));
+}
+
+.hist-card .hist-notable .hist-item-icon { color: var(--ink-cyan); background: rgba(0, 229, 255, 0.12); }
+
+.hist-card .hist-caution {
+  border-color: rgba(255, 179, 0, 0.22);
+  background: linear-gradient(120deg, rgba(255, 179, 0, 0.08), rgba(255, 255, 255, 0.025));
+}
+
+.hist-card .hist-caution .hist-item-icon { color: var(--ink-amber); background: rgba(255, 179, 0, 0.12); }
+
+.hist-foot-meta {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.7;
+}
+
+.hist-notadvice {
+  margin: 0;
+  font-size: 10.4px;
+  line-height: 1.7;
+  color: var(--text-3);
+  padding-top: 2px;
+  border-top: 1px dashed var(--line);
+}
+
+/* ---- light theme ---------------------------------------------------------- */
+
+:root[data-theme='light'] .hist-card {
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(0, 131, 146, 0.07) 0%, transparent 58%),
+    #ffffff;
+  box-shadow: 0 8px 24px rgba(20, 32, 58, 0.08);
+}
+
+:root[data-theme='light'] .hist-card .hist-item,
+:root[data-theme='light'] .hist-ladder-row,
+:root[data-theme='light'] .hist-chip {
+  background: rgba(20, 32, 58, 0.03);
+}
+
+:root[data-theme='light'] .hist-gauge-track { background: rgba(20, 32, 58, 0.10); }
+:root[data-theme='light'] .hist-ladder-track { background: rgba(20, 32, 58, 0.10); }
+:root[data-theme='light'] .hist-item-icon { background: rgba(20, 32, 58, 0.05); }
+:root[data-theme='light'] .hist-glyph {
+  background: linear-gradient(140deg, rgba(0, 131, 146, 0.12), rgba(106, 58, 224, 0.10));
+  border-color: rgba(0, 131, 146, 0.24);
+  color: var(--ink-cyan);
+}
+
+/* Motion budget: the whole card animates on open/close only, and every
+   transition here is transform/opacity so it stays composited. */
+@media (prefers-reduced-motion: reduce) {
+  .hist-gauge-pin,
+  .hist-chev,
+  .hist-ladder-track > span,
+  .hist-gauge-fill { transition: none !important; animation: none !important; }
+}
+
 /* Tutorial video buttons. Two side by side (Persian / English) rather than
    one, because YouTube does not load on most Iranian networks — see the note
    in Docs.jsx about why the Persian option is listed first. */

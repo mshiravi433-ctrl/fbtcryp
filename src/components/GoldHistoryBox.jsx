@@ -5,6 +5,7 @@ import Sparkline from './Sparkline';
 import TokenIcon from '../lib/tokenIcon';
 import { fmtCompact, fmtPct, fmtPrice } from '../lib/format';
 import { equitySeriesFacts } from '../lib/equityAnalysis';
+import { historyFactKey } from '../lib/history';
 import { fetchEquityChartWindowed, isUsableSeries } from '../lib/equityChart';
 import { usePoll } from '../hooks/useMarket';
 import { IconChevronRight } from './Icons';
@@ -97,7 +98,11 @@ function GoldFacts({ asset }) {
     for (const key of ['price', 'low', 'high']) {
       if (v[key] != null) v[key] = fmtPrice(v[key]);
     }
-    return t(`history.equity.${id}`, v);
+    if (v.side === 'above' || v.side === 'below') v.side = t(`history.side${v.side === 'above' ? 'Above' : 'Below'}`);
+    if (v.dir === 'up' || v.dir === 'down') v.dir = t(`history.dir${v.dir === 'up' ? 'Up' : 'Down'}`);
+    /* Same rule as EquityAnalysis: shared facts are `history.*`, not
+       `history.equity.*` — see historyFactKey() in lib/history.js. */
+    return t(historyFactKey(id, { equity: true }), v);
   };
 
   return (

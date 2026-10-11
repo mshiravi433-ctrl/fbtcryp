@@ -1010,6 +1010,195 @@ export function projectActionRisk({ market, action, amountWei, asset, collateral
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   §13/§14 — THE DISTANCE TO LIQUIDATION AND WHAT AN ACTION COSTS
+   ---------------------------------------------------------------------------
+   Reported: «در صفحه وام برای وام‌گیری — این عملیات چه هزینه‌ای می‌تواند داشته
+   باشد — اطلاعات ان ناقص است».
+
+   The sheet already said what the position IS (health factor, threshold, LTV)
+   and what the network fee is. What it never said is the two things a borrower
+   actually decides on:
+
+     · HOW FAR THE POSITION IS FROM LIQUIDATION, as a move in the collateral's
+       price — not as a health-factor number the user has to translate.
+     · WHAT HOLDING THE LOAN COSTS — the interest that accrues every day at the
+       pool's own current rate, which is what makes a long-term borrow
+       expensive even when the price never moves.
+
+   Both are arithmetic over values the pool already reported. Neither predicts
+   anything: the interest projection is explicitly "if today's variable rate
+   held", and the price distance is a statement about the CURRENT block.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Distance to the liquidation point, expressed as price moves.
+ *
+ * ─── THE ARITHMETIC ─────────────────────────────────────────────────────────
+ * Aave-family liquidation happens when
+ *
+ *     collateralValue × liquidationThreshold < debtValue
+ *
+ * so with a current health factor HF = (C·T)/D, the collateral value can fall
+ * to C/HF before the position is liquidatable — a fall of (1 − 1/HF)·100
+ * percent. The same relation read the other way gives how far the DEBT asset
+ * can rise before it happens, which matters when the borrowed asset is the
+ * volatile one:
+ *
+ *     debt can rise to D·HF — an increase of (HF − 1)·100 percent.
+ *
+ * Both numbers use the health factor the protocol reported, so they are
+ * consistent with the figure shown two rows above them; when no health factor
+ * is available (no debt yet, or the account could not be read) the function
+ * says so with a reason instead of printing a zero that reads as "at risk".
+ *
+ * @returns {{ok:true, collateralDropPct, debtRisePct, healthFactor}|{ok:false, reason}}
+ */
+export function liquidationTouchPoints({
+  healthFactor = null,
+  totalCollateralUsd = null,
+  totalDebtUsd = null,
+  liquidationThresholdPct = null
+} = {}) {
+  const debt = Number(totalDebtUsd);
+  const collateral = Number(totalCollateralUsd);
+  const threshold = Number(liquidationThresholdPct);
+  const hf = healthFactor == null ? null : Number(healthFactor);
+
+  /* Debt-free is not "far from liquidation", it is UNDEFINED: with no debt
+     there is nothing to liquidate. Reported as a reason, never as 100%. */
+  if ((Number.isFinite(debt) && debt <= 0) && hf == null) return { ok: false, reason: 'NO_DEBT' };
+
+  let factor = Number.isFinite(hf) && hf > 0 ? hf : null;
+  if (factor == null) {
+    if (!Number.isFinite(debt) || !Number.isFinite(collateral) || !Number.isFinite(threshold) || threshold <= 0 || collateral <= 0) {
+      return { ok: false, reason: 'LIQUIDATION_DISTANCE_UNAVAILABLE' };
+    }
+    factor = (collateral * (threshold / 100)) / debt;
+  }
+  if (!Number.isFinite(factor) || factor <= 0) return { ok: false, reason: 'LIQUIDATION_DISTANCE_UNAVAILABLE' };
+
+  return {
+    ok: true,
+    healthFactor: factor,
+    /* A fall of this many percent reaches the liquidation point. */
+    collateralDropPct: Math.max(0, (1 - 1 / factor) * 100),
+    /* …and a rise of this many percent in the debt's own price does too. */
+    debtRisePct: Math.max(0, (factor - 1) * 100)
+  };
+}
+
+/**
+ * What holding a loan (or a deposit) costs over a horizon, at TODAY'S rate.
+ *
+ * ─── WHY LINEAR, AND WHY THAT IS SAID OUT LOUD ──────────────────────────────
+ * The pool's rate is per-second and VARIABLE. Compounding it forward for a
+ * month would produce a number with more decimals than truth: the rate that
+ * applies next week is not the rate read now. So the projection is deliberately
+ * linear — `amount × apy/100 × days/365` — and every caller is expected to
+ * label it "if today's rate held", which is exactly what it is. A projection
+ * that looks precise about a variable it cannot know is the kind of number
+ * this codebase refuses to print.
+ *
+ * @returns {{ok:true, perDayUsd, horizonUsd, horizonDays, apyPct}|{ok:false, reason}}
+ */
+export function projectInterestCost({ amountUsd = null, apyPct = null, days = 30 } = {}) {
+  const horizon = Math.max(1, Math.floor(Number(days) || 30));
+  /*
+   * `null` is NOT zero here. `Number(null)` is 0, which would turn "the amount
+   * could not be priced" into "the loan costs $0.00" — a confident figure built
+   * on a missing read, which is the one thing this panel is not allowed to do.
+   */
+  if (amountUsd == null || String(amountUsd).trim() === '') return { ok: false, reason: 'AMOUNT_UNAVAILABLE' };
+  if (apyPct == null || String(apyPct).trim() === '') return { ok: false, reason: 'RATE_UNAVAILABLE' };
+  const amount = Number(amountUsd);
+  const apy = Number(apyPct);
+  if (!Number.isFinite(amount) || amount < 0) return { ok: false, reason: 'AMOUNT_UNAVAILABLE' };
+  if (!Number.isFinite(apy) || apy < 0) return { ok: false, reason: 'RATE_UNAVAILABLE' };
+  return {
+    ok: true,
+    apyPct: apy,
+    horizonDays: horizon,
+    perDayUsd: (amount * (apy / 100)) / 365,
+    horizonUsd: (amount * (apy / 100) * horizon) / 365
+  };
+}
+
+/**
+ * The whole cost side of one action, in the units the sheet renders.
+ *
+ * Collects — never invents — the numbers and returns `null` for each one that
+ * genuinely could not be read, so the UI can leave that row out rather than
+ * print a zero. `feeUsd`/`feeNative` come from the gas estimate, `apyPct` from
+ * the reserve the pool reported, `dropPct` from the projection's own health
+ * factor.
+ *
+ * @returns {{ok:boolean, rows:Array, ltvAfterPct:number|null, dropPct:number|null,
+ *            debtRisePct:number|null, interest:object|null, net:object|null}}
+ */
+export function actionCostBreakdown({
+  action = 'borrow',
+  amountUsd = null,
+  apyPct = null,
+  healthFactorBefore = null,
+  healthFactorAfter = null,
+  assessmentAfter = null,
+  horizonDays = 30
+} = {}) {
+  const rows = [];
+  const amount = Number(amountUsd);
+  const hasAmount = Number.isFinite(amount) && amount > 0;
+
+  /*
+   * The time cost of the action — interest accrued for a borrow, interest
+   * stopped for a repay, earnings for a supply. One arithmetic, three labels:
+   * the number is the same, what it MEANS is not, and printing "you saved
+   * $1.20 this month" next to "the loan costs $1.20 this month" is the whole
+   * difference between the two rows.
+   */
+  const carriesInterest = action === 'borrow' || action === 'supply' || action === 'repay';
+  const interest = carriesInterest
+    ? projectInterestCost({ amountUsd: hasAmount ? amount : null, apyPct, days: horizonDays })
+    : null;
+
+  const ltvAfterPct = Number.isFinite(Number(assessmentAfter?.ltvPct)) ? Number(assessmentAfter.ltvPct) : null;
+
+  /*
+   * The liquidation distance is taken from the health factor AFTER the action
+   * when there is one — that is the position the user will actually be holding
+   * — and from the current health factor before anything is borrowed.
+   */
+  const touch = liquidationTouchPoints({ healthFactor: healthFactorAfter ?? healthFactorBefore });
+
+  if (interest?.ok) {
+    const perDayId = action === 'repay' ? 'savedPerDay' : action === 'supply' ? 'earnPerDay' : 'interestPerDay';
+    const horizonId = action === 'repay' ? 'savedHorizon' : action === 'supply' ? 'earnHorizon' : 'interestHorizon';
+    rows.push({ id: perDayId, values: { usd: interest.perDayUsd, apy: interest.apyPct } });
+    rows.push({
+      id: horizonId,
+      values: { usd: interest.horizonUsd, days: interest.horizonDays, apy: interest.apyPct }
+    });
+  }
+  if (touch.ok) {
+    rows.push({ id: 'priceFall', values: { pct: touch.collateralDropPct } });
+    rows.push({ id: 'priceRise', values: { pct: touch.debtRisePct } });
+  }
+  if (ltvAfterPct != null && Number.isFinite(ltvAfterPct)) {
+    rows.push({ id: 'ltvAfter', values: { pct: ltvAfterPct } });
+  }
+
+  return {
+    ok: true,
+    rows,
+    amountUsd: hasAmount ? amount : null,
+    ltvAfterPct,
+    dropPct: touch.ok ? touch.collateralDropPct : null,
+    debtRisePct: touch.ok ? touch.debtRisePct : null,
+    interest: interest?.ok ? interest : null,
+    net: null
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    §9/§11/§17/§20 — THE PRE-FLIGHT DECISION
    ═══════════════════════════════════════════════════════════════════════════ */
 

@@ -1,0 +1,441 @@
+/* ==========================================================================
+   LOAN — THE RISK & COST PANEL, AND THE HEADER ACTIONS
+   --------------------------------------------------------------------------
+   Asked for:
+     «در صفحه وام برای وام‌گیری این عملیات چه هزینه‌ای می‌تواند داشته باشد —
+      اطلاعات ان ناقص است …»
+     «در صفحه وام آیکون زنگوله و آپدیت را مدرن‌تر کن و باکس را با رنگ‌بندی
+      درست و انیمیشن و svg خیلی زیباتر کن»
+
+   ─── THE COLOUR RULE ───────────────────────────────────────────────────────
+   The panel has exactly ONE accent, `--band`, and it is set by the risk band
+   the engine reported (healthy / moderate / warning / critical / liquidatable)
+   — never by anything in this stylesheet. So the box cannot imply a risk level
+   the engine did not measure, and the health-factor markers, the border and
+   the level chip are guaranteed to agree with each other.
+
+   The health-factor SCALE is drawn with the app's colour tokens (down → amber
+   → up) because it is a scale, not a verdict: 1.00 is the liquidation point on
+   it, and where the markers sit is the measurement.
+
+   ─── THE MOTION BUDGET ─────────────────────────────────────────────────────
+   Only three things move, all of them composited transform/opacity, and all of
+   them disabled under prefers-reduced-motion:
+     · the health-factor markers slide into place once, when the numbers change
+     · the refresh glyph spins while a read is in flight
+     · the bell swings when there is something to read
+   ========================================================================== */
+
+.loan-risk-card {
+  --band: #60a5fa;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 13px 14px;
+  margin-bottom: 12px;
+  border: 1px solid color-mix(in srgb, var(--band) 34%, transparent);
+  background:
+    radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--band) 16%, transparent) 0%, transparent 62%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.20);
+}
+
+/* A hairline in the band's colour along the leading edge — the only decoration,
+   and it is derived from the engine's own band. */
+.loan-risk-card::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--band);
+  opacity: 0.85;
+}
+
+.loan-risk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.loan-risk-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+
+.loan-risk-level {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+}
+
+/* ---- the health-factor scale --------------------------------------------- */
+
+.loan-hf-scale { margin-bottom: 11px; }
+
+.loan-hf-track {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.30) 0%, rgba(251, 191, 36, 0.24) 26%, rgba(74, 222, 128, 0.22) 70%, rgba(74, 222, 128, 0.34) 100%);
+  border: 1px solid var(--line);
+}
+
+/* The distance between the current health factor and the projected one. */
+.loan-hf-band {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--band) 45%, transparent));
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.loan-hf-marker {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: inset-inline-start 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.loan-hf-marker.is-before {
+  background: var(--bg-panel-solid, #0a0c12);
+  border: 2px solid var(--text-2);
+}
+
+.loan-hf-marker.is-after {
+  background: var(--band);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--band) 22%, transparent);
+}
+
+/* The liquidation point: 1.00 on this scale, always at the start. */
+.loan-hf-liq {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: -4px;
+  width: 2px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(180deg, var(--down, #ff3b6b) 0 3px, transparent 3px 6px);
+}
+
+.loan-hf-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 9.5px;
+  color: var(--text-3);
+}
+
+.loan-hf-liq-label { color: var(--down, #ff3b6b); font-weight: 700; }
+.loan-hf-scale-max { font-family: var(--font-mono); }
+
+/* ---- the four risk numbers ----------------------------------------------- */
+
+.loan-risk-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+
+.loan-risk-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.loan-risk-label {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loan-risk-value {
+  font-size: 10.8px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-1);
+  flex: 0 0 auto;
+}
+
+/* ---- what it costs -------------------------------------------------------- */
+
+.loan-cost-block {
+  margin-top: 11px;
+  padding: 10px 11px;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+}
+
+.loan-cost-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.loan-cost-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.loan-cost-label {
+  font-size: 10.6px;
+  line-height: 1.6;
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.loan-cost-value {
+  font-size: 10.8px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-1);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.loan-cost-note {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
+/* ---- the distance to liquidation, in price-move units -------------------- */
+
+.loan-touch {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 11px;
+  font-size: 10.4px;
+  line-height: 1.75;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--band) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--band) 26%, transparent);
+}
+
+.loan-risk-unavailable,
+.loan-risk-hint {
+  margin: 8px 0 0;
+  font-size: 10.4px;
+  line-height: 1.7;
+  color: #fbbf24;
+}
+
+.loan-risk-hint { color: var(--text-3); }
+
+.loan-risk-note {
+  margin: 8px 0 0;
+  font-size: 9.4px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+
+/* ---- light theme ---------------------------------------------------------- */
+
+:root[data-theme='light'] .loan-risk-card {
+  background:
+    radial-gradient(120% 130% at 100% 0%, color-mix(in srgb, var(--band) 12%, transparent) 0%, transparent 62%),
+    #ffffff;
+  box-shadow: 0 8px 22px rgba(20, 32, 58, 0.08);
+}
+
+:root[data-theme='light'] .loan-cost-block { background: rgba(20, 32, 58, 0.03); }
+:root[data-theme='light'] .loan-hf-marker.is-before { background: #ffffff; }
+
+/* ==========================================================================
+   HEADER ACTIONS — the bell and the refresh, as real controls
+   --------------------------------------------------------------------------
+   «آیکون زنگوله و اپدیت را مدرن‌تر کن … با انیمیشن و svg خیلی زیباتر»
+
+   Both were emoji-ish glyphs on a ghost button: the bell was the literal 🔔
+   character (which renders as a different picture on every OS, cannot be
+   recoloured, and looks dated — the exact complaint), and refresh reused the
+   swap arrows. They are now SVG controls with their own colour, a pressed
+   state, and motion that MEANS something:
+
+     · the bell swings only while it has alerts, and its badge is a gradient
+       pill whose colour is derived from the worst alert severity
+     · the refresh glyph rotates only while a read is actually in flight
+
+   No new colours are introduced: they are the app's RGB tokens, so the header
+   matches the rest of the product in both themes.
+   ========================================================================== */
+
+.loan-icon-btn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  cursor: pointer;
+  color: var(--text-1);
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03));
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.loan-icon-btn:hover { transform: translateY(-1px); }
+.loan-icon-btn:active { transform: translateY(0) scale(0.96); }
+.loan-icon-btn:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+.loan-icon-btn.is-bell {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+  background: linear-gradient(150deg, rgba(251, 191, 36, 0.18), rgba(255, 45, 149, 0.10));
+  box-shadow: 0 6px 18px rgba(251, 191, 36, 0.14);
+}
+
+.loan-icon-btn.is-bell[data-count='0'] {
+  color: var(--text-2);
+  border-color: var(--line);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  box-shadow: none;
+}
+
+.loan-icon-btn.is-bell[data-critical='true'] {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.40);
+  background: linear-gradient(150deg, rgba(248, 113, 113, 0.20), rgba(255, 45, 149, 0.12));
+  box-shadow: 0 6px 18px rgba(248, 113, 113, 0.18);
+}
+
+.loan-icon-btn.is-refresh {
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.32);
+  background: linear-gradient(150deg, rgba(96, 165, 250, 0.18), rgba(124, 77, 255, 0.12));
+  box-shadow: 0 6px 18px rgba(96, 165, 250, 0.14);
+}
+
+.loan-icon-btn.is-refresh[data-loading='true'] {
+  color: var(--rgb-1);
+  border-color: rgba(0, 229, 255, 0.40);
+}
+
+/* The ring that sweeps while a read is in flight — an honest spinner: it is
+   only on screen while the read exists. */
+.loan-icon-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 15px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.loan-icon-btn[data-loading='true'] .loan-icon-ring {
+  opacity: 0.9;
+  animation: loan-spin 0.9s linear infinite;
+}
+
+.loan-icon-spin { display: inline-flex; }
+.loan-icon-btn[data-loading='true'] .loan-icon-spin { animation: loan-spin 0.9s linear infinite; }
+
+@keyframes loan-spin { to { transform: rotate(360deg); } }
+
+/* The bell swings while it has something to say, and stops when it does not. */
+.loan-bell-swing { display: inline-flex; transform-origin: 50% 12%; }
+.loan-icon-btn.is-bell[data-count]:not([data-count='0']) .loan-bell-swing {
+  animation: loan-bell 2.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+}
+
+@keyframes loan-bell {
+  0%, 62%, 100% { transform: rotate(0deg); }
+  68% { transform: rotate(12deg); }
+  74% { transform: rotate(-10deg); }
+  80% { transform: rotate(6deg); }
+  86% { transform: rotate(-4deg); }
+  92% { transform: rotate(0deg); }
+}
+
+/* A soft halo behind the bell when something is critical — attention without
+   a second colour and without a loud animation. */
+.loan-bell-halo {
+  position: absolute;
+  inset: -4px;
+  border-radius: 16px;
+  border: 1px solid currentColor;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loan-icon-btn.is-bell[data-critical='true'] .loan-bell-halo {
+  animation: loan-halo 2.4s ease-out infinite;
+}
+
+@keyframes loan-halo {
+  0% { opacity: 0.45; transform: scale(0.92); }
+  70% { opacity: 0; transform: scale(1.12); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+.loan-icon-badge {
+  position: absolute;
+  top: -5px;
+  inset-inline-end: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #08080c;
+  background: linear-gradient(140deg, #fbbf24, #ff8a3d);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.loan-icon-btn.is-bell[data-critical='true'] .loan-icon-badge {
+  background: linear-gradient(140deg, #fda4af, #f43f5e);
+  color: #1b0410;
+}
+
+:root[data-theme='light'] .loan-icon-btn {
+  background: linear-gradient(150deg, rgba(20, 32, 58, 0.06), rgba(20, 32, 58, 0.02));
+  border-color: rgba(20, 32, 58, 0.14);
+}
+
+:root[data-theme='light'] .loan-icon-badge { color: #ffffff; }
+
+/* Motion budget. */
+@media (prefers-reduced-motion: reduce) {
+  .loan-hf-band,
+  .loan-hf-marker,
+  .loan-icon-btn { transition: none !important; }
+  .loan-bell-swing,
+  .loan-icon-spin,
+  .loan-icon-ring,
+  .loan-bell-halo { animation: none !important; }
+}
+
+@media (max-width: 360px) {
+  .loan-risk-grid { grid-template-columns: 1fr; }
+  .loan-icon-btn { width: 34px; height: 34px; border-radius: 11px; }
+}

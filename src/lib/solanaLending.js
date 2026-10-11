@@ -779,28 +779,38 @@ export async function readSolanaLendingBalances({ wallet, assets = [], rpcUrl = 
     }
   };
 
+  /*
+   * ONE ROUND TRIP'S WORTH OF WAITING PER NODE, NOT TWO.
+   *
+   * The native balance and the parsed token accounts are independent reads
+   * against the same connection. They ran sequentially, so the panel waited
+   * for both; now they are issued together and each keeps its own verdict —
+   * a node that answers one and refuses the other is still a partial win, and
+   * `nativeDone` / `tokenDone` track exactly that.
+   */
   for (const url of candidates) {
     if (nativeDone && tokenDone) break;
     const connection = new Connection(url, { commitment: 'confirmed' });
+    const owner = new PublicKey(wallet);
+    const tasks = [];
     if (!nativeDone) {
-      try {
-        nativeLamports = BigInt(await connection.getBalance(new PublicKey(wallet)));
-        nativeDone = true;
-      } catch { nativeLamports = null; }
+      tasks.push(
+        connection.getBalance(owner)
+          .then((lamports) => { nativeLamports = BigInt(lamports); nativeDone = true; })
+          .catch(() => { nativeLamports = null; })
+      );
     }
     if (!tokenDone) {
-      try {
-        const response = await connection.getParsedTokenAccountsByOwner(
-          new PublicKey(wallet),
-          { programId: new PublicKey(SPL_TOKEN_PROGRAM_ID) }
-        );
-        fillTokenAccounts(response);
-        tokenDone = true;
-      } catch {
-        /* Next candidate; the fall-through state stays `{}` — failure is
-           reported downstream as BALANCE_UNKNOWN, never faked as zero. */
-      }
+      tasks.push(
+        connection.getParsedTokenAccountsByOwner(owner, { programId: new PublicKey(SPL_TOKEN_PROGRAM_ID) })
+          .then((response) => { fillTokenAccounts(response); tokenDone = true; })
+          .catch(() => {
+            /* Next candidate; the fall-through state stays `{}` — failure is
+               reported downstream as BALANCE_UNKNOWN, never faked as zero. */
+          })
+      );
     }
+    if (tasks.length) await Promise.all(tasks);
   }
   if (!nativeDone || !tokenDone) await resetRememberedSolanaRpc();
   if (nativeLamports != null && byMint.has(WSOL_MINT)) {
@@ -1036,33 +1046,53 @@ export async function serializeKaminoMarket({
     }
   }
 
-  /* A failed obligation read is NOT "no position": it is unknown, and the
-     panel must say so instead of showing an empty position with $0s. */
-  let obligation = null;
-  let obligationUnknown = false;
-  if (wallet) {
+  /*
+   * ─── THE OBLIGATION AND THE BALANCES ARE READ AT THE SAME TIME ─────────────
+   * «گرفتن اطلاعات از کامینو با سرعت بیشتری باشد».
+   *
+   * Both are independent RPC round trips against the same node, and they used
+   * to run one after the other: the obligation (`getAccountInfo` on the
+   * user's obligation account) and the wallet's token balances
+   * (`getBalance` + `getParsedTokenAccountsByOwner`). On a phone that is two
+   * waits of a few hundred milliseconds each, in series, before the panel can
+   * paint a single number — for two reads that share nothing.
+   *
+   * `Promise.all` here makes the panel wait for the slower of the two instead
+   * of the sum. Each side keeps its own error handling, because the two
+   * failures mean different things on screen:
+   *
+   *   · a failed OBLIGATION read is NOT «no position» — it is UNKNOWN, and the
+   *     panel must say so instead of showing an empty position with $0s.
+   *   · a failed BALANCE read leaves the map empty — the panel reports
+   *     BALANCE_UNKNOWN and refuses to open the wallet for a transaction it
+   *     could not pre-check (§7).
+   */
+  const readObligation = async () => {
+    if (!wallet) return { obligation: null, unknown: false };
     try {
-      obligation = await readVanillaObligation(market, new PublicKey(wallet));
+      return { obligation: await readVanillaObligation(market, new PublicKey(wallet)), unknown: false };
     } catch {
-      obligation = null;
-      obligationUnknown = true;
+      return { obligation: null, unknown: true };
     }
-  }
+  };
 
-  /* The wallet's spendable balance per reserve (§7 preflight input). The read
-     itself belongs to the door (see `readBalances` above); a failure stays
-     empty — the panel reports BALANCE_UNKNOWN and refuses to open the wallet
-     for a transaction it cannot pre-check. */
-  let balances = {};
-  let balancesUnknown = false;
-  if (wallet) {
+  const readWalletBalances = async () => {
+    if (!wallet) return { balances: {}, unknown: false };
     try {
-      balances = typeof readBalances === 'function'
+      const next = typeof readBalances === 'function'
         ? (await readBalances({ wallet, assets: reserves })) || {}
         : {};
-      balancesUnknown = Object.keys(balances || {}).length === 0;
-    } catch { balances = {}; balancesUnknown = true; }
-  }
+      return { balances: next, unknown: Object.keys(next || {}).length === 0 };
+    } catch {
+      return { balances: {}, unknown: true };
+    }
+  };
+
+  const [obligationRead, balanceRead] = await Promise.all([readObligation(), readWalletBalances()]);
+  const obligation = obligationRead.obligation;
+  const obligationUnknown = obligationRead.unknown;
+  const balances = balanceRead.balances;
+  const balancesUnknown = balanceRead.unknown;
 
   const positions = {};
   for (const asset of reserves) {
@@ -1208,7 +1238,41 @@ export async function readSolanaLendingMarketInBrowser({ wallet = null, rpcUrl =
  *   with `serverCode`/`serverTried` attached, so the panel can say both what the
  *   nodes did and whether our own server was even an option.
  */
+/*
+ * ─── ONE READ AT A TIME PER WALLET ──────────────────────────────────────────
+ * «گرفتن اطلاعات از کامینو با سرعت بیشتری باشد».
+ *
+ * The market load is dozens of accounts plus two wallet reads, and the panel
+ * genuinely asks for it more than once in quick succession: mount, the wallet
+ * address resolving a beat later, a tab switch, and React StrictMode's double
+ * mount in development. Every one of those started its OWN full read, so two
+ * identical multi-hundred-millisecond reads raced each other and the later
+ * answer could arrive first and overwrite the fresher one.
+ *
+ * Concurrent callers for the SAME wallet now share a single in-flight read.
+ * This is not a cache: the moment the promise settles the entry is gone, so
+ * the next caller pays for a fresh read — which is what a position screen must
+ * do. `fresh: true` (after a transaction) and an explicit `rpcUrl` bypass the
+ * share entirely, because those callers asked for a read of their own.
+ *
+ * A rejected read is re-thrown to every waiter, never swallowed: each caller
+ * keeps the per-host verdicts it needs to explain the failure.
+ */
+const inFlightMarketReads = new Map();
+const marketReadKey = (wallet) => String(wallet || 'anon');
+
 export async function readSolanaLendingMarket({ wallet = null, rpcUrl = null, allowServer = null, fresh = false, walletReadGraceMs = WALLET_READ_GRACE_MS } = {}) {
+  if (fresh || rpcUrl) return readSolanaLendingMarketOnce({ wallet, rpcUrl, allowServer, fresh, walletReadGraceMs });
+  const key = marketReadKey(wallet);
+  const existing = inFlightMarketReads.get(key);
+  if (existing) return existing;
+  const pending = readSolanaLendingMarketOnce({ wallet, rpcUrl, allowServer, fresh, walletReadGraceMs })
+    .finally(() => { if (inFlightMarketReads.get(key) === pending) inFlightMarketReads.delete(key); });
+  inFlightMarketReads.set(key, pending);
+  return pending;
+}
+
+async function readSolanaLendingMarketOnce({ wallet = null, rpcUrl = null, allowServer = null, fresh = false, walletReadGraceMs = WALLET_READ_GRACE_MS } = {}) {
   if (rpcUrl || allowServer === false) return readSolanaLendingMarketInBrowser({ wallet, rpcUrl });
 
   const { readSolanaLendingMarketViaServer } = await import('./solanaLendingServer.js');
