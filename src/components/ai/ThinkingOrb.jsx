@@ -135,7 +135,7 @@ export function ThinkingOrbLarge({ state = 'solving', size = 64, locale = 'fa', 
  * now, hollow grey = not started. `final` marks every non-failed step done —
  * used under produced answers, where the work already happened.
  */
-export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', defaultOpen = false, final = false }) {
+export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', defaultOpen = false }) {
   const fa = locale.startsWith('fa');
   /*
    * The eight status lines used to be printed one under the other on every
@@ -146,17 +146,8 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
    */
   const [open, setOpen] = useState(Boolean(defaultOpen));
 
-  /*
-   * On a produced answer (`final`) every non-failed step counts as done —
-   * the summary count, the head label and the dots all read from `shown`,
-   * so a finished plan shows «8/8 · همه مراحل انجام شد», never «0/8».
-   */
-  const shown = useMemo(() => (final
-    ? (steps || []).map((s) => {
-        const st = String(s?.status || 'pending');
-        return ['failed', 'error'].includes(st) ? s : { ...s, status: 'completed' };
-      })
-    : (steps || [])), [steps, final]);
+  // A final answer is not proof that a stage finished. Render only supplied statuses.
+  const shown = steps || [];
 
   const total = shown.length || 0;
   const doneCount = useMemo(
@@ -218,6 +209,7 @@ export function AIActivityTimeline({ steps = [], locale = 'fa', className = '', 
             <span className="ai-timeline-label" style={{ color: tone === 'done' ? '#cbd5e1' : tone === 'busy' ? '#e2e8f0' : tone === 'bad' ? '#fca5a5' : 'rgba(148,163,184,0.7)' }}>
               {fa ? (step.labelFa || step.label) : (step.labelEn || step.label)}
             </span>
+            {step.at && Number.isFinite(new Date(step.at).getTime()) ? <time className="nc-timeline-time" dateTime={new Date(step.at).toISOString()}>{new Date(step.at).toLocaleTimeString(fa ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</time> : null}
             {tone === 'busy' ? <ThinkingOrb state={step.orbState || 'working'} size={12} locale={locale} /> : null}
           </div>
         );

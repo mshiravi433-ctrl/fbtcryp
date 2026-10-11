@@ -36,7 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  *  assignment is invisible to it; this uses the native setter and then
  *  dispatches the event React is listening for. */
 const setInputValue = (input, value) => {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  const setter = Object.getOwnPropertyDescriptor((input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement : window.HTMLInputElement).prototype, 'value').set;
   setter.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
@@ -62,10 +62,10 @@ export async function run(container) {
   for (let i = 0; i < 4; i += 1) await act(async () => { await sleep(20); });
 
   check('the chat renders', !!q('.iaos-composer'));
-  check('the composer has an input', !!q('.iaos-composer input.iaos-input'));
+  check('the composer has an input', !!q('.iaos-composer textarea.iaos-input'));
 
   /* ── Type a goal and send it ─────────────────────────────────────────── */
-  const input = q('.iaos-composer input.iaos-input');
+  const input = q('.iaos-composer textarea.iaos-input');
   await act(async () => { setInputValue(input, 'سودم ۲ برابر شود در ۹۰ روز'); });
   await act(async () => { await sleep(10); });
   check('the goal text lands in the composer', input?.value?.includes('برابر') === true);
@@ -107,7 +107,7 @@ export async function run(container) {
      the card outright — so this is reachable with the network dead. It is the
      other half of the reported complaint («اتوماسیون خوب کار نمی‌کنه») and the
      same glue question: does the chat turn an autonomyRequest into a card. */
-  const input2 = q('.iaos-composer input.iaos-input');
+  const input2 = q('.iaos-composer textarea.iaos-input');
   await act(async () => { setInputValue(input2, 'اتوماسیون را با حالت کاغذی شروع کن'); });
   await act(async () => { await sleep(10); });
   const send2 = q('.iaos-composer button.iaos-send');

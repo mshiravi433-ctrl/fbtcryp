@@ -40,7 +40,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Set a React-controlled input's value so onChange actually fires. */
 const setInputValue = (input, value) => {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  const setter = Object.getOwnPropertyDescriptor((input instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement : window.HTMLInputElement).prototype, 'value').set;
   setter.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
@@ -79,7 +79,7 @@ export async function run(container) {
   check('the chat renders', !!q('.iaos-composer'));
 
   /* ── Type the whole-ecosystem objective and send it ─────────────────── */
-  const input = q('.iaos-composer input.iaos-input');
+  const input = q('.iaos-composer textarea.iaos-input');
   await act(async () => { setInputValue(input, OBJECTIVE); });
   await act(async () => { await sleep(10); });
   check('the objective lands in the composer', input?.value?.includes('۱۵٪') === true);
@@ -178,7 +178,7 @@ export async function run(container) {
   /* ── The plain portfolio question must NOT be swallowed by the objective
         path: «من … دارم» is in both sentences, and the holdings heuristic used
         to answer the objective as "do you hold USD?". ─────────────────── */
-  const input2 = q('.iaos-composer input.iaos-input');
+  const input2 = q('.iaos-composer textarea.iaos-input');
   await act(async () => { setInputValue(input2, 'پرتفوی من را تحلیل کن'); });
   await act(async () => { await sleep(10); });
   const send2 = q('.iaos-composer button.iaos-send');
@@ -214,7 +214,7 @@ export async function run(container) {
     throw new Error('test: other domains deliberately unavailable');
   };
   try {
-    const input3 = q('.iaos-composer input.iaos-input');
+    const input3 = q('.iaos-composer textarea.iaos-input');
     await act(async () => { setInputValue(input3, 'من ۱۰۰۰ دلار دارم، در ۳۰ روز ۳۰٪ سود می‌خواهم، ریسک متوسط'); });
     const send3 = q('.iaos-composer button.iaos-send');
     if (send3 && !send3.disabled) await act(async () => { send3.click(); });
