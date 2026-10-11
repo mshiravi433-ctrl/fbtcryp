@@ -115,13 +115,20 @@ export const RAMP_DIRECTORY = Object.freeze([
     sides: ['BUY', 'SELL'],
     access: 'attribution',
     enabled: true,
-    /* Documented widget parameters only: widget_id, currency, amount (buy) and
-       type=sell + fiat_currency (sell) — read from mercuryo.io/on-ramp and
-       widget.docs.mercuryo.io. The destination WALLET is not pre-filled: we
-       have not verified that parameter, and a wrong address in a money URL is
-       the one mistake this app is built to never make. The user pastes it on
-       Mercuryo's own page, which is exactly one extra step. */
-    prefill: ['fiat', 'amount'],
+    /* Parameters read from <https://widget.docs.mercuryo.io/guide/integration/
+       widget-parameters> (2026-10-11): widget_id, type, currency (CRYPTO
+       ticker), amount (CRYPTO amount), fiat_currency, fiat_amount (FIAT
+       amount), payment_method, redirect_url.
+       Note the trap the docs settle: `amount` is the crypto amount and
+       `fiat_amount` is the fiat one — they are not interchangeable, and
+       sending a fiat number as `amount` would ask Mercuryo for 100 COINS.
+       The destination WALLET is deliberately NOT pre-filled even though
+       `address` is documented: without a verified mapping from our network
+       slugs to Mercuryo's network codes, an address sent alone can be paid on
+       a different chain than the one this order and its on-chain watch are
+       built around. The user picks the network and pastes the address on
+       Mercuryo's own page, where both are visible in the same step. */
+    prefill: ['asset', 'fiat', 'amount'],
     requires: { env: 'VITE_MERCURYO_WIDGET_ID', pattern: /^[A-Za-z0-9_-]{4,64}$/ },
     coverage: { mode: 'unknown', source: 'https://mercuryo.io/' },
     fiat: 'unknown',
@@ -207,21 +214,29 @@ const BUILDERS = {
   },
 
   /* Mercuryo: documented params only. Requires the public widget id; without
-     it the row is UNCONFIGURED, never a link with someone else's id in it. */
+     it the row is UNCONFIGURED, never a link with someone else's id in it.
+     `fiat_amount` carries the fiat figure on BUY and `amount` the crypto
+     figure on SELL — per their parameter reference those are different
+     fields, and mixing them up asks for the wrong quantity. */
   mercuryo: (input) => {
     const id = env('VITE_MERCURYO_WIDGET_ID');
     if (!/^[A-Za-z0-9_-]{4,64}$/.test(id)) return null;
     const params = new URLSearchParams();
     params.set('widget_id', id);
+    params.set('type', input.side === 'SELL' ? 'sell' : 'buy');
+    const ticker = slug(input.asset);
+    if (ticker) params.set('currency', ticker.toUpperCase());
+    if (input.fiatCurrency) params.set('fiat_currency', input.fiatCurrency);
+    const prefill = ['asset', 'fiat'];
     if (input.side === 'SELL') {
-      params.set('type', 'sell');
-      params.set('fiat_currency', input.fiatCurrency);
-      return { url: `https://exchange.mercuryo.io/?${params.toString()}`, prefill: ['fiat'] };
+      const units = positiveAmount(input.cryptoAmount);
+      if (units) { params.set('amount', String(units)); prefill.push('amount'); }
+    } else {
+      const fiat = positiveAmount(input.fiatAmount);
+      if (fiat) { params.set('fiat_amount', String(fiat)); prefill.push('amount'); }
     }
-    params.set('currency', input.fiatCurrency);
-    const amount = positiveAmount(input.fiatAmount);
-    if (amount) params.set('amount', String(amount));
-    return { url: `https://exchange.mercuryo.io/?${params.toString()}`, prefill: amount ? ['fiat', 'amount'] : ['fiat'] };
+    if (typeof input.finalUrl === 'string' && /^https?:\/\//.test(input.finalUrl)) params.set('redirect_url', input.finalUrl);
+    return { url: `https://exchange.mercuryo.io/?${params.toString()}`, prefill };
   },
 
   /* Swapzone: the pair travels in the path. Verified pages:
@@ -329,7 +344,12 @@ export function rampOptions({
       /* tier drives the order: everything filled in first, the page-only
          doors last. It is a statement about how much typing the user has
          left, never about which provider is better. */
-      tier: prefill.length >= 3 ? 'full' : (prefill.length ? 'partial' : 'page'),
+      /* "full" means the destination is typed too, not merely the numbers: a
+         row that pre-fills amounts but leaves the wallet address (and the
+         network it belongs to) to the provider's page is a different amount
+         of work AND a different certainty about where the coins land. Ranking
+         it as "full" would tell the user something untrue about both. */
+      tier: prefill.includes('wallet') ? 'full' : (prefill.length ? 'partial' : 'page'),
       prefill,
       coverage: cov.state,
       coverageSource: cov.source || null,

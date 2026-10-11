@@ -9884,6 +9884,26 @@ export default async function run() {
     t('a hostile asset string never reaches a URL path',
       rampOptions({ ...base, country: 'DE', asset: 'USDT"></script><script>' }).options.every((option) => !/script/i.test(option.url)));
 
+    /* ---- Mercuryo's two different amount fields ----
+       Their parameter reference is explicit: `amount` is the CRYPTO figure and
+       `fiat_amount` the FIAT one. Sending a fiat number as `amount` would ask
+       the widget for 100 coins instead of 100 euros, so the two sides are
+       asserted separately the moment the row is configured. */
+    if (mercuryoConfigured) {
+      const buy = rampOptions({ ...base, country: 'DE', side: 'BUY', fiatAmount: 100 })
+        .options.find((option) => option.id === 'mercuryo');
+      const sell = rampOptions({ ...base, country: 'DE', side: 'SELL', cryptoAmount: '100' })
+        .options.find((option) => option.id === 'mercuryo');
+      t('a configured Mercuryo buy link carries the fiat figure in fiat_amount, not amount',
+        Boolean(buy) && /[?&]fiat_amount=100(&|$)/.test(buy.url) && !/[?&]amount=/.test(buy.url));
+      t('a configured Mercuryo sell link carries the crypto figure in amount',
+        Boolean(sell) && /[?&]amount=100(&|$)/.test(sell.url) && /[?&]type=sell(&|$)/.test(sell.url));
+      t('Mercuryo never receives a wallet address we cannot tie to a verified network',
+        [buy, sell].every((option) => Boolean(option) && !/[?&]address=/.test(option.url)));
+      t('a row that leaves the destination to the provider is never ranked as fully pre-filled',
+        [buy, sell].every((option) => !option || option.tier === 'partial'));
+    }
+
     /* ---- input hygiene ---- */
     t('the country gate is two letters or nothing',
       normalizeCountry('de') === 'DE' && normalizeCountry('DEU') === null && normalizeCountry('') === null && normalizeCountry(null) === null);
