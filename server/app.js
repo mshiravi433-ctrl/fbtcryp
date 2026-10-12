@@ -4888,11 +4888,20 @@ app.get('/api/signals/solana/radar', async (req, res) => {
 app.get('/api/category/:slug', (req, res) => {
   const slug = String(req.params.slug || '').slice(0, 60);
   if (!Object.values(MARKET_CATEGORIES).includes(slug)) return res.status(400).json({ error: 'BAD_CATEGORY' });
-  const perPage = Math.min(100, Math.max(1, Number(req.query.per_page) || 50));
+  /*
+   * per_page accepts CoinGecko's own ceiling (250) and `page` walks the
+   * category, so a screen that wants the WHOLE sector — /stocks does, it
+   * labels the list with its row count — is not silently capped at the first
+   * hundred rows the way it was until 2026-10-12 («اعداد را خیلی بیشتر کن»).
+   * Ten pages is the walk limit: beyond 2,500 rows a category is no longer a
+   * sector, and every page is a separate 5-minute server-side cache entry.
+   */
+  const perPage = Math.min(250, Math.max(1, Number(req.query.per_page) || 50));
+  const page = Math.min(10, Math.max(1, Number(req.query.page) || 1));
   const vs = /^[a-z]{2,5}$/.test(String(req.query.vs || '')) ? String(req.query.vs) : 'usd';
   return serve(res, 300_000)(
-    () => fetchCategory(slug, { perPage, vs }),
-    `cat:${slug}:${vs}:${perPage}`
+    () => fetchCategory(slug, { perPage, vs, page }),
+    `cat:${slug}:${vs}:${perPage}:${page}`
   );
 });
 

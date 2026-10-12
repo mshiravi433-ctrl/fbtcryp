@@ -521,14 +521,28 @@ async function backupSectorRows(page = 1) {
 /** A blocked CoinGecko category must not turn an entire sector into a blank tab.
  * Backup rows are real USD quotes, selected by an explicit CoinGecko ID list.
  * CoinLore has no EUR quotes or 24h extrema, so never synthesize either. */
-export async function fetchCategory(slug, { perPage = 50, vs = 'usd' } = {}) {
+export async function fetchCategory(slug, { perPage = 50, vs = 'usd', page = 1 } = {}) {
   const sector = Object.keys(MARKET_CATEGORIES).find((key) => MARKET_CATEGORIES[key] === slug);
   if (!sector) throw new Error('BAD_CATEGORY');
+  /*
+   * ─── PAGE, NOT JUST PER-PAGE (added 2026-10-12) ──────────────────────────
+   * The sector view used to be pinned to `page: 1` with per_page clamped at
+   * 100, so every category was silently truncated at its first hundred rows —
+   * «تعداد توکنها خیلی کمه» on the RWA tab was this constant, not the size of
+   * CoinGecko's category. `page` is now a real parameter (1–10) so a caller
+   * that wants the whole universe can walk it, and per_page accepts
+   * CoinGecko's documented maximum of 250. The default is unchanged, so the
+   * Market screen still makes exactly one request per sector.
+   */
+  const pageNo = Math.min(10, Math.max(1, Number(page) || 1));
+  /* Normalised ONCE: the upstream request, the backup slice and the cache key
+     must agree on one number, or a page-sized answer becomes a lesser one. */
+  const size = Math.min(250, Math.max(1, Number(perPage) || 50));
   try {
     const raw = await cgReq(
       cgUrl('/coins/markets', {
         vs_currency: vs, category: slug, order: 'market_cap_desc',
-        per_page: Math.min(100, perPage), page: 1, sparkline: true,
+        per_page: size, page: pageNo, sparkline: true,
         price_change_percentage: '1h,24h,7d'
       })
     );
@@ -541,12 +555,19 @@ export async function fetchCategory(slug, { perPage = 50, vs = 'usd' } = {}) {
     // independent ID-curated ticker feed before declaring the sector empty.
   } catch (err) {
     if (String(vs).toLowerCase() !== 'usd') throw err;
+    if (pageNo > 1) throw err;
   }
-  if (String(vs).toLowerCase() !== 'usd') throw new Error('CATEGORY_DATA_UNAVAILABLE');
+  /*
+   * The CoinLore backup is a list of explicit CoinGecko IDs — ten of them — so
+   * it can only ever answer page 1. Answering a page-2 request with page-1
+   * rows would duplicate the first twenty-five rows on the screen, so a later
+   * page refuses instead: an honest short list beats a silently repeated one.
+   */
+  if (String(vs).toLowerCase() !== 'usd' || pageNo > 1) throw new Error('CATEGORY_DATA_UNAVAILABLE');
   const first = await backupSectorRows();
-  let matches = sectorFromRows(sector, first).slice(0, perPage);
+  let matches = sectorFromRows(sector, first).slice(0, size);
   if (!matches.length && first.length === 250) {
-    matches = sectorFromRows(sector, await backupSectorRows(2)).slice(0, perPage);
+    matches = sectorFromRows(sector, await backupSectorRows(2)).slice(0, size);
   }
   if (!matches.length) throw new Error('CATEGORY_DATA_UNAVAILABLE');
   // Visuals are best-effort; never block quotes for the full 6s market budget.
