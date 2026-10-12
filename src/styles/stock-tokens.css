@@ -1,0 +1,288 @@
+/* ── TOKENIZED-STOCK BOARD — the Robinhood Chain cards on /stocks ───────────
+ *
+ * «باکسهایش را با قیمت و مدرنتر کن، فاصله و اندازهاش را درست کن»
+ *
+ * This replaces a stack of full-width list rows that had no price on most of
+ * them. Three things were actually wrong, and each one has a rule here:
+ *
+ *   1. SIZE / GAP. Rows were 30-40px tall with one fact per line, so twenty
+ *      contracts filled a screen and 200 were a scroll nobody would make. The
+ *      board is now a GRID: two cards on a phone, six on a desktop, one
+ *      consistent 10-12px gutter, every card the same height whatever it holds.
+ *   2. HIERARCHY. The price is the largest element, the ticker is next, the
+ *      company name and the contract address are deliberately quiet. The old
+ *      row made the ticker loudest — the one number people came for was the
+ *      smallest thing on the line.
+ *   3. NO PRICE. Cards show the token's own market price, or the share
+ *      reference tagged «مرجع», or «—». The states are visually distinct on
+ *      purpose: a skeleton while loading, a dash only when we are done and
+ *      there is genuinely nothing.
+ *
+ * PERFORMANCE. Twenty-four of these can be on screen at once, so: no blur, no
+ * per-card animation, `contain: paint` on the card, and the accent is a static
+ * gradient rather than a rotating border. Direction is carried by hue (green /
+ * red) instead of by motion.
+ */
+
+.stk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+@media (min-width: 560px) {
+  .stk-grid { grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 12px; }
+}
+
+@media (min-width: 900px) {
+  .stk-grid { grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); }
+}
+
+.stk-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 11px 10px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(130% 100% at 100% 0%, rgba(0, 229, 255, 0.06), transparent 60%),
+    var(--bg-panel);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: start;
+  /* A card is a self-contained paint surface: nothing inside it can dirty the
+     grid's paint area, which is what keeps 24 of them cheap to scroll. */
+  contain: paint;
+  transition: border-color 0.2s ease, transform 0.16s ease;
+}
+
+/* The direction stripe. Static on purpose — see the header. */
+.stk-card::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: var(--stk-accent, linear-gradient(90deg, var(--line-strong), transparent));
+  opacity: 0.9;
+}
+.stk-card.is-up { --stk-accent: linear-gradient(90deg, var(--up), rgba(0, 255, 157, 0)); }
+.stk-card.is-down { --stk-accent: linear-gradient(90deg, var(--down), rgba(255, 59, 107, 0)); }
+.stk-card.is-flat { --stk-accent: linear-gradient(90deg, var(--rgb-1), rgba(0, 229, 255, 0)); }
+
+.stk-card:active { transform: scale(0.985); border-color: var(--line-strong); }
+
+.stk-card:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
+
+/* ── identity ─────────────────────────────────────────────────────────────── */
+
+.stk-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.stk-id { min-width: 0; flex: 1; }
+
+.stk-sym {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.25;
+}
+
+.stk-name {
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+/* ── the number ───────────────────────────────────────────────────────────── */
+
+.stk-value {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+  min-height: 21px;
+}
+
+.stk-price {
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.stk-noprice { color: var(--text-3); font-weight: 500; }
+
+.stk-chip {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  line-height: 1.5;
+}
+.stk-chip.up { color: var(--up); background: rgba(0, 255, 157, 0.1); border-color: rgba(0, 255, 157, 0.22); }
+.stk-chip.down { color: var(--down); background: rgba(255, 59, 107, 0.1); border-color: rgba(255, 59, 107, 0.22); }
+
+/* While the prices are in flight. A dash here would claim there is no market. */
+.stk-skel {
+  display: inline-block;
+  width: 68px;
+  height: 15px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--bg-raised) 0%, var(--line-strong) 50%, var(--bg-raised) 100%);
+  background-size: 220% 100%;
+  animation: stk-shimmer 1.4s linear infinite;
+}
+
+@keyframes stk-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stk-skel { animation: none; background: var(--bg-raised); }
+  .stk-card { transition: none; }
+}
+
+/* ── provenance ───────────────────────────────────────────────────────────── */
+
+.stk-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  min-height: 17px;
+}
+
+.stk-addr {
+  font-size: 9.5px;
+  color: var(--text-3);
+  background: var(--bg-raised);
+  border-radius: 6px;
+  padding: 1px 5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stk-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.stk-tag-ref {
+  color: var(--rgb-5);
+  border-color: rgba(255, 179, 0, 0.3);
+  background: rgba(255, 179, 0, 0.09);
+}
+
+/* ── the action ───────────────────────────────────────────────────────────── */
+
+/*
+ * `.btn` sets `width: 100%`, which is exactly what a grid cell wants; the row
+ * variant needed `.btn-row` because that width collapsed siblings in a flex
+ * row. Here the button is alone in a column, so nothing else has to be undone —
+ * and no inline width is needed, which is the layout rule this repo pins.
+ */
+.stk-buy {
+  margin-top: auto;
+  min-height: 32px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ── header, search, legend ──────────────────────────────────────────────── */
+
+.stk-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stk-head-id { min-width: 0; }
+
+.stk-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--bg-raised);
+}
+
+.stk-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 8px rgba(0, 255, 157, 0.7);
+}
+
+.stk-live.is-loading .stk-live-dot { background: var(--rgb-1); box-shadow: 0 0 8px rgba(0, 229, 255, 0.7); }
+.stk-live.is-none { color: var(--rgb-5); border-color: rgba(255, 179, 0, 0.3); }
+.stk-live.is-none .stk-live-dot { background: var(--rgb-5); box-shadow: 0 0 8px rgba(255, 179, 0, 0.6); }
+
+.stk-search { position: relative; margin: 10px 0 2px; }
+
+.stk-search .stk-search-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+
+.stk-search input {
+  width: 100%;
+  height: 40px;
+  font-size: 12.5px;
+  border-radius: 12px;
+}
+
+.stk-legend {
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: var(--text-3);
+  margin: 8px 0 0;
+}
+
+.stk-more {
+  width: 100%;
+  margin-top: 12px;
+}

@@ -56,6 +56,7 @@ import {
 } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
+import { priceTokensByAddress } from './stockPrices.js';
 import { resolveVenue, resolveVenues } from './coinVenue.js';
 import {
   checkBuySellEligibility,
@@ -5584,6 +5585,43 @@ app.get('/api/coin-id/:chainId', async (req, res) => {
     if (out.error) return res.status(400).json(out);
     /* An id mapping is near-permanent; let the browser hold it for an hour. */
     res.set('cache-control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=14400');
+    return res.json(out);
+  } catch (err) {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  }
+});
+
+/**
+ * GET /api/stock-prices?chainId=4663&addresses=0x..,0x..
+ *
+ * PRICE BY CONTRACT, for the tokenized-stock board on /stocks.
+ *
+ * ─── WHY IT EXISTS ──────────────────────────────────────────────────────────
+ * «تب سهام توکنیزه ۲۰۰ توکن جدید، بدون قیمت خورده» — that board lists ~200
+ * real contracts on Robinhood Chain and priced almost none of them: the only
+ * quote it had was the company's SHARE price, matched by ticker against the
+ * Avantis/Pyth equity feed, and that feed carries about forty names. See
+ * server/stockPrices.js for the full argument, including why the lookup is by
+ * address and never by ticker.
+ *
+ * Not wrapped in `serve()`: the response depends on the query, and that helper
+ * caches per fixed key. The caching that matters is inside stockPrices.js (the
+ * id index for six hours, each price for 45 seconds), which is why two
+ * different screens — or two different users on a warm instance — cost one
+ * upstream call between them.
+ *
+ * A token we cannot price comes back as `null` rather than being dropped, and
+ * `upstreamError` says whether the feed or the contract was the problem. The
+ * card prints «—» for a null; it never prints a number we did not read.
+ */
+app.get('/api/stock-prices', async (req, res) => {
+  try {
+    const out = await priceTokensByAddress(req.query.chainId, req.query.addresses);
+    if (out.error) return res.status(400).json(out);
+    /* Short browser TTL, short edge TTL, and a long stale window: a price that
+       is a minute old is a price, a card that waits on a cold serverless
+       instance is a broken screen. */
+    res.set('cache-control', 'public, max-age=45, s-maxage=45, stale-while-revalidate=600');
     return res.json(out);
   } catch (err) {
     return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });

@@ -17,12 +17,14 @@ import { useTelegram } from '../context/TelegramContext';
 import { IconSearch } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 /*
- * TokenIcon (not CoinLogo) for the Robinhood rail: those rows are CONTRACTS,
- * and TokenIcon resolves artwork by chain + address first — the same
- * impersonation-proof rule lib/tokenIcon.jsx documents. CoinLogo is for rows
- * that have no contract at all (the reference table).
+ * The Robinhood board renders through StockTokenCard, which owns the artwork
+ * rule for it: TokenIcon (not CoinLogo), because those tiles are CONTRACTS and
+ * TokenIcon resolves artwork by chain + address first — the impersonation-proof
+ * rule lib/tokenIcon.jsx documents. CoinLogo is for rows with no contract at
+ * all (the reference table).
  */
-import TokenIcon from '../lib/tokenIcon';
+import StockTokenCard from '../components/StockTokenCard';
+import { loadStockTokenPrices } from '../lib/stockPrices';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import { THIN_ASSETS } from '../lib/solanaAssets';
 import { solanaSellUrl } from '../lib/solanaSell';
@@ -48,6 +50,7 @@ import { feePercentString } from '../lib/feeBps';
  */
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 import {
+  ROBINHOOD_CHAIN_ID,
   ROBINHOOD_CHAIN_NAME,
   loadStockTokenUniverse,
   referencePriceFor,
@@ -169,7 +172,7 @@ const RWA_FEED_PER_PAGE = 250;
 const RWA_ROWS = 24;
 
 /* How many Robinhood-Chain contracts render before «نمایش همه». */
-const RH_ROWS = 18;
+const RH_ROWS = 24;
 const STOCK_TABS = SPECULATION_ENABLED
   ? ['equity', 'rwa', 'ostium', 'derivatives']
   : ['equity', 'rwa'];
@@ -693,6 +696,22 @@ export default function Stocks() {
   const [rhShowAll, setRhShowAll] = useState(false);
   useEffect(() => { setRhShowAll(false); }, [rhSearch]);
 
+  /*
+   * ─── PRICES, BY CONTRACT (2026-10-12) ───────────────────────────────────
+   * «تب سهام توکنیزه ۲۰۰ توکن جدید، بدون قیمت خورده». True: this rail's only
+   * quote was `referencePriceFor` below — the company's SHARE price, matched by
+   * TICKER against the Avantis/Pyth feed, which carries about forty names. Out
+   * of ~200 contracts, most therefore printed «—».
+   *
+   * `loadStockTokenPrices` asks OUR backend to price the contracts we are
+   * actually about to paint (server/stockPrices.js: contract → CoinGecko id →
+   * market price), so one screenful costs one request and a page turn costs
+   * another. It never throws: a failed read leaves the reference price as the
+   * fallback, and the card labels which of the two it is showing.
+   */
+  const [stockPrices, setStockPrices] = useState({});
+  const [pricesLoading, setPricesLoading] = useState(false);
+
   const rhEquities = useMemo(() => {
     const rows = (stockUniverse ?? []).filter((t) => t.equity);
     const q = rhSearch.trim().toLowerCase();
@@ -705,8 +724,34 @@ export default function Stocks() {
     );
   }, [stockUniverse, rhSearch]);
 
-  const rhVisible = rhShowAll ? rhEquities : rhEquities.slice(0, RH_ROWS);
+  /*
+   * Memoised so the price effect below can depend on the SLICE rather than on
+   * a stringly-typed key of it: `rhEquities` is rebuilt on every render of the
+   * page, and depending on it directly would re-ask for prices on every
+   * keystroke somewhere else on the screen.
+   */
+  const rhVisible = useMemo(() => (rhShowAll ? rhEquities : rhEquities.slice(0, RH_ROWS)), [rhEquities, rhShowAll]);
   const rhAll = useMemo(() => (stockUniverse ?? []).filter((t) => t.equity), [stockUniverse]);
+
+  useEffect(() => {
+    if (tab !== 'equity' || !rhVisible.length) return undefined;
+    let alive = true;
+    setPricesLoading(true);
+    loadStockTokenPrices(rhVisible, { chainId: ROBINHOOD_CHAIN_ID })
+      .then((map) => {
+        if (!alive) return;
+        setStockPrices((prev) => ({ ...prev, ...map }));
+      })
+      .finally(() => alive && setPricesLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [tab, rhVisible]);
+
+  const visiblePriced = useMemo(
+    () => rhVisible.filter((tk) => stockPrices[String(tk.address).toLowerCase()]).length,
+    [rhVisible, stockPrices]
+  );
 
   /* Every buy on this rail goes through the SAME screen as an RWA row's buy —
      the one that prints the recipient contract before anything is signed. */
@@ -1096,17 +1141,19 @@ export default function Stocks() {
             ─── THE TOKENIZED-STOCK UNIVERSE OF ROBINHOOD CHAIN (2026-10-12) ──
             Asked for as «تعداد توکنهای صفحه سهام — توکنهای توکنیزه و RWA —
             خیلی کمه … اعداد را خیلی بیشتر کن». Everything below is a real
-            contract read from Uniswap's own default token list: no row is
-            invented, none is padded, and each one prints its own address,
-            because the address — not the ticker — is what identifies a token.
+            contract read from a public token list: no row is invented, none is
+            padded, and each one prints its own address, because the address —
+            not the ticker — is what identifies a token. Where that list comes
+            from is an implementation detail of lib/stockTokens.js and is no
+            longer printed on the screen (see the note above the grid).
 
             WHY IT IS A SEPARATE SECTION AND NOT MORE ROWS ABOVE. The Solana
             rail's whole promise is that every mint was matched against
-            Backed's issuer keys on load. These were not: they are exactly what
-            Uniswap's list says they are, and nothing more. Merging them into
-            the verified rail would quietly transfer that promise to rows that
-            never earned it — so they get their own heading, their own badge
-            naming the source, and a note that says the limit out loud.
+            Backed's issuer keys on load. These were not: we have verified no
+            issuer here, and that is exactly what the note under the grid says.
+            Merging them into the verified rail would quietly transfer a
+            promise to rows that never earned it — so they get their own
+            heading and a note that states the limit out loud.
 
             Every «خرید» here goes to /swap with the contract address attached,
             through the same screen, fee and warnings an RWA row uses. Nothing
@@ -1127,87 +1174,74 @@ export default function Stocks() {
           )}
 
           {rhAll.length > 0 && (
-            <section style={{ marginTop: 16 }}>
-              <div className="row-between" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                <div>
+            <section style={{ marginTop: 18 }}>
+              {/*
+                ─── THE BADGE THAT NAMED UNISWAP IS GONE (2026-10-12) ────────
+                Asked for directly: «جملهٔ فهرست رسمی توکنهای یونیسواپ را پاک
+                کن، این بکجور تبلیغ میشود». It was a `stocks.rhSource` pill
+                reading «فهرست رسمی توکنهای یونیسواپ» — and the note under the
+                grid repeated it. Both are removed from the screen: we are not
+                an advertising surface for somebody else's list, and the pill
+                was never what made these rows safe anyway. What made them safe
+                is printed on every card and kept here: WE have not verified the
+                issuer, so the contract address is shown on each tile and again
+                on the swap screen before anything is signed.
+
+                In its place: the one piece of status this board actually has —
+                whether the prices on it are live. Three honest states, no
+                logo, no third-party name.
+              */}
+              <div className="stk-head">
+                <div className="stk-head-id">
                   <p className="section-label" style={{ margin: 0 }}>{t('stocks.rhTitle')}</p>
                   <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>
                     {t('stocks.rhSub', { count: rhAll.length, chain: ROBINHOOD_CHAIN_NAME })}
                   </p>
                 </div>
-                <span className="pill" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  {t('stocks.rhSource')}
+                <span className={`stk-live ${pricesLoading ? 'is-loading' : visiblePriced ? '' : 'is-none'}`}>
+                  <span className="stk-live-dot" aria-hidden="true" />
+                  {pricesLoading
+                    ? t('stocks.rhPricesLoading')
+                    : visiblePriced
+                      ? t('stocks.rhPricesLive')
+                      : t('stocks.rhPricesNone')}
                 </span>
               </div>
 
-              <div style={{ position: 'relative', marginBottom: 10 }}>
+              <div className="stk-search">
                 <input
                   type="text"
                   className="input"
-                  style={{
-                    width: '100%',
-                    paddingLeft: isRTL ? 12 : 36,
-                    paddingRight: isRTL ? 36 : 12,
-                    fontSize: 12.5,
-                    height: 38
-                  }}
+                  style={{ paddingLeft: isRTL ? 12 : 34, paddingRight: isRTL ? 34 : 12 }}
                   placeholder={t('stocks.rhSearchPlaceholder')}
                   value={rhSearch}
                   onChange={(e) => setRhSearch(e.target.value)}
                 />
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    [isRTL ? 'right' : 'left']: 12,
-                    pointerEvents: 'none',
-                    color: 'var(--muted)',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
+                <span className="stk-search-icon" style={{ [isRTL ? 'right' : 'left']: 12 }}>
                   <IconSearch width={14} height={14} />
                 </span>
               </div>
 
               {rhVisible.length > 0 ? (
-                <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
+                <motion.div className="stk-grid" variants={stagger} initial="hidden" animate="show">
                   {rhVisible.map((tk) => {
-                    const ref = referencePriceFor(tk.symbol, avantis?.rows ?? []);
-                    const addr = `${tk.address.slice(0, 6)}…${tk.address.slice(-4)}`;
+                    /*
+                     * Market price first, share reference second, nothing third.
+                     * `market` is the TOKEN's own quote read by contract;
+                     * `reference` is the company's SHARE quote matched by ticker
+                     * and the card tags it «مرجع» so the two can never be
+                     * mistaken for each other.
+                     */
+                    const market = stockPrices[String(tk.address).toLowerCase()] ?? null;
                     return (
-                      <motion.div
-                        key={tk.id}
-                        className="coin-row"
-                        variants={riseIn}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => rhBuy(tk)}
-                      >
-                        <TokenIcon token={tk} chainId={tk.chainId} size={30} />
-                        <div className="coin-meta" style={{ minWidth: 0 }}>
-                          <div className="coin-sym">{tk.symbol}</div>
-                          <div className="coin-name" dir="ltr" style={{ textAlign: 'start' }}>
-                            {tk.name} · <span className="mono">{addr}</span>
-                          </div>
-                        </div>
-                        <div className="coin-right" style={{ textAlign: isRTL ? 'left' : 'right' }}>
-                          {/* A reference quote for the SHARE, matched by ticker —
-                              not a quote for the token. Null stays a dash. */}
-                          <div className="mono" style={{ fontSize: 12.5 }}>
-                            {ref ? `$${fmtPrice(ref.price)}` : '—'}
-                          </div>
-                          <div className="faint" style={{ fontSize: 9.5 }}>{t('stocks.rhRefPrice')}</div>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          style={{ flexShrink: 0 }}
-                          aria-label={t('stocks.rwaQuickBuy', { sym: tk.symbol, pay: 'USDG', fee: feePercentString() })}
-                          onClick={(e) => { e.stopPropagation(); rhBuy(tk); }}
-                        >
-                          {t('stocks.rhBuy')}
-                        </button>
+                      <motion.div key={tk.id} variants={riseIn}>
+                        <StockTokenCard
+                          token={tk}
+                          market={market}
+                          reference={market ? null : referencePriceFor(tk.symbol, avantis?.rows ?? [])}
+                          loading={pricesLoading}
+                          onBuy={rhBuy}
+                        />
                       </motion.div>
                     );
                   })}
@@ -1219,11 +1253,10 @@ export default function Stocks() {
               {rhEquities.length > RH_ROWS && (
                 <button
                   type="button"
-                  className="btn btn-ghost"
-                  style={{ marginTop: 10 }}
+                  className="btn btn-ghost stk-more"
                   onClick={() => { haptic?.('select'); setRhShowAll((v) => !v); }}
                 >
-                  {/* «توکن», not «سهم»: these rows are contracts, and the
+                  {/* «توکن», not «سهم»: these tiles are contracts, and the
                       count is what the list claims to hold. */}
                   {rhShowAll
                     ? t('stocks.showLess')
@@ -1231,7 +1264,8 @@ export default function Stocks() {
                 </button>
               )}
 
-              <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('stocks.rhNote')}</p>
+              <p className="stk-legend">{t('stocks.rhLegend')}</p>
+              <p className="faint" style={{ marginTop: 6, lineHeight: 1.75 }}>{t('stocks.rhNote')}</p>
             </section>
           )}
 
