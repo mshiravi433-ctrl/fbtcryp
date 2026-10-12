@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -24,6 +24,11 @@ import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
 import TokenRiskCard from '../components/TokenRiskCard';
 import TokenSmartMoney from '../components/TokenSmartMoney';
 import '../styles/smart-money.css';
+import '../styles/coin-detail-tabs.css';
+import lazyRetry from '../lib/lazyRetry';
+
+const LazyCompare = lazyRetry(() => import('./Compare'));
+const DETAIL_TABS = ['trade', 'history', 'compare', 'smartMoney'];
 
 /**
  * Chain names for the resolved-venue line.
@@ -55,6 +60,30 @@ function ChartTip({ active, payload }) {
   );
 }
 
+function DetailTabIcon({ name }) {
+  const common = {
+    width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none',
+    stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': true
+  };
+  if (name === 'trade') return <svg {...common}><path d="M5 8h14l-3-3M19 8l-3 3" /><path d="M19 16H5l3 3m-3-3 3-3" /></svg>;
+  if (name === 'history') return <svg {...common}><path d="M3.5 18.5 9 13l3.5 3.5L20.5 7" /><path d="M16 7h4.5v4.5M3.5 21h17" /></svg>;
+  if (name === 'compare') return <svg {...common}><rect x="3.5" y="4.5" width="7" height="15" rx="2" /><rect x="13.5" y="4.5" width="7" height="15" rx="2" /><path d="M7 9h.01M17 15h.01" /></svg>;
+  return <svg {...common}><path d="M12 3.5 4.5 7v5.2c0 4.2 3 6.9 7.5 8.3 4.5-1.4 7.5-4.1 7.5-8.3V7L12 3.5Z" /><path d="M8.5 12h7m-3.5-3.5v7" /></svg>;
+}
+
+function TradeActionIcon({ side }) {
+  return side === 'buy' ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12m-5-5 5 5 5-5" /><path d="M5 20h14" />
+    </svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 21V9m5 5-5-5-5 5" /><path d="M5 4h14" />
+    </svg>
+  );
+}
+
 function Metric({ label, value, tone }) {
   return (
     <motion.div className="card card-tight" variants={riseIn}>
@@ -72,6 +101,9 @@ export default function CoinDetail() {
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [range, setRange] = useState(RANGES[1]);
+  const [detailTab, setDetailTab] = useState('trade');
+  useEffect(() => { setDetailTab('trade'); }, [id]);
+  const chartNeeded = detailTab === 'trade' || detailTab === 'history';
 
   // Fetch the coin by id rather than hunting for it inside the paged markets
   // list — that lookup is what produced "coin not found" for anything outside
@@ -99,7 +131,7 @@ export default function CoinDetail() {
     if (fetched) setNeedsListFallback(false);
   }, [coinLoading, fetched]);
   const { data: coins } = useMarkets(needsListFallback ? 60 : null);
-  const { data: series, loading } = useChart(id, range.days);
+  const { data: series, loading } = useChart(chartNeeded ? id : null, range.days);
 
   /*
    * Is there a REAL, curated contract behind this coin?
@@ -111,7 +143,7 @@ export default function CoinDetail() {
    */
   /* Line by default: easier to read, and most visitors are not traders. */
   const [chartMode, setChartMode] = useState('line');
-  const { data: ohlc, loading: ohlcLoading } = useOhlc(chartMode === 'candle' ? id : null, range.days);
+  const { data: ohlc, loading: ohlcLoading } = useOhlc(detailTab === 'trade' && chartMode === 'candle' ? id : null, range.days);
 
   const coinGeckoId = id;
   const realSwap = useMemo(() => swapTargetFor(coinGeckoId), [coinGeckoId]);
@@ -225,8 +257,8 @@ export default function CoinDetail() {
    * two network polls per coin view — repeated every 60s by usePoll — with
    * nothing reading the result.
    *
-   * HistoryPanel below stays: it reports measured facts about this coin's own
-   * chart, which is exactly what a chart page is for.
+   * The dedicated history subtab stays: it reports measured facts about this
+   * coin's own chart, separate from the trade actions.
    */
 
   const favorites = useAppStore((s) => s.favorites);
@@ -324,6 +356,48 @@ export default function CoinDetail() {
         </button>
       </motion.div>
 
+      <div className="coin-detail-tabs" role="tablist" aria-label={t('coin.detailTabs.aria')} data-testid="coin-detail-tabs">
+        {DETAIL_TABS.map((tab) => (
+          <button
+            key={tab}
+            id={`coin-detail-tab-${tab}`}
+            type="button"
+            role="tab"
+            aria-selected={detailTab === tab}
+            aria-controls="coin-detail-panel"
+            tabIndex={detailTab === tab ? 0 : -1}
+            className={`coin-detail-tab${detailTab === tab ? ' is-active' : ''}`}
+            onClick={() => { haptic?.('select'); setDetailTab(tab); }}
+            onKeyDown={(event) => {
+              if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const current = DETAIL_TABS.indexOf(tab);
+              const rtl = typeof document !== 'undefined' && document.documentElement.dir === 'rtl';
+              const direction = (event.key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1);
+              const next = event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? DETAIL_TABS.length - 1
+                  : (current + direction + DETAIL_TABS.length) % DETAIL_TABS.length;
+              setDetailTab(DETAIL_TABS[next]);
+              document.getElementById(`coin-detail-tab-${DETAIL_TABS[next]}`)?.focus();
+            }}
+          >
+            <DetailTabIcon name={tab} />
+            <span>{t(`coin.detailTabs.${tab}`)}</span>
+          </button>
+        ))}
+      </div>
+
+      <div
+        id="coin-detail-panel"
+        className="coin-detail-panel"
+        role="tabpanel"
+        aria-labelledby={`coin-detail-tab-${detailTab}`}
+        data-testid="coin-detail-panel"
+      >
+        {detailTab === 'trade' && (
+          <>
       {/* ---------- price + chart ---------- */}
       <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
         <div className="sheen" />
@@ -458,22 +532,38 @@ export default function CoinDetail() {
         <Metric label={t('coin.fromAth')} value={fmtPct(coin?.athChange ?? 0)} tone="down" />
       </motion.div>
 
-      {/*
-        ─── WHAT THE PAST SAYS ────────────────────────────────────────────
-        Placed BELOW the metrics and ABOVE the buy/sell buttons on purpose:
-        it is the last thing read before a decision, which is where a
-        drawdown figure or a "this level broke 3 of 4 times" belongs.
+      </>
+        )}
 
-        `series` is the chart data already on screen — no extra request, and
-        the panel follows whichever range the user picked.
-      */}
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <HistoryPanel
-          series={(series ?? []).map((d) => d.p)}
-          days={range.days}
-          volume={coin?.volume}
-        />
-      </motion.div>
+        {detailTab === 'history' && (loading && (!series || series.length === 0) ? (
+          <div className="card" style={{ minHeight: 190, padding: 16 }} aria-label={t('common.loading')}>
+            <div className="skel" style={{ height: 28, marginBottom: 12 }} />
+            <div className="skel" style={{ height: 88 }} />
+          </div>
+        ) : (
+          <HistoryPanel
+            series={(series ?? []).map((d) => d.p)}
+            days={range.days}
+            volume={coin?.volume}
+            collapsible={false}
+            emptyMessage={t('history.empty')}
+          />
+        ))}
+
+      {detailTab === 'trade' && (
+        <>
+          {realSwap?.kind !== 'thor' && realSwap?.token?.address && (
+            <TokenRiskCard
+              chainId={realSwap.chainId}
+              address={realSwap.token.address}
+              symbol={realSwap.token.symbol}
+              collapsible={false}
+            />
+          )}
+
+          <InfoBox title={t('common.notAdviceTitle')} tone="warn" id="coin-notadvice">
+            <p>{t('common.notAdvice')}</p>
+          </InfoBox>
 
       {/*
         ─── THESE BUTTONS USED TO OPEN THE SIMULATOR ─────────────────────────
@@ -495,12 +585,14 @@ export default function CoinDetail() {
       <motion.div className="stack" style={{ gap: 9 }} variants={riseIn} initial="hidden" animate="show">
         {realSwap ? (
           <>
-            <div className="row" style={{ gap: 10 }}>
-              <button className="btn btn-primary" onClick={() => navigate(swapUrlFor(coinGeckoId, 'buy'))}>
-                {t('trade.buy')}
+            <div className="row coin-trade-actions" style={{ gap: 10 }}>
+              <button className="btn btn-primary coin-trade-btn" onClick={() => navigate(swapUrlFor(coinGeckoId, 'buy'))}>
+                <TradeActionIcon side="buy" />
+                <span>{t('trade.buy')}</span>
               </button>
-              <button className="btn btn-ghost" onClick={() => navigate(swapUrlFor(coinGeckoId, 'sell'))}>
-                {t('trade.sell')}
+              <button className="btn btn-ghost coin-trade-btn" onClick={() => navigate(swapUrlFor(coinGeckoId, 'sell'))}>
+                <TradeActionIcon side="sell" />
+                <span>{t('trade.sell')}</span>
               </button>
             </div>
             <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
@@ -526,15 +618,17 @@ export default function CoinDetail() {
             budget, spent on the thing that is actually uncertain here.
           */
           <>
-            <div className="row" style={{ gap: 10 }}>
-              <button className="btn btn-primary" onClick={() => navigate(resolvedRoute.href)}>
-                {t('trade.buy')}
+            <div className="row coin-trade-actions" style={{ gap: 10 }}>
+              <button className="btn btn-primary coin-trade-btn" onClick={() => navigate(resolvedRoute.href)}>
+                <TradeActionIcon side="buy" />
+                <span>{t('trade.buy')}</span>
               </button>
               <button
-                className="btn btn-ghost"
+                className="btn btn-ghost coin-trade-btn"
                 onClick={() => navigate(resolvedRoute.href.replace('side=buy', 'side=sell'))}
               >
-                {t('trade.sell')}
+                <TradeActionIcon side="sell" />
+                <span>{t('trade.sell')}</span>
               </button>
             </div>
             <p className="faint" style={{ fontSize: 11.4, lineHeight: 1.7 }}>
@@ -567,58 +661,41 @@ export default function CoinDetail() {
           <p className="notice">{t('coin.notSwappable')}</p>
         )}
 
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => {
-            haptic?.('light');
-            navigate(`/compare?a=${encodeURIComponent(id)}&b=ethereum`);
-          }}
-        >
-          ⚖️ {t('coin.compare')}
-        </button>
       </motion.div>
+        </>
+        )}
 
-      {/*
-        ─── THE STICKY SWAP DOCK ───────────────────────────────────────────
-        «منو پایین صفحه محو و دکمه زیبا و ندرن سواپ ظاهر شود … مثل یونی سواپ»
+        {detailTab === 'compare' && (
+          <div className="coin-compare-tab">
+            <h2 className="coin-detail-pane-title">{t('coin.detailTabs.compare')}</h2>
+            <Suspense fallback={<div className="card" style={{ minHeight: 220, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
+              <LazyCompare embedded initialA={id} initialB="ethereum" />
+            </Suspense>
+          </div>
+        )}
 
-        The second copy of the trade action, pinned to the bottom edge once the
-        one above has scrolled away. It is gated on the SAME resolution the
-        in-page buttons use — curated contract, else the resolved venue — and
-        it renders NOTHING when neither exists, so the dock can never be a
-        button that leads to a swap screen which then refuses the route.
-      */}
-      <SwapDock coin={coin} />
+        {detailTab === 'smartMoney' && (
+          <div className="coin-smart-money-tab">
+            {realSwap?.kind !== 'thor' && (realSwap?.token?.address || resolvedRoute?.address) ? (
+              <TokenSmartMoney
+                chainId={
+                  realSwap?.token?.address
+                    ? realSwap.chainId === 'solana' ? 'solana' : Number(realSwap.chainId) || 1
+                    : resolvedRoute?.kind === 'solana' ? 'solana' : Number(resolvedRoute?.chainId) || 1
+                }
+                address={realSwap?.token?.address || resolvedRoute?.address}
+                collapsible={false}
+              />
+            ) : !venueChecked ? (
+              <div className="card" style={{ minHeight: 160, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>
+            ) : (
+              <p className="notice">{t('coin.smartMoneyUnavailable')}</p>
+            )}
+          </div>
+        )}
+      </div>
 
-      {realSwap?.kind !== 'thor' && realSwap?.token?.address && (
-        <TokenRiskCard
-          chainId={realSwap.chainId}
-          address={realSwap.token.address}
-          symbol={realSwap.token.symbol}
-        />
-      )}
-
-      {/*
-        SMART MONEY — on-chain behaviour layer (Section 31 of the Smart Money
-        spec). Real flows, holders, accumulation/distribution and top movers
-        from the server-side intelligence engine. Shown only when there is a
-        real contract address to anchor to; it reports unavailability rather
-        than inventing a signal. Not a buy recommendation.
-      */}
-      {realSwap?.kind !== 'thor' && (realSwap?.token?.address || resolvedRoute?.address) && (
-        <TokenSmartMoney
-          chainId={
-            realSwap?.token?.address
-              ? realSwap.chainId === 'solana' ? 'solana' : Number(realSwap.chainId) || 1
-              : resolvedRoute?.kind === 'solana' ? 'solana' : Number(resolvedRoute?.chainId) || 1
-          }
-          address={realSwap?.token?.address || resolvedRoute?.address}
-        />
-      )}
-
-      <InfoBox title={t('common.notAdviceTitle')} tone="warn" id="coin-notadvice">
-        <p>{t('common.notAdvice')}</p>
-      </InfoBox>
+      <SwapDock coin={coin} alwaysVisible />
     </PageTransition>
   );
 }

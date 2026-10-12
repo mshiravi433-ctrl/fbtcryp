@@ -1,0 +1,75 @@
+.stock-subtabs {
+  position: sticky;
+  top: calc(50px + env(safe-area-inset-top, 0px));
+  z-index: 25;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  margin: 12px 0 4px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: var(--bg-raised);
+}
+
+.stock-subtabs--rwa { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.stock-subtab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.stock-subtab {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 7px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-2);
+  font: 700 12px/1.25 var(--font-display);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stock-subtab > svg { flex: 0 0 auto; opacity: .82; }
+.stock-subtab > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.stock-subtab:hover { color: var(--text-1); background: color-mix(in srgb, var(--text-1) 4%, transparent); }
+.stock-subtab.is-active {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 30%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 13%, var(--bg-panel-solid)), color-mix(in srgb, var(--rgb-2) 10%, var(--bg-panel-solid)));
+  box-shadow: 0 4px 16px -12px color-mix(in srgb, var(--rgb-1) 80%, transparent), inset 0 1px 0 rgba(255,255,255,.055);
+}
+.stock-subtab.is-active > svg { color: var(--rgb-1); opacity: 1; }
+.stock-subtab:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+:root[data-theme='light'] .stock-subtabs { background: rgba(16, 20, 40, .035); }
+:root[data-theme='light'] .stock-subtab.is-active {
+  color: #17233a;
+  border-color: color-mix(in srgb, var(--ink-cyan) 27%, rgba(16,20,40,.1));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ink-cyan) 9%, #fff), color-mix(in srgb, var(--ink-violet) 6%, #fff));
+}
+:root[data-theme='light'] .stock-subtab.is-active > svg { color: var(--ink-cyan); }
+
+@media (max-width: 360px) {
+  .stock-subtabs { gap: 3px; padding: 4px; }
+  .stock-subtab { gap: 5px; padding-inline: 4px; font-size: 11px; }
+  .stock-subtab > svg { width: 15px; height: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stock-subtab { transition: none; }
+}

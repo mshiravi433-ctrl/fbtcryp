@@ -6,9 +6,8 @@
  * boot test either — it fails silently at runtime for whoever taps that tab.
  * Rendering each one directly is the cheapest way to catch that.
  */
-import { useState } from 'react';
+import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { act } from 'react-dom/test-utils';
 import { HashRouter } from 'react-router-dom';
 import '../src/i18n/index.js';
 import { FEE_BPS } from '../src/lib/feeBps.js';

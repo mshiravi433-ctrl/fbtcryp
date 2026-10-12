@@ -7280,6 +7280,8 @@ body { overflow-x: clip; }
   color: inherit;
   font-family: inherit;
 }
+.hist-card .hist-head.hist-static { cursor: default; }
+.hist-empty-state { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.75; }
 
 .hist-glyph {
   position: relative;
@@ -9652,6 +9654,7 @@ button.farm-protocol-toggle {
   font: inherit;
   -webkit-tap-highlight-color: transparent;
 }
+.infobox-head.is-static { cursor: default; }
 
 /* Tone as a 7px dot. At this size a warning glyph is noise, and these screens
    were already too busy — colour alone carries it. */

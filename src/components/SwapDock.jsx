@@ -47,7 +47,7 @@ const REVEAL_AFTER_PX = 420;
 /** How close to the bottom the page has to be for the dock to be worth pinning. */
 const HIDE_FROM_BOTTOM_PX = 160;
 
-export default function SwapDock({ coin, route, side = 'buy' }) {
+export default function SwapDock({ coin, route, side = 'buy', alwaysVisible = false }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const acquire = useSwapDockStore((s) => s.acquire);
@@ -74,8 +74,22 @@ export default function SwapDock({ coin, route, side = 'buy' }) {
   const href = swapUrl();
 
   useEffect(() => {
-    if (!href) return undefined;
-    let alive = true;
+    if (!href) {
+      if (shownRef.current) {
+        shownRef.current = false;
+        setShown(false);
+      }
+      return undefined;
+    }
+
+    if (alwaysVisible) {
+      if (!shownRef.current) {
+        shownRef.current = true;
+        setShown(true);
+      }
+      return undefined;
+    }
+
     const decide = () => {
       const y = window.scrollY || window.pageYOffset || 0;
       const doc = document.documentElement;
@@ -91,12 +105,10 @@ export default function SwapDock({ coin, route, side = 'buy' }) {
     window.addEventListener('scroll', decide, { passive: true });
     window.addEventListener('resize', decide, { passive: true });
     return () => {
-      alive = false;
       window.removeEventListener('scroll', decide);
       window.removeEventListener('resize', decide);
-      void alive;
     };
-  }, [href]);
+  }, [href, alwaysVisible]);
 
   /* The nav yields the edge only while the dock is actually painted — a bar
      that fades in over 250ms and the nav that fades out over the same should

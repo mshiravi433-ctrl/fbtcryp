@@ -34,7 +34,7 @@ const WINDOWS = ['1h', '4h', '24h', '7d'];
  * distribution confidence, top buyers/sellers, holders, liquidity, exchange
  * flow. Never a buy recommendation.
  */
-export default function TokenSmartMoney({ chainId = 1, address, embedded = true }) {
+export default function TokenSmartMoney({ chainId = 1, address, embedded = true, collapsible = true }) {
   const { t } = useTranslation();
   /* 'solana' is a first-class chain here (base58 mints are served by the
      intel route); it must survive the prop instead of being coerced to 1. */
@@ -52,7 +52,9 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
    * standalone /smart-money/token route starts OPEN, because there the user
    * navigated precisely to read it.
    */
-  const [open, setOpen] = useState(!embedded);
+  const [openState, setOpenState] = useState(!embedded);
+  const open = collapsible ? openState : true;
+  const Head = collapsible ? 'button' : 'div';
 
   useEffect(() => {
     if (!address) return undefined;
@@ -118,13 +120,13 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
       style={embedded ? { margin: 0 } : undefined}
     >
       {/* ── the header is the collapse toggle, not a decorative h3 ───────── */}
-      <button
-        type="button"
-        className="sm-token-head"
-        aria-expanded={open}
-        aria-controls="sm-token-card-body"
-        data-testid="sm-token-toggle"
-        onClick={() => setOpen((v) => !v)}
+      <Head
+        type={collapsible ? 'button' : undefined}
+        className={`sm-token-head${collapsible ? '' : ' is-static'}`}
+        aria-expanded={collapsible ? open : undefined}
+        aria-controls={collapsible ? 'sm-token-card-body' : undefined}
+        data-testid={collapsible ? 'sm-token-toggle' : undefined}
+        onClick={collapsible ? () => setOpenState((v) => !v) : undefined}
       >
         <span className="sm-token-head-main">
           <svg
@@ -139,14 +141,14 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true 
           {t('sm.title')}
         </span>
         {headSummary ? <span className="sm-token-head-summary mono">{headSummary}</span> : null}
-        <svg
+        {collapsible && <svg
           className={`sm-token-caret ${open ? 'is-open' : ''}`}
           width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
         >
           <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
+        </svg>}
+      </Head>
 
       {/* the identity line — the connection itself, visible and checkable */}
       <div className="sm-token-identity" data-testid="sm-token-identity">

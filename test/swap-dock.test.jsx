@@ -71,10 +71,10 @@ const Probe = () => {
   return <div data-testid="where">{loc.pathname}{loc.search}</div>;
 };
 
-const mount = (token) => render(
+const mount = (token, props = {}) => render(
   <MemoryRouter initialEntries={['/coin/bitcoin']}>
     <Probe />
-    <SwapDock coin={token} />
+    <SwapDock coin={token} {...props} />
   </MemoryRouter>
 );
 
@@ -86,6 +86,23 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the sticky swap dock', () => {
+  it('can stay visible on token-detail subtabs and releases the nav when unmounted', async () => {
+    setPage({ scrollY: 0, scrollHeight: 5000, innerHeight: 800 });
+    const { unmount } = mount(coin(), { alwaysVisible: true });
+    await waitFor(() => expect(screen.getByTestId('swap-dock')).toBeTruthy());
+    await waitFor(() => expect(useSwapDockStore.getState().active).toBe(true));
+    unmount();
+    expect(useSwapDockStore.getState().active).toBe(false);
+    expect(useSwapDockStore.getState().count).toBe(0);
+  });
+
+  it('does not hide the nav for an unsupported coin, even in always-visible mode', () => {
+    setPage({ scrollY: 0, scrollHeight: 5000, innerHeight: 800 });
+    mount(coin({ id: 'cardano', symbol: 'ADA' }), { alwaysVisible: true });
+    expect(screen.queryByTestId('swap-dock')).toBeNull();
+    expect(useSwapDockStore.getState().active).toBe(false);
+  });
+
   it('is absent at the top of the page, where the in-page buttons already are', () => {
     const scroll = setPage({ scrollY: 0, scrollHeight: 5000, innerHeight: 800 });
     mount(coin());
