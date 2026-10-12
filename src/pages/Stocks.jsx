@@ -11,11 +11,18 @@ import EquityHoldings, { useSolanaEquityHoldings } from '../components/EquityHol
 import GoldHistoryBox from '../components/GoldHistoryBox';
 import TopMovers from '../components/TopMovers';
 import { useMarkets } from '../hooks/useMarket';
-import { getCategory } from '../lib/api';
+import { getCategoryPages } from '../lib/api';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { IconSearch } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
+/*
+ * TokenIcon (not CoinLogo) for the Robinhood rail: those rows are CONTRACTS,
+ * and TokenIcon resolves artwork by chain + address first — the same
+ * impersonation-proof rule lib/tokenIcon.jsx documents. CoinLogo is for rows
+ * that have no contract at all (the reference table).
+ */
+import TokenIcon from '../lib/tokenIcon';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import { THIN_ASSETS } from '../lib/solanaAssets';
 import { solanaSellUrl } from '../lib/solanaSell';
@@ -40,6 +47,12 @@ import { feePercentString } from '../lib/feeBps';
  * next person editing this file.
  */
 import { fetchAvantisEquities } from '../lib/avantisEquities';
+import {
+  ROBINHOOD_CHAIN_NAME,
+  loadStockTokenUniverse,
+  referencePriceFor,
+  stockTokenSwapUrl
+} from '../lib/stockTokens';
 import { SPECULATION_ENABLED } from '../lib/features';
 import lazyRetry from '../lib/lazyRetry';
 import RwaHorizonSwapBanners from '../components/RwaHorizonSwapBanners';
@@ -141,6 +154,22 @@ const RWA_IDS = [
 
 /** Sizes for the depth gate. Deliberately the same set the Farm screen uses. */
 const AMOUNTS = [100, 1000, 5000];
+
+/*
+ * How much of the RWA sector to read, and how much of it to paint.
+ *
+ * Four pages of 250 is CoinGecko's own maximum per page — 1,000 rows is the
+ * practical ceiling of a category — and `getCategoryPages` asks for the later
+ * pages only when the first one came back full, so a small sector still costs
+ * exactly one request. RWA_ROWS is the render page; the list labels itself
+ * with the FULL count, which is the number that was being complained about.
+ */
+const RWA_FEED_PAGES = 4;
+const RWA_FEED_PER_PAGE = 250;
+const RWA_ROWS = 24;
+
+/* How many Robinhood-Chain contracts render before «نمایش همه». */
+const RH_ROWS = 18;
 const STOCK_TABS = SPECULATION_ENABLED
   ? ['equity', 'rwa', 'ostium', 'derivatives']
   : ['equity', 'rwa'];
@@ -322,7 +351,17 @@ export default function Stocks() {
     let alive = true;
     setRwaLoading(true);
     setRwaError(null);
-    getCategory('rwa', { perPage: 250 })
+    /*
+     * ─── THE WHOLE SECTOR, NOT ITS FIRST HUNDRED ROWS (2026-10-12) ────────
+     * «تعداد توکنهای ... RWA خیلی کمه ... اعداد را خیلی بیشتر کن». The list
+     * below labels itself with the number of rows it holds, and that number
+     * was capped by our own proxy (per_page ≤ 100, page pinned to 1) rather
+     * than by CoinGecko. getCategoryPages walks up to four pages of 250 and
+     * stops early when the category is exhausted, so this is the real sector
+     * size — and the render below still pages, because a thousand rows is a
+     * scroll nobody asked for.
+     */
+    getCategoryPages('rwa', { pages: RWA_FEED_PAGES, perPage: RWA_FEED_PER_PAGE })
       .then((rows) => { if (alive) setRwaFeed(rows || []); })
       .catch((e) => { if (alive) setRwaError(e); })
       .finally(() => { if (alive) setRwaLoading(false); });
@@ -364,6 +403,38 @@ export default function Stocks() {
     };
   }, [tab]);
 
+  /*
+   * ─── THE TOKENIZED STOCK UNIVERSE OF ROBINHOOD CHAIN (2026-10-12) ────────
+   * «تعداد توکنهای صفحه سهام — توکنهای توکنیزه و RWA — خیلی کمه … اعداد را
+   * خیلی بیشتر کن». The Solana rail above is short by construction: it only
+   * offers xStocks whose issuer authority was verified against Backed's keys
+   * AND whose book clears $25k. The tokenized-equity market is far larger, and
+   * most of it is ordinary ERC-20s on Robinhood Chain that our existing EVM
+   * swap already routes (lib/stockTokens.js explains the source and the limits
+   * it inherits — read that header before changing anything here).
+   *
+   * Loaded only on the equity tab: nobody reading the RWA tab should pay for
+   * a 1,000-entry JSON, and the browser may already have it cached for a day.
+   */
+  const [stockUniverse, setStockUniverse] = useState(null);
+  const [stockUniverseError, setStockUniverseError] = useState(null);
+
+  useEffect(() => {
+    if (tab !== 'equity') return undefined;
+    let alive = true;
+    setStockUniverseError(null);
+    loadStockTokenUniverse()
+      .then((tokens) => {
+        if (!alive) return;
+        /* An empty list is a failure to read, not an empty market — say so
+           instead of rendering a heading over nothing. */
+        if (!tokens.length) setStockUniverseError(new Error('EMPTY_LIST'));
+        setStockUniverse(tokens);
+      })
+      .catch((e) => alive && setStockUniverseError(e));
+    return () => { alive = false; };
+  }, [tab]);
+
   const rwaCoins = useMemo(() => {
     /* The sector feed understands RWA better than the top-250 page does. */
     if (Array.isArray(rwaFeed) && rwaFeed.length > 0) return rwaFeed;
@@ -373,6 +444,20 @@ export default function Stocks() {
   /* ── equity sector filter + RWA sort. Both are views over loaded data. ── */
   const [eqSector, setEqSector] = useState('all');
   const [rwaSort, setRwaSort] = useState('mcap');
+
+  /*
+   * The RWA list is long now — it renders a page and asks before the rest.
+   *
+   * Declared BELOW `rwaSort`/`rwaCategory`/`rwaSearch` on purpose: the reset
+   * effect reads all three, and reading a binding the component has not
+   * initialised yet is a temporal-dead-zone ReferenceError, not `undefined`.
+   * That is the exact failure this repo has already been bitten by once (see
+   * the swap token-list comment in lib/tokenLists.js): a `useState` binding
+   * read from above its declaration throws on EVERY render while the build
+   * stays green. test/screens.jsx mounts this page for precisely this reason.
+   */
+  const [rwaShowAll, setRwaShowAll] = useState(false);
+  useEffect(() => { setRwaShowAll(false); }, [rwaSort, rwaCategory, rwaSearch]);
 
   /*
    * ─── ONLY THE TICKERS WE CANNOT SELL ────────────────────────────────────
@@ -592,6 +677,43 @@ export default function Stocks() {
     () => rwaCoins.reduce((s, c) => s + (Number(c.mcap) || 0), 0),
     [rwaCoins]
   );
+
+  /* The painted page of the RWA list — the count above it stays the real one. */
+  const visibleRwa = rwaShowAll ? sortedRwa : sortedRwa.slice(0, RWA_ROWS);
+
+  /*
+   * ─── THE ROBINHOOD RAIL: SEARCH, PAGE, AND A REFERENCE PRICE ─────────────
+   * The price comes from the equity feed this tab already loads (Avantis, via
+   * Pyth) matched by TICKER. It is a quote for the company's SHARE, not for
+   * the token — the token trades in its own pool and can sit at a premium or a
+   * discount to it. `referencePriceFor` returns null when the ticker is not in
+   * that feed, and the row then shows «—» rather than a number nobody read.
+   */
+  const [rhSearch, setRhSearch] = useState('');
+  const [rhShowAll, setRhShowAll] = useState(false);
+  useEffect(() => { setRhShowAll(false); }, [rhSearch]);
+
+  const rhEquities = useMemo(() => {
+    const rows = (stockUniverse ?? []).filter((t) => t.equity);
+    const q = rhSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (t) =>
+        t.symbol.toLowerCase().includes(q) ||
+        t.name.toLowerCase().includes(q) ||
+        t.address.toLowerCase().includes(q)
+    );
+  }, [stockUniverse, rhSearch]);
+
+  const rhVisible = rhShowAll ? rhEquities : rhEquities.slice(0, RH_ROWS);
+  const rhAll = useMemo(() => (stockUniverse ?? []).filter((t) => t.equity), [stockUniverse]);
+
+  /* Every buy on this rail goes through the SAME screen as an RWA row's buy —
+     the one that prints the recipient contract before anything is signed. */
+  const rhBuy = (token) => {
+    haptic?.('select');
+    navigate(stockTokenSwapUrl(token, amount));
+  };
 
   /*
    * 90 days of gold now lives in GoldHistoryBox, which owns its own fetches.
@@ -971,6 +1093,149 @@ export default function Stocks() {
           </section>
 
           {/*
+            ─── THE TOKENIZED-STOCK UNIVERSE OF ROBINHOOD CHAIN (2026-10-12) ──
+            Asked for as «تعداد توکنهای صفحه سهام — توکنهای توکنیزه و RWA —
+            خیلی کمه … اعداد را خیلی بیشتر کن». Everything below is a real
+            contract read from Uniswap's own default token list: no row is
+            invented, none is padded, and each one prints its own address,
+            because the address — not the ticker — is what identifies a token.
+
+            WHY IT IS A SEPARATE SECTION AND NOT MORE ROWS ABOVE. The Solana
+            rail's whole promise is that every mint was matched against
+            Backed's issuer keys on load. These were not: they are exactly what
+            Uniswap's list says they are, and nothing more. Merging them into
+            the verified rail would quietly transfer that promise to rows that
+            never earned it — so they get their own heading, their own badge
+            naming the source, and a note that says the limit out loud.
+
+            Every «خرید» here goes to /swap with the contract address attached,
+            through the same screen, fee and warnings an RWA row uses. Nothing
+            is signed on this page.
+          */}
+          {stockUniverse === null && !stockUniverseError && (
+            <section style={{ marginTop: 16 }}>
+              <p className="section-label">{t('stocks.rhTitle')}</p>
+              <p className="faint" style={{ margin: 0 }}>{t('stocks.rhLoading')}</p>
+            </section>
+          )}
+
+          {stockUniverseError && (
+            <section style={{ marginTop: 16 }}>
+              <p className="section-label">{t('stocks.rhTitle')}</p>
+              <p className="notice" style={{ marginTop: 6 }}>{t('stocks.rhUnavailable')}</p>
+            </section>
+          )}
+
+          {rhAll.length > 0 && (
+            <section style={{ marginTop: 16 }}>
+              <div className="row-between" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                <div>
+                  <p className="section-label" style={{ margin: 0 }}>{t('stocks.rhTitle')}</p>
+                  <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>
+                    {t('stocks.rhSub', { count: rhAll.length, chain: ROBINHOOD_CHAIN_NAME })}
+                  </p>
+                </div>
+                <span className="pill" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {t('stocks.rhSource')}
+                </span>
+              </div>
+
+              <div style={{ position: 'relative', marginBottom: 10 }}>
+                <input
+                  type="text"
+                  className="input"
+                  style={{
+                    width: '100%',
+                    paddingLeft: isRTL ? 12 : 36,
+                    paddingRight: isRTL ? 36 : 12,
+                    fontSize: 12.5,
+                    height: 38
+                  }}
+                  placeholder={t('stocks.rhSearchPlaceholder')}
+                  value={rhSearch}
+                  onChange={(e) => setRhSearch(e.target.value)}
+                />
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    [isRTL ? 'right' : 'left']: 12,
+                    pointerEvents: 'none',
+                    color: 'var(--muted)',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <IconSearch width={14} height={14} />
+                </span>
+              </div>
+
+              {rhVisible.length > 0 ? (
+                <motion.div className="stack" style={{ gap: 8 }} variants={stagger} initial="hidden" animate="show">
+                  {rhVisible.map((tk) => {
+                    const ref = referencePriceFor(tk.symbol, avantis?.rows ?? []);
+                    const addr = `${tk.address.slice(0, 6)}…${tk.address.slice(-4)}`;
+                    return (
+                      <motion.div
+                        key={tk.id}
+                        className="coin-row"
+                        variants={riseIn}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => rhBuy(tk)}
+                      >
+                        <TokenIcon token={tk} chainId={tk.chainId} size={30} />
+                        <div className="coin-meta" style={{ minWidth: 0 }}>
+                          <div className="coin-sym">{tk.symbol}</div>
+                          <div className="coin-name" dir="ltr" style={{ textAlign: 'start' }}>
+                            {tk.name} · <span className="mono">{addr}</span>
+                          </div>
+                        </div>
+                        <div className="coin-right" style={{ textAlign: isRTL ? 'left' : 'right' }}>
+                          {/* A reference quote for the SHARE, matched by ticker —
+                              not a quote for the token. Null stays a dash. */}
+                          <div className="mono" style={{ fontSize: 12.5 }}>
+                            {ref ? `$${fmtPrice(ref.price)}` : '—'}
+                          </div>
+                          <div className="faint" style={{ fontSize: 9.5 }}>{t('stocks.rhRefPrice')}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{ flexShrink: 0 }}
+                          aria-label={t('stocks.rwaQuickBuy', { sym: tk.symbol, pay: 'USDG', fee: feePercentString() })}
+                          onClick={(e) => { e.stopPropagation(); rhBuy(tk); }}
+                        >
+                          {t('stocks.rhBuy')}
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              ) : (
+                <p className="notice" style={{ marginTop: 8 }}>{t('stocks.rhNoMatch')}</p>
+              )}
+
+              {rhEquities.length > RH_ROWS && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ marginTop: 10 }}
+                  onClick={() => { haptic?.('select'); setRhShowAll((v) => !v); }}
+                >
+                  {/* «توکن», not «سهم»: these rows are contracts, and the
+                      count is what the list claims to hold. */}
+                  {rhShowAll
+                    ? t('stocks.showLess')
+                    : t('stocks.showAllTokens', { count: rhEquities.length })}
+                </button>
+              )}
+
+              <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('stocks.rhNote')}</p>
+            </section>
+          )}
+
+          {/*
             ─── GOLD ──────────────────────────────────────────────────────
             Below the equities but under the SAME freeze warning, which is why
             it lives inside this tab rather than getting one of its own: the
@@ -1333,7 +1598,7 @@ export default function Stocks() {
               </div>
             ) : (
               <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-                {sortedRwa.map((c) => (
+                {visibleRwa.map((c) => (
                   <motion.div
                     key={c.id}
                     className="coin-row"
@@ -1356,6 +1621,19 @@ export default function Stocks() {
                 ))}
               </motion.div>
             )}
+            {sortedRwa.length > RWA_ROWS && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: 10 }}
+                onClick={() => { haptic?.('select'); setRwaShowAll((v) => !v); }}
+              >
+                {rwaShowAll
+                  ? t('stocks.showLess')
+                  : t('stocks.showAllTokens', { count: sortedRwa.length })}
+              </button>
+            )}
+
             <p className="faint" style={{ marginTop: 9, lineHeight: 1.7 }}>{t('stocks.rwaNote')}</p>
           </section>
 

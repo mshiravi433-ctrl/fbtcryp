@@ -424,11 +424,13 @@ export function getMarkets({ page = 1, perPage = 50, vs = 'usd' } = {}) {
  * than an error, which would render as a blank screen with no explanation.
  * The map in marketSectors.js is shared with the server allowlist.
  */
-export function getCategory(category, { perPage = 100, vs = 'usd' } = {}) {
+export function getCategory(category, { perPage = 100, vs = 'usd', page = 1 } = {}) {
   const slug = MARKET_CATEGORIES[category];
   if (!slug) return Promise.resolve([]);
+  const pageNo = Math.min(10, Math.max(1, Number(page) || 1));
+  const size = Math.min(250, Math.max(1, Number(perPage) || 100));
 
-  return resilient(`cat:${slug}:${vs}:${perPage}`, {
+  return resilient(`cat:${slug}:${vs}:${size}:${pageNo}`, {
     /*
      * Five minutes. A sector list moves far more slowly than a price ticker,
      * and every extra request here is spent against a free public rate limit
@@ -436,13 +438,13 @@ export function getCategory(category, { perPage = 100, vs = 'usd' } = {}) {
      */
     ttl: 300_000,
     backend: async () => {
-      const { data, stale } = await fetchJson(`${apiBase()}/category/${slug}?per_page=${perPage}&vs=${vs}`, { withMeta: true });
+      const { data, stale } = await fetchJson(`${apiBase()}/category/${slug}?per_page=${size}&vs=${vs}&page=${pageNo}`, { withMeta: true });
       return (Array.isArray(data) ? data : []).map((row) => ({ ...row, dataProvenance: stale ? 'stale' : 'live' }));
     },
     direct: async () => {
       const raw = await fetchJson(
         `${PUBLIC_CG}/coins/markets?vs_currency=${vs}&category=${slug}` +
-          `&order=market_cap_desc&per_page=${perPage}&page=1&sparkline=true` +
+          `&order=market_cap_desc&per_page=${size}&page=${pageNo}&sparkline=true` +
           `&price_change_percentage=1h,24h,7d`
       );
       if (!Array.isArray(raw) || !raw.length) throw new Error('Empty category response');
@@ -455,6 +457,67 @@ export function getCategory(category, { perPage = 100, vs = 'usd' } = {}) {
      */
     fallback: () => []
   });
+}
+
+/**
+ * ─── A WHOLE SECTOR, NOT JUST ITS FIRST PAGE (added 2026-10-12) ─────────────
+ * The Stocks screen labels its RWA list with the number of rows it holds, and
+ * that number used to be whatever page 1 of the category contained. Reported
+ * as «تعداد توکنها ... خیلی کمه ... اعداد را خیلی بیشتر کن» — and the cap was
+ * ours, not CoinGecko's.
+ *
+ * Page 1 is asked for alone: if it comes back short, the category is simply
+ * that small and the remaining pages are never requested. Only when page 1 is
+ * full are the rest fetched — in parallel, because the user is waiting.
+ *
+ * Failure of ONE page never discards the others. A partial sector is still a
+ * true sector, and every row carries its own provenance; an empty tab because
+ * page 3 timed out would be worse than the rows that did load.
+ */
+export async function getCategoryPages(category, { pages = 1, perPage = 250, vs = 'usd' } = {}) {
+  const wanted = Math.min(10, Math.max(1, Number(pages) || 1));
+  const size = Math.min(250, Math.max(1, Number(perPage) || 250));
+  const first = await getCategory(category, { perPage: size, vs, page: 1 }).catch(() => []);
+
+  const out = [];
+  const seen = new Set();
+  const push = (batch) => {
+    for (const row of Array.isArray(batch) ? batch : []) {
+      const key = row?.id ?? `${row?.symbol}:${row?.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+  };
+  push(first);
+  if (!Array.isArray(first) || first.length < size || wanted === 1) return out;
+
+  const rest = await Promise.all(
+    Array.from({ length: wanted - 1 }, (_, i) =>
+      getCategory(category, { perPage: size, vs, page: i + 2 }).catch(() => null)
+    )
+  );
+  for (const batch of rest) {
+    /*
+     * ─── AN EMPTY PAGE IS NOT AN ANSWER (found by the paging test) ──────────
+     * `getCategory` deliberately resolves to [] when every source failed — the
+     * honest empty state the Market tab needs — so a page that timed out and a
+     * page that is genuinely past the end of the category arrive here looking
+     * identical. Treating the first one as evidence of the end silently threw
+     * away every page that answered after it: the sector then rendered ONE
+     * page while three more sat in memory, which is the same too-small number
+     * this whole function exists to fix.
+     *
+     * A non-empty short page is still the real end — that is what the upstream
+     * says when it has nothing left to give — so only that stops the walk. The
+     * cost of the distinction is one extra request in the rare case where a
+     * category's size is an exact multiple of the page size.
+     */
+    if (!Array.isArray(batch) || batch.length === 0) continue;
+    push(batch);
+    if (batch.length < size) break; // the category is exhausted upstream
+  }
+  return out;
 }
 
 export function normalizeCoin(c = {}) {

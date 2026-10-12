@@ -14,6 +14,12 @@ import { digestFromMarket } from '../src/lib/news.js';
 import { trimKeepingLanguages } from '../server/news.js';
 import { isEligible, normalizePool, riskBand } from '../server/yields.js';
 import { issuerMatches } from '../server/solanaAssets.js';
+/* The sector proxy and its client: the counts the Stocks tabs label
+   themselves with are decided by the page/per-page clamps in these two,
+   which is why they are driven here and not only in the wiring text checks. */
+import { fetchCategory } from '../server/providers.js';
+import { getCategory, getCategoryPages } from '../src/lib/api.js';
+import { MARKET_CATEGORIES } from '../src/lib/marketSectors.js';
 import { bridgeFee, integratorId } from '../server/bridge.js';
 import { feeBps as gaslessFeeBps, feeRecipient as gaslessRecipient, gaslessConfigured } from '../server/gasless.js';
 import {
@@ -9935,6 +9941,167 @@ export default async function run() {
       fresh(5n * 10n ** 18n) === null);
   }
 
+
+
+  /* ================================================================== */
+  /* SECTOR PAGING — the number the Stocks screen labels itself with     */
+  /* ================================================================== */
+  /*
+   * «تعداد توکنهای صفحه سهام — توکنهای توکنیزه و RWA — خیلی کمه … اعداد را
+   *  خیلی بیشتر کن». The RWA tab prints the size of the sector its feed
+   * returned, so that number is decided HERE — by the per-page and page clamps
+   * on both sides of the proxy — and not by the size of CoinGecko's category.
+   * Both halves are driven against a stubbed fetch: the server function that
+   * builds the upstream URL, and the client that walks the pages.
+   */
+  {
+    const realFetch = globalThis.fetch;
+    const json = (body) => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => body });
+    const rawPage = (count, prefix) => Array.from({ length: count }, (_, i) => ({
+      id: `${prefix}-${i}`, symbol: `S${i}`, name: `${prefix} coin ${i}`, current_price: i + 1, image: null
+    }));
+
+    /* ---- the server half ---- */
+    {
+      const urls = [];
+      globalThis.fetch = async (url) => { urls.push(String(url)); return json(rawPage(250, 'srv')); };
+      try {
+        const rows = await fetchCategory(MARKET_CATEGORIES.rwa, { perPage: 250, page: 3 });
+        const url = urls[0] || '';
+        const asked = new URL(url);
+        t('the sector proxy asks its upstream for the page it was given',
+          asked.searchParams.get('page') === '3' && asked.searchParams.get('per_page') === '250');
+        t('...and answers with that page, not with a truncated one',
+          rows.length === 250 && rows[0].symbol === 'S0');
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+    {
+      const urls = [];
+      globalThis.fetch = async (url) => { urls.push(String(url)); return json(rawPage(1, 'clamp')); };
+      try {
+        await fetchCategory(MARKET_CATEGORIES.rwa, { perPage: 9999, page: 99 });
+        const asked = new URL(urls[0] || '');
+        /* CoinGecko documents 250/page and we allow ten pages; anything else
+           would come back as an error, which reads to the user as an empty
+           sector. The clamps are the contract, so they are asserted. */
+        t('per_page is clamped to CoinGecko\'s documented maximum',
+          asked.searchParams.get('per_page') === '250');
+        t('page is clamped to the ten pages the proxy allows',
+          asked.searchParams.get('page') === '10');
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+    {
+      globalThis.fetch = async () => json([]);
+      let code = null;
+      try { await fetchCategory(MARKET_CATEGORIES.rwa, { page: 2 }); } catch (err) { code = err?.message ?? 'threw'; }
+      /* The CoinLore backup is a ten-ID list: it can only answer page 1, and
+         answering page 2 with page-1 rows would print the same twenty-five
+         tokens twice. An honest short answer beats a silently repeated one. */
+      t('a sector page past the first is refused rather than repeated',
+        code === 'CATEGORY_DATA_UNAVAILABLE');
+      globalThis.fetch = realFetch;
+    }
+
+    /* ---- the client half ---- */
+    {
+      /* Distinct `vs` per scenario: the client memoises by key, so the cases
+         must not share one cache entry. */
+      const seen = [];
+      globalThis.fetch = async (url) => {
+        const asked = new URL(String(url), 'https://app.example.test');
+        const page = Number(asked.searchParams.get('page') ?? 1);
+        const per = Number(asked.searchParams.get('per_page') ?? 250);
+        seen.push({ page, per });
+        return json(rawPage(per, `p${page}`));
+      };
+      try {
+        await getCategory('rwa', { perPage: 1000, page: 42, vs: 'unitclamp' });
+        const last = seen.at(-1);
+        t('the client clamps the page and per-page it sends',
+          last.page === 10 && last.per === 250);
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+    {
+      const pages = [];
+      globalThis.fetch = async (url) => {
+        const asked = new URL(String(url), 'https://app.example.test');
+        const page = Number(asked.searchParams.get('page') ?? 1);
+        const per = Number(asked.searchParams.get('per_page') ?? 250);
+        pages.push(page);
+        return json(rawPage(page <= 2 ? per : 120, `w${page}`)); // page 3 is the last one
+      };
+      try {
+        const rows = await getCategoryPages('rwa', { pages: 4, perPage: 250, vs: 'unitwalk' });
+        t('a full sector walks every page it was allowed',
+          rows.length === 250 + 250 + 120);
+        t('...and stops at the first short page instead of asking past the end',
+          pages.includes(1) && pages.includes(2) && pages.includes(3));
+        const ids = rows.map((r) => r.id);
+        t('...with no row repeated after the merge', new Set(ids).size === ids.length);
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+    {
+      let calls = 0;
+      globalThis.fetch = async (url) => {
+        const asked = new URL(String(url), 'https://app.example.test');
+        calls += 1;
+        return json(rawPage(30, 'small'));
+      };
+      try {
+        const rows = await getCategoryPages('rwa', { pages: 4, perPage: 250, vs: 'unitsmall' });
+        /* A small category costs ONE request: the later pages are only asked
+           for when page 1 came back full. */
+        t('a small sector is one request, not four', calls === 1 && rows.length === 30);
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    }
+    {
+      globalThis.fetch = async (url) => {
+        const asked = new URL(String(url), 'https://app.example.test');
+        const page = Number(asked.searchParams.get('page') ?? 1);
+        if (page === 2) throw new Error('HTTP 500');
+        return json(rawPage(250, `f${page}`));
+      };
+      let rows = [];
+      try {
+        rows = await getCategoryPages('rwa', { pages: 4, perPage: 250, vs: 'unitfail' });
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+      /* One dead page must never empty the tab. A partial sector is still a
+         true sector, and the rows that did load carry their own provenance. */
+      t('one failed page never discards the pages that answered',
+        rows.length === 250 * 3 && rows.every((r) => typeof r.id === 'string'));
+    }
+    {
+      /* The same row twice (a category that shifts between two requests) is
+         one row on the screen: the merge de-duplicates by id. */
+      globalThis.fetch = async (url) => {
+        const asked = new URL(String(url), 'https://app.example.test');
+        const page = Number(asked.searchParams.get('page') ?? 1);
+        const rows = rawPage(250, 'dup');
+        return json(page === 1 ? rows : rows.slice(0, 200).concat(rawPage(20, `extra${page}`)));
+      };
+      let rows = [];
+      try {
+        rows = await getCategoryPages('rwa', { pages: 2, perPage: 250, vs: 'unitdup' });
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+      const ids = rows.map((r) => r.id);
+      t('a row that moves between pages is listed once',
+        new Set(ids).size === ids.length && rows.length === 250 + 20);
+    }
+  }
 
   return rows;
 }

@@ -88,6 +88,22 @@ execFileSync(process.execPath, ['--test', 'test/dydx-wallet-return.test.mjs'], {
 execFileSync(process.execPath, ['--test', 'test/ostium-subgraph-gateway.test.mjs'], {
   stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
 });
+/*
+ * THE TOKENIZED-STOCK RAIL ON /stocks — the rows that answer «تعداد توکنهای
+ * صفحه سهام … خیلی کمه … اعداد را خیلی بیشتر کن». The universe comes from
+ * SOMEONE ELSE'S list (Uniswap's default token list), which is exactly why the
+ * rules that decide what gets shown and where the buy button goes are pinned
+ * against real rows: wrong-chain rows, bad addresses, duplicated contracts and
+ * chain-native symbols must be dropped rather than relabelled, a company
+ * ticker may never be handed a chain token's logo, and the buy link has to be
+ * the same /swap?chain=4663&from=USDG&toAddress=… contract an RWA row builds.
+ * No network — it runs as a child process like the probes above so its fetch
+ * and localStorage stubs cannot leak into the suites that follow.
+ */
+console.log('\n▸ checking the tokenized-stock universe…');
+execFileSync(process.execPath, ['--test', 'test/stock-tokens.test.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
 /* The central brain's turn probe: every §42 scenario (A–J) against the real
    engines with only the external boundary faked. It belongs in `npm test`
    because the failure it catches — a confident answer built on unread data — is a

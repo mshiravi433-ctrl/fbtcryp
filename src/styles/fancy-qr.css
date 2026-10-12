@@ -5,12 +5,34 @@
    stage and leave the code itself alone.
    ========================================================================== */
 
+/*
+ * ─── THE TOP BAND IS PART OF THE BOX (fixed 2026-10-12) ─────────────────────
+ * Reported on the receive QR: «اندازه باکس اشتباهه چون لوگو بالایی خیلی بالا
+ * قرار گرفته و رفته زیر صفحه».
+ *
+ * The medallion is absolutely positioned against THIS stage and lifted by
+ * translate(-50%, -38%) — 15.2px on a 40px badge. With an 18px top padding,
+ * that lifted half painted OUTSIDE the stage's own box. On a plain page that
+ * is invisible; every receive QR, however, lives inside <Sheet>'s
+ * `.sheet-body`, which is an `overflow-y: auto` scroll container — and a
+ * scroll container CLIPS what sits above its content box with no way to
+ * scroll it back. The medallion therefore rendered sliced off at the top on
+ * both receive sheets (EVM and Solana) while looking fine everywhere else.
+ *
+ * Reserving the overhang INSIDE the box fixes it at the source, so no parent
+ * can ever clip it:
+ *
+ *   34px = 18px of clearance above the plate (the look was unchanged)
+ *        + 15.2px the medallion rises above its anchor
+ *        + ~1px for its transparent border
+ *   12px below = room for the corner brackets (9px) with a pixel to spare.
+ */
 .fqr-stage {
   position: relative;
   display: flex;
   justify-content: center;
   width: 100%;
-  padding: 18px 10px 10px; /* top band is the medallion's home */
+  padding: 34px 10px 12px; /* top band is the medallion's home — inside the box */
   margin: 4px auto 12px;
 }
 
@@ -131,12 +153,19 @@
   pointer-events: none;
 }
 
-/* The chain/brand medallion, sunk into the top edge. It overlaps only the
-   plate's QUIET-ZONE padding band (the plate pads 15px; the badge dips 10px),
-   so no module is ever covered. */
+/* The chain/brand medallion, sunk into the top edge of the plate. It overlaps
+   only the plate's QUIET-ZONE padding band (the plate pads 15px; the badge
+   dips 6.8px into it), so no module is ever covered.
+ *
+ * `top: 16px` is the medallion's anchor INSIDE the stage's 34px top band:
+ *   16 − 15.2 (the 38% lift on a 40px badge) = 0.8px — its top edge stays
+ *   inside the box, which is what the receive sheets need (see .fqr-stage).
+ *   Moving this down without moving the band up would put the medallion over
+ *   the QR's first module row; test/fancy-qr-box.test.mjs pins both numbers.
+ */
 .fqr-badge {
   position: absolute;
-  top: 0;
+  top: 16px;
   left: 50%;
   transform: translate(-50%, -38%);
   width: 40px;
