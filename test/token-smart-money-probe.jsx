@@ -194,6 +194,28 @@ export async function run(container) {
     /0x1111/i.test(q('[data-testid="sm-token-identity"]')?.textContent || ''));
   await act(async () => { root.unmount(); });
 
+  /* ── 6. token-detail subtab: open and deliberately not a disclosure ───── */
+  container.innerHTML = '';
+  root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <TokenSmartMoney
+          chainId={1}
+          address="0x1111111111111111111111111111111111111111"
+          embedded
+          collapsible={false}
+        />
+      </MemoryRouter>
+    );
+  });
+  await act(async () => { await sleep(40); });
+  const staticHead = q('.sm-token-head');
+  check('token-detail smart money has a static header, not a disclosure button',
+    staticHead?.tagName === 'DIV' && !q('[data-testid="sm-token-toggle"]'));
+  check('token-detail smart-money content is open immediately', Boolean(q('#sm-token-card-body')));
+  await act(async () => { root.unmount(); });
+
   check('no React error was logged', errors.length === 0, errors.slice(0, 2).join(' | '));
 
   global.fetch = realFetch;

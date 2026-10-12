@@ -31,6 +31,17 @@ describe('asset icons — lending coverage', () => {
     }
   });
 
+  it('RWA and tokenized-equity rows always have offline logo artwork', () => {
+    const rwaSymbols = [
+      'ONDO', 'USDY', 'USDG', 'PAXG', 'XAUt', 'MKR', 'PENDLE', 'POLYX', 'CFG', 'XDC', 'INJ',
+      'CPOOL', 'MPL', 'GFI', 'REAL', 'TRUF', 'FACTR', 'USYC', 'JTRSY',
+      'VBILL', 'THBILL', 'RGTI', 'JOBY', 'SOFI'
+    ];
+    for (const symbol of rwaSymbols) {
+      expect(symbolSvg(symbol), `RWA symbol ${symbol} must have offline artwork`).toContain('<svg');
+    }
+  });
+
   it('wrappers resolve to their parent artwork instead of the raw monogram', () => {
     expect(symbolSvg('wS')).toBe(symbolSvg('S') ?? symbolSvg('wS')); /* Sonic pair via the chain mark */
     expect(symbolSvg('WSOL')).toBeTruthy();

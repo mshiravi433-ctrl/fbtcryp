@@ -143,7 +143,15 @@
     "thorSwapNote": "Native {{symbol}} is swapped through THORChain (not an EVM token). You send coins with a memo from the wallet that holds them — this app quotes the route, it does not sign it.",
     "compare": "Compare",
     "tvHint": "Drag to pan · pinch to zoom",
-    "swapDockAria": "Buy {{symbol}}"
+    "swapDockAria": "Buy {{symbol}}",
+    "detailTabs": {
+      "aria": "Token details",
+      "trade": "Buy / sell",
+      "history": "What the past says",
+      "compare": "Compare",
+      "smartMoney": "Smart money"
+    },
+    "smartMoneyUnavailable": "On-chain smart-money data is not available for this asset."
   },
   "trade": {
     "title": "Trade",
@@ -3572,6 +3580,13 @@
       "historyNote": "Each token is priced by a different issuer, so the three series are measured separately rather than averaged into one number.",
       "noHistoryOne": "No 90-day history available for this token.",
       "windowChip": "{{days}}-day window"
+    },
+    "subtab": {
+      "tokenized": "Tokenized stocks",
+      "robinhood": "Robinhood",
+      "gold": "Gold",
+      "realAssets": "Real-world assets",
+      "rwaTokens": "RWA tokens"
     }
   },
   "help": {
@@ -5846,7 +5861,8 @@
     "sideBelow": "below",
     "dirUp": "up",
     "dirDown": "down",
-    "footSample": "Every number above is measured from {{points}} price points over {{days}} days — the same data this chart draws."
+    "footSample": "Every number above is measured from {{points}} price points over {{days}} days — the same data this chart draws.",
+    "empty": "There is not enough historical price data to make a useful summary yet."
   },
   "lab": {
     "title": "Lab"

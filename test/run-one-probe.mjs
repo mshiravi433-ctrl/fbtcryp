@@ -19,6 +19,10 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
   global.matchMedia = w.matchMedia
     ? w.matchMedia.bind(w)
     : () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+  // jsdom has no layout engine or native scrolling; real browsers do.
+  if (w.HTMLElement && !w.HTMLElement.prototype.scrollIntoView) {
+    w.HTMLElement.prototype.scrollIntoView = function scrollIntoView() {};
+  }
   Object.defineProperty(global, 'navigator', { value: w.navigator, configurable: true });
   global.IS_REACT_ACT_ENVIRONMENT = true;
   return dom;

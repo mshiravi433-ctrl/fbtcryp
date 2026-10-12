@@ -498,6 +498,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .sm-token-head:focus-visible { outline: 2px solid var(--rgb-4, #00e5ff); outline-offset: 2px; border-radius: 10px; }
+.sm-token-head.is-static { cursor: default; }
 .sm-token-head-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
 .sm-token-head-icon { flex: 0 0 16px; color: var(--rgb-4, #00e5ff); }
 .sm-token-head-summary {

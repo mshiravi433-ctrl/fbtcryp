@@ -165,12 +165,14 @@ function Chip({ label, value }) {
   );
 }
 
-export default function HistoryPanel({ series, days = 90, volume, volumeHistory, compact = false }) {
+export default function HistoryPanel({ series, days = 90, volume, volumeHistory, compact = false, collapsible = true, emptyMessage = '' }) {
   const { t } = useTranslation();
   /* Open by default on the full-size panel so nothing that used to be visible
      becomes hidden; `compact` rows (the watchlist) start closed because they
      are one line inside a list of many. */
-  const [open, setOpen] = useState(!compact);
+  const [openState, setOpenState] = useState(!compact);
+  const open = collapsible ? openState : true;
+  const Head = collapsible ? 'button' : 'div';
 
   const facts = useMemo(
     () => historyFacts(series, { days, volume, volumeHistory }),
@@ -181,7 +183,22 @@ export default function HistoryPanel({ series, days = 90, volume, volumeHistory,
   const position = useMemo(() => rangePosition(series), [series]);
   const moves = useMemo(() => dailyMoves(series), [series]);
 
-  if (!facts.length) return null;
+  if (!facts.length) {
+    if (!emptyMessage) return null;
+    return (
+      <section className={`hist-panel hist-card is-open ${compact ? 'is-compact' : ''}`} data-testid="history-panel" data-open="true" data-facts="0">
+        <div className="hist-head hist-static">
+          <span className="hist-glyph" aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 15.5 8 10l4 3.5L21 5" /><path d="M21 5h-4.5M21 5v4.5" /><path d="M3 20h18" opacity="0.5" />
+            </svg>
+          </span>
+          <span className="hist-head-text"><span className="hist-title">{t('history.title')}</span></span>
+        </div>
+        <div className="hist-body"><p className="hist-empty-state">{emptyMessage}</p></div>
+      </section>
+    );
+  }
 
   /*
    * Prices are formatted with the app's own price formatter, so a $68,000
@@ -218,11 +235,11 @@ export default function HistoryPanel({ series, days = 90, volume, volumeHistory,
       data-open={open}
       data-facts={facts.length}
     >
-      <button
-        type="button"
-        className="hist-head"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+      <Head
+        type={collapsible ? 'button' : undefined}
+        className={`hist-head${collapsible ? '' : ' hist-static'}`}
+        aria-expanded={collapsible ? open : undefined}
+        onClick={collapsible ? () => setOpenState((v) => !v) : undefined}
       >
         <span className="hist-glyph" aria-hidden="true">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -240,7 +257,7 @@ export default function HistoryPanel({ series, days = 90, volume, volumeHistory,
           )}
         </span>
 
-        <motion.span
+        {collapsible && <motion.span
           className="hist-chev"
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -249,8 +266,8 @@ export default function HistoryPanel({ series, days = 90, volume, volumeHistory,
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
             <path d="m6 9 6 6 6-6" />
           </svg>
-        </motion.span>
-      </button>
+        </motion.span>}
+      </Head>
 
       <AnimatePresence initial={false}>
         {open && (

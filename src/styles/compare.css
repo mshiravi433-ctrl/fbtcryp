@@ -1,5 +1,6 @@
 /* ── COMPARE — token vs token ────────────────────────────────────────────── */
 
+.cmp-embedded { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .cmp-duel {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

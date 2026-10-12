@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { FLAG_SVG, NETWORK_SVG, STOCK_MARK, TOKEN_SVG } from '../lib/assetIconData';
+import { rwaSymbolSvg } from '../lib/rwaAssetSvg';
 
 /**
  * ASSET ICON — offline artwork for venue-curated pickers.
@@ -114,6 +115,8 @@ export function symbolSvg(rawSymbol) {
   if (METALS[sym]) { const m = METALS[sym]; return tileSvg(m.label, m.a, m.b, { text: '#1b1b1b', size: 9.5 }); }
   if (ENERGY[sym]) { const m = ENERGY[sym]; return tileSvg(m.label, m.a, m.b); }
   if (INDEX_OR_FUND[sym]) { const [l, c] = INDEX_OR_FUND[sym]; return tileSvg(l, c, '#0b0f19'); }
+  const rwa = rwaSymbolSvg(sym);
+  if (rwa) return rwa;
   return null;
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -109,7 +110,7 @@ function PickerSheet({ open, side, coins, onPick, onClose }) {
     return (remoteHits ?? []).filter((c) => !have.has(c.id)).slice(0, 15);
   }, [remoteHits, local, q]);
 
-  return (
+  const content = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -183,6 +184,7 @@ function PickerSheet({ open, side, coins, onPick, onClose }) {
       )}
     </AnimatePresence>
   );
+  return typeof document === 'undefined' ? null : createPortal(content, document.body);
 }
 
 function TokenCard({ coin, color, side, onChange, t }) {
@@ -263,13 +265,17 @@ function MetricRow({ label, hint, a, b, aText, bText, winner, t }) {
   );
 }
 
-export default function Compare() {
+export default function Compare({ embedded = false, initialA = 'bitcoin', initialB = 'ethereum' } = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const [params, setParams] = useSearchParams();
-  const aId = params.get('a') || 'bitcoin';
-  const bId = params.get('b') || 'ethereum';
+  const [embeddedPair, setEmbeddedPair] = useState(() => ({ a: initialA || 'bitcoin', b: initialB || 'ethereum' }));
+  useEffect(() => {
+    if (embedded) setEmbeddedPair({ a: initialA || 'bitcoin', b: initialB || 'ethereum' });
+  }, [embedded, initialA, initialB]);
+  const aId = embedded ? embeddedPair.a : params.get('a') || 'bitcoin';
+  const bId = embedded ? embeddedPair.b : params.get('b') || 'ethereum';
 
   const [range, setRange] = useState(RANGES[1]);
   const [picker, setPicker] = useState(null); // 'a' | 'b' | null
@@ -286,7 +292,8 @@ export default function Compare() {
 
   const set = (a, b) => {
     haptic?.('light');
-    setParams({ a, b }, { replace: true });
+    if (embedded) setEmbeddedPair({ a, b });
+    else setParams({ a, b }, { replace: true });
     setPicker(null);
   };
 
@@ -364,8 +371,10 @@ export default function Compare() {
   const winsB = scored.filter((r) => r.winner === 'b').length;
   const total = winsA + winsB;
 
-  return (
-    <PageTransition>
+  const content = (
+    <>
+      {!embedded && (
+        <>
       <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <IconChevronLeft width={18} height={18} />
@@ -373,6 +382,8 @@ export default function Compare() {
         <h1 className="h1" style={{ fontSize: 19 }}>{t('compare.title')}</h1>
       </motion.div>
       <p className="muted">{t('compare.subtitle')}</p>
+        </>
+      )}
 
       {/* ── the two contenders ── */}
       <motion.div className="cmp-duel" variants={stagger} initial="hidden" animate="show">
@@ -509,6 +520,7 @@ export default function Compare() {
         onClose={() => setPicker(null)}
         onPick={(id) => (picker === 'b' ? set(aId, id) : set(id, bId))}
       />
-    </PageTransition>
+    </>
   );
+  return embedded ? <div className="cmp-embedded">{content}</div> : <PageTransition>{content}</PageTransition>;
 }

@@ -14,12 +14,14 @@ import { IconChevronRight } from './Icons';
  *
  * A missing address or an unsupported chain renders nothing.
  */
-export default function TokenRiskCard({ chainId, address, symbol, compact = false, onRisk = null }) {
+export default function TokenRiskCard({ chainId, address, symbol, compact = false, onRisk = null, collapsible = true }) {
   const { t } = useTranslation();
   const { haptic } = useTelegram();
   const [risk, setRisk] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = collapsible ? openState : true;
+  const Head = collapsible ? 'button' : 'div';
 
   const canScan = useMemo(
     () => Boolean(goplusChainId(chainId) && address && /^0x[a-fA-F0-9]{40}$/.test(address)),
@@ -43,7 +45,7 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
         if (typeof onRisk === 'function') onRisk(r);
         // Auto-open when the verdict is scary so a real warning can't hide
         // behind a collapsed header.
-        if (r && (r.level === 'critical' || r.level === 'high')) setOpen(true);
+        if (r && (r.level === 'critical' || r.level === 'high')) setOpenState(true);
       })
       .catch(() => {
         if (!alive) return;
@@ -70,14 +72,11 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
       className={`infobox infobox-${tone} ${open ? 'is-open' : ''}`}
       style={{ marginTop: 10 }}
     >
-      <button
-        type="button"
-        className="infobox-head"
-        aria-expanded={open}
-        onClick={() => {
-          haptic?.('select');
-          setOpen((v) => !v);
-        }}
+      <Head
+        type={collapsible ? 'button' : undefined}
+        className={`infobox-head${collapsible ? '' : ' is-static'}`}
+        aria-expanded={collapsible ? open : undefined}
+        onClick={collapsible ? () => { haptic?.('select'); setOpenState((v) => !v); } : undefined}
       >
         <span className="infobox-dot" aria-hidden="true" />
         <span className="infobox-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -88,15 +87,15 @@ export default function TokenRiskCard({ chainId, address, symbol, compact = fals
             {busy ? t('common.loading') : t(`risk.level.${level}`)}
           </span>
         </span>
-        <motion.span
+        {collapsible && <motion.span
           className="infobox-chev"
           animate={{ rotate: open ? 90 : 0 }}
           transition={{ duration: 0.18 }}
           aria-hidden="true"
         >
           <IconChevronRight width={15} height={15} />
-        </motion.span>
-      </button>
+        </motion.span>}
+      </Head>
 
       <AnimatePresence initial={false}>
         {open && (

@@ -60,6 +60,7 @@ import { SPECULATION_ENABLED } from '../lib/features';
 import lazyRetry from '../lib/lazyRetry';
 import RwaHorizonSwapBanners from '../components/RwaHorizonSwapBanners';
 import RwaSectionBanner from '../components/RwaSectionBanner';
+import StockSubtabs from '../components/StockSubtabs';
 
 /*
  * These are tab routes, not imports. The Stocks page is already a lazy route,
@@ -176,6 +177,8 @@ const RH_ROWS = 24;
 const STOCK_TABS = SPECULATION_ENABLED
   ? ['equity', 'rwa', 'ostium', 'derivatives']
   : ['equity', 'rwa'];
+const EQUITY_SUBTABS = ['tokenized', 'robinhood', 'gold'];
+const RWA_SUBTABS = ['assets', 'tokens'];
 
 /** /stocks?tab=ostium — the On-Chain futures tab sends traditional markets here. */
 function initialStockTab() {
@@ -184,6 +187,16 @@ function initialStockTab() {
     const wanted = new URLSearchParams(raw).get('tab');
     return STOCK_TABS.includes(wanted) ? wanted : 'equity';
   } catch { return 'equity'; }
+}
+
+function initialSubtab(param, allowed, fallback) {
+  try {
+    const hashQuery = String(window.location.hash || '').split('?')[1] || '';
+    const searchQuery = String(window.location.search || '').replace(/^\?/, '');
+    const query = new URLSearchParams(hashQuery || searchQuery);
+    const value = query.get(param);
+    return allowed.includes(value) ? value : fallback;
+  } catch { return fallback; }
 }
 
 /*
@@ -277,11 +290,18 @@ export default function Stocks() {
   const navigate = useNavigate();
   const location = useLocation();
   const { haptic } = useTelegram();
-  const { data: coins, loading } = useMarkets(250);
   const [tab, setTab] = useState(initialStockTab);
+  const [equitySubview, setEquitySubview] = useState(() => initialSubtab('equity', EQUITY_SUBTABS, 'tokenized'));
+  const [rwaSubview, setRwaSubview] = useState(() => initialSubtab('rwa', RWA_SUBTABS, 'assets'));
+  const { data: coins, loading } = useMarkets(tab === 'rwa' ? 250 : null);
   useEffect(() => {
-    const wanted = new URLSearchParams(location.search).get('tab');
+    const params = new URLSearchParams(location.search);
+    const wanted = params.get('tab');
     if (STOCK_TABS.includes(wanted)) setTab(wanted);
+    const equityWanted = params.get('equity');
+    const rwaWanted = params.get('rwa');
+    if (EQUITY_SUBTABS.includes(equityWanted)) setEquitySubview(equityWanted);
+    if (RWA_SUBTABS.includes(rwaWanted)) setRwaSubview(rwaWanted);
   }, [location.search]);
 
   const [assets, setAssets] = useState(null);
@@ -296,6 +316,7 @@ export default function Stocks() {
   const [selectedRwaSheet, setSelectedRwaSheet] = useState(null);
 
   useEffect(() => {
+    if (tab !== 'rwa' || rwaSubview !== 'assets') return undefined;
     let alive = true;
     fetchRwaMarketplace()
       .then((tokens) => {
@@ -307,7 +328,7 @@ export default function Stocks() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [tab, rwaSubview]);
 
   const tradeableRwa = useMemo(() => {
     const enriched = enrichWithMarketPrices(rwaCuratedRaw, coins, i18n.language);
@@ -350,7 +371,7 @@ export default function Stocks() {
   const [rwaError, setRwaError] = useState(null);
 
   useEffect(() => {
-    if (tab !== 'rwa') return undefined;
+    if (tab !== 'rwa' || rwaSubview !== 'tokens') return undefined;
     let alive = true;
     setRwaLoading(true);
     setRwaError(null);
@@ -369,9 +390,10 @@ export default function Stocks() {
       .catch((e) => { if (alive) setRwaError(e); })
       .finally(() => { if (alive) setRwaLoading(false); });
     return () => { alive = false; };
-  }, [tab]);
+  }, [tab, rwaSubview]);
 
   useEffect(() => {
+    if (tab !== 'equity' || !['tokenized', 'gold'].includes(equitySubview)) return undefined;
     let alive = true;
     setAssetsLoading(true);
     getSolanaAssets()
@@ -381,7 +403,7 @@ export default function Stocks() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [tab, equitySubview]);
 
   /*
    * ─── THE AVANTIS TICKER LIST ────────────────────────────────────────────
@@ -395,7 +417,7 @@ export default function Stocks() {
   const [avantisLoading, setAvantisLoading] = useState(true);
 
   useEffect(() => {
-    if (tab !== 'equity') return undefined;
+    if (tab !== 'equity' || !['tokenized', 'robinhood'].includes(equitySubview)) return undefined;
     let alive = true;
     setAvantisLoading(true);
     fetchAvantisEquities()
@@ -404,7 +426,7 @@ export default function Stocks() {
     return () => {
       alive = false;
     };
-  }, [tab]);
+  }, [tab, equitySubview]);
 
   /*
    * ─── THE TOKENIZED STOCK UNIVERSE OF ROBINHOOD CHAIN (2026-10-12) ────────
@@ -423,7 +445,7 @@ export default function Stocks() {
   const [stockUniverseError, setStockUniverseError] = useState(null);
 
   useEffect(() => {
-    if (tab !== 'equity') return undefined;
+    if (tab !== 'equity' || equitySubview !== 'robinhood') return undefined;
     let alive = true;
     setStockUniverseError(null);
     loadStockTokenUniverse()
@@ -436,7 +458,7 @@ export default function Stocks() {
       })
       .catch((e) => alive && setStockUniverseError(e));
     return () => { alive = false; };
-  }, [tab]);
+  }, [tab, equitySubview]);
 
   const rwaCoins = useMemo(() => {
     /* The sector feed understands RWA better than the top-250 page does. */
@@ -569,7 +591,10 @@ export default function Stocks() {
   /* Read only while the equity tab is showing: the RWA and futures tabs have
      no use for it, and three RPC calls per visit is enough. Leaving the tab
      resets the read; coming back re-reads, which is also the freshest answer. */
-  const held = useSolanaEquityHoldings(tab === 'equity' ? solAddress : null, pricedAssets);
+  const held = useSolanaEquityHoldings(
+    tab === 'equity' && ['tokenized', 'gold'].includes(equitySubview) ? solAddress : null,
+    pricedAssets
+  );
 
   /*
    * ─── SEARCH, SORT, THEN PAGE THE LONG LIST ────────────────────────────────
@@ -734,7 +759,7 @@ export default function Stocks() {
   const rhAll = useMemo(() => (stockUniverse ?? []).filter((t) => t.equity), [stockUniverse]);
 
   useEffect(() => {
-    if (tab !== 'equity' || !rhVisible.length) return undefined;
+    if (tab !== 'equity' || equitySubview !== 'robinhood' || !rhVisible.length) return undefined;
     let alive = true;
     setPricesLoading(true);
     loadStockTokenPrices(rhVisible, { chainId: ROBINHOOD_CHAIN_ID })
@@ -746,7 +771,7 @@ export default function Stocks() {
     return () => {
       alive = false;
     };
-  }, [tab, rhVisible]);
+  }, [tab, equitySubview, rhVisible]);
 
   const visiblePriced = useMemo(
     () => rhVisible.filter((tk) => stockPrices[String(tk.address).toLowerCase()]).length,
@@ -835,6 +860,19 @@ export default function Stocks() {
 
       {tab === 'equity' ? (
         <>
+          <StockSubtabs
+            kind="equity"
+            active={equitySubview}
+            onChange={(value) => { haptic?.('select'); setEquitySubview(value); }}
+          />
+          <div
+            id="stocks-equity-panel"
+            className="stock-subtab-panel"
+            role="tabpanel"
+            aria-labelledby={`stocks-equity-${equitySubview}-tab`}
+          >
+            {equitySubview === 'tokenized' && (
+              <>
           <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
             <div className="sheen" />
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.realTitle')}</div>
@@ -1136,7 +1174,11 @@ export default function Stocks() {
               </motion.div>
             )}
           </section>
+              </>
+            )}
 
+            {equitySubview === 'robinhood' && (
+              <>
           {/*
             ─── THE TOKENIZED-STOCK UNIVERSE OF ROBINHOOD CHAIN (2026-10-12) ──
             Asked for as «تعداد توکنهای صفحه سهام — توکنهای توکنیزه و RWA —
@@ -1268,7 +1310,18 @@ export default function Stocks() {
               <p className="faint" style={{ marginTop: 6, lineHeight: 1.75 }}>{t('stocks.rhNote')}</p>
             </section>
           )}
+              </>
+            )}
 
+            {equitySubview === 'gold' && (
+              <>
+          {assetsLoading && (
+            <div className="stack" style={{ gap: 9 }}>
+              {[0, 1].map((i) => <div key={i} className="skel" style={{ height: 104, borderRadius: 14 }} />)}
+            </div>
+          )}
+          {!assetsLoading && assetsError && <p className="notice notice-danger">{t('stocks.unavailable')}</p>}
+          {!assetsLoading && !assetsError && commodities.length === 0 && <p className="notice">{t('stocks.noneTradeable')}</p>}
           {/*
             ─── GOLD ──────────────────────────────────────────────────────
             Below the equities but under the SAME freeze warning, which is why
@@ -1321,7 +1374,11 @@ export default function Stocks() {
               </div>
             </section>
           )}
+              </>
+            )}
 
+            {equitySubview === 'tokenized' && (
+              <>
           {/*
             Requested by name: «قبل از خرید این را بخوان» and «این ها سهم
             نیستند». Both are the same question — what am I actually buying —
@@ -1451,9 +1508,17 @@ export default function Stocks() {
               </InfoBox>
             </motion.div>
           )}
+              </>
+            )}
+          </div>
         </>
       ) : tab === 'rwa' ? (
         <>
+          <StockSubtabs
+            kind="rwa"
+            active={rwaSubview}
+            onChange={(value) => { haptic?.('select'); setRwaSubview(value); }}
+          />
           {/* The RWA header as a banner: animated SVG icon + the same copy + the
               fee line — requested as «مثل بنر با ایکون svg و انیمیشن و مینیمال و
               مدرن» instead of the plain text card. */}
@@ -1461,6 +1526,14 @@ export default function Stocks() {
             <RwaSectionBanner />
           </motion.div>
 
+          <div
+            id="stocks-rwa-panel"
+            className="stock-subtab-panel"
+            role="tabpanel"
+            aria-labelledby={`stocks-rwa-${rwaSubview}-tab`}
+          >
+            {rwaSubview === 'assets' && (
+              <>
           {/* ─── TRADEABLE RWA TOKENS (WITH 0.70% PLATFORM FEE) ─── */}
           <section style={{ marginTop: 16 }}>
             <div className="row-between" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
@@ -1574,7 +1647,11 @@ export default function Stocks() {
               <p>{t('stocks.rwaHowItWorksP2', { fee: feePercentString() })}</p>
             </InfoBox>
           </div>
+              </>
+            )}
 
+            {rwaSubview === 'tokens' && (
+              <>
           {/* The RWA highlight reel + stats — same treatment as the equities. */}
           {rwaCoins.length > 0 && (
             <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
@@ -1674,6 +1751,9 @@ export default function Stocks() {
           <InfoBox title={t('stocks.kycTitle')} tone="info" id="stocks-kyc">
             <p>{t('stocks.kycNotice')}</p>
           </InfoBox>
+              </>
+            )}
+          </div>
         </>
       ) : (
         /*

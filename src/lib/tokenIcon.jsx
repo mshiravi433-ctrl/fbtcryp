@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { rwaSymbolSvg } from './rwaAssetSvg';
 
 /**
  * TOKEN ICONS.
@@ -198,6 +199,22 @@ export default function TokenIcon({ token, chainId, size = 34 }) {
   const src = candidates[idx];
 
   if (!src) {
+    const svg = rwaSymbolSvg(symbol);
+    if (svg) {
+      /* Known RWA marks stay available when both
+         the venue logo and remote catalog are missing or unreachable. */
+      const filled = /^<svg(?![^>]*\swidth=)/.test(svg)
+        ? svg.replace('<svg ', '<svg width="100%" height="100%" ')
+        : svg;
+      return (
+        <span
+          className="tok-icon tok-icon-svg"
+          style={{ width: size, height: size }}
+          dangerouslySetInnerHTML={{ __html: filled }}
+          aria-hidden="true"
+        />
+      );
+    }
     const hue = hueFor(symbol);
     return (
       <span
