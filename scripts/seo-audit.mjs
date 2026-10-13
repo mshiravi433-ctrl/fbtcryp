@@ -26,6 +26,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { JSDOM } from 'jsdom';
+import { BRAND_ALIASES } from './content/discovery.mjs';
 
 const OUT = 'dist';
 const SITE = (process.env.VITE_PUBLIC_URL || 'https://fbtswap.ir').replace(/\/+$/, '');
@@ -116,7 +117,7 @@ if (!existsSync(sitemapIndexFile)) {
       urls: [...sdoc.querySelectorAll('url')].map((u) => ({
         loc: u.querySelector('loc')?.textContent?.trim(),
         lastmod: u.querySelector('lastmod')?.textContent?.trim() || null,
-        alternates: [...u.querySelectorAll('link')].map((l) => l.getAttribute('href'))
+        alternates: [...u.getElementsByTagNameNS('http://www.w3.org/1999/xhtml', 'link')].map((l) => ({ lang: l.getAttribute('hreflang'), href: l.getAttribute('href') }))
       })),
       children: [...sdoc.querySelectorAll('sitemap > loc')].map((l) => l.textContent.trim())
     };
@@ -147,6 +148,18 @@ if (!existsSync(sitemapIndexFile)) {
     const sdoc = docAt(u.loc);
     if (!sdoc) error('sitemap', `listed URL has no generated document: ${u.loc}`);
     else if (sdoc.noindex) error('sitemap', `noindex page listed in sitemap: ${u.loc}`);
+    if (sdoc && !sdoc.noindex) {
+      const annotation = ({ lang, href }) => `${String(lang).toLowerCase()}|${canon(href)}`;
+      const headAlternates = [...sdoc.doc.querySelectorAll('link[rel="alternate"][hreflang]')]
+        .map((l) => annotation({ lang: l.getAttribute('hreflang'), href: l.getAttribute('href') })).sort();
+      const mapAlternates = u.alternates.map(annotation).sort();
+      if (JSON.stringify(headAlternates) !== JSON.stringify(mapAlternates))
+        error('sitemap-hreflang', `sitemap language annotations differ from the HTML head: ${u.loc}`);
+      if (new Set(mapAlternates).size !== mapAlternates.length)
+        error('sitemap-hreflang', `duplicate language annotation: ${u.loc}`);
+      if (u.lastmod && (!Number.isFinite(Date.parse(u.lastmod)) || Date.parse(u.lastmod) > Date.now()))
+        error('sitemap-lastmod', `invalid or future editorial date: ${u.lastmod}`, u.loc);
+    }
   }
   const listed = new Set(locs.map(canon));
   for (const d of indexable) {
@@ -155,6 +168,7 @@ if (!existsSync(sitemapIndexFile)) {
   if (sitemapUrls.length > 50000) error('sitemap', 'a single sitemap may not exceed 50,000 URLs');
   const withLastmod = sitemapUrls.filter((u) => u.lastmod).length;
   ok('sitemap', `${sitemapUrls.length} URLs, ${withLastmod} carry <lastmod>`);
+  ok('sitemap-hreflang', 'sitemap language annotations checked against every HTML head');
   for (const f of sitemapFiles) {
     const bytes = statSync(f).size;
     if (bytes > 50 * 1024 * 1024) error('sitemap', `${relative(OUT, f)} exceeds the 50 MB limit`);
@@ -185,9 +199,9 @@ if (!existsSync(robotsFile)) {
   }
   if (!/^Sitemap:\s*https?:\/\//mi.test(robots)) error('robots', 'robots.txt does not point at an absolute sitemap URL');
 
-  /* Answer engines. Being absent from robots.txt is not a block, but being
-     explicitly welcomed removes any ambiguity for crawlers that look for a
-     named group before fetching. */
+  /* Explicit groups document the operator's policy. The wildcard rule already
+     permits public crawling; named training bots and search bots serve different
+     purposes. These checks cannot prove indexing or answer-engine citations. */
   const AI_AGENTS = [
     'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-User', 'anthropic-ai',
     'PerplexityBot', 'Perplexity-User', 'Google-Extended', 'Applebot-Extended',
@@ -223,6 +237,27 @@ const STOP_SLUGS = new Set(['', 'library', 'fa/']);
 for (const entry of docs.values()) {
   const { doc, url, slug, noindex, isApp } = entry;
   const where = `/${slug}`;
+
+  if (!noindex) {
+    const robots = doc.querySelector('meta[name="robots"]')?.content || '';
+    if (!/max-snippet:-1/i.test(robots) || /(?:^|[,\s])nosnippet(?:$|[,\s])/i.test(robots))
+      error('answer-excerpts', 'public page must permit useful search/answer excerpts', where);
+    const discoveries = [...doc.querySelectorAll('.search-guides')];
+    if (!discoveries.length) error('discovery-layout', 'missing readable bottom-of-page reference links', where);
+    if (isApp) {
+      const root = doc.getElementById('root');
+      const hub = doc.getElementById('home-hub');
+      if (!root || !hub || !(root.compareDocumentPosition(hub) & 4))
+        error('discovery-layout', '#home-hub must follow #root, not appear above the app/logo', where);
+      if (hub?.hidden) error('discovery-layout', 'homepage reference content is hidden in delivered HTML', where);
+    } else {
+      const endOfContent = doc.querySelector('.risk-panel');
+      for (const item of [...discoveries, ...doc.querySelectorAll('.section-nav')]) {
+        if (item.closest('header') || (endOfContent && !(endOfContent.compareDocumentPosition(item) & 4)))
+          error('discovery-layout', 'topic/reference navigation must be below the main content and risk notice', where);
+      }
+    }
+  }
 
   const title = doc.title?.trim() || '';
   const desc = doc.querySelector('meta[name="description"]')?.content?.trim() || '';
@@ -295,6 +330,19 @@ for (const entry of docs.values()) {
     }
   }
   const types = new Set(graph.map((n) => n['@type']).flat().filter(Boolean));
+  if (!noindex) {
+    for (const type of ['Organization', 'WebSite']) {
+      const entity = graph.find((n) => n['@type'] === type);
+      if (!entity || BRAND_ALIASES.some((alias) => !entity.alternateName?.includes(alias)))
+        error('brand-identity', `${type} must name the published brand variants consistently`, where);
+      if (entity?.alternateName?.some((name) => ['swap', 'crypto'].includes(String(name).toLowerCase())))
+        error('brand-identity', 'generic product terms are not organisation aliases', where);
+    }
+    const sitemapDate = sitemapUrls.find((u) => canon(u.loc) === canon(url))?.lastmod;
+    const pageDate = graph.find((n) => n['@type'] === 'WebPage')?.dateModified;
+    if (sitemapDate && pageDate !== sitemapDate)
+      error('editorial-date', 'WebPage dateModified differs from sitemap lastmod', where);
+  }
   if (!noindex && !isApp) {
     if (!types.has('BreadcrumbList')) warn('schema', 'no BreadcrumbList', where);
     if (!types.has('Organization')) warn('schema', 'no Organization node', where);
@@ -446,7 +494,7 @@ if (JSON_MODE) {
       if (list.length > 8) console.log(`      … and ${list.length - 8} more`);
     }
   }
-  console.log(`\n  ${errors.length ? '✗ FAILED' : '✓ PASSED'} — ${errors.length} errors, ${warnings.length} warnings`);
+  console.log(`\n  ${errors.length || (STRICT && warnings.length) ? '✗ FAILED' : '✓ PASSED'} — ${errors.length} errors, ${warnings.length} warnings`);
   console.log('  Indexation and ranking are NOT proven here; verify in Search Console.\n');
 }
 

@@ -43,7 +43,8 @@
  * release.
  *
  * Can still be run by hand:
- *     node scripts/submit-indexnow.mjs
+ *     node scripts/submit-indexnow.mjs --submit   # explicit production request
+ *     node scripts/submit-indexnow.mjs --dry-run  # inspect URLs, no network
  */
 
 /**
@@ -57,6 +58,17 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+const DRY_RUN = process.argv.includes('--dry-run');
+const EXPLICIT_SUBMIT = process.argv.includes('--submit');
+if (process.env.INDEXNOW_DISABLED === '1') {
+  console.log('▸ IndexNow: disabled by operator.');
+  process.exit(0);
+}
+if (!DRY_RUN && !EXPLICIT_SUBMIT && process.env.VERCEL_ENV !== 'production') {
+  console.log('▸ IndexNow: skipped outside a production deployment (use --dry-run or explicit --submit).');
+  process.exit(0);
+}
 
 const KEY = 'b5187e6cbc36ff99eb5f2b97efcdfb6e';
 
@@ -113,7 +125,7 @@ const urlList = all
   .filter((u) => {
     if (!u.lastmod) return false; // no editorial date means nothing claimed to change
     const t = Date.parse(u.lastmod);
-    return Number.isFinite(t) && t >= cutoff;
+    return Number.isFinite(t) && t >= cutoff && t <= Date.now();
   })
   .map((u) => u.loc)
   .slice(0, 10000); // protocol maximum per request
@@ -156,6 +168,11 @@ const body = {
 const ENDPOINT = 'https://api.indexnow.org/IndexNow';
 
 async function main() {
+  if (DRY_RUN) {
+    console.log(JSON.stringify({ dryRun: true, endpoint: ENDPOINT, ...body }, null, 2));
+    console.log('▸ Dry run only: no engine was contacted; this does not submit anything to Google.');
+    return;
+  }
   console.log(`▸ submitting ${urlList.length} URLs for ${HOST}`);
   for (const u of urlList) console.log(`  ${u}`);
 
@@ -163,6 +180,7 @@ async function main() {
   try {
     res = await fetch(ENDPOINT, {
       method: 'POST',
+      signal: AbortSignal.timeout(10000), // an advisory notification must not stall deployment
       headers: { 'content-type': 'application/json; charset=utf-8' },
       body: JSON.stringify(body)
     });

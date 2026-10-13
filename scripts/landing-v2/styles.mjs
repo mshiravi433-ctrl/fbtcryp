@@ -825,7 +825,7 @@ html[dir="rtl"] .stat-card .v { text-align: right; }
 footer.site { margin-block-start: 30px; border-block-start: 1px solid var(--line); padding: clamp(30px, 4vw, 48px) 0 calc(112px + env(safe-area-inset-bottom)); }
 .foot-grid { display: grid; gap: 26px; grid-template-columns: 1fr; }
 @media (min-width: 700px) { .foot-grid { grid-template-columns: 1.3fr 2fr; } }
-.foot-col h4 { margin: 0 0 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--quiet); }
+.foot-col h3 { margin: 0 0 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--quiet); }
 .foot-col ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .foot-col a { color: var(--muted); font-size: 13px; text-decoration: none; }
 .foot-col a:hover { color: var(--cyan); }
