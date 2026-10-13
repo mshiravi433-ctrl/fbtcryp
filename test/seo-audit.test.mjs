@@ -71,6 +71,170 @@ test('public network claims agree with the chain registry and homepage JSON-LD',
   }
 });
 
+/*
+ * ─── THE HOMEPAGE IS A DOCUMENT, NOT A SPINNER ─────────────────────────────
+ * `/` is the application shell: React mounts into #root and paints a market
+ * dashboard that is fetched client-side. Without the injected home hub the
+ * delivered HTML of the most authoritative URL on the domain is a spinner and
+ * nothing else, which is why every crawler that does not execute JavaScript
+ * — every answer engine among them — had no homepage to read and no internal
+ * link graph to follow.
+ *
+ * These assertions are the regression guard. They cannot prove that sitelinks
+ * appear or that anything is indexed; they prove the homepage still ships real,
+ * bilingual, structured content and a complete map, which is the part we own.
+ */
+test('the homepage ships crawlable content and a map of every published page', () => {
+  const raw = read(join(OUT, 'index.html'));
+  assert.ok(raw.includes('id="home-hub"'), 'the home hub was injected into dist/index.html');
+
+  const home = html(join(OUT, 'index.html'));
+  const hub = home.querySelector('#home-hub');
+  assert.ok(hub, '#home-hub exists in the delivered document');
+
+  // One <h1>, and it is in the Persian block the document declares (lang="fa").
+  const h1s = [...home.querySelectorAll('h1')];
+  assert.equal(h1s.length, 1, 'exactly one <h1> in the delivered HTML');
+  assert.match(h1s[0].textContent, /\u0627\u0641\u200c\u0628\u06cc\u200c\u062a\u06cc \u0633\u0648\u0627\u067e/);
+
+  // Real content, not a placeholder. 800 words is a floor, not a target: the
+  // generated hub currently carries roughly 2,000 across both languages.
+  const clone = hub.cloneNode(true);
+  for (const el of clone.querySelectorAll('script,style')) el.remove();
+  const words = clone.textContent.split(/\s+/).filter(Boolean).length;
+  assert.ok(words >= 800, `home hub carries ${words} words of body copy (needs 800+)`);
+
+  // Both languages are present as real sections, each declaring its own dir.
+  assert.ok(hub.querySelector('section[lang="fa"][dir="rtl"]'), 'Persian section present');
+  assert.ok(hub.querySelector('section[lang="en"][dir="ltr"]'), 'English section present');
+
+  // The link graph: every href must resolve to a document the build produced.
+  const hrefs = [...hub.querySelectorAll('a[href]')].map((a) => a.getAttribute('href'));
+  assert.ok(hrefs.length >= 100, `home hub links to ${hrefs.length} internal URLs (needs 100+)`);
+  const listed = new Set(urls());
+  for (const href of hrefs) {
+    assert.ok(href.startsWith('/'), `home hub link is internal: ${href}`);
+    // Directory-backed URLs: the sitemap spells them with the trailing slash,
+    // the hub spells some of them without. Both are the same document.
+    const target = `${SITE}${href}`;
+    const stripped = `${SITE}${href.replace(/\/$/, '')}`;
+    assert.ok(
+      listed.has(target) || listed.has(stripped),
+      `home hub links to a page that is not in the sitemap: ${href}`
+    );
+  }
+
+  // A heading level is never skipped — the audit warns, this fails.
+  let prev = 0;
+  for (const h of home.querySelectorAll('#home-hub h1, #home-hub h2, #home-hub h3')) {
+    const level = Number(h.tagName[1]);
+    assert.ok(!prev || level <= prev + 1, `#home-hub jumps from h${prev} to h${level}`);
+    prev = level;
+  }
+});
+
+test('the homepage declares its language instead of contradicting itself', () => {
+  const home = html(join(OUT, 'index.html'));
+  const description = home.querySelector('meta[name="description"]').content;
+
+  // The document declares lang="fa"; its metadata must not be English-only.
+  assert.match(description, /\u0633\u0648\u0627\u067e \u063a\u06cc\u0631\u0627\u0645\u0627\u0646\u06cc/, 'description carries Persian');
+  assert.match(description, /Non-custodial/, 'description carries English');
+  // The declared locale order follows the document, not the other way round.
+  assert.equal(home.querySelector('meta[property="og:locale"]').content, 'fa_IR');
+  assert.equal(home.querySelector('meta[property="og:locale:alternate"]').content, 'en_US');
+  // Self-referencing alternates: x-default plus the document's own language.
+  const alts = [...home.querySelectorAll('link[rel="alternate"][hreflang]')];
+  assert.ok(alts.some((a) => a.getAttribute('hreflang') === 'x-default' && a.href === `${SITE}/`));
+  assert.ok(alts.some((a) => a.getAttribute('hreflang') === 'fa-IR' && a.href === `${SITE}/`));
+});
+
+/*
+ * ─── SITELINKS NEED A STABLE HIERARCHY ─────────────────────────────────────
+ * Google builds the indented sub-page list under a result from the site's own
+ * internal link hierarchy. Links that appear on one page and not another, or
+ * whose anchor text shifts between pages, teach it nothing — so the topic row
+ * has to be identical everywhere within a language. This is the guard on that.
+ */
+test('every indexable page carries the same topic row in its own language', () => {
+  const listed = new Set(urls());
+  const rows = new Map(); // language -> serialised "label|href" set
+
+  const samples = [
+    'non-custodial-crypto-swap', 'library', 'guides/crypto-fees-and-gas',
+    'fa/', 'fa/non-custodial-wallet', 'fa/guides/crypto-security-and-scams'
+  ];
+  for (const slug of samples) {
+    const doc = html(join(OUT, slug, 'index.html'));
+    const links = [...doc.querySelectorAll('.section-nav a')];
+    assert.ok(links.length >= 8, `${slug} carries ${links.length} topic links (needs 8+)`);
+    for (const a of links) {
+      assert.ok(a.textContent.trim(), `${slug} has a topic link with no text`);
+      const href = a.getAttribute('href');
+      assert.ok(
+        listed.has(`${SITE}${href}`) || listed.has(`${SITE}${href.replace(/\/$/, '')}`),
+        `${slug} topic row points at an unlisted URL: ${href}`
+      );
+    }
+    const lang = doc.documentElement.getAttribute('lang');
+    const serialised = links.map((a) => `${a.textContent.trim()}|${a.getAttribute('href')}`).join('\n');
+    if (rows.has(lang)) {
+      assert.equal(serialised, rows.get(lang), `the ${lang} topic row differs between pages`);
+    } else {
+      rows.set(lang, serialised);
+    }
+  }
+  assert.ok(rows.has('en') && rows.has('fa'), 'both languages were sampled');
+  assert.notEqual(rows.get('en'), rows.get('fa'), 'the two languages have different topic rows');
+});
+
+/*
+ * ─── ANSWER ENGINES NEED THE QUESTION BEFORE THE PROSE ─────────────────────
+ * A crawler deciding whether a page is worth extracting from should not have to
+ * parse the whole body to find out what it answers. The question list states it
+ * up front, built from the same page.faqs as the FAQPage markup, so there is no
+ * third copy that can go stale.
+ */
+test('every page states the questions it answers, and the answers are on the page', () => {
+  for (const slug of ['non-custodial-crypto-swap', 'fa/crypto-swap-without-kyc', 'guides/solana']) {
+    const doc = html(join(OUT, slug, 'index.html'));
+    const list = doc.querySelector('.qa-list');
+    assert.ok(list, `${slug} has a question list`);
+    const items = [...list.querySelectorAll('li a')];
+    assert.ok(items.length >= 2, `${slug} states ${items.length} questions`);
+
+    const faqs = [...doc.querySelectorAll('.faq-list details')];
+    assert.equal(items.length, faqs.length, `${slug}: question count matches the visible FAQ`);
+    items.forEach((a, i) => {
+      assert.ok(a.textContent.trim(), `${slug} question ${i + 1} has no text`);
+      assert.ok(doc.querySelector(a.getAttribute('href')), `${slug} question ${i + 1} links to a missing answer`);
+    });
+
+    // The list sits before the prose, not after it.
+    const body = doc.querySelector('.story-copy');
+    const position = list.compareDocumentPosition(body);
+    assert.ok(position & 4, `${slug}: the question list comes before the body copy`);
+  }
+});
+
+test('llms.txt is generated from the corpus in both languages', () => {
+  const llms = read(join(OUT, 'llms.txt'));
+  assert.ok(llms.includes(`${SITE}/llms-full.txt`), 'llms.txt points at the full corpus map');
+  const hubs = (lang) => llms.split('## Topic hubs \u2014 English')[1] ?? llms;
+  assert.match(llms, /## Topic hubs \u2014 English/);
+  assert.match(llms, /## \u0645\u0631\u062c\u0639\u200c\u0647\u0627\u06cc \u0645\u0648\u0636\u0648\u0639\u06cc \u2014 \u0641\u0627\u0631\u0633\u06cc/);
+  for (const slug of ['guides/crypto-swap-and-routing', 'guides/crypto-fees-and-gas', 'guides/solana']) {
+    assert.ok(llms.includes(`${SITE}/${slug}`), `llms.txt lists ${slug}`);
+  }
+  for (const slug of ['fa/guides/crypto-swap-and-routing', 'fa/guides/solana']) {
+    assert.ok(llms.includes(`${SITE}/${slug}`), `llms.txt lists ${slug}`);
+  }
+  // The old hand-written file described twenty pages. The generated one must
+  // describe the corpus that actually exists.
+  const listed = urls().length;
+  assert.ok(listed > 200, 'sanity: the corpus is the size this test assumes');
+});
+
 test('robots rules apply the API exclusion to every declared crawler group', () => {
   const robots = read(join(OUT, 'robots.txt'));
   const groups = [];

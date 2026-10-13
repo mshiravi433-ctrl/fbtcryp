@@ -106,7 +106,8 @@ export const HUB_COPY = {
     body: [
       'کیف پول دارایی شما را نگه نمی‌دارد. کلیدی را نگه می‌دارد که اثبات می‌کند دارایی روی زنجیره متعلق به شماست و هر ویژگی غافلگیرکننده‌ای که مردم در این حوزه می‌بینند از همین یک واقعیت می‌آید. بازنشانی رمز وجود ندارد چون اصلاً حسابی وجود ندارد و هیچ پشتیبانی نمی‌تواند دسترسی را بازگرداند چون هیچ‌کس دیگری هرگز کلید را نداشته است.',
       'به همین دلیل مدل تهدید هم غیرمعمول است. خطر واقعی شکستن رمزنگاری نیست؛ این است که متقاعد شوید چیزی را امضا کنید، یا تنها نسخهٔ عبارتی را از دست بدهید که دوباره صادر نمی‌شود.'
-    ],
+,
+      'این یک نتیجهٔ عملی هم دارد: ارزش نسخهٔ پشتیبان شما از ارزش خود دستگاه بیشتر است. کیف پول سخت‌افزاری، کیف پول موبایل و افزونهٔ مرورگر هرکدام نقطهٔ ضعف متفاوتی دارند، اما در برابر یک عبارت بازیابی گم‌شده یا عکس‌برداری‌شده همه یکسان‌اند. آن را روی کاغذ بنویسید، جدا از دستگاه نگه دارید و هرگز در هیچ فرمی تایپ نکنید.'    ],
     facts: [
       ['محتوای کیف پول', 'یک کلید، نه خود دارایی'],
       ['عبارت بازیابی', 'بازنشانی، صدور مجدد و بازیابی آن ممکن نیست'],
@@ -124,7 +125,8 @@ export const HUB_COPY = {
     body: [
       'Almost every large crypto loss follows the same shape: the victim signed something. Not a broken cipher, not a stolen server — an approval, a transfer, a message that looked like a login. Attacks in this space target judgement under time pressure, because that is the cheapest attack surface available.',
       'The defences that work are correspondingly behavioural. Read what you are signing. Navigate from an address you saved yourself. Assume urgency is manufactured. These cost nothing and cover more real-world loss than any tool.'
-    ],
+,
+      'Two claims should end a conversation rather than start one. Nobody from FBT Swap will ever message you first, ask for a recovery phrase, or offer to recover funds — anyone who does is impersonating the project. And no legitimate support process requires you to sign a transaction, connect to an unknown site, or move assets to a \'safe\' wallet in order to prove ownership.'    ],
     facts: [
       ['Common factor in losses', 'The victim signed something'],
       ['Primary target', 'Judgement under time pressure, not cryptography'],
@@ -140,7 +142,8 @@ export const HUB_COPY = {
     body: [
       'تقریباً همهٔ زیان‌های بزرگ در این فضا یک شکل دارند: قربانی چیزی را امضا کرده است. نه رمزی شکسته شده و نه سروری هک شده — یک مجوز، یک انتقال یا پیامی که شبیه ورود به سایت به نظر می‌رسید. حملات در این حوزه قضاوت تحت فشار زمان را هدف می‌گیرند، چون ارزان‌ترین سطح حملهٔ موجود همین است.',
       'دفاع‌هایی هم که جواب می‌دهند رفتاری‌اند. آنچه را امضا می‌کنید بخوانید. از نشانی‌ای وارد شوید که خودتان ذخیره کرده‌اید. فرض کنید هر فوریتی ساختگی است. این‌ها هیچ هزینه‌ای ندارند و بیشتر از هر ابزاری جلوی زیان واقعی را می‌گیرند.'
-    ],
+,
+      'دو ادعا باید پایان گفت‌وگو باشند نه آغاز آن. هیچ‌کس از سوی اف‌بی‌تی سواپ هرگز اول با شما پیام نمی‌دهد، عبارت بازیابی نمی‌خواهد و پیشنهاد بازگرداندن دارایی نمی‌دهد؛ هر کس چنین کند در حال جعل هویت پروژه است. و هیچ فرایند پشتیبانی مشروعی از شما نمی‌خواهد تراکنشی امضا کنید، به سایتی ناشناس وصل شوید یا برای اثبات مالکیت، دارایی را به کیف پول «امن» منتقل کنید.'    ],
     facts: [
       ['وجه مشترک زیان‌ها', 'قربانی چیزی را امضا کرده است'],
       ['هدف اصلی حمله', 'قضاوت تحت فشار زمان، نه رمزنگاری'],
@@ -158,7 +161,8 @@ export const HUB_COPY = {
     body: [
       'Multi-chain is usually sold as more choice. In practice it is mostly more ways to be wrong: the same token exists as several different contracts, liquidity does not aggregate across chains, and an asset sent to the right address on the wrong network can be unrecoverable.',
       'The compensation is real though. Fees differ by orders of magnitude, confirmation times by seconds versus minutes, and the right network for a given trade is usually obvious once you know which questions to ask.'
-    ],
+,
+      'Bridging deserves its own warning, because it is the one action in this cluster that adds risk without adding information. A bridge is a contract holding assets on one chain and issuing a claim on another, so its safety is the safety of that contract and of every chain it touches. Routing a trade across a bridge to chase a marginally better price converts a price problem into a custody problem.'    ],
     facts: [
       ['Same name, different asset', 'A token on two chains is two contracts'],
       ['Liquidity', 'Does not aggregate across networks'],
@@ -174,7 +178,8 @@ export const HUB_COPY = {
     body: [
       'چندزنجیره‌ای بودن معمولاً به‌عنوان انتخاب بیشتر معرفی می‌شود. در عمل بیشتر به معنای راه‌های بیشتر برای اشتباه کردن است: یک توکن روی چند شبکه چند قرارداد متفاوت دارد، نقدینگی میان شبکه‌ها جمع نمی‌شود و دارایی ارسال‌شده به آدرس درست روی شبکهٔ اشتباه می‌تواند غیرقابل بازیابی باشد.',
       'در مقابل، مزیت آن واقعی است. کارمزدها چند برابر با هم تفاوت دارند، زمان تأیید از چند ثانیه تا چند دقیقه متغیر است و انتخاب شبکهٔ درست برای یک معاملهٔ مشخص معمولاً روشن است، به شرطی که بدانید چه پرسش‌هایی باید بپرسید.'
-    ],
+,
+      'پل زدن هشدار جداگانه‌ای می‌طلبد، چون تنها کاری در این مجموعه است که بدون افزودن اطلاعات، ریسک اضافه می‌کند. پل قراردادی است که دارایی را روی یک شبکه نگه می‌دارد و روی شبکهٔ دیگر ادعایی صادر می‌کند، پس امنیت آن همان امنیت آن قرارداد و هر شبکه‌ای است که به آن متصل است. فرستادن یک معامله از مسیر پل برای گرفتن قیمتی اندکی بهتر، مسئلهٔ قیمت را به مسئلهٔ حضانت تبدیل می‌کند.'    ],
     facts: [
       ['نام یکسان، دارایی متفاوت', 'یک توکن روی دو شبکه دو قرارداد است'],
       ['نقدینگی', 'میان شبکه‌ها جمع نمی‌شود'],
@@ -192,7 +197,8 @@ export const HUB_COPY = {
     body: [
       'Every yield in decentralised finance is someone else paying. Borrowers pay interest, traders pay pool fees, protocols pay incentives from their own treasury. If you cannot identify who is paying and why, the correct assumption is that the yield is temporary, or that the payment is for risk you have not priced.',
       'The arithmetic is visible on-chain, which is the genuine advantage here. The parts that are not visible — governance decisions, oracle behaviour under stress, what the contract does in conditions nobody has tested — are where losses actually occur.'
-    ],
+,
+      'Two structural limits are worth stating before any of the guides. Liquidation is not a risk of lending, it is the mechanism of lending: a protocol has to be able to close your position, or it cannot promise anything to the people who deposited into it. And a health factor is a live number that moves with the oracle price, not a margin you hold until the end of the week.'    ],
     facts: [
       ['Every yield', 'Is someone else paying — identify who'],
       ['Visible on-chain', 'Rates, collateral, reserves, liquidation thresholds'],
@@ -208,7 +214,8 @@ export const HUB_COPY = {
     body: [
       'هر بازدهی در امور مالی غیرمتمرکز یعنی کسی دیگر دارد می‌پردازد. وام‌گیرندگان بهره می‌دهند، معامله‌گران کارمزد استخر می‌پردازند و پروتکل‌ها از خزانهٔ خودشان مشوق پخش می‌کنند. اگر نمی‌توانید تشخیص دهید چه کسی و چرا پرداخت می‌کند، فرض درست این است که بازدهی موقتی است یا بهای ریسکی است که قیمت‌گذاری نکرده‌اید.',
       'محاسبات روی زنجیره قابل مشاهده است و مزیت واقعی همین است. آنچه قابل مشاهده نیست — تصمیم‌های حاکمیتی، رفتار اوراکل در شرایط فشار و عملکرد قرارداد در وضعیتی که کسی آزمایش نکرده — همان جایی است که زیان‌ها واقعاً رخ می‌دهند.'
-    ],
+,
+      'دو محدودیت ساختاری را پیش از هر راهنمایی باید گفت. انحلال ریسک وام‌دهی نیست، سازوکار آن است: پروتکل باید بتواند موقعیت شما را ببندد وگرنه نمی‌تواند به سپرده‌گذاران چیزی قول بدهد. و ضریب سلامت یک عدد زنده است که با قیمت اوراکل حرکت می‌کند، نه حاشیه‌ای که تا پایان هفته در اختیار دارید.'    ],
     facts: [
       ['هر بازدهی', 'یعنی کسی دارد می‌پردازد؛ مشخص کنید چه کسی'],
       ['قابل مشاهده روی زنجیره', 'نرخ‌ها، وثیقه، ذخایر و آستانهٔ انحلال'],
@@ -226,7 +233,8 @@ export const HUB_COPY = {
     body: [
       'Market data is useful for describing conditions and almost useless for predicting them, and the gap between those two uses is where most trading education goes wrong. An indicator can tell you that recent movement has been unusually one-sided. It cannot tell you what happens next, and no amount of parameter tuning changes that.',
       'What does survive scrutiny is comparison against an asset\'s own history, stated with its window and its source. "Volume is three times its thirty-day median" is checkable. "Volume is surging" is not.'
-    ],
+,
+      'Three habits make a reading useful instead of decorative. Always name the window behind a number, because a twenty-day average and a two-hundred-day average answer different questions. Compare an asset against itself rather than against the market, since most of what moves one price moves everything. And treat any reading that omits volume as incomplete, because a level that held on thin volume held for no reason you can rely on.'    ],
     facts: [
       ['Genuinely useful', "Comparison against an asset's own recent history"],
       ['Not predictive', 'Indicators, patterns and crossovers used as timing rules'],
@@ -242,7 +250,8 @@ export const HUB_COPY = {
     body: [
       'داده‌های بازار برای توصیف شرایط مفیدند و برای پیش‌بینی آن تقریباً بی‌فایده، و فاصلهٔ میان این دو کاربرد همان جایی است که بیشتر آموزش‌های معامله‌گری اشتباه می‌کنند. یک اندیکاتور می‌تواند بگوید حرکت اخیر به‌طور غیرعادی یک‌طرفه بوده است. نمی‌تواند بگوید بعد چه می‌شود و هیچ تنظیم پارامتری این را تغییر نمی‌دهد.',
       'آنچه در برابر بررسی دقیق دوام می‌آورد، مقایسه با تاریخچهٔ خود دارایی است، همراه با ذکر بازه و منبع. «حجم سه برابر میانهٔ سی‌روزه است» قابل بررسی است؛ «حجم در حال جهش است» نیست.'
-    ],
+,
+      'سه عادت باعث می‌شود این خوانش‌ها به‌جای تزئین، مفید باشند. همیشه بازهٔ پشت عدد را نام ببرید، چون میانگین بیست‌روزه و میانگین دویست‌روزه به دو پرسش متفاوت پاسخ می‌دهند. یک دارایی را با خودش مقایسه کنید نه با کل بازار، چون بیشترِ آنچه قیمت یک دارایی را حرکت می‌دهد همه‌چیز را حرکت می‌دهد. و هر خوانشی را که حجم را حذف کرده ناقص بدانید، چون سطحی که با حجم کم حفظ شده، دلیلی ندارد که بتوانید روی آن حساب کنید.'    ],
     facts: [
       ['واقعاً مفید', 'مقایسه با تاریخچهٔ اخیر خود دارایی'],
       ['پیش‌بینی‌کننده نیست', 'اندیکاتور و الگو به‌عنوان قاعدهٔ زمان‌بندی'],
@@ -260,7 +269,8 @@ export const HUB_COPY = {
     body: [
       'Solana is not an EVM chain with cheaper gas. The account model, the address format, the fee mechanism and the failure modes are all different, and habits carried over from Ethereum produce specific, repeatable confusion — transactions that vanish instead of pending, tokens that need a deposit before they can be received, and a priority fee that decides inclusion rather than speed.',
       'The upside is that the same design makes wallets able to show exactly which balances a transaction will change before you sign it. That is better pre-signature visibility than most EVM tooling offers.'
-    ],
+,
+      'Three Solana-specific habits prevent most of the support questions we see. Keep a little SOL aside for rent deposits and priority fees, because a wallet holding tokens with a zero SOL balance cannot send anything. Check the expiry and the priority fee before resubmitting instead of repeating the same request. And read the simulated balance change in the wallet, which shows what you will actually receive rather than what the quote promised.'    ],
     facts: [
       ['Not EVM', 'Different accounts, addresses, fees and failure modes'],
       ['Transactions', 'Expire rather than pend — usually at no cost'],
@@ -276,7 +286,8 @@ export const HUB_COPY = {
     body: [
       'سولانا یک شبکهٔ سازگار با اتریوم با گس ارزان‌تر نیست. مدل حساب، قالب آدرس، سازوکار کارمزد و حالت‌های خرابی همگی متفاوت‌اند و عادت‌هایی که از اتریوم منتقل می‌شوند سردرگمی‌های مشخص و تکرارشونده‌ای می‌سازند: تراکنش‌هایی که به‌جای انتظار ناپدید می‌شوند، توکن‌هایی که پیش از دریافت به ودیعه نیاز دارند، و کارمزد اولویتی که ورود به بلاک را تعیین می‌کند نه سرعت را.',
       'در عوض، همین طراحی باعث می‌شود کیف پول بتواند دقیقاً نشان دهد کدام موجودی‌ها پیش از امضا تغییر می‌کنند. این سطح از شفافیت پیش از امضا از بیشتر ابزارهای شبکه‌های سازگار با اتریوم بهتر است.'
-    ],
+,
+      'سه عادت مخصوص سولانا جلوی بیشتر پرسش‌هایی را می‌گیرد که می‌بینیم. کمی سولانا برای ودیعهٔ اجاره و کارمزد اولویت کنار بگذارید، چون کیف پولی که توکن دارد اما موجودی سولانای آن صفر است نمی‌تواند چیزی بفرستد. پیش از ارسال دوباره، زمان انقضا و کارمزد اولویت را بررسی کنید نه اینکه همان درخواست را پشت‌سرهم تکرار کنید. و تغییر شبیه‌سازی‌شدهٔ موجودی را در کیف پول بخوانید که نشان می‌دهد واقعاً چه دریافت می‌کنید، نه آنچه مظنه قول داده بود.'    ],
     facts: [
       ['سازگار با اتریوم نیست', 'حساب، آدرس، کارمزد و حالت خرابی متفاوت'],
       ['تراکنش‌ها', 'به‌جای انتظار منقضی می‌شوند، معمولاً بدون هزینه'],

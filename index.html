@@ -116,16 +116,38 @@
       Console after deployment. Keep this number tied to EVM_CHAIN_ORDER +
       Solana.
     -->
-    <title>FBTSwap (FBT Swap) | Non-Custodial Crypto DEX on 17 Networks</title>
+    <!--
+      BILINGUAL ON PURPOSE. This document is the Persian-first application
+      shell (<html lang="fa" dir="rtl">), and it used to advertise itself in
+      English only. A crawler matching the declared language of the page
+      against the language of its metadata had nothing to match: the title and
+      description said one thing, the document said another, and neither was
+      enough to rank the most important URL on the domain for anything.
+
+      Persian leads because that is what the document is; the English half is
+      there because brand queries arrive in Latin script too. The digit stays
+      Latin ("17") in both halves so the network count is one token a crawler
+      can match rather than two renderings of the same number.
+    -->
+    <title>FBT Swap | اف‌بی‌تی سواپ — سواپ غیرامانی روی 17 شبکه</title>
     <meta
       name="description"
-      content="Non-custodial crypto swaps across 17 networks including BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic and Solana. You hold your keys."
+      content="سواپ غیرامانی ارز دیجیتال روی ۱۷ شبکه؛ بدون حساب و بدون احراز هویت. Non-custodial crypto swap across 17 networks — you hold your own keys."
     />
     <meta
       name="keywords"
       content="dex, decentralized exchange, crypto swap, non-custodial wallet, bnb chain, defi, token swap, limit orders, dca"
     />
     <link rel="canonical" href="https://fbtswap.ir/" />
+    <!--
+      The app is one document that renders in the reader's own language, so it
+      is the language-neutral entry to the site: x-default points at itself.
+      fa-IR is the same URL because this document declares lang="fa" and the
+      shell really is Persian-first. The translated, crawlable corpus lives
+      under /fa/ and is paired page by page over there.
+    -->
+    <link rel="alternate" hreflang="fa-IR" href="https://fbtswap.ir/" />
+    <link rel="alternate" hreflang="x-default" href="https://fbtswap.ir/" />
 
     <!--
       SEARCH CONSOLE VERIFICATION
@@ -148,10 +170,10 @@
     <!-- Open Graph: Telegram, WhatsApp, LinkedIn, Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FBT Swap" />
-    <meta property="og:title" content="FBTSwap (FBT Swap) — Non-Custodial DEX &amp; Crypto Swap" />
+    <meta property="og:title" content="FBT Swap | اف‌بی‌تی سواپ — سواپ غیرامانی روی 17 شبکه" />
     <meta
       property="og:description"
-      content="Swap crypto across 17 networks without giving up your keys. Live prices, limit orders and DCA, in 12 languages."
+      content="سواپ غیرامانی ارز دیجیتال روی ۱۷ شبکه؛ بدون حساب و بدون احراز هویت. Non-custodial crypto swap across 17 networks — you hold your own keys."
     />
     <meta property="og:url" content="https://fbtswap.ir/" />
     <meta property="og:image" content="https://fbtswap.ir/social-card.png" />
@@ -160,16 +182,16 @@
     <meta property="og:image:width" content="1024" />
     <meta property="og:image:height" content="500" />
     <meta property="og:image:alt" content="FBT Swap — Non-custodial crypto swap" />
-    <meta property="og:locale" content="en_US" />
-    <meta property="og:locale:alternate" content="fa_IR" />
+    <meta property="og:locale" content="fa_IR" />
+    <meta property="og:locale:alternate" content="en_US" />
 
     <!-- Twitter / X card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@CompanyFbt" />
-    <meta name="twitter:title" content="FBTSwap (FBT Swap) — Non-Custodial DEX" />
+    <meta name="twitter:title" content="FBT Swap | اف‌بی‌تی سواپ — سواپ غیرامانی روی 17 شبکه" />
     <meta
       name="twitter:description"
-      content="Swap crypto across 17 networks without giving up your keys."
+      content="سواپ غیرامانی روی ۱۷ شبکه؛ بدون حساب و بدون احراز هویت. Non-custodial crypto swap across 17 networks."
     />
     <meta name="twitter:image" content="https://fbtswap.ir/social-card.png" />
     <meta name="twitter:image:alt" content="FBT Swap — Non-custodial crypto swap" />
@@ -243,8 +265,8 @@
             "@type": "WebPage",
             "@id": "https://fbtswap.ir/#webpage",
             "url": "https://fbtswap.ir/",
-            "name": "FBTSwap (FBT Swap) | Non-Custodial Crypto DEX on 17 Networks",
-            "description": "Non-custodial crypto swaps on 17 supported networks. You hold your own keys and sign every trade.",
+            "name": "FBT Swap | اف‌بی‌تی سواپ — سواپ غیرامانی روی 17 شبکه",
+            "description": "سواپ غیرامانی ارز دیجیتال روی ۱۷ شبکه؛ بدون حساب و بدون احراز هویت. Non-custodial crypto swap across 17 networks — you hold your own keys.",
             "inLanguage": ["fa-IR", "en"],
             "isPartOf": { "@id": "https://fbtswap.ir/#website" },
             "about": { "@id": "https://fbtswap.ir/#app" },
@@ -448,79 +470,51 @@
       </div>
     </div>
     <!--
-      A real, readable fallback rather than an SEO-only hidden block. The app
-      itself needs JavaScript, but this lets a no-JS visitor and a lightweight
-      crawler understand what the domain is for, reach the static guides, and
-      avoid an endless boot spinner. The `<style>` is inside `<noscript>`, so
-      it never changes the JavaScript application.
+      HOME HUB — the crawlable content of `/`.
+
+      The app mounts into #root and paints a market dashboard that is fetched
+      client-side, so the initial HTML of the most authoritative URL on the
+      domain would otherwise be a spinner and nothing else.
+
+      The block between the two markers below is REPLACED at build time by
+      scripts/gen-landing.mjs, which renders scripts/content/home-hub.mjs from
+      the same PAGES array that produces the sitemap: a bilingual, structured
+      map of every published page, in both languages, with each page's own
+      title as the anchor text.
+
+      What is left here is only the no-JS placeholder for a build that somehow
+      skips the generator. It is intentionally short — the generated version
+      carries the real content and the full link graph.
+
+      This is not hidden text and not cloaking. One document is served to
+      everyone; there is no user-agent test anywhere in the repository. A
+      visitor without JavaScript reads exactly this. A visitor with JavaScript
+      sees the app boot over it, and the element is removed on mount the same
+      way the boot spinner always was.
     -->
+    <!-- HOME-HUB:START -->
+    <main id="no-js-content">
+      <p><strong>FBT Swap</strong> &middot; اف‌بی‌تی سواپ</p>
+      <h1>اف‌بی‌تی سواپ؛ سواپ غیرامانی ارز دیجیتال روی ۱۷ شبکه</h1>
+      <p>اف‌بی‌تی سواپ یک رابط سواپ غیرامانی است: کیف پول خودت را وصل می‌کنی، نرخ و کارمزد را پیش از امضا می‌بینی و تراکنش در همان کیف پول امضا می‌شود. دارایی و عبارت بازیابی‌ات نزد خودت می‌ماند.</p>
+      <h2>راهنماها و صفحات</h2>
+      <ul>
+        <li><a href="/library" lang="en" dir="ltr">Page library — every FBT Swap page (English)</a></li>
+        <li><a href="/fa/">کتابخانهٔ صفحات — همهٔ صفحات در یک‌جا (فارسی)</a></li>
+        <li><a href="/decentralized-crypto-exchange">معرفی کامل محصول</a></li>
+        <li><a href="/fa/crypto-swap-without-kyc">سواپ ارز دیجیتال بدون ثبت‌نام</a></li>
+        <li><a href="/crypto-swap-without-kyc" lang="en" dir="ltr">Crypto swap without KYC (English)</a></li>
+      </ul>
+      <p>برای اجرای رابط سواپ، JavaScript را در مرورگر فعال کن. ارزهای دیجیتال پرنوسان‌اند و تراکنش‌های روی زنجیره برگشت‌ناپذیرند؛ این متن توصیهٔ مالی نیست.</p>
+    </main>
     <noscript>
       <style>
         #boot { display: none !important; }
-        #no-js-content {
-          max-width: 720px;
-          margin: 0 auto;
-          padding: 32px 20px 64px;
-          direction: rtl;
-          background: #06070c;
-          color: #e8ecf6;
-          font: 16px/1.95 'Vazirmatn', system-ui, sans-serif;
-        }
-        #no-js-content h1 { font-size: clamp(26px, 7vw, 38px); line-height: 1.25; margin: 0 0 18px; }
-        #no-js-content h2 { font-size: 18px; margin: 30px 0 10px; }
-        #no-js-content p, #no-js-content li { color: #c3cbe0; }
-        #no-js-content li { margin: 10px 0; }
+        #no-js-content { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; direction: rtl; color: #e8ecf6; font: 16px/1.95 'Vazirmatn', system-ui, sans-serif; }
         #no-js-content a { color: #00e5ff; }
-        #no-js-content .no-js-note { border-inline-start: 2px solid #ffb300; padding-inline-start: 12px; color: #9eaac5; }
       </style>
-      <main id="no-js-content">
-        <p><strong>FBT Swap</strong></p>
-        <h1>اف‌بی‌تی سواپ؛ سواپ غیرامانی ارز دیجیتال روی ۱۷ شبکه</h1>
-        <p>اف‌بی‌تی سواپ یک رابط سواپ غیرامانی است: کیف پول خودت را وصل می‌کنی، نرخ و کارمزد را می‌بینی و هر تراکنش را در همان کیف پول امضا می‌کنی. دارایی و عبارت بازیابی‌ات نزد خودت می‌ماند.</p>
-        <p>شبکه‌های پشتیبانی‌شده (۱۷): بی‌ان‌بی چین، اتریوم، پالیگان، آربیتروم، بیس، اپتیمیسم، آوالانچ، لینیا، سونیک، براچین، یونی‌چین، موناد، منتل، اسکرول، زی‌کی‌سینک، زنجیرهٔ رابین‌هود و سولانا.</p>
-        <h2>راهنماهای FBT Swap</h2>
-        <!--
-          These links are the site's internal link graph as far as a
-          JavaScript-free crawler is concerned, which is why every generated
-          landing page is listed here and not only the few that existed when
-          this block was written. The app itself routes behind a hash
-          (`/#/swap`), so nothing after the `#` is a URL a crawler can follow;
-          these are the only crawlable paths from the homepage into the rest of
-          the domain. A page that is generated, sitemapped and submitted but
-          unreachable by link is a page that ranks on its own or not at all.
-        -->
-        <h2>کتابخانهٔ صفحات — فهرست مرجع همهٔ صفحات</h2>
-        <ul>
-          <li><a href="/library" lang="en" dir="ltr">Page library — every FBT Swap page in one place (English)</a></li>
-          <li><a href="/fa/">کتابخانهٔ صفحات — همهٔ صفحات در یک‌جا (فارسی)</a></li>
-        </ul>
-        <ul>
-          <li><a href="/decentralized-crypto-exchange">سواپ ارز دیجیتال و صرافی غیرمتمرکز</a></li>
-          <li><a href="/fa/crypto-swap-without-kyc">سواپ ارز دیجیتال بدون ثبت‌نام</a></li>
-          <li><a href="/fa/crypto-investing-yield-and-lending">سرمایه‌گذاری در ارز دیجیتال و ابزارهای بازده</a></li>
-          <li><a href="/fa/solana-token-swap">سواپ سولانا (توکن‌های SPL)</a></li>
-          <li><a href="/fa/crypto-price-alerts-and-dca">هشدار قیمت ارز دیجیتال و خرید پله‌ای</a></li>
-          <li><a href="/fa/crypto-market-history-analysis">تحلیل تکنیکال ارز دیجیتال</a></li>
-          <li><a href="/fa/non-custodial-wallet">کیف پول غیرامانی و نکات امنیتی</a></li>
-          <li><a href="/non-custodial-crypto-swap" lang="en" dir="ltr">Non-custodial crypto swap (English)</a></li>
-          <li><a href="/crypto-swap-without-kyc" lang="en" dir="ltr">Crypto swap without KYC (English)</a></li>
-          <li><a href="/crypto-investing-yield-and-lending" lang="en" dir="ltr">Crypto investing, yield and lending (English)</a></li>
-          <li><a href="/solana-token-swap" lang="en" dir="ltr">Solana token swap (English)</a></li>
-        </ul>
-        <h2>وبلاگ و راهنماهای بلند</h2>
-        <ul>
-          <li><a href="/fa/blog">وبلاگ — کارمزد، امانت‌داری و حریم خصوصی</a></li>
-          <li><a href="/fa/how-crypto-swap-fees-work">کارمزد سواپ ارز دیجیتال چطور حساب می‌شود؟</a></li>
-          <li><a href="/fa/custodial-vs-non-custodial-wallets">تفاوت کیف پول امانی و غیرامانی</a></li>
-          <li><a href="/fa/what-stays-private-without-kyc">سواپ بدون احراز هویت: چه چیزی خصوصی می‌ماند</a></li>
-          <li><a href="/blog" lang="en" dir="ltr">Guides (English)</a></li>
-          <li><a href="/how-crypto-swap-fees-work" lang="en" dir="ltr">How a crypto swap fee actually works (English)</a></li>
-          <li><a href="/custodial-vs-non-custodial-wallets" lang="en" dir="ltr">Custodial vs non-custodial wallets (English)</a></li>
-          <li><a href="/what-stays-private-without-kyc" lang="en" dir="ltr">Swapping without KYC: what stays private (English)</a></li>
-        </ul>
-        <p class="no-js-note">برای اجرای برنامهٔ سواپ، JavaScript را در مرورگر فعال کن. ارزهای دیجیتال پرنوسان‌اند و تراکنش‌های روی زنجیره برگشت‌ناپذیرند؛ این متن توصیهٔ مالی نیست.</p>
-      </main>
     </noscript>
+    <!-- HOME-HUB:END -->
     <div id="root"></div>
 
     <script>
