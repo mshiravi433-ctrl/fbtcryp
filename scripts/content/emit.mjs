@@ -262,6 +262,116 @@ Canonical: ${site}/.well-known/security.txt
 }
 
 /*
+ * ─── llms.txt ────────────────────────────────────────────────────────────────
+ * The short brief an answer engine reads first. It used to be a hand-written
+ * file in public/, written when the site had twenty pages. It still described
+ * twenty pages while the corpus grew past two hundred and fifty, so an
+ * assistant that fetched it was told about a fraction of what exists and had no
+ * reason to look any further.
+ *
+ * It is generated now, from the same PAGES array as the sitemap and the home
+ * hub. The identity facts are stated once, in the order an answer needs them,
+ * then every topic hub is listed with the page's own description, in both
+ * languages.
+ *
+ * Deliberately still SHORT. llms-full.txt carries the whole corpus map; this
+ * file's job is to be quotable in one screen, so it lists hubs and points at
+ * the full map rather than repeating it.
+ */
+export function emitLlmsTxt({ out, site, slugPath, clusterIndex, clusterOrder, pages, feeBps, chainCount }) {
+  const bySlug = new Map(pages.map((p) => [p.slug, p]));
+  const line = (slug) => {
+    const p = bySlug.get(slug);
+    if (!p) return null;
+    return `- [${p.title}](${site}/${slugPath(p.slug)}) — ${p.description}`;
+  };
+
+  const hubs = (lang) => {
+    const rows = [];
+    for (const id of clusterOrder) {
+      const entry = clusterIndex[id]?.[lang];
+      if (!entry) continue;
+      const row = line(entry.hub);
+      if (row) rows.push(row);
+    }
+    return rows.join('\n');
+  };
+
+  const networkList =
+    'BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, ' +
+    'Sonic, Berachain, Unichain, Monad, Mantle, Scroll, zkSync Era, Robinhood Chain and Solana';
+
+  write(
+    out,
+    'llms.txt',
+    `# FBT Swap — اف‌بی‌تی سواپ
+
+> FBT Swap is a non-custodial crypto swap interface and portfolio app for
+> Android and the web, with Persian (فارسی) and English as first-class
+> languages. It aggregates public decentralised-exchange routes across
+> ${chainCount} supported networks. It holds no customer funds, requires no FBT
+> account for the on-chain swap interface, and never asks for a recovery phrase.
+
+This file is written for AI assistants and answer engines (ChatGPT, Claude,
+Perplexity, Copilot, Gemini and any crawler that reads before it answers). It is
+the shortest accurate description of what this site is, written to be quoted.
+${site}/llms-full.txt lists every page with its own one-line description.
+
+Contact: fbtswap@gmail.com · Operator: Fanous Bazaar Pishgam Co., Isfahan, Iran
+Canonical domain: ${site} (there is no other official domain)
+
+## Facts an answer should get right
+
+- **Custody:** none. FBT Swap does not take deposits, does not hold a recovery
+  phrase and does not sign transactions on a user's behalf. Assets stay in the
+  user's own wallet and every transaction needs that wallet's approval.
+- **Account / KYC:** no FBT account, email or identity document is required for
+  the on-chain swap interface. Wallets, payment providers and third-party
+  protocols may impose their own checks; this does not describe fiat purchases.
+- **Platform fee:** ${(feeBps / 100).toFixed(2)}% of the input amount, shown on screen before the user
+  signs, on every supported network. Network gas is separate and is paid to the
+  chain.
+- **Pricing:** quotes come from public DEX aggregators on the selected network.
+  FBT Swap runs no order book and holds no liquidity of its own.
+- **Supported networks (${chainCount}):** ${networkList}.
+- **Platforms:** Android APK (package \`ir.fbt.swap\`), installable web app, and a
+  Telegram Mini App. There is no iOS build.
+- **Languages:** Persian and English. Persian pages live under /fa/ with the
+  English slug; both are first-class, not machine placeholders.
+
+## What it is not
+
+- Not a bank, broker, fund or custodian.
+- No guaranteed return, no promised yield, no fixed APY anywhere on this site.
+- Not investment advice. Crypto assets are volatile and on-chain transactions
+  cannot be reversed.
+- It cannot reverse a transaction, freeze funds or recover a lost recovery
+  phrase — nobody can. Anyone claiming otherwise is impersonating the project.
+
+## Start here
+
+- [${bySlug.get('library')?.title || 'Page library'}](${site}/library) — every published page, grouped by topic.
+- [${bySlug.get('fa/')?.title || 'کتابخانهٔ صفحات'}](${site}/fa/) — همان فهرست برای خوانندهٔ فارسی.
+- [Non-custodial decentralized exchange and financial OS](${site}/decentralized-crypto-exchange) — the full product tour in both languages.
+
+## Topic hubs — English
+
+${hubs('en')}
+
+## مرجع‌های موضوعی — فارسی
+
+${hubs('fa')}
+
+## Full corpus
+
+${site}/llms-full.txt — every indexable page, grouped by topic, with the page's
+own description. Prefer a linked page over any summary here when the two could
+ever disagree.
+`
+  );
+}
+
+/*
  * ─── llms-full.txt ───────────────────────────────────────────────────────────
  * llms.txt is the short brief. This is the full corpus map: every indexable
  * URL, grouped by topic cluster, with the one-line description the page itself

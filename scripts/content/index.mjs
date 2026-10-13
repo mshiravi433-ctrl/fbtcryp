@@ -110,7 +110,12 @@ for (const cluster of CLUSTERS) {
       topic: cluster.topic,
       route: cluster.route,
       datePublished: '2026-10-05',
-      dateModified: '2026-10-05',
+      /* dateModified is an editorial claim, not a build stamp: it moves when
+         the prose on the page moves. The hub bodies were extended on
+         2026-10-13 (one closing paragraph per thin cluster, in both
+         languages), so this is a real change and the sitemap <lastmod> and the
+         IndexNow window should both see it. */
+      dateModified: '2026-10-13',
       title: meta.title,
       description: meta.description,
       h1: meta.h1,

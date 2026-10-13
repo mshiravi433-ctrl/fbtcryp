@@ -224,8 +224,27 @@ requestAnimationFrame(() => {
    * so the guard can be cleared and the NEXT incident may reload once again.
    */
   clearHardReloadFlag();
+
+  /*
+   * The pre-mount documents go away together.
+   *
+   * `#boot` is the spinner. `#home-hub` is the crawlable home page the
+   * generator injected into this document at build time (see
+   * scripts/content/home-hub.mjs): real bilingual prose plus a structured map
+   * of every published page, there so that a crawler which does not execute
+   * JavaScript — every AI answer engine among them — reads a homepage instead
+   * of an empty shell.
+   *
+   * Both are removed once the app is up. Leaving the hub in place would put
+   * content behind an opaque layer, which is the one thing this must never
+   * become; the crawler contract is that the content stands on its own in the
+   * delivered HTML, not that it lingers invisibly after hydration.
+   */
   const boot = document.getElementById('boot');
-  if (!boot) return;
-  boot.style.opacity = '0';
-  setTimeout(() => boot.remove(), 420);
+  if (boot) {
+    boot.style.opacity = '0';
+    setTimeout(() => boot.remove(), 420);
+  }
+  const homeHub = document.getElementById('home-hub');
+  if (homeHub) setTimeout(() => homeHub.remove(), 420);
 });

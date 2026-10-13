@@ -57,8 +57,10 @@ import {
   emitFeed,
   emitSecurityTxt,
   emitLlmsFull,
+  emitLlmsTxt,
   emit404
 } from './content/emit.mjs';
+import { renderHomeHub, injectHomeHub } from './content/home-hub.mjs';
 import {
   MARKET_DASHBOARD_STYLES,
   marketDashboardScript as renderMarketDashboardScript,
@@ -231,6 +233,7 @@ const PAGES = [
   },
   {
     slug: 'crypto-market-history-analysis',
+    dateModified: '2026-10-13',
     icon: 'history',
     topic: 'market',
     lang: 'en',
@@ -242,7 +245,9 @@ const PAGES = [
     body: [
       'Most chart tools give you a snapshot: an RSI reading, a moving average, one support line. None of that answers the question people actually ask before setting a target price — has the market been here before, and what happened?',
       'This app measures repeated behaviour across the whole series. It finds the levels price keeps returning to and counts the touches, reports how often each one held versus broke, shows the worst peak-to-trough fall in the window, and compares today’s volume to this coin’s own median rather than to some absolute number.',
-      'Nothing here forecasts anything, and that is the point. "This level was tested four times and held three" is a fact about data that already exists. "This level will hold" is a guess. A level that held four times can break on the fifth, and the app says so on the same screen.'
+      'Nothing here forecasts anything, and that is the point. "This level was tested four times and held three" is a fact about data that already exists. "This level will hold" is a guess. A level that held four times can break on the fifth, and the app says so on the same screen.',
+      'The readings are only comparable when the window is comparable, which is why each one names its own. A fourteen-day RSI and a daily RSI over three months are not two opinions about the same question; they are answers to different questions. Volume follows the same rule: measured against the median for that same coin over the selected window rather than against a fixed threshold that means nothing for a thinly traded asset.',
+      'Used that way, history does one job well. It tells you what conditions this asset has actually traded in, so the level you are about to trust is one you have watched being tested rather than one you drew yourself.'
     ],
     facts: [
       ['Levels', 'Counted touches, with a held-versus-broke record'],
@@ -331,6 +336,7 @@ const PAGES = [
   },
   {
     slug: 'fa/crypto-market-history-analysis',
+    dateModified: '2026-10-13',
     icon: 'history',
     topic: 'market',
     lang: 'fa',
@@ -343,7 +349,9 @@ const PAGES = [
     body: [
       'تحلیل تکنیکال وقتی مفید است که بدانی چه می‌گوید و چه نمی‌گوید. در اف‌بی‌تی سواپ، RSI، MACD، باند بولینگر، میانگین‌های متحرک، نوسان و سطح‌های حمایت و مقاومت از تاریخچهٔ واقعی قیمت محاسبه می‌شوند تا بتوانی وضعیت فعلی نمودار را در کنار هم ببینی.',
       'به‌جای اینکه یک عدد را «سیگنال قطعی» بدانی، می‌توانی ببینی اندیکاتورها چقدر با هم هم‌نظرند، قیمت چند بار به یک سطح برگشته و آن سطح چند بار نگه داشته یا شکسته شده است. حجم هم با میانهٔ همان دارایی مقایسه می‌شود، نه با یک عدد دل‌بخواهی برای همهٔ کوین‌ها.',
-      'هیچ‌کدام از این اندازه‌گیری‌ها آینده را تضمین نمی‌کنند. سطح حمایتی که چند بار دوام آورده ممکن است دفعهٔ بعد بشکند و بازارِ پرنوسان می‌تواند در چند دقیقه نتیجه را عوض کند. این صفحه برای تحقیق و فهم بهتر داده است، نه توصیهٔ مالی یا فرمان خرید و فروش.'
+      'هیچ‌کدام از این اندازه‌گیری‌ها آینده را تضمین نمی‌کنند. سطح حمایتی که چند بار دوام آورده ممکن است دفعهٔ بعد بشکند و بازارِ پرنوسان می‌تواند در چند دقیقه نتیجه را عوض کند. این صفحه برای تحقیق و فهم بهتر داده است، نه توصیهٔ مالی یا فرمان خرید و فروش.',
+      'این خوانش‌ها فقط وقتی قابل مقایسه‌اند که بازهٔ آن‌ها هم یکی باشد، و به همین دلیل هر عدد بازهٔ خودش را همراه دارد. RSI چهارده‌روزه و RSI روزانه در سه ماه دو نظر دربارهٔ یک پرسش نیستند؛ پاسخ به دو پرسش متفاوت‌اند. حجم هم همین‌طور است؛ با میانهٔ خودِ همان دارایی در بازهٔ انتخابی سنجیده می‌شود، نه با یک آستانهٔ ثابت که برای دارایی کم‌معامله معنایی ندارد.',
+      'با همین نگاه، تاریخچه یک کار را خوب انجام می‌دهد؛ می‌گوید این دارایی واقعاً در چه شرایطی معامله شده، تا سطحی که می‌خواهی به آن اعتماد کنی سطحی باشد که آزموده‌شدنش را دیده‌ای، نه خطی که خودت کشیده‌ای.'
     ],
     facts: [
       ['اندیکاتورها', 'RSI، MACD، باند بولینگر و میانگین‌های متحرک'],
@@ -1986,6 +1994,8 @@ function copyFor(lang) {
         readNext: 'ادامهٔ مطالعه',
         guides: 'راهنماها',
         minRead: 'دقیقه مطالعه',
+        onThisPage: 'پرسش‌هایی که این صفحه جواب می‌دهد',
+        topics: 'موضوع‌ها',
         /* Library (مرجع صفحات) — the reference directory every page links to. */
         library: 'کتابخانهٔ صفحات',
         allPages: 'همهٔ صفحات',
@@ -2017,6 +2027,8 @@ function copyFor(lang) {
         readNext: 'Read next',
         guides: 'Guides',
         minRead: 'min read',
+        onThisPage: 'Questions this page answers',
+        topics: 'Topics',
         /* Library (the page directory) — the reference every page links to. */
         library: 'Page library',
         allPages: 'All pages',
@@ -2030,6 +2042,26 @@ function copyFor(lang) {
           'Crypto assets are volatile and on-chain transactions cannot be reversed. You can lose money, including all of it. Nothing here is financial advice.'
       };
 }
+
+/**
+ * The label a cluster declares for its own hub, in one language.
+ *
+ * The topic row on every page needs the hub URL together with the label the
+ * cluster gives it — never the hub page's own <title>, which is a 60-character
+ * search string that changes whenever the SEO copy is retuned. The sitelinks
+ * signal depends on that label being byte-identical on all 253 documents, so it
+ * has to come from the cluster definition and nowhere else.
+ */
+const CLUSTER_LABEL_BY_HUB = (() => {
+  const map = new Map();
+  for (const id of CLUSTER_ORDER) {
+    for (const lng of ['en', 'fa']) {
+      const entry = CLUSTER_INDEX[id]?.[lng];
+      if (entry?.hub && entry.label) map.set(`${lng}:${entry.hub}`, entry.label);
+    }
+  }
+  return map;
+})();
 
 /**
  * The FAQ JSON-LD mirrors visible `<details>` content below. That matters:
@@ -2700,7 +2732,7 @@ function render(page) {
       <div class="faq-list">
         ${page.faqs
           .map(
-            ({ q, a }) => `<details>
+            ({ q, a }, faqIndex) => `<details id="faq-${faqIndex + 1}">
           <summary><span>${esc(q)}</span><span class="faq-plus" aria-hidden="true">+</span></summary>
           <p>${esc(a)}</p>
         </details>`
@@ -2736,6 +2768,59 @@ function render(page) {
         .join('\n      ')}
     </ol>
   </section>`
+    : '';
+
+  /*
+   * ─── THE TOPIC ROW ────────────────────────────────────────────────────────
+   * The same links, in the same order, with the same wording, on every page in
+   * the language. The repetition is the point.
+   *
+   * Google's sitelinks — the indented list of sub-pages shown under the main
+   * result — are drawn from the site's own internal link hierarchy. A crawler
+   * that meets the same small set of labelled, stable links on all 253
+   * documents learns what the sections of this site are and which URL owns
+   * each one. Links that appear on one page and not another, or whose anchor
+   * text changes between pages, teach it nothing.
+   *
+   * Slugs come from CLUSTER_INDEX, so the row can only ever point at a hub
+   * that was really generated.
+   */
+  const sectionSlugs = CLUSTER_ORDER
+    .map((id) => CLUSTER_INDEX[id]?.[lang]?.hub)
+    .filter((slug) => slug && pageBySlug.has(slug));
+  const sectionNav = sectionSlugs.length
+    ? `<nav class="section-nav" aria-label="${esc(ui.topics)}">
+        ${sectionSlugs
+          .map((slug) => {
+            const p = pageBySlug.get(slug);
+            const label = CLUSTER_LABEL_BY_HUB.get(`${lang}:${slug}`) || p.h1 || p.title;
+            return `<a href="/${esc(slugPath(slug))}">${esc(label)}</a>`;
+          })
+          .join('\n        ')}
+      </nav>`
+    : '';
+
+  /*
+   * ─── THE QUESTION LIST ────────────────────────────────────────────────────
+   * What this page answers, stated before any of the prose.
+   *
+   * Two jobs. For a reader it is a skim-able contract: if these are not your
+   * questions, this is not your page. For an answer engine it is the
+   * highest-signal text on the document — real questions in the page's own
+   * words, in the shape a query takes, extractable without parsing the body.
+   *
+   * It is built from page.faqs, the same source as the FAQPage JSON-LD and the
+   * visible <details> below, so there is no third copy to keep in step.
+   */
+  const questionList = page.faqs?.length
+    ? `<section class="qa-list" aria-labelledby="qa-heading">
+        <h2 id="qa-heading">${esc(ui.onThisPage)}</h2>
+        <ul>
+          ${page.faqs
+            .map(({ q }, i) => `<li><a href="#faq-${i + 1}">${esc(q)}</a></li>`)
+            .join('\n          ')}
+        </ul>
+      </section>`
     : '';
 
   const structuredData = landingStructuredData(page, url);
@@ -2959,6 +3044,34 @@ ${
   .crumb a:hover { color: var(--cy); }
   .crumb-sep { opacity: .5; }
   .crumb span[aria-current] { max-width: min(520px, 62vw); overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+  /* The topic row. The same links, worded identically, on every page in the
+     language — see sectionNav in render() for why the repetition is the point
+     rather than an accident. */
+  .section-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .section-nav a {
+    display: inline-block; padding: 6px 11px; border: 1px solid var(--line);
+    border-radius: 999px; color: var(--muted); font-size: 12.5px;
+    text-decoration: none; transition: color .18s ease, border-color .18s ease;
+  }
+  .section-nav a:hover { color: var(--cy); border-color: var(--line-strong); }
+  /* The question list under the lede: what this page answers, before any of the
+     prose. It is the visible half of the FAQ further down, and it sits at the
+     top because a reader — or an answer engine deciding whether a page is worth
+     extracting from — should see what it answers before reading any of it. */
+  .qa-list { margin: 26px 0 0; }
+  .qa-list h2 {
+    font-size: 13px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--quiet); margin: 0 0 10px;
+  }
+  [dir="rtl"] .qa-list h2 { letter-spacing: 0; text-transform: none; }
+  .qa-list ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .qa-list li { position: relative; padding-inline-start: 20px; }
+  .qa-list li::before {
+    content: ''; position: absolute; inset-inline-start: 2px; top: .62em;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--cy); opacity: .65;
+  }
+  .qa-list a { color: #d6ddf0; text-decoration: none; font-size: 14.5px; line-height: 1.7; }
+  .qa-list a:hover { color: var(--cy); text-decoration: underline; }
   .lang-pill {
     display: inline-flex;
     flex: 0 0 auto;
@@ -3592,6 +3705,8 @@ ${
       ${langMate ? `<a class="lang-pill" href="${esc(langMate.url)}" aria-label="${esc(ui.langAria)}">${iconSvg('globe')}<span>${esc(ui.langVersion)}</span></a>` : ''}
     </div>
 
+    ${sectionNav}
+
     <div class="brand-row">
       <a class="brand" href="${esc(SITE)}/" aria-label="FBT Swap">
         <span class="brand-mark"><img src="/icon-192.png" alt="" width="28" height="28"></span>
@@ -3606,6 +3721,7 @@ ${
         <h1>${esc(page.h1)}</h1>
         <p class="lede">${esc(page.description)}</p>
         ${postMeta}
+        ${questionList}
         <div class="hero-actions">
           <a class="cta" href="${esc(appUrl)}">${iconSvg('spark')}<span>${esc(page.ctaLabel || ui.ctaDefault)}</span><span class="cta-arrow" aria-hidden="true">\u2192</span></a>
           ${isLibrary ? `<a class="soft-cta" href="#directory-top"><span>${esc(ui.details)}</span><span aria-hidden="true">\u2193</span></a>` : `<a class="soft-cta" href="#facts"><span>${esc(ui.details)}</span><span aria-hidden="true">\u2193</span></a>`}
@@ -3866,14 +3982,55 @@ function main() {
   });
   emit404({ out: OUT, site: SITE });
 
-  // Sanity check: the app's own index must still be there. A generator that
-  // overwrote it would take the whole site down.
-  readFileSync(join(OUT, 'index.html'), 'utf8');
+  emitLlmsTxt({
+    out: OUT,
+    site: SITE,
+    slugPath,
+    clusterIndex: CLUSTER_INDEX,
+    clusterOrder: CLUSTER_ORDER,
+    pages: PAGES,
+    feeBps: 70,
+    chainCount: 17
+  });
+
+  /*
+   * ─── THE HOME HUB ────────────────────────────────────────────────────────
+   * `/` is the application shell: React mounts into #root and paints a market
+   * dashboard fetched client-side, so the delivered HTML of the most
+   * authoritative URL on the domain is a spinner and nothing else.
+   *
+   * Every crawler that does not execute JavaScript — GPTBot, ClaudeBot,
+   * PerplexityBot, CCBot and the rest of the answer engines robots.txt
+   * explicitly welcomes — therefore reads a homepage with no content and no
+   * links, and answers questions about this project from nothing at all.
+   *
+   * injectHomeHub() writes a bilingual, structured map of every published page
+   * into that document, derived from PAGES so it cannot advertise a URL that
+   * was not generated. It THROWS when the markers are absent: a silent no-op
+   * would ship an empty homepage behind a green build log.
+   */
+  const indexFile = join(OUT, 'index.html');
+  const indexHtml = readFileSync(indexFile, 'utf8');
+  writeFileSync(
+    indexFile,
+    injectHomeHub({
+      file: indexFile,
+      html: indexHtml,
+      hub: renderHomeHub({ site: SITE, pages: PAGES, flagshipSlug: V2_PAGE.slug, slugPath })
+    }),
+    'utf8'
+  );
+  // The app's own index must survive — a generator that clobbered it would take
+  // the whole site down — and the hub must actually be in it.
+  if (!readFileSync(indexFile, 'utf8').includes('id="home-hub"')) {
+    throw new Error('[gen-landing] the home hub was not written into dist/index.html');
+  }
 
   console.log(`▸ generated ${PAGES.length + 1} landing pages`);
   console.log(`▸ sitemap index: ${counts.en} en + ${counts.fa} fa URLs`);
   console.log(`▸ robots.txt with ${ANSWER_ENGINE_COUNT} answer-engine groups, feed.xml (${feedItems} items), security.txt, llms-full.txt, 404.html`);
   console.log(`  /${V2_PAGE.slug} (bilingual landing 2.0)`);
+  console.log(`  / home hub injected (bilingual map of every published page)`);
 }
 
 main();
