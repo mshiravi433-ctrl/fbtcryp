@@ -1,0 +1,72 @@
+# Optional workflow template; not active while stored under ci/.
+# Install as .github/workflows/seo.yml only with GitHub workflow-write permission.
+name: SEO and landing checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'src/main.jsx'
+      - 'src/lib/homeHub.js'
+      - 'scripts/content/**'
+      - 'scripts/landing-v2/**'
+      - 'scripts/gen-landing.mjs'
+      - 'scripts/seo-audit.mjs'
+      - 'scripts/submit-indexnow.mjs'
+      - 'test/seo-*.test.mjs'
+      - 'public/**'
+      - 'package*.json'
+      - 'vercel.json'
+      - 'vite.config.js'
+      - '.github/workflows/seo.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'src/main.jsx'
+      - 'src/lib/homeHub.js'
+      - 'scripts/content/**'
+      - 'scripts/landing-v2/**'
+      - 'scripts/gen-landing.mjs'
+      - 'scripts/seo-audit.mjs'
+      - 'scripts/submit-indexnow.mjs'
+      - 'test/seo-*.test.mjs'
+      - 'public/**'
+      - 'package*.json'
+      - 'vercel.json'
+      - 'vite.config.js'
+      - '.github/workflows/seo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seo:
+    name: Crawlable HTML and SEO regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # CI validates the build; it must never notify engines about an unpublished
+      # PR. Vercel production builds retain the production notification hook.
+      VERCEL_ENV: preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check Linux lockfile compatibility
+        run: node ci/lock-platform-guard.mjs --check
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build the production site and run the strict full-site audit
+        run: npm run build:full
+      - name: Verify metadata, layout, translations and visible answers
+        run: npm run test:seo && npm run test:landing

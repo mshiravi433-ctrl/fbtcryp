@@ -1,53 +1,15 @@
 /**
- * THE HOME HUB — real, crawlable content for `/`.
- * ---------------------------------------------------------------------------
- * The root document is the application shell. React mounts into `#root` and
- * paints a market dashboard that is fetched client-side, so the initial HTML
- * contains nothing a crawler can read. That is the whole reason the site has
- * no presence worth speaking of: the one URL with the most authority on the
- * domain is, to every crawler that does not execute JavaScript, an empty page
- * with a spinner.
- *
- * This module generates the document that fills that hole. It is emitted into
- * `dist/index.html` at build time, derived from the same `PAGES` array that
- * produces the sitemap, so it can never advertise a URL that was not written.
- *
- * ─── WHY IT IS NOT CLOAKING ────────────────────────────────────────────────
- * One file is served to everyone. There is no user-agent test anywhere in the
- * repository. A visitor without JavaScript sees exactly this document — it is
- * the no-JS page, styled and complete, with a note asking them to enable
- * JavaScript for the swap interface. A visitor with JavaScript sees the app
- * boot over the top of it, and the element is removed on mount exactly as the
- * boot spinner always was.
- *
- * Nothing here is hidden text: there is no `display:none`, no off-screen
- * positioning, no clip-path, no colour-on-colour. The block is ordinary
- * content that a real person reads when the app cannot start.
- *
- * ─── WHY IT IS SHAPED LIKE A SITE MAP ──────────────────────────────────────
- * Google's sitelinks — the indented list of sub-pages under the main result —
- * are generated from the site's own link hierarchy, and they are overwhelmingly
- * drawn from the links on the page that ranks for the brand query. A homepage
- * whose only outbound links are a flat list of twenty hand-written anchors
- * gives the algorithm a flat list to choose from. A homepage that groups every
- * published page under a labelled topic, with the same wording on both
- * languages, gives it a hierarchy.
- *
- * Every topic hub and its spokes are listed here, in both languages, with the
- * page's own title as the anchor text. That is the input the feature needs. It
- * is also the input every answer engine needs: a crawler that fetches one
- * document and gets a labelled map of two hundred and fifty pages does not
- * have to guess what this domain is about.
- *
- * ─── WHAT IT CANNOT PROVE ──────────────────────────────────────────────────
- * It cannot prove that sitelinks appear, that any page is indexed, or that any
- * crawler fetched anything. Those are Search Console questions about the
- * deployed property. This proves one thing only: the root document now
- * contains real, structured, bilingual content and a complete internal link
- * graph, instead of nothing.
+ * Visible, crawlable homepage reference content, rendered below #root.
+ * The app and the footer share the same delivered document. The footer is NOT
+ * deleted on mount and is not positioned off-screen: web homepage readers can
+ * scroll to it with or without JavaScript. App-only hash screens and the native
+ * shell have their own layout; no user-agent or crawler branching is used.
+ * Links come from the emitted page list. This improves discoverability, but
+ * cannot establish Google indexing, rankings, sitelinks or AI citations.
  */
 
 import { CLUSTER_INDEX, CLUSTER_ORDER } from './index.mjs';
+import { DISCOVERY_STYLES, renderDiscovery } from './discovery.mjs';
 
 const esc = (s) =>
   String(s ?? '')
@@ -115,7 +77,7 @@ const UI = {
       ['/fa/trust/editorial-policy', 'خط‌مشی محتوا'],
       ['/fa/trust/contact-and-verification', 'راه‌های تماس']
     ],
-    note: 'برای اجرای رابط سواپ، JavaScript مرورگر را فعال کن. ارزهای دیجیتال پرنوسان‌اند و تراکنش‌های روی زنجیره برگشت‌ناپذیرند؛ این متن توصیهٔ مالی نیست.'
+    note: 'ارزهای دیجیتال پرنوسان‌اند و تراکنش‌های روی زنجیره برگشت‌ناپذیرند؛ این متن توصیهٔ مالی نیست و وعدهٔ سود یا دسترسی بدون محدودیت نمی‌دهد.'
   },
   en: {
     lang: 'en',
@@ -136,7 +98,7 @@ const UI = {
       ['/trust/editorial-policy', 'Editorial policy'],
       ['/trust/contact-and-verification', 'Contact and verification']
     ],
-    note: 'Enable JavaScript to run the swap interface. Crypto assets are volatile and on-chain transactions cannot be reversed; nothing here is financial advice.'
+    note: 'Crypto assets are volatile and on-chain transactions cannot be reversed. Nothing here is financial advice, a profit promise or a guarantee of unrestricted access.'
   }
 };
 
@@ -218,6 +180,8 @@ ${heading}
 ${factsBlock(lang)}
         </dl>
 
+        ${renderDiscovery({ lang, headingTag: sub })}
+
         <nav class="hh-top" aria-label="${esc(u.topics)}">
           <a class="hh-lib" href="/${slugPath(librarySlug)}">${esc(u.library)}</a>
           <a class="hh-lib hh-lib-flagship" href="${esc(flagshipPath)}">${esc(u.flagship)}</a>
@@ -251,12 +215,14 @@ ${u.trustLinks
    */
   return `<style>
   #home-hub {
-    background: var(--boot-bg, #000);
-    color: var(--boot-fg, #fff);
+    background: var(--bg-void, var(--boot-bg, #000));
+    color: var(--text-1, var(--boot-fg, #fff));
     font-family: 'Vazirmatn', system-ui, -apple-system, 'Segoe UI', sans-serif;
     line-height: 1.95;
-    min-height: 100vh;
-    padding: 28px 18px 72px;
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--border, rgba(168,186,236,.22));
+    padding: 40px 18px calc(90px + env(safe-area-inset-bottom));
     box-sizing: border-box;
   }
   #home-hub * { box-sizing: border-box; }
@@ -288,7 +254,8 @@ ${u.trustLinks
   #home-hub .hh-group p { font-size: 13px; opacity: .78; margin: 0 0 8px; }
   #home-hub .hh-group ul { margin: 0; padding-inline-start: 18px; }
   #home-hub .hh-group li { font-size: 13.5px; margin: 4px 0; }
-  #home-hub a { color: #7dd3fc; }
+  #home-hub a { color: var(--ink-cyan, #7dd3fc); }
+  #home-hub .hh-group h3 a { color: var(--ink-cyan, #54e8ff); }
   #home-hub .hh-trust { margin: 0; padding-inline-start: 18px; columns: 2; column-gap: 24px; }
   #home-hub .hh-trust li { font-size: 13.5px; margin: 3px 0; }
   #home-hub .hh-note { margin-top: 30px; font-size: 12.5px; opacity: .6; border-inline-start: 2px solid #ffb300; padding-inline-start: 12px; }
@@ -296,8 +263,9 @@ ${u.trustLinks
     #home-hub .hh-fact { grid-template-columns: 1fr; gap: 2px; }
     #home-hub .hh-trust { columns: 1; }
   }
+${DISCOVERY_STYLES}
 </style>
-<div id="home-hub">
+<div id="home-hub" role="complementary" aria-label="FBT Swap — guides and product information">
   <div class="hh-wrap">
     <header class="hh-head">
       <img src="/icon-192.png" alt="" width="40" height="40" />
@@ -310,7 +278,8 @@ ${section('en')}
 <noscript>
   <!-- Without JavaScript the boot spinner can never be replaced, so hide it
        and let this document stand on its own. -->
-  <style>#boot { display: none !important; }</style>
+  <style>#boot, #root:empty { display: none !important; }</style>
+  <p style="text-align:center;padding:20px" lang="fa" dir="rtl">برای اجرای رابط سواپ، JavaScript مرورگر را فعال کن. <span lang="en" dir="ltr">Enable JavaScript to use the swap interface.</span></p>
 </noscript>
 `;
 }
@@ -335,6 +304,10 @@ export function injectHomeHub({ file, html, hub }) {
       `[home-hub] ${file} is missing the ${START} / ${END} markers — ` +
         'the homepage would ship with no crawlable content.'
     );
+  }
+  const root = html.indexOf('id="root"');
+  if (root === -1 || root > start) {
+    throw new Error(`[home-hub] ${file}: #root must precede the home hub so content cannot appear above the app logo.`);
   }
   return `${html.slice(0, start)}${START}\n${hub}\n${END}${html.slice(end + END.length)}`;
 }

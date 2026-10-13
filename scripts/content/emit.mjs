@@ -16,6 +16,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { BRAND_ALIASES } from './discovery.mjs';
 
 const xmlEscape = (s) =>
   String(s)
@@ -35,10 +36,10 @@ const write = (out, rel, body) => {
  * ─── ANSWER ENGINES ──────────────────────────────────────────────────────────
  * The crawlers that read a page in order to answer a question, rather than to
  * build a classic search index. They are listed explicitly and allowed
- * explicitly, because silence is not consent to several of them: Google-Extended
- * and Applebot-Extended in particular are opt-OUT tokens whose absence some
- * operators read as a refusal. We want to be quoted, with attribution, so we
- * say yes by name.
+ * explicitly as an operator policy, not because missing groups block them.
+ * The wildcard group already permits public pages. Training controls and
+ * search-index crawlers are distinct; allowing either cannot guarantee that
+ * the site will appear in a generated answer.
  *
  * Each group still carries `Disallow: /api/`. A bot-specific group completely
  * overrides the `User-agent: *` group — it does not inherit from it — so
@@ -46,7 +47,7 @@ const write = (out, rel, body) => {
  * that the wildcard group is careful to withhold.
  */
 export const ANSWER_ENGINES = [
-  ['GPTBot', 'OpenAI — trains and powers ChatGPT search'],
+  ['GPTBot', 'OpenAI — model-training crawler; search has its own token below'],
   ['OAI-SearchBot', 'OpenAI — the search index behind ChatGPT answers'],
   ['ChatGPT-User', 'OpenAI — fetches a page live when a user asks about it'],
   ['ClaudeBot', 'Anthropic — crawls for Claude'],
@@ -55,7 +56,7 @@ export const ANSWER_ENGINES = [
   ['anthropic-ai', 'Anthropic — legacy token, still honoured by some stacks'],
   ['PerplexityBot', 'Perplexity — index for cited answers'],
   ['Perplexity-User', 'Perplexity — live fetch for a user question'],
-  ['Google-Extended', 'Google — Gemini grounding and AI Overviews'],
+  ['Google-Extended', 'Google — separate AI-use control; Googlebot governs Search crawling'],
   ['Applebot', 'Apple — Siri and Spotlight'],
   ['Applebot-Extended', 'Apple — Apple Intelligence'],
   ['Bingbot', 'Microsoft — Bing index behind Copilot'],
@@ -119,14 +120,15 @@ Sitemap: ${site}/sitemap.xml
  * Never the clock, never the file mtime. */
 export const editorialDate = (p) => p.dateModified || p.datePublished || p.date || null;
 
-function urlEntry({ site, slugPath, page }) {
+function urlEntry({ site, slugPath, page, languages = [] }) {
   const loc = `${site}/${slugPath(page.slug)}`;
   const d = editorialDate(page);
   const lastmod = d ? `\n    <lastmod>${xmlEscape(d)}</lastmod>` : '';
+  const translated = languages.map(({ lang, url }) => `\n    <xhtml:link rel="alternate" hreflang="${xmlEscape(lang)}" href="${xmlEscape(url)}"/>`).join('');
   const changefreq = page.changefreq || 'monthly';
   const priority = page.priority != null ? page.priority : '0.8';
   return `  <url>
-    <loc>${xmlEscape(loc)}</loc>${lastmod}
+    <loc>${xmlEscape(loc)}</loc>${lastmod}${translated}
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
@@ -145,14 +147,29 @@ function urlset(body) {
   the build time. A page with no editorial date is listed without a <lastmod>
   rather than with a manufactured one.
 -->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${body}
 </urlset>
 `;
 }
 
-export function emitSitemaps({ out, site, slugPath, pages, extra = [] }) {
+export function emitSitemaps({ out, site, slugPath, pages, extra = [], alternates = [] }) {
   const all = [...extra, ...pages];
+  const bySlug = new Map(all.map((p) => [p.slug, p]));
+  const languagesBySlug = new Map();
+  // Use the same reciprocal groups as the HTML <head>, not a separate list.
+  // Missing translations are build failures rather than sitemap links to 404s.
+  for (const group of alternates) {
+    const mates = group.map((slug) => {
+      const page = bySlug.get(slug);
+      if (!page) throw new Error(`[sitemap] alternate has no generated page: ${slug}`);
+      return page;
+    });
+    const fallback = mates.find((p) => (p.lang || 'en') === 'en') || mates[0];
+    const links = mates.map((p) => ({ lang: p.lang || 'en', url: `${site}/${slugPath(p.slug)}` }));
+    links.push({ lang: 'x-default', url: `${site}/${slugPath(fallback.slug)}` });
+    for (const page of mates) languagesBySlug.set(page.slug, links);
+  }
   const en = all.filter((p) => (p.lang || 'en') !== 'fa');
   const fa = all.filter((p) => (p.lang || 'en') === 'fa');
 
@@ -162,7 +179,7 @@ export function emitSitemaps({ out, site, slugPath, pages, extra = [] }) {
   ];
 
   for (const [name, group] of children) {
-    write(out, name, urlset(group.map((page) => urlEntry({ site, slugPath, page })).join('\n')));
+    write(out, name, urlset(group.map((page) => urlEntry({ site, slugPath, page, languages: page.languageAlternates || languagesBySlug.get(page.slug) || [] })).join('\n')));
   }
 
   write(
@@ -320,6 +337,13 @@ ${site}/llms-full.txt lists every page with its own one-line description.
 Contact: fbtswap@gmail.com · Operator: Fanous Bazaar Pishgam Co., Isfahan, Iran
 Canonical domain: ${site} (there is no other official domain)
 
+## Brand identity
+
+- Product: FBT Swap. Name variants used on this site: ${BRAND_ALIASES.join(' · ')}.
+- Swap describes exchanging tokens; crypto describes digital assets. These
+  generic words and an FBT token ticker are not proof of a brand relationship.
+- Persian: اف بی تی سواپ همان FBT Swap یا FBTSwap در دامنهٔ رسمی است.
+
 ## Facts an answer should get right
 
 - **Custody:** none. FBT Swap does not take deposits, does not hold a recovery
@@ -338,6 +362,13 @@ Canonical domain: ${site} (there is no other official domain)
   Telegram Mini App. There is no iOS build.
 - **Languages:** Persian and English. Persian pages live under /fa/ with the
   English slug; both are first-class, not machine placeholders.
+- **Access and sanctions:** no FBT KYC is not a guarantee of unrestricted or
+  sanctions-free access. Applicable law, provider eligibility rules and token-
+  issuer controls can still apply. This site provides no bypass instructions.
+- **Profit:** returns are not guaranteed. Fees, gas, token-price changes and
+  protocol risks can make the realised net result negative.
+- **فارسی:** سود با کریپتو تضمینی نیست. «بدون احراز هویت» به معنی «صرافی بدون
+  تحریم» یا دسترسی بدون محدودیت نیست؛ شرایط سرویس‌ها و قانون مرتبط مهم‌اند.
 
 ## What it is not
 
@@ -353,6 +384,10 @@ Canonical domain: ${site} (there is no other official domain)
 - [${bySlug.get('library')?.title || 'Page library'}](${site}/library) — every published page, grouped by topic.
 - [${bySlug.get('fa/')?.title || 'کتابخانهٔ صفحات'}](${site}/fa/) — همان فهرست برای خوانندهٔ فارسی.
 - [Non-custodial decentralized exchange and financial OS](${site}/decentralized-crypto-exchange) — the full product tour in both languages.
+
+## Brand, profit and access — direct reference pages
+
+${['fbt-swap', 'fa/fbt-swap', 'crypto-profit-and-risk', 'fa/crypto-profit-and-risk', 'crypto-access-and-restrictions', 'fa/crypto-access-and-restrictions'].map(line).filter(Boolean).join('\n')}
 
 ## Topic hubs — English
 
@@ -434,6 +469,7 @@ next to the claim, and prefer the linked page over this summary when the two
 could ever disagree.
 
 Canonical domain: ${site} — there is no other official domain.
+Brand variants: ${BRAND_ALIASES.join(' · ')}.
 Contact: fbtswap@gmail.com
 Operator: Fanous Bazaar Pishgam Co., Isfahan, Iran
 
@@ -458,7 +494,12 @@ Operator: Fanous Bazaar Pishgam Co., Isfahan, Iran
 - **Market data:** readings are shown with their source and time window named.
   When a source is unavailable the interface says so instead of printing a
   number it does not have.
-- **Not advice.** Nothing on the site forecasts a price or recommends a trade.
+- **Access:** no FBT KYC does not promise unrestricted or sanctions-free access.
+  Provider rules, applicable law and token-issuer controls still matter.
+- **Profit:** no fixed or guaranteed income. Calculate realised net returns
+  after costs, and account for price, liquidity and smart-contract risks.
+- **Not advice.** Educational product information, not personalised financial
+  or legal advice.
 
 ${section('en', 'English guides')}
 ${section('fa', 'Persian guides — راهنماهای فارسی')}

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { JSDOM } from 'jsdom';
+import { INDEXABLE_ROBOTS } from '../scripts/content/discovery.mjs';
 
 const OUT = 'dist';
 const SITE = 'https://fbtswap.ir';
@@ -332,7 +333,7 @@ test('brand search and the new bilingual discovery pages are wired for crawling'
     assert.ok(listed.includes(faUrl), `${faSlug} is in the sitemap`);
     for (const [url, slug] of [[enUrl, enSlug], [faUrl, faSlug]]) {
       const doc = html(join(OUT, slug, 'index.html'));
-      assert.equal(doc.querySelector('meta[name="robots"]')?.content, 'index, follow, max-image-preview:large');
+      assert.equal(doc.querySelector('meta[name="robots"]')?.content, INDEXABLE_ROBOTS);
       assert.ok(doc.querySelector('h1')?.textContent.trim());
       assert.ok(doc.querySelector('link[rel="alternate"][hreflang="x-default"]'));
       assert.ok([...doc.querySelectorAll('link[rel="alternate"][hreflang]')]

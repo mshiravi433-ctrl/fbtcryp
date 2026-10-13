@@ -59,6 +59,7 @@ import { NETWORK_PAGES } from './networks.mjs';
  * money, these are ranking signals as much as they are courtesy.
  */
 import { TRUST_PAGES } from './trust.mjs';
+import { SEARCH_INTENT_PAGES } from './search-intents.mjs';
 
 /** Every authored spoke, in cluster order so hub listings are deterministic. */
 export const ARTICLES = [
@@ -67,7 +68,8 @@ export const ARTICLES = [
   ...faSwap, ...faFees, ...faWallets, ...faSecurity, ...faNetworks,
   ...faDefi, ...faMarkets, ...faSolana, ...faAi,
   ...NETWORK_PAGES,
-  ...TRUST_PAGES
+  ...TRUST_PAGES,
+  ...SEARCH_INTENT_PAGES
 ];
 
 const fail = (why) => { throw new Error(`[content/index] ${why}`); };

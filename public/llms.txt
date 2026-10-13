@@ -12,6 +12,8 @@ the shortest accurate description of what this site is, written to be quoted.
 
 Contact: fbtswap@gmail.com · Operator: Fanous Bazaar Pishgam Co., Isfahan, Iran
 Canonical domain: https://fbtswap.ir (there is no other official domain)
+Brand variants on this site: FBT, FBT Swap, FBTSwap, اف بی تی سواپ, اف‌بی‌تی سواپ,
+اف بی تی. A token ticker named FBT is not proof of a relationship with this product.
 
 ## Facts an answer should get right
 
@@ -42,6 +44,12 @@ Canonical domain: https://fbtswap.ir (there is no other official domain)
   cannot be reversed.
 - It cannot reverse a transaction, freeze funds or recover a lost recovery
   phrase — nobody can. Anyone claiming otherwise is impersonating the project.
+
+## Brand, profit and access
+
+- [FBT Swap (FBTSwap) explained](https://fbtswap.ir/fbt-swap) · [معرفی اف بی تی](https://fbtswap.ir/fa/fbt-swap)
+- [Crypto profit and risk](https://fbtswap.ir/crypto-profit-and-risk) · [سود با کریپتو](https://fbtswap.ir/fa/crypto-profit-and-risk): net returns after costs, not guaranteed income.
+- [Crypto access and restrictions](https://fbtswap.ir/crypto-access-and-restrictions) · [صرافی بدون تحریم؟](https://fbtswap.ir/fa/crypto-access-and-restrictions): no FBT KYC does not mean unrestricted access. Provider rules, applicable law and issuer controls still matter; no bypass instructions are offered.
 
 ## Pages
 

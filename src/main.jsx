@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import { clearHardReloadFlag } from './lib/refresh.js';
+import { syncHomeHubVisibility } from './lib/homeHub.js';
 import { installDeeplinkReturnListeners, subscribeDeeplink } from './lib/solana/deeplink.js';
 import { useAppStore } from './store/useAppStore.js';
 import { measureVerifyEnclave, warmVerifyEnclave } from './lib/wc/verify.js';
@@ -207,6 +208,16 @@ class BootBoundary extends React.Component {
   }
 }
 
+// Only the web homepage has the persistent reference footer. Keep transaction
+// screens/native onboarding app-only, and restore it when the user returns home.
+const syncHomeHub = () => syncHomeHubVisibility({
+  document,
+  location: window.location,
+  native: Boolean(window.Capacitor?.isNativePlatform?.())
+});
+syncHomeHub();
+window.addEventListener('hashchange', syncHomeHub);
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BootBoundary>
@@ -225,26 +236,13 @@ requestAnimationFrame(() => {
    */
   clearHardReloadFlag();
 
-  /*
-   * The pre-mount documents go away together.
-   *
-   * `#boot` is the spinner. `#home-hub` is the crawlable home page the
-   * generator injected into this document at build time (see
-   * scripts/content/home-hub.mjs): real bilingual prose plus a structured map
-   * of every published page, there so that a crawler which does not execute
-   * JavaScript — every AI answer engine among them — reads a homepage instead
-   * of an empty shell.
-   *
-   * Both are removed once the app is up. Leaving the hub in place would put
-   * content behind an opaque layer, which is the one thing this must never
-   * become; the crawler contract is that the content stands on its own in the
-   * delivered HTML, not that it lingers invisibly after hydration.
-   */
+  // The route may have been normalised during App's first render.
+  syncHomeHub();
+  // Remove the boot overlay only. The home hub is real content below #root,
+  // visible to homepage readers and crawlers even after the app has mounted.
   const boot = document.getElementById('boot');
   if (boot) {
     boot.style.opacity = '0';
     setTimeout(() => boot.remove(), 420);
   }
-  const homeHub = document.getElementById('home-hub');
-  if (homeHub) setTimeout(() => homeHub.remove(), 420);
 });

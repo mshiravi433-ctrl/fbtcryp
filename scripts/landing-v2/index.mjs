@@ -28,6 +28,7 @@ import { COPY } from './copy.mjs';
 import { CSS } from './styles.mjs';
 import { RUNTIME } from './runtime.mjs';
 import { lottieScript, lottieSlot } from './lottie.mjs';
+import { BRAND_ALIASES, INDEXABLE_ROBOTS, HOME_CONTENT_UPDATED, DISCOVERY_STYLES, renderDiscovery } from '../content/discovery.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Small helpers                                                        */
@@ -1123,7 +1124,7 @@ function riskAndFooter(site) {
   const cols = COPY.footer.columns
     .map(
       (col) => `<div class="foot-col">
-        <h4>${T(col.t)}</h4>
+        <h3>${T(col.t)}</h3>
         <ul>${col.links
           .map((l) => `<li><a href="${l.href.startsWith('/') ? site + encodeURI(l.href) : l.href}">${T({ en: l.en, fa: l.fa })}</a></li>`)
           .join('')}</ul>
@@ -1142,6 +1143,10 @@ function riskAndFooter(site) {
         </div>
       </div>
     </section>
+    <div class="wrap">
+      ${renderDiscovery({ lang: 'en', site, className: 'lg lg-en' })}
+      ${renderDiscovery({ lang: 'fa', site, className: 'lg lg-fa' })}
+    </div>
     <footer class="site">
       <div class="wrap">
         <div class="foot-grid">
@@ -1191,7 +1196,7 @@ function structuredData(url, site) {
         '@type': 'Organization',
         '@id': orgId,
         name: 'FBT Swap',
-        alternateName: ['FBTSwap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
+        alternateName: BRAND_ALIASES,
         legalName: 'Fanous Bazaar Pishgam Co.',
         url: `${site}/`,
         email: 'fbtswap@gmail.com',
@@ -1203,7 +1208,7 @@ function structuredData(url, site) {
         '@id': websiteId,
         url: `${site}/`,
         name: 'FBT Swap',
-        alternateName: ['FBTSwap', 'FBT Swap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
+        alternateName: BRAND_ALIASES,
         inLanguage: ['en', 'fa'],
         publisher: { '@id': orgId }
       },
@@ -1226,6 +1231,7 @@ function structuredData(url, site) {
         url,
         name: COPY.meta.en.title,
         description: COPY.meta.en.description,
+        dateModified: HOME_CONTENT_UPDATED,
         inLanguage: 'en',
         isPartOf: { '@id': websiteId },
         publisher: { '@id': orgId },
@@ -1268,7 +1274,8 @@ function structuredData(url, site) {
 export const V2_PAGE = {
   slug: 'decentralized-crypto-exchange',
   changefreq: 'weekly',
-  priority: '0.9'
+  priority: '0.9',
+  dateModified: HOME_CONTENT_UPDATED
 };
 
 export function renderLandingV2({ site }) {
@@ -1341,6 +1348,7 @@ export function renderLandingV2({ site }) {
 <meta name="description" content="${esc(COPY.meta.en.description)}">
 <meta name="keywords" content="${esc(COPY.meta.keywords)}">
 <link rel="canonical" href="${esc(url)}">
+<link rel="alternate" type="application/rss+xml" title="FBT Swap guides" href="${SITE}/feed.xml">
 <!--
   hreflang on a bilingual single-document page: one URL genuinely serves both
   languages (the variant is a rendering choice on the same DOM, not separate
@@ -1350,7 +1358,7 @@ export function renderLandingV2({ site }) {
 <link rel="alternate" hreflang="en" href="${esc(url)}">
 <link rel="alternate" hreflang="fa" href="${esc(url)}">
 <link rel="alternate" hreflang="x-default" href="${esc(url)}">
-<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="robots" content="${INDEXABLE_ROBOTS}">
 <meta name="theme-color" content="#05030e">
 <meta name="color-scheme" content="dark">
 <meta name="format-detection" content="telephone=no">
@@ -1424,6 +1432,7 @@ export function renderLandingV2({ site }) {
 @font-face{font-family:'Vazirmatn';src:url('/fonts/Vazirmatn-var.woff2') format('woff2-variations');font-weight:100 900;font-display:swap}
 @font-face{font-family:'JetBrains Mono';src:url('/fonts/JetBrainsMono-var.woff2') format('woff2-variations');font-weight:100 800;font-display:swap}
 ${CSS}
+${DISCOVERY_STYLES}
 </style>
 
 <script type="application/ld+json">${structuredData(url, SITE)}</script>

@@ -32,6 +32,7 @@ const seen = new Set();
  * @param {Array<[string, string]>} [spec.howTo]     Visible + marked-up steps.
  * @param {string} [spec.route]     In-app hash destination for the CTA.
  * @param {string} [spec.icon]
+ * @param {string[]} [spec.relatedSlugs] Contextual internal links, emitted before cluster siblings.
  * @param {string} [spec.date]      ISO publication date.
  * @param {string} [spec.updated]   ISO modification date.
  * @param {string} [spec.risk]      Page-specific risk statement.
@@ -40,7 +41,7 @@ export function article(spec) {
   const {
     slug, cluster, lang = 'en', title, description, h1, intro, sections,
     facts, faqs, howTo, route, icon, date = '2026-10-05', updated, risk,
-    ctaLabel, kind = 'article'
+    ctaLabel, relatedSlugs, kind = 'article'
   } = spec;
 
   const where = `${lang}:${slug}`;
@@ -68,6 +69,9 @@ export function article(spec) {
   if (!Array.isArray(facts) || facts.length < 3) fail('needs at least three facts');
   if (!Array.isArray(faqs) || faqs.length < 2) fail('needs at least two FAQ entries');
 
+  if (relatedSlugs && (!Array.isArray(relatedSlugs) || relatedSlugs.some((s) => typeof s !== 'string' || !s || s.startsWith('/'))))
+    fail('relatedSlugs must be an array of non-empty page slugs');
+
   const words = [...intro, ...sections.flatMap(([, p]) => p)].join(' ').split(/\s+/).length;
   if (lang === 'en' && words < 280) fail(`thin: only ${words} words of prose`);
   if (lang === 'fa' && words < 230) fail(`thin: only ${words} words of prose`);
@@ -93,6 +97,7 @@ export function article(spec) {
     ...(howTo ? { howTo } : {}),
     ...(risk ? { riskText: risk } : {}),
     ...(ctaLabel ? { ctaLabel } : {}),
+    ...(relatedSlugs ? { relatedSlugs } : {}),
     ...(lang === 'fa' ? { glanceLabel: 'یک نگاه کلی' } : {})
   };
 }

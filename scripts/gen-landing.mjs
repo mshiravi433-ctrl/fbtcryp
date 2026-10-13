@@ -52,6 +52,7 @@ import { renderLandingV2, V2_PAGE } from './landing-v2/index.mjs';
 import { CONTENT_PAGES, CONTENT_ALTERNATES, CLUSTER_INDEX, CLUSTER_ORDER } from './content/index.mjs';
 import {
   ANSWER_ENGINES,
+  editorialDate,
   emitRobots,
   emitSitemaps,
   emitFeed,
@@ -61,6 +62,7 @@ import {
   emit404
 } from './content/emit.mjs';
 import { renderHomeHub, injectHomeHub } from './content/home-hub.mjs';
+import { BRAND_ALIASES, INDEXABLE_ROBOTS, HOME_CONTENT_UPDATED, DISCOVERY_STYLES, renderDiscovery } from './content/discovery.mjs';
 import {
   MARKET_DASHBOARD_STYLES,
   marketDashboardScript as renderMarketDashboardScript,
@@ -1991,6 +1993,8 @@ function copyFor(lang) {
         related: 'راهنماهای بیشتر',
         faqHint: 'پاسخ‌های کوتاه و روشن، پیش از اینکه تصمیم بگیری.',
         byline: 'نوشتهٔ FBT Swap',
+        updated: 'به‌روزرسانی',
+        editorial: 'سیاست محتوا',
         readNext: 'ادامهٔ مطالعه',
         guides: 'راهنماها',
         minRead: 'دقیقه مطالعه',
@@ -2024,6 +2028,8 @@ function copyFor(lang) {
         related: 'Explore more guides',
         faqHint: 'Clear answers before you decide.',
         byline: 'By FBT Swap',
+        updated: 'Updated',
+        editorial: 'Editorial policy',
         readNext: 'Read next',
         guides: 'Guides',
         minRead: 'min read',
@@ -2082,7 +2088,7 @@ function landingStructuredData(page, url) {
       '@type': 'Organization',
       '@id': organizationId,
       name: 'FBT Swap',
-      alternateName: ['FBTSwap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
+      alternateName: BRAND_ALIASES,
       legalName: 'Fanous Bazaar Pishgam Co.',
       url: `${SITE}/`,
       email: 'fbtswap@gmail.com',
@@ -2129,7 +2135,7 @@ function landingStructuredData(page, url) {
       '@id': websiteId,
       url: `${SITE}/`,
       name: 'FBT Swap',
-      alternateName: ['FBTSwap', 'FBT Swap', 'اف‌بی‌تی سواپ', 'اف بی تی سواپ'],
+      alternateName: BRAND_ALIASES,
       inLanguage: ['fa', 'en'],
       publisher: { '@id': organizationId }
     },
@@ -2139,6 +2145,7 @@ function landingStructuredData(page, url) {
       url,
       name: page.title,
       description: page.description,
+      ...(editorialDate(page) ? { dateModified: editorialDate(page) } : {}),
       inLanguage: page.lang === 'fa' ? 'fa-IR' : 'en',
       isPartOf: { '@id': websiteId },
       publisher: { '@id': organizationId },
@@ -2423,15 +2430,13 @@ function render(page) {
    * drives byline, date and section rendering covers all three.
    */
   const isPost = page.kind === 'post' || page.kind === 'article' || page.kind === 'cluster';
-  const postDate = page.datePublished
-    ? new Date(page.datePublished).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    : '';
+  const formatDate = (date) => date ? new Date(date).toLocaleDateString(lang === 'fa' ? 'fa-IR' : 'en-GB', {
+    year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC'
+  }) : '';
+  const prefix = lang === 'fa' ? 'fa/' : '';
+  const changed = page.dateModified && page.dateModified !== page.datePublished;
   const postMeta = isPost
-    ? `<p class="post-meta">${esc(ui.byline)} \u00b7 <time datetime="${esc(page.datePublished)}">${esc(postDate)}</time></p>`
+    ? `<p class="post-meta"><a href="/${prefix}about">${esc(ui.byline)}</a> \u00b7 <time datetime="${esc(page.datePublished)}">${esc(formatDate(page.datePublished))}</time>${changed ? ` \u00b7 ${esc(ui.updated)} <time datetime="${esc(page.dateModified)}">${esc(formatDate(page.dateModified))}</time>` : ''} \u00b7 <a href="/${prefix}trust/editorial-policy">${esc(ui.editorial)}</a></p>`
     : '';
   const postSections = page.sections?.length
     ? `<section class="story-card panel reveal post-body" style="--delay:170ms">
@@ -2715,7 +2720,14 @@ function render(page) {
     ];
   }
 
+  const contextualPages = (page.relatedSlugs || []).map((slug) => {
+    const target = pageBySlug.get(slug);
+    if (!target) throw new Error(`[gen-landing] ${page.slug} links to an unknown related page: ${slug}`);
+    return target;
+  });
+  relatedPages = [...new Map([...contextualPages, ...relatedPages].map((p) => [p.slug, p])).values()];
   const siblingLinks = relatedPages
+    .filter((p) => p.slug !== page.slug)
     .slice(0, SIBLING_CAP)
     .map(linkTo)
     .join('\n        ');
@@ -2850,13 +2862,16 @@ function render(page) {
 <title>${esc(page.title)}</title>
 <meta name="description" content="${esc(page.description)}">
 <link rel="canonical" href="${esc(url)}">
+<link rel="alternate" type="application/rss+xml" title="FBT Swap guides" href="${esc(SITE)}/feed.xml">
 ${hreflang}
-<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="robots" content="${INDEXABLE_ROBOTS}">
 <meta name="theme-color" content="#05060d">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
-<meta property="og:type" content="website">
+<meta property="og:type" content="${isPost ? 'article' : 'website'}">
+${isPost ? `<meta property="article:published_time" content="${esc(page.datePublished)}">
+<meta property="article:modified_time" content="${esc(page.dateModified || page.datePublished)}">` : ''}
 <meta property="og:site_name" content="FBT Swap">
 <meta property="og:locale" content="${lang === 'fa' ? 'fa_IR' : 'en_US'}">
 <meta property="og:locale:alternate" content="${lang === 'fa' ? 'en_US' : 'fa_IR'}">
@@ -3024,6 +3039,7 @@ ${
   }
   [dir="rtl"] .hero-panel::after { transform: translateX(130%); }
   .topbar {
+    margin-top: 18px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -3031,6 +3047,8 @@ ${
     margin-bottom: clamp(24px, 4vw, 40px);
   }
   .crumb {
+    min-width: 0;
+    flex: 1;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -3087,6 +3105,7 @@ ${
     text-decoration: none;
     transition: border-color .2s ease, color .2s ease, transform .2s ease;
   }
+  .lang-pill { flex-shrink: 0; }
   .lang-pill svg { width: 14px; height: 14px; color: var(--cy); }
   .lang-pill:hover { border-color: rgba(84, 232, 255, .55); color: var(--ink); transform: translateY(-1px); }
 
@@ -3630,8 +3649,9 @@ ${
   @media (max-width: 680px) {
     :root { --gap: 14px; }
     .landing-page { width: min(100% - 24px, 1080px); }
-    .topbar { margin-bottom: 24px; }
-    .crumb span[aria-current] { max-width: 52vw; }
+    .topbar { flex-direction: column; align-items: flex-start; margin-bottom: 24px; }
+    .crumb { width: 100%; }
+    .crumb span[aria-current] { max-width: 100%; }
     h1 { font-size: clamp(29px, 9vw, 44px); }
     h1::after { margin-top: 16px; }
     .hero-actions { display: grid; grid-template-columns: 1fr; }
@@ -3680,6 +3700,7 @@ ${
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
   }
+  ${DISCOVERY_STYLES}
   ${page.marketDashboard ? MARKET_DASHBOARD_STYLES : ''}
 </style>
 </head>
@@ -3692,6 +3713,14 @@ ${
 </div>
 <main id="content" class="landing-page" tabindex="-1">
   <header class="hero-panel reveal" style="--delay:20ms">
+    <div class="brand-row">
+      <a class="brand" href="${esc(SITE)}/" aria-label="FBT Swap">
+        <span class="brand-mark"><img src="/icon-192.png" alt="" width="28" height="28"></span>
+        <span>FBT Swap</span>
+      </a>
+      ${isLibrary ? '' : `<a class="pages-pill" href="${esc(SITE)}/${slugPath(lang === 'fa' ? 'fa/' : 'library')}">${iconSvg('grid')}<span>${esc(ui.allPages)}</span></a>`}
+    </div>
+
     <div class="topbar">
       <nav class="crumb" aria-label="${esc(ui.breadcrumb)}">
         <a href="${esc(SITE)}/">${esc(ui.home)}</a>
@@ -3700,19 +3729,10 @@ ${
           ? `<span aria-current="page">${esc(ui.library)}</span>`
           : `<a href="${esc(SITE)}/${slugPath(lang === 'fa' ? 'fa/' : 'library')}">${esc(ui.library)}</a>
         <span class="crumb-sep" aria-hidden="true">/</span>
+        ${page.kind === 'article' && clusterEntry ? `<a href="/${slugPath(clusterEntry.hub)}">${esc(clusterEntry.label)}</a><span class="crumb-sep" aria-hidden="true">/</span>` : ''}
         <span aria-current="page">${esc(page.h1)}</span>`}
       </nav>
       ${langMate ? `<a class="lang-pill" href="${esc(langMate.url)}" aria-label="${esc(ui.langAria)}">${iconSvg('globe')}<span>${esc(ui.langVersion)}</span></a>` : ''}
-    </div>
-
-    ${sectionNav}
-
-    <div class="brand-row">
-      <a class="brand" href="${esc(SITE)}/" aria-label="FBT Swap">
-        <span class="brand-mark"><img src="/icon-192.png" alt="" width="28" height="28"></span>
-        <span>FBT Swap</span>
-      </a>
-      ${isLibrary ? '' : `<a class="pages-pill" href="${esc(SITE)}/${slugPath(lang === 'fa' ? 'fa/' : 'library')}">${iconSvg('grid')}<span>${esc(ui.allPages)}</span></a>`}
     </div>
 
     <div class="hero-grid">
@@ -3801,6 +3821,12 @@ ${
       ${siblingLinks}
     </div>
   </section>`}
+
+  <section class="topics-panel panel" aria-labelledby="topics-heading">
+    <h2 id="topics-heading">${esc(ui.topics)}</h2>
+    ${sectionNav}
+    ${renderDiscovery({ lang, site: SITE, headingTag: 'h3' })}
+  </section>
 
   <footer class="reveal" style="--delay:120ms">
     <p><a href="${esc(SITE)}/">FBT Swap</a> &middot; Fanous Bazaar Pishgam Co., Isfahan, Iran</p>
@@ -3947,18 +3973,20 @@ function main() {
    * listed with no <lastmod>, which is the honest answer.
    */
   const sitemapExtra = [
-    { slug: '', title: 'FBT Swap', description: '', changefreq: 'daily', priority: '1.0', lang: 'en' },
+    { slug: '', title: 'FBT Swap', description: '', changefreq: 'daily', priority: '1.0', lang: 'fa', dateModified: HOME_CONTENT_UPDATED, languageAlternates: [{ lang: 'fa-IR', url: `${SITE}/` }, { lang: 'x-default', url: `${SITE}/` }] },
     {
       slug: V2_PAGE.slug,
       title: V2_PAGE.title,
       description: V2_PAGE.description || '',
       changefreq: V2_PAGE.changefreq,
       priority: V2_PAGE.priority,
+      dateModified: V2_PAGE.dateModified,
+      languageAlternates: ['en', 'fa', 'x-default'].map((lang) => ({ lang, url: `${SITE}/${V2_PAGE.slug}` })),
       lang: 'en'
     }
   ];
 
-  const counts = emitSitemaps({ out: OUT, site: SITE, slugPath, pages: PAGES, extra: sitemapExtra });
+  const counts = emitSitemaps({ out: OUT, site: SITE, slugPath, pages: PAGES, extra: sitemapExtra, alternates: ALTERNATES });
   emitRobots({ out: OUT, site: SITE });
   const feedItems = emitFeed({ out: OUT, site: SITE, slugPath, pages: PAGES });
 
@@ -4005,8 +4033,9 @@ function main() {
    * links, and answers questions about this project from nothing at all.
    *
    * injectHomeHub() writes a bilingual, structured map of every published page
-   * into that document, derived from PAGES so it cannot advertise a URL that
-   * was not generated. It THROWS when the markers are absent: a silent no-op
+   * below the app in that document, derived from PAGES so it cannot advertise
+   * an ungenerated URL. It stays visible on the web homepage after mount.
+   * It THROWS when the markers are absent: a silent no-op
    * would ship an empty homepage behind a green build log.
    */
   const indexFile = join(OUT, 'index.html');
