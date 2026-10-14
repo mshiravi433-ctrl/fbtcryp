@@ -5515,6 +5515,56 @@
       "networkUnsupportedDetail": "No aggregator route available for limit orders on {{network}}.",
       "readyToSwap": "Ready to swap",
       "conditionMet": "Condition met"
+    },
+    "stats": {
+      "title": "Your order statistics",
+      "windowLabel": "Time window",
+      "win30": "30 days",
+      "win90": "90 days",
+      "winAll": "All time",
+      "total": "Orders",
+      "open": "Open now",
+      "filled": "Filled",
+      "expired": "Expired",
+      "closedNote": "Rates count closed orders only (filled + expired). Open orders are not counted as misses.",
+      "days": "{{n}} days",
+      "bestType": "Best fill rate: {{type}} ({{rate}})",
+      "bestNone": "Best fill rate: not enough closed orders yet (at least {{n}} per type).",
+      "closedCount": "{{n}} closed"
+    },
+    "avgFillTime": "Average time to fill",
+    "typeName": {
+      "limit": "Limit",
+      "trailing": "Trailing stop",
+      "bracket": "Bracket (TP/SL)",
+      "ladder": "Ladder",
+      "rebalance": "Rebalance"
+    },
+    "fullHistory": {
+      "title": "Filled order history",
+      "honest": "Each figure is the quotation the watcher saw when the order became ready, recorded when you handed it to Swap. It is not an on-chain receipt: the app does not watch the chain, so the final execution is not verified here.",
+      "filterType": "Filter by type",
+      "filterRange": "Filter by date",
+      "allTypes": "All types",
+      "range": {
+        "today": "Today",
+        "week": "7 days",
+        "month": "30 days",
+        "all": "All"
+      },
+      "count": "{{n}} filled orders",
+      "empty": "No filled orders in this range.",
+      "filledAt": "Filled at",
+      "amountIn": "Amount sent",
+      "rate": "Quoted rate",
+      "amountOut": "Quoted output",
+      "minOut": "Your minimum",
+      "aboveFloor": "Above your minimum",
+      "source": "Quote source",
+      "unknownSource": "not recorded",
+      "pnl": "Profit / loss",
+      "pnlNa": "Not available: the purchase price of this position is not stored.",
+      "viewAll": "View full history"
     }
   },
   "lock": {

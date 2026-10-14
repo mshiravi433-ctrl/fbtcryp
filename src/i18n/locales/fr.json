@@ -723,6 +723,56 @@
       "networkUnsupported": "Échanges non pris en charge sur ce réseau",
       "readyToSwap": "Prêt à échanger",
       "conditionMet": "Condition remplie"
+    },
+    "stats": {
+      "title": "Vos statistiques d'ordres",
+      "windowLabel": "Période",
+      "win30": "30 jours",
+      "win90": "90 jours",
+      "winAll": "Tout",
+      "total": "Ordres",
+      "open": "Ouverts",
+      "filled": "Exécutés",
+      "expired": "Expirés",
+      "closedNote": "Les taux ne comptent que les ordres clôturés (exécutés + expirés). Les ordres ouverts ne comptent pas comme échecs.",
+      "days": "{{n}} jours",
+      "bestType": "Meilleur taux d'exécution : {{type}} ({{rate}})",
+      "bestNone": "Meilleur taux d'exécution : pas encore assez d'ordres clôturés (au moins {{n}} par type).",
+      "closedCount": "{{n}} clôturés"
+    },
+    "avgFillTime": "Temps moyen d'exécution",
+    "typeName": {
+      "limit": "Limite (Limit)",
+      "trailing": "Stop suiveur (Trailing)",
+      "bracket": "Bracket (TP/SL)",
+      "ladder": "Échelle (Ladder)",
+      "rebalance": "Rééquilibrage (Rebalance)"
+    },
+    "fullHistory": {
+      "title": "Historique complet des ordres exécutés",
+      "honest": "Chaque chiffre est la cotation vue par le surveillant quand l'ordre est devenu prêt, enregistrée lors de l'envoi vers Swap. Ce n'est pas un reçu on-chain : l'application ne surveille pas la chaîne, donc l'exécution finale n'est pas vérifiée ici.",
+      "filterType": "Filtrer par type",
+      "filterRange": "Filtrer par date",
+      "allTypes": "Tous les types",
+      "range": {
+        "today": "Aujourd'hui",
+        "week": "7 jours",
+        "month": "30 jours",
+        "all": "Tout"
+      },
+      "count": "{{n}} ordres exécutés",
+      "empty": "Aucun ordre exécuté sur cette période.",
+      "filledAt": "Exécuté le",
+      "amountIn": "Montant envoyé",
+      "rate": "Taux coté",
+      "amountOut": "Sortie cotée",
+      "minOut": "Votre minimum",
+      "aboveFloor": "Au-dessus de votre minimum",
+      "source": "Source de la cotation",
+      "unknownSource": "non enregistré",
+      "pnl": "Gain / perte",
+      "pnlNa": "Non disponible : le prix d'achat de cette position n'est pas enregistré.",
+      "viewAll": "Voir l'historique complet"
     }
   },
   "bridge": {
