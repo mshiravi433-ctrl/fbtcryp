@@ -723,6 +723,56 @@
       "networkUnsupported": "此网络不支持交换",
       "readyToSwap": "准备交换",
       "conditionMet": "条件已满足"
+    },
+    "stats": {
+      "title": "您的订单统计",
+      "windowLabel": "时间范围",
+      "win30": "30 天",
+      "win90": "90 天",
+      "winAll": "全部",
+      "total": "订单总数",
+      "open": "进行中",
+      "filled": "已成交",
+      "expired": "已过期",
+      "closedNote": "比率仅计算已关闭的订单（已成交 + 已过期）。进行中的订单不计为失败。",
+      "days": "{{n}} 天",
+      "bestType": "最佳成交率：{{type}}（{{rate}}）",
+      "bestNone": "最佳成交率：数据还不够（每种类型至少需要 {{n}} 个已关闭订单）。",
+      "closedCount": "{{n}} 个已关闭"
+    },
+    "avgFillTime": "平均成交时间",
+    "typeName": {
+      "limit": "限价 (Limit)",
+      "trailing": "移动止损 (Trailing)",
+      "bracket": "双向订单 (TP/SL)",
+      "ladder": "阶梯 (Ladder)",
+      "rebalance": "再平衡 (Rebalance)"
+    },
+    "fullHistory": {
+      "title": "已成交订单的完整历史",
+      "honest": "每个数字都是监视器在订单变为就绪时看到的报价，并在您交给 Swap 时记录。这不是链上回执：应用不监视链上交易，因此这里无法验证最终执行。",
+      "filterType": "按类型筛选",
+      "filterRange": "按日期筛选",
+      "allTypes": "全部类型",
+      "range": {
+        "today": "今天",
+        "week": "7 天",
+        "month": "30 天",
+        "all": "全部"
+      },
+      "count": "{{n}} 个已成交订单",
+      "empty": "此时间范围内没有已成交订单。",
+      "filledAt": "成交时间",
+      "amountIn": "发送数量",
+      "rate": "报价汇率",
+      "amountOut": "报价产出",
+      "minOut": "您的最低值",
+      "aboveFloor": "高于您的最低值",
+      "source": "报价来源",
+      "unknownSource": "未记录",
+      "pnl": "盈利 / 亏损",
+      "pnlNa": "无法计算：此仓位的买入价未保存。",
+      "viewAll": "查看完整历史"
     }
   },
   "bridge": {

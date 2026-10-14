@@ -18,9 +18,18 @@ export async function dispatchStageAlert({
   quote = '',
   rate = '',
   id = 'x',
-  haptic
+  haptic,
+  minAmountOut = null,
+  quoteOut = null
 } = {}) {
   const st = stage === 'pending' || stage === 'closed' ? stage : 'ready';
+  /*
+   * LEVEL 2: the quotation figures travel with the alert so the notification
+   * can say what was checked. They are optional; a stage without a quotation
+   * simply omits them.
+   */
+  const hasQuote = Number.isFinite(Number(quoteOut)) && Number.isFinite(Number(minAmountOut));
+  const quoteBody = hasQuote ? ` · ${Number(quoteOut)} ≥ ${Number(minAmountOut)}` : '';
   playSound(st);
   vibrate(VIBRATE[st], haptic);
 
@@ -38,6 +47,7 @@ export async function dispatchStageAlert({
           quote,
           rate: rate == null ? '' : String(rate),
           id,
+          ...(hasQuote ? { minAmountOut: String(minAmountOut), quoteOut: String(quoteOut) } : {}),
           lang: document.documentElement.lang || 'fa'
         })
       });
@@ -48,7 +58,7 @@ export async function dispatchStageAlert({
   }
 
   showLocalNotification(st, {
-    body: `${base}→${quote}`,
+    body: `${base}→${quote}${quoteBody}`,
     tag: `fbt-${kind}-${st}-${id}`,
     vibrate: VIBRATE[st]
   });

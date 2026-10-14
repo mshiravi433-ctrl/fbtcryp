@@ -723,6 +723,56 @@
       "networkUnsupported": "Intercambios no soportados en esta red",
       "readyToSwap": "Listo para intercambiar",
       "conditionMet": "Condición cumplida"
+    },
+    "stats": {
+      "title": "Tus estadísticas de órdenes",
+      "windowLabel": "Periodo",
+      "win30": "30 días",
+      "win90": "90 días",
+      "winAll": "Todo",
+      "total": "Órdenes",
+      "open": "Abiertas ahora",
+      "filled": "Ejecutadas",
+      "expired": "Vencidas",
+      "closedNote": "Las tasas solo cuentan órdenes cerradas (ejecutadas + vencidas). Las órdenes abiertas no cuentan como fallos.",
+      "days": "{{n}} días",
+      "bestType": "Mejor tasa de ejecución: {{type}} ({{rate}})",
+      "bestNone": "Mejor tasa de ejecución: aún no hay suficientes órdenes cerradas (mín. {{n}} por tipo).",
+      "closedCount": "{{n}} cerradas"
+    },
+    "avgFillTime": "Tiempo medio de ejecución",
+    "typeName": {
+      "limit": "Límite (Limit)",
+      "trailing": "Stop móvil (Trailing)",
+      "bracket": "Bracket (TP/SL)",
+      "ladder": "Escalera (Ladder)",
+      "rebalance": "Rebalanceo (Rebalance)"
+    },
+    "fullHistory": {
+      "title": "Historial completo de órdenes ejecutadas",
+      "honest": "Cada cifra es la cotización que el vigilante vio cuando la orden quedó lista, registrada al enviarla a Swap. No es un recibo on-chain: la app no vigila la cadena, así que la ejecución final no se verifica aquí.",
+      "filterType": "Filtrar por tipo",
+      "filterRange": "Filtrar por fecha",
+      "allTypes": "Todos los tipos",
+      "range": {
+        "today": "Hoy",
+        "week": "7 días",
+        "month": "30 días",
+        "all": "Todo"
+      },
+      "count": "{{n}} órdenes ejecutadas",
+      "empty": "No hay órdenes ejecutadas en este periodo.",
+      "filledAt": "Ejecutada el",
+      "amountIn": "Cantidad enviada",
+      "rate": "Tasa cotizada",
+      "amountOut": "Salida cotizada",
+      "minOut": "Tu mínimo",
+      "aboveFloor": "Por encima de tu mínimo",
+      "source": "Fuente de la cotización",
+      "unknownSource": "no registrado",
+      "pnl": "Ganancia / pérdida",
+      "pnlNa": "No disponible: el precio de compra de esta posición no está guardado.",
+      "viewAll": "Ver historial completo"
     }
   },
   "bridge": {
