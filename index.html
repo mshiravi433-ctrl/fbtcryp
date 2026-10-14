@@ -491,11 +491,14 @@
       skips the generator. It is intentionally short — the generated version
       carries the real content and the full link graph.
 
-      This content is below the app, never above its logo. The same HTML is
-      served to readers and crawlers. It remains visible on the web homepage
-      after boot; only the spinner is removed. Hash-routed transaction screens
-      and the native app keep their app-only layout. Without JavaScript the
-      empty app root is hidden and this document is the complete fallback.
+      This content is below the app, never above its logo, and the same HTML is
+      served to readers and crawlers. The client app retires this block before
+      its first React render — on EVERY route, the web homepage included,
+      because it is the crawlable surface and not app UI (src/lib/homeHub.js) —
+      and hides it rather than deleting it, so a renderer still finds the
+      content in the DOM. Only the spinner is removed. Hash-routed transaction
+      screens and the native app keep their app-only layout; without JavaScript
+      the empty app root is hidden and this document is the complete fallback.
     -->
     <!-- HOME-HUB:START -->
     <main id="no-js-content">
