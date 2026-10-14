@@ -535,3 +535,20 @@ export function lidoWithdrawAllowedFor({ owner, hasPosition } = {}) {
   if (!owner) return false;
   return Boolean(hasPosition);
 }
+
+/* -------------------------------------------------------------------------- */
+/* SPOT TRADE (تب «اسپات») — OFF BY DEFAULT, IN EVERY BUILD                     */
+/* -------------------------------------------------------------------------- */
+/*
+ * The spot tab swaps the USER'S OWN tokens from the USER'S OWN wallet, one
+ * order at a time, each signed in that wallet. The platform holds no balance,
+ * no liquidity and no key. It is not the futures screens, so it does NOT
+ * depend on SPECULATION_ENABLED: the tab, the `/trade` redirect and the
+ * `/perp?tab=spot` deep link all read this flag alone.
+ *
+ * It is OFF unless the build says `VITE_ENABLE_SPOT_TRADE=true` exactly. The
+ * Android build (`android:sync`) does not set it, so the store distribution
+ * stays off: real-money trading must not ship there before a legal review has
+ * signed off on it.
+ */
+export const SPOT_TRADE_ENABLED = envFlag('VITE_ENABLE_SPOT_TRADE') === 'true';

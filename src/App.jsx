@@ -39,7 +39,7 @@ import { pingWatchTick } from './lib/watchTick';
 import GalaxyBackdrop from './components/GalaxyBackdrop';
 import AppLock from './components/AppLock';
 import { initTheme, useSettingsStore } from './store/useSettingsStore';
-import { SPECULATION_ENABLED } from './lib/features';
+import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from './lib/features';
 import { languageIsUnset } from './i18n';
 import { initServiceWorker, initNativePushListeners, autoRegisterNativePush, refreshWebPushIfOptedIn, maybeSendDailyPromo, pickPromoKey } from './lib/notify';
 import { newsIsStale, getNews } from './lib/news';
@@ -71,6 +71,12 @@ const About = lazyRetry(() => import('./pages/About'));
 const Contact = lazyRetry(() => import('./pages/Contact'));
 const Legal = lazyRetry(() => import('./pages/Legal'));
 const Perp = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Perp')) : () => null;
+/*
+ * The spot tab. With speculation on it lives inside Perp (its rail). With
+ * speculation off but the spot flag on, `/perp` serves this page instead, so
+ * the spot tab works without ever loading the futures screen.
+ */
+const SpotPage = SPOT_TRADE_ENABLED && !SPECULATION_ENABLED ? lazyRetry(() => import('./pages/SpotPage')) : () => null;
 const Farm = lazyRetry(() => import('./pages/Farm'));
 const Signals = lazyRetry(() => import('./pages/Signals'));
 const Stocks = lazyRetry(() => import('./pages/Stocks'));
@@ -407,7 +413,8 @@ function AnimatedRoutes() {
             <Route path="/" element={<Market />} />
             <Route path="/coin/:id" element={<CoinDetail />} />
             <Route path="/compare" element={<Compare />} />
-            <Route path="/trade" element={<Trade />} />
+            {/* With the spot flag on, /trade is the spot tab. Replace, not push: Back must not loop. */}
+            <Route path="/trade" element={SPOT_TRADE_ENABLED ? <Navigate to="/perp?tab=spot" replace /> : <Trade />} />
             <Route path="/swap" element={<Swap />} />
             <Route path="/bridge" element={<Bridge />} />
             {SPECULATION_ENABLED && <Route path="/invest" element={<Invest />} />}
@@ -419,6 +426,7 @@ function AnimatedRoutes() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/legal/:doc" element={<Legal />} />
             {SPECULATION_ENABLED && <Route path="/perp" element={<Perp />} />}
+            {!SPECULATION_ENABLED && SPOT_TRADE_ENABLED && <Route path="/perp" element={<SpotPage />} />}
             <Route path="/farm" element={<Farm />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/stocks" element={<Stocks />} />

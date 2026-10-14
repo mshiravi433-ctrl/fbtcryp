@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
@@ -13,13 +13,14 @@ import FuturesMarketChart from '../components/FuturesMarketChart';
 import TokenIcon from '../lib/tokenIcon';
 import FundingPanel from '../components/FundingPanel';
 import FuturesPositionsCard from '../components/FuturesPositionsCard';
-import { IconActivity, IconRoute, IconShield, IconSparkle, IconTrend } from '../components/Icons';
+import { IconActivity, IconRoute, IconShield, IconSparkle, IconSwap, IconTrend } from '../components/Icons';
+import SpotTrade from '../components/spot/SpotTrade';
 import { useMarkets } from '../hooks/useMarket';
 import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { SPECULATION_ENABLED } from '../lib/features';
+import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
 import {
@@ -48,7 +49,12 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
  */
 const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
 
-const TAB_LABEL_KEY = { overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
+/*
+ * `spot` is the user's own-wallet spot trade (components/spot). It is listed
+ * whenever SPOT_TRADE_ENABLED is on, and it is NOT gated by SPECULATION: the
+ * futures tabs below are the only ones that depend on that flag.
+ */
+const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
 
 /**
  * One icon per venue, so the rail says what each tab IS instead of asking the
@@ -57,7 +63,7 @@ const TAB_LABEL_KEY = { overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx',
  *   dydx     → the activity of an external, client-signed venue
  *   onchain  → the shield, because that tab is the self-custodial one
  */
-const TAB_ICON = { overview: IconTrend, dydx: IconActivity, onchain: IconShield };
+const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield };
 
 /*
  * ─── THERE IS NO EXTERNAL VENUE ON THIS PAGE ANY MORE ─────────────────────
@@ -293,6 +299,7 @@ export default function Perp() {
     the market screen already makes, so it costs the app nothing new.
   */
   const { data: coins, loading } = useMarkets(250);
+  const navigate = useNavigate();
   const slippagePct = useSettingsStore((s) => s.defaultSlippage);
   const setSlippage = useSettingsStore((s) => s.setSlippage);
 
@@ -304,11 +311,30 @@ export default function Perp() {
     try {
       const raw = String(window.location.hash || '').split('?')[1] || '';
       const wanted = new URLSearchParams(raw).get('tab');
+      if (wanted === 'spot' && SPOT_TRADE_ENABLED) return 'spot';
       return SPECULATION_ENABLED && ['dydx', 'onchain'].includes(wanted) ? wanted : 'overview';
     } catch { return 'overview'; }
   })();
   const [perpTab, setPerpTab] = useState(initialTab);
-  const PERP_TABS = SPECULATION_ENABLED ? ['overview', 'dydx', 'onchain'] : ['overview'];
+  /*
+   * The rail's tabs. Spot comes first and depends only on its own flag; the
+   * futures tabs appear only in the speculation build. A single tab hides the
+   * rail, so the content does not jump when only one tab is left.
+   */
+  const FUTURES_TABS = SPECULATION_ENABLED ? ['overview', 'dydx', 'onchain'] : [];
+  const PERP_TABS = [...(SPOT_TRADE_ENABLED ? ['spot'] : []), ...FUTURES_TABS];
+  /*
+   * A rail click also writes `tab` into the URL. Without that, a user who
+   * arrived on `?tab=spot` would be pulled straight back by the URL effect.
+   */
+  const selectTab = (k) => {
+    setPerpTab(k);
+    try {
+      const sp = new URLSearchParams(location.search || '');
+      sp.set('tab', k);
+      navigate({ search: `?${sp.toString()}` }, { replace: true });
+    } catch { /* the tab already changed; only the URL write was lost */ }
+  };
 
   /*
    * ─── THE TERMINAL'S OWN STATE ─────────────────────────────────────────────
@@ -600,6 +626,13 @@ export default function Perp() {
       if ((want === 'onchain' || want === 'dydx') && want !== perpTab) setPerpTab(want);
     } catch { /* a malformed query is not worth breaking the page over */ }
   }, [location.search, perpTab]);
+  useEffect(() => {
+    if (!SPOT_TRADE_ENABLED) return;
+    try {
+      const want = new URLSearchParams(location.search || '').get('tab');
+      if (want === 'spot' && perpTab !== 'spot') setPerpTab('spot');
+    } catch { /* a malformed query is not worth breaking the page over */ }
+  }, [location.search, perpTab]);
 
   /*
    * The two venue tabs are BOARDS (five measured columns, a depth chart, an
@@ -608,7 +641,7 @@ export default function Perp() {
    * See `body.hall-wide` in styles/derivatives-glass.css.
    */
   useEffect(() => {
-    if (perpTab === 'overview') return undefined;
+    if (perpTab === 'overview' || perpTab === 'spot') return undefined;
     document.body.classList.add('hall-wide');
     return () => { document.body.classList.remove('hall-wide'); };
   }, [perpTab]);
@@ -914,8 +947,8 @@ export default function Perp() {
   return (
     <PageTransition>
       <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t('perp.title')}</h1>
-        <p className="muted">{t('perp.subtitle')}</p>
+        <h1 className="h1">{t(perpTab === 'spot' ? 'trade.title' : 'perp.title')}</h1>
+        <p className="muted">{t(perpTab === 'spot' ? 'spot.subtitle' : 'perp.subtitle')}</p>
       </motion.div>
 
       {/*
@@ -926,31 +959,35 @@ export default function Perp() {
         venues the way every other tab control in the app does), and a real
         44px tap height.
       */}
-      <div className="perp-rail" role="tablist" aria-label={t('perp.title')}>
-        {PERP_TABS.map((k) => {
-          const active = perpTab === k;
-          const Icon = TAB_ICON[k];
-          return (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`perp-rail-tab ${active ? 'is-active' : ''}`}
-              style={{ isolation: 'isolate' }}
-              onClick={() => setPerpTab(k)}
-            >
-              {active && <SegIndicator id="perp-tab" />}
-              <span className="perp-rail-ico" aria-hidden="true">
-                <Icon width={16} height={16} />
-              </span>
-              <span className="perp-rail-label">{t(TAB_LABEL_KEY[k])}</span>
-            </button>
-          );
-        })}
-      </div>
+      {PERP_TABS.length > 1 && (
+        <div className="perp-rail" role="tablist" aria-label={t('perp.title')}>
+          {PERP_TABS.map((k) => {
+            const active = perpTab === k;
+            const Icon = TAB_ICON[k];
+            return (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`perp-rail-tab ${active ? 'is-active' : ''}`}
+                style={{ isolation: 'isolate' }}
+                onClick={() => selectTab(k)}
+              >
+                {active && <SegIndicator id="perp-tab" />}
+                <span className="perp-rail-ico" aria-hidden="true">
+                  <Icon width={16} height={16} />
+                </span>
+                <span className="perp-rail-label">{t(TAB_LABEL_KEY[k])}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {perpTab === 'dydx' ? (
+      {perpTab === 'spot' ? (
+        <SpotTrade />
+      ) : perpTab === 'dydx' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyDydx && <LazyDydx embedded />}
         </Suspense>
