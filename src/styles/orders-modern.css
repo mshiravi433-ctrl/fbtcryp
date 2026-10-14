@@ -492,3 +492,56 @@
   .ord-new-card,
   .ord-new-card:hover { transform: none; transition: none; }
 }
+
+/* --------------------------------------------------------------------------
+   LEVEL 1 — honest card and quotation-checked statuses
+   -------------------------------------------------------------------------- */
+.ord-honest-card {
+  border-inline-start: 3px solid var(--accent, #3b82f6);
+  background: color-mix(in srgb, var(--accent, #3b82f6) 4%, transparent);
+}
+
+.ord-honest-card strong {
+  color: var(--text, #fff);
+}
+
+/* Quotation-checked status badges */
+.ord-status-ready {
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  color: #22c55e;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.ord-status-quote-below {
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  color: #f59e0b;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.ord-status-unavailable {
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #ef4444;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Light theme adjustments for status badges */
+:root[data-theme='light'] .ord-status-ready { color: #16a34a; }
+:root[data-theme='light'] .ord-status-quote-below { color: #d97706; }
+:root[data-theme='light'] .ord-status-unavailable { color: #dc2626; }
+
+/* Level 1 estimated output card */
+.ord-estimate-card {
+  background: color-mix(in srgb, var(--hue) 5%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+

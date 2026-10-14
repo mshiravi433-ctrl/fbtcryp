@@ -705,7 +705,25 @@
     "statReady": "现在可执行",
     "pxOk": "价格源已连接",
     "pxChecking": "正在检查价格源…",
-    "pxNone": "没有价格源"
+    "pxNone": "没有价格源",
+    "level1": {
+      "honestCard": "此订单仅在您确认后执行。没有自动执行 — 当条件满足且真实报价达到您的限价时，系统会要求您批准交换。",
+      "quoteReady": "准备交换",
+      "quoteBelowLimit": "报价低于限价",
+      "quoteUnavailable": "报价不可用",
+      "expiryLabel": "到期时间",
+      "expiry_1h": "1 小时",
+      "expiry_24h": "24 小时",
+      "expiry_7d": "7 天",
+      "feeCapLabel": "最高手续费（可选）",
+      "estimatedOutput": "按限价估算输出",
+      "minOutput": "您至少收到的金额",
+      "noAutoExec": "无自动执行",
+      "swapRequiresConfirm": "交换需要您确认",
+      "networkUnsupported": "此网络不支持交换",
+      "readyToSwap": "准备交换",
+      "conditionMet": "条件已满足"
+    }
   },
   "bridge": {
     "emptyHint": "输入金额以查看最佳路径和费用。",

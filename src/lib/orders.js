@@ -125,6 +125,27 @@ export const LADDER_MAX_STEPS = 8;
 export const DCA_INTERVALS = { daily: 86400000, weekly: 604800000, monthly: 2592000000 };
 
 /**
+ * LIMIT ORDER EXPIRY OPTIONS — how long a limit order stays active.
+ *
+ * Three options cover the common cases without overwhelming the form:
+ *   1 hour   — scalping a quick move, or testing the waters
+ *   24 hours — the standard "today" order
+ *   7 days   — patient positioning
+ *
+ * Longer than 7 days is deliberately absent: a limit set at a price the market
+ * left behind weeks ago is not a plan, it is litter that fires at the worst
+ * possible moment if the price ever wanders back. The user can always create
+ * a new one.
+ *
+ * Values in milliseconds, keyed by a short tag the UI translates.
+ */
+export const LIMIT_EXPIRY_OPTIONS = {
+  '1h': 3600000,
+  '24h': 86400000,
+  '7d': 604800000
+};
+
+/**
  * Trailing stop distance, in percent, clamped to a sane band.
  *
  * Below ~0.5% ordinary spread noise triggers it constantly; above 50% it is
@@ -287,10 +308,28 @@ export function createOrder(input, now = Date.now()) {
          * and anyone who tried would set the opposite of what they meant.
          */
         priceOf: input.priceOf === 'to' ? 'to' : 'from',
-        // Limit orders expire. An order set at a price the market left behind
-        // a year ago is not a plan, it is litter that fires at the worst
-        // possible moment if the price ever wanders back.
-        expiresAt: now + (Number(input.expiryDays) || 30) * 86400000
+        /*
+         * EXPIRY — how long the order stays active.
+         *
+         * The new Level 1 form offers three fixed options (1h, 24h, 7d) via
+         * `expiryKey`. The legacy `expiryDays` field is still accepted for
+         * backward compatibility with existing stored orders.
+         */
+        expiryKey: LIMIT_EXPIRY_OPTIONS[input.expiryKey] ? input.expiryKey : null,
+        expiresAt: LIMIT_EXPIRY_OPTIONS[input.expiryKey]
+          ? now + LIMIT_EXPIRY_OPTIONS[input.expiryKey]
+          : now + (Number(input.expiryDays) || 30) * 86400000,
+        /*
+         * FEE CAP — the maximum platform fee in basis points the user accepts.
+         *
+         * The standard fee is 50 bps (0.5%). A cap lets the user say "I will
+         * not pay more than X bps" and the order stays pending if the quoted
+         * fee exceeds it. Null means "accept the standard fee" (the common
+         * case). Stored so the UI can show the cap on the order row.
+         */
+        ...(Number.isFinite(Number(input.maxFeeBps)) && Number(input.maxFeeBps) >= 0
+          ? { maxFeeBps: Number(input.maxFeeBps) }
+          : {})
       }
     };
   }
@@ -609,6 +648,174 @@ export function evaluateOrder(order, rate, now = Date.now()) {
   if (order.runsDone >= order.totalRuns) return { ready: false, reason: 'COMPLETE' };
   const due = now >= (order.nextRunAt ?? 0);
   return { ready: due, reason: due ? 'DUE' : 'WAITING' };
+}
+
+/* -------------------------------------------------------------------------- */
+/* LEVEL 1 LIMIT — quotation-checked readiness                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Compute the minimum output amount for a limit order, given the input amount
+ * and the target rate.
+ *
+ * This is the FLOOR the user expects: "if I swap X at my target rate, I should
+ * get at least Y out." The quotation must meet or exceed this, or the order
+ * stays pending — even if the price condition itself is met.
+ *
+ * ─── ROUNDING ────────────────────────────────────────────────────────────────
+ * The result is rounded UP (ceiling) to the token's precision, so the user
+ * always gets AT LEAST what they asked for, never a fraction less due to
+ * floating-point drift. For USDC (6 decimals) this means the 7th decimal is
+ * always rounded up; for ETH (18 decimals) the 19th.
+ *
+ * @param {object} order
+ * @param {number} amountIn  the input amount (in human units, e.g. 1.5 BNB)
+ * @param {number} toDecimals  decimals of the output token
+ * @returns {number|null}  minimum output in human units, or null if invalid
+ */
+export function computeMinAmountOut(order, amountIn, toDecimals) {
+  if (!order || order.type !== 'limit') return null;
+  const amount = Number(amountIn);
+  const target = Number(order.targetRate);
+  const decimals = Number(toDecimals);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (!Number.isFinite(target) || target <= 0) return null;
+  if (!Number.isInteger(decimals) || decimals < 0) return null;
+
+  /*
+   * The target rate is "1 FROM = target TO" (when priceOf === 'from') or
+   * "1 TO = target FROM" (when priceOf === 'to'). In the latter case, the
+   * output per unit of input is the RECIPROCAL: if 1 USDT = 0.0014 BNB,
+   * then swapping 100 USDT yields 100 * 0.0014 = 0.14 BNB.
+   */
+  const ratePerUnit = order.priceOf === 'to' ? 1 / target : target;
+  if (!Number.isFinite(ratePerUnit) || ratePerUnit <= 0) return null;
+
+  const raw = amount * ratePerUnit;
+  /*
+   * CEILING at the token's precision. `Math.ceil` on the scaled value ensures
+   * the user never receives less than the target, even by a dust amount. For
+   * a 1.5 BNB → USDT swap at target 700, raw = 1050.0; with 6 decimals the
+   * scaled value is 1050000000, ceiling is 1050000000, back to 1050.000000.
+   * For 0.1 ETH → USDC at target 3500, raw = 350.0; scaled = 350000000,
+   * ceiling = 350000000, back to 350.000000.
+   */
+  const scale = 10 ** decimals;
+  const scaled = Math.ceil(raw * scale);
+  return scaled / scale;
+}
+
+/**
+ * Evaluate a limit order with a real quotation, not just a price tick.
+ *
+ * ─── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+ * `evaluateOrder` checks whether the MARKET RATE has reached the target. That
+ * is necessary but not sufficient: the actual swap goes through an aggregator
+ * (KyberSwap, OpenOcean, LI.FI) which may quote a WORSE rate than the market
+ * mid-price due to slippage, thin liquidity, or fees. A limit order that fires
+ * on a price tick but fills at a worse rate is the exact failure the user set
+ * the limit to avoid.
+ *
+ * This function takes the quotation result from `getQuote` (or the Solana
+ * equivalent) and compares the ACTUAL output against the minimum the user
+ * expects. Only if the quotation meets the floor does the order become `ready`.
+ *
+ * ─── THE THREE OUTCOMES ──────────────────────────────────────────────────────
+ *   1. `ready: true` — price condition met AND quotation ≥ minAmountOut.
+ *      The swap can be prepared with `minAmountOut` as the slippage floor.
+ *   2. `ready: false, reason: 'QUOTE_BELOW_LIMIT'` — price condition met but
+ *      quotation < minAmountOut. The order stays pending; the user is told why.
+ *   3. `ready: false, reason: 'QUOTE_UNAVAILABLE'` — quotation failed (network,
+ *      rate-limit, no route). The order is marked `unavailable` with the error;
+ *      it is NOT marked ready, because a missing quote is not a fill.
+ *
+ * ─── NO AUTOMATIC EXECUTION ──────────────────────────────────────────────────
+ * This function returns a STATUS, not a transaction. The UI shows the user a
+ * "Swap now" button; the click handler builds and signs the transaction. The
+ * server never signs anything. This is the non-custodial guarantee.
+ *
+ * @param {object} order  the stored limit order
+ * @param {number|null} rate  current market rate (from price feed)
+ * @param {object|null} quote  result from getQuote: { amountOut, minOut, ... }
+ * @param {number} now  timestamp
+ * @returns {{ ready: boolean, reason: string, minAmountOut?: number, quoteOut?: number }}
+ */
+export function evaluateLimitWithQuote(order, rate, quote, now = Date.now()) {
+  if (!order || order.type !== 'limit') {
+    return { ready: false, reason: 'NOT_LIMIT' };
+  }
+  if (order.status !== 'active') {
+    return { ready: false, reason: 'INACTIVE' };
+  }
+  if (order.expiresAt && now >= order.expiresAt) {
+    return { ready: false, reason: 'EXPIRED' };
+  }
+
+  /*
+   * Step 1: check the price condition. If the market rate has not reached the
+   * target, the order is still waiting — no need to fetch a quotation.
+   */
+  const baseEval = evaluateOrder(order, rate, now);
+  if (!baseEval.ready) {
+    return baseEval;
+  }
+
+  /*
+   * Step 2: the price condition is met. Now check the quotation.
+   *
+   * A null or missing quote means the aggregator failed — network error,
+   * rate-limit, no route, or the token is not supported. This is NOT the same
+   * as "quotation below limit": the user's order is fine, but we cannot tell
+   * whether it would fill. Marking it `ready` would be dishonest: the swap
+   * button would open a screen that immediately errors.
+   */
+  if (!quote || !Number.isFinite(Number(quote.amountOut))) {
+    return {
+      ready: false,
+      reason: 'QUOTE_UNAVAILABLE',
+      quoteError: quote?.error || 'NO_QUOTE'
+    };
+  }
+
+  /*
+   * Step 3: compute the minimum output the user expects, and compare.
+   *
+   * `quote.amountOut` is the ACTUAL output the aggregator quoted, in human
+   * units (e.g. 1050.123456 USDT). `minAmountOut` is the floor computed from
+   * the target rate and the input amount. If the quote meets the floor, the
+   * order is ready.
+   *
+   * The comparison uses the QUOTE's output, not the quote's `minOut` (which
+   * is the aggregator's own slippage floor and may be lower than the user's
+   * limit). The user's limit is the hard floor.
+   */
+  const quoteOut = Number(quote.amountOut);
+  const toDecimals = Number(order.toToken?.decimals ?? 18);
+  const minAmountOut = computeMinAmountOut(order, Number(order.amountIn), toDecimals);
+  if (minAmountOut === null) {
+    return { ready: false, reason: 'BAD_ORDER' };
+  }
+
+  if (quoteOut >= minAmountOut) {
+    return {
+      ready: true,
+      reason: 'QUOTE_READY',
+      minAmountOut,
+      quoteOut
+    };
+  }
+
+  /*
+   * The quotation is below the limit. The order stays pending, and the reason
+   * is stored so the UI can explain why: "Price condition met, but the actual
+   * swap would yield 1048.50 USDT, which is below your limit of 1050."
+   */
+  return {
+    ready: false,
+    reason: 'QUOTE_BELOW_LIMIT',
+    minAmountOut,
+    quoteOut
+  };
 }
 
 /**

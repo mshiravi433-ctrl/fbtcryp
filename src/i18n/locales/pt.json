@@ -705,7 +705,25 @@
     "statReady": "Pronta agora",
     "pxOk": "Cotação ligada",
     "pxChecking": "A verificar a cotação…",
-    "pxNone": "Sem cotação"
+    "pxNone": "Sem cotação",
+    "level1": {
+      "honestCard": "Esta ordem só é executada com a sua confirmação. Não há execução automática — quando a condição é satisfeita e uma cotação real atinge o seu limite, ser-lhe-á pedido que aprove a troca.",
+      "quoteReady": "Pronto para trocar",
+      "quoteBelowLimit": "Cotação abaixo do limite",
+      "quoteUnavailable": "Cotação indisponível",
+      "expiryLabel": "Validade",
+      "expiry_1h": "1 hora",
+      "expiry_24h": "24 horas",
+      "expiry_7d": "7 dias",
+      "feeCapLabel": "Taxa máxima (opcional)",
+      "estimatedOutput": "Saída estimada ao preço limite",
+      "minOutput": "Mínimo que receberá",
+      "noAutoExec": "Sem execução automática",
+      "swapRequiresConfirm": "A troca requer a sua confirmação",
+      "networkUnsupported": "Trocas não suportadas nesta rede",
+      "readyToSwap": "Pronto para trocar",
+      "conditionMet": "Condição satisfeita"
+    }
   },
   "bridge": {
     "emptyHint": "Introduza um valor para ver a melhor rota e as suas taxas.",

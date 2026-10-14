@@ -22,6 +22,7 @@ import {
   DCA_INTERVALS,
   LADDER_MAX_STEPS,
   LADDER_MIN_STEPS,
+  LIMIT_EXPIRY_OPTIONS,
   REBALANCE_MAX_DRIFT,
   REBALANCE_MIN_DRIFT,
   TRAIL_MAX_PCT,
@@ -33,7 +34,9 @@ import {
   WATCHED_TYPES,
   addOrder,
   advanceOrder,
+  computeMinAmountOut,
   createOrder,
+  evaluateLimitWithQuote,
   evaluateOrder,
   expireStale,
   loadOrders,
@@ -635,6 +638,25 @@ export default function Orders() {
       </motion.p>
 
       {/*
+        LEVEL 1 HONEST CARD — the non-custodial guarantee, stated plainly.
+        No automatic execution, no silent fills. This is the promise the
+        whole security model rests on, and it must be visible before the
+        user creates anything — not buried in a tooltip or a settings page.
+      */}
+      <motion.div
+        className="card ord-honest-card"
+        variants={riseIn}
+        initial="hidden"
+        animate="show"
+        style={{ padding: '12px 14px', marginTop: 4 }}
+      >
+        <p className="faint" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.7 }}>
+          <strong>{t('orders.level1.noAutoExec')}</strong>{' '}
+          {t('orders.level1.honestCard')}
+        </p>
+      </motion.div>
+
+      {/*
         What is currently scheduled. Only shown once something exists, so an
         empty screen is not cluttered with a zero.
       */}
@@ -1146,6 +1168,8 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
   const [twapSlices, setTwapSlices] = useState('4');
   const [twapWindow, setTwapWindow] = useState('60');
   const [rebalanceDrift, setRebalanceDrift] = useState('10');
+  const [expiryKey, setExpiryKey] = useState('24h');
+  const [maxFeeBps, setMaxFeeBps] = useState('');
   const goal = useMemo(() => loadGoal(), [kind]);
   const [goalId, setGoalId] = useState('');
 
@@ -1656,6 +1680,54 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
                 token has too little history to say anything honest. */}
             <HistoryPanel series={(watchedSeries ?? []).map((d) => d.p)} days={90} compact />
 
+            {/*
+              EXPIRY SELECTOR — how long the order stays active.
+              Three fixed options (1h, 24h, 7d) rather than a free-form
+              field: a limit set months ago is litter that fires at the
+              worst moment. The user can always create a new one.
+            */}
+            <label className="ord-field">
+              <span className="faint">{t('orders.level1.expiryLabel')}</span>
+              <div className="segmented" style={{ marginTop: 4 }}>
+                {Object.keys(LIMIT_EXPIRY_OPTIONS).map((key) => (
+                  <button
+                    key={key}
+                    className={expiryKey === key ? 'active' : ''}
+                    onClick={() => setExpiryKey(key)}
+                    aria-pressed={expiryKey === key}
+                    style={{ isolation: 'isolate', minHeight: 44 }}
+                  >
+                    {expiryKey === key && <SegIndicator id={`ord-expiry-${key}`} />}
+                    {t(`orders.level1.expiry_${key}`)}
+                  </button>
+                ))}
+              </div>
+            </label>
+
+            {/*
+              ESTIMATED OUTPUT — shown at the limit price, not the market
+              price. The user typed a target; the estimate must match that
+              target, or they will see a number that disagrees with the
+              order they are creating.
+            */}
+            {Number(target) > 0 && Number(amount) > 0 && (
+              <div className="card" style={{ padding: '10px 12px', marginTop: 4 }}>
+                <span className="faint" style={{ fontSize: 12 }}>
+                  {t('orders.level1.estimatedOutput')}
+                </span>
+                <p className="mono" style={{ margin: '4px 0 0', fontSize: 14 }}>
+                  {(() => {
+                    const minOut = computeMinAmountOut(
+                      { type: 'limit', targetRate: Number(target), priceOf, amountIn: amount },
+                      Number(amount),
+                      Number(toToken?.decimals ?? 18)
+                    );
+                    return minOut != null ? `${fmtQty(minOut)} ${toSym}` : '—';
+                  })()}
+                </p>
+              </div>
+            )}
+
             <p className="faint" style={{ lineHeight: 1.7 }}>
               {t('orders.willSwap', { from: fromSym, to: toSym })}
             </p>
@@ -2001,7 +2073,14 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
               slices: Number(twapSlices),
               windowMin: Number(twapWindow),
               driftPct: Number(rebalanceDrift),
-              goalId: kind === 'dca' && goalId ? goalId : undefined
+              goalId: kind === 'dca' && goalId ? goalId : undefined,
+              /*
+               * LEVEL 1 — expiry and fee cap for limit orders.
+               * These are only meaningful for `type: 'limit'`; the
+               * createOrder function ignores them for other types.
+               */
+              expiryKey: kind === 'limit' ? expiryKey : undefined,
+              maxFeeBps: kind === 'limit' && maxFeeBps ? Number(maxFeeBps) : undefined
             })
           }
         >

@@ -705,7 +705,25 @@
     "statReady": "Prêt maintenant",
     "pxOk": "Flux de prix connecté",
     "pxChecking": "Vérification du flux de prix…",
-    "pxNone": "Aucun flux de prix"
+    "pxNone": "Aucun flux de prix",
+    "level1": {
+      "honestCard": "Cet ordre ne s'exécute qu'avec votre confirmation. Pas d'exécution automatique — quand la condition est remplie et qu'une cotation réelle atteint votre limite, il vous sera demandé d'approuver l'échange.",
+      "quoteReady": "Prêt à échanger",
+      "quoteBelowLimit": "Cotation sous la limite",
+      "quoteUnavailable": "Cotation indisponible",
+      "expiryLabel": "Expiration",
+      "expiry_1h": "1 heure",
+      "expiry_24h": "24 heures",
+      "expiry_7d": "7 jours",
+      "feeCapLabel": "Frais max (optionnel)",
+      "estimatedOutput": "Sortie estimée au prix limite",
+      "minOutput": "Minimum que vous recevrez",
+      "noAutoExec": "Pas d'exécution automatique",
+      "swapRequiresConfirm": "L'échange nécessite votre confirmation",
+      "networkUnsupported": "Échanges non pris en charge sur ce réseau",
+      "readyToSwap": "Prêt à échanger",
+      "conditionMet": "Condition remplie"
+    }
   },
   "bridge": {
     "emptyHint": "Saisissez un montant pour voir le meilleur itinéraire et ses frais.",

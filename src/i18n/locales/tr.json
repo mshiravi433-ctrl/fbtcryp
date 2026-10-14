@@ -705,7 +705,25 @@
     "statReady": "Şimdi hazır",
     "pxOk": "Fiyat akışı bağlı",
     "pxChecking": "Fiyat akışı kontrol ediliyor…",
-    "pxNone": "Fiyat akışı yok"
+    "pxNone": "Fiyat akışı yok",
+    "level1": {
+      "honestCard": "Bu emir yalnızca onayınızla yürütülür. Otomatik yürütme yoktur — koşul sağlandığında ve gerçek bir teklif limitinize ulaştığında, takas onayı istenecektir.",
+      "quoteReady": "Takas için hazır",
+      "quoteBelowLimit": "Teklif limitin altında",
+      "quoteUnavailable": "Teklif mevcut değil",
+      "expiryLabel": "Son kullanma",
+      "expiry_1h": "1 saat",
+      "expiry_24h": "24 saat",
+      "expiry_7d": "7 gün",
+      "feeCapLabel": "Maks. ücret (isteğe bağlı)",
+      "estimatedOutput": "Limit fiyatında tahmini çıktı",
+      "minOutput": "Alacağınız minimum",
+      "noAutoExec": "Otomatik yürütme yok",
+      "swapRequiresConfirm": "Takas onayınızı gerektirir",
+      "networkUnsupported": "Bu ağda takaslar desteklenmiyor",
+      "readyToSwap": "Takas için hazır",
+      "conditionMet": "Koşul sağlandı"
+    }
   },
   "bridge": {
     "emptyHint": "En iyi rotayı ve ücretleri görmek için bir tutar girin.",
