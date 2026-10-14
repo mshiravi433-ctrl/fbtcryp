@@ -403,5 +403,196 @@ export default {
     es: 'El destino de la comisión no coincide, así que no se envió nada.', fr: 'La destination des frais ne correspond pas ; rien n’a été envoyé.',
     ru: 'Получатель комиссии не совпал, поэтому ничего не отправлено.', tr: 'Ücret alıcısı eşleşmedi, bu yüzden hiçbir şey gönderilmedi.',
     ur: 'فیس کی منزل مماثل نہیں، اس لیے کچھ نہیں بھیجا گیا۔', id: 'Tujuan biaya tidak cocok, sehingga tidak ada yang dikirim.', pt: 'O destino da taxa não confere, então nada foi enviado.'
+  },
+
+  /* ── 2026-10-14: one box, popup pickers, the risk fold, the missing codes ── */
+  'spot.networkTitle': {
+    zh: '选择网络', hi: 'नेटवर्क चुनें',
+    es: 'Elige una red', fr: 'Choisissez un réseau',
+    ru: 'Выберите сеть', tr: 'Bir ağ seçin',
+    ur: 'نیٹ ورک منتخب کریں', id: 'Pilih jaringan',
+    pt: 'Escolha uma rede'
+  },
+  'spot.assetLabel': {
+    zh: '代币', hi: 'टोकन',
+    es: 'Token', fr: 'Token',
+    ru: 'Токен', tr: 'Token',
+    ur: 'ٹوکن', id: 'Token',
+    pt: 'Token'
+  },
+  'spot.quoteSheetTitle': {
+    zh: '选择支付代币', hi: 'वह टोकन चुनें जिससे भुगतान करेंगे',
+    es: 'Elige el token con el que pagarás', fr: 'Choisissez le token de paiement',
+    ru: 'Выберите токен оплаты', tr: 'Ödeme yapacağınız tokeni seçin',
+    ur: 'ادائیگی کا ٹوکن منتخب کریں', id: 'Pilih token untuk pembayaran',
+    pt: 'Escolha o token de pagamento'
+  },
+  'spot.rate': {
+    zh: '汇率', hi: 'दर',
+    es: 'Tasa', fr: 'Taux',
+    ru: 'Курс', tr: 'Oran',
+    ur: 'شرح', id: 'Kurs',
+    pt: 'Taxa'
+  },
+  'spot.notices.title': {
+    zh: '签名之前', hi: 'हस्ताक्षर से पहले',
+    es: 'Antes de firmar', fr: 'Avant de signer',
+    ru: 'Перед подписью', tr: 'İmzalamadan önce',
+    ur: 'دستخط سے پہلے', id: 'Sebelum menandatangani',
+    pt: 'Antes de assinar'
+  },
+  'spot.notices.subtitle': {
+    zh: '关于此订单的三点提示', hi: 'इस ऑर्डर के बारे में तीन ज़रूरी बातें',
+    es: 'Tres cosas que conviene saber de este pedido', fr: 'Trois points à connaître sur cet ordre',
+    ru: 'Три важных момента об этом ордере', tr: 'Bu emir hakkında bilinmesi gereken üç nokta',
+    ur: 'اس آرڈر کے بارے میں تین اہم باتیں', id: 'Tiga hal yang perlu diketahui tentang pesanan ini',
+    pt: 'Três coisas que vale saber sobre esta ordem'
+  },
+  'spot.risk.subtitle': {
+    zh: '合约扫描 — 流动性、持有者、税费与跑路概率', hi: 'कॉन्ट्रैक्ट स्कैन — लिक्विडिटी, होल्डर, टैक्स और रग की संभावना',
+    es: 'Análisis del contrato — liquidez, holders, impuestos y riesgo de rug', fr: 'Analyse du contrat — liquidité, holders, taxes et risque de rug',
+    ru: 'Проверка контракта — ликвидность, держатели, налоги и вероятность rug', tr: 'Sözleşme taraması — likidite, sahipler, vergiler ve rug olasılığı',
+    ur: 'کنٹریکٹ اسکین — لیکویڈیٹی، ہولڈرز، ٹیکس اور رگ کا امکان', id: 'Pemindaian kontrak — likuiditas, holder, pajak, dan peluang rug',
+    pt: 'Análise do contrato — liquidez, holders, taxas e risco de rug'
+  },
+  'spot.risk.score': {
+    zh: '风险评分', hi: 'जोखिम स्कोर',
+    es: 'Puntuación de riesgo', fr: 'Score de risque',
+    ru: 'Оценка риска', tr: 'Risk puanı',
+    ur: 'رسک اسکور', id: 'Skor risiko',
+    pt: 'Pontuação de risco'
+  },
+  'spot.risk.scoreOf': {
+    zh: '{{n}} / 100', hi: '{{n}} / 100',
+    es: '{{n}} de 100', fr: '{{n}} sur 100',
+    ru: '{{n}} из 100', tr: '100 üzerinden {{n}}',
+    ur: '{{n}} از 100', id: '{{n}} dari 100',
+    pt: '{{n}} de 100'
+  },
+  'spot.risk.rescan': {
+    zh: '重新扫描', hi: 'फिर से स्कैन करें',
+    es: 'Volver a analizar', fr: 'Analyser à nouveau',
+    ru: 'Проверить снова', tr: 'Yeniden tara',
+    ur: 'دوبارہ اسکین کریں', id: 'Pindai lagi',
+    pt: 'Analisar novamente'
+  },
+  'spot.risk.clean': {
+    zh: '未记录到严重风险标记。', hi: 'कोई गंभीर फ़्लैग दर्ज नहीं हुआ।',
+    es: 'No se registró ninguna alerta crítica.', fr: 'Aucune alerte critique n’a été enregistrée.',
+    ru: 'Критических отметок не зафиксировано.', tr: 'Kritik bir uyarı kaydedilmedi.',
+    ur: 'کوئی سنگین فلیگ ریکارڈ نہیں ہوا۔', id: 'Tidak ada tanda kritis yang tercatat.',
+    pt: 'Nenhum alerta crítico foi registrado.'
+  },
+  'spot.risk.native': {
+    zh: '这是该网络自身的 Gas 币，没有代币合约可扫描。', hi: 'यह नेटवर्क का अपना गैस कॉइन है, इसलिए स्कैन के लिए कोई टोकन कॉन्ट्रैक्ट नहीं है।',
+    es: 'Es la moneda de gas de la red, así que no hay contrato de token que analizar.', fr: 'C’est la monnaie de gaz du réseau ; il n’y a donc aucun contrat de token à analyser.',
+    ru: 'Это собственная монета газа сети, поэтому токена-контракта для проверки нет.', tr: 'Bu, ağın kendi gas coin’i; taranacak bir token sözleşmesi yok.',
+    ur: 'یہ نیٹ ورک کا اپنا گیس کوائن ہے، اس لیے اسکین کے لیے کوئی ٹوکن کنٹریکٹ نہیں۔', id: 'Ini koin gas milik jaringan, jadi tidak ada kontrak token untuk dipindai.',
+    pt: 'É a moeda de gás da própria rede, então não há contrato de token para analisar.'
+  },
+  'spot.risk.scanning': {
+    zh: '正在扫描合约…', hi: 'कॉन्ट्रैक्ट स्कैन हो रहा है…',
+    es: 'Analizando el contrato…', fr: 'Analyse du contrat en cours…',
+    ru: 'Идёт проверка контракта…', tr: 'Sözleşme taranıyor…',
+    ur: 'کنٹریکٹ اسکین ہو رہا ہے…', id: 'Memindai kontrak…',
+    pt: 'Analisando o contrato…'
+  },
+  'spot.risk.whaleLabel': {
+    zh: '巨鲸活动', hi: 'व्हेल गतिविधि',
+    es: 'Actividad de ballenas', fr: 'Activité des baleines',
+    ru: 'Активность китов', tr: 'Balina hareketi',
+    ur: 'وہیل سرگرمی', id: 'Aktivitas whale',
+    pt: 'Atividade de baleias'
+  },
+  'spot.risk.whale.quiet': {
+    zh: '平静', hi: 'शांत',
+    es: 'Tranquila', fr: 'Calme',
+    ru: 'Спокойная', tr: 'Sakin',
+    ur: 'پرسکون', id: 'Tenang',
+    pt: 'Tranquila'
+  },
+  'spot.risk.whale.elevated': {
+    zh: '偏高', hi: 'बढ़ी हुई',
+    es: 'Elevada', fr: 'Élevée',
+    ru: 'Повышенная', tr: 'Yüksek',
+    ur: 'زیادہ', id: 'Meningkat',
+    pt: 'Elevada'
+  },
+  'spot.risk.whale.extreme': {
+    zh: '高度集中', hi: 'अत्यधिक केंद्रित',
+    es: 'Muy concentrada', fr: 'Très concentrée',
+    ru: 'Очень высокая концентрация', tr: 'Çok yoğun',
+    ur: 'بہت مرتکز', id: 'Sangat terkonsentrasi',
+    pt: 'Muito concentrada'
+  },
+  'spot.risk.whale.unknown': {
+    zh: '未知', hi: 'अज्ञात',
+    es: 'Desconocida', fr: 'Inconnue',
+    ru: 'Неизвестно', tr: 'Bilinmiyor',
+    ur: 'نامعلوم', id: 'Tidak diketahui',
+    pt: 'Desconhecida'
+  },
+  'spot.err.NOT_CONFIRMED': {
+    zh: '订单未确认，因此未发送任何内容。', hi: 'ऑर्डर की पुष्टि नहीं हुई, इसलिए कुछ भी नहीं भेजा गया।',
+    es: 'El pedido no se confirmó, así que no se envió nada.', fr: 'L’ordre n’a pas été confirmé ; rien n’a été envoyé.',
+    ru: 'Ордер не подтверждён, поэтому ничего не отправлено.', tr: 'Emir onaylanmadı, bu yüzden hiçbir şey gönderilmedi.',
+    ur: 'آرڈر کی تصدیق نہیں ہوئی، اس لیے کچھ نہیں بھیجا گیا۔', id: 'Pesanan tidak dikonfirmasi, jadi tidak ada yang dikirim.',
+    pt: 'A ordem não foi confirmada, então nada foi enviado.'
+  },
+  'spot.err.QUOTE_MISSING': {
+    zh: '此订单没有报价。请先获取新汇率。', hi: 'इस ऑर्डर के लिए कोई कोट नहीं है। पहले नई दर लें।',
+    es: 'No hay cotización para este pedido. Obtén una nueva tasa primero.', fr: 'Aucun devis pour cet ordre. Récupérez d’abord un nouveau taux.',
+    ru: 'Для этого ордера нет котировки. Сначала получите новый курс.', tr: 'Bu emir için teklif yok. Önce yeni bir oran alın.',
+    ur: 'اس آرڈر کے لیے کوئی کوٹیشن نہیں۔ پہلے نئی شرح حاصل کریں۔', id: 'Tidak ada kutipan untuk pesanan ini. Ambil kurs baru terlebih dahulu.',
+    pt: 'Não há cotação para esta ordem. Obtenha uma nova taxa primeiro.'
+  },
+  'spot.err.QUOTE_INVALID': {
+    zh: '返回的报价无效。请重试。', hi: 'जो कोट मिला वह मान्य नहीं था। फिर कोशिश करें।',
+    es: 'La cotización recibida no es válida. Inténtalo de nuevo.', fr: 'Le devis reçu n’est pas valide. Réessayez.',
+    ru: 'Полученная котировка недействительна. Попробуйте снова.', tr: 'Gelen teklif geçerli değil. Tekrar deneyin.',
+    ur: 'موصول ہونے والی کوٹیشن درست نہیں۔ دوبارہ کوشش کریں۔', id: 'Kutipan yang diterima tidak valid. Coba lagi.',
+    pt: 'A cotação recebida não é válida. Tente novamente.'
+  },
+  'spot.err.INVALID_DECIMALS': {
+    zh: '这不是有效的小数。', hi: 'यह मान्य दशमलव संख्या नहीं है।',
+    es: 'No es un número decimal válido.', fr: 'Ce n’est pas un nombre décimal valide.',
+    ru: 'Это некорректное десятичное число.', tr: 'Bu geçerli bir ondalık sayı değil.',
+    ur: 'یہ درست اعشاریہ نہیں ہے۔', id: 'Itu bukan angka desimal yang valid.',
+    pt: 'Esse não é um número decimal válido.'
+  },
+  'spot.err.NO_TRANSACTION': {
+    zh: '无法构建交易。请重试。', hi: 'कोई लेन-देन नहीं बन सका। फिर कोशिश करें।',
+    es: 'No se pudo crear la transacción. Inténtalo de nuevo.', fr: 'Aucune transaction n’a pu être créée. Réessayez.',
+    ru: 'Не удалось создать транзакцию. Попробуйте снова.', tr: 'İşlem oluşturulamadı. Tekrar deneyin.',
+    ur: 'ٹرانزیکشن نہیں بن سکی۔ دوبارہ کوشش کریں۔', id: 'Transaksi tidak dapat dibuat. Coba lagi.',
+    pt: 'Não foi possível criar a transação. Tente novamente.'
+  },
+  'spot.err.ORDER_FAILED': {
+    zh: '网络未接受此订单。', hi: 'नेटवर्क ने यह ऑर्डर स्वीकार नहीं किया।',
+    es: 'La red no aceptó este pedido.', fr: 'Le réseau n’a pas accepté cet ordre.',
+    ru: 'Сеть не приняла этот ордер.', tr: 'Ağ bu emri kabul etmedi.',
+    ur: 'نیٹ ورک نے یہ آرڈر قبول نہیں کیا۔', id: 'Jaringan tidak menerima pesanan ini.',
+    pt: 'A rede não aceitou esta ordem.'
+  },
+  'spot.err.SEND_FAILED': {
+    zh: '交易未能发送到网络。', hi: 'लेन-देन नेटवर्क पर नहीं भेजा जा सका।',
+    es: 'No se pudo enviar la transacción a la red.', fr: 'La transaction n’a pas pu être envoyée au réseau.',
+    ru: 'Не удалось отправить транзакцию в сеть.', tr: 'İşlem ağa gönderilemedi.',
+    ur: 'ٹرانزیکشن نیٹ ورک پر نہیں بھیجی جا سکی۔', id: 'Transaksi tidak dapat dikirim ke jaringan.',
+    pt: 'A transação não pôde ser enviada à rede.'
+  },
+  'spot.err.NO_TOKEN_ACCOUNT': {
+    zh: '您的钱包还没有该代币的账户。', hi: 'आपके वॉलेट में अभी इस टोकन का खाता नहीं है।',
+    es: 'Tu cartera aún no tiene cuenta para este token.', fr: 'Votre portefeuille n’a pas encore de compte pour ce token.',
+    ru: 'В вашем кошельке ещё нет счёта для этого токена.', tr: 'Cüzdanınızda bu token için henüz hesap yok.',
+    ur: 'آپ کے بٹوے میں ابھی اس ٹوکن کا اکاؤنٹ نہیں ہے۔', id: 'Dompet Anda belum punya akun untuk token ini.',
+    pt: 'Sua carteira ainda não tem conta para este token.'
+  },
+  'spot.err.BELOW_MINIMUM': {
+    zh: '金额低于网络最低要求。', hi: 'राशि नेटवर्क की न्यूनतम सीमा से कम है।',
+    es: 'El importe está por debajo del mínimo de la red.', fr: 'Le montant est inférieur au minimum du réseau.',
+    ru: 'Сумма ниже минимума сети.', tr: 'Tutar, ağın alt sınırının altında.',
+    ur: 'رقم نیٹ ورک کی کم از کم حد سے کم ہے۔', id: 'Jumlah di bawah minimum jaringan.',
+    pt: 'O valor está abaixo do mínimo da rede.'
   }
 };

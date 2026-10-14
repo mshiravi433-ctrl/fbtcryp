@@ -2955,7 +2955,40 @@
       "ROUTE_CHANGED": "A rota mudou. Revise a nova cotação antes de assinar.",
       "CONFIRMATION_TIMEOUT": "A rede está demorando para confirmar. Verifique pelo link do explorador.",
       "FEE_NOT_APPLIED": "A taxa da plataforma não pôde ser aplicada, então nada foi enviado.",
-      "FEE_RECIPIENT_MISMATCH": "O destino da taxa não confere, então nada foi enviado."
+      "FEE_RECIPIENT_MISMATCH": "O destino da taxa não confere, então nada foi enviado.",
+      "NOT_CONFIRMED": "A ordem não foi confirmada, então nada foi enviado.",
+      "QUOTE_MISSING": "Não há cotação para esta ordem. Obtenha uma nova taxa primeiro.",
+      "QUOTE_INVALID": "A cotação recebida não é válida. Tente novamente.",
+      "INVALID_DECIMALS": "Esse não é um número decimal válido.",
+      "NO_TRANSACTION": "Não foi possível criar a transação. Tente novamente.",
+      "ORDER_FAILED": "A rede não aceitou esta ordem.",
+      "SEND_FAILED": "A transação não pôde ser enviada à rede.",
+      "NO_TOKEN_ACCOUNT": "Sua carteira ainda não tem conta para este token.",
+      "BELOW_MINIMUM": "O valor está abaixo do mínimo da rede."
+    },
+    "networkTitle": "Escolha uma rede",
+    "assetLabel": "Token",
+    "quoteSheetTitle": "Escolha o token de pagamento",
+    "rate": "Taxa",
+    "notices": {
+      "title": "Antes de assinar",
+      "subtitle": "Três coisas que vale saber sobre esta ordem"
+    },
+    "risk": {
+      "subtitle": "Análise do contrato — liquidez, holders, taxas e risco de rug",
+      "score": "Pontuação de risco",
+      "scoreOf": "{{n}} de 100",
+      "rescan": "Analisar novamente",
+      "clean": "Nenhum alerta crítico foi registrado.",
+      "native": "É a moeda de gás da própria rede, então não há contrato de token para analisar.",
+      "scanning": "Analisando o contrato…",
+      "whaleLabel": "Atividade de baleias",
+      "whale": {
+        "quiet": "Tranquila",
+        "elevated": "Elevada",
+        "extreme": "Muito concentrada",
+        "unknown": "Desconhecida"
+      }
     }
   }
 }
