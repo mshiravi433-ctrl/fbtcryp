@@ -179,6 +179,11 @@ describe('the feature flag: off by default, and no existing flag changed', () =>
     const mod = await import('../src/lib/features.js');
     assert.equal(mod.SPOT_TRADE_ENABLED, false);
   });
+  it('the website build (build:full, Vercel) enables it; android:sync does not', () => {
+    const pkg = JSON.parse(read('package.json'));
+    assert.match(pkg.scripts['build:full'], /VITE_ENABLE_SPOT_TRADE=true/);
+    assert.equal(/VITE_ENABLE_SPOT_TRADE/.test(pkg.scripts['android:sync']), false);
+  });
   it('the Android sync script does not enable it', () => {
     const pkg = JSON.parse(read('package.json'));
     assert.equal(/VITE_ENABLE_SPOT_TRADE=true/.test(pkg.scripts['android:sync']), false);

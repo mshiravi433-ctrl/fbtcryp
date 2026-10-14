@@ -2,6 +2,8 @@
 
 تاریخ: ۲۰۲۶-۱۰-۱۴ · شاخه: `arena/f3d7d64d-fbtcryp` · پرچم: `SPOT_TRADE_ENABLED` (پیش‌فرض **خاموش**)
 
+> **وضعیت انتشار:** در `package.json` اسکریپت `build:full` (ساخت وب برای Vercel) مقدار `VITE_ENABLE_SPOT_TRADE=true` را دارد؛ `android:sync` و پیش‌فرض کد همچنان خاموش‌اند. تا این PR به `main` ادغام نشده، این تغییر روی بیلد وب فعال نیست.
+
 ## خلاصه
 
 صفحهٔ قدیمی `/trade` (فقط معاملهٔ کاغذی NX) حالا در بیلدی که پرچم را روشن کرده باشد، **تب «اسپات»** در `/perp?tab=spot` است: کاربر توکن‌های خودش را از کیف پول خودش سواپ می‌کند و هر تراکنش را خودش در کیف پولش امضا می‌کند. پلتفرم هیچ پول، نقدینگی، کلید یا قرارداد جدیدی ندارد.
@@ -52,7 +54,7 @@
 - `src/i18n/locales/{en,fa,ar}.json` (دستی) و نُه فایل دیگر و `coverage.json` (از `gen-locales`).
 - `scripts/gen-locales.mjs` — ثبت `spot.mjs`.
 - `.env.example` — `VITE_ENABLE_SPOT_TRADE` با پیش‌فرض خالی (خاموش).
-- `package.json` — اسکریپت `test:spot`.
+- `package.json` — اسکریپت `test:spot`؛ و `build:full` با `VITE_ENABLE_SPOT_TRADE=true` (فقط بیلد وب؛ `android:sync` دست‌نخورده).
 - `CHANGELOG.md`.
 
 **دست‌نخورده (مطابق دستور):** `contracts/`، `scripts/deploy-*`، `test/protocol/*`، و هر پرچم موجود `*_ENABLED` / `*_PUBLIC` / `*_ALLOWLIST`. `android:sync` پرچم اسپات را روشن نمی‌کند.
