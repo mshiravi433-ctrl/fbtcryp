@@ -1,0 +1,570 @@
+/* ==========================================================================
+   Spot trade (components/spot). User-wallet swaps.
+   Tokens only: every colour, radius, space and size comes from the shared
+   variables in src/index.css. No blur filters. Every control is at least
+   44px tall. Logical properties (inline-start/end) so RTL and LTR both work.
+   ========================================================================== */
+
+.spot-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+  min-width: 0;
+}
+
+.spot-root .mono,
+.spot-root .spot-big,
+.spot-root .spot-row-num,
+.spot-root .spot-row-bal,
+.spot-root .spot-change,
+.spot-root .spot-estimate,
+.spot-root .spot-dl dd {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.spot-root .spot-mode {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.spot-root .spot-mode-tab {
+  flex: 1;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.spot-root .spot-mode-tab.is-active {
+  background: var(--bg-raised);
+  color: var(--text-1);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+/* Paper mode is labelled so it can never be mistaken for real funds. */
+.spot-root .spot-paper-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  align-self: flex-start;
+  min-height: 28px;
+  padding: 0 var(--sp-3);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 12%, transparent);
+  color: var(--rgb-5);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.spot-root .spot-paper {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px dashed color-mix(in srgb, var(--rgb-5) 45%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 6%, transparent);
+}
+
+.spot-root .spot-market-col { min-width: 0; }
+.spot-root .spot-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .spot-root .spot-grid {
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  }
+}
+
+/* ---------- cards ---------- */
+
+.spot-root .spot-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  box-shadow: var(--glass-shadow);
+  min-width: 0;
+}
+
+.spot-root .spot-h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.spot-root .spot-muted,
+.spot-root .spot-hint,
+.spot-root .spot-freshness {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  color: var(--text-2);
+}
+
+.spot-root .spot-empty {
+  padding: var(--sp-4);
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- market list ---------- */
+
+.spot-root .spot-market-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.spot-root .spot-search {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.spot-root .spot-market {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.spot-root .spot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name price' 'meta meta';
+  gap: var(--sp-1) var(--sp-2);
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.spot-root .spot-row:hover { background: var(--bg-raised); }
+
+.spot-root .spot-row.is-active {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
+}
+
+.spot-root .spot-row-num { grid-area: price; font-size: var(--fs-sm); }
+.spot-root .spot-row-meta {
+  grid-area: meta;
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.spot-root .spot-row-bal { color: var(--text-2); }
+.spot-root .spot-asset-btn .spot-asset-sym,
+.spot-root .spot-row .spot-asset-sym { font-weight: 700; }
+.spot-root .spot-asset-name { color: var(--text-2); font-size: var(--fs-xs); margin-inline-start: var(--sp-1); }
+
+.spot-root .spot-change.up { color: var(--up); }
+.spot-root .spot-change.down { color: var(--down); }
+
+/* ---------- form ---------- */
+
+.spot-root .spot-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.spot-root .spot-pair {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.spot-root .spot-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+}
+
+.spot-root .spot-side-btn {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.spot-root .spot-side-btn.is-buy.is-active {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 60%, transparent);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+}
+
+.spot-root .spot-side-btn.is-sell.is-active {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 60%, transparent);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+}
+
+.spot-root .spot-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.spot-root .spot-label {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.spot-root .spot-amount-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+}
+
+.spot-root .spot-amount-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  text-align: end;
+}
+
+.spot-root .spot-amount-input:focus-visible,
+.spot-root .spot-input:focus-visible,
+.spot-root .spot-search:focus-visible,
+.spot-root .spot-select:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
+
+.spot-root .spot-amount-sym { color: var(--text-2); font-weight: 700; }
+
+.spot-root .spot-input,
+.spot-root .spot-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+
+.spot-root .spot-input.is-invalid { border-color: var(--down); }
+
+.spot-root .spot-pct {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.spot-root .spot-chip {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.spot-root .spot-chip.is-active {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 60%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+}
+
+.spot-root .spot-slip-custom {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.spot-root .spot-slip-input { max-width: 120px; }
+
+.spot-root .spot-quote-field,
+.spot-root .spot-estimate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+
+.spot-root .spot-estimate-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.spot-root .spot-big { font-size: var(--fs-xl); font-weight: 700; color: var(--text-1); word-break: break-all; }
+
+.spot-root .spot-picker-btn,
+.spot-root .spot-asset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---------- notices ---------- */
+
+.spot-root .spot-error {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--down) 55%, transparent);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+}
+
+.spot-root .spot-notice {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+}
+
+.spot-root .spot-notice-line {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  border: 1px solid;
+}
+.spot-root .spot-notice-line.is-warn {
+  color: var(--rgb-5);
+  border-color: color-mix(in srgb, var(--rgb-5) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 10%, transparent);
+}
+.spot-root .spot-notice-line.is-bad {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 60%, transparent);
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+}
+.spot-root .spot-notice-line.is-info {
+  color: var(--rgb-1);
+  border-color: color-mix(in srgb, var(--rgb-1) 50%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
+}
+
+.spot-root .spot-disclaimers {
+  margin: 0;
+  padding-inline-start: var(--sp-4);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+/* ---------- definition lists (review and outcome) ---------- */
+
+.spot-root .spot-dl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.spot-root .spot-dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.spot-root .spot-dl dt { color: var(--text-2); font-size: var(--fs-xs); }
+.spot-root .spot-dl dd { margin: 0; color: var(--text-1); font-size: var(--fs-sm); text-align: end; overflow-wrap: anywhere; }
+
+.spot-root .spot-dl-review { padding-block: var(--sp-2); border-block: 1px solid var(--line); }
+
+.spot-root .spot-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.spot-root .spot-review-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* ---------- buttons ---------- */
+
+.spot-root .spot-btn {
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease, opacity 160ms ease;
+}
+
+.spot-root .spot-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.spot-root .spot-btn-ghost { background: transparent; color: var(--text-2); }
+
+.spot-root .spot-btn-link {
+  min-height: 44px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: transparent;
+  color: var(--rgb-1);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.spot-root .spot-cta-wrap { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.spot-root .spot-cta {
+  width: 100%;
+  min-height: 48px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 800;
+  font-size: var(--fs-md);
+  color: var(--bg-void);
+  cursor: pointer;
+}
+.spot-root .spot-cta.is-buy { background: var(--up); }
+.spot-root .spot-cta.is-sell { background: var(--down); color: var(--text-1); }
+.spot-root .spot-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.spot-root .spot-btn-primary {
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
+  border-color: transparent;
+  color: var(--bg-void);
+}
+
+.spot-root .spot-btn-confirm {
+  background: var(--up);
+  border-color: transparent;
+  color: var(--bg-void);
+}
+
+/* ---------- outcome card ---------- */
+
+.spot-root .spot-outcome { border-inline-start-width: 3px; }
+.spot-root .spot-outcome.is-ok { border-inline-start-color: var(--up); }
+.spot-root .spot-outcome.is-bad { border-inline-start-color: var(--down); }
+.spot-root .spot-outcome.is-warn { border-inline-start-color: var(--rgb-5); }
+.spot-root .spot-outcome.is-busy { border-inline-start-color: var(--rgb-1); }
+.spot-root .spot-outcome.is-muted { border-inline-start-color: var(--line-strong); }
+.spot-root .spot-outcome.is-muted .spot-outcome-head { color: var(--text-2); }
+
+.spot-root .spot-outcome-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.spot-root .spot-outcome.is-ok .spot-outcome-head { color: var(--up); }
+.spot-root .spot-outcome.is-bad .spot-outcome-head { color: var(--down); }
+.spot-root .spot-outcome.is-warn .spot-outcome-head { color: var(--rgb-5); }
+.spot-root .spot-outcome.is-busy .spot-outcome-head { color: var(--rgb-1); }
+
+.spot-root .spot-history { margin-top: var(--sp-2); }
+
+/* ---------- motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .spot-root *,
+  .spot-root *::before,
+  .spot-root *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}

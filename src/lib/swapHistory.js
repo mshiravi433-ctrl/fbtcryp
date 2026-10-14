@@ -66,11 +66,15 @@ export function recordSwap({
   txHash = null,
   status = 'pending',
   at = Date.now(),
-  error = null
+  error = null,
+  source = null
 } = {}) {
   const row = {
     id: `s_${at}_${Math.random().toString(36).slice(2, 8)}`,
     network,
+    /* Which screen placed it: 'spot' for the user-signed spot tab, null for
+       the swap page. Lets the spot tab show only its own orders. */
+    source: source || null,
     chainId: chainId == null ? null : Number(chainId),
     chainName,
     from: from || '',

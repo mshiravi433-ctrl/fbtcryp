@@ -2794,5 +2794,111 @@
       "noRecentProbe": "近期没有此网络专属的成功报价探测",
       "registryNetworkCount": "注册的 {{total}} 个网络中有 {{count}} 个列于路由提供方元数据"
     }
+  },
+  "spot": {
+    "subtitle": "用您自己的钱包兑换代币。每笔交易都由您亲自签名。",
+    "modeLabel": "交易模式",
+    "mode": {
+      "real": "我的钱包",
+      "paper": "模拟（纸面）"
+    },
+    "paperBanner": "试用 — 无真实资金",
+    "market": {
+      "title": "市场",
+      "sheetTitle": "选择代币",
+      "empty": "没有匹配搜索的代币。"
+    },
+    "form": {
+      "title": "兑换"
+    },
+    "network": "网络",
+    "connectCard": {
+      "title": "连接钱包后即可交易",
+      "body": "您现在就能查看价格。连接后可看到余额并签名兑换。私钥始终留在您的钱包中，平台无法看到。"
+    },
+    "wrongNetwork": {
+      "title": "您的钱包在另一个网络上",
+      "body": "您的钱包在 {{wallet}} 上，而此订单在 {{order}} 上。请切换钱包后继续。",
+      "switch": "将钱包切换到 {{network}}"
+    },
+    "side": {
+      "label": "方向",
+      "buy": "买入",
+      "sell": "卖出"
+    },
+    "quoteAsset": "支付方式",
+    "payAmount": "支付金额（{{symbol}}）",
+    "percentLabel": "占余额的比例",
+    "balance": "余额",
+    "balanceUnavailable": "不可用",
+    "receiveEstimate": "预计可得",
+    "platformFee": "平台手续费（{{pct}}%）",
+    "networkFeeUnknown": "报价后才能确定",
+    "route": {
+      "value": "{{from}} → {{to}} · {{hops}} 跳"
+    },
+    "impact": {
+      "title": "价格影响",
+      "warn": "此交易会使价格变动约 {{pct}}%。您可能得到的数量会明显少于报价。",
+      "high": "此交易会使价格变动约 {{pct}}%。请尝试更小的金额。您可能得到的数量会远少于报价。"
+    },
+    "quoteRefreshIn": "{{s}} 秒后更新报价",
+    "quoteExpired": "报价已过期，正在获取新报价",
+    "quoteLoading": "正在获取报价…",
+    "quoteAge": "{{s}} 秒前",
+    "refreshQuote": "刷新报价",
+    "slippageInvalid": "滑点必须在 0.01% 到 5% 之间。",
+    "slippageHigh": "滑点较高：交易可能以差得多的价格成交。",
+    "reviewOrder": "查看订单",
+    "review": {
+      "title": "签名前请确认",
+      "action": "操作",
+      "back": "返回",
+      "confirm": "确认并发送"
+    },
+    "quoteExpiredReview": "此报价已过期。签名前请返回并刷新报价。尚未发送任何内容。",
+    "notice": {
+      "own": "每一步都由您的钱包签名。平台无法转移您的资产。",
+      "price": "在交易被打包前价格可能变动。“最少可得”是您接受的最低数量。",
+      "gas": "网络手续费以该网络的 gas 代币支付，不可退还。"
+    },
+    "status": {
+      "preparing": "正在准备…",
+      "approving": "等待您在钱包中批准…",
+      "approvalSent": "批准已发送，等待确认…",
+      "quoting": "正在检查最新报价…",
+      "signing": "等待您签名…",
+      "pending": "已发送，等待网络确认…",
+      "confirmed": "兑换已确认",
+      "failed": "未完成",
+      "cancelled": "已取消：您在钱包中拒绝了该请求。",
+      "stale": "价格已变动。再次尝试前请查看新报价。"
+    },
+    "err": {
+      "WALLET_NOT_CONNECTED": "请先连接钱包。",
+      "WRONG_NETWORK": "请先将钱包切换到此订单的网络。",
+      "INSUFFICIENT_BALANCE": "余额不足以支付此金额。",
+      "INSUFFICIENT_GAS": "钱包中的网络代币不足以支付手续费。",
+      "QUOTE_EXPIRED": "报价已过期，已请求新报价。签名前请查看。",
+      "SLIPPAGE_EXCEEDED": "价格超出了您设定的滑点上限。请查看新报价后再试。",
+      "SLIPPAGE_INVALID": "滑点必须在 0.01% 到 5% 之间。",
+      "RPC_ERROR": "网络没有响应，请稍后再试。",
+      "NO_ROUTE": "目前找不到此交易对的路线。",
+      "NO_LIQUIDITY": "此金额的流动性不足。",
+      "QUOTE_FAILED": "无法获取报价，请重试。",
+      "QUOTE_NETWORK": "无法连接报价服务，请重试。",
+      "AMOUNT_REQUIRED": "请输入金额。",
+      "INVALID_AMOUNT": "请输入有效的数字。",
+      "AMOUNT_ZERO": "金额必须大于零。",
+      "TOO_MANY_DECIMALS": "此代币最多 {{decimals}} 位小数。",
+      "TX_FAILED": "交易未完成。",
+      "TX_REVERTED": "网络拒绝了该交易。详情请查看浏览器链接。",
+      "USER_REJECTED": "您在钱包中拒绝了该请求。",
+      "PRICE_MOVED": "价格已变动。签名前请查看新报价。",
+      "ROUTE_CHANGED": "路线已变更。签名前请查看新报价。",
+      "CONFIRMATION_TIMEOUT": "网络确认时间较长。请通过浏览器链接查看。",
+      "FEE_NOT_APPLIED": "平台手续费未能应用，因此未发送任何内容。",
+      "FEE_RECIPIENT_MISMATCH": "手续费接收地址不一致，因此未发送任何内容。"
+    }
   }
 }

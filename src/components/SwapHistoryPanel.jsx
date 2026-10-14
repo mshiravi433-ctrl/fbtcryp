@@ -22,7 +22,7 @@ const STATUS_STYLES = {
  * is used for both EVM and Solana swaps, filtered to the current `network` or
  * shown together with `all`.
  */
-export default function SwapHistoryPanel({ network = 'all', limit = 20 }) {
+export default function SwapHistoryPanel({ network = 'all', limit = 20, source = null }) {
   const { t, i18n } = useTranslation();
   const [version, setVersion] = useState(0);
   const [cleared, setCleared] = useState(false);
@@ -31,11 +31,13 @@ export default function SwapHistoryPanel({ network = 'all', limit = 20 }) {
     // version is read only to re-read after a delete/clear.
     void version;
     const all = loadSwapHistory();
-    const filtered = network === 'all'
+    const byNetwork = network === 'all'
       ? all
       : all.filter((r) => r.network === network);
+    // `source` narrows to one screen's orders (e.g. 'spot'); null shows all.
+    const filtered = source ? byNetwork.filter((r) => r.source === source) : byNetwork;
     return filtered.slice(0, limit);
-  }, [network, limit, version]);
+  }, [network, limit, version, source]);
 
   if (!rows.length && !cleared) return null;
 

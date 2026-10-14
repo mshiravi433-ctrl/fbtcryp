@@ -2801,5 +2801,111 @@
       "noRecentProbe": "Aucun succès récent de devis propre à ce réseau",
       "registryNetworkCount": "{{count}} réseaux enregistrés sur {{total}} sont déclarés par les fournisseurs de routage"
     }
+  },
+  "spot": {
+    "subtitle": "Échangez des tokens depuis votre propre portefeuille. Chaque transaction est signée par vous.",
+    "modeLabel": "Mode de trading",
+    "mode": {
+      "real": "Mon portefeuille",
+      "paper": "Essai (papier)"
+    },
+    "paperBanner": "Essai — aucun argent réel",
+    "market": {
+      "title": "Marché",
+      "sheetTitle": "Choisir un token",
+      "empty": "Aucun token ne correspond à votre recherche."
+    },
+    "form": {
+      "title": "Échanger"
+    },
+    "network": "Réseau",
+    "connectCard": {
+      "title": "Connectez votre portefeuille pour trader",
+      "body": "Vous pouvez déjà voir les prix. En connectant votre portefeuille, vous voyez vos soldes et signez l’échange. Vos clés restent dans votre portefeuille ; la plateforme ne les voit jamais."
+    },
+    "wrongNetwork": {
+      "title": "Votre portefeuille est sur un autre réseau",
+      "body": "Votre portefeuille est sur {{wallet}}, mais cet ordre est sur {{order}}. Changez de réseau dans votre portefeuille pour continuer.",
+      "switch": "Passer le portefeuille sur {{network}}"
+    },
+    "side": {
+      "label": "Sens",
+      "buy": "Acheter",
+      "sell": "Vendre"
+    },
+    "quoteAsset": "Payer avec",
+    "payAmount": "Montant à payer ({{symbol}})",
+    "percentLabel": "Part de votre solde",
+    "balance": "Solde",
+    "balanceUnavailable": "indisponible",
+    "receiveEstimate": "Vous recevez environ",
+    "platformFee": "Frais de la plateforme ({{pct}} %)",
+    "networkFeeUnknown": "Connu après le devis",
+    "route": {
+      "value": "{{from}} → {{to}} · {{hops}} saut(s)"
+    },
+    "impact": {
+      "title": "Impact sur le prix",
+      "warn": "Cette opération fait bouger le prix d’environ {{pct}} %. Vous pourriez recevoir nettement moins que le devis.",
+      "high": "Cette opération fait bouger le prix d’environ {{pct}} %. Essayez un montant plus petit. Vous pourriez recevoir beaucoup moins que le devis."
+    },
+    "quoteRefreshIn": "Nouveau devis dans {{s}} s",
+    "quoteExpired": "Devis expiré ; nouveau devis en cours",
+    "quoteLoading": "Récupération du devis…",
+    "quoteAge": "il y a {{s}} s",
+    "refreshQuote": "Actualiser le devis",
+    "slippageInvalid": "La tolérance doit être comprise entre 0,01 % et 5 %.",
+    "slippageHigh": "Tolérance élevée : l’opération pourrait se faire à un prix bien moins bon.",
+    "reviewOrder": "Voir l’ordre",
+    "review": {
+      "title": "Vérifier avant de signer",
+      "action": "Action",
+      "back": "Retour",
+      "confirm": "Confirmer et envoyer"
+    },
+    "quoteExpiredReview": "Ce devis a expiré. Revenez en arrière et actualisez-le avant de signer. Rien n’a encore été envoyé.",
+    "notice": {
+      "own": "Votre portefeuille signe chaque étape. La plateforme ne peut pas déplacer vos fonds.",
+      "price": "Le prix peut bouger avant l’inclusion de l’opération. Le « minimum reçu » est le montant le plus bas que vous acceptez.",
+      "gas": "Les frais de réseau sont payés dans la monnaie de gas du réseau et ne sont pas remboursables."
+    },
+    "status": {
+      "preparing": "Préparation…",
+      "approving": "En attente de l’approbation dans votre portefeuille…",
+      "approvalSent": "Approbation envoyée ; en attente de confirmation…",
+      "quoting": "Vérification du dernier devis…",
+      "signing": "En attente de votre signature…",
+      "pending": "Envoyé ; en attente du réseau…",
+      "confirmed": "Échange confirmé",
+      "failed": "Non abouti",
+      "cancelled": "Annulé : vous l’avez refusé dans votre portefeuille.",
+      "stale": "Le prix a changé. Vérifiez le nouveau devis avant de réessayer."
+    },
+    "err": {
+      "WALLET_NOT_CONNECTED": "Connectez d’abord votre portefeuille.",
+      "WRONG_NETWORK": "Passez d’abord votre portefeuille sur le réseau de cet ordre.",
+      "INSUFFICIENT_BALANCE": "Votre solde est insuffisant pour ce montant.",
+      "INSUFFICIENT_GAS": "Votre portefeuille manque de monnaie du réseau pour payer les frais.",
+      "QUOTE_EXPIRED": "Le devis a expiré ; un nouveau a été demandé. Vérifiez-le avant de signer.",
+      "SLIPPAGE_EXCEEDED": "Le prix a dépassé votre limite de tolérance. Vérifiez un nouveau devis et réessayez.",
+      "SLIPPAGE_INVALID": "La tolérance doit être comprise entre 0,01 % et 5 %.",
+      "RPC_ERROR": "Le réseau n’a pas répondu. Réessayez dans un instant.",
+      "NO_ROUTE": "Aucun itinéraire pour cette paire pour l’instant.",
+      "NO_LIQUIDITY": "Liquidité insuffisante pour ce montant.",
+      "QUOTE_FAILED": "Impossible d’obtenir le devis. Réessayez.",
+      "QUOTE_NETWORK": "Impossible de joindre le service de devis. Réessayez.",
+      "AMOUNT_REQUIRED": "Saisissez un montant.",
+      "INVALID_AMOUNT": "Saisissez un nombre valide.",
+      "AMOUNT_ZERO": "Le montant doit être supérieur à zéro.",
+      "TOO_MANY_DECIMALS": "Ce token accepte au maximum {{decimals}} décimales.",
+      "TX_FAILED": "La transaction n’a pas abouti.",
+      "TX_REVERTED": "Le réseau a rejeté la transaction. Consultez le lien de l’explorateur pour les détails.",
+      "USER_REJECTED": "Vous l’avez refusé dans votre portefeuille.",
+      "PRICE_MOVED": "Le prix a changé. Vérifiez le nouveau devis avant de signer.",
+      "ROUTE_CHANGED": "L’itinéraire a changé. Vérifiez le nouveau devis avant de signer.",
+      "CONFIRMATION_TIMEOUT": "La confirmation du réseau tarde. Consultez le lien de l’explorateur.",
+      "FEE_NOT_APPLIED": "Les frais de la plateforme n’ont pas pu être appliqués ; rien n’a été envoyé.",
+      "FEE_RECIPIENT_MISMATCH": "La destination des frais ne correspond pas ; rien n’a été envoyé."
+    }
   }
 }

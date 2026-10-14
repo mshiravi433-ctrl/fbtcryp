@@ -2801,5 +2801,111 @@
       "noRecentProbe": "Bu ağa özgü yakın tarihli başarılı bir fiyat teklifi sorgusu yok",
       "registryNetworkCount": "Kayıtlı {{total}} ağın {{count}} tanesi yönlendirme sağlayıcılarının metaverisinde listeleniyor"
     }
+  },
+  "spot": {
+    "subtitle": "Tokenleri kendi cüzdanınızdan takas edin. Her işlemi yalnızca siz imzalarsınız.",
+    "modeLabel": "İşlem modu",
+    "mode": {
+      "real": "Cüzdanım",
+      "paper": "Deneme (kağıt)"
+    },
+    "paperBanner": "Deneme — gerçek para yok",
+    "market": {
+      "title": "Piyasa",
+      "sheetTitle": "Bir token seçin",
+      "empty": "Aramanızla eşleşen token yok."
+    },
+    "form": {
+      "title": "Takas"
+    },
+    "network": "Ağ",
+    "connectCard": {
+      "title": "İşlem yapmak için cüzdanınızı bağlayın",
+      "body": "Fiyatları şimdiden görebilirsiniz. Bağlandığınızda bakiyelerinizi görür ve takası imzalayabilirsiniz. Anahtarlarınız cüzdanınızda kalır; platform bunları asla görmez."
+    },
+    "wrongNetwork": {
+      "title": "Cüzdanınız başka bir ağda",
+      "body": "Cüzdanınız {{wallet}} üzerinde, bu emir ise {{order}} üzerinde. Cüzdanınızın ağını değiştirip devam edin.",
+      "switch": "Cüzdanı {{network}} ağına geçir"
+    },
+    "side": {
+      "label": "Yön",
+      "buy": "Al",
+      "sell": "Sat"
+    },
+    "quoteAsset": "Ödeme",
+    "payAmount": "Ödenecek miktar ({{symbol}})",
+    "percentLabel": "Bakiyenizin payı",
+    "balance": "Bakiye",
+    "balanceUnavailable": "kullanılamıyor",
+    "receiveEstimate": "Yaklaşık alacağınız",
+    "platformFee": "Platform ücreti (%{{pct}})",
+    "networkFeeUnknown": "Fiyat alındıktan sonra belli olur",
+    "route": {
+      "value": "{{from}} → {{to}} · {{hops}} adım"
+    },
+    "impact": {
+      "title": "Fiyat etkisi",
+      "warn": "Bu işlem fiyatı yaklaşık %{{pct}} oynatır. Tekliften belirgin biçimde daha az alabilirsiniz.",
+      "high": "Bu işlem fiyatı yaklaşık %{{pct}} oynatır. Daha küçük bir miktar deneyin. Tekliften çok daha az alabilirsiniz."
+    },
+    "quoteRefreshIn": "Yeni teklif {{s}} sn içinde",
+    "quoteExpired": "Teklifin süresi doldu; yenisi alınıyor",
+    "quoteLoading": "Teklif alınıyor…",
+    "quoteAge": "{{s}} sn önce",
+    "refreshQuote": "Teklifi yenile",
+    "slippageInvalid": "Kayma %0,01 ile %5 arasında olmalı.",
+    "slippageHigh": "Yüksek kayma: işlem çok daha kötü bir fiyatla gerçekleşebilir.",
+    "reviewOrder": "Emri gözden geçir",
+    "review": {
+      "title": "İmzalamadan önce kontrol edin",
+      "action": "İşlem",
+      "back": "Geri",
+      "confirm": "Onayla ve gönder"
+    },
+    "quoteExpiredReview": "Bu teklifin süresi doldu. İmzalamadan önce geri dönüp yenileyin. Henüz hiçbir şey gönderilmedi.",
+    "notice": {
+      "own": "Her adımı cüzdanınız imzalar. Platform varlıklarınızı hareket ettiremez.",
+      "price": "İşlem dahil edilmeden önce fiyat değişebilir. “Alınacak en az miktar”, kabul edeceğiniz en düşük tutardır.",
+      "gas": "Ağ ücretleri ağın gaz parasıyla ödenir ve iade edilmez."
+    },
+    "status": {
+      "preparing": "Hazırlanıyor…",
+      "approving": "Cüzdanınızda onay bekleniyor…",
+      "approvalSent": "Onay gönderildi; teyit bekleniyor…",
+      "quoting": "Son teklif kontrol ediliyor…",
+      "signing": "İmzanız bekleniyor…",
+      "pending": "Gönderildi; ağ bekleniyor…",
+      "confirmed": "Takas onaylandı",
+      "failed": "Tamamlanamadı",
+      "cancelled": "İptal edildi: cüzdanınızda reddettiniz.",
+      "stale": "Fiyat değişti. Tekrar denemeden önce yeni teklifi kontrol edin."
+    },
+    "err": {
+      "WALLET_NOT_CONNECTED": "Önce cüzdanınızı bağlayın.",
+      "WRONG_NETWORK": "Önce cüzdanınızı bu emrin ağına geçirin.",
+      "INSUFFICIENT_BALANCE": "Bakiyeniz bu miktar için yetersiz.",
+      "INSUFFICIENT_GAS": "Cüzdanınızda ücreti ödemek için yeterli ağ parası yok.",
+      "QUOTE_EXPIRED": "Teklifin süresi doldu; yenisi istendi. İmzalamadan önce kontrol edin.",
+      "SLIPPAGE_EXCEEDED": "Fiyat kayma sınırınızı aştı. Yeni bir teklife bakıp tekrar deneyin.",
+      "SLIPPAGE_INVALID": "Kayma %0,01 ile %5 arasında olmalı.",
+      "RPC_ERROR": "Ağ yanıt vermedi. Biraz sonra tekrar deneyin.",
+      "NO_ROUTE": "Bu çift için şu anda rota bulunamadı.",
+      "NO_LIQUIDITY": "Bu miktar için yeterli likidite yok.",
+      "QUOTE_FAILED": "Teklif alınamadı. Tekrar deneyin.",
+      "QUOTE_NETWORK": "Teklif servisine ulaşılamadı. Tekrar deneyin.",
+      "AMOUNT_REQUIRED": "Bir miktar girin.",
+      "INVALID_AMOUNT": "Geçerli bir sayı girin.",
+      "AMOUNT_ZERO": "Miktar sıfırdan büyük olmalı.",
+      "TOO_MANY_DECIMALS": "Bu token en fazla {{decimals}} ondalık basamak destekler.",
+      "TX_FAILED": "İşlem tamamlanamadı.",
+      "TX_REVERTED": "Ağ işlemi reddetti. Ayrıntılar için gezgin bağlantısına bakın.",
+      "USER_REJECTED": "Cüzdanınızda reddettiniz.",
+      "PRICE_MOVED": "Fiyat değişti. İmzalamadan önce yeni teklifi kontrol edin.",
+      "ROUTE_CHANGED": "Rota değişti. İmzalamadan önce yeni teklifi kontrol edin.",
+      "CONFIRMATION_TIMEOUT": "Ağın onayı uzun sürüyor. Gezgin bağlantısından kontrol edin.",
+      "FEE_NOT_APPLIED": "Platform ücreti uygulanamadı, bu yüzden hiçbir şey gönderilmedi.",
+      "FEE_RECIPIENT_MISMATCH": "Ücret alıcısı eşleşmedi, bu yüzden hiçbir şey gönderilmedi."
+    }
   }
 }

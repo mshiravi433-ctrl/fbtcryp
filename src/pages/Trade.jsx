@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -18,7 +18,13 @@ import '../styles/lab-modern.css';
 const FEE = 0.001; // 0.1% simulated taker fee
 const PERCENTS = [25, 50, 75, 100];
 
-export default function Trade() {
+/*
+ * `embedded` is the paper-trading mode inside the spot tab (components/spot).
+ * The standalone /trade page is unchanged: when embedded it drops its own
+ * header, its market tabs and the URL sync, because the host screen owns
+ * those. Nothing about the paper maths changes.
+ */
+export default function Trade({ embedded = false } = {}) {
   // Subscribe so the figures re-render the moment the switch moves;
   // the masking itself lives in the formatters.
   useHideBalances();
@@ -42,6 +48,7 @@ export default function Trade() {
   const [pickerQuery, setPickerQuery] = useState('');
 
   useEffect(() => {
+    if (embedded) return;
     const next = new URLSearchParams(params);
     next.set('coin', coinId);
     next.set('side', side);
@@ -97,20 +104,26 @@ export default function Trade() {
 
   const coinUp = (coin?.change24h ?? 0) >= 0;
 
+  // A plain fragment when embedded: the host page already provides the shell.
+  const Frame = embedded ? Fragment : PageTransition;
   return (
-    <PageTransition>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t('trade.title')}</h1>
-        <p className="muted">{t('trade.subtitle')}</p>
-      </motion.div>
+    <Frame>
+      {!embedded && (
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <h1 className="h1">{t('trade.title')}</h1>
+          <p className="muted">{t('trade.subtitle')}</p>
+        </motion.div>
+      )}
 
       {/* market-type switcher: spot (here), perpetuals, prediction */}
-      <div className="tag-scroll" style={{ marginTop: 8 }}>
-        <button className="tag active">{t('trade.spot')}</button>
-        <button className="tag" onClick={() => navigate('/perp')}>{t('nav.perp')}</button>
-        <button className="tag" onClick={() => navigate('/predict')}>{t('nav.predict')}</button>
-        <button className="tag" onClick={() => navigate('/swap')}>{t('nav.swap')}</button>
-      </div>
+      {!embedded && (
+        <div className="tag-scroll" style={{ marginTop: 8 }}>
+          <button className="tag active">{t('trade.spot')}</button>
+          <button className="tag" onClick={() => navigate('/perp')}>{t('nav.perp')}</button>
+          <button className="tag" onClick={() => navigate('/predict')}>{t('nav.predict')}</button>
+          <button className="tag" onClick={() => navigate('/swap')}>{t('nav.swap')}</button>
+        </div>
+      )}
 
       <p className="notice">{t('trade.paperNotice')}</p>
 
@@ -374,6 +387,6 @@ export default function Trade() {
           </button>
         </div>
       </Sheet>
-    </PageTransition>
+    </Frame>
   );
 }

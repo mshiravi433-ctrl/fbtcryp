@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useTelegram } from '../context/TelegramContext';
-import { SPECULATION_ENABLED } from '../lib/features';
+import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
 import { useStill } from './AnimatedIcon';
 import {
   IconActivity,
@@ -105,6 +105,15 @@ const GROUPS = [
        * because it is a destination people arrive wanting, not a setting they
        * go hunting for.
        */
+      /*
+       * The spot tab, in the build where the futures screens are absent (its
+       * own entry, because /perp is not in this build). Where speculation is on,
+       * the same tab sits in the Futures rail instead, so there is no duplicate.
+       * /trade redirects to the spot tab whenever the spot flag is on.
+       */
+      ...(SPOT_TRADE_ENABLED && !SPECULATION_ENABLED
+        ? [{ to: '/trade', key: 'nav.trade', Icon: IconSwap, hue: 'var(--rgb-4)' }]
+        : []),
       { to: '/shop', key: 'nav.shop', Icon: IconBriefcase, hue: 'var(--rgb-9)' },
       { to: '/buy', key: 'nav.buy', Icon: IconSwap, hue: 'var(--rgb-4)' },
       /* Cross-chain. Sits next to Swap because that is the question it

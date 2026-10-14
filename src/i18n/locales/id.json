@@ -2801,5 +2801,111 @@
       "noRecentProbe": "Belum ada keberhasilan kuotasi khusus jaringan ini baru-baru ini",
       "registryNetworkCount": "{{count}} dari {{total}} jaringan terdaftar tercantum dalam metadata penyedia perutean"
     }
+  },
+  "spot": {
+    "subtitle": "Tukar token dari dompet Anda sendiri. Setiap transaksi ditandatangani oleh Anda.",
+    "modeLabel": "Mode perdagangan",
+    "mode": {
+      "real": "Dompet saya",
+      "paper": "Uji coba (kertas)"
+    },
+    "paperBanner": "Uji coba — tanpa uang sungguhan",
+    "market": {
+      "title": "Pasar",
+      "sheetTitle": "Pilih token",
+      "empty": "Tidak ada token yang cocok dengan pencarian Anda."
+    },
+    "form": {
+      "title": "Tukar"
+    },
+    "network": "Jaringan",
+    "connectCard": {
+      "title": "Hubungkan dompet untuk berdagang",
+      "body": "Anda sudah bisa melihat harga. Setelah terhubung, Anda bisa melihat saldo dan menandatangani tukar. Kunci Anda tetap di dompet; platform tidak pernah melihatnya."
+    },
+    "wrongNetwork": {
+      "title": "Dompet Anda ada di jaringan lain",
+      "body": "Dompet Anda ada di {{wallet}}, sedangkan order ini di {{order}}. Ganti jaringan dompet, lalu lanjutkan.",
+      "switch": "Ganti dompet ke {{network}}"
+    },
+    "side": {
+      "label": "Arah",
+      "buy": "Beli",
+      "sell": "Jual"
+    },
+    "quoteAsset": "Bayar dengan",
+    "payAmount": "Jumlah dibayar ({{symbol}})",
+    "percentLabel": "Bagian dari saldo",
+    "balance": "Saldo",
+    "balanceUnavailable": "tidak tersedia",
+    "receiveEstimate": "Perkiraan diterima",
+    "platformFee": "Biaya platform ({{pct}}%)",
+    "networkFeeUnknown": "Diketahui setelah kutipan",
+    "route": {
+      "value": "{{from}} → {{to}} · {{hops}} lompatan"
+    },
+    "impact": {
+      "title": "Dampak harga",
+      "warn": "Transaksi ini menggerakkan harga sekitar {{pct}}%. Anda bisa menerima jauh lebih sedikit dari kutipan.",
+      "high": "Transaksi ini menggerakkan harga sekitar {{pct}}%. Coba jumlah yang lebih kecil. Anda bisa menerima jauh lebih sedikit dari kutipan."
+    },
+    "quoteRefreshIn": "Kutipan baru dalam {{s}} dtk",
+    "quoteExpired": "Kutipan kedaluwarsa; mengambil yang baru",
+    "quoteLoading": "Mengambil kutipan…",
+    "quoteAge": "{{s}} dtk lalu",
+    "refreshQuote": "Segarkan kutipan",
+    "slippageInvalid": "Slippage harus antara 0,01% dan 5%.",
+    "slippageHigh": "Slippage tinggi: transaksi bisa terjadi di harga yang jauh lebih buruk.",
+    "reviewOrder": "Tinjau order",
+    "review": {
+      "title": "Periksa sebelum menandatangani",
+      "action": "Tindakan",
+      "back": "Kembali",
+      "confirm": "Konfirmasi dan kirim"
+    },
+    "quoteExpiredReview": "Kutipan ini kedaluwarsa. Kembali dan segarkan sebelum menandatangani. Belum ada yang dikirim.",
+    "notice": {
+      "own": "Dompet Anda menandatangani setiap langkah. Platform tidak dapat memindahkan dana Anda.",
+      "price": "Harga bisa berubah sebelum transaksi masuk ke blok. \"Minimum diterima\" adalah jumlah terendah yang Anda terima.",
+      "gas": "Biaya jaringan dibayar dengan koin gas jaringan dan tidak dapat dikembalikan."
+    },
+    "status": {
+      "preparing": "Menyiapkan…",
+      "approving": "Menunggu persetujuan di dompet…",
+      "approvalSent": "Persetujuan terkirim; menunggu konfirmasi…",
+      "quoting": "Memeriksa kutipan terbaru…",
+      "signing": "Menunggu tanda tangan Anda…",
+      "pending": "Terkirim; menunggu jaringan…",
+      "confirmed": "Tukar dikonfirmasi",
+      "failed": "Tidak selesai",
+      "cancelled": "Dibatalkan: Anda menolaknya di dompet.",
+      "stale": "Harga berubah. Tinjau kutipan baru sebelum mencoba lagi."
+    },
+    "err": {
+      "WALLET_NOT_CONNECTED": "Hubungkan dompet Anda terlebih dahulu.",
+      "WRONG_NETWORK": "Ganti dompet ke jaringan order ini terlebih dahulu.",
+      "INSUFFICIENT_BALANCE": "Saldo Anda tidak cukup untuk jumlah ini.",
+      "INSUFFICIENT_GAS": "Koin jaringan di dompet Anda terlalu sedikit untuk membayar biaya.",
+      "QUOTE_EXPIRED": "Kutipan kedaluwarsa; kutipan baru diminta. Tinjau sebelum menandatangani.",
+      "SLIPPAGE_EXCEEDED": "Harga melewati batas slippage Anda. Tinjau kutipan baru lalu coba lagi.",
+      "SLIPPAGE_INVALID": "Slippage harus antara 0,01% dan 5%.",
+      "RPC_ERROR": "Jaringan tidak merespons. Coba lagi sebentar lagi.",
+      "NO_ROUTE": "Belum ada rute untuk pasangan ini saat ini.",
+      "NO_LIQUIDITY": "Likuiditas tidak cukup untuk jumlah ini.",
+      "QUOTE_FAILED": "Gagal mendapatkan kutipan. Coba lagi.",
+      "QUOTE_NETWORK": "Tidak dapat menjangkau layanan kutipan. Coba lagi.",
+      "AMOUNT_REQUIRED": "Masukkan jumlah.",
+      "INVALID_AMOUNT": "Masukkan angka yang valid.",
+      "AMOUNT_ZERO": "Jumlah harus lebih dari nol.",
+      "TOO_MANY_DECIMALS": "Token ini mendukung paling banyak {{decimals}} desimal.",
+      "TX_FAILED": "Transaksi tidak selesai.",
+      "TX_REVERTED": "Jaringan menolak transaksi. Lihat tautan penjelajah untuk detailnya.",
+      "USER_REJECTED": "Anda menolaknya di dompet.",
+      "PRICE_MOVED": "Harga berubah. Tinjau kutipan baru sebelum menandatangani.",
+      "ROUTE_CHANGED": "Rute berubah. Tinjau kutipan baru sebelum menandatangani.",
+      "CONFIRMATION_TIMEOUT": "Jaringan butuh waktu lama untuk konfirmasi. Cek lewat tautan penjelajah.",
+      "FEE_NOT_APPLIED": "Biaya platform tidak dapat diterapkan, sehingga tidak ada yang dikirim.",
+      "FEE_RECIPIENT_MISMATCH": "Tujuan biaya tidak cocok, sehingga tidak ada yang dikirim."
+    }
   }
 }

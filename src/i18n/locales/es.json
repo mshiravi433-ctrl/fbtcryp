@@ -2801,5 +2801,111 @@
       "noRecentProbe": "Sin una prueba reciente de cotización específica de esta red",
       "registryNetworkCount": "{{count}} de {{total}} redes registradas aparecen en los metadatos de los proveedores"
     }
+  },
+  "spot": {
+    "subtitle": "Intercambia tokens desde tu propia cartera. Cada transacción la firmas tú.",
+    "modeLabel": "Modo de operación",
+    "mode": {
+      "real": "Mi cartera",
+      "paper": "Prueba (papel)"
+    },
+    "paperBanner": "Prueba — sin dinero real",
+    "market": {
+      "title": "Mercado",
+      "sheetTitle": "Elige un token",
+      "empty": "Ningún token coincide con tu búsqueda."
+    },
+    "form": {
+      "title": "Intercambiar"
+    },
+    "network": "Red",
+    "connectCard": {
+      "title": "Conecta tu cartera para operar",
+      "body": "Ya puedes ver los precios. Al conectar, verás tus saldos y podrás firmar un intercambio. Tus claves se quedan en tu cartera; la plataforma nunca las ve."
+    },
+    "wrongNetwork": {
+      "title": "Tu cartera está en otra red",
+      "body": "Tu cartera está en {{wallet}}, pero esta orden es en {{order}}. Cambia la red de tu cartera y continúa.",
+      "switch": "Cambiar la cartera a {{network}}"
+    },
+    "side": {
+      "label": "Dirección",
+      "buy": "Comprar",
+      "sell": "Vender"
+    },
+    "quoteAsset": "Pagar con",
+    "payAmount": "Cantidad a pagar ({{symbol}})",
+    "percentLabel": "Parte de tu saldo",
+    "balance": "Saldo",
+    "balanceUnavailable": "no disponible",
+    "receiveEstimate": "Recibirás aprox.",
+    "platformFee": "Comisión de la plataforma ({{pct}} %)",
+    "networkFeeUnknown": "Se conocerá al cotizar",
+    "route": {
+      "value": "{{from}} → {{to}} · {{hops}} salto(s)"
+    },
+    "impact": {
+      "title": "Impacto en el precio",
+      "warn": "Esta operación mueve el precio unos {{pct}} %. Podrías recibir bastante menos que la cotización.",
+      "high": "Esta operación mueve el precio unos {{pct}} %. Prueba con una cantidad menor. Podrías recibir mucho menos que la cotización."
+    },
+    "quoteRefreshIn": "Nueva cotización en {{s}} s",
+    "quoteExpired": "La cotización caducó; pidiendo una nueva",
+    "quoteLoading": "Obteniendo cotización…",
+    "quoteAge": "hace {{s}} s",
+    "refreshQuote": "Actualizar cotización",
+    "slippageInvalid": "La tolerancia debe estar entre 0,01 % y 5 %.",
+    "slippageHigh": "Tolerancia alta: la operación podría ejecutarse a un precio mucho peor.",
+    "reviewOrder": "Revisar orden",
+    "review": {
+      "title": "Revisa antes de firmar",
+      "action": "Acción",
+      "back": "Volver",
+      "confirm": "Confirmar y enviar"
+    },
+    "quoteExpiredReview": "Esta cotización caducó. Vuelve atrás y actualízala antes de firmar. Aún no se ha enviado nada.",
+    "notice": {
+      "own": "Tu cartera firma cada paso. La plataforma no puede mover tus fondos.",
+      "price": "El precio puede cambiar antes de que la operación se incluya. El “mínimo recibido” es lo menos que aceptarás.",
+      "gas": "Las comisiones de red se pagan en la moneda de gas de la red y no son reembolsables."
+    },
+    "status": {
+      "preparing": "Preparando…",
+      "approving": "Esperando la aprobación en tu cartera…",
+      "approvalSent": "Aprobación enviada; esperando confirmación…",
+      "quoting": "Revisando la cotización más reciente…",
+      "signing": "Esperando tu firma…",
+      "pending": "Enviado; esperando a la red…",
+      "confirmed": "Intercambio confirmado",
+      "failed": "No completado",
+      "cancelled": "Cancelado: lo rechazaste en tu cartera.",
+      "stale": "El precio cambió. Revisa la nueva cotización antes de volver a intentar."
+    },
+    "err": {
+      "WALLET_NOT_CONNECTED": "Conecta primero tu cartera.",
+      "WRONG_NETWORK": "Cambia primero tu cartera a la red de esta orden.",
+      "INSUFFICIENT_BALANCE": "Tu saldo no alcanza para esta cantidad.",
+      "INSUFFICIENT_GAS": "Tu cartera tiene muy poca moneda de la red para pagar la comisión.",
+      "QUOTE_EXPIRED": "La cotización caducó y se pidió una nueva. Revísala antes de firmar.",
+      "SLIPPAGE_EXCEEDED": "El precio superó tu límite de tolerancia. Revisa una cotización nueva e inténtalo de nuevo.",
+      "SLIPPAGE_INVALID": "La tolerancia debe estar entre 0,01 % y 5 %.",
+      "RPC_ERROR": "La red no respondió. Inténtalo de nuevo en un momento.",
+      "NO_ROUTE": "Ahora mismo no hay ruta para este par.",
+      "NO_LIQUIDITY": "No hay liquidez suficiente para esta cantidad.",
+      "QUOTE_FAILED": "No se pudo obtener la cotización. Inténtalo de nuevo.",
+      "QUOTE_NETWORK": "No se pudo conectar con el servicio de cotización. Inténtalo de nuevo.",
+      "AMOUNT_REQUIRED": "Introduce una cantidad.",
+      "INVALID_AMOUNT": "Introduce un número válido.",
+      "AMOUNT_ZERO": "La cantidad debe ser mayor que cero.",
+      "TOO_MANY_DECIMALS": "Este token admite como máximo {{decimals}} decimales.",
+      "TX_FAILED": "La transacción no se completó.",
+      "TX_REVERTED": "La red rechazó la transacción. Revisa el enlace del explorador para ver los detalles.",
+      "USER_REJECTED": "Lo rechazaste en tu cartera.",
+      "PRICE_MOVED": "El precio cambió. Revisa la nueva cotización antes de firmar.",
+      "ROUTE_CHANGED": "La ruta cambió. Revisa la nueva cotización antes de firmar.",
+      "CONFIRMATION_TIMEOUT": "La red tarda en confirmar. Revisa el enlace del explorador.",
+      "FEE_NOT_APPLIED": "No se pudo aplicar la comisión de la plataforma, así que no se envió nada.",
+      "FEE_RECIPIENT_MISMATCH": "El destino de la comisión no coincide, así que no se envió nada."
+    }
   }
 }

@@ -14624,5 +14624,111 @@
     "day": "24h",
     "chartTitle": "Price chart — {{days}} days",
     "windowFallback": "A full 90-day series is not available for this ticker yet; the nearest real window — {{days}} days — is shown instead."
+  },
+  "spot": {
+    "subtitle": "Swap tokens from your own wallet. You sign every transaction.",
+    "modeLabel": "Trade mode",
+    "mode": {
+      "real": "My wallet",
+      "paper": "Trial (paper)"
+    },
+    "paperBanner": "Trial — no real money",
+    "market": {
+      "title": "Market",
+      "sheetTitle": "Choose a token",
+      "empty": "No token matches your search."
+    },
+    "form": {
+      "title": "Swap"
+    },
+    "network": "Network",
+    "connectCard": {
+      "title": "Connect your wallet to trade",
+      "body": "You can see prices now. Connecting shows your balances and lets you sign a swap. Your keys stay in your wallet; the platform never sees them."
+    },
+    "wrongNetwork": {
+      "title": "Your wallet is on another network",
+      "body": "Your wallet is on {{wallet}}, but this order is on {{order}}. Switch your wallet, then continue.",
+      "switch": "Switch wallet to {{network}}"
+    },
+    "side": {
+      "label": "Direction",
+      "buy": "Buy",
+      "sell": "Sell"
+    },
+    "quoteAsset": "Pay with",
+    "payAmount": "Amount to pay ({{symbol}})",
+    "percentLabel": "Share of your balance",
+    "balance": "Balance",
+    "balanceUnavailable": "unavailable",
+    "receiveEstimate": "You receive about",
+    "platformFee": "Platform fee ({{pct}}%)",
+    "networkFeeUnknown": "Known after quoting",
+    "route": {
+      "value": "{{from}} → {{to}} · {{hops}} hop(s)"
+    },
+    "impact": {
+      "title": "Price impact",
+      "warn": "This trade moves the price by about {{pct}}%. You may receive noticeably less than the quoted price.",
+      "high": "This trade moves the price by about {{pct}}%. Try a smaller amount. You may receive much less than the quoted price."
+    },
+    "quoteRefreshIn": "New quote in {{s}}s",
+    "quoteExpired": "Quote expired — getting a new one",
+    "quoteLoading": "Getting a quote…",
+    "quoteAge": "{{s}}s ago",
+    "refreshQuote": "Refresh quote",
+    "slippageInvalid": "Slippage must be between 0.01% and 5%.",
+    "slippageHigh": "High slippage: the trade may execute at a much worse price.",
+    "reviewOrder": "Review order",
+    "review": {
+      "title": "Review before you sign",
+      "action": "Action",
+      "back": "Back",
+      "confirm": "Confirm and send"
+    },
+    "quoteExpiredReview": "This quote has expired. Go back and refresh it before you sign. Nothing has been sent.",
+    "notice": {
+      "own": "Your wallet signs every step. The platform cannot move your funds.",
+      "price": "The price can change before your trade is included. The minimum received is the lowest amount you will accept.",
+      "gas": "Network fees are paid in the network’s gas coin and are not refundable."
+    },
+    "status": {
+      "preparing": "Preparing…",
+      "approving": "Waiting for approval in your wallet…",
+      "approvalSent": "Approval sent. Waiting for confirmation…",
+      "quoting": "Checking the latest quote…",
+      "signing": "Waiting for your signature…",
+      "pending": "Sent. Waiting for the network…",
+      "confirmed": "Swap confirmed",
+      "failed": "Not completed",
+      "cancelled": "Cancelled: you rejected it in your wallet.",
+      "stale": "The price changed. Review the new quote before trying again."
+    },
+    "err": {
+      "WALLET_NOT_CONNECTED": "Connect your wallet first.",
+      "WRONG_NETWORK": "Switch your wallet to this order’s network first.",
+      "INSUFFICIENT_BALANCE": "Your balance is too low for this amount.",
+      "INSUFFICIENT_GAS": "Your wallet has too little network coin to pay the fee.",
+      "QUOTE_EXPIRED": "The quote expired and a new one was requested. Review it before signing.",
+      "SLIPPAGE_EXCEEDED": "The price moved beyond your slippage limit. Review a fresh quote and try again.",
+      "SLIPPAGE_INVALID": "Slippage must be between 0.01% and 5%.",
+      "RPC_ERROR": "The network did not answer. Try again in a moment.",
+      "NO_ROUTE": "No route was found for this pair right now.",
+      "NO_LIQUIDITY": "There is not enough liquidity for this amount.",
+      "QUOTE_FAILED": "Could not get a quote. Try again.",
+      "QUOTE_NETWORK": "Could not reach the quote service. Try again.",
+      "AMOUNT_REQUIRED": "Enter an amount.",
+      "INVALID_AMOUNT": "Enter a valid number.",
+      "AMOUNT_ZERO": "The amount must be more than zero.",
+      "TOO_MANY_DECIMALS": "This token allows at most {{decimals}} decimal places.",
+      "TX_FAILED": "The transaction did not complete.",
+      "TX_REVERTED": "The network rejected the transaction. See the explorer link for details.",
+      "USER_REJECTED": "You rejected it in your wallet.",
+      "PRICE_MOVED": "The price moved. Review the new quote before signing.",
+      "ROUTE_CHANGED": "The route changed. Review the new quote before signing.",
+      "CONFIRMATION_TIMEOUT": "The network is taking a long time to confirm. Check the explorer link.",
+      "FEE_NOT_APPLIED": "The platform fee could not be applied, so nothing was sent.",
+      "FEE_RECIPIENT_MISMATCH": "The fee recipient did not match, so nothing was sent."
+    }
   }
 }
