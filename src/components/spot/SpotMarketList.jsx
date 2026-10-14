@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import TokenIcon from '../../lib/tokenIcon';
+import AssetIcon from '../AssetIcon';
 import { balancesHidden, fmtUsd } from '../../lib/format';
 
 /**
@@ -12,6 +12,10 @@ import { balancesHidden, fmtUsd } from '../../lib/format';
  *     read failed, never zero.
  * Direction is always written out with its arrow, so colour is never the only
  * signal.
+ *
+ * The artwork is AssetIcon — the vendored, offline SVG set (token mark with a
+ * network badge), so the list looks the same on a phone that cannot reach any
+ * icon CDN, which is where the empty-circle reports came from.
  */
 export default function SpotMarketList({
   chainId,
@@ -58,7 +62,7 @@ export default function SpotMarketList({
               className={`spot-row${active ? ' is-active' : ''}`}
               onClick={() => onPick(tk)}
             >
-              <TokenIcon token={tk} chainId={chainId} size={30} />
+              <AssetIcon symbol={tk.symbol} chain={chainId} size={30} />
               <span className="spot-row-meta">
                 <strong dir="ltr">{tk.symbol}</strong>
                 <small>{tk.name}</small>

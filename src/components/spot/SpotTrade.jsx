@@ -32,11 +32,33 @@ import {
   slippageLevel
 } from '../../lib/spot/spotMath';
 import { SPOT_STATUS, runSpotOrder } from '../../lib/spot/spotFlow';
+import {
+  SOLANA_GAS_ESTIMATE,
+  SOLANA_GAS_FLOOR,
+  SOLANA_SPOT_CHAIN,
+  SOLANA_SPOT_ID,
+  SOLANA_SPOT_TOKENS,
+  getSolanaSpotBalances,
+  getSolanaSpotQuote,
+  runSolanaSpotOrder,
+  solanaTxLink
+} from '../../lib/spot/solanaSpot';
 import Sheet from '../Sheet';
 import WalletConnectSheet from '../WalletConnectSheet';
+import SolanaConnectSheet from '../SolanaConnectSheet';
 import SwapHistoryPanel from '../SwapHistoryPanel';
 import SegIndicator from '../SegIndicator';
-import { IconCheck, IconClock, IconInfo, IconRefresh, IconShield, IconWallet, IconX } from '../Icons';
+import AssetIcon from '../AssetIcon';
+import {
+  IconCheck,
+  IconChevronRight,
+  IconClock,
+  IconInfo,
+  IconRefresh,
+  IconShield,
+  IconWallet,
+  IconX
+} from '../Icons';
 import SpotMarketList from './SpotMarketList';
 import Trade from '../../pages/Trade';
 import '../../styles/spot-trade.css';
@@ -69,6 +91,15 @@ function errorKey(code) {
   return `spot.err.${code || 'TX_FAILED'}`;
 }
 
+/** The dropdown caret every modern select in the app wears (a rotated chevron). */
+function Caret() {
+  return (
+    <span className="spot-select-chev" aria-hidden="true">
+      <IconChevronRight width={16} height={16} style={{ transform: 'rotate(90deg)' }} />
+    </span>
+  );
+}
+
 export default function SpotTrade() {
   const { t } = useTranslation();
   const wallet = useWallet();
@@ -81,10 +112,35 @@ export default function SpotTrade() {
   const [chainId, setChainId] = useState(() =>
     SPOT_CHAINS.includes(Number(wallet.chainId)) ? Number(wallet.chainId) : SPOT_CHAINS.includes(DEFAULT_CHAIN) ? DEFAULT_CHAIN : SPOT_CHAINS[0]
   );
-  const tokens = useMemo(() => TOKENS[chainId] ?? [], [chainId]);
-  const cfg = EVM_CHAINS[chainId];
-  const walletOnOrderChain = wallet.isConnected && Number(wallet.chainId) === Number(chainId);
-  const walletOnOtherChain = wallet.isConnected && !walletOnOrderChain;
+  const isSol = chainId === SOLANA_SPOT_ID;
+  const tokens = useMemo(() => (isSol ? SOLANA_SPOT_TOKENS : TOKENS[chainId] ?? []), [isSol, chainId]);
+  const cfg = isSol ? SOLANA_SPOT_CHAIN : EVM_CHAINS[chainId];
+
+  /* The Solana wallet is connected from the wallet screen (or its own sheet
+     here). It is module-global state with one lightweight change event — the
+     same contract pages/SolanaSwap.jsx follows — never a second connection
+     flow living inside a trade form. */
+  const [solAddress, setSolAddress] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const onWalletChange = (event) => {
+      if (alive) setSolAddress(event?.detail?.address || null);
+    };
+    window.addEventListener('solana:wallet-change', onWalletChange);
+    import('../../lib/solanaWallet.js')
+      .then((m) => {
+        if (alive) setSolAddress(m.solanaAddress() || null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+      window.removeEventListener('solana:wallet-change', onWalletChange);
+    };
+  }, []);
+
+  const connected = isSol ? Boolean(solAddress) : wallet.isConnected;
+  const walletOnOrderChain = isSol ? Boolean(solAddress) : wallet.isConnected && Number(wallet.chainId) === Number(chainId);
+  const walletOnOtherChain = !isSol && wallet.isConnected && !walletOnOrderChain;
 
   /* ─── pair and direction (derived, so the pair can never disagree) ───── */
   const [mode, setMode] = useState('real'); // 'real' | 'paper' — paper is off by default
@@ -126,6 +182,23 @@ export default function SpotTrade() {
   const [balances, setBalances] = useState({});
   const [balanceNonce, setBalanceNonce] = useState(0);
   useEffect(() => {
+    if (isSol) {
+      if (!solAddress) {
+        setBalances({});
+        return undefined;
+      }
+      let alive = true;
+      getSolanaSpotBalances({ owner: solAddress, tokens, formatFloor: formatWeiFloor })
+        .then((map) => {
+          if (alive) setBalances(map);
+        })
+        .catch(() => {
+          if (alive) setBalances(Object.fromEntries(tokens.map((tk) => [tk.symbol, null])));
+        });
+      return () => {
+        alive = false;
+      };
+    }
     if (!wallet.isConnected || !wallet.address) {
       setBalances({});
       return undefined;
@@ -154,13 +227,20 @@ export default function SpotTrade() {
     return () => {
       alive = false;
     };
-  }, [wallet.isConnected, wallet.address, chainId, tokens, balanceNonce, wallet.getReadProvider]);
+  }, [isSol, solAddress, wallet.isConnected, wallet.address, chainId, tokens, balanceNonce, wallet.getReadProvider]);
 
   const balanceFor = (tk) => (balances[tk.symbol] === undefined ? undefined : balances[tk.symbol]);
   const fromBal = fromToken ? balances[fromToken.symbol] : undefined;
   // The gas coin keeps a floor so a max-amount order can still pay its fee.
   const isGasCoin = Boolean(fromToken && (fromToken.native || fromToken.address == null));
-  const gasFloorWei = amountParseWei(NATIVE_GAS_FLOOR[chainId]) ?? 0n;
+  const gasFloorWei = useMemo(() => {
+    if (isSol) {
+      const r = parseAmountWei(SOLANA_GAS_FLOOR, 9);
+      return r.ok ? r.wei : 0n;
+    }
+    return amountParseWei(NATIVE_GAS_FLOOR[chainId]) ?? 0n;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSol, chainId]);
   const availableWei = fromBal
     ? isGasCoin
       ? (fromBal.raw > gasFloorWei ? fromBal.raw - gasFloorWei : 0n)
@@ -174,6 +254,7 @@ export default function SpotTrade() {
   const seqRef = useRef(0);
   const currentKey = [chainId, side, fromToken?.symbol, toToken?.symbol, amountNorm, slipNum].join('|');
   const walletAddress = wallet.address ?? null;
+  const orderAddress = isSol ? solAddress : walletAddress;
 
   useEffect(() => {
     if (!fromToken || !toToken || !amountParse.ok || slipLevel === 'invalid') {
@@ -184,6 +265,32 @@ export default function SpotTrade() {
     setQuoteView((prev) => ({ ...prev, status: 'loading', key: currentKey }));
     const timer = setTimeout(async () => {
       try {
+        if (isSol) {
+          const q = await getSolanaSpotQuote({
+            fromToken,
+            toToken,
+            amountWei: amountParse.wei,
+            slippagePct: slipNum,
+            address: orderAddress
+          });
+          if (seq !== seqRef.current) return;
+          if (!q || q.error) {
+            setQuoteView({ status: 'error', key: currentKey, code: q?.error ?? 'NO_ROUTE' });
+            return;
+          }
+          const fetchedAt = Date.now();
+          // The route echoes its own impact and the network's fee is a known
+          // floor — no second estimation round trip on this chain.
+          setQuoteView({
+            status: 'ok',
+            key: currentKey,
+            quote: q,
+            fetchedAt,
+            impact: q.impactPct,
+            gasCost: SOLANA_GAS_ESTIMATE
+          });
+          return;
+        }
         const provider = await wallet.getReadProvider(chainId);
         if (seq !== seqRef.current) return;
         const q = await getQuote({
@@ -208,13 +315,19 @@ export default function SpotTrade() {
         estimateGasCost(provider)
           .then((g) => seq === seqRef.current && setQuoteView((v) => (v.fetchedAt === fetchedAt ? { ...v, gasCost: g } : v)))
           .catch(() => {});
-      } catch {
-        if (seq === seqRef.current) setQuoteView({ status: 'error', key: currentKey, code: 'QUOTE_FAILED' });
+      } catch (err) {
+        if (seq === seqRef.current) {
+          // The Solana routes throw plain Error(code); a code the UI knows is
+          // shown as itself, anything else becomes the generic line.
+          const msg = String(err?.message ?? '');
+          const code = ['NO_ROUTE', 'NO_LIQUIDITY', 'QUOTE_NETWORK', 'QUOTE_FAILED'].includes(msg) ? msg : 'QUOTE_FAILED';
+          setQuoteView({ status: 'error', key: currentKey, code });
+        }
       }
     }, 380);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentKey, nonce, chainId, walletAddress]);
+  }, [currentKey, nonce, chainId, orderAddress, isSol]);
 
   // The countdown only runs while a quote is on screen and idle. When it
   // expires, a NEW quote is requested. The old one is never executed.
@@ -236,7 +349,7 @@ export default function SpotTrade() {
 
   /* ─── order gating: the reasons are shown, in order, to the user ──────── */
   const blockers = [];
-  if (!wallet.isConnected) blockers.push('WALLET_NOT_CONNECTED');
+  if (!connected) blockers.push('WALLET_NOT_CONNECTED');
   else if (walletOnOtherChain) blockers.push('WRONG_NETWORK');
   if (slipLevel === 'invalid') blockers.push('SLIPPAGE_INVALID');
   if (!amountParse.ok) blockers.push(amountParse.code);
@@ -279,7 +392,13 @@ export default function SpotTrade() {
    */
   const onConfirm = async () => {
     if (!snapshot || submitting) return;
-    if (Number(wallet.chainId) !== Number(chainId)) {
+    if (isSol) {
+      if (!solAddress) {
+        setOutcome({ status: SPOT_STATUS.BLOCKED, code: 'WALLET_NOT_CONNECTED' });
+        setReviewing(false);
+        return;
+      }
+    } else if (Number(wallet.chainId) !== Number(chainId)) {
       setOutcome({ status: SPOT_STATUS.BLOCKED, code: 'WRONG_NETWORK' });
       setReviewing(false);
       return;
@@ -288,6 +407,65 @@ export default function SpotTrade() {
     setStage('preparing');
     setOutcome({ status: 'working' });
     haptic?.('medium');
+
+    let recordId = null;
+
+    if (isSol) {
+      const parsed = parseAmountWei(snapshot.amountText, snapshot.fromToken.decimals);
+      if (!parsed.ok) {
+        setOutcome({ status: SPOT_STATUS.BLOCKED, code: parsed.code });
+        setSubmitting(false);
+        setStage(null);
+        setReviewing(false);
+        return;
+      }
+      const result = await runSolanaSpotOrder({
+        confirmed: true,
+        reviewed: snapshot,
+        context: { address: solAddress, amountWei: parsed.wei },
+        onStage: (s, extra) => {
+          setStage(s);
+          // Recorded at SIGNING, so the history shows «در حال اجرا» while the
+          // wallet prompt is up — the same choice the Solana swap screen made.
+          if (s === 'signing' && !recordId) {
+            recordId = recordSwap({
+              network: 'solana',
+              chainId: null,
+              chainName: cfg?.name ?? null,
+              from: snapshot.amountText,
+              fromSymbol: snapshot.fromToken.symbol,
+              to: formatWeiFloor(snapshot.quote.minOutWei, snapshot.toToken.decimals, 6),
+              toSymbol: snapshot.toToken.symbol,
+              amountIn: Number(snapshot.amountText),
+              amountOut: Number(formatWeiFloor(snapshot.quote.amountOutWei, snapshot.toToken.decimals, 6)),
+              txHash: extra?.hash ?? null,
+              status: 'pending',
+              source: 'spot'
+            }).id;
+          }
+        }
+      });
+
+      if (recordId) {
+        if (result.status === SPOT_STATUS.CONFIRMED) confirmSwap(recordId, result.hash);
+        else if (result.status === SPOT_STATUS.CANCELLED) cancelSwap(recordId, result.code);
+        else failSwap(recordId, result.code ?? 'TX_FAILED');
+      }
+
+      setSubmitting(false);
+      setStage(null);
+      setReviewing(false);
+      setOutcome(result);
+      setBalanceNonce((n) => n + 1);
+      if (result.status === SPOT_STATUS.CONFIRMED) {
+        haptic?.('success');
+        setAmountText('');
+      } else {
+        haptic?.('error');
+      }
+      if (result.status === SPOT_STATUS.STALE || result.code === 'QUOTE_EXPIRED') setNonce((n) => n + 1);
+      return;
+    }
 
     let signer = null;
     let provider = null;
@@ -305,7 +483,6 @@ export default function SpotTrade() {
       return;
     }
 
-    let recordId = null;
     const result = await runSpotOrder({
       confirmed: true,
       reviewed: snapshot,
@@ -366,7 +543,7 @@ export default function SpotTrade() {
     setAmountText(formatWeiFloor(wei, fromToken.decimals, fromToken.decimals));
     haptic?.('select');
   };
-  const explorer = outcome?.hash ? explorerTx(chainId, outcome.hash) : null;
+  const explorer = outcome?.hash ? (isSol ? solanaTxLink(outcome.hash) : explorerTx(chainId, outcome.hash)) : null;
   const assetInfo = asset ? markets?.find((c) => c.id === asset.coingeckoId) : null;
   const impact = quoteMatches ? quoteView.impact : null;
   const impactTier = impactLevel(impact);
@@ -397,12 +574,16 @@ export default function SpotTrade() {
       <div className="spot-mode" role="tablist" aria-label={t('spot.modeLabel')}>
         <button type="button" role="tab" aria-selected={mode === 'real'} className={`spot-mode-tab${mode === 'real' ? ' is-active' : ''}`} onClick={() => setMode('real')}>
           {mode === 'real' && <SegIndicator id="spot-mode-ind" />}
-          <IconWallet width={16} height={16} aria-hidden="true" />
+          <span className="spot-mode-ico" aria-hidden="true">
+            <IconWallet width={18} height={18} />
+          </span>
           <span>{t('spot.mode.real')}</span>
         </button>
         <button type="button" role="tab" aria-selected={mode === 'paper'} className={`spot-mode-tab${mode === 'paper' ? ' is-active' : ''}`} onClick={() => setMode('paper')}>
           {mode === 'paper' && <SegIndicator id="spot-mode-ind" />}
-          <IconShield width={16} height={16} aria-hidden="true" />
+          <span className="spot-mode-ico" aria-hidden="true">
+            <IconShield width={18} height={18} />
+          </span>
           <span>{t('spot.mode.paper')}</span>
         </button>
       </div>
@@ -417,12 +598,12 @@ export default function SpotTrade() {
           <aside className="spot-market-col" aria-label={t('spot.market.title')}>
             <h2 className="spot-h2">{t('spot.market.title')}</h2>
             <SpotMarketList
-              chainId={chainId}
+              chainId={isSol ? 'solana' : chainId}
               tokens={assetChoices}
               activeSymbol={asset?.symbol}
               priceFor={priceFor}
               balanceFor={balanceFor}
-              connected={wallet.isConnected}
+              connected={connected}
               query={query}
               onQuery={setQuery}
               onPick={pick}
@@ -431,241 +612,269 @@ export default function SpotTrade() {
           </aside>
 
           <section className="spot-form-col" aria-label={t('spot.form.title')}>
-            {/* network */}
-            <div className="spot-field">
-              <label className="spot-label" htmlFor="spot-chain">{t('spot.network')}</label>
-              <select
-                id="spot-chain"
-                className="spot-select"
-                value={chainId}
-                onChange={(e) => {
-                  setChainId(Number(e.target.value));
-                  setQuoteSym(null);
-                  setAssetSym(null);
-                  setAmountText('');
-                  setOutcome(null);
-                }}
-              >
-                {SPOT_CHAINS.map((id) => (
-                  <option key={id} value={id}>{EVM_CHAINS[id].name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* wallet state: connect, or the wrong network */}
-            {!wallet.isConnected && (
-              <div className="spot-card spot-notice is-info" role="status">
-                <strong>{t('spot.connectCard.title')}</strong>
-                <p>{t('spot.connectCard.body')}</p>
-                <button type="button" className="spot-btn spot-btn-primary" onClick={() => setConnectOpen(true)}>
-                  {wallet.locked ? t('wallet.unlock') : t('wallet.connect')}
-                </button>
-              </div>
-            )}
-            {walletOnOtherChain && (
-              <div className="spot-card spot-notice is-warn" role="alert">
-                <strong>{t('spot.wrongNetwork.title')}</strong>
-                <p>
-                  {t('spot.wrongNetwork.body', {
-                    wallet: EVM_CHAINS[wallet.chainId]?.name ?? String(wallet.chainId),
-                    order: cfg?.name ?? ''
-                  })}
-                </p>
-                <button
-                  type="button"
-                  className="spot-btn spot-btn-ghost"
-                  onClick={() => wallet.switchChain?.(chainId).catch(() => {})}
-                >
-                  {t('spot.wrongNetwork.switch', { network: cfg?.name ?? '' })}
-                </button>
-              </div>
-            )}
-
-            {/* side + pair */}
-            <div className="spot-side" role="group" aria-label={t('spot.side.label')}>
-              {['buy', 'sell'].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  aria-pressed={side === s}
-                  className={`spot-side-btn is-${s}${side === s ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setSide(s);
-                    setAmountText('');
-                    haptic?.('select');
-                  }}
-                >
-                  {side === s && <SegIndicator id="spot-side-ind" style={{ background: s === 'buy' ? 'var(--up)' : 'var(--down)', opacity: 0.22 }} />}
-                  <span>{t(`spot.side.${s}`)}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="spot-pair">
-              <button type="button" className="spot-asset-btn spot-picker-btn" onClick={() => setPickerOpen(true)}>
-                <span className="spot-asset-sym" dir="ltr">{asset?.symbol ?? '—'}</span>
-                <span className="spot-asset-name">{asset?.name ?? ''}</span>
-                {assetInfo?.price != null && (
-                  <span className="mono" dir="ltr">{fmtUsd(assetInfo.price)}</span>
-                )}
-              </button>
-              <div className="spot-field spot-quote-field">
-                <label className="spot-label" htmlFor="spot-quote">{t('spot.quoteAsset')}</label>
-                <select
-                  id="spot-quote"
-                  className="spot-select"
-                  value={quoteAsset?.symbol ?? ''}
-                  onChange={(e) => {
-                    setQuoteSym(e.target.value);
-                    setAmountText('');
-                  }}
-                >
-                  {tokens
-                    .filter((tk) => !asset || tk.symbol !== asset.symbol)
-                    .map((tk) => (
-                      <option key={tk.symbol} value={tk.symbol}>{tk.symbol}</option>
+            <div className="spot-card spot-ticket">
+              {/* network */}
+              <div className="spot-field">
+                <label className="spot-label" htmlFor="spot-chain">{t('spot.network')}</label>
+                <div className="spot-select-wrap">
+                  <span className="spot-select-ico" aria-hidden="true">
+                    <AssetIcon chain={isSol ? 'solana' : chainId} size={22} />
+                  </span>
+                  <select
+                    id="spot-chain"
+                    className="spot-select"
+                    value={String(chainId)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setChainId(v === SOLANA_SPOT_ID ? SOLANA_SPOT_ID : Number(v));
+                      setQuoteSym(null);
+                      setAssetSym(null);
+                      setAmountText('');
+                      setOutcome(null);
+                    }}
+                  >
+                    {SPOT_CHAINS.map((id) => (
+                      <option key={id} value={id}>{EVM_CHAINS[id].name}</option>
                     ))}
-                </select>
+                    <option value={SOLANA_SPOT_ID}>{SOLANA_SPOT_CHAIN.name}</option>
+                  </select>
+                  <Caret />
+                </div>
               </div>
-            </div>
 
-            {/* amount */}
-            <div className="spot-field">
-              <label className="spot-label" htmlFor="spot-amount">
-                {t('spot.payAmount', { symbol: fromToken?.symbol ?? '' })}
-              </label>
-              <div className="spot-amount-row">
-                <input
-                  id="spot-amount"
-                  className="spot-input spot-amount-input mono"
-                  dir="ltr"
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  placeholder="0.0"
-                  value={amountText}
-                  aria-invalid={!amountParse.ok && amountText.trim() !== ''}
-                  aria-describedby="spot-amount-hint"
-                  onChange={(e) => setAmountText(e.target.value.replace(',', '.'))}
-                />
-                <span className="spot-amount-sym" dir="ltr">{fromToken?.symbol ?? ''}</span>
-              </div>
-              <div className="spot-pct" role="group" aria-label={t('spot.percentLabel')}>
-                {PERCENTS.map((p) => (
-                  <button key={p} type="button" className="spot-chip" disabled={availableWei === null || availableWei <= 0n} onClick={() => setPercent(p)}>
-                    {p === 100 ? t('swap.max') : `${p}%`}
+              {/* wallet state: connect, or the wrong network */}
+              {!connected && (
+                <div className="spot-card spot-notice is-info" role="status">
+                  <strong>{t('spot.connectCard.title')}</strong>
+                  <p>{t('spot.connectCard.body')}</p>
+                  <button type="button" className="spot-btn spot-btn-primary" onClick={() => setConnectOpen(true)}>
+                    {wallet.locked ? t('wallet.unlock') : t('wallet.connect')}
+                  </button>
+                </div>
+              )}
+              {walletOnOtherChain && (
+                <div className="spot-card spot-notice is-warn" role="alert">
+                  <strong>{t('spot.wrongNetwork.title')}</strong>
+                  <p>
+                    {t('spot.wrongNetwork.body', {
+                      wallet: EVM_CHAINS[wallet.chainId]?.name ?? String(wallet.chainId),
+                      order: cfg?.name ?? ''
+                    })}
+                  </p>
+                  <button
+                    type="button"
+                    className="spot-btn spot-btn-ghost"
+                    onClick={() => wallet.switchChain?.(chainId).catch(() => {})}
+                  >
+                    {t('spot.wrongNetwork.switch', { network: cfg?.name ?? '' })}
+                  </button>
+                </div>
+              )}
+
+              {/* side + pair */}
+              <div className="spot-side" role="group" aria-label={t('spot.side.label')}>
+                {['buy', 'sell'].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    aria-pressed={side === s}
+                    className={`spot-side-btn is-${s}${side === s ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setSide(s);
+                      setAmountText('');
+                      haptic?.('select');
+                    }}
+                  >
+                    {side === s && (
+                      <SegIndicator
+                        id="spot-side-ind"
+                        style={{ background: s === 'buy' ? 'linear-gradient(90deg, var(--up), var(--rgb-1))' : 'linear-gradient(90deg, var(--down), var(--rgb-4))' }}
+                      />
+                    )}
+                    <span>{t(`spot.side.${s}`)}</span>
                   </button>
                 ))}
               </div>
-              <div id="spot-amount-hint" className="spot-hint">
-                {t('spot.balance')}:{' '}
-                <span dir="ltr" className="mono">
-                  {fromBal === undefined
-                    ? '…'
-                    : fromBal === null
-                      ? t('spot.balanceUnavailable')
-                      : balancesHidden()
-                        ? '•••'
-                        : `${fromBal.formatted} ${fromToken?.symbol ?? ''}`}
-                </span>
-                {amountText.trim() !== '' && !amountParse.ok && (
-                  <span className="spot-error"> · {t(errorKey(amountParse.code), { decimals: fromDec })}</span>
-                )}
-              </div>
-            </div>
 
-            {/* estimate */}
-            <div className="spot-card spot-estimate" aria-live="polite">
-              <div className="spot-estimate-head">
-                <span className="spot-muted">{t('spot.receiveEstimate')}</span>
-                <span className="spot-big mono" dir="ltr">
-                  {quote && quoteFresh
-                    ? `${formatWeiFloor(quote.amountOutWei, toDec, 6)} ${toToken?.symbol ?? ''}`
-                    : quoteView.status === 'error' && quoteView.key === currentKey
-                      ? '—'
-                      : '…'}
-                </span>
-              </div>
-              {quote && (
-                <dl className="spot-dl">
-                  <div><dt>{t('swap.minReceived')}</dt><dd dir="ltr" className="mono">{formatWeiFloor(quote.minOutWei, toDec, 6)} {toToken?.symbol}</dd></div>
-                  <div><dt>{t('spot.platformFee', { pct: (feeBps / 100).toFixed(2) })}</dt><dd dir="ltr" className="mono">{feeBps && quote.platformFeeWei != null ? `${formatWeiFloor(quote.platformFeeWei, fromDec, 6)} ${fromToken?.symbol}` : '—'}</dd></div>
-                  <div><dt>{t('swap.networkFee')}</dt><dd dir="ltr" className="mono">{quoteView.gasCost != null ? `≈ ${Number(quoteView.gasCost).toPrecision(3)} ${cfg?.native?.symbol ?? ''}` : '…'}</dd></div>
-                  <div><dt>{t('swap.route')}</dt><dd dir="ltr">{routeText(t, quote, fromToken, toToken)}</dd></div>
-                </dl>
-              )}
-              {impactTier && (
-                <p className={`spot-notice-line ${impactTier === 'high' ? 'is-bad' : 'is-warn'}`} role="status">
-                  <strong>⚠ {t('spot.impact.title')}</strong> {t(impactTier === 'high' ? 'spot.impact.high' : 'spot.impact.warn', { pct: Number(impact).toFixed(2) })}
-                </p>
-              )}
-              {quoteView.status === 'error' && quoteView.key === currentKey && (
-                <p className="spot-notice-line is-bad" role="alert">{errorText(t, quoteView.code)}</p>
-              )}
-              <div className="spot-freshness">
-                <span className="spot-muted">
-                  {!amountParse.ok || slipLevel === 'invalid'
-                    ? ''
-                    : quoteFresh
-                      ? t('spot.quoteRefreshIn', { s: quoteLeftSec })
-                      : quoteMatches
-                        ? t('spot.quoteExpired')
-                        : t('spot.quoteLoading')}
-                  {quoteFresh && quoteAgeSec != null && <> · {t('spot.quoteAge', { s: quoteAgeSec })}</>}
-                </span>
-                <button type="button" className="spot-btn-link" onClick={() => setNonce((n) => n + 1)} disabled={!amountParse.ok}>
-                  <IconRefresh width={14} height={14} aria-hidden="true" /> {t('spot.refreshQuote')}
+              <div className="spot-pair">
+                <button type="button" className="spot-asset-btn spot-picker-btn" onClick={() => setPickerOpen(true)}>
+                  <AssetIcon symbol={asset?.symbol ?? '?'} chain={isSol ? 'solana' : chainId} size={28} />
+                  <span className="spot-asset-text">
+                    <span className="spot-asset-sym" dir="ltr">{asset?.symbol ?? '—'}</span>
+                    <span className="spot-asset-name">{asset?.name ?? ''}</span>
+                  </span>
+                  {assetInfo?.price != null && (
+                    <span className="mono spot-asset-price" dir="ltr">{fmtUsd(assetInfo.price)}</span>
+                  )}
+                  <Caret />
                 </button>
+                <div className="spot-field spot-quote-field">
+                  <label className="spot-label" htmlFor="spot-quote">{t('spot.quoteAsset')}</label>
+                  <div className="spot-select-wrap">
+                    <span className="spot-select-ico" aria-hidden="true">
+                      <AssetIcon symbol={quoteAsset?.symbol ?? '?'} size={22} />
+                    </span>
+                    <select
+                      id="spot-quote"
+                      className="spot-select"
+                      value={quoteAsset?.symbol ?? ''}
+                      onChange={(e) => {
+                        setQuoteSym(e.target.value);
+                        setAmountText('');
+                      }}
+                    >
+                      {tokens
+                        .filter((tk) => !asset || tk.symbol !== asset.symbol)
+                        .map((tk) => (
+                          <option key={tk.symbol} value={tk.symbol}>{tk.symbol}</option>
+                        ))}
+                    </select>
+                    <Caret />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* slippage */}
-            <div className="spot-field">
-              <span className="spot-label" id="spot-slip-label">{t('swap.slippage')}</span>
-              <div className="spot-pct" role="group" aria-labelledby="spot-slip-label">
-                {SLIPPAGE_PRESETS.map((p) => (
-                  <button key={p} type="button" className={`spot-chip${slipNum === p ? ' is-active' : ''}`} aria-pressed={slipNum === p} onClick={() => setSlippageText(String(p))}>
-                    {p}%
-                  </button>
-                ))}
-                <label className="spot-slip-custom">
-                  <span className="sr-only">{t('swap.slippage')}</span>
+              {/* amount */}
+              <div className="spot-field">
+                <label className="spot-label" htmlFor="spot-amount">
+                  {t('spot.payAmount', { symbol: fromToken?.symbol ?? '' })}
+                </label>
+                <div className="spot-amount-row">
+                  <span className="spot-amount-ico" aria-hidden="true">
+                    <AssetIcon symbol={fromToken?.symbol ?? '?'} size={26} />
+                  </span>
                   <input
+                    id="spot-amount"
+                    className="spot-input spot-amount-input mono"
+                    dir="ltr"
                     type="text"
                     inputMode="decimal"
-                    dir="ltr"
-                    className={`spot-input spot-slip-input mono${slipLevel === 'invalid' ? ' is-invalid' : ''}`}
-                    value={slippageText}
-                    onChange={(e) => setSlippageText(e.target.value.replace(',', '.'))}
-                    aria-invalid={slipLevel === 'invalid'}
+                    autoComplete="off"
+                    placeholder="0.0"
+                    value={amountText}
+                    aria-invalid={!amountParse.ok && amountText.trim() !== ''}
+                    aria-describedby="spot-amount-hint"
+                    onChange={(e) => setAmountText(e.target.value.replace(',', '.'))}
                   />
-                  <span>%</span>
-                </label>
+                  <span className="spot-amount-sym" dir="ltr">{fromToken?.symbol ?? ''}</span>
+                </div>
+                <div className="spot-pct" role="group" aria-label={t('spot.percentLabel')}>
+                  {PERCENTS.map((p) => (
+                    <button key={p} type="button" className="spot-chip" disabled={availableWei === null || availableWei <= 0n} onClick={() => setPercent(p)}>
+                      {p === 100 ? t('swap.max') : `${p}%`}
+                    </button>
+                  ))}
+                </div>
+                <div id="spot-amount-hint" className="spot-hint">
+                  {t('spot.balance')}:{' '}
+                  <span dir="ltr" className="mono">
+                    {fromBal === undefined
+                      ? '…'
+                      : fromBal === null
+                        ? t('spot.balanceUnavailable')
+                        : balancesHidden()
+                          ? '•••'
+                          : `${fromBal.formatted} ${fromToken?.symbol ?? ''}`}
+                  </span>
+                  {amountText.trim() !== '' && !amountParse.ok && (
+                    <span className="spot-error"> · {t(errorKey(amountParse.code), { decimals: fromDec })}</span>
+                  )}
+                </div>
               </div>
-              {slipLevel === 'invalid' && <p className="spot-error">{t('spot.slippageInvalid')}</p>}
-              {slipLevel === 'high' && <p className="spot-notice-line is-bad" role="status">{t('spot.slippageHigh')}</p>}
-            </div>
 
-            {/* the single action */}
-            <div className="spot-cta-wrap">
-              <button
-                type="button"
-                className={`spot-cta ${side === 'buy' ? 'is-buy' : 'is-sell'}`}
-                disabled={!canReview || submitting}
-                onClick={openReview}
-              >
-                {t('spot.reviewOrder')}
-              </button>
-              {!canReview && blockerText && <p className="spot-hint" role="status">{blockerText}</p>}
-            </div>
+              {/* estimate */}
+              <div className="spot-card spot-estimate" aria-live="polite">
+                <div className="spot-estimate-head">
+                  <span className="spot-muted">{t('spot.receiveEstimate')}</span>
+                  <span className="spot-big mono" dir="ltr">
+                    {quote && quoteFresh
+                      ? `${formatWeiFloor(quote.amountOutWei, toDec, 6)} ${toToken?.symbol ?? ''}`
+                      : quoteView.status === 'error' && quoteView.key === currentKey
+                        ? '—'
+                        : '…'}
+                  </span>
+                </div>
+                {quote && (
+                  <dl className="spot-dl">
+                    <div><dt>{t('swap.minReceived')}</dt><dd dir="ltr" className="mono">{formatWeiFloor(quote.minOutWei, toDec, 6)} {toToken?.symbol}</dd></div>
+                    <div><dt>{t('spot.platformFee', { pct: (feeBps / 100).toFixed(2) })}</dt><dd dir="ltr" className="mono">{feeBps && quote.platformFeeWei != null ? `${formatWeiFloor(quote.platformFeeWei, fromDec, 6)} ${fromToken?.symbol}` : '—'}</dd></div>
+                    <div><dt>{t('swap.networkFee')}</dt><dd dir="ltr" className="mono">{quoteView.gasCost != null ? `≈ ${Number(quoteView.gasCost).toPrecision(3)} ${cfg?.native?.symbol ?? ''}` : '…'}</dd></div>
+                    <div><dt>{t('swap.route')}</dt><dd dir="ltr">{routeText(t, quote, fromToken, toToken)}</dd></div>
+                  </dl>
+                )}
+                {impactTier && (
+                  <p className={`spot-notice-line ${impactTier === 'high' ? 'is-bad' : 'is-warn'}`} role="status">
+                    <strong>⚠ {t('spot.impact.title')}</strong> {t(impactTier === 'high' ? 'spot.impact.high' : 'spot.impact.warn', { pct: Number(impact).toFixed(2) })}
+                  </p>
+                )}
+                {quoteView.status === 'error' && quoteView.key === currentKey && (
+                  <p className="spot-notice-line is-bad" role="alert">{errorText(t, quoteView.code)}</p>
+                )}
+                <div className="spot-freshness">
+                  <span className="spot-muted">
+                    {!amountParse.ok || slipLevel === 'invalid'
+                      ? ''
+                      : quoteFresh
+                        ? t('spot.quoteRefreshIn', { s: quoteLeftSec })
+                        : quoteMatches
+                          ? t('spot.quoteExpired')
+                          : t('spot.quoteLoading')}
+                    {quoteFresh && quoteAgeSec != null && <> · {t('spot.quoteAge', { s: quoteAgeSec })}</>}
+                  </span>
+                  <button type="button" className="spot-btn-link" onClick={() => setNonce((n) => n + 1)} disabled={!amountParse.ok}>
+                    <IconRefresh width={14} height={14} aria-hidden="true" /> {t('spot.refreshQuote')}
+                  </button>
+                </div>
+              </div>
 
-            {/* outcome of the last attempt */}
-            {outcome && outcome.status !== 'blocked' && (
-              <OutcomeCard t={t} outcome={outcome} stage={stage} explorer={explorer} />
-            )}
-            {outcome?.status === SPOT_STATUS.BLOCKED && (
-              <p className="spot-error" role="alert">{errorText(t, outcome.code)}</p>
-            )}
+              {/* slippage */}
+              <div className="spot-field">
+                <span className="spot-label" id="spot-slip-label">{t('swap.slippage')}</span>
+                <div className="spot-pct" role="group" aria-labelledby="spot-slip-label">
+                  {SLIPPAGE_PRESETS.map((p) => (
+                    <button key={p} type="button" className={`spot-chip${slipNum === p ? ' is-active' : ''}`} aria-pressed={slipNum === p} onClick={() => setSlippageText(String(p))}>
+                      {p}%
+                    </button>
+                  ))}
+                  <label className="spot-slip-custom">
+                    <span className="sr-only">{t('swap.slippage')}</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
+                      className={`spot-input spot-slip-input mono${slipLevel === 'invalid' ? ' is-invalid' : ''}`}
+                      value={slippageText}
+                      onChange={(e) => setSlippageText(e.target.value.replace(',', '.'))}
+                      aria-invalid={slipLevel === 'invalid'}
+                    />
+                    <span>%</span>
+                  </label>
+                </div>
+                {slipLevel === 'invalid' && <p className="spot-error">{t('spot.slippageInvalid')}</p>}
+                {slipLevel === 'high' && <p className="spot-notice-line is-bad" role="status">{t('spot.slippageHigh')}</p>}
+              </div>
+
+              {/* the single action */}
+              <div className="spot-cta-wrap">
+                <button
+                  type="button"
+                  className={`spot-cta ${side === 'buy' ? 'is-buy' : 'is-sell'}`}
+                  disabled={!canReview || submitting}
+                  onClick={openReview}
+                >
+                  {t('spot.reviewOrder')}
+                </button>
+                {!canReview && blockerText && <p className="spot-hint" role="status">{blockerText}</p>}
+              </div>
+
+              {/* outcome of the last attempt */}
+              {outcome && outcome.status !== 'blocked' && (
+                <OutcomeCard t={t} outcome={outcome} stage={stage} explorer={explorer} />
+              )}
+              {outcome?.status === SPOT_STATUS.BLOCKED && (
+                <p className="spot-error" role="alert">{errorText(t, outcome.code)}</p>
+              )}
+            </div>
 
             <div className="spot-disclaimers">
               <p>{t('spot.notice.own')}</p>
@@ -674,7 +883,7 @@ export default function SpotTrade() {
             </div>
 
             <div className="spot-history">
-              <SwapHistoryPanel network="evm" limit={12} source="spot" />
+              <SwapHistoryPanel network={isSol ? 'solana' : 'evm'} limit={12} source="spot" />
             </div>
           </section>
         </div>
@@ -683,12 +892,12 @@ export default function SpotTrade() {
       {/* market list as a sheet on phones */}
       <Sheet open={pickerOpen} onClose={() => setPickerOpen(false)} title={t('spot.market.sheetTitle')}>
         <SpotMarketList
-          chainId={chainId}
+          chainId={isSol ? 'solana' : chainId}
           tokens={assetChoices}
           activeSymbol={asset?.symbol}
           priceFor={priceFor}
           balanceFor={balanceFor}
-          connected={wallet.isConnected}
+          connected={connected}
           query={query}
           onQuery={setQuery}
           onPick={pick}
@@ -707,7 +916,7 @@ export default function SpotTrade() {
             nativeSymbol={cfg?.native?.symbol ?? ''}
             gasCost={quoteView.gasCost}
             impact={quoteView.impact}
-            owner={wallet.address}
+            owner={isSol ? solAddress : wallet.address}
             fresh={!isQuoteStale(snapshot.fetchedAt, clock, SPOT_QUOTE_MAX_AGE_MS)}
             submitting={submitting}
             stage={stage}
@@ -717,7 +926,8 @@ export default function SpotTrade() {
         )}
       </Sheet>
 
-      <WalletConnectSheet open={connectOpen} onClose={() => setConnectOpen(false)} />
+      <WalletConnectSheet open={connectOpen && !isSol} onClose={() => setConnectOpen(false)} />
+      <SolanaConnectSheet open={connectOpen && isSol} onClose={() => setConnectOpen(false)} />
     </>
   );
 
