@@ -1,15 +1,32 @@
 /* ==========================================================================
    Spot trade (components/spot). User-wallet swaps — EVM + Solana.
-   Tokens only: every colour, radius, space and size comes from the shared
-   variables in src/index.css. No blur filters. Every control is at least
-   44px tall. Logical properties (inline-start/end) so RTL and LTR both work.
 
-   The skin is the app's modern ticket language (the one .trade-ticket /
-   .swap-ticket and the bridge screens use): one rounded panel per column, a
-   soft RGB wash instead of a flat grey box, full-width controls, and the
-   buy/sell pair on gradient pills. Light theme gets its overrides at the
-   bottom — where a bright pill needs dark ink, the token flips with the
-   theme (network-select.css does the same).
+   Tokens only: every colour, radius, space and size comes from the shared
+   variables in src/index.css. No blur filters, no literal colours. Every
+   control is at least 44px tall. Logical properties (inline-start/end) so RTL
+   and LTR both work.
+
+   ─── WHAT CHANGED, AND WHY ──────────────────────────────────────────────
+   The tab used to be two columns (a «بازار» list beside the order ticket) with
+   three different control languages on the ticket: two native <select>s and a
+   hand-rolled list with a search field. The report was specific — one box, not
+   two; the network and both token choices as modern popups with no search
+   field; a price field that is not absurdly wide and does not grow an ugly blue
+   bar when it is focused; estimate lines that fit on one line; the three
+   warnings in one folding box; correct colours under buy/sell.
+
+   So this file is now:
+     · ONE ticket, centred, capped at a reading width (a price field that spans
+       1200px is not a form, it is a banner);
+     · .spot-sel — the popup picker (trigger + portalled sheet) shared by the
+       network, the token and the pay-with choices. The trigger carries NO
+       background of its own: a hairline on the ticket, ink, artwork, caret;
+     · .spot-est — the estimate as one figure plus rows that cannot wrap;
+     · .spot-notices / .spot-risk — the two folds below the ticket.
+
+   The popup styles are deliberately NOT scoped under `.spot-root`: the popup is
+   portalled to document.body (see SpotSelect.jsx), so an ancestor selector
+   would never match it.
    ========================================================================== */
 
 .spot-root {
@@ -21,12 +38,10 @@
 }
 
 .spot-root .mono,
-.spot-root .spot-big,
-.spot-root .spot-row-num,
+.spot-root .spot-est-amount,
+.spot-root .spot-chg,
 .spot-root .spot-row-bal,
-.spot-root .spot-change,
-.spot-root .spot-estimate,
-.spot-root .spot-dl dd {
+.spot-root .spot-rows dd {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -37,6 +52,9 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--sp-1);
+  width: 100%;
+  max-width: 520px;
+  margin-inline: auto;
   padding: var(--sp-1);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -109,33 +127,16 @@
   background: color-mix(in srgb, var(--rgb-5) 6%, transparent);
 }
 
-/* ---------- layout ---------- */
+/* ---------- layout: ONE column, capped, centred ---------- */
 
-.spot-root .spot-market-col {
+.spot-root .spot-stack {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  width: 100%;
+  max-width: 520px;
+  margin-inline: auto;
   min-width: 0;
-  padding: var(--sp-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(120% 100% at 10% -10%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 55%),
-    var(--bg-panel);
-  box-shadow: 0 18px 40px -22px color-mix(in srgb, var(--bg-void) 85%, transparent);
-}
-
-.spot-root .spot-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-4);
-  align-items: start;
-}
-
-@media (min-width: 900px) {
-  .spot-root .spot-grid {
-    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  }
 }
 
 /* ---------- cards ---------- */
@@ -152,8 +153,8 @@
   min-width: 0;
 }
 
-/* The form ticket: the page's one full panel, in the same skin as the swap
-   and paper-trade tickets — a soft RGB wash on a raised glass sheet. */
+/* The order ticket: the page's one panel, in the same skin as the swap and
+   paper-trade tickets — a soft RGB wash on a raised glass sheet. */
 .spot-root .spot-ticket {
   gap: var(--sp-4);
   background:
@@ -161,13 +162,6 @@
     linear-gradient(165deg, color-mix(in srgb, var(--bg-raised) 85%, transparent), var(--bg-panel));
   border-color: color-mix(in srgb, var(--rgb-1) 18%, var(--line));
   box-shadow: 0 20px 50px -24px color-mix(in srgb, var(--bg-void) 85%, transparent);
-}
-
-.spot-root .spot-h2 {
-  margin: 0;
-  font-size: var(--fs-md);
-  font-weight: 700;
-  color: var(--text-1);
 }
 
 .spot-root .spot-muted,
@@ -179,121 +173,7 @@
   color: var(--text-2);
 }
 
-.spot-root .spot-empty {
-  padding: var(--sp-4);
-  text-align: center;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-}
-
-/* ---------- market list ---------- */
-
-.spot-root .spot-market-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-
-.spot-root .spot-search {
-  width: 100%;
-  min-height: 44px;
-  padding: 0 var(--sp-3);
-  border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-raised);
-  color: var(--text-1);
-  font: inherit;
-  font-size: var(--fs-sm);
-}
-
-.spot-root .spot-market {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  max-height: 480px;
-  overflow-y: auto;
-}
-
-.spot-root .spot-row {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  grid-template-areas:
-    'icon name price'
-    'icon name bal';
-  gap: var(--sp-1) var(--sp-3);
-  align-items: center;
-  width: 100%;
-  min-height: 44px;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--text-1);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease;
-}
-
-.spot-root .spot-row .asset-icon { grid-area: icon; }
-
-.spot-root .spot-row:hover { background: var(--bg-raised); }
-
-.spot-root .spot-row.is-active {
-  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
-  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
-}
-
-.spot-root .spot-row-num {
-  grid-area: price;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-  font-size: var(--fs-sm);
-}
-
-.spot-root .spot-row-meta {
-  grid-area: name;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 1px;
-  min-width: 0;
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-}
-
-.spot-root .spot-row-bal {
-  grid-area: bal;
-  align-self: start;
-  text-align: end;
-  color: var(--text-2);
-}
-
-.spot-root .spot-asset-btn .spot-asset-sym,
-.spot-root .spot-row .spot-row-meta strong { font-weight: 700; color: var(--text-1); }
-.spot-root .spot-asset-name { color: var(--text-2); font-size: var(--fs-xs); }
-.spot-root .spot-row .spot-row-meta small {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.spot-root .spot-change.up { color: var(--up); }
-.spot-root .spot-change.down { color: var(--down); }
-
 /* ---------- form ---------- */
-
-.spot-root .spot-form-col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  min-width: 0;
-}
 
 .spot-root .spot-field {
   display: flex;
@@ -308,60 +188,314 @@
   color: var(--text-2);
 }
 
-/* ---------- the modern select (network / quote asset) ---------- */
+/* ==========================================================================
+   THE PICKER — trigger and popup (network / token / pay-with)
+   ========================================================================== */
 
-.spot-root .spot-select-wrap {
-  position: relative;
+.spot-sel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/*
+ * «بدون پس‌زمینه و مدرن و زیبا» — the trigger has no well of its own. It is a
+ * hairline on the ticket with the item's artwork, its name, its figure and a
+ * caret; the wash appears only under the pointer or the keyboard.
+ */
+.spot-sel-trigger {
   display: flex;
   align-items: center;
+  gap: var(--sp-2);
   width: 100%;
   min-height: 52px;
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius);
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(135deg, var(--bg-raised), var(--bg-panel));
-  transition: border-color 160ms ease, box-shadow 160ms ease;
-}
-
-.spot-root .spot-select-wrap:focus-within {
-  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 12%, transparent);
-}
-
-.spot-root .spot-select-ico {
-  position: absolute;
-  inset-inline-start: 12px;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-
-.spot-root .spot-select-chev {
-  position: absolute;
-  inset-inline-end: 12px;
-  display: grid;
-  place-items: center;
-  color: var(--text-2);
-  pointer-events: none;
-}
-
-.spot-root .spot-select-wrap .spot-select {
-  width: 100%;
-  min-height: 52px;
-  padding-inline: 44px 38px;
-  border: 0;
-  border-radius: var(--radius);
-  appearance: none;
-  -webkit-appearance: none;
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--text-1);
   font: inherit;
-  font-size: var(--fs-sm);
-  font-weight: 600;
+  text-align: start;
   cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
 }
 
-/* ---------- buy / sell (gradient pills, like the demo ticket) ---------- */
+.spot-sel-trigger:hover { background: var(--bg-raised); border-color: var(--line-strong); }
 
+.spot-sel-trigger:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
+
+.spot-sel.is-open .spot-sel-trigger {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 6%, transparent);
+}
+
+.spot-sel-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.spot-sel-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.spot-sel-title {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-1);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spot-sel-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The chart and the figures never shrink: the NAME is the only thing on the
+   row allowed to ellipsise, so a long token name can no longer push the price
+   or the sparkline off the edge («بدون اینکه قسمتی از نام و نمودار و قیمت محو
+   شود»). */
+.spot-sel-spark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 56px;
+  width: 56px;
+}
+
+.spot-sel-trigger .spot-sel-num {
+  flex: 0 0 auto;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.spot-sel-chev {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  transition: transform 200ms ease, color 200ms ease;
+}
+
+.spot-sel-chev.is-open { transform: rotate(180deg); color: var(--text-1); }
+
+/* The pay-with choice is a narrower companion, not a second banner. */
+.spot-sel.is-compact .spot-sel-trigger { min-height: 52px; }
+.spot-sel.is-compact .spot-sel-title { font-size: var(--fs-sm); }
+
+/* ── the popup ─────────────────────────────────────────────────────────────
+   Portalled to document.body, so it is not positioned against the ticket and
+   not clipped by it. On a phone it rises from the bottom (thumb reach); on a
+   wide screen it centres like every other dialog in the app. index.css puts
+   the app's sheets at 200/201 and the network popup at 210/211 — this pair
+   sits at 212/213 so a picker opened from inside a sheet is still on top.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.spot-sel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 212;
+  background: color-mix(in srgb, var(--bg-void) 62%, transparent);
+  animation: spot-sel-fade 160ms ease-out;
+}
+
+.spot-sel-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 213;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.spot-sel-pop {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(78vh, 640px);
+  padding: var(--sp-1) var(--sp-1) calc(var(--sp-1) + env(safe-area-inset-bottom));
+  border-radius: 24px 24px 0 0;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-panel-solid);
+  box-shadow: 0 -18px 60px color-mix(in srgb, var(--bg-void) 60%, transparent);
+  overflow: hidden;
+  animation: spot-sel-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes spot-sel-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spot-sel-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.spot-sel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+  flex: 0 0 auto;
+}
+
+.spot-sel-grabber { display: none; }
+
+.spot-sel-head-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spot-sel-x {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+
+.spot-sel-x:hover { background: var(--bg-panel); color: var(--text-1); }
+.spot-sel-x:active { transform: scale(0.94); }
+.spot-sel-x:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+.spot-sel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  outline: none;
+}
+
+.spot-sel-list::-webkit-scrollbar { width: 8px; }
+.spot-sel-list::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 99px;
+}
+
+/* One row = artwork, name, chart, price. Flex with fixed side columns is what
+   keeps every part of the row on screen at 320px. */
+.spot-sel-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 13px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.spot-sel-opt.is-cursor { background: var(--bg-raised); }
+
+.spot-sel-opt.is-active {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
+}
+
+.spot-sel-opt .spot-sel-num {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex: 0 0 auto;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.spot-sel-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spot-sel-check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  width: 18px;
+  color: var(--rgb-1);
+}
+
+.spot-sel-empty {
+  padding: var(--sp-4);
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.spot-chg { font-size: var(--fs-xs); }
+.spot-chg.up { color: var(--up); }
+.spot-chg.down { color: var(--down); }
+
+@media (min-width: 720px) {
+  .spot-sel-layer {
+    align-items: center;
+    padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 20px);
+  }
+  .spot-sel-pop {
+    max-height: min(70vh, 640px);
+    border-radius: 22px;
+    padding: var(--sp-1);
+    box-shadow: 0 28px 70px color-mix(in srgb, var(--bg-void) 55%, transparent);
+  }
+}
+
+/* ---------- buy / sell ---------- */
+
+/*
+ * «زیر تب خرید و فروش باید رنگ بکگراند درست داشته باشد؛ فروش هم کمی رنگ سبز
+ * دارد» — the sell pill used to fade from red into --rgb-4, which IS the mint
+ * green of --up: a sell button that turns the buy colour at its right edge.
+ * The gradients now live in SpotTrade.jsx (buy: --up → --rgb-1, sell: --down →
+ * --rgb-3) so the two sides never share a hue, and the well behind them is a
+ * neutral raised surface rather than a flat panel.
+ */
 .spot-root .spot-side {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -369,7 +503,7 @@
   padding: var(--sp-1);
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
 }
 
 .spot-root .spot-side-btn {
@@ -390,11 +524,10 @@
   transition: color 160ms ease;
 }
 
-/* A tick with the colour change: the pill alone is invisible to a reader
-   with a colour-vision deficiency (the shared .segmented rule does the same). */
-.spot-root .spot-side-btn.is-active {
-  color: var(--bg-void);
-}
+/* A tick with the colour change: the pill alone is invisible to a reader with
+   a colour-vision deficiency (the shared .segmented rule does the same). */
+.spot-root .spot-side-btn.is-active { color: var(--bg-void); }
+
 .spot-root .spot-side-btn.is-active::before {
   content: '✓';
   font-size: 11px;
@@ -402,9 +535,7 @@
   margin-inline-end: 5px;
 }
 
-:root[data-theme='light'] .spot-root .spot-side-btn.is-active {
-  color: var(--text-1);
-}
+:root[data-theme='light'] .spot-root .spot-side-btn.is-active { color: var(--text-1); }
 
 .spot-root .spot-side-btn.is-buy.is-active {
   box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--up) 65%, transparent);
@@ -414,136 +545,89 @@
   box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--down) 65%, transparent);
 }
 
-/* ---------- pair (asset picker + pay-with select) ---------- */
+/* ---------- pair: the two pickers on one line ---------- */
 
 .spot-root .spot-pair {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: var(--sp-2);
   align-items: end;
 }
 
 @media (max-width: 420px) {
-  .spot-root .spot-pair {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  .spot-root .spot-pair { grid-template-columns: minmax(0, 1fr); }
 }
 
-.spot-root .spot-picker-btn,
-.spot-root .spot-asset-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  width: 100%;
-  min-height: 52px;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius);
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(135deg, var(--bg-raised), var(--bg-panel));
-  color: var(--text-1);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  transition: border-color 160ms ease;
-}
-
-.spot-root .spot-asset-btn:hover { border-color: var(--line-strong); }
-
-.spot-root .spot-asset-text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.spot-root .spot-asset-btn .spot-asset-sym { font-size: var(--fs-sm); }
-.spot-root .spot-asset-price {
-  margin-inline-start: auto;
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-  white-space: nowrap;
-}
-
-/* The caret rides in the row here (the picker button is not a select wrap). */
-.spot-root .spot-asset-btn .spot-select-chev {
-  position: static;
-  color: var(--text-2);
-  flex-shrink: 0;
-}
-
-/* Base surfaces FIRST, so the specific inputs below can override them
-   (`.spot-amount-input` sits on the amount row's own well and must not draw
-   a second border inside it). The 44px floor lives here for all four input
-   classes. */
-.spot-root .spot-input,
-.spot-root .spot-select {
-  min-height: 44px;
-}
-
-.spot-root .spot-input {
-  width: 100%;
-  padding: 0 var(--sp-3);
-  border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-raised);
-  color: var(--text-1);
-  font: inherit;
-  font-size: var(--fs-sm);
-}
-
-.spot-root .spot-input.is-invalid { border-color: var(--down); }
-
-/* ---------- amount (the pay box: wide, one line, correct height) ---------- */
+/* ---------- amount ---------- */
 
 .spot-root .spot-amount-row {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
-  min-height: 64px;
+  min-height: 56px;
   padding: 0 var(--sp-3);
   border-radius: var(--radius);
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(135deg, var(--bg-raised), var(--bg-panel));
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  border: 1px solid var(--line);
+  background: transparent;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-.spot-root .spot-amount-row:focus-within {
-  border-color: color-mix(in srgb, var(--rgb-1) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 12%, transparent);
-}
+.spot-root .spot-amount-row:hover { background: var(--bg-raised); }
 
-.spot-root .spot-amount-ico {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-
+/*
+ * The focus state is the TICKET's, not the field's. The global `input:focus`
+ * rule in index.css draws a cyan ring around any focused input — inside this
+ * row that ring landed as a bar across the middle of the control («وقتی قیمت
+ * وارد میکنی یک نوار زشت ابی میاد»). The inner input is therefore reset to no
+ * ring and no outline, and the row itself answers focus with a soft accent
+ * border. Keyboard users still get a visible state (see :focus-within below).
+ */
 .spot-root .spot-amount-input {
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
-  min-height: 60px;
+  min-height: 52px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: var(--fs-xl);
+  font-size: var(--fs-lg);
   font-variant-numeric: tabular-nums;
   direction: ltr;
   text-align: end;
+  outline: none;
 }
 
-.spot-root .spot-amount-input:focus-visible,
-.spot-root .spot-input:focus-visible,
-.spot-root .spot-search:focus-visible,
-.spot-root .spot-select:focus-visible {
-  outline: 2px solid var(--rgb-1);
-  outline-offset: 2px;
+.spot-root .spot-amount-input:focus,
+.spot-root .spot-amount-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: 0;
 }
 
-.spot-root .spot-amount-sym { color: var(--text-1); font-weight: 700; white-space: nowrap; }
+.spot-root .spot-amount-row:focus-within {
+  border-color: color-mix(in srgb, var(--rgb-1) 60%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 5%, transparent);
+}
+
+.spot-root .spot-amount-row.is-invalid { border-color: color-mix(in srgb, var(--down) 65%, transparent); }
+
+.spot-root .spot-amount-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.spot-root .spot-amount-sym {
+  flex: 0 0 auto;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
 
 .spot-root .spot-pct {
   display: flex;
@@ -572,49 +656,168 @@
   background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
 }
 
-.spot-root .spot-slip-custom {
+.spot-root .spot-hint {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--sp-2);
   flex-wrap: wrap;
 }
 
-.spot-root .spot-slip-input { max-width: 120px; }
+.spot-root .spot-hint-item { white-space: nowrap; }
+
+.spot-root .spot-error-inline { color: var(--down); }
+
+.spot-root .spot-slip-custom {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.spot-root .spot-slip-input {
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  direction: ltr;
+}
+
+.spot-root .spot-slip-input.is-invalid { border-color: var(--down); }
+
+.spot-root .spot-slip-input:focus-visible,
+.spot-root .spot-btn:focus-visible,
+.spot-root .spot-chip:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 2px;
+}
 
 /* ---------- estimate ---------- */
-
-.spot-root .spot-quote-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-width: 0;
-}
 
 .spot-root .spot-estimate {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-4);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--rgb-1) 6%, var(--bg-raised));
   border: 1px solid var(--line);
+  min-width: 0;
 }
 
-.spot-root .spot-estimate-head {
+.spot-root .spot-est-head {
   display: flex;
   justify-content: space-between;
-  gap: var(--sp-2);
   align-items: baseline;
-  font-size: var(--fs-xs);
-  color: var(--text-2);
+  gap: var(--sp-3);
+  min-width: 0;
 }
 
-.spot-root .spot-big {
+.spot-root .spot-est-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.spot-root .spot-est-state {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.spot-root .spot-est-state.is-live { color: var(--up); }
+.spot-root .spot-est-state.is-wait { color: var(--rgb-1); }
+.spot-root .spot-est-state.is-bad { color: var(--down); }
+
+/* The figure is ONE line: artwork, amount, symbol — the symbol is a separate
+   span at a smaller size, which is why a long ticker no longer wraps under the
+   number and clips. */
+.spot-root .spot-est-main {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.spot-root .spot-est-ico {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.spot-root .spot-est-amount {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: var(--fs-xl);
   font-weight: 700;
+  line-height: var(--lh-tight);
   color: var(--text-1);
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spot-root .spot-est-sym {
+  flex: 0 0 auto;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* Rows that CANNOT wrap: the label ellipsises, the value stays whole and on
+   one line, which is the «در یک خط قرار نمیگیره» fix. */
+.spot-root .spot-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-block: var(--sp-2);
+  border-block: 1px solid var(--line);
+  min-width: 0;
+}
+
+.spot-root .spot-rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.spot-root .spot-rows dt {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spot-root .spot-rows dd {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
   text-align: end;
+  white-space: nowrap;
+}
+
+.spot-root .spot-freshness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-width: 0;
 }
 
 /* ---------- notices ---------- */
@@ -631,6 +834,9 @@
 }
 
 .spot-root .spot-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
   margin: 0;
   padding: var(--sp-3);
   border-radius: 12px;
@@ -641,14 +847,27 @@
   line-height: var(--lh-normal);
 }
 
+.spot-root .spot-notice p { margin: 0; }
+
 .spot-root .spot-notice strong {
-  display: block;
-  margin-bottom: var(--sp-1);
   color: var(--text-1);
   font-size: var(--fs-sm);
 }
 
+.spot-root .spot-notice.is-info {
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
+}
+
+.spot-root .spot-notice.is-warn {
+  border-color: color-mix(in srgb, var(--rgb-5) 50%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 10%, transparent);
+}
+
 .spot-root .spot-notice-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-1);
   margin: 0;
   padding: var(--sp-2) var(--sp-3);
   border-radius: 12px;
@@ -656,65 +875,225 @@
   line-height: var(--lh-normal);
   border: 1px solid;
 }
+
 .spot-root .spot-notice-line.is-warn {
   color: var(--rgb-5);
   border-color: color-mix(in srgb, var(--rgb-5) 55%, transparent);
   background: color-mix(in srgb, var(--rgb-5) 10%, transparent);
 }
+
 .spot-root .spot-notice-line.is-bad {
   color: var(--down);
   border-color: color-mix(in srgb, var(--down) 60%, transparent);
   background: color-mix(in srgb, var(--down) 12%, transparent);
 }
-.spot-root .spot-notice-line.is-info {
-  color: var(--rgb-1);
-  border-color: color-mix(in srgb, var(--rgb-1) 50%, transparent);
-  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
-}
 
-.spot-root .spot-disclaimers {
-  margin: 0;
-  padding-inline-start: var(--sp-4);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-normal);
-  color: var(--text-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-/* ---------- definition lists (review and outcome) ---------- */
-
-.spot-root .spot-dl {
+/* The three warnings: one fold (CollapsibleCard), one list, an icon each. */
+.spot-root .spot-notice-list {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.spot-root .spot-dl > div {
+.spot-root .spot-notice-list li {
   display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+}
+
+.spot-root .spot-notice-list li svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--rgb-1);
+}
+
+/* ---------- AI token risk ---------- */
+
+.spot-root .spot-risk-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.spot-risk-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--sp-2);
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.spot-risk-pill.is-low {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 55%, transparent);
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+}
+
+.spot-risk-pill.is-medium {
+  color: var(--rgb-5);
+  border-color: color-mix(in srgb, var(--rgb-5) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 12%, transparent);
+}
+
+.spot-risk-pill.is-high {
+  color: var(--rgb-3);
+  border-color: color-mix(in srgb, var(--rgb-3) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-3) 12%, transparent);
+}
+
+.spot-risk-pill.is-critical {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 60%, transparent);
+  background: color-mix(in srgb, var(--down) 14%, transparent);
+}
+
+.spot-root .spot-risk-meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.spot-root .spot-risk-meter-head {
+  display: flex;
+  align-items: baseline;
   justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.spot-root .spot-risk-meter-track {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.spot-root .spot-risk-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--up), var(--rgb-5));
+  transition: width 260ms ease;
+}
+
+.spot-root .spot-risk.is-high .spot-risk-meter-fill,
+.spot-root .spot-risk.is-critical .spot-risk-meter-fill {
+  background: linear-gradient(90deg, var(--rgb-5), var(--down));
+}
+
+.spot-root .spot-risk-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  min-width: 0;
+}
+
+.spot-root .spot-risk-rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sp-3);
   align-items: baseline;
   min-width: 0;
 }
 
-.spot-root .spot-dl dt { color: var(--text-2); font-size: var(--fs-xs); }
-.spot-root .spot-dl dd { margin: 0; color: var(--text-1); font-size: var(--fs-sm); text-align: end; overflow-wrap: anywhere; }
-
-.spot-root .spot-dl-review { padding-block: var(--sp-2); border-block: 1px solid var(--line); }
-
-.spot-root .spot-review {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
+.spot-root .spot-risk-rows dt {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.spot-root .spot-review-actions {
+.spot-root .spot-risk-rows dd {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.spot-root .spot-risk-flags {
   display: flex;
-  gap: var(--sp-2);
   flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spot-root .spot-risk-flag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--sp-2);
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
+
+.spot-root .spot-risk-flag.is-caution {
+  color: var(--rgb-5);
+  border-color: color-mix(in srgb, var(--rgb-5) 45%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 10%, transparent);
+}
+
+.spot-root .spot-risk-flag.is-medium {
+  color: var(--rgb-5);
+  border-color: color-mix(in srgb, var(--rgb-5) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 12%, transparent);
+}
+
+.spot-root .spot-risk-flag.is-high {
+  color: var(--rgb-3);
+  border-color: color-mix(in srgb, var(--rgb-3) 55%, transparent);
+  background: color-mix(in srgb, var(--rgb-3) 12%, transparent);
+}
+
+.spot-root .spot-risk-flag.is-critical {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 60%, transparent);
+  background: color-mix(in srgb, var(--down) 14%, transparent);
+}
+
+.spot-root .spot-risk-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  color: var(--text-2);
+}
+
+.spot-root .spot-risk-note.is-warn { color: var(--rgb-5); }
+.spot-root .spot-risk-note.is-good { color: var(--up); }
+
+.spot-root .spot-risk-rescan {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
 }
 
 /* ---------- buttons ---------- */
@@ -751,11 +1130,13 @@
   cursor: pointer;
 }
 
+.spot-root .spot-btn-link:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
 .spot-root .spot-cta-wrap { display: flex; flex-direction: column; gap: var(--sp-2); }
 
 .spot-root .spot-cta {
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius);
   border: 1px solid transparent;
@@ -769,21 +1150,22 @@
 
 .spot-root .spot-cta:active:not(:disabled) { transform: scale(0.99); }
 
+.spot-root .spot-cta:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+
+/* Buy stays green→cyan, sell stays red→magenta: no shared hue between them. */
 .spot-root .spot-cta.is-buy {
-  background: linear-gradient(90deg, var(--up), var(--rgb-1));
+  background: linear-gradient(135deg, var(--up), var(--rgb-1));
   box-shadow: 0 14px 30px -12px color-mix(in srgb, var(--up) 55%, transparent);
 }
 
 .spot-root .spot-cta.is-sell {
-  background: linear-gradient(90deg, var(--down), var(--rgb-3));
+  background: linear-gradient(135deg, var(--down), var(--rgb-3));
   box-shadow: 0 14px 30px -12px color-mix(in srgb, var(--down) 55%, transparent);
 }
 
 /* Both pills are bright: the ink on them is dark in BOTH themes — the dark
    theme's dark is --bg-void, the light theme's is --text-1. */
-:root[data-theme='light'] .spot-root .spot-cta {
-  color: var(--text-1);
-}
+:root[data-theme='light'] .spot-root .spot-cta { color: var(--text-1); }
 
 .spot-root .spot-cta:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -793,9 +1175,7 @@
   color: var(--bg-void);
 }
 
-:root[data-theme='light'] .spot-root .spot-btn-primary {
-  color: var(--text-1);
-}
+:root[data-theme='light'] .spot-root .spot-btn-primary { color: var(--text-1); }
 
 .spot-root .spot-btn-confirm {
   background: var(--up);
@@ -803,13 +1183,22 @@
   color: var(--bg-void);
 }
 
-:root[data-theme='light'] .spot-root .spot-btn-confirm {
-  color: var(--text-1);
-}
+:root[data-theme='light'] .spot-root .spot-btn-confirm { color: var(--text-1); }
 
 /* ---------- outcome card ---------- */
 
-.spot-root .spot-outcome { border-inline-start-width: 3px; }
+.spot-root .spot-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-inline-start-width: 3px;
+  background: var(--bg-raised);
+}
+
+.spot-root .spot-outcome p { margin: 0; font-size: var(--fs-xs); color: var(--text-2); }
 .spot-root .spot-outcome.is-ok { border-inline-start-color: var(--up); }
 .spot-root .spot-outcome.is-bad { border-inline-start-color: var(--down); }
 .spot-root .spot-outcome.is-warn { border-inline-start-color: var(--rgb-5); }
@@ -830,14 +1219,30 @@
 .spot-root .spot-outcome.is-warn .spot-outcome-head { color: var(--rgb-5); }
 .spot-root .spot-outcome.is-busy .spot-outcome-head { color: var(--rgb-1); }
 
-.spot-root .spot-history { margin-top: var(--sp-2); }
+/* ---------- review sheet ---------- */
+
+.spot-root .spot-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.spot-root .spot-review-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.spot-root .spot-history { margin-top: var(--sp-1); }
 
 /* ---------- motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {
   .spot-root *,
   .spot-root *::before,
-  .spot-root *::after {
+  .spot-root *::after,
+  .spot-sel-pop,
+  .spot-sel-backdrop {
     transition: none !important;
     animation: none !important;
     scroll-behavior: auto !important;

@@ -2,18 +2,31 @@
 /**
  * SPOT TRADE — the screen, rendered for real.
  *
- * What is real: SpotTrade, SpotMarketList, the order flow (runSpotOrder), the
- * quote timer and the review sheet. What is replaced: the wallet (no network,
- * no keys), the market feed (fixed prices), and the swap library's
- * chain-touching functions. Every replaced function is a counter, so the
- * assertions read as "this many signatures happened": the wallet is the only
- * thing that can sign, and the only route to it is the review's confirm button.
+ * What is real: SpotTrade, SpotSelect (the popup picker), SpotTokenRisk, the
+ * order flow (runSpotOrder), the quote timer and the review sheet. What is
+ * replaced: the wallet (no network, no keys), the market feed (fixed prices),
+ * the token-risk reader, and the swap library's chain-touching functions.
+ * Every replaced function is a counter, so the assertions read as "this many
+ * signatures happened": the wallet is the only thing that can sign, and the
+ * only route to it is the review's confirm button.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import EN from '../src/i18n/locales/en.json';
 
+/*
+ * A `t()` that behaves like i18next does. A key that exists answers with itself
+ * (so the assertions can read the key); a key that does NOT exist answers with
+ * its defaultValue, or with the key when there is none. That last part is the
+ * bug the error test below is written against: a bare `t('spot.err.X')` on a
+ * code nobody translated printed «spot.err.X» to the user.
+ */
+const i18n = vi.hoisted(() => ({ keys: null }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key) => key, i18n: { language: 'en', changeLanguage: () => {} } })
+  useTranslation: () => ({
+    t: (key, opts) => (i18n.keys && !i18n.keys.has(key) ? (opts?.defaultValue ?? key) : key),
+    i18n: { language: 'en', changeLanguage: () => {} }
+  })
 }));
 
 const walletState = { current: null };
@@ -30,11 +43,24 @@ vi.mock('../src/hooks/useHideBalances', () => ({ useHideBalances: () => false })
 vi.mock('../src/hooks/useMarket', () => ({
   useMarkets: () => ({
     data: [
-      { id: 'binancecoin', price: 600, change24h: 1.2 },
-      { id: 'tether', price: 1, change24h: 0 }
+      { id: 'binancecoin', price: 600, change24h: 1.2, sparkline: [1, 2, 3, 4, 5] },
+      { id: 'tether', price: 1, change24h: 0, sparkline: [1, 1, 1, 1, 1] },
+      { id: 'usd-coin', price: 1, change24h: 0.01, sparkline: [1, 1, 1, 1, 1] },
+      { id: 'pancakeswap-token', price: 2.5, change24h: -3.4, sparkline: [5, 4, 3, 2, 1] }
     ],
     loading: false
   })
+}));
+
+/* The AI risk reader: one verdict, and a counter of what it was asked about. */
+const riskState = vi.hoisted(() => ({ verdict: null, calls: [] }));
+vi.mock('../src/lib/tokenRisk', () => ({
+  goplusChainId: (chainId) => (Number(chainId) === 56 ? '56' : null),
+  fetchTokenRisk: (args) => {
+    riskState.calls.push(args);
+    return Promise.resolve(riskState.verdict);
+  },
+  isTrustedNative: () => false
 }));
 
 vi.mock('../src/components/WalletConnectSheet', () => ({ default: () => null }));
@@ -73,6 +99,16 @@ import { recordSwap } from '../src/lib/swapHistory';
 
 const ADDR = '0x1111111111111111111111111111111111111111';
 const ONE = 10n ** 18n;
+
+/** Every leaf key path in en.json, so the t() mock knows what exists. */
+function leafKeys(obj, prefix = '', out = []) {
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) leafKeys(v, path, out);
+    else out.push(path);
+  }
+  return out;
+}
 
 /** A quote shaped like getQuote's real success return (see lib/swap.js). */
 function quote(over = {}) {
@@ -124,8 +160,30 @@ function disconnectedWallet() {
   };
 }
 
+/** Open a picker popup by its trigger id and hand back the portalled card. */
+async function openPopup(triggerId) {
+  fireEvent.click(document.getElementById(triggerId));
+  return screen.findByTestId(`${triggerId}-popup`);
+}
+
 beforeEach(() => {
   localStorage.clear();
+  i18n.keys = new Set(leafKeys(EN));
+  riskState.calls = [];
+  riskState.verdict = {
+    score: 41,
+    level: 'medium',
+    honeypot: false,
+    scam: false,
+    contractRisk: 'medium',
+    liquidityRisk: 'high',
+    holderConcentration: 54,
+    whaleActivity: 'elevated',
+    rugPull: 30,
+    flags: [{ id: 'lpUnlocked', severity: 'high', values: {} }],
+    unknown: false,
+    generatedAt: Date.now()
+  };
   swap.getQuote = vi.fn(async () => quote());
   swap.getTokenBalance = vi.fn(async () => ({ raw: 1000n * ONE, formatted: 1000 }));
   swap.needsApproval = vi.fn(async () => false);
@@ -142,14 +200,30 @@ afterEach(() => {
 });
 
 describe('not connected: the market is readable, nothing can be signed', () => {
-  it('shows the market and the connect card, and the review button is disabled', async () => {
+  it('shows the connect card, and the review button is disabled', () => {
     walletState.current = disconnectedWallet();
     render(<SpotTrade />);
     expect(screen.getByText('spot.connectCard.title')).toBeTruthy();
-    expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
     const cta = document.querySelector('.spot-cta');
     expect(cta.disabled).toBe(true);
     expect(screen.getByText('spot.err.WALLET_NOT_CONNECTED')).toBeTruthy();
+  });
+
+  it('the token picker IS the market: one popup, no search field, no separate market box', async () => {
+    walletState.current = disconnectedWallet();
+    const { container } = render(<SpotTrade />);
+    // The old «بازار» column repeated the picker row for row; it is gone.
+    expect(container.querySelector('.spot-market-col')).toBeNull();
+
+    const popup = await openPopup('spot-asset');
+    const options = within(popup).getAllByRole('option');
+    expect(options.length).toBeGreaterThan(0);
+    // «هیچ کدام باکس‌ها فیلد جستجو نداشته باشد»
+    expect(popup.querySelector('input')).toBeNull();
+    expect(popup.querySelector('input[type="search"]')).toBeNull();
+    // Every row is one line: name, chart, price.
+    expect(within(popup).getAllByText('CAKE').length).toBeGreaterThan(0);
+    expect(popup.querySelectorAll('.spot-sel-spark').length).toBeGreaterThan(0);
   });
 
   it('typing an amount still signs nothing and reads no balances', async () => {
@@ -163,17 +237,28 @@ describe('not connected: the market is readable, nothing can be signed', () => {
   });
 });
 
-describe('wrong network: a clear message and a switch, never a silent trade', () => {
-  it('an order on a network the wallet is not on shows the card, and can ask the wallet to switch', async () => {
-    // The order network follows the wallet when the wallet is on a supported
-    // chain. To get a mismatch the user picks another network, as they would.
+describe('the pickers are popups: network, token and pay-with', () => {
+  it('the network opens as a popup and choosing one switches the order network', async () => {
     walletState.current = connectedWallet({ chainId: 1 });
     render(<SpotTrade />);
     expect(screen.queryByText('spot.wrongNetwork.title')).toBeNull();
-    fireEvent.change(document.getElementById('spot-chain'), { target: { value: '56' } });
+
+    const popup = await openPopup('spot-chain');
+    expect(popup.querySelector('input')).toBeNull();
+    fireEvent.click(popup.querySelector('[data-value="56"]'));
+
     expect(screen.getByText('spot.wrongNetwork.title')).toBeTruthy();
     fireEvent.click(screen.getByText('spot.wrongNetwork.switch'));
     await waitFor(() => expect(walletState.current.switchChain).toHaveBeenCalledWith(56));
+  });
+
+  it('the pay-with token is a popup with the token logos, and it lists no search field', async () => {
+    walletState.current = connectedWallet();
+    render(<SpotTrade />);
+    const popup = await openPopup('spot-quote');
+    expect(popup.querySelector('input')).toBeNull();
+    expect(within(popup).getAllByRole('option').length).toBeGreaterThan(0);
+    expect(popup.querySelectorAll('.spot-sel-ico').length).toBeGreaterThan(0);
   });
 
   it('a wallet on the order network shows no wrong-network card', () => {
@@ -184,20 +269,22 @@ describe('wrong network: a clear message and a switch, never a silent trade', ()
 });
 
 describe('balances: a failed read is «unavailable», never zero', () => {
-  it('a balance that throws shows the unavailable label in the market list', async () => {
+  it('a balance that throws shows the unavailable label in the picker rows', async () => {
     swap.getTokenBalance = vi.fn(async () => {
       throw new Error('rpc down');
     });
     walletState.current = connectedWallet();
     render(<SpotTrade />);
-    await waitFor(() => expect(screen.getAllByText('spot.balanceUnavailable').length).toBeGreaterThan(0));
-    expect(document.querySelectorAll('.spot-row-bal')[0].textContent).not.toMatch(/^0(\.0+)?\s/);
+    const popup = await openPopup('spot-asset');
+    await waitFor(() => expect(within(popup).getAllByText('spot.balanceUnavailable').length).toBeGreaterThan(0));
+    expect(popup.querySelectorAll('.spot-row-bal')[0].textContent).not.toMatch(/^0(\.0+)?\s/);
   });
 
   it('a resolved balance is shown with its symbol', async () => {
     walletState.current = connectedWallet();
     render(<SpotTrade />);
-    await waitFor(() => expect(document.querySelector('.spot-row-bal').textContent).toMatch(/1000/));
+    const popup = await openPopup('spot-asset');
+    await waitFor(() => expect(popup.querySelector('.spot-row-bal').textContent).toMatch(/1000/));
   });
 });
 
@@ -210,6 +297,67 @@ describe('paper trading is separate, labelled, and never the real path', () => {
     const paper = screen.getByTestId('paper-trade');
     expect(paper.getAttribute('data-embedded')).toBe('true');
     expect(document.querySelector('.spot-cta')).toBeNull();
+  });
+});
+
+describe('the two folds below the ticket: warnings and AI risk', () => {
+  it('the three warnings live in one box that starts closed and opens', async () => {
+    walletState.current = connectedWallet();
+    render(<SpotTrade />);
+    const head = screen.getByRole('button', { name: /spot\.notices\.title/ });
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(head);
+    await waitFor(() => expect(head.getAttribute('aria-expanded')).toBe('true'));
+    expect(screen.getByText('spot.notice.own')).toBeTruthy();
+    expect(screen.getByText('spot.notice.price')).toBeTruthy();
+    expect(screen.getByText('spot.notice.gas')).toBeTruthy();
+  });
+
+  it('the AI risk box scans the selected token and shows the breakdown when opened', async () => {
+    walletState.current = connectedWallet();
+    render(<SpotTrade />);
+    // BNB is the network's own gas coin: there is no contract to scan.
+    expect(screen.getByText('spot.risk.native')).toBeTruthy();
+
+    const popup = await openPopup('spot-asset');
+    fireEvent.click(popup.querySelector('[data-value="CAKE"]'));
+
+    await waitFor(() =>
+      expect(riskState.calls.some((c) => Number(c.chainId) === 56 && /^0x[a-fA-F0-9]{40}$/.test(String(c.address)))).toBe(true)
+    );
+
+    const head = screen.getByRole('button', { name: /risk\.badge/ });
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(head);
+    await waitFor(() => expect(head.getAttribute('aria-expanded')).toBe('true'));
+    expect(screen.getByText('risk.band.high')).toBeTruthy(); // liquidity
+    expect(screen.getByText('risk.flag.lpUnlocked')).toBeTruthy();
+    expect(screen.getByText('spot.risk.whaleLabel')).toBeTruthy();
+  });
+});
+
+describe('the amount field', () => {
+  it('the ≈ figure prices the token being PAID, not the asset', async () => {
+    walletState.current = connectedWallet();
+    render(<SpotTrade />);
+    // Buy: USDT (1 USD) is paid. Sell: BNB (600 USD) is paid.
+    fireEvent.change(document.getElementById('spot-amount'), { target: { value: '1' } });
+    await waitFor(() => expect(screen.getByText(/≈ \$1\b/)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /spot\.side\.sell/ }));
+    fireEvent.change(document.getElementById('spot-amount'), { target: { value: '1' } });
+    await waitFor(() => expect(screen.getByText(/≈ \$600\b/)).toBeTruthy());
+  });
+});
+
+describe('errors reach the reader as sentences, in the reader’s language', () => {
+  it('a code nobody translated falls back to a real sentence, never to the key', async () => {
+    swap.getQuote = vi.fn(async () => ({ error: 'MYSTERY_CODE' }));
+    walletState.current = connectedWallet();
+    render(<SpotTrade />);
+    fireEvent.change(document.getElementById('spot-amount'), { target: { value: '1' } });
+    await waitFor(() => expect(screen.getAllByText('spot.err.TX_FAILED').length).toBeGreaterThan(0), { timeout: 3000 });
+    expect(screen.queryAllByText('spot.err.MYSTERY_CODE').length).toBe(0);
   });
 });
 
