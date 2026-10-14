@@ -705,7 +705,25 @@
     "statReady": "Lista ahora",
     "pxOk": "Cotización conectada",
     "pxChecking": "Comprobando la cotización…",
-    "pxNone": "Sin cotización"
+    "pxNone": "Sin cotización",
+    "level1": {
+      "honestCard": "Esta orden solo se ejecuta con su confirmación. No hay ejecución automática — cuando se cumple la condición y una cotización real alcanza su límite, se le pedirá que apruebe el intercambio.",
+      "quoteReady": "Listo para intercambiar",
+      "quoteBelowLimit": "Cotización bajo el límite",
+      "quoteUnavailable": "Cotización no disponible",
+      "expiryLabel": "Vencimiento",
+      "expiry_1h": "1 hora",
+      "expiry_24h": "24 horas",
+      "expiry_7d": "7 días",
+      "feeCapLabel": "Comisión máxima (opcional)",
+      "estimatedOutput": "Salida estimada al precio límite",
+      "minOutput": "Mínimo que recibirá",
+      "noAutoExec": "Sin ejecución automática",
+      "swapRequiresConfirm": "El intercambio requiere su confirmación",
+      "networkUnsupported": "Intercambios no soportados en esta red",
+      "readyToSwap": "Listo para intercambiar",
+      "conditionMet": "Condición cumplida"
+    }
   },
   "bridge": {
     "emptyHint": "Introduce un importe para ver la mejor ruta y sus comisiones.",

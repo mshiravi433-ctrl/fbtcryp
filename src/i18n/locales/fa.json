@@ -5373,7 +5373,9 @@
       "failed": "ناموفق",
       "rejected": "ردشده",
       "partial": "جزئی",
-      "cancelled": "لغوشده"
+      "cancelled": "لغوشده",
+      "ready": "آماده",
+      "unavailable": "در دسترس نیست"
     },
     "from": "از",
     "to": "به",
@@ -5491,7 +5493,29 @@
     "statReady": "آمادهٔ اقدام",
     "pxOk": "فید قیمت وصل است",
     "pxChecking": "در حال بررسی فید قیمت…",
-    "pxNone": "فید قیمت ندارد"
+    "pxNone": "فید قیمت ندارد",
+    "level1": {
+      "honestCard": "این سفارش فقط با تایید شما اجرا می‌شود. اجرای خودکار وجود ندارد — وقتی شرط برقرار شد و کوتیشن واقعی حد شما را بدهد، برای تایید سواپ از شما پرسیده می‌شود.",
+      "quoteReady": "آماده‌ی سواپ",
+      "quoteBelowLimit": "کوتیشن زیر حد",
+      "quoteUnavailable": "کوتیشن در دسترس نیست",
+      "quoteBelowDetail": "شرط بازار برقرار است، اما سواپ واقعی {{quoteOut}} {{symbol}} می‌دهد که زیر حد شما ({{minOut}} {{symbol}}) است.",
+      "quoteUnavailableDetail": "در حال حاضر نمی‌توان کوتیشن واقعی گرفت. سفارش بعداً دوباره بررسی می‌شود.",
+      "expiryLabel": "سررسید",
+      "expiry_1h": "۱ ساعت",
+      "expiry_24h": "۲۴ ساعت",
+      "expiry_7d": "۷ روز",
+      "feeCapLabel": "سقف کارمزد (اختیاری)",
+      "feeCapNote": "اگر کارمزد کوتیشن از این بیشتر باشد، سفارش معلق می‌ماند",
+      "estimatedOutput": "خروجی تخمینی با قیمت حد",
+      "minOutput": "حداقل دریافتی شما",
+      "noAutoExec": "بدون اجرای خودکار",
+      "swapRequiresConfirm": "سواپ نیاز به تایید شما دارد",
+      "networkUnsupported": "سواپ در این شبکه پشتیبانی نمی‌شود",
+      "networkUnsupportedDetail": "مسیر اگریگیتور برای سفارش Limit در {{network}} وجود ندارد.",
+      "readyToSwap": "آماده‌ی سواپ",
+      "conditionMet": "شرط برقرار"
+    }
   },
   "lock": {
     "title": "قفل است",

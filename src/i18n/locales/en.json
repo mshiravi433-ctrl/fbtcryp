@@ -5373,7 +5373,9 @@
       "failed": "Failed",
       "rejected": "Rejected",
       "partial": "Partial",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "ready": "Ready",
+      "unavailable": "Unavailable"
     },
     "from": "From",
     "to": "To",
@@ -5491,7 +5493,29 @@
     "statReady": "Ready now",
     "pxOk": "Price feed connected",
     "pxChecking": "Checking the price feed…",
-    "pxNone": "No price feed"
+    "pxNone": "No price feed",
+    "level1": {
+      "honestCard": "This order executes only with your confirmation. There is no automatic execution — when the condition is met and a real quote meets your limit, you will be asked to approve the swap.",
+      "quoteReady": "Ready to swap",
+      "quoteBelowLimit": "Quote below limit",
+      "quoteUnavailable": "Quote unavailable",
+      "quoteBelowDetail": "Market condition met, but the actual swap would yield {{quoteOut}} {{symbol}}, which is below your limit of {{minOut}} {{symbol}}.",
+      "quoteUnavailableDetail": "Cannot get a real quote right now. The order will be checked again later.",
+      "expiryLabel": "Expires in",
+      "expiry_1h": "1 hour",
+      "expiry_24h": "24 hours",
+      "expiry_7d": "7 days",
+      "feeCapLabel": "Max fee (optional)",
+      "feeCapNote": "Order stays pending if the quoted fee exceeds this",
+      "estimatedOutput": "Estimated output at limit price",
+      "minOutput": "Minimum you receive",
+      "noAutoExec": "No automatic execution",
+      "swapRequiresConfirm": "Swap requires your confirmation",
+      "networkUnsupported": "Swaps not supported on this network",
+      "networkUnsupportedDetail": "No aggregator route available for limit orders on {{network}}.",
+      "readyToSwap": "Ready to swap",
+      "conditionMet": "Condition met"
+    }
   },
   "lock": {
     "title": "Locked",

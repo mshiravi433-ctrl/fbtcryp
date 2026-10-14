@@ -705,7 +705,25 @@
     "statReady": "Siap sekarang",
     "pxOk": "Umpan harga terhubung",
     "pxChecking": "Memeriksa umpan harga…",
-    "pxNone": "Tanpa umpan harga"
+    "pxNone": "Tanpa umpan harga",
+    "level1": {
+      "honestCard": "Pesanan ini hanya dieksekusi dengan konfirmasi Anda. Tidak ada eksekusi otomatis — ketika kondisi terpenuhi dan kutipan nyata mencapai batas Anda, Anda akan diminta menyetujui pertukaran.",
+      "quoteReady": "Siap untuk ditukar",
+      "quoteBelowLimit": "Kutipan di bawah batas",
+      "quoteUnavailable": "Kutipan tidak tersedia",
+      "expiryLabel": "Kedaluwarsa",
+      "expiry_1h": "1 jam",
+      "expiry_24h": "24 jam",
+      "expiry_7d": "7 hari",
+      "feeCapLabel": "Biaya maks. (opsional)",
+      "estimatedOutput": "Output estimasi pada harga batas",
+      "minOutput": "Minimum yang Anda terima",
+      "noAutoExec": "Tanpa eksekusi otomatis",
+      "swapRequiresConfirm": "Pertukaran memerlukan konfirmasi Anda",
+      "networkUnsupported": "Pertukaran tidak didukung di jaringan ini",
+      "readyToSwap": "Siap untuk ditukar",
+      "conditionMet": "Kondisi terpenuhi"
+    }
   },
   "bridge": {
     "emptyHint": "Masukkan jumlah untuk melihat rute terbaik dan biayanya.",

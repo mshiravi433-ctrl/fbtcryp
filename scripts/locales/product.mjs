@@ -436,4 +436,93 @@ export default {
     id: 'Masukkan jumlah untuk melihat rute terbaik dan biayanya.',
     pt: 'Introduza um valor para ver a melhor rota e as suas taxas.'
   },
+
+  /* --------------------------- orders level 1 -------------------------- */
+  'orders.level1.honestCard': {
+    zh: '此订单仅在您确认后执行。没有自动执行 — 当条件满足且真实报价达到您的限价时，系统会要求您批准交换。',
+    hi: 'यह ऑर्डर केवल आपकी पुष्टि पर निष्पादित होता है। कोई स्वचालित निष्पादन नहीं — जब शर्त पूरी हो और वास्तविक कोटेशन आपकी सीमा तक पहुँचे, तो आपसे स्वैप स्वीकृति मांगी जाएगी।',
+    es: 'Esta orden solo se ejecuta con su confirmación. No hay ejecución automática — cuando se cumple la condición y una cotización real alcanza su límite, se le pedirá que apruebe el intercambio.',
+    fr: 'Cet ordre ne s\'exécute qu\'avec votre confirmation. Pas d\'exécution automatique — quand la condition est remplie et qu\'une cotation réelle atteint votre limite, il vous sera demandé d\'approuver l\'échange.',
+    ru: 'Этот ордер исполняется только с вашего подтверждения. Автоматического исполнения нет — когда условие выполнено и реальная котировка достигает вашего лимита, вам будет предложено подтвердить обмен.',
+    tr: 'Bu emir yalnızca onayınızla yürütülür. Otomatik yürütme yoktur — koşul sağlandığında ve gerçek bir teklif limitinize ulaştığında, takas onayı istenecektir.',
+    ur: 'یہ آرڈر صرف آپ کی تصدیق پر عمل میں آتا ہے۔ کوئی خودکار عمل نہیں — جب شرط پوری ہو اور حقیقی قیمت آپ کی حد تک پہنچے، تو آپ سے swap کی منظوری مانگی جائے گی۔',
+    id: 'Pesanan ini hanya dieksekusi dengan konfirmasi Anda. Tidak ada eksekusi otomatis — ketika kondisi terpenuhi dan kutipan nyata mencapai batas Anda, Anda akan diminta menyetujui pertukaran.',
+    pt: 'Esta ordem só é executada com a sua confirmação. Não há execução automática — quando a condição é satisfeita e uma cotação real atinge o seu limite, ser-lhe-á pedido que aprove a troca.'
+  },
+  'orders.level1.quoteReady': {
+    zh: '准备交换', hi: 'स्वैप के लिए तैयार', es: 'Listo para intercambiar',
+    fr: 'Prêt à échanger', ru: 'Готов к обмену', tr: 'Takas için hazır',
+    ur: 'تبادلے کے لیے تیار', id: 'Siap untuk ditukar', pt: 'Pronto para trocar'
+  },
+  'orders.level1.quoteBelowLimit': {
+    zh: '报价低于限价', hi: 'कोटेशन सीमा से कम', es: 'Cotización bajo el límite',
+    fr: 'Cotation sous la limite', ru: 'Котировка ниже лимита', tr: 'Teklif limitin altında',
+    ur: 'قیمت حد سے کم', id: 'Kutipan di bawah batas', pt: 'Cotação abaixo do limite'
+  },
+  'orders.level1.quoteUnavailable': {
+    zh: '报价不可用', hi: 'कोटेशन अनुपलब्ध', es: 'Cotización no disponible',
+    fr: 'Cotation indisponible', ru: 'Котировка недоступна', tr: 'Teklif mevcut değil',
+    ur: 'قیمت دستیاب نہیں', id: 'Kutipan tidak tersedia', pt: 'Cotação indisponível'
+  },
+  'orders.level1.expiryLabel': {
+    zh: '到期时间', hi: 'समाप्ति', es: 'Vencimiento',
+    fr: 'Expiration', ru: 'Истечение', tr: 'Son kullanma',
+    ur: 'میعاد ختم', id: 'Kedaluwarsa', pt: 'Validade'
+  },
+  'orders.level1.expiry_1h': {
+    zh: '1 小时', hi: '1 घंटा', es: '1 hora',
+    fr: '1 heure', ru: '1 час', tr: '1 saat',
+    ur: '١ گھنٹہ', id: '1 jam', pt: '1 hora'
+  },
+  'orders.level1.expiry_24h': {
+    zh: '24 小时', hi: '24 घंटे', es: '24 horas',
+    fr: '24 heures', ru: '24 часа', tr: '24 saat',
+    ur: '٢٤ گھنٹے', id: '24 jam', pt: '24 horas'
+  },
+  'orders.level1.expiry_7d': {
+    zh: '7 天', hi: '7 दिन', es: '7 días',
+    fr: '7 jours', ru: '7 дней', tr: '7 gün',
+    ur: '٧ دن', id: '7 hari', pt: '7 dias'
+  },
+  'orders.level1.feeCapLabel': {
+    zh: '最高手续费（可选）', hi: 'अधिकतम शुल्क (वैकल्पिक)', es: 'Comisión máxima (opcional)',
+    fr: 'Frais max (optionnel)', ru: 'Макс. комиссия (необязательно)', tr: 'Maks. ücret (isteğe bağlı)',
+    ur: 'زیادہ سے زیادہ فیس (اختیاری)', id: 'Biaya maks. (opsional)', pt: 'Taxa máxima (opcional)'
+  },
+  'orders.level1.estimatedOutput': {
+    zh: '按限价估算输出', hi: 'सीमा मूल्य पर अनुमानित आउटपुट', es: 'Salida estimada al precio límite',
+    fr: 'Sortie estimée au prix limite', ru: 'Расчётный выход по лимитной цене', tr: 'Limit fiyatında tahmini çıktı',
+    ur: 'حد کی قیمت پر تخمینی آؤٹ پٹ', id: 'Output estimasi pada harga batas', pt: 'Saída estimada ao preço limite'
+  },
+  'orders.level1.minOutput': {
+    zh: '您至少收到的金额', hi: 'न्यूनतम आपको मिलेगा', es: 'Mínimo que recibirá',
+    fr: 'Minimum que vous recevrez', ru: 'Минимум, который вы получите', tr: 'Alacağınız minimum',
+    ur: 'کم از کم آپ کو ملے گا', id: 'Minimum yang Anda terima', pt: 'Mínimo que receberá'
+  },
+  'orders.level1.noAutoExec': {
+    zh: '无自动执行', hi: 'कोई स्वचालित निष्पादन नहीं', es: 'Sin ejecución automática',
+    fr: 'Pas d\'exécution automatique', ru: 'Нет автоматического исполнения', tr: 'Otomatik yürütme yok',
+    ur: 'کوئی خودکار عمل نہیں', id: 'Tanpa eksekusi otomatis', pt: 'Sem execução automática'
+  },
+  'orders.level1.swapRequiresConfirm': {
+    zh: '交换需要您确认', hi: 'स्वैप को आपकी पुष्टि चाहिए', es: 'El intercambio requiere su confirmación',
+    fr: 'L\'échange nécessite votre confirmation', ru: 'Обмен требует вашего подтверждения', tr: 'Takas onayınızı gerektirir',
+    ur: 'تبادلے کو آپ کی تصدیق درکار ہے', id: 'Pertukaran memerlukan konfirmasi Anda', pt: 'A troca requer a sua confirmação'
+  },
+  'orders.level1.networkUnsupported': {
+    zh: '此网络不支持交换', hi: 'इस नेटवर्क पर स्वैप समर्थित नहीं', es: 'Intercambios no soportados en esta red',
+    fr: 'Échanges non pris en charge sur ce réseau', ru: 'Обмены не поддерживаются в этой сети', tr: 'Bu ağda takaslar desteklenmiyor',
+    ur: 'اس نیٹ ورک پر تبادلے تعاون یافتہ نہیں', id: 'Pertukaran tidak didukung di jaringan ini', pt: 'Trocas não suportadas nesta rede'
+  },
+  'orders.level1.readyToSwap': {
+    zh: '准备交换', hi: 'स्वैप के लिए तैयार', es: 'Listo para intercambiar',
+    fr: 'Prêt à échanger', ru: 'Готов к обмену', tr: 'Takas için hazır',
+    ur: 'تبادلے کے لیے تیار', id: 'Siap untuk ditukar', pt: 'Pronto para trocar'
+  },
+  'orders.level1.conditionMet': {
+    zh: '条件已满足', hi: 'शर्त पूरी हो गई', es: 'Condición cumplida',
+    fr: 'Condition remplie', ru: 'Условие выполнено', tr: 'Koşul sağlandı',
+    ur: 'شرط پوری ہو گئی', id: 'Kondisi terpenuhi', pt: 'Condição satisfeita'
+  },
 };
+

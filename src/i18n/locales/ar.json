@@ -3611,7 +3611,9 @@
     "remove": "حذف",
     "status": {
       "filled": "تم",
-      "expired": "منتهٍ"
+      "expired": "منتهٍ",
+      "ready": "جاهز",
+      "unavailable": "غير متاح"
     },
     "from": "من",
     "to": "إلى",
@@ -3670,7 +3672,29 @@
     "statReady": "جاهز الآن",
     "pxOk": "تغذية السعر متصلة",
     "pxChecking": "جارٍ التحقق من تغذية السعر…",
-    "pxNone": "لا تتوفر تغذية سعر"
+    "pxNone": "لا تتوفر تغذية سعر",
+    "level1": {
+      "honestCard": "يُنفَّذ هذا الأمر بتأكيدك فقط. لا يوجد تنفيذ تلقائي — عندما يتحقق الشرط ويعطيك عرض حقيقي سعرك المحدد، سيُطلب منك الموافقة على المبادلة.",
+      "quoteReady": "جاهز للمبادلة",
+      "quoteBelowLimit": "العرض أقل من الحد",
+      "quoteUnavailable": "العرض غير متاح",
+      "quoteBelowDetail": "تحقق شرط السوق، لكن المبادلة الفعلية ستعطي {{quoteOut}} {{symbol}}، وهو أقل من حدك {{minOut}} {{symbol}}.",
+      "quoteUnavailableDetail": "لا يمكن الحصول على عرض حقيقي الآن. سيُعاد فحص الأمر لاحقاً.",
+      "expiryLabel": "ينتهي خلال",
+      "expiry_1h": "ساعة واحدة",
+      "expiry_24h": "٢٤ ساعة",
+      "expiry_7d": "٧ أيام",
+      "feeCapLabel": "الحد الأقصى للعمولة (اختياري)",
+      "feeCapNote": "يبقى الأمر معلّقاً إذا تجاوزت العمولة المعروضة هذا الحد",
+      "estimatedOutput": "المخرجات المقدرة بسعر الحد",
+      "minOutput": "الحد الأدنى الذي ستحصل عليه",
+      "noAutoExec": "بدون تنفيذ تلقائي",
+      "swapRequiresConfirm": "المبادلة تتطلب تأكيدك",
+      "networkUnsupported": "المبادلات غير مدعومة على هذه الشبكة",
+      "networkUnsupportedDetail": "لا يوجد مسار مجمّع لأوامر الحد على {{network}}.",
+      "readyToSwap": "جاهز للمبادلة",
+      "conditionMet": "تحقق الشرط"
+    }
   },
   "solana": {
     "twoWalletsTitle": "محفظتان جنباً إلى جنب",
