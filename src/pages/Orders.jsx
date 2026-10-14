@@ -36,13 +36,17 @@ import {
   advanceOrder,
   computeMinAmountOut,
   createOrder,
+  createQuoteGate,
+  evaluateForNotification,
   evaluateLimitWithQuote,
   evaluateOrder,
   expireStale,
+  fillFromReadyQuote,
   loadOrders,
   orderNotionalUsd,
   pauseOrder,
   pingWatchTick,
+  readyQuoteFields,
   removeOrder,
   resumeOrder,
   ladderPortion,
@@ -53,6 +57,8 @@ import {
   updateOrder
 } from '../lib/orders';
 import { dispatchStageAlert } from '../lib/stagePush';
+import { getQuote } from '../lib/swap';
+import OrderStats from '../components/OrderStats';
 import { activateDca, confirmDcaCancel, createDcaRevision, dcaDisplayStatus, loadDcaReceipts, requestDcaCancel } from '../lib/dcaExecution';
 import { loadGoal } from '../lib/goalStore';
 import { loadSolanaHandoffs } from '../lib/solanaOrders';
@@ -102,6 +108,28 @@ const chainOptionsFrom = (counts, t) =>
       };
     })
     .filter(Boolean);
+
+/**
+ * One live quotation for a watched order, in the shape evaluateForNotification
+ * expects. Failures come back as { error } and are never treated as ready.
+ * The Swap screen remains the only place a transaction is built.
+ */
+async function fetchOrderQuote(order) {
+  const q = await getQuote({
+    provider: null,
+    chainId: order.chainId,
+    fromToken: order.fromToken,
+    toToken: order.toToken,
+    amountIn: order.amountIn
+  });
+  if (!q || q.error || !Number.isFinite(Number(q.amountOut))) {
+    return { error: q?.error || 'NO_QUOTE' };
+  }
+  return {
+    amountOut: Number(q.amountOut),
+    selectedSolver: q.selectedSolver ?? null
+  };
+}
 
 export default function Orders() {
   // Subscribe so the figures re-render the moment the switch moves;
@@ -202,7 +230,54 @@ export default function Orders() {
     [prices]
   );
 
-  /* Watch for ready orders and notify once per cooldown. */
+  /*
+   * LEVEL 2 — notify only on a REAL quotation.
+   *
+   * The price tick still decides readiness for the screen and still persists
+   * the trailing high-water mark, synchronously, exactly as before. What changed
+   * is the notification: for limit, trailing and bracket orders the user is told
+   * only when a live quotation meets their floor (see evaluateForNotification).
+   *
+   * The quotation request is async and throttled. The gate allows one request
+   * per order at a time, and waits QUOTE_RECHECK_MS between checks, so a price
+   * that stays on target does not turn into a request on every tick.
+   */
+  const quoteGate = useRef(null);
+  if (quoteGate.current === null) quoteGate.current = createQuoteGate();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const checkOrderAndNotify = useCallback(
+    async (order, rate) => {
+      const outcome = await evaluateForNotification(order, rate, fetchOrderQuote, Date.now());
+      if (!outcome.notify) return;
+      const now = Date.now();
+      dispatchStageAlert({
+        stage: 'ready',
+        kind: 'order',
+        base: order.fromToken.symbol,
+        quote: order.toToken.symbol,
+        rate: outcome.rate ?? order.targetRate,
+        id: order.id,
+        haptic,
+        minAmountOut: outcome.minAmountOut,
+        quoteOut: outcome.quoteOut
+      }).catch(() => {});
+      /*
+       * Remember the quotation this ready state was judged on. The hand-off to
+       * Swap records it as the fill details; it is never presented as a receipt.
+       */
+      updateOrder(order.id, { lastNotifiedAt: now, ...readyQuoteFields(outcome, now) });
+      if (mounted.current) setOrders(loadOrders());
+    },
+    [haptic]
+  );
+
   useEffect(() => {
     if (!orders.length) return;
     const now = Date.now();
@@ -210,7 +285,6 @@ export default function Orders() {
     const next = orders.map((o) => {
       if (o.status !== 'active') return o;
       const res = evaluateOrder(o, rateFor(o), now);
-      const { ready } = res;
 
       /*
        * PERSIST THE TRAILING HIGH-WATER MARK.
@@ -226,25 +300,20 @@ export default function Orders() {
         changed = true;
       }
 
-      if (!ready || !shouldNotify(cur, now)) return cur;
-      changed = true;
-
-      dispatchStageAlert({
-        stage: 'ready',
-        kind: 'order',
-        base: cur.fromToken.symbol,
-        quote: cur.toToken.symbol,
-        rate: res.at ?? cur.targetRate,
-        id: cur.id,
-        haptic
-      }).catch(() => {});
-      return { ...cur, lastNotifiedAt: now };
+      if (res.ready && shouldNotify(cur, now) && quoteGate.current.canStart(cur.id, now)) {
+        quoteGate.current.start(cur.id);
+        Promise.resolve()
+          .then(() => checkOrderAndNotify(cur, rateFor(cur)))
+          .catch(() => {})
+          .finally(() => quoteGate.current.finish(cur.id, Date.now()));
+      }
+      return cur;
     });
     if (changed) {
       saveOrders(next);
       setOrders(next);
     }
-  }, [orders, rateFor, t]);
+  }, [orders, rateFor, t, checkOrderAndNotify]);
 
   /*
    * Keep the server's watch list in step with the local one.
@@ -448,7 +517,7 @@ export default function Orders() {
       haptic
     }).catch(() => {});
     // A hand-off to swap is not a receipt. DCA progress advances only when verified evidence is recorded.
-    if (order.type !== 'dca') setOrders(updateOrder(order.id, advanceOrder(order)));
+    if (order.type !== 'dca') setOrders(updateOrder(order.id, advanceOrder(order, fillFromReadyQuote(order))));
     const params = new URLSearchParams({
       from: order.fromToken.symbol,
       to: order.toToken.symbol,
@@ -598,6 +667,8 @@ export default function Orders() {
         bars={heroBars}
       />
 
+      <OrderStats orders={orders} />
+
       {/*
         Rail of order types. Flat tinted cards with one accent each — no
         backdrop blur, no glow — and each card now carries the number of live
@@ -701,7 +772,16 @@ export default function Orders() {
 
       {done.length > 0 && (
         <motion.section variants={stagger} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 8 }}>{t('orders.history')}</p>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <p className="section-label" style={{ margin: 0 }}>{t('orders.history')}</p>
+            <button
+              type="button"
+              onClick={() => navigate('/orders/history')}
+              style={{ background: 'none', border: 0, color: 'inherit', textDecoration: 'underline', fontSize: 12.5, cursor: 'pointer' }}
+            >
+              {t('orders.fullHistory.viewAll')} →
+            </button>
+          </div>
           <div className="stack" style={{ gap: 8 }}>
             {done.slice(0, 10).map((o) => <OrderRow key={o.id} o={o} t={t} rateFor={rateFor} usdMap={usdMap} actions={rowActions} />)}
           </div>

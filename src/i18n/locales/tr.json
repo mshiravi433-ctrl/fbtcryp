@@ -723,6 +723,56 @@
       "networkUnsupported": "Bu ağda takaslar desteklenmiyor",
       "readyToSwap": "Takas için hazır",
       "conditionMet": "Koşul sağlandı"
+    },
+    "stats": {
+      "title": "Emir istatistikleriniz",
+      "windowLabel": "Zaman aralığı",
+      "win30": "30 gün",
+      "win90": "90 gün",
+      "winAll": "Tümü",
+      "total": "Emirler",
+      "open": "Şu an açık",
+      "filled": "Gerçekleşen",
+      "expired": "Süresi doldu",
+      "closedNote": "Oranlar yalnızca kapanmış emirleri sayar (gerçekleşen + süresi dolan). Açık emirler başarısızlık sayılmaz.",
+      "days": "{{n}} gün",
+      "bestType": "En iyi gerçekleşme oranı: {{type}} ({{rate}})",
+      "bestNone": "En iyi gerçekleşme oranı: henüz yeterli kapanmış emir yok (tür başına en az {{n}}).",
+      "closedCount": "{{n}} kapalı"
+    },
+    "avgFillTime": "Ortalama gerçekleşme süresi",
+    "typeName": {
+      "limit": "Limit (Limit)",
+      "trailing": "İz süren stop (Trailing)",
+      "bracket": "Bracket (TP/SL)",
+      "ladder": "Merdiven (Ladder)",
+      "rebalance": "Yeniden dengeleme (Rebalance)"
+    },
+    "fullHistory": {
+      "title": "Gerçekleşen emirlerin tam geçmişi",
+      "honest": "Her rakam, emir hazır olduğunda izleyicinin gördüğü tekliftir ve Swap'a aktarıldığında kaydedilir. Zincir üstü makbuz değildir: uygulama zinciri izlemez, bu yüzden nihai gerçekleşme burada doğrulanmaz.",
+      "filterType": "Türe göre filtrele",
+      "filterRange": "Tarihe göre filtrele",
+      "allTypes": "Tüm türler",
+      "range": {
+        "today": "Bugün",
+        "week": "7 gün",
+        "month": "30 gün",
+        "all": "Tümü"
+      },
+      "count": "{{n}} gerçekleşen emir",
+      "empty": "Bu aralıkta gerçekleşen emir yok.",
+      "filledAt": "Gerçekleşme zamanı",
+      "amountIn": "Gönderilen miktar",
+      "rate": "Teklif kuru",
+      "amountOut": "Teklif çıktısı",
+      "minOut": "Minimumunuz",
+      "aboveFloor": "Minimumunuzun üzerinde",
+      "source": "Teklif kaynağı",
+      "unknownSource": "kaydedilmedi",
+      "pnl": "Kâr / zarar",
+      "pnlNa": "Kullanılamıyor: bu pozisyonun alış fiyatı kaydedilmedi.",
+      "viewAll": "Tam geçmişi gör"
     }
   },
   "bridge": {

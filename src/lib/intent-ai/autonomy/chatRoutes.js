@@ -105,7 +105,7 @@ export const ROUTED_PATHS = Object.freeze([
   '/earn', '/wallet', '/settings', '/about', '/contact', '/legal/:doc', '/perp',
   '/farm', '/signals', '/stocks', '/ostium', '/dydx', '/derivatives', '/shop',
   '/help', '/docs', '/audit', '/security', '/developers', '/ecosystem', '/business',
-  '/p2p', '/leaderboard', '/news', '/explore', '/discover', '/nft', '/orders',
+  '/p2p', '/leaderboard', '/news', '/explore', '/discover', '/nft', '/orders', '/orders/history',
   '/lab', '/explore-hub', '/learn', '/rewards', '/solana', '/buy',
   '/order/result/:orderId', '/smart-wallet', '/smart-money',
   '/smart-money/wallet/:chain/:address', '/smart-money/token/:chain/:address',

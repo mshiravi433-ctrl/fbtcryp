@@ -723,6 +723,56 @@
       "networkUnsupported": "Pertukaran tidak didukung di jaringan ini",
       "readyToSwap": "Siap untuk ditukar",
       "conditionMet": "Kondisi terpenuhi"
+    },
+    "stats": {
+      "title": "Statistik pesanan Anda",
+      "windowLabel": "Rentang waktu",
+      "win30": "30 hari",
+      "win90": "90 hari",
+      "winAll": "Semua",
+      "total": "Pesanan",
+      "open": "Terbuka sekarang",
+      "filled": "Terisi",
+      "expired": "Kedaluwarsa",
+      "closedNote": "Persentase hanya menghitung pesanan tertutup (terisi + kedaluwarsa). Pesanan terbuka tidak dihitung sebagai gagal.",
+      "days": "{{n}} hari",
+      "bestType": "Tingkat terisi terbaik: {{type}} ({{rate}})",
+      "bestNone": "Tingkat terisi terbaik: data tertutup belum cukup (minimal {{n}} per jenis).",
+      "closedCount": "{{n}} tertutup"
+    },
+    "avgFillTime": "Rata-rata waktu terisi",
+    "typeName": {
+      "limit": "Limit (Limit)",
+      "trailing": "Trailing stop (Trailing)",
+      "bracket": "Bracket (TP/SL)",
+      "ladder": "Tangga (Ladder)",
+      "rebalance": "Penyeimbangan ulang (Rebalance)"
+    },
+    "fullHistory": {
+      "title": "Riwayat lengkap pesanan terisi",
+      "honest": "Setiap angka adalah kutipan yang dilihat pemantau saat pesanan menjadi siap, dicatat saat Anda menyerahkannya ke Swap. Ini bukan bukti on-chain: aplikasi tidak memantau rantai, jadi eksekusi akhir tidak diverifikasi di sini.",
+      "filterType": "Filter menurut jenis",
+      "filterRange": "Filter menurut tanggal",
+      "allTypes": "Semua jenis",
+      "range": {
+        "today": "Hari ini",
+        "week": "7 hari",
+        "month": "30 hari",
+        "all": "Semua"
+      },
+      "count": "{{n}} pesanan terisi",
+      "empty": "Tidak ada pesanan terisi dalam rentang ini.",
+      "filledAt": "Terisi pada",
+      "amountIn": "Jumlah dikirim",
+      "rate": "Kurs kutipan",
+      "amountOut": "Keluaran kutipan",
+      "minOut": "Minimum Anda",
+      "aboveFloor": "Di atas minimum Anda",
+      "source": "Sumber kutipan",
+      "unknownSource": "tidak tercatat",
+      "pnl": "Untung / rugi",
+      "pnlNa": "Tidak tersedia: harga beli posisi ini tidak disimpan.",
+      "viewAll": "Lihat riwayat lengkap"
     }
   },
   "bridge": {

@@ -101,6 +101,7 @@ const Explore = lazyRetry(() => import('./pages/Explore'));
 const Discover = lazyRetry(() => import('./pages/Discover'));
 const Nft = lazyRetry(() => import('./pages/Nft'));
 const Orders = lazyRetry(() => import('./pages/Orders'));
+const OrderHistory = lazyRetry(() => import('./pages/OrderHistory'));
 // Lazy on purpose: pulls @solana/web3.js, which is 19 MB installed and is
 // only needed by users who actually open the Solana screen.
 const SolanaSwap = lazyRetry(() => import('./pages/SolanaSwap'));
@@ -448,6 +449,7 @@ function AnimatedRoutes() {
             <Route path="/discover" element={<Discover />} />
             <Route path="/nft" element={<Nft />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/history" element={<OrderHistory />} />
 
             {/* Merged hubs. The individual routes below still exist so old
                 links do not break. */}

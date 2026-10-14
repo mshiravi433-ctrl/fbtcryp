@@ -723,6 +723,56 @@
       "networkUnsupported": "Trocas não suportadas nesta rede",
       "readyToSwap": "Pronto para trocar",
       "conditionMet": "Condição satisfeita"
+    },
+    "stats": {
+      "title": "As suas estatísticas de ordens",
+      "windowLabel": "Período",
+      "win30": "30 dias",
+      "win90": "90 dias",
+      "winAll": "Tudo",
+      "total": "Ordens",
+      "open": "Abertas agora",
+      "filled": "Executadas",
+      "expired": "Expiradas",
+      "closedNote": "As taxas contam apenas ordens fechadas (executadas + expiradas). Ordens abertas não contam como falhas.",
+      "days": "{{n}} dias",
+      "bestType": "Melhor taxa de execução: {{type}} ({{rate}})",
+      "bestNone": "Melhor taxa de execução: ainda não há ordens fechadas suficientes (mín. {{n}} por tipo).",
+      "closedCount": "{{n}} fechadas"
+    },
+    "avgFillTime": "Tempo médio de execução",
+    "typeName": {
+      "limit": "Limite (Limit)",
+      "trailing": "Stop dinâmico (Trailing)",
+      "bracket": "Bracket (TP/SL)",
+      "ladder": "Escada (Ladder)",
+      "rebalance": "Rebalanceamento (Rebalance)"
+    },
+    "fullHistory": {
+      "title": "Histórico completo de ordens executadas",
+      "honest": "Cada número é a cotação que o vigia viu quando a ordem ficou pronta, registada ao enviá-la para o Swap. Não é um recibo on-chain: a aplicação não vigia a cadeia, por isso a execução final não é verificada aqui.",
+      "filterType": "Filtrar por tipo",
+      "filterRange": "Filtrar por data",
+      "allTypes": "Todos os tipos",
+      "range": {
+        "today": "Hoje",
+        "week": "7 dias",
+        "month": "30 dias",
+        "all": "Tudo"
+      },
+      "count": "{{n}} ordens executadas",
+      "empty": "Não há ordens executadas neste período.",
+      "filledAt": "Executada em",
+      "amountIn": "Quantidade enviada",
+      "rate": "Taxa cotada",
+      "amountOut": "Saída cotada",
+      "minOut": "O seu mínimo",
+      "aboveFloor": "Acima do seu mínimo",
+      "source": "Origem da cotação",
+      "unknownSource": "não registada",
+      "pnl": "Lucro / prejuízo",
+      "pnlNa": "Não disponível: o preço de compra desta posição não está guardado.",
+      "viewAll": "Ver histórico completo"
     }
   },
   "bridge": {

@@ -818,13 +818,247 @@ export function evaluateLimitWithQuote(order, rate, quote, now = Date.now()) {
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* LEVEL 2 — quotation floors for trailing and bracket orders                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Trailing stop with a quotation floor.
+ *
+ * The rule itself (peak, stopAt, WAITING / TRAIL_HIT) is `evaluateOrder`'s and
+ * is not repeated here. What this adds is the same honesty check the limit
+ * order gets: a stop that armed on a price tick but whose real quotation pays
+ * less than the stop price stays pending, with the reason recorded.
+ *
+ * The floor is `stopAt` — the price the trailing rule just armed. The result
+ * keeps `peak` and `stopAt` from the base evaluation so the caller can persist
+ * the high-water mark exactly as it does without a quotation.
+ */
+export function evaluateTrailingWithQuote(order, rate, quote, now = Date.now()) {
+  if (!order || order.type !== 'trailing') return { ready: false, reason: 'NOT_TRAILING' };
+  const base = evaluateOrder(order, rate, now);
+  if (!base.ready) return base;
+
+  if (!quote || !Number.isFinite(Number(quote.amountOut))) {
+    return { ...base, ready: false, reason: 'QUOTE_UNAVAILABLE', quoteError: quote?.error || 'NO_QUOTE' };
+  }
+
+  const minAmountOut = computeMinAmountOut(
+    { type: 'limit', targetRate: base.stopAt, priceOf: order.priceOf },
+    Number(order.amountIn),
+    Number(order.toToken?.decimals ?? 18)
+  );
+  if (minAmountOut === null) return { ...base, ready: false, reason: 'BAD_ORDER' };
+
+  const quoteOut = Number(quote.amountOut);
+  if (quoteOut >= minAmountOut) {
+    return { ...base, ready: true, reason: 'QUOTE_READY', minAmountOut, quoteOut };
+  }
+  return { ...base, ready: false, reason: 'QUOTE_BELOW_LIMIT', minAmountOut, quoteOut };
+}
+
+/**
+ * Bracket (OCO) with a quotation floor.
+ *
+ * The floor depends on WHICH side fired: take-profit is held to the
+ * take-profit rate, stop-loss to the stop-loss rate. `side` is kept on the
+ * result so the notification and the history can say which one it was.
+ *
+ * ⚠ Known trade-off, stated in the design doc: a stop-loss whose real quote is
+ * below the stop rate stays pending under this rule. That protects the user
+ * from a bad fill, but it also means the exit can be held back in a fast move.
+ */
+export function evaluateBracketWithQuote(order, rate, quote, now = Date.now()) {
+  if (!order || order.type !== 'bracket') return { ready: false, reason: 'NOT_BRACKET' };
+  const base = evaluateOrder(order, rate, now);
+  if (!base.ready) return base;
+
+  if (!quote || !Number.isFinite(Number(quote.amountOut))) {
+    return { ...base, ready: false, reason: 'QUOTE_UNAVAILABLE', quoteError: quote?.error || 'NO_QUOTE' };
+  }
+
+  const targetRate = base.side === 'takeProfit' ? order.takeProfitRate : order.stopLossRate;
+  const minAmountOut = computeMinAmountOut(
+    { type: 'limit', targetRate, priceOf: order.priceOf },
+    Number(order.amountIn),
+    Number(order.toToken?.decimals ?? 18)
+  );
+  if (minAmountOut === null) return { ...base, ready: false, reason: 'BAD_ORDER' };
+
+  const quoteOut = Number(quote.amountOut);
+  if (quoteOut >= minAmountOut) {
+    return { ...base, ready: true, reason: 'QUOTE_READY', minAmountOut, quoteOut, side: base.side };
+  }
+  return { ...base, ready: false, reason: 'QUOTE_BELOW_LIMIT', minAmountOut, quoteOut, side: base.side };
+}
+
+/** Types whose notification waits for a real quotation. Others keep the price-only rule. */
+export const QUOTE_CHECKED_TYPES = new Set(['limit', 'trailing', 'bracket']);
+
+/** Route to the quotation-aware evaluator for a type. Other types ignore the quote. */
+export function evaluateOrderWithQuote(order, rate, quote, now = Date.now()) {
+  switch (order?.type) {
+    case 'limit':
+      return evaluateLimitWithQuote(order, rate, quote, now);
+    case 'trailing':
+      return evaluateTrailingWithQuote(order, rate, quote, now);
+    case 'bracket':
+      return evaluateBracketWithQuote(order, rate, quote, now);
+    default:
+      return evaluateOrder(order, rate, now);
+  }
+}
+
+/**
+ * Decide whether an order should notify the user right now.
+ *
+ * Two gates, in order:
+ *   1. The price condition (`evaluateOrder`). If it is not met, no quotation
+ *      is requested at all — quotes cost an API call each.
+ *   2. For QUOTE_CHECKED_TYPES, a real quotation must meet the floor. Only
+ *      `QUOTE_READY` sets `notify: true`. A quotation that is below the floor
+ *      or failed does not notify.
+ *
+ * `fetchQuote(order)` is injected so the decision is testable without a
+ * network. A throwing fetch is treated as "no quote", never as ready.
+ *
+ * @returns {Promise<{ready:boolean, reason:string, notify:boolean, needsQuote:boolean,
+ *   minAmountOut?:number, quoteOut?:number, quoteSource?:string|null, side?:string}>}
+ */
+export async function evaluateForNotification(order, rate, fetchQuote, now = Date.now()) {
+  const price = evaluateOrder(order, rate, now);
+  if (!QUOTE_CHECKED_TYPES.has(order?.type)) {
+    return { ...price, notify: price.ready === true, needsQuote: false, quoteSource: null };
+  }
+  if (!price.ready) {
+    return { ...price, notify: false, needsQuote: false, quoteSource: null };
+  }
+
+  let quote = null;
+  try {
+    quote = await fetchQuote(order);
+  } catch {
+    quote = null;
+  }
+  const res = evaluateOrderWithQuote(order, rate, quote, now);
+  return {
+    ...res,
+    notify: res.ready === true && res.reason === 'QUOTE_READY',
+    needsQuote: true,
+    quoteSource: quote?.selectedSolver ?? quote?.source ?? null
+  };
+}
+
+/**
+ * Throttle for quotation requests, one per order at a time.
+ *
+ * The watcher effect runs on every price tick. Without this gate a limit whose
+ * price has been met for an hour would request a quotation hundreds of times.
+ * At most one request is in flight per order, and after each check the order
+ * waits `minIntervalMs` before the next one.
+ */
+export const QUOTE_RECHECK_MS = 30_000;
+
+export function createQuoteGate({ minIntervalMs = QUOTE_RECHECK_MS } = {}) {
+  const inFlight = new Set();
+  const lastAt = new Map();
+  return {
+    canStart(id, now = Date.now()) {
+      return !inFlight.has(id) && now - (lastAt.get(id) ?? -Infinity) >= minIntervalMs;
+    },
+    start(id) {
+      inFlight.add(id);
+    },
+    finish(id, now = Date.now()) {
+      inFlight.delete(id);
+      lastAt.set(id, now);
+    }
+  };
+}
+
+/**
+ * The quotation an order was last judged ready on, stored on the order.
+ *
+ * This is what the history later shows as "fill details". It is NOT a receipt.
+ * The app has no transaction watcher, so the only real evidence is the quote
+ * the watcher saw at the moment the order became ready.
+ */
+export const READY_QUOTE_MAX_AGE_MS = 10 * 60_000;
+
+export function readyQuoteFields(outcome, now = Date.now()) {
+  return {
+    readyQuoteAt: now,
+    readyQuoteOut: Number.isFinite(Number(outcome?.quoteOut)) ? Number(outcome.quoteOut) : null,
+    readyMinOut: Number.isFinite(Number(outcome?.minAmountOut)) ? Number(outcome.minAmountOut) : null,
+    readyQuoteSource: outcome?.quoteSource ?? null,
+    readyQuoteSide: outcome?.side ?? null
+  };
+}
+
+/**
+ * Fill details to record when the user hands an order off to Swap.
+ *
+ * Returns null when there is no ready quotation, or it is older than
+ * READY_QUOTE_MAX_AGE_MS. A stale quotation would describe a price the market
+ * may no longer offer, so it is better to record nothing.
+ */
+export function fillFromReadyQuote(order, now = Date.now()) {
+  if (!order || !Number.isFinite(order.readyQuoteAt)) return null;
+  if (now - order.readyQuoteAt > READY_QUOTE_MAX_AGE_MS) return null;
+  const amountIn = Number(order.amountIn);
+  const out = Number(order.readyQuoteOut);
+  if (!Number.isFinite(out) || !(amountIn > 0)) return null;
+  return {
+    rate: out / amountIn,
+    amountOut: out,
+    minAmountOut: Number.isFinite(Number(order.readyMinOut)) ? Number(order.readyMinOut) : null,
+    source: order.readyQuoteSource ?? null,
+    side: order.readyQuoteSide ?? null
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* advance                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const finiteOrNull = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** The fill fields stored on a filled order. Unknown values are null, never 0. */
+export function fillDetailsFields(fill) {
+  return {
+    filledRate: finiteOrNull(fill?.rate),
+    filledAmountOut: finiteOrNull(fill?.amountOut),
+    filledMinAmountOut: finiteOrNull(fill?.minAmountOut),
+    filledQuoteSource: typeof fill?.source === 'string' ? fill.source : null,
+    filledSide: typeof fill?.side === 'string' ? fill.side : null
+  };
+}
+
 /**
  * Advance an order after a successful fill.
  * Pure: returns the next state rather than mutating.
+ *
+ * Accepts both call shapes so existing callers keep working:
+ *   advanceOrder(order)                 — hand-off with no details
+ *   advanceOrder(order, now)            — legacy: second argument is a timestamp
+ *   advanceOrder(order, fill, now)      — with fill details from fillFromReadyQuote
  */
-export function advanceOrder(order, now = Date.now()) {
+export function advanceOrder(order, fillOrNow = null, maybeNow = undefined) {
+  let fill = null;
+  let now = Date.now();
+  if (typeof fillOrNow === 'number') {
+    now = fillOrNow;
+  } else {
+    fill = fillOrNow;
+    if (typeof maybeNow === 'number') now = maybeNow;
+  }
+
   if (order.type === 'limit' || order.type === 'trailing' || order.type === 'rebalance') {
-    return { ...order, status: 'filled', filledAt: now, runsDone: 1 };
+    return { ...order, status: 'filled', filledAt: now, runsDone: 1, ...fillDetailsFields(fill) };
   }
 
   /*
@@ -833,7 +1067,7 @@ export function advanceOrder(order, now = Date.now()) {
    * take-profit fire later on the same position the user has already exited.
    */
   if (order.type === 'bracket') {
-    return { ...order, status: 'filled', filledAt: now, runsDone: 1 };
+    return { ...order, status: 'filled', filledAt: now, runsDone: 1, ...fillDetailsFields(fill) };
   }
 
   /*
