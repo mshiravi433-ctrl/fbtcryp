@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { releaseAllScrollLocks } from './lib/scrollLock.js';
 import { clearHardReloadFlag } from './lib/refresh.js';
-import { syncHomeHubVisibility } from './lib/homeHub.js';
+import { hideReferenceBlock } from './lib/homeHub.js';
 import { installDeeplinkReturnListeners, subscribeDeeplink } from './lib/solana/deeplink.js';
 import { useAppStore } from './store/useAppStore.js';
 import { measureVerifyEnclave, warmVerifyEnclave } from './lib/wc/verify.js';
@@ -208,15 +208,20 @@ class BootBoundary extends React.Component {
   }
 }
 
-// Only the web homepage has the persistent reference footer. Keep transaction
-// screens/native onboarding app-only, and restore it when the user returns home.
-const syncHomeHub = () => syncHomeHubVisibility({
-  document,
-  location: window.location,
-  native: Boolean(window.Capacitor?.isNativePlatform?.())
-});
-syncHomeHub();
-window.addEventListener('hashchange', syncHomeHub);
+/*
+ * ─── THE REFERENCE BLOCK IS FOR CRAWLERS, NEVER FOR THE APP ────────────────
+ * `index.html` carries a static bilingual reference document below #root — the
+ * facts and the page map that a crawler which does not run JavaScript reads.
+ * That is the SEO surface, not app UI, so it is retired here, before the first
+ * React render, on every route and in every shell (see lib/homeHub.js for the
+ * full reasoning). It is hidden rather than removed, so a renderer still finds
+ * the content in the DOM.
+ *
+ * This replaced a route list that hid the block on `#/swap`, `#/intent`,
+ * `#/pay/…`, `#/wallet` and `#/buy` only — which is why every other screen
+ * (`#/bridge`, `#/stocks`, …) ended under the marketing copy.
+ */
+hideReferenceBlock({ document });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -236,10 +241,8 @@ requestAnimationFrame(() => {
    */
   clearHardReloadFlag();
 
-  // The route may have been normalised during App's first render.
-  syncHomeHub();
-  // Remove the boot overlay only. The home hub is real content below #root,
-  // visible to homepage readers and crawlers even after the app has mounted.
+  // Remove the boot overlay only. The reference block below #root was already
+  // retired before the first render — see lib/homeHub.js.
   const boot = document.getElementById('boot');
   if (boot) {
     boot.style.opacity = '0';

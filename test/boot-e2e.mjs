@@ -128,6 +128,22 @@ check('first paint is English, not Persian', !/[\u0600-\u06FF]/.test(text));
 check('no language picker until after start', doc.querySelectorAll('.lang-row').length === 0);
 check('no uncaught script errors', jsErrors.length === 0);
 
+/*
+ * ─── THE CRAWLABLE REFERENCE BLOCK IS DELIVERED, NEVER SHOWN ───────────────
+ * `dist/index.html` carries the whole bilingual reference document below #root
+ * — that is what a crawler which does not run JavaScript reads, and it is
+ * checked in test/seo-audit.test.mjs. The APP must retire it before the visitor
+ * sees it, on every screen: reported as «پایان صفحه FBT Swap · اف‌بی‌تی سواپ …
+ * صفحات اصلی اپ زشت شده» while a route list hid it on some screens and left it
+ * on `#/bridge` and the rest. This asserts the real boot in the real document,
+ * which a unit test of the helper alone cannot.
+ */
+const referenceBlock = doc.getElementById('home-hub');
+check('the reference block ships in the delivered document', Boolean(referenceBlock));
+check('the booted app hides the reference block', Boolean(referenceBlock) && referenceBlock.hidden === true);
+check('the block is hidden, not deleted, so a rendering crawler still finds the content',
+  Boolean(referenceBlock) && referenceBlock.querySelectorAll('a').length >= 100);
+
 console.log('  external hosts blocked:', [...new Set(blocked.map((u) => new URL(u).host))].join(', ') || 'none');
 console.log('  first screen text     :', text.slice(0, 90));
 if (jsErrors.length) console.log('  js errors             :', jsErrors.slice(0, 2));

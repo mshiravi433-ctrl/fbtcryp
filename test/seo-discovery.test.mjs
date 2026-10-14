@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { JSDOM } from 'jsdom';
 import { BRAND_ALIASES, INDEXABLE_ROBOTS, HOME_CONTENT_UPDATED, DISCOVERY_COPY } from '../scripts/content/discovery.mjs';
 import { injectHomeHub } from '../scripts/content/home-hub.mjs';
-import { syncHomeHubVisibility } from '../src/lib/homeHub.js';
+import { hideReferenceBlock } from '../src/lib/homeHub.js';
 
 const OUT = 'dist';
 const SITE = 'https://fbtswap.ir';
@@ -37,7 +37,17 @@ const sitemap = () => ['sitemap-en.xml', 'sitemap-fa.xml'].flatMap((name) => {
 const pairs = ['fbt-swap', 'crypto-profit-and-risk', 'crypto-access-and-restrictions']
   .map((slug) => [slug, `fa/${slug}`]);
 
-test('homepage reference content follows the app and is not deleted at boot', () => {
+/*
+ * ─── THE REFERENCE DOCUMENT IS FOR CRAWLERS, NEVER FOR THE APP ─────────────
+ * Reported: «پایین صفحه FBT Swap · اف‌بی‌تی سواپ اومده با توضیحات و لینک
+ * راهنمایی … گفتیم فقط برای صفحات سئو باشد نه صفحات اصلی، صفحات اصلی اپ زشت
+ * شده». The delivered HTML must keep the whole document (a crawler that does
+ * not run JavaScript reads it), and the app must show NONE of it — on any
+ * route. Both halves are asserted here, because a regression in either one
+ * fails silently in production: hiding it in the delivered document loses the
+ * crawlable homepage, and showing it in the app is the bug being fixed.
+ */
+test('the homepage reference document ships in the HTML and is never shown by the app', () => {
   const home = documentAt(`${SITE}/`);
   const root = home.getElementById('root');
   const hub = home.getElementById('home-hub');
@@ -45,29 +55,44 @@ test('homepage reference content follows the app and is not deleted at boot', ()
   assert.ok(root.compareDocumentPosition(hub) & 4, '#root precedes #home-hub in DOM order');
   assert.equal(hub.hidden, false, 'the delivered homepage has visible reference content');
   assert.equal(hub.querySelectorAll('.search-guides').length, 2);
-  assert.match(read('src/main.jsx'), /window\.addEventListener\('hashchange', syncHomeHub\)/);
-  assert.doesNotMatch(read('src/main.jsx'), /homeHub\.remove\(|home-hub['"]\)[\s\S]{0,100}\.remove\(/);
+
+  const main = read('src/main.jsx');
+  assert.match(main, /hideReferenceBlock\(\{ document \}\)/,
+    'the app retires the block before its first React render');
+  assert.doesNotMatch(main, /syncHomeHub/,
+    'visibility is no longer decided per route — nothing may re-show it on the homepage');
+  assert.doesNotMatch(main, /window\.addEventListener\('hashchange'/,
+    'and no route listener resurrects it either');
+  assert.doesNotMatch(main, /homeHub\.remove\(|home-hub['"]\)[\s\S]{0,100}\.remove\(/,
+    'the node is hidden, never deleted: a rendering crawler must still find it');
+
   assert.match(read('scripts/content/home-hub.mjs'), /#boot, #root:empty \{ display: none !important; \}/,
     'no-JS readers do not get a blank viewport above the reference document');
+  assert.match(read('scripts/content/home-hub.mjs'), /#home-hub\[hidden\] \{ display: none !important; \}/,
+    'the hidden block cannot be re-shown by a later author display rule');
 });
 
-test('app-only routes hide the footer without destroying it, and home restores it', () => {
+test('every app view retires the block, and the content survives for the next crawl', () => {
   const dom = new JSDOM('<div id="root"></div><div id="home-hub"><a href="/fa/fbt-swap">اف بی تی</a></div>');
   const doc = dom.window.document;
   const hub = doc.getElementById('home-hub');
-  const apply = (hash, native = false, pathname = '/') => syncHomeHubVisibility({ document: doc, location: { hash, pathname }, native });
-  for (const hash of ['', '#', '#/', '#/?app=1']) assert.equal(apply(hash), true);
-  for (const hash of ['#/swap', '#/intent', '#/pay/code', '#/wallet', '#/buy?app=1']) {
-    assert.equal(apply(hash), false, hash);
-    assert.equal(doc.getElementById('home-hub'), hub, 'the node is retained');
-    assert.ok(hub.querySelector('a'), 'content is retained for the next home visit');
-  }
-  assert.equal(apply('#/'), true);
-  assert.equal(apply('#/', true), false, 'native app remains app-only');
-  assert.equal(apply('#/', false, '/iran-buy/return'), false, 'payment return is not a marketing page');
-  assert.equal(apply('#/', false, '/index.html'), true);
-  assert.equal(syncHomeHubVisibility({ document: new JSDOM('<div id="root"></div>').window.document }), null);
+  assert.equal(hideReferenceBlock({ document: doc }), 1);
+  assert.equal(hub.hidden, true, 'the app never shows the reference block');
+  assert.equal(doc.getElementById('home-hub'), hub, 'the node is retained');
+  assert.ok(hub.querySelector('a'), 'content is retained in the DOM for rendering crawlers');
+  assert.equal(hideReferenceBlock({ document: doc }), 1);
+  assert.equal(hub.hidden, true, 'a second call neither throws nor un-hides it');
+
+  /* The source-only placeholder is retired by the same call, so a `vite dev`
+     document and a built one behave identically for the visitor. */
+  const dev = new JSDOM('<div id="root"></div><main id="no-js-content"><a href="/fa/">راهنما</a></main>');
+  assert.equal(hideReferenceBlock({ document: dev.window.document }), 1);
+  assert.equal(dev.window.document.getElementById('no-js-content').hidden, true);
+
+  assert.equal(hideReferenceBlock({ document: new JSDOM('<div id="root"></div>').window.document }), 0);
+  assert.equal(hideReferenceBlock(), 0, 'a document-less call is a no-op, not a crash');
   dom.window.close();
+  dev.window.close();
 });
 
 test('homepage injection is idempotent and rejects missing or incorrectly positioned markers', () => {

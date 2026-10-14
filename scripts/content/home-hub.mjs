@@ -1,9 +1,16 @@
 /**
- * Visible, crawlable homepage reference content, rendered below #root.
- * The app and the footer share the same delivered document. The footer is NOT
- * deleted on mount and is not positioned off-screen: web homepage readers can
- * scroll to it with or without JavaScript. App-only hash screens and the native
- * shell have their own layout; no user-agent or crawler branching is used.
+ * The crawlable homepage reference content, rendered below #root.
+ *
+ * ─── WHO READS THIS ────────────────────────────────────────────────────────
+ * It is injected into the delivered `dist/index.html`, so a reader without
+ * JavaScript — and every crawler that does not execute it, the answer engines
+ * in robots.txt included — gets a real document: the facts, the page map and
+ * the internal link graph. It is NOT app UI. The running app retires the block
+ * before its first render, on every route including the homepage (see
+ * src/lib/homeHub.js), and hides it rather than deleting it so a renderer still
+ * finds the content in the DOM. No user-agent or crawler branching is used: one
+ * document is served to everyone.
+ *
  * Links come from the emitted page list. This improves discoverability, but
  * cannot establish Google indexing, rankings, sitelinks or AI citations.
  */
@@ -226,6 +233,12 @@ ${u.trustLinks
     box-sizing: border-box;
   }
   #home-hub * { box-sizing: border-box; }
+  /* The app retires this block before its first render (src/lib/homeHub.js).
+     The hidden attribute is the only thing standing between the reference
+     document and the top of the app, so it cannot be left to the user-agent
+     stylesheet's [hidden] { display: none }: any future author display rule on
+     #home-hub would silently beat it. */
+  #home-hub[hidden] { display: none !important; }
   #home-hub .hh-wrap { max-width: 860px; margin: 0 auto; }
   #home-hub .hh-head { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
   #home-hub .hh-head img { border-radius: 12px; display: block; }
