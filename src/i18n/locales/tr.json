@@ -3050,7 +3050,40 @@
       "ROUTE_CHANGED": "Rota değişti. İmzalamadan önce yeni teklifi kontrol edin.",
       "CONFIRMATION_TIMEOUT": "Ağın onayı uzun sürüyor. Gezgin bağlantısından kontrol edin.",
       "FEE_NOT_APPLIED": "Platform ücreti uygulanamadı, bu yüzden hiçbir şey gönderilmedi.",
-      "FEE_RECIPIENT_MISMATCH": "Ücret alıcısı eşleşmedi, bu yüzden hiçbir şey gönderilmedi."
+      "FEE_RECIPIENT_MISMATCH": "Ücret alıcısı eşleşmedi, bu yüzden hiçbir şey gönderilmedi.",
+      "NOT_CONFIRMED": "Emir onaylanmadı, bu yüzden hiçbir şey gönderilmedi.",
+      "QUOTE_MISSING": "Bu emir için teklif yok. Önce yeni bir oran alın.",
+      "QUOTE_INVALID": "Gelen teklif geçerli değil. Tekrar deneyin.",
+      "INVALID_DECIMALS": "Bu geçerli bir ondalık sayı değil.",
+      "NO_TRANSACTION": "İşlem oluşturulamadı. Tekrar deneyin.",
+      "ORDER_FAILED": "Ağ bu emri kabul etmedi.",
+      "SEND_FAILED": "İşlem ağa gönderilemedi.",
+      "NO_TOKEN_ACCOUNT": "Cüzdanınızda bu token için henüz hesap yok.",
+      "BELOW_MINIMUM": "Tutar, ağın alt sınırının altında."
+    },
+    "networkTitle": "Bir ağ seçin",
+    "assetLabel": "Token",
+    "quoteSheetTitle": "Ödeme yapacağınız tokeni seçin",
+    "rate": "Oran",
+    "notices": {
+      "title": "İmzalamadan önce",
+      "subtitle": "Bu emir hakkında bilinmesi gereken üç nokta"
+    },
+    "risk": {
+      "subtitle": "Sözleşme taraması — likidite, sahipler, vergiler ve rug olasılığı",
+      "score": "Risk puanı",
+      "scoreOf": "100 üzerinden {{n}}",
+      "rescan": "Yeniden tara",
+      "clean": "Kritik bir uyarı kaydedilmedi.",
+      "native": "Bu, ağın kendi gas coin’i; taranacak bir token sözleşmesi yok.",
+      "scanning": "Sözleşme taranıyor…",
+      "whaleLabel": "Balina hareketi",
+      "whale": {
+        "quiet": "Sakin",
+        "elevated": "Yüksek",
+        "extreme": "Çok yoğun",
+        "unknown": "Bilinmiyor"
+      }
     }
   }
 }

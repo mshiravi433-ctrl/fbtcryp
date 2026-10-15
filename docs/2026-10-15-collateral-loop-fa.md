@@ -41,10 +41,9 @@
 - `npm run test:lending`: **۹۲/۹۲** تست Vitest، probe موتور **۳۰/۳۰**، probe اجرای Loan **۴۰/۴۰**؛ خروج ۰.
 - پس از متوقف‌کردن dev preview برای آزادشدن حافظه، `npm run build` با خروج ۰ تمام شد و ۲۵۸ صفحهٔ landing تولید کرد؛ اجرای جایگزین Vite با heap ۲٬۵۰۰ MB نیز موفق بود. هشدارهای Rollup و نبودن `FBT_ANDROID_SHA256` برای assetlinks در محیط دیده شد؛ تغییری در Android یا تنظیمات آن انجام نشد.
 - `npm test`: اجرای عادی در build داخلی runner با وضعیت ۱۳۷ (OOM) متوقف شد. اجرای `FBT_TEST_PREBUILT=1 npm test` از OOM گذشت، اما تست بوت ۴ assertion را رد کرد و `first-launch-flow` با `TypeError` روی `.splash-btn` متوقف شد؛ مراحل بعدی runner اجرا نشدند.
-- `test/wiring.mjs`: در شاخهٔ فعلی **۲٬۸۳۶/۲٬۸۷۳، ۳۷ شکست**؛ اجرای همان فایل‌ها از `git archive HEAD` نیز دقیقاً **۲٬۸۳۶/۲٬۸۷۳، همان ۳۷ شکست** داد. بنابراین شکست تازه‌ای ایجاد نشده؛ عدد «۲۷ شکست پایه» در خلاصهٔ اولیه با checkout واقعی نمی‌خوانْد.
+- `test/wiring.mjs`: درخت پیش از تغییر و `git archive 8f4baa11e09d1b7018395191997c161147fa3f12` هر دو **۲٬۸۳۶/۲٬۸۷۳، همان ۳۷ شکست** دادند؛ شکست تازه‌ای از تغییر حلقه اضافه نشد. عدد «۲۷ شکست پایه» در خلاصهٔ اولیه با checkout واقعی نمی‌خوانْد.
 - `npm ci --ignore-scripts --no-audit --no-fund` پیش‌تر موفق شد؛ هشدار engine موجود Pyth به Node 24 در حالی‌که محیط Node 22 است، build را متوقف نکرد.
 
-## وضعیت Git و نمایش بصری
+## نمایش بصری
 
-- شاخهٔ ثابت session `arena/a0e5c164-fbtcryp` با شاخهٔ درخواست‌شده `arena/fea51023-fbtcryp` متفاوت است؛ کار روی شاخهٔ ثابت session نگه داشته شد. هیچ merge یا انتشار production صورت نگرفته است.
-- پیش‌نمایش محلی Vite روی route `/#/loan` در حال اجراست. آزمون‌های UI روی jsdom موفق شدند؛ مرورگر واقعی/screenshot در این محیط اجرا نشده است.
+- پیش‌نمایش Vite روی route `/#/loan` فراهم شد. آزمون‌های UI روی jsdom موفق شدند؛ مرورگر واقعی/screenshot در این محیط اجرا نشده است.

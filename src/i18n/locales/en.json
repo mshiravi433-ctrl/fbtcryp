@@ -14787,6 +14787,7 @@
       "title": "Swap"
     },
     "network": "Network",
+    "networkTitle": "Choose a network",
     "connectCard": {
       "title": "Connect your wallet to trade",
       "body": "You can see prices now. Connecting shows your balances and lets you sign a swap. Your keys stay in your wallet; the platform never sees them."
@@ -14802,11 +14803,14 @@
       "sell": "Sell"
     },
     "quoteAsset": "Pay with",
+    "assetLabel": "Token",
+    "quoteSheetTitle": "Choose the token you pay with",
     "payAmount": "Amount to pay ({{symbol}})",
     "percentLabel": "Share of your balance",
     "balance": "Balance",
     "balanceUnavailable": "unavailable",
     "receiveEstimate": "You receive about",
+    "rate": "Rate",
     "platformFee": "Platform fee ({{pct}}%)",
     "networkFeeUnknown": "Known after quoting",
     "route": {
@@ -14836,6 +14840,26 @@
       "own": "Your wallet signs every step. The platform cannot move your funds.",
       "price": "The price can change before your trade is included. The minimum received is the lowest amount you will accept.",
       "gas": "Network fees are paid in the network’s gas coin and are not refundable."
+    },
+    "notices": {
+      "title": "Before you sign",
+      "subtitle": "Three things worth knowing about this order"
+    },
+    "risk": {
+      "subtitle": "Contract scan — liquidity, holders, taxes and rug odds",
+      "score": "Risk score",
+      "scoreOf": "{{n}} of 100",
+      "rescan": "Scan again",
+      "clean": "No critical flag was recorded.",
+      "native": "This is the network’s own gas coin, so there is no token contract to scan.",
+      "scanning": "Scanning the contract…",
+      "whaleLabel": "Whale activity",
+      "whale": {
+        "quiet": "Quiet",
+        "elevated": "Elevated",
+        "extreme": "Very concentrated",
+        "unknown": "Unknown"
+      }
     },
     "status": {
       "preparing": "Preparing…",
@@ -14873,7 +14897,16 @@
       "ROUTE_CHANGED": "The route changed. Review the new quote before signing.",
       "CONFIRMATION_TIMEOUT": "The network is taking a long time to confirm. Check the explorer link.",
       "FEE_NOT_APPLIED": "The platform fee could not be applied, so nothing was sent.",
-      "FEE_RECIPIENT_MISMATCH": "The fee recipient did not match, so nothing was sent."
+      "FEE_RECIPIENT_MISMATCH": "The fee recipient did not match, so nothing was sent.",
+      "NOT_CONFIRMED": "The order was not confirmed, so nothing was sent.",
+      "QUOTE_MISSING": "There is no quote for this order. Fetch a new rate first.",
+      "QUOTE_INVALID": "The quote that came back was not valid. Try again.",
+      "INVALID_DECIMALS": "That is not a valid decimal number.",
+      "NO_TRANSACTION": "No transaction could be built. Try again.",
+      "ORDER_FAILED": "The network did not accept this order.",
+      "SEND_FAILED": "The transaction could not be sent to the network.",
+      "NO_TOKEN_ACCOUNT": "Your wallet has no account for this token yet.",
+      "BELOW_MINIMUM": "The amount is below the network’s minimum."
     }
   }
 }

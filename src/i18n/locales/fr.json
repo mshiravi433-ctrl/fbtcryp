@@ -3050,7 +3050,40 @@
       "ROUTE_CHANGED": "L’itinéraire a changé. Vérifiez le nouveau devis avant de signer.",
       "CONFIRMATION_TIMEOUT": "La confirmation du réseau tarde. Consultez le lien de l’explorateur.",
       "FEE_NOT_APPLIED": "Les frais de la plateforme n’ont pas pu être appliqués ; rien n’a été envoyé.",
-      "FEE_RECIPIENT_MISMATCH": "La destination des frais ne correspond pas ; rien n’a été envoyé."
+      "FEE_RECIPIENT_MISMATCH": "La destination des frais ne correspond pas ; rien n’a été envoyé.",
+      "NOT_CONFIRMED": "L’ordre n’a pas été confirmé ; rien n’a été envoyé.",
+      "QUOTE_MISSING": "Aucun devis pour cet ordre. Récupérez d’abord un nouveau taux.",
+      "QUOTE_INVALID": "Le devis reçu n’est pas valide. Réessayez.",
+      "INVALID_DECIMALS": "Ce n’est pas un nombre décimal valide.",
+      "NO_TRANSACTION": "Aucune transaction n’a pu être créée. Réessayez.",
+      "ORDER_FAILED": "Le réseau n’a pas accepté cet ordre.",
+      "SEND_FAILED": "La transaction n’a pas pu être envoyée au réseau.",
+      "NO_TOKEN_ACCOUNT": "Votre portefeuille n’a pas encore de compte pour ce token.",
+      "BELOW_MINIMUM": "Le montant est inférieur au minimum du réseau."
+    },
+    "networkTitle": "Choisissez un réseau",
+    "assetLabel": "Token",
+    "quoteSheetTitle": "Choisissez le token de paiement",
+    "rate": "Taux",
+    "notices": {
+      "title": "Avant de signer",
+      "subtitle": "Trois points à connaître sur cet ordre"
+    },
+    "risk": {
+      "subtitle": "Analyse du contrat — liquidité, holders, taxes et risque de rug",
+      "score": "Score de risque",
+      "scoreOf": "{{n}} sur 100",
+      "rescan": "Analyser à nouveau",
+      "clean": "Aucune alerte critique n’a été enregistrée.",
+      "native": "C’est la monnaie de gaz du réseau ; il n’y a donc aucun contrat de token à analyser.",
+      "scanning": "Analyse du contrat en cours…",
+      "whaleLabel": "Activité des baleines",
+      "whale": {
+        "quiet": "Calme",
+        "elevated": "Élevée",
+        "extreme": "Très concentrée",
+        "unknown": "Inconnue"
+      }
     }
   }
 }

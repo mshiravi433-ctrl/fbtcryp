@@ -1,93 +1,81 @@
-import { useTranslation } from 'react-i18next';
-import TokenIcon from '../../lib/tokenIcon';
+import AssetIcon from '../AssetIcon';
+import Sparkline from '../Sparkline';
 import { balancesHidden, fmtUsd } from '../../lib/format';
 
 /**
- * The market list of the spot tab: one row per token on the selected network.
+ * THE MARKET — now a picker list, not a column of its own
+ * ---------------------------------------------------------------------------
+ * The spot tab used to render the market twice: a «بازار» column on the left
+ * with its own search field, and an «انتخاب توکن» button that opened a sheet
+ * with the SAME rows, the SAME prices and the SAME balances. One dataset, two
+ * boxes, twice the reading. The report was exact about it: «بازار کلا باید
+ * باکسش محو شود ما در انتخاب توکن همون بازاره و اطلاعات تکراریه باید یک باکس
+ * باشد واحد».
  *
- * A row shows what is known and nothing more:
- *   • price and 24h change from the market feed, or an honest dash when the
- *     feed has no coin for it (never a guessed number);
- *   • the wallet balance when a wallet is connected — «unavailable» when the
- *     read failed, never zero.
- * Direction is always written out with its arrow, so colour is never the only
- * signal.
+ * So the column is gone and this module is what is left of it: it turns the
+ * curated token list of one network into the ROWS of the token popup
+ * (components/spot/SpotSelect.jsx). Same honesty rules as before:
+ *   • price and 24h change come from the market feed, or an honest dash when
+ *     the feed has no coin for it — never a guessed number;
+ *   • the sparkline is drawn only from a real series. `Sparkline` renders a
+ *     skeleton when it has fewer than two points; nothing here invents a line
+ *     out of percentage changes (the rule lib/marketVisuals.js states);
+ *   • the wallet balance is «unavailable» when the read failed, never zero.
+ *
+ * One row is one line: artwork, name, chart, price. Every column but the name
+ * is fixed-width and the name is the one that ellipsises, so a long token name
+ * can never push the chart or the price off the row.
  */
-export default function SpotMarketList({
+export function tokenItems({
   chainId,
   tokens,
-  activeSymbol,
-  priceFor,
-  balanceFor,
+  markets,
   connected,
-  query,
-  onQuery,
-  onPick,
-  ariaLabel
+  balanceFor,
+  t,
+  excludeSymbol = null,
+  withChart = true
 }) {
-  const { t } = useTranslation();
-  const q = query.trim().toLowerCase();
-  const shown = q
-    ? tokens.filter((tk) => tk.symbol.toLowerCase().includes(q) || tk.name.toLowerCase().includes(q))
-    : tokens;
+  const list = (tokens ?? []).filter((tk) => !excludeSymbol || tk.symbol !== excludeSymbol);
 
-  return (
-    <div className="spot-market">
-      <input
-        type="search"
-        className="spot-search"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-        placeholder={t('market.search')}
-        aria-label={t('market.search')}
-      />
-      <div className="spot-market-list" role="listbox" aria-label={ariaLabel}>
-        {shown.length === 0 && <p className="spot-empty">{t('spot.market.empty')}</p>}
-        {shown.map((tk) => {
-          const active = tk.symbol === activeSymbol;
-          const info = priceFor(tk);
-          const change = info?.change24h;
-          const up = Number(change) >= 0;
-          const bal = connected ? balanceFor(tk) : undefined;
-          return (
-            <button
-              key={tk.symbol}
-              type="button"
-              role="option"
-              aria-selected={active}
-              className={`spot-row${active ? ' is-active' : ''}`}
-              onClick={() => onPick(tk)}
-            >
-              <TokenIcon token={tk} chainId={chainId} size={30} />
-              <span className="spot-row-meta">
-                <strong dir="ltr">{tk.symbol}</strong>
-                <small>{tk.name}</small>
-              </span>
-              <span className="spot-row-num">
-                <span className="mono" dir="ltr">
-                  {info?.price != null ? fmtUsd(info.price) : '—'}
-                </span>
-                {change != null && Number.isFinite(Number(change)) && (
-                  <span className={`mono spot-change ${up ? 'up' : 'down'}`} dir="ltr">
-                    {up ? '▲' : '▼'} {Math.abs(Number(change)).toFixed(2)}%
-                  </span>
-                )}
-              </span>
-              {connected && (
-                <span className="spot-row-bal mono" dir="ltr">
-                  {bal === undefined
-                    ? ''
-                    : bal === null
-                      ? t('spot.balanceUnavailable')
-                      : balancesHidden()
-                        ? '•••'
-                        : `${bal.formatted} ${tk.symbol}`}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return list.map((tk) => {
+    const row = markets?.find((m) => m.id === tk.coingeckoId) ?? null;
+    const change = row?.change24h;
+    const up = Number(change) >= 0;
+    const spark = Array.isArray(row?.sparkline) ? row.sparkline.slice(-40) : [];
+    const bal = connected ? balanceFor?.(tk) : undefined;
+
+    return {
+      value: tk.symbol,
+      token: tk,
+      icon: <AssetIcon symbol={tk.symbol} chain={chainId} size={30} />,
+      title: tk.symbol,
+      sub: tk.name,
+      spark: withChart ? <Sparkline data={spark} up={up} width={54} height={24} /> : null,
+      num: row?.price != null ? fmtUsd(row.price) : '—',
+      change:
+        change != null && Number.isFinite(Number(change)) ? (
+          <span className={`spot-chg ${up ? 'up' : 'down'}`} dir="ltr">
+            {up ? '▲' : '▼'} {Math.abs(Number(change)).toFixed(2)}%
+          </span>
+        ) : null,
+      meta: connected ? (
+        <span className="spot-row-bal mono" dir="ltr">
+          {bal === undefined
+            ? ''
+            : bal === null
+              ? t('spot.balanceUnavailable')
+              : balancesHidden()
+                ? '•••'
+                : `${bal.formatted} ${tk.symbol}`}
+        </span>
+      ) : null
+    };
+  });
+}
+
+/** One market row for the feed lookup the triggers need (price + change). */
+export function tokenInfo(markets, tk) {
+  if (!tk) return null;
+  return markets?.find((m) => m.id === tk.coingeckoId) ?? null;
 }

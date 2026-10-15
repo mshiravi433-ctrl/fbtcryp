@@ -3050,7 +3050,40 @@
       "ROUTE_CHANGED": "Rute berubah. Tinjau kutipan baru sebelum menandatangani.",
       "CONFIRMATION_TIMEOUT": "Jaringan butuh waktu lama untuk konfirmasi. Cek lewat tautan penjelajah.",
       "FEE_NOT_APPLIED": "Biaya platform tidak dapat diterapkan, sehingga tidak ada yang dikirim.",
-      "FEE_RECIPIENT_MISMATCH": "Tujuan biaya tidak cocok, sehingga tidak ada yang dikirim."
+      "FEE_RECIPIENT_MISMATCH": "Tujuan biaya tidak cocok, sehingga tidak ada yang dikirim.",
+      "NOT_CONFIRMED": "Pesanan tidak dikonfirmasi, jadi tidak ada yang dikirim.",
+      "QUOTE_MISSING": "Tidak ada kutipan untuk pesanan ini. Ambil kurs baru terlebih dahulu.",
+      "QUOTE_INVALID": "Kutipan yang diterima tidak valid. Coba lagi.",
+      "INVALID_DECIMALS": "Itu bukan angka desimal yang valid.",
+      "NO_TRANSACTION": "Transaksi tidak dapat dibuat. Coba lagi.",
+      "ORDER_FAILED": "Jaringan tidak menerima pesanan ini.",
+      "SEND_FAILED": "Transaksi tidak dapat dikirim ke jaringan.",
+      "NO_TOKEN_ACCOUNT": "Dompet Anda belum punya akun untuk token ini.",
+      "BELOW_MINIMUM": "Jumlah di bawah minimum jaringan."
+    },
+    "networkTitle": "Pilih jaringan",
+    "assetLabel": "Token",
+    "quoteSheetTitle": "Pilih token untuk pembayaran",
+    "rate": "Kurs",
+    "notices": {
+      "title": "Sebelum menandatangani",
+      "subtitle": "Tiga hal yang perlu diketahui tentang pesanan ini"
+    },
+    "risk": {
+      "subtitle": "Pemindaian kontrak — likuiditas, holder, pajak, dan peluang rug",
+      "score": "Skor risiko",
+      "scoreOf": "{{n}} dari 100",
+      "rescan": "Pindai lagi",
+      "clean": "Tidak ada tanda kritis yang tercatat.",
+      "native": "Ini koin gas milik jaringan, jadi tidak ada kontrak token untuk dipindai.",
+      "scanning": "Memindai kontrak…",
+      "whaleLabel": "Aktivitas whale",
+      "whale": {
+        "quiet": "Tenang",
+        "elevated": "Meningkat",
+        "extreme": "Sangat terkonsentrasi",
+        "unknown": "Tidak diketahui"
+      }
     }
   }
 }

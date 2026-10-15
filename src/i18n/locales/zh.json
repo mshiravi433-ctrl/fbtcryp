@@ -3043,7 +3043,40 @@
       "ROUTE_CHANGED": "路线已变更。签名前请查看新报价。",
       "CONFIRMATION_TIMEOUT": "网络确认时间较长。请通过浏览器链接查看。",
       "FEE_NOT_APPLIED": "平台手续费未能应用，因此未发送任何内容。",
-      "FEE_RECIPIENT_MISMATCH": "手续费接收地址不一致，因此未发送任何内容。"
+      "FEE_RECIPIENT_MISMATCH": "手续费接收地址不一致，因此未发送任何内容。",
+      "NOT_CONFIRMED": "订单未确认，因此未发送任何内容。",
+      "QUOTE_MISSING": "此订单没有报价。请先获取新汇率。",
+      "QUOTE_INVALID": "返回的报价无效。请重试。",
+      "INVALID_DECIMALS": "这不是有效的小数。",
+      "NO_TRANSACTION": "无法构建交易。请重试。",
+      "ORDER_FAILED": "网络未接受此订单。",
+      "SEND_FAILED": "交易未能发送到网络。",
+      "NO_TOKEN_ACCOUNT": "您的钱包还没有该代币的账户。",
+      "BELOW_MINIMUM": "金额低于网络最低要求。"
+    },
+    "networkTitle": "选择网络",
+    "assetLabel": "代币",
+    "quoteSheetTitle": "选择支付代币",
+    "rate": "汇率",
+    "notices": {
+      "title": "签名之前",
+      "subtitle": "关于此订单的三点提示"
+    },
+    "risk": {
+      "subtitle": "合约扫描 — 流动性、持有者、税费与跑路概率",
+      "score": "风险评分",
+      "scoreOf": "{{n}} / 100",
+      "rescan": "重新扫描",
+      "clean": "未记录到严重风险标记。",
+      "native": "这是该网络自身的 Gas 币，没有代币合约可扫描。",
+      "scanning": "正在扫描合约…",
+      "whaleLabel": "巨鲸活动",
+      "whale": {
+        "quiet": "平静",
+        "elevated": "偏高",
+        "extreme": "高度集中",
+        "unknown": "未知"
+      }
     }
   }
 }

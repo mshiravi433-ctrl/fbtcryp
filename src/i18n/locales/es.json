@@ -3050,7 +3050,40 @@
       "ROUTE_CHANGED": "La ruta cambió. Revisa la nueva cotización antes de firmar.",
       "CONFIRMATION_TIMEOUT": "La red tarda en confirmar. Revisa el enlace del explorador.",
       "FEE_NOT_APPLIED": "No se pudo aplicar la comisión de la plataforma, así que no se envió nada.",
-      "FEE_RECIPIENT_MISMATCH": "El destino de la comisión no coincide, así que no se envió nada."
+      "FEE_RECIPIENT_MISMATCH": "El destino de la comisión no coincide, así que no se envió nada.",
+      "NOT_CONFIRMED": "El pedido no se confirmó, así que no se envió nada.",
+      "QUOTE_MISSING": "No hay cotización para este pedido. Obtén una nueva tasa primero.",
+      "QUOTE_INVALID": "La cotización recibida no es válida. Inténtalo de nuevo.",
+      "INVALID_DECIMALS": "No es un número decimal válido.",
+      "NO_TRANSACTION": "No se pudo crear la transacción. Inténtalo de nuevo.",
+      "ORDER_FAILED": "La red no aceptó este pedido.",
+      "SEND_FAILED": "No se pudo enviar la transacción a la red.",
+      "NO_TOKEN_ACCOUNT": "Tu cartera aún no tiene cuenta para este token.",
+      "BELOW_MINIMUM": "El importe está por debajo del mínimo de la red."
+    },
+    "networkTitle": "Elige una red",
+    "assetLabel": "Token",
+    "quoteSheetTitle": "Elige el token con el que pagarás",
+    "rate": "Tasa",
+    "notices": {
+      "title": "Antes de firmar",
+      "subtitle": "Tres cosas que conviene saber de este pedido"
+    },
+    "risk": {
+      "subtitle": "Análisis del contrato — liquidez, holders, impuestos y riesgo de rug",
+      "score": "Puntuación de riesgo",
+      "scoreOf": "{{n}} de 100",
+      "rescan": "Volver a analizar",
+      "clean": "No se registró ninguna alerta crítica.",
+      "native": "Es la moneda de gas de la red, así que no hay contrato de token que analizar.",
+      "scanning": "Analizando el contrato…",
+      "whaleLabel": "Actividad de ballenas",
+      "whale": {
+        "quiet": "Tranquila",
+        "elevated": "Elevada",
+        "extreme": "Muy concentrada",
+        "unknown": "Desconocida"
+      }
     }
   }
 }

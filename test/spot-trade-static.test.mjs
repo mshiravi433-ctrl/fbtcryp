@@ -20,7 +20,20 @@ const get = (obj, key) => key.split('.').reduce((o, k) => o?.[k], obj);
 const SPOT_FILES = [
   'src/components/spot/SpotTrade.jsx',
   'src/components/spot/SpotMarketList.jsx',
+  'src/components/spot/SpotSelect.jsx',
+  'src/components/spot/SpotTokenRisk.jsx',
   'src/pages/SpotPage.jsx'
+];
+
+/* The spot tab's refusals, wherever they are raised: `code: 'X'` and
+   `throw new Error('X')` in the flow modules, and the codes the screen pushes
+   onto its own blocker list. */
+const CODE_SOURCES = [
+  'src/components/spot/SpotTrade.jsx',
+  'src/lib/spot/spotFlow.js',
+  'src/lib/spot/solanaSpot.js',
+  'src/lib/spot/spotMath.js',
+  'src/lib/solana.js'
 ];
 
 /** Every `spot.*` key a source file asks for, literal or built from a known set. */
@@ -59,7 +72,9 @@ describe('locales: the spot tab exists in all twelve languages', () => {
       'SLIPPAGE_EXCEEDED', 'SLIPPAGE_INVALID', 'RPC_ERROR', 'NO_ROUTE', 'NO_LIQUIDITY', 'QUOTE_FAILED',
       'QUOTE_NETWORK', 'AMOUNT_REQUIRED', 'INVALID_AMOUNT', 'AMOUNT_ZERO', 'TOO_MANY_DECIMALS', 'TX_FAILED',
       'TX_REVERTED', 'USER_REJECTED', 'PRICE_MOVED', 'ROUTE_CHANGED', 'CONFIRMATION_TIMEOUT', 'FEE_NOT_APPLIED',
-      'FEE_RECIPIENT_MISMATCH'
+      'FEE_RECIPIENT_MISMATCH',
+      'NOT_CONFIRMED', 'QUOTE_MISSING', 'QUOTE_INVALID', 'INVALID_DECIMALS',
+      'NO_TRANSACTION', 'ORDER_FAILED', 'SEND_FAILED', 'NO_TOKEN_ACCOUNT', 'BELOW_MINIMUM'
     ];
     for (const c of ERR) used.add(`spot.err.${c}`);
     for (const s of ['preparing', 'approving', 'approvalSent', 'quoting', 'signing', 'pending', 'confirmed', 'failed', 'cancelled', 'stale']) used.add(`spot.status.${s}`);
@@ -148,12 +163,14 @@ describe('design: tokens only, 44px targets, no blur, reduced motion honoured', 
     assert.equal((css.match(/rgba?\(/g) ?? []).length, 0);
   });
   it('no backdrop filter of any kind', () => {
-    assert.equal(/backdrop/i.test(css), false);
+    // The rule is the FILTER (an expensive composited layer on a phone), not
+    // the word: `.spot-sel-backdrop` is the dimmed layer's class name.
+    assert.equal(/backdrop-filter/i.test(css), false);
   });
   it('interactive controls are at least 44px tall', () => {
-    for (const sel of ['.spot-btn', '.spot-row', '.spot-input', '.spot-select', '.spot-search', '.spot-side-btn', '.spot-cta', '.spot-chip', '.spot-mode-tab']) {
-      // The selector may sit in a grouped rule (`.spot-input, .spot-select { … }`).
-      const re = new RegExp(`${sel.replace('.', '\\.')}(?![\\w-])[^{}]*\\{[^}]*min-height:\\s*(44px|48px|var\\(--min-tap\\))`);
+    for (const sel of ['.spot-btn', '.spot-sel-trigger', '.spot-sel-opt', '.spot-side-btn', '.spot-cta', '.spot-chip', '.spot-mode-tab', '.spot-amount-row', '.spot-btn-link', '.spot-slip-input']) {
+      // The selector may sit in a grouped rule (`.spot-a, .spot-b { … }`).
+      const re = new RegExp(`${sel.replace('.', '\\.')}(?![\\w-])[^{}]*\\{[^}]*min-height:\\s*(44px|48px|52px|56px|var\\(--min-tap\\))`);
       assert.ok(re.test(css), `${sel} has a 44px minimum height`);
     }
   });
@@ -167,6 +184,114 @@ describe('design: tokens only, 44px targets, no blur, reduced motion honoured', 
     const spotTrade = read('src/components/spot/SpotTrade.jsx');
     const confirmUses = spotTrade.match(/spot-btn-confirm/g) ?? [];
     assert.equal(confirmUses.length, 1);
+  });
+});
+
+describe('errors: every refusal the spot tab can raise has a translated sentence', () => {
+  /*
+   * «ارورها درست همراه با زبان درست باشد» — the bug behind this test. `t()` on a
+   * missing key returns the KEY, so any code without a locale entry reached the
+   * user as «spot.err.QUOTE_MISSING». Nine codes had no entry at all
+   * (QUOTE_MISSING, QUOTE_INVALID, NOT_CONFIRMED, INVALID_DECIMALS,
+   * NO_TRANSACTION, ORDER_FAILED, SEND_FAILED, NO_TOKEN_ACCOUNT,
+   * BELOW_MINIMUM); they are translated now, and this keeps them that way.
+   */
+  const NOT_SENTENCES = ['QUOTE_LOADING']; // the screen shows spot.quoteLoading for it
+
+  function codesOf(text) {
+    const out = new Set();
+    for (const m of text.matchAll(/code:\s*'([A-Z_]{3,})'/g)) out.add(m[1]);
+    for (const m of text.matchAll(/Error\('([A-Z_]{3,})'\)/g)) out.add(m[1]);
+    for (const m of text.matchAll(/return '([A-Z_]{3,})'/g)) out.add(m[1]);
+    // Deliberately NOT the `^SAME_TOKEN$`-style alternatives inside
+    // solanaErrorCode: those are inputs it maps away (to NO_ROUTE), not codes
+    // that can reach the screen.
+    return out;
+  }
+
+  it('every code from the spot flow, the screen and the Solana order map is in en.json', () => {
+    const codes = new Set();
+    for (const f of ['src/components/spot/SpotTrade.jsx', 'src/lib/spot/spotFlow.js', 'src/lib/spot/solanaSpot.js', 'src/lib/spot/spotMath.js']) {
+      for (const c of codesOf(read(f))) codes.add(c);
+    }
+    // orderErrorKey's answers reach the spot UI verbatim through solanaErrorCode.
+    const solana = read('src/lib/solana.js');
+    const at = solana.indexOf('export function orderErrorKey');
+    assert.ok(at >= 0, 'orderErrorKey exists');
+    for (const c of codesOf(solana.slice(at, solana.indexOf('\n}\n', at)))) codes.add(c);
+
+    assert.ok(codes.size >= 25, `the scan found the codes (${codes.size})`);
+    const missing = [...codes].filter((c) => !NOT_SENTENCES.includes(c) && typeof get(json.en, `spot.err.${c}`) !== 'string');
+    assert.deepEqual(missing, [], `codes with no sentence in en.json: ${missing.join(', ')}`);
+  });
+
+  it('and in every one of the twelve locales', () => {
+    const gaps = [];
+    for (const [k, v] of Object.entries(spotLeaves(json.en))) {
+      if (!k.startsWith('spot.err.')) continue;
+      for (const l of LOCALES) {
+        if (typeof spotLeaves(json[l])[k] !== 'string' || String(v).trim() === '') gaps.push(`${l}:${k}`);
+      }
+    }
+    assert.deepEqual(gaps, [], `untranslated refusals: ${gaps.slice(0, 12).join(', ')}`);
+  });
+
+  it('every error the screen shows goes through the fallback, never a bare t(code)', () => {
+    const src = read('src/components/spot/SpotTrade.jsx');
+    // The only allowed shape is errorText(t, code[, values]); a bare
+    // t(errorKey(...)) without a defaultValue is the bug that shipped.
+    const bare = [...src.matchAll(/t\(errorKey\(([^)]*)\)\s*\)/g)];
+    assert.deepEqual(bare.map((m) => m[0]), [], 'no t(errorKey(code)) without a defaultValue');
+  });
+});
+
+describe('the pickers: popups, no search field, one box', () => {
+  const select = read('src/components/spot/SpotSelect.jsx');
+  const trade = read('src/components/spot/SpotTrade.jsx');
+
+  it('there is no search field anywhere in the spot tab', () => {
+    for (const f of SPOT_FILES) {
+      const src = read(f);
+      assert.equal(/type="search"/.test(src), false, `${f} has no search input`);
+      assert.equal(/spot-search/.test(src), false, `${f} has no search field`);
+    }
+  });
+
+  it('the choices open a portalled popup, not a native select', () => {
+    assert.match(select, /createPortal\(/);
+    assert.match(select, /role="dialog"/);
+    assert.match(select, /role="listbox"/);
+    assert.equal(/<select/.test(trade), false, 'the ticket has no native <select>');
+    assert.equal(/<select/.test(select), false, 'the picker has no native <select>');
+  });
+
+  it('the market column is gone: one ticket, the market inside the picker', () => {
+    assert.equal(/spot-market-col/.test(trade), false, 'no market column');
+    assert.equal(/<SpotMarketList/.test(trade), false, 'the market list is not rendered as its own box');
+    assert.match(trade, /className="spot-stack"/);
+  });
+
+  it('the three warnings live in one folding box, and the AI risk in its own', () => {
+    assert.match(trade, /id="spot-notices"/);
+    assert.match(trade, /spot\.notices\.title/);
+    assert.match(trade, /<SpotTokenRisk/);
+    assert.match(read('src/components/spot/SpotTokenRisk.jsx'), /CollapsibleCard/);
+  });
+
+  it('buy and sell never share a hue (the sell pill used to fade into the buy green)', () => {
+    const buy = trade.match(/s === 'buy' \? '([^']+)'/)?.[1] ?? '';
+    const sell = trade.match(/: '([^']*linear-gradient[^']*)'/)?.[1] ?? '';
+    assert.match(buy, /var\(--up\)/);
+    assert.match(sell, /var\(--down\)/);
+    assert.equal(/var\(--rgb-4\)/.test(buy + sell), false, 'no mint green on the sell side');
+  });
+
+  it('the amount input draws no ring of its own — the row answers focus', () => {
+    const css = read('src/styles/spot-trade.css');
+    const block = css.match(/\.spot-root \.spot-amount-input:focus[\s\S]*?\}/)?.[0] ?? '';
+    assert.match(block, /box-shadow:\s*none/);
+    assert.match(block, /outline:\s*none/);
+    assert.match(css, /\.spot-root \.spot-amount-row:focus-within/);
   });
 });
 
