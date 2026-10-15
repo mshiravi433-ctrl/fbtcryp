@@ -1,18 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { useStill } from '../components/AnimatedIcon';
 import { openUrl } from '../lib/browser';
-import { createStoryAmbientController } from '../lib/storyAudio';
 import { useAppStore } from '../store/useAppStore';
 import {
   IconCheck,
   IconCopy,
   IconExternal,
   IconSearch,
-  IconVideo,
-  IconVolume
+  IconVideo
 } from '../components/Icons';
 import '../styles/market-modern.css';
 
@@ -197,18 +195,7 @@ export default function AparatVideos({ embedded = false }) {
   const [selectedId, setSelectedId] = useState('stocks');
   const [playingPreview, setPlayingPreview] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
-  const [audioOn, setAudioOn] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const audioRef = useRef(null);
-  if (!audioRef.current) {
-    audioRef.current = createStoryAmbientController();
-  }
-
-  useEffect(() => {
-    const ctrl = audioRef.current;
-    return () => ctrl?.destroy();
-  }, []);
 
   const selectedCourse = useMemo(
     () => APARAT_COURSES.find((c) => c.id === selectedId) || APARAT_COURSES[0],
@@ -223,18 +210,6 @@ export default function AparatVideos({ embedded = false }) {
     }, 4000);
     return () => clearInterval(timer);
   }, [playingPreview, still, selectedCourse]);
-
-  const toggleAudio = () => {
-    const ctrl = audioRef.current;
-    if (!ctrl) return;
-    if (audioOn) {
-      ctrl.stop();
-      setAudioOn(false);
-    } else {
-      ctrl.start('cinema');
-      setAudioOn(true);
-    }
-  };
 
   const openOfficialChannel = () => {
     openUrl(APARAT_CHANNEL_URL);
@@ -344,14 +319,6 @@ export default function AparatVideos({ embedded = false }) {
                 <IconVideo width={18} height={18} />
                 <span>{t('aparat.hero.watchOnAparat')}</span>
                 <IconExternal width={15} height={15} />
-              </button>
-              <button
-                type="button"
-                className={`btn btn-ghost aparat-audio-cta ${audioOn ? 'is-active' : ''}`}
-                onClick={toggleAudio}
-              >
-                <IconVolume width={16} height={16} />
-                <span>{audioOn ? t('aparat.player.muteMusic') : t('aparat.player.playMusic')}</span>
               </button>
             </div>
           </div>

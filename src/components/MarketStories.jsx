@@ -10,6 +10,8 @@ import { tickerLogo } from '../lib/coinImage';
 import { fmtCompact, fmtPct, fmtUsd } from '../lib/format';
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 import { createStoryAmbientController } from '../lib/storyAudio';
+import { getCalm } from '../lib/audio';
+import { useRadioStore } from '../store/useRadioStore';
 import { openUrl } from '../lib/browser';
 import { APARAT_CHANNEL_URL } from '../pages/AparatVideos';
 import {
@@ -27,7 +29,7 @@ import {
  * Placed directly beneath the Bitcoin hero card on the Market page.
  * Each story opens a 60-second (60,000 ms) rich interactive popup with
  * custom Illustrator-style vector SVG artwork, live market/stock rankings,
- * optional ambient music synthesizer, and a bottom CTA bar that navigates
+ * automatic cinematic ambient soundtrack, and a bottom CTA bar that navigates
  * straight to that section of the app.
  */
 export const STORY_DURATION_MS = 60_000;
@@ -41,9 +43,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/stocks', labelKey: 'stories.quick.xstocks' },
       { to: '/swap', labelKey: 'stories.quick.swapRwa' }
     ],
-    ring: 'linear-gradient(135deg, #00ff9d 0%, #ffb300 52%, #00e5ff 100%)',
-    accent: '#00ff9d',
-    accent2: '#ffb300',
+    ring: 'linear-gradient(135deg, #69d8b5 0%, #e5bc7b 52%, #7dcbe2 100%)',
+    accent: '#69d8b5',
+    accent2: '#e5bc7b',
     mood: 'alpha'
   },
   {
@@ -53,9 +55,9 @@ export const MARKET_STORY_ITEMS = [
     secondaryRoutes: [
       { to: '/learn', labelKey: 'stories.quick.learnHub' }
     ],
-    ring: 'linear-gradient(135deg, #ff2d95 0%, #ffb300 50%, #7c4dff 100%)',
-    accent: '#ff2d95',
-    accent2: '#ffb300',
+    ring: 'linear-gradient(135deg, #e9a0bf 0%, #e5bc7b 50%, #a99ae9 100%)',
+    accent: '#e9a0bf',
+    accent2: '#e5bc7b',
     mood: 'cinema'
   },
   {
@@ -66,9 +68,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/solana', labelKey: 'stories.quick.solana' },
       { to: '/bridge', labelKey: 'stories.quick.bridge' }
     ],
-    ring: 'linear-gradient(135deg, #00e5ff 0%, #7c4dff 52%, #14f195 100%)',
-    accent: '#00e5ff',
-    accent2: '#14f195',
+    ring: 'linear-gradient(135deg, #7dcbe2 0%, #a99ae9 52%, #80d6bd 100%)',
+    accent: '#7dcbe2',
+    accent2: '#80d6bd',
     mood: 'alpha'
   },
   {
@@ -79,9 +81,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/signals', labelKey: 'stories.quick.signals' },
       { to: '/smart-money', labelKey: 'stories.quick.smartMoney' }
     ],
-    ring: 'linear-gradient(135deg, #7c4dff 0%, #ff2d95 52%, #00e5ff 100%)',
-    accent: '#7c4dff',
-    accent2: '#ff2d95',
+    ring: 'linear-gradient(135deg, #a99ae9 0%, #e9a0bf 52%, #7dcbe2 100%)',
+    accent: '#a99ae9',
+    accent2: '#e9a0bf',
     mood: 'focus'
   },
   {
@@ -92,9 +94,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/loan', labelKey: 'stories.quick.loan' },
       { to: '/rewards', labelKey: 'stories.quick.rewards' }
     ],
-    ring: 'linear-gradient(135deg, #14f195 0%, #00e5ff 50%, #3b82f6 100%)',
-    accent: '#14f195',
-    accent2: '#00e5ff',
+    ring: 'linear-gradient(135deg, #80d6bd 0%, #7dcbe2 50%, #8daef0 100%)',
+    accent: '#80d6bd',
+    accent2: '#7dcbe2',
     mood: 'alpha'
   },
   {
@@ -104,9 +106,9 @@ export const MARKET_STORY_ITEMS = [
     secondaryRoutes: [
       { to: '/global', labelKey: 'stories.quick.global' }
     ],
-    ring: 'linear-gradient(135deg, #ff2d95 0%, #ffb300 48%, #00e5ff 100%)',
-    accent: '#ffb300',
-    accent2: '#ff2d95',
+    ring: 'linear-gradient(135deg, #e9a0bf 0%, #e5bc7b 48%, #7dcbe2 100%)',
+    accent: '#e5bc7b',
+    accent2: '#e9a0bf',
     mood: 'cinema'
   },
   {
@@ -116,9 +118,9 @@ export const MARKET_STORY_ITEMS = [
     secondaryRoutes: [
       { to: '/compare', labelKey: 'stories.quick.compare' }
     ],
-    ring: 'linear-gradient(135deg, #ffb300 0%, #00e5ff 52%, #7c4dff 100%)',
-    accent: '#ffb300',
-    accent2: '#00e5ff',
+    ring: 'linear-gradient(135deg, #e5bc7b 0%, #7dcbe2 52%, #a99ae9 100%)',
+    accent: '#e5bc7b',
+    accent2: '#7dcbe2',
     mood: 'focus'
   },
   {
@@ -130,9 +132,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/launch', labelKey: 'stories.quick.launch' },
       { to: '/insurance', labelKey: 'stories.quick.insurance' }
     ],
-    ring: 'linear-gradient(135deg, #00e5ff 0%, #ffb300 50%, #7c4dff 100%)',
-    accent: '#00e5ff',
-    accent2: '#7c4dff',
+    ring: 'linear-gradient(135deg, #7dcbe2 0%, #e5bc7b 50%, #a99ae9 100%)',
+    accent: '#7dcbe2',
+    accent2: '#a99ae9',
     mood: 'alpha'
   }
 ];
@@ -253,11 +255,11 @@ function StoryStageIllustration({ id, accent, accent2 }) {
           <rect x="42" y="60" width="20" height="36" rx="5" fill={accent} fillOpacity="0.4" />
           <rect x="76" y="48" width="20" height="48" rx="5" fill={accent} fillOpacity="0.6" />
           <rect x="110" y="34" width="20" height="62" rx="5" fill={accent2} fillOpacity="0.75" />
-          <rect x="144" y="20" width="20" height="76" rx="5" fill="#00ff9d" fillOpacity="0.92" />
+          <rect x="144" y="20" width="20" height="76" rx="5" fill="#69d8b5" fillOpacity="0.92" />
           <path d="M34 80 C82 68, 124 44, 178 24 L250 16" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-          <circle cx="250" cy="16" r="5.5" fill="#00ff9d" />
+          <circle cx="250" cy="16" r="5.5" fill="#69d8b5" />
           <rect x="218" y="38" width="114" height="52" rx="14" fill="rgba(8,13,26,0.72)" stroke={accent} strokeWidth="1.6" />
-          <text x="275" y="61" textAnchor="middle" fill="#00ff9d" fontSize="13" fontWeight="800" fontFamily="monospace">xSTOCKS · RWA</text>
+          <text x="275" y="61" textAnchor="middle" fill="#69d8b5" fontSize="13" fontWeight="800" fontFamily="monospace">xSTOCKS · RWA</text>
           <text x="275" y="79" textAnchor="middle" fill="#fff" fontSize="10.5" fontFamily="monospace">NVDA · AAPL · TSLA</text>
         </g>
       )}
@@ -265,11 +267,11 @@ function StoryStageIllustration({ id, accent, accent2 }) {
       {id === 'aparat' && (
         <g>
           <rect x="34" y="18" width="168" height="84" rx="16" fill="rgba(10,14,28,0.75)" stroke={accent} strokeWidth="2" />
-          <polygon points="106,44 138,60 106,76" fill="#ff2d95" />
-          <circle cx="54" cy="34" r="4" fill="#ffb300" />
+          <polygon points="106,44 138,60 106,76" fill="#e9a0bf" />
+          <circle cx="54" cy="34" r="4" fill="#e5bc7b" />
           <circle cx="276" cy="60" r="34" fill="rgba(255,45,149,0.16)" stroke={accent2} strokeWidth="2" strokeDasharray="6 4" />
           <text x="276" y="57" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800" fontFamily="monospace">APARAT</text>
-          <text x="276" y="73" textAnchor="middle" fill="#ffb300" fontSize="10" fontFamily="monospace">@Fbtcompany</text>
+          <text x="276" y="73" textAnchor="middle" fill="#e5bc7b" fontSize="10" fontFamily="monospace">@Fbtcompany</text>
         </g>
       )}
 
@@ -279,7 +281,7 @@ function StoryStageIllustration({ id, accent, accent2 }) {
           <circle cx="272" cy="60" r="34" fill="rgba(20,241,149,0.15)" stroke={accent2} strokeWidth="2" />
           <path d="M134 46h92l-12-12M226 74h-92l12 12" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
           <text x="88" y="64" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800" fontFamily="monospace">EVM</text>
-          <text x="272" y="64" textAnchor="middle" fill="#14f195" fontSize="12" fontWeight="800" fontFamily="monospace">SOL</text>
+          <text x="272" y="64" textAnchor="middle" fill="#80d6bd" fontSize="12" fontWeight="800" fontFamily="monospace">SOL</text>
         </g>
       )}
 
@@ -287,14 +289,14 @@ function StoryStageIllustration({ id, accent, accent2 }) {
         <g>
           <circle cx="180" cy="60" r="38" fill="rgba(124,77,255,0.2)" stroke={accent} strokeWidth="2.2" />
           <circle cx="180" cy="60" r="20" stroke="#fff" strokeWidth="1.6" strokeDasharray="4 4" />
-          <circle cx="180" cy="60" r="7" fill="#00e5ff" />
+          <circle cx="180" cy="60" r="7" fill="#7dcbe2" />
           <line x1="142" y1="60" x2="72" y2="34" stroke={accent2} strokeWidth="2" />
-          <line x1="142" y1="60" x2="72" y2="86" stroke="#00e5ff" strokeWidth="2" />
-          <line x1="218" y1="60" x2="288" y2="34" stroke="#00e5ff" strokeWidth="2" />
+          <line x1="142" y1="60" x2="72" y2="86" stroke="#7dcbe2" strokeWidth="2" />
+          <line x1="218" y1="60" x2="288" y2="34" stroke="#7dcbe2" strokeWidth="2" />
           <line x1="218" y1="60" x2="288" y2="86" stroke={accent2} strokeWidth="2" />
           <circle cx="72" cy="34" r="7" fill={accent2} />
-          <circle cx="72" cy="86" r="7" fill="#00e5ff" />
-          <circle cx="288" cy="34" r="7" fill="#00e5ff" />
+          <circle cx="72" cy="86" r="7" fill="#7dcbe2" />
+          <circle cx="288" cy="34" r="7" fill="#7dcbe2" />
           <circle cx="288" cy="86" r="7" fill={accent2} />
         </g>
       )}
@@ -303,7 +305,7 @@ function StoryStageIllustration({ id, accent, accent2 }) {
         <g>
           <polygon points="104,18 148,60 104,102 60,60" fill="rgba(20,241,149,0.2)" stroke={accent} strokeWidth="2.2" />
           <rect x="176" y="26" width="148" height="68" rx="14" fill="rgba(8,13,26,0.7)" stroke={accent2} strokeWidth="1.8" />
-          <text x="250" y="54" textAnchor="middle" fill="#14f195" fontSize="14" fontWeight="800" fontFamily="monospace">DEFI YIELD</text>
+          <text x="250" y="54" textAnchor="middle" fill="#80d6bd" fontSize="14" fontWeight="800" fontFamily="monospace">DEFI YIELD</text>
           <text x="250" y="75" textAnchor="middle" fill="#fff" fontSize="10.5" fontFamily="monospace">AAVE · MORPHO · KAMINO</text>
         </g>
       )}
@@ -334,18 +336,18 @@ function StoryStageIllustration({ id, accent, accent2 }) {
           <circle cx="88" cy="60" r="34" fill="rgba(255,179,0,0.16)" stroke={accent} strokeWidth="2.2" />
           <path d="M88 38v22l15 9" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" />
           <rect x="156" y="24" width="166" height="72" rx="14" fill="rgba(8,13,26,0.72)" stroke={accent2} strokeWidth="1.8" />
-          <text x="239" y="53" textAnchor="middle" fill="#ffb300" fontSize="13" fontWeight="800" fontFamily="monospace">DCA · LIMIT · TWAP</text>
-          <text x="239" y="74" textAnchor="middle" fill="#00e5ff" fontSize="10.5" fontFamily="monospace">24/7 AUTO EXECUTION</text>
+          <text x="239" y="53" textAnchor="middle" fill="#e5bc7b" fontSize="13" fontWeight="800" fontFamily="monospace">DCA · LIMIT · TWAP</text>
+          <text x="239" y="74" textAnchor="middle" fill="#7dcbe2" fontSize="10.5" fontFamily="monospace">24/7 AUTO EXECUTION</text>
         </g>
       )}
 
       {id === 'ecosystem' && (
         <g>
           <path d="M92 20l36 14v22c0 22-15 38-36 44-21-6-36-22-36-44V34l36-14z" fill="rgba(0,229,255,0.18)" stroke={accent} strokeWidth="2.2" />
-          <path d="m79 58 9 9 19-19" stroke="#00ff9d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="m79 58 9 9 19-19" stroke="#69d8b5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
           <rect x="158" y="26" width="166" height="68" rx="14" fill="rgba(8,13,26,0.72)" stroke={accent2} strokeWidth="1.8" />
           <text x="241" y="54" textAnchor="middle" fill="#fff" fontSize="12.5" fontWeight="800" fontFamily="monospace">WALLET · SHOP · INSURE</text>
-          <text x="241" y="74" textAnchor="middle" fill="#00e5ff" fontSize="10.5" fontFamily="monospace">NON-CUSTODIAL SUPERAPP</text>
+          <text x="241" y="74" textAnchor="middle" fill="#7dcbe2" fontSize="10.5" fontFamily="monospace">NON-CUSTODIAL SUPERAPP</text>
         </g>
       )}
     </svg>
@@ -362,7 +364,10 @@ export default function MarketStories({ coins = [], global = null }) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [paused, setPaused] = useState(false);
   const [audioOn, setAudioOn] = useState(false);
-  const [audioMood, setAudioMood] = useState('alpha');
+  const [radioItems, setRadioItems] = useState([]);
+  const [radioFailed, setRadioFailed] = useState(false);
+  const radioTrack = useRadioStore((s) => s.track);
+  const radioPlaying = useRadioStore((s) => s.playing);
   const [seenIds, setSeenIds] = useState(() => {
     try {
       const raw = sessionStorage.getItem('fbt-seen-stories-v1');
@@ -373,6 +378,7 @@ export default function MarketStories({ coins = [], global = null }) {
   });
   const [liveEquities, setLiveEquities] = useState([]);
 
+  const dialogRef = useRef(null);
   const audioRef = useRef(null);
   if (!audioRef.current) {
     audioRef.current = createStoryAmbientController();
@@ -382,6 +388,17 @@ export default function MarketStories({ coins = [], global = null }) {
     const ctrl = audioRef.current;
     return () => ctrl?.destroy();
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    getCalm().then((data) => { if (alive) setRadioItems(data?.items || []); })
+      .catch(() => { if (alive) setRadioFailed(true); });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    if (radioPlaying) { audioRef.current?.stop(); setAudioOn(false); }
+  }, [radioPlaying]);
 
   const activeStory = openIndex != null ? MARKET_STORY_ITEMS[openIndex] ?? null : null;
 
@@ -406,8 +423,8 @@ export default function MarketStories({ coins = [], global = null }) {
     setElapsedMs(0);
     setPaused(false);
     markSeen(item.id);
-    if (audioOn && audioRef.current) {
-      audioRef.current.setMood(item.mood);
+    if (!useRadioStore.getState().playing) {
+      setAudioOn(audioRef.current.start('cinema'));
     }
   };
 
@@ -459,19 +476,26 @@ export default function MarketStories({ coins = [], global = null }) {
   useEffect(() => {
     if (openIndex == null) return undefined;
     const unlock = lockBodyScroll();
+    const previousFocus = document.activeElement;
+    dialogRef.current?.querySelector('button')?.focus();
     const onKey = (e) => {
+      if (e.key === 'Tab') {
+        const buttons = [...(dialogRef.current?.querySelectorAll('button, a[href], [tabindex="0"]') || [])];
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
       if (e.key === 'Escape') closeModal();
       else if (e.key === 'ArrowRight') (isRtl ? goPrevStory() : goNextStory());
       else if (e.key === 'ArrowLeft') (isRtl ? goNextStory() : goPrevStory());
-      else if (e.key === ' ') {
-        e.preventDefault();
-        setPaused((p) => !p);
-      }
+
     };
     window.addEventListener('keydown', onKey);
     return () => {
       unlock();
       window.removeEventListener('keydown', onKey);
+      previousFocus?.focus?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openIndex, isRtl]);
@@ -534,26 +558,10 @@ export default function MarketStories({ coins = [], global = null }) {
       .slice(0, 4);
   }, [coins]);
 
-  const toggleStoryAudio = () => {
-    const ctrl = audioRef.current;
-    if (!ctrl) return;
-    if (audioOn) {
-      ctrl.stop();
-      setAudioOn(false);
-    } else {
-      const m = activeStory?.mood || audioMood;
-      setAudioMood(m);
-      ctrl.start(m);
-      setAudioOn(true);
-    }
-  };
-
-  const selectMoodAndPlay = (mood) => {
-    setAudioMood(mood);
-    if (audioRef.current) {
-      audioRef.current.start(mood);
-      setAudioOn(true);
-    }
+  const playRadioTrack = (track) => {
+    audioRef.current?.stop();
+    setAudioOn(false);
+    useRadioStore.getState().play(track, radioItems);
   };
 
   const handlePrimaryNavigate = (route) => {
@@ -631,7 +639,9 @@ export default function MarketStories({ coins = [], global = null }) {
                 />
 
                 <motion.div
+                  ref={dialogRef}
                   className="market-story-dialog market-glass-surface"
+                  style={{ '--story-accent': activeStory.accent, '--story-accent2': activeStory.accent2 }}
                   role="dialog"
                   aria-modal="true"
                   aria-label={t(`stories.items.${activeStory.id}.title`)}
@@ -653,6 +663,7 @@ export default function MarketStories({ coins = [], global = null }) {
                           onClick={() => openStoryAt(idx)}
                           aria-label={t(`stories.items.${st.id}.short`)}
                         >
+                          <StoryAvatarSvg id={st.id} accent={st.accent} accent2={st.accent2} />
                           <span
                             className="market-story-progress-fill"
                             style={{
@@ -689,28 +700,6 @@ export default function MarketStories({ coins = [], global = null }) {
                     </div>
 
                     <div className="row" style={{ gap: 6 }}>
-                      <button
-                        type="button"
-                        className={`market-story-ctrl-btn ${audioOn ? 'is-active' : ''}`}
-                        onClick={toggleStoryAudio}
-                        aria-label={audioOn ? t('stories.controls.mute') : t('stories.controls.music')}
-                        data-testid="story-audio-toggle"
-                      >
-                        <IconVolume width={15} height={15} />
-                        <span className="mono" style={{ fontSize: 10 }}>
-                          {audioOn ? t('stories.controls.musicOn') : t('stories.controls.music')}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="market-story-ctrl-btn mono"
-                        onClick={() => setPaused((p) => !p)}
-                        data-testid="story-pause-toggle"
-                      >
-                        {paused ? t('stories.controls.resume') : t('stories.controls.pause')}
-                      </button>
-
                       <button
                         type="button"
                         className="market-story-ctrl-btn"
@@ -943,22 +932,21 @@ export default function MarketStories({ coins = [], global = null }) {
                             {t('stories.radio.studioTitle')}
                           </span>
                           <span className="mono market-story-tag-accent">
-                            {audioOn ? t('stories.controls.musicOn') : 'SYNTH + LIVE'}
+                            {radioPlaying ? t('stories.controls.musicOn') : 'CRYPTO RADIO'}
                           </span>
                         </div>
 
-                        <div className="market-story-mood-row">
-                          {['alpha', 'focus', 'cinema'].map((m) => (
-                            <button
-                              key={m}
-                              type="button"
-                              className={`market-story-mood-btn ${audioOn && audioMood === m ? 'is-active' : ''}`}
-                              onClick={() => selectMoodAndPlay(m)}
-                            >
-                              <IconVolume width={14} height={14} />
-                              <span>{t(`stories.radio.mood.${m}`)}</span>
+                        <div className="market-story-radio-tracks">
+                          {radioItems.slice(0, 5).map((track) => (
+                            <button key={track.id} type="button"
+                              className={`market-story-radio-track ${radioTrack?.id === track.id ? 'is-active' : ''}`}
+                              onClick={() => playRadioTrack(track)}>
+                              <IconVolume width={20} height={20} />
+                              <span>{track.title}</span>
+                              <span aria-hidden="true">↗</span>
                             </button>
                           ))}
+                          {!radioItems.length && <p role="status">{t(radioFailed ? 'common.error' : 'common.loading')}</p>}
                         </div>
                       </div>
                     )}

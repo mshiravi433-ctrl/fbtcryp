@@ -77,8 +77,8 @@ export function createStoryAmbientController() {
     currentMood = MOOD_CHORDS[mood] ? mood : 'alpha';
     const ac = getAudioContext();
     if (!ac) {
-      running = true;
-      return true;
+      running = false;
+      return false;
     }
     try {
       if (ac.state === 'suspended' && typeof ac.resume === 'function') {
