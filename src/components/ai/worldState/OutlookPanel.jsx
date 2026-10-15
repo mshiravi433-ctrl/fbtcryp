@@ -19,8 +19,8 @@
  * Nothing is filled in to make the panel look complete.
  */
 import { useMemo } from 'react';
-import { buildOutlookReading, usdCompact, OUTLOOK_LABEL_FA } from './worldModel.js';
-import { WIcon, DirMark } from './icons.jsx';
+import { buildOutlookReading, usdCompact, OUTLOOK_LABEL_FA, REGIME_FA } from './worldModel.js';
+import { WIcon, DirMark, useSvgId } from './icons.jsx';
 import { faNum, pct } from './format.jsx';
 import { describeSource } from './resolve.js';
 
@@ -51,19 +51,159 @@ function dirWord(s) {
 }
 
 
-/* the score arc: a half circle from «ریسک فشار» (left) to «رشد» (right).
-   Geometry only — the value it draws is the reading's own score. */
-const ARC = { cx: 160, cy: 132, r: 116 };
-const arcPoint = (t) => [
-  ARC.cx - ARC.r * Math.cos(t),
-  ARC.cy - ARC.r * Math.sin(t)
-];
-function arcPath(from, to) {
-  const a = arcPoint(from); const b = arcPoint(to);
-  const large = to - from > Math.PI ? 1 : 0;
-  return `M ${a[0].toFixed(1)} ${a[1].toFixed(1)} A ${ARC.r} ${ARC.r} 0 ${large} 1 ${b[0].toFixed(1)} ${b[1].toFixed(1)}`;
+/*
+ * THE DIAL — «اون حالت عقربه را کلا مدرن‌ترش کن» (reported 2026-10-15).
+ * ---------------------------------------------------------------------------
+ * A half dial from −1 (stress, left) through 0 (neutral, top) to +1 (growth,
+ * right) — the same orientation as before, so nobody has to relearn it:
+ *   · the scale is 33 segments coloured red → amber → green; the segments
+ *     between neutral and this pass's score light up (in sequence, on mount),
+ *     the rest stay as a faint guide — so the dial shows HOW FAR from neutral,
+ *     and on which side, at a glance;
+ *   · major ticks at −1, −0.5, 0, +0.5, +1 with their numbers (Persian digits
+ *     in Persian), minor ticks every 0.1;
+ *   · a tapered needle with a counterweight and a glowing tip that sweeps in
+ *     from −1 and settles with a small overshoot (transform only);
+ *   · the score itself, large, under the hub, in the colour of its side.
+ * No score → no needle sweep and no lit segment: the dial says «خوانده نشد».
+ */
+const G = { cx: 160, cy: 160, r: 116, w: 15 };
+const SEGMENTS = 33;
+const STOPS = [[-1, [239, 68, 68]], [-0.5, [249, 115, 22]], [0, [234, 179, 8]], [0.5, [132, 204, 22]], [1, [34, 197, 94]]];
+/* t: 0 = the left end (−1), π = the right end (+1) */
+const polar = (r, t) => [G.cx - r * Math.cos(t), G.cy - r * Math.sin(t)];
+const f2 = (n) => n.toFixed(2);
+function arcD(r, t0, t1) {
+  const a = polar(r, t0); const b = polar(r, t1);
+  return `M${f2(a[0])} ${f2(a[1])}A${r} ${r} 0 0 1 ${f2(b[0])} ${f2(b[1])}`;
 }
-const ARC_SPAN = Math.PI;
+function colourAt(v) {
+  const x = Math.max(-1, Math.min(1, v));
+  for (let i = 1; i < STOPS.length; i += 1) {
+    const [v1, c1] = STOPS[i];
+    const [v0, c0] = STOPS[i - 1];
+    if (x <= v1) {
+      const k = (x - v0) / (v1 - v0);
+      return `rgb(${c0.map((c, j) => Math.round(c + (c1[j] - c) * k)).join(',')})`;
+    }
+  }
+  return 'rgb(34,197,94)';
+}
+
+function OutlookDial({ score, labelText, L, isPersian }) {
+  const id = useSvgId('ol');
+  const v = score === null || score === undefined || !Number.isFinite(Number(score)) ? null : Math.max(-1, Math.min(1, Number(score)));
+  const side = v === null ? 'na' : v > 0.05 ? 'up' : v < -0.05 ? 'down' : 'flat';
+  const toneColor = v === null ? '#64748b' : colourAt(v);
+  const half = 1 / SEGMENTS;
+  const gap = 0.022;
+  const segs = Array.from({ length: SEGMENTS }, (_, i) => {
+    const mid = ((i + 0.5) / SEGMENTS) * 2 - 1;
+    const lit = v !== null && (
+      Math.abs(mid) <= half + 1e-9
+        ? true
+        : v >= 0 ? (mid > 0 && mid <= v + half) : (mid < 0 && mid >= v - half)
+    );
+    return { i, mid, lit, d: arcD(G.r, (i / SEGMENTS) * Math.PI + gap / 2, ((i + 1) / SEGMENTS) * Math.PI - gap / 2) };
+  });
+  const litOrder = segs.filter((sg) => sg.lit).sort((a, b) => Math.abs(a.mid) - Math.abs(b.mid)).map((sg) => sg.i);
+  const ticks = Array.from({ length: 21 }, (_, i) => {
+    const tv = -1 + i * 0.1;
+    const t = ((tv + 1) / 2) * Math.PI;
+    const major = i % 5 === 0;
+    const r0 = G.r + G.w / 2 + 4;
+    const r1 = r0 + (major ? 7 : 3.5);
+    const a = polar(r0, t); const b = polar(r1, t);
+    return { i, major, d: `M${f2(a[0])} ${f2(a[1])}L${f2(b[0])} ${f2(b[1])}`, t, tv };
+  });
+  const num = (n) => {
+    const txt = `${n > 0 ? '+' : n < 0 ? '\u2212' : ''}${Math.abs(n)}`;
+    return isPersian ? txt.replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]).replace('.', '٫') : txt;
+  };
+  const deg = v === null ? 0 : v * 90;
+  const scoreText = v === null
+    ? L('خوانده نشد', 'unread')
+    : num(Math.round(Number(score) * 100) / 100);
+
+  return (
+    <div className={`aigw-outlook-gauge side-${side}`} style={{ '--ol-tone': toneColor }}>
+      {/* `direction: ltr` (not only dir=…): SVG text inherits the CSS
+          direction, and in a Persian page «−۰٫۵» would otherwise print as «۰٫۵−» */}
+      <svg className="aigw-outlook-arc" viewBox="0 0 320 178" dir="ltr" style={{ direction: 'ltr' }} role="img"
+        aria-label={`${L('مقیاس چشم‌انداز', 'outlook scale')}: ${scoreText}`}>
+        <defs>
+          <linearGradient id={`${id}n`} gradientUnits="userSpaceOnUse" x1="0" y1={G.cy - G.r} x2="0" y2={G.cy + 20}>
+            <stop offset="0%" stopColor={toneColor} />
+            <stop offset="55%" stopColor="#f8fafc" />
+            <stop offset="100%" stopColor="#cbd5e1" />
+          </linearGradient>
+          <radialGradient id={`${id}h`} cx="42%" cy="36%" r="70%">
+            <stop offset="0%" stopColor="#334155" />
+            <stop offset="100%" stopColor="#0b1020" />
+          </radialGradient>
+          <filter id={`${id}g`} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" />
+          </filter>
+        </defs>
+
+        {/* the faint inner guide ring and the glow under the lit run */}
+        <path d={arcD(G.r - G.w / 2 - 9, 0.02, Math.PI - 0.02)} className="aigw-ol-guide" />
+        {v !== null ? (
+          <path d={arcD(G.r, Math.min(Math.PI / 2, ((v + 1) / 2) * Math.PI), Math.max(Math.PI / 2, ((v + 1) / 2) * Math.PI) + 0.001)}
+            stroke={toneColor} strokeWidth={G.w + 6} fill="none" opacity=".35" filter={`url(#${id}g)`} />
+        ) : null}
+
+        {/* the 33 segments */}
+        {segs.map((sg) => (
+          <path key={sg.i} d={sg.d} className={`aigw-ol-seg ${sg.lit ? 'lit' : ''}`}
+            stroke={colourAt(sg.mid)} strokeWidth={G.w}
+            style={sg.lit ? { '--i': litOrder.indexOf(sg.i) } : undefined} />
+        ))}
+
+        {/* ticks + numbers */}
+        {ticks.map((tk) => <path key={tk.i} d={tk.d} className={`aigw-ol-tick ${tk.major ? 'major' : ''}`} />)}
+        {ticks.filter((tk) => tk.major).map((tk) => {
+          const [x, y] = polar(G.r + G.w / 2 + 20, tk.t);
+          const isTop = Math.abs(tk.tv) < 1e-9;
+          return (
+            <text key={`n${tk.i}`} x={f2(x)} y={f2(y + (isTop ? 2 : 4))} className="aigw-ol-num"
+              textAnchor={tk.tv < -0.99 ? 'start' : tk.tv > 0.99 ? 'end' : 'middle'}>
+              {isTop ? L('خنثی', 'neutral') : num(Math.round(tk.tv * 10) / 10)}
+            </text>
+          );
+        })}
+        <text x={G.cx - G.r} y={G.cy + 17} className="aigw-ol-zone down" textAnchor="middle">{L('فشار', 'stress')}</text>
+        <text x={G.cx + G.r} y={G.cy + 17} className="aigw-ol-zone up" textAnchor="middle">{L('رشد', 'growth')}</text>
+
+        {/* the needle: drawn pointing at neutral, turned to the score */}
+        {v !== null ? (
+          <g className="aigw-ol-needle" style={{ '--deg': `${deg}deg` }}>
+            <path d={`M${G.cx} ${G.cy - G.r + 6}L${G.cx + 5.5} ${G.cy}L${G.cx} ${G.cy + 20}L${G.cx - 5.5} ${G.cy}Z`}
+              fill={toneColor} opacity=".45" filter={`url(#${id}g)`} />
+            <path d={`M${G.cx} ${G.cy - G.r + 6}L${G.cx + 5.5} ${G.cy}L${G.cx} ${G.cy + 20}L${G.cx - 5.5} ${G.cy}Z`}
+              fill={`url(#${id}n)`} stroke="rgba(15,23,42,.35)" strokeWidth=".6" />
+            <path d={`M${G.cx} ${G.cy - G.r + 6}L${G.cx} ${G.cy + 20}`} stroke="rgba(255,255,255,.55)" strokeWidth=".8" />
+            <circle cx={G.cx} cy={G.cy - G.r + 6} r="7.5" fill={toneColor} filter={`url(#${id}g)`} />
+            <circle cx={G.cx} cy={G.cy - G.r + 6} r="3.8" fill="#fff" />
+          </g>
+        ) : null}
+
+        {/* the hub */}
+        <circle cx={G.cx} cy={G.cy} r="15" fill={`url(#${id}h)`} stroke={toneColor} strokeWidth="2" />
+        <circle cx={G.cx} cy={G.cy} r="6.5" fill={toneColor} className="aigw-ol-core" />
+        <circle cx={G.cx - 2} cy={G.cy - 2.2} r="1.8" fill="rgba(255,255,255,.75)" />
+      </svg>
+
+      <div className="aigw-outlook-legend">
+        <span className={`aigw-ol-score ${side}`}><span className="aigw-ltr">{scoreText}</span></span>
+        {labelText ? <span className={`aigw-ol-verdict ${side}`}>{labelText}</span> : null}
+        <span className="aigw-ol-cap">
+          {L('امتیاز ترکیبی', 'blended score')} · {L('از', 'from')} <span className="aigw-ltr">{num(-1)}</span> {L('تا', 'to')} <span className="aigw-ltr">{num(1)}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function OutlookPanel({ world, L, isPersian }) {
   const o = useMemo(() => buildOutlookReading(world), [world]);
@@ -82,43 +222,13 @@ export function OutlookPanel({ world, L, isPersian }) {
         </span>
       </div>
 
-      {/* ── the gauge: where this pass's blended score sits on the scale ──── */}
-      {(() => {
-        const v = o.score === null ? null : Math.max(-1, Math.min(1, Number(o.score)));
-        const t = v === null ? ARC_SPAN / 2 : ((v + 1) / 2) * ARC_SPAN;
-        const tip = arcPoint(t);
-        const tone = v === null ? 'var(--text-3)' : v > 0.05 ? 'var(--up)' : v < -0.05 ? 'var(--down)' : 'var(--warn, #eab308)';
-        return (
-          <div className="aigw-outlook-gauge">
-            <svg className="aigw-outlook-arc" viewBox="0 0 320 156" dir="ltr" role="img"
-              aria-label={L('مقیاس چشم‌انداز', 'outlook scale')}>
-              <defs>
-                <linearGradient id="aigw-outlook-grad" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#ef4444" />
-                  <stop offset="50%" stopColor="#eab308" />
-                  <stop offset="100%" stopColor="#22c55e" />
-                </linearGradient>
-              </defs>
-              <path d={arcPath(0, ARC_SPAN)} fill="none" stroke="color-mix(in srgb, var(--text-1) 12%, transparent)" strokeWidth="10" strokeLinecap="round" />
-              <path d={arcPath(0, ARC_SPAN)} fill="none" stroke="url(#aigw-outlook-grad)" strokeWidth="3" strokeLinecap="round" opacity=".55" />
-              {v !== null ? (
-                <path d={arcPath(0, Math.max(0.02, t))} fill="none" stroke={tone} strokeWidth="10" strokeLinecap="round" opacity=".85" />
-              ) : null}
-              <line x1={ARC.cx} y1={ARC.cy} x2={tip[0]} y2={tip[1]} stroke={tone} strokeWidth="2.4" strokeLinecap="round" />
-              <circle cx={ARC.cx} cy={ARC.cy} r="6" fill={tone} />
-              <circle cx={ARC.cx} cy={ARC.cy} r="2.4" fill="var(--bg-panel-solid, #0b1020)" />
-              <text x="18" y="152" fontSize="9.5" fill="var(--text-3)" fontFamily="inherit">{L('فشار', 'stress')}</text>
-              <text x={ARC.cx} y="18" fontSize="9.5" fill="var(--text-3)" fontFamily="inherit" textAnchor="middle">{L('خنثی', 'neutral')}</text>
-              <text x="302" y="152" fontSize="9.5" fill="var(--text-3)" fontFamily="inherit" textAnchor="end">{L('رشد', 'growth')}</text>
-            </svg>
-            <div className="aigw-outlook-legend">
-              <span>-1</span>
-              <span>{L('امتیاز ترکیبی', 'blended score')}: {o.score === null ? L('خوانده نشد', 'unread') : (isPersian ? faNum(`${o.score > 0 ? '+' : ''}${o.score}`) : `${o.score > 0 ? '+' : ''}${o.score}`)}</span>
-              <span>+1</span>
-            </div>
-          </div>
-        );
-      })()}
+      {/* ── the dial: where this pass's blended score sits on the scale ───── */}
+      <OutlookDial
+        score={o.score}
+        labelText={o.label === 'UNAVAILABLE' ? null : (isPersian ? o.labelFa : o.label.replace(/_/g, ' ').toLowerCase())}
+        L={L}
+        isPersian={isPersian}
+      />
 
       <div className="aigw-outlook-now">
         <div className="aigw-outlook-state">
@@ -131,7 +241,7 @@ export function OutlookPanel({ world, L, isPersian }) {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
             <span className={`aigw-pill ${tone}`}>
               <DirMark dir={scoreDir} size={9} />
-              <span className="aigw-ltr">{o.score === null ? '—' : (o.score > 0 ? '+' : '') + o.score}</span>
+              <span className="aigw-ltr">{o.score === null ? '—' : (isPersian ? faNum(`${o.score > 0 ? '+' : ''}${o.score}`) : `${o.score > 0 ? '+' : ''}${o.score}`)}</span>
             </span>
             {o.engineLabel
               ? <span className="aigw-pill info">{L(`موتور: ${OUTLOOK_LABEL_FA[o.engineLabel] || o.engineLabel.replace(/_/g, ' ')}`, `engine: ${o.engineLabel.replace(/_/g, ' ').toLowerCase()}`)}</span>
@@ -152,7 +262,7 @@ export function OutlookPanel({ world, L, isPersian }) {
           </div>
           <div className="aigw-outlook-state-k" style={{ marginTop: 6 }}>
             {o.currentState.regime
-              ? L(`رژیم کنونی: ${o.currentState.regime}`, `current regime: ${o.currentState.regime}`)
+              ? L(`رژیم کنونی: ${REGIME_FA[o.currentState.regime] || o.currentState.regime}`, `current regime: ${String(o.currentState.regime).replace(/_/g, ' ').toLowerCase()}`)
               : L('رژیم خوانده نشد', 'regime unread')}
           </div>
         </div>
@@ -250,8 +360,8 @@ export function OutlookPanel({ world, L, isPersian }) {
 
       <div className="aigw-note">
         {L(
-          `هر سیگنال با مقدار، وزن و شاهد خودش آمده است. برچسب و امتیاز وقتی موتور پاسخ داده مال موتور است و مکمل محلی جدا برچسب می‌خورد؛ وقتی موتور پاسخ نداده، همین ترکیب محلی با برچسب «ترکیب محلی» نمایش داده می‌شود — نه یک حکم بی‌پشتوانه.${o.currentState.regime ? ` رژیم مرجع: ${o.currentState.regime}.` : ''}`,
-          `Every signal carries its value, weight and evidence. When the engine answered, the label and score are its own and the local complement is labelled separately; when it did not, this labelled local composite is shown — never an unsupported verdict.${o.currentState.regime ? ` Reference regime: ${o.currentState.regime}.` : ''}`
+          `هر سیگنال با مقدار، وزن و شاهد خودش آمده است. برچسب و امتیاز وقتی موتور پاسخ داده مال موتور است و مکمل محلی جدا برچسب می‌خورد؛ وقتی موتور پاسخ نداده، همین ترکیب محلی با برچسب «ترکیب محلی» نمایش داده می‌شود — نه یک حکم بی‌پشتوانه.${o.currentState.regime ? ` رژیم مرجع: ${REGIME_FA[o.currentState.regime] || o.currentState.regime}.` : ''}`,
+          `Every signal carries its value, weight and evidence. When the engine answered, the label and score are its own and the local complement is labelled separately; when it did not, this labelled local composite is shown — never an unsupported verdict.${o.currentState.regime ? ` Reference regime: ${String(o.currentState.regime).replace(/_/g, ' ').toLowerCase()}.` : ''}`
         )}
       </div>
     </div>

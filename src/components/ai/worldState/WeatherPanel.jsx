@@ -26,6 +26,7 @@ import {
 import { WeatherGlyph, WIcon, DirMark } from './icons.jsx';
 import { evidenceLabel, evidenceValue, evidenceText, faNum, pct, usdCompact, usdFaCompact, moneyK } from './format.jsx';
 import { QualityBadge, Ltr } from './parts.jsx';
+import { WeatherScene, GlassDrops } from './WeatherScene.jsx';
 
 const METRIC_META = {
   liquidity: { fa: 'نقدینگی جهانی', en: 'Global liquidity' },
@@ -48,6 +49,17 @@ const LEVEL_META = {
 const GAUGE_ICON = {
   liquidity: 'drop', risk: 'warning', inflation: 'flame', dollar: 'bank', cryptoFlow: 'coin',
   institutional: 'building', geopolitics: 'globe', rwa: 'layers', volatility: 'pulse'
+};
+
+/* REPORTED (2026-10-15): «آیکون‌ها مدرن و درست رنگی بشه» — each measure in the
+   colours of what it is: water for liquidity, rose for risk, flame for
+   inflation, money-green for the dollar, gold for crypto, indigo for
+   institutions, sky for geopolitics, violet for real-world assets, pink for
+   volatility. */
+const GAUGE_TINT = {
+  liquidity: ['#22d3ee', '#3b82f6'], risk: ['#fb7185', '#ef4444'], inflation: ['#fbbf24', '#f97316'],
+  dollar: ['#34d399', '#059669'], cryptoFlow: ['#fcd34d', '#f59e0b'], institutional: ['#a5b4fc', '#6366f1'],
+  geopolitics: ['#38bdf8', '#818cf8'], rwa: ['#c084fc', '#e879f9'], volatility: ['#f472b6', '#a78bfa']
 };
 
 const WEATHER_ICON = { sun: 'sun', partly: 'partly', cloud: 'cloud', rain: 'rain', storm: 'storm', wind: 'wind', windy: 'wind', wavesIcon: 'waves', newsIcon: 'news', na: 'na' };
@@ -134,23 +146,28 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
     <div className="aigw-panel acc-weather">
       {/* ── the climate of this pass ─────────────────────────────────────── */}
       <div className="aigw-climate">
-        <div className="aigw-climate-main">
-          <WeatherGlyph name={WEATHER_ICON[climateTone] || 'na'} size={62} />
-          <div className="aigw-climate-copy">
-            <div className="aigw-climate-kicker">{L('اقلیم مالی این دور', 'This pass\u2019s financial climate')}</div>
-            <div className="aigw-climate-label">{climateWord}</div>
-            <div className="aigw-climate-sub">
-              {climate.label
-                ? L(
-                  `ترکیب وزن‌دار ${faNum(climate.readCount)} خوانش واقعی از ${faNum(climate.total)} جزء ممکن`,
-                  `weighted composite of ${climate.readCount} real reads of ${climate.total} possible components`
-                )
-                : L('برای این دور به‌اندازهٔ کافی خوانش نبود — هیچ عددی حدس زده نمی‌شود.', 'Too few readings this pass — nothing is guessed.')}
+        {/* the same weather window as the status-report tile: the sky is this
+            pass's climate tone, the figures sit on a frosted pane in front */}
+        <div className="aigw-climate-window" data-sky={climateTone}>
+          <WeatherScene tone={climateTone} />
+          <div className="aigw-climate-main gw-glass">
+            <GlassDrops tone={climateTone} />
+            <div className="aigw-climate-copy">
+              <div className="aigw-climate-kicker">{L('اقلیم مالی این دور', 'This pass\u2019s financial climate')}</div>
+              <div className="aigw-climate-label"><span className="aigw-sky-pill">{climateWord}</span></div>
+              <div className="aigw-climate-sub">
+                {climate.label
+                  ? L(
+                    `ترکیب وزن‌دار ${faNum(climate.readCount)} خوانش واقعی از ${faNum(climate.total)} جزء ممکن`,
+                    `weighted composite of ${climate.readCount} real reads of ${climate.total} possible components`
+                  )
+                  : L('برای این دور به‌اندازهٔ کافی خوانش نبود — هیچ عددی حدس زده نمی‌شود.', 'Too few readings this pass — nothing is guessed.')}
+              </div>
             </div>
-          </div>
-          <div className="aigw-climate-index">
-            <b>{climate.index === null ? '—' : (isPersian ? faNum(climate.index) : climate.index)}</b>
-            <span>{L('از ۱۰۰', '/ 100')}</span>
+            <div className="aigw-climate-index">
+              <b>{climate.index === null ? '—' : (isPersian ? faNum(climate.index) : climate.index)}</b>
+              <span>{L('از ۱۰۰', '/ 100')}</span>
+            </div>
           </div>
         </div>
 
@@ -289,8 +306,9 @@ export function WorldStatePanel({ world, L, isPersian, onGoTab }) {
           const lit = Math.max(m.status === 'ok' ? 1 : 0, Math.round(m.meter * 5));
           const bad = m.id === 'risk' || m.id === 'volatility' || m.id === 'geopolitics';
           return (
-            <div key={m.id} className="aigw-gauge">
-              <span className="aigw-gauge-icon"><WIcon name={GAUGE_ICON[m.id] || 'pulse'} size={18} /></span>
+            <div key={m.id} className="aigw-gauge tinted"
+              style={{ '--g1': (GAUGE_TINT[m.id] || GAUGE_TINT.liquidity)[0], '--g2': (GAUGE_TINT[m.id] || GAUGE_TINT.liquidity)[1] }}>
+              <span className="aigw-gauge-icon"><WIcon name={GAUGE_ICON[m.id] || 'pulse'} size={19} grad={GAUGE_TINT[m.id] || GAUGE_TINT.liquidity} /></span>
               <div style={{ minWidth: 0 }}>
                 <div className="aigw-gauge-name">{isPersian ? meta.fa : meta.en}</div>
                 <div className="aigw-gauge-ev">

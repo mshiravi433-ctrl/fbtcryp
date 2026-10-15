@@ -1296,7 +1296,8 @@ export const COUNTRIES = Object.freeze([
     'طلا و دلار پروکسی‌های فشار ارزی و تقاضای پوشش ریسک‌اند.', 'Gold and the dollar are proxies for FX pressure and hedging demand.'),
   C('ru', 'روسیه', 'Russia', 60, 90, ['WTI', 'GOLD'], ['WTI', 'GOLD'],
     'نفت پروکسی درآمد صادراتی و طلا پروکسی ذخایر است.', 'Oil proxies export revenue; gold proxies reserves.'),
-  C('gulf', 'خلیج فارس', 'Gulf states', 25, 50, ['WTI', 'BRENT'], ['WTI', 'BRENT'],
+  /* the English name is «Persian Gulf» — the body of water's name (reported 2026-10-15) */
+  C('gulf', 'خلیج فارس', 'Persian Gulf', 25, 50, ['WTI', 'BRENT'], ['WTI', 'BRENT'],
     'نفت خام مهم‌ترین سازوکار درآمد این اقتصادهاست (پروکسی).', 'Crude is the dominant revenue mechanism here (proxy).'),
   C('ir', 'ایران', 'Iran', 32, 53, ['TMN', 'GOLD', 'WTI'], ['GOLD', 'WTI'],
     'نرخ مرجع USDT/TMN خوانش مستقیم است؛ طلا و نفت پروکسی‌اند.', 'The USDT/TMN reference is direct; gold and oil are proxies.'),

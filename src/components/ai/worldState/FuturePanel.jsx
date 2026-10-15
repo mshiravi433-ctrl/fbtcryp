@@ -17,21 +17,175 @@
  */
 import { useMemo, useState } from 'react';
 import { buildFutureTree, buildChallenger, FUTURE_ASSETS, FUTURE_DRIVER_LABEL, usdCompact } from './worldModel.js';
-import { WIcon, DirMark } from './icons.jsx';
+import { WIcon, DirMark, useSvgId } from './icons.jsx';
 import { faNum, pct } from './format.jsx';
 import { Ltr } from './parts.jsx';
 
 const FUTURE_META = {
-  btc: { fa: 'رمزارز (کلاس)', en: 'Crypto (class)', icon: 'coin' },
-  gold: { fa: 'طلا', en: 'Gold', icon: 'spark' },
-  dollar: { fa: 'دلار', en: 'Dollar', icon: 'bank' },
-  equity: { fa: 'سهام', en: 'Equity', icon: 'chart' }
+  btc: { fa: 'رمزارز (کلاس)', en: 'Crypto (class)', icon: 'coin', grad: ['#fcd34d', '#f59e0b'] },
+  gold: { fa: 'طلا', en: 'Gold', icon: 'spark', grad: ['#fde68a', '#eab308'] },
+  dollar: { fa: 'دلار', en: 'Dollar', icon: 'bank', grad: ['#6ee7b7', '#10b981'] },
+  equity: { fa: 'سهام', en: 'Equity', icon: 'chart', grad: ['#93c5fd', '#6366f1'] }
 };
 const CASE_META = {
-  bull: { fa: 'سناریوی صعودی', en: 'Bull case', color: '#22c55e', icon: 'spark' },
-  base: { fa: 'سناریوی خنثی', en: 'Base case', color: '#eab308', icon: 'gauge' },
-  stress: { fa: 'سناریوی فشار', en: 'Stress case', color: '#ef4444', icon: 'warning' }
+  bull: { fa: 'سناریوی صعودی', en: 'Bull case', short: ['صعودی', 'bull'], color: '#22c55e', leaf: ['#dcfce7', '#4ade80', '#15803d'], icon: 'spark' },
+  base: { fa: 'سناریوی خنثی', en: 'Base case', short: ['خنثی', 'base'], color: '#eab308', leaf: ['#fef9c3', '#facc15', '#a16207'], icon: 'gauge' },
+  stress: { fa: 'سناریوی فشار', en: 'Stress case', short: ['فشار', 'stress'], color: '#ef4444', leaf: ['#fee2e2', '#f87171', '#b91c1c'], icon: 'warning' }
 };
+
+/*
+ * THE TREE — «درخت آینده را خیلی مدرن کن با رنگ‌بندی جذاب» (reported 2026-10-15).
+ * ---------------------------------------------------------------------------
+ * An illustrated tree that grows from the asset: a tapered teal→lime trunk on
+ * a glowing ground, three limbs (stress on the left, neutral up the middle,
+ * bull on the right — the same left-to-right order as the outlook dial) whose
+ * THICKNESS and CANOPY SIZE follow the scenario weight, leaf clusters in each
+ * scenario's colours, a halo that breathes on the heaviest scenario, and
+ * fireflies rising from the canopies. The weight badges sit on the canopies.
+ * Everything drawn here is a weight that buildFutureTree already computed —
+ * the picture adds no number of its own.
+ */
+const TREE = {
+  trunkTop: [160, 150],
+  canopy: { stress: [74, 96], base: [160, 72], bull: [246, 96] },
+  limb: {
+    stress: 'M160 154C150 134 116 126 90 106',
+    base: 'M160 152C160 130 160 108 160 88',
+    bull: 'M160 154C170 134 204 126 230 106'
+  },
+  twig: {
+    stress: 'M122 128C114 121 107 120 99 122',
+    base: 'M160 118C167 111 173 109 181 109',
+    bull: 'M198 128C206 121 213 120 221 122'
+  },
+  twigLeaf: { stress: [96, 122], base: [184, 108], bull: [224, 122] }
+};
+/* a crown of pointed leaves: [angle°, length factor] — fanned up from the limb tip */
+const CROWN = [[-100, 0.78], [-68, 0.92], [-36, 1], [0, 1.06], [36, 1], [68, 0.92], [100, 0.78], [-150, 0.62], [150, 0.62]];
+/* one leaf, base at 0,0, pointing up (length 1, width 0.42) */
+const LEAF_D = 'M0 0C.26 -.18.27 -.62 0 -1C-.27 -.62-.26 -.18 0 0Z';
+const FIREFLY = [
+  ['stress', -14, 0, 0], ['stress', 12, 6, 1.4], ['stress', 2, -8, 2.6],
+  ['base', -10, 2, 0.7], ['base', 12, -4, 2], ['base', 0, 8, 3.1],
+  ['bull', 14, 0, 0.3], ['bull', -12, 6, 1.7], ['bull', 0, -10, 2.9]
+];
+
+function FutureTreeArt({ weights, isPersian, L }) {
+  const id = useSvgId('ft');
+  const cases = ['stress', 'base', 'bull'];
+  const top = cases.reduce((a, k) => (weights[k] > weights[a] ? k : a), 'base');
+  const rc = (k) => 18 + Math.max(0, Math.min(75, weights[k])) * 0.3;
+  const pctText = (k) => (isPersian ? `${faNum(weights[k])}\u066a` : `${weights[k]}%`);
+  return (
+    <svg className="aigw-tree-svg" viewBox="0 -14 320 266" fill="none" dir="ltr" style={{ direction: 'ltr' }} role="img"
+      aria-label={`${L('درخت آینده', 'Future tree')}: ${cases.map((k) => `${isPersian ? CASE_META[k].short[0] : CASE_META[k].short[1]} ${pctText(k)}`).join(' · ')}`}>
+      <defs>
+        <linearGradient id={`${id}t`} gradientUnits="userSpaceOnUse" x1="0" y1="236" x2="0" y2="146">
+          <stop offset="0%" stopColor="#0f766e" />
+          <stop offset="55%" stopColor="#14b8a6" />
+          <stop offset="100%" stopColor="#a3e635" />
+        </linearGradient>
+        <radialGradient id={`${id}g`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#2dd4bf" stopOpacity=".45" />
+          <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
+        </radialGradient>
+        <filter id={`${id}b`} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" /></filter>
+        {cases.map((k) => {
+          const [cx, cy] = TREE.canopy[k];
+          return (
+            <g key={k}>
+              <linearGradient id={`${id}l${k}`} gradientUnits="userSpaceOnUse" x1="160" y1="152" x2={cx} y2={cy}>
+                <stop offset="0%" stopColor="#a3e635" />
+                <stop offset="100%" stopColor={CASE_META[k].color} />
+              </linearGradient>
+              <linearGradient id={`${id}f${k}`} x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stopColor={CASE_META[k].leaf[2]} />
+                <stop offset="55%" stopColor={CASE_META[k].leaf[1]} />
+                <stop offset="100%" stopColor={CASE_META[k].leaf[0]} />
+              </linearGradient>
+              <radialGradient id={`${id}a${k}`} cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor={CASE_META[k].color} stopOpacity=".42" />
+                <stop offset="100%" stopColor={CASE_META[k].color} stopOpacity="0" />
+              </radialGradient>
+            </g>
+          );
+        })}
+      </defs>
+
+      {/* ground + roots */}
+      <ellipse cx="160" cy="236" rx="128" ry="13" fill={`url(#${id}g)`} />
+      <ellipse cx="160" cy="236" rx="74" ry="4.5" className="aigw-tree-ground" />
+      <g stroke="#14b8a6" strokeWidth="1.6" strokeLinecap="round" opacity=".7">
+        <path d="M157 233C149 237 137 239 120 240" />
+        <path d="M163 233C171 237 183 239 200 240" />
+        <path d="M155 234C151 239 145 243 134 246" opacity=".6" />
+        <path d="M165 234C169 239 175 243 186 246" opacity=".6" />
+      </g>
+
+      {/* the trunk: tapered, with a glow and a highlight */}
+      <path d="M149 236C151.5 214 153.6 190 154.6 168C155.2 159 156.8 153 160 148C163.2 153 164.8 159 165.4 168C166.4 190 168.5 214 171 236Z"
+        fill={`url(#${id}t)`} opacity=".55" filter={`url(#${id}b)`} />
+      <path d="M149 236C151.5 214 153.6 190 154.6 168C155.2 159 156.8 153 160 148C163.2 153 164.8 159 165.4 168C166.4 190 168.5 214 171 236Z"
+        fill={`url(#${id}t)`} />
+      <path d="M157.4 228C158.2 206 158.6 186 159 166" stroke="rgba(255,255,255,.35)" strokeWidth="1.2" strokeLinecap="round" />
+
+      {/* limbs + twigs (they grow in), thickness follows the weight */}
+      {cases.map((k, i) => (
+        <path key={`l${k}`} className={`aigw-branch-tree-path ${i ? `d${i}` : ''}`} d={TREE.limb[k]}
+          stroke={`url(#${id}l${k})`} strokeWidth={(3 + weights[k] * 0.085).toFixed(2)} strokeLinecap="round" />
+      ))}
+      {cases.map((k, i) => (
+        <path key={`t${k}`} className={`aigw-branch-tree-path d${Math.min(2, i + 1)}`} d={TREE.twig[k]}
+          stroke={CASE_META[k].color} strokeWidth="2" strokeLinecap="round" opacity=".85" />
+      ))}
+
+      {/* canopies: a halo, then a rosette of leaves, sized by the weight */}
+      {cases.map((k) => {
+        const [cx, cy] = TREE.canopy[k];
+        const r = rc(k);
+        return (
+          <g key={`c${k}`} className={`aigw-canopy c-${k} ${k === top ? 'lead' : ''}`}>
+            <circle className="aigw-tree-aura" cx={cx} cy={cy} r={(r * 1.45).toFixed(1)} fill={`url(#${id}a${k})`} />
+            {CROWN.map(([deg, len], j) => (
+              <g key={j} transform={`translate(${cx} ${cy + r * 0.12}) rotate(${deg}) scale(${(r * len * 1.15).toFixed(2)})`}>
+                <path className={`aigw-leaf ${['', 'd1', 'd2', 'd3'][j % 4]}`} d={LEAF_D}
+                  fill={`url(#${id}f${k})`} stroke="rgba(255,255,255,.28)" strokeWidth={(0.7 / (r * len * 1.15)).toFixed(3)} />
+                <path d="M0 -.08V-.86" stroke="rgba(255,255,255,.45)" strokeWidth={(0.8 / (r * len * 1.15)).toFixed(3)} strokeLinecap="round" />
+              </g>
+            ))}
+            <circle cx={cx} cy={cy + r * 0.12} r={(r * 0.2).toFixed(1)} fill={CASE_META[k].leaf[0]} opacity=".95" />
+          </g>
+        );
+      })}
+      {cases.map((k, i) => (
+        <circle key={`tl${k}`} className={`aigw-leaf d${i + 1}`} cx={TREE.twigLeaf[k][0]} cy={TREE.twigLeaf[k][1]} r="4.2"
+          fill={`url(#${id}f${k})`} />
+      ))}
+
+      {/* fireflies rising from the canopies */}
+      {FIREFLY.map(([k, dx, dy, delay], j) => {
+        const [cx, cy] = TREE.canopy[k];
+        return (
+          <circle key={`ff${j}`} className="aigw-firefly" cx={cx + dx} cy={cy - rc(k) * 0.4 + dy} r={j % 3 === 0 ? 1.9 : 1.4}
+            fill={CASE_META[k].leaf[0]} style={{ animationDelay: `${delay}s` }} />
+        );
+      })}
+
+      {/* the weight badges, on the canopies */}
+      {cases.map((k) => {
+        const [cx, cy] = TREE.canopy[k];
+        const by = cy - rc(k) * 1.14 - 33;
+        return (
+          <g key={`b${k}`} className={`aigw-tree-badge ${k === top ? 'lead' : ''}`} style={{ '--case': CASE_META[k].color }}>
+            <rect x={cx - 30} y={by} width="60" height="32" rx="12" />
+            <text x={cx} y={by + 15} textAnchor="middle" className="aigw-tree-badge-v">{pctText(k)}</text>
+            <text x={cx} y={by + 27} textAnchor="middle" className="aigw-tree-badge-k">{isPersian ? CASE_META[k].short[0] : CASE_META[k].short[1]}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
 export function FutureTreePanel({ world, L, isPersian }) {
   const [asset, setAsset] = useState('btc');
   const tree = useMemo(() => buildFutureTree(world, asset), [world, asset]);
@@ -44,7 +198,7 @@ export function FutureTreePanel({ world, L, isPersian }) {
       <div className="aigw-chips">
         {FUTURE_ASSETS.map((a) => (
           <button key={a} type="button" className={`aigw-chip ${asset === a ? 'active' : ''}`} onClick={() => setAsset(a)}>
-            <WIcon name={FUTURE_META[a].icon} size={13} />
+            <WIcon name={FUTURE_META[a].icon} size={14} grad={FUTURE_META[a].grad} />
             {isPersian ? FUTURE_META[a].fa : FUTURE_META[a].en}
           </button>
         ))}
@@ -54,39 +208,14 @@ export function FutureTreePanel({ world, L, isPersian }) {
         <div className="gw-col">
       {/* ── the tree ─────────────────────────────────────────────────────── */}
       <div className="aigw-tree-stage" key={asset}>
-        <svg className="aigw-tree-svg" viewBox="0 0 320 220" fill="none" dir="ltr" role="img"
-          aria-label={L('درخت آینده', 'Future tree')}>
-          {/* trunk */}
-          <path className="aigw-branch-tree-path" d="M160 214 V150" stroke="rgba(163,230,53,0.85)" strokeWidth="4" strokeLinecap="round" />
-          {/* bull limb (left) */}
-          <path className="aigw-branch-tree-path d1" d="M160 152 C150 126 118 116 88 82" stroke="#22c55e" strokeWidth="2.6" strokeLinecap="round" />
-          {/* base limb (centre) */}
-          <path className="aigw-branch-tree-path d2" d="M160 150 C160 122 160 104 160 66" stroke="#eab308" strokeWidth="2.6" strokeLinecap="round" />
-          {/* stress limb (right) */}
-          <path className="aigw-branch-tree-path d2" d="M160 152 C172 126 206 116 236 82" stroke="#ef4444" strokeWidth="2.6" strokeLinecap="round" />
-          {/* leaves */}
-          {[
-            [78, 74, '#22c55e', ''], [96, 92, '#22c55e', 'd1'], [64, 90, '#22c55e', 'd2'],
-            [152, 60, '#eab308', 'd1'], [170, 62, '#eab308', 'd2'], [161, 42, '#eab308', ''],
-            [246, 74, '#ef4444', 'd2'], [228, 92, '#ef4444', ''], [258, 92, '#ef4444', 'd1']
-          ].map(([x, y, fill, d], i) => (
-            <circle key={i} className={`aigw-leaf ${d}`} cx={x} cy={y} r={i % 3 === 0 ? 6 : 4.6} fill={fill} opacity="0.85" />
-          ))}
-          {/* the weights live on the limbs */}
-          <text x="62" y="58" fill="#22c55e" fontSize="15" fontWeight="900" fontFamily="inherit" textAnchor="middle">
-            {isPersian ? `${faNum(w.bull)}\u066a` : `${w.bull}%`}
-          </text>
-          <text x="160" y="30" fill="#eab308" fontSize="15" fontWeight="900" fontFamily="inherit" textAnchor="middle">
-            {isPersian ? `${faNum(w.base)}\u066a` : `${w.base}%`}
-          </text>
-          <text x="258" y="58" fill="#ef4444" fontSize="15" fontWeight="900" fontFamily="inherit" textAnchor="middle">
-            {isPersian ? `${faNum(w.stress)}\u066a` : `${w.stress}%`}
-          </text>
-        </svg>
+        <FutureTreeArt weights={w} isPersian={isPersian} L={L} />
       </div>
 
       <div className="aigw-tree-root">
-        <div>
+        <span className="aigw-tree-root-ico" style={{ '--g1': FUTURE_META[asset].grad[0], '--g2': FUTURE_META[asset].grad[1] }}>
+          <WIcon name={FUTURE_META[asset].icon} size={18} grad={FUTURE_META[asset].grad} />
+        </span>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 12.5, fontWeight: 950, color: 'var(--text-1)' }}>
             {isPersian ? FUTURE_META[asset].fa : FUTURE_META[asset].en}
           </div>
@@ -102,11 +231,14 @@ export function FutureTreePanel({ world, L, isPersian }) {
       </div>
 
       {['bull', 'base', 'stress'].map((k) => (
-        <div key={k} className="aigw-branch" style={{ '--branch-tone': CASE_META[k].color }}>
+        <div key={k} className={`aigw-branch b-${k} ${['bull', 'base', 'stress'].every((o) => w[k] >= w[o]) ? 'lead' : ''}`} style={{ '--branch-tone': CASE_META[k].color }}>
           <div className="aigw-branch-head">
             <span className="aigw-branch-name">
-              <WIcon name={CASE_META[k].icon} size={15} style={{ color: CASE_META[k].color }} />
+              <span className="aigw-branch-ico"><WIcon name={CASE_META[k].icon} size={15} style={{ color: CASE_META[k].color }} /></span>
               {isPersian ? CASE_META[k].fa : CASE_META[k].en}
+              {['bull', 'base', 'stress'].every((o) => w[k] >= w[o])
+                ? <span className="aigw-branch-lead">{L('بیشترین وزن', 'heaviest')}</span>
+                : null}
             </span>
             <span className="aigw-branch-weight">{isPersian ? `${faNum(w[k])}\u066a` : `${w[k]}%`}</span>
           </div>

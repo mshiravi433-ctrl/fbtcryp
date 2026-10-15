@@ -30,6 +30,7 @@ import i18n, { setLanguage } from '../../src/i18n/index.js';
 import AiGlobalIntelligence from '../../src/components/ai/AiGlobalIntelligence.jsx';
 import { WORLD_STYLES } from '../../src/components/ai/worldState/styles.js';
 import { GLOBAL_PAGE_STYLES } from '../../src/components/ai/worldState/ui.styles.js';
+import { WeatherScene, GlassDrops } from '../../src/components/ai/worldState/WeatherScene.jsx';
 
 /* the path the router is on — the tile-navigation checks read it */
 let lastPath = '/';
@@ -292,6 +293,42 @@ export async function run(container) {
     && all('[data-tile="whales"]')[0]?.tagName === 'BUTTON');
   check('briefing: the server\u2019s own briefing messages sit below the board, with their headline',
     all('.gw-msg').length === 3 && /Yield curve inverted/.test(text()));
+
+  /* ── 2026-10-15 · the climate tile is a weather window behind frosted glass ─ */
+  const climateTile = all('[data-tile="climate"]')[0] || null;
+  check('briefing: the climate tile is a weather window — the sky follows the climate tone, the figures sit on frosted glass',
+    !!climateTile && climateTile.classList.contains('gw-climate-tile')
+    && climateTile.getAttribute('data-sky') === 'cloud'
+    && !!climateTile.querySelector('.gw-sky.sky-cloud') && climateTile.querySelectorAll('.gw-sky-cloud').length >= 2
+    && !!climateTile.querySelector('.gw-glass .gw-climate-track i')
+    && /\d/.test(climateTile.querySelector('.gw-glass .gw-v')?.textContent || '')
+    && /cloudy/.test(climateTile.textContent || '') && !!climateTile.querySelector('.gw-glass .aigw-q'));
+  /* every tone draws its own sky — rendered on its own, outside the board */
+  const skyBox = document.createElement('div');
+  document.body.appendChild(skyBox);
+  const skyRoot = createRoot(skyBox);
+  const skyOf = async (tone) => {
+    await act(async () => { skyRoot.render(<><WeatherScene tone={tone} /><GlassDrops tone={tone} /></>); });
+    return skyBox;
+  };
+  let sky = await skyOf('sun');
+  const sunOk = !!sky.querySelector('.gw-sky.sky-sun .gw-sky-sun svg') && !sky.querySelector('.gw-sky-rain') && !sky.querySelector('.gw-glass-drops');
+  sky = await skyOf('rain');
+  const rainOk = sky.querySelectorAll('.gw-sky-rain i').length >= 20 && sky.querySelectorAll('.gw-sky-cloud').length >= 2
+    && sky.querySelectorAll('.gw-glass-drops i').length >= 6 && !sky.querySelector('.gw-sky-bolt') && !sky.querySelector('.gw-sky-sun');
+  sky = await skyOf('storm');
+  const stormOk = !!sky.querySelector('.gw-sky-bolt svg') && !!sky.querySelector('.gw-sky-flash') && sky.querySelectorAll('.gw-sky-rain i').length > 20;
+  sky = await skyOf('na');
+  const naOk = !!sky.querySelector('.gw-sky-na svg') && !sky.querySelector('.gw-sky-sun') && !sky.querySelector('.gw-sky-rain') && !sky.querySelector('.gw-glass-drops');
+  await act(async () => { skyRoot.unmount(); });
+  skyBox.remove();
+  check('briefing: sun → a sun behind the glass; rain → rain and drops on the glass; storm → a bolt; unread → no weather invented',
+    sunOk && rainOk && stormOk && naOk, { sunOk, rainOk, stormOk, naOk });
+  check('briefing: the sky moves by transform/opacity only, freezes under reduced motion, and the pane is the one backdrop blur',
+    keyframeProps('gw-sky').length >= 8 && keyframeProps('gw-sky').every(([, prop]) => prop === 'transform' || prop === 'opacity')
+    && keyframeProps('gw-glass').every(([, prop]) => prop === 'transform' || prop === 'opacity')
+    && /prefers-reduced-motion: reduce\)[\s\S]*\.gw-sky \.gw-sky-rain i \{ animation: none;/.test(SHEET)
+    && (SHEET.match(/(^|[^-])backdrop-filter: blur\(14px\)/gm) || []).length === 1);
   /* tap → the relevant page */
   await act(async () => { all('[data-tile="dollar"]')[0]?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(15); });
   check('briefing: tapping the dollar tile opens the capital-flow tab (the macro table)',
@@ -358,6 +395,16 @@ export async function run(container) {
     && all('.aigw-climate-parts').length === 1
     && all('.aigw-climate-parts > *').length >= 5
     && /\d+\/9|\d+ از ۹/.test(text()));
+  /* 2026-10-15 · «وضعیت جهانی آیکون‌ها مدرن و درست رنگی بشه» */
+  check('world: the climate card opens with the same weather window, and each gauge wears its own colours',
+    all('.aigw-climate .aigw-climate-window[data-sky="cloud"] .gw-sky').length === 1
+    && all('.aigw-climate-window .gw-glass').length === 1
+    && all('.aigw-gauge.tinted').length === 9
+    && new Set(all('.aigw-gauge.tinted').map((g) => g.style.getPropertyValue('--g1'))).size >= 8
+    && all('.aigw-gauge-icon svg linearGradient').length === 9);
+  check('world: the station glyphs are colour illustrations, and every gradient id on the page is unique',
+    all('.aigw-station .aigw-glyph-svg linearGradient, .aigw-station .aigw-glyph-svg radialGradient').length >= 14
+    && (() => { const ids = all('.aigw-panel [id]').map((e) => e.id); return ids.length > 20 && new Set(ids).size === ids.length; })());
 
   /* ── GLOBE ───────────────────────────────────────────────────────────── */
   await clickTab('🗺️');
@@ -387,6 +434,16 @@ export async function run(container) {
     /\d+ of \d+ countries read|کشور خوانده شد/.test(text()) && all('.aigw-globe-legend .aigw-hint').length === 4);
   check('globe: the decorative orbit layer and the drag hint are present',
     all('.aigw-globe-svg').length === 1 && all('.aigw-orbit-b').length === 1 && /drag to spin|بکش تا بچرخد/.test(text()));
+  /* 2026-10-15 · «Persian Gulf», and a lion beside Iran */
+  check('globe: the gulf is called «Persian Gulf» in English — «Gulf states» is gone',
+    all('.aigw-globe-dot[aria-label="Persian Gulf"]').length === 1 && !/Gulf states/.test(text()));
+  const irDot = all('.aigw-globe-dot').find((g) => g.getAttribute('aria-label') === 'Iran');
+  check('globe: Iran\u2019s chip carries the SVG lion (and no other chip does)',
+    !!irDot?.querySelector('svg.aigw-lion path') && all('.aigw-globe-dot svg.aigw-lion').length === 1);
+  await act(async () => { irDot?.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await sleep(12); });
+  check('globe: selecting Iran puts the lion beside its name on the country card',
+    !!all('.aigw-country-head .aigw-lion-medal svg.aigw-lion')[0]
+    && /Iran/.test(all('.aigw-country-name')[0]?.textContent || ''));
 
   /* ── RADAR ───────────────────────────────────────────────────────────── */
   await clickTab('📡');
@@ -472,6 +529,11 @@ export async function run(container) {
   check('future: the tree draws three animated limbs with breathing leaves',
     all('.aigw-tree-svg').length === 1 && all('.aigw-branch-tree-path').length >= 3
     && all('.aigw-leaf').length >= 6);
+  check('future: the modern tree — three weighted canopies, the heaviest marked, a weight badge on each',
+    all('.aigw-canopy').length === 3 && all('.aigw-canopy.lead').length === 1
+    && all('.aigw-tree-badge').length === 3 && all('.aigw-branch.lead').length >= 1
+    && all('.aigw-firefly').length >= 6
+    && keyframeProps('gw-tree').every(([, prop]) => prop === 'transform' || prop === 'opacity'));
   check('future: the tree names what would flip it, and the challenger attacks with observed risks',
     all('.aigw-flip').length >= 1 && all('.aigw-adv-row').length >= 1
     && all('.aigw-adv-ico.observed').length >= 1
@@ -501,6 +563,13 @@ export async function run(container) {
     && all('.aig-signal').length >= 2
     && /blended score|امتیاز ترکیبی/.test(text())
     && /input coverage|پوشش ورودی/.test(text()));
+  const needle = all('.aigw-ol-needle')[0] || null;
+  check('outlook: the modern dial — 33 graded segments, the run from neutral lit, a needle turned to the score',
+    all('.aigw-ol-seg').length === 33 && all('.aigw-ol-seg.lit').length >= 1
+    && !!needle && parseFloat(needle.style.getPropertyValue('--deg')) < 0
+    && /0\.21/.test(all('.aigw-ol-score')[0]?.textContent || '')
+    && all('.aigw-ol-zone').length === 2
+    && keyframeProps('gw-ol').every(([, prop]) => prop === 'transform' || prop === 'opacity'));
   check('outlook: coverage is a COUNT, and anything missing is named with its reason',
     /\d+\s*\/\s*9/.test(text())
     && (all('.aigw-missing .aigw-pill').length === 0 || /inputs not read|ورودی‌های خوانده‌نشده/.test(text())));
@@ -575,6 +644,11 @@ export async function run(container) {
   }
   const rawHit = rawHits.length ? rawHits.join(' | ') : null;
   check('fa: no raw machine string (enum, object, source id, undefined) on any tab', !rawHit, rawHit);
+  await clickTab('🔀');
+  check('fa: the outlook names the regime in Persian and the dial numbers read in Persian digits',
+    !/\bMIXED\b/.test(all('.aigw-panel.acc-econ')[0]?.textContent || '')
+    && /ترکیبی/.test(all('.aigw-panel.acc-econ')[0]?.textContent || '')
+    && /۰٫۵/.test(all('.aigw-outlook-arc')[0]?.textContent || ''));
   await clickTab('🌐');
   check('fa: the calibrated board reads in Persian — «خوانش مستقیم», «برابر نوسان معمول», «واحد پایه»',
     /خوانش مستقیم/.test(text()) && /برابر نوسان معمول/.test(text()) && /واحد پایه/.test(text()) && !/\bbp\b/.test(text()));

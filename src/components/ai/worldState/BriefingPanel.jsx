@@ -19,8 +19,66 @@
 import { WIcon, WeatherGlyph } from './icons.jsx';
 import { QualityBadge, Ltr } from './parts.jsx';
 import { TONE_WORD } from './worldModel.js';
+import { WeatherScene, GlassDrops } from './WeatherScene.jsx';
 
 const GLYPH_OF = { sun: 'sun', partly: 'partly', cloud: 'cloud', rain: 'rain', storm: 'storm', windy: 'wind', na: 'na' };
+
+/*
+ * THE CLIMATE TILE — a weather window behind frosted glass.
+ * REPORTED (2026-10-15): «باکس اقلیم مالی این دور خیلی مدرن‌تر و زیباتر شود؛
+ * اگر آفتابیه پشت شیشه خورشید باشه، اگر بارونیه پشت شیشه بارون بیاد».
+ * The sky behind the pane is drawn from the tile's own tone (the climate
+ * label of this pass); the pane carries the same figures the tile always
+ * carried — the index, the condition word, the station count, the quality
+ * badge and the destination — plus a 0–100 track that places the index
+ * between stress and support.
+ */
+function ClimateTile({ tile, L, isPersian, onGo }) {
+  const value = isPersian ? tile.valueFa : tile.valueEn;
+  const unit = isPersian ? tile.unitFa : tile.unitEn;
+  const title = isPersian ? tile.titleFa : tile.titleEn;
+  const sub = isPersian ? tile.subFa : tile.subEn;
+  const navLabel = isPersian ? tile.nav.fa : tile.nav.en;
+  const word = tile.wordFa ? (isPersian ? tile.wordFa : tile.wordEn) : null;
+  const index = tile.severity !== null && tile.severity !== undefined && tile.valueEn !== null && tile.valueEn !== undefined
+    ? Math.max(0, Math.min(100, Number(tile.valueEn))) : null;
+  return (
+    <button
+      type="button"
+      data-tile={tile.id}
+      data-sky={tile.tone}
+      className={`gw-tile gw-climate-tile t-${tile.tone} st-${tile.status} wide`}
+      onClick={() => onGo(tile.nav)}
+      aria-label={`${title}${value ? ` — ${value}${unit ? ` ${unit}` : ''}` : ''}${word ? ` — ${word}` : ''} — ${L('برو به', 'open')} ${navLabel}`}
+    >
+      <WeatherScene tone={tile.tone} />
+      <span className="gw-glass">
+        <GlassDrops tone={tile.tone} />
+        <span className="gw-tile-top">
+          <span className="gw-tile-title">{title}</span>
+          <i className="gw-tile-go" aria-hidden="true" />
+        </span>
+        <span className="gw-tile-value">
+          {value
+            ? <><Ltr className="gw-v">{value}</Ltr>{unit ? <small>{unit}</small> : null}</>
+            : <span className="gw-tile-unread">{L('خوانده نشد', 'unread')}</span>}
+        </span>
+        {word ? <em className="gw-tile-word">{word}</em> : null}
+        {index !== null ? (
+          <span className="gw-climate-scale" aria-hidden="true">
+            <span className="gw-climate-track"><i style={{ left: `${index}%` }} /></span>
+            <span className="gw-climate-ends"><b>{L('فشار', 'stress')}</b><b>{L('حمایت', 'support')}</b></span>
+          </span>
+        ) : null}
+        {sub ? <span className="gw-tile-sub">{sub}</span> : null}
+        <span className="gw-tile-foot">
+          <QualityBadge quality={tile.quality} isPersian={isPersian} />
+          <span className="gw-tile-nav">{navLabel}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
 
 function Tile({ tile, L, isPersian, onGo }) {
   const value = isPersian ? tile.valueFa : tile.valueEn;
@@ -108,7 +166,9 @@ export function BriefingPanel({ board, messages, briefingAt, unreadInputs, L, is
 
       {hasTiles ? (
         <div className="gw-tiles">
-          {tiles.map((tile) => <Tile key={tile.id} tile={tile} L={L} isPersian={isPersian} onGo={go} />)}
+          {tiles.map((tile) => (tile.id === 'climate'
+            ? <ClimateTile key={tile.id} tile={tile} L={L} isPersian={isPersian} onGo={go} />
+            : <Tile key={tile.id} tile={tile} L={L} isPersian={isPersian} onGo={go} />))}
         </div>
       ) : (
         <div className="aig-empty">
