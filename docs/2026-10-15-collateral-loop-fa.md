@@ -41,7 +41,7 @@
 - `npm run test:lending`: **۹۲/۹۲** تست Vitest، probe موتور **۳۰/۳۰**، probe اجرای Loan **۴۰/۴۰**؛ خروج ۰.
 - پس از متوقف‌کردن dev preview برای آزادشدن حافظه، `npm run build` با خروج ۰ تمام شد و ۲۵۸ صفحهٔ landing تولید کرد؛ اجرای جایگزین Vite با heap ۲٬۵۰۰ MB نیز موفق بود. هشدارهای Rollup و نبودن `FBT_ANDROID_SHA256` برای assetlinks در محیط دیده شد؛ تغییری در Android یا تنظیمات آن انجام نشد.
 - `npm test`: اجرای عادی در build داخلی runner با وضعیت ۱۳۷ (OOM) متوقف شد. اجرای `FBT_TEST_PREBUILT=1 npm test` از OOM گذشت، اما تست بوت ۴ assertion را رد کرد و `first-launch-flow` با `TypeError` روی `.splash-btn` متوقف شد؛ مراحل بعدی runner اجرا نشدند.
-- `test/wiring.mjs`: درخت پیش از تغییر و `git archive 8f4baa11e09d1b7018395191997c161147fa3f12` هر دو **۲٬۸۳۶/۲٬۸۷۳، همان ۳۷ شکست** دادند؛ شکست تازه‌ای از تغییر حلقه اضافه نشد. عدد «۲۷ شکست پایه» در خلاصهٔ اولیه با checkout واقعی نمی‌خوانْد.
+- `test/wiring.mjs`: پس از همگام‌سازی با `main`، درخت فعلی و snapshot ساخته‌شده از `origin/main` هر دو **۲٬۸۳۶/۲٬۸۷۴** و همان ۳۸ دستهٔ شکست را دارند. مورد first-paint در هر دو از سقف ۱٬۷۰۰ KB می‌گذرد: فعلی ۱٬۷۲۴ KB، پایه ۱٬۷۲۰ KB. پیش از همگام‌سازی، commit پایهٔ `8f4baa11e09d1b7018395191997c161147fa3f12`، ۳۷ شکست از ۲٬۸۷۳ داشت. سقف «۲۷ شکست پایه» با baselineهای واقعی سازگار نیست.
 - `npm ci --ignore-scripts --no-audit --no-fund` پیش‌تر موفق شد؛ هشدار engine موجود Pyth به Node 24 در حالی‌که محیط Node 22 است، build را متوقف نکرد.
 
 ## نمایش بصری
