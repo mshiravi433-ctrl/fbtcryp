@@ -1,3 +1,19 @@
+# ۲۰۲۶-۱۰-۱۵ — حلقهٔ وثیقه در صفحهٔ Loan: برآورد خالص، پوزیشن خواندنی، اجرای fail-closed
+
+جزئیات: [2026-10-15-collateral-loop-fa.md](docs/2026-10-15-collateral-loop-fa.md).
+
+- **A — ماشین‌حساب محلی (`src/lib/loopMath.js`):** LTV، آستانهٔ لیکوئیدیشن، APY سپرده/وام، هزینهٔ سواپ و gas، حاشیهٔ امن و ۱–۵ دور کاملاً قابل‌ویرایش؛ HF موقت و پس از سپرده، فاصله تا HF=1، leverage، خالص carry و نرخ سال اول بعد از هزینه‌ها. هیچ RPC یا price feed ندارد؛ قیمت‌ها در projection یک دلار فرض می‌شوند و ورودی نرخ‌ها کوتیشن نیست.
+- **B — پیش‌نمایش واقعی اما فقط‌خواندنی:** `CollateralLoopPanel` از خوانش حساب موجود Lending استفاده می‌کند؛ زنده/ناقص/کش/کش قدیمی با timestamp برچسب می‌خورند. در وضعیت unavailable ارقام قدیمی پنهان‌اند، نه صفر. اختلاف پوزیشن و بالابودن از LTV مشخص می‌شود.
+- **C — اجرای زنجیره‌ای خاموش و fail-closed:** مسیر واقعی `confirmExecution → executeLendingPlan → runLendingPlan` و `simulateLendingPlan` بررسی شد. شبیه‌سازی موجود برای هر تراکنش `eth_call` جداگانه است، state را بین borrow/swap/supply منتقل نمی‌کند؛ پشتیبانی `eth_simulateV1` در endpointهای عمومی برنامه و طرح کامل swap نیز اثبات نشد. بنابراین اجرای واقعی حلقه عمداً در UI غیرفعال است، حتی اگر فلگ و allowlist تنظیم شوند.
+- **گیت‌ها:** `VITE_COLLATERAL_LOOP_CALCULATOR_ENABLED` پیش‌فرض روشن؛ `VITE_COLLATERAL_LOOP_EXECUTION_ENABLED` پیش‌فرض خاموش؛ `VITE_COLLATERAL_LOOP_ALLOWLIST` فقط ورودی‌های دقیق `chainId:wallet` می‌پذیرد. `LOOP_STATEFUL_SIMULATION_VERIFIED=false` گیت نهایی را بسته نگه می‌دارد. ماشین حالت مستقل با mock، کلیک اجباری، شبیه‌سازی، HF تازه، کوتیشن تازه، توقف، partial و unwind دستی را می‌آزماید؛ هیچ تراکنش یا unwind خودکاری وجود ندارد.
+- **ترجمه و UI:** کلیدها در هر ۱۲ فایل locale هستند؛ copy تازهٔ فارسی/انگلیسی ترجمه شده و RTL/LTR و روشن/تاریک stylesheet دارد. ۱۰ locale دیگر برای این کلیدهای تازه از متن انگلیسی استفاده می‌کنند.
+- **تست حلقه:** `npm run test:collateral-loop` — **۳۰ تست Node + ۶ تست UI، همه سبز**.
+- **تست Lending:** `npm run test:lending` — ۹۲ تست Vitest، probe موتور ۳۰/۳۰ و probe اجرای صفحه ۴۰/۴۰ سبز.
+- **Build:** پس از متوقف‌کردن dev preview برای آزادشدن حافظه، `npm run build` با خروج ۰ تمام شد؛ ۲۵۸ صفحهٔ landing تولید شد. اجرای جایگزین Vite با heap ۲٬۵۰۰ MB نیز موفق بود. هشدارهای Rollup و نبودن `FBT_ANDROID_SHA256` برای assetlinks ثبت شدند؛ Android تغییر نکرد.
+- **تست کامل:** `npm test` در build داخل runner با وضعیت ۱۳۷/کمبود حافظه متوقف شد. اجرای `FBT_TEST_PREBUILT=1 npm test` از آن مرحله عبور کرد، اما probe بوت ۴ assertion ازپیش‌موجود را رد کرد و سپس تست `first-launch-flow` با نبودن `.splash-btn` خطا داد؛ runner پیش از ادامهٔ بقیهٔ مجموعه متوقف شد.
+- **Wiring با پایهٔ واقعی:** شاخهٔ جاری و `git archive HEAD` هر دو دقیقاً **۲٬۸۳۶/۲٬۸۷۳** (۳۷ شکست ازپیش‌موجود) دارند؛ هیچ شکست wiring اضافه نشده. عدد ۲۷ ذکرشده در خلاصهٔ درخواست با خروجی واقعی base تطبیق نداشت.
+- **شاخه و انتشار:** شاخهٔ ثابت session، `arena/a0e5c164-fbtcryp`، با شاخهٔ درخواستی `arena/fea51023-fbtcryp` متفاوت است؛ کار روی شاخهٔ ثابت session نگه داشته شد. هیچ merge یا انتشار productionی انجام نشده است.
+
 # ۲۰۲۶-۱۰-۱۴ (۳) — تب «اسپات» در بخش معاملات: سواپ از کیف پول خود کاربر
 
 جزئیات و استدلال کامل: [2026-10-14-spot-trade-fa.md](docs/2026-10-14-spot-trade-fa.md).

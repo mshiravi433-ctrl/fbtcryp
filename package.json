@@ -54,6 +54,7 @@
     "test:market-data": "node test/market-provider-fallback-probe.mjs && node test/market-visuals-probe.mjs && node test/market-visuals-rescue-probe.mjs && node --test test/market-sector-regression.test.mjs",
     "test:lending-service": "vitest run test/lending-service.test.js test/lending-bff-config-probe.test.js",
     "test:lending": "npm run test:lending-service && node test/lending-engine-probe.mjs && node test/intent-ai/lending-adapters-probe.mjs && vite build -c test/vite.loan.mjs --logLevel error && node test/run-one-probe.mjs ./.out/loan/loan-execution-probe.js",
+    "test:collateral-loop": "node --test test/loop-math.test.mjs test/loop-preview.test.mjs test/loop-execution.test.mjs test/loop-feature-flags.test.mjs && vitest run test/loop-ui.test.jsx --maxWorkers=2 --no-file-parallelism",
     "test:aave-base-fork": "node test/aave-base-fork-probe.mjs",
     "test:aave-arbitrum-fork": "node test/aave-arbitrum-fork-probe.mjs",
     "test:compound-base-fork": "node test/compound-base-fork-probe.mjs",
