@@ -211,7 +211,6 @@ const GROUPS = [
         repeats what the user can already reach.
       */
       { to: '/learn', key: 'learn.title', Icon: IconInfo, hue: 'var(--rgb-9)' },
-      { to: '/aparat', key: 'nav.aparat', Icon: IconVideo, hue: 'var(--rgb-3)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
       { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },
       { to: '/ecosystem', key: 'nav.ecosystem', Icon: IconGlobe, hue: 'var(--rgb-3)' },

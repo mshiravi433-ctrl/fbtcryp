@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import { forwardRef } from 'react';
+import { useRadioStore } from '../src/store/useRadioStore';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import fa from '../src/i18n/locales/fa.json';
 import en from '../src/i18n/locales/en.json';
+
+vi.mock('../src/lib/audio', () => ({
+  getCalm: async () => ({ items: [{ id: 'cinema-test', title: 'Cinematic journey', audioUrl: '/test-score.mp3' }] })
+}));
 
 const dict = { fa, en };
 let LANG = 'fa';
@@ -29,14 +35,14 @@ vi.mock('framer-motion', () => ({
     get: (_, tag) => {
       const T = String(tag);
       if (!MOTION_STUBS.has(T)) {
-        MOTION_STUBS.set(T, ({ children, ...p }) => {
+        MOTION_STUBS.set(T, forwardRef(({ children, ...p }, ref) => {
           const clean = Object.fromEntries(
             Object.entries(p).filter(
               ([k]) => !['initial', 'animate', 'exit', 'transition', 'whileTap', 'whileHover', 'layout', 'layoutId', 'variants'].includes(k)
             )
           );
-          return <T {...clean}>{children}</T>;
-        });
+          return <T ref={ref} {...clean}>{children}</T>;
+        }));
       }
       return MOTION_STUBS.get(T);
     }
@@ -120,6 +126,7 @@ function LocationProbe({ onChange }) {
 
 beforeEach(() => {
   LANG = 'fa';
+  useRadioStore.getState().stop();
   globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ venues: {}, rows: [] }) }));
 });
 
@@ -142,6 +149,9 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     expect(btcCard.classList.contains('market-glass-surface')).toBe(true);
     expect(btcCard.textContent).toContain('Bitcoin');
     expect(btcCard.textContent).toContain('#1');
+    expect(document.querySelector('.market-global-watermark')).toBeNull();
+    expect(document.querySelector('.market-btc-watermark')).toBeNull();
+    expect(document.querySelector('.market-hero-action-chip')).toBeNull();
 
     const modernCss = readFileSync('src/styles/market-modern.css', 'utf8');
     expect(modernCss).toMatch(/:root\[data-native='true'\]\s*\.market-glass-surface[\s\S]*?backdrop-filter:\s*none\s*!important/);
@@ -177,15 +187,25 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     expect(popup.textContent).toContain('AAPL');
     expect(popup.textContent).toContain('60s');
 
-    // Toggle story music on/off
-    const audioBtn = screen.getByTestId('story-audio-toggle');
-    fireEvent.click(audioBtn);
-    expect(audioBtn.classList.contains('is-active')).toBe(true);
+    expect(screen.queryByTestId('story-audio-toggle')).toBeNull();
+    expect(screen.queryByTestId('story-pause-toggle')).toBeNull();
+    expect(popup.querySelectorAll('.market-story-progress-seg svg').length).toBe(8);
 
     // Click bottom CTA button to open Stocks page
     const ctaBtn = screen.getByTestId('story-cta-stocks');
     fireEvent.click(ctaBtn);
     await waitFor(() => expect(currentPath).toBe('/stocks'));
+  });
+
+  it('shares News music queue and keeps radio selected after closing the story', async () => {
+    render(<MemoryRouter><Market /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('market-story-item-radio'));
+    fireEvent.click(await screen.findByText('Cinematic journey'));
+    expect(useRadioStore.getState().track.id).toBe('cinema-test');
+    expect(useRadioStore.getState().queue).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('story-close-btn'));
+    expect(useRadioStore.getState().track.id).toBe('cinema-test');
+    expect(screen.queryByTestId('market-story-popup')).toBeNull();
   });
 
   it('renders the dedicated Aparat educational videos page with https://www.aparat.com/Fbtcompany and interactive courses', async () => {
@@ -199,6 +219,7 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
 
     const page = screen.getByTestId('aparat-videos-page');
     expect(page).toBeTruthy();
+    expect(document.querySelector('.aparat-audio-cta')).toBeNull();
     expect(page.textContent).toContain('https://www.aparat.com/Fbtcompany');
     expect(page.textContent).toContain('@Fbtcompany');
     expect(screen.getByTestId('aparat-open-channel-btn')).toBeTruthy();

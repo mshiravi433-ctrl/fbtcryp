@@ -311,11 +311,6 @@ export default function Market() {
         >
           <div className="market-glass-orb market-glass-orb--cyan" aria-hidden="true" />
           <div className="market-glass-orb market-glass-orb--violet" aria-hidden="true" />
-          <svg className="market-global-watermark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
-            <circle cx="60" cy="60" r="46" stroke="#00e5ff" strokeWidth="1.6" strokeDasharray="6 5" />
-            <ellipse cx="60" cy="60" rx="24" ry="46" stroke="#7c4dff" strokeWidth="1.4" />
-            <path d="M14 60h92M22 38h76M22 82h76" stroke="#00ff9d" strokeWidth="1.2" strokeOpacity="0.65" />
-          </svg>
 
           <div className="market-global-head">
             <div>
@@ -426,11 +421,6 @@ export default function Market() {
             data-testid="market-btc-hero-card"
           >
             <div className="market-glass-orb market-glass-orb--btc" aria-hidden="true" />
-            <svg className="market-btc-watermark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
-              <circle cx="60" cy="60" r="48" stroke="#f7931a" strokeWidth="1.8" strokeDasharray="7 5" />
-              <circle cx="60" cy="60" r="34" stroke="#ffb300" strokeWidth="1.2" />
-              <path d="M52 38v44M64 38v44M46 44h20a8 8 0 0 1 0 16H48h20a8.5 8.5 0 0 1 0 17H46" stroke="#f7931a" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
 
             <div className="market-hero-top">
               <div className="market-hero-identity">
@@ -479,16 +469,6 @@ export default function Market() {
 
             <div className="market-hero-actions">
               <span className="faint" style={{ fontSize: 11 }}>{t('market.heroExplore')}</span>
-              <button
-                type="button"
-                className="market-hero-action-chip"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(swapUrlFor(hero.id, 'buy') || '/swap');
-                }}
-              >
-                <span>{t('market.swap')} {hero.symbol}</span>
-              </button>
             </div>
           </motion.section>
         )}

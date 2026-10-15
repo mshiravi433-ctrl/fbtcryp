@@ -73,7 +73,7 @@ const MORE_TOOLS = [
 const TAB_SPRING = { type: 'spring', stiffness: 480, damping: 38, mass: 0.75 };
 
 export default function Lab() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { haptic } = useTelegram();
   const navigate = useNavigate();
   const still = useStill();
@@ -278,6 +278,11 @@ export default function Lab() {
                   style={{ overflow: 'hidden' }}
                 >
                   <div className="lab2-grid" style={{ paddingTop: 14 }}>
+                    {(i18n.resolvedLanguage || i18n.language).split('-')[0] === 'fa' && (
+                      <LabCard icon="cap" accent="magenta" index={3}
+                        title={t('nav.aparat')} sub="آموزش تصویری سواپ، سهام و امنیت کیف پول"
+                        onClick={() => navigate('/aparat')} />
+                    )}
                     {MORE_TOOLS.map((m, i) => (
                       <LabCard
                         key={m.id}
