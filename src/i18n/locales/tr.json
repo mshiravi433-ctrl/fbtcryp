@@ -31,7 +31,8 @@
     },
     "intentOS": "Niyet sistemi",
     "loan": "Krediler",
-    "protection": "Koruma"
+    "protection": "Koruma",
+    "aparat": "Video Tutorials"
   },
   "common": {
     "balance": "Bakiye",
@@ -267,7 +268,8 @@
       "volume": "Hacim"
     },
     "swap": "Swap",
-    "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network"
+    "swapOnCorrectNetwork": "{{symbol}} → Swap on the correct network",
+    "heroExplore": "Tap to view full chart, analytics & trade"
   },
   "coin": {
     "notFound": "Coin bulunamadı",
@@ -3293,6 +3295,206 @@
         "elevated": "Yüksek",
         "extreme": "Çok yoğun",
         "unknown": "Bilinmiyor"
+      }
+    }
+  },
+  "stories": {
+    "railTitle": "App Interactive Stories",
+    "railBadge": "1 min · Live & Audio",
+    "controls": {
+      "music": "Music",
+      "musicOn": "Playing",
+      "mute": "Mute",
+      "pause": "Pause",
+      "resume": "Resume",
+      "prev": "Previous story",
+      "next": "Next story"
+    },
+    "quick": {
+      "xstocks": "Solana xStocks",
+      "swapRwa": "Quick RWA Swap",
+      "learnHub": "Learn & Help Hub",
+      "solana": "Solana Swap",
+      "bridge": "Cross-Chain Bridge",
+      "signals": "AI Signals",
+      "smartMoney": "Whale Radar",
+      "loan": "DeFi Lending",
+      "rewards": "Rewards & Rank",
+      "global": "Global Macro Console",
+      "compare": "Compare Assets",
+      "shop": "Crypto Shop",
+      "launch": "Token Launchpad",
+      "insurance": "DeFi Insurance"
+    },
+    "items": {
+      "stocks": {
+        "short": "Stocks & RWA",
+        "title": "Tokenized Stocks & Real-World Assets",
+        "subtitle": "Explore the highest-yielding tokenized equities (NVIDIA, Apple, Tesla & Gold) with instant on-chain settlement.",
+        "cta": "Open Stocks & RWA Page"
+      },
+      "aparat": {
+        "short": "Aparat Videos",
+        "title": "FBT Video Academy on Aparat",
+        "subtitle": "Step-by-step Persian & visual video courses covering Smart Swap, Tokenized Stocks, Intent AI, and Wallet Security.",
+        "cta": "Open Aparat Video Academy"
+      },
+      "swap": {
+        "short": "Smart Swap",
+        "title": "Multi-Chain EVM & Solana Smart Swap",
+        "subtitle": "Aggregated best quotes across top DEXs on 9+ EVM chains and Solana, signed directly from your wallet.",
+        "cta": "Open Smart Swap"
+      },
+      "intent": {
+        "short": "Intent AI",
+        "title": "Intent AI Neural OS & Smart Money",
+        "subtitle": "Trade with natural language, track institutional whale wallets live, and inspect algorithmic market signals.",
+        "cta": "Open Intent AI"
+      },
+      "defi": {
+        "short": "DeFi & Yield",
+        "title": "DeFi Yield Farming, Staking & Lending",
+        "subtitle": "Earn on-chain yield across Aave V3, Morpho, Lido, and Solana Kamino with non-custodial execution.",
+        "cta": "Open DeFi Farm & Yield"
+      },
+      "radio": {
+        "short": "Radio & Music",
+        "title": "Crypto Radio, Focus Music & Live News",
+        "subtitle": "Listen to ambient trading focus music, crypto podcasts, and breaking market news in the background.",
+        "cta": "Open News & Radio"
+      },
+      "orders": {
+        "short": "Auto Orders",
+        "title": "Automated DCA, Limit & TWAP Orders",
+        "subtitle": "Schedule recurring dollar-cost averaging, limit targets, and automated portfolio rebalancing 24/7.",
+        "cta": "Open Auto Orders"
+      },
+      "ecosystem": {
+        "short": "Wallet & Shop",
+        "title": "Smart Wallet, Global Shop, Launchpad & Insurance",
+        "subtitle": "Manage multi-chain assets, buy global gift cards & eSIMs, launch tokens, and protect DeFi positions.",
+        "cta": "Open Smart Wallet"
+      }
+    },
+    "stocks": {
+      "topGainersTitle": "Top Gaining & Highest-Return Stocks",
+      "liveTag": "Top Performers"
+    },
+    "aparat": {
+      "featuredTitle": "Featured Video Courses on Aparat"
+    },
+    "swap": {
+      "topMoversTitle": "Top Gaining Swappable Tokens"
+    },
+    "intent": {
+      "cmd1Title": "Natural Language Trade",
+      "cmd1Desc": "Swap, bridge, and rebalance in one prompt",
+      "cmd2Title": "Whale Wallet Sonar",
+      "cmd2Desc": "Track smart-money inflows and outflows",
+      "cmd3Title": "Multi-Factor Signals",
+      "cmd3Desc": "Technical momentum and regime scoring",
+      "cmd4Title": "Global World Console",
+      "cmd4Desc": "Macro liquidity and cross-asset flows"
+    },
+    "radio": {
+      "studioTitle": "Select Story Ambient Soundtrack",
+      "mood": {
+        "alpha": "Alpha Wave",
+        "focus": "Deep Focus",
+        "cinema": "Cinematic"
+      }
+    },
+    "ecosystem": {
+      "walletTitle": "Non-Custodial Wallet",
+      "shopTitle": "Global Crypto Shop",
+      "shopDesc": "Gift cards, travel & eSIM with crypto",
+      "launchTitle": "Token Launchpad",
+      "launchDesc": "Deploy & launch liquidity with zero code",
+      "insureTitle": "DeFi Insurance",
+      "insureDesc": "On-chain smart contract risk coverage"
+    }
+  },
+  "aparat": {
+    "hero": {
+      "kicker": "Official Video Academy on Aparat",
+      "title": "FBT Educational Video Tutorials on Aparat",
+      "subtitle": "Watch step-by-step video guides covering every capability of the platform — from non-custodial wallet setup and smart swaps to tokenized stocks, DeFi farming, and AI trading.",
+      "watchOnAparat": "Watch Official Channel on Aparat",
+      "copyLink": "Copy Aparat Link"
+    },
+    "stats": {
+      "courses": "Video Courses",
+      "quality": "Video Quality",
+      "free": "Free Access"
+    },
+    "player": {
+      "stageLabel": "Interactive Course Preview & Chapters",
+      "startWalkthrough": "Auto-Play Chapter Steps",
+      "pauseWalkthrough": "Pause Walkthrough",
+      "watchEpisode": "Watch Video on Aparat",
+      "openSection": "Try Feature in App",
+      "playMusic": "Play Ambient Music",
+      "muteMusic": "Mute Music"
+    },
+    "catalog": {
+      "title": "Educational Video Curriculum",
+      "searchPlaceholder": "Search tutorials (Stocks, Swap, AI, DeFi…)"
+    },
+    "categories": {
+      "all": "All Videos",
+      "beginner": "Getting Started",
+      "trading": "Swap & Trading",
+      "stocks": "Stocks & RWA",
+      "ai": "Intent AI",
+      "defi": "DeFi & Lending"
+    },
+    "level": {
+      "beginner": "Beginner",
+      "intermediate": "Intermediate",
+      "pro": "Advanced"
+    },
+    "courses": {
+      "wallet": {
+        "title": "Non-Custodial Multi-Chain Wallet Setup & Security",
+        "desc": "How to create or connect your wallet across EVM, Solana, and Bitcoin, back up your seed phrase, and enable biometric lock.",
+        "step1": "Create a local vault or connect an external wallet via WalletConnect",
+        "step2": "Back up your 12-word recovery phrase and configure biometric lock",
+        "step3": "Manage Ethereum, Base, Arbitrum, Solana, and Bitcoin in one view"
+      },
+      "swap": {
+        "title": "Smart Swap on EVM, Solana Jupiter & Cross-Chain Bridge",
+        "desc": "Learn how to get the best aggregated swap rate with minimal slippage and bridge tokens across networks safely.",
+        "step1": "Select chain, source, and destination tokens to compare aggregator quotes",
+        "step2": "Verify slippage tolerance, gas fee, and contract address before signing",
+        "step3": "Use the Solana tab and Cross-Chain Bridge for multi-network routing"
+      },
+      "stocks": {
+        "title": "Buying & Selling Tokenized Stocks (NVIDIA, Apple, Tesla & Gold)",
+        "desc": "Complete walkthrough of Solana xStocks and Robinhood Chain equity tokens, issuer verification, and instant swaps.",
+        "step1": "Open the Stocks page and inspect live prices and top-performing equities",
+        "step2": "Verify official contract addresses and on-chain pool liquidity depth",
+        "step3": "Buy or sell tokenized equities directly with stablecoins in seconds"
+      },
+      "ai": {
+        "title": "Trading with Intent AI & Tracking Smart Money Whales",
+        "desc": "Execute multi-step trading intents using plain language, audit portfolio health, and follow institutional wallets.",
+        "step1": "Type your trading or portfolio goal in natural language inside Intent AI",
+        "step2": "Review the compiled route, security simulation, and confirm execution",
+        "step3": "Use Smart Money radar and AI Signals to spot high-conviction trends"
+      },
+      "defi": {
+        "title": "DeFi Yield Farming, Staking & Lending on Aave, Morpho & Kamino",
+        "desc": "Earn sustainable yield on stablecoins and blue-chip tokens or borrow against your collateral without selling.",
+        "step1": "Compare live APY rates and protocol risk ratings on the Farm screen",
+        "step2": "Supply collateral on Aave, Morpho, or Kamino and monitor Health Factor",
+        "step3": "Withdraw principal and accrued yield non-custodially at any time"
+      },
+      "orders": {
+        "title": "Automated DCA, Limit Orders & TWAP Execution Strategies",
+        "desc": "Automate recurring purchases and target-price executions with on-chain verification and push alerts.",
+        "step1": "Choose between Dollar-Cost Averaging (DCA), Limit, or TWAP plans",
+        "step2": "Configure interval frequency, per-slice amount, and target price bounds",
+        "step3": "Track live execution progress and receive instant push notifications"
       }
     }
   }

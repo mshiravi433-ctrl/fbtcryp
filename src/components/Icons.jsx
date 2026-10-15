@@ -526,3 +526,12 @@ export const IconCoins = (p) => (
     <path d="M5 11v4.4c0 1.6 3.1 2.9 7 2.9s7-1.3 7-2.9V11" />
   </svg>
 );
+
+export const IconVideo = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
+    <path d="m10.2 9.2 5.3 2.8-5.3 2.8V9.2z" />
+    <path d="M6.5 4.5v2.2M17.5 4.5v2.2" />
+  </svg>
+);
+
