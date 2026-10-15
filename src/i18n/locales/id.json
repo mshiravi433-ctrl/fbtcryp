@@ -1608,6 +1608,101 @@
     "wallet": {
       "title": "Dompet tidak terbuka",
       "switch": "Buka kunci dompet, pastikan berada di Solana mainnet, lalu coba lagi. Tidak ada yang dikirim dan tidak ada biaya."
+    },
+    "loop": {
+      "title": "Collateral loop",
+      "subtitle": "Estimate the risk and carry before considering a multi-step borrow-and-redeposit strategy.",
+      "stageA": "A · Risk calculator",
+      "stageB": "B · Read-only position preview",
+      "stageC": "C · Guided execution",
+      "disclaimer": "Illustration only. Values and rates are estimates you enter; token prices are treated as USD-pegged. This is not a quote, protocol forecast, or promise of safety or profit.",
+      "inputs": {
+        "collateralUsd": "Starting collateral to add (USD)",
+        "collateralAsset": "Collateral asset",
+        "borrowAsset": "Borrow asset",
+        "ltvPct": "Maximum LTV (%)",
+        "liquidationThresholdPct": "Liquidation threshold (%)",
+        "supplyApyPct": "Supply APY (%)",
+        "borrowApyPct": "Variable borrow APY (%)",
+        "swapCostPct": "Estimated swap cost per round (%)",
+        "gasUsdPerRound": "Estimated network cost per round (USD)",
+        "rounds": "Maximum rounds",
+        "headroomPct": "LTV headroom (%)",
+        "startingCollateralUsd": "Existing collateral (USD)",
+        "startingDebtUsd": "Existing debt (USD)",
+        "useLivePosition": "Use the readable position values",
+        "assetHint": "Symbols are labels only; prices are assumed to be $1 for this projection."
+      },
+      "columns": {
+        "round": "Round",
+        "borrow": "Borrow",
+        "supplied": "Est. added",
+        "collateral": "Total collateral",
+        "debt": "Total debt",
+        "healthFactor": "HF after supply",
+        "liquidationDrop": "Drop to liquidation",
+        "healthFactorAtBorrow": "HF after borrow"
+      },
+      "summary": {
+        "finalHealthFactor": "Projected final health factor",
+        "lowestHealthFactor": "Lowest projected HF during a borrow",
+        "liquidationDrop": "Collateral fall to HF 1.00",
+        "leverage": "Collateral / starting capital",
+        "netCarryRate": "Annual net carry on capital",
+        "firstYearNetRate": "First-year net after estimated costs",
+        "firstYearNetNote": "Includes the entered swap and network-cost estimates; rates can change."
+      },
+      "warning": {
+        "NO_LOOP_POSSIBLE": "No additional borrow fits the selected LTV and headroom.",
+        "ALREADY_OVER_LTV": "The entered starting position is already above the selected LTV.",
+        "STOPPED_BY_HEALTH_FACTOR": "Projection stopped: the next borrow would take HF below 1.05.",
+        "LIQUIDATION_NEAR": "A projected interim health factor is below 1.20; the price buffer is small.",
+        "NEGATIVE_NET_CARRY": "Estimated first-year net carry after entered costs is negative."
+      },
+      "error": {
+        "INVALID_POSITIVE_NUMBER": "Enter a finite number greater than zero.",
+        "INVALID_NON_NEGATIVE_NUMBER": "Enter a finite number that is zero or greater.",
+        "INVALID_PERCENT": "Enter a percentage greater than zero and at most 100.",
+        "LTV_EXCEEDS_LIQUIDATION_THRESHOLD": "LTV cannot exceed the liquidation threshold.",
+        "SWAP_COST_TOO_HIGH": "Swap cost must be less than 100%.",
+        "INVALID_HEADROOM": "Headroom must be at least zero and less than 100%.",
+        "INVALID_ROUND_COUNT": "Choose an integer from 1 to 5 rounds.",
+        "ASSET_REQUIRED": "Enter both asset symbols."
+      },
+      "position": {
+        "title": "Position on this lending market",
+        "live": "Live",
+        "partial": "Partial read",
+        "cached": "Cached",
+        "stale": "Stale cached data",
+        "unavailable": "Unavailable",
+        "connectWallet": "Connect a wallet to read your position.",
+        "noPosition": "No readable account position is available. Values are not shown as zero.",
+        "collateral": "Collateral",
+        "debt": "Debt",
+        "borrowPower": "Available borrow power",
+        "healthFactor": "Health factor",
+        "liquidationDrop": "Collateral fall to HF 1.00",
+        "updated": "Last read",
+        "positionDiffers": "Your actual position differs from this calculator input.",
+        "overLtv": "The actual position is above the selected LTV. Do not use this projection as permission to borrow.",
+        "staleNote": "This is an older cached read, not a current position. Refresh before making any decision.",
+        "refresh": "Refresh position"
+      },
+      "execution": {
+        "title": "Step-by-step execution",
+        "body": "Execution is disabled unless the feature flag, exact wallet/chain allowlist, and a verified stateful simulation are all present.",
+        "runButton": "Prepare loop steps",
+        "FLAG_DISABLED": "Execution feature flag is off (the default).",
+        "WALLET_REQUIRED": "Connect the allowlisted wallet first.",
+        "CHAIN_UNSUPPORTED": "This market is not enabled for loop execution.",
+        "NOT_ALLOWLISTED": "This exact wallet and chain are not on the execution allowlist.",
+        "STATEFUL_SIMULATION_UNVERIFIED": "No stateful multi-transaction loop simulation is verified for the public providers used by this app. Execution remains blocked.",
+        "notAutomatic": "No transaction is scheduled or sent automatically. Every future step must have its own user click and wallet signature.",
+        "partial": "The sequence stopped after confirmed steps. Your position may be partially changed.",
+        "unwind": "Review your current position and available repay / withdraw actions manually; no unwind transaction is prepared or sent automatically."
+      },
+      "calculatorLocal": "Local calculation · no RPC"
     }
   },
   "intentAI": {

@@ -44,6 +44,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import CollateralLoopPanel from '../components/CollateralLoopPanel';
 import InfoBox from '../components/InfoBox';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import SolanaLendingPanel from '../components/SolanaLendingPanel';
@@ -54,6 +55,7 @@ import { POINT_VALUES } from '../lib/ranks';
 import { useTelegram } from '../context/TelegramContext';
 import { SOLANA_LENDING_CHAIN_ID } from '../lib/lending.js';
 import { loanErrorText } from '../lib/loanErrors';
+import { readLoopFeatureFlags } from '../lib/loopFeatureFlags.js';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import { apiBase } from '../lib/apiBase';
 import { recordStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
@@ -2866,6 +2868,7 @@ export default function Loan() {
 
   const assets = useMemo(() => lendingAssetsFor(chain), [chain]);
   const venue = useMemo(() => lendingVenue(chain), [chain]);
+  const loopFlags = useMemo(() => readLoopFeatureFlags(), []);
 
   const [reserves, setReserves] = useState({});
   const [positions, setPositions] = useState({});
@@ -3812,6 +3815,23 @@ export default function Loan() {
 
         <HeroStats t={t} />
       </motion.div>
+
+      <CollateralLoopPanel
+        t={t}
+        lang={i18n.language}
+        dir={i18n.dir(i18n.language)}
+        account={account}
+        dataStatus={dataStatus}
+        readAt={readAt}
+        ageMs={snapshotAgeMs}
+        source={sources?.account ?? null}
+        chainId={chain}
+        wallet={address}
+        isConnected={Boolean(isConnected && address)}
+        supportedChain={Boolean(venue && venue.protocol === 'aave-v3' && isNetworkEnabled(chain))}
+        flags={loopFlags}
+        calculatorEnabled={loopFlags.calculatorEnabled}
+      />
 
       {/* ── Market picker ──────────────────────────────────────────────── */}
       <ChainRail chain={chain} onPick={(id) => { haptic?.('select'); setChain(id); }} t={t} />
