@@ -135,3 +135,139 @@ test('a stop request during a wallet step does not automatically advance the pla
   assert.equal(result.state.unwindSuggested, true);
   assert.equal(result.state.stepIndex, 1);
 });
+
+/* ── 2026-10-15: the controller drives real steps ────────────────────────── */
+
+test('a second click while a step is being checked is refused — one step at a time', async () => {
+  let sends = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const controller = readyController({
+    readRisk: async () => { await gate; return { ok: true, healthFactor: null, debtUsd: 0 }; },
+    executeStep: async () => { sends += 1; return { ok: true, hash: '0xstep' }; }
+  });
+  await controller.simulate();
+  const first = controller.advance({ userClicked: true });
+  const second = await controller.advance({ userClicked: true });
+  assert.equal(second.code, 'STEP_IN_FLIGHT');
+  assert.equal(controller.snapshot().busy, true);
+  release();
+  assert.equal((await first).ok, true);
+  assert.equal(sends, 1);
+  assert.equal(controller.snapshot().busy, false);
+});
+
+test('a stop pressed during the checks prevents the wallet prompt entirely', async () => {
+  let sends = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const controller = readyController({
+    simulateStep: async () => { await gate; return clean; },
+    executeStep: async () => { sends += 1; return { ok: true, hash: '0xstep' }; }
+  });
+  await controller.simulate();
+  const pending = controller.advance({ userClicked: true });
+  controller.cancel();
+  release();
+  const result = await pending;
+  assert.equal(result.code, 'LOOP_STOPPED');
+  assert.equal(sends, 0);
+  assert.equal(controller.snapshot().status, LOOP_RUN_STATE.CANCELLED);
+});
+
+test('prepareStep resolves the amount; finish:true completes the run early without signing', async () => {
+  let sends = 0;
+  const steps = [
+    { key: 'borrow-1', id: 'borrow', asset: { symbol: 'USDT' } },
+    { key: 'supply-1', id: 'supply', asset: { symbol: 'USDC' } }
+  ];
+  const controller = readyController({
+    steps,
+    prepareStep: async (s) => (s.key === 'borrow-1' ? { ok: true, finish: true, code: 'NO_MORE_CAPACITY' } : { ok: true, amountWei: '5' }),
+    executeStep: async () => { sends += 1; return { ok: true, hash: '0xstep' }; }
+  });
+  await controller.simulate();
+  const result = await controller.advance({ userClicked: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.endedEarly, 'NO_MORE_CAPACITY');
+  const snap = controller.snapshot();
+  assert.equal(snap.status, LOOP_RUN_STATE.COMPLETED);
+  assert.deepEqual(snap.steps.map((s) => s.runState), ['skipped', 'skipped']);
+  assert.equal(sends, 0);
+});
+
+test('a prepared amount is recorded on the step and on the completed entry', async () => {
+  const controller = readyController({
+    steps: [{ key: 'borrow-1', id: 'borrow', asset: { symbol: 'USDT' } }],
+    prepareStep: async () => ({ ok: true, amountWei: '777', projectedHealthFactor: 1.6 }),
+    readRisk: async () => ({ ok: true, healthFactor: 1.6, debtUsd: 10, minHealthFactor: 1.35 }),
+    executeStep: async () => ({ ok: true, hash: '0xabc' })
+  });
+  await controller.simulate();
+  await controller.advance({ userClicked: true });
+  const snap = controller.snapshot();
+  assert.equal(snap.completed[0].amountWei, '777');
+  assert.equal(snap.steps[0].prepared.amountWei, '777');
+  assert.equal(snap.steps[0].hash, '0xabc');
+  assert.equal(snap.steps[0].runState, 'done');
+});
+
+test('a per-step floor from the risk reader overrides the default floor', async () => {
+  let sends = 0;
+  const controller = readyController({
+    readRisk: async () => ({ ok: true, healthFactor: 1.3, debtUsd: 10, minHealthFactor: 1.35 }),
+    executeStep: async () => { sends += 1; return { ok: true }; }
+  });
+  await controller.simulate();
+  const result = await controller.advance({ userClicked: true });
+  assert.equal(result.code, 'HEALTH_FACTOR_BELOW_FLOOR');
+  assert.equal(result.detail.minimum, 1.35);
+  assert.equal(sends, 0);
+});
+
+test('a supply marked floorExempt is not blocked by an unreadable health factor', async () => {
+  let sends = 0;
+  const controller = readyController({
+    readRisk: async () => ({ ok: true, floorExempt: true, healthFactor: null, debtUsd: null }),
+    executeStep: async () => { sends += 1; return { ok: true, hash: '0x1' }; }
+  });
+  await controller.simulate();
+  assert.equal((await controller.advance({ userClicked: true })).ok, true);
+  assert.equal(sends, 1);
+});
+
+test('resume re-checks the remaining steps after a failure and refuses while completed', async () => {
+  let fail = true;
+  let preflights = 0;
+  const controller = readyController({
+    steps: [step, { ...step, key: 'b' }],
+    simulatePlan: async (remaining) => { preflights += 1; return { ...clean, remaining: remaining.length }; },
+    executeStep: async () => (fail ? { ok: false, code: 'USER_REJECTED' } : { ok: true, hash: '0x2' })
+  });
+  await controller.simulate();
+  assert.equal((await controller.advance({ userClicked: true })).code, 'USER_REJECTED');
+  assert.equal(controller.snapshot().status, LOOP_RUN_STATE.FAILED);
+  fail = false;
+  const resumed = await controller.resume();
+  assert.equal(resumed.ok, true);
+  assert.equal(resumed.simulation.remaining, 2);
+  assert.equal(preflights, 2);
+  await controller.advance({ userClicked: true });
+  await controller.advance({ userClicked: true });
+  assert.equal(controller.snapshot().status, LOOP_RUN_STATE.COMPLETED);
+  assert.equal((await controller.resume()).code, 'LOOP_NOT_RESUMABLE');
+});
+
+test('a stop pressed during the preflight is not overwritten when the checks finish', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const controller = readyController({ simulatePlan: async () => { await gate; return clean; } });
+  const pending = controller.simulate();
+  assert.equal(controller.snapshot().status, LOOP_RUN_STATE.SIMULATING);
+  controller.cancel();
+  release();
+  const result = await pending;
+  assert.equal(result.code, 'LOOP_STOPPED');
+  assert.equal(controller.snapshot().status, LOOP_RUN_STATE.CANCELLED);
+  assert.equal((await controller.advance({ userClicked: true })).code, 'LOOP_STOPPED');
+});

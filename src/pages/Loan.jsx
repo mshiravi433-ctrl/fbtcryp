@@ -56,6 +56,8 @@ import { useTelegram } from '../context/TelegramContext';
 import { SOLANA_LENDING_CHAIN_ID } from '../lib/lending.js';
 import { loanErrorText } from '../lib/loanErrors';
 import { readLoopFeatureFlags } from '../lib/loopFeatureFlags.js';
+import { createBrowserLoopDeps } from '../lib/loopDeps.js';
+import { FEE_BPS } from '../lib/feeBps.js';
 import { EVM_CHAINS, explorerTx } from '../lib/chains';
 import { apiBase } from '../lib/apiBase';
 import { recordStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
@@ -3111,6 +3113,52 @@ export default function Loan() {
     if (typeof switchChain === 'function') await switchChain(chain);
   }, [switchChain, chain, haptic]);
 
+  /*
+   * COLLATERAL LOOP — the real chain/wallet functions its runtime calls
+   * (lending reads, adapter-built simulations, executeLendingPlan, the
+   * fee-verified swap path). One instance per wallet context; a run keeps the
+   * instance it started with.
+   */
+  const loopDeps = useMemo(
+    () => createBrowserLoopDeps({ getReadProvider, getSigner }),
+    [getReadProvider, getSigner]
+  );
+
+  /*
+   * Every SENT loop step lands in the same transaction history as the page's
+   * own actions (§27: a real hash or no hash, never an invented one), and a
+   * confirmed step force-refreshes the market so the position, the health
+   * factor and the next step's plan all read the chain, not the cache.
+   */
+  const onLoopStep = useCallback(({ ok, step, result, code }) => {
+    if (!step) return;
+    const isSwap = step.id === 'swap';
+    const decimals = isSwap ? step.fromAsset?.decimals : step.asset?.decimals;
+    const amountWei = result?.amountWei ?? step.executedWei ?? step.prepared?.amountWei ?? null;
+    let amount = null;
+    try { amount = amountWei != null && decimals != null ? fromUnits(BigInt(amountWei), decimals) : null; } catch { amount = null; }
+    const loopChain = step.asset?.chain ?? chain;
+    historyRef.current.record({
+      id: `loop:${step.key}:${result?.hash || code || Date.now()}`,
+      action: isSwap ? 'loopSwap' : step.id,
+      asset: isSwap ? `${step.fromSymbol ?? ''}→${step.toSymbol ?? ''}` : (step.symbol ?? step.asset?.symbol ?? null),
+      amount,
+      amountWei: amountWei != null ? String(amountWei) : null,
+      chainId: loopChain,
+      protocol: venue?.protocol ?? 'aave-v3',
+      wallet: address,
+      hash: result?.hash ?? null,
+      status: ok ? TX_STATUS.CONFIRMED : TX_STATUS.FAILED,
+      code: ok ? null : (code || null)
+    });
+    setHistory(historyRef.current.list({ wallet: address, chainId: chain }));
+    if (ok) {
+      haptic?.('success');
+      cacheRef.current.invalidate(`market:${chain}:`);
+      refresh({ force: true });
+    }
+  }, [address, chain, venue, refresh, haptic]);
+
   /**
    * Review first. Everything the wallet will be asked to sign is computed
    * BEFORE the sheet opens:
@@ -3831,6 +3879,19 @@ export default function Loan() {
         supportedChain={Boolean(venue && venue.protocol === 'aave-v3' && isNetworkEnabled(chain))}
         flags={loopFlags}
         calculatorEnabled={loopFlags.calculatorEnabled}
+        staleAfterMs={MARKET_STALE_AFTER_MS}
+        market={market}
+        walletChainId={walletChainId}
+        readOnly={Boolean(readOnly || !canTransact)}
+        loopDeps={loopDeps}
+        swapFeeBps={FEE_BPS}
+        chainName={chainLabel(chain)}
+        explorerTxUrl={(hash) => { try { return explorerTx(chain, hash); } catch { return null; } }}
+        onConnect={connect}
+        onSwitchChain={switchToChain}
+        onRefresh={() => refresh({ force: true })}
+        onStepResult={onLoopStep}
+        onOpenPositions={() => { haptic?.('select'); setTab('positions'); }}
       />
 
       {/* ── Market picker ──────────────────────────────────────────────── */}
