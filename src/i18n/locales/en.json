@@ -116,7 +116,10 @@
     "trendNote": "Rebuilt from the largest {{n}} coins already on this page — each one’s hourly price history × its circulating supply. It is the top of the market, not the whole market, and supply is held constant across the window.",
     "compare": "Compare",
     "livePrices": "Live market prices",
-    "heroExplore": "Tap to view full chart, analytics & trade"
+    "heroExplore": "Tap to view full chart, analytics & trade",
+    "dominanceAria": "Bitcoin, Ethereum and the rest of the market's share of total market cap",
+    "dominanceOthers": "Other assets",
+    "range24h": "24h range"
   },
   "coin": {
     "notFound": "Coin not found",
@@ -12211,6 +12214,12 @@
       "guide": {
         "title": "App guide",
         "sub": "Every area, from wallet connect to finish — step by step, with pictures"
+      },
+      "aparat": {
+        "badge": "Persian",
+        "kicker": "FBT Video Academy",
+        "title": "Educational videos",
+        "sub": "Visual walkthroughs of Swap, tokenized stocks and wallet security on Aparat"
       }
     },
     "screens": {
@@ -15123,7 +15132,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "1 min · Cinematic · Interactive",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",
@@ -15152,50 +15161,82 @@
     "items": {
       "stocks": {
         "short": "Stocks & RWA",
+        "kicker": "Tokenized real-world assets",
         "title": "Tokenized Stocks & Real-World Assets",
         "subtitle": "Explore the highest-yielding tokenized equities (NVIDIA, Apple, Tesla & Gold) with instant on-chain settlement.",
+        "hl1": "Instant settlement on Solana",
+        "hl2": "Apple · NVIDIA · Tesla",
+        "hl3": "No traditional broker",
         "cta": "Open Stocks & RWA Page"
       },
       "aparat": {
         "short": "Aparat Videos",
+        "kicker": "Persian video academy",
         "title": "FBT Video Academy on Aparat",
         "subtitle": "Step-by-step Persian & visual video courses covering Smart Swap, Tokenized Stocks, Intent AI, and Wallet Security.",
+        "hl1": "Step-by-step visual lessons",
+        "hl2": "Swap · Stocks · Wallet security",
+        "hl3": "Official Aparat channel",
         "cta": "Open Aparat Video Academy"
       },
       "swap": {
         "short": "Smart Swap",
+        "kicker": "Best aggregated rate",
         "title": "Multi-Chain EVM & Solana Smart Swap",
         "subtitle": "Aggregated best quotes across top DEXs on 9+ EVM chains and Solana, signed directly from your wallet.",
+        "hl1": "9+ EVM chains",
+        "hl2": "Solana & cross-chain bridge",
+        "hl3": "Signed from your own wallet",
         "cta": "Open Smart Swap"
       },
       "intent": {
         "short": "Intent AI",
+        "kicker": "Trade in natural language",
         "title": "Intent AI Neural OS & Smart Money",
         "subtitle": "Trade with natural language, track institutional whale wallets live, and inspect algorithmic market signals.",
+        "hl1": "Text command, on-chain execution",
+        "hl2": "Live whale wallet sonar",
+        "hl3": "Multi-factor market signals",
         "cta": "Open Intent AI"
       },
       "defi": {
         "short": "DeFi & Yield",
+        "kicker": "Non-custodial yield",
         "title": "DeFi Yield Farming, Staking & Lending",
         "subtitle": "Earn on-chain yield across Aave V3, Morpho, Lido, and Solana Kamino with non-custodial execution.",
+        "hl1": "Aave · Morpho · Kamino",
+        "hl2": "USD & crypto yield",
+        "hl3": "No intermediary, no lock-up",
         "cta": "Open DeFi Farm & Yield"
       },
       "radio": {
         "short": "Radio & Music",
+        "kicker": "Trading focus music",
         "title": "Crypto Radio, Focus Music & Live News",
         "subtitle": "Listen to ambient trading focus music, crypto podcasts, and breaking market news in the background.",
+        "hl1": "Plays in the app background",
+        "hl2": "In sync with the News radio",
+        "hl3": "Instrumental & calming",
         "cta": "Open News & Radio"
       },
       "orders": {
         "short": "Auto Orders",
+        "kicker": "24/7 automated trading",
         "title": "Automated DCA, Limit & TWAP Orders",
         "subtitle": "Schedule recurring dollar-cost averaging, limit targets, and automated portfolio rebalancing 24/7.",
+        "hl1": "DCA · Limit · TWAP",
+        "hl2": "Automatic take-profit & stop-loss",
+        "hl3": "No need to stay online",
         "cta": "Open Auto Orders"
       },
       "ecosystem": {
         "short": "Wallet & Shop",
+        "kicker": "Non-custodial superapp",
         "title": "Smart Wallet, Global Shop, Launchpad & Insurance",
         "subtitle": "Manage multi-chain assets, buy global gift cards & eSIMs, launch tokens, and protect DeFi positions.",
+        "hl1": "Multi-chain wallet",
+        "hl2": "Global shop & gift cards",
+        "hl3": "Launchpad & DeFi insurance",
         "cta": "Open Smart Wallet"
       }
     },
@@ -15217,7 +15258,8 @@
       "cmd3Title": "Multi-Factor Signals",
       "cmd3Desc": "Technical momentum and regime scoring",
       "cmd4Title": "Global World Console",
-      "cmd4Desc": "Macro liquidity and cross-asset flows"
+      "cmd4Desc": "Macro liquidity and cross-asset flows",
+      "panelTitle": "Four intelligent market commands"
     },
     "radio": {
       "studioTitle": "Select Story Ambient Soundtrack",
@@ -15225,7 +15267,9 @@
         "alpha": "Alpha Wave",
         "focus": "Deep Focus",
         "cinema": "Cinematic"
-      }
+      },
+      "backgroundHint": "Still playing in the background",
+      "tapHint": "Play · keeps running in the app background"
     },
     "ecosystem": {
       "walletTitle": "Non-Custodial Wallet",
@@ -15234,7 +15278,23 @@
       "launchTitle": "Token Launchpad",
       "launchDesc": "Deploy & launch liquidity with zero code",
       "insureTitle": "DeFi Insurance",
-      "insureDesc": "On-chain smart contract risk coverage"
+      "insureDesc": "On-chain smart contract risk coverage",
+      "panelTitle": "The whole FBT ecosystem in one app"
+    },
+    "progressAria": "Story progress — tap any circle to jump to that story",
+    "score": {
+      "cue": "Cinematic score playing",
+      "silent": "Sound off"
+    },
+    "promo": {
+      "label": "Sponsored"
+    },
+    "defi": {
+      "panelTitle": "Non-custodial yield protocols",
+      "liveTag": "Live APY"
+    },
+    "orders": {
+      "panelTitle": "Highest-volume markets ready for auto-trading"
     }
   },
   "aparat": {

@@ -309,16 +309,42 @@ export default function Market() {
           initial="hidden"
           animate="show"
         >
-          <div className="market-glass-orb market-glass-orb--cyan" aria-hidden="true" />
-          <div className="market-glass-orb market-glass-orb--violet" aria-hidden="true" />
+          {/*
+            ─── THE SPHERE IS GONE ─────────────────────────────────────────
+            «پشتش یک کره هست که زشته، مدرن نیست، شیشه‌ای نیست»
+
+            What was behind this card were two 220px circles painted with a
+            single `radial-gradient` — a hard-edged blob that reads as a
+            sticker somebody dropped on the card, not as light coming from
+            inside it. A sphere is also the one shape glass cannot fake: real
+            glass bends what is behind it, and a radial gradient bends nothing.
+
+            Replaced with an AURORA FIELD: three wide, low-opacity gradients
+            that overlap, plus a 1px specular sheen along the top edge and a
+            faint technical grid masked to fade out. Overlapping soft light is
+            what actually reads as "frosted glass with something glowing behind
+            it", and because the layers bleed past the card's rounded corners
+            (the surface clips them) the colour feels like it belongs to the
+            card rather than sitting on it.
+
+            Motion budget: the two blooms animate `transform` + `opacity` only,
+            on the compositor, and stop entirely under reduced motion and on
+            native WebViews — see the guards at the bottom of market-modern.css.
+          */}
+          <span className="market-glass-aurora" aria-hidden="true">
+            <i className="market-glass-bloom market-glass-bloom--a" />
+            <i className="market-glass-bloom market-glass-bloom--b" />
+            <i className="market-glass-grid" />
+            <i className="market-glass-sheen" />
+          </span>
 
           <div className="market-global-head">
-            <div>
+            <div className="market-global-head-text">
               <div className="market-global-kicker">
                 <span className="market-live-dot" aria-hidden="true" />
                 <span>{t('market.livePrices')}</span>
               </div>
-              <div className="faint" style={{ marginBottom: 4 }}>{t('market.totalMcap')}</div>
+              <div className="market-global-label">{t('market.totalMcap')}</div>
               <div className="market-global-value-wrap">
                 <div className="stat-value market-global-value">
                   <AnimatedNumber value={global?.mcap ?? 0} format={(v) => fmtCompact(v)} flash={false} />
@@ -326,27 +352,34 @@ export default function Market() {
               </div>
             </div>
             <span className={`pill market-change-badge ${(global?.mcapChange ?? 0) >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`}>
+              <span className="market-change-arrow" aria-hidden="true">{(global?.mcapChange ?? 0) >= 0 ? '▲' : '▼'}</span>
               {fmtPct(global?.mcapChange ?? 0, 2)}
             </span>
           </div>
 
           <div className="market-global-metrics">
-            <div className="market-metric-pod">
+            <div className="market-metric-pod" data-tone="cyan">
               <div className="market-metric-pod-label">{t('market.volume24h')}</div>
               <div className="market-metric-pod-val">{fmtCompact(global?.volume ?? 0)}</div>
             </div>
-            <div className="market-metric-pod">
+            <div className="market-metric-pod" data-tone="amber">
               <div className="market-metric-pod-label">{t('market.btcDominance')}</div>
               <div className="market-metric-pod-val">{(global?.btcDominance ?? 0).toFixed(2)}%</div>
             </div>
-            <div className="market-metric-pod">
+            <div className="market-metric-pod" data-tone="violet">
               <div className="market-metric-pod-label">{t('market.ethDominance')}</div>
               <div className="market-metric-pod-val">{(global?.ethDominance ?? 0).toFixed(2)}%</div>
             </div>
           </div>
 
+          {/*
+            Dominance as a stacked bar WITH a legend. The bar alone said
+            "56% of this coloured strip is orange" and left the reader to guess
+            which asset the orange was; the legend makes the same three numbers
+            above it legible in the shape as well.
+          */}
           <div className="market-dominance-wrap">
-            <div className="progress market-dominance-bar">
+            <div className="progress market-dominance-bar" role="img" aria-label={t('market.dominanceAria')}>
               <div
                 className="progress-fill market-dom-seg market-dom-seg--btc"
                 style={{ width: `${Math.min(85, Math.max(10, global?.btcDominance ?? 52))}%` }}
@@ -356,6 +389,17 @@ export default function Market() {
                 style={{ width: `${Math.min(40, Math.max(5, global?.ethDominance ?? 16))}%` }}
               />
               <div className="market-dom-seg market-dom-seg--other" />
+            </div>
+            <div className="market-dominance-legend">
+              <span className="market-legend-item" data-tone="btc">
+                <i aria-hidden="true" />BTC {(global?.btcDominance ?? 0).toFixed(1)}%
+              </span>
+              <span className="market-legend-item" data-tone="eth">
+                <i aria-hidden="true" />ETH {(global?.ethDominance ?? 0).toFixed(1)}%
+              </span>
+              <span className="market-legend-item" data-tone="other">
+                <i aria-hidden="true" />{t('market.dominanceOthers')}
+              </span>
             </div>
           </div>
 
@@ -409,7 +453,7 @@ export default function Market() {
           />
         </motion.div>
 
-        {/* ---------- hero coin (Bitcoin glassmorphic box) ---------- */}
+        {/* ---------- hero coin (Bitcoin glass box — no watermark, no swap button) ---------- */}
         {hero && (
           <motion.section
             className="card market-glass-surface market-hero-card"
@@ -420,7 +464,33 @@ export default function Market() {
             style={{ cursor: 'pointer' }}
             data-testid="market-btc-hero-card"
           >
-            <div className="market-glass-orb market-glass-orb--btc" aria-hidden="true" />
+            {/*
+              ─── WHAT WAS REMOVED FROM THIS BOX, AND WHY ──────────────────
+              «در پس‌زمینه لوگوی بیت‌کوین زشته، ببرش» · «دکمه swap btc را ببر»
+
+              1. The background Bitcoin mark (an orange radial "orb" plus an
+                 oversized ₿ watermark in the corner) is gone. A logo the size
+                 of the card, at 16% opacity, behind text, does not decorate the
+                 box — it competes with the number the box exists to show. The
+                 coin's real logo already sits in the identity tile at 48px,
+                 which is where a logo belongs.
+              2. Every BUTTON is gone. The whole card is the tap target
+                 (`onClick` → /coin/bitcoin), so a swap button inside it was a
+                 second, smaller tap target nested inside a first one — the
+                 interaction design equivalent of a door with a door on it. One
+                 surface, one action, and a static (non-interactive) affordance
+                 at the bottom that says what tapping does.
+
+              What replaced the orange glow is the same aurora field as the
+              market-cap card, tinted to the coin: light from inside the glass
+              instead of a sticker on top of it.
+            */}
+            <span className="market-glass-aurora market-glass-aurora--hero" aria-hidden="true">
+              <i className="market-glass-bloom market-glass-bloom--a" />
+              <i className="market-glass-bloom market-glass-bloom--b" />
+              <i className="market-glass-grid" />
+              <i className="market-glass-sheen" />
+            </span>
 
             <div className="market-hero-top">
               <div className="market-hero-identity">
@@ -428,13 +498,13 @@ export default function Market() {
                   <CoinLogo coin={hero} />
                   <span className="market-hero-rank-badge mono">#{hero.rank || 1}</span>
                 </div>
-                <div>
+                <div className="market-hero-id-text">
                   <div className="market-hero-title">{hero.name}</div>
                   <div className="market-hero-pair-row">
                     <span className="market-hero-pair-pill mono">
                       {hero.symbol} / {vs.toUpperCase()}
                     </span>
-                    <span className="market-live-dot" aria-hidden="true" />
+                    <span className="market-hero-live" aria-hidden="true" />
                   </div>
                 </div>
               </div>
@@ -442,11 +512,45 @@ export default function Market() {
                 <div className="stat-mini market-hero-price">
                   <AnimatedNumber value={hero.price} format={(v) => fmtUsd(v)} flash={false} />
                 </div>
-                <span className={`pill market-change-badge ${hero.change24h >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`} style={{ marginTop: 4 }}>
+                <span className={`pill market-change-badge ${hero.change24h >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`}>
+                  <span className="market-change-arrow" aria-hidden="true">{hero.change24h >= 0 ? '▲' : '▼'}</span>
                   {fmtPct(hero.change24h)}
                 </span>
               </div>
             </div>
+
+            {/*
+              24-HOUR RANGE. The one thing this box had that no other card in
+              the app shows: where the price sits between its own low and high
+              of the last day. Five numbers about right now tell you nothing
+              about whether now is the top of the day or the bottom of it; this
+              does, in the width of a finger.
+            */}
+            {hero.low24h > 0 && hero.high24h > hero.low24h && (
+              <div className="market-hero-range" data-testid="market-hero-range">
+                <div className="market-hero-range-head">
+                  <span className="market-hero-range-label">{t('market.range24h')}</span>
+                  <span className="market-hero-range-pct mono">
+                    {Math.round(
+                      Math.min(100, Math.max(0, ((hero.price - hero.low24h) / (hero.high24h - hero.low24h)) * 100))
+                    )}
+                    %
+                  </span>
+                </div>
+                <div className="market-hero-range-track">
+                  <span
+                    className="market-hero-range-marker"
+                    style={{
+                      insetInlineStart: `${Math.min(98, Math.max(2, ((hero.price - hero.low24h) / (hero.high24h - hero.low24h)) * 100))}%`
+                    }}
+                  />
+                </div>
+                <div className="market-hero-range-scale mono">
+                  <span>{fmtUsd(hero.low24h)}</span>
+                  <span>{fmtUsd(hero.high24h)}</span>
+                </div>
+              </div>
+            )}
 
             <div className="market-hero-metrics">
               <div className="market-hero-mini-pod">
@@ -467,9 +571,12 @@ export default function Market() {
               <Sparkline data={hero.sparkline ?? []} up={hero.change24h >= 0} width={470} height={64} strokeWidth={2.2} />
             </div>
 
-            <div className="market-hero-actions">
-              <span className="faint" style={{ fontSize: 11 }}>{t('market.heroExplore')}</span>
-            </div>
+            {/* A `<span>`, never a `<button>`: this card is already one big tap
+                target and a nested control would fight it for the gesture. */}
+            <span className="market-hero-explore">
+              <span className="market-hero-explore-text">{t('market.heroExplore')}</span>
+              <span className="market-hero-explore-arrow" aria-hidden="true" />
+            </span>
           </motion.section>
         )}
       </div>

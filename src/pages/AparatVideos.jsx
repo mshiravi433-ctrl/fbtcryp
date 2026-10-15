@@ -242,8 +242,14 @@ export default function AparatVideos({ embedded = false }) {
       <div className="aparat-page" data-testid="aparat-videos-page">
         {/* ─── OFFICIAL APARAT CHANNEL HERO ─────────────────────────────── */}
         <section className="card market-glass-surface aparat-hero-card">
-          <div className="market-glass-orb market-glass-orb--cyan" aria-hidden="true" />
-          <div className="market-glass-orb market-glass-orb--violet" aria-hidden="true" />
+          {/* Same aurora field as the Market cards: overlapping soft light
+              clipped by the card, never a gradient "sphere" stuck on top. */}
+          <span className="market-glass-aurora" aria-hidden="true">
+            <i className="market-glass-bloom market-glass-bloom--a" />
+            <i className="market-glass-bloom market-glass-bloom--b" />
+            <i className="market-glass-grid" />
+            <i className="market-glass-sheen" />
+          </span>
 
           <div className="aparat-hero-top">
             <div className="aparat-hero-badge-row">

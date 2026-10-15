@@ -7,9 +7,45 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import fa from '../src/i18n/locales/fa.json';
 import en from '../src/i18n/locales/en.json';
+import { fmtUsd } from '../src/lib/format';
 
 vi.mock('../src/lib/audio', () => ({
   getCalm: async () => ({ items: [{ id: 'cinema-test', title: 'Cinematic journey', audioUrl: '/test-score.mp3' }] })
+}));
+
+/*
+ * The score is spied on, not silenced.
+ *
+ * jsdom has no AudioContext, so the real controller returns false and the test
+ * would learn nothing. What is actually under test here is the CONTRACT: the
+ * story opens → `start('cinema')` is called exactly once, with no button being
+ * pressed first; a real radio track takes over → `stop()`; the story closes →
+ * `stop()`. Those three calls are the whole "autoplay, no transport UI" rule.
+ */
+const audioSpy = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  playing: false,
+  lastMood: null
+}));
+
+vi.mock('../src/lib/storyAudio', () => ({
+  createStoryAmbientController: () => ({
+    start: (mood) => {
+      audioSpy.lastMood = mood;
+      audioSpy.playing = true;
+      audioSpy.start(mood);
+      return true;
+    },
+    stop: () => {
+      audioSpy.playing = false;
+      audioSpy.stop();
+    },
+    setMood: () => {},
+    destroy: () => {},
+    isPlaying: () => audioSpy.playing,
+    getMood: () => audioSpy.lastMood
+  })
 }));
 
 const dict = { fa, en };
@@ -127,6 +163,10 @@ function LocationProbe({ onChange }) {
 beforeEach(() => {
   LANG = 'fa';
   useRadioStore.getState().stop();
+  audioSpy.start.mockClear();
+  audioSpy.stop.mockClear();
+  audioSpy.playing = false;
+  audioSpy.lastMood = null;
   globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ venues: {}, rows: [] }) }));
 });
 
@@ -227,5 +267,192 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     expect(screen.getByTestId('aparat-course-stocks')).toBeTruthy();
     expect(screen.getByTestId('aparat-course-swap')).toBeTruthy();
     expect(screen.getByTestId('aparat-course-wallet')).toBeTruthy();
+  });
+
+  /* ══════════════════════════════════════════════════════════════════════
+     THE 2026-10 GLASS PASS
+     «باکس ارزش کل بازار پشتش یک کره هست که زشته» · «باکس بیت‌کوین در
+      پس‌زمینه لوگوی بیت‌کوین زشته، ببرش» · «دکمه swap btc را ببر»
+     Each assertion below is one sentence of that request, pinned so a later
+     refactor cannot quietly put the sphere or the button back.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  it('replaces the spheres behind both cards with an aurora field, in CSS and in the DOM', () => {
+    render(<MemoryRouter><Market /></MemoryRouter>);
+
+    /* Not one orb anywhere on the page — they were the "کره زشت". */
+    expect(document.querySelectorAll('.market-glass-orb')).toHaveLength(0);
+
+    /* Both cards carry the layered aurora instead: two blooms, a masked grid
+       and the 1px specular sheen along the top edge. */
+    const globalCard = document.querySelector('.market-global-card.market-glass-surface');
+    const heroCard = screen.getByTestId('market-btc-hero-card');
+    for (const card of [globalCard, heroCard]) {
+      expect(card.querySelector('.market-glass-aurora')).toBeTruthy();
+      expect(card.querySelector('.market-glass-bloom--a')).toBeTruthy();
+      expect(card.querySelector('.market-glass-bloom--b')).toBeTruthy();
+      expect(card.querySelector('.market-glass-grid')).toBeTruthy();
+      expect(card.querySelector('.market-glass-sheen')).toBeTruthy();
+    }
+
+    /* The dominance bar now names its own segments. */
+    expect(globalCard.querySelector('.market-dominance-legend')).toBeTruthy();
+    expect(globalCard.textContent).toContain('BTC');
+    expect(globalCard.textContent).toContain('ETH');
+
+    const css = readFileSync('src/styles/market-modern.css', 'utf8');
+    expect(css).not.toMatch(/\.market-glass-orb\s*\{/);
+    expect(css).not.toMatch(/\.market-btc-watermark\s*\{/);
+    expect(css).not.toMatch(/\.market-global-watermark\s*\{/);
+    expect(css).not.toMatch(/\.market-hero-action-chip\s*\{/);
+    expect(css).toMatch(/\.market-glass-bloom--a\s*\{/);
+    /* The motion budget the file's own header promises: transform/opacity only. */
+    expect(css).toMatch(/@keyframes mk-drift\s*\{[\s\S]*?transform:[\s\S]*?opacity:/);
+    expect(css).not.toMatch(/animation:[^;]*filter/);
+  });
+
+  it('renders the Bitcoin box as one glass surface with no watermark, no sphere and no button inside it', () => {
+    render(<MemoryRouter><Market /></MemoryRouter>);
+
+    const btcCard = screen.getByTestId('market-btc-hero-card');
+
+    /* «دکمه swap btc را ببر» — the card IS the tap target, so it holds zero
+       nested controls. Any <button> in here is a second tap target fighting
+       the first for the same gesture. */
+    expect(btcCard.querySelectorAll('button')).toHaveLength(0);
+    expect(btcCard.textContent).not.toMatch(/swap/i);
+    expect(btcCard.querySelector('.market-btc-watermark')).toBeNull();
+    expect(btcCard.querySelector('.market-hero-action-chip')).toBeNull();
+
+    /* The coin's real logo still exists, once, at identity size — it is the
+       background mark that was removed, not the logo itself. */
+    expect(btcCard.querySelectorAll('.market-hero-logo-halo')).toHaveLength(1);
+
+    /* The one thing no other card in the app shows: where the price sits
+       between its own 24h low and high. */
+    const range = screen.getByTestId('market-hero-range');
+    expect(range).toBeTruthy();
+    expect(range.querySelector('.market-hero-range-marker')).toBeTruthy();
+    /* Both ends of the day are printed, so the marker is legible as a position
+       between two numbers rather than a dot on an unlabelled bar. */
+    expect(range.textContent).toContain(fmtUsd(89500));
+    expect(range.textContent).toContain(fmtUsd(93200));
+  });
+
+  it('opens the story full-screen, autoplays a cinematic score, and offers no transport control', async () => {
+    render(<MemoryRouter><Market /></MemoryRouter>);
+
+    /* Nothing has started before the tap. */
+    expect(audioSpy.start).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('market-story-item-stocks'));
+    const popup = await screen.findByTestId('market-story-popup');
+
+    /* «موسیقی خودکار پلی بشه بدون دکمه توقف یا پخش و موسیقی یک فیلم باشد» */
+    expect(audioSpy.start).toHaveBeenCalledTimes(1);
+    expect(audioSpy.lastMood).toBe('cinema');
+    expect(screen.queryByTestId('story-audio-toggle')).toBeNull();
+    expect(screen.queryByTestId('story-pause-toggle')).toBeNull();
+    /* The equalizer cue is a <span>: a control-shaped element the user cannot
+       press is worse than no element at all. */
+    expect(popup.querySelectorAll('.market-story-eq')).toHaveLength(1);
+    expect(popup.querySelector('.market-story-eq').tagName).toBe('SPAN');
+
+    /* «صفحه پاپ‌آپ کامل باشد، تمام صفحه» */
+    const css = readFileSync('src/styles/market-modern.css', 'utf8');
+    expect(css).toMatch(/\.market-story-overlay\s*\{[^}]*padding:\s*0/s);
+    expect(css).toMatch(/\.market-story-dialog\.market-glass-surface\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100dvh;[\s\S]*?border-radius:\s*0/);
+
+    /* «دایره‌هایی که بالا قرار می‌گیرد و پر می‌شود، با آیکون و رنگ‌بندی درست» —
+       eight circles, one glyph each, the live one carrying its fill as --p. */
+    const segs = popup.querySelectorAll('.market-story-progress-seg');
+    expect(segs).toHaveLength(8);
+    expect(popup.querySelectorAll('.market-story-progress-seg svg')).toHaveLength(8);
+    const live = popup.querySelector('.market-story-progress-seg.is-live');
+    expect(live).toBeTruthy();
+    expect(live.style.getPropertyValue('--p')).not.toBe('');
+    expect(live.style.getPropertyValue('--story-accent')).not.toBe('');
+    expect(popup.querySelector('.market-story-progress-fill')).toBeTruthy();
+
+    /* «عنوان‌های کامل» — kicker, full title and three fact chips. */
+    expect(popup.querySelector('.market-story-head-kicker').textContent.trim().length).toBeGreaterThan(4);
+    expect(popup.querySelectorAll('.market-story-fact')).toHaveLength(3);
+  });
+
+  it('hands the radio story over to the app player, which keeps running in the background', async () => {
+    render(<MemoryRouter><Market /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('market-story-item-radio'));
+    await screen.findByTestId('market-story-popup');
+
+    /* The synthesized score is running before a track is chosen… */
+    expect(audioSpy.playing).toBe(true);
+
+    fireEvent.click(await screen.findByText('Cinematic journey'));
+
+    /* …and steps aside the instant a real track starts: two sources at once is
+       the one thing an audio UI must never do. */
+    expect(audioSpy.stop).toHaveBeenCalled();
+    expect(audioSpy.playing).toBe(false);
+
+    /* The track and the queue came from getCalm() — the very call the News
+       screen's Calm tab makes, through the same five-minute client cache, so
+       the two lists cannot disagree. */
+    expect(useRadioStore.getState().track.id).toBe('cinema-test');
+    expect(useRadioStore.getState().queue).toHaveLength(1);
+
+    /* And the story says so out loud. */
+    const popup = screen.getByTestId('market-story-popup');
+    expect(popup.textContent).toContain('پس‌زمینه');
+
+    /* Closing the story stops the SCORE, never the radio: RadioDock is mounted
+       above the router in App.jsx, so the track survives both the close and
+       every navigation after it. */
+    fireEvent.click(screen.getByTestId('story-close-btn'));
+    expect(screen.queryByTestId('market-story-popup')).toBeNull();
+    expect(useRadioStore.getState().track.id).toBe('cinema-test');
+    expect(useRadioStore.getState().playing).toBe(false);
+  });
+
+  it('does not start a second score when the app radio is already playing', () => {
+    useRadioStore.getState().play({ id: 'already', title: 'Already on', audioUrl: '/a.mp3' }, []);
+    useRadioStore.getState().setPlaying(true);
+
+    render(<MemoryRouter><Market /></MemoryRouter>);
+    fireEvent.click(screen.getByTestId('market-story-item-stocks'));
+
+    expect(audioSpy.start).not.toHaveBeenCalled();
+  });
+
+  it('gives every story bubble one modern glyph, a fixed label box and a badge', () => {
+    render(<MemoryRouter><Market /></MemoryRouter>);
+
+    const rail = screen.getByTestId('market-stories-rail');
+    const bubbles = rail.querySelectorAll('.market-story-Bubble');
+    expect(bubbles).toHaveLength(MARKET_STORY_ITEMS.length);
+
+    for (const b of bubbles) {
+      /* One glyph, inside the ring, painted from that story's own two accents. */
+      expect(b.querySelectorAll('.market-story-ring svg')).toHaveLength(1);
+      expect(b.querySelector('.market-story-chip').textContent.trim().length).toBeGreaterThan(0);
+      /* A non-empty label: «با عنوان‌های کامل». */
+      expect(b.querySelector('.market-story-label').textContent.trim().length).toBeGreaterThan(1);
+      /* Both accents are handed to CSS so the ring, chip and glow agree. */
+      expect(b.style.getPropertyValue('--story-accent')).not.toBe('');
+      expect(b.style.getPropertyValue('--story-accent2')).not.toBe('');
+    }
+
+    /* «زیر باکس‌ها اندازه و فاصله درست داشته باشد» — the label is a fixed
+       two-line box, so eight labels of different lengths leave the rail with
+       one clean baseline instead of a ragged one. */
+    const css = readFileSync('src/styles/market-modern.css', 'utf8');
+    expect(css).toMatch(/\.market-story-label\s*\{[\s\S]*?min-height:[\s\S]*?-webkit-line-clamp:\s*2/);
+  });
+
+  it('ships the stories, market cards and Aparat page with no emoji left in their icons', () => {
+    /* Emoji were the "not modern" part of the old rail: they cannot be
+       recoloured by an accent token and they render differently per OS. */
+    const src = readFileSync('src/components/MarketStories.jsx', 'utf8');
+    const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    expect(emoji.test(src)).toBe(false);
   });
 });

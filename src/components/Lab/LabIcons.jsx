@@ -307,6 +307,23 @@ export const IconPlay = (p) => (
   </svg>
 );
 
+/**
+ * Video academy — a screen with a play glyph and a strip of frames beneath it.
+ *
+ * Added for the Lab's «امکانات بیشتر» entry into `/aparat`. `IconPlay` alone
+ * reads as "press to start whatever is already here"; this says "a library of
+ * films lives behind this door", which is the difference that matters when the
+ * tile sits next to Compare / Level / Leaderboard.
+ */
+export const IconFilm = (p) => (
+  <svg {...base} {...p}>
+    <rect x="2.8" y="4.6" width="18.4" height="12.2" rx="3.2" />
+    <path d="M10.2 8.4l4.3 2.3-4.3 2.3V8.4Z" />
+    <path d="M6.4 20.2h11.2" />
+    <path d="M8.6 16.8v1.6M15.4 16.8v1.6" opacity=".6" />
+  </svg>
+);
+
 export const IconPlus = (p) => (
   <svg {...base} {...p}>
     <path d="M12 5v14M5 12h14" />
@@ -511,7 +528,10 @@ export const LAB_ICONS = {
   flame: IconFlame,
   layers: IconLayers,
   coins: IconCoins,
-  hourglass: IconHourglass
+  hourglass: IconHourglass,
+  /* The Persian video academy — see the note on IconFilm above. */
+  film: IconFilm,
+  video: IconFilm
 };
 
 /**
