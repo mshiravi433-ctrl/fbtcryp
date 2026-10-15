@@ -10,6 +10,8 @@ import CoinLogo from '../components/CoinLogo';
 import AnimatedNumber from '../components/AnimatedNumber';
 import Sparkline from '../components/Sparkline';
 import TrendChart from '../components/TrendChart';
+import MarketStories from '../components/MarketStories';
+import '../styles/market-modern.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct, fmtUsd } from '../lib/format';
@@ -56,9 +58,9 @@ const SECTORS = Object.keys(MARKET_CATEGORIES);
 
 function StatTile({ label, value, sub, tone }) {
   return (
-    <motion.div className="card card-tight" variants={riseIn}>
+    <motion.div className="card card-tight market-stat-tile" variants={riseIn}>
       <div className="faint" style={{ marginBottom: 4 }}>{label}</div>
-      <div className="stat-mini">{value}</div>
+      <div className="stat-mini" style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       {sub != null && (
         <div className={`mono ${tone === 'up' ? 'up' : tone === 'down' ? 'down' : ''}`} style={{ fontSize: 10.5, marginTop: 2 }}>
           {sub}
@@ -300,48 +302,66 @@ export default function Market() {
       {isOffline && <div className="notice">{t('common.offlineData')}</div>}
 
       <div className={`market-overview${hero ? ' has-hero' : ''}`}>
-        {/* ---------- global market card ---------- */}
+        {/* ---------- global market card (ultra-modern glassmorphic) ---------- */}
         <motion.section
-          className="card card-rgb card-glow-cyan market-global-card"
+          className="card market-glass-surface market-global-card"
           variants={riseIn}
           initial="hidden"
           animate="show"
         >
-          <div className="sheen" />
-          <div className="row-between" style={{ marginBottom: 10 }}>
+          <div className="market-glass-orb market-glass-orb--cyan" aria-hidden="true" />
+          <div className="market-glass-orb market-glass-orb--violet" aria-hidden="true" />
+          <svg className="market-global-watermark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+            <circle cx="60" cy="60" r="46" stroke="#00e5ff" strokeWidth="1.6" strokeDasharray="6 5" />
+            <ellipse cx="60" cy="60" rx="24" ry="46" stroke="#7c4dff" strokeWidth="1.4" />
+            <path d="M14 60h92M22 38h76M22 82h76" stroke="#00ff9d" strokeWidth="1.2" strokeOpacity="0.65" />
+          </svg>
+
+          <div className="market-global-head">
             <div>
-              <div className="faint">{t('market.totalMcap')}</div>
-              <div className="stat-value">
-                <AnimatedNumber value={global?.mcap ?? 0} format={(v) => fmtCompact(v)} />
+              <div className="market-global-kicker">
+                <span className="market-live-dot" aria-hidden="true" />
+                <span>{t('market.livePrices')}</span>
+              </div>
+              <div className="faint" style={{ marginBottom: 4 }}>{t('market.totalMcap')}</div>
+              <div className="market-global-value-wrap">
+                <div className="stat-value market-global-value">
+                  <AnimatedNumber value={global?.mcap ?? 0} format={(v) => fmtCompact(v)} flash={false} />
+                </div>
               </div>
             </div>
-            <span className={`pill ${(global?.mcapChange ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`}>
+            <span className={`pill market-change-badge ${(global?.mcapChange ?? 0) >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`}>
               {fmtPct(global?.mcapChange ?? 0, 2)}
             </span>
           </div>
 
-          <div className="grid-3">
-            <div>
-              <div className="faint">{t('market.volume24h')}</div>
-              <div className="mono" style={{ fontSize: 13 }}>{fmtCompact(global?.volume ?? 0)}</div>
+          <div className="market-global-metrics">
+            <div className="market-metric-pod">
+              <div className="market-metric-pod-label">{t('market.volume24h')}</div>
+              <div className="market-metric-pod-val">{fmtCompact(global?.volume ?? 0)}</div>
             </div>
-            <div>
-              <div className="faint">{t('market.btcDominance')}</div>
-              <div className="mono" style={{ fontSize: 13 }}>{(global?.btcDominance ?? 0).toFixed(2)}%</div>
+            <div className="market-metric-pod">
+              <div className="market-metric-pod-label">{t('market.btcDominance')}</div>
+              <div className="market-metric-pod-val">{(global?.btcDominance ?? 0).toFixed(2)}%</div>
             </div>
-            <div>
-              <div className="faint">{t('market.ethDominance')}</div>
-              <div className="mono" style={{ fontSize: 13 }}>{(global?.ethDominance ?? 0).toFixed(2)}%</div>
+            <div className="market-metric-pod">
+              <div className="market-metric-pod-label">{t('market.ethDominance')}</div>
+              <div className="market-metric-pod-val">{(global?.ethDominance ?? 0).toFixed(2)}%</div>
             </div>
           </div>
 
-          <div className="progress" style={{ marginTop: 12 }}>
-            <motion.div
-              className="progress-fill"
-              initial={{ width: 0 }}
-              animate={{ width: `${global?.btcDominance ?? 50}%` }}
-              transition={{ duration: 1, ease: 'easeOut' }}
-            />
+          <div className="market-dominance-wrap">
+            <div className="progress market-dominance-bar">
+              <div
+                className="progress-fill market-dom-seg market-dom-seg--btc"
+                style={{ width: `${Math.min(85, Math.max(10, global?.btcDominance ?? 52))}%` }}
+              />
+              <div
+                className="market-dom-seg market-dom-seg--eth"
+                style={{ width: `${Math.min(40, Math.max(5, global?.ethDominance ?? 16))}%` }}
+              />
+              <div className="market-dom-seg market-dom-seg--other" />
+            </div>
           </div>
 
           {/*
@@ -355,7 +375,7 @@ export default function Market() {
             covering only the top of the book is worse than none.
           */}
           {trend && (
-            <div className="market-trend" data-testid="global-market-trend">
+            <div className="market-trend market-trend-glass" data-testid="global-market-trend">
               <div className="market-trend-head">
                 <span className="faint">
                   {t('market.trendTitle', {
@@ -394,39 +414,88 @@ export default function Market() {
           />
         </motion.div>
 
-        {/* ---------- hero coin ---------- */}
+        {/* ---------- hero coin (Bitcoin glassmorphic box) ---------- */}
         {hero && (
           <motion.section
-            className="card market-hero-card"
+            className="card market-glass-surface market-hero-card"
             variants={riseIn}
             initial="hidden"
             animate="show"
             onClick={() => navigate(`/coin/${hero.id}`)}
             style={{ cursor: 'pointer' }}
+            data-testid="market-btc-hero-card"
           >
-            <div className="row-between">
-              <div className="row">
-                <CoinLogo coin={hero} />
+            <div className="market-glass-orb market-glass-orb--btc" aria-hidden="true" />
+            <svg className="market-btc-watermark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <circle cx="60" cy="60" r="48" stroke="#f7931a" strokeWidth="1.8" strokeDasharray="7 5" />
+              <circle cx="60" cy="60" r="34" stroke="#ffb300" strokeWidth="1.2" />
+              <path d="M52 38v44M64 38v44M46 44h20a8 8 0 0 1 0 16H48h20a8.5 8.5 0 0 1 0 17H46" stroke="#f7931a" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+
+            <div className="market-hero-top">
+              <div className="market-hero-identity">
+                <div className="market-hero-logo-halo">
+                  <CoinLogo coin={hero} />
+                  <span className="market-hero-rank-badge mono">#{hero.rank || 1}</span>
+                </div>
                 <div>
-                  <div style={{ fontWeight: 700 }}>{hero.name}</div>
-                  <div className="faint">{hero.symbol} / {vs.toUpperCase()}</div>
+                  <div className="market-hero-title">{hero.name}</div>
+                  <div className="market-hero-pair-row">
+                    <span className="market-hero-pair-pill mono">
+                      {hero.symbol} / {vs.toUpperCase()}
+                    </span>
+                    <span className="market-live-dot" aria-hidden="true" />
+                  </div>
                 </div>
               </div>
-              <div style={{ textAlign: 'end' }}>
-                <div className="stat-mini">
-                  <AnimatedNumber value={hero.price} format={(v) => fmtUsd(v)} />
+              <div className="market-hero-price-col">
+                <div className="stat-mini market-hero-price">
+                  <AnimatedNumber value={hero.price} format={(v) => fmtUsd(v)} flash={false} />
                 </div>
-                <div className={`mono ${hero.change24h >= 0 ? 'up' : 'down'}`} style={{ fontSize: 11 }}>
+                <span className={`pill market-change-badge ${hero.change24h >= 0 ? 'pill-up is-up' : 'pill-down is-down'}`} style={{ marginTop: 4 }}>
                   {fmtPct(hero.change24h)}
-                </div>
+                </span>
               </div>
             </div>
-            <div className="market-hero-chart" style={{ marginTop: 10 }}>
-              <Sparkline data={hero.sparkline ?? []} up={hero.change24h >= 0} width={470} height={64} strokeWidth={2} />
+
+            <div className="market-hero-metrics">
+              <div className="market-hero-mini-pod">
+                <div className="market-hero-mini-lbl">{t('market.totalMcap')}</div>
+                <div className="market-hero-mini-val mono">{fmtCompact(hero.mcap || 0)}</div>
+              </div>
+              <div className="market-hero-mini-pod">
+                <div className="market-hero-mini-lbl">{t('market.volume24h')}</div>
+                <div className="market-hero-mini-val mono">{fmtCompact(hero.volume || 0)}</div>
+              </div>
+              <div className="market-hero-mini-pod">
+                <div className="market-hero-mini-lbl">{t('market.btcDominance')}</div>
+                <div className="market-hero-mini-val mono">{(global?.btcDominance ?? 52).toFixed(1)}%</div>
+              </div>
+            </div>
+
+            <div className="market-hero-chart market-hero-chart-well">
+              <Sparkline data={hero.sparkline ?? []} up={hero.change24h >= 0} width={470} height={64} strokeWidth={2.2} />
+            </div>
+
+            <div className="market-hero-actions">
+              <span className="faint" style={{ fontSize: 11 }}>{t('market.heroExplore')}</span>
+              <button
+                type="button"
+                className="market-hero-action-chip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(swapUrlFor(hero.id, 'buy') || '/swap');
+                }}
+              >
+                <span>{t('market.swap')} {hero.symbol}</span>
+              </button>
             </div>
           </motion.section>
         )}
       </div>
+
+      {/* ---------- Instagram-style 1-minute App Stories below Bitcoin card ---------- */}
+      <MarketStories coins={coins} global={global} />
 
       <AdBanner slot="signals" />
 

@@ -174,6 +174,7 @@ const InsuranceSettings = lazyRetry(() => import('./pages/insurance/InsuranceSet
 const Lab = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Lab')) : () => null;
 const ExploreHub = lazyRetry(() => import('./pages/ExploreHub'));
 const Learn = lazyRetry(() => import('./pages/Learn'));
+const AparatVideos = lazyRetry(() => import('./pages/AparatVideos'));
 const Rewards = lazyRetry(() => import('./pages/Rewards'));
 
 /**
@@ -456,6 +457,7 @@ function AnimatedRoutes() {
             {SPECULATION_ENABLED && <Route path="/lab" element={<Lab />} />}
             <Route path="/explore-hub" element={<ExploreHub />} />
             <Route path="/learn" element={<Learn />} />
+            <Route path="/aparat" element={<AparatVideos />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/solana" element={<SolanaSwap />} />
             <Route path="/buy" element={<Buy />} />
