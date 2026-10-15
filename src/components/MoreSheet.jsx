@@ -28,8 +28,7 @@ import {
   IconX,
   IconSearch,
   IconClock,
-  IconWorld,
-  IconVideo
+  IconWorld
 } from './Icons';
 
 /**
@@ -210,6 +209,28 @@ const GROUPS = [
         "More" list earns its length only in proportion to how little of it
         repeats what the user can already reach.
       */
+      /*
+       * ─── «ویدیوهای آموزشی» IS NOT A MENU TILE ───────────────────────────
+       * روی درخواست: «دکمه فیلم‌های آموزشی را از منو بیشتر ببر و بزار داخل
+       * صفحه آزمایشگاه، بخش امکانات بیشتر، و اینکه فقط با زبان فارسی که
+       * انتخاب می‌شه این گزینه بیاد».
+       *
+       * The Aparat video academy is a PERSIAN-ONLY destination — every course
+       * is recorded in Farsi. Listing it in a menu shown to all twelve
+       * languages put a doorway in front of eleven audiences that leads to a
+       * room they cannot understand, which is worse than no doorway.
+       *
+       * So it moved into the Lab's «امکانات بیشتر» disclosure, gated on
+       * `resolvedLanguage === 'fa'` (see src/pages/Lab.jsx). The `/aparat`
+       * ROUTE still exists and still works for bookmarks, deep links and the
+       * Learn tab — the same rule the /solana and /nft entries below follow:
+       * a menu entry is discovery, a route is a contract.
+       *
+       * The video-glyph import that the removed tile used was dropped with it;
+       * leaving an icon imported by nothing is how a tile quietly comes back
+       * in a later merge (and `test/lab-screens.test.jsx` now fails the build
+       * if the symbol reappears anywhere in this file, comment included).
+       */
       { to: '/learn', key: 'learn.title', Icon: IconInfo, hue: 'var(--rgb-9)' },
       { to: '/audit', key: 'nav.audit', Icon: IconShield, hue: 'var(--rgb-4)' },
       { to: '/developers', key: 'nav.developers', Icon: IconKey, hue: 'var(--rgb-2)' },

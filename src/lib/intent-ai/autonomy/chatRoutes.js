@@ -107,6 +107,12 @@ export const ROUTED_PATHS = Object.freeze([
   '/help', '/docs', '/audit', '/security', '/developers', '/ecosystem', '/business',
   '/p2p', '/leaderboard', '/news', '/explore', '/discover', '/nft', '/orders', '/orders/history',
   '/lab', '/explore-hub', '/learn', '/rewards', '/solana', '/buy',
+  /* Persian video academy. Reached from the Lab's «امکانات بیشتر» fold rather
+     than from a menu tile (it is Farsi-only, so it is gated there), but the
+     ROUTE is mounted in App.jsx and a chat answer is allowed to name it —
+     which is exactly what this list exists to guarantee. It was missing, and
+     `chat-route-contract-probe` was failing on the drift. */
+  '/aparat',
   '/order/result/:orderId', '/smart-wallet', '/smart-money',
   '/smart-money/wallet/:chain/:address', '/smart-money/token/:chain/:address',
   '/portfolio', '/intent', '/intent-ai', '/ai-control', '/flash-liquidity',

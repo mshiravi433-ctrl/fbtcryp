@@ -18,21 +18,56 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconExternal,
+  IconSparkle,
   IconVideo,
   IconVolume,
   IconX
 } from './Icons';
 
 /**
- * 1-MINUTE INTERACTIVE MARKET STORIES
+ * 1-MINUTE CINEMATIC MARKET STORIES
  * ---------------------------------------------------------------------------
- * Placed directly beneath the Bitcoin hero card on the Market page.
- * Each story opens a 60-second (60,000 ms) rich interactive popup with
- * custom Illustrator-style vector SVG artwork, live market/stock rankings,
- * automatic cinematic ambient soundtrack, and a bottom CTA bar that navigates
- * straight to that section of the app.
+ * Sits directly beneath the Bitcoin hero card on the Market page. Tapping a
+ * bubble opens a FULL-SCREEN story: a progress ring row, a headline block, an
+ * animated cinematic stage, live market data, and a CTA bar that navigates
+ * straight into that part of the app.
+ *
+ * ─── THE FOUR RULES THIS FILE OBEYS ────────────────────────────────────────
+ * 1. NO TRANSPORT UI. «موسیقی خودکار پلی بشه بدون دکمه توقف یا پخش» — the
+ *    score starts on the tap that opens the story (a real user gesture, so
+ *    every autoplay policy allows it) and stops when the story closes. There
+ *    is deliberately no play/pause/mute button to render, so there is no
+ *    button that can disagree with the audio state. What IS shown is a
+ *    non-interactive equalizer: a cue that sound is on, never a control.
+ * 2. ONE SVG PER PROGRESS CHIP. The chip is a circle that fills as the story
+ *    runs (`--p`, painted as a conic ring) with the story's own glyph inside.
+ *    `test/market-stories-and-aparat.test.jsx` counts exactly eight `svg`
+ *    elements inside `.market-story-progress-seg`, so the "seen" tick is drawn
+ *    in CSS, not with a second icon.
+ * 3. RADIO IS THE APP'S RADIO. The Crypto Radio story reads the SAME
+ *    `getCalm()` catalogue the News screen reads (one 5-minute client cache,
+ *    so both lists are literally the same array) and writes to the SAME
+ *    `useRadioStore`. `RadioDock` is mounted above the router in App.jsx, so a
+ *    track chosen inside a story keeps playing after the story closes and
+ *    after you navigate away — «در پس‌زمینه هم فعال بشه انگار موسیقی را فعال
+ *    کردی». The synthesized score steps aside the moment a real track starts.
+ * 4. FULL SCREEN, GPU-CHEAP. The dialog is `100dvh` with no border radius.
+ *    Ambient light animates `transform`/`opacity` only, never `filter`, and
+ *    collapses to a still frame under `prefers-reduced-motion` and on native.
  */
 export const STORY_DURATION_MS = 60_000;
+
+/*
+ * Optional REAL promo film. «اگر فیلمی میشود پخش شود تبلیغاتی» — when a video
+ * source is configured, the video story plays it as a sponsored clip instead
+ * of the animated stage. It is opt-in by environment because the app ships no
+ * video asset of its own (a 1 MB file in the APK for one story is not a trade
+ * worth making), and because a promotional clip is a business decision that
+ * changes without a release. `muted` + `playsInline` are mandatory: an
+ * unmuted autoplaying video is blocked by every mobile browser, and a blocked
+ * video shows as a black rectangle.
+ */
+const STORY_PROMO_VIDEO = String(import.meta.env?.VITE_STORY_PROMO_VIDEO ?? '').trim();
 
 export const MARKET_STORY_ITEMS = [
   {
@@ -43,22 +78,21 @@ export const MARKET_STORY_ITEMS = [
       { to: '/stocks', labelKey: 'stories.quick.xstocks' },
       { to: '/swap', labelKey: 'stories.quick.swapRwa' }
     ],
-    ring: 'linear-gradient(135deg, #69d8b5 0%, #e5bc7b 52%, #7dcbe2 100%)',
-    accent: '#69d8b5',
-    accent2: '#e5bc7b',
-    mood: 'alpha'
+    accent: '#3ddc97',
+    accent2: '#a3e635',
+    ink: '#04150e'
   },
   {
     id: 'aparat',
-    badge: 'VIDEO',
+    badge: 'FILM',
     route: '/aparat',
+    film: true,
     secondaryRoutes: [
       { to: '/learn', labelKey: 'stories.quick.learnHub' }
     ],
-    ring: 'linear-gradient(135deg, #e9a0bf 0%, #e5bc7b 50%, #a99ae9 100%)',
-    accent: '#e9a0bf',
-    accent2: '#e5bc7b',
-    mood: 'cinema'
+    accent: '#ff7ab8',
+    accent2: '#ffb86b',
+    ink: '#1a0511'
   },
   {
     id: 'swap',
@@ -68,10 +102,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/solana', labelKey: 'stories.quick.solana' },
       { to: '/bridge', labelKey: 'stories.quick.bridge' }
     ],
-    ring: 'linear-gradient(135deg, #7dcbe2 0%, #a99ae9 52%, #80d6bd 100%)',
-    accent: '#7dcbe2',
-    accent2: '#80d6bd',
-    mood: 'alpha'
+    accent: '#38bdf8',
+    accent2: '#22d3ee',
+    ink: '#04141f'
   },
   {
     id: 'intent',
@@ -81,10 +114,9 @@ export const MARKET_STORY_ITEMS = [
       { to: '/signals', labelKey: 'stories.quick.signals' },
       { to: '/smart-money', labelKey: 'stories.quick.smartMoney' }
     ],
-    ring: 'linear-gradient(135deg, #a99ae9 0%, #e9a0bf 52%, #7dcbe2 100%)',
-    accent: '#a99ae9',
-    accent2: '#e9a0bf',
-    mood: 'focus'
+    accent: '#a78bfa',
+    accent2: '#f472b6',
+    ink: '#120a24'
   },
   {
     id: 'defi',
@@ -94,22 +126,20 @@ export const MARKET_STORY_ITEMS = [
       { to: '/loan', labelKey: 'stories.quick.loan' },
       { to: '/rewards', labelKey: 'stories.quick.rewards' }
     ],
-    ring: 'linear-gradient(135deg, #80d6bd 0%, #7dcbe2 50%, #8daef0 100%)',
-    accent: '#80d6bd',
-    accent2: '#7dcbe2',
-    mood: 'alpha'
+    accent: '#2dd4bf',
+    accent2: '#60a5fa',
+    ink: '#03191a'
   },
   {
     id: 'radio',
-    badge: 'MUSIC',
+    badge: 'RADIO',
     route: '/news',
     secondaryRoutes: [
       { to: '/global', labelKey: 'stories.quick.global' }
     ],
-    ring: 'linear-gradient(135deg, #e9a0bf 0%, #e5bc7b 48%, #7dcbe2 100%)',
-    accent: '#e5bc7b',
-    accent2: '#e9a0bf',
-    mood: 'cinema'
+    accent: '#fbbf24',
+    accent2: '#fb7185',
+    ink: '#1d1204'
   },
   {
     id: 'orders',
@@ -118,10 +148,9 @@ export const MARKET_STORY_ITEMS = [
     secondaryRoutes: [
       { to: '/compare', labelKey: 'stories.quick.compare' }
     ],
-    ring: 'linear-gradient(135deg, #e5bc7b 0%, #7dcbe2 52%, #a99ae9 100%)',
-    accent: '#e5bc7b',
-    accent2: '#7dcbe2',
-    mood: 'focus'
+    accent: '#f59e0b',
+    accent2: '#c084fc',
+    ink: '#1c1103'
   },
   {
     id: 'ecosystem',
@@ -132,18 +161,17 @@ export const MARKET_STORY_ITEMS = [
       { to: '/launch', labelKey: 'stories.quick.launch' },
       { to: '/insurance', labelKey: 'stories.quick.insurance' }
     ],
-    ring: 'linear-gradient(135deg, #7dcbe2 0%, #e5bc7b 50%, #a99ae9 100%)',
-    accent: '#7dcbe2',
-    accent2: '#a99ae9',
-    mood: 'alpha'
+    accent: '#60a5fa',
+    accent2: '#34d399',
+    ink: '#061225'
   }
 ];
 
 const CURATED_TOP_STOCKS = [
-  { symbol: 'NVDA', name: 'NVIDIA xStock', price: 138.40, change24h: 6.45, tag: 'AI Chip Leader' },
-  { symbol: 'TSLA', name: 'Tesla xStock', price: 258.90, change24h: 5.18, tag: 'EV & Robotics' },
-  { symbol: 'AAPL', name: 'Apple xStock', price: 231.50, change24h: 3.92, tag: 'Consumer Tech' },
-  { symbol: 'META', name: 'Meta Platforms', price: 592.10, change24h: 3.64, tag: 'AI & Social' },
+  { symbol: 'NVDA', name: 'NVIDIA xStock', price: 138.4, change24h: 6.45, tag: 'AI Chip Leader' },
+  { symbol: 'TSLA', name: 'Tesla xStock', price: 258.9, change24h: 5.18, tag: 'EV & Robotics' },
+  { symbol: 'AAPL', name: 'Apple xStock', price: 231.5, change24h: 3.92, tag: 'Consumer Tech' },
+  { symbol: 'META', name: 'Meta Platforms', price: 592.1, change24h: 3.64, tag: 'AI & Social' },
   { symbol: 'MSFT', name: 'Microsoft xStock', price: 428.75, change24h: 2.85, tag: 'Cloud & AI' }
 ];
 
@@ -154,203 +182,329 @@ const DEFI_HIGHLIGHTS = [
   { id: 'lido', protocol: 'Lido Liquid Staking', asset: 'stETH · wstETH', apy: '3.6%', badge: 'Liquid' }
 ];
 
-function StoryAvatarSvg({ id, accent, accent2 }) {
-  const gId = `st-av-${id}`;
+/**
+ * THE GLYPH SET.
+ *
+ * «از ایکون های خیلی مدرن استفاده بشود» — these replaced an earlier set that
+ * mixed filled blobs, 2.4px strokes and hard-cornered rectangles at three
+ * different optical sizes, which is why the rail read as eight unrelated
+ * icons rather than one family.
+ *
+ * One system now, applied to all eight:
+ *   · 32×32 viewBox, 1.7 stroke, round caps and joins (the same numbers as
+ *     `components/Icons.jsx`, so a story glyph and a nav glyph are cousins).
+ *   · ~3u of padding inside the box on every side, so a circle story and a
+ *     rectangle story occupy the same visual weight.
+ *   · Duotone: the structural lines take the gradient, one accent detail takes
+ *     `accent2` solid. Two colours, never more — three is where duotone stops
+ *     looking designed.
+ *   · `id` is namespaced per instance (`useId`) because several copies of the
+ *     same glyph are on screen at once (rail + progress chip + headline), and
+ *     duplicate gradient ids make the browser resolve every one of them to the
+ *     first, which paints the wrong colours.
+ */
+function StoryGlyph({ id, accent, accent2, gid, className = '' }) {
+  const g = `${gid}-g`;
+  const soft = `${gid}-s`;
+  const stroke = { strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' };
   return (
-    <svg viewBox="0 0 48 48" fill="none" className="market-story-avatar-svg" aria-hidden="true">
+    <svg viewBox="0 0 32 32" fill="none" className={`market-story-glyph ${className}`} aria-hidden="true" focusable="false">
       <defs>
-        <linearGradient id={gId} x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+        <linearGradient id={g} x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor={accent} />
           <stop offset="100%" stopColor={accent2} />
         </linearGradient>
+        <linearGradient id={soft} x1="6" y1="6" x2="26" y2="26" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor={accent} stopOpacity="0.34" />
+          <stop offset="100%" stopColor={accent2} stopOpacity="0.12" />
+        </linearGradient>
       </defs>
 
+      {/* 1 · Stocks & RWA — candlesticks under a rising line. */}
       {id === 'stocks' && (
-        <g>
-          <rect x="9" y="25" width="6" height="13" rx="2" fill={accent} fillOpacity="0.55" />
-          <rect x="18" y="19" width="6" height="19" rx="2" fill={accent} fillOpacity="0.8" />
-          <rect x="27" y="13" width="6" height="25" rx="2" fill={`url(#${gId})`} />
-          <path d="M9 21l10-7 8 4 12-10" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="39" cy="8" r="3" fill={accent2} />
+        <g {...stroke}>
+          <path d="M6 26.5h20" stroke={`url(#${g})`} opacity="0.55" />
+          <path d="M10 22.5v-6M10 13.2v-1.6" stroke={`url(#${g})`} />
+          <rect x="7.9" y="16.5" width="4.2" height="6" rx="1.4" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M16.6 19.5v-8M16.6 8.2V6.4" stroke={`url(#${g})`} />
+          <rect x="14.5" y="11.5" width="4.2" height="8" rx="1.4" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M23.2 15.5v-5M23.2 7.4V5.6" stroke={accent2} />
+          <rect x="21.1" y="10.5" width="4.2" height="5" rx="1.4" fill={accent2} fillOpacity="0.28" stroke={accent2} />
         </g>
       )}
 
+      {/* 2 · Film academy — a screen with a play glyph and a strip of frames. */}
       {id === 'aparat' && (
-        <g>
-          <rect x="7" y="10" width="34" height="28" rx="8" stroke={`url(#${gId})`} strokeWidth="2.2" fill="rgba(255,45,149,0.14)" />
-          <polygon points="20,17 32,24 20,31" fill="#fff" />
-          <circle cx="13" cy="15" r="1.8" fill={accent2} />
-          <circle cx="35" cy="15" r="1.8" fill={accent} />
+        <g {...stroke}>
+          <rect x="4.5" y="7.5" width="23" height="17" rx="4.5" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M13.6 12.6l5.6 3.4-5.6 3.4z" fill={accent2} stroke={accent2} strokeWidth="1.4" />
+          <path d="M9 11.4v9.2M23 11.4v9.2" stroke={`url(#${g})`} opacity="0.5" />
+          <path d="M11.4 27.5h9.2" stroke={accent2} opacity="0.85" />
         </g>
       )}
 
+      {/* 3 · Smart swap — two assets trading places on a closed loop. */}
       {id === 'swap' && (
-        <g>
-          <circle cx="17" cy="18" r="8" stroke={accent} strokeWidth="2.2" fill="rgba(0,229,255,0.15)" />
-          <circle cx="31" cy="30" r="8" stroke={accent2} strokeWidth="2.2" fill="rgba(20,241,149,0.15)" />
-          <path d="M27 13h9v9M21 35h-9v-9" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <g {...stroke}>
+          <path d="M9.6 12.4h13.8l-3.2-3.3M22.4 19.6H8.6l3.2 3.3" stroke={`url(#${g})`} />
+          <circle cx="7.6" cy="12.4" r="3.1" fill={accent2} fillOpacity="0.26" stroke={accent2} />
+          <circle cx="24.4" cy="19.6" r="3.1" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M16 6.2v3.1M16 22.7v3.1" stroke={`url(#${g})`} opacity="0.55" />
         </g>
       )}
 
+      {/* 4 · Intent AI — a neural chip with a spark in its core. */}
       {id === 'intent' && (
-        <g>
-          <circle cx="24" cy="24" r="13" stroke={`url(#${gId})`} strokeWidth="2.2" fill="rgba(124,77,255,0.16)" />
-          <circle cx="24" cy="24" r="5" fill="#fff" />
-          <path d="M24 7v4M24 37v4M7 24h4M37 24h4" stroke={accent} strokeWidth="2.2" strokeLinecap="round" />
+        <g {...stroke}>
+          <rect x="8.6" y="8.6" width="14.8" height="14.8" rx="4.6" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M16 12.4l1.5 2.6 2.6 1.5-2.6 1.5-1.5 2.6-1.5-2.6-2.6-1.5 2.6-1.5z" fill={accent2} stroke={accent2} strokeWidth="1.2" />
+          <path d="M12.6 8.6V5.4M19.4 8.6V5.4M12.6 26.6v-3.2M19.4 26.6v-3.2M8.6 12.6H5.4M8.6 19.4H5.4M26.6 12.6h-3.2M26.6 19.4h-3.2" stroke={`url(#${g})`} opacity="0.8" />
         </g>
       )}
 
+      {/* 5 · DeFi yield — three stacked vault layers with yield rising. */}
       {id === 'defi' && (
-        <g>
-          <polygon points="24,7 39,24 24,41 9,24" stroke={`url(#${gId})`} strokeWidth="2.2" fill="rgba(20,241,149,0.16)" />
-          <polygon points="24,14 32,24 24,34 16,24" fill="#fff" fillOpacity="0.85" />
+        <g {...stroke}>
+          <path d="M16 5.4l9.4 4.6-9.4 4.6L6.6 10z" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M6.6 16l9.4 4.6L25.4 16" stroke={`url(#${g})`} opacity="0.75" />
+          <path d="M6.6 21.6l9.4 4.6 9.4-4.6" stroke={accent2} opacity="0.9" />
         </g>
       )}
 
+      {/* 6 · Crypto radio — an equalizer inside a broadcast arc. */}
       {id === 'radio' && (
-        <g>
-          <path d="M12 26v-3a12 12 0 0 1 24 0v3" stroke={`url(#${gId})`} strokeWidth="2.4" strokeLinecap="round" />
-          <rect x="9" y="25" width="6" height="11" rx="3" fill={accent} />
-          <rect x="33" y="25" width="6" height="11" rx="3" fill={accent2} />
-          <path d="M20 28v6M24 24v12M28 27v7" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+        <g {...stroke}>
+          <path d="M7.4 14.2a11.4 11.4 0 0 1 17.2 0" stroke={`url(#${g})`} opacity="0.7" />
+          <path d="M11 24.6v-5.2M16 26.4v-9.4M21 24.6v-5.2" stroke={`url(#${g})`} />
+          <circle cx="16" cy="9.6" r="2.2" fill={accent2} stroke={accent2} strokeWidth="1.2" />
         </g>
       )}
 
+      {/* 7 · Auto orders — a clock on a self-driving loop. */}
       {id === 'orders' && (
-        <g>
-          <circle cx="24" cy="24" r="14" stroke={`url(#${gId})`} strokeWidth="2.2" fill="rgba(255,179,0,0.14)" />
-          <path d="M24 15v9l6 4" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="35" cy="13" r="3.5" fill={accent2} />
+        <g {...stroke}>
+          <path d="M25.6 16a9.6 9.6 0 1 1-3.1-7.1" stroke={`url(#${g})`} />
+          <path d="M23.2 4.6v4.6h-4.6" stroke={accent2} />
+          <path d="M16 11.2V16l3.4 2.1" stroke={`url(#${g})`} />
+          <circle cx="16" cy="16" r="1.3" fill={accent2} stroke="none" />
         </g>
       )}
 
+      {/* 8 · Ecosystem — a verified globe: the whole app, non-custodial. */}
       {id === 'ecosystem' && (
-        <g>
-          <path d="M24 8l14 5.5v9.5c0 9.5-6 16.5-14 19-8-2.5-14-9.5-14-19v-9.5L24 8z" stroke={`url(#${gId})`} strokeWidth="2.2" fill="rgba(0,229,255,0.14)" />
-          <path d="m19 24 3.5 3.5L30 20" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+        <g {...stroke}>
+          <circle cx="15" cy="15" r="9.6" fill={`url(#${soft})`} stroke={`url(#${g})`} />
+          <path d="M5.4 15h19.2M15 5.4c2.7 2.8 4 6 4 9.6s-1.3 6.8-4 9.6c-2.7-2.8-4-6-4-9.6s1.3-6.8 4-9.6z" stroke={`url(#${g})`} opacity="0.75" />
+          <circle cx="23.4" cy="23.4" r="4.6" fill="#0a1020" stroke={accent2} />
+          <path d="M21.5 23.4l1.5 1.5 2.6-2.9" stroke={accent2} />
         </g>
       )}
     </svg>
   );
 }
 
-function StoryStageIllustration({ id, accent, accent2 }) {
-  const gradId = `story-stage-grad-${id}`;
+/**
+ * THE CINEMATIC STAGE.
+ *
+ * «تصاویر خیره‌کننده» and «اگر فیلمی میشود پخش شود تبلیغاتی».
+ *
+ * Two implementations of one slot:
+ *   · If a promo film is configured, it plays — muted, looped, inline — inside
+ *     a glass frame with a SPONSORED label, because an unlabeled promotional
+ *     clip inside a finance app is the thing the AdBanner header comment warns
+ *     about.
+ *   · Otherwise the stage is an animated vector scene. It is built to be
+ *     WATCHED: a horizon glow, drifting light, a line that draws itself, and
+ *     particles that rise. All of it is `transform`/`opacity`/`stroke-dashoffset`
+ *     on the compositor, and all of it stops under reduced motion.
+ */
+function StoryStage({ item, gid, still, t, promo }) {
+  const { id, accent, accent2 } = item;
+  const g = `${gid}-st`;
+  const glow = `${gid}-gl`;
+
+  if (promo && item.film) {
+    return (
+      <div className="market-story-stage-wrap is-film" data-testid="story-stage-film">
+        <video
+          className="market-story-promo-video"
+          src={promo}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+          disablePictureInPicture
+          aria-label={t('stories.promo.label')}
+        />
+        <span className="market-story-promo-flag mono">{t('stories.promo.label')}</span>
+      </div>
+    );
+  }
+
   return (
-    <svg viewBox="0 0 360 120" fill="none" className="market-story-stage-svg" aria-hidden="true">
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="360" y2="120" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor={accent} stopOpacity="0.32" />
-          <stop offset="55%" stopColor={accent2} stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#090d1a" stopOpacity="0.06" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="2" width="356" height="116" rx="20" fill={`url(#${gradId})`} />
-      <circle cx="305" cy="28" r="46" fill={accent} fillOpacity="0.14" />
-      <circle cx="52" cy="96" r="38" fill={accent2} fillOpacity="0.14" />
+    <div className="market-story-stage-wrap" data-testid="story-stage">
+      <svg viewBox="0 0 360 150" fill="none" className="market-story-stage-svg" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id={g} x1="0" y1="0" x2="360" y2="150" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor={accent} stopOpacity="0.36" />
+            <stop offset="52%" stopColor={accent2} stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#070c18" stopOpacity="0.05" />
+          </linearGradient>
+          <radialGradient id={glow} cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0%" stopColor={accent} stopOpacity="0.5" />
+            <stop offset="100%" stopColor={accent} stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id={`${gid}-ln`} x1="0" y1="0" x2="360" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor={accent2} />
+            <stop offset="100%" stopColor={accent} />
+          </linearGradient>
+        </defs>
 
-      {id === 'stocks' && (
-        <g>
-          <path d="M24 96h312" stroke="rgba(255,255,255,0.16)" strokeWidth="1.4" />
-          <rect x="42" y="60" width="20" height="36" rx="5" fill={accent} fillOpacity="0.4" />
-          <rect x="76" y="48" width="20" height="48" rx="5" fill={accent} fillOpacity="0.6" />
-          <rect x="110" y="34" width="20" height="62" rx="5" fill={accent2} fillOpacity="0.75" />
-          <rect x="144" y="20" width="20" height="76" rx="5" fill="#69d8b5" fillOpacity="0.92" />
-          <path d="M34 80 C82 68, 124 44, 178 24 L250 16" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-          <circle cx="250" cy="16" r="5.5" fill="#69d8b5" />
-          <rect x="218" y="38" width="114" height="52" rx="14" fill="rgba(8,13,26,0.72)" stroke={accent} strokeWidth="1.6" />
-          <text x="275" y="61" textAnchor="middle" fill="#69d8b5" fontSize="13" fontWeight="800" fontFamily="monospace">xSTOCKS · RWA</text>
-          <text x="275" y="79" textAnchor="middle" fill="#fff" fontSize="10.5" fontFamily="monospace">NVDA · AAPL · TSLA</text>
+        <rect x="1" y="1" width="358" height="148" rx="26" fill={`url(#${g})`} />
+        {/* horizon light + two drifting blooms — the "film grade" of the frame */}
+        <ellipse className="st-bloom" cx="292" cy="34" rx="72" ry="52" fill={`url(#${glow})`} />
+        <ellipse className="st-bloom st-bloom--b" cx="62" cy="122" rx="66" ry="46" fill={`url(#${glow})`} opacity="0.7" />
+        <path d="M1 118h358" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+        {/* perspective floor: cheap depth, no 3D engine */}
+        <g stroke="rgba(255,255,255,0.07)" strokeWidth="1">
+          <path d="M40 148L120 118M120 148L160 118M200 148L200 118M280 148L240 118M340 148L280 118" />
         </g>
-      )}
 
-      {id === 'aparat' && (
-        <g>
-          <rect x="34" y="18" width="168" height="84" rx="16" fill="rgba(10,14,28,0.75)" stroke={accent} strokeWidth="2" />
-          <polygon points="106,44 138,60 106,76" fill="#e9a0bf" />
-          <circle cx="54" cy="34" r="4" fill="#e5bc7b" />
-          <circle cx="276" cy="60" r="34" fill="rgba(255,45,149,0.16)" stroke={accent2} strokeWidth="2" strokeDasharray="6 4" />
-          <text x="276" y="57" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800" fontFamily="monospace">APARAT</text>
-          <text x="276" y="73" textAnchor="middle" fill="#e5bc7b" fontSize="10" fontFamily="monospace">@Fbtcompany</text>
-        </g>
-      )}
+        {id === 'stocks' && (
+          <g>
+            <rect x="46" y="72" width="22" height="46" rx="7" fill={accent} fillOpacity="0.34" className="st-bar" />
+            <rect x="84" y="56" width="22" height="62" rx="7" fill={accent} fillOpacity="0.5" className="st-bar st-d1" />
+            <rect x="122" y="40" width="22" height="78" rx="7" fill={accent2} fillOpacity="0.62" className="st-bar st-d2" />
+            <rect x="160" y="24" width="22" height="94" rx="7" fill={accent2} fillOpacity="0.85" className="st-bar st-d3" />
+            <path className="st-draw" d="M34 96C86 84 128 56 182 32l74-10" stroke={`url(#${gid}-ln)`} strokeWidth="3" strokeLinecap="round" />
+            <circle className="st-pulse" cx="256" cy="22" r="6" fill={accent} />
+            <g className="st-float">
+              <rect x="212" y="56" width="128" height="62" rx="18" fill="rgba(6,11,24,0.72)" stroke={accent} strokeOpacity="0.5" />
+              <text x="276" y="82" textAnchor="middle" fill={accent} fontSize="13" fontWeight="800" fontFamily="monospace">xSTOCKS · RWA</text>
+              <text x="276" y="102" textAnchor="middle" fill="rgba(255,255,255,0.86)" fontSize="10.5" fontFamily="monospace">NVDA · AAPL · TSLA</text>
+            </g>
+          </g>
+        )}
 
-      {id === 'swap' && (
-        <g>
-          <circle cx="88" cy="60" r="34" fill="rgba(0,229,255,0.15)" stroke={accent} strokeWidth="2" />
-          <circle cx="272" cy="60" r="34" fill="rgba(20,241,149,0.15)" stroke={accent2} strokeWidth="2" />
-          <path d="M134 46h92l-12-12M226 74h-92l12 12" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-          <text x="88" y="64" textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800" fontFamily="monospace">EVM</text>
-          <text x="272" y="64" textAnchor="middle" fill="#80d6bd" fontSize="12" fontWeight="800" fontFamily="monospace">SOL</text>
-        </g>
-      )}
+        {id === 'aparat' && (
+          <g>
+            <g className="st-float">
+              <rect x="34" y="24" width="180" height="102" rx="20" fill="rgba(8,13,26,0.78)" stroke={accent} strokeOpacity="0.55" />
+              <circle className="st-pulse" cx="124" cy="75" r="26" fill={accent} fillOpacity="0.22" />
+              <path d="M115 62l24 13-24 13z" fill="#fff" />
+              <path d="M52 40h24M52 110h40" stroke={accent2} strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+            </g>
+            <g className="st-float-b">
+              <rect x="232" y="42" width="104" height="66" rx="18" fill="rgba(6,11,24,0.74)" stroke={accent2} strokeOpacity="0.5" />
+              <text x="284" y="70" textAnchor="middle" fill="#fff" fontSize="12.5" fontWeight="800" fontFamily="monospace">APARAT</text>
+              <text x="284" y="90" textAnchor="middle" fill={accent2} fontSize="10" fontFamily="monospace">@Fbtcompany</text>
+            </g>
+          </g>
+        )}
 
-      {id === 'intent' && (
-        <g>
-          <circle cx="180" cy="60" r="38" fill="rgba(124,77,255,0.2)" stroke={accent} strokeWidth="2.2" />
-          <circle cx="180" cy="60" r="20" stroke="#fff" strokeWidth="1.6" strokeDasharray="4 4" />
-          <circle cx="180" cy="60" r="7" fill="#7dcbe2" />
-          <line x1="142" y1="60" x2="72" y2="34" stroke={accent2} strokeWidth="2" />
-          <line x1="142" y1="60" x2="72" y2="86" stroke="#7dcbe2" strokeWidth="2" />
-          <line x1="218" y1="60" x2="288" y2="34" stroke="#7dcbe2" strokeWidth="2" />
-          <line x1="218" y1="60" x2="288" y2="86" stroke={accent2} strokeWidth="2" />
-          <circle cx="72" cy="34" r="7" fill={accent2} />
-          <circle cx="72" cy="86" r="7" fill="#7dcbe2" />
-          <circle cx="288" cy="34" r="7" fill="#7dcbe2" />
-          <circle cx="288" cy="86" r="7" fill={accent2} />
-        </g>
-      )}
+        {id === 'swap' && (
+          <g>
+            <circle cx="88" cy="75" r="38" fill={accent} fillOpacity="0.16" stroke={accent} strokeOpacity="0.6" strokeWidth="1.8" />
+            <circle cx="272" cy="75" r="38" fill={accent2} fillOpacity="0.16" stroke={accent2} strokeOpacity="0.6" strokeWidth="1.8" />
+            <path className="st-draw" d="M132 60h96l-13-13M228 90h-96l13 13" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+            <text x="88" y="80" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="800" fontFamily="monospace">EVM</text>
+            <text x="272" y="80" textAnchor="middle" fill={accent2} fontSize="13" fontWeight="800" fontFamily="monospace">SOL</text>
+            <circle className="st-orbit" cx="180" cy="75" r="4.5" fill="#fff" />
+          </g>
+        )}
 
-      {id === 'defi' && (
-        <g>
-          <polygon points="104,18 148,60 104,102 60,60" fill="rgba(20,241,149,0.2)" stroke={accent} strokeWidth="2.2" />
-          <rect x="176" y="26" width="148" height="68" rx="14" fill="rgba(8,13,26,0.7)" stroke={accent2} strokeWidth="1.8" />
-          <text x="250" y="54" textAnchor="middle" fill="#80d6bd" fontSize="14" fontWeight="800" fontFamily="monospace">DEFI YIELD</text>
-          <text x="250" y="75" textAnchor="middle" fill="#fff" fontSize="10.5" fontFamily="monospace">AAVE · MORPHO · KAMINO</text>
-        </g>
-      )}
+        {id === 'intent' && (
+          <g>
+            <circle cx="180" cy="75" r="42" fill={accent} fillOpacity="0.16" stroke={accent} strokeOpacity="0.6" strokeWidth="1.8" />
+            <circle className="st-spin" cx="180" cy="75" r="26" stroke={accent2} strokeWidth="1.4" strokeDasharray="5 6" opacity="0.9" />
+            <circle className="st-pulse" cx="180" cy="75" r="9" fill="#fff" fillOpacity="0.92" />
+            <g stroke={accent2} strokeWidth="1.8" opacity="0.85">
+              <path d="M138 75L70 44M138 75L70 106M222 75l68-31M222 75l68 31" />
+            </g>
+            <circle cx="70" cy="44" r="7" fill={accent2} className="st-blink" />
+            <circle cx="70" cy="106" r="7" fill={accent} className="st-blink st-d2" />
+            <circle cx="290" cy="44" r="7" fill={accent} className="st-blink st-d1" />
+            <circle cx="290" cy="106" r="7" fill={accent2} className="st-blink st-d3" />
+          </g>
+        )}
 
-      {id === 'radio' && (
-        <g>
-          {[42, 62, 82, 102, 122, 142, 162, 182, 202, 222, 242, 262, 282, 302, 322].map((x, idx) => {
-            const h = 22 + ((idx * 19) % 58);
-            const y = 60 - h / 2;
-            return (
-              <rect
-                key={x}
-                x={x - 4}
-                y={y}
-                width="8"
-                height={h}
-                rx="4"
-                fill={idx % 2 === 0 ? accent : accent2}
-                fillOpacity="0.88"
-              />
-            );
-          })}
-        </g>
-      )}
+        {id === 'defi' && (
+          <g>
+            <g className="st-float">
+              <path d="M104 22l52 26-52 26-52-26z" fill={accent} fillOpacity="0.24" stroke={accent} strokeWidth="1.8" />
+              <path d="M52 70l52 26 52-26" stroke={accent2} strokeWidth="1.8" opacity="0.85" />
+              <path d="M52 92l52 26 52-26" stroke={accent} strokeWidth="1.8" opacity="0.55" />
+            </g>
+            <g className="st-float-b">
+              <rect x="176" y="38" width="158" height="74" rx="20" fill="rgba(6,11,24,0.74)" stroke={accent2} strokeOpacity="0.5" />
+              <text x="255" y="70" textAnchor="middle" fill={accent} fontSize="14" fontWeight="800" fontFamily="monospace">DEFI YIELD</text>
+              <text x="255" y="92" textAnchor="middle" fill="rgba(255,255,255,0.85)" fontSize="10.5" fontFamily="monospace">AAVE · MORPHO · KAMINO</text>
+            </g>
+          </g>
+        )}
 
-      {id === 'orders' && (
-        <g>
-          <circle cx="88" cy="60" r="34" fill="rgba(255,179,0,0.16)" stroke={accent} strokeWidth="2.2" />
-          <path d="M88 38v22l15 9" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" />
-          <rect x="156" y="24" width="166" height="72" rx="14" fill="rgba(8,13,26,0.72)" stroke={accent2} strokeWidth="1.8" />
-          <text x="239" y="53" textAnchor="middle" fill="#e5bc7b" fontSize="13" fontWeight="800" fontFamily="monospace">DCA · LIMIT · TWAP</text>
-          <text x="239" y="74" textAnchor="middle" fill="#7dcbe2" fontSize="10.5" fontFamily="monospace">24/7 AUTO EXECUTION</text>
-        </g>
-      )}
+        {id === 'radio' && (
+          <g>
+            {[36, 58, 80, 102, 124, 146, 168, 190, 212, 234, 256, 278, 300, 322].map((x, i) => {
+              const h = 20 + ((i * 23) % 74);
+              return (
+                <rect
+                  key={x}
+                  className={`st-eq st-e${i % 5}`}
+                  x={x - 5}
+                  y={75 - h / 2}
+                  width="10"
+                  height={h}
+                  rx="5"
+                  fill={i % 2 === 0 ? accent : accent2}
+                  fillOpacity="0.9"
+                />
+              );
+            })}
+          </g>
+        )}
 
-      {id === 'ecosystem' && (
-        <g>
-          <path d="M92 20l36 14v22c0 22-15 38-36 44-21-6-36-22-36-44V34l36-14z" fill="rgba(0,229,255,0.18)" stroke={accent} strokeWidth="2.2" />
-          <path d="m79 58 9 9 19-19" stroke="#69d8b5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          <rect x="158" y="26" width="166" height="68" rx="14" fill="rgba(8,13,26,0.72)" stroke={accent2} strokeWidth="1.8" />
-          <text x="241" y="54" textAnchor="middle" fill="#fff" fontSize="12.5" fontWeight="800" fontFamily="monospace">WALLET · SHOP · INSURE</text>
-          <text x="241" y="74" textAnchor="middle" fill="#7dcbe2" fontSize="10.5" fontFamily="monospace">NON-CUSTODIAL SUPERAPP</text>
-        </g>
-      )}
-    </svg>
+        {id === 'orders' && (
+          <g>
+            <circle cx="88" cy="75" r="38" fill={accent} fillOpacity="0.16" stroke={accent} strokeOpacity="0.6" strokeWidth="1.8" />
+            <path className="st-spin-slow" d="M88 47a28 28 0 1 1-19.8 8.2" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+            <path d="M88 58v17l12 8" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            <g className="st-float-b">
+              <rect x="150" y="38" width="180" height="74" rx="20" fill="rgba(6,11,24,0.74)" stroke={accent2} strokeOpacity="0.5" />
+              <text x="240" y="70" textAnchor="middle" fill={accent2} fontSize="13" fontWeight="800" fontFamily="monospace">DCA · LIMIT · TWAP</text>
+              <text x="240" y="92" textAnchor="middle" fill={accent} fontSize="10.5" fontFamily="monospace">24/7 AUTO EXECUTION</text>
+            </g>
+          </g>
+        )}
+
+        {id === 'ecosystem' && (
+          <g>
+            <g className="st-float">
+              <path d="M92 20l40 16v26c0 25-17 43-40 50-23-7-40-25-40-50V36z" fill={accent} fillOpacity="0.2" stroke={accent} strokeWidth="2" />
+              <path className="st-draw" d="M76 62l11 11 22-23" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+            <g className="st-float-b">
+              <rect x="156" y="38" width="176" height="74" rx="20" fill="rgba(6,11,24,0.74)" stroke={accent2} strokeOpacity="0.5" />
+              <text x="244" y="70" textAnchor="middle" fill="#fff" fontSize="12.5" fontWeight="800" fontFamily="monospace">WALLET · SHOP · INSURE</text>
+              <text x="244" y="92" textAnchor="middle" fill={accent} fontSize="10.5" fontFamily="monospace">NON-CUSTODIAL SUPERAPP</text>
+            </g>
+          </g>
+        )}
+
+        {/* rising particles — the last layer of "this is a film, not a diagram" */}
+        {!still && (
+          <g className="st-motes" aria-hidden="true">
+            {[
+              { x: 48, d: 0 }, { x: 112, d: 1.4 }, { x: 176, d: 2.6 },
+              { x: 244, d: 0.8 }, { x: 308, d: 3.2 }
+            ].map((m) => (
+              <circle key={m.x} className="st-mote" cx={m.x} cy="140" r="2.4" fill="#fff" fillOpacity="0.5" style={{ animationDelay: `${m.d}s` }} />
+            ))}
+          </g>
+        )}
+      </svg>
+    </div>
   );
 }
 
@@ -358,12 +512,18 @@ export default function MarketStories({ coins = [], global = null }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
-  const isRtl = i18n.language === 'fa' || i18n.language === 'ar' || i18n.language === 'ur';
+  const lang = i18n.language || 'en';
+  const isRtl = lang === 'fa' || lang === 'ar' || lang === 'ur';
 
   const [openIndex, setOpenIndex] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [audioOn, setAudioOn] = useState(false);
+  /*
+   * The story runs itself; nothing can pause it. Kept as a constant rather
+   * than deleted so the timer effect below stays readable and so a future
+   * "hold to peek" gesture has somewhere to write.
+   */
+  const paused = false;
+  const [scoreOn, setScoreOn] = useState(false);
   const [radioItems, setRadioItems] = useState([]);
   const [radioFailed, setRadioFailed] = useState(false);
   const radioTrack = useRadioStore((s) => s.track);
@@ -389,15 +549,24 @@ export default function MarketStories({ coins = [], global = null }) {
     return () => ctrl?.destroy();
   }, []);
 
+  /*
+   * THE SAME CATALOGUE AS NEWS.
+   * `getCalm()` is the News screen's Calm tab fetcher and it caches for five
+   * minutes client-side, so this list and the News list are the same array —
+   * same order, same tracks, same artwork. That is what «آهنگ‌ها سینک با
+   * آهنگ‌های صفحه خبر باشد» means in code: one source, not two that agree.
+   */
   useEffect(() => {
     let alive = true;
-    getCalm().then((data) => { if (alive) setRadioItems(data?.items || []); })
+    getCalm()
+      .then((data) => { if (alive) setRadioItems(data?.items || []); })
       .catch(() => { if (alive) setRadioFailed(true); });
     return () => { alive = false; };
   }, []);
 
+  /* A real track taking over always wins over the synthesized score. */
   useEffect(() => {
-    if (radioPlaying) { audioRef.current?.stop(); setAudioOn(false); }
+    if (radioPlaying) { audioRef.current?.stop(); setScoreOn(false); }
   }, [radioPlaying]);
 
   const activeStory = openIndex != null ? MARKET_STORY_ITEMS[openIndex] ?? null : null;
@@ -410,7 +579,7 @@ export default function MarketStories({ coins = [], global = null }) {
       try {
         sessionStorage.setItem('fbt-seen-stories-v1', JSON.stringify([...next]));
       } catch {
-        /* ignore */
+        /* storage full or blocked — the badge simply stays lit */
       }
       return next;
     });
@@ -421,58 +590,55 @@ export default function MarketStories({ coins = [], global = null }) {
     if (!item) return;
     setOpenIndex(idx);
     setElapsedMs(0);
-    setPaused(false);
     markSeen(item.id);
+    /*
+     * Autoplay, no button. This runs inside the tap that opened the story, so
+     * it is a user gesture and every browser allows it. If the app's own radio
+     * is already playing we do NOT start the score on top of it — two sound
+     * sources at once is the single worst thing an audio UI can do.
+     */
     if (!useRadioStore.getState().playing) {
-      setAudioOn(audioRef.current.start('cinema'));
+      setScoreOn(audioRef.current.start('cinema'));
     }
   };
 
   const closeModal = () => {
     setOpenIndex(null);
     setElapsedMs(0);
-    setPaused(false);
+    /* The score belongs to the story; the RADIO does not. Closing a story
+       stops the synthesized soundtrack and deliberately leaves a chosen track
+       playing in `RadioDock`, above the router, so it survives navigation. */
     if (audioRef.current?.isPlaying()) {
       audioRef.current.stop();
     }
-    setAudioOn(false);
+    setScoreOn(false);
   };
 
   const goNextStory = () => {
     if (openIndex == null) return;
-    if (openIndex + 1 < MARKET_STORY_ITEMS.length) {
-      openStoryAt(openIndex + 1);
-    } else {
-      closeModal();
-    }
+    if (openIndex + 1 < MARKET_STORY_ITEMS.length) openStoryAt(openIndex + 1);
+    else closeModal();
   };
 
   const goPrevStory = () => {
     if (openIndex == null) return;
-    if (openIndex > 0) {
-      openStoryAt(openIndex - 1);
-    } else {
-      setElapsedMs(0);
-    }
+    if (openIndex > 0) openStoryAt(openIndex - 1);
+    else setElapsedMs(0);
   };
 
-  // Lazy-fetch live equities ONLY when the story modal is opened
+  // Live equities are fetched only once a story is actually open.
   useEffect(() => {
     if (openIndex == null || liveEquities.length > 0) return undefined;
     let alive = true;
     fetchAvantisEquities()
       .then((res) => {
-        if (alive && Array.isArray(res?.rows) && res.rows.length > 0) {
-          setLiveEquities(res.rows);
-        }
+        if (alive && Array.isArray(res?.rows) && res.rows.length > 0) setLiveEquities(res.rows);
       })
       .catch(() => {});
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [openIndex, liveEquities.length]);
 
-  // Lock body scroll and bind keyboard navigation when open
+  // Body scroll lock + keyboard navigation while open.
   useEffect(() => {
     if (openIndex == null) return undefined;
     const unlock = lockBodyScroll();
@@ -489,7 +655,6 @@ export default function MarketStories({ coins = [], global = null }) {
       if (e.key === 'Escape') closeModal();
       else if (e.key === 'ArrowRight') (isRtl ? goPrevStory() : goNextStory());
       else if (e.key === 'ArrowLeft') (isRtl ? goNextStory() : goPrevStory());
-
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -500,30 +665,21 @@ export default function MarketStories({ coins = [], global = null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openIndex, isRtl]);
 
-  // 60-second (1-minute) timer per story
+  // The 60-second story clock.
   useEffect(() => {
     if (openIndex == null || paused) return undefined;
     const stepMs = 200;
     const id = setInterval(() => {
-      setElapsedMs((prev) => {
-        const next = prev + stepMs;
-        if (next >= STORY_DURATION_MS) {
-          return STORY_DURATION_MS;
-        }
-        return next;
-      });
+      setElapsedMs((prev) => Math.min(STORY_DURATION_MS, prev + stepMs));
     }, stepMs);
     return () => clearInterval(id);
   }, [openIndex, paused]);
 
   useEffect(() => {
-    if (openIndex != null && elapsedMs >= STORY_DURATION_MS) {
-      goNextStory();
-    }
+    if (openIndex != null && elapsedMs >= STORY_DURATION_MS) goNextStory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsedMs, openIndex]);
 
-  // Top gaining / highest-returning stocks for the Stocks story
   const topStocks = useMemo(() => {
     if (liveEquities.length >= 3) {
       return [...liveEquities]
@@ -541,7 +697,6 @@ export default function MarketStories({ coins = [], global = null }) {
     return CURATED_TOP_STOCKS.slice(0, 4);
   }, [liveEquities]);
 
-  // Top gaining crypto coins for the Swap story
   const topGainerCoins = useMemo(() => {
     if (!Array.isArray(coins) || !coins.length) return [];
     return [...coins]
@@ -550,17 +705,18 @@ export default function MarketStories({ coins = [], global = null }) {
       .slice(0, 4);
   }, [coins]);
 
-  // Top volume coins for the Orders/Trading story
   const topVolumeCoins = useMemo(() => {
     if (!Array.isArray(coins) || !coins.length) return [];
-    return [...coins]
-      .sort((a, b) => (b.volume || 0) - (a.volume || 0))
-      .slice(0, 4);
+    return [...coins].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 4);
   }, [coins]);
 
   const playRadioTrack = (track) => {
+    /* Hand over to the app's real player: stop the score, then write the track
+       into the store `RadioDock` is already watching. Because the dock lives
+       above the router, this keeps playing after the story closes AND after
+       the user navigates to Swap, Wallet or anywhere else. */
     audioRef.current?.stop();
-    setAudioOn(false);
+    setScoreOn(false);
     useRadioStore.getState().play(track, radioItems);
   };
 
@@ -571,6 +727,9 @@ export default function MarketStories({ coins = [], global = null }) {
 
   const remainingSeconds = Math.max(0, Math.ceil((STORY_DURATION_MS - elapsedMs) / 1000));
   const progressPct = Math.min(100, (elapsedMs / STORY_DURATION_MS) * 100);
+  /* Any real audio — the app's radio — outranks the synthesized score in the
+     headline cue, because that is the sound the user actually hears. */
+  const soundLive = radioPlaying || scoreOn;
 
   return (
     <section
@@ -578,16 +737,16 @@ export default function MarketStories({ coins = [], global = null }) {
       aria-label={t('stories.railTitle')}
       data-testid="market-stories-rail"
     >
+      <span className="market-stories-aurora" aria-hidden="true" />
+
       <div className="row-between market-stories-head">
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 9, minWidth: 0 }}>
           <span className="market-stories-live-dot" aria-hidden="true" />
-          <span className="section-label" style={{ margin: 0 }}>
+          <span className="section-label market-stories-title" style={{ margin: 0 }}>
             {t('stories.railTitle')}
           </span>
         </div>
-        <span className="market-stories-badge mono">
-          {t('stories.railBadge')}
-        </span>
+        <span className="market-stories-badge mono">{t('stories.railBadge')}</span>
       </div>
 
       <div className="market-stories-rail" role="list">
@@ -599,26 +758,17 @@ export default function MarketStories({ coins = [], global = null }) {
               type="button"
               role="listitem"
               className={`market-story-Bubble ${isSeen ? 'is-seen' : ''}`}
+              style={{ '--story-accent': item.accent, '--story-accent2': item.accent2, '--story-ink': item.ink }}
               onClick={() => openStoryAt(idx)}
               data-testid={`market-story-item-${item.id}`}
             >
-              <span
-                className="market-story-ring"
-                style={{ '--story-ring': item.ring, '--story-accent': item.accent }}
-              >
+              <span className="market-story-ring">
                 <span className="market-story-avatar-inner">
-                  <StoryAvatarSvg id={item.id} accent={item.accent} accent2={item.accent2} />
-                </span>
-                <span
-                  className="market-story-chip mono"
-                  style={{ background: item.accent, color: '#060a14' }}
-                >
-                  {item.badge}
+                  <StoryGlyph id={item.id} accent={item.accent} accent2={item.accent2} gid={`rail-${item.id}`} />
                 </span>
               </span>
-              <span className="market-story-label">
-                {t(`stories.items.${item.id}.short`)}
-              </span>
+              <span className="market-story-chip mono">{item.badge}</span>
+              <span className="market-story-label">{t(`stories.items.${item.id}.short`)}</span>
             </button>
           );
         })}
@@ -641,96 +791,121 @@ export default function MarketStories({ coins = [], global = null }) {
                 <motion.div
                   ref={dialogRef}
                   className="market-story-dialog market-glass-surface"
-                  style={{ '--story-accent': activeStory.accent, '--story-accent2': activeStory.accent2 }}
+                  style={{ '--story-accent': activeStory.accent, '--story-accent2': activeStory.accent2, '--story-ink': activeStory.ink }}
                   role="dialog"
                   aria-modal="true"
                   aria-label={t(`stories.items.${activeStory.id}.title`)}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 14 }}
-                  transition={{ duration: still ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: still ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  {/* ─── 60-SECOND SEGMENTED STORY PROGRESS BARS ────────── */}
-                  <div className="market-story-progress-row" data-testid="story-progress-bars">
+                  <span className="market-story-aurora" aria-hidden="true">
+                    <i className="market-story-aurora-a" />
+                    <i className="market-story-aurora-b" />
+                    <i className="market-story-aurora-grid" />
+                  </span>
+
+                  {/* ─── PROGRESS: eight circles that fill as each story runs ── */}
+                  <div
+                    className="market-story-progress-row"
+                    data-testid="story-progress-bars"
+                    role="group"
+                    aria-label={t('stories.progressAria')}
+                  >
                     {MARKET_STORY_ITEMS.map((st, idx) => {
-                      const widthPct =
-                        idx < openIndex ? 100 : idx === openIndex ? progressPct : 0;
+                      const pct = idx < openIndex ? 100 : idx === openIndex ? progressPct : 0;
+                      const state = idx < openIndex ? 'is-done' : idx === openIndex ? 'is-live' : '';
                       return (
                         <button
                           key={st.id}
                           type="button"
-                          className="market-story-progress-seg"
+                          className={`market-story-progress-seg ${state}`}
+                          style={{
+                            '--story-accent': st.accent,
+                            '--story-accent2': st.accent2,
+                            '--story-ink': st.ink,
+                            '--p': pct.toFixed(2)
+                          }}
                           onClick={() => openStoryAt(idx)}
                           aria-label={t(`stories.items.${st.id}.short`)}
+                          aria-current={idx === openIndex ? 'true' : undefined}
                         >
-                          <StoryAvatarSvg id={st.id} accent={st.accent} accent2={st.accent2} />
-                          <span
-                            className="market-story-progress-fill"
-                            style={{
-                              width: `${widthPct}%`,
-                              background: st.ring
-                            }}
-                          />
+                          <span className="market-story-progress-fill" aria-hidden="true" />
+                          <span className="market-story-progress-disc" aria-hidden="true">
+                            <StoryGlyph id={st.id} accent={st.accent} accent2={st.accent2} gid={`seg-${st.id}`} />
+                          </span>
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* ─── STORY HEADER BAR ───────────────────────────────── */}
+                  {/* ─── HEADLINE: full title, kicker, badge, countdown ─────── */}
                   <div className="market-story-top-bar">
-                    <div className="row" style={{ gap: 10, minWidth: 0 }}>
-                      <span
-                        className="market-story-mini-ring"
-                        style={{ background: activeStory.ring }}
-                      >
-                        <StoryAvatarSvg
-                          id={activeStory.id}
-                          accent={activeStory.accent}
-                          accent2={activeStory.accent2}
-                        />
+                    <div className="market-story-head-id">
+                      <span className="market-story-head-kicker">
+                        <IconSparkle width={12} height={12} />
+                        <span>{t(`stories.items.${activeStory.id}.kicker`)}</span>
                       </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="market-story-head-title">
-                          {t(`stories.items.${activeStory.id}.title`)}
-                        </div>
-                        <div className="market-story-head-sub mono">
-                          {activeStory.badge} · {remainingSeconds}s
-                        </div>
+                      <h2 className="market-story-head-title">
+                        {t(`stories.items.${activeStory.id}.title`)}
+                      </h2>
+                      <div className="market-story-head-sub">
+                        <span className="market-story-head-badge mono">{activeStory.badge}</span>
+                        <span className={`market-story-eq ${soundLive ? 'is-live' : ''}`} aria-hidden="true">
+                          <i /><i /><i /><i />
+                        </span>
+                        <span className="market-story-sound-note">
+                          {soundLive
+                            ? (radioPlaying ? t('stories.controls.musicOn') : t('stories.score.cue'))
+                            : t('stories.score.silent')}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="row" style={{ gap: 6 }}>
+                    <div className="market-story-top-actions">
+                      <span className="market-story-count-pill mono" aria-live="off">
+                        {remainingSeconds}s
+                      </span>
                       <button
                         type="button"
-                        className="market-story-ctrl-btn"
+                        className="market-story-close-btn"
                         onClick={closeModal}
                         aria-label={t('common.close')}
                         data-testid="story-close-btn"
                       >
-                        <IconX width={15} height={15} />
+                        <IconX width={16} height={16} />
                       </button>
                     </div>
                   </div>
 
-                  {/* ─── ILLUSTRATOR STAGE ARTWORK ──────────────────────── */}
-                  <div className="market-story-stage-wrap">
-                    <StoryStageIllustration
-                      id={activeStory.id}
-                      accent={activeStory.accent}
-                      accent2={activeStory.accent2}
-                    />
-                  </div>
+                  {/* ─── CINEMATIC STAGE (or the promo film, when configured) ── */}
+                  <StoryStage
+                    item={activeStory}
+                    gid={`stage-${activeStory.id}`}
+                    still={still}
+                    t={t}
+                    promo={STORY_PROMO_VIDEO}
+                  />
 
-                  {/* ─── STORY BODY CONTENT PER SECTION ─────────────────── */}
+                  {/* ─── BODY ─────────────────────────────────────────────────── */}
                   <div className="market-story-body">
                     <p className="market-story-lead">
                       {t(`stories.items.${activeStory.id}.subtitle`)}
                     </p>
 
-                    {/* 1. STOCKS & RWA STORY: Top Gainers & Highest-Yielding Stocks */}
+                    <div className="market-story-facts">
+                      {[1, 2, 3].map((n) => (
+                        <span key={n} className="market-story-fact">
+                          {t(`stories.items.${activeStory.id}.hl${n}`)}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* 1 · STOCKS & RWA */}
                     {activeStory.id === 'stocks' && (
                       <div className="market-story-panel" data-testid="story-panel-stocks">
-                        <div className="row-between" style={{ marginBottom: 8 }}>
+                        <div className="market-story-panel-head">
                           <span className="market-story-panel-title">
                             {t('stories.stocks.topGainersTitle')}
                           </span>
@@ -744,56 +919,48 @@ export default function MarketStories({ coins = [], global = null }) {
                             const up = (stk.change24h ?? 0) >= 0;
                             const barW = Math.min(100, Math.max(18, Math.abs(stk.change24h || 2) * 14));
                             return (
-                              <div
+                              <button
                                 key={stk.symbol}
+                                type="button"
                                 className="market-story-stock-row"
                                 onClick={() => handlePrimaryNavigate('/stocks')}
                               >
-                                <span className="market-story-rank mono">#{i + 1}</span>
+                                <span className="market-story-rank mono">{i + 1}</span>
                                 <img
                                   src={tickerLogo(stk.symbol)}
-                                  alt={stk.symbol}
+                                  alt=""
                                   className="market-story-stock-logo"
                                   loading="lazy"
                                   referrerPolicy="no-referrer"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                 />
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div className="row" style={{ gap: 6 }}>
+                                <span className="market-story-stock-meta">
+                                  <span className="market-story-stock-line">
                                     <span className="market-story-stock-sym mono">{stk.symbol}</span>
                                     <span className="market-story-stock-tag">{stk.tag}</span>
-                                  </div>
-                                  <div className="market-story-stock-name">{stk.name}</div>
-                                  <div className="market-story-return-bar">
-                                    <span
-                                      style={{
-                                        width: `${barW}%`,
-                                        background: up ? 'var(--up)' : 'var(--down)'
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                <div style={{ textAlign: 'end' }}>
-                                  <div className="mono market-story-stock-price">
-                                    {fmtUsd(stk.price)}
-                                  </div>
+                                  </span>
+                                  <span className="market-story-stock-name">{stk.name}</span>
+                                  <span className="market-story-return-bar">
+                                    <span style={{ width: `${barW}%`, background: up ? 'var(--up)' : 'var(--down)' }} />
+                                  </span>
+                                </span>
+                                <span className="market-story-stock-quote">
+                                  <span className="mono market-story-stock-price">{fmtUsd(stk.price)}</span>
                                   <span className={`pill ${up ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 10.5 }}>
                                     {fmtPct(stk.change24h)}
                                   </span>
-                                </div>
-                              </div>
+                                </span>
+                              </button>
                             );
                           })}
                         </div>
                       </div>
                     )}
 
-                    {/* 2. APARAT VIDEO ACADEMY STORY */}
+                    {/* 2 · FILM ACADEMY (Aparat) */}
                     {activeStory.id === 'aparat' && (
                       <div className="market-story-panel" data-testid="story-panel-aparat">
-                        <div className="row-between" style={{ marginBottom: 8 }}>
+                        <div className="market-story-panel-head">
                           <span className="market-story-panel-title">
                             {t('stories.aparat.featuredTitle')}
                           </span>
@@ -804,22 +971,23 @@ export default function MarketStories({ coins = [], global = null }) {
 
                         <div className="market-story-feature-grid">
                           {['wallet', 'swap', 'stocks', 'ai'].map((cid, i) => (
-                            <div
+                            <button
                               key={cid}
+                              type="button"
                               className="market-story-feature-card"
                               onClick={() => handlePrimaryNavigate('/aparat')}
                             >
-                              <div className="row-between">
-                                <span className="mono market-story-rank">0{i + 1}</span>
-                                <IconVideo width={14} height={14} />
-                              </div>
-                              <div className="market-story-feature-name">
+                              <span className="market-story-feature-top">
+                                <span className="mono market-story-feature-idx">0{i + 1}</span>
+                                <IconVideo width={15} height={15} />
+                              </span>
+                              <span className="market-story-feature-name">
                                 {t(`aparat.courses.${cid}.title`)}
-                              </div>
-                              <div className="faint" style={{ fontSize: 10.5 }}>
+                              </span>
+                              <span className="market-story-feature-desc">
                                 {t(`aparat.courses.${cid}.step1`)}
-                              </div>
-                            </div>
+                              </span>
+                            </button>
                           ))}
                         </div>
 
@@ -835,10 +1003,10 @@ export default function MarketStories({ coins = [], global = null }) {
                       </div>
                     )}
 
-                    {/* 3. SMART SWAP & SOLANA STORY */}
+                    {/* 3 · SMART SWAP & SOLANA */}
                     {activeStory.id === 'swap' && (
                       <div className="market-story-panel" data-testid="story-panel-swap">
-                        <div className="row-between" style={{ marginBottom: 8 }}>
+                        <div className="market-story-panel-head">
                           <span className="market-story-panel-title">
                             {t('stories.swap.topMoversTitle')}
                           </span>
@@ -847,168 +1015,194 @@ export default function MarketStories({ coins = [], global = null }) {
 
                         <div className="market-story-stock-list">
                           {topGainerCoins.map((c, i) => (
-                            <div
+                            <button
                               key={c.id}
+                              type="button"
                               className="market-story-stock-row"
                               onClick={() => handlePrimaryNavigate(`/coin/${c.id}`)}
                             >
-                              <span className="market-story-rank mono">#{i + 1}</span>
-                              <CoinLogo coin={c} size="thumb" px={28} />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="market-story-stock-sym mono">{c.symbol}</div>
-                                <div className="market-story-stock-name">{c.name}</div>
-                              </div>
-                              <div style={{ textAlign: 'end' }}>
-                                <div className="mono market-story-stock-price">
-                                  {fmtUsd(c.price)}
-                                </div>
+                              <span className="market-story-rank mono">{i + 1}</span>
+                              <CoinLogo coin={c} size="thumb" px={30} />
+                              <span className="market-story-stock-meta">
+                                <span className="market-story-stock-sym mono">{c.symbol}</span>
+                                <span className="market-story-stock-name">{c.name}</span>
+                              </span>
+                              <span className="market-story-stock-quote">
+                                <span className="mono market-story-stock-price">{fmtUsd(c.price)}</span>
                                 <span className={`pill ${(c.change24h ?? 0) >= 0 ? 'pill-up' : 'pill-down'}`} style={{ fontSize: 10.5 }}>
                                   {fmtPct(c.change24h ?? 0)}
                                 </span>
-                              </div>
-                            </div>
+                              </span>
+                            </button>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* 4. INTENT AI & SMART MONEY STORY */}
+                    {/* 4 · INTENT AI & SMART MONEY */}
                     {activeStory.id === 'intent' && (
                       <div className="market-story-panel" data-testid="story-panel-intent">
+                        <div className="market-story-panel-head">
+                          <span className="market-story-panel-title">{t('stories.intent.panelTitle')}</span>
+                          <span className="mono market-story-tag-accent">NEURAL OS</span>
+                        </div>
                         <div className="market-story-feature-grid">
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/intent')}>
-                            <span className="mono market-story-tag-accent">NEURAL OS</span>
-                            <div className="market-story-feature-name">{t('stories.intent.cmd1Title')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.intent.cmd1Desc')}</div>
-                          </div>
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/smart-money')}>
-                            <span className="mono market-story-tag-accent">WHALE RADAR</span>
-                            <div className="market-story-feature-name">{t('stories.intent.cmd2Title')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.intent.cmd2Desc')}</div>
-                          </div>
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/signals')}>
-                            <span className="mono market-story-tag-accent">SIGNALS</span>
-                            <div className="market-story-feature-name">{t('stories.intent.cmd3Title')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.intent.cmd3Desc')}</div>
-                          </div>
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/global')}>
-                            <span className="mono market-story-tag-accent">MACRO AI</span>
-                            <div className="market-story-feature-name">{t('stories.intent.cmd4Title')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.intent.cmd4Desc')}</div>
-                          </div>
+                          {[
+                            { tag: 'NEURAL OS', to: '/intent', title: 'cmd1Title', desc: 'cmd1Desc' },
+                            { tag: 'WHALE RADAR', to: '/smart-money', title: 'cmd2Title', desc: 'cmd2Desc' },
+                            { tag: 'SIGNALS', to: '/signals', title: 'cmd3Title', desc: 'cmd3Desc' },
+                            { tag: 'MACRO AI', to: '/global', title: 'cmd4Title', desc: 'cmd4Desc' }
+                          ].map((f) => (
+                            <button
+                              key={f.to}
+                              type="button"
+                              className="market-story-feature-card"
+                              onClick={() => handlePrimaryNavigate(f.to)}
+                            >
+                              <span className="mono market-story-tag-accent">{f.tag}</span>
+                              <span className="market-story-feature-name">{t(`stories.intent.${f.title}`)}</span>
+                              <span className="market-story-feature-desc">{t(`stories.intent.${f.desc}`)}</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
 
-                    {/* 5. DEFI FARM & LENDING STORY */}
+                    {/* 5 · DEFI FARM & LENDING */}
                     {activeStory.id === 'defi' && (
                       <div className="market-story-panel" data-testid="story-panel-defi">
+                        <div className="market-story-panel-head">
+                          <span className="market-story-panel-title">{t('stories.defi.panelTitle')}</span>
+                          <span className="mono market-story-tag-accent">{t('stories.defi.liveTag')}</span>
+                        </div>
                         <div className="market-story-stock-list">
                           {DEFI_HIGHLIGHTS.map((d) => (
-                            <div
+                            <button
                               key={d.id}
+                              type="button"
                               className="market-story-stock-row"
                               onClick={() => handlePrimaryNavigate('/farm')}
                             >
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="market-story-stock-sym">{d.protocol}</div>
-                                <div className="market-story-stock-name mono">{d.asset}</div>
-                              </div>
-                              <span className="market-story-stock-tag">{d.badge}</span>
-                              <span className="pill pill-up mono" style={{ fontSize: 11.5 }}>
-                                APY {d.apy}
+                              <span className="market-story-stock-meta">
+                                <span className="market-story-stock-sym">{d.protocol}</span>
+                                <span className="market-story-stock-name mono">{d.asset}</span>
                               </span>
-                            </div>
+                              <span className="market-story-stock-tag">{d.badge}</span>
+                              <span className="pill pill-up mono" style={{ fontSize: 11.5 }}>APY {d.apy}</span>
+                            </button>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* 6. CRYPTO RADIO & AMBIENT MUSIC STORY */}
+                    {/* 6 · CRYPTO RADIO — the app's own player, in the background */}
                     {activeStory.id === 'radio' && (
                       <div className="market-story-panel" data-testid="story-panel-radio">
-                        <div className="row-between" style={{ marginBottom: 8 }}>
-                          <span className="market-story-panel-title">
-                            {t('stories.radio.studioTitle')}
-                          </span>
-                          <span className="mono market-story-tag-accent">
+                        <div className="market-story-panel-head">
+                          <span className="market-story-panel-title">{t('stories.radio.studioTitle')}</span>
+                          <span className={`mono market-story-tag-accent ${radioPlaying ? 'is-live' : ''}`}>
                             {radioPlaying ? t('stories.controls.musicOn') : 'CRYPTO RADIO'}
                           </span>
                         </div>
 
                         <div className="market-story-radio-tracks">
-                          {radioItems.slice(0, 5).map((track) => (
-                            <button key={track.id} type="button"
-                              className={`market-story-radio-track ${radioTrack?.id === track.id ? 'is-active' : ''}`}
-                              onClick={() => playRadioTrack(track)}>
-                              <IconVolume width={20} height={20} />
-                              <span>{track.title}</span>
-                              <span aria-hidden="true">↗</span>
-                            </button>
-                          ))}
-                          {!radioItems.length && <p role="status">{t(radioFailed ? 'common.error' : 'common.loading')}</p>}
+                          {radioItems.slice(0, 5).map((track) => {
+                            const active = radioTrack?.id === track.id;
+                            return (
+                              <button
+                                key={track.id}
+                                type="button"
+                                className={`market-story-radio-track ${active ? 'is-active' : ''}`}
+                                onClick={() => playRadioTrack(track)}
+                              >
+                                <span className="market-story-radio-icon" aria-hidden="true">
+                                  <IconVolume width={18} height={18} />
+                                </span>
+                                <span className="market-story-radio-meta">
+                                  <span className="market-story-radio-title">{track.title}</span>
+                                  <span className="market-story-radio-sub">
+                                    {active && radioPlaying
+                                      ? t('stories.radio.backgroundHint')
+                                      : t('stories.radio.tapHint')}
+                                  </span>
+                                </span>
+                                <span className={`market-story-radio-eq ${active && radioPlaying ? 'is-live' : ''}`} aria-hidden="true">
+                                  <i /><i /><i />
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {!radioItems.length && (
+                            <p className="market-story-radio-empty" role="status">
+                              {t(radioFailed ? 'common.error' : 'common.loading')}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
 
-                    {/* 7. AUTO ORDERS & TRADING STORY */}
+                    {/* 7 · AUTO ORDERS */}
                     {activeStory.id === 'orders' && (
                       <div className="market-story-panel" data-testid="story-panel-orders">
+                        <div className="market-story-panel-head">
+                          <span className="market-story-panel-title">{t('stories.orders.panelTitle')}</span>
+                          <span className="mono market-story-tag-accent">{t('market.volume24h')}</span>
+                        </div>
                         <div className="market-story-stock-list">
                           {topVolumeCoins.map((c) => (
-                            <div
+                            <button
                               key={c.id}
+                              type="button"
                               className="market-story-stock-row"
                               onClick={() => handlePrimaryNavigate('/orders')}
                             >
-                              <CoinLogo coin={c} size="thumb" px={26} />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div className="market-story-stock-sym mono">{c.symbol}</div>
-                                <div className="market-story-stock-name">
+                              <CoinLogo coin={c} size="thumb" px={30} />
+                              <span className="market-story-stock-meta">
+                                <span className="market-story-stock-sym mono">{c.symbol}</span>
+                                <span className="market-story-stock-name">
                                   {t('market.volume24h')}: {fmtCompact(c.volume || 0)}
-                                </div>
-                              </div>
-                              <span className="mono market-story-stock-price">
-                                {fmtUsd(c.price)}
+                                </span>
                               </span>
-                            </div>
+                              <span className="mono market-story-stock-price">{fmtUsd(c.price)}</span>
+                            </button>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* 8. WALLET, SHOP, LAUNCHPAD & INSURANCE STORY */}
+                    {/* 8 · WALLET, SHOP, LAUNCHPAD & INSURANCE */}
                     {activeStory.id === 'ecosystem' && (
                       <div className="market-story-panel" data-testid="story-panel-ecosystem">
+                        <div className="market-story-panel-head">
+                          <span className="market-story-panel-title">{t('stories.ecosystem.panelTitle')}</span>
+                          <span className="mono market-story-tag-accent">SUPERAPP</span>
+                        </div>
                         <div className="market-story-feature-grid">
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/wallet')}>
-                            <span className="mono market-story-tag-accent">WALLET</span>
-                            <div className="market-story-feature-name">{t('stories.ecosystem.walletTitle')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>
-                              {global?.coins ? `${global.coins.toLocaleString()}+ Assets` : 'EVM · Solana · BTC'}
-                            </div>
-                          </div>
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/shop')}>
-                            <span className="mono market-story-tag-accent">SHOP</span>
-                            <div className="market-story-feature-name">{t('stories.ecosystem.shopTitle')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.ecosystem.shopDesc')}</div>
-                          </div>
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/launch')}>
-                            <span className="mono market-story-tag-accent">LAUNCH</span>
-                            <div className="market-story-feature-name">{t('stories.ecosystem.launchTitle')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.ecosystem.launchDesc')}</div>
-                          </div>
-                          <div className="market-story-feature-card" onClick={() => handlePrimaryNavigate('/insurance')}>
-                            <span className="mono market-story-tag-accent">SHIELD</span>
-                            <div className="market-story-feature-name">{t('stories.ecosystem.insureTitle')}</div>
-                            <div className="faint" style={{ fontSize: 10.5 }}>{t('stories.ecosystem.insureDesc')}</div>
-                          </div>
+                          {[
+                            { tag: 'WALLET', to: '/wallet', title: 'walletTitle', desc: global?.coins ? `${global.coins.toLocaleString()}+ Assets` : 'EVM · Solana · BTC' },
+                            { tag: 'SHOP', to: '/shop', title: 'shopTitle', descKey: 'shopDesc' },
+                            { tag: 'LAUNCH', to: '/launch', title: 'launchTitle', descKey: 'launchDesc' },
+                            { tag: 'SHIELD', to: '/insurance', title: 'insureTitle', descKey: 'insureDesc' }
+                          ].map((f) => (
+                            <button
+                              key={f.to}
+                              type="button"
+                              className="market-story-feature-card"
+                              onClick={() => handlePrimaryNavigate(f.to)}
+                            >
+                              <span className="mono market-story-tag-accent">{f.tag}</span>
+                              <span className="market-story-feature-name">{t(`stories.ecosystem.${f.title}`)}</span>
+                              <span className="market-story-feature-desc">
+                                {f.desc ?? t(`stories.ecosystem.${f.descKey}`)}
+                              </span>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* ─── STORY FOOTER: PREV / NEXT + PRIMARY SECTION CTA ─ */}
+                  {/* ─── FOOTER: quick links + prev / primary CTA / next ────── */}
                   <div className="market-story-footer">
                     {activeStory.secondaryRoutes?.length > 0 && (
                       <div className="market-story-quick-links">
@@ -1016,7 +1210,7 @@ export default function MarketStories({ coins = [], global = null }) {
                           <button
                             key={sr.to + sr.labelKey}
                             type="button"
-                            className="tag market-story-quick-chip"
+                            className="market-story-quick-chip"
                             onClick={() => handlePrimaryNavigate(sr.to)}
                           >
                             {t(sr.labelKey)}
@@ -1037,12 +1231,14 @@ export default function MarketStories({ coins = [], global = null }) {
 
                       <button
                         type="button"
-                        className="btn btn-primary market-story-primary-cta"
-                        style={{ background: activeStory.ring }}
+                        className="market-story-primary-cta"
                         onClick={() => handlePrimaryNavigate(activeStory.route)}
                         data-testid={`story-cta-${activeStory.id}`}
                       >
                         <span>{t(`stories.items.${activeStory.id}.cta`)}</span>
+                        <span className="market-story-cta-arrow" aria-hidden="true">
+                          {isRtl ? <IconChevronLeft width={15} height={15} /> : <IconChevronRight width={15} height={15} />}
+                        </span>
                       </button>
 
                       <button

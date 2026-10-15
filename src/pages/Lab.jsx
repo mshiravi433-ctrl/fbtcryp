@@ -278,10 +278,59 @@ export default function Lab() {
                   style={{ overflow: 'hidden' }}
                 >
                   <div className="lab2-grid" style={{ paddingTop: 14 }}>
-                    {(i18n.resolvedLanguage || i18n.language).split('-')[0] === 'fa' && (
-                      <LabCard icon="cap" accent="magenta" index={3}
-                        title={t('nav.aparat')} sub="آموزش تصویری سواپ، سهام و امنیت کیف پول"
-                        onClick={() => navigate('/aparat')} />
+                    {/*
+                      ─── THE PERSIAN VIDEO ACADEMY ─────────────────────────
+                      «دکمه فیلم‌های آموزشی را از منو بیشتر ببر و بزار داخل
+                      صفحه آزمایشگاه، بخش امکانات بیشتر، و اینکه فقط با زبان
+                      فارسی که انتخاب می‌شه این گزینه بیاد.»
+
+                      Gated on the RESOLVED language, not the requested one:
+                      `i18n.language` can still read `fa-IR` or fall back to a
+                      detector value while the UI is rendering English, and a
+                      tile that appears in an English app and opens six Farsi
+                      videos is the exact mismatch the gate exists to prevent.
+
+                      It is its own card rather than a fourth `LabCard` because
+                      it is not the same kind of thing: the three tools beside
+                      it are simulators inside the Lab, this is a doorway out to
+                      a video library. Same grid, different weight, so it spans
+                      the full row and carries the film-strip art.
+                    */}
+                    {(i18n.resolvedLanguage || i18n.language || '').split('-')[0] === 'fa' && (
+                      <motion.button
+                        type="button"
+                        className="lab2-academy-card acc-magenta"
+                        data-testid="lab-academy-card"
+                        onClick={() => {
+                          haptic?.('select');
+                          navigate('/aparat');
+                        }}
+                        initial={still ? false : { opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4, ease: LAB_EASE, delay: still ? 0 : 0.06 }}
+                      >
+                        <span className="lab2-academy-glow" aria-hidden="true" />
+                        <span className="lab2-academy-media" aria-hidden="true">
+                          <LabIcon name="film" width={26} height={26} />
+                          <span className="lab2-academy-play">
+                            <LabIcon name="play" width={12} height={12} />
+                          </span>
+                          <span className="lab2-academy-strip">
+                            <i /><i /><i /><i /><i />
+                          </span>
+                        </span>
+                        <span className="lab2-academy-copy">
+                          <span className="lab2-academy-kicker">
+                            <span className="lab2-academy-badge">{t('lab2.cards.aparat.badge')}</span>
+                            <span>{t('lab2.cards.aparat.kicker')}</span>
+                          </span>
+                          <span className="lab2-academy-title">{t('lab2.cards.aparat.title')}</span>
+                          <span className="lab2-academy-sub">{t('lab2.cards.aparat.sub')}</span>
+                        </span>
+                        <span className="lab2-academy-arrow" aria-hidden="true">
+                          <LabIcon name="next" width={14} height={14} />
+                        </span>
+                      </motion.button>
                     )}
                     {MORE_TOOLS.map((m, i) => (
                       <LabCard

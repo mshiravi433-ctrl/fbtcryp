@@ -23,9 +23,15 @@
  * (test/i18n-probe.jsx) and asserting English strings here would only make this
  * file churn every time a translation is reworded.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+/* Mutable so one suite can render the Lab in Persian and another in English —
+   the video-academy doorway is gated on the resolved language, and a gate that
+   is never tested from both sides is a gate nobody has verified. */
+const LANG = vi.hoisted(() => ({ current: 'fa' }));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -35,7 +41,11 @@ vi.mock('react-i18next', () => ({
       if (typeof opt === 'object' && opt) return key;
       return typeof opt === 'string' ? opt : key;
     },
-    i18n: { language: 'fa', changeLanguage: () => {} }
+    i18n: {
+      language: LANG.current,
+      resolvedLanguage: LANG.current,
+      changeLanguage: (l) => { LANG.current = l; }
+    }
   })
 }));
 
@@ -74,6 +84,7 @@ async function mount(url) {
 
 beforeEach(() => {
   localStorage.clear();
+  LANG.current = 'fa';
 });
 
 describe('Lab shell', () => {
@@ -153,6 +164,76 @@ describe.each(TOOLS)('Lab tool · $id', ({ id }) => {
     expect(container.querySelector('.lab2-group')).toBeFalsy();
     expect(container.innerHTML).not.toContain('NaN');
 
+    unmount();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE PERSIAN VIDEO ACADEMY DOORWAY
+   «دکمه فیلم‌های آموزشی را از منو بیشتر ببر و بزار داخل صفحه آزمایشگاه، بخش
+    امکانات بیشتر، و اینکه فقط با زبان فارسی که انتخاب می‌شه این گزینه بیاد …
+    پخش موسیقی نداشته باشد»
+   Four assertions, one per clause: it is OUT of the More drawer, it is IN the
+   Lab's more-tools fold, it is Persian-only, and the Lab makes no sound.
+   ══════════════════════════════════════════════════════════════════════════ */
+describe('Lab · Persian video academy', () => {
+  it('lives inside the more-tools fold, as its own full-width card', async () => {
+    const { container, unmount } = await mount('/lab');
+
+    // Closed by default: the fold has to be opened the way a thumb would.
+    expect(container.querySelector('[data-testid="lab-academy-card"]')).toBeNull();
+    fireEvent.click(container.querySelector('.lab2-more-trigger'));
+
+    const card = container.querySelector('[data-testid="lab-academy-card"]');
+    expect(card, 'the academy card must be in the more-tools fold').toBeTruthy();
+    expect(container.querySelector('.lab2-more-panel').contains(card)).toBe(true);
+    expect(card.textContent).toContain('lab2.cards.aparat.title');
+    expect(card.textContent).toContain('lab2.cards.aparat.sub');
+    // Its own art, not a reused 44px icon tile.
+    expect(card.querySelector('.lab2-academy-media')).toBeTruthy();
+    expect(card.classList.contains('lab2-card')).toBe(false);
+    unmount();
+  });
+
+  it('appears in Persian and in no other language', async () => {
+    LANG.current = 'en';
+    const { container, unmount } = await mount('/lab');
+    fireEvent.click(container.querySelector('.lab2-more-trigger'));
+
+    expect(container.querySelector('[data-testid="lab-academy-card"]')).toBeNull();
+    // The three simulators beside it are untouched by the gate.
+    expect(container.querySelectorAll('.lab2-more-panel .lab2-card')).toHaveLength(3);
+    unmount();
+  });
+
+  it('is gone from the More drawer, route and all translations intact', () => {
+    const sheet = readFileSync('src/components/MoreSheet.jsx', 'utf8');
+    expect(sheet).not.toMatch(/to:\s*'\/aparat'/);
+    expect(sheet).not.toMatch(/nav\.aparat/);
+    // An icon imported by nothing is how a removed tile comes back in a merge.
+    expect(sheet).not.toMatch(/IconVideo/);
+
+    // A menu entry is discovery; a route is a contract. The page still resolves.
+    const app = readFileSync('src/App.jsx', 'utf8');
+    expect(app).toMatch(/path="\/aparat"/);
+  });
+
+  it('makes no sound: no media element, no ambient controller', async () => {
+    const { container, unmount } = await mount('/lab');
+    fireEvent.click(container.querySelector('.lab2-more-trigger'));
+    expect(container.querySelectorAll('audio, video')).toHaveLength(0);
+
+    for (const f of [
+      'src/pages/Lab.jsx',
+      'src/components/Lab/Shared.jsx',
+      'src/components/Lab/PracticeGroup.jsx',
+      'src/components/Lab/LearnGroup.jsx',
+      'src/components/Lab/AdvancedGroup.jsx'
+    ]) {
+      const src = readFileSync(f, 'utf8');
+      expect(src, `${f} must not import the story score`).not.toMatch(/storyAudio|createStoryAmbientController/);
+      expect(src, `${f} must not mount a media element`).not.toMatch(/new Audio\(|<audio|<video/);
+    }
     unmount();
   });
 });
