@@ -194,6 +194,41 @@ export const GLOBAL_PAGE_STYLES = `
   .gw-tile-dial { position: absolute; inset-inline: 0; bottom: 0; height: 3px; direction: ltr; background: color-mix(in srgb, var(--text-1) 8%, transparent); }
   .gw-tile-dial i { position: absolute; inset-block: 0; inset-inline-start: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 40%, transparent), var(--tone)); transition: width .8s cubic-bezier(.3,.7,.2,1); }
 
+  /* ══ the climate tile: a weather window behind frosted glass ══════════
+     (the sky, the pane and the palettes live in sky.styles.js) */
+  .gw-tile.gw-climate-tile {
+    --tone: var(--sky-acc);
+    --text-1: #ffffff; --text-2: rgba(240,246,255,.86); --text-3: rgba(226,236,250,.72);
+    gap: 0; min-height: 214px; padding: 12px; isolation: isolate; color: var(--text-1);
+    background: #0b1020;
+    border-color: color-mix(in srgb, var(--sky-acc) 46%, rgba(255,255,255,.08));
+    box-shadow: 0 26px 50px -34px color-mix(in srgb, var(--sky-acc) 90%, transparent), inset 0 1px 0 rgba(255,255,255,.1);
+  }
+  .gw-tile.gw-climate-tile:hover { border-color: color-mix(in srgb, var(--sky-acc) 70%, transparent); box-shadow: 0 30px 56px -32px color-mix(in srgb, var(--sky-acc) 95%, transparent); }
+  .gw-climate-tile .gw-glass { flex: 1; display: flex; flex-direction: column; gap: 7px; width: min(64%, 380px); padding: 13px 14px 12px; }
+  .gw-climate-tile .gw-tile-title { font-size: 12px; }
+  .gw-climate-tile .gw-tile-value { align-items: baseline; gap: 7px; min-height: 0; }
+  .gw-tile.gw-climate-tile .gw-tile-value .gw-v { font-size: 42px; line-height: 1; letter-spacing: -.5px;
+    text-shadow: 0 8px 26px color-mix(in srgb, var(--sky-acc) 55%, transparent); }
+  .gw-climate-tile .gw-tile-value small { font-size: 11px; color: var(--text-2); }
+  .gw-climate-tile .gw-tile-word {
+    align-self: flex-start; margin: 0; display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px;
+    font-size: 11.5px; color: var(--text-1); background: color-mix(in srgb, var(--sky-acc) 30%, rgba(255,255,255,.06));
+    border: 1px solid color-mix(in srgb, var(--sky-acc) 62%, transparent);
+  }
+  .gw-climate-tile .gw-tile-word::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--sky-acc); box-shadow: 0 0 10px var(--sky-acc); }
+  .gw-climate-scale { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+  .gw-climate-track { position: relative; height: 6px; border-radius: 999px; direction: ltr;
+    background: linear-gradient(90deg, #f43f5e, #f59e0b 40%, #facc15 56%, #4ade80 80%, #22c55e); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+  .gw-climate-track i { position: absolute; top: 50%; width: 13px; height: 13px; margin-left: -6.5px; margin-top: -6.5px; border-radius: 50%; background: #fff;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--sky-acc) 55%, transparent), 0 0 14px 2px color-mix(in srgb, var(--sky-acc) 70%, transparent); }
+  .gw-climate-ends { display: flex; justify-content: space-between; direction: ltr; }
+  .gw-climate-ends b { font-size: 8.5px; font-weight: 800; color: var(--text-3); }
+  .gw-climate-tile .gw-tile-sub { color: var(--text-2); }
+  .gw-climate-tile .gw-tile-foot { padding-top: 4px; }
+  .gw-climate-tile .gw-tile-nav { color: var(--text-1); opacity: .85; }
+  @media (max-width: 380px) { .gw-climate-tile .gw-glass { width: 72%; } }
+
   .gw-msgs { margin-top: 18px; }
   .gw-msgs-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 900; color: var(--text-1); }
   .gw-msgs-h small { margin-inline-start: auto; font-size: 10px; font-weight: 700; color: var(--text-3); }
@@ -493,6 +528,12 @@ export const GLOBAL_PAGE_STYLES = `
   :root[data-theme='light'] .gw-tile, :root[data-theme='light'] .gw-msg, :root[data-theme='light'] .aigw-anchor, :root[data-theme='light'] .aigw-domrow {
     background: #ffffff; border-color: rgba(13,16,32,0.1); }
   :root[data-theme='light'] .gw-tile { border-color: color-mix(in srgb, var(--tone) 38%, rgba(13,16,32,0.1)); }
+  :root[data-theme='light'] .gw-tile.gw-climate-tile {
+    --text-1: #0d1020; --text-2: #2c3650; --text-3: #46506b;
+    background: #e8f1fb; border-color: color-mix(in srgb, var(--sky-acc) 55%, rgba(13,16,32,0.12));
+    box-shadow: 0 24px 44px -32px color-mix(in srgb, var(--sky-acc) 80%, transparent);
+  }
+  :root[data-theme='light'] .gw-climate-tile .gw-tile-word { background: color-mix(in srgb, var(--sky-acc) 22%, rgba(255,255,255,.6)); }
   :root[data-theme='light'] .aigw-bench { background: #ffffff; border-color: rgba(13,16,32,0.1); }
   :root[data-theme='light'] .aigw-adv-opp { background: rgba(13,16,32,0.03); }
   :root[data-theme='light'] .aigw-ev, :root[data-theme='light'] .aigw-dom-stat, :root[data-theme='light'] .aigw-sum-chip { background: rgba(13,16,32,0.04); }

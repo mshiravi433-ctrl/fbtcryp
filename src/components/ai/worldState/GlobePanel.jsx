@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildGlobeModel, COUNTRIES } from './worldModel.js';
 import { landCells } from './landMask.js';
-import { WIcon, DirMark } from './icons.jsx';
+import { WIcon, DirMark, LionIcon, lionSvgDocument } from './icons.jsx';
 import { faNum, pct } from './format.jsx';
 import { QualityBadge, Ltr } from './parts.jsx';
 
@@ -53,12 +53,32 @@ function landVectors() {
 
 const MOOD_COLOR = { up: '#00ff9d', down: '#ff3b6b', flat: '#38bdf8', unread: '#5b647f' };
 
+/*
+ * THE LION BESIDE IRAN.
+ * REPORTED (2026-10-15): «یه ایکون زیبای شیر هم کنار ایران بزار svg».
+ * The globe is a canvas, so the lion is the SAME SVG drawing as <LionIcon/>
+ * (icons.jsx → lionSvgDocument) rasterised once into an Image and drawn just
+ * north of Iran's marker — over the Caspian, where no other economy sits —
+ * and inside Iran's label when Iran is selected. No network read: the image
+ * is a data: URL built in memory.
+ */
+let LION_IMAGE = null;
+function lionImage() {
+  if (typeof Image === 'undefined') return null;
+  if (!LION_IMAGE) {
+    LION_IMAGE = new Image();
+    LION_IMAGE.decoding = 'async';
+    LION_IMAGE.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(lionSvgDocument(128))}`;
+  }
+  return LION_IMAGE.complete && LION_IMAGE.naturalWidth > 0 ? LION_IMAGE : null;
+}
+
 export function GlobePanel({ world, L, isPersian }) {
   const [sel, setSel] = useState('us');
   const [dragging, setDragging] = useState(false);
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
-  const stateRef = useRef({ yaw: -1.9, pitch: TILT0, vy: 0, size: 320, markers: [], dragging: false, last: null, moved: 0 });
+  const stateRef = useRef({ yaw: -1.9, pitch: TILT0, vy: 0, size: 320, markers: [], dragging: false, last: null, moved: 0, target: null });
 
   const model = useMemo(() => buildGlobeModel(world, { isPersian }), [world, isPersian]);
   const snap = model.byId.get(sel) || model.byId.get('us');
@@ -91,8 +111,16 @@ export function GlobePanel({ world, L, isPersian }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
 
-    /* auto-rotation (slow) + inertia after a drag */
-    if (!st.dragging) {
+    /* fly-to (a country was picked) · inertia after a drag · slow auto-rotation */
+    if (!st.dragging && st.target) {
+      const k = reducedMotion ? 1 : Math.min(1, dt * 3.2);
+      const dYaw = Math.atan2(Math.sin(st.target.yaw - st.yaw), Math.cos(st.target.yaw - st.yaw));
+      const dPitch = st.target.pitch - st.pitch;
+      st.yaw += dYaw * k;
+      st.pitch += dPitch * k;
+      st.vy = 0;
+      if (Math.abs(dYaw) < 0.003 && Math.abs(dPitch) < 0.003) st.target = null;
+    } else if (!st.dragging) {
       if (Math.abs(st.vy) > 0.0005) {
         st.yaw += st.vy * dt * 60;
         st.vy *= 0.94;
@@ -177,8 +205,10 @@ export function GlobePanel({ world, L, isPersian }) {
       ctx.stroke();
     }
 
-    /* country markers + hit map */
+    /* country markers + hit map; the selected label is painted last, so a
+       neighbour's marker (or Iran's lion) can never cover it */
     const markers = [];
+    let paintLabel = null;
     for (const { c, v } of countryVectors) {
       const s = model.byId.get(c.id);
       const p = project(v);
@@ -204,27 +234,73 @@ export function GlobePanel({ world, L, isPersian }) {
       ctx.globalAlpha = alpha;
       ctx.fill();
       ctx.globalAlpha = 1;
+      const lion = c.id === 'ir' ? lionImage() : null;
+      if (lion && !active) {
+        /* a small medallion just north of the marker */
+        const ls = Math.max(18, size / 15);
+        const lx = p[0]; const ly = p[1] - ls * 0.5 - 8;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(lx, ly, ls * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(6,10,24,0.6)';
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(251,191,36,0.6)';
+        ctx.stroke();
+        ctx.drawImage(lion, lx - ls / 2, ly - ls / 2, ls, ls);
+        ctx.globalAlpha = 1;
+      }
       if (active) {
         ctx.beginPath();
         ctx.arc(p[0], p[1], active ? 2.2 : 1.4, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.92)';
         ctx.fill();
-        /* the label of the selected country */
-        const label = isPersian ? c.fa : c.en;
-        ctx.font = `800 ${Math.max(10, size / 30)}px Vazirmatn, system-ui, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        const w = ctx.measureText(label).width + 14;
-        ctx.fillStyle = 'rgba(6,10,24,0.82)';
-        ctx.beginPath();
-        ctx.roundRect ? ctx.roundRect(p[0] - w / 2, p[1] - 26, w, 17, 9) : ctx.rect(p[0] - w / 2, p[1] - 26, w, 17);
-        ctx.fill();
-        ctx.fillStyle = '#eaf2ff';
-        ctx.fillText(label, p[0], p[1] - 11);
+        /* the label of the selected country (Iran's carries its lion) */
+        paintLabel = () => {
+          const label = isPersian ? c.fa : c.en;
+          ctx.font = `800 ${Math.max(10, size / 30)}px Vazirmatn, system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          const icon = lion ? 16 : 0;
+          const pad = icon ? icon + 4 : 0;
+          const w = ctx.measureText(label).width + 14 + pad;
+          const h = icon ? 20 : 17;
+          const top = p[1] - 9 - h;
+          ctx.fillStyle = 'rgba(6,10,24,0.82)';
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(p[0] - w / 2, top, w, h, h / 2) : ctx.rect(p[0] - w / 2, top, w, h);
+          ctx.fill();
+          if (lion) {
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(251,191,36,0.55)';
+            ctx.stroke();
+            /* the icon sits where the name begins: right in Persian, left in English */
+            const ix = isPersian ? p[0] + w / 2 - 4 - icon : p[0] - w / 2 + 4;
+            ctx.drawImage(lion, ix, top + (h - icon) / 2, icon, icon);
+          }
+          ctx.fillStyle = '#eaf2ff';
+          ctx.fillText(label, p[0] + (isPersian ? -pad / 2 : pad / 2), top + h - 2 - (h - 17) / 2);
+        };
       }
     }
+    if (paintLabel) paintLabel();
     stateRef.current.markers = markers;
   }, [arcs, countryVectors, isPersian, model.byId, reducedMotion, sel]);
+
+  /* picking an economy turns the globe to face it (the opening view is kept
+     until the selection actually changes — StrictMode's double mount included);
+     a drag cancels the turn */
+  const lastSel = useRef(sel);
+  useEffect(() => {
+    if (lastSel.current === sel) return;
+    lastSel.current = sel;
+    const c = COUNTRIES.find((x) => x.id === sel);
+    if (!c) return;
+    stateRef.current.target = {
+      yaw: -c.lon * DEG,
+      pitch: Math.max(MIN_PITCH, Math.min(MAX_PITCH, c.lat * DEG * 0.85))
+    };
+  }, [sel]);
 
   /* size + loop */
   useEffect(() => {
@@ -258,6 +334,7 @@ export function GlobePanel({ world, L, isPersian }) {
   const onPointerDown = (e) => {
     const st = stateRef.current;
     st.dragging = true;
+    st.target = null;
     st.moved = 0;
     st.last = { x: e.clientX, y: e.clientY, yaw: st.yaw, pitch: st.pitch };
     setDragging(true);
@@ -363,6 +440,7 @@ export function GlobePanel({ world, L, isPersian }) {
             >
               <span className="aigw-dot" style={{ background: dotColor }} />
               {isPersian ? c.fa : c.en}
+              {c.id === 'ir' ? <LionIcon size={17} /> : null}
             </button>
           );
         })}
@@ -373,7 +451,9 @@ export function GlobePanel({ world, L, isPersian }) {
         <div className="aigw-country-card" key={snap.country.id}>
           <div className="aigw-country-head">
             <span className="aigw-country-name">
-              <WIcon name="globe" size={16} style={{ color: 'var(--acc1)' }} />
+              {snap.country.id === 'ir'
+                ? <span className="aigw-lion-medal"><LionIcon size={26} /></span>
+                : <WIcon name="globe" size={16} style={{ color: 'var(--acc1)' }} />}
               {isPersian ? snap.country.fa : snap.country.en}
             </span>
             {snap.status === 'unread'

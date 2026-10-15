@@ -17,6 +17,9 @@
  * Light and dark themes are both first-class, and every animation is switched
  * off under prefers-reduced-motion.
  */
+import { SKY_STYLES } from './sky.styles.js';
+import { MODERN_STYLES } from './modern.styles.js';
+
 export const WORLD_STYLES = `
   /* ══ tokens ═════════════════════════════════════════════════════════════ */
   .aigw-panel {
@@ -549,6 +552,8 @@ export const WORLD_STYLES = `
     background-size: 200% 100%; animation: aigw-shimmer 1.4s linear infinite; }
   @keyframes aigw-shimmer { to { background-position: -200% 0; } }
 
+${SKY_STYLES}
+${MODERN_STYLES}
   /* ══ light theme ═══════════════════════════════════════════════════════ */
   :root[data-theme='light'] .aigw-gauge,
   :root[data-theme='light'] .aigw-chain-node,
@@ -586,6 +591,17 @@ export const WORLD_STYLES = `
     .aigw-g-wind, .aigw-g-flame, .aigw-g-wave, .aigw-g-coin, .aigw-g-thermo, .aigw-g-rise { animation: none; }
     .aigw-branch-tree-path { stroke-dashoffset: 0; }
     .aigw-station:hover, .aigw-weather-card:hover, .aigw-gauge:hover, .aigw-ribbon:hover, .aigw-tape-row:hover { transform: none; }
+    /* the climate sky stands still: rain becomes streaks, the bolt stays lit */
+    .gw-sky .gw-sky-glow, .gw-sky .gw-sky-rays, .gw-sky .gw-sky-halo, .gw-sky .gw-sky-flare, .gw-sky .gw-sky-cloud,
+    .gw-sky .gw-sky-wind path, .gw-sky .gw-sky-na-ring, .gw-sky .gw-sky-na-pulse, .aigw-g-halo, .aigw-g-glint { animation: none; }
+    .gw-sky .gw-sky-rain i { animation: none; top: var(--y); opacity: .55; }
+    .gw-sky .gw-sky-flash { animation: none; opacity: 0; }
+    .gw-sky .gw-sky-bolt { animation: none; opacity: .9; }
+    .gw-glass-drops i.run, .gw-glass-drops i.bead { animation: none; opacity: .75; }
+    .aigw-g-glint { opacity: 0; }
+    .aigw-ol-needle, .aigw-ol-seg.lit, .aigw-ol-core, .aigw-ol-score { animation: none; }
+    .aigw-canopy.lead .aigw-tree-aura, .aigw-firefly, .aigw-branch-bar i { animation: none; }
+    .aigw-firefly { opacity: .6; }
   }
 `;
 
