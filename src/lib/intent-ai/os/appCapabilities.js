@@ -137,7 +137,7 @@ export const APP_CAPABILITIES = Object.freeze([
     ],
     queries: [
       'futures.markets', 'futures.providers', 'futures.positions', 'futures.funding',
-      'futures.openInterest', 'futures.fees', 'futures.risk', 'futures.health', 'futures.history'
+      'futures.openInterest', 'futures.fees', 'futures.risk', 'futures.health'
     ],
     /* Exactly the names src/lib/futures-engine/events.js emits. */
     events: [
