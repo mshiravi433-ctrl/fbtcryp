@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -65,6 +65,8 @@ import { recordLot } from '../lib/portfolioIntel';
 import { recordSwap, confirmSwap, cancelSwap, failSwap } from '../lib/swapHistory';
 import { recordStrategyReceiptHint } from '../lib/strategyBrain/strategyReceipts.js';
 import SwapHistoryPanel from '../components/SwapHistoryPanel';
+import lazyRetry from '../lib/lazyRetry';
+import { SPOT_DEPTH_ENABLED } from '../lib/features';
 import { POINT_VALUES } from '../lib/ranks';
 import { createExecutionProof } from '../lib/executionProof';
 import useIntentExecution from '../hooks/useIntentExecution';
@@ -85,6 +87,12 @@ import {
 } from '../lib/intentReplacement';
 import { isConfidentialPrivacy } from '../lib/confidentialIntent';
 import { isNativeShell } from '../lib/nativeShell';
+
+/* The depth card (and recharts) loads only when SPOT_DEPTH_ENABLED is on, so
+   the default build's first-paint graph does not change. */
+const LazySpotDepth = SPOT_DEPTH_ENABLED
+  ? lazyRetry(() => import('../components/spot/SpotDepth').then((m) => ({ default: m.SpotDepthLive })))
+  : null;
 
 /**
  * ─── SwapAmountInput: isolated, never remounts on quote changes ────────────
@@ -195,6 +203,7 @@ function pickDefaultCounter(chainId, curatedList) {
  * - re-quote spam (debounce 380ms + abort + seq guard, no auto-requote on impact)
  * - page jump on Android (min-height reserved, no dvh resize feedback, bottom nav hidden on focus)
  */
+
 export default function Swap() {
   useHideBalances();
   const { t } = useTranslation();
@@ -2131,6 +2140,20 @@ export default function Swap() {
         </div>
         <p className="faint" style={{ marginTop: 9, lineHeight: 1.8 }}>{t('swap.gasNote')}</p>
       </InfoBox>
+
+      {/* Indicative price impact from non-binding quotes. Off unless SPOT_DEPTH_ENABLED
+          is set at build time; it never sends or reserves anything. */}
+      {SPOT_DEPTH_ENABLED && LazySpotDepth && (
+        <Suspense fallback={null}>
+          <LazySpotDepth
+            chainId={chainId}
+            fromToken={fromToken}
+            toToken={toToken}
+            fromAddress={wallet.address}
+            getProvider={() => wallet.getReadProvider(chainId)}
+          />
+        </Suspense>
+      )}
 
       <SwapHistoryPanel network="evm" />
 

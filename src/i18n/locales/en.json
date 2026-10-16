@@ -7131,7 +7131,61 @@
     "chartUnavailable": "The dYdX indexer did not return candles for this market.",
     "chartSource": "dYdX indexer candles",
     "longSub": "Long — expecting the price to rise",
-    "shortSub": "Short — expecting the price to fall"
+    "shortSub": "Short — expecting the price to fall",
+    "tpsl": {
+      "title": "Take profit & stop loss",
+      "subtitle": "Conditional orders on this position. Signed by you.",
+      "tp": "Take profit",
+      "sl": "Stop loss",
+      "tpLabel": "Take-profit price",
+      "slLabel": "Stop-loss price",
+      "tpLimitLabel": "Take-profit limit price",
+      "slLimitLabel": "Stop-loss limit price",
+      "optional": "Optional",
+      "execLabel": "When triggered",
+      "exec": {
+        "market": "Market",
+        "limit": "Limit"
+      },
+      "slippageLabel": "Max slippage when triggered",
+      "sizeLabel": "Size",
+      "closesLong": "closes long",
+      "closesShort": "closes short",
+      "limitAt": "worst price",
+      "previewTitle": "Preview — nothing is sent yet",
+      "estimateNote": "Estimated at the trigger price. Excludes fees, funding and slippage beyond the limit. The final result may differ.",
+      "estPnl": "Est. PnL",
+      "estimated": "estimate",
+      "roundedNote": "Rounded to the market tick: {{from}} → {{to}}",
+      "feeNote": "A builder fee applies when the order fills, the same as other dYdX orders in this screen.",
+      "confirmSend": "Confirm & send",
+      "signHint": "Each leg is signed separately by your dYdX account. Nothing is sent until you tap the button.",
+      "submitted": "Submitted",
+      "notConnected": "Connect your dYdX account to set a take-profit or stop-loss.",
+      "marketUnknown": "Market details have not loaded yet. Try again in a moment.",
+      "openTitle": "Open conditional orders",
+      "refresh": "Refresh",
+      "noOpen": "No open take-profit or stop-loss orders on this market.",
+      "indexerUnavailable": "The indexer is unavailable, so open orders cannot be shown now. Nothing is assumed to be active.",
+      "triggerAt": "trigger",
+      "status": {
+        "untriggered": "Waiting for trigger"
+      },
+      "cancelOrder": "Cancel order",
+      "err": {
+        "NO_LEG": "Enter a take-profit or a stop-loss price.",
+        "BAD_SIZE": "This position has no open size.",
+        "BAD_PRICE": "Enter a positive price.",
+        "NO_CURRENT_PRICE": "The current price is not available yet.",
+        "TICK_UNKNOWN": "The market tick size is unknown, so prices cannot be rounded safely.",
+        "TRIGGER_PASSED": "The price has already passed this level. It would trigger at once, so nothing was sent.",
+        "LIMIT_PRICE_INVALID": "The limit price must sit on the correct side of the trigger.",
+        "BAD_POSITION_SIDE": "The position direction is unknown.",
+        "REJECTED": "The request was not signed.",
+        "SUBMIT_FAILED": "The order could not be submitted. Check the account and try again.",
+        "CANCEL_FAILED": "The order could not be cancelled. Try again."
+      }
+    }
   },
   "derivatives": {
     "tradeCta": "Buy / Trade",
@@ -13930,7 +13984,71 @@
       "240": "4h",
       "1D": "1d"
     },
-    "chartSpot": "Market index chart (this pair's venue candles were unavailable)"
+    "chartSpot": "Market index chart (this pair's venue candles were unavailable)",
+    "history": {
+      "tab": "History",
+      "title": "Trade history (read-only)",
+      "subtitle": "Filled trades from each venue. This list cannot send, cancel or change anything.",
+      "notConnected": "Connect your dYdX account to see its trade history.",
+      "openDydx": "Go to dYdX",
+      "filters": {
+        "market": "Market",
+        "allMarkets": "All markets",
+        "range": "Period"
+      },
+      "range": {
+        "24h": "24 h",
+        "7d": "7 days",
+        "30d": "30 days",
+        "all": "All"
+      },
+      "indexerUnavailable": "The dYdX indexer is unavailable. The table may be incomplete.",
+      "loading": "Loading trades…",
+      "empty": "No filled trades in this period.",
+      "emptyUnavailable": "History is unavailable right now.",
+      "tableCaption": "Filled trades",
+      "cols": {
+        "time": "Time",
+        "market": "Market",
+        "direction": "Direction",
+        "type": "Action",
+        "size": "Size",
+        "price": "Price",
+        "fee": "Fee",
+        "pnl": "Realised PnL",
+        "status": "Status"
+      },
+      "dir": {
+        "long": "Long",
+        "short": "Short",
+        "unknown": "Unknown"
+      },
+      "closing": "Close",
+      "opening": "Open",
+      "status": {
+        "filled": "Filled"
+      },
+      "pnlNone": "dYdX fills do not carry realised PnL in this view.",
+      "pnlNote": "Realised PnL is not shown for dYdX: its fills do not provide it here, so a dash is shown instead of zero.",
+      "joinNote": "Direction comes from the order each fill belongs to. Fills whose order is outside the last 100 filled orders show Unknown.",
+      "loadMore": "Load more",
+      "end": "No more trades.",
+      "venue": {
+        "dydx": "dYdX",
+        "dydxSource": "dYdX source: indexer fills and orders, read through the FBT proxy.",
+        "ostium": "Ostium",
+        "velocity": "Velocity",
+        "ostiumUnavailable": "Trade history for Ostium is not available here yet: no reliable history source is connected to this app.",
+        "velocityUnavailable": "Trade history for Velocity is not available yet. This app reads only current Velocity positions."
+      },
+      "tpsl": {
+        "title": "TP/SL on other venues",
+        "intro": "Take-profit and stop-loss on these venues are set on their own screens, through the flows those screens already use. This page only links to them.",
+        "ostium": "Ostium: edit take-profit and stop-loss on an open position in the Ostium screen.",
+        "velocity": "Velocity: TP/SL is set from the on-chain futures tab, after you choose the market.",
+        "open": "Open {{venue}}"
+      }
+    }
   },
   "profileBadge": {
     "title": "Notifications",
@@ -15138,6 +15256,34 @@
       "SEND_FAILED": "The transaction could not be sent to the network.",
       "NO_TOKEN_ACCOUNT": "Your wallet has no account for this token yet.",
       "BELOW_MINIMUM": "The amount is below the network’s minimum."
+    },
+    "depth": {
+      "title": "Depth from quotes",
+      "caveat": "Indicative only. These are non-binding aggregator quotes for each size. This is not an order book, and the price can change when you swap.",
+      "updatedAt": "Updated {{time}}",
+      "stale": "Stale — tap refresh for current quotes",
+      "refresh": "Refresh",
+      "loading": "Getting quotes…",
+      "noPrice": "No USD price is available for this token, so trade sizes cannot be set. Depth is not shown.",
+      "unsupported": "Depth is not available for this pair on this network.",
+      "error": "Could not get quotes. Try again.",
+      "chartLabel": "Price impact by trade size",
+      "tableCaption": "Quotes by trade size (indicative)",
+      "col": {
+        "size": "Size",
+        "rate": "Rate",
+        "impact": "Price impact",
+        "signal": "Signal"
+      },
+      "impactTip": "{{value}}% versus the smallest size",
+      "pointUnavailable": "Unavailable",
+      "band": {
+        "low": "Low impact",
+        "medium": "Medium impact",
+        "high": "High impact"
+      },
+      "thresholds": "Estimated bands: medium from {{medium}}%, high from {{high}}% versus the smallest size. The thresholds are estimates.",
+      "disclaimer": "Quotes are not binding and change with execution. This is not a promised fill and not the venue's order book."
     }
   },
   "stories": {

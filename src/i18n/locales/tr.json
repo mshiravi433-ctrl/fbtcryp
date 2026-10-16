@@ -3296,6 +3296,34 @@
         "extreme": "Çok yoğun",
         "unknown": "Bilinmiyor"
       }
+    },
+    "depth": {
+      "title": "Teklif verisinden derinlik",
+      "caveat": "Yalnızca gösterge niteliğindedir. Bunlar her tutar için toplayıcının bağlayıcı olmayan teklifleridir. Emir defteri değildir ve takas sırasında fiyat değişebilir.",
+      "updatedAt": "{{time}} itibarıyla güncellendi",
+      "stale": "Eski veri — güncel teklifler için yenileyin",
+      "refresh": "Yenile",
+      "loading": "Teklifler alınıyor…",
+      "noPrice": "Bu token için USD fiyatı yok, bu yüzden işlem tutarları belirlenemez. Derinlik gösterilmiyor.",
+      "unsupported": "Bu ağda bu çift için derinlik kullanılamıyor.",
+      "error": "Teklifler alınamadı. Tekrar deneyin.",
+      "chartLabel": "İşlem tutarına göre fiyat etkisi",
+      "tableCaption": "İşlem tutarına göre teklifler (gösterge niteliğinde)",
+      "col": {
+        "size": "Tutar",
+        "rate": "Oran",
+        "impact": "Fiyat etkisi",
+        "signal": "Sinyal"
+      },
+      "impactTip": "En küçük tutara göre %{{value}}",
+      "pointUnavailable": "Kullanılamıyor",
+      "band": {
+        "low": "Düşük etki",
+        "medium": "Orta etki",
+        "high": "Yüksek etki"
+      },
+      "thresholds": "Tahmini bantlar: en küçük tutara göre %{{medium}} ve üzeri orta, %{{high}} ve üzeri yüksek. Eşikler tahminidir.",
+      "disclaimer": "Teklifler bağlayıcı değildir ve işlem sırasında değişir. Bu bir işlem garantisi veya borsanın emir defteri değildir."
     }
   },
   "stories": {

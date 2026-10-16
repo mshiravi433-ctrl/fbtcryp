@@ -1,3 +1,18 @@
+# ۲۰۲۶-۱۰-۱۶ (سیزنِ بعد) — حد ضرر/سود در dYdX، تاریخچهٔ فیوچرز، و عمقِ قیمتِ اسپات
+
+جزئیات و استدلال کامل: [2026-10-16-season-next-tpsl-history-depth-fa.md](docs/2026-10-16-season-next-tpsl-history-depth-fa.md).
+
+- **امکان‌سنجی TP/SL:** SDK پین‌شدهٔ `@dydxprotocol/v4-client-js@3.4.0` سفارش‌های شرطی با `reduceOnly` دارد؛ پس TP/SL پیاده شد. نسخه تغییری نکرد. زمان انقضای لغو و رفتار LIMIT+IOC هنوز روی testnet تأیید نشده‌اند.
+- **حد ضرر/سود روی پوزیشن‌های باز dYdX (`DydxTpSlCard.jsx`، `dydxTpsl.js`):** فقط با کلیک «تأیید و ارسال» روی همان سفارش ارسال می‌شود. نشست dYdX فقط در حافظه است. برآورد سود/زیان برچسب «برآورد» دارد و کارمزد و فاندینگ را شامل نیست.
+- **تب تاریخچهٔ فیوچرز با کلید `history` (`FuturesHistory.jsx`، `futuresHistory.js`):** فقط‌خواندنی. dYdX فعال است (فیل‌ها و سفارش‌های پرشده از پروکسیِ هم‌مبدأ). سودِ محقق‌شده در فیل نیست و «—» نشان داده می‌شود. Ostium و Velocity «در دسترس نیست» برچسب می‌خورند و حد سود/ضرر آن‌ها با لینک به مسیرهای موجود نشان داده می‌شود.
+- **پروکسیِ dYdX (`server/dydx.js`، `server/app.js`):** دو مسیر فقط‌GET برای سفارش‌ها و فیل‌ها با `no-store`، فهرست وضعیت allow-list و نرمال‌سازی شکل پاسخ.
+- **عمقِ قیمتِ اسپات (`spotDepth.js`، `spotDepthQuotes.js`، `SpotDepth.jsx`):** `buildDepthCurve({ quotes, referenceRate })` در چهار اندازه (۱۰۰ تا ۱۰٬۰۰۰ دلار)، بدون `NaN`، با وضعیت `unavailable`. نمودار recharts، جدول و برچسب سیگنال. نقل‌قول‌ها غیرالزام‌آورند و این‌طور برچسب خورده‌اند. کش ۲۰ ثانیه، هم‌زمانی ۲، `AbortController` و debounce ۳۰۰ میلی‌ثانیه. حدِ نرخ‌محدودیتِ تجمیع‌کننده‌ها ناشناخته است.
+- **پرچم‌های جدید خاموش:** `DYDX_TPSL_ENABLED`، `FUTURES_HISTORY_ENABLED`، `SPOT_DEPTH_ENABLED` در `features.js`. `android:sync` هر سه را صریحاً `false` می‌کند.
+- **ترجمه:** `spot.depth.*` در ۱۲ زبان. `dydx.tpsl.*` و `futures.history.*` در فارسی و انگلیسی کامل؛ بقیه فعلاً به انگلیسی برمی‌گردند.
+- **تست:** `test/tpsl-depth-history.test.mjs` (۴۰)، `test/tpsl-depth-history-server.test.mjs` (۱۴)، `test/tpsl-depth-history-ui.test.jsx` (۱۳). `wiring.mjs` بدون شکستِ جدید (۳۹ شکستِ موجود روی `main` هم هست).
+
+---
+
 # ۲۰۲۶-۱۰-۱۶ — سینمای هدرِ صفحهٔ سیگنال: فیلمِ پشتِ «سیگنال هوشمند» و چرخهٔ ۳۰ ثانیه‌ای کلمه‌ها
 
 جزئیات و استدلال کامل: [2026-10-16-signals-hero-cinema-fa.md](docs/2026-10-16-signals-hero-cinema-fa.md).

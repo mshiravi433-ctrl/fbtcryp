@@ -1,0 +1,298 @@
+/*
+ * TP/SL card and read-only futures history.
+ * Uses only the existing tokens from index.css (--up, --down, --line, --text-2,
+ * --bg-panel, --radius-sm, --font-mono). Spacing follows the app scale
+ * 4 / 8 / 12 / 16 / 20 / 24 / 32. Touch targets are at least 44px.
+ */
+
+/* ── TP/SL card ───────────────────────────────────────────────────────────── */
+.tpsl-card {
+  margin-top: 12px;
+}
+.tpsl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.tpsl-field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+.tpsl-field .field-label {
+  margin: 0;
+}
+.tpsl-field input {
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.tpsl-tag {
+  min-height: 44px;
+  min-width: 56px;
+}
+.tpsl-errors {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.tpsl-preview {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.tpsl-preview li {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.tpsl-preview-meta {
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 4px;
+}
+.tpsl-submit {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 16px;
+}
+.tpsl-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tpsl-hint {
+  font-size: 11.5px;
+  margin-top: 8px;
+  line-height: 1.7;
+}
+.tpsl-results {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.tpsl-hash {
+  font-size: 11px;
+}
+.tpsl-open {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+}
+.tpsl-open-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.tpsl-open-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.tpsl-touch {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ── Futures history ──────────────────────────────────────────────────────── */
+.fhist {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  max-width: 1200px;
+}
+.fhist-head {
+  display: grid;
+  gap: 4px;
+}
+.fhist-title {
+  font-size: 18px;
+  margin: 0;
+}
+.fhist-sub {
+  font-size: 12.5px;
+  margin: 0;
+  line-height: 1.7;
+}
+.fhist-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: end;
+}
+.fhist-filter {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.fhist-filter select {
+  min-height: 44px;
+}
+.fhist-filter .segmented button {
+  min-height: 44px;
+}
+.fhist-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+.fhist-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.fhist-table th,
+.fhist-table td {
+  padding: 12px;
+  text-align: start;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.fhist-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel-solid);
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 12px;
+}
+.fhist-table .num {
+  text-align: end;
+}
+.fhist-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.fhist-dir.up {
+  color: var(--up);
+}
+.fhist-dir.down {
+  color: var(--down);
+}
+.fhist-dir.faint {
+  color: var(--text-2);
+}
+.fhist-status {
+  color: var(--text-2);
+}
+.fhist-note,
+.fhist-end {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0;
+}
+.fhist-more,
+.fhist-touch {
+  min-height: 44px;
+  width: 100%;
+}
+.fhist-empty {
+  padding: 24px;
+  text-align: center;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+.fhist-skeleton {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.fhist-skel-row {
+  display: block;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-panel), var(--bg-raised), var(--bg-panel));
+}
+.fhist-venues {
+  display: grid;
+  gap: 12px;
+}
+
+/* Narrow screens: each history row becomes a card with label / value lines. */
+@media (max-width: 640px) {
+  .fhist-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fhist-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .fhist-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .fhist-table,
+  .fhist-table tbody,
+  .fhist-table tr,
+  .fhist-table td {
+    display: block;
+    width: 100%;
+  }
+  .fhist-table tr {
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-panel);
+  }
+  .fhist-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    border: 0;
+    white-space: normal;
+    text-align: end;
+  }
+  .fhist-table td::before {
+    content: attr(data-label);
+    color: var(--text-2);
+    font-size: 12px;
+    text-align: start;
+  }
+  .fhist-table .num {
+    text-align: end;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fhist-skel-row {
+    animation: none;
+  }
+}
