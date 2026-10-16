@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useStill } from '../components/AnimatedIcon';
+import { SignalsHeroScene, SignalsHeroWords } from '../components/SignalsHeroCinema';
 import InfoBox from '../components/InfoBox';
 import CoinLogo from '../components/CoinLogo';
 import AdBanner from '../components/AdBanner';
@@ -56,6 +57,7 @@ import '../styles/docs-modern.css';
 import '../styles/wallet-modern.css';
 import '../styles/signals-intel.css';
 import '../styles/signals-early.css';
+import '../styles/signals-hero-cinema.css';
 
 const HORIZONS = [
   { days: 1, key: '1D' },
@@ -1692,6 +1694,11 @@ function IntelligenceHub({ early, sm, momentumCards, portfolioImpactData, histor
  * ──────────────────────────────────────────────────────────────────────────── */
 export default function Signals() {
   const { t, i18n } = useTranslation();
+  /* The hero cinema (film + rotating sentence) obeys the same guard the nav
+     icons and the promo banners already use: system `prefers-reduced-motion`
+     OR the app's own «reduce motion» setting freezes it, and the page's own
+     sentence simply stays on screen instead of rotating. */
+  const still = useStill();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const { data: coins } = useMarkets(40);
@@ -2231,10 +2238,27 @@ export default function Signals() {
 
   return (
     <PageTransition className="page sic-page">
-      <motion.section className="sic-page-hero" variants={riseIn} initial="hidden" animate="show">
+      {/* ── THE FIRST BOX: a cinema background and a 30-second sentence cycle ──
+          «باکس ابتدایی که جمله سیگنال هوشمند داره … فیلم زیر پخش شود … با
+          کلماتی که مثل سیگنال زودهنگام، شتاب حرکتی میاد و با انیمیشن محو
+          می‌شود و ۳۰ ثانیه جمله سیگنال هوشمند را نشان دهد.»
+
+          The title stays where it has always been — it is the page's h1, and
+          every probe and screen reader finds it there. The cycle runs on the
+          line under it: the same sentence as slot 0 of the rotation, then the
+          signal words fading through, and back to it every 30 seconds exactly.
+
+          The background is a SLOT, not a bundled file: a configured
+          VITE_SIGNALS_HERO_VIDEO plays (muted, inline, paused off-screen); with
+          nothing configured the nebula the Pixabay clip was chosen for is drawn
+          instead. src/components/SignalsHeroCinema.jsx records why shipping the
+          video itself is the wrong build for a 7.5 MB APK. */}
+      <motion.section className="sic-page-hero has-cinema" variants={riseIn} initial="hidden" animate="show">
+        <SignalsHeroScene active={!still} />
         <span className="sic-hero-icon"><IconSparkle /></span>
         <div className="sic-hero-copy">
           <h1>{t('signals.title')}</h1>
+          <SignalsHeroWords />
           <p>{t('signals.subtitle')}</p>
         </div>
         <div className="sic-hero-status">

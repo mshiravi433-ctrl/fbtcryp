@@ -1682,6 +1682,19 @@
   "signals": {
     "title": "إشارات ذكية",
     "subtitle": "Technical analysis across the market, updated live.",
+    "hero": {
+      "aria": "عبارات الإشارات الذكية الدوّارة",
+      "words": {
+        "early": "إشارة مبكرة",
+        "momentum": "تسارع الحركة",
+        "flow": "تدفق الأموال الذكية",
+        "pulse": "نبض السوق",
+        "volume": "حجم غير اعتيادي",
+        "breakout": "اختراق المستوى",
+        "convergence": "تقارب المؤشرات",
+        "liquidity": "دورة السيولة"
+      }
+    },
     "marketMood": "Market mood",
     "analyzing": "Analyzing…",
     "confidence": "Confidence",
