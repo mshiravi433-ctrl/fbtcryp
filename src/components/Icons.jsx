@@ -527,6 +527,18 @@ export const IconCoins = (p) => (
   </svg>
 );
 
+export const IconPlay = (p) => (
+  <svg {...base} {...p}>
+    <path d="M8.1 5.9a1.15 1.15 0 0 1 1.73-.99l9.25 5.53a1.82 1.82 0 0 1 0 3.12l-9.25 5.53a1.15 1.15 0 0 1-1.73-.99V5.9z" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const IconPause = (p) => (
+  <svg {...base} {...p}>
+    <path d="M8 6.5h2.5v11H8zM13.5 6.5H16v11h-2.5z" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const IconVideo = (p) => (
   <svg {...base} {...p}>
     <rect x="2.5" y="4.5" width="19" height="15" rx="3" />
