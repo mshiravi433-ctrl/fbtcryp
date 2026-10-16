@@ -32,8 +32,12 @@ import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
 import lazyRetry from './lib/lazyRetry';
 import { seoEntryHandoff } from './lib/webEntry';
 import Welcome from './pages/Welcome';
-import Onboarding from './pages/Onboarding';
-import Guide from './pages/Guide';
+// These are post-Start screens. In particular Onboarding imports the wallet
+// connection sheet and diagnostics: returning users and the first splash must
+// not download them before the first paint. Keep the fallback inside the
+// persistent providers so a chunk load never resets wallet/session state.
+const Onboarding = lazyRetry(() => import('./pages/Onboarding'));
+const Guide = lazyRetry(() => import('./pages/Guide'));
 import Splash from './pages/Splash';
 import { pingWatchTick } from './lib/watchTick';
 import GalaxyBackdrop from './components/GalaxyBackdrop';
@@ -842,7 +846,7 @@ export default function App() {
             <GalaxyBackdrop />
           </div>
         )}
-        {screen}
+        <Suspense fallback={<Loader />}>{screen}</Suspense>
         <ConnectivityAlert />
         <Toasts />
         {/*

@@ -55,8 +55,15 @@ export default function FuturesHistory({ onOpenDydx = null }) {
   const [range, setRange] = useState('all');
   /* How many filtered rows are on screen. Grows by one page per «بارگذاری بیشتر». */
   const [shown, setShown] = useState(HISTORY_PAGE_SIZE);
-  const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  const mounted = useRef(false);
+  const requestSeq = useRef(0);
+  const currentAddress = useRef(address);
+  currentAddress.current = address;
+  useEffect(() => {
+    // React StrictMode replays effects: setup must restore the mounted guard.
+    mounted.current = true;
+    return () => { mounted.current = false; requestSeq.current += 1; };
+  }, []);
 
   /* Filled orders, loaded once per first page and reused to annotate every later
      page, so an older fill still gets its direction from the order it belongs to. */
@@ -64,16 +71,17 @@ export default function FuturesHistory({ onOpenDydx = null }) {
 
   const fetchPage = useCallback(async ({ before = null, reset = false } = {}) => {
     if (!address) return;
+    const seq = ++requestSeq.current;
     setLoading(true);
     const [fills, orders] = await Promise.all([
       getDydxFills({ address, subaccount: 0, limit: HISTORY_PAGE_SIZE, before }),
       reset ? getDydxOrders({ address, subaccount: 0, status: 'FILLED' }) : Promise.resolve(null)
     ]);
-    if (!mounted.current) return;
+    if (!mounted.current || seq !== requestSeq.current || currentAddress.current !== address) return;
     if (orders) filledOrders.current = orders.orders || [];
     const normalised = (fills.fills || []).map(normaliseDydxFill).filter(Boolean);
     const joined = annotateFills(normalised, filledOrders.current);
-    setLive(Boolean(fills.live));
+    setLive(Boolean(fills.live && (!orders || orders.live)));
     setRows((prev) => {
       const base = reset ? [] : prev;
       const seen = new Set(base.map((r) => r.id));
@@ -87,9 +95,17 @@ export default function FuturesHistory({ onOpenDydx = null }) {
   }, [address]);
 
   useEffect(() => {
-    if (!address) return;
+    // Never reuse another account's rows, filters or pagination cursor.
+    requestSeq.current += 1;
+    setRows([]);
+    filledOrders.current = [];
+    setCursor(null);
+    setExhausted(false);
+    setLoading(false);
+    setLive(false);
+    setMarketFilter('all');
     setShown(HISTORY_PAGE_SIZE);
-    fetchPage({ reset: true });
+    if (address) fetchPage({ reset: true });
   }, [address, fetchPage]);
 
   const markets = useMemo(() => marketsIn(rows), [rows]);

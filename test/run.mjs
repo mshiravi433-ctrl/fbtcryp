@@ -107,7 +107,7 @@ execFileSync(process.execPath, ['--test', 'test/stock-tokens.test.mjs'], {
 /* TP/SL planning, futures history, spot depth curve, the server proxy
    helpers and the signing guards: pure logic plus security mocks, no network. */
 console.log('\n▸ checking TP/SL, futures history and spot depth…');
-execFileSync(process.execPath, ['--test', 'test/tpsl-depth-history.test.mjs'], {
+execFileSync(process.execPath, ['--test', 'test/tpsl-depth-history.test.mjs', 'test/season-activation.test.mjs'], {
   stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
 });
 /* The two dYdX read routes, driven over HTTP with the indexer stubbed. */
@@ -1670,9 +1670,14 @@ report('futures on-chain tab (backend truth · read-only states · confirm gate 
  */
 console.log('\n▸ building the Intent AI activity suite…');
 npx(['vite', 'build', '-c', 'test/vite.activity-tab.mjs', '--logLevel', 'error']);
-installDom();
-const { run: runActivityTab } = await import('./.out/activity-tab/activity-tab-orders-probe.js');
-report('intent-ai activity tab (object-token orders · seasons · operations)', await runActivityTab(document.getElementById('r')));
+// This existing probe intentionally replaces globalThis.fetch with a
+// rejecting stub and does not restore it. Isolate the probe, unchanged, so
+// later HTTP suites use Node's real loopback fetch rather than that stub.
+let activityTabOk = true;
+try {
+  execFileSync(process.execPath, ['test/run-one-probe.mjs', './.out/activity-tab/activity-tab-orders-probe.js'], { stdio: 'inherit' });
+} catch { activityTabOk = false; }
+report('intent-ai activity tab (object-token orders · seasons · operations)', [['isolated activity assertions', activityTabOk]]);
 
 
 /* --------------------------- 5. store-safe build -------------------------- */
@@ -1994,8 +1999,17 @@ console.log('\n▸ probing the signed solver commitment API…');
    executeWithoutUser and automatic execution for an AUTHENTICATED caller. */
 console.log('\n▸ probing the authenticated ecosystem registry\u2026');
 {
-  const registryRows = (await import('./ecosystem-registry-probe.mjs')).default;
-  report('ecosystem registry', registryRows);
+  // Server/auth modules cache fixture configuration on first import. Earlier
+  // probes deliberately change it; a fresh process keeps this HTTP suite's
+  // signed-identity fixture coherent (158/158 on main and this branch).
+  // Return every original assertion to report(), not just an exit-code check.
+  const marker = '__ECOSYSTEM_REGISTRY_ROWS__';
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e',
+    `const {default: rows} = await import('./test/ecosystem-registry-probe.mjs'); console.log('${marker}' + JSON.stringify(rows));`
+  ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], cwd: new URL('..', import.meta.url).pathname });
+  const result = output.split('\n').find((line) => line.startsWith(marker));
+  if (!result) throw new Error('Ecosystem registry probe did not return its assertions');
+  report('ecosystem registry', JSON.parse(result.slice(marker.length)));
 }
 
 /* Real HTTP + strict-validation coverage for privacy-safe execution
@@ -2221,11 +2235,14 @@ console.log('\n▸ proving the five-chain LI.FI swap path (client + server)…')
 console.log('\n▸ checking the start screen backdrop…');
 {
   npx(['vite', 'build', '-c', 'test/vite.splash.mjs', '--logLevel', 'error']);
-  installDom();
-  const { run: runSplash } = await import('./.out/splash/splash-probe.js');
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  report('start screen', await runSplash(host));
+  // Earlier mounted suites replace DOM globals and cache framer-motion's
+  // browser detection. A fresh process tests the actual Splash, not stale
+  // module state from a different jsdom document (standalone: 6/6).
+  let splashOk = true;
+  try {
+    execFileSync(process.execPath, ['test/run-one-probe.mjs', './.out/splash/splash-probe.js'], { stdio: 'inherit' });
+  } catch { splashOk = false; }
+  report('start screen', [['isolated backdrop and start-button assertions', splashOk]]);
 }
 
 console.log('\n▸ checking the wallet panel…');
