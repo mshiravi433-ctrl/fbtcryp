@@ -2902,6 +2902,19 @@
   "signals": {
     "title": "AI Signals",
     "subtitle": "Technical analysis across the market, updated live.",
+    "hero": {
+      "aria": "Rotating smart-signal phrases",
+      "words": {
+        "early": "Early signal",
+        "momentum": "Momentum burst",
+        "flow": "Smart-money flow",
+        "pulse": "Market pulse",
+        "volume": "Unusual volume",
+        "breakout": "Level breakout",
+        "convergence": "Indicator convergence",
+        "liquidity": "Liquidity cycle"
+      }
+    },
     "marketMood": "Market mood",
     "analyzing": "Analyzing…",
     "confidence": "Confidence",

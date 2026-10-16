@@ -1,0 +1,365 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIGNALS HERO CINEMA — the film/nebula behind the first box of /signals and
+   the words that fade through it.
+
+   Request: «باکس ابتدایی … ۳۰ ثانیه یکبار فیلم … با کلماتی که … با انیمیشن
+   محو می‌شود و ۳۰ ثانیه جمله «سیگنال هوشمند» را نشان می‌دهد، با بک‌گراند خالی،
+   خیلی مدرن و زیبا، بدون افت سرعت».
+
+   Every rule here is scoped to `.sigh-` or to `.sic-page-hero.has-cinema`, so
+   no other screen, language or spacing in the app moves. The hero's own
+   contract (`.sic-page-hero`, `.sic-hero-copy h1`, the gradient hairline) is
+   untouched — this file only adds a background layer and one text slot.
+
+   THE PERFORMANCE LAW THIS FILE OBEYS («بدون افت سرعت»)
+     · only `transform` and `opacity` animate — never `filter`, never
+       `backdrop-filter` (the two properties PageTransition.jsx documents as
+       the source of every stutter this app ever had);
+     · two drifting planes carry all the stars, so the browser animates two
+       elements instead of forty;
+     · the nebula's `feTurbulence` filter renders ONCE on a static group — the
+       drift happens on a parent layer, not inside the filter;
+     · `prefers-reduced-motion`, the app's own reduce-motion setting (both via
+       the `.is-still` class the component adds) and the native APK freeze
+       every animation here;
+     · the vignette is a plain gradient. No blur anywhere in this box.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The hero already has `position: relative; overflow: hidden; isolation:
+   isolate`, so the scene is clipped to the 24px radius by the box itself and
+   creates no stacking context of its own above the page. */
+.sic-page-hero.has-cinema {
+  --sigh-slot-h: 19px;
+  --sigh-ink: #dff3ff;
+}
+
+/*
+ * ─── WHY THE BOX'S OWN BACKGROUND HAS TO BE RE-DECLARED HERE ────────────────
+ * signals-intel.css paints `.sic-page-hero` with a glass wash — two white
+ * surfaces at 5.8% and 2% alpha over the page. A background is painted BELOW
+ * every child, so the scene would sit behind ~92% opaque white and the nebula
+ * would be a rumour rather than a background.
+ *
+ * So with a cinema present the padding-box layer becomes one deep-space wash at
+ * 34%→10%: the panel still reads as the same glass box (the gradient hairline in
+ * the border-box layer is untouched, and the light theme gets its own version
+ * below), but the space behind the sentence is actually visible. This is the
+ * «بک‌گراند خالی» half of the request — empty of assets, not empty of design.
+ */
+.sic-page-hero.has-cinema {
+  background:
+    linear-gradient(155deg, rgba(8, 12, 28, 0.34), rgba(8, 12, 28, 0.1)) padding-box,
+    linear-gradient(140deg, rgba(0, 229, 255, 0.34), rgba(124, 77, 255, 0.22) 46%, rgba(255, 45, 149, 0.18)) border-box;
+}
+
+/* ── The scene layer ────────────────────────────────────────────────────────
+   z-index 0 inside the hero's isolated context. The hero's own ::before aurora
+   is z-index -1 (behind the panel's background paint), so it is switched off
+   below rather than stacked against — two drifting washes over one box is
+   brightness and cost with nothing to show for it. */
+.sigh-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 160% at 82% -30%, rgba(0, 229, 255, 0.1), transparent 62%),
+    linear-gradient(112deg, #060a1a 4%, #0b1030 46%, #160a2c 78%, #05070f);
+}
+
+/* Content above the scene. The hero is a grid; lifting its direct children is
+   one rule and it cannot be forgotten when a child is added later. */
+.sic-page-hero.has-cinema > *:not(.sigh-scene) {
+  position: relative;
+  z-index: 1;
+}
+
+.sic-page-hero.has-cinema::before {
+  animation: none;
+  opacity: 0;
+}
+
+/* ── Drawn nebula ─────────────────────────────────────────────────────────── */
+.sigh-neb {
+  position: absolute;
+  inset: -12% -8%;
+  width: 116%;
+  height: 124%;
+  opacity: 0.62;
+  animation: sigh-neb-drift 64s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.sigh-plane {
+  position: absolute;
+  inset: -8%;
+  will-change: transform;
+}
+.sigh-plane-far  { animation: sigh-star-far 108s linear infinite; opacity: 0.85; }
+.sigh-plane-near { animation: sigh-star-near 74s linear infinite; }
+
+.sigh-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #eaf6ff;
+  opacity: var(--dim, 0.4);
+  animation-name: sigh-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.sigh-star-bright {
+  background: #ffffff;
+  box-shadow: 0 0 5px rgba(160, 220, 255, 0.5);
+}
+
+/* ── The film, when an operator has configured one ───────────────────────────
+   Opacity, not display, so the first decoded frame cross-fades over the drawn
+   scene instead of popping. Until then the nebula is what the user sees, which
+   is the whole point of drawing one: a buffering video is never a black
+   rectangle at the top of the page. */
+.sigh-film {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  object-fit: cover;
+  transition: opacity 900ms ease-out;
+}
+.sigh-scene.is-film .sigh-film { opacity: 0.5; }
+
+/* A stock clip's source line — see VITE_SIGNALS_HERO_VIDEO_CREDIT. */
+.sigh-credit {
+  position: absolute;
+  inset-block-end: 5px;
+  inset-inline-end: 9px;
+  z-index: 4;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+/* ── Readability ────────────────────────────────────────────────────────────
+   One gradient, no blur. The scene is decorative; the sentence on top of it is
+   the product, so the veil is stronger behind the text than at the edges. */
+.sigh-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background:
+    linear-gradient(to left, rgba(4, 7, 18, 0.1), rgba(4, 7, 18, 0.52) 42%, rgba(4, 7, 18, 0.74)),
+    radial-gradient(128% 190% at 50% 50%, transparent 42%, rgba(3, 5, 14, 0.6) 100%);
+}
+
+/* ── The rotating line ──────────────────────────────────────────────────────
+   A fixed-height slot with absolutely stacked words. A long Persian phrase can
+   never push the hero's icon or status column around, because the words do not
+   participate in flow while they fade. */
+.sigh-words {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-top: 5px;
+}
+
+.sigh-words-slot {
+  position: relative;
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: var(--sigh-slot-h);
+}
+
+.sigh-word {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--sigh-ink);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  line-height: var(--sigh-slot-h);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 10px rgba(3, 8, 20, 0.7);
+  will-change: opacity, transform;
+}
+
+/* Slot 0 is the hero's own sentence — «سیگنال هوشمند» — so it carries the
+   brand wash instead of the plain ink the keywords use. */
+.sigh-word.is-title {
+  background: linear-gradient(94deg, #ffffff 8%, #8fe6ff 58%, #cbb6ff 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  font-size: 12.5px;
+  font-weight: 900;
+  text-shadow: none;
+}
+
+/* A breathing dot before the line: the one hint that this is live rather than
+   a printed label. Opacity only. */
+.sigh-words::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.7);
+  animation: sigh-blip 3s ease-in-out infinite;
+}
+
+/* Cycle ticks — one per slot, the current one lit. The affordance that tells
+   the reader a silent cross-fade has more to say. The "dot vs pill" change is a
+   `scaleX` on a fixed 10px box, not an animated `width`: layout on every tick
+   of a 30 s cycle is exactly the kind of invisible cost this file exists to
+   avoid. */
+.sigh-ticks {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+.sigh-ticks i {
+  width: 10px;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  opacity: 0.5;
+  transform: scaleX(0.3);
+  transform-origin: center;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease;
+}
+.sigh-ticks i[data-on='true'] {
+  background: linear-gradient(90deg, #00e5ff, #b47cff);
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* The hero's printed subtitle moves under the rotating line and stays out of
+   the way on narrow phones, where the sentence needs the whole width. */
+.sic-page-hero.has-cinema .sic-hero-copy p {
+  margin-top: 3px;
+  color: rgba(226, 240, 255, 0.5);
+  font-size: 10.5px;
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────────── */
+@keyframes sigh-neb-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1.02); }
+  to   { transform: translate3d(2.5%, 1.5%, 0) scale(1.09); }
+}
+@keyframes sigh-star-far {
+  from { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(-1.4%, 0.9%, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+@keyframes sigh-star-near {
+  from { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(1.8%, -1.1%, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+@keyframes sigh-twinkle {
+  0%, 100% { opacity: calc(var(--dim, 0.4) * 0.35); }
+  50%      { opacity: var(--dim, 0.4); }
+}
+@keyframes sigh-blip {
+  0%, 100% { opacity: 0.42; transform: scale(0.9); }
+  50%      { opacity: 1; transform: scale(1); }
+}
+
+/* ── Motion off: the scene stays, frozen ────────────────────────────────────
+   `.is-still` is set by the component from `useStill()` (system
+   prefers-reduced-motion OR the app's own setting); the media query below is
+   the belt-and-braces half for anything this file paints without the
+   component's knowledge. A frozen nebula still looks like deep space. */
+.sigh-scene.is-still .sigh-neb,
+.sigh-scene.is-still .sigh-plane,
+.sigh-scene.is-still .sigh-star,
+.sigh-scene.is-still .sigh-words::before {
+  animation: none;
+}
+.sigh-scene.is-still .sigh-neb { opacity: 0.72; }
+.sigh-scene.is-still .sigh-star { opacity: 0.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sigh-neb,
+  .sigh-plane,
+  .sigh-star,
+  .sigh-words::before,
+  .sigh-ticks i { animation: none; transition: none; }
+  .sigh-film { transition: none; }
+}
+
+/* ── Native APK: no decoder, no drifting layers ─────────────────────────────
+   The component never mounts a film here; this freezes the drawn scene too,
+   the same rule the wallet hero's aurora already follows. */
+:root[data-native='true'] .sigh-neb,
+:root[data-native='true'] .sigh-plane,
+:root[data-native='true'] .sigh-star,
+:root[data-native='true'] .sigh-words::before {
+  animation: none;
+}
+:root[data-native='true'] .sigh-neb { opacity: 0.7; }
+
+/* ── Light theme ────────────────────────────────────────────────────────────
+   A deep-space box in a light UI is still a dark box — that is what makes it
+   read as a screen. The wash is simply calmer, and the ink is the dark
+   gradient the hero's h1 already uses in this theme, so the sentence keeps its
+   AA contrast against the lighter veil. */
+:root[data-theme='light'] .sic-page-hero.has-cinema {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)) padding-box,
+    linear-gradient(140deg, rgba(38, 88, 201, 0.3), rgba(108, 75, 216, 0.2) 48%, rgba(255, 45, 149, 0.14)) border-box;
+}
+:root[data-theme='light'] .sigh-scene {
+  background:
+    radial-gradient(120% 160% at 84% -30%, rgba(38, 88, 201, 0.12), transparent 62%),
+    linear-gradient(112deg, #eef3ff 4%, #e6ecff 48%, #f4ecff 80%, #eaeff8);
+}
+:root[data-theme='light'] .sigh-neb { opacity: 0.3; }
+:root[data-theme='light'] .sigh-star { background: #2c3a63; }
+:root[data-theme='light'] .sigh-star-bright { background: #16224a; box-shadow: none; }
+:root[data-theme='light'] .sigh-vignette {
+  background:
+    linear-gradient(to left, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.5) 44%, rgba(255, 255, 255, 0.72)),
+    radial-gradient(128% 190% at 50% 50%, transparent 46%, rgba(255, 255, 255, 0.5) 100%);
+}
+:root[data-theme='light'] .sigh-scene.is-film .sigh-film { opacity: 0.34; }
+:root[data-theme='light'] .sigh-words { --sigh-ink: #23304f; }
+:root[data-theme='light'] .sigh-word { text-shadow: none; }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  :root[data-theme='light'] .sigh-word.is-title {
+    background: linear-gradient(94deg, #151a30 12%, #2658c9 62%, #6c4bd8);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+}
+:root[data-theme='light'] .sigh-words::before { background: #2658c9; box-shadow: 0 0 7px rgba(38, 88, 201, 0.45); }
+:root[data-theme='light'] .sigh-ticks i { background: rgba(21, 26, 48, 0.2); }
+:root[data-theme='light'] .sigh-ticks i[data-on='true'] { background: linear-gradient(90deg, #2658c9, #6c4bd8); }
+:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy p { color: rgba(21, 26, 48, 0.56); }
+:root[data-theme='light'] .sigh-credit { color: rgba(21, 26, 48, 0.4); }
+
+/* ── Narrow phones ──────────────────────────────────────────────────────────
+   Below 440px the status column is already hidden by signals-intel.css; here
+   the printed subtitle goes too, so the rotating sentence gets the width. */
+@media (max-width: 440px) {
+  .sic-page-hero.has-cinema .sic-hero-copy p { display: none; }
+  .sigh-word { font-size: 11px; }
+  .sigh-word.is-title { font-size: 12px; }
+}
+@media (max-width: 360px) {
+  .sigh-ticks { display: none; }
+  .sigh-words { gap: 5px; }
+}
