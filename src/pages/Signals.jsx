@@ -2238,28 +2238,15 @@ export default function Signals() {
 
   return (
     <PageTransition className="page sic-page">
-      {/* ── THE FIRST BOX: a cinema background and a 30-second sentence cycle ──
-          «باکس ابتدایی که جمله سیگنال هوشمند داره … فیلم زیر پخش شود … با
-          کلماتی که مثل سیگنال زودهنگام، شتاب حرکتی میاد و با انیمیشن محو
-          می‌شود و ۳۰ ثانیه جمله سیگنال هوشمند را نشان دهد.»
-
-          The title stays where it has always been — it is the page's h1, and
-          every probe and screen reader finds it there. The cycle runs on the
-          line under it: the same sentence as slot 0 of the rotation, then the
-          signal words fading through, and back to it every 30 seconds exactly.
-
-          The background is a SLOT, not a bundled file: a configured
-          VITE_SIGNALS_HERO_VIDEO plays (muted, inline, paused off-screen); with
-          nothing configured the nebula the Pixabay clip was chosen for is drawn
-          instead. src/components/SignalsHeroCinema.jsx records why shipping the
-          video itself is the wrong build for a 7.5 MB APK. */}
+      {/* Same-origin video fills the first panel; the scene remains as a fallback.
+          The tagline is static below the heading, while the keyword line rotates. */}
       <motion.section className="sic-page-hero has-cinema" variants={riseIn} initial="hidden" animate="show">
         <SignalsHeroScene active={!still} />
         <span className="sic-hero-icon"><IconSparkle /></span>
         <div className="sic-hero-copy">
           <h1>{t('signals.title')}</h1>
+          <p className="sic-hero-tagline">{t('signals.hero.tagline')}</p>
           <SignalsHeroWords />
-          <p>{t('signals.subtitle')}</p>
         </div>
         <div className="sic-hero-status">
           <span>{t('signals.aiPowered')}</span>
