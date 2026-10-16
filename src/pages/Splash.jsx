@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { openUrl, isSafeUrl } from '../lib/browser';
 import { IconInstagram, IconLinkedin, IconBriefcase, IconMail, IconXLogo } from '../components/Icons';
 import { SOCIAL_CHANNELS, isMailChannel } from '../lib/socials';
 import GalaxyBackdrop from '../components/GalaxyBackdrop';
-import FluidBackdrop, { fluidSupported } from '../components/FluidBackdrop';
+import { fluidSupported } from '../lib/fluidSupported';
 
 /*
  * The same accounts Contact links to — imported, not copied. The copy had
@@ -63,10 +63,19 @@ export default function Splash({ onStart, hideGalaxy }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
 
-  // Decided once, before first paint, so the screen never flashes one backdrop
-  // and then swaps to the other. `fluidSupported()` is a cheap one-off probe
-  // that also bails out for reduced-motion users.
+  // The optional GPU engine is not part of the first-paint graph. Keep the
+  // galaxy and Start button usable while it loads, or if the chunk is offline.
+  // No GPU context/animation is mounted if the splash has already closed.
   const [fluid] = useState(() => fluidSupported());
+  const [FluidEngine, setFluidEngine] = useState(null);
+  useEffect(() => {
+    if (!fluid || hideGalaxy) return;
+    let active = true;
+    import('../components/FluidBackdrop').then((mod) => {
+      if (active) setFluidEngine(() => mod.default);
+    }).catch(() => { /* The galaxy remains visible on a failed optional load. */ });
+    return () => { active = false; };
+  }, [fluid, hideGalaxy]);
 
   // With reduced motion the mark simply appears; nothing rotates or breathes.
   const ringSpin = reduce
@@ -79,7 +88,7 @@ export default function Splash({ onStart, hideGalaxy }) {
           the drawn galaxy otherwise (see FluidBackdrop.jsx for why a video was
           the wrong build — the same reasoning that originally kept the galaxy
           drawn still holds). */}
-      {!hideGalaxy && (fluid ? <FluidBackdrop /> : <GalaxyBackdrop />)}
+      {!hideGalaxy && (FluidEngine ? <FluidEngine /> : <GalaxyBackdrop />)}
 
       {/* Soft colour wash over the backdrop, tying it to the brand hues. */}
       <div className="splash-glow" aria-hidden="true" />

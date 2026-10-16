@@ -11,6 +11,7 @@
  * The dYdX module, the network and the router are replaced. Every replaced
  * function is a counter, so the assertions read as «this many signatures».
  */
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -54,8 +55,8 @@ const market = { ticker: 'BTC-USD', oraclePrice: 100, raw: { tickSize: '0.1' } }
 beforeEach(() => {
   dydxMock.place.mockClear();
   dydxMock.cancel.mockClear();
-  dydxMock.orders.mockClear();
-  dydxMock.fills.mockClear();
+  dydxMock.orders.mockReset().mockResolvedValue({ orders: [], live: true });
+  dydxMock.fills.mockReset().mockResolvedValue({ fills: [], live: true });
   dydxMock.session.address = VALID_ADDR;
 });
 afterEach(() => cleanup());
@@ -149,6 +150,35 @@ describe('FuturesHistory — read-only, honest about each venue', () => {
     expect(container.textContent).toMatch(/BTC-USD/);
     expect(container.textContent).toMatch(/—/);
     expect(container.textContent).toMatch(/futures\.history\.dir\.long/);
+  });
+
+  it('loads under StrictMode effect replay', async () => {
+    dydxMock.fills.mockResolvedValue({ fills: [fill], live: true });
+    const { container } = render(<StrictMode><MemoryRouter future={ROUTER_FUTURE}><FuturesHistory /></MemoryRouter></StrictMode>);
+    await waitFor(() => expect(container.querySelector('.fhist-table tbody tr')).toBeTruthy());
+    expect(dydxMock.place).not.toHaveBeenCalled();
+  });
+
+  it('ignores delayed responses from the previous account', async () => {
+    let resolveOld;
+    dydxMock.fills.mockImplementationOnce(() => new Promise((r) => { resolveOld = r; }));
+    const view = () => <MemoryRouter future={ROUTER_FUTURE}><FuturesHistory /></MemoryRouter>;
+    const { container, rerender } = render(view());
+    dydxMock.session.address = `dydx1${'b'.repeat(38)}`;
+    dydxMock.fills.mockResolvedValueOnce({ fills: [{ ...fill, id: 'new', market: 'ETH-USD' }], live: true });
+    rerender(view());
+    await waitFor(() => expect(container.textContent).toContain('ETH-USD'));
+    resolveOld({ fills: [fill], live: true });
+    await waitFor(() => expect(container.querySelectorAll('.fhist-table tbody tr')).toHaveLength(1));
+    expect(container.textContent).not.toContain('BTC-USD');
+  });
+
+  it('reports an incomplete table when orders fail even if fills succeed', async () => {
+    dydxMock.fills.mockResolvedValueOnce({ fills: [fill], live: true });
+    dydxMock.orders.mockResolvedValueOnce({ orders: [], live: false });
+    render(<MemoryRouter future={ROUTER_FUTURE}><FuturesHistory /></MemoryRouter>);
+    expect(await screen.findByText('futures.history.indexerUnavailable')).toBeTruthy();
+    expect(await screen.findByText('futures.history.dir.unknown')).toBeTruthy();
   });
 
   it('has no send, cancel, edit or confirm control', async () => {

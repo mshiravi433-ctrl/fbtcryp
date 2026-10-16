@@ -10,6 +10,9 @@ export async function run(container) {
   const root = createRoot(container);
   const has = (s) => Boolean(container.querySelector(s));
 
+  // Exercise the app entrance, not the bare-browser SEO redirect. The web
+  // landing CTA and installed app intentionally enter with ?app=1.
+  window.history.replaceState(null, '', '/?app=1');
   // A genuinely fresh install: no stored language, no onboarding.
   // The language screen must come FIRST — an onboarding carousel in a script
   // the user cannot read is not an onboarding, it is a wall.

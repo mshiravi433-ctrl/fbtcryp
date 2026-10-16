@@ -874,6 +874,60 @@
     "fundingHelp": {
       "title": "Where do I fund the account?",
       "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
+    },
+    "tpsl": {
+      "title": "Ambil untung dan batas rugi",
+      "subtitle": "Order bersyarat pada posisi ini. Anda yang menandatangani.",
+      "tp": "Ambil untung",
+      "sl": "Batas rugi",
+      "tpLabel": "Harga ambil untung",
+      "slLabel": "Harga batas rugi",
+      "tpLimitLabel": "Harga limit ambil untung",
+      "slLimitLabel": "Harga limit batas rugi",
+      "optional": "Opsional",
+      "execLabel": "Saat terpicu",
+      "exec": {
+        "market": "Pasar",
+        "limit": "Limit"
+      },
+      "slippageLabel": "Slippage maksimum saat terpicu",
+      "sizeLabel": "Ukuran",
+      "closesLong": "menutup posisi long",
+      "closesShort": "menutup posisi short",
+      "limitAt": "harga terburuk",
+      "previewTitle": "Pratinjau — belum ada yang dikirim",
+      "estimateNote": "Estimasi pada harga pemicu. Tidak termasuk biaya, pendanaan, dan slippage di luar limit. Hasil akhir dapat berbeda.",
+      "estPnl": "Estimasi laba/rugi",
+      "estimated": "estimasi",
+      "roundedNote": "Dibulatkan ke langkah harga pasar: {{from}} → {{to}}",
+      "feeNote": "Biaya pembangun berlaku saat order terisi, sama seperti order dYdX lainnya di layar ini.",
+      "confirmSend": "Konfirmasi dan kirim",
+      "signHint": "Setiap bagian ditandatangani terpisah oleh akun dYdX Anda. Tidak ada yang dikirim sampai Anda mengetuk tombol.",
+      "submitted": "Terkirim",
+      "notConnected": "Hubungkan akun dYdX untuk mengatur ambil untung atau batas rugi.",
+      "marketUnknown": "Detail pasar belum dimuat. Coba lagi sebentar.",
+      "openTitle": "Order bersyarat terbuka",
+      "refresh": "Segarkan",
+      "noOpen": "Tidak ada order ambil untung atau batas rugi terbuka di pasar ini.",
+      "indexerUnavailable": "Pengindeks tidak tersedia, jadi order terbuka belum dapat ditampilkan. Tidak ada order yang diasumsikan aktif.",
+      "triggerAt": "pemicu",
+      "status": {
+        "untriggered": "Menunggu pemicu"
+      },
+      "cancelOrder": "Batalkan order",
+      "err": {
+        "NO_LEG": "Masukkan harga ambil untung atau batas rugi.",
+        "BAD_SIZE": "Posisi ini tidak memiliki ukuran terbuka.",
+        "BAD_PRICE": "Masukkan harga positif.",
+        "NO_CURRENT_PRICE": "Harga saat ini belum tersedia.",
+        "TICK_UNKNOWN": "Langkah harga pasar tidak diketahui, sehingga harga tidak dapat dibulatkan dengan aman.",
+        "TRIGGER_PASSED": "Harga sudah melewati tingkat ini. Order akan langsung terpicu, jadi tidak ada yang dikirim.",
+        "LIMIT_PRICE_INVALID": "Harga limit harus berada di sisi yang benar dari harga pemicu.",
+        "BAD_POSITION_SIDE": "Arah posisi tidak diketahui.",
+        "REJECTED": "Permintaan belum ditandatangani.",
+        "SUBMIT_FAILED": "Order tidak dapat dikirim. Periksa akun dan coba lagi.",
+        "CANCEL_FAILED": "Order tidak dapat dibatalkan. Coba lagi."
+      }
     }
   },
   "biz": {
@@ -2111,7 +2165,71 @@
     "change24h": "Perubahan 24 jam",
     "volume24h": "Volume 24 jam",
     "noWalletHint": "Tidak ada dompet Solana yang terpasang di perangkat ini. Ketuk tombol di atas untuk membuka halaman dompet — hubungkan Phantom, Solflare atau Backpack di sana dan Anda akan kembali langsung ke pesanan ini.",
-    "chartLive": "candle pasar langsung"
+    "chartLive": "candle pasar langsung",
+    "history": {
+      "tab": "Riwayat",
+      "title": "Riwayat perdagangan (hanya baca)",
+      "subtitle": "Perdagangan yang terisi di setiap platform. Daftar ini tidak dapat mengirim, membatalkan, atau mengubah apa pun.",
+      "notConnected": "Hubungkan akun dYdX untuk melihat riwayat perdagangannya.",
+      "openDydx": "Buka dYdX",
+      "filters": {
+        "market": "Pasar",
+        "allMarkets": "Semua pasar",
+        "range": "Periode"
+      },
+      "range": {
+        "24h": "24 jam",
+        "7d": "7 hari",
+        "30d": "30 hari",
+        "all": "Semua"
+      },
+      "indexerUnavailable": "Pengindeks dYdX tidak tersedia. Tabel mungkin tidak lengkap.",
+      "loading": "Memuat perdagangan…",
+      "empty": "Tidak ada perdagangan yang terisi pada periode ini.",
+      "emptyUnavailable": "Riwayat tidak tersedia saat ini.",
+      "tableCaption": "Perdagangan terisi",
+      "cols": {
+        "time": "Waktu",
+        "market": "Pasar",
+        "direction": "Arah",
+        "type": "Tindakan",
+        "size": "Ukuran",
+        "price": "Harga",
+        "fee": "Biaya",
+        "pnl": "Laba/rugi terealisasi",
+        "status": "Status"
+      },
+      "dir": {
+        "long": "Long",
+        "short": "Short",
+        "unknown": "Tidak diketahui"
+      },
+      "closing": "Tutup",
+      "opening": "Buka",
+      "status": {
+        "filled": "Terisi"
+      },
+      "pnlNone": "Eksekusi dYdX tidak memuat laba/rugi terealisasi dalam tampilan ini.",
+      "pnlNote": "Laba/rugi terealisasi tidak ditampilkan untuk dYdX: eksekusinya tidak menyediakan data tersebut di sini, jadi tanda pisah ditampilkan alih-alih nol.",
+      "joinNote": "Arah berasal dari order setiap eksekusi. Jika order tidak termasuk dalam 100 order terisi terakhir, tampil «Tidak diketahui».",
+      "loadMore": "Muat lagi",
+      "end": "Tidak ada perdagangan lagi.",
+      "venue": {
+        "dydx": "dYdX",
+        "dydxSource": "Sumber dYdX: eksekusi dan order pengindeks, dibaca melalui proksi FBT.",
+        "ostium": "Ostium",
+        "velocity": "Velocity",
+        "ostiumUnavailable": "Riwayat perdagangan Ostium belum tersedia di sini: belum ada sumber riwayat tepercaya yang terhubung ke aplikasi ini.",
+        "velocityUnavailable": "Riwayat perdagangan Velocity belum tersedia. Aplikasi ini hanya membaca posisi Velocity saat ini."
+      },
+      "tpsl": {
+        "title": "TP/SL di platform lain",
+        "intro": "Ambil untung dan batas rugi pada platform ini diatur di layar masing-masing melalui alur yang sudah ada. Halaman ini hanya menyediakan tautan.",
+        "ostium": "Ostium: ubah ambil untung dan batas rugi pada posisi terbuka di layar Ostium.",
+        "velocity": "Velocity: TP/SL diatur dari tab futures on-chain setelah memilih pasar.",
+        "open": "Buka {{venue}}"
+      }
+    }
   },
   "about": {
     "title": "Tentang kami",

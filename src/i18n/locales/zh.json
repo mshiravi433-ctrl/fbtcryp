@@ -874,6 +874,60 @@
     "fundingHelp": {
       "title": "Where do I fund the account?",
       "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
+    },
+    "tpsl": {
+      "title": "止盈与止损",
+      "subtitle": "此持仓的条件订单，由您签名。",
+      "tp": "止盈",
+      "sl": "止损",
+      "tpLabel": "止盈触发价",
+      "slLabel": "止损触发价",
+      "tpLimitLabel": "止盈限价",
+      "slLimitLabel": "止损限价",
+      "optional": "可选",
+      "execLabel": "触发时",
+      "exec": {
+        "market": "市价",
+        "limit": "限价"
+      },
+      "slippageLabel": "触发时最大滑点",
+      "sizeLabel": "数量",
+      "closesLong": "平多仓",
+      "closesShort": "平空仓",
+      "limitAt": "最差价格",
+      "previewTitle": "预览 — 尚未发送任何订单",
+      "estimateNote": "按触发价估算，不含手续费、资金费用及超出限价的滑点。最终结果可能不同。",
+      "estPnl": "预估盈亏",
+      "estimated": "估算",
+      "roundedNote": "已按市场最小价格变动单位取整：{{from}} → {{to}}",
+      "feeNote": "订单成交时收取构建者费用，与此页面的其他 dYdX 订单相同。",
+      "confirmSend": "确认并发送",
+      "signHint": "每一部分均由您的 dYdX 账户单独签名。点击按钮前不会发送任何订单。",
+      "submitted": "已提交",
+      "notConnected": "连接您的 dYdX 账户以设置止盈或止损。",
+      "marketUnknown": "市场详情尚未加载，请稍后重试。",
+      "openTitle": "未成交条件订单",
+      "refresh": "刷新",
+      "noOpen": "此市场没有未成交的止盈或止损订单。",
+      "indexerUnavailable": "索引器不可用，暂时无法显示未成交订单。不应据此认为任何订单处于生效状态。",
+      "triggerAt": "触发价",
+      "status": {
+        "untriggered": "等待触发"
+      },
+      "cancelOrder": "取消订单",
+      "err": {
+        "NO_LEG": "请输入止盈或止损价格。",
+        "BAD_SIZE": "此持仓没有未平仓数量。",
+        "BAD_PRICE": "请输入正数价格。",
+        "NO_CURRENT_PRICE": "当前价格尚不可用。",
+        "TICK_UNKNOWN": "市场最小价格变动单位未知，无法安全地对价格取整。",
+        "TRIGGER_PASSED": "价格已越过此水平，订单会立即触发，因此未发送任何订单。",
+        "LIMIT_PRICE_INVALID": "限价必须位于触发价的正确一侧。",
+        "BAD_POSITION_SIDE": "持仓方向未知。",
+        "REJECTED": "请求未签名。",
+        "SUBMIT_FAILED": "无法提交订单，请检查账户后重试。",
+        "CANCEL_FAILED": "无法取消订单，请重试。"
+      }
     }
   },
   "biz": {
@@ -2104,7 +2158,71 @@
     "change24h": "24 小时涨跌",
     "volume24h": "24 小时成交量",
     "noWalletHint": "此设备上未安装任何 Solana 钱包。点击上方按钮打开钱包页面——在那里连接 Phantom、Solflare 或 Backpack，即可直接返回当前订单。",
-    "chartLive": "实时市场K线"
+    "chartLive": "实时市场K线",
+    "history": {
+      "tab": "历史",
+      "title": "交易历史（只读）",
+      "subtitle": "各平台的已成交交易。此列表无法发送、取消或修改任何订单。",
+      "notConnected": "连接您的 dYdX 账户以查看交易历史。",
+      "openDydx": "前往 dYdX",
+      "filters": {
+        "market": "市场",
+        "allMarkets": "所有市场",
+        "range": "时段"
+      },
+      "range": {
+        "24h": "24 小时",
+        "7d": "7 天",
+        "30d": "30 天",
+        "all": "全部"
+      },
+      "indexerUnavailable": "dYdX 索引器不可用，表格可能不完整。",
+      "loading": "正在加载交易…",
+      "empty": "此时段内没有已成交交易。",
+      "emptyUnavailable": "历史记录暂时不可用。",
+      "tableCaption": "已成交交易",
+      "cols": {
+        "time": "时间",
+        "market": "市场",
+        "direction": "方向",
+        "type": "操作",
+        "size": "数量",
+        "price": "价格",
+        "fee": "手续费",
+        "pnl": "已实现盈亏",
+        "status": "状态"
+      },
+      "dir": {
+        "long": "多头",
+        "short": "空头",
+        "unknown": "未知"
+      },
+      "closing": "平仓",
+      "opening": "开仓",
+      "status": {
+        "filled": "已成交"
+      },
+      "pnlNone": "此视图中的 dYdX 成交记录不包含已实现盈亏。",
+      "pnlNote": "不显示 dYdX 的已实现盈亏：此处的成交记录不提供该数据，因此显示横线而非零。",
+      "joinNote": "方向来自每笔成交所属的订单。如果订单不在最近 100 笔已成交订单中，则显示“未知”。",
+      "loadMore": "加载更多",
+      "end": "没有更多交易。",
+      "venue": {
+        "dydx": "dYdX",
+        "dydxSource": "dYdX 数据来源：通过 FBT 代理读取索引器的成交记录及订单。",
+        "ostium": "Ostium",
+        "velocity": "Velocity",
+        "ostiumUnavailable": "此处暂不提供 Ostium 交易历史：应用尚未接入可靠的历史数据源。",
+        "velocityUnavailable": "暂不提供 Velocity 交易历史。此应用仅读取 Velocity 当前持仓。"
+      },
+      "tpsl": {
+        "title": "其他平台的止盈/止损",
+        "intro": "这些平台的止盈和止损在各自页面中通过现有流程设置。此页面仅提供链接。",
+        "ostium": "Ostium：在 Ostium 页面编辑未平仓持仓的止盈和止损。",
+        "velocity": "Velocity：选择市场后，在链上期货标签页设置止盈/止损。",
+        "open": "打开 {{venue}}"
+      }
+    }
   },
   "about": {
     "title": "关于我们",

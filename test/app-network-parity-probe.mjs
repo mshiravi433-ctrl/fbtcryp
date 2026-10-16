@@ -281,7 +281,10 @@ check('perp: the rail is not the unstyled shared segmented control',
 check('perp: the rail has a real tap height', /\.perp-rail-tab\s*\{[^}]*min-height:\s*4[4-9]px/.test(perpCss));
 check('perp: the rail is styled outside the overview-only wrapper',
   /\.perp-rail\s*\{/.test(perpCss) && !/\.perp-modern \.perp-rail\s*\{/.test(perpCss));
-check('perp: the virtual-credit doorway carries an icon', /perp-cta-ico/.test(perpSrc) && /\.perp-cta-ico\s*\{/.test(perpCss));
+// The retired virtual-credit doorway no longer renders. Pin the current
+// safety disclosure's icon instead of demanding dead markup be restored.
+check('perp: the current safety disclosure carries an icon',
+  /id="perp-honest"\s+icon=\{<IconShield/.test(perpSrc));
 const perpCtaMinHeight = perpCss.match(/\.perp-cta\s*\{[^}]*min-height:\s*(\d+)px/);
 check('perp: the virtual-credit doorway has a real minimum height',
   Number(perpCtaMinHeight?.[1]) >= 70);

@@ -874,6 +874,60 @@
     "fundingHelp": {
       "title": "Where do I fund the account?",
       "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
+    },
+    "tpsl": {
+      "title": "Kâr al ve zarar durdur",
+      "subtitle": "Bu pozisyondaki koşullu emirler. Siz imzalarsınız.",
+      "tp": "Kâr al",
+      "sl": "Zarar durdur",
+      "tpLabel": "Kâr alma fiyatı",
+      "slLabel": "Zarar durdurma fiyatı",
+      "tpLimitLabel": "Kâr alma limit fiyatı",
+      "slLimitLabel": "Zarar durdurma limit fiyatı",
+      "optional": "İsteğe bağlı",
+      "execLabel": "Tetiklendiğinde",
+      "exec": {
+        "market": "Piyasa",
+        "limit": "Limit"
+      },
+      "slippageLabel": "Tetiklenmede azami kayma",
+      "sizeLabel": "Büyüklük",
+      "closesLong": "uzun pozisyonu kapatır",
+      "closesShort": "kısa pozisyonu kapatır",
+      "limitAt": "en kötü fiyat",
+      "previewTitle": "Önizleme — henüz hiçbir şey gönderilmedi",
+      "estimateNote": "Tetikleme fiyatındaki tahmindir. Ücretler, fonlama ve limitin ötesindeki kayma dahil değildir. Sonuç farklı olabilir.",
+      "estPnl": "Tahmini kâr/zarar",
+      "estimated": "tahmin",
+      "roundedNote": "Piyasa fiyat adımına yuvarlandı: {{from}} → {{to}}",
+      "feeNote": "Emir gerçekleştiğinde, bu ekrandaki diğer dYdX emirlerinde olduğu gibi oluşturucu ücreti uygulanır.",
+      "confirmSend": "Onayla ve gönder",
+      "signHint": "Her bacak dYdX hesabınızla ayrı imzalanır. Düğmeye dokunana kadar hiçbir şey gönderilmez.",
+      "submitted": "Gönderildi",
+      "notConnected": "Kâr al veya zarar durdur belirlemek için dYdX hesabınızı bağlayın.",
+      "marketUnknown": "Piyasa ayrıntıları henüz yüklenmedi. Biraz sonra tekrar deneyin.",
+      "openTitle": "Açık koşullu emirler",
+      "refresh": "Yenile",
+      "noOpen": "Bu piyasada açık kâr al veya zarar durdur emri yok.",
+      "indexerUnavailable": "İndeksleyici kullanılamıyor, bu nedenle açık emirler gösterilemiyor. Hiçbir emrin etkin olduğu varsayılmaz.",
+      "triggerAt": "tetikleme",
+      "status": {
+        "untriggered": "Tetikleme bekleniyor"
+      },
+      "cancelOrder": "Emri iptal et",
+      "err": {
+        "NO_LEG": "Kâr alma veya zarar durdurma fiyatı girin.",
+        "BAD_SIZE": "Bu pozisyonun açık büyüklüğü yok.",
+        "BAD_PRICE": "Pozitif bir fiyat girin.",
+        "NO_CURRENT_PRICE": "Güncel fiyat henüz kullanılamıyor.",
+        "TICK_UNKNOWN": "Piyasa fiyat adımı bilinmediğinden fiyatlar güvenle yuvarlanamıyor.",
+        "TRIGGER_PASSED": "Fiyat bu seviyeyi zaten geçti. Hemen tetikleneceği için hiçbir şey gönderilmedi.",
+        "LIMIT_PRICE_INVALID": "Limit fiyatı tetikleme fiyatının doğru tarafında olmalıdır.",
+        "BAD_POSITION_SIDE": "Pozisyon yönü bilinmiyor.",
+        "REJECTED": "İstek imzalanmadı.",
+        "SUBMIT_FAILED": "Emir gönderilemedi. Hesabı kontrol edip tekrar deneyin.",
+        "CANCEL_FAILED": "Emir iptal edilemedi. Tekrar deneyin."
+      }
     }
   },
   "biz": {
@@ -2111,7 +2165,71 @@
     "change24h": "24 saat değişim",
     "volume24h": "24 saat hacim",
     "noWalletHint": "Bu cihazda kurulu bir Solana cüzdanı yok. Cüzdan sayfasını açmak için yukarıdaki düğmeye dokunun — orada Phantom, Solflare veya Backpack bağlayın ve doğrudan bu emre geri döneceksiniz.",
-    "chartLive": "canlı piyas mumları"
+    "chartLive": "canlı piyas mumları",
+    "history": {
+      "tab": "Geçmiş",
+      "title": "İşlem geçmişi (salt okunur)",
+      "subtitle": "Her platformdaki gerçekleşen işlemler. Bu liste hiçbir şey gönderemez, iptal edemez veya değiştiremez.",
+      "notConnected": "İşlem geçmişini görmek için dYdX hesabınızı bağlayın.",
+      "openDydx": "dYdX'e git",
+      "filters": {
+        "market": "Piyasa",
+        "allMarkets": "Tüm piyasalar",
+        "range": "Dönem"
+      },
+      "range": {
+        "24h": "24 saat",
+        "7d": "7 gün",
+        "30d": "30 gün",
+        "all": "Tümü"
+      },
+      "indexerUnavailable": "dYdX indeksleyicisi kullanılamıyor. Tablo eksik olabilir.",
+      "loading": "İşlemler yükleniyor…",
+      "empty": "Bu dönemde gerçekleşen işlem yok.",
+      "emptyUnavailable": "Geçmiş şu anda kullanılamıyor.",
+      "tableCaption": "Gerçekleşen işlemler",
+      "cols": {
+        "time": "Zaman",
+        "market": "Piyasa",
+        "direction": "Yön",
+        "type": "İşlem",
+        "size": "Büyüklük",
+        "price": "Fiyat",
+        "fee": "Ücret",
+        "pnl": "Gerçekleşmiş kâr/zarar",
+        "status": "Durum"
+      },
+      "dir": {
+        "long": "Uzun",
+        "short": "Kısa",
+        "unknown": "Bilinmiyor"
+      },
+      "closing": "Kapat",
+      "opening": "Aç",
+      "status": {
+        "filled": "Gerçekleşti"
+      },
+      "pnlNone": "dYdX gerçekleşmeleri bu görünümde gerçekleşmiş kâr/zarar içermez.",
+      "pnlNote": "dYdX için gerçekleşmiş kâr/zarar gösterilmez: gerçekleşmeler bunu burada sağlamadığından sıfır yerine çizgi gösterilir.",
+      "joinNote": "Yön her gerçekleşmenin bağlı olduğu emirden alınır. Emir son 100 gerçekleşmiş emir arasında değilse «Bilinmiyor» gösterilir.",
+      "loadMore": "Daha fazla yükle",
+      "end": "Başka işlem yok.",
+      "venue": {
+        "dydx": "dYdX",
+        "dydxSource": "dYdX kaynağı: FBT vekili üzerinden okunan indeksleyici gerçekleşmeleri ve emirleri.",
+        "ostium": "Ostium",
+        "velocity": "Velocity",
+        "ostiumUnavailable": "Ostium işlem geçmişi henüz burada kullanılamıyor: uygulamaya güvenilir bir geçmiş kaynağı bağlı değil.",
+        "velocityUnavailable": "Velocity işlem geçmişi henüz kullanılamıyor. Bu uygulama yalnızca mevcut Velocity pozisyonlarını okur."
+      },
+      "tpsl": {
+        "title": "Diğer platformlarda TP/SL",
+        "intro": "Bu platformlarda kâr al ve zarar durdur kendi ekranlarında mevcut akışlar üzerinden ayarlanır. Bu sayfa yalnızca bağlantı verir.",
+        "ostium": "Ostium: açık pozisyonun kâr al ve zarar durdur değerlerini Ostium ekranında düzenleyin.",
+        "velocity": "Velocity: TP/SL, piyasayı seçtikten sonra zincir üstü vadeli işlemler sekmesinden ayarlanır.",
+        "open": "{{venue}} aç"
+      }
+    }
   },
   "about": {
     "title": "Hakkımızda",

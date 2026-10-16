@@ -874,6 +874,60 @@
     "fundingHelp": {
       "title": "Where do I fund the account?",
       "body": "dYdX collateral deposits are not handled in this app or on our website. Deposit USDC, withdraw, and manage your account only on the official dydx.trade site using the same wallet. The app only builds the order and sends it to your wallet for signing; FBT never holds your funds."
+    },
+    "tpsl": {
+      "title": "Toma de ganancias y límite de pérdidas",
+      "subtitle": "Órdenes condicionales sobre esta posición. Las firmas tú.",
+      "tp": "Tomar ganancias",
+      "sl": "Limitar pérdidas",
+      "tpLabel": "Precio de toma de ganancias",
+      "slLabel": "Precio de límite de pérdidas",
+      "tpLimitLabel": "Precio límite de toma de ganancias",
+      "slLimitLabel": "Precio límite de cierre por pérdidas",
+      "optional": "Opcional",
+      "execLabel": "Al activarse",
+      "exec": {
+        "market": "Mercado",
+        "limit": "Límite"
+      },
+      "slippageLabel": "Deslizamiento máximo al activarse",
+      "sizeLabel": "Tamaño",
+      "closesLong": "cierra una posición larga",
+      "closesShort": "cierra una posición corta",
+      "limitAt": "peor precio",
+      "previewTitle": "Vista previa — aún no se ha enviado nada",
+      "estimateNote": "Estimación al precio de activación. Excluye comisiones, financiación y deslizamiento más allá del límite. El resultado final puede variar.",
+      "estPnl": "Ganancia/pérdida estimada",
+      "estimated": "estimación",
+      "roundedNote": "Redondeado al incremento de precio del mercado: {{from}} → {{to}}",
+      "feeNote": "Al ejecutarse la orden se aplica una comisión de constructor, igual que a las demás órdenes dYdX de esta pantalla.",
+      "confirmSend": "Confirmar y enviar",
+      "signHint": "Tu cuenta dYdX firma cada parte por separado. No se envía nada hasta que pulses el botón.",
+      "submitted": "Enviada",
+      "notConnected": "Conecta tu cuenta dYdX para establecer la toma de ganancias o el límite de pérdidas.",
+      "marketUnknown": "Los detalles del mercado aún no se han cargado. Inténtalo de nuevo en un momento.",
+      "openTitle": "Órdenes condicionales abiertas",
+      "refresh": "Actualizar",
+      "noOpen": "No hay órdenes abiertas de toma de ganancias ni de límite de pérdidas en este mercado.",
+      "indexerUnavailable": "El indexador no está disponible, por lo que no se pueden mostrar las órdenes abiertas. No se supone que ninguna esté activa.",
+      "triggerAt": "activación",
+      "status": {
+        "untriggered": "Esperando activación"
+      },
+      "cancelOrder": "Cancelar orden",
+      "err": {
+        "NO_LEG": "Introduce un precio de toma de ganancias o de límite de pérdidas.",
+        "BAD_SIZE": "Esta posición no tiene tamaño abierto.",
+        "BAD_PRICE": "Introduce un precio positivo.",
+        "NO_CURRENT_PRICE": "El precio actual aún no está disponible.",
+        "TICK_UNKNOWN": "Se desconoce el incremento de precio del mercado, por lo que no se pueden redondear los precios con seguridad.",
+        "TRIGGER_PASSED": "El precio ya ha superado este nivel. Se activaría inmediatamente, por lo que no se ha enviado nada.",
+        "LIMIT_PRICE_INVALID": "El precio límite debe estar en el lado correcto del precio de activación.",
+        "BAD_POSITION_SIDE": "Se desconoce la dirección de la posición.",
+        "REJECTED": "La solicitud no se ha firmado.",
+        "SUBMIT_FAILED": "No se pudo enviar la orden. Revisa la cuenta e inténtalo de nuevo.",
+        "CANCEL_FAILED": "No se pudo cancelar la orden. Inténtalo de nuevo."
+      }
     }
   },
   "biz": {
@@ -2111,7 +2165,71 @@
     "change24h": "Cambio 24 h",
     "volume24h": "Volumen 24 h",
     "noWalletHint": "No hay ningún monedero Solana instalado en este dispositivo. Toca el botón de arriba para abrir la página del monedero: conecta Phantom, Solflare o Backpack allí y volverás directamente a esta orden.",
-    "chartLive": "velas del mercado en vivo"
+    "chartLive": "velas del mercado en vivo",
+    "history": {
+      "tab": "Historial",
+      "title": "Historial de operaciones (solo lectura)",
+      "subtitle": "Operaciones ejecutadas en cada plataforma. Esta lista no puede enviar, cancelar ni modificar nada.",
+      "notConnected": "Conecta tu cuenta dYdX para ver su historial de operaciones.",
+      "openDydx": "Ir a dYdX",
+      "filters": {
+        "market": "Mercado",
+        "allMarkets": "Todos los mercados",
+        "range": "Periodo"
+      },
+      "range": {
+        "24h": "24 h",
+        "7d": "7 días",
+        "30d": "30 días",
+        "all": "Todo"
+      },
+      "indexerUnavailable": "El indexador de dYdX no está disponible. La tabla puede estar incompleta.",
+      "loading": "Cargando operaciones…",
+      "empty": "No hay operaciones ejecutadas en este periodo.",
+      "emptyUnavailable": "El historial no está disponible ahora.",
+      "tableCaption": "Operaciones ejecutadas",
+      "cols": {
+        "time": "Hora",
+        "market": "Mercado",
+        "direction": "Dirección",
+        "type": "Acción",
+        "size": "Tamaño",
+        "price": "Precio",
+        "fee": "Comisión",
+        "pnl": "Ganancia/pérdida realizada",
+        "status": "Estado"
+      },
+      "dir": {
+        "long": "Larga",
+        "short": "Corta",
+        "unknown": "Desconocida"
+      },
+      "closing": "Cerrar",
+      "opening": "Abrir",
+      "status": {
+        "filled": "Ejecutada"
+      },
+      "pnlNone": "Las ejecuciones de dYdX no incluyen la ganancia/pérdida realizada en esta vista.",
+      "pnlNote": "No se muestra la ganancia/pérdida realizada de dYdX: sus ejecuciones no la proporcionan aquí, por lo que se muestra un guion en lugar de cero.",
+      "joinNote": "La dirección procede de la orden de cada ejecución. Si su orden no está entre las últimas 100 órdenes ejecutadas, se muestra «Desconocida».",
+      "loadMore": "Cargar más",
+      "end": "No hay más operaciones.",
+      "venue": {
+        "dydx": "dYdX",
+        "dydxSource": "Fuente de dYdX: ejecuciones y órdenes del indexador, leídas a través del proxy de FBT.",
+        "ostium": "Ostium",
+        "velocity": "Velocity",
+        "ostiumUnavailable": "El historial de Ostium aún no está disponible aquí: no hay una fuente de historial fiable conectada a esta aplicación.",
+        "velocityUnavailable": "El historial de Velocity aún no está disponible. Esta aplicación solo lee las posiciones actuales de Velocity."
+      },
+      "tpsl": {
+        "title": "TP/SL en otras plataformas",
+        "intro": "La toma de ganancias y el límite de pérdidas se establecen en las pantallas de cada plataforma mediante sus flujos existentes. Esta página solo enlaza a ellas.",
+        "ostium": "Ostium: edita la toma de ganancias y el límite de pérdidas de una posición abierta en la pantalla de Ostium.",
+        "velocity": "Velocity: el TP/SL se establece en la pestaña de futuros en cadena, después de elegir el mercado.",
+        "open": "Abrir {{venue}}"
+      }
+    }
   },
   "about": {
     "title": "Sobre nosotros",

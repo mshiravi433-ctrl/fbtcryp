@@ -79,7 +79,9 @@ vc.on('jsdomError', (e) => {
 });
 
 const dom = new JSDOM(page, {
-  url: 'https://localhost/',
+  // Enter the app as the landing CTA/native shell does. A bare browser root
+  // intentionally hands off to SEO and renders no Splash, even when offline.
+  url: 'https://localhost/?app=1',
   runScripts: 'dangerously',
   pretendToBeVisual: true,
   virtualConsole: vc,
