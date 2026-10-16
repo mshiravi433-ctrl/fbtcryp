@@ -15283,8 +15283,7 @@
     },
     "progressAria": "Story progress — tap any circle to jump to that story",
     "score": {
-      "cue": "Cinematic score playing",
-      "silent": "Sound off"
+      "cue": "Music playing"
     },
     "promo": {
       "label": "Sponsored"
@@ -15320,8 +15319,10 @@
       "muteMusic": "Mute Music"
     },
     "catalog": {
+      "kicker": "LEARNING PATHS",
       "title": "Educational Video Curriculum",
-      "searchPlaceholder": "Search tutorials (Stocks, Swap, AI, DeFi…)"
+      "searchPlaceholder": "Search tutorials (Stocks, Swap, AI, DeFi…)",
+      "noResults": "No courses match your search. Try another keyword or category."
     },
     "categories": {
       "all": "All Videos",

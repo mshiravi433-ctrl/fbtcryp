@@ -9,6 +9,8 @@ import {
   IconCheck,
   IconCopy,
   IconExternal,
+  IconPause,
+  IconPlay,
   IconSearch,
   IconVideo
 } from '../components/Icons';
@@ -280,58 +282,72 @@ export default function AparatVideos({ embedded = false }) {
                 </div>
               </div>
 
-              <div className="aparat-hero-emblem" aria-hidden="true">
-                <svg viewBox="0 0 120 120" fill="none" className="aparat-emblem-svg">
-                  <defs>
-                    <linearGradient id="aparat-hero-ring" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stopColor="#ff2d95" />
-                      <stop offset="50%" stopColor="#ffb300" />
-                      <stop offset="100%" stopColor="#00e5ff" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="60" cy="60" r="52" stroke="url(#aparat-hero-ring)" strokeWidth="2.5" strokeDasharray="8 6" />
-                  <circle cx="60" cy="60" r="40" fill="rgba(255,45,149,0.14)" stroke="url(#aparat-hero-ring)" strokeWidth="1.8" />
-                  <circle cx="44" cy="44" r="6" fill="#ff2d95" />
-                  <circle cx="76" cy="44" r="6" fill="#ffb300" />
-                  <circle cx="44" cy="76" r="6" fill="#00e5ff" />
-                  <circle cx="76" cy="76" r="6" fill="#00ff9d" />
-                  <polygon points="54,48 74,60 54,72" fill="#ffffff" />
-                </svg>
+              <div className="aparat-hero-art" aria-hidden="true">
+                <span className="aparat-art-orbit aparat-art-orbit--outer" />
+                <span className="aparat-art-orbit aparat-art-orbit--inner" />
+                <div className="aparat-hero-emblem">
+                  <svg viewBox="0 0 120 120" fill="none" className="aparat-emblem-svg">
+                    <defs>
+                      <linearGradient id="aparat-hero-ring" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stopColor="#ff5cad" />
+                        <stop offset="52%" stopColor="#a78bfa" />
+                        <stop offset="100%" stopColor="#38e1ff" />
+                      </linearGradient>
+                      <linearGradient id="aparat-hero-play" x1="42" y1="39" x2="82" y2="81" gradientUnits="userSpaceOnUse">
+                        <stop offset="0%" stopColor="#ffffff" />
+                        <stop offset="100%" stopColor="#d9e7ff" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="60" cy="60" r="52" stroke="url(#aparat-hero-ring)" strokeWidth="1.6" strokeDasharray="2 8" />
+                    <circle cx="60" cy="60" r="39" fill="rgba(255,92,173,0.09)" stroke="url(#aparat-hero-ring)" strokeWidth="1.5" />
+                    <circle cx="60" cy="60" r="25" fill="rgba(8,13,26,0.72)" stroke="rgba(255,255,255,0.18)" />
+                    <path d="M55 48.5a2 2 0 0 1 3-1.72l19 11.38a2.15 2.15 0 0 1 0 3.68L58 73.22a2 2 0 0 1-3-1.72V48.5z" fill="url(#aparat-hero-play)" />
+                    <circle cx="92" cy="26" r="3.5" fill="#38e1ff" />
+                    <circle cx="28" cy="92" r="3.5" fill="#ff5cad" />
+                  </svg>
+                </div>
+                <span className="aparat-art-play-chip"><IconPlay width={13} height={13} /></span>
               </div>
             </div>
 
-            <div className="aparat-stats-row">
-              <div className="aparat-stat-chip">
-                <span className="aparat-stat-val mono">{APARAT_COURSES.length}+</span>
-                <span className="aparat-stat-lbl">{t('aparat.stats.courses')}</span>
+            <div className="aparat-hero-footer">
+              <div className="aparat-stats-row">
+                <div className="aparat-stat-chip">
+                  <span className="aparat-stat-val mono">{APARAT_COURSES.length}+</span>
+                  <span className="aparat-stat-lbl">{t('aparat.stats.courses')}</span>
+                </div>
+                <div className="aparat-stat-chip">
+                  <span className="aparat-stat-val mono">HD</span>
+                  <span className="aparat-stat-lbl">{t('aparat.stats.quality')}</span>
+                </div>
+                <div className="aparat-stat-chip">
+                  <span className="aparat-stat-val mono">100%</span>
+                  <span className="aparat-stat-lbl">{t('aparat.stats.free')}</span>
+                </div>
               </div>
-              <div className="aparat-stat-chip">
-                <span className="aparat-stat-val mono">HD</span>
-                <span className="aparat-stat-lbl">{t('aparat.stats.quality')}</span>
-              </div>
-              <div className="aparat-stat-chip">
-                <span className="aparat-stat-val mono">100%</span>
-                <span className="aparat-stat-lbl">{t('aparat.stats.free')}</span>
-              </div>
-            </div>
 
-            <div className="aparat-hero-actions">
-              <button
-                type="button"
-                className="btn btn-primary aparat-primary-cta"
-                onClick={openOfficialChannel}
-                data-testid="aparat-open-channel-btn"
-              >
-                <IconVideo width={18} height={18} />
-                <span>{t('aparat.hero.watchOnAparat')}</span>
-                <IconExternal width={15} height={15} />
-              </button>
+              <div className="aparat-hero-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary aparat-primary-cta"
+                  onClick={openOfficialChannel}
+                  data-testid="aparat-open-channel-btn"
+                >
+                  <IconPlay width={17} height={17} />
+                  <span>{t('aparat.hero.watchOnAparat')}</span>
+                  <IconExternal width={15} height={15} />
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
         {/* ─── INTERACTIVE COURSE STUDIO STAGE ──────────────────────────── */}
-        <section className="card market-glass-surface aparat-stage-card" data-testid="aparat-interactive-stage">
+        <section
+          className="card market-glass-surface aparat-stage-card"
+          data-testid="aparat-interactive-stage"
+          style={{ '--course-accent': selectedCourse.accent, '--course-accent2': selectedCourse.accent2 }}
+        >
           <div className="row-between aparat-stage-header">
             <div className="row" style={{ gap: 8 }}>
               <span className="aparat-stage-dot" style={{ background: selectedCourse.accent }} />
@@ -354,10 +370,14 @@ export default function AparatVideos({ embedded = false }) {
                   type="button"
                   className="aparat-play-toggle"
                   onClick={() => setPlayingPreview((p) => !p)}
+                  aria-pressed={playingPreview}
                 >
-                  {playingPreview ? t('aparat.player.pauseWalkthrough') : t('aparat.player.startWalkthrough')}
+                  {playingPreview
+                    ? <IconPause width={15} height={15} aria-hidden="true" />
+                    : <IconPlay width={15} height={15} aria-hidden="true" />}
+                  <span>{playingPreview ? t('aparat.player.pauseWalkthrough') : t('aparat.player.startWalkthrough')}</span>
                 </button>
-                <span className="faint" style={{ fontSize: 11 }}>
+                <span className="aparat-stage-level">
                   {t(`aparat.level.${selectedCourse.level}`)}
                 </span>
               </div>
@@ -378,6 +398,8 @@ export default function AparatVideos({ embedded = false }) {
                     type="button"
                     className={`aparat-step-item ${activeStep === idx ? 'is-active' : ''}`}
                     onClick={() => setActiveStep(idx)}
+                    aria-pressed={activeStep === idx}
+                    aria-current={activeStep === idx ? 'step' : undefined}
                   >
                     <span className="aparat-step-num mono">{stepNum}</span>
                     <span className="aparat-step-text">
@@ -390,8 +412,7 @@ export default function AparatVideos({ embedded = false }) {
               <div className="aparat-stage-actions">
                 <button
                   type="button"
-                  className="btn btn-primary"
-                  style={{ flex: 1.2, minHeight: 42, borderRadius: 12 }}
+                  className="btn btn-primary aparat-stage-cta"
                   onClick={openOfficialChannel}
                 >
                   <IconVideo width={16} height={16} />
@@ -399,8 +420,7 @@ export default function AparatVideos({ embedded = false }) {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost"
-                  style={{ flex: 1, minHeight: 42, borderRadius: 12 }}
+                  className="btn btn-ghost aparat-stage-secondary"
                   onClick={() => navigate(selectedCourse.appRoute)}
                 >
                   <span>{t('aparat.player.openSection')}</span>
@@ -412,95 +432,114 @@ export default function AparatVideos({ embedded = false }) {
 
         {/* ─── SEARCH & CATEGORY TABS ───────────────────────────────────── */}
         <section className="aparat-catalog-section">
-          <div className="row-between" style={{ alignItems: 'center', marginBottom: 10 }}>
-            <p className="section-label" style={{ margin: 0 }}>{t('aparat.catalog.title')}</p>
-            <span className="faint mono" style={{ fontSize: 11.5 }}>
-              {filteredCourses.length} / {APARAT_COURSES.length}
+          <div className="aparat-catalog-head">
+            <div className="aparat-catalog-heading">
+              <span className="aparat-catalog-kicker">{t('aparat.catalog.kicker')}</span>
+              <h2 className="aparat-catalog-title">{t('aparat.catalog.title')}</h2>
+            </div>
+            <span className="aparat-course-count mono" aria-live="polite">
+              <strong>{filteredCourses.length}</strong>
+              <span>/ {APARAT_COURSES.length}</span>
             </span>
           </div>
 
-          <div className="aparat-search-wrap">
-            <IconSearch width={16} height={16} />
+          <label className="aparat-search-wrap">
+            <IconSearch width={16} height={16} aria-hidden="true" />
             <input
-              type="text"
+              type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('aparat.catalog.searchPlaceholder')}
+              aria-label={t('aparat.catalog.searchPlaceholder')}
               className="aparat-search-input"
             />
-          </div>
+          </label>
 
-          <div className="tag-scroll" style={{ marginBottom: 14 }}>
+          <div className="tag-scroll aparat-category-rail" role="group" aria-label={t('aparat.catalog.title')}>
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 type="button"
-                className={`tag ${category === cat ? 'active' : ''}`}
+                className={`tag aparat-category-chip ${category === cat ? 'active' : ''}`}
                 onClick={() => setCategory(cat)}
+                aria-pressed={category === cat}
               >
                 {t(`aparat.categories.${cat}`)}
               </button>
             ))}
           </div>
 
-          <div className="aparat-video-grid">
-            {filteredCourses.map((course) => {
-              const isSelected = course.id === selectedCourse.id;
-              return (
-                <article
-                  key={course.id}
-                  className={`card market-glass-surface aparat-course-card ${isSelected ? 'is-selected' : ''}`}
-                  data-testid={`aparat-course-${course.id}`}
-                >
-                  <div
-                    className="aparat-course-thumb"
-                    onClick={() => {
-                      setSelectedId(course.id);
-                      setActiveStep(0);
-                      setPlayingPreview(true);
-                    }}
+          {filteredCourses.length > 0 ? (
+            <div className="aparat-video-grid">
+              {filteredCourses.map((course) => {
+                const isSelected = course.id === selectedCourse.id;
+                const courseTitle = t(`aparat.courses.${course.id}.title`);
+                return (
+                  <article
+                    key={course.id}
+                    className={`card market-glass-surface aparat-course-card ${isSelected ? 'is-selected' : ''}`}
+                    data-testid={`aparat-course-${course.id}`}
+                    style={{ '--course-accent': course.accent, '--course-accent2': course.accent2 }}
                   >
-                    <CourseIllustration
-                      id={course.id}
-                      accent={course.accent}
-                      accent2={course.accent2}
-                    />
-                    <span className="aparat-thumb-duration mono">{course.duration}</span>
-                    <span className={`aparat-thumb-level aparat-level-${course.level}`}>
-                      {t(`aparat.level.${course.level}`)}
-                    </span>
-                  </div>
+                    <button
+                      type="button"
+                      className="aparat-course-thumb"
+                      aria-label={`${t('aparat.player.watchEpisode')}: ${courseTitle}`}
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        setSelectedId(course.id);
+                        setActiveStep(0);
+                        setPlayingPreview(true);
+                      }}
+                    >
+                      <CourseIllustration
+                        id={course.id}
+                        accent={course.accent}
+                        accent2={course.accent2}
+                      />
+                      <span className="aparat-thumb-play" aria-hidden="true">
+                        <IconPlay width={17} height={17} />
+                      </span>
+                      <span className="aparat-thumb-duration mono">{course.duration}</span>
+                      <span className={`aparat-thumb-level aparat-level-${course.level}`}>
+                        {t(`aparat.level.${course.level}`)}
+                      </span>
+                    </button>
 
-                  <div className="aparat-course-body">
-                    <h3 className="aparat-course-title">
-                      {t(`aparat.courses.${course.id}.title`)}
-                    </h3>
-                    <p className="aparat-course-desc">
-                      {t(`aparat.courses.${course.id}.desc`)}
-                    </p>
+                    <div className="aparat-course-body">
+                      <h3 className="aparat-course-title">{courseTitle}</h3>
+                      <p className="aparat-course-desc">
+                        {t(`aparat.courses.${course.id}.desc`)}
+                      </p>
 
-                    <div className="aparat-course-footer">
-                      <button
-                        type="button"
-                        className="tag aparat-btn-watch"
-                        onClick={openOfficialChannel}
-                      >
-                        <IconVideo width={14} height={14} />
-                        <span>{t('aparat.player.watchEpisode')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="tag aparat-btn-try"
-                        onClick={() => navigate(course.appRoute)}
-                      >
-                        <span>{t('aparat.player.openSection')}</span>
-                      </button>
+                      <div className="aparat-course-footer">
+                        <button
+                          type="button"
+                          className="tag aparat-btn-watch"
+                          onClick={openOfficialChannel}
+                        >
+                          <IconVideo width={14} height={14} />
+                          <span>{t('aparat.player.watchEpisode')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="tag aparat-btn-try"
+                          onClick={() => navigate(course.appRoute)}
+                        >
+                          <span>{t('aparat.player.openSection')}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="aparat-empty-state" role="status">
+              <span className="aparat-empty-icon" aria-hidden="true"><IconSearch width={18} height={18} /></span>
+              <p>{t('aparat.catalog.noResults')}</p>
+            </div>
+          )}
         </section>
       </div>
     </PageTransition>

@@ -213,6 +213,7 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
 
     const rail = screen.getByTestId('market-stories-rail');
     expect(rail).toBeTruthy();
+    expect(screen.getByTestId('market-story-item-aparat')).toBeTruthy();
 
     const stocksBubble = screen.getByTestId('market-story-item-stocks');
     expect(stocksBubble).toBeTruthy();
@@ -235,6 +236,20 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     const ctaBtn = screen.getByTestId('story-cta-stocks');
     fireEvent.click(ctaBtn);
     await waitFor(() => expect(currentPath).toBe('/stocks'));
+  });
+
+  it('shows the Aparat story only in Persian and keeps the non-Persian progress rail aligned', async () => {
+    LANG = 'en';
+    render(<MemoryRouter><Market /></MemoryRouter>);
+
+    const rail = screen.getByTestId('market-stories-rail');
+    expect(screen.queryByTestId('market-story-item-aparat')).toBeNull();
+    expect(rail.querySelectorAll('.market-story-Bubble')).toHaveLength(MARKET_STORY_ITEMS.length - 1);
+
+    fireEvent.click(screen.getByTestId('market-story-item-stocks'));
+    const popup = await screen.findByTestId('market-story-popup');
+    expect(popup.querySelectorAll('.market-story-progress-seg')).toHaveLength(MARKET_STORY_ITEMS.length - 1);
+    expect(screen.queryByTestId('story-panel-aparat')).toBeNull();
   });
 
   it('shares News music queue and keeps radio selected after closing the story', async () => {
@@ -267,6 +282,14 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     expect(screen.getByTestId('aparat-course-stocks')).toBeTruthy();
     expect(screen.getByTestId('aparat-course-swap')).toBeTruthy();
     expect(screen.getByTestId('aparat-course-wallet')).toBeTruthy();
+
+    const stocksPreview = page.querySelector('[data-testid="aparat-course-stocks"] .aparat-course-thumb');
+    const walletPreview = page.querySelector('[data-testid="aparat-course-wallet"] .aparat-course-thumb');
+    expect(stocksPreview.tagName).toBe('BUTTON');
+    expect(stocksPreview.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(walletPreview);
+    expect(walletPreview.getAttribute('aria-pressed')).toBe('true');
+    expect(page.querySelector('.aparat-stage-title').textContent).toContain('کیف پول');
   });
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -353,10 +376,12 @@ describe('Glassmorphic Market Cap & Bitcoin Hero Cards + 1-Minute Stories + Apar
     expect(audioSpy.lastMood).toBe('cinema');
     expect(screen.queryByTestId('story-audio-toggle')).toBeNull();
     expect(screen.queryByTestId('story-pause-toggle')).toBeNull();
-    /* The equalizer cue is a <span>: a control-shaped element the user cannot
-       press is worse than no element at all. */
-    expect(popup.querySelectorAll('.market-story-eq')).toHaveLength(1);
-    expect(popup.querySelector('.market-story-eq').tagName).toBe('SPAN');
+    /* The play glyph is a non-interactive status cue, never a fake control. */
+    expect(popup.querySelectorAll('.market-story-playing-indicator')).toHaveLength(1);
+    expect(popup.querySelector('.market-story-playing-indicator').tagName).toBe('SPAN');
+    expect(popup.querySelector('.market-story-playing-indicator svg')).toBeTruthy();
+    expect(popup.textContent).not.toContain('موسیقی سینمایی در حال پخش');
+    expect(popup.textContent).not.toContain('Cinematic score playing');
 
     /* «صفحه پاپ‌آپ کامل باشد، تمام صفحه» */
     const css = readFileSync('src/styles/market-modern.css', 'utf8');

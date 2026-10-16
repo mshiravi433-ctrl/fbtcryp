@@ -18,6 +18,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconExternal,
+  IconPlay,
   IconSparkle,
   IconVideo,
   IconVolume,
@@ -37,8 +38,8 @@ import {
  *    score starts on the tap that opens the story (a real user gesture, so
  *    every autoplay policy allows it) and stops when the story closes. There
  *    is deliberately no play/pause/mute button to render, so there is no
- *    button that can disagree with the audio state. What IS shown is a
- *    non-interactive equalizer: a cue that sound is on, never a control.
+ *    button that can disagree with the audio state. A small, non-interactive
+ *    play glyph is the only visible cue while audio is actually playing.
  * 2. ONE SVG PER PROGRESS CHIP. The chip is a circle that fills as the story
  *    runs (`--p`, painted as a conic ring) with the story's own glyph inside.
  *    `test/market-stories-and-aparat.test.jsx` counts exactly eight `svg`
@@ -512,10 +513,18 @@ export default function MarketStories({ coins = [], global = null }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
-  const lang = i18n.language || 'en';
+  const lang = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0].toLowerCase();
   const isRtl = lang === 'fa' || lang === 'ar' || lang === 'ur';
+  const isPersian = lang === 'fa';
+  const storyItems = useMemo(
+    () => MARKET_STORY_ITEMS.filter((item) => item.id !== 'aparat' || isPersian),
+    [isPersian]
+  );
 
-  const [openIndex, setOpenIndex] = useState(null);
+  /* Store the active story by identity, not by its position in the rail. When
+     Aparat is filtered out after a language change, the remaining stories keep
+     their identity and sequence instead of silently shifting under the modal. */
+  const [activeStoryId, setActiveStoryId] = useState(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   /*
    * The story runs itself; nothing can pause it. Kept as a constant rather
@@ -569,7 +578,23 @@ export default function MarketStories({ coins = [], global = null }) {
     if (radioPlaying) { audioRef.current?.stop(); setScoreOn(false); }
   }, [radioPlaying]);
 
-  const activeStory = openIndex != null ? MARKET_STORY_ITEMS[openIndex] ?? null : null;
+  const activeIndex = activeStoryId == null
+    ? -1
+    : storyItems.findIndex((item) => item.id === activeStoryId);
+  const openIndex = activeIndex >= 0 ? activeIndex : null;
+  const activeStory = openIndex == null ? null : storyItems[openIndex];
+
+  /* If a Persian Aparat story is open when the user switches languages, close
+     it cleanly rather than leaving an invisible modal or showing another
+     story in its old position. */
+  useEffect(() => {
+    if (activeStoryId != null && openIndex == null) {
+      setActiveStoryId(null);
+      setElapsedMs(0);
+      audioRef.current?.stop();
+      setScoreOn(false);
+    }
+  }, [activeStoryId, openIndex]);
 
   const markSeen = (id) => {
     setSeenIds((prev) => {
@@ -586,9 +611,9 @@ export default function MarketStories({ coins = [], global = null }) {
   };
 
   const openStoryAt = (idx) => {
-    const item = MARKET_STORY_ITEMS[idx];
+    const item = storyItems[idx];
     if (!item) return;
-    setOpenIndex(idx);
+    setActiveStoryId(item.id);
     setElapsedMs(0);
     markSeen(item.id);
     /*
@@ -603,7 +628,7 @@ export default function MarketStories({ coins = [], global = null }) {
   };
 
   const closeModal = () => {
-    setOpenIndex(null);
+    setActiveStoryId(null);
     setElapsedMs(0);
     /* The score belongs to the story; the RADIO does not. Closing a story
        stops the synthesized soundtrack and deliberately leaves a chosen track
@@ -616,7 +641,7 @@ export default function MarketStories({ coins = [], global = null }) {
 
   const goNextStory = () => {
     if (openIndex == null) return;
-    if (openIndex + 1 < MARKET_STORY_ITEMS.length) openStoryAt(openIndex + 1);
+    if (openIndex + 1 < storyItems.length) openStoryAt(openIndex + 1);
     else closeModal();
   };
 
@@ -740,8 +765,10 @@ export default function MarketStories({ coins = [], global = null }) {
       <span className="market-stories-aurora" aria-hidden="true" />
 
       <div className="row-between market-stories-head">
-        <div className="row" style={{ gap: 9, minWidth: 0 }}>
-          <span className="market-stories-live-dot" aria-hidden="true" />
+        <div className="row market-stories-heading" style={{ gap: 9, minWidth: 0 }}>
+          <span className="market-stories-mark" aria-hidden="true">
+            <IconSparkle width={14} height={14} />
+          </span>
           <span className="section-label market-stories-title" style={{ margin: 0 }}>
             {t('stories.railTitle')}
           </span>
@@ -750,7 +777,7 @@ export default function MarketStories({ coins = [], global = null }) {
       </div>
 
       <div className="market-stories-rail" role="list">
-        {MARKET_STORY_ITEMS.map((item, idx) => {
+        {storyItems.map((item, idx) => {
           const isSeen = seenIds.has(item.id);
           return (
             <button
@@ -813,7 +840,7 @@ export default function MarketStories({ coins = [], global = null }) {
                     role="group"
                     aria-label={t('stories.progressAria')}
                   >
-                    {MARKET_STORY_ITEMS.map((st, idx) => {
+                    {storyItems.map((st, idx) => {
                       const pct = idx < openIndex ? 100 : idx === openIndex ? progressPct : 0;
                       const state = idx < openIndex ? 'is-done' : idx === openIndex ? 'is-live' : '';
                       return (
@@ -852,14 +879,15 @@ export default function MarketStories({ coins = [], global = null }) {
                       </h2>
                       <div className="market-story-head-sub">
                         <span className="market-story-head-badge mono">{activeStory.badge}</span>
-                        <span className={`market-story-eq ${soundLive ? 'is-live' : ''}`} aria-hidden="true">
-                          <i /><i /><i /><i />
-                        </span>
-                        <span className="market-story-sound-note">
-                          {soundLive
-                            ? (radioPlaying ? t('stories.controls.musicOn') : t('stories.score.cue'))
-                            : t('stories.score.silent')}
-                        </span>
+                        {soundLive && (
+                          <span
+                            className="market-story-playing-indicator"
+                            role="img"
+                            aria-label={t('stories.score.cue')}
+                          >
+                            <IconPlay width={13} height={13} aria-hidden="true" />
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1100,9 +1128,7 @@ export default function MarketStories({ coins = [], global = null }) {
                       <div className="market-story-panel" data-testid="story-panel-radio">
                         <div className="market-story-panel-head">
                           <span className="market-story-panel-title">{t('stories.radio.studioTitle')}</span>
-                          <span className={`mono market-story-tag-accent ${radioPlaying ? 'is-live' : ''}`}>
-                            {radioPlaying ? t('stories.controls.musicOn') : 'CRYPTO RADIO'}
-                          </span>
+                          <span className="mono market-story-tag-accent">CRYPTO RADIO</span>
                         </div>
 
                         <div className="market-story-radio-tracks">
