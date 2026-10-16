@@ -3296,6 +3296,34 @@
         "extreme": "Sangat terkonsentrasi",
         "unknown": "Tidak diketahui"
       }
+    },
+    "depth": {
+      "title": "Kedalaman dari kutipan",
+      "caveat": "Hanya indikatif. Ini adalah kutipan agregator yang tidak mengikat untuk setiap ukuran. Ini bukan buku pesanan, dan harga dapat berubah saat menukar.",
+      "updatedAt": "Diperbarui {{time}}",
+      "stale": "Usang — ketuk segarkan untuk kutipan terbaru",
+      "refresh": "Segarkan",
+      "loading": "Mengambil kutipan…",
+      "noPrice": "Tidak ada harga USD untuk token ini, sehingga ukuran perdagangan tidak dapat ditetapkan. Kedalaman tidak ditampilkan.",
+      "unsupported": "Kedalaman tidak tersedia untuk pasangan ini di jaringan ini.",
+      "error": "Gagal mengambil kutipan. Coba lagi.",
+      "chartLabel": "Dampak harga menurut ukuran perdagangan",
+      "tableCaption": "Kutipan menurut ukuran perdagangan (indikatif)",
+      "col": {
+        "size": "Ukuran",
+        "rate": "Kurs",
+        "impact": "Dampak harga",
+        "signal": "Sinyal"
+      },
+      "impactTip": "{{value}}% dibanding ukuran terkecil",
+      "pointUnavailable": "Tidak tersedia",
+      "band": {
+        "low": "Dampak rendah",
+        "medium": "Dampak sedang",
+        "high": "Dampak tinggi"
+      },
+      "thresholds": "Pita perkiraan: sedang dari {{medium}}%, tinggi dari {{high}}% dibanding ukuran terkecil. Ambang batas ini perkiraan.",
+      "disclaimer": "Kutipan tidak mengikat dan berubah saat eksekusi. Ini bukan jaminan eksekusi dan bukan buku pesanan bursa."
     }
   },
   "stories": {

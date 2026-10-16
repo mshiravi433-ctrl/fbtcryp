@@ -19,6 +19,7 @@ export const DYDX_BUILDER_FEE_PPM = 1000; // 10 bps = 1000 ppm (dYdX allows up t
    the same-origin proxy below so the indexer never has to satisfy CORS. */
 export const DYDX_INDEXER = 'https://indexer.dydx.trade';
 import { apiBase } from './apiBase.js';
+import { TPSL_GOOD_TIL_SECONDS } from './dydxTpsl.js';
 
 /*
  * THE API ORIGIN IS NOT A CONSTANT ANY MORE.
@@ -177,6 +178,44 @@ export async function getDydxSubaccount(address, number = 0) {
     /* An unfunded derived address is a legitimate empty account. */
     if (String(err?.message).includes('HTTP_404')) return { account: null, live: true };
     return { account: null, live: false };
+  }
+}
+
+/*
+ * ─── READS FOR THE TP/SL AND HISTORY SECTIONS ────────────────────────────────
+ * Both go through the same-origin proxy (server/dydx.js) and never through the
+ * browser directly. The address travels in the request path only; it is kept
+ * in the caller's memory and is not written to storage or to any log here.
+ */
+export const DYDX_ORDER_STATUSES = Object.freeze(['UNTRIGGERED', 'OPEN', 'FILLED', 'CANCELED', 'BEST_EFFORT_CANCELED']);
+
+export async function getDydxFills({ address, subaccount = 0, limit = 25, before = null } = {}) {
+  if (!isDydxAddress(address)) return { fills: [], live: false, reason: 'BAD_ADDRESS' };
+  const sub = Number.isInteger(Number(subaccount)) ? Number(subaccount) : 0;
+  const qs = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, Math.trunc(Number(limit) || 25)))) });
+  if (before) qs.set('before', String(before));
+  try {
+    const body = await timeoutFetch(`${API_BASE}/dydx/fills/${encodeURIComponent(address)}/${sub}?${qs.toString()}`);
+    return { fills: Array.isArray(body?.fills) ? body.fills : [], live: true };
+  } catch (err) {
+    /* An account that has never traded is a legitimate empty history. */
+    if (String(err?.message).includes('HTTP_404')) return { fills: [], live: true };
+    return { fills: [], live: false, reason: 'INDEXER_UNAVAILABLE' };
+  }
+}
+
+export async function getDydxOrders({ address, subaccount = 0, status = 'UNTRIGGERED' } = {}) {
+  if (!isDydxAddress(address)) return { orders: [], live: false, reason: 'BAD_ADDRESS' };
+  if (!DYDX_ORDER_STATUSES.includes(status)) return { orders: [], live: false, reason: 'BAD_STATUS' };
+  const sub = Number.isInteger(Number(subaccount)) ? Number(subaccount) : 0;
+  try {
+    const body = await timeoutFetch(
+      `${API_BASE}/dydx/orders/${encodeURIComponent(address)}/${sub}?status=${encodeURIComponent(status)}`
+    );
+    return { orders: Array.isArray(body?.orders) ? body.orders : [], live: true };
+  } catch (err) {
+    if (String(err?.message).includes('HTTP_404')) return { orders: [], live: true };
+    return { orders: [], live: false, reason: 'INDEXER_UNAVAILABLE' };
   }
 }
 
@@ -568,4 +607,102 @@ export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, re
     builderAddress: DYDX_BUILDER_ADDRESS,
     feePpm: DYDX_BUILDER_FEE_PPM
   };
+}
+
+/*
+ * ─── TAKE-PROFIT / STOP-LOSS: SIGNED ONLY FROM A CLICK ───────────────────────
+ * `leg` is one planned leg from `validateTpSl` (src/lib/dydxTpsl.js). The
+ * caller has already refused an invalid plan; this function re-checks the leg's
+ * shape so a malformed object can never reach the chain. It is called from the
+ * «تایید و ارسال» handler and from nothing else. Nothing schedules it.
+ */
+export async function placeDydxConditionalOrder({ market, leg }) {
+  if (!session) throw new Error('NOT_CONNECTED');
+  if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
+  if (!leg || !leg.sdkType || leg.reduceOnly !== true) throw new Error('BAD_LEG');
+  const qty = Number(leg.size);
+  const trigger = Number(leg.triggerPrice);
+  const limit = Number(leg.limitPrice);
+  if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(trigger) || trigger <= 0 || !Number.isFinite(limit) || limit <= 0) {
+    throw new Error('BAD_LEG');
+  }
+  const sdk = await loadClient();
+  const orderType = sdk.OrderType[leg.sdkType];
+  if (!orderType) throw new Error('BAD_LEG');
+  const isSell = leg.side === 'SELL';
+  const clientId = crypto.getRandomValues(new Uint32Array(1))[0];
+  let client;
+  try {
+    client = await ensureDydxClient();
+  } catch {
+    throw new Error('VALIDATOR_UNREACHABLE');
+  }
+  if (!session) throw new Error('NOT_CONNECTED');
+  const { subaccount } = session;
+  const result = await client.placeOrder(
+    subaccount,
+    market.ticker,
+    orderType,
+    isSell ? sdk.OrderSide.SELL : sdk.OrderSide.BUY,
+    limit,
+    qty,
+    clientId,
+    undefined,
+    TPSL_GOOD_TIL_SECONDS,
+    sdk.OrderExecution.IOC,
+    false,
+    true,
+    trigger,
+    market.raw,
+    undefined,
+    undefined,
+    'FBT Swap TP/SL order',
+    undefined,
+    undefined,
+    { builderAddress: DYDX_BUILDER_ADDRESS, feePpm: DYDX_BUILDER_FEE_PPM }
+  );
+  const hash = result?.hash;
+  return {
+    hash: typeof hash === 'string' ? hash : hash?.toString?.() || null,
+    clientId,
+    kind: leg.kind,
+    reduceOnly: true,
+    triggerPrice: trigger,
+    builderAddress: DYDX_BUILDER_ADDRESS,
+    feePpm: DYDX_BUILDER_FEE_PPM
+  };
+}
+
+/**
+ * Cancel one untriggered conditional order, signed by the session. The expiry
+ * is taken from the order itself so the cancel targets the same stateful order
+ * the indexer reported, instead of a freshly computed lifetime.
+ */
+export async function cancelDydxConditionalOrder({ market, clientId, goodTilBlockTime = null }) {
+  if (!session) throw new Error('NOT_CONNECTED');
+  if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
+  const id = Number(clientId);
+  if (!Number.isInteger(id) || id < 0) throw new Error('BAD_CLIENT_ID');
+  const expiryMs = Date.parse(String(goodTilBlockTime || ''));
+  const seconds = Number.isFinite(expiryMs)
+    ? Math.max(1, Math.round((expiryMs - Date.now()) / 1000))
+    : TPSL_GOOD_TIL_SECONDS;
+  const sdk = await loadClient();
+  let client;
+  try {
+    client = await ensureDydxClient();
+  } catch {
+    throw new Error('VALIDATOR_UNREACHABLE');
+  }
+  if (!session) throw new Error('NOT_CONNECTED');
+  const result = await client.cancelOrder(
+    session.subaccount,
+    id,
+    sdk.OrderFlags.CONDITIONAL,
+    market.ticker,
+    undefined,
+    seconds
+  );
+  const hash = result?.hash;
+  return { hash: typeof hash === 'string' ? hash : hash?.toString?.() || null, clientId: id };
 }

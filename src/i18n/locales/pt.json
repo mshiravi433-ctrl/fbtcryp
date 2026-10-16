@@ -3296,6 +3296,34 @@
         "extreme": "Muito concentrada",
         "unknown": "Desconhecida"
       }
+    },
+    "depth": {
+      "title": "Profundidade a partir de cotações",
+      "caveat": "Apenas indicativo. São cotações não vinculantes do agregador para cada valor. Não é um livro de ofertas, e o preço pode mudar ao trocar.",
+      "updatedAt": "Atualizado às {{time}}",
+      "stale": "Desatualizado: toque em atualizar para cotações atuais",
+      "refresh": "Atualizar",
+      "loading": "Obtendo cotações…",
+      "noPrice": "Não há preço em USD para este token, então os valores não podem ser definidos. A profundidade não é exibida.",
+      "unsupported": "A profundidade não está disponível para este par nesta rede.",
+      "error": "Não foi possível obter as cotações. Tente novamente.",
+      "chartLabel": "Impacto no preço por valor da operação",
+      "tableCaption": "Cotações por valor da operação (indicativo)",
+      "col": {
+        "size": "Valor",
+        "rate": "Taxa",
+        "impact": "Impacto no preço",
+        "signal": "Sinal"
+      },
+      "impactTip": "{{value}}% em relação ao menor valor",
+      "pointUnavailable": "Indisponível",
+      "band": {
+        "low": "Impacto baixo",
+        "medium": "Impacto médio",
+        "high": "Impacto alto"
+      },
+      "thresholds": "Faixas estimadas: médio a partir de {{medium}}%, alto a partir de {{high}}% em relação ao menor valor. Os limites são estimativas.",
+      "disclaimer": "As cotações não são vinculantes e mudam na execução. Não é uma execução prometida nem o livro de ofertas da plataforma."
     }
   },
   "stories": {

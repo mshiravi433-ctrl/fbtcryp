@@ -3296,6 +3296,34 @@
         "extreme": "Très concentrée",
         "unknown": "Inconnue"
       }
+    },
+    "depth": {
+      "title": "Profondeur à partir des cotations",
+      "caveat": "Indicatif uniquement. Il s'agit de cotations non contraignantes de l'agrégateur pour chaque montant. Ce n'est pas un carnet d'ordres, et le prix peut changer lors de l'échange.",
+      "updatedAt": "Mis à jour à {{time}}",
+      "stale": "Périmé : appuyez sur actualiser pour des cotations à jour",
+      "refresh": "Actualiser",
+      "loading": "Récupération des cotations…",
+      "noPrice": "Aucun prix en USD pour ce token, les montants ne peuvent donc pas être définis. La profondeur n'est pas affichée.",
+      "unsupported": "La profondeur n'est pas disponible pour cette paire sur ce réseau.",
+      "error": "Impossible d'obtenir les cotations. Réessayez.",
+      "chartLabel": "Impact sur le prix selon le montant de l'échange",
+      "tableCaption": "Cotations par montant d'échange (indicatif)",
+      "col": {
+        "size": "Montant",
+        "rate": "Taux",
+        "impact": "Impact sur le prix",
+        "signal": "Signal"
+      },
+      "impactTip": "{{value}} % par rapport au plus petit montant",
+      "pointUnavailable": "Indisponible",
+      "band": {
+        "low": "Impact faible",
+        "medium": "Impact moyen",
+        "high": "Impact élevé"
+      },
+      "thresholds": "Seuils estimés : moyen à partir de {{medium}} %, élevé à partir de {{high}} % par rapport au plus petit montant. Ces seuils sont des estimations.",
+      "disclaimer": "Les cotations ne sont pas contraignantes et changent à l'exécution. Ce n'est pas une exécution promise, ni le carnet d'ordres de la plateforme."
     }
   },
   "stories": {

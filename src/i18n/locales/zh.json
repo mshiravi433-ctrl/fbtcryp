@@ -3289,6 +3289,34 @@
         "extreme": "高度集中",
         "unknown": "未知"
       }
+    },
+    "depth": {
+      "title": "报价深度",
+      "caveat": "仅供参考。这些是各规模下聚合器返回的非约束性报价。这不是订单簿，兑换时价格可能变化。",
+      "updatedAt": "更新于 {{time}}",
+      "stale": "已过期——点击刷新获取最新报价",
+      "refresh": "刷新",
+      "loading": "正在获取报价…",
+      "noPrice": "该代币没有美元价格，无法设定交易规模，因此不显示深度。",
+      "unsupported": "此网络上该交易对暂无深度数据。",
+      "error": "无法获取报价，请重试。",
+      "chartLabel": "按交易规模划分的价格影响",
+      "tableCaption": "按交易规模的报价（仅供参考）",
+      "col": {
+        "size": "规模",
+        "rate": "汇率",
+        "impact": "价格影响",
+        "signal": "信号"
+      },
+      "impactTip": "相比最小规模 {{value}}%",
+      "pointUnavailable": "不可用",
+      "band": {
+        "low": "低影响",
+        "medium": "中等影响",
+        "high": "高影响"
+      },
+      "thresholds": "估计区间：相比最小规模，中等为 {{medium}}% 起，高为 {{high}}% 起。阈值为估计值。",
+      "disclaimer": "报价不具约束力，会随执行而变化。这不代表成交承诺，也不是交易场所的订单簿。"
     }
   },
   "stories": {

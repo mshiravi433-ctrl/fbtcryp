@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import PageTransition, { riseIn } from '../components/PageTransition';
@@ -24,7 +24,14 @@ import {
   placeDydxOrder
 } from '../lib/dydx';
 import TrendChart from '../components/TrendChart';
+import lazyRetry from '../lib/lazyRetry';
+import { DYDX_TPSL_ENABLED } from '../lib/features';
 import ModernSelect from '../components/ModernSelect';
+
+/* The TP/SL card loads only when DYDX_TPSL_ENABLED is on. */
+const LazyDydxTpSlCard = DYDX_TPSL_ENABLED
+  ? lazyRetry(() => import('../components/futures/DydxTpSlCard'))
+  : null;
 
 /**
  * `embedded` — hosted by the Perpetual page, which has already drawn the one
@@ -34,6 +41,7 @@ import ModernSelect from '../components/ModernSelect';
  * reported for. `.derivatives-hall` cancels ONE page's padding, not two.
  * The standalone route (/dydx) still renders its own page.
  */
+
 export default function Dydx({ embedded = false } = {}) {
   const { t } = useTranslation();
   const wallet = useWallet();
@@ -499,6 +507,18 @@ export default function Dydx({ embedded = false } = {}) {
             >
               {closingMarket === p.market ? t('dydx.closing') : t('dydx.close')}
             </button>
+            {/* Take-profit / stop-loss for this position. Off unless DYDX_TPSL_ENABLED
+                is set at build time; every order it sends is signed from its own click. */}
+            {DYDX_TPSL_ENABLED && LazyDydxTpSlCard && (
+              <Suspense fallback={null}>
+                <LazyDydxTpSlCard
+                  position={p}
+                  market={markets.find((m) => m.ticker === p.market) || null}
+                  address={dydxAddress}
+                  onChanged={() => refreshAccount()}
+                />
+              </Suspense>
+            )}
           </div>)}</div>
         )}
       </section>}

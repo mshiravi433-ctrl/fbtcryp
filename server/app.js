@@ -51,8 +51,8 @@ import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
 import { fetchSolanaIntel, fetchSolanaWhales, solscanConfigured, SOLANA_SIGNAL_MINTS } from './solanaIntel.js';
 import {
-  fetchDydxAccount, fetchDydxCandles, fetchDydxMarkets, fetchDydxOrderbook,
-  normaliseCandleQuery
+  fetchDydxAccount, fetchDydxCandles, fetchDydxFills, fetchDydxMarkets, fetchDydxOrderbook,
+  fetchDydxOrders, normaliseCandleQuery, normaliseFillsBody, normaliseOrdersBody
 } from './dydx.js';
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
@@ -5402,6 +5402,47 @@ app.get('/api/dydx/account/:address/:number', async (req, res) => {
     res.set('cache-control', 'no-store');
     return res.json(account);
   } catch (error) {
+    const status = Number(error?.status) === 404 ? 404 : Number(error?.status) === 400 ? 400 : 502;
+    return res.status(status).json({ error: error?.message || 'DYDX_UPSTREAM_FAILED' });
+  }
+});
+
+/*
+ * Personal read-only history and conditional-order state for one dYdX
+ * subaccount. Two rules stand out from the public routes above:
+ *   · `cache-control: no-store` — a shared cache must never hand one trader's
+ *     fills or orders to another request (the account route does the same);
+ *   · no logging of the address or the body here. The address is in the path
+ *     only, and is validated by the upstream helper before any fetch.
+ * Neither route can place, cancel or sign anything: both are GET-only.
+ */
+app.get('/api/dydx/fills/:address/:number', async (req, res) => {
+  try {
+    const address = String(req.params.address || '').toLowerCase();
+    const number = Number(req.params.number);
+    const body = await fetchDydxFills(address, number, {
+      limit: req.query.limit,
+      before: typeof req.query.before === 'string' ? req.query.before : null
+    });
+    res.set('cache-control', 'no-store');
+    return res.json({ fills: normaliseFillsBody(body) });
+  } catch (error) {
+    res.set('cache-control', 'no-store');
+    const status = Number(error?.status) === 404 ? 404 : Number(error?.status) === 400 ? 400 : 502;
+    return res.status(status).json({ error: error?.message || 'DYDX_UPSTREAM_FAILED' });
+  }
+});
+
+app.get('/api/dydx/orders/:address/:number', async (req, res) => {
+  try {
+    const address = String(req.params.address || '').toLowerCase();
+    const number = Number(req.params.number);
+    const status = typeof req.query.status === 'string' ? req.query.status : 'UNTRIGGERED';
+    const body = await fetchDydxOrders(address, number, status);
+    res.set('cache-control', 'no-store');
+    return res.json({ orders: normaliseOrdersBody(body) });
+  } catch (error) {
+    res.set('cache-control', 'no-store');
     const status = Number(error?.status) === 404 ? 404 : Number(error?.status) === 400 ? 400 : 502;
     return res.status(status).json({ error: error?.message || 'DYDX_UPSTREAM_FAILED' });
   }

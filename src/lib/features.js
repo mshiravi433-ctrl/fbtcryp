@@ -552,3 +552,23 @@ export function lidoWithdrawAllowedFor({ owner, hasPosition } = {}) {
  * signed off on it.
  */
 export const SPOT_TRADE_ENABLED = envFlag('VITE_ENABLE_SPOT_TRADE') === 'true';
+
+/* -------------------------------------------------------------------------- */
+/* FUTURES TP/SL, FUTURES HISTORY, SPOT DEPTH — all OFF unless exactly 'true' */
+/* -------------------------------------------------------------------------- */
+/*
+ * Added with the season-prompt work (TP/SL on dYdX, read-only futures history,
+ * spot depth from aggregator quotes). Each one is OFF by default and uses the
+ * `=== 'true'` form so a build that forgets the variable ships without them.
+ *
+ *   VITE_ENABLE_DYDX_TPSL=true        dYdX take-profit / stop-loss (signed by the user)
+ *   VITE_ENABLE_FUTURES_HISTORY=true  read-only history tab on the futures terminal
+ *   VITE_ENABLE_SPOT_DEPTH=true       indicative price-impact curve under the swap form
+ *
+ * The futures two depend on SPECULATION_ENABLED at the tab level (see Perp.jsx);
+ * spot depth is independent of it. The Android build (`android:sync`) keeps all
+ * three off.
+ */
+export const DYDX_TPSL_ENABLED = envFlag('VITE_ENABLE_DYDX_TPSL') === 'true';
+export const FUTURES_HISTORY_ENABLED = envFlag('VITE_ENABLE_FUTURES_HISTORY') === 'true';
+export const SPOT_DEPTH_ENABLED = envFlag('VITE_ENABLE_SPOT_DEPTH') === 'true';

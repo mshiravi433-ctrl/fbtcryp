@@ -104,6 +104,21 @@ console.log('\n▸ checking the tokenized-stock universe…');
 execFileSync(process.execPath, ['--test', 'test/stock-tokens.test.mjs'], {
   stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
 });
+/* TP/SL planning, futures history, spot depth curve, the server proxy
+   helpers and the signing guards: pure logic plus security mocks, no network. */
+console.log('\n▸ checking TP/SL, futures history and spot depth…');
+execFileSync(process.execPath, ['--test', 'test/tpsl-depth-history.test.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
+/* The two dYdX read routes, driven over HTTP with the indexer stubbed. */
+execFileSync(process.execPath, ['--test', '--test-force-exit', 'test/tpsl-depth-history-server.test.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
+/* The three new screens, rendered for real. vitest is the runner the other
+   UI suites use; it is invoked as a child process for the same isolation. */
+execFileSync('npx', ['vitest', 'run', 'test/tpsl-depth-history-ui.test.jsx'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
 /* The central brain's turn probe: every §42 scenario (A–J) against the real
    engines with only the external boundary faked. It belongs in `npm test`
    because the failure it catches — a confident answer built on unread data — is a

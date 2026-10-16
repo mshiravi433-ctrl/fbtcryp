@@ -126,4 +126,68 @@ export function fetchDydxAccount(address, number = 0) {
   return request(`/v4/addresses/${encodeURIComponent(address)}/subaccountNumber/${subaccount}`);
 }
 
+/*
+ * Fills for one subaccount, newest first, one page at a time. The caller pages
+ * with `createdBeforeOrAt` (an ISO timestamp). Never fetches the full history
+ * in one request: the client asks for a page and «بارگذاری بیشتر» asks for the
+ * next one.
+ */
+export const DYDX_FILLS_LIMIT_MAX = 100;
+export function fetchDydxFills(address, number = 0, { limit = 25, before = null } = {}) {
+  if (!validAddress(address)) throw upstreamError('BAD_DYDX_ADDRESS', 400);
+  const subaccount = Number(number);
+  if (!Number.isInteger(subaccount) || subaccount < 0 || subaccount > 31) {
+    throw upstreamError('BAD_DYDX_SUBACCOUNT', 400);
+  }
+  const count = Math.min(DYDX_FILLS_LIMIT_MAX, Math.max(1, Math.trunc(Number(limit) || 25)));
+  const qs = new URLSearchParams({
+    address,
+    subaccountNumber: String(subaccount),
+    limit: String(count)
+  });
+  if (before) {
+    const t = Date.parse(String(before));
+    if (!Number.isFinite(t)) throw upstreamError('BAD_DYDX_CURSOR', 400);
+    qs.set('createdBeforeOrAt', new Date(t).toISOString());
+  }
+  return request(`/v4/fills?${qs.toString()}`);
+}
+
+/*
+ * Orders for one subaccount in one status. The status is checked against an
+ * allow-list so the proxy cannot be used to ask for arbitrary indexer filters.
+ */
+export const DYDX_ORDER_STATUS_ALLOWED = Object.freeze([
+  'UNTRIGGERED', 'OPEN', 'FILLED', 'CANCELED', 'BEST_EFFORT_CANCELED'
+]);
+export function fetchDydxOrders(address, number = 0, status = 'UNTRIGGERED') {
+  if (!validAddress(address)) throw upstreamError('BAD_DYDX_ADDRESS', 400);
+  const subaccount = Number(number);
+  if (!Number.isInteger(subaccount) || subaccount < 0 || subaccount > 31) {
+    throw upstreamError('BAD_DYDX_SUBACCOUNT', 400);
+  }
+  if (!DYDX_ORDER_STATUS_ALLOWED.includes(String(status))) throw upstreamError('BAD_DYDX_STATUS', 400);
+  const qs = new URLSearchParams({
+    address,
+    subaccountNumber: String(subaccount),
+    status: String(status),
+    limit: String(DYDX_FILLS_LIMIT_MAX)
+  });
+  return request(`/v4/orders?${qs.toString()}`);
+}
+
+/*
+ * Response shapes. The indexer wraps fills as `{ fills }` but answers orders
+ * with a bare array. Both are normalised here, so the route cannot silently
+ * return an empty list because it read the wrong property.
+ */
+export function normaliseFillsBody(body) {
+  const rows = Array.isArray(body?.fills) ? body.fills : [];
+  return rows.slice(0, DYDX_FILLS_LIMIT_MAX);
+}
+export function normaliseOrdersBody(body) {
+  const rows = Array.isArray(body) ? body : Array.isArray(body?.orders) ? body.orders : [];
+  return rows.slice(0, DYDX_FILLS_LIMIT_MAX);
+}
+
 export { INDEXER as DYDX_INDEXER };
