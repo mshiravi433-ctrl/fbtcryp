@@ -2907,13 +2907,9 @@
       "aria": "Rotating smart-signal phrases",
       "words": {
         "early": "Early signal",
-        "momentum": "Momentum burst",
-        "flow": "Smart-money flow",
-        "pulse": "Market pulse",
-        "volume": "Unusual volume",
-        "breakout": "Level breakout",
-        "convergence": "Indicator convergence",
-        "liquidity": "Liquidity cycle"
+        "momentum": "Momentum radar",
+        "history": "Signal history",
+        "conclusion": "Conclusion: modern, beautiful financial intelligence"
       }
     },
     "marketMood": "Market mood",

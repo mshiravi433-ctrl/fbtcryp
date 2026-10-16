@@ -43,39 +43,27 @@ const HERO = {
     aria: 'عبارت‌های چرخشی سیگنال هوشمند',
     words: {
       early: 'سیگنال زودهنگام',
-      momentum: 'شتاب حرکتی',
-      flow: 'جریان پول هوشمند',
-      pulse: 'نبض بازار',
-      volume: 'حجم غیرعادی',
-      breakout: 'شکست سطح',
-      convergence: 'همگرایی اندیکاتورها',
-      liquidity: 'چرخهٔ نقدینگی'
+      momentum: 'رادار شتاب',
+      history: 'تاریخچه سیگنال‌ها',
+      conclusion: 'نتیجه‌گیری با هوش مالی مدرن و زیبا'
     }
   },
   en: {
     aria: 'Rotating smart-signal phrases',
     words: {
       early: 'Early signal',
-      momentum: 'Momentum burst',
-      flow: 'Smart-money flow',
-      pulse: 'Market pulse',
-      volume: 'Unusual volume',
-      breakout: 'Level breakout',
-      convergence: 'Indicator convergence',
-      liquidity: 'Liquidity cycle'
+      momentum: 'Momentum radar',
+      history: 'Signal history',
+      conclusion: 'Conclusion: modern, beautiful financial intelligence'
     }
   },
   ar: {
     aria: 'عبارات الإشارات الذكية الدوّارة',
     words: {
       early: 'إشارة مبكرة',
-      momentum: 'تسارع الحركة',
-      flow: 'تدفق الأموال الذكية',
-      pulse: 'نبض السوق',
-      volume: 'حجم غير اعتيادي',
-      breakout: 'اختراق المستوى',
-      convergence: 'تقارب المؤشرات',
-      liquidity: 'دورة السيولة'
+      momentum: 'رادار الزخم',
+      history: 'سجل الإشارات',
+      conclusion: 'الخلاصة: ذكاء مالي حديث وجميل'
     }
   }
 };

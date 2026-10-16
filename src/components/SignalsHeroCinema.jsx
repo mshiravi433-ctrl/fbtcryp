@@ -12,19 +12,15 @@ import { isNativeShell } from '../lib/nativeShell';
  * connections keep the still scene instead.
  */
 
-/* The rotating line is the hero's own title plus eight signal words. Slot 0 is
-   the title — «سیگنال هوشمند» — and the schedule below is built so the whole
-   cycle is exactly HERO_CYCLE_MS, which is what «۳۰ ثانیه یکبار» asks for: the
-   sentence returns every 30 seconds, with the words fading in between. */
+/* The rotating line is the hero's own title plus four phrases. Slot 0 is the
+   title — «سیگنال هوشمند» — held for HERO_TITLE_HOLD_MS; the four phrases below
+   it share the rest of the 30 s cycle, 6 s each, so the sentence returns every
+   30 seconds with each phrase fading in and out. */
 export const HERO_WORD_KEYS = Object.freeze([
-  'early',       // سیگنال زودهنگام
-  'momentum',    // شتاب حرکتی
-  'flow',        // جریان پول هوشمند
-  'pulse',       // نبض بازار
-  'volume',      // حجم غیرعادی
-  'breakout',    // شکست سطح
-  'convergence', // همگرایی اندیکاتورها
-  'liquidity'    // چرخه نقدینگی
+  'early',      // سیگنال زودهنگام
+  'momentum',   // رادار شتاب
+  'history',    // تاریخچه سیگنال‌ها
+  'conclusion'  // نتیجه‌گیری با هوش مالی مدرن و زیبا
 ]);
 
 /* Exported because the CSS side of this contract has to agree with it: the
@@ -93,10 +89,10 @@ function useCheapLink() {
   }, []);
 }
 
-/* Derived, not chosen: the eight words share what is left of the 30 s after the
+/* Derived, not chosen: the four phrases share what is left of the 30 s after the
    sentence has had its slot, so the cycle length cannot drift away from the
-   word count. Add a ninth word and each one simply holds a little less. */
-export const HERO_WORD_HOLD_MS = (HERO_CYCLE_MS - HERO_TITLE_HOLD_MS) / HERO_WORD_KEYS.length; // 3000
+   phrase count. Add a fifth phrase and each one simply holds a little less. */
+export const HERO_WORD_HOLD_MS = (HERO_CYCLE_MS - HERO_TITLE_HOLD_MS) / HERO_WORD_KEYS.length; // 6000
 
 /* How long after the page settles before the first rotation. The hero enters
    with the route's own rise-in animation and the first market poll lands in

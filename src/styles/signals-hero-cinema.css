@@ -28,6 +28,8 @@
 .sic-page-hero.has-cinema {
   --sigh-slot-h: 23px;
   --sigh-ink: #dff3ff;
+  width: 94%;
+  margin-inline: auto;
 }
 
 /*
@@ -45,7 +47,7 @@
  */
 .sic-page-hero.has-cinema {
   background:
-    linear-gradient(155deg, rgba(8, 12, 28, 0.34), rgba(8, 12, 28, 0.1)) padding-box,
+    linear-gradient(112deg, #060a1a 4%, #0b1030 46%, #160a2c 78%, #05070f) padding-box,
     linear-gradient(140deg, rgba(0, 229, 255, 0.34), rgba(124, 77, 255, 0.22) 46%, rgba(255, 45, 149, 0.18)) border-box;
 }
 
@@ -148,8 +150,7 @@
   inset: 0;
   z-index: 3;
   background:
-    linear-gradient(to left, rgba(4, 7, 18, 0.1), rgba(4, 7, 18, 0.52) 42%, rgba(4, 7, 18, 0.74)),
-    radial-gradient(128% 190% at 50% 50%, transparent 42%, rgba(3, 5, 14, 0.6) 100%);
+    radial-gradient(128% 190% at 50% 50%, transparent 46%, rgba(3, 5, 14, 0.42) 100%);
 }
 
 /* ── The rotating line ──────────────────────────────────────────────────────

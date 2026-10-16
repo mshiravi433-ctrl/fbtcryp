@@ -215,7 +215,7 @@ describe('the 30-second cycle', () => {
     const seen = [shown()]; // slot 0: the page's own sentence, before any timer
 
     /* The first rotation waits for the page to settle (1.6 s) plus the
-       sentence's own 6 s hold; every later slot holds 3 s. Each advance below
+       sentence's own 6 s hold; every later slot holds 6 s too. Each advance below
        crosses exactly ONE transition — two landing in the same millisecond
        would make the visible phrase depend on callback order rather than on
        the schedule. */
@@ -223,23 +223,23 @@ describe('the 30-second cycle', () => {
     seen.push(shown());                                  // word 1 at 6 s
     for (let n = 1; n < words.length; n += 1) {
       oneWord();
-      seen.push(shown());                                // words 2…8, 3 s apart
+      seen.push(shown());                                // phrases 2…4, 6 s apart
     }
 
     expect(seen).toEqual(['سیگنال هوشمند', ...words]);
-    // The last word's 3 s is what brings the sentence back: 6 s + 8 × 3 s = 30 s
+    // The last phrase's 6 s is what brings the sentence back: 6 s + 4 × 6 s = 30 s
     // of cycle, every slot shown exactly once, the page's own phrase closing it.
     oneWord();
     expect(shown()).toBe('سیگنال هوشمند');
     expect(isTitle()).toBe('true');
   });
 
-  it('adds up to the advertised cycle: title hold + every word hold = 30 000 ms', () => {
+  it('adds up to the advertised cycle: title hold + every phrase hold = 30 000 ms', () => {
     expect(HERO_CYCLE_MS).toBe(30_000);
     expect(HERO_TITLE_HOLD_MS + HERO_WORD_HOLD_MS * HERO_WORD_KEYS.length).toBe(HERO_CYCLE_MS);
-    expect(HERO_WORD_KEYS.length).toBe(8);
+    expect(HERO_WORD_KEYS.length).toBe(4);
     // A hold per word is derived, not hand-picked, so the lap cannot drift.
-    expect(HERO_WORD_HOLD_MS).toBe(3_000);
+    expect(HERO_WORD_HOLD_MS).toBe(6_000);
     expect(HERO_TITLE_HOLD_MS).toBe(6_000);
   });
 
@@ -619,7 +619,9 @@ describe('the rotating words are real translations', () => {
 
   it('keeps the requested Persian wording, verbatim', () => {
     expect(fa.signals.hero.words.early).toBe('سیگنال زودهنگام');
-    expect(fa.signals.hero.words.momentum).toBe('شتاب حرکتی');
+    expect(fa.signals.hero.words.momentum).toBe('رادار شتاب');
+    expect(fa.signals.hero.words.history).toBe('تاریخچه سیگنال‌ها');
+    expect(fa.signals.hero.words.conclusion).toBe('نتیجه‌گیری با هوش مالی مدرن و زیبا');
   });
 
   it('never prints a promise the disclaimer two boxes below contradicts', () => {
