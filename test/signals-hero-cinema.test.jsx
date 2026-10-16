@@ -1,48 +1,7 @@
 // @vitest-environment jsdom
 /**
- * SIGNALS HERO CINEMA — the first box of /signals.
- * ---------------------------------------------------------------------------
- * Request (verbatim): «در صفحه سیگنال، باکس ابتدایی که جمله «سیگنال هوشمند»
- * داره، ۳۰ ثانیه یکبار فیلم زیر پخش شود، با کلماتی که … مثل سیگنال زودهنگام،
- * شتاب حرکتی، … میاد و با انیمیشن محو می‌شود و ۳۰ ثانیه جمله «سیگنال هوشمند»
- * را نشان می‌دهد، با بک‌گراند خالی، خیلی مدرن و زیبا، بدون افت سرعت» +
- * https://pixabay.com/videos/galaxy-nebula-space-cosmos-381972/
- *
- * A decorative box is the easiest thing in an app to get subtly wrong and the
- * hardest to notice. A cycle that is 34 s instead of 30, a timer left running
- * behind a screen the user scrolled past, a film that paints a black rectangle
- * while it buffers, or one animated `filter` that costs frames on the exact
- * phone this app ships to — none of that shows up in a screenshot. So all of it
- * is asserted here instead:
- *
- *   · THE SCHEDULE — the sentence returns every 30 000 ms exactly, each of the
- *     eight words holds 3 000 ms, every slot is shown once per lap, and the
- *     order matches the locale file;
- *   · THE GUARDS — reduced motion freezes it, scrolling away stops it, a hidden
- *     tab stops it, unmounting clears it;
- *   · THE FILM — the Pixabay clip the request named is the DEFAULT source: its
- *     exact CDN URL is asserted against the constant in the component (a typo in
- *     a hotlinked URL cannot silently ship), `none` opts out, an operator's URL
- *     replaces it, and nothing at all is fetched until the box is on screen. The
- *     video is muted/inline/loop/preload=none — the only combination mobile
- *     browsers autoplay — a decoded frame retires the drawn scene, and a
- *     failure, the native APK or a saveData/2G link all leave the nebula
- *     standing instead of a black rectangle;
- *   · THE COPY — fa/en/ar carry every word, and the nine partial locales stay
- *     honest about falling back to English rather than half-translating a
- *     decoration;
- *   · THE CSS — every keyframe animates only `transform`/`opacity`, the fade
- *     agrees with the JS constant, the word slot has a fixed height (so a long
- *     Persian phrase cannot push the hero's layout), and every rule is scoped to
- *     this one box;
- *   · THE WIRING — the hero still owns its `h1`, the scene and the cycle are
- *     really mounted in the page, and the three env vars are documented with the
- *     default URL, the opt-out word and every case where nothing is fetched.
- *
- * Only framework plumbing is stubbed (framer-motion, IntersectionObserver,
- * matchMedia, the media-element methods jsdom does not implement). The
- * component, the settings store, the locale JSON, the CSS file and the page
- * source are all real.
+ * Signals hero: verifies the 30-second word cycle, lazy same-origin video,
+ * visible fallback, translations, reduced-motion guards and page wiring.
  */
 import React from 'react';
 import { readFileSync } from 'node:fs';
@@ -402,26 +361,24 @@ describe('the film the request named is the DEFAULT — nothing to configure', (
     /* Compared against a literal, not against "some https URL": this is a
        hotlink to a third-party CDN, and a mistyped date or id ships a 404 that
        shows up only as a hero that quietly never plays. */
-    expect(HERO_FILM_SRC).toBe('https://cdn.pixabay.com/video/2026-10-10/381972_large.mp4');
+    expect(HERO_FILM_SRC).toBe('/media/signals-hero.mp4');
     expect(resolveHeroFilm({})).toBe(HERO_FILM_SRC);
     expect(resolveHeroFilm({ VITE_SIGNALS_HERO_VIDEO: '' })).toBe(HERO_FILM_SRC);
     expect(resolveHeroFilm({ VITE_SIGNALS_HERO_VIDEO: '   ' })).toBe(HERO_FILM_SRC);
     renderScene();
+    expect(document.querySelector('video').getAttribute('src')).toBeNull();
+    settle();
     expect(document.querySelector('video').getAttribute('src')).toBe(HERO_FILM_SRC);
   });
 
-  it('names the author of the film it hotlinks — and only once a frame is up', () => {
-    /* The Pixabay Content License does not require attribution. A 4K render
-       hotlinked as the front page of a trading app is still somebody's work,
-       and the credit must not appear before the film does. */
-    expect(HERO_FILM_CREDIT).toContain('Pixabay');
-    expect(resolveHeroCredit({})).toBe(HERO_FILM_CREDIT);
+  it('does not invent a credit for the original bundled loop', () => {
+    expect(HERO_FILM_CREDIT).toBe('');
+    expect(resolveHeroCredit({})).toBe('');
     renderScene();
     settle();
-    expect(document.querySelector('.sigh-credit')).toBeNull();
     act(() => { io.emit(true); });
     fireEvent(document.querySelector('video'), new Event('playing'));
-    expect(document.querySelector('.sigh-credit').textContent).toBe(HERO_FILM_CREDIT);
+    expect(document.querySelector('.sigh-credit')).toBeNull();
   });
 
   it('still fetches nothing until the box is on screen', () => {
@@ -529,7 +486,7 @@ describe('the drawn scene (film switched off — VITE_SIGNALS_HERO_VIDEO=none)',
 });
 
 describe("an operator's own film (VITE_SIGNALS_HERO_VIDEO=/media/…)", () => {
-  const FILM = '/media/signals-hero.mp4';
+  const FILM = '/media/custom.mp4';
   beforeEach(() => {
     vi.stubEnv('VITE_SIGNALS_HERO_VIDEO', FILM);
     vi.stubEnv('VITE_SIGNALS_HERO_VIDEO_CREDIT', 'Pixabay');
@@ -554,11 +511,12 @@ describe("an operator's own film (VITE_SIGNALS_HERO_VIDEO=/media/…)", () => {
     renderScene();
     const v = document.querySelector('video');
     expect(v).not.toBeNull();
-    expect(v.getAttribute('src')).toBe(FILM);
+    expect(v.getAttribute('src')).toBeNull();
     expect(v.muted).toBe(true);
     expect(v.loop).toBe(true);
     expect(v.hasAttribute('playsinline')).toBe(true);
     expect(v.getAttribute('preload')).toBe('none');
+    expect(v.hasAttribute('autoplay')).toBe(true);
     expect(v.hasAttribute('controls')).toBe(false);
     // Nothing is fetched by mounting alone.
     expect(window.HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
@@ -589,8 +547,8 @@ describe("an operator's own film (VITE_SIGNALS_HERO_VIDEO=/media/…)", () => {
     const scene = screen.getByTestId('signals-hero-scene');
     expect(scene.dataset.film).toBe('live');
     expect(scene.className).toContain('is-film');
-    expect(document.querySelector('.sigh-neb')).toBeNull();
-    expect(document.querySelectorAll('.sigh-star')).toHaveLength(0);
+    expect(document.querySelector('.sigh-neb')).not.toBeNull();
+    expect(document.querySelector('.sigh-vignette')).not.toBeNull();
     // The operator's credit line appears with the film, never before it.
     expect(document.querySelector('.sigh-credit').textContent).toBe('Pixabay');
   });
@@ -757,13 +715,16 @@ describe('the stylesheet keeps its performance promises', () => {
     const rule = css().match(/\.sigh-film\s*\{[^}]*\}/)[0];
     expect(rule).toMatch(new RegExp(`transition:\\s*opacity\\s+${HERO_FILM_CROSSFADE_MS}ms`));
     expect(rule).toMatch(/object-fit:\s*cover/);
+    expect(css()).toMatch(/\.sigh-scene\.is-film \.sigh-film \{ opacity: 1; \}/);
   });
 
   it('gives the rotating line a fixed slot so a long phrase cannot move the hero', () => {
     const slot = css().match(/\.sigh-words-slot\s*\{[^}]*\}/)[0];
     expect(slot).toMatch(/height:\s*var\(--sigh-slot-h\)/);
+    expect(slot).toMatch(/flex:\s*1 1 auto/);
     const word = css().match(/\.sigh-word\s*\{[^}]*\}/)[0];
     expect(word).toMatch(/position:\s*absolute/);
+    expect(word).toMatch(/width:\s*100%/);
     expect(word).toMatch(/white-space:\s*nowrap/);
     expect(word).toMatch(/text-overflow:\s*ellipsis/);
     expect(css()).toMatch(/--sigh-slot-h:\s*\d+px/);
@@ -876,13 +837,10 @@ describe('the Signals page wiring', () => {
     /* The page the request named AND the CDN file it resolves to: whoever reads
        this next should not have to repeat the discovery, and should know the
        file is a 4K vertical. */
-    expect(block).toContain('pixabay.com/videos/galaxy-nebula-space-cosmos-381972');
     expect(block).toContain(HERO_FILM_SRC);
-    expect(block).toContain('2160×3840');
     // What an empty value now means, and the word that switches the film off.
     expect(block).toMatch(/اگر خالی بماند/);
     expect(block).toContain('none');
-    expect(block).toContain(HERO_FILM_CREDIT);
     /* The three cases where nothing is fetched at all, written down where an
        operator debugging «why is my film not playing» will find them. */
     expect(block).toContain('saveData');
@@ -897,11 +855,11 @@ describe('the Signals page wiring', () => {
     expect(read('.github/workflows/build-apk.yml')).not.toContain('VITE_SIGNALS_HERO');
   });
 
-  it('ships no video asset in the repository — the film is a URL, not a file', () => {
+  it('ships a small same-origin video in the repository', () => {
     /* Playing the clip by default does not mean committing it: a 4K vertical
        loop does not ride along in the bundle or in a 7.5 MB APK for one box of
        one screen, and a library's file is theirs to keep serving. */
-    expect(() => read('public/media/signals-hero.mp4')).toThrow();
+    expect(readFileSync(join(ROOT, 'public/media/signals-hero.mp4')).length).toBeGreaterThan(1000);
     const src = read('src/components/SignalsHeroCinema.jsx');
     expect(src).toContain(HERO_FILM_SRC);
     expect(src).not.toMatch(/from '\.\.\/assets\/.*\.(mp4|webm)'/);

@@ -1,10 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    SIGNALS HERO CINEMA — the film/nebula behind the first box of /signals and
-   the words that fade through it.
-
-   Request: «باکس ابتدایی … ۳۰ ثانیه یکبار فیلم … با کلماتی که … با انیمیشن
-   محو می‌شود و ۳۰ ثانیه جمله «سیگنال هوشمند» را نشان می‌دهد، با بک‌گراند خالی،
-   خیلی مدرن و زیبا، بدون افت سرعت».
+   the words that fade through it. The default video is a local, lightweight
+   seamless loop; the drawn scene stays behind it throughout playback.
 
    Every rule here is scoped to `.sigh-` or to `.sic-page-hero.has-cinema`, so
    no other screen, language or spacing in the app moves. The hero's own
@@ -29,7 +26,7 @@
    isolate`, so the scene is clipped to the 24px radius by the box itself and
    creates no stacking context of its own above the page. */
 .sic-page-hero.has-cinema {
-  --sigh-slot-h: 19px;
+  --sigh-slot-h: 23px;
   --sigh-ink: #dff3ff;
 }
 
@@ -114,11 +111,10 @@
   box-shadow: 0 0 5px rgba(160, 220, 255, 0.5);
 }
 
-/* ── The film, when an operator has configured one ───────────────────────────
+/* ── The same-origin film, or an operator-supplied replacement ──────────────
    Opacity, not display, so the first decoded frame cross-fades over the drawn
-   scene instead of popping. Until then the nebula is what the user sees, which
-   is the whole point of drawing one: a buffering video is never a black
-   rectangle at the top of the page. */
+   scene instead of popping. Keep the fallback below it through playback: a
+   transparent or stalled frame cannot reveal the panel's dark surface. */
 .sigh-film {
   position: absolute;
   inset: 0;
@@ -127,9 +123,10 @@
   height: 100%;
   opacity: 0;
   object-fit: cover;
+  object-position: center;
   transition: opacity 900ms ease-out;
 }
-.sigh-scene.is-film .sigh-film { opacity: 0.5; }
+.sigh-scene.is-film .sigh-film { opacity: 1; }
 
 /* A stock clip's source line — see VITE_SIGNALS_HERO_VIDEO_CREDIT. */
 .sigh-credit {
@@ -164,13 +161,13 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
-  margin-top: 5px;
+  margin-top: 9px;
 }
 
 .sigh-words-slot {
   position: relative;
   display: block;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
   height: var(--sigh-slot-h);
 }
@@ -180,10 +177,11 @@
   inset-block-start: 0;
   inset-inline-start: 0;
   display: block;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
   color: var(--sigh-ink);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.1px;
   line-height: var(--sigh-slot-h);
@@ -246,12 +244,16 @@
   transform: scaleX(1);
 }
 
-/* The hero's printed subtitle moves under the rotating line and stays out of
-   the way on narrow phones, where the sentence needs the whole width. */
-.sic-page-hero.has-cinema .sic-hero-copy p {
-  margin-top: 3px;
-  color: rgba(226, 240, 255, 0.5);
-  font-size: 10.5px;
+/* The tagline is a real second line, visible even on narrow screens. */
+.sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline {
+  margin: 5px 0 0;
+  color: #c5d9f3;
+  font-size: clamp(12px, 1.05vw, 14px);
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: normal;
+  text-overflow: clip;
+  overflow: visible;
 }
 
 /* ── Keyframes ────────────────────────────────────────────────────────────── */
@@ -335,7 +337,7 @@
     linear-gradient(to left, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.5) 44%, rgba(255, 255, 255, 0.72)),
     radial-gradient(128% 190% at 50% 50%, transparent 46%, rgba(255, 255, 255, 0.5) 100%);
 }
-:root[data-theme='light'] .sigh-scene.is-film .sigh-film { opacity: 0.34; }
+:root[data-theme='light'] .sigh-scene.is-film .sigh-film { opacity: 0.24; }
 :root[data-theme='light'] .sigh-words { --sigh-ink: #23304f; }
 :root[data-theme='light'] .sigh-word { text-shadow: none; }
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
@@ -348,16 +350,16 @@
 :root[data-theme='light'] .sigh-words::before { background: #2658c9; box-shadow: 0 0 7px rgba(38, 88, 201, 0.45); }
 :root[data-theme='light'] .sigh-ticks i { background: rgba(21, 26, 48, 0.2); }
 :root[data-theme='light'] .sigh-ticks i[data-on='true'] { background: linear-gradient(90deg, #2658c9, #6c4bd8); }
-:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy p { color: rgba(21, 26, 48, 0.56); }
+:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { color: #30456f; }
 :root[data-theme='light'] .sigh-credit { color: rgba(21, 26, 48, 0.4); }
 
 /* ── Narrow phones ──────────────────────────────────────────────────────────
-   Below 440px the status column is already hidden by signals-intel.css; here
-   the printed subtitle goes too, so the rotating sentence gets the width. */
+   Keep the tagline visible; hide only the decorative ticks for word room. */
 @media (max-width: 440px) {
-  .sic-page-hero.has-cinema .sic-hero-copy p { display: none; }
+  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { font-size: 12px; }
   .sigh-word { font-size: 11px; }
   .sigh-word.is-title { font-size: 12px; }
+  .sigh-ticks { display: none; }
 }
 @media (max-width: 360px) {
   .sigh-ticks { display: none; }

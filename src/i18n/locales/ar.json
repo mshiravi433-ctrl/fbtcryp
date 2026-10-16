@@ -1683,6 +1683,7 @@
     "title": "إشارات ذكية",
     "subtitle": "Technical analysis across the market, updated live.",
     "hero": {
+      "tagline": "نبض السوق بين يديك",
       "aria": "عبارات الإشارات الذكية الدوّارة",
       "words": {
         "early": "إشارة مبكرة",

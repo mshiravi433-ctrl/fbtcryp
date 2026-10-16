@@ -5,73 +5,11 @@ import { useStill } from './AnimatedIcon';
 import { isNativeShell } from '../lib/nativeShell';
 
 /**
- * SIGNALS HERO CINEMA — the film behind the first box of /signals, and the
- * words that fade through it.
- * ---------------------------------------------------------------------------
- * Request (verbatim): «در صفحه سیگنال، باکس ابتدایی که جمله «سیگنال هوشمند»
- * داره، ۳۰ ثانیه یکبار فیلم زیر پخش شود، با کلماتی که … مثل سیگنال زودهنگام،
- * شتاب حرکتی، … میاد و با انیمیشن محو می‌شود و ۳۰ ثانیه جمله «سیگنال هوشمند»
- * را نشان می‌دهد، با بک‌گراند خالی، خیلی مدرن و زیبا، بدون افت سرعت»
- * + a Pixabay galaxy/nebula loop:
- *   https://pixabay.com/videos/galaxy-nebula-space-cosmos-381972/
- *
- * ─── THE FILM IS A URL, NOT A BUNDLED FILE ─────────────────────────────────
- * The clip the request named lives on Pixabay's own CDN —
- *   https://cdn.pixabay.com/video/2026-10-10/381972_large.mp4
- * (MP4, 2160×3840 vertical, 30 fps, free under the Pixabay Content License,
- * author doktorkleinmusic) — and that URL is what plays by default: it is
- * HERO_FILM_SRC below, so the film is on without anyone configuring anything.
- * What is NOT done is downloading the file and committing it, for the reasons
- * already written into `GalaxyBackdrop.jsx` and `MarketStories.jsx`:
- *
- *   • SIZE. A compressed galaxy loop is 2–5 MB and a 4K vertical one is more.
- *     The whole APK is ~7.5 MB, and this is decoration on ONE box of ONE screen.
- *   • IT WOULD OFTEN SHOW NOTHING. On a slow or filtered connection the hero is
- *     still buffering while the user is already reading the signals, so the
- *     first thing on the page is a black rectangle.
- *   • IT IS NOT OURS TO REDISTRIBUTE. Pixabay's licence allows use without
- *     permission, but a copy shipped inside a store binary is a different
- *     question from pointing at the library's own URL. So no file is committed:
- *     `VITE_SIGNALS_HERO_VIDEO` swaps the URL for the operator's own copy
- *     (`/media/signals-hero.mp4`) and `=none` switches the film off, both
- *     documented in `.env.example` next to the page it was asked for.
- *
- * Shipping a third-party URL is only defensible because every way it can fail
- * lands on the same picture: no network, a blocked or expired CDN link, refused
- * autoplay, an unsupported codec, `saveData`/2G, the native APK and reduced
- * motion all leave the drawn nebula standing. It is painted first and it never
- * waits for anything.
- *
- * ─── WHAT IS DRAWN WHEN THE FILM CANNOT PLAY ───────────────────────────────
- * The scene the clip was chosen for is drawn instead: a turbulent nebula
- * (`feTurbulence`, rendered ONCE into a static layer — it is the difference
- * between a one-off rasterisation and a per-frame one) with two drifting star
- * planes and a vignette that keeps the text readable. A few kB, first frame,
- * nothing to fetch, no codec that can fail — «بک‌گراند خالی» in the sense that
- * was meant: empty of assets, not empty of design.
- *
- * ─── WHY THIS DOES NOT COST SPEED («بدون افت سرعت») ────────────────────────
- *   • Only `transform` and `opacity` animate. No `filter` animation, no
- *     `backdrop-filter` — the two properties PageTransition.jsx documents as
- *     the cause of every stutter this app ever had.
- *   • The star planes are TWO animated elements, not sixty; each star only
- *     fades. Positions come from a seeded PRNG, so a re-render can never
- *     reshuffle the sky.
- *   • The drawn scene costs nothing when the film is actually playing: it
- *     unmounts on the video's first frame instead of painting behind it.
- *   • A film is fetched lazily (`preload="none"` + an explicit `load()` only
- *     when the hero is on screen), muted and inline so autoplay is legal, and
- *     PAUSED whenever the box scrolls out of view or the tab is hidden. A
- *     background video nobody is watching is a decoder running for nothing.
- *   • A film is NOT fetched on a link that cannot afford it: `saveData`, or an
- *     `effectiveType` of 2g/slow-2g, keeps the drawn scene instead. A 4K
- *     vertical loop on a metered connection is a cost the reader never asked
- *     for and cannot see the bill of.
- *   • The film never runs inside the APK (`isNativeShell`): a 7.5 MB binary
- *     does not get a video, and the WebView pays for decoding it in heat.
- *   • `prefers-reduced-motion` AND the app's own «reduce motion» setting (the
- *     existing `useStill()` hook) stop the rotation, freeze the scene and skip
- *     the film entirely — the title simply stays on screen.
+ * The first Signals banner: a lightweight, same-origin H.264 nebula loop with
+ * a CSS/SVG fallback and a 30-second rotating phrase. No third-party hotlink
+ * is needed to make the default experience work. The film is decorative and
+ * never blocks the page; reduced motion, native shell and slow/data-saving
+ * connections keep the still scene instead.
  */
 
 /* The rotating line is the hero's own title plus eight signal words. Slot 0 is
@@ -101,25 +39,13 @@ export const HERO_FADE_MS = 420;
    two files is a fade that drifts. */
 export const HERO_FILM_CROSSFADE_MS = 900;
 
-/* ─── THE FILM ITSELF ────────────────────────────────────────────────────────
-   The Pixabay page the request named (galaxy-nebula-space-cosmos-381972) hands
-   out this direct CDN URL from its own «Open video in new tab» menu: MP4,
-   2160×3840 vertical, 30 fps, published 2026-10-12 by doktorkleinmusic, free
-   under the Pixabay Content License. It plays by default — no configuration
-   needed — and `VITE_SIGNALS_HERO_VIDEO` replaces or switches it off.
-   Exported because `.env.example`, the docs and the test all have to agree with
-   the same string; a URL typed twice is a URL that drifts. */
-export const HERO_FILM_SRC = 'https://cdn.pixabay.com/video/2026-10-10/381972_large.mp4';
+/* A small original loop, served from the same origin as the app. Operators can
+   override or turn it off with VITE_SIGNALS_HERO_VIDEO. */
+export const HERO_FILM_SRC = '/media/signals-hero.mp4';
+export const HERO_FILM_CREDIT = '';
 
-/* The licence does not require attribution. Hotlinking somebody's 4K render as
-   the front page of a trading app is exactly the case where naming them costs
-   nothing and is the decent default, so it ships with the default film — 7.5px
-   in the corner, and only once a frame is really on screen. */
-export const HERO_FILM_CREDIT = 'Pixabay · doktorkleinmusic';
 
-/* «Draw the nebula, fetch nothing.» An empty variable can no longer mean that
-   — empty now means «use the default above» — so the opt-out needs a word of
-   its own. Compared case-insensitively. */
+/* Explicit opt-out for the optional film. */
 export const HERO_FILM_OFF = Object.freeze(['none', 'off', 'no', 'false', '0', '-']);
 
 const isOff = (value) => HERO_FILM_OFF.includes(String(value ?? '').trim().toLowerCase());
@@ -130,7 +56,7 @@ const isOff = (value) => HERO_FILM_OFF.includes(String(value ?? '').trim().toLow
  * test (or an operator flipping the variable in `.env` and restarting Vite)
  * has to be able to change the answer without the module having cached it.
  *
- *   unset / empty  → the Pixabay default    → HERO_FILM_SRC
+ *   unset / empty  → the bundled loop    → HERO_FILM_SRC
  *   `none` / `off` → nothing at all         → ''  (drawn nebula, zero requests)
  *   anything else  → the operator's own URL → as given
  */
@@ -146,11 +72,11 @@ export function resolveHeroCredit(env = import.meta.env) {
   if (isOff(raw)) return '';
   /* An operator hosting their own file gets no credit invented for it — the
      name on somebody else's footage must not end up on theirs. */
-  return raw || (resolveHeroFilm(env) === HERO_FILM_SRC ? HERO_FILM_CREDIT : '');
+  return raw;
 }
 
 /**
- * True when the connection cannot afford a 4K loop.
+ * True when the connection asks us not to stream video.
  *
  * `navigator.connection` is Chrome/Android-only and absent in jsdom, so this
  * reads as `false` almost everywhere — including in the tests, which is why the
@@ -184,7 +110,7 @@ const START_DELAY_MS = 1_600;
  * that costs power on this box — the film decoder and the rotation timer —
  * keys off this, so a hero scrolled past or a backgrounded tab costs nothing.
  * Falls back to "visible" where the API is missing, which is the safe default:
- * the timer is cheap and the film is opt-in anyway.
+ * the timer is cheap and the video source is only attached when visible.
  *
  * Returns a CALLBACK ref, not a `useRef`: an effect keyed on a ref object never
  * re-runs when the node attaches, so the observer would silently never be
@@ -259,7 +185,7 @@ function makeStars(count, seed) {
 }
 
 /**
- * THE SCENE — drawn nebula, or the configured film, never both at once.
+ * THE SCENE — drawn nebula under a same-origin film, when motion is allowed.
  *
  * `active` is false when motion is not allowed; the scene then renders as a
  * still picture (the nebula without its drift), which still looks like deep
@@ -277,16 +203,14 @@ export function SignalsHeroScene({ active = true }) {
   const film = resolveHeroFilm();
   const poster = String(import.meta.env?.VITE_SIGNALS_HERO_POSTER ?? '').trim() || undefined;
   const credit = resolveHeroCredit();
-  /* Three separate reasons not to fetch, and all three land on the same drawn
-     scene: the operator switched the film off (`none`), this is the APK, or the
-     reader's own connection says it is saving data / on 2G. */
+  /* Opt-out, native shell and data-saving connections use the drawn scene. */
   const wantFilm = Boolean(film) && !native && !cheap;
 
   const [setHostNode, onScreen] = useOnScreen();
   const videoRef = useRef(null);
   const foreground = useForeground();
-  /* 'idle' → nothing fetched yet · 'loading' → fetch started · 'live' → first
-     frame painted (the drawn scene unmounts) · 'failed' → give up, stay drawn.
+  /* 'idle' → no source attached · 'loading' → fetch started · 'live' → playing
+     over the drawn scene · 'failed' → give up, stay drawn.
      A video that errors must not leave a black rectangle in the hero: the
      nebula behind it is the fallback and it is already painted. */
   const [filmState, setFilmState] = useState('idle');
@@ -295,12 +219,18 @@ export function SignalsHeroScene({ active = true }) {
   const near = useMemo(() => makeStars(14, 770113), []);
   const filmLive = filmState === 'live';
 
-  /* Fetch nothing until the box is actually on screen and allowed to move. */
+  /* Attach the src only after visibility has been confirmed. `preload=none`
+     alone does not guarantee that a browser will make zero requests. */
   useEffect(() => {
-    if (!wantFilm || filmState !== 'idle' || !active || !onScreen || !foreground) return;
+    if (wantFilm && filmState === 'idle' && active && onScreen && foreground) {
+      setFilmState('loading');
+    }
+  }, [wantFilm, filmState, active, onScreen, foreground]);
+
+  useEffect(() => {
+    if (!wantFilm || filmState !== 'loading' || !active || !onScreen || !foreground) return;
     const v = videoRef.current;
     if (!v) return;
-    setFilmState('loading');
     try {
       if (typeof v.load === 'function') v.load();
       // Autoplay can still be refused (battery saver, a browser policy), and a
@@ -308,9 +238,9 @@ export function SignalsHeroScene({ active = true }) {
       // worth reporting: the drawn scene is right behind the film and already
       // looks finished.
       const p = typeof v.play === 'function' ? v.play() : null;
-      if (p && typeof p.catch === 'function') p.catch(() => setFilmState('idle'));
+      if (p && typeof p.catch === 'function') p.catch(() => setFilmState('failed'));
     } catch {
-      setFilmState('idle');
+      setFilmState('failed');
     }
   }, [wantFilm, filmState, active, onScreen, foreground]);
 
@@ -335,13 +265,9 @@ export function SignalsHeroScene({ active = true }) {
       data-film={wantFilm ? filmState : 'none'}
       aria-hidden="true"
     >
-      {/*
-        The drawn scene is unmounted — not merely hidden — once the film has a
-        frame on screen. Two full-box layers painting behind an opaque video is
-        work the GPU does for nobody.
-      */}
-      {!filmLive && (
-        <>
+      {/* Keep the drawn scene behind the video, including during its fade and
+          when playback is paused or a browser cannot decode the film. */}
+      <>
           <svg
             className="sigh-neb"
             viewBox="0 0 400 160"
@@ -414,45 +340,30 @@ export function SignalsHeroScene({ active = true }) {
             ))}
           </div>
 
-          {/* Keeps the title legible over gas and stars alike. */}
-          <div className="sigh-vignette" />
-        </>
-      )}
+      </>
 
       {wantFilm && (
         <video
           ref={videoRef}
           className="sigh-film"
-          src={film}
+          src={filmState === 'loading' || filmLive ? film : undefined}
           poster={poster}
           muted
           loop
           playsInline
-          autoPlay={false}
+          autoPlay
           preload="none"
           disablePictureInPicture
           disableRemotePlayback
           onPlaying={() => setFilmState('live')}
-          onLoadedData={() => {
-            /* Some browsers never fire `playing` when autoplay is refused but
-               the data is there; a decoded frame is enough to retire the drawn
-               scene, and if it never plays the nebula simply stays. */
-            setFilmState((s) => (s === 'loading' ? 'live' : s));
-          }}
           onError={() => setFilmState('failed')}
           onStalled={() => setFilmState((s) => (s === 'loading' ? 'failed' : s))}
         />
       )}
 
-      {/*
-        Attribution for a film hotlinked from somebody else's library. The
-        Pixabay licence does not require it; naming the author costs 7.5px in a
-        corner at 34% opacity, and it only appears once a real frame is on
-        screen. An operator's own URL gets no credit invented for it, and
-        VITE_SIGNALS_HERO_VIDEO_CREDIT replaces this line — or removes it, with
-        `none`. Deliberately a <span> and not a link: an outbound destination
-        inside the hero would be a focus stop and a tap target nobody asked for.
-      */}
+      <div className="sigh-vignette" />
+
+      {/* Optional credit for an operator-supplied video. */}
       {wantFilm && filmLive && credit && <span className="sigh-credit">{credit}</span>}
     </div>
   );

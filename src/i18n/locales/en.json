@@ -2903,6 +2903,7 @@
     "title": "AI Signals",
     "subtitle": "Technical analysis across the market, updated live.",
     "hero": {
+      "tagline": "The market pulse, in your hands",
       "aria": "Rotating smart-signal phrases",
       "words": {
         "early": "Early signal",
