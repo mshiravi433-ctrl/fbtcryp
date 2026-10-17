@@ -110,6 +110,14 @@ export const ACTIONS = Object.freeze({
 
   /* loyalty mechanics */
   dailyCheckin: { points: 15, verify: 'none', dailyCap: 1, kind: 'checkin' },
+  /* One point-bearing fortune-wheel spin per local day. Bonus spins granted by
+     referrals deliberately cannot reach this action: they only mint soulbound
+     badges / entries, so the daily cap is a hard ceiling on wheel points. */
+  dailyWheel: { points: 25, verify: 'none', dailyCap: 1, kind: 'loyalty' },
+  /* A short lesson about an asset the app really lists. One credit per topic;
+     the client sends a topic-scoped rewardId and the daily cap bounds abuse
+     if a client is tampered with. No yield/price figure is involved. */
+  learn: { points: 50, verify: 'none', dailyCap: 6, kind: 'learn' },
   shareApp: { points: 30, verify: 'none', dailyCap: 1, kind: 'growth' },
   /* Opening a friend's https://fbtswap.ir/#/?ref=CODE link. Zero points for
      the visitor; the referrer is credited via referralOpportunity. */

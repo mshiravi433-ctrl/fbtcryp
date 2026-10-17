@@ -6103,6 +6103,346 @@
       "sync": "Engine sync",
       "intentAiPlan": "AI plan drafted",
       "intentAiExecuted": "AI intent executed"
+    },
+    "v2": {
+      "headerSub": "Reputation, rituals and soulbound animals",
+      "activeKicker": "{{tab}} · active section",
+      "footerNote": "FBT is a loyalty balance inside this app — not a coin, not tradable, no price. Points are a reputation score, not currency.",
+      "quicknav": "Jump to a section",
+      "quicknavItems": {
+        "wheel": "Wheel",
+        "streak": "Streak",
+        "referral": "Referral",
+        "badges": "Badges",
+        "learn": "Learn",
+        "focus": "Focus",
+        "season": "Season",
+        "perks": "Perks",
+        "profile": "Profile"
+      },
+      "loyalty": {
+        "fbt": "FBT is a loyalty balance — not a coin. No price, no trading, no withdrawal.",
+        "points": "Points are a reputation score, not currency. They are never shown next to a fiat symbol."
+      },
+      "tab": {
+        "earn": {
+          "label": "Earn",
+          "title": "Put your assets to work",
+          "sub": "Only our own audited products — no outbound links, no typed APY. Real activity here feeds the same points ledger the wheel and badges use."
+        },
+        "rewards": {
+          "label": "Rewards",
+          "title": "Play. Learn. Collect.",
+          "sub": "A daily wheel, a seven-day streak, soulbound animal badges, confirmed-referral spins and an honest airdrop season."
+        }
+      },
+      "animals": {
+        "turtle": "Turtle",
+        "wolf": "Wolf",
+        "lion": "Lion",
+        "eagle": "Eagle",
+        "dragon": "Dragon",
+        "phoenix": "Phoenix"
+      },
+      "hero": {
+        "kicker": "Your standing",
+        "badges": "Badges",
+        "entries": "{{n}} entries",
+        "noPrice": "No price · no trade",
+        "fbtHint": "FBT is a loyalty balance, not a coin. It has no price and cannot be withdrawn or traded."
+      },
+      "wheel": {
+        "kicker": "Daily ritual",
+        "title": "Fortune wheel",
+        "sub": "One free spin a day. Points, a soulbound badge or an airdrop entry — every sector is a real outcome, and only the points sector touches your score.",
+        "legend": {
+          "points": "{{n}} points",
+          "nft": "Tier badge",
+          "entries": "Airdrop entries",
+          "bonus": "Bonus spin"
+        },
+        "spinsToday": "Daily spins: {{n}}/1",
+        "mode": "Spin type",
+        "dailyMode": "Daily spin",
+        "bonusMode": "Bonus ({{n}})",
+        "onePerDay": "One free spin today",
+        "bonusLeft": "{{n}} bonus spins ready",
+        "comeBack": "Next spin in {{h}}h",
+        "spinning": "Spinning…",
+        "result": {
+          "points": "+{{n}} points credited",
+          "alreadyCredited": "Today's wheel points were already credited — +1 entry added instead.",
+          "nft": "Soulbound badge unlocked: {{tier}} animal",
+          "nftDup": "That badge is already owned — +1 entry added instead.",
+          "entryOne": "+1 airdrop entry",
+          "entryMany": "+{{n}} airdrop entries",
+          "bonus": "+1 bonus spin",
+          "fallbackNote": "The points for today were already in your ledger, so this spin added an entry instead.",
+          "dupNote": "Badges are unique and soulbound; the duplicate became an entry.",
+          "note": "Recorded on this device. Points are credited by the rewards service."
+        },
+        "note": "Points are credited once per local day by the rewards service. Bonus spins never pay points. Badges are soulbound, and entries are stored on this device."
+      },
+      "streak": {
+        "kicker": "Daily ritual",
+        "title": "Keep the flame alive",
+        "days": "{{n}} days",
+        "sub": "One check-in per local day. The seventh day pays the biggest streak bonus.",
+        "week": "This week",
+        "day7": "Day 7 — biggest bonus",
+        "claimHint": "Today's check-in reward",
+        "nextHint": "Come back tomorrow to grow it",
+        "note": "Calculated by the same dailyRewards rule as before: 15 base points plus 10 per streak day, capped at day 7. The points are credited by the rewards service."
+      },
+      "missions": {
+        "kicker": "Real activity",
+        "title": "Earn more points",
+        "chip": "Verified actions",
+        "sub": "These actions are already wired to the points engine. No fake-money activity counts.",
+        "note": "Points land once per action; the server enforces the caps."
+      },
+      "referral": {
+        "kicker": "Grow together",
+        "title": "Invite a friend",
+        "confirmedChip": "{{n}} confirmed",
+        "deviceChip": "Device ledger",
+        "sub": "A friend who opens your link and completes a real swap or deposit qualifies. Each confirmed friend adds one entry and one bonus spin; every third also mints your current tier's soulbound animal.",
+        "confirmed": "Confirmed friends",
+        "entries": "Airdrop entries",
+        "bonusSpins": "Bonus spins",
+        "perkEntry": "Each friend: +1 entry",
+        "perkSpin": "Each friend: +1 bonus spin",
+        "perkNft": "Every {{n}}rd: soulbound badge",
+        "nextBadge": "Next guaranteed badge at {{n}} confirmed",
+        "copyCode": "Copy code",
+        "tierNote": "Badges minted at your current tier: {{tier}}",
+        "synced": "+{{n}} new confirmed referral(s) added to your device ledger.",
+        "syncedNft": "A soulbound badge was minted.",
+        "note": "The count comes from the rewards service; entries and badges are stored on this device. Self-referrals never qualify.",
+        "invitedBonus": "You joined through a friend’s link — +1 airdrop entry added."
+      },
+      "badges": {
+        "kicker": "Soulbound collection",
+        "title": "Animal badges",
+        "ownedChip": "{{n}}/{{total}} owned",
+        "sub": "One animal per tier, in the exact tier colour. They are minted by the wheel, confirmed referrals and tier milestones.",
+        "owned": "Owned",
+        "locked": "Locked",
+        "soulbound": "Soulbound: cannot be transferred, sold or traded. Not a token.",
+        "boxKicker": "Tier milestone",
+        "boxTitle": "{{tier}} surprise box",
+        "boxSub": "You crossed a tier. Open the box for one bonus spin and one airdrop entry. No points are minted here.",
+        "boxOpen": "Open the box",
+        "boxResult": "{{tier}} box opened: +1 bonus spin, +1 entry.",
+        "achievements": "Achievements",
+        "note": "Achievements are derived automatically from your points ledger; tapping them does nothing."
+      },
+      "achievements": {
+        "firstLight": {
+          "title": "First light",
+          "desc": "Earn your first reputation point."
+        },
+        "walletOn": {
+          "title": "Wallet on",
+          "desc": "Connect a verified wallet."
+        },
+        "firstSwap": {
+          "title": "First real swap",
+          "desc": "Complete a real swap — arcade money never counts."
+        },
+        "streak7": {
+          "title": "Seven flames",
+          "desc": "Check in seven days in a row."
+        },
+        "referrer": {
+          "title": "Good company",
+          "desc": "A friend completes a real swap or deposit."
+        },
+        "collector": {
+          "title": "Collector",
+          "desc": "Collect three soulbound animal badges."
+        },
+        "legend": {
+          "title": "Legend",
+          "desc": "Reach 40,000 points and the top of the animal ladder."
+        }
+      },
+      "learn": {
+        "kicker": "Learn-to-earn",
+        "title": "Know what you hold",
+        "sub": "Four short lessons about assets this app actually lists. Each pays 50 points once.",
+        "progressChip": "{{n}}/{{total}} complete",
+        "quizKicker": "Lesson",
+        "question": "Question {{n}} of {{total}}",
+        "wrong": "Not quite — try again. Nothing is lost.",
+        "doneTitle": "Lesson complete",
+        "earnedTitle": "Lesson complete: +{{n}} points",
+        "doneSub": "You can reopen the lesson any time to review it.",
+        "openAsset": "View {{sym}}",
+        "note": "No price, yield or forecast is taught here — the live rate always lives on the product screen that measures it.",
+        "btc": {
+          "title": "Bitcoin: scarcity and self-custody",
+          "desc": "What makes BTC different from a bank balance.",
+          "q1": {
+            "q": "What makes Bitcoin scarce?",
+            "a1": "A fixed issuance schedule enforced by its protocol",
+            "a2": "A company decides how many exist",
+            "a3": "Its price stops people from buying",
+            "a4": "A central bank issues it"
+          },
+          "q2": {
+            "q": "Who controls a self-custody wallet?",
+            "a1": "Whoever holds the keys",
+            "a2": "The exchange support team",
+            "a3": "The miners",
+            "a4": "FBT"
+          }
+        },
+        "eth": {
+          "title": "Ethereum staking",
+          "desc": "What stETH and rETH represent — without a promised rate.",
+          "q1": {
+            "q": "What is stETH designed to represent?",
+            "a1": "Staked ETH plus the staking rewards it accrues",
+            "a2": "A dollar-pegged stablecoin",
+            "a3": "A share in a company",
+            "a4": "A token issued by FBT"
+          },
+          "q2": {
+            "q": "If you buy stETH through our swap, what do you hold?",
+            "a1": "A liquid staking token you can keep or swap",
+            "a2": "A locked bank deposit",
+            "a3": "An FBT loyalty balance",
+            "a4": "A promise from FBT to pay ETH"
+          }
+        },
+        "sol": {
+          "title": "Solana: fees and staking",
+          "desc": "What SOL pays for and what a liquid staking token holds.",
+          "q1": {
+            "q": "What is SOL used for on Solana?",
+            "a1": "Paying network fees and staking to secure the network",
+            "a2": "Paying for FBT subscriptions",
+            "a3": "Minting FBT",
+            "a4": "Nothing"
+          },
+          "q2": {
+            "q": "What does a Solana liquid staking token let you do?",
+            "a1": "Hold a transferable claim on staked SOL",
+            "a2": "Withdraw fiat at a bank",
+            "a3": "Earn a fixed APY guaranteed by FBT",
+            "a4": "Own a share of FBT"
+          }
+        },
+        "paxg": {
+          "title": "Tokenized gold",
+          "desc": "What backs PAXG and what to verify before buying.",
+          "q1": {
+            "q": "What is PAXG backed by?",
+            "a1": "Physical gold held by the issuer",
+            "a2": "A basket of FBT points",
+            "a3": "USDT only",
+            "a4": "Nothing"
+          },
+          "q2": {
+            "q": "What should you check before buying a tokenized-gold token?",
+            "a1": "The issuer and the token contract address",
+            "a2": "Only the ticker symbol",
+            "a3": "A promised APY",
+            "a4": "A Telegram message"
+          }
+        }
+      },
+      "focus": {
+        "kicker": "One-minute game",
+        "title": "Focus round",
+        "sub": "Eight runes light up. Tap the one that glows before it fades. Under a minute, no streak, no grind.",
+        "available": "Entry available",
+        "doneToday": "Entry earned today",
+        "round": "Round",
+        "hits": "Hits",
+        "wins": "Wins",
+        "start": "Start a round",
+        "prompt": "Tap the glowing rune",
+        "won": "{{n}}/8 — good focus",
+        "lost": "{{n}}/8 — close",
+        "earnedEntry": "+1 airdrop entry added to this device.",
+        "alreadyEarned": "Today's entry was already earned; this round was practice.",
+        "tryAgain": "Six hits earns the daily entry. Try again.",
+        "again": "Play again",
+        "note": "The game is under a minute on purpose: it must not become a daily grind. Entries are device-local.",
+        "rune": "Rune {{n}}"
+      },
+      "season": {
+        "kicker": "Season 1",
+        "title": "Airdrop entries",
+        "fundedChip": "Funded",
+        "notFundedChip": "Not funded",
+        "fundedTitle": "The pool is funded",
+        "fundedBody": "{{pool}} — entries are collected here. An entry is not a guarantee of a payout; distribution rules are published before any payout.",
+        "tokenNote": "Configured asset: {{token}}.",
+        "notFundedTitle": "No pool is funded yet",
+        "notFundedBody": "Entries are being collected in case a funded season ships. No token, amount or date is promised.",
+        "entries": "entries on this device",
+        "source": {
+          "wheel": "Fortune wheel",
+          "referral": "Confirmed referrals",
+          "focus": "Focus round",
+          "box": "Tier milestone box"
+        },
+        "note": "This card turns into a funded season only when both the funding flag and a verifiable pool description are configured. Until then, entries are a record, not a claim."
+      },
+      "rebate": {
+        "kicker": "FBT utility",
+        "title": "Fee ladder and venue perks",
+        "levelChip": "{{tier}} balance",
+        "sub": "Your FBT balance sits on a published fee-discount ladder. The discount is defined in lib/fbt.js and is not yet applied by the live swap router — this card says so rather than pretending.",
+        "youAreHere": "You are here",
+        "toNext": "{{n}} FBT to {{tier}}",
+        "planned": "Planned: the ladder is real, but the live swap path still charges the flat fee. It will switch only after quote-level verification.",
+        "perksAvailable": "{{n}} available",
+        "perksSub": "Venue discounts unlocked by your rank. The code is the venue's own referral code; points are never spent.",
+        "perksNote": "No outbound links are rendered on this page. Copy the code and use it at the venue you already trade on."
+      },
+      "profile": {
+        "kicker": "Share your standing",
+        "title": "Points profile",
+        "chip": "No price attached",
+        "sub": "A shareable card with your animals, points, streak, badges and entries. It deliberately carries no fiat value.",
+        "points": "points",
+        "share": "Share card",
+        "rendering": "Rendering…",
+        "shareText": "My FBT points profile: {{points}} points, {{tier}} tier.",
+        "saved": "Card downloaded and link copied.",
+        "savedHint": "Your browser could not open a share sheet, so the card was downloaded and the link copied.",
+        "shareFailed": "Could not create the card — try again.",
+        "legal": "FBT is a loyalty balance — not a coin, not tradable, no price.",
+        "note": "The image is rendered on your device; nothing is uploaded."
+      },
+      "earn": {
+        "kicker": "Earn + climb",
+        "title": "Do the work, climb the ladder",
+        "sub": "Every audited product on this tab is ours. Real activity on these screens feeds the same points ledger the wheel and badges use.",
+        "next": "{{n}} points to {{tier}}",
+        "openRewards": "Open rewards",
+        "onlyOurs": "Only our own products",
+        "noApy": "No typed APY",
+        "openProduct": "Open product",
+        "pointsKicker": "The bridge",
+        "pointsTitle": "What activity pays",
+        "pointsChip": "Real events",
+        "pointsSub": "These rows come from POINT_VALUES, the same table the engine uses.",
+        "pointsNote": "A rate is never written into this page: the product screen measures it live."
+      },
+      "actions": {
+        "wheel": "Daily wheel",
+        "learn": "Learn-to-earn lesson"
+      },
+      "history": {
+        "chip": "Latest 10",
+        "note": "Only confirmed point events appear here. Badges and entries live in the device ledger above."
+      },
+      "deviceNote": "Soulbound badges, airdrop entries and bonus spins are stored on this device (localStorage). Clearing site data clears them; points remain on the rewards service."
     }
   },
   "verdict": {
