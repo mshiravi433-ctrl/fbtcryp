@@ -22,10 +22,14 @@
  * conversion is one-to-one and nobody was ever promised something undeliverable.
  *
  * ─── THE RULE THIS FILE ENFORCES ────────────────────────────────────────────
- * FBT is NOT tradable, NOT withdrawable, and has NO price. It is a loyalty
- * balance. Every string in the UI says so. The moment we imply a dollar value
- * we have made an unregistered offering out of a discount scheme, which is the
- * exact licensing exposure this whole app is built to avoid.
+ * FBT has NO price today, and is NOT withdrawable or tradable yet. It is a
+ * loyalty balance. Every string in the UI says exactly that — "no price
+ * today, tradable later once the token is issued" — so the promise is the
+ * other way round from a promise we cannot keep: nothing is sold, and the
+ * moment the token is issued the same ledger becomes tradable. The moment we
+ * imply a dollar value we have made an unregistered offering out of a
+ * discount scheme, which is the exact licensing exposure this whole app is
+ * built to avoid.
  */
 
 /** 1 point = 1 FBT. Deliberately trivial: a ratio invites a "rate" and a rate
