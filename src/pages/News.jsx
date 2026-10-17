@@ -6,6 +6,7 @@ import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
 import FbtRadioBox from '../components/FbtRadioBox';
+import { play as playFbtRadio } from '../lib/fbtRadioEngine';
 import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
@@ -123,6 +124,19 @@ function NewsPage() {
     (next) => {
       if (!NEWS_TABS.includes(next)) return;
       setTabState(next);
+      /*
+       * Start the live station INSIDE the click handler, not in an effect.
+       *
+       * Chrome allows a deferred play() after a tap, but iOS Safari only
+       * counts an audio call made synchronously inside the gesture — a
+       * play() from useEffect a frame later is refused there and the box
+       * would show its start button on every iPhone. Calling it here makes
+       * «پخش خودکار» true on the platform where it is hardest to get.
+       * Persian-only, like the box itself.
+       */
+      if (next === 'listen' && String(i18n.language || 'fa').toLowerCase().startsWith('fa')) {
+        playFbtRadio();
+      }
       setSearchParams(
         (prev) => {
           const p = new URLSearchParams(prev);
@@ -133,7 +147,7 @@ function NewsPage() {
         { replace: true }
       );
     },
-    [setSearchParams]
+    [setSearchParams, i18n.language]
   );
   const [notifyOn, setNotifyOn] = useState(() => getNotifySettings().news);
   // Bumped on each toggle so the bell re-rings, confirming the tap.
