@@ -1,0 +1,618 @@
+/* ==========================================================================
+   FBT LIVE RADIO — the box on News → Radio
+   --------------------------------------------------------------------------
+   Token-driven so it belongs to both themes, but the design leans dark: a
+   black glass slab with a slow RGB aurora behind it, one gradient play button,
+   and an equaliser that only moves while sound is actually coming out.
+
+   Nothing here is decorative-but-loud: the aurora is 8% opacity, the grain is
+   3%, and every animation stops under `prefers-reduced-motion`. A radio widget
+   sits on a text-heavy screen; it has to feel expensive, not compete.
+   ========================================================================== */
+
+.fbr {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 4px 0 18px;
+  padding: 16px 16px 14px;
+  border-radius: 26px;
+  color: var(--text-1, #fff);
+  background:
+    radial-gradient(120% 140% at 88% -20%, rgba(124, 77, 255, 0.22), transparent 58%),
+    radial-gradient(90% 120% at 6% 0%, rgba(0, 229, 255, 0.14), transparent 55%),
+    linear-gradient(168deg, rgba(14, 17, 28, 0.94), rgba(6, 8, 14, 0.97));
+  border: 1px solid color-mix(in srgb, var(--rgb-2, #7c4dff) 26%, var(--line, rgba(255, 255, 255, 0.09)));
+  box-shadow:
+    0 26px 60px -32px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+
+:root[data-theme='light'] .fbr {
+  background:
+    radial-gradient(120% 140% at 88% -20%, rgba(124, 77, 255, 0.13), transparent 58%),
+    radial-gradient(90% 120% at 6% 0%, rgba(0, 172, 193, 0.1), transparent 55%),
+    linear-gradient(168deg, rgba(255, 255, 255, 0.97), rgba(243, 245, 252, 0.97));
+  border-color: color-mix(in srgb, var(--rgb-2) 20%, var(--line));
+  box-shadow: 0 22px 50px -34px rgba(20, 24, 60, 0.55);
+}
+
+/* Gradient hairline that reads as "premium" without a second border. */
+.fbr::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.5), transparent 34%, transparent 66%, rgba(255, 45, 149, 0.42));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.fbr-aurora {
+  position: absolute;
+  z-index: -1;
+  inset: -40% -20% auto;
+  height: 150%;
+  background:
+    radial-gradient(closest-side, rgba(0, 229, 255, 0.28), transparent 70%) 12% 30% / 46% 60% no-repeat,
+    radial-gradient(closest-side, rgba(255, 45, 149, 0.22), transparent 70%) 78% 18% / 52% 58% no-repeat,
+    radial-gradient(closest-side, rgba(124, 77, 255, 0.3), transparent 72%) 50% 82% / 60% 62% no-repeat;
+  filter: blur(26px);
+  opacity: 0.55;
+  animation: fbr-drift 22s ease-in-out infinite alternate;
+}
+
+.fbr-grain {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+@keyframes fbr-drift {
+  0% { transform: translate3d(-2%, 0, 0) scale(1); }
+  100% { transform: translate3d(3%, 4%, 0) scale(1.08); }
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+.fbr-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.fbr-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #ffd9e6;
+  background: rgba(255, 45, 149, 0.16);
+  border: 1px solid rgba(255, 45, 149, 0.34);
+}
+
+.fbr-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff2d95;
+  box-shadow: 0 0 0 0 rgba(255, 45, 149, 0.6);
+  animation: fbr-ping 1.9s ease-out infinite;
+}
+
+@keyframes fbr-ping {
+  0% { box-shadow: 0 0 0 0 rgba(255, 45, 149, 0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(255, 45, 149, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 45, 149, 0); }
+}
+
+.fbr-brand {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 2.4px;
+  color: var(--text-3, #5b647f);
+  margin-inline-start: auto;
+}
+
+.fbr-link {
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2, #9aa4bf);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: 0.18s;
+}
+
+.fbr-link:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+/* ── cover + identity ───────────────────────────────────────────────────── */
+.fbr-main {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.fbr-art {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 14px 30px -18px #000, 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.fbr-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scale(1.02);
+}
+
+.fbr-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(150deg, rgba(0, 229, 255, 0.24), transparent 46%, rgba(255, 45, 149, 0.2));
+}
+
+.fbr-art-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 22px;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(0, 229, 255, 0.9), rgba(124, 77, 255, 0.7), rgba(255, 45, 149, 0.85), rgba(0, 255, 157, 0.7), rgba(0, 229, 255, 0.9));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 2px;
+  opacity: 0.35;
+  transition: opacity 0.3s;
+}
+
+.fbr.is-live .fbr-art-ring {
+  opacity: 0.95;
+  animation: fbr-spin 7s linear infinite;
+}
+
+@keyframes fbr-spin { to { transform: rotate(360deg); } }
+
+/* The arm button shown when autoplay was refused. */
+.fbr-start {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border: 0;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(4, 6, 12, 0.5);
+  backdrop-filter: blur(2px);
+  transition: background 0.2s;
+}
+
+.fbr-start:hover { background: rgba(4, 6, 12, 0.34); }
+
+.fbr-start::before {
+  content: '';
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35);
+  animation: fbr-ping-w 2s ease-out infinite;
+}
+
+@keyframes fbr-ping-w {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+  70% { box-shadow: 0 0 0 14px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+.fbr-start svg { position: relative; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)); }
+
+.fbr-body { min-width: 0; }
+
+.fbr-kicker {
+  margin: 0 0 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--rgb-1, #00e5ff);
+  opacity: 0.9;
+}
+
+.fbr-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fbr-title b {
+  background: linear-gradient(92deg, #c8b6ff, #7ee8ff 55%, #ffb3d1);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Equaliser beside the title: 16 thin bars, idle at 22% height. */
+.fbr-wave {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 20px;
+}
+
+.fbr-wave i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--rgb-1, #00e5ff), var(--rgb-2, #7c4dff));
+  transform: scaleY(0.22);
+  transform-origin: bottom;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+.fbr.is-live .fbr-wave i {
+  opacity: 1;
+  animation: fbr-eq 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes fbr-eq {
+  from { transform: scaleY(0.18); }
+  to { transform: scaleY(1); }
+}
+
+.fbr-sub {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2, #9aa4bf);
+  min-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fbr-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 7px;
+  color: var(--text-2, #9aa4bf);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+}
+
+.fbr-chip-whale {
+  color: #bfe9ff;
+  background: rgba(0, 229, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.28);
+}
+
+/* ── rail ───────────────────────────────────────────────────────────────── */
+.fbr-rail-wrap { margin: 14px 0 4px; }
+
+.fbr-rail {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  cursor: pointer;
+  direction: ltr;
+  outline: none;
+}
+
+.fbr-rail:focus-visible { box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.3); }
+
+.fbr-rail-buf,
+.fbr-rail-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.fbr-rail-buf { background: rgba(255, 255, 255, 0.12); }
+
+.fbr-rail-fill {
+  background: linear-gradient(90deg, #00e5ff, #7c4dff 55%, #ff2d95);
+  box-shadow: 0 0 12px -2px rgba(0, 229, 255, 0.65);
+}
+
+.fbr-rail-knob {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin-left: -6.5px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.28), 0 1px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: transform 0.12s;
+}
+
+.fbr-rail:hover .fbr-rail-knob { transform: translateY(-50%) scale(1.16); }
+
+.fbr-rail-tick {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+}
+
+.fbr-times {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 7px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3, #5b647f);
+  direction: rtl;
+}
+
+.fbr-times span:first-child { color: var(--text-2, #9aa4bf); font-weight: 700; }
+.fbr-remain { margin-inline-start: auto; }
+
+/* ── transport ──────────────────────────────────────────────────────────── */
+.fbr-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.fbr-play {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: #04060c;
+  cursor: pointer;
+  background: linear-gradient(140deg, #7ee8ff, #a78bfa 52%, #ff9ecb);
+  box-shadow:
+    0 12px 26px -12px rgba(124, 77, 255, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+  transition: transform 0.16s, box-shadow 0.2s;
+}
+
+.fbr-play:hover { transform: scale(1.05); }
+.fbr-play:active { transform: scale(0.97); }
+
+.fbr.is-live .fbr-play {
+  box-shadow:
+    0 12px 30px -12px rgba(255, 45, 149, 0.8),
+    0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+}
+
+.fbr-ctl {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-2, #9aa4bf);
+  font: inherit;
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  text-decoration: none;
+  transition: 0.16s;
+}
+
+.fbr-ctl:hover {
+  color: var(--text-1, #fff);
+  border-color: color-mix(in srgb, var(--rgb-1, #00e5ff) 45%, transparent);
+  background: rgba(0, 229, 255, 0.08);
+}
+
+.fbr-ctl:disabled { opacity: 0.35; cursor: default; }
+
+.fbr-ctl small {
+  position: absolute;
+  bottom: 3px;
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  opacity: 0.8;
+}
+
+.fbr-ctl-g { font-size: 15px; line-height: 1; margin-top: -5px; }
+
+.fbr-rate {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.fbr-dl { font-size: 16px; }
+
+/* ── chapters ───────────────────────────────────────────────────────────── */
+.fbr-chapters {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 4px 0 6px;
+  margin-top: 6px;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fbr-chapters::-webkit-scrollbar { display: none; }
+
+.fbr-ch {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border-radius: 11px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-2, #9aa4bf);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: 0.16s;
+  white-space: nowrap;
+}
+
+.fbr-ch:hover {
+  color: var(--text-1, #fff);
+  border-color: var(--line-strong, rgba(255, 255, 255, 0.16));
+}
+
+.fbr-ch.is-on {
+  color: #dff8ff;
+  border-color: rgba(0, 229, 255, 0.42);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 16px -8px rgba(0, 229, 255, 0.8);
+}
+
+.fbr-ch-time {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9.5px;
+  opacity: 0.72;
+  direction: ltr;
+}
+
+.fbr-note {
+  margin: 6px 0 0;
+  font-size: 9.5px;
+  line-height: 1.7;
+  color: var(--text-3, #5b647f);
+  text-align: center;
+}
+
+/* ── small screens ──────────────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .fbr { padding: 14px 12px 12px; border-radius: 22px; }
+  .fbr-main { grid-template-columns: 78px 1fr; gap: 11px; }
+  .fbr-art { width: 78px; height: 78px; border-radius: 17px; }
+  .fbr-title { font-size: 18px; }
+  .fbr-wave { display: none; }
+  .fbr-ctl { width: 36px; height: 36px; }
+  .fbr-play { width: 50px; height: 50px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbr-aurora,
+  .fbr-art-ring,
+  .fbr-live i,
+  .fbr-start::before { animation: none !important; }
+  .fbr-wave i { animation: none !important; transform: scaleY(0.5); }
+}
+
+/* ==========================================================================
+   The floating pill — the station keeps playing outside the News screen.
+   Small, corner-placed, same language as RadioDock's pill but never shown at
+   the same time (the engine stops one source when the other starts).
+   ========================================================================== */
+.fbr-pill {
+  position: fixed;
+  z-index: 70;
+  inset-inline-end: 14px;
+  bottom: calc(var(--nav-h, 88px) + 14px);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  background: linear-gradient(140deg, rgba(10, 14, 22, 0.94), rgba(18, 12, 30, 0.94));
+  color: #eaf6ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 34px -18px rgba(0, 0, 0, 0.9), 0 0 22px -14px rgba(0, 229, 255, 0.9);
+}
+
+.fbr-pill-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 15px;
+}
+
+.fbr-pill-eq i {
+  width: 2.5px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #00e5ff, #7c4dff);
+  transform: scaleY(0.3);
+  transform-origin: bottom;
+}
+
+.fbr-pill.is-live .fbr-pill-eq i { animation: fbr-eq 0.85s ease-in-out infinite alternate; }
+
+.fbr-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff2d95;
+  box-shadow: 0 0 8px rgba(255, 45, 149, 0.9);
+}
+
+.fbr-pill-close {
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd6ea;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbr-pill.is-live .fbr-pill-eq i { animation: none; }
+}

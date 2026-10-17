@@ -5,6 +5,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
+import FbtRadioBox from '../components/FbtRadioBox';
 import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
@@ -275,19 +276,32 @@ function NewsPage() {
       ) : tab === 'calm' ? (
         <CalmPanel />
       ) : tab === 'listen' ? (
-        /*
-          ─── RADIO, NOT TELEVISION, AND THE REASON IS UNCHANGED ───────────
-          Asked again for TV. It is still not buildable honestly: a video tab
-          means an embedded YouTube player, and youtube.com does not resolve
-          on most Iranian networks — the whole tab would be a grey box for the
-          audience this app is built for. That is the dead-button failure the
-          Aparat links were removed for.
+        <>
+          {/*
+            ─── FBT LIVE RADIO, FIRST ────────────────────────────────────────
+            Asked for directly: «در صفحه اخبار، تب رادیو یک باکس خیلی مدرن
+            ایجاد کن و رادیو پخش خودکار باشد … و تنها در زبان فارسی بیاد».
 
-          Podcast audio is plain MP3 over HTTPS from reachable CDNs, needs no
-          iframe or SDK, survives a slow connection, and keeps playing with
-          the screen off. It is the honest version of the same request.
-        */
-        <RadioPanel />
+            It is the station this project actually owns — two hours, recorded
+            in Persian and built for this app — so it sits above the podcast
+            list rather than being one row inside it. The component renders
+            nothing at all outside the Persian interface, and it starts itself
+            as soon as the tab is opened.
+
+            ─── AND WHY THE PODCAST LIST BELOW IS STILL AUDIO, NOT VIDEO ─────
+            Asked again for TV. It is still not buildable honestly: a video tab
+            means an embedded YouTube player, and youtube.com does not resolve
+            on most Iranian networks — the whole tab would be a grey box for
+            the audience this app is built for. That is the dead-button failure
+            the Aparat links were removed for.
+
+            Podcast audio is plain MP3 over HTTPS from reachable CDNs, needs no
+            iframe or SDK, survives a slow connection, and keeps playing with
+            the screen off. It is the honest version of the same request.
+          */}
+          <FbtRadioBox />
+          <RadioPanel />
+        </>
       ) : tab === 'insights' ? (
         <MarketInsightsPanel
           markets={coins ?? []}
