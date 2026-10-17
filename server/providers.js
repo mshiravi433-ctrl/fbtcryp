@@ -382,6 +382,22 @@ export async function fetchSimplePrices(ids = [], vs = 'usd') {
   return req(cgUrl('/simple/price', { ids: ids.join(','), vs_currencies: vs, include_24hr_change: 'true' }));
 }
 
+/** One batched seven-day history read for contract-resolved stock-token ids.
+ * Unlike fetchMarkets, this does NOT substitute another provider's coins by
+ * ticker, synthesize history, or read the company's underlying share. Keep the
+ * response raw so stockCharts can verify each id before attaching a series to
+ * a contract. A failed optional chart read should not hold up the price rail
+ * through the general market feed's retry budget. */
+export async function fetchStockSparklines(ids = []) {
+  if (!ids.length) return [];
+  return req(cgUrl('/coins/markets', {
+    vs_currency: 'usd',
+    ids: ids.join(','),
+    sparkline: 'true',
+    per_page: String(ids.length)
+  }), { timeout: 8_000 });
+}
+
 /** GeckoTerminal trending DEX pools (no key required). */
 export async function fetchDexPools(network = 'bsc') {
   const raw = await req(`${GT_BASE}/networks/${encodeURIComponent(network)}/trending_pools`);

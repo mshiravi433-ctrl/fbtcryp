@@ -25,6 +25,7 @@ import SegIndicator from '../components/SegIndicator';
  */
 import StockTokenCard from '../components/StockTokenCard';
 import { loadStockTokenPrices } from '../lib/stockPrices';
+import { loadStockTokenCharts } from '../lib/stockCharts';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import { THIN_ASSETS } from '../lib/solanaAssets';
 import { solanaSellUrl } from '../lib/solanaSell';
@@ -709,33 +710,21 @@ export default function Stocks() {
   /* The painted page of the RWA list — the count above it stays the real one. */
   const visibleRwa = rwaShowAll ? sortedRwa : sortedRwa.slice(0, RWA_ROWS);
 
-  /*
-   * ─── THE ROBINHOOD RAIL: SEARCH, PAGE, AND A REFERENCE PRICE ─────────────
-   * The price comes from the equity feed this tab already loads (Avantis, via
-   * Pyth) matched by TICKER. It is a quote for the company's SHARE, not for
-   * the token — the token trades in its own pool and can sit at a premium or a
-   * discount to it. `referencePriceFor` returns null when the ticker is not in
-   * that feed, and the row then shows «—» rather than a number nobody read.
-   */
+  /* Search and page the contract universe without changing token identity.
+   * Avantis/Pyth is ONLY a labelled fallback for the underlying SHARE when a
+   * contract has no token-market quote. It must never supply the token chart. */
   const [rhSearch, setRhSearch] = useState('');
   const [rhShowAll, setRhShowAll] = useState(false);
   useEffect(() => { setRhShowAll(false); }, [rhSearch]);
 
-  /*
-   * ─── PRICES, BY CONTRACT (2026-10-12) ───────────────────────────────────
-   * «تب سهام توکنیزه ۲۰۰ توکن جدید، بدون قیمت خورده». True: this rail's only
-   * quote was `referencePriceFor` below — the company's SHARE price, matched by
-   * TICKER against the Avantis/Pyth feed, which carries about forty names. Out
-   * of ~200 contracts, most therefore printed «—».
-   *
-   * `loadStockTokenPrices` asks OUR backend to price the contracts we are
-   * actually about to paint (server/stockPrices.js: contract → CoinGecko id →
-   * market price), so one screenful costs one request and a page turn costs
-   * another. It never throws: a failed read leaves the reference price as the
-   * fallback, and the card labels which of the two it is showing.
-   */
+  /* Prices and real 7-day token history are both keyed by chain + contract.
+   * The history request waits for quotes and only asks for priced tokens. A
+   * reference share quote gets NO token chart. Requests use the visible slice;
+   * search, show-all and tab changes invalidate the current painted maps. */
   const [stockPrices, setStockPrices] = useState({});
+  const [stockCharts, setStockCharts] = useState({});
   const [pricesLoading, setPricesLoading] = useState(false);
+  const [chartsLoading, setChartsLoading] = useState(false);
 
   const rhEquities = useMemo(() => {
     const rows = (stockUniverse ?? []).filter((t) => t.equity);
@@ -762,15 +751,30 @@ export default function Stocks() {
     if (tab !== 'equity' || equitySubview !== 'robinhood' || !rhVisible.length) return undefined;
     let alive = true;
     setPricesLoading(true);
-    loadStockTokenPrices(rhVisible, { chainId: ROBINHOOD_CHAIN_ID })
-      .then((map) => {
-        if (!alive) return;
-        setStockPrices((prev) => ({ ...prev, ...map }));
-      })
-      .finally(() => alive && setPricesLoading(false));
-    return () => {
-      alive = false;
-    };
+    setChartsLoading(false);
+    setStockPrices({});
+    setStockCharts({});
+    (async () => {
+      const prices = await loadStockTokenPrices(rhVisible, {
+        chainId: ROBINHOOD_CHAIN_ID,
+        onUpdate: (partial) => {
+          if (alive) setStockPrices((prev) => ({ ...prev, ...partial }));
+        }
+      });
+      if (!alive) return;
+      setStockPrices(prices);
+      setPricesLoading(false);
+      const priced = rhVisible.filter((tk) => prices[String(tk.address).toLowerCase()]);
+      if (!priced.length) return;
+      setChartsLoading(true);
+      const charts = await loadStockTokenCharts(priced, { chainId: ROBINHOOD_CHAIN_ID });
+      if (alive) setStockCharts(charts);
+    })().catch(() => {
+      if (alive) { setStockPrices({}); setStockCharts({}); }
+    }).finally(() => {
+      if (alive) { setPricesLoading(false); setChartsLoading(false); }
+    });
+    return () => { alive = false; };
   }, [tab, equitySubview, rhVisible]);
 
   const visiblePriced = useMemo(
@@ -1281,7 +1285,9 @@ export default function Stocks() {
                           token={tk}
                           market={market}
                           reference={market ? null : referencePriceFor(tk.symbol, avantis?.rows ?? [])}
+                          chart={stockCharts[String(tk.address).toLowerCase()] ?? null}
                           loading={pricesLoading}
+                          chartLoading={chartsLoading}
                           onBuy={rhBuy}
                         />
                       </motion.div>

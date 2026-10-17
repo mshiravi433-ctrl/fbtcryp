@@ -255,7 +255,9 @@ export function referencePriceFor(symbol, referenceRows = []) {
   if (!hit || !Number.isFinite(price) || price <= 0) return null;
   return {
     price,
-    change24h: Number.isFinite(Number(hit.change24h)) ? Number(hit.change24h) : null,
+    change24h: hit.change24h == null || hit.change24h === ''
+      ? null
+      : (Number.isFinite(Number(hit.change24h)) ? Number(hit.change24h) : null),
     marketOpen: hit.marketOpen ?? null
   };
 }

@@ -239,6 +239,7 @@ describe('the Robinhood Chain stock universe', () => {
     ];
     const hit = referencePriceFor('nvda', feed);
     assert.deepEqual(hit, { price: 187.43, change24h: 1.8, marketOpen: true });
+    assert.equal(referencePriceFor('NVDA', [{ symbol: 'NVDA', price: 187.43, change24h: null }]).change24h, null);
     assert.equal(referencePriceFor('BRK.B', feed), null);
     /* A zero or NaN price is an unread price. The row shows «—» — it does not
        show $0.00 as if the company had collapsed. */

@@ -26,6 +26,7 @@
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import fa from '../src/i18n/locales/fa.json';
 
@@ -108,9 +109,45 @@ describe('the tokenized-stock card', () => {
     expect(box().textContent).not.toContain('$0');
   });
 
+  it('draws only real token history; its 7d direction is independent of the 24h chip', () => {
+    const { rerender } = render(
+      <StockTokenCard token={TOKEN} onBuy={() => {}} market={{ price: 187.43, change24h: 1.8 }}
+        chart={[104, 103, 102, 101]} />
+    );
+    expect(box().querySelector('.stk-trend-line')?.getAttribute('d')).toMatch(/^M/);
+    expect(box().querySelector('.stk-chart-slot').className).toContain('chart-down');
+    expect(box().className).toContain('is-up');
+    expect(box().textContent).toContain(fa.stocks.rhChartWindow);
+    rerender(<StockTokenCard token={TOKEN} onBuy={() => {}} reference={{ price: 187.43 }} chart={[104, 103, 102, 101]} />);
+    expect(box().querySelector('.stk-trend-line')).toBeNull();
+    expect(box().textContent).toContain(fa.stocks.rhChartUnavailable);
+    rerender(<StockTokenCard token={TOKEN} onBuy={() => {}} market={{ price: 187.43 }} chart={[1, 0, 2]} />);
+    expect(box().querySelector('.stk-trend-line')).toBeNull();
+  });
+
+  it('reserves the same chart space while loading or unavailable, and keeps long names and prices intact', () => {
+    const longToken = { ...TOKEN, name: 'NVIDIA Corporation very long tokenized equity name', symbol: 'LONGSYMBOL', address: TOKEN.address };
+    const { rerender } = render(<StockTokenCard token={longToken} onBuy={() => {}}
+      market={{ price: 18743.7, change24h: null }} chartLoading />);
+    const slot = box().querySelector('.stk-chart-slot');
+    expect(slot.textContent).toContain(fa.stocks.rhChartLoading);
+    expect(box().querySelector('.stk-name').getAttribute('title')).toBe(longToken.name);
+    expect(box().querySelector('.stk-sym').textContent).toBe(longToken.symbol);
+    expect(box().querySelector('.stk-price').getAttribute('title')).toBe('$18743.7');
+    expect(box().querySelector('.stk-price').textContent).toBe('$18,743.7');
+    expect(box().querySelector('.stk-price').getAttribute('dir')).toBe('ltr');
+    rerender(<StockTokenCard token={longToken} onBuy={() => {}} market={{ price: 18743.7 }} />);
+    expect(box().querySelector('.stk-chart-slot')).toBe(slot, 'the reserved slot is not remounted when data arrives');
+    expect(slot.textContent).toContain(fa.stocks.rhChartUnavailable);
+    const css = readFileSync('src/styles/stock-tokens.css', 'utf8');
+    expect(css).toMatch(/\.stk-chart-slot\s*\{[^}]*flex:\s*0 0 48px/s);
+  });
+
   it('opens the swap from the tile and from its Buy button, once each', () => {
     const onBuy = vi.fn();
     card({ market: { price: 187.43, change24h: 1.8 }, onBuy });
+    expect(box().tagName).toBe('BUTTON');
+    expect(box().querySelector('button')).toBeNull(); // no nested interactive CTA
     fireEvent.click(box().querySelector('.stk-buy'));
     expect(onBuy).toHaveBeenCalledTimes(1);
     expect(onBuy).toHaveBeenCalledWith(TOKEN);

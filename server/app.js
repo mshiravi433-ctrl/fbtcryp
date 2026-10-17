@@ -57,6 +57,7 @@ import {
 import { fetchOstiumPrices, fetchOstiumSubgraph } from './ostium.js';
 import { resolveIds } from './coinIndex.js';
 import { priceTokensByAddress } from './stockPrices.js';
+import { chartTokensByAddress } from './stockCharts.js';
 import { resolveVenue, resolveVenues } from './coinVenue.js';
 import {
   checkBuySellEligibility,
@@ -5659,13 +5660,34 @@ app.get('/api/stock-prices', async (req, res) => {
   try {
     const out = await priceTokensByAddress(req.query.chainId, req.query.addresses);
     if (out.error) return res.status(400).json(out);
-    /* Short browser TTL, short edge TTL, and a long stale window: a price that
-       is a minute old is a price, a card that waits on a cold serverless
-       instance is a broken screen. */
-    res.set('cache-control', 'public, max-age=45, s-maxage=45, stale-while-revalidate=600');
+    /* Do not edge-cache a feed outage or serve a stale quote as "live". */
+    res.set('cache-control', out.upstreamError
+      ? 'no-store'
+      : 'public, max-age=45, s-maxage=45');
     return res.json(out);
-  } catch (err) {
-    return res.status(502).json({ error: 'UPSTREAM_FAILED', detail: String(err.message).slice(0, 200) });
+  } catch {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED' });
+  }
+});
+
+/** GET /api/stock-charts?chainId=4663&addresses=0x...,0x...
+ * One batched seven-day sparkline read for the SAME Robinhood contracts as the
+ * prices route. No ticker or stock-share history can be attached to a token.
+ * Failed/empty charts are cheap to retry; successful ones needn't refresh on
+ * every quote tick. Never cache a transient upstream failure at the edge. */
+app.get('/api/stock-charts', async (req, res) => {
+  try {
+    const out = await chartTokensByAddress(req.query.chainId, req.query.addresses);
+    if (out.error) return res.status(400).json(out);
+    const count = Object.keys(out.charts).length;
+    res.set('cache-control', out.upstreamError
+      ? 'no-store'
+      : out.charted === count
+        ? 'public, max-age=300, s-maxage=300'
+        : 'public, max-age=20, s-maxage=30');
+    return res.json(out);
+  } catch {
+    return res.status(502).json({ error: 'UPSTREAM_FAILED' });
   }
 });
 
