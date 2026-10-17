@@ -1,288 +1,228 @@
-/* ── TOKENIZED-STOCK BOARD — the Robinhood Chain cards on /stocks ───────────
- *
- * «باکسهایش را با قیمت و مدرنتر کن، فاصله و اندازهاش را درست کن»
- *
- * This replaces a stack of full-width list rows that had no price on most of
- * them. Three things were actually wrong, and each one has a rule here:
- *
- *   1. SIZE / GAP. Rows were 30-40px tall with one fact per line, so twenty
- *      contracts filled a screen and 200 were a scroll nobody would make. The
- *      board is now a GRID: two cards on a phone, six on a desktop, one
- *      consistent 10-12px gutter, every card the same height whatever it holds.
- *   2. HIERARCHY. The price is the largest element, the ticker is next, the
- *      company name and the contract address are deliberately quiet. The old
- *      row made the ticker loudest — the one number people came for was the
- *      smallest thing on the line.
- *   3. NO PRICE. Cards show the token's own market price, or the share
- *      reference tagged «مرجع», or «—». The states are visually distinct on
- *      purpose: a skeleton while loading, a dash only when we are done and
- *      there is genuinely nothing.
- *
- * PERFORMANCE. Twenty-four of these can be on screen at once, so: no blur, no
- * per-card animation, `contain: paint` on the card, and the accent is a static
- * gradient rather than a rotating border. Direction is carried by hue (green /
- * red) instead of by motion.
- */
-
+/* Robinhood Chain contract board. Scoped to this section: the site-wide
+   animated rainbow .btn-primary is intentionally NOT used on these tiles. */
 .stk-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
   margin-top: 10px;
 }
-
+.stk-grid > * { min-width: 0; }
 @media (min-width: 560px) {
   .stk-grid { grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); gap: 12px; }
 }
-
 @media (min-width: 900px) {
   .stk-grid { grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); }
 }
 
 .stk-card {
+  --stk-accent: var(--rgb-1);
+  box-sizing: border-box;
+  appearance: none;
+  width: 100%;
+  height: 100%;
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 11px 10px;
-  border-radius: 15px;
+  align-items: stretch;
+  gap: 7px;
+  padding: 12px;
   border: 1px solid var(--line);
-  background:
-    radial-gradient(130% 100% at 100% 0%, rgba(0, 229, 255, 0.06), transparent 60%),
-    var(--bg-panel);
-  overflow: hidden;
-  cursor: pointer;
+  border-radius: 17px;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--rgb-1) 6%, var(--bg-panel-solid)), var(--bg-panel-solid) 65%);
+  color: var(--text-1);
+  font-family: var(--font-display);
   text-align: start;
-  /* A card is a self-contained paint surface: nothing inside it can dirty the
-     grid's paint area, which is what keeps 24 of them cheap to scroll. */
-  contain: paint;
-  transition: border-color 0.2s ease, transform 0.16s ease;
+  cursor: pointer;
+  box-shadow: 0 10px 26px -22px rgba(0, 0, 0, .85);
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-
-/* The direction stripe. Static on purpose — see the header. */
 .stk-card::before {
   content: '';
   position: absolute;
-  inset-inline: 0;
+  inset-inline: 12px;
   top: 0;
   height: 2px;
-  background: var(--stk-accent, linear-gradient(90deg, var(--line-strong), transparent));
-  opacity: 0.9;
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(90deg, transparent, var(--stk-accent), transparent);
 }
-.stk-card.is-up { --stk-accent: linear-gradient(90deg, var(--up), rgba(0, 255, 157, 0)); }
-.stk-card.is-down { --stk-accent: linear-gradient(90deg, var(--down), rgba(255, 59, 107, 0)); }
-.stk-card.is-flat { --stk-accent: linear-gradient(90deg, var(--rgb-1), rgba(0, 229, 255, 0)); }
-
-.stk-card:active { transform: scale(0.985); border-color: var(--line-strong); }
-
-.stk-card:focus-visible {
-  outline: 2px solid var(--rgb-1);
-  outline-offset: 2px;
+.stk-card.is-up { --stk-accent: var(--up); }
+.stk-card.is-down { --stk-accent: var(--down); }
+.stk-card.is-reference { --stk-accent: var(--rgb-5); }
+.stk-card:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+.stk-card:active { transform: scale(.99); }
+@media (hover: hover) {
+  .stk-card:hover { border-color: color-mix(in srgb, var(--stk-accent) 34%, var(--line)); transform: translateY(-2px); box-shadow: 0 17px 30px -23px rgba(0, 0, 0, .85); }
 }
 
-/* ── identity ─────────────────────────────────────────────────────────────── */
-
-.stk-top {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.stk-id { min-width: 0; flex: 1; }
-
+/* Identity is given two lines regardless of the length of the company name.
+   Long names are clipped visually, but the full name remains in the title and
+   the accessible button text; the symbol and contract are never replaced. */
+.stk-top { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 44px; }
+.stk-top .tok-icon { flex: 0 0 auto; }
+.stk-id { display: block; min-width: 0; flex: 1; }
 .stk-sym {
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  line-height: 1.25;
-}
-
-.stk-name {
-  font-size: 10.5px;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
-}
-
-/* ── the number ───────────────────────────────────────────────────────────── */
-
-.stk-value {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  flex-wrap: wrap;
-  min-height: 21px;
-}
-
-.stk-price {
-  font-size: 15.5px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-
-.stk-noprice { color: var(--text-3); font-weight: 500; }
-
-.stk-chip {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  line-height: 1.5;
-}
-.stk-chip.up { color: var(--up); background: rgba(0, 255, 157, 0.1); border-color: rgba(0, 255, 157, 0.22); }
-.stk-chip.down { color: var(--down); background: rgba(255, 59, 107, 0.1); border-color: rgba(255, 59, 107, 0.22); }
-
-/* While the prices are in flight. A dash here would claim there is no market. */
-.stk-skel {
-  display: inline-block;
-  width: 68px;
-  height: 15px;
-  border-radius: 5px;
-  background: linear-gradient(90deg, var(--bg-raised) 0%, var(--line-strong) 50%, var(--bg-raised) 100%);
-  background-size: 220% 100%;
-  animation: stk-shimmer 1.4s linear infinite;
-}
-
-@keyframes stk-shimmer {
-  from { background-position: 120% 0; }
-  to { background-position: -120% 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stk-skel { animation: none; background: var(--bg-raised); }
-  .stk-card { transition: none; }
-}
-
-/* ── provenance ───────────────────────────────────────────────────────────── */
-
-.stk-meta {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-  min-height: 17px;
-}
-
-.stk-addr {
-  font-size: 9.5px;
-  color: var(--text-3);
-  background: var(--bg-raised);
-  border-radius: 6px;
-  padding: 1px 5px;
+  display: block;
+  width: fit-content;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+.stk-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 2.65em;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.33;
 }
 
-.stk-tag {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
+/* Reserve quote AND chart real estate before either network request finishes.
+   A price, reference badge or long ticker arriving later never pushes cards in
+   the neighbouring columns around. The 24h chip may wrap, not the number. */
+.stk-quote-label { color: var(--text-2); font-size: 10px; line-height: 1.2; font-weight: 650; }
+.stk-value { display: flex; flex-wrap: wrap; align-content: start; align-items: center; gap: 2px 7px; min-height: 40px; }
+.stk-price {
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+}
+.stk-noprice { color: var(--text-2); font-weight: 500; }
+.stk-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px 6px;
   border-radius: 6px;
   border: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+.stk-chip.up { color: var(--up); background: color-mix(in srgb, var(--up) 11%, transparent); border-color: color-mix(in srgb, var(--up) 24%, var(--line)); }
+.stk-chip.down { color: var(--down); background: color-mix(in srgb, var(--down) 11%, transparent); border-color: color-mix(in srgb, var(--down) 24%, var(--line)); }
+.stk-chip.flat { color: var(--text-2); background: var(--bg-raised); }
+.stk-skel { display: block; width: 74px; height: 16px; border-radius: 5px; background: linear-gradient(90deg, var(--bg-raised), var(--line-strong), var(--bg-raised)); background-size: 220% 100%; animation: stk-shimmer 1.4s linear infinite; }
+@keyframes stk-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+/* The chart has one fixed 48px slot in ALL states. It never draws a reference
+   equity chart under a token's market label or fills missing data with noise. */
+.stk-chart-slot {
+  display: block;
+  position: relative;
+  flex: 0 0 48px;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--rgb-1) 3%, var(--bg-raised));
   color: var(--text-2);
+}
+.stk-chart-slot.chart-up { color: var(--up); }
+.stk-chart-slot.chart-down { color: var(--down); }
+.stk-trend { position: absolute; inset: 3px 5px 7px; width: calc(100% - 10px); height: 36px; }
+.stk-trend-guide { stroke: var(--line-strong); stroke-width: .8; fill: none; vector-effect: non-scaling-stroke; }
+.stk-trend-area { fill: currentColor; opacity: .12; }
+.stk-trend-line { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.stk-chart-caption { position: absolute; inset-inline-start: 6px; bottom: 2px; color: var(--text-2); font-size: 8.5px; line-height: 1; }
+.stk-chart-wait, .stk-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 5px;
+  color: var(--text-2);
+  font-size: 9.5px;
+  line-height: 1.3;
+  text-align: center;
+}
+.stk-chart-wait { color: var(--rgb-1); }
+
+.stk-meta { display: flex; align-content: flex-start; align-items: center; gap: 4px; flex-wrap: wrap; min-height: 36px; }
+.stk-addr {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+  padding: 2px 5px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 9.5px;
+}
+.stk-tag {
+  display: inline-block;
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.3;
   white-space: nowrap;
 }
+.stk-tag-ref { border-color: color-mix(in srgb, var(--rgb-5) 38%, var(--line)); color: var(--rgb-5); background: color-mix(in srgb, var(--rgb-5) 12%, transparent); }
 
-.stk-tag-ref {
-  color: var(--rgb-5);
-  border-color: rgba(255, 179, 0, 0.3);
-  background: rgba(255, 179, 0, 0.09);
-}
-
-/* ── the action ───────────────────────────────────────────────────────────── */
-
-/*
- * `.btn` sets `width: 100%`, which is exactly what a grid cell wants; the row
- * variant needed `.btn-row` because that width collapsed siblings in a flex
- * row. Here the button is alone in a column, so nothing else has to be undone —
- * and no inline width is needed, which is the layout rule this repo pins.
- */
+/* The CTA is part of the card's sole button, not another interactive element.
+   Mint/cyan echoes the site's palette, but keeps dark text on a stable light
+   fill instead of the global animated cyan→violet→pink button (black on violet
+   had poor contrast). All cards retain the same bottom alignment. */
 .stk-buy {
-  margin-top: auto;
-  min-height: 32px;
-  padding: 7px 10px;
-  font-size: 11.5px;
-  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  margin-top: auto;
+  border-radius: 10px;
+  background: linear-gradient(112deg, var(--rgb-1), var(--rgb-4));
+  color: #061c1b;
+  font-size: 11.5px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px -14px var(--rgb-1);
 }
+.stk-card:hover .stk-buy { filter: brightness(1.05); }
 
-/* ── header, search, legend ──────────────────────────────────────────────── */
-
-.stk-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
+/* Header/search keep their original footprint; only scoped surfaces change. */
+.stk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .stk-head-id { min-width: 0; }
-
-.stk-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  white-space: nowrap;
-  flex-shrink: 0;
-  color: var(--text-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 3px 9px;
-  background: var(--bg-raised);
-}
-
-.stk-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--up);
-  box-shadow: 0 0 8px rgba(0, 255, 157, 0.7);
-}
-
-.stk-live.is-loading .stk-live-dot { background: var(--rgb-1); box-shadow: 0 0 8px rgba(0, 229, 255, 0.7); }
-.stk-live.is-none { color: var(--rgb-5); border-color: rgba(255, 179, 0, 0.3); }
-.stk-live.is-none .stk-live-dot { background: var(--rgb-5); box-shadow: 0 0 8px rgba(255, 179, 0, 0.6); }
-
+.stk-live { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; background: var(--bg-raised); color: var(--text-2); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.stk-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--up); }
+.stk-live.is-loading .stk-live-dot { background: var(--rgb-1); }
+.stk-live.is-none { color: var(--text-2); }
+.stk-live.is-none .stk-live-dot { background: var(--rgb-5); }
 .stk-search { position: relative; margin: 10px 0 2px; }
+.stk-search .stk-search-icon { position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-2); display: flex; align-items: center; }
+.stk-search input { width: 100%; height: 40px; font-size: 12.5px; border-radius: 12px; }
+.stk-legend { font-size: 10.5px; line-height: 1.7; color: var(--text-2); margin: 8px 0 0; }
+.stk-more { width: 100%; margin-top: 12px; border-color: color-mix(in srgb, var(--rgb-1) 22%, var(--line)); }
+.stk-more:hover { border-color: var(--rgb-1); }
 
-.stk-search .stk-search-icon {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-}
+:root[data-theme='light'] .stk-card { background: linear-gradient(155deg, #fff, #f4f8fb); box-shadow: 0 12px 24px -22px rgba(21, 44, 68, .55); }
+:root[data-theme='light'] .stk-card:hover { box-shadow: 0 16px 28px -20px rgba(21, 44, 68, .36); }
+:root[data-theme='light'] .stk-chart-slot { background: #f1f7f9; }
+:root[data-theme='light'] .stk-tag-ref { color: #8d5600; }
+:root[data-theme='light'] .stk-chart-wait { color: #006b79; }
 
-.stk-search input {
-  width: 100%;
-  height: 40px;
-  font-size: 12.5px;
-  border-radius: 12px;
-}
-
-.stk-legend {
-  font-size: 10.5px;
-  line-height: 1.7;
-  color: var(--text-3);
-  margin: 8px 0 0;
-}
-
-.stk-more {
-  width: 100%;
-  margin-top: 12px;
+@media (prefers-reduced-motion: reduce) {
+  .stk-card { transition: none; }
+  .stk-skel { animation: none; background: var(--bg-raised); }
 }

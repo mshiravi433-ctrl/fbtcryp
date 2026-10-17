@@ -21,8 +21,8 @@
  * ─── FAIL-OPEN TO THE SECOND SOURCE, FAIL-CLOSED ON THE NUMBER ──────────────
  * Order of attempts, the same one lib/api.js uses for market data:
  *   1. our backend (one batch call per 40 contracts, cached 45s at the edge);
- *   2. CoinGecko directly from the browser — the keyless public endpoint, so a
- *      backend outage does not blank the board;
+ *   2. CoinGecko directly for just the addresses the backend couldn't price —
+ *      a keyless public endpoint, also covering a cold/stale server id index;
  *   3. nothing. The caller keeps the reference price it already had.
  *
  * A result is cached in memory for a minute, and a result that priced NOTHING
@@ -121,46 +121,69 @@ function batches(list, size = BATCH_SIZE) {
  * collapsed, which is worse than an honest «—».
  */
 function readRow(row) {
-  const price = Number(row?.usd);
+  // Our server returns { price, change24h }; the public token-price endpoint
+  // returns { usd, usd_24h_change }. Reading only `usd` discarded EVERY valid
+  // backend quote, leaving most cards without a price despite a 200 response.
+  const rawPrice = row?.price ?? row?.usd;
+  const price = rawPrice == null || rawPrice === '' ? NaN : Number(rawPrice);
   if (!Number.isFinite(price) || price <= 0) return null;
-  const change = Number(row?.usd_24h_change);
+  const rawChange = row?.usd_24h_change ?? row?.change24h;
+  const change = rawChange == null || rawChange === '' ? NaN : Number(rawChange);
   return { price, change24h: Number.isFinite(change) ? change : null };
 }
 
+function notifyPartial(onUpdate, rows) {
+  if (typeof onUpdate !== 'function' || !Object.keys(rows).length) return;
+  try { onUpdate({ ...rows }); } catch { /* a rendering callback cannot break pricing */ }
+}
+
 /**
- * Fetch one batch from the backend, then — only if the backend priced nothing
- * at all — from CoinGecko directly.
+ * Fetch one batch from the backend, then ask CoinGecko directly only for any
+ * remaining unpriced contracts. A partial backend answer is not a full answer.
  *
  * @returns {Promise<Record<string, {price:number, change24h:number|null, source:string}>>}
  */
-async function fetchBatch(chainId, addresses) {
+async function fetchBatch(chainId, addresses, onUpdate) {
   let out = {};
 
   try {
     const data = await fetchJson(
       `${apiBase()}/stock-prices?chainId=${Number(chainId)}&addresses=${addresses.join(',')}`
     );
+    const requested = new Set(addresses);
     for (const [addr, row] of Object.entries(data?.prices ?? {})) {
-      const parsed = row ? readRow(row) : null;
-      if (parsed) out[String(addr).toLowerCase()] = { ...parsed, source: 'market' };
+      const key = String(addr).toLowerCase();
+      if (!requested.has(key)) continue;
+      const parsed = readRow(row);
+      if (parsed) out[key] = { ...parsed, source: 'market' };
     }
+    // Paint verified backend quotes now, rather than waiting for the optional
+    // direct fallback (which can time out for the OTHER contracts in a batch).
+    notifyPartial(onUpdate, out);
   } catch {
     /* Backend down or rate-limited — the direct read below is why we survive it. */
   }
 
   const slug = PLATFORM_SLUGS[Number(chainId)];
-  if (!Object.keys(out).length && slug) {
+  const missing = addresses.filter((addr) => !out[addr]);
+  if (missing.length && slug) {
     try {
+      // A partially priced batch must not strand the other contracts. This
+      // direct address lookup can find newly indexed tokens before the server's
+      // six-hour coin-id index refreshes. Never overwrite a backend quote.
       const data = await fetchJson(
-        `${CG_BASE}/simple/token_price/${slug}?contract_addresses=${addresses.join(',')}` +
+        `${CG_BASE}/simple/token_price/${slug}?contract_addresses=${missing.join(',')}` +
           '&vs_currencies=usd&include_24hr_change=true'
       );
+      const requested = new Set(missing);
       for (const [addr, row] of Object.entries(data ?? {})) {
+        const key = String(addr).toLowerCase();
+        if (!requested.has(key)) continue;
         const parsed = readRow(row);
-        if (parsed) out[String(addr).toLowerCase()] = { ...parsed, source: 'market' };
+        if (parsed) out[key] = { ...parsed, source: 'market' };
       }
     } catch {
-      /* Both sources failed. The caller keeps the reference price it had. */
+      /* No substituted price: the caller keeps a labelled share reference. */
     }
   }
 
@@ -179,9 +202,10 @@ async function fetchBatch(chainId, addresses) {
  * @param  {object} [opts]
  * @param  {number} [opts.chainId]
  * @param  {boolean}[opts.force]     ignore the in-memory cache
+ * @param  {Function}[opts.onUpdate] paint a partial contract-keyed backend result early
  * @return {Promise<Record<string, {price:number, change24h:number|null, source:string}>>}
  */
-export async function loadStockTokenPrices(tokens, { chainId = 4663, force = false } = {}) {
+export async function loadStockTokenPrices(tokens, { chainId = 4663, force = false, onUpdate } = {}) {
   const cid = Number(chainId);
   const list = addressesOf(tokens);
   if (!list.length) return {};
@@ -204,6 +228,7 @@ export async function loadStockTokenPrices(tokens, { chainId = 4663, force = fal
     need.push(addr);
   }
 
+  notifyPartial(onUpdate, out);
   if (!need.length) return out;
 
   const groups = batches(need);
@@ -221,9 +246,9 @@ export async function loadStockTokenPrices(tokens, { chainId = 4663, force = fal
         const key = `${cid}:${group.join(',')}`;
         let job = inflight.get(key);
         if (!job || force) {
-          job = fetchBatch(cid, group);
+          job = fetchBatch(cid, group, onUpdate);
           inflight.set(key, job);
-          job.finally(() => inflight.delete(key));
+          job.finally(() => { if (inflight.get(key) === job) inflight.delete(key); });
         }
         let found = {};
         try {

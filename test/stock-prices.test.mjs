@@ -75,7 +75,9 @@ function stubFetch({ prices = {}, listRows = LIST, failList = false, failPrices 
       const q = new URL(u, 'https://x.test');
       const addrs = String(q.searchParams.get('addresses') || '').split(',').filter(Boolean);
       const out = { chainId: 4663, prices: {} };
-      for (const a of addrs) out.prices[a] = a === NVDA ? { id: 'nvidia-token', price: 187.43, change24h: 1.8, usd: 187.43, usd_24h_change: 1.8 } : null;
+      // Match the REAL server response, not the upstream /simple/price shape.
+      // Adding `usd` here used to mask a bug that threw every backend quote away.
+      for (const a of addrs) out.prices[a] = a === NVDA ? { id: 'nvidia-token', price: 187.43, change24h: 1.8 } : null;
       return { ok: true, status: 200, json: async () => out };
     }
     if (u.includes('/simple/token_price/')) {
@@ -115,6 +117,7 @@ describe('the price layer — pure rules', () => {
     assert.deepEqual(readPrice({ usd: 187.43, usd_24h_change: 1.8 }), { price: 187.43, change24h: 1.8 });
     /* A missing 24h change is null — the chip is not drawn — but the price stands. */
     assert.deepEqual(readPrice({ usd: 12 }), { price: 12, change24h: null });
+    assert.deepEqual(readPrice({ usd: 12, usd_24h_change: null }), { price: 12, change24h: null });
     assert.equal(readPrice({ usd: 0 }), null);
     assert.equal(readPrice({ usd: 'NaN' }), null);
     assert.equal(readPrice({ usd: null }), null);
@@ -201,8 +204,22 @@ describe('the price layer — the live path', () => {
       const out = await priceTokensByAddress(4663, [NVDA, TSLA]);
       assert.equal(out.prices[NVDA], null);
       assert.equal(out.prices[TSLA], null);
-      assert.ok(out.upstreamError, 'the caller must be able to tell the feed failed');
+      assert.equal(out.upstreamError, 'MARKET_FEED_UNAVAILABLE', 'never leak an upstream URL/key');
       assert.equal(out.priced, 0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('an expired backend quote is not served as live when its refresh fails', async () => {
+    const now = Date.now();
+    stubFetch({ prices: { 'nvidia-token': { usd: 187.43 } } });
+    try {
+      assert.equal((await priceTokensByAddress(4663, [NVDA], { now })).prices[NVDA].price, 187.43);
+      stubFetch({ failPrices: true });
+      const out = await priceTokensByAddress(4663, [NVDA], { now: now + 90_000 });
+      assert.equal(out.prices[NVDA], null);
+      assert.ok(out.upstreamError);
     } finally {
       restore();
     }
@@ -249,10 +266,62 @@ describe('the price layer — the client', () => {
       /* The card only cares that TSLA has no price: the key is simply absent. */
       assert.equal(out[TSLA], undefined);
       assert.ok(calls.some((u) => u.includes('/stock-prices')));
-      assert.ok(!calls.some((u) => u.includes('simple/token_price')));
+      const direct = calls.find((u) => u.includes('simple/token_price'));
+      assert.ok(direct, 'the other contract gets a direct fallback');
+      assert.ok(direct.includes(TSLA));
+      assert.ok(!direct.includes(NVDA), 'a valid backend quote is never overwritten');
     } finally {
       restore();
     }
+  });
+
+  it('fills only the missing addresses when the backend returns a partial, real-shaped answer', async () => {
+    const calls = [];
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      calls.push(u);
+      if (u.includes('/stock-prices')) return {
+        ok: true, json: async () => ({ prices: {
+          [NVDA]: { id: 'nvidia-token', price: 187.43, change24h: null },
+          [TSLA]: null
+        } })
+      };
+      if (u.includes('/simple/token_price/')) return {
+        ok: true, json: async () => ({
+          [TSLA]: { usd: 213.2, usd_24h_change: -1.4 },
+          [NVDA]: { usd: 9999, usd_24h_change: 9 }
+        })
+      };
+      throw new Error(`unstubbed ${u}`);
+    };
+    try {
+      const out = await loadStockTokenPrices([NVDA, TSLA]);
+      assert.equal(out[NVDA].price, 187.43, 'backend price wins, not the stray direct result');
+      assert.equal(out[NVDA].change24h, null, 'unknown move is not a fabricated 0%');
+      assert.equal(out[TSLA].price, 213.2);
+      assert.ok(calls[1].includes(TSLA));
+      assert.ok(!calls[1].includes(NVDA));
+    } finally { restore(); }
+  });
+
+  it('paints the backend quote before a slow direct fallback finishes', async () => {
+    let finishDirect;
+    const waiting = new Promise((resolve) => { finishDirect = resolve; });
+    const updates = [];
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('/stock-prices')) return { ok: true, json: async () => ({ prices: {
+        [NVDA]: { price: 187.43, change24h: 1.8 }, [TSLA]: null
+      } }) };
+      if (String(url).includes('/simple/token_price/')) return waiting;
+      throw new Error('unexpected URL');
+    };
+    try {
+      const pending = loadStockTokenPrices([NVDA, TSLA], { onUpdate: (part) => updates.push(part) });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(updates[0]?.[NVDA]?.price, 187.43, 'do not make a priced tile wait for an unrelated timeout');
+      finishDirect({ ok: true, json: async () => ({ [TSLA]: { usd: 213.2 } }) });
+      assert.equal((await pending)[TSLA].price, 213.2);
+    } finally { restore(); }
   });
 
   it('falls back to the public feed when the backend is unreachable', async () => {

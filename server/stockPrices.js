@@ -105,7 +105,8 @@ export function chunk(list, size) {
 export function readPrice(row) {
   const price = Number(row?.usd);
   if (!Number.isFinite(price) || price <= 0) return null;
-  const change = Number(row?.usd_24h_change);
+  const rawChange = row?.usd_24h_change;
+  const change = rawChange == null || rawChange === '' ? NaN : Number(rawChange);
   return { price, change24h: Number.isFinite(change) ? change : null };
 }
 
@@ -191,20 +192,20 @@ export async function priceTokensByAddress(chainId, addresses, { now = Date.now(
         /* A null is remembered too: an id CoinGecko lists no price for costs
            no upstream call for the next 45 seconds either. */
         if (row) priceCache.set(id, { ...row, at: now });
-        else if (!priceCache.has(id)) priceCache.set(id, { price: null, change24h: null, at: now });
+        else priceCache.set(id, { price: null, change24h: null, at: now });
       }
-    } catch (err) {
-      /* One failed batch must not empty the others: whatever was already in
-         the cache is still served, and the caller learns that the feed, not
-         the token, was the problem. */
-      upstreamError = String(err?.message ?? err).slice(0, 160);
+    } catch {
+      /* Do not echo provider errors: their URLs can include a private API
+         key. A failed batch must not empty the others or be cached as live. */
+      upstreamError = 'MARKET_FEED_UNAVAILABLE';
     }
   }
 
   const byId = {};
   for (const id of new Set(Object.values(idsByAddress).filter(Boolean))) {
     const hit = priceCache.get(id);
-    if (hit && hit.price != null) byId[id] = { usd: hit.price, usd_24h_change: hit.change24h };
+    // A failed refresh must not quietly revive an expired quote as "live".
+    if (fresh(hit, now) && hit.price != null) byId[id] = { usd: hit.price, usd_24h_change: hit.change24h };
   }
 
   const prices = shapePrices(idsByAddress, byId);
