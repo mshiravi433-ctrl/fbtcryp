@@ -9,13 +9,9 @@ import { CentralBrainProvider } from './context/CentralBrainContext';
 import RgbBackground from './components/RgbBackground';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
-import ScreenshotSharePrompt from './components/ScreenshotSharePrompt.jsx';
 import PullToRefresh from './components/PullToRefresh';
 import Toasts from './components/Toasts';
 import ConnectivityAlert from './components/ConnectivityAlert';
-import InstallPrompt from './components/InstallPrompt';
-import RadioDock from './components/RadioDock';
-import FbtRadioPill from './components/FbtRadioPill';
 import { useSwapDockStore } from './store/useSwapDockStore';
 import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
 /*
@@ -33,6 +29,16 @@ import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
 import lazyRetry from './lib/lazyRetry';
 import { seoEntryHandoff } from './lib/webEntry';
 import Welcome from './pages/Welcome';
+
+// These controls are non-critical overlays: most sessions never render them.
+// Keeping them out of the eager graph lowers the first-paint payload without
+// delaying the app shell. Each use has a local null Suspense fallback so a
+// slow optional chunk can never replace the current page with the route loader.
+const ScreenshotSharePrompt = lazyRetry(() => import('./components/ScreenshotSharePrompt.jsx'));
+const InstallPrompt = lazyRetry(() => import('./components/InstallPrompt'));
+const RadioDock = lazyRetry(() => import('./components/RadioDock'));
+const FbtRadioPill = lazyRetry(() => import('./components/FbtRadioPill'));
+
 // These are post-Start screens. In particular Onboarding imports the wallet
 // connection sheet and diagnostics: returning users and the first splash must
 // not download them before the first paint. Keep the fallback inside the
@@ -381,7 +387,9 @@ function AppChrome() {
         the bottom edge on `/pay/:code`, and from the top on `/intent`, whose
         own tab bar owns the bottom.
       */}
-      <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless ? 'bare' : 'nav'} />
+      <Suspense fallback={null}>
+        <ScreenshotSharePrompt placement={pathname === '/intent' ? 'top' : headerless ? 'bare' : 'nav'} />
+      </Suspense>
       {!headerless && <BottomNav />}
     </div>
   );
@@ -751,7 +759,9 @@ export default function App() {
     screen = (
       <HashRouter future={{ v7_relativeSplatPath: true }}>
         <AppChrome />
-        <RadioDock />
+        <Suspense fallback={null}>
+          <RadioDock />
+        </Suspense>
       </HashRouter>
     );
   } else if (locked) {
@@ -811,13 +821,17 @@ export default function App() {
 
           It renders nothing at all until something is playing.
         */}
-        <RadioDock />
+        <Suspense fallback={null}>
+          <RadioDock />
+        </Suspense>
         {/*
           The FBT live station's engine lives outside React, so it survives
           navigation; this pill is its only visible owner once the reader
           leaves News. Persian-only, like the station itself.
         */}
-        <FbtRadioPill />
+        <Suspense fallback={null}>
+          <FbtRadioPill />
+        </Suspense>
       </HashRouter>
     );
   }
@@ -861,7 +875,11 @@ export default function App() {
           changes, and it must not appear over the splash, onboarding or the
           lock screen — all of which replace `screen` entirely.
         */}
-        {!payLanding && <InstallPrompt />}
+        {!payLanding && (
+          <Suspense fallback={null}>
+            <InstallPrompt />
+          </Suspense>
+        )}
         </CentralBrainProvider>
       </WalletProvider>
     </TelegramProvider>
