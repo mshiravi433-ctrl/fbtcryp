@@ -58,3 +58,8 @@ scripts/.vendor-kamino-buffer-shim.generated.mjs
 
 # Intent OS sandbox registry (local dev only, rebuilt every boot)
 data/
+
+# FBT Radio media (large binaries)
+FBT_Radio_*.mp3
+fbt_radio_part*.mp3
+parts/*.mp3

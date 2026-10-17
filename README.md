@@ -1,640 +1,79 @@
-# FBT Swap — Non-Custodial Decentralized Exchange
+# 📻 رادیو FBT — پخش ۲ ساعتهٔ دنیای کریپتو
 
-**Official website:** [https://fbtswap.ir](https://fbtswap.ir/)
-
-FBT Swap is a non-custodial DEX interface available as a Telegram Mini App,
-web app and Android app. It supports real on-chain swaps across **17 networks**:
-BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea,
-Sonic, Mantle, Berachain, Unichain, Monad, Scroll, zkSync Era, Robinhood
-Chain and Solana. You connect a wallet you
-control and sign every trade there—FBT Swap does not take deposits or hold a
-recovery phrase.
-
-**Fanous Bazaar Pishgam** · Isfahan, Khomeyni Shahr
-
-### At a glance
-
-| | |
-|---|---|
-| **Networks** | BNB Chain, Ethereum, Polygon, Arbitrum, Base, Optimism, Avalanche, Linea, Sonic, Mantle, Berachain, Unichain, Monad, Scroll, zkSync Era, Robinhood Chain and Solana |
-| **Platform fee** | 0.70% of the input amount on supported swap routes, shown in the quote before signing; network gas is separate |
-| **Tokens** | Public token lists per chain — thousands — plus ~90 bundled hand-verified tokens that work offline, plus import-any-contract |
-| **Gas** | Paid in each chain's own native coin, warned about before signing. Not only BNB, and never taken from the platform fee |
-| **Languages** | fa · en · ar fully translated; zh · hi · es · fr · ru · tr · ur · id · pt cover navigation, onboarding, the guide, the swap flow and every safety warning |
-| **Keys required to run** | None. See [docs/APIS-FA.md](docs/APIS-FA.md) for what each optional key buys |
-
-### Intent OS — AI Brain + Operations Center
-
-`/#/intent` is no longer chat-only. It is the single user-facing brain with:
-
-- **Operations** — a real catalog (Portfolio, Wallet, Swap, Bridge, Lending,
-  Farm, Liquidity, Futures, dYdX, Global Markets, Intelligence, Goals,
-  Automation, Monitoring, Rewards) where every card performs a real read,
-  quote, monitor, order or venue execution — no UI-only buttons.
-- **Monitoring** — «بازار را بپای» creates a durable, per-device monitor job
-  (`POST /api/v1/ai/monitors`) evaluated against live prices by the server
-  (`/api/cron/monitors` + daily cron); triggers record honest events and push
-  when a push identity exists.
-- **Conditional orders** — «اگر BTC به 100000 رسید بخر» creates a real limit
-  watch in `fbt-orders-v1`, visible on `/orders` and mirrored to the server
-  watcher (fills still require your wallet signature — no custody, no signer).
-- **Opportunity Engine** — portfolio + live market + real yield/farm/lending
-  scan with risk filter, historical base rates, drawn-down, confidence and
-  data quality; nothing is ever labelled guaranteed.
-- **History** — conversations, operations and active monitoring in one drawer,
-  and an operation can be continued in chat («متوقفش کن», «شرطش را تغییر بده»).
-- **Memory that survives the session** — the per-account summary is now read
-  back (a `summary`/`conversationSummary` name mismatch had made every session
-  start from zero) and both the summary and a bounded long-term memory block
-  reach the model. Long-term memory ships in **two tiers behind one interface**:
-  a **free local tier that is ON by default** (no account, no key, no outbound
-  request — the app's own store plus a BM25/recency/importance ranking over the
-  repo's existing Persian-aware tokenizer) and an **optional on-chain Walrus
-  Memory (MemWal)** tier that adds semantic search and cross-device durability.
-  `MEMWAL_PROVIDER=auto` (the default) uses Walrus when
-  `MEMWAL_ACCOUNT_ID`+`MEMWAL_PRIVATE_KEY` are present and the local tier
-  otherwise; everything is redacted before it is stored, never used for
-  balances, and `GET /api/v1/ai/memory/long-term` reports which provider is
-  live. See
-  [docs/INTENT-AI-EFFICIENCY-UPGRADE-FA.md](docs/INTENT-AI-EFFICIENCY-UPGRADE-FA.md)
-  and [docs/WALRUS-MEMORY-ACTIVATION-FA.md](docs/WALRUS-MEMORY-ACTIVATION-FA.md)
-  for the Walrus upgrade path (`npm run memwal:keygen` → dashboard →
-  `npm run memwal:preflight`).
-
-See [docs/INTENT-OS-RESTORATION-AUDIT.md](docs/INTENT-OS-RESTORATION-AUDIT.md)
-for the full audit (FOUND / REUSED / BROKEN / MISSING / DISCONNECTED /
-RESTORED / CREATED) and the acceptance-test status.
-
-### Intent execution layer
-
-FBT now includes a deterministic **Intent OS** control plane at `/#/intent`:
-structured outcome requests pass through local risk rules, capability-aware
-solver selection, user-signed execution and a content-addressed
-Proof-of-Execution receipt. Capabilities are discoverable at
-`GET /api/intents/v1/capabilities`. Registered solvers can submit
-Ed25519-signed quote commitments to an immutable transparency log with
-replay-resistant nonces, deterministic Merkle roots and inclusion proofs. An
-authenticated coordinator can produce a deterministic signed auction-close
-receipt, and an independently submitted EVM transaction can anchor that exact
-receipt when a contract network is configured. This remains evidence—not
-executable calldata, bonded settlement, or proof that no pre-seal bid was
-censored.
-
-- [معماری کامل Intent OS و نقشه راه فارسی](docs/INTENT-OS-FA.md)
-- [سواپ اتمیک میان‌زنجیره‌ای (HTLC) — فاز ۴د](docs/INTENT-ATOMIC-SWAP-FA.md)
-- [فازهای ۱۵۱ تا ۲۰۰ — Recovery، 0x، Atomic Intent، ریسک ۲۰٪ و کارمزد ۵٪ از سود محقق‌شده](docs/INTENT-AI-PHASES-151-200-FA.md)
-- [فاز ۱۵۲ — Flash Liquidity: آربیتراژ با فلش لان بدون وثیقه (Aave/Balancer، خط لولهٔ ۹ مرحله‌ای، `/#/flash-liquidity`)](docs/INTENT-AI-PHASE152-FLASH-LIQUIDITY-FA.md)
-- [فعال‌سازی فاز ۱۵۲ — گام به گام: سطح ۰ پلنر، سطح ۱ دیپلوی قرارداد، سطح ۲ اجرای واقعی پس از ممیزی](docs/INTENT-AI-PHASE152-ACTIVATE-FA.md)
-- [بازبینی امنیتی فاز ۱۵۲ — خودبازبینی + شواهد تمرین اتمیک + باگ پیدا و اصلاح‌شده + نقشهٔ ممیزی](docs/INTENT-AI-PHASE152-SECURITY-REVIEW-FA.md)
-- [فاز ۱۵۳ — وصل کردن میان‌زنجیره‌ای و بخش اتمیک Intent OS: امضای Ed25519 مرورگر، میز میان‌زنجیره‌ای، سواپ اتمیک HTLC و مراحل قابل استفادهٔ بخش هوش مصنوعی](docs/INTENT-AI-PHASE153-CROSS-CHAIN-FA.md)
-- [فازهای ۲۰۱ تا ۲۰۷ — اصلاح کامل گزارش‌های کاربر روی `/#/intent-ai` (broadcast واقعی، مکالمهٔ AI↔AI، ایجنت خارجی، حافظه)](docs/INTENT-AI-PHASE201-207-USER-REPORT-FIXES-FA.md)
-- [فاز ۲۰۹ — صفحهٔ هوش مصنوعی به‌عنوان AI Command Center: پنج درب، فایروال ۱۱ مرحله‌ای، ایجنت‌های مخفی، i18n کامل فارسی](docs/INTENT-AI-COMMAND-CENTER-FA.md)
-- [Intent AI — فازهای ۸ تا ۲۰ و وضعیت فعال‌سازی](docs/INTENT-AI-ROADMAP-8-20-FA.md)
-- [فاز ۸ — مرز Secret Manager و گزارش readiness](docs/INTENT-AI-PHASE8-FA.md)
-- [فاز ۱۰ — Marketplace و Trust](docs/INTENT-AI-PHASE10-FA.md)
-- [فازهای ۱۱ تا ۱۵ — Strategy، Policy، Lifecycle، Genome و Runtime](docs/INTENT-AI-PHASE11-FA.md) · [۱۲](docs/INTENT-AI-PHASE12-FA.md) · [۱۳](docs/INTENT-AI-PHASE13-FA.md) · [۱۴](docs/INTENT-AI-PHASE14-FA.md) · [۱۵](docs/INTENT-AI-PHASE15-FA.md)
-- [فازهای ۱۶ تا ۲۰ — Adapters، On-chain Policy، Proof، Security و Launch](docs/INTENT-AI-PHASE16-FA.md) · [۱۷](docs/INTENT-AI-PHASE17-FA.md) · [۱۸](docs/INTENT-AI-PHASE18-FA.md) · [۱۹](docs/INTENT-AI-PHASE19-FA.md) · [۲۰](docs/INTENT-AI-PHASE20-FA.md)
-- [Proof-of-Execution, signed commitments and transparency protocol](docs/PROOF-OF-EXECUTION.md)
-- [Financial OS — Financial Goals: goal → required return → allocation → Intent OS → monitoring](docs/FINANCIAL-GOALS.md) · [فارسی](docs/FINANCIAL-GOALS-FA.md)
-- [Financial Goal Engine — Outlook · Probability · What-If · Simulator · Health · Evidence](docs/FINANCIAL-GOAL-ENGINE-FA.md)
-
-### AI agents & MCP — `fbt-mcp`
-
-External AI agents (Cursor, Claude Code, Claude Desktop, Codex) can operate on
-FBT through a zero-dependency MCP bridge: market intelligence, signals, quotes
-and dry-run simulations, gated by the same developer-key scopes as the API
-(`request_quote`, `request_simulation`, `manage_listings`). **Read / quote /
-simulate only — nothing in the bridge signs, broadcasts, settles or
-withdraws; the user's wallet is the only signer.** Secrets are redacted before
-any payload reaches a model, and every advertised tool route is proven to
-exist by `test/mcp/mcp-probe.mjs`.
-
-- [mcp/README.md](mcp/README.md) (setup + tool surface) · [پل MCP به فارسی](docs/MCP-BRIDGE-FA.md)
-- Pattern modeled after QuantDinger Community's `quantdinger-mcp` — see [the QuantDinger assessment](docs/QUANTDINGER-ASSESSMENT-FA.md)
-
-### Public guides
-
-- [صرافی غیرمتمرکز و سواپ ارز دیجیتال](https://fbtswap.ir/%D8%B5%D8%B1%D8%A7%D9%81%DB%8C-%D8%BA%DB%8C%D8%B1%D9%85%D8%AA%D9%85%D8%B1%DA%A9%D8%B2)
-- [هشدار قیمت ارز دیجیتال و خرید پله‌ای](https://fbtswap.ir/%D9%87%D8%B4%D8%AF%D8%A7%D8%B1-%D9%82%DB%8C%D9%85%D8%AA-%D8%A7%D8%B1%D8%B2-%D8%AF%DB%8C%D8%AC%DB%8C%D8%AA%D8%A7%D9%84)
-- [تحلیل تکنیکال ارز دیجیتال](https://fbtswap.ir/%D8%AA%D8%AD%D9%84%DB%8C%D9%84-%D8%AA%DA%A9%D9%86%DB%8C%DA%A9%D8%A7%D9%84-%D8%A7%D8%B1%D8%B2-%D8%AF%DB%8C%D8%AC%DB%8C%D8%AA%D8%A7%D9%84)
-- [کیف پول غیرامانی](https://fbtswap.ir/%DA%A9%DB%8C%D9%81-%D9%BE%D9%88%D9%84-%D8%BA%DB%8C%D8%B1%D8%A7%D9%85%D8%A7%D9%86%DB%8C)
+پخش رادیویی حرفه‌ای و کاملاً فارسی دربارهٔ ارزهای دیجیتال: آموزش، اخبار بازار، مصاحبهٔ تحلیلی و رادار حرکت نهنگ‌ها — با موسیقی اختصاصی که برای همین برنامه ساخته شده است.
 
 ---
 
-## 📚 راهنماهای فارسی (Persian guides)
+## 🎧 فایل اصلی
 
-قدم‌به‌قدم، برای انجام با گوشی و بدون کامپیوتر:
+| فایل | مدت | توضیح |
+|---|---|---|
+| **`FBT_Radio_2Hours_HQ.mp3`** | **۲:۰۰:۰۰** | میکس نهایی، ۱۱۲ کیلوبیت (۹۷ مگابایت)، همراه کاور داخلی و متادیتا |
+| `FBT_Radio_2Hours_chapters.txt` | — | فهرست کامل فصل‌ها با زمان دقیق |
+| `FBT_Radio_2Hours.cue` | — | فایل CUE برای پلیرهای حرفه‌ای و پخش‌کننده‌های رادیویی |
+| `radio_fbt.html` | — | پلیر وب با فصل‌بندی قابل کلیک، دانلود و کاور |
+| `assets/radio/fbt-radio-cover.jpg` | — | کاور ۱۲۰۰×۱۲۰۰ |
 
-| راهنما | موضوع |
-|---|---|
-| [VERCEL-FIX-FA.md](docs/VERCEL-FIX-FA.md) | چرا سایت ورسل بالا نمی‌آمد و چطور درستش کنیم |
-| [KEYSTORE-FA.md](docs/KEYSTORE-FA.md) | ساخت کلید امضای اپ با گوشی (Termux) |
-| [PRIVATE-REPO-FA.md](docs/PRIVATE-REPO-FA.md) | خصوصی کردن مخزن گیت‌هاب |
-| [APK-FA.md](docs/APK-FA.md) | ساخت فایل APK |
-| [DEPLOY-FA.md](docs/DEPLOY-FA.md) | انتشار مینی‌اپ تلگرام |
-| [DEPLOY-API-FA.md](docs/DEPLOY-API-FA.md) | راه‌اندازی سرور و هوش مصنوعی |
-| [PUBLISH-IRAN-FA.md](docs/PUBLISH-IRAN-FA.md) | انتشار در کافه‌بازار و مایکت |
-| [APIS-FA.md](docs/APIS-FA.md) | کدام API لازم است، کدام نیست، و هر کلید چه چیزی اضافه می‌کند |
-| **[AI-PROVIDER-WIRING-FIX-FA.md](docs/AI-PROVIDER-WIRING-FIX-FA.md)** | **«کلیدها را گذاشتم ولی هوش مصنوعی وصل نیست»** — تشخیص واقعی هر ۹ ارائه‌دهنده، مدل‌های بازنشسته، و مسیر تعمیر |
-| [FINANCIAL-GOALS-FA.md](docs/FINANCIAL-GOALS-FA.md) | اهداف مالی (Financial OS): از هدف تا اینتنت، بدون Execution Engine جدید |
-| **[DOWNLOAD-FA.md](docs/DOWNLOAD-FA.md)** | **دانلود اپ و انتشار** — لینک مستقیم + ساخت نسخه امضاشده |
-| [BUILD-NOW-FA.md](docs/BUILD-NOW-FA.md) | **شروع از اینجا** — ساخت اپ و انتشار، گام به گام با گوشی |
-| [PLAY-STORE-FA.md](docs/PLAY-STORE-FA.md) | **انتشار در Google Play** — کلید امضا، AAB، Data safety، چک‌لیست |
-| **[SEO-VISIBILITY-FA.md](docs/SEO-VISIBILITY-FA.md)** | **دیده‌شدن سایت** — Search Console، Bing، Yandex، DappRadar، DappBay و WalletConnect |
-
----
-
-## 📱 Download the Android APK
-
-The APK is compiled by GitHub Actions (this dev sandbox has no JDK or Android
-SDK, so it cannot produce one locally).
-
-> The workflow lives at `.github/workflows/build-apk.yml` and is working.
-> Build steps are in `ci/build-apk.sh`, so the YAML is 27 lines and rarely
-> needs editing. Persian walkthrough: **[docs/APK-FA.md](docs/APK-FA.md)**
-
-### ⚡ One-time setup — enable the workflow (phone-friendly)
-
-GitHub doesn't allow apps to commit workflow files, so you add it once
-yourself. **No computer needed** — from a mobile browser:
-
-1. Open the repo → check the branch is `arena/019fa427-fbtcryp`
-2. **Add file** → **Create new file**
-3. Name it exactly `.github/workflows/build-apk.yml`
-4. Copy the contents of [`ci/build-apk-minimal.yml`](ci/build-apk-minimal.yml)
-   and paste — **the contents, not the filename**. Open the `raw.` version of
-   the file so Select-all grabs only the text.
-5. **Commit changes**
-
-The build starts immediately. Full walkthrough with screenshots-by-step and
-troubleshooting: [`ci/README.md`](ci/README.md).
-
-This repo is public, so **Actions minutes are free and unlimited**. A build
-takes about 5–8 minutes.
-
-**Then get the build:**
-
-1. Open the [**Actions** tab](../../actions)
-2. Tap the newest run and wait for the green ✓
-3. **Artifacts** → `FBT-Swap-apk` → downloads a `.zip`, extract the `.apk`
-
-For a one-tap install with no unzipping, run the workflow manually with
-**Also publish a GitHub Release** ticked — the APK is then attached directly
-to the [Releases](../../releases) page.
-
-> **Vercel/Netlify can't build APKs.** They have no Android SDK or JDK — they
-> build websites. Use Vercel to host the web app and Telegram Mini App, and
-> GitHub Actions to build the Android binary.
-
-Build it yourself (needs JDK 17 + Android SDK):
+سرور محلی با پشتیبانی از Range (برای جابه‌جایی سریع در فایل دو ساعته):
 
 ```bash
-npm ci && npm run android:apk
-# -> android/app/build/outputs/apk/debug/app-debug.apk
+python3 radio_server.py      # http://localhost:8000/radio_fbt.html
 ```
 
 ---
 
-## 💰 Optional BNB FeeRouter example (50 bps)
+## 📚 ساختار برنامه (۴۲ فصل)
 
-> The public FBT Swap interface currently uses a **0.70%** fee quote on its
-> supported swap routes; that rate is shown before the user signs. The optional
-> `FeeRouter` below is a BNB-only contract example whose deployment script
-> defaults to **50 bps (0.5%)** unless `FEE_BPS` is explicitly set. It is not
-> the source of truth for the live multi-chain interface.
+### ساعت اول
+1. **جینگل افتتاحیه** و معرفی رادیو
+2. **کریپتو چیست؟** — بلاکچین، شفافیت، دیفای، NFT
+3. **بیت‌کوین** — طلای دیجیتال، عرضهٔ ۲۱ میلیونی، هاوینگ
+4. **اتریوم و آلت‌کوین‌ها** — سولانا، کاردانو، ریپل، میم‌کوین‌ها
+5. **مصاحبهٔ تحلیلی** — ساختار بازار، تحلیل آن‌چین، آیندهٔ پنج‌ساله
+6. **رادار نهنگ‌ها** — جریان صرافی‌ها، عرضهٔ غیرفعال، استیبل‌کوین، فاندینگ ریت
+7. **اخبار داغ** — ETF، ورود سرمایهٔ نهادی، آپدیت شبکه‌ها
+8. **آیندهٔ کریپتو** — وب۳، توکن‌سازی دارایی، هوش مصنوعی
+9. **استیبل‌کوین و دیفای** — تتر، وام‌دهی، یونی‌سواپ
+10. **NFT و متاورس** — مالکیت دیجیتال، بازی‌های درآمدزا
+11. **آموزش ترید** — هولد در برابر ترید، مدیریت سرمایه، حد ضرر
+12. **امنیت کیف پول** — کیف گرم و سرد، عبارت بازیابی، فیشینگ
 
-`contracts/FeeRouter.sol` takes a 0.5% platform fee from the **input** token and forwards the
-rest to PancakeSwap **in the same transaction**. It's atomic: a user cannot
-receive their swap without the fee being paid, and there's no second
-transaction they can decline.
+### ساعت دوم
+بازپخش منتخب با چیدمان و بستر موسیقی متفاوت (سبک رادیوهای ۲۴ ساعته) به‌همراه ۵ ست موسیقی دیگر.
 
-```
-user ──approve──▶ FeeRouter ──0.5%──▶ your wallet
-                      └──99.5%──▶ PancakeSwap ──▶ user gets output token
-```
+---
 
-### Revenue wallet — configured
+## 🎼 موسیقی
 
-The 0.5% fee is paid to:
+هشت ترک اصیل و اختصاصی با موتور سینتی‌سایزر نوشته‌شده در `radio_build/music_engine.py`:
 
-```
-0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6   (BNB Smart Chain)
-```
+`Genesis` · `Ledger` · `Orbit` · `Deep Liquidity` · `Night Desk` · `Bull Run` · `Cold Storage` · `Signal`
 
-EIP-55 checksum verified. It's baked into `scripts/deploy-feerouter.mjs` as the
-default, so it can't be mistyped at deploy time. Override for a one-off with
-`FEE_RECIPIENT=0x...`, but if you want to change it permanently after launch,
-call `setFeeRecipient()` on the live contract instead of redeploying — that way
-you don't have to migrate users to a new contract address.
+- سبک: امبینت / سینث‌ویو آرام با پدهای آنالوگ، آرپژ، بیس و درام ملایم
+- ۱۰ ست موسیقی با کراس‌فید ۲٫۶ ثانیه‌ای (بدون سکوت)
+- بستر موسیقی زیر گفتار با داکینگ خودکار (۶۰٪ کاهش در حین صحبت)
 
-Fees arrive in whatever token the user sold: BNB from BNB→token swaps, USDT
-from USDT→token swaps, and so on. To convert to Bitcoin, swap to BTC (in this
-app or on any exchange) and withdraw to
-`bc1qq937k3vl6t92jp8h3wflt26nvvl4hu7th60gm2`.
+## 🎚 میکس و مسترینگ
 
-Verified in a real EVM (`npm run test:feerouter`): the contract deploys with
-this exact address as `feeRecipient`, and exactly 0.5% lands there across
-token→token, BNB→token and token→BNB.
+- گفتار: های‌پس ۸۰ هرتز، اصلاح حضور ۲٫۶ کیلوهرتز، کمپرسور ملایم، نرمال‌سازی
+- بلوک‌های گفتاری پیوسته با یک بستر موسیقی یکنواخت (بدون قطع وسط جمله)
+- مستر: **−۱۵٫۹ LUFS** یکپارچه، سقف واقعی **−۳٫۳ dBFS**، بدون کلیپینگ و بدون سکوت بیش از ۱٫۲ ثانیه
 
-### ✅ Default: zero setup, fee already flowing
+---
 
-**You don't have to deploy anything.** By default swaps route through the
-**KyberSwap aggregator**, whose already-deployed and audited router splits the
-0.5% out and sends it straight to your wallet inside the same transaction.
+## ⚠️ شفافیت محتوا
 
-```
-user swaps ──▶ KyberSwap router ──0.5%──▶ 0xaf5C…24d6  (your wallet)
-                     └──99.5%──▶ best price across every DEX on BSC
-```
+- مصاحبه با «آرش نیک‌نام» یک **سناریوی آموزشی با روایت استودیویی** است و مهمان واقعی بیرونی ندارد؛ برای آموزش ساختار تحلیل آن‌چین طراحی شده است.
+- اخبار و اعداد ذکرشده در حد روایت آموزشی‌اند و جای مشاورهٔ مالی یا خبر لحظه‌ای را نمی‌گیرند.
+- تمام موسیقی‌ها و جینگل‌ها با کد از صفر ساخته شده‌اند و هیچ نمونهٔ ثالثی استفاده نشده است.
 
-No contract to deploy. No gas to spend. No audit to commission. And users
-usually get **better prices**, because the aggregator routes across every DEX
-on the chain instead of only PancakeSwap.
+---
 
-Verified by test: the API request carries `feeAmount=50`, `isInBps=true`,
-`chargeFeeBy=currency_in` and `feeReceiver=0xaf5CE154…24d6`.
-
-If the aggregator is ever unreachable, the app falls back to a direct
-PancakeSwap swap **with no fee** — a working swap beats a blocked one.
-
-### Alternative: run your own contract
-
-Only worth it if you'd rather not depend on a third party. `contracts/FeeRouter.sol`
-does the same job from a contract you control. Costs ~$1–6 of gas to deploy and
-really should be audited before it sees serious volume.
-
-> 📖 **[راهنمای کامل فارسی قدم‌به‌قدم →](docs/DEPLOY-FA.md)** — every click,
-> a free testnet rehearsal, BscScan verification, and nine common errors.
+## 🛠 بازتولید
 
 ```bash
-npm run compile:contract
-DEPLOYER_PRIVATE_KEY=0x... NETWORK=testnet npm run deploy:feerouter   # test first
-DEPLOYER_PRIVATE_KEY=0x... npm run deploy:feerouter                   # mainnet
+python3 -m venv /tmp/radvenv && /tmp/radvenv/bin/pip install numpy scipy imageio-ffmpeg
+/tmp/radvenv/bin/python radio_build/assemble.py     # رندر مستر ۲ ساعته در /tmp/radio
 ```
 
-Setting `VITE_FEE_ROUTER_ADDRESS` automatically switches `FEE_MODE` to
-`contract`; leaving it blank keeps the aggregator path.
-
-### Fee configuration summary
-
-| Variable | Default | Effect |
-|---|---|---|
-| `VITE_FEE_RECIPIENT` | `0xaf5CE154…24d6` | Where the optional FeeRouter fee lands |
-| `VITE_FEE_MODE` | auto | `aggregator`, or `contract` when a FeeRouter address is set |
-| `VITE_FEE_ROUTER_ADDRESS` | *(blank)* | Your contract; setting it implies `contract` mode |
-
-**The optional FeeRouter example charges 0.5% by default.** The live
-multi-chain app uses its own 70-bps quote configuration; see `src/lib/feeBps.js`
-and the quote screen rather than treating this contract example as the public
-fee schedule.
-
-### Safety properties built into the contract
-
-| Property | Why |
-|---|---|
-| `MAX_FEE_BPS = 100` (1%) hard cap | Even a stolen owner key can't set a 100% fee and drain traders |
-| Reentrancy guard on every path | Standard defence against the classic drain |
-| Zero balance after each swap | Contract never custodies funds between transactions |
-| `SafeERC20`-style calls | Non-standard tokens (USDT) don't brick the router |
-| `amountOutMin` passed through untouched | Contract cannot weaken the user's slippage protection |
-| Owner can't touch user funds | `rescue()` only recovers tokens sent here by mistake |
-
-**Verified in a real EVM** (`npm run test:feerouter`) — deploys the contract
-with a mock DEX and asserts exactly 0.5% lands in the fee wallet across
-token→token, BNB→token and token→BNB, plus that the fee cap and access control
-hold.
-
-### Before you route real volume
-
-- **Get a professional audit.** The tests prove the fee works; they don't prove
-  the contract is free of every exploit class. A bug here loses other people's
-  money, not just yours.
-- **Verify the source on BscScan** so users can read what they're approving.
-- **Transfer ownership to a hardware wallet or multi-sig** right after deploy.
-  The deployer key becomes the owner, and a hot deployer key is a liability.
-- **Test with a tiny swap** before announcing anything.
-- Charging a fee makes this a commercial financial service. Check what that
-  means for FBT iran's licensing and tax obligations locally.
-
----
-
-## Decentralized wallet layer
-
-Three connection modes, all self-custody. The private key never reaches this
-app's server in any of them:
-
-| Mode | How | When to use |
-|---|---|---|
-| **WalletConnect v2** | QR / deep link to MetaMask, Trust, Rainbow… | The real path inside Telegram. Safest. |
-| **Injected** | `window.ethereum` | Desktop browsers, wallet in-app browsers. |
-| **In-app wallet** | 12-word seed generated on-device, AES-GCM encrypted | Small amounts only — see the warning below. |
-
-The official FBT Reown/WalletConnect project ID is
-**`8e36eccabebf5a4567f4e974fafd6b20`**. It is public by design and is pinned as
-the single `WC_PROJECT_ID` constant in `src/lib/wc/config.js`; the web, local
-and APK builds therefore cannot silently select different projects.
-`VITE_WALLETCONNECT_PROJECT_ID` is retired and is deliberately ignored.
-
-Why this project (not the newer `5997d5aee8bb42f43ddec4b1a5f94eb1` one): the
-newer project's Reown allowlist is **empty** (verified live against
-`api.web3modal.org/projects/v1/origins` on 2026-09-21), so sessions created
-under it fail Reown's `jwt.origin === allowlisted origin` gate and the wallet
-shows the domain **unverified** (and, for some wallets, the signing prompt is
-never accepted). This project has `fbtswap.ir` (+ `https://localhost` for the
-local dev origin; the `www.` host 301-redirects to it, so no entry is needed)
-allowlisted. The switch is recorded in
-`WALLET-UNVERIFIED-ROOT-CAUSE-2026-09-21.md`. Existing sessions paired under
-the old project are automatically wiped on next app load
-(`purgeStaleProjectKeys` in `src/lib/wc/storage.js`) so users re-pair as
-verified without any manual step. Run
-`npm run walletconnect:check` from any networked machine to re-verify the
-allowlist.
-
-The Reown **Dashboard API Secret is different**: it is private, is not required
-by the current app, and must never be placed in a `VITE_*` variable, source
-code, a client bundle or GitHub Actions Variables.
-
-### About the in-app wallet
-
-It generates a BIP-39 mnemonic in the browser and encrypts it with the user's
-password using **AES-GCM + PBKDF2-SHA256 at 310,000 iterations** (OWASP 2023).
-Verified by test: the plaintext phrase never appears in `localStorage`, salt
-and IV are unique per encryption, and a wrong password fails closed.
-
-It is still weaker than an external wallet, and the UI says so in plain
-language rather than hiding it:
-
-- It lives in `localStorage` inside a Telegram WebView. Any XSS in this app **or
-  any dependency** can read the ciphertext and brute-force a weak password offline.
-- No secure enclave, no hardware isolation, no biometric gate.
-- Lose the seed phrase and the funds are gone. Nobody can restore it.
-
-Treat it as pocket money. Real value belongs in MetaMask/Trust via
-WalletConnect, or on hardware.
-
-### Swap safety properties
-
-`src/lib/swap.js` deliberately does these things — keep them if you edit it:
-
-- **`amountOutMin` from a fresh on-chain quote.** A sandwich attack can't take
-  more than the slippage the user explicitly accepted.
-- **Exact-amount approvals, never `MaxUint256`.** The common "infinite approve"
-  pattern means a later router exploit drains the user's whole balance. Verified
-  by test that we approve exactly the trade amount.
-- **Short deadlines (20 min).** A stuck transaction can't execute hours later at
-  a completely different price.
-- **Re-quote immediately before sending**, because the price moves while the
-  approval transaction confirms.
-- **Fee-on-transfer-tolerant router methods**, so taxed tokens don't revert.
-- **Price-impact warning above 5%**, which is the tell for a thin/rugged pool.
-
-Token addresses in `src/lib/chains.js` are checksum-verified, but **verify them
-yourself** against official sources before sending real value. Fake tokens with
-real names are the single most common way people get drained.
-
-### Data flow
-
-Every request goes to your own `/api` first, so the CoinGecko key never
-reaches the browser and the TTL cache absorbs the free tier's rate limit. For
-USD spot markets, the server and client try CoinGecko first and then the
-independent live CoinLore ticker feed. Only if both live providers fail does
-the app render a deterministic offline snapshot and show the "offline data"
-banner. Historical charts remain CoinGecko-only. The server also serves a
-last-good cache when an upstream refresh fails.
-
-### Design system
-
-All colour, radius and glow values are CSS custom properties in `index.css`,
-so retinting the whole app is a five-line change. The RGB look is built from
-three drifting blurred orbs on a `#000` base, a perspective grid, conic-gradient
-card borders animated via `@property --angle`, sheen sweeps, and
-`prefers-reduced-motion` support throughout. Route transitions, list stagger,
-the nav indicator and the language pill all use Framer Motion shared layout.
-
----
-
-## What is real and what is simulated
-
-**Real:** market prices, charts, global stats, trending, DEX pools, Telegram
-identity and haptics, the on-chain wallet read.
-
-**Simulated (virtual "NX" credits):** trading, investment yield, all games,
-predictions and rewards. NX has no monetary value and cannot be withdrawn.
-
-This split is deliberate, and I'd push back on changing it casually:
-
-- **Taking deposits** to trade or invest on someone's behalf makes you a money
-  services business / VASP nearly everywhere. That means registration, KYC/AML,
-  segregated client money, audits and reporting. Doing it without a licence is
-  a criminal offence in most jurisdictions, not a fine.
-- **Fixed-APR "investment plans" funded by user deposits** with no real
-  underlying strategy is the exact mechanical shape of a Ponzi scheme. If you
-  want real yield, route it to an audited on-chain protocol the user signs into
-  themselves (ERC-4626-style vaults) and never touch the funds.
-- **Real-money betting** needs a gambling licence per jurisdiction, age and
-  identity verification, an independently audited RNG (iTech Labs, GLI, eCOGRA),
-  self-exclusion tooling and deposit limits. Telegram also removes bots that run
-  unlicensed real-money gambling.
-- **Binary options** — which is what the prediction screen is — are banned for
-  retail investors in the EU and UK outright.
-
-There is no deposit address anywhere in this codebase and none should ever be
-added. `WalletContext.jsx` connects read-only and signs nothing on the app's
-behalf. If you eventually get licensed, replace the store layer with your
-licensed backend rather than bolting a hot wallet onto a Telegram bot.
-
-### Provably fair — and its limit
-
-Games use commit–reveal: a server seed is hashed and shown before you bet, you
-control the client seed, and the outcome is `SHA-256(server:client:nonce)`.
-After rotating you can re-hash the revealed seed and confirm it matched.
-
-The honest caveat, which the app also states in its own UI: in this build the
-seed is generated *in your browser*. That proves the interface didn't change a
-result mid-round. It is not equivalent to a licensed operator's independently
-audited RNG, and it doesn't make real-money betting legal.
-
-House edge is 3% on crash, dice and wheel; the prediction payout is 1.9× (5%).
-Verified by simulation — dice EV 0.973, wheel EV 0.972 per unit staked.
-
----
-
-## Bot commands
-
-| Command | Does |
-|---|---|
-| `/start` | Welcome + launch button (retains legacy `?start=REFCODE` referrals) |
-| `/app` | Opens the Mini App |
-| `/help` | In-chat help center — index with a button per topic |
-| `/help <topic>` | Opens one topic directly, e.g. `/help fees`, `/help security` |
-| `/fees` `/networks` `/security` `/support` | Shortcuts to the most-asked topics |
-| `/guide` `/api` | Developer guide, then the API/auth quick reference |
-| `/price btc` | Spot price, 1h/24h/7d change, cap, volume |
-| `/top` | Top 10 by market cap |
-| `/trending` | CoinGecko trending list |
-| `/global` | Total cap, volume, BTC/ETH dominance |
-| inline | Type `@fbtco_bot btc` in any chat to share a price card |
-
-### Putting the bot live (webhook)
-
-On Vercel there is no long-running process, so the bot cannot poll — and until
-a webhook is registered, Telegram has nowhere to deliver updates and the bot is
-silent no matter how correct the handlers are.
-
-1. Choose a secret and set it in **Vercel → Settings → Environment Variables**
-   as `TELEGRAM_WEBHOOK_SECRET` (alongside `TELEGRAM_BOT_TOKEN` and
-   `WEBAPP_URL`), then **redeploy** — variables are read at boot.
-2. Register the webhook and publish the command menu:
-
-   ```bash
-   TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... WEBAPP_URL=https://fbtswap.ir \
-     node scripts/telegram-webhook-setup.mjs
-   ```
-
-3. Check it: `curl -s https://fbtswap.ir/api/telegram/webhook-status | jq`
-   (`ready: true` means the token and secret are both configured).
-
-`--status` inspects without changing anything; `--delete` removes the webhook
-so a local `npm start` can use long polling again. **Telegram allows only one
-delivery method per bot** — registering a webhook silently stops `getUpdates`,
-so never run both against the same bot.
-
-The route (`POST /api/telegram/webhook`) **fails closed**: with no
-`TELEGRAM_WEBHOOK_SECRET` configured it answers 503 rather than accepting
-unauthenticated updates, because the URL is public and a forged update could
-otherwise make the bot reply anywhere. Telegram's secret token is compared with
-a timing-safe, length-checked comparison, and the route acknowledges an update
-*before* handling it — anything other than 2xx makes Telegram redeliver, which
-would send the user the same reply several times.
-
-### In-chat help center
-
-`/help` is a topic-based help center, in English, defined once as data in
-[`server/botHelp.js`](server/botHelp.js) — so the same answer is served whether
-it is reached from a button, a slash command or a typed question, and a fact
-that changes is changed in one place.
-
-Topics: getting started · all commands · swapping · fees and gas · networks and
-tokens · wallets · bridging · safety and scams · developers · troubleshooting ·
-privacy · support.
-
-In a **private** chat the bot also matches a plain-language question
-("what are the fees", "my balance is gone") to a topic. It answers only on a
-confident match and otherwise points at `/help`; it never guesses, and in
-groups it stays silent unless commanded. The copy may not claim funds are
-simulated, promise a return, or ask for a recovery phrase —
-[`test/bot-help-probe.mjs`](test/bot-help-probe.mjs) enforces that, along with
-Telegram's 4096-character and 64-byte `callback_data` limits and HTML validity
-(a malformed message is a 400, which the user experiences as a bot that ignored
-them).
-
-**Official Mini App:** [@fbtco_bot](https://t.me/fbtco_bot) (public Bot ID
-`7837421575`). Referral links use Telegram's Main Mini App form,
-`https://t.me/fbtco_bot?startapp=REFCODE`, so the app receives the code as a
-Telegram launch parameter. The ID is public metadata; production still needs
-the new bot's private `TELEGRAM_BOT_TOKEN` in Vercel to verify Mini App
-sessions.
-
-Nothing in the bot moves money or accepts deposits, by design.
-
----
-
-## Verifying initData
-
-Never trust `Telegram.WebApp.initDataUnsafe` for anything that matters — the
-client controls it. Send the raw `initData` string in an
-`x-telegram-init-data` header and let `server/telegramAuth.js` check the HMAC:
-
-```js
-app.get('/api/private', telegramAuth(BOT_TOKEN, { required: true }), (req, res) => {
-  res.json({ userId: req.tgUser.id });   // authenticated
-});
-```
-
-Tested against valid, wrong-token, tampered-payload and expired inputs.
-
----
-
-## Notes on the other services you listed
-
-- **Nobitex** — removed at your request. It was a centralized custodial
-  exchange, which contradicted the decentralized architecture.
-- **CoinRithm agent trading / Freetime SDK** — these place real orders. Keep
-  them in a separate service that the public web tier cannot reach, on a
-  trade-only key with no withdrawal permission and an IP allowlist.
-- **dynamic-labs tg-bot-starter** — a good reference if you want embedded
-  wallets; it's a different (custodial-ish, MPC) trust model than the
-  read-only connect used here, so read their security docs first.
-
----
-
-## Roadmap if you take this further
-
-1. Move the store server-side (Postgres + the verified `tgUser.id` as the key)
-   so balances survive a cache clear and can't be edited from devtools.
-2. WebSocket price streaming instead of polling.
-3. TON Connect for real in-Telegram wallet UX.
-4. Real leaderboards and a shared game feed.
-5. Legal review before *any* real value enters the system.
-
-## Screens
-
-```
-┌─ Market ──── live prices, global cap, trending, search, sparklines
-├─ Swap ────── REAL on-chain swaps, 0.70% quote on supported routes, you sign from your wallet
-├─ Trade ───── paper trading on virtual credits (clearly labelled)
-├─ Wallet ──── net worth, allocation, WalletConnect / in-app self-custody
-└─ Settings ── theme, profile, 2FA, biometrics, about & contact
-```
-
-Plus Invest / Play / Predict / Earn (all simulated, reachable in-app) and a
-three-screen onboarding on first launch that ends on "your keys, your coins".
-
-## Settings & security
-
-- **Theme** — dark / light / follow-system, plus four accent palettes. Every
-  colour is a CSS custom property, so re-theming touches one block.
-- **Profile** — username (local only, never published on-chain) and wallet.
-- **2FA (TOTP)** — works with Google Authenticator / Authy. Verified against
-  all five official **RFC 6238 test vectors**, with ±1 step clock tolerance and
-  single-use recovery codes.
-- **Biometrics** — WebAuthn platform authenticator (fingerprint / face).
-- **Auto-lock**, hide-balances, and mandatory transaction review.
-
-**Scope, stated honestly:** these protect the *app on this device* — real
-protection if someone picks up your unlocked phone. They cannot protect funds
-on-chain, because anyone holding your seed phrase can spend from any other
-wallet app. The seed phrase and wallet password remain the actual security
-boundary, and the UI says exactly this rather than implying more.
-
-## Firebase
-
-Used for anonymous auth + settings sync (theme, accent, username, display
-preferences). Configure with the `VITE_FIREBASE_*` web-config values — those
-are public by design and Firebase expects them in your bundle.
-
-**Apply these Firestore rules**, or your database is world-writable no matter
-what keys you use:
-
-```js
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-  }
-}
-```
-
-Seed phrases, wallet passwords and 2FA secrets are **never** uploaded. They
-stay encrypted on-device — putting them in a cloud database would hand anyone
-who breaches Firebase the keys to every user's funds.
-
-## Company
-
-**Fanous Bazaar Pishgam** — commercial trading company moving into the new digital economy.
-
-- Address: Isfahan, Khomeyni Shahr, Shahid Beheshti Blvd., next to District 4 Municipality
-- Contact: see the in-app Contact screen
-
+فایل‌های میانی در `/tmp/radio` ساخته می‌شوند تا مخزن سبک بماند.

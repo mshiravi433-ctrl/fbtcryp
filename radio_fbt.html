@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>رادیو FBT — پخش ۲ ساعته دنیای کریپتو</title>
+<meta name="description" content="رادیو FBT: پخش حرفه‌ای ۲ ساعته دنیای کریپتو با موزیک اختصاصی، مصاحبه با تحلیل‌گر آنچین و رادار نهنگ‌ها.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05070e; --card:rgba(17,23,38,.72); --line:rgba(148,163,184,.14);
+  --violet:#8b5cf6; --cyan:#22d3ee; --gold:#f5b942; --txt:#e9edf7; --mut:#94a3b8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:'Vazirmatn',Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--txt);
+  min-height:100vh;overflow-x:hidden;line-height:1.7;
+}
+body:before{
+  content:"";position:fixed;inset:0;z-index:-2;
+  background:
+    radial-gradient(900px 500px at 85% -10%, rgba(139,92,246,.28), transparent 60%),
+    radial-gradient(800px 460px at 5% 5%, rgba(34,211,238,.16), transparent 60%),
+    radial-gradient(1200px 700px at 50% 110%, rgba(245,185,66,.08), transparent 60%);
+}
+body:after{
+  content:"";position:fixed;inset:0;z-index:-1;opacity:.35;
+  background-image:linear-gradient(rgba(148,163,184,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.06) 1px,transparent 1px);
+  background-size:56px 56px;mask-image:radial-gradient(circle at 50% 30%,#000,transparent 75%);
+}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 20px 70px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:.5px}
+.brand .dot{width:12px;height:12px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.7);animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.7)}70%{box-shadow:0 0 0 12px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+.live{font-size:12px;font-weight:800;color:#fecaca;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.35);padding:5px 12px;border-radius:999px}
+.hero{display:grid;grid-template-columns:300px 1fr;gap:34px;align-items:center;margin:10px 0 34px}
+.cover{position:relative;border-radius:26px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.06) inset;aspect-ratio:1}
+.cover img{width:100%;height:100%;object-fit:cover;display:block;transform:scale(1.01)}
+.cover:after{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(139,92,246,.18),transparent 45%,rgba(34,211,238,.12))}
+.kicker{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#c4b5fd;background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.3);padding:6px 14px;border-radius:999px;margin-bottom:14px}
+h1{font-size:clamp(34px,5vw,58px);line-height:1.15;margin:0 0 10px;font-weight:900;letter-spacing:-.5px}
+h1 span{background:linear-gradient(90deg,#c4b5fd,#22d3ee 55%,#f5b942);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--mut);font-size:16px;max-width:56ch;margin:0 0 18px}
+.chips{display:flex;flex-wrap:wrap;gap:9px}
+.chip{font-size:12.5px;font-weight:700;color:#cbd5e1;background:rgba(148,163,184,.08);border:1px solid var(--line);padding:7px 13px;border-radius:999px}
+.chip b{color:#fff}
+.player{background:linear-gradient(180deg,rgba(23,30,49,.9),rgba(13,18,31,.92));border:1px solid var(--line);border-radius:24px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.45);backdrop-filter:blur(14px);margin-bottom:30px}
+.player-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.now{display:flex;align-items:center;gap:12px;min-width:0}
+.eq{display:flex;align-items:flex-end;gap:3px;height:22px}
+.eq i{display:block;width:3px;background:linear-gradient(180deg,#22d3ee,#8b5cf6);border-radius:2px;animation:bar 1s infinite ease-in-out}
+.eq i:nth-child(1){height:40%;animation-delay:-.4s} .eq i:nth-child(2){height:90%;animation-delay:-.2s} .eq i:nth-child(3){height:60%;animation-delay:-.7s} .eq i:nth-child(4){height:100%;animation-delay:-.1s} .eq i:nth-child(5){height:50%;animation-delay:-.5s}
+@keyframes bar{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+.paused .eq i{animation-play-state:paused}
+.now .lbl{font-size:11px;color:var(--mut);letter-spacing:1px}
+.now .ttl{font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+audio{width:100%;height:46px;border-radius:12px;outline:none;filter:invert(.92) hue-rotate(180deg) saturate(1.1)}
+.progress{position:relative;height:7px;border-radius:99px;background:rgba(148,163,184,.16);margin-top:16px;cursor:pointer;overflow:hidden;direction:ltr}
+.progress .fill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,#8b5cf6,#22d3ee);border-radius:99px;transition:width .15s linear}
+.progress .tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.22)}
+.timebar{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:7px;font-variant-numeric:tabular-nums}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.btn{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:800;font-size:14px;padding:11px 18px;border-radius:13px;border:1px solid transparent;cursor:pointer;transition:.18s}
+.btn.primary{background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;box-shadow:0 10px 26px rgba(124,58,237,.35)}
+.btn.ghost{background:rgba(148,163,184,.08);border-color:var(--line);color:#dbeafe}
+.btn:hover{transform:translateY(-2px)}
+.section-title{display:flex;align-items:center;gap:12px;margin:34px 0 14px;font-size:20px;font-weight:900}
+.section-title:after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px;backdrop-filter:blur(12px)}
+.card h3{margin:6px 12px 10px;font-size:13px;font-weight:800;color:#a5b4fc;letter-spacing:.5px}
+.ch{display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:0;color:var(--txt);text-align:right;padding:10px 12px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:13.5px;transition:.15s}
+.ch:hover{background:rgba(139,92,246,.14)}
+.ch.active{background:rgba(34,211,238,.12);box-shadow:inset 3px 0 0 var(--cyan)}
+.ch .tm{font-variant-numeric:tabular-nums;color:#93c5fd;font-size:12px;min-width:58px;font-weight:700}
+.ch .ttl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch .play{opacity:0;font-size:10px;color:var(--cyan);transition:.15s}
+.ch:hover .play{opacity:1}
+.ch.music{color:#c4b5fd}
+.foot{margin-top:40px;padding-top:22px;border-top:1px solid var(--line);color:#64748b;font-size:12.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(34,211,238,.12);color:#67e8f9;margin-inline-start:8px}
+@media(max-width:860px){
+  .hero{grid-template-columns:1fr;gap:22px} .cover{max-width:320px;margin:0 auto}
+  .grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span> FBT RADIO <span class="tag">ON AIR</span></div>
+    <div class="live">● پخش ۲۴ ساعته دنیای کریپتو</div>
+  </div>
+
+  <div class="hero">
+    <div class="cover"><img src="assets/radio/fbt-radio-cover.jpg" alt="کاور رادیو FBT"></div>
+    <div>
+      <div class="kicker">🎧 ویژه برنامه دو ساعته</div>
+      <h1>رادیو <span>FBT</span><br>صدای آیندهٔ پول</h1>
+      <p class="sub">دو ساعت پخش پیوسته با موزیک اختصاصی، آموزش ارزهای دیجیتال، اخبار بازار، مصاحبه اختصاصی با تحلیل‌گر آنچین و رادار حرکت نهنگ‌ها.</p>
+      <div class="chips">
+        <span class="chip">⏱ مدت <b>۲:۰۰:۰۰</b></span>
+        <span class="chip">🎙 گفتار <b>۲۹ دقیقه</b></span>
+        <span class="chip">🎵 <b>۱۰ ست موزیک</b></span>
+        <span class="chip">🎼 <b>۸ ترک اختصاصی</b></span>
+        <span class="chip">🐋 <b>رادار نهنگ‌ها</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="player" id="playerCard">
+    <div class="player-head">
+      <div class="now paused" id="nowWrap">
+        <div class="eq"><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="min-width:0">
+          <div class="lbl">در حال پخش</div>
+          <div class="ttl" id="nowTitle">آمادهٔ پخش — دکمهٔ Play را بزنید</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--mut)">FBT Radio · 2026</div>
+    </div>
+    <audio id="au" preload="metadata" src="FBT_Radio_2Hours_HQ.mp3"></audio>
+    <div class="progress" id="bar"><div class="fill" id="fill"></div></div>
+    <div class="timebar"><span id="cur">00:00:00</span><span id="dur">02:00:00</span></div>
+    <div class="actions">
+      <button class="btn primary" onclick="toggle()" id="pp">▶ پخش</button>
+      <button class="btn ghost" onclick="jump(-30)">↺ ۳۰ ثانیه</button>
+      <button class="btn ghost" onclick="jump(30)">۳۰ ثانیه ↻</button>
+      <a class="btn ghost" href="FBT_Radio_2Hours_HQ.mp3" download>⬇ دانلود MP3</a>
+      <a class="btn ghost" href="FBT_Radio_2Hours_chapters.txt" download>📄 فهرست فصل‌ها</a>
+    </div>
+  </div>
+
+  <div class="section-title">فصل‌های برنامه</div>
+  <div class="grid">
+    <div class="card"><h3>ساعت اول</h3><button class="ch talk" data-t="9.0" onclick="seekTo(9.0)">
+      <span class="tm">00:09</span><span class="ic">🎙️</span><span class="ttl">معرفی رادیو FBT</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="55.04" onclick="seekTo(55.04)">
+      <span class="tm">00:55</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۱ — طلوع بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="637.08" onclick="seekTo(637.08)">
+      <span class="tm">10:37</span><span class="ic">🎙️</span><span class="ttl">کریپتو چیست؟</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="690.56" onclick="seekTo(690.56)">
+      <span class="tm">11:30</span><span class="ic">🎙️</span><span class="ttl">بیت‌کوین، پادشاه بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="740.36" onclick="seekTo(740.36)">
+      <span class="tm">12:20</span><span class="ic">🎙️</span><span class="ttl">اتریوم و آلت‌کوین‌ها</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="795.56" onclick="seekTo(795.56)">
+      <span class="tm">13:15</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۲ — مدار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="1120.42" onclick="seekTo(1120.42)">
+      <span class="tm">18:40</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: ساختار بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="1143.42" onclick="seekTo(1143.42)">
+      <span class="tm">19:03</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: تحلیل آنچین</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="1223.98" onclick="seekTo(1223.98)">
+      <span class="tm">20:23</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: حرکت نهنگ‌ها</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="1237.94" onclick="seekTo(1237.94)">
+      <span class="tm">20:37</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: رادار نهنگ‌ها</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="1334.22" onclick="seekTo(1334.22)">
+      <span class="tm">22:14</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: آینده بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="1346.86" onclick="seekTo(1346.86)">
+      <span class="tm">22:26</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: سه موج آینده</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="1454.38" onclick="seekTo(1454.38)">
+      <span class="tm">24:14</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۳ — عمق بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="2080.05" onclick="seekTo(2080.05)">
+      <span class="tm">34:40</span><span class="ic">🎙️</span><span class="ttl">اخبار داغ کریپتو</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="2132.05" onclick="seekTo(2132.05)">
+      <span class="tm">35:32</span><span class="ic">🎙️</span><span class="ttl">آینده کریپتو</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="2192.45" onclick="seekTo(2192.45)">
+      <span class="tm">36:32</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۴ — روند صعودی</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="2470.53" onclick="seekTo(2470.53)">
+      <span class="tm">41:10</span><span class="ic">🎙️</span><span class="ttl">استیبل‌کوین و دیفای</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="2528.17" onclick="seekTo(2528.17)">
+      <span class="tm">42:08</span><span class="ic">🎙️</span><span class="ttl">ان‌اف‌تی و متاورس</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="2584.85" onclick="seekTo(2584.85)">
+      <span class="tm">43:04</span><span class="ic">🎙️</span><span class="ttl">آموزش ترید حرفه‌ای</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="2640.17" onclick="seekTo(2640.17)">
+      <span class="tm">44:00</span><span class="ic">🎙️</span><span class="ttl">امنیت و کیف پول</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="2694.73" onclick="seekTo(2694.73)">
+      <span class="tm">44:54</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۵ — رادار نهنگ‌ها</span>
+      <span class="play">▶</span></button></div>
+    <div class="card"><h3>ساعت دوم</h3><button class="ch talk" data-t="3383.73" onclick="seekTo(3383.73)">
+      <span class="tm">56:23</span><span class="ic">🎙️</span><span class="ttl">اخبار داغ کریپتو</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="3435.73" onclick="seekTo(3435.73)">
+      <span class="tm">57:15</span><span class="ic">🎙️</span><span class="ttl">آینده کریپتو</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="3496.13" onclick="seekTo(3496.13)">
+      <span class="tm">58:16</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۶ — نقدینگی</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="4137.84" onclick="seekTo(4137.84)">
+      <span class="tm">1:08:57</span><span class="ic">🎙️</span><span class="ttl">آموزش ترید حرفه‌ای</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="4193.16" onclick="seekTo(4193.16)">
+      <span class="tm">1:09:53</span><span class="ic">🎙️</span><span class="ttl">امنیت و کیف پول</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="4247.72" onclick="seekTo(4247.72)">
+      <span class="tm">1:10:47</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۷ — شبانه</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="4793.18" onclick="seekTo(4793.18)">
+      <span class="tm">1:19:53</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: ساختار بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="4816.18" onclick="seekTo(4816.18)">
+      <span class="tm">1:20:16</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: تحلیل آنچین</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="4896.74" onclick="seekTo(4896.74)">
+      <span class="tm">1:21:36</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: حرکت نهنگ‌ها</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="4910.7" onclick="seekTo(4910.7)">
+      <span class="tm">1:21:50</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: رادار نهنگ‌ها</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="5006.98" onclick="seekTo(5006.98)">
+      <span class="tm">1:23:26</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: آینده بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="5019.62" onclick="seekTo(5019.62)">
+      <span class="tm">1:23:39</span><span class="ic">🎙️</span><span class="ttl">مصاحبه: سه موج آینده</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="5127.14" onclick="seekTo(5127.14)">
+      <span class="tm">1:25:27</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۸ — سیگنال</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="5704.68" onclick="seekTo(5704.68)">
+      <span class="tm">1:35:04</span><span class="ic">🎙️</span><span class="ttl">کریپتو چیست؟</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="5758.16" onclick="seekTo(5758.16)">
+      <span class="tm">1:35:58</span><span class="ic">🎙️</span><span class="ttl">بیت‌کوین، پادشاه بازار</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="5807.96" onclick="seekTo(5807.96)">
+      <span class="tm">1:36:47</span><span class="ic">🎙️</span><span class="ttl">اتریوم و آلت‌کوین‌ها</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="5863.16" onclick="seekTo(5863.16)">
+      <span class="tm">1:37:43</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۹ — آلت‌کوین‌ها</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="6440.71" onclick="seekTo(6440.71)">
+      <span class="tm">1:47:20</span><span class="ic">🎙️</span><span class="ttl">استیبل‌کوین و دیفای</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="6498.35" onclick="seekTo(6498.35)">
+      <span class="tm">1:48:18</span><span class="ic">🎙️</span><span class="ttl">ان‌اف‌تی و متاورس</span>
+      <span class="play">▶</span></button><button class="ch music" data-t="6555.03" onclick="seekTo(6555.03)">
+      <span class="tm">1:49:15</span><span class="ic">🎵</span><span class="ttl">ست موسیقی ۱۰ — افق</span>
+      <span class="play">▶</span></button><button class="ch talk" data-t="7153.96" onclick="seekTo(7153.96)">
+      <span class="tm">1:59:13</span><span class="ic">🎙️</span><span class="ttl">معرفی رادیو FBT</span>
+      <span class="play">▶</span></button></div>
+  </div>
+
+  <div class="foot">
+    <div>© ۲۰۲۶ رادیو FBT — همهٔ موزیک‌ها و صداها اختصاصی و اصیل هستند.</div>
+    <div>این برنامه آموزشی است و توصیهٔ مالی نیست.</div>
+  </div>
+</div>
+
+<script>
+const CH = [{"start": 9.0, "end": 55.04, "title": "معرفی رادیو FBT", "kind": "talk", "half": 1}, {"start": 55.04, "end": 632.58, "title": "ست موسیقی ۱ — طلوع بازار", "kind": "music", "half": 1}, {"start": 637.08, "end": 689.84, "title": "کریپتو چیست؟", "kind": "talk", "half": 1}, {"start": 690.56, "end": 740.36, "title": "بیت‌کوین، پادشاه بازار", "kind": "talk", "half": 1}, {"start": 740.36, "end": 795.56, "title": "اتریوم و آلت‌کوین‌ها", "kind": "talk", "half": 1}, {"start": 795.56, "end": 1116.42, "title": "ست موسیقی ۲ — مدار", "kind": "music", "half": 1}, {"start": 1120.42, "end": 1142.7, "title": "مصاحبه: ساختار بازار", "kind": "talk", "half": 1}, {"start": 1143.42, "end": 1223.26, "title": "مصاحبه: تحلیل آنچین", "kind": "talk", "half": 1}, {"start": 1223.98, "end": 1237.22, "title": "مصاحبه: حرکت نهنگ‌ها", "kind": "talk", "half": 1}, {"start": 1237.94, "end": 1334.22, "title": "مصاحبه: رادار نهنگ‌ها", "kind": "talk", "half": 1}, {"start": 1334.22, "end": 1346.14, "title": "مصاحبه: آینده بازار", "kind": "talk", "half": 1}, {"start": 1346.86, "end": 1454.38, "title": "مصاحبه: سه موج آینده", "kind": "talk", "half": 1}, {"start": 1454.38, "end": 2080.05, "title": "ست موسیقی ۳ — عمق بازار", "kind": "music", "half": 1}, {"start": 2080.05, "end": 2131.33, "title": "اخبار داغ کریپتو", "kind": "talk", "half": 1}, {"start": 2132.05, "end": 2192.45, "title": "آینده کریپتو", "kind": "talk", "half": 1}, {"start": 2192.45, "end": 2470.53, "title": "ست موسیقی ۴ — روند صعودی", "kind": "music", "half": 1}, {"start": 2470.53, "end": 2527.45, "title": "استیبل‌کوین و دیفای", "kind": "talk", "half": 1}, {"start": 2528.17, "end": 2584.85, "title": "ان‌اف‌تی و متاورس", "kind": "talk", "half": 1}, {"start": 2584.85, "end": 2639.45, "title": "آموزش ترید حرفه‌ای", "kind": "talk", "half": 1}, {"start": 2640.17, "end": 2694.73, "title": "امنیت و کیف پول", "kind": "talk", "half": 1}, {"start": 2694.73, "end": 3379.23, "title": "ست موسیقی ۵ — رادار نهنگ‌ها", "kind": "music", "half": 1}, {"start": 3383.73, "end": 3435.01, "title": "اخبار داغ کریپتو", "kind": "talk", "half": 2}, {"start": 3435.73, "end": 3496.13, "title": "آینده کریپتو", "kind": "talk", "half": 2}, {"start": 3496.13, "end": 4137.84, "title": "ست موسیقی ۶ — نقدینگی", "kind": "music", "half": 2}, {"start": 4137.84, "end": 4192.44, "title": "آموزش ترید حرفه‌ای", "kind": "talk", "half": 2}, {"start": 4193.16, "end": 4247.72, "title": "امنیت و کیف پول", "kind": "talk", "half": 2}, {"start": 4247.72, "end": 4793.18, "title": "ست موسیقی ۷ — شبانه", "kind": "music", "half": 2}, {"start": 4793.18, "end": 4815.46, "title": "مصاحبه: ساختار بازار", "kind": "talk", "half": 2}, {"start": 4816.18, "end": 4896.02, "title": "مصاحبه: تحلیل آنچین", "kind": "talk", "half": 2}, {"start": 4896.74, "end": 4909.98, "title": "مصاحبه: حرکت نهنگ‌ها", "kind": "talk", "half": 2}, {"start": 4910.7, "end": 5006.98, "title": "مصاحبه: رادار نهنگ‌ها", "kind": "talk", "half": 2}, {"start": 5006.98, "end": 5018.9, "title": "مصاحبه: آینده بازار", "kind": "talk", "half": 2}, {"start": 5019.62, "end": 5127.14, "title": "مصاحبه: سه موج آینده", "kind": "talk", "half": 2}, {"start": 5127.14, "end": 5704.68, "title": "ست موسیقی ۸ — سیگنال", "kind": "music", "half": 2}, {"start": 5704.68, "end": 5757.44, "title": "کریپتو چیست؟", "kind": "talk", "half": 2}, {"start": 5758.16, "end": 5807.96, "title": "بیت‌کوین، پادشاه بازار", "kind": "talk", "half": 2}, {"start": 5807.96, "end": 5863.16, "title": "اتریوم و آلت‌کوین‌ها", "kind": "talk", "half": 2}, {"start": 5863.16, "end": 6440.71, "title": "ست موسیقی ۹ — آلت‌کوین‌ها", "kind": "music", "half": 2}, {"start": 6440.71, "end": 6497.63, "title": "استیبل‌کوین و دیفای", "kind": "talk", "half": 2}, {"start": 6498.35, "end": 6555.03, "title": "ان‌اف‌تی و متاورس", "kind": "talk", "half": 2}, {"start": 6555.03, "end": 7153.96, "title": "ست موسیقی ۱۰ — افق", "kind": "music", "half": 2}, {"start": 7153.96, "end": 7200.0, "title": "معرفی رادیو FBT", "kind": "talk", "half": 2}];
+const au = document.getElementById('au');
+const fill = document.getElementById('fill');
+const cur = document.getElementById('cur');
+const dur = document.getElementById('dur');
+const nowTitle = document.getElementById('nowTitle');
+const nowWrap = document.getElementById('nowWrap');
+const pp = document.getElementById('pp');
+const bar = document.getElementById('bar');
+
+// chapter ticks
+CH.forEach(c => {
+  const d = document.createElement('div');
+  d.className = 'tick';
+  d.style.left = (c.start / 7200 * 100) + '%';
+  bar.appendChild(d);
+});
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), x = s%60;
+  return [h,m,x].map(v => String(v).padStart(2,'0')).join(':');
+}
+function toggle() {
+  if (au.paused) { au.play(); } else { au.pause(); }
+}
+au.addEventListener('play', () => { pp.textContent = '⏸ توقف'; nowWrap.classList.remove('paused'); });
+au.addEventListener('pause', () => { pp.textContent = '▶ پخش'; nowWrap.classList.add('paused'); });
+au.addEventListener('timeupdate', () => {
+  const p = au.currentTime;
+  fill.style.width = (p / (au.duration || 7200) * 100) + '%';
+  cur.textContent = fmt(p);
+  if (au.duration) dur.textContent = fmt(au.duration);
+  let idx = -1;
+  for (let i = 0; i < CH.length; i++) if (p >= CH[i].start) idx = i;
+  if (idx >= 0) nowTitle.textContent = CH[idx].title;
+  document.querySelectorAll('.ch').forEach(el => el.classList.remove('active'));
+  if (idx >= 0) {
+    const el = document.querySelectorAll('.ch')[idx];
+    if (el) el.classList.add('active');
+  }
+});
+au.addEventListener('loadedmetadata', () => { dur.textContent = fmt(au.duration); });
+function seekTo(t) { au.currentTime = t; au.play(); window.scrollTo({top: 0, behavior: 'smooth'}); }
+function jump(d) { au.currentTime = Math.min((au.duration||7200), Math.max(0, au.currentTime + d)); }
+bar.addEventListener('click', e => {
+  const r = bar.getBoundingClientRect();
+  const ratio = (e.clientX - r.left) / r.width;
+  au.currentTime = ratio * (au.duration || 7200);
+});
+</script>
+</body>
+</html>
