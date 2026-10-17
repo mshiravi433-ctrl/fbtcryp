@@ -40,6 +40,8 @@ const REPORTABLE = new Set([
   'tokenAnalysis',
   'intentAiPlan',
   'intentAiExecuted',
+  'dailyWheel',
+  'learn',
   'quest:firstSwap',
   'quest:connectWallet',
   'quest:backupWallet',
@@ -67,7 +69,9 @@ export const DAILY_CAPS = {
   lab: 10,
   tokenAnalysis: 10,
   intentAiPlan: 10,
-  intentAiExecuted: 10
+  intentAiExecuted: 10,
+  dailyWheel: 1,
+  learn: 6
 };
 
 /** Local calendar day, used for per-day reward keys (mirror lib/dailyRewards). */
@@ -188,9 +192,21 @@ export const useAppStore = create(
           points: st.points + amount,
           pointsLog: [entry, ...st.pointsLog].slice(0, 100)
         }));
-        if (REPORTABLE.has(action) && !String(action).startsWith('mission:')) {
+        /*
+         * Wheel and lesson awards are stored under a day/topic-scoped action
+         * (`wheel:20261017`, `learn:btc`) so `awardPointsOnce` can make them
+         * idempotent locally. The ENGINE knows the canonical actions
+         * `dailyWheel` / `learn`; mapping here keeps the two ledgers aligned
+         * without teaching the reporter every namespaced variant.
+         */
+        const reportAction = String(action).startsWith('wheel:')
+          ? 'dailyWheel'
+          : String(action).startsWith('learn:')
+            ? 'learn'
+            : action;
+        if (REPORTABLE.has(reportAction) && !String(action).startsWith('mission:')) {
           /* Fire-and-forget: the engine dedupes and verifies. */
-          reportActivity(action, meta);
+          reportActivity(reportAction, meta);
         }
         return true;
       },

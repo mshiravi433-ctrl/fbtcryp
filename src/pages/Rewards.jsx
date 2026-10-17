@@ -4,27 +4,28 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
-import { IconChevronLeft, IconCoins, IconTrophy } from '../components/Icons';
+import { IconChevronLeft, IconCoins, IconTrophy, IconShield } from '../components/Icons';
 import RewardsHero from '../components/rewards/RewardsHero';
 import RewardsEarnPanel from '../components/rewards/RewardsEarnPanel';
 import RewardsRewardsPanel from '../components/rewards/RewardsRewardsPanel';
 import '../styles/rewards.css';
 
 /**
- * POINTS & REWARDS — امتیاز و پاداش.
+ * POINTS & REWARDS — the hub (Earn / Rewards).
  * ---------------------------------------------------------------------------
- * A single, modern hub with a live score hero and two tabs:
- *   earn     — put your assets to work (our own yield products)
- *   rewards  — daily check-in, missions, perks, referral, points history
+ * The `?tab=` contract from PR #526 is preserved: Android back steps through
+ * tabs, deep links open a tab, and a crash-reload returns to where the user
+ * was. Only this page is restyled; the standalone /earn and /leaderboard pages
+ * keep their own layouts and data.
  *
- * The `?tab=` param is preserved (Android back steps between tabs, deep links
- * land on a tab, crash-reload returns to where you were) — the same contract
- * the old TabbedPage had. Only this page is restyled; /earn and /leaderboard
- * keep their own layouts.
+ * Two permanent promises are part of the chrome, not a tab:
+ *   · FBT is a loyalty balance, not a coin: no price, no trade, no withdrawal.
+ *   · Points are a reputation score, not currency.
+ * They render above the hero so no tab can accidentally hide them.
  */
 const TABS = [
-  { id: 'earn', labelKey: 'nav.earn', Icon: IconCoins },
-  { id: 'rewards', labelKey: 'nav.leaderboard', Icon: IconTrophy }
+  { id: 'earn', labelKey: 'rewards.v2.tab.earn.label', titleKey: 'rewards.v2.tab.earn.title', subKey: 'rewards.v2.tab.earn.sub', Icon: IconCoins },
+  { id: 'rewards', labelKey: 'rewards.v2.tab.rewards.label', titleKey: 'rewards.v2.tab.rewards.title', subKey: 'rewards.v2.tab.rewards.sub', Icon: IconTrophy }
 ];
 
 export default function Rewards() {
@@ -34,7 +35,7 @@ export default function Rewards() {
   const [params, setParams] = useSearchParams();
 
   const fromUrl = params.get('tab');
-  const valid = TABS.some((x) => x.id === fromUrl);
+  const valid = TABS.some((tab) => tab.id === fromUrl);
   const [active, setActive] = useState(valid ? fromUrl : 'earn');
 
   useEffect(() => {
@@ -49,21 +50,35 @@ export default function Rewards() {
     setParams({ tab: id }, { replace: true });
   };
 
+  const current = TABS.find((tab) => tab.id === active) || TABS[0];
+
   return (
     <PageTransition className="page rwd">
       <div className="rwd-aurora" aria-hidden="true" />
+      <div className="rwd-grid-bg" aria-hidden="true" />
 
       <div className="rwd-header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <button type="button" className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <IconChevronLeft width={18} height={18} />
         </button>
-        <h1>{t('rewards.title')}</h1>
+        <div className="rwd-header-title">
+          <h1>{t('rewards.title')}</h1>
+          <span className="rwd-header-sub">{t('rewards.v2.headerSub')}</span>
+        </div>
         <span className="rwd-spark"><IconTrophy width={18} height={18} /></span>
+      </div>
+
+      <div className="rwd-loyalty-note" role="note">
+        <span className="rwd-loyalty-ico"><IconShield width={15} height={15} /></span>
+        <div>
+          <b>{t('rewards.v2.loyalty.fbt')}</b>
+          <span>{t('rewards.v2.loyalty.points')}</span>
+        </div>
       </div>
 
       <RewardsHero />
 
-      <div className="rwd-tabs" role="tablist">
+      <div className="rwd-tabs" role="tablist" aria-label={t('rewards.title')}>
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -81,9 +96,15 @@ export default function Rewards() {
               />
             )}
             <tab.Icon width={16} height={16} aria-hidden="true" />
-            {t(tab.labelKey)}
+            <span>{t(tab.labelKey)}</span>
           </button>
         ))}
+      </div>
+
+      <div className="rwd-active-head">
+        <div className="rwd-active-kicker">{t('rewards.v2.activeKicker', { tab: t(current.labelKey) })}</div>
+        <h2>{t(current.titleKey)}</h2>
+        <p>{t(current.subKey)}</p>
       </div>
 
       <AnimatePresence mode="wait">
@@ -93,11 +114,18 @@ export default function Rewards() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         >
-          {active === 'earn' ? <RewardsEarnPanel /> : <RewardsRewardsPanel />}
+          {active === 'earn'
+            ? <RewardsEarnPanel onOpenRewards={() => select('rewards')} />
+            : <RewardsRewardsPanel />}
         </motion.div>
       </AnimatePresence>
+
+      <div className="rwd-footer-note">
+        <IconShield width={13} height={13} />
+        <span>{t('rewards.v2.footerNote')}</span>
+      </div>
     </PageTransition>
   );
 }

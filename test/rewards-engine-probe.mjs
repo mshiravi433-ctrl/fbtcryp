@@ -124,6 +124,33 @@ t('...and still never twice', rr.results[0]?.duplicate === true && rr.ledger.poi
 rr = await engine.ingestEvents({ owner: ownerR, events: [{ id: 'zz', action: 'teleport', at: now }], io: ioR, verify: okVerify });
 t('an unknown action is refused, not invented', rr.results[0]?.ok === false && rr.results[0]?.code === 'UNKNOWN_ACTION');
 
+/* the loyalty wheel + a lesson are bounded server-side too */
+const kvWheel = makeKv();
+const ioWheel = io(kvWheel);
+let rw = await engine.ingestEvents({
+  owner: 'dev:wheel',
+  events: [{ id: 'wheel-0001', action: 'dailyWheel', at: now }],
+  io: ioWheel,
+  verify: okVerify
+});
+rw = await engine.ingestEvents({
+  owner: 'dev:wheel',
+  events: [{ id: 'wheel-0002', action: 'dailyWheel', at: now + 1000 }],
+  io: ioWheel,
+  verify: okVerify
+});
+t('dailyWheel pays 25 once per local day, even if a client replays',
+  rw.results[0]?.capped === true && rw.ledger.points === 25);
+
+const kvLearn = makeKv();
+const rLearn = await engine.ingestEvents({
+  owner: 'dev:learn',
+  events: [{ id: 'learn-0001', action: 'learn', at: now }],
+  io: io(kvLearn),
+  verify: okVerify
+});
+t('a learn lesson credits its real 50 points', rLearn.results[0]?.credited === true && rLearn.ledger.points === 50);
+
 /* once-ever */
 const kvOnce = makeKv();
 const ioOnce = io(kvOnce);
