@@ -15,6 +15,7 @@ import Toasts from './components/Toasts';
 import ConnectivityAlert from './components/ConnectivityAlert';
 import InstallPrompt from './components/InstallPrompt';
 import RadioDock from './components/RadioDock';
+import FbtRadioPill from './components/FbtRadioPill';
 import { useSwapDockStore } from './store/useSwapDockStore';
 import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
 /*
@@ -811,6 +812,12 @@ export default function App() {
           It renders nothing at all until something is playing.
         */}
         <RadioDock />
+        {/*
+          The FBT live station's engine lives outside React, so it survives
+          navigation; this pill is its only visible owner once the reader
+          leaves News. Persian-only, like the station itself.
+        */}
+        <FbtRadioPill />
       </HashRouter>
     );
   }

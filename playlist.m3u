@@ -1,0 +1,23 @@
+#EXTM3U
+#EXTINF:7200,FBT Radio — 2 Hour Crypto Broadcast
+FBT_Radio_2Hours_HQ.mp3
+#EXTINF:46,معرفی رادیو FBT
+fbt_radio_part01_intro.mp3
+#EXTINF:53,کریپتو چیست؟
+fbt_radio_part02_crypto_chist.mp3
+#EXTINF:50,بیت‌کوین
+fbt_radio_part03_bitcoin.mp3
+#EXTINF:55,اتریوم و آلت‌کوین‌ها
+fbt_radio_part04_ethereum_altcoins.mp3
+#EXTINF:51,اخبار داغ کریپتو
+fbt_radio_part05_news.mp3
+#EXTINF:60,آینده کریپتو
+fbt_radio_part06_future.mp3
+#EXTINF:57,استیبل‌کوین و دیفای
+fbt_radio_part07_stablecoin_defi.mp3
+#EXTINF:57,ان‌اف‌تی و متاورس
+fbt_radio_part08_nft_metaverse.mp3
+#EXTINF:55,آموزش ترید
+fbt_radio_part09_trading.mp3
+#EXTINF:55,امنیت و کیف پول
+fbt_radio_part10_security.mp3

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>پیش‌نمایش باکس رادیو FBT</title>
+<style>
+  /* App tokens, copied from src/index.css so the linked component stylesheet
+     resolves exactly as it does inside the app. */
+  :root{
+    --bg-void:#000; --bg-abyss:#05060a; --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
+    --rgb-1:#00e5ff; --rgb-2:#7c4dff; --rgb-3:#ff2d95; --rgb-4:#00ff9d; --rgb-5:#ffb300;
+    --text-1:#fff; --text-2:#9aa4bf; --text-3:#5b647f;
+    --font-mono:'JetBrains Mono',ui-monospace,monospace; --nav-h:88px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:22px 14px 60px; min-height:100vh; background:#05060a; color:#fff;
+    font-family:Vazirmatn,system-ui,Tahoma,sans-serif;
+    background-image:
+      radial-gradient(720px 380px at 88% -8%, rgba(124,77,255,.24), transparent 62%),
+      radial-gradient(620px 340px at 4% 2%, rgba(0,229,255,.14), transparent 60%);
+  }
+  .demo{max-width:520px;margin:0 auto}
+  .demo h1{font-size:13px;font-weight:700;color:#8ea0c0;margin:0 0 11px;text-align:center;letter-spacing:.4px}
+</style>
+<link rel="stylesheet" href="/src/styles/fbt-radio.css" />
+</head>
+<body>
+<div class="demo">
+  <h1>پیش‌نمایش · باکس رادیو در تب «رادیو» صفحهٔ اخبار</h1>
+
+  <!-- Markup mirrors src/components/FbtRadioBox.jsx so what you see here is
+       what ships. The audio is the same file the app streams. -->
+  <section class="fbr" id="box" dir="rtl" aria-label="رادیو زنده اف‌بی‌تی">
+    <span class="fbr-aurora" aria-hidden="true"></span>
+    <span class="fbr-grain" aria-hidden="true"></span>
+
+    <header class="fbr-head">
+      <span class="fbr-live"><i aria-hidden="true"></i> پخش زنده</span>
+      <span class="fbr-brand">FBT RADIO</span>
+      <button type="button" class="fbr-link">تیترها</button>
+    </header>
+
+    <div class="fbr-main">
+      <div class="fbr-art" aria-hidden="true">
+        <img src="/radio/fbt-radio-cover.jpg" alt="" />
+        <span class="fbr-art-ring"></span>
+        <button type="button" class="fbr-start" id="start" aria-label="شروع پخش رادیو">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.2-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2Z"/></svg>
+        </button>
+      </div>
+
+      <div class="fbr-body">
+        <p class="fbr-kicker">برنامه دو ساعته · دنیای کریپتو</p>
+        <h2 class="fbr-title">رادیو <b>اف‌بی‌تی</b>
+          <span class="fbr-wave" aria-hidden="true">
+            <i style="animation-delay:-0s"></i><i style="animation-delay:-.12s"></i><i style="animation-delay:-.24s"></i><i style="animation-delay:-.36s"></i>
+            <i style="animation-delay:-.48s"></i><i style="animation-delay:-.6s"></i><i style="animation-delay:-.72s"></i><i style="animation-delay:-.84s"></i>
+            <i style="animation-delay:-.06s"></i><i style="animation-delay:-.18s"></i><i style="animation-delay:-.3s"></i><i style="animation-delay:-.42s"></i>
+            <i style="animation-delay:-.54s"></i><i style="animation-delay:-.66s"></i><i style="animation-delay:-.78s"></i><i style="animation-delay:-.9s"></i>
+          </span>
+        </h2>
+        <p class="fbr-sub" id="sub">برای شروع، دکمهٔ پخش را لمس کن</p>
+        <div class="fbr-chips">
+          <span class="fbr-chip">۲ ساعت پیوسته</span>
+          <span class="fbr-chip">۴۲ فصل</span>
+          <span class="fbr-chip">۸ ترک اختصاصی</span>
+          <span class="fbr-chip fbr-chip-whale">🐋 رادار نهنگ‌ها</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fbr-rail-wrap">
+      <div class="fbr-rail" id="rail" role="slider" tabindex="0" aria-label="زمان پخش">
+        <span class="fbr-rail-buf" id="buf" style="width:0"></span>
+        <span class="fbr-rail-fill" id="fill" style="width:0"></span>
+        <span class="fbr-rail-knob" id="knob" style="left:0"></span>
+      </div>
+      <div class="fbr-times">
+        <span id="cur">۰:۰۰</span>
+        <span class="fbr-remain" id="rem">−۲:۰۰:۰۰</span>
+        <span id="dur">۲:۰۰:۰۰</span>
+      </div>
+    </div>
+
+    <div class="fbr-controls">
+      <button type="button" class="fbr-ctl" id="back"><span class="fbr-ctl-g">↺</span><small>۳۰</small></button>
+      <button type="button" class="fbr-play" id="play" aria-label="پخش رادیو" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" id="playIcon"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.2-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2Z"/></svg>
+      </button>
+      <button type="button" class="fbr-ctl" id="fwd"><span class="fbr-ctl-g">↻</span><small>۳۰</small></button>
+      <button type="button" class="fbr-ctl" id="mute">🔊</button>
+      <button type="button" class="fbr-ctl fbr-rate" id="rate">×۱</button>
+      <a class="fbr-ctl fbr-dl" href="/radio/fbt-radio-2h.mp3" download>⤓</a>
+    </div>
+
+    <div class="fbr-chapters" id="chapters"></div>
+
+    <p class="fbr-note">موسیقی و صداها اختصاصی رادیو اف‌بی‌تی است · برنامه آموزشی است و توصیهٔ مالی نیست.</p>
+  </section>
+</div>
+
+<script>
+const FA='۰۱۲۳۴۵۶۷۸۹';
+const fa=(v)=>String(v).replace(/\d/g,d=>FA[+d]);
+const clock=(s)=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;const p=n=>fa(String(n).padStart(2,'0'));return h?`${fa(h)}:${p(m)}:${p(r)}`:`${fa(m)}:${p(r)}`};
+const CHAPTERS=[
+ [9,'معرفی رادیو FBT'],[637.08,'کریپتو چیست؟'],[690.56,'بیت‌کوین، پادشاه بازار'],
+ [740.36,'اتریوم و آلت‌کوین‌ها'],[1120.42,'مصاحبه ویژه'],[1223.98,'رادار نهنگ‌ها'],
+ [2080.05,'اخبار داغ کریپتو'],[2132.05,'آینده کریپتو'],[2470.53,'استیبل‌کوین و دیفای'],
+ [2528.17,'ان‌اف‌تی و متاورس'],[2584.85,'آموزش ترید'],[2640.17,'امنیت کیف پول']
+];
+const box=document.getElementById('box'), sub=document.getElementById('sub');
+const rail=document.getElementById('rail'), fill=document.getElementById('fill'), buf=document.getElementById('buf'), knob=document.getElementById('knob');
+const cur=document.getElementById('cur'), rem=document.getElementById('rem'), dur=document.getElementById('dur');
+const playBtn=document.getElementById('play'), playIcon=document.getElementById('playIcon');
+
+CHAPTERS.forEach(([t,label])=>{
+  const b=document.createElement('button');
+  b.type='button'; b.className='fbr-ch';
+  b.innerHTML=`<span class="fbr-ch-time">${clock(t)}</span><span class="fbr-ch-label">${label}</span>`;
+  b.onclick=()=>{a.currentTime=t; a.play();};
+  document.getElementById('chapters').appendChild(b);
+});
+
+const a=new Audio('/radio/fbt-radio-2h.mp3');
+a.preload='metadata'; a.volume=.85;
+
+function tick(){
+  const d=a.duration||7200, p=(a.currentTime/d)*100;
+  fill.style.width=p+'%'; knob.style.left=p+'%';
+  cur.textContent=clock(a.currentTime); rem.textContent='−'+clock(d-a.currentTime); dur.textContent=clock(d);
+  let idx=-1; CHAPTERS.forEach(([t],i)=>{ if(a.currentTime>=t) idx=i; });
+  document.querySelectorAll('.fbr-ch').forEach((el,i)=>el.classList.toggle('is-on', i===idx));
+  if(!a.paused) sub.textContent = idx>=0 ? CHAPTERS[idx][1] : 'در حال پخش…';
+  try{ if(a.buffered.length) buf.style.width=Math.min(100,(a.buffered.end(a.buffered.length-1)/d)*100)+'%'; }catch(e){}
+}
+a.addEventListener('timeupdate',tick);
+a.addEventListener('progress',tick);
+a.addEventListener('loadedmetadata',tick);
+a.addEventListener('play',()=>{
+  box.classList.add('is-live'); document.getElementById('start').style.display='none';
+  playBtn.setAttribute('aria-pressed','true');
+  playIcon.innerHTML='<rect x="6" y="4.5" width="4.2" height="15" rx="1.6"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.6"/>';
+});
+a.addEventListener('pause',()=>{
+  box.classList.remove('is-live');
+  playBtn.setAttribute('aria-pressed','false');
+  playIcon.innerHTML='<path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.2-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2Z"/>';
+  sub.textContent='برای شروع، دکمهٔ پخش را لمس کن';
+});
+playBtn.onclick=()=>{ a.paused ? a.play().catch(()=>{}) : a.pause(); };
+document.getElementById('start').onclick=()=>a.play().catch(()=>{});
+document.getElementById('back').onclick=()=>{a.currentTime=Math.max(0,a.currentTime-30)};
+document.getElementById('fwd').onclick=()=>{a.currentTime=Math.min((a.duration||7200)-1,a.currentTime+30)};
+document.getElementById('mute').onclick=(e)=>{a.muted=!a.muted; e.currentTarget.textContent=a.muted?'🔇':'🔊'};
+document.getElementById('rate').onclick=(e)=>{
+  const rates=[1,1.25,1.5,.75]; const i=rates.indexOf(a.playbackRate);
+  const r=rates[(i+1)%rates.length]; a.playbackRate=r; e.currentTarget.textContent='×'+fa(r);
+};
+rail.onclick=(e)=>{ const r=rail.getBoundingClientRect(); const ratio=(e.clientX-r.left)/r.width;
+  a.currentTime=Math.min((a.duration||7200)-1,Math.max(0,ratio*(a.duration||7200))); };
+tick();
+</script>
+</body>
+</html>

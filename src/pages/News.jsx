@@ -5,6 +5,8 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import AdBanner from '../components/AdBanner';
 import RadioPanel from '../components/RadioPanel';
+import FbtRadioBox from '../components/FbtRadioBox';
+import { play as playFbtRadio } from '../lib/fbtRadioEngine';
 import CalmPanel from '../components/CalmPanel';
 import CommunityPanel from '../components/CommunityPanel';
 import MarketInsightsPanel from '../components/MarketInsightsPanel';
@@ -122,6 +124,19 @@ function NewsPage() {
     (next) => {
       if (!NEWS_TABS.includes(next)) return;
       setTabState(next);
+      /*
+       * Start the live station INSIDE the click handler, not in an effect.
+       *
+       * Chrome allows a deferred play() after a tap, but iOS Safari only
+       * counts an audio call made synchronously inside the gesture — a
+       * play() from useEffect a frame later is refused there and the box
+       * would show its start button on every iPhone. Calling it here makes
+       * «پخش خودکار» true on the platform where it is hardest to get.
+       * Persian-only, like the box itself.
+       */
+      if (next === 'listen' && String(i18n.language || 'fa').toLowerCase().startsWith('fa')) {
+        playFbtRadio();
+      }
       setSearchParams(
         (prev) => {
           const p = new URLSearchParams(prev);
@@ -132,7 +147,7 @@ function NewsPage() {
         { replace: true }
       );
     },
-    [setSearchParams]
+    [setSearchParams, i18n.language]
   );
   const [notifyOn, setNotifyOn] = useState(() => getNotifySettings().news);
   // Bumped on each toggle so the bell re-rings, confirming the tap.
@@ -275,19 +290,32 @@ function NewsPage() {
       ) : tab === 'calm' ? (
         <CalmPanel />
       ) : tab === 'listen' ? (
-        /*
-          ─── RADIO, NOT TELEVISION, AND THE REASON IS UNCHANGED ───────────
-          Asked again for TV. It is still not buildable honestly: a video tab
-          means an embedded YouTube player, and youtube.com does not resolve
-          on most Iranian networks — the whole tab would be a grey box for the
-          audience this app is built for. That is the dead-button failure the
-          Aparat links were removed for.
+        <>
+          {/*
+            ─── FBT LIVE RADIO, FIRST ────────────────────────────────────────
+            Asked for directly: «در صفحه اخبار، تب رادیو یک باکس خیلی مدرن
+            ایجاد کن و رادیو پخش خودکار باشد … و تنها در زبان فارسی بیاد».
 
-          Podcast audio is plain MP3 over HTTPS from reachable CDNs, needs no
-          iframe or SDK, survives a slow connection, and keeps playing with
-          the screen off. It is the honest version of the same request.
-        */
-        <RadioPanel />
+            It is the station this project actually owns — two hours, recorded
+            in Persian and built for this app — so it sits above the podcast
+            list rather than being one row inside it. The component renders
+            nothing at all outside the Persian interface, and it starts itself
+            as soon as the tab is opened.
+
+            ─── AND WHY THE PODCAST LIST BELOW IS STILL AUDIO, NOT VIDEO ─────
+            Asked again for TV. It is still not buildable honestly: a video tab
+            means an embedded YouTube player, and youtube.com does not resolve
+            on most Iranian networks — the whole tab would be a grey box for
+            the audience this app is built for. That is the dead-button failure
+            the Aparat links were removed for.
+
+            Podcast audio is plain MP3 over HTTPS from reachable CDNs, needs no
+            iframe or SDK, survives a slow connection, and keeps playing with
+            the screen off. It is the honest version of the same request.
+          */}
+          <FbtRadioBox />
+          <RadioPanel />
+        </>
       ) : tab === 'insights' ? (
         <MarketInsightsPanel
           markets={coins ?? []}
