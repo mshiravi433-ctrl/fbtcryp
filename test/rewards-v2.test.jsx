@@ -149,4 +149,24 @@ describe('achievements', () => {
     expect(rows.find((r) => r.id === 'collector')?.earned).toBe(false);
     expect(rows.find((r) => r.id === 'legend')?.earned).toBe(false);
   });
+
+  it('keeps the whole discovery wall honest — every card starts locked and derives from the ledger', () => {
+    const empty = achievementsFor({ points: 0, streak: 0, referrals: 0, pointsLog: [], nfts: [] });
+    expect(empty.length).toBe(28);
+    expect(empty.every((row) => row.earned === false)).toBe(true);
+    expect(empty.every((row) => row.progress === 0)).toBe(true);
+
+    /* one real swap unlocks exactly the swap cards and nothing else */
+    const afterSwap = achievementsFor({
+      points: 0,
+      streak: 0,
+      referrals: 0,
+      pointsLog: [{ action: 'swap' }],
+      nfts: []
+    });
+    expect(afterSwap.find((r) => r.id === 'firstSwap')?.earned).toBe(true);
+    expect(afterSwap.find((r) => r.id === 'swaps5')?.earned).toBe(false);
+    expect(afterSwap.find((r) => r.id === 'swaps5')?.progress).toBeCloseTo(0.2);
+    expect(afterSwap.filter((r) => r.earned).length).toBe(1);
+  });
 });

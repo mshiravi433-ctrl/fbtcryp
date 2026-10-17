@@ -4,10 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
-import { IconChevronLeft, IconCoins, IconTrophy, IconShield } from '../components/Icons';
+import { IconChevronLeft, IconCoins, IconTrophy, IconShield, IconSparkle } from '../components/Icons';
 import RewardsHero from '../components/rewards/RewardsHero';
 import RewardsEarnPanel from '../components/rewards/RewardsEarnPanel';
 import RewardsRewardsPanel from '../components/rewards/RewardsRewardsPanel';
+import { REWARD_SECTION_IDS, DEFAULT_REWARD_SECTION } from '../components/rewards/sections';
 import '../styles/rewards.css';
 
 /**
@@ -15,11 +16,11 @@ import '../styles/rewards.css';
  * ---------------------------------------------------------------------------
  * The `?tab=` contract from PR #526 is preserved: Android back steps through
  * tabs, deep links open a tab, and a crash-reload returns to where the user
- * was. Only this page is restyled; the standalone /earn and /leaderboard pages
- * keep their own layouts and data.
+ * was. `?section=` extends it one level down into the rewards tab's dock, so
+ * a deep link can open the wheel, the badges or the game directly.
  *
  * Two permanent promises are part of the chrome, not a tab:
- *   · FBT is a loyalty balance, not a coin: no price, no trade, no withdrawal.
+ *   · FBT is a loyalty balance, not a coin: no price today, tradable later.
  *   · Points are a reputation score, not currency.
  * They render above the hero so no tab can accidentally hide them.
  */
@@ -38,16 +39,37 @@ export default function Rewards() {
   const valid = TABS.some((tab) => tab.id === fromUrl);
   const [active, setActive] = useState(valid ? fromUrl : 'earn');
 
+  const sectionParam = params.get('section');
+  const sectionValid = REWARD_SECTION_IDS.includes(sectionParam);
+  const [section, setSection] = useState(sectionValid ? sectionParam : DEFAULT_REWARD_SECTION);
+
   useEffect(() => {
     if (valid && fromUrl !== active) setActive(fromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromUrl]);
 
+  useEffect(() => {
+    if (sectionValid && sectionParam !== section) setSection(sectionParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionParam]);
+
   const select = (id) => {
     if (id === active) return;
     haptic?.('select');
     setActive(id);
-    setParams({ tab: id }, { replace: true });
+    const next = new URLSearchParams(params);
+    next.set('tab', id);
+    if (id !== 'rewards') next.delete('section');
+    setParams(next, { replace: true });
+  };
+
+  const selectSection = (id) => {
+    if (id === section) return;
+    setSection(id);
+    const next = new URLSearchParams(params);
+    next.set('tab', 'rewards');
+    next.set('section', id);
+    setParams(next, { replace: true });
   };
 
   const current = TABS.find((tab) => tab.id === active) || TABS[0];
@@ -68,11 +90,20 @@ export default function Rewards() {
         <span className="rwd-spark"><IconTrophy width={18} height={18} /></span>
       </div>
 
-      <div className="rwd-loyalty-note" role="note">
-        <span className="rwd-loyalty-ico"><IconShield width={15} height={15} /></span>
-        <div>
-          <b>{t('rewards.v2.loyalty.fbt')}</b>
-          <span>{t('rewards.v2.loyalty.points')}</span>
+      <div className="rwd-trust" role="note">
+        <div className="rwd-trust-item">
+          <span className="rwd-trust-ico"><IconShield width={15} height={15} /></span>
+          <div>
+            <b>{t('rewards.v2.loyalty.fbtTitle')}</b>
+            <span>{t('rewards.v2.loyalty.fbt')}</span>
+          </div>
+        </div>
+        <div className="rwd-trust-item">
+          <span className="rwd-trust-ico rgb"><IconSparkle width={15} height={15} /></span>
+          <div>
+            <b>{t('rewards.v2.loyalty.pointsTitle')}</b>
+            <span>{t('rewards.v2.loyalty.points')}</span>
+          </div>
         </div>
       </div>
 
@@ -118,7 +149,7 @@ export default function Rewards() {
         >
           {active === 'earn'
             ? <RewardsEarnPanel onOpenRewards={() => select('rewards')} />
-            : <RewardsRewardsPanel />}
+            : <RewardsRewardsPanel section={section} onSection={selectSection} />}
         </motion.div>
       </AnimatePresence>
 

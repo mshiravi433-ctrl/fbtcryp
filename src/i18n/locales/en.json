@@ -5986,7 +5986,7 @@
     "levelTo": "{{n}} pts to {{tier}}",
     "levelMax": "Top level",
     "fbtBalance": "FBT Balance",
-    "fbtSub": "loyalty balance — not a token yet",
+    "fbtSub": "loyalty balance — tradable later, once the token is issued",
     "rank": "Rank",
     "rankNone": "—",
     "rankSub": "no public board — your tier is your rank",
@@ -6041,7 +6041,7 @@
     "marketSub": "Price · volume · chart",
     "marketStatus": "MARKET NOT LAUNCHED",
     "marketInfoTitle": "Why there is no market",
-    "marketInfoBody": "FBT is not an issued token and nothing here is traded or priced. The points ledger is the asset: one point equals one FBT if a token is ever launched (see docs/FBT-TOKEN-FA.md). The moment a real market exists, FBT joins the swap router — never before, and never with invented prices.",
+    "marketInfoBody": "FBT is not issued yet, so nothing here is priced or traded today. The points ledger is the asset: when the token is issued, one point equals one FBT and FBT becomes tradable (see docs/FBT-TOKEN-FA.md). The moment a real market exists, FBT joins the swap router — never before, and never with invented prices.",
     "claimTitle": "Claim FBT",
     "claimSub": "points → token claim",
     "claimReady": "READY",
@@ -6107,7 +6107,7 @@
     "v2": {
       "headerSub": "Reputation, rituals and soulbound animals",
       "activeKicker": "{{tab}} · active section",
-      "footerNote": "FBT is a loyalty balance inside this app — not a coin, not tradable, no price. Points are a reputation score, not currency.",
+      "footerNote": "FBT is a loyalty balance inside this app — not a coin: no price today, tradable later once the token is issued. Points are a reputation score, not currency.",
       "quicknav": "Jump to a section",
       "quicknavItems": {
         "wheel": "Wheel",
@@ -6118,11 +6118,14 @@
         "focus": "Focus",
         "season": "Season",
         "perks": "Perks",
-        "profile": "Profile"
+        "profile": "Profile",
+        "missions": "Missions"
       },
       "loyalty": {
-        "fbt": "FBT is a loyalty balance — not a coin. No price, no trading, no withdrawal.",
-        "points": "Points are a reputation score, not currency. They are never shown next to a fiat symbol."
+        "fbt": "FBT is a loyalty balance — not a coin. No price today; it becomes tradable later, once the token is issued.",
+        "points": "Points are a reputation score, not currency. They are never shown next to a fiat symbol.",
+        "fbtTitle": "FBT · loyalty balance",
+        "pointsTitle": "Points · reputation score"
       },
       "tab": {
         "earn": {
@@ -6148,8 +6151,9 @@
         "kicker": "Your standing",
         "badges": "Badges",
         "entries": "{{n}} entries",
-        "noPrice": "No price · no trade",
-        "fbtHint": "FBT is a loyalty balance, not a coin. It has no price and cannot be withdrawn or traded."
+        "noPrice": "No price today · tradable later",
+        "fbtHint": "FBT is a loyalty balance, not a coin. It has no price today and cannot be withdrawn or traded yet — it becomes tradable once the token is issued.",
+        "ladder": "The animal ladder"
       },
       "wheel": {
         "kicker": "Daily ritual",
@@ -6228,14 +6232,16 @@
         "sub": "One animal per tier, in the exact tier colour. They are minted by the wheel, confirmed referrals and tier milestones.",
         "owned": "Owned",
         "locked": "Locked",
-        "soulbound": "Soulbound: cannot be transferred, sold or traded. Not a token.",
+        "soulbound": "Soulbound: badges cannot be transferred, sold or traded. They are not the FBT token.",
         "boxKicker": "Tier milestone",
         "boxTitle": "{{tier}} surprise box",
         "boxSub": "You crossed a tier. Open the box for one bonus spin and one airdrop entry. No points are minted here.",
         "boxOpen": "Open the box",
         "boxResult": "{{tier}} box opened: +1 bonus spin, +1 entry.",
         "achievements": "Achievements",
-        "note": "Achievements are derived automatically from your points ledger; tapping them does nothing."
+        "note": "Achievements are derived automatically from your points ledger; tapping them does nothing.",
+        "achievementsSub": "Every card is something you actually did.",
+        "allTiers": "All"
       },
       "achievements": {
         "firstLight": {
@@ -6265,6 +6271,90 @@
         "legend": {
           "title": "Legend",
           "desc": "Reach 40,000 points and the top of the animal ladder."
+        },
+        "streak3": {
+          "title": "Three Flames",
+          "desc": "Check in three days in a row."
+        },
+        "backupKey": {
+          "title": "Backup Key",
+          "desc": "Back up your private key."
+        },
+        "twoFactor": {
+          "title": "Second Layer",
+          "desc": "Turn on two-factor sign-in."
+        },
+        "rank500": {
+          "title": "Silver Rung",
+          "desc": "Collect 500 reputation points."
+        },
+        "swaps5": {
+          "title": "Five Swaps",
+          "desc": "Make five real swaps."
+        },
+        "swaps25": {
+          "title": "Twenty-Five",
+          "desc": "Make twenty-five real swaps."
+        },
+        "crossChain": {
+          "title": "Chain Walker",
+          "desc": "Move funds across chains for real."
+        },
+        "lender": {
+          "title": "The Lender",
+          "desc": "Supply to a lending pool once, for real."
+        },
+        "borrower": {
+          "title": "The Borrower",
+          "desc": "Borrow once, for real."
+        },
+        "rank2000": {
+          "title": "Gold Rung",
+          "desc": "Collect 2,000 reputation points."
+        },
+        "wheelTurn": {
+          "title": "Wheel Turner",
+          "desc": "Take your first fortune-wheel spin."
+        },
+        "learned": {
+          "title": "Scholar",
+          "desc": "Finish one lesson."
+        },
+        "streak30": {
+          "title": "Thirty Flames",
+          "desc": "Check in for thirty days in a row."
+        },
+        "referrer3": {
+          "title": "Three Friends",
+          "desc": "Three confirmed friends joined."
+        },
+        "curator": {
+          "title": "The Curator",
+          "desc": "Collect all six animal badges."
+        },
+        "goalSetter": {
+          "title": "Goal Setter",
+          "desc": "Create a real financial goal."
+        },
+        "labRat": {
+          "title": "Lab Rat",
+          "desc": "Complete a lab scenario."
+        },
+        "analyst": {
+          "title": "The Analyst",
+          "desc": "Analyse a token on the Signals surface."
+        },
+        "rank6000": {
+          "title": "Platinum Rung",
+          "desc": "Collect 6,000 reputation points."
+        },
+        "rank15000": {
+          "title": "Diamond Rung",
+          "desc": "Collect 15,000 reputation points."
+        },
+        "referrer9": {
+          "title": "Nine Friends",
+          "desc": "Nine confirmed friends joined."
         }
       },
       "learn": {
@@ -6371,7 +6461,9 @@
         "tryAgain": "Six hits earns the daily entry. Try again.",
         "again": "Play again",
         "note": "The game is under a minute on purpose: it must not become a daily grind. Entries are device-local.",
-        "rune": "Rune {{n}}"
+        "rune": "Rune {{n}}",
+        "combo": "Combo",
+        "bestCombo": "Best combo"
       },
       "season": {
         "kicker": "Season 1",
@@ -6416,7 +6508,7 @@
         "saved": "Card downloaded and link copied.",
         "savedHint": "Your browser could not open a share sheet, so the card was downloaded and the link copied.",
         "shareFailed": "Could not create the card — try again.",
-        "legal": "FBT is a loyalty balance — not a coin, not tradable, no price.",
+        "legal": "FBT is a loyalty balance — not a coin. No price today; tradable later, once the token is issued.",
         "note": "The image is rendered on your device; nothing is uploaded."
       },
       "earn": {

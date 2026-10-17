@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { riseIn, stagger } from '../PageTransition';
 import { useAppStore } from '../../store/useAppStore';
 import { useTelegram } from '../../context/TelegramContext';
-import { POINT_VALUES } from '../../lib/ranks';
 import { rewardsSummary, bindRewardCode } from '../../lib/rewards/rewardsApi';
-import { refreshHub, useRewardsHub } from '../../lib/rewards/wheel';
+import { refreshHub, useRewardsHub, pendingTierBox, focusAvailable } from '../../lib/rewards/wheel';
+import { dailyRewardStatus } from '../../lib/dailyRewards';
 import { fmtNum, fmtDateTime } from '../../lib/format';
-import {
-  IconWallet, IconSwap, IconKey, IconShield, IconUser, IconCheck,
-  IconSparkle, IconTrophy, IconChevronRight
-} from '../Icons';
+import { IconSparkle } from '../Icons';
 import DailyWheel from './DailyWheel';
 import StreakCard from './StreakCard';
 import ReferralCard from './ReferralCard';
@@ -22,27 +17,9 @@ import FocusGame from './FocusGame';
 import SeasonCard from './SeasonCard';
 import RebateLadder from './RebateLadder';
 import ProfileCard from './ProfileCard';
-
-/* The same five real quests Earn.jsx and Leaderboard.jsx use. */
-const QUESTS = [
-  { id: 'connectWallet', to: '/wallet', pts: POINT_VALUES.connectWallet, Icon: IconWallet, tone: 'var(--rgb-1)' },
-  { id: 'firstSwap', to: '/swap', pts: POINT_VALUES.firstSwap, Icon: IconSwap, tone: 'var(--rgb-2)' },
-  { id: 'backupWallet', to: '/wallet', pts: POINT_VALUES.backupWallet, Icon: IconKey, tone: 'var(--rgb-5)' },
-  { id: 'enable2fa', to: '/settings', pts: POINT_VALUES.enable2fa, Icon: IconShield, tone: 'var(--rgb-1)' },
-  { id: 'inviteFriend', to: null, pts: POINT_VALUES.referral, Icon: IconUser, tone: 'var(--rgb-3)' }
-];
-
-const SECTIONS = [
-  { id: 'rwd-wheel', key: 'wheel' },
-  { id: 'rwd-streak', key: 'streak' },
-  { id: 'rwd-referral', key: 'referral' },
-  { id: 'rwd-badges', key: 'badges' },
-  { id: 'rwd-learn', key: 'learn' },
-  { id: 'rwd-focus', key: 'focus' },
-  { id: 'rwd-season', key: 'season' },
-  { id: 'rwd-perks', key: 'perks' },
-  { id: 'rwd-profile', key: 'profile' }
-];
+import RewardsMissions from './RewardsMissions';
+import RewardsSubNav from './RewardsSubNav';
+import { REWARD_SECTIONS } from './sections';
 
 function labelFor(t, action) {
   const raw = String(action ?? '');
@@ -60,27 +37,38 @@ function labelFor(t, action) {
 
 /**
  * REWARDS TAB — the gamified side of the hub.
- *
- * One vertical journey, anchored by a quick-jump rail: wheel → streak → real
- * quests → referral → soulbound badges → lessons → focus round → honest season
- * → fee ladder → shareable profile → points history.
+ * ---------------------------------------------------------------------------
+ * ONE SECTION AT A TIME. The tab used to be a single scrolling page holding
+ * eleven stacked surfaces; the user complained that it was crowded and that
+ * tapping a chip only scrolled them further down the pile. Now the dock at
+ * the top is a real switcher: one chip, one section, nothing else mounted.
  *
  * Every point-bearing surface routes through the existing server-backed store
  * actions. The device ledger (wheel/entries/badges) is explicitly labelled as
  * device-local where that matters.
  */
-export default function RewardsRewardsPanel() {
+export default function RewardsRewardsPanel({ section, onSection }) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const { haptic, user } = useTelegram();
   const hub = useRewardsHub();
 
   const points = useAppStore((s) => s.points);
   const streak = useAppStore((s) => s.streak);
   const referralsLocal = useAppStore((s) => s.referrals);
-  const quests = useAppStore((s) => s.quests);
   const pointsLog = useAppStore((s) => s.pointsLog);
   const ensureRefCode = useAppStore((s) => s.ensureRefCode);
+  const quests = useAppStore((s) => s.quests);
+  const lastClaim = useAppStore((s) => s.lastClaim);
+
+  const dailyStatus = useMemo(
+    () => dailyRewardStatus({ now: Date.now(), lastClaim, streak }),
+    [lastClaim, streak]
+  );
+  const questsLeft = useMemo(
+    () => ['connectWallet', 'firstSwap', 'backupWallet', 'enable2fa', 'inviteFriend']
+      .filter((id) => !quests?.[id]?.done).length,
+    [quests]
+  );
 
   const [summary, setSummary] = useState(null);
   const [online, setOnline] = useState(false);
@@ -121,123 +109,82 @@ export default function RewardsRewardsPanel() {
     [pointsLog]
   );
 
-  const jump = (id) => {
-    haptic?.('select');
-    const node = document.getElementById(id);
-    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const openReferral = () => onSection?.('referral');
+
+  /** A live dot on the chips: something is genuinely waiting there. */
+  const badgeOf = (id) => {
+    if (id === 'streak') return dailyStatus.canClaim;
+    if (id === 'missions') return questsLeft > 0;
+    if (id === 'badges') return Boolean(pendingTierBox(points));
+    if (id === 'focus') return focusAvailable();
+    return false;
   };
 
-  const openQuest = (quest) => {
+  const select = (id) => {
+    if (id === section) return;
     haptic?.('select');
-    if (quest.id === 'inviteFriend') {
-      jump('rwd-referral');
-      return;
-    }
-    if (quest.to) navigate(quest.to);
+    onSection?.(id);
   };
+
+  const sections = {
+    wheel: <DailyWheel />,
+    streak: <StreakCard />,
+    missions: <RewardsMissions onOpenReferral={openReferral} />,
+    referral: <ReferralCard summary={summary} online={online} />,
+    badges: <BadgesSection points={points} streak={streak} referrals={referrals} pointsLog={pointsLog} />,
+    learn: <LearnQuests />,
+    focus: <FocusGame />,
+    season: <SeasonCard />,
+    perks: <RebateLadder points={points} />,
+    profile: <ProfileCard referrals={referrals} />
+  };
+
+  const active = REWARD_SECTIONS.some((row) => row.id === section) ? section : REWARD_SECTIONS[0].id;
 
   return (
     <div className="rwd-panel rwd-fade">
-      <nav className="rwd-quicknav" aria-label={t('rewards.v2.quicknav')}>
-        {SECTIONS.map((section) => (
-          <button key={section.id} type="button" className="rwd-quicknav-chip" onClick={() => jump(section.id)}>
-            {t(`rewards.v2.quicknavItems.${section.key}`)}
-          </button>
-        ))}
-      </nav>
+      <RewardsSubNav items={REWARD_SECTIONS} active={active} onSelect={select} badgeOf={badgeOf} />
 
-      <DailyWheel />
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={active}
+          className="rwd-fade"
+          initial={{ opacity: 0, y: 14, scale: 0.985 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10, scale: 0.99 }}
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {sections[active]}
+        </motion.div>
+      </AnimatePresence>
 
-      <div className="rwd-grid-2">
-        <StreakCard />
-        <section className="rwd-card rwd-missions-card">
-          <header className="rwd-sec-head">
-            <div>
-              <div className="rwd-kicker">{t('rewards.v2.missions.kicker')}</div>
-              <h3 className="rwd-sec-title">
-                <IconTrophy width={17} height={17} style={{ color: 'var(--rgb-5)' }} />
-                {t('rewards.v2.missions.title')}
-              </h3>
-            </div>
-            <span className="rwd-chip">{t('rewards.v2.missions.chip')}</span>
-          </header>
-          <p className="rwd-prose">{t('rewards.v2.missions.sub')}</p>
-          <motion.div className="rwd-list rwd-missions-list" variants={stagger} initial="hidden" animate="show">
-            {QUESTS.map((quest) => {
-              const done = Boolean(quests?.[quest.id]?.done);
-              return (
-                <motion.button
-                  key={quest.id}
-                  type="button"
-                  className={`rwd-quest${done ? ' done' : ''}`}
-                  variants={riseIn}
-                  onClick={() => openQuest(quest)}
-                  disabled={done}
-                >
-                  <span
-                    className="rwd-quest-ico"
-                    style={{
-                      color: quest.tone,
-                      borderColor: done ? 'transparent' : quest.tone,
-                      background: done ? 'rgba(0,255,157,.12)' : `color-mix(in srgb, ${quest.tone} 12%, transparent)`
-                    }}
-                  >
-                    {done ? <IconCheck width={16} height={16} /> : <quest.Icon width={16} height={16} />}
-                  </span>
-                  <span className="rwd-quest-meta">
-                    <span className="rwd-quest-title">{t(`earn.quest.${quest.id}`)}</span>
-                    <span className="rwd-quest-pts">+{quest.pts} {t('rank.pts')}</span>
-                  </span>
-                  <span className={`rwd-pill${done ? ' up' : ''}`}>
-                    {done ? '✓' : <IconChevronRight width={13} height={13} />}
-                  </span>
-                </motion.button>
-              );
-            })}
-          </motion.div>
-          <p className="rwd-fine">{t('rewards.v2.missions.note')}</p>
-        </section>
-      </div>
-
-      <ReferralCard summary={summary} online={online} />
-
-      <BadgesSection points={points} streak={streak} referrals={referrals} pointsLog={pointsLog} />
-
-      <LearnQuests />
-
-      <FocusGame />
-
-      <SeasonCard />
-
-      <RebateLadder points={points} />
-
-      <ProfileCard referrals={referrals} />
-
-      <section className="rwd-history" id="rwd-history">
-        <div className="rwd-section-head">
-          <h2>{t('rank.historyTitle')}</h2>
-          <span className="rwd-chip">{t('rewards.v2.history.chip')}</span>
-        </div>
-        {history.length === 0 ? (
-          <p className="rwd-empty">{t('rank.noneYet')}</p>
-        ) : (
-          <div className="rwd-card rwd-history-card">
-            <div className="rwd-timeline">
-              {history.map((entry) => (
-                <div key={`${entry.id || entry.action}-${entry.at}`} className="rwd-entry">
-                  <span className="rwd-entry-dot" />
-                  <div className="rwd-entry-meta">
-                    <div className="rwd-entry-title">{labelFor(t, entry.action)}</div>
-                    <div className="rwd-entry-time">{fmtDateTime(entry.at)}</div>
-                  </div>
-                  <div className="rwd-entry-pts">+{fmtNum(entry.amount ?? entry.pts ?? 0, 0)}</div>
-                </div>
-              ))}
-            </div>
+      {active === 'profile' && (
+        <section className="rwd-history" id="rwd-history">
+          <div className="rwd-section-head">
+            <h2>{t('rank.historyTitle')}</h2>
+            <span className="rwd-chip">{t('rewards.v2.history.chip')}</span>
           </div>
-        )}
-        <p className="rwd-fine">{t('rewards.v2.history.note')}</p>
-      </section>
+          {history.length === 0 ? (
+            <p className="rwd-empty">{t('rank.noneYet')}</p>
+          ) : (
+            <div className="rwd-card rwd-history-card">
+              <div className="rwd-timeline">
+                {history.map((entry) => (
+                  <div key={`${entry.id || entry.action}-${entry.at}`} className="rwd-entry">
+                    <span className="rwd-entry-dot" />
+                    <div className="rwd-entry-meta">
+                      <div className="rwd-entry-title">{labelFor(t, entry.action)}</div>
+                      <div className="rwd-entry-time">{fmtDateTime(entry.at)}</div>
+                    </div>
+                    <div className="rwd-entry-pts">+{fmtNum(entry.amount ?? entry.pts ?? 0, 0)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="rwd-fine">{t('rewards.v2.history.note')}</p>
+        </section>
+      )}
 
       <div className="rwd-device-note">
         <IconSparkle width={13} height={13} />

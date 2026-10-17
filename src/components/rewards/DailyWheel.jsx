@@ -169,7 +169,19 @@ export default function DailyWheel() {
 
       <div className="rwd-wheel-stage">
         <div className="rwd-wheel-glow" aria-hidden="true" style={{ '--tone': tier.color }} />
-        <div className="rwd-wheel-pointer" aria-hidden="true" />
+        <div className="rwd-wheel-pointer" aria-hidden="true">
+          <svg viewBox="0 0 24 30" width="24" height="30">
+            <defs>
+              <linearGradient id="rwd-wheel-pin" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#ffe9a8" />
+                <stop offset=".45" stopColor="var(--rgb-5)" />
+                <stop offset="1" stopColor="#b26a00" />
+              </linearGradient>
+            </defs>
+            <path d="M12 29 C12 29 21 15 21 8 A9 9 0 0 0 3 8 C3 15 12 29 12 29 Z" fill="url(#rwd-wheel-pin)" stroke="rgba(0,0,0,.35)" strokeWidth="1" />
+            <circle cx="12" cy="8" r="3.4" fill="#0a0f16" opacity=".55" />
+          </svg>
+        </div>
         <motion.div
           className="rwd-wheel-disc"
           animate={{ rotate: angle }}
@@ -180,53 +192,78 @@ export default function DailyWheel() {
         >
           <svg viewBox="0 0 240 240" role="img" aria-label={t('rewards.v2.wheel.title')}>
             <defs>
-              <radialGradient id="rwd-wheel-sheen" cx="50%" cy="42%" r="62%">
-                <stop offset="0" stopColor="#fff" stopOpacity=".26" />
-                <stop offset=".55" stopColor="#fff" stopOpacity=".04" />
-                <stop offset="1" stopColor="#000" stopOpacity=".24" />
+              <radialGradient id="rwd-wheel-sheen" cx="50%" cy="38%" r="64%">
+                <stop offset="0" stopColor="#fff" stopOpacity=".3" />
+                <stop offset=".5" stopColor="#fff" stopOpacity=".05" />
+                <stop offset="1" stopColor="#000" stopOpacity=".3" />
+              </radialGradient>
+              <linearGradient id="rwd-wheel-rim" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0" stopColor="#e9f2ff" stopOpacity=".55" />
+                <stop offset=".35" stopColor="#5d6a86" stopOpacity=".35" />
+                <stop offset=".6" stopColor="#e9f2ff" stopOpacity=".2" />
+                <stop offset="1" stopColor="#2a3348" stopOpacity=".5" />
+              </linearGradient>
+              <radialGradient id="rwd-wheel-plate" cx="50%" cy="36%" r="70%">
+                <stop offset="0" stopColor="#131a28" />
+                <stop offset="1" stopColor="#05070d" />
               </radialGradient>
             </defs>
-            <circle cx="120" cy="120" r="112" fill="rgba(0,0,0,.28)" />
+
+            {/* metal rim + inner plate */}
+            <circle cx="120" cy="120" r="117" fill="#000" opacity=".42" />
+            <circle cx="120" cy="120" r="113" fill="url(#rwd-wheel-rim)" />
+            <circle cx="120" cy="120" r="105" fill="url(#rwd-wheel-plate)" />
+
+            {/* sectors */}
             {pool.map((segment, index) => {
               const mid = index * step + step / 2;
               const [lx, ly] = polar(73, mid);
+              const [ex, ey] = polar(96, mid);
               return (
                 <g key={`${segment.id}-${index}`}>
                   <path
                     d={sectorPath(index, pool.length)}
                     fill={segment.color}
-                    fillOpacity={index % 2 === 0 ? 0.22 : 0.12}
-                    stroke="rgba(255,255,255,.14)"
-                    strokeWidth="1.2"
+                    fillOpacity={index % 2 === 0 ? 0.2 : 0.1}
+                    stroke="rgba(255,255,255,.12)"
+                    strokeWidth="1"
                   />
+                  <line x1="120" y1="120" x2={ex} y2={ey} stroke={segment.color} strokeOpacity=".28" strokeWidth="1" />
                   <text
                     x={lx}
                     y={ly}
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill={segment.color}
-                    fontSize="17"
-                    style={{ filter: `drop-shadow(0 0 5px ${segment.color})` }}
+                    fontSize="18"
+                    style={{ filter: `drop-shadow(0 0 6px ${segment.color})` }}
                   >
                     {segment.glyph}
                   </text>
                 </g>
               );
             })}
+
+            {/* glass sheen + inner rings */}
             <circle cx="120" cy="120" r="96" fill="url(#rwd-wheel-sheen)" pointerEvents="none" />
-            <circle cx="120" cy="120" r="97" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="2" />
-            <circle cx="120" cy="120" r="111" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="1" />
-            {Array.from({ length: 16 }).map((_, i) => {
-              const [x, y] = polar(106, i * 22.5);
-              return <circle key={i} cx={x} cy={y} r={i % 2 ? 1.4 : 2.1} fill={i % 2 ? 'rgba(255,255,255,.45)' : tier.color} />;
+            <circle cx="120" cy="120" r="97" fill="none" stroke={tier.color} strokeOpacity=".38" strokeWidth="1.6" />
+            <circle cx="120" cy="120" r="101" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="1" />
+
+            {/* notch ring */}
+            {Array.from({ length: 24 }).map((_, i) => {
+              const [x, y] = polar(107, i * 15);
+              return <circle key={i} cx={x} cy={y} r={i % 2 ? 1.1 : 1.9} fill={i % 2 ? 'rgba(255,255,255,.35)' : tier.color} opacity={i % 2 ? 0.7 : 1} />;
             })}
-            <circle cx="120" cy="120" r="34" fill="rgba(4,8,14,.9)" stroke="rgba(255,255,255,.18)" strokeWidth="1.4" />
+
+            {/* hub */}
+            <circle cx="120" cy="120" r="38" fill="rgba(4,8,14,.92)" stroke={tier.color} strokeOpacity=".45" strokeWidth="1.4" />
+            <circle cx="120" cy="120" r="43" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="1" strokeDasharray="2 6" />
           </svg>
         </motion.div>
         {/* The animal sits ABOVE the rotating disc, not inside it: otherwise it
             would come to rest at a random angle after every spin. */}
         <span className="rwd-wheel-core">
-          <TierTotem tier={tier.id} size={54} idle={!spinning} interactive={!spinning} />
+          <TierTotem tier={tier.id} size={58} idle={!spinning} interactive={!spinning} />
         </span>
       </div>
 
