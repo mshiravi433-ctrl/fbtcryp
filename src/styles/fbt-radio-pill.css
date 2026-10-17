@@ -1,0 +1,98 @@
+/* FBT Radio — the floating pill.
+   Split from fbt-radio.css on purpose: this file is imported by a
+   component in the FIRST-PAINT bundle (App mounts the pill), while the
+   box's stylesheet travels with the lazy News chunk. Keeping them in one
+   file put ~15 KB of box CSS into the byte budget the build enforces. */
+
+/* ==========================================================================
+   The floating pill — the station keeps playing outside the News screen.
+   Small, corner-placed, same language as RadioDock's pill but never shown at
+   the same time (the engine stops one source when the other starts).
+   ========================================================================== */
+.fbr-pill {
+  position: fixed;
+  z-index: 70;
+  inset-inline-end: 14px;
+  bottom: calc(var(--nav-h, 88px) + 14px);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  background: linear-gradient(140deg, rgba(10, 14, 22, 0.94), rgba(18, 12, 30, 0.94));
+  color: #eaf6ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 16px 34px -18px rgba(0, 0, 0, 0.9), 0 0 22px -14px rgba(0, 229, 255, 0.9);
+}
+
+.fbr-pill-eq {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 15px;
+}
+
+.fbr-pill-eq i {
+  width: 2.5px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #00e5ff, #7c4dff);
+  transform: scaleY(0.3);
+  transform-origin: bottom;
+}
+
+.fbr-pill.is-live .fbr-pill-eq i { animation: fbr-pill-eqbars 0.85s ease-in-out infinite alternate; }
+
+.fbr-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff2d95;
+  box-shadow: 0 0 8px rgba(255, 45, 149, 0.9);
+}
+
+.fbr-pill-close {
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd6ea;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbr-pill.is-live .fbr-pill-eq i { animation: none; }
+}
+
+/* ── light theme ─────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .fbr-pill {
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.97), rgba(243, 245, 252, 0.97));
+    color: #10142a;
+    border-color: rgba(0, 137, 167, 0.35);
+    box-shadow: 0 14px 30px -18px rgba(20, 24, 60, 0.45);
+  }
+  :root:not([data-theme='dark']) .fbr-pill-close {
+    background: rgba(16, 20, 40, 0.07);
+    color: #33405c;
+  }
+}
+
+:root[data-theme='light'] .fbr-pill {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.97), rgba(243, 245, 252, 0.97));
+  color: #10142a;
+  border-color: rgba(0, 137, 167, 0.35);
+  box-shadow: 0 14px 30px -18px rgba(20, 24, 60, 0.45);
+}
+
+:root[data-theme='light'] .fbr-pill-close { background: rgba(16, 20, 40, 0.07); color: #33405c; }

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useFbtRadioStore } from '../store/useFbtRadioStore';
 import { pause, play } from '../lib/fbtRadioEngine';
-import '../styles/fbt-radio.css';
+import '../styles/fbt-radio-pill.css';
 
 /**
  * FBT LIVE RADIO — the corner pill.
