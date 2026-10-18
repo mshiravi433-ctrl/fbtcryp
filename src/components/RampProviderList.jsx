@@ -4,29 +4,30 @@ import { useNavigate } from 'react-router-dom';
 import { rampOptions } from '../lib/rampDirectory';
 import { openUrl } from '../lib/browser';
 import {
-  IconArrowUpRight, IconCard, IconCheck, IconChevronRight, IconExternal, IconGlobe, IconShield, IconSwap
+  IconArrowUpRight, IconCheck, IconChevronRight, IconExternal, IconGlobe, IconShield
 } from './Icons';
 
-/* Local line-art marks: no remote logo request and no implied official badge. */
-const PROVIDER_MARKS = Object.freeze({
-  ramp: IconArrowUpRight,
-  swapzone: IconSwap,
-  guardarian: IconShield,
-  mercuryo: IconCard
+/* Distinct local provider monograms, not official certification badges.
+ * No external image/CDN dependency in the payment hand-off. */
+const PROVIDER_GLYPHS = Object.freeze({
+  ramp: <><path d="M5 19V5h7a4 4 0 0 1 0 8H5m7 0 6 6" /><path d="m15 3 6 0 0 6m0-6-6 6" /></>,
+  swapzone: <><path d="M4 8h14l-4-4M20 16H6l4 4" /><path d="m18 8 2 2M6 16l-2-2" /></>,
+  guardarian: <><path d="m12 2 8 4v6c0 5-8 9-8 9s-8-4-8-9V6z" /><path d="M15 9a4 4 0 1 0 0 6v-3h-3" /></>
 });
 
 const PROVIDER_ACCENTS = Object.freeze({
-  ramp: '#f08b73',
+  ramp: '#52e5a5',
   swapzone: '#a68cff',
   guardarian: '#53d7b1',
   mercuryo: '#68c7ee'
 });
 
 function ProviderMark({ id }) {
-  const Mark = PROVIDER_MARKS[id] || IconGlobe;
   return (
     <span className={`bsw-ramp-mark is-${id}`} aria-hidden="true">
-      <Mark width={21} height={21} />
+      {PROVIDER_GLYPHS[id] ? (
+        <svg viewBox="0 0 24 24" width="27" height="27" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{PROVIDER_GLYPHS[id]}</svg>
+      ) : <IconGlobe width={27} height={27} />}
     </span>
   );
 }
@@ -141,7 +142,9 @@ export default function RampProviderList({
                     <span className="bsw-ramp-name">{option.name}</span>
                     {option.id === result.recommended && <span className="bsw-ramp-pill">{t('buySell.ramp.recommended')}</span>}
                   </div>
+                  <span className="bsw-ramp-domain" dir="ltr">{new URL(option.url).hostname}</span>
                 </div>
+                <IconArrowUpRight className="bsw-ramp-corner" width={18} height={18} aria-hidden="true" />
               </div>
               <div className="bsw-ramp-notes">
                 <p className="bsw-ramp-note"><IconCheck width={13} height={13} aria-hidden="true" /><span>{prefillNote(option)}</span></p>
@@ -151,7 +154,8 @@ export default function RampProviderList({
               <button
                 type="button"
                 className="btn btn-primary bsw-ramp-open"
-                disabled={busy === option.id}
+                disabled={Boolean(busy)}
+                aria-busy={busy === option.id}
                 onClick={() => openExternal(option)}
               >
                 {t('buySell.ramp.open', { provider: option.name })}

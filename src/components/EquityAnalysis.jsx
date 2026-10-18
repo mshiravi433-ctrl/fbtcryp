@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -8,7 +8,8 @@ import { IconSwap, IconX } from './Icons';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { equitySeriesFacts, equityStats } from '../lib/equityAnalysis';
 import { historyFactKey } from '../lib/history';
-import { fetchEquityChartWindowed, isDrawableSeries, isUsableSeries } from '../lib/equityChart';
+import { fetchEquityChart, fetchEquityChartWindowed, isDrawableSeries, isUsableSeries } from '../lib/equityChart';
+import { getSolanaAssets } from '../lib/solanaAssetsClient';
 import { usePoll } from '../hooks/useMarket';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useStill } from './AnimatedIcon';
@@ -88,35 +89,64 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
     };
   }, [onClose]);
 
+  const [windowDays, setWindowDays] = useState(1);
+  const liveMode = windowDays === 1;
+  // Only an open analysis polls; no extra timers on the token list.
+  const { data: liveQuote, error: quoteError } = usePoll(async () => {
+    const feed = await getSolanaAssets();
+    const row = [...(feed.equities || []), ...(feed.commodities || [])].find((r) => r.mint === asset?.mint);
+    if (!row || !Number.isFinite(row.usdPrice) || row.usdPrice <= 0) throw new Error('QUOTE_UNAVAILABLE');
+    return { asset: row, at: feed.at };
+  }, [asset?.mint], 30_000);
+  const quotedAsset = liveQuote?.asset || asset;
+  const [observations, setObservations] = useState([]);
+  useEffect(() => { setObservations([]); }, [asset?.mint]);
+  useEffect(() => {
+    const p = liveQuote?.asset?.usdPrice;
+    const at = liveQuote?.at;
+    if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(at)) return;
+    setObservations((rows) => rows.at(-1)?.t >= at ? rows : [...rows, { t: at, p }].slice(-240));
+  }, [liveQuote]);
   const hasId = Boolean(asset?.coingeckoId);
-  const { data: chart, loading } = usePoll(
-    () => (hasId ? fetchEquityChartWindowed(asset.coingeckoId, DAYS) : Promise.resolve(NO_CHART)),
-    [asset?.coingeckoId, hasId],
-    120_000
+  const { data: chartResult, loading: chartLoading } = usePoll(
+    async () => {
+      if (!hasId) return { ...NO_CHART, days: windowDays, requestedDays: windowDays };
+      if (liveMode) return { series: await fetchEquityChart(asset.coingeckoId, 1), days: 1, requestedDays: 1 };
+      return { ...(await fetchEquityChartWindowed(asset.coingeckoId, windowDays)), requestedDays: windowDays };
+    },
+    [asset?.coingeckoId, hasId, windowDays],
+    60_000
   );
 
-  const series = useMemo(() => (chart?.series ?? []).map((d) => d.p), [chart]);
+  const chart = chartResult?.requestedDays === windowDays ? chartResult : null;
+  const loading = chartLoading || !chart;
+  const series = useMemo(() => {
+    const history = chart?.series ?? [];
+    if (!liveMode) return history.map((d) => d.p);
+    const last = history.at(-1)?.t ?? 0;
+    return [...history, ...observations.filter((d) => d.t > last)].map((d) => d.p);
+  }, [chart, liveMode, observations]);
   const chartDrawable = useMemo(() => isDrawableSeries(series), [series]);
-  const usable = useMemo(() => isUsableSeries(series), [series]);
+  const usable = useMemo(() => !liveMode && isUsableSeries(series), [series, liveMode]);
   /* The window the numbers actually cover — 90 if the full series came back,
      otherwise the longest window that did. This is the ONLY value fed to the
      `{{days}}` keys, so the label can never promise a window the chart does
      not show. */
-  const effectiveDays = chart?.days ?? DAYS;
+  const effectiveDays = chart?.days ?? windowDays;
 
   const facts = useMemo(
     () => (usable ? equitySeriesFacts(series, { days: effectiveDays }) : []),
     [series, usable, effectiveDays]
   );
 
-  const stats = useMemo(() => equityStats(asset, amountUsd, series), [asset, amountUsd, series]);
+  const stats = useMemo(() => equityStats(quotedAsset, amountUsd, series), [quotedAsset, amountUsd, series]);
   const hasQuote = Number.isFinite(stats.price) && stats.price > 0;
 
   /* Colour on the chart follows the WINDOW, not the 24h delta: the line being
      drawn is the returned series, and a green line for a series that ended
      below where it started would be the chart arguing with itself. */
   const sparkUp = (stats.windowChange ?? 0) >= 0;
-  const fellBack = chartDrawable && effectiveDays < DAYS;
+  const fellBack = chartDrawable && !liveMode && effectiveDays < windowDays;
 
   const formatFact = (id, values) => {
     const v = { ...values };
@@ -187,14 +217,26 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
               )}
             </div>
             <span className="eqsh-window faint">
-              {t('stocks.eq.window90', { days: effectiveDays })}
+              {liveMode ? t(chart?.series?.length >= 2 ? 'eqsheet.liveWindow' : 'eqsheet.observedWindow') : t('stocks.eq.window90', { days: effectiveDays })}
             </span>
           </div>
+
+          <div className="eqsh-chart-windows" role="group" aria-label={t('eqsheet.chartRange')}>
+            {[1, 14, 90].map((days) => (
+              <button key={days} type="button" aria-pressed={windowDays === days}
+                onClick={() => setWindowDays(days)}>
+                {days === 1 ? t('eqsheet.live') : t('eqsheet.days', { days })}
+              </button>
+            ))}
+          </div>
+          <p className="eqsh-refresh-note" role="status">
+            {quoteError ? t('eqsheet.refreshFailed') : t('eqsheet.refreshNote')}
+          </p>
 
           {/* ── the series, full width ──────────────────────────────────── */}
           <section className="eqan-chart eqsh-card">
             <div className="eqan-chart-head">
-              <span className="faint">{t('eqsheet.chartTitle', { days: effectiveDays })}</span>
+              <span className="faint">{liveMode ? t(chart?.series?.length >= 2 ? 'eqsheet.liveChart' : 'eqsheet.observedChart') : t('eqsheet.chartTitle', { days: effectiveDays })}</span>
               {chartDrawable && stats.windowChange != null && (
                 <span className={`mono ${sparkUp ? 'up' : 'down'}`}>
                   {fmtPct(stats.windowChange, 1)}
@@ -230,6 +272,7 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
                 </svg>
                 <span className="eqan-snapshot-copy">
                   {t('eqsheet.quoteSnapshot', { price: `$${fmtPrice(stats.price)}` })}
+                  {liveMode && <span className="eqsh-refresh-note">{t('eqsheet.collecting')}</span>}
                 </span>
               </div>
             ) : (

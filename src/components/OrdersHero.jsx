@@ -129,10 +129,7 @@ const OrdersHero = memo(function OrdersHero({
                 in user units so it rotates about the dish centre, not the
                 SVG box (which is what silently offsets every rotating icon
                 drawn this way). */}
-            <g className="ordx-sweep">
-              <path d="M36 36 L36 6 A30 30 0 0 1 57.2 15.8 Z" fill="url(#ordxSweep)" opacity="0.3" />
-              <path d="M36 36 L36 6" stroke="#00ff9d" strokeOpacity="0.6" strokeWidth="1.2" strokeLinecap="round" />
-            </g>
+
 
             {/* the pulse: an expanding ring, opacity only */}
             <circle className="ordx-pulse" cx="36" cy="36" r="16" stroke="#00ff9d" strokeWidth="1.2" fill="none" />
@@ -157,6 +154,15 @@ const OrdersHero = memo(function OrdersHero({
               <path d="M64.5 36h4" />
             </g>
           </svg>
+          {/* Rotate a full-size HTML layer, not an asymmetric SVG bounding box.
+              Its centre stays at 36,36 on Chromium, WebView and Safari. */}
+          <span className="ordx-sweep">
+            <svg viewBox="0 0 72 72" fill="none" focusable="false">
+              <path d="M36 36 L36 6 A30 30 0 0 1 57.2 15.8 Z" fill="#42e8c4" opacity="0.18" />
+              <path d="M36 36 L36 6" stroke="#42e8c4" strokeWidth="1.4" strokeLinecap="round" />
+              <circle cx="36" cy="6" r="2" fill="#bcfff0" />
+            </svg>
+          </span>
         </span>
 
         <div className="ordx-copy">

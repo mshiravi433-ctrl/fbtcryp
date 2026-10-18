@@ -964,3 +964,9 @@
 @media (prefers-reduced-motion: reduce) {
   .eqsh-close { transition: none; }
 }
+
+.eqsh-chart-windows { display: flex; gap: 5px; padding: 5px; margin-block: 14px 7px; border: 1px solid var(--line); border-radius: 15px; background: var(--bg-panel); }
+.eqsh-chart-windows button { flex: 1; min-height: 44px; border: 0; border-radius: 11px; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; cursor: pointer; }
+.eqsh-chart-windows button[aria-pressed='true'] { background: var(--text-1); color: var(--bg-panel-solid); font-weight: 800; }
+.eqsh-chart-windows button:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
+.eqsh-refresh-note { display: block; font-size: 11px; line-height: 1.8; color: var(--text-3); margin-block: 6px 12px; }

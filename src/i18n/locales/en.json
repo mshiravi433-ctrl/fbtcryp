@@ -15550,6 +15550,16 @@
     "disclaimer": "Read-only. FBT does not place ETF or gold orders. Funds and Prediction markets stay unavailable in this phase."
   },
   "eqsheet": {
+    "observedChart": "Live price observations · this session",
+    "observedWindow": "Measured quotes collected while this panel is open",
+    "collecting": "Waiting for a second measured quote to draw a live line; no history is invented.",
+    "live": "Live · 24h",
+    "liveWindow": "Today’s token price · refreshes every 60s",
+    "liveChart": "Token price · last 24 hours",
+    "chartRange": "Chart time range",
+    "days": "{{days}} days",
+    "refreshNote": "Spot price refreshes every 30s while this panel is open. History updates every 60s; this is not a tick-by-tick feed.",
+    "refreshFailed": "Price refresh unavailable. The last received quote is shown.",
     "title": "{{name}} analysis",
     "kicker": "Token analysis",
     "day": "24h",

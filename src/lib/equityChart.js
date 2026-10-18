@@ -70,6 +70,21 @@ async function getJson(url, timeout = 12000) {
   }
 }
 
+/** Accept our normalized proxy and CoinGecko's public wire format.
+ * Strictly validate before coercion: null/false are not measured prices. */
+export function normalizeEquityChart(raw) {
+  const rows = Array.isArray(raw) ? raw : raw?.prices;
+  if (!Array.isArray(rows)) return [];
+  const points = new Map();
+  for (const row of rows) {
+    const t = Array.isArray(row) ? row[0] : row?.t;
+    const p = Array.isArray(row) ? row[1] : row?.p;
+    if (typeof t === 'number' && Number.isFinite(t) && t > 0 &&
+        typeof p === 'number' && Number.isFinite(p) && p > 0) points.set(t, { t, p });
+  }
+  return [...points.values()].sort((a, b) => a.t - b.t);
+}
+
 /**
  * Pull the closing-price series for one CoinGecko coin id.
  *
@@ -89,6 +104,7 @@ async function getJson(url, timeout = 12000) {
 export async function fetchEquityChart(id, days = 90) {
   const coinId = String(id ?? '').trim();
   if (!coinId) return [];
+  if (!Number.isFinite(days) || days <= 0 || days > 365) return [];
   const key = `${coinId}:${days}`;
 
   const hit = cache.get(key);
@@ -98,24 +114,18 @@ export async function fetchEquityChart(id, days = 90) {
   if (pending) return pending;
 
   const job = (async () => {
-    let raw = null;
-    try {
-      raw = await getJson(`${apiBase()}/chart/${encodeURIComponent(coinId)}?days=${days}&vs=usd`);
-    } catch {
+    let series = [];
+    const sources = [
+      `${apiBase()}/chart/${encodeURIComponent(coinId)}?days=${days}&vs=usd`,
+      `${PUBLIC_CG}/coins/${encodeURIComponent(coinId)}/market_chart?vs_currency=usd&days=${days}`
+    ];
+    for (const source of sources) {
       try {
-        raw = await getJson(
-          `${PUBLIC_CG}/coins/${encodeURIComponent(coinId)}/market_chart?vs_currency=usd&days=${days}`
-        );
-      } catch {
-        /* Both upstreams failed. An empty series is the honest answer. */
-        return [];
-      }
+        const candidate = normalizeEquityChart(await getJson(source));
+        if (candidate.length > series.length) series = candidate;
+        if (isDrawableSeries(series)) break;
+      } catch { /* Try the next real source; never synthesize a history. */ }
     }
-
-    const prices = Array.isArray(raw?.prices) ? raw.prices : [];
-    const series = prices
-      .map(([t, p]) => ({ t: Number(t), p: Number(p) }))
-      .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.p) && d.p > 0);
 
     cache.set(key, { at: Date.now(), series });
     return series;
