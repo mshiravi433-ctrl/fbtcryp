@@ -1,0 +1,928 @@
+/* ============================================================================
+   WALLET GLASS 3.0 — the real-wallet screen, redesigned.
+   ----------------------------------------------------------------------------
+   Scoped under `.walx` (the /wallet real-tab wrapper) and `.walx-tabs`
+   (its tab strip). Everything outside that scope — the Solana tab, the
+   sheets this page opens, the other fourteen screens that borrow
+   wallet-modern.css — keeps the exact pixels it had.
+
+   Imported LAST in Wallet.jsx, so at equal specificity these rules win;
+   where an older light-theme rule is more specific, a light twin is
+   written beside the base rule with `:root[data-theme='light'] .walx …`.
+
+   ─── THE ANTI-FLICKER CONTRACT (read before adding motion) ────────────────
+   This screen has shipped the "fluorescent tube" bug twice, both times
+   from the same mechanism: a `backdrop-filter` sampling content behind it
+   while blurred layers moved. The contract that keeps it dead:
+
+     1. The hero is OPAQUE (layered static gradients, solid base). Blurring
+        what is behind an opaque panel is invisible work — dropped.
+     2. `backdrop-filter` survives ONLY on the web build's secondary cards.
+        On native (`data-native`) and installed-PWA lite (`data-lite`) it is
+        killed below, exactly like the rules in wallet-modern.css.
+     3. The aurora wash is STATIC here (its 18s drift loop is disabled in
+        this scope). The only loops left are state, not decoration: the 7px
+        live dot and the refresh spinner, both inherited.
+     4. Entrance motion is one-shot `transform/opacity`, component-mount
+        only, and off for reduced-motion, native and lite. Portfolio ticks
+        re-render the same DOM nodes, so nothing replays every 30 seconds.
+   ============================================================================ */
+
+/* ── Design tokens ─────────────────────────────────────────────────────────
+   Icon colours come from --ink-* (defined in index.css): neon on dark,
+   measured-AA darkened variants on light, pastel-safe under the pastel
+   accent. One token set, correct in every theme/accent by construction. */
+.walx {
+  --walx-glass: linear-gradient(152deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.028) 55%, rgba(255, 255, 255, 0.045));
+  --walx-inset: rgba(255, 255, 255, 0.05);
+  --walx-inset-2: rgba(255, 255, 255, 0.085);
+  --walx-line: rgba(255, 255, 255, 0.1);
+  --walx-line-soft: rgba(255, 255, 255, 0.07);
+  --walx-card-shadow: 0 18px 38px -28px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --walx-track: rgba(255, 255, 255, 0.08);
+  --walx-up: var(--up);
+  --walx-down: var(--down);
+  display: flex;
+  flex-direction: column;
+}
+:root[data-theme='light'] .walx {
+  --walx-glass: linear-gradient(152deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.68) 58%, rgba(255, 255, 255, 0.8));
+  --walx-inset: rgba(15, 23, 42, 0.045);
+  --walx-inset-2: rgba(15, 23, 42, 0.075);
+  --walx-line: rgba(15, 23, 42, 0.1);
+  --walx-line-soft: rgba(15, 23, 42, 0.07);
+  --walx-card-shadow: 0 16px 34px -27px rgba(15, 23, 42, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --walx-track: rgba(15, 23, 42, 0.08);
+  /* --up/--down are neon for dark canvases; on paper they fail as text.
+     These two are the same hues at AA on white (cf. --ink-mint). */
+  --walx-up: #008854;
+  --walx-down: #d81b4e;
+}
+
+/* ── Entrance (one-shot, mount only) ─────────────────────────────────────── */
+@keyframes walx-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.walx .walx-rise {
+  animation: walx-rise 0.52s cubic-bezier(0.22, 0.8, 0.32, 1) both;
+  animation-delay: var(--walx-d, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .walx .walx-rise { animation: none; }
+}
+:root[data-reduce-motion='true'] .walx .walx-rise,
+:root[data-native='true'] .walx .walx-rise,
+:root[data-lite='true'] .walx .walx-rise { animation: none; }
+
+/* Focus must stay visible on every new control, in both themes. */
+.walx button:focus-visible,
+.walx input:focus-visible,
+.walx-tabs button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rgb-1) 65%, transparent);
+  outline-offset: 2px;
+}
+
+/* ═══ TAB STRIP — real wallet / Solana wallet ═══════════════════════════════ */
+.walx-tabs.segmented {
+  padding: 5px;
+  border-radius: 19px;
+  gap: 5px;
+  background: linear-gradient(152deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 14px 30px -24px rgba(0, 0, 0, 0.8);
+}
+:root[data-theme='light'] .walx-tabs.segmented {
+  background: linear-gradient(152deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.7));
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 26px -22px rgba(15, 23, 42, 0.3);
+}
+.walx-tabs.segmented > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 43px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-2);
+}
+.walx-tabs.segmented > button.active { color: #06121a; }
+.walx-tab-ico { display: grid; place-items: center; flex-shrink: 0; line-height: 0; }
+.walx-tab-ico svg { display: block; }
+
+/* ═══ HERO — the balance box ════════════════════════════════════════════════
+   Opaque layered surface: violet light from the top-start, cyan from the
+   top-end, a magenta whisper at the floor, solid base underneath. Light
+   theme is frosted porcelain with the same three sources at paper-safe
+   strength. The mesh stays at the bottom, under the actions. */
+.walx .walx-hero {
+  padding: 20px 18px 18px;
+  border-radius: 30px;
+  border: 1px solid var(--walx-line);
+  background:
+    radial-gradient(115% 85% at 6% -12%, color-mix(in srgb, var(--rgb-2) 30%, transparent), transparent 58%),
+    radial-gradient(85% 65% at 94% -4%, color-mix(in srgb, var(--rgb-1) 21%, transparent), transparent 60%),
+    radial-gradient(70% 55% at 82% 112%, color-mix(in srgb, var(--rgb-3) 13%, transparent), transparent 62%),
+    linear-gradient(168deg, #12162700, rgba(0, 0, 0, 0) 40%),
+    linear-gradient(168deg, #111524, #080a12 62%);
+  box-shadow: 0 26px 52px -30px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme='light'] .walx .walx-hero {
+  background:
+    radial-gradient(115% 85% at 6% -12%, color-mix(in srgb, var(--rgb-2) 15%, transparent), transparent 58%),
+    radial-gradient(85% 65% at 94% -4%, color-mix(in srgb, var(--rgb-1) 13%, transparent), transparent 60%),
+    radial-gradient(70% 55% at 82% 112%, color-mix(in srgb, var(--rgb-3) 9%, transparent), transparent 62%),
+    linear-gradient(168deg, #ffffff, #f2f5fc 62%);
+  box-shadow: 0 24px 46px -30px rgba(15, 23, 42, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+/* One ::before, ours: the spectrum rim along the top edge (light needs a
+   source; this is its nearest edge). Neutralises both older ::before
+   treatments (border-mask and hairline) inside this scope. */
+.walx .walx-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  padding: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--rgb-1) 60%, transparent), color-mix(in srgb, var(--rgb-3) 45%, transparent), transparent);
+  -webkit-mask: none;
+  mask: none;
+  opacity: 1;
+  pointer-events: none;
+}
+/* Static wash only — contract §3. */
+.walx .wallet-hero-aurora::before,
+.walx .wallet-hero-aurora::after { animation: none; }
+.walx .wallet-hero-aurora { opacity: 0.55; }
+:root[data-theme='light'] .walx .wallet-hero-aurora { opacity: 0.35; }
+
+.walx-hero-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* ── Identity row: identicon + copyable address · chain/provider pills ───── */
+.walx-idrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Wraps instead of overflowing when a long provider name («کیف پول روی
+     دستگاه») meets a narrow screen — the hero clips overflow, so an
+     unwrapped row loses its end pill to the corner radius. */
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-width: 0;
+}
+.walx-id { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.walx-identicon {
+  border-radius: 10.5px;
+  box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+:root[data-theme='light'] .walx-identicon {
+  box-shadow: 0 8px 16px -11px rgba(15, 23, 42, 0.45), 0 0 0 1px rgba(15, 23, 42, 0.1);
+}
+.walx-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  min-width: 0;
+  white-space: nowrap;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--walx-line);
+  background: var(--walx-inset);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+.walx-addr:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .walx-addr:hover { background: var(--walx-inset-2); border-color: var(--line-strong); }
+}
+.walx-addr svg { color: var(--text-3); flex-shrink: 0; }
+.walx-addr .walx-copied { color: var(--walx-up); }
+.walx-pills { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.walx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.walx-pill svg { flex-shrink: 0; }
+.walx-pill.is-live { color: var(--text-1); }
+.walx-pill { max-width: 48vw; }
+.walx-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Balance block ───────────────────────────────────────────────────────── */
+.walx-balance { display: flex; flex-direction: column; }
+.walx-bal-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.walx-bal-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.walx-eye {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+.walx-eye:active { transform: scale(0.92); }
+@media (hover: hover) and (pointer: fine) {
+  .walx-eye:hover { color: var(--text-1); background: var(--walx-inset); }
+}
+.walx-eye[aria-pressed='true'] { color: var(--ink-cyan); }
+/* Solid ink, never gradient text: AnimatedNumber flashes up/down by
+   setting `color`, and a background-clip gradient would swallow it. */
+.walx .walx-total {
+  margin-top: 5px;
+  font-size: clamp(33px, 9.2vw, 43px);
+  font-weight: 900;
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+:lang(fa) .walx .walx-total, [dir='rtl'] .walx .walx-total {
+  font-size: clamp(29px, 8.4vw, 38px);
+  letter-spacing: -0.015em;
+}
+.walx-bal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  margin-top: 7px;
+  min-height: 16px;
+  font-size: 11px;
+}
+
+/* Spectrum bar — where the money sits, per network. Real shares of the
+   same read the breakdown card below itemises; segments flex-grow by
+   share (set inline) on a zero basis. Hidden while balances are hidden:
+   proportions are holdings information too. */
+.walx-spectrum {
+  display: flex;
+  gap: 2.5px;
+  height: 6px;
+  margin-top: 13px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--walx-track);
+}
+.walx-spectrum-seg {
+  flex-basis: 0;
+  min-width: 3px;
+  border-radius: 999px;
+  opacity: 0.92;
+}
+
+/* 24H / 7D / 30D — one segmented glass track, three equal cells. */
+.walx-chg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin-top: 11px;
+  padding: 3px;
+  border-radius: 15px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+}
+.walx-chg-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.walx-chg-cell .walx-chg-k {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+.walx-chg-cell .walx-chg-v { font-size: 12px; font-weight: 850; color: var(--text-2); }
+.walx-chg-cell.is-up { background: color-mix(in srgb, var(--walx-up) 9%, transparent); }
+.walx-chg-cell.is-up .walx-chg-v { color: var(--walx-up); }
+.walx-chg-cell.is-down { background: color-mix(in srgb, var(--walx-down) 9%, transparent); }
+.walx-chg-cell.is-down .walx-chg-v { color: var(--walx-down); }
+.walx-chg-cell svg { flex-shrink: 0; }
+.walx-chg-cell.is-up svg { color: var(--walx-up); }
+.walx-chg-cell.is-down svg { color: var(--walx-down); }
+
+/* ── Assets / DeFi / NFT stat chips ──────────────────────────────────────── */
+.walx .wal-hero-chips { gap: 8px; margin-top: 0; }
+.walx .wal-hero-chip {
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  min-height: 58px;
+  padding: 9px 11px;
+  border-radius: 17px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-glass);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color 0.18s ease, transform 0.16s ease, background 0.18s ease;
+}
+:root[data-theme='light'] .walx .wal-hero-chip {
+  background: var(--walx-glass);
+  border-color: var(--walx-line-soft);
+  box-shadow: 0 8px 18px -16px rgba(15, 23, 42, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.walx .wal-hero-chip:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wal-hero-chip:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+}
+.walx-stat-ico {
+  --walx-ac: var(--ink-cyan);
+  width: 33px;
+  height: 33px;
+  flex-shrink: 0;
+  border-radius: 11.5px;
+  display: grid;
+  place-items: center;
+  color: var(--walx-ac);
+  background: color-mix(in srgb, var(--walx-ac) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--walx-ac) 26%, transparent);
+}
+.walx-stat-ico.t-defi { --walx-ac: var(--ink-mint); }
+.walx-stat-ico.t-nft { --walx-ac: var(--ink-magenta); }
+.walx-stat-text { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+.walx .wal-hero-chip strong { font-size: 16.5px; }
+.walx .wal-hero-chip-note { font-size: 8.5px; }
+
+/* Lease line — quiet glass strip. */
+.walx .wal-lease {
+  margin: 0;
+  padding: 8px 11px;
+  border-radius: 13px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  font-size: 11px;
+}
+
+/* ═══ ACTION RAIL ═══════════════════════════════════════════════════════════
+   Snap-scrolling rail of equal squircle tiles. Icon chips are tinted glass
+   (accent at 14% fill / 28% edge, glyph in the full --ink-* accent) — the
+   modern wallet idiom, and the one that keeps white-on-neon contrast
+   failures out of the light theme. Edge fade hints scrollability in both
+   writing directions. */
+.walx .wallet-actions-v2 { margin-top: 0; }
+.walx .wallet-action-strip {
+  gap: 8px;
+  padding: 3px 2px 5px;
+  scroll-snap-type: x proximity;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+}
+.walx .wallet-action-v2 {
+  --walx-ac: var(--ink-cyan);
+  flex: 0 0 81px;
+  min-height: 80px;
+  gap: 7px;
+  padding: 10px 6px 9px;
+  border-radius: 21px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-glass);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  scroll-snap-align: start;
+  transition: transform 0.16s ease, border-color 0.18s ease, box-shadow 0.2s ease;
+}
+:root[data-theme='light'] .walx .wallet-action-v2 {
+  background: var(--walx-glass);
+  border-color: var(--walx-line-soft);
+  box-shadow: 0 9px 18px -16px rgba(15, 23, 42, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.walx .wallet-action-v2:active { transform: scale(0.95); }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wallet-action-v2:hover {
+    border-color: color-mix(in srgb, var(--walx-ac) 38%, transparent);
+    box-shadow: 0 14px 26px -18px var(--walx-ac), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    transform: translateY(-2px);
+  }
+}
+.walx .wallet-action-v2 .wallet-action-v2-icon {
+  width: 41px;
+  height: 41px;
+  border-radius: 14.5px;
+  color: var(--walx-ac);
+  background: color-mix(in srgb, var(--walx-ac) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--walx-ac) 28%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 9px 18px -13px var(--walx-ac);
+}
+:root[data-theme='light'] .walx .wallet-action-v2 .wallet-action-v2-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 8px 15px -12px var(--walx-ac);
+}
+.walx .wallet-action-v2-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-1);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.walx .wal-action-send { --walx-ac: var(--ink-magenta); }
+.walx .wal-action-recv { --walx-ac: var(--ink-mint); }
+.walx .wal-action-btc { --walx-ac: var(--ink-orange); }
+.walx .wal-action-swap { --walx-ac: var(--ink-cyan); }
+.walx .wal-action-bridge { --walx-ac: var(--ink-amber); }
+.walx .wal-action-buy { --walx-ac: var(--ink-violet); }
+.walx .wal-action-earn { --walx-ac: var(--ink-purple); }
+
+/* Optimize — a full-width proposal CTA: spectrum edge, tinted wash. */
+.walx .wallet-optimize {
+  min-height: 48px;
+  margin-top: 9px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--rgb-2) 34%, transparent);
+  background: linear-gradient(92deg, color-mix(in srgb, var(--rgb-1) 13%, transparent), color-mix(in srgb, var(--rgb-2) 14%, transparent), color-mix(in srgb, var(--rgb-3) 13%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  font-size: 13px;
+  transition: border-color 0.18s ease, box-shadow 0.2s ease, transform 0.16s ease;
+}
+.walx .wallet-optimize:active { transform: scale(0.985); }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wallet-optimize:hover {
+    border-color: color-mix(in srgb, var(--rgb-1) 52%, transparent);
+    box-shadow: 0 14px 28px -18px color-mix(in srgb, var(--rgb-2) 70%, transparent);
+    transform: translateY(-1px);
+  }
+}
+.walx-opt-ico { display: grid; place-items: center; color: var(--ink-violet); line-height: 0; }
+
+/* Housekeeping row — refresh / explorer / lock / disconnect, seed / backup */
+.walx .wal-utils { gap: 7px; margin-top: 0; padding-top: 13px; }
+.walx .wal-util {
+  min-height: 42px;
+  gap: 5px;
+  padding: 8px 5px;
+  border-radius: 14px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  color: var(--text-2);
+  /* 11px so the longest label (EN "Disconnect": icon + 10 glyphs) fits its
+     equal share next to the fixed explorer square — measured in the
+     screenshot pass, where 11.5px ellipsised. */
+  font-size: 11px;
+  font-weight: 700;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+:root[data-theme='light'] .walx .wal-util {
+  background: var(--walx-inset);
+  border-color: var(--walx-line-soft);
+}
+.walx .wal-util:active { transform: scale(0.97); }
+.walx .wal-util svg { flex-shrink: 0; width: 15px; height: 15px; }
+/* Four equal pills starve the long labels («Disconnect» clipped its first
+   letter in the screenshot pass). The icon-only explorer becomes a fixed
+   square so the three labelled controls share what is left, and a label
+   that still cannot fit (long locale, 320px screen) ellipsises inside its
+   span instead of being guillotined by the button's overflow. */
+.walx .wal-util.walx-util-ico { flex: 0 0 44px; }
+.walx .wal-util > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.walx .wal-util-danger { color: color-mix(in srgb, var(--walx-down) 78%, var(--text-2)); }
+
+/* ═══ SECTION CARDS ═════════════════════════════════════════════════════════ */
+.walx .wallet-pie-card {
+  border-radius: 23px;
+  border: 1px solid var(--walx-line);
+  background: var(--walx-glass);
+  box-shadow: var(--walx-card-shadow);
+  backdrop-filter: blur(16px) saturate(1.45);
+  -webkit-backdrop-filter: blur(16px) saturate(1.45);
+}
+:root[data-theme='light'] .walx .wallet-pie-card {
+  background: var(--walx-glass);
+  border-color: var(--walx-line);
+  box-shadow: var(--walx-card-shadow);
+}
+.walx-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.walx-sec-title { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.walx-sec-ico {
+  --walx-ac: var(--ink-cyan);
+  width: 29px;
+  height: 29px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--walx-ac);
+  background: color-mix(in srgb, var(--walx-ac) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--walx-ac) 24%, transparent);
+}
+.walx-sec-ico.t-assets { --walx-ac: var(--ink-violet); }
+.walx-sec-count {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+/* ── Network rows: real chain artwork + share track ─────────────────────── */
+.walx .wal-chain-grid { gap: 7px; }
+.walx .wal-chain-row {
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 17px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+:root[data-theme='light'] .walx .wal-chain-row {
+  background: var(--walx-inset);
+  border-color: var(--walx-line-soft);
+}
+.walx .wal-chain-row:active { transform: scale(0.99); }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wal-chain-row:hover { background: var(--walx-inset-2); }
+}
+.walx .wal-chain-row.is-active {
+  border-color: color-mix(in srgb, var(--chip-color, var(--rgb-1)) 36%, transparent);
+  background: color-mix(in srgb, var(--chip-color, var(--rgb-1)) 8%, transparent);
+}
+.walx-chain-ico {
+  width: 37px;
+  height: 37px;
+  flex-shrink: 0;
+  border-radius: 12.5px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--walx-inset-2);
+  border: 1px solid var(--walx-line-soft);
+  color: var(--ink-cyan);
+}
+.walx-chain-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.walx .wal-chain-row strong { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.walx .wal-chain-row small { font-size: 10.5px; }
+.walx .wal-badge-live {
+  margin-inline-start: 0;
+  background: color-mix(in srgb, var(--walx-up) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--walx-up) 34%, transparent);
+  color: var(--walx-up);
+  border-radius: 999px;
+  padding: 1.5px 7px;
+}
+.walx-share {
+  height: 4px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--walx-cc, var(--rgb-1)) calc(var(--walx-pct, 0) * 1%), var(--walx-track) 0);
+}
+:dir(rtl) .walx-share {
+  background: linear-gradient(270deg, var(--walx-cc, var(--rgb-1)) calc(var(--walx-pct, 0) * 1%), var(--walx-track) 0);
+}
+.walx-chain-fig { flex-shrink: 0; text-align: end; white-space: nowrap; }
+.walx-chain-fig .walx-chain-val { font-weight: 850; font-size: 13px; font-variant-numeric: tabular-nums; }
+.walx-chain-fig .walx-chain-pct { display: block; margin-top: 2px; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* ── Asset search + rows ─────────────────────────────────────────────────── */
+.walx-search { position: relative; margin-bottom: 11px; }
+.walx-search svg {
+  position: absolute;
+  inset-inline-start: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+.walx-search input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  padding-inline-start: 39px;
+  border-radius: 15px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.walx-search input::placeholder { color: var(--text-3); }
+.walx-search input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--rgb-1) 45%, transparent);
+  background: var(--walx-inset-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 12%, transparent);
+}
+.walx .wal-asset-group {
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+:root[data-theme='light'] .walx .wal-asset-group {
+  background: var(--walx-inset);
+  border-color: var(--walx-line-soft);
+  box-shadow: none;
+}
+.walx .wal-asset-group:active { transform: scale(0.99); }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wal-asset-group:hover { background: var(--walx-inset-2); border-color: var(--line-strong); transform: none; }
+}
+.walx-token-ico {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--walx-line-soft), 0 7px 14px -11px rgba(0, 0, 0, 0.6);
+  line-height: 0;
+}
+.walx .wal-chip-net {
+  padding: 1.5px 6px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  font-size: 9px;
+}
+.walx .wal-asset-figures .walx-fig-qty { font-weight: 850; font-size: 13px; font-variant-numeric: tabular-nums; }
+.walx .wal-asset-figures .walx-fig-val { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: 2px; }
+/* Forward chevrons point the way "forward" is read. */
+.walx .walx-chev { flex-shrink: 0; opacity: 0.55; }
+:dir(rtl) .walx .walx-chev { transform: scaleX(-1); }
+.walx .wal-empty-asset {
+  border: 1px dashed var(--walx-line);
+  background: var(--walx-inset);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ═══ INTEL / P&L / SECURITY TILES ══════════════════════════════════════════
+   Vertical dashboard tiles: icon + chevron up top, title, then the figure.
+   Equal height from the grid; text clamps so a long locale can never push
+   one tile taller than its neighbours. */
+.walx .wallet-intel-row { gap: 8px; }
+.walx .wal-sec-card {
+  --walx-ac: var(--ink-cyan);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  min-height: 118px;
+  padding: 12px;
+  border-radius: 20px;
+  transition: border-color 0.18s ease, transform 0.16s ease;
+}
+.walx .wal-sec-card:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wal-sec-card:hover { border-color: color-mix(in srgb, var(--walx-ac) 34%, transparent); transform: translateY(-1px); }
+}
+.walx-tile-intel { --walx-ac: var(--ink-violet); }
+.walx-tile-pnl { --walx-ac: var(--ink-mint); }
+.walx .walx-tile-sec { --walx-ac: var(--ink-cyan); }
+.walx .wal-sec-ico {
+  width: 35px;
+  height: 35px;
+  border-radius: 12px;
+  color: var(--walx-ac);
+  background: color-mix(in srgb, var(--walx-ac) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--walx-ac) 26%, transparent);
+  box-shadow: none;
+}
+.walx-tile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+.walx-tile-title {
+  display: block;
+  margin-top: 9px;
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: start;
+}
+.walx-tile-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-3);
+  text-align: start;
+}
+.walx-tile-fig {
+  display: block;
+  margin-top: 3px;
+  font-size: 14.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}
+
+/* ═══ MORE HOLDINGS — farm pools / NFT / trade doors ═══════════════════════ */
+.walx-more-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.walx-more-card {
+  --walx-ac: var(--ink-mint);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 17px;
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+.walx-more-card.t-nft { --walx-ac: var(--ink-magenta); }
+.walx-more-card:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) {
+  .walx-more-card:hover { background: var(--walx-inset-2); border-color: color-mix(in srgb, var(--walx-ac) 32%, transparent); }
+}
+.walx-more-card .walx-more-label { flex: 1; min-width: 0; }
+.walx-trade-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border-radius: 15px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 30%, transparent);
+  background: linear-gradient(92deg, color-mix(in srgb, var(--rgb-1) 11%, transparent), color-mix(in srgb, var(--rgb-2) 11%, transparent));
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.14s ease, box-shadow 0.2s ease;
+}
+.walx-trade-cta:active { transform: scale(0.985); }
+@media (hover: hover) and (pointer: fine) {
+  .walx-trade-cta:hover { border-color: color-mix(in srgb, var(--rgb-1) 50%, transparent); box-shadow: 0 12px 24px -18px var(--rgb-1); }
+}
+.walx-trade-cta svg { color: var(--ink-cyan); }
+
+/* ACTIVE card rows inside the glass scope */
+.walx .wal-active-row {
+  border: 1px solid var(--walx-line-soft);
+  background: var(--walx-inset);
+  border-radius: 15px;
+}
+:root[data-theme='light'] .walx .wal-active-row {
+  background: var(--walx-inset);
+  border-color: var(--walx-line-soft);
+  box-shadow: none;
+}
+.walx .wal-active-ico { background: var(--walx-inset-2); border-radius: 11px; }
+.walx-empty-ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-cyan);
+  background: color-mix(in srgb, var(--ink-cyan) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink-cyan) 22%, transparent);
+  margin-bottom: 4px;
+}
+
+/* ═══ DISCONNECTED + RECONNECTING ═══════════════════════════════════════════ */
+.walx .wal-empty { padding: 18px 6px 8px; }
+.walx-empty-orb {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  margin: 0 auto 16px;
+  border-radius: 30px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(90% 90% at 20% 8%, color-mix(in srgb, var(--rgb-1) 22%, transparent), transparent 60%),
+    radial-gradient(90% 90% at 85% 90%, color-mix(in srgb, var(--rgb-2) 24%, transparent), transparent 60%),
+    var(--walx-inset);
+  border: 1px solid var(--walx-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 18px 34px -24px rgba(0, 0, 0, 0.75);
+}
+.walx-empty-orb svg { margin: 0; }
+:root[data-theme='light'] .walx-empty-orb {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 16px 30px -24px rgba(15, 23, 42, 0.35);
+}
+.walx-connect {
+  min-height: 50px;
+  border-radius: 17px;
+  font-size: 14px;
+  font-weight: 850;
+  box-shadow: 0 16px 30px -16px color-mix(in srgb, var(--rgb-1) 65%, transparent);
+}
+
+/* ═══ NATIVE / LITE — the fluorescent-tube kill, restated for this scope ═══
+   Same rule as wallet-modern.css: no backdrop sampling where the shell
+   cannot composite it cheaply. Surfaces stay legible because the hero is
+   opaque and the cards keep their tint; only the blur goes. */
+:root[data-native='true'] .walx .wallet-pie-card,
+:root[data-lite='true'] .walx .wallet-pie-card,
+:root[data-native='true'] .walx .wal-hero-chip,
+:root[data-lite='true'] .walx .wal-hero-chip,
+:root[data-native='true'] .walx .wallet-action-v2,
+:root[data-lite='true'] .walx .wallet-action-v2 {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-native='true'] .walx .wallet-hero-aurora,
+:root[data-lite='true'] .walx .wallet-hero-aurora { display: none; }
+
+/* Reduced motion: entrance already off above; kill the interactive
+   transforms too so nothing slides under a finger that asked for stillness. */
+@media (prefers-reduced-motion: reduce) {
+  .walx .wallet-action-v2,
+  .walx .wal-hero-chip,
+  .walx .wal-sec-card,
+  .walx .wal-chain-row,
+  .walx .wal-asset-group,
+  .walx .wallet-optimize,
+  .walx .wal-util,
+  .walx .walx-addr,
+  .walx .walx-eye { transition: none; }
+}
+
+/* ── Small screens: keep tiles breathable, never crush the number ───────── */
+@media (max-width: 400px) {
+  .walx .walx-hero { padding: 17px 14px 15px; border-radius: 26px; }
+  .walx .wallet-action-v2 { flex-basis: 74px; min-height: 74px; border-radius: 19px; }
+  .walx .wallet-action-v2 .wallet-action-v2-icon { width: 37px; height: 37px; border-radius: 13px; }
+  .walx .wal-hero-chip { padding: 8px 9px; gap: 7px; }
+  .walx-stat-ico { width: 29px; height: 29px; border-radius: 10px; }
+  .walx .wal-sec-card { min-height: 110px; padding: 10px; }
+  .walx-pills .walx-pill { padding: 4px 8px; }
+}
+@media (max-width: 340px) {
+  .walx .wal-hero-chips { gap: 6px; }
+  .walx-stat-ico { display: none; }
+}

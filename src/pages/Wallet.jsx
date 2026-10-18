@@ -35,13 +35,41 @@ import { cleanAssetText, groupHoldings } from '../lib/walletRisk';
 import { apiBase } from '../lib/apiBase';
 import TokenIcon from '../lib/tokenIcon';
 import NetworkSelect from '../components/NetworkSelect';
-import { IconCopy, IconGlobe, IconChevronRight, IconShield } from '../components/Icons';
-import { WalletMesh } from '../components/WalletArt';
+import AssetIcon from '../components/AssetIcon';
+import { balancesHidden } from '../lib/format';
+import { IconGlobe, IconChevronRight, IconShield, IconWallet } from '../components/Icons';
+import {
+  WalIdenticon, IconWalCopy, IconWalCheck, IconWalEye, IconWalEyeOff,
+  IconWalRefresh, IconWalPower, IconWalLock, IconWalExternal, IconWalSearch,
+  IconWalLayers, IconWalNodes, IconWalPool, IconWalGem, IconWalTrend,
+  IconWalKey, IconWalArchive, IconWalTriUp, IconWalTriDown
+} from '../components/WalletGlassIcons';
+import { WalletMesh, WalletEmptyMark } from '../components/WalletArt';
 import '../styles/wallet-modern.css';
 import '../styles/wallet.css';
+/* Glass 3.0 — imported LAST so the scoped redesign wins its cascade ties.
+   Everything in it lives under `.walx`; see the file's header for the
+   anti-flicker contract (opaque hero, static aurora, no backdrop blur on
+   native/lite, one-shot entrance). */
+import '../styles/wallet-glass.css';
+
+/*
+ * ─── HIDE-BALANCES FINALLY REACHES THIS PAGE ───────────────────────────────
+ * lib/format.js masks money (`•••`) at the formatter, for exactly the reason
+ * written there: "a screen where SOME numbers are masked leaks exactly the
+ * ones that were missed". THIS page was the miss — it formats with its own
+ * fmtCurrencyValue/fmtQty, so the hero total, every chain total and every
+ * asset row stayed visible while the settings toggle was on (only the
+ * network dropdown and the blurred address honoured it). Both local
+ * formatters now read the same module flag the store keeps in sync, and
+ * `Wallet()` already subscribes via useHideBalances() so the mask lands the
+ * instant the switch moves — including from the new eye on the balance box.
+ */
+const WAL_MASK = '•••';
 
 function fmtCurrencyValue(v, currency, opts = {}) {
   if (v == null || !Number.isFinite(v)) return null;
+  if (balancesHidden()) return WAL_MASK;
   try {
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
@@ -56,6 +84,7 @@ function fmtCurrencyValue(v, currency, opts = {}) {
 
 function fmtQty(v) {
   if (!Number.isFinite(v)) return '—';
+  if (balancesHidden()) return WAL_MASK;
   const abs = Math.abs(v);
   if (abs >= 1_000_000) return (v / 1_000_000).toFixed(2) + 'M';
   if (abs >= 1000) return (v / 1000).toFixed(2) + 'K';
@@ -70,16 +99,11 @@ function copyText(text, haptic) {
 
 function openInExplorer(url) { if (url) window.open(url, '_blank', 'noopener,noreferrer'); }
 
-const IconRefresh = (p) => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>
-  </svg>
-);
-const IconDisconnect = (p) => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
-  </svg>
-);
+/* The refresh/power glyphs that used to be hand-rolled here moved to
+   WalletGlassIcons (IconWalRefresh / IconWalPower) so the whole page draws
+   at one stroke weight — IconDisconnect was defined and never rendered,
+   which is how the disconnect button ended up text-only next to iconned
+   neighbours. */
 
 /* Provider label helpers */
 function providerLabel(wallet, t) {
@@ -114,7 +138,7 @@ function changeLabel(ch, currency) {
 
 function WalHero({
   wallet, currency, portfolio, intel, chips, hideBalances, t,
-  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, onRetry,
+  onConnect, onDisconnect, onRefresh, onCopy, onExplorer, switchChain, haptic, onRetry, onToggleHide,
   /* The portfolio view filter: which network's holdings the page is showing.
      It is NOT the wallet's active chain — «همه شبکه‌ها» is a view, and so is
      looking at Base while the wallet sits on BSC. */
@@ -123,6 +147,38 @@ function WalHero({
   const connected = Boolean(wallet.address) && !wallet.locked;
   const [switching, setSwitching] = useState(false);
   const [switchErr, setSwitchErr] = useState(null);
+
+  /* Copy feedback: the address pill shows a check for a beat after a copy.
+     Clipboard + haptic stay with the parent's onCopy — this state is purely
+     the visual receipt (a silent clipboard write is indistinguishable from
+     a dead button in a WebView where navigator.clipboard may not exist). */
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  const handleCopyAddress = useCallback(() => {
+    onCopy?.(wallet.address);
+    setCopied(true);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 1600);
+  }, [onCopy, wallet.address]);
+
+  /* Spectrum-bar segments: each priced network's share of the same total
+     the hero prints, from the same read — so the bar can never disagree
+     with the number above it or the breakdown below it. Errored chains
+     (totalValue null/0) contribute nothing, same as they contribute no
+     money. Hidden with the balances: proportions are holdings information. */
+  const spectrum = useMemo(() => {
+    if (hideBalances || !portfolio?.loaded || !(portfolio?.totalValue > 0)) return [];
+    return (portfolio.chains ?? [])
+      .filter((c) => Number.isFinite(c.totalValue) && c.totalValue > 0)
+      .map((c) => ({
+        chainId: c.chainId,
+        share: c.totalValue / portfolio.totalValue,
+        color: c.chainColor || 'var(--rgb-1)',
+        label: c.chainShort
+      }))
+      .sort((a, b) => b.share - a.share);
+  }, [portfolio?.chains, portfolio?.loaded, portfolio?.totalValue, hideBalances]);
 
   /* Per-network figures for the picker's rows. Built from the portfolio the
      hero already renders, so the dropdown and the breakdown below it can never
@@ -163,37 +219,67 @@ function WalHero({
   }, [switchChain, switching, haptic]);
 
   return (
-    <section className={`wallet-hero-modern wal-hero`}>
+    <section className="wallet-hero-modern wal-hero walx-hero">
       <div className="wallet-hero-aurora wal-hero-aurora" aria-hidden="true" />
       <WalletMesh className="wal-mesh" />
 
       {connected ? (
-        <div className="stack" style={{ gap: 13, position: 'relative' }}>
-          <div className="row-between">
-            <span className="wallet-chip-modern">
-              <span className={`wal-chip-dot ${wallet.locked ? '' : 'is-live'}`} />
-              <span className="mono" style={{ fontWeight: 700 }}>
-                <button
-                  className={`wal-addr-plain ${hideBalances ? 'wal-addr-blur' : ''}`}
-                  onClick={() => onCopy(wallet.address)}
-                  title={t('wallet.copyAddress')}
-                  aria-label={t('wallet.copyAddress')}
-                  style={{ all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                >
-                  {shortAddress(wallet.address, 6)}
-                  <IconCopy width={12} height={12} />
-                </button>
-              </span>
+        <div className="walx-hero-in">
+          {/* Identity: a face grown from the address (WalIdenticon), the
+              copyable address with its live dot, then chain + provider. */}
+          <div className="walx-idrow walx-rise">
+            <span className="walx-id">
+              <WalIdenticon address={wallet.address} size={34} />
+              <button
+                type="button"
+                className={`walx-addr ${hideBalances ? 'wal-addr-blur' : ''}`}
+                onClick={handleCopyAddress}
+                title={t('wallet.copyAddress')}
+                aria-label={t('wallet.copyAddress')}
+              >
+                <span className={`wal-chip-dot ${wallet.locked ? '' : 'is-live'}`} style={{ background: 'var(--up)' }} aria-hidden="true" />
+                {/* An address is LTR data in every locale — without dir=ltr
+                    the ellipsis seam reorders under RTL and the pill wrapped
+                    onto two lines in the screenshot pass. */}
+                <span dir="ltr">{shortAddress(wallet.address, 6)}</span>
+                {copied
+                  ? <IconWalCheck className="walx-copied" />
+                  : <IconWalCopy />}
+              </button>
             </span>
-            <span className="row" style={{ gap: 6 }}>
-              <span className="pill pill-rgb" style={{ fontSize: 10.5, padding: '4px 8px' }}>{wallet.chain?.short ?? 'BSC'}</span>
-              <span className={`pill ${wallet.locked ? 'pill-down' : 'pill-up'}`} style={{ fontSize: 10.5 }}>{wallet.locked ? '🔒' : providerLabel(wallet, t)}</span>
+            <span className="walx-pills">
+              <span className="walx-pill">
+                <AssetIcon chain={wallet.chainId ?? 56} size={15} radius={5} />
+                {wallet.chain?.short ?? 'BSC'}
+              </span>
+              <span className="walx-pill is-live">
+                {wallet.locked
+                  ? <IconWalLock width={12} height={12} />
+                  : <span className="walx-pill-text">{providerLabel(wallet, t)}</span>}
+              </span>
             </span>
           </div>
 
-          <div className="wal-hero-value">
-            <div className="faint" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.7 }}>{t('wallet.portfolioTotal')} · {currency.code}</div>
-            <div className="wal-hero-total">
+          {/* The balance box: label + the privacy eye, the number, its quiet
+              metadata, then WHERE it sits (spectrum) and HOW it moved (24H/7D/30D). */}
+          <div className="walx-balance walx-rise" style={{ '--walx-d': '45ms' }}>
+            <div className="walx-bal-top">
+              <span className="walx-bal-label">{t('wallet.portfolioTotal')} · {currency.code}</span>
+              {/* The Settings switch, on the number it protects. Toggling
+                  writes the same store key Settings owns — one flag, the
+                  formatter masks, every figure on this page follows. */}
+              <button
+                type="button"
+                className="walx-eye"
+                onClick={onToggleHide}
+                aria-pressed={hideBalances ? 'true' : 'false'}
+                title={t('settings.hideBalances')}
+                aria-label={t('settings.hideBalances')}
+              >
+                {hideBalances ? <IconWalEyeOff /> : <IconWalEye />}
+              </button>
+            </div>
+            <div className="wal-hero-total walx-total">
               {/*
                 THE NUMBER NEVER BECOMES «…» AGAIN.
 
@@ -213,14 +299,26 @@ function WalHero({
                 succeeds AnimatedNumber tweens to the NEW figure and flashes
                 green/red. That is the whole requested behaviour: «باید روی
                 موجودی بمونه و اگر بروز شد عدد جدید را نشان بدهد».
+
+                Hide-balances is NOT an exception to that rule — it is the
+                user asking for the mask, and the mask comes out of the same
+                fmtCurrencyValue (it reads the format.js flag), so the dots
+                are a value, not a loading state. `duration={0}` + no flash
+                while hidden: tweening behind a mask would leak the
+                DIRECTION of the change through the flash colour.
               */}
               {!portfolio.loaded ? (
                 <span className="wal-total-skeleton" aria-hidden="true" />
               ) : (
-                <AnimatedNumber value={portfolio.totalValue} format={(v) => fmtCurrencyValue(v, currency) || '—'} />
+                <AnimatedNumber
+                  value={portfolio.totalValue}
+                  format={(v) => fmtCurrencyValue(v, currency) || '—'}
+                  flash={!hideBalances}
+                  duration={hideBalances ? 0 : 520}
+                />
               )}
             </div>
-            <div className="row" style={{ gap: 8, marginTop: 6, fontSize: 11 }}>
+            <div className="walx-bal-meta">
               {/* Refreshing is shown as a quiet, non-destructive cue beside the
                   number — never in place of it. */}
               {portfolio.loaded && portfolio.loading && (
@@ -247,34 +345,61 @@ function WalHero({
               )}
             </div>
 
+            {/* Where the money sits — one segment per priced network, sized
+                by its share of the total above. Decorative duplication of
+                the breakdown card, so aria-hidden; the data is read there. */}
+            {spectrum.length > 0 && (
+              <div className="walx-spectrum" aria-hidden="true">
+                {spectrum.map((s) => (
+                  <span
+                    key={s.chainId}
+                    className="walx-spectrum-seg"
+                    style={{ flexGrow: s.share, background: s.color }}
+                    title={s.label}
+                  />
+                ))}
+              </div>
+            )}
+
             {/* 24H / 7D / 30D — real snapshot deltas only; else — */}
-            <div className="wal-chg-row" role="group" aria-label={t('wallet.changes')}>
+            <div className="walx-chg" role="group" aria-label={t('wallet.changes')}>
               {[['24H', intel?.change24h], ['7D', intel?.change7d], ['30D', intel?.change30d]].map(([label, ch]) => (
-                <span key={label} className={`pill ${ch && ch.abs >= 0 ? 'pill-up' : ch ? 'pill-down' : ''}`} style={{ fontSize: 10.5, padding: '5px 9px' }}>
-                  {label} {changeLabel(ch, currency)}
+                <span key={label} className={`walx-chg-cell ${ch ? (ch.abs >= 0 ? 'is-up' : 'is-down') : ''}`}>
+                  <span className="walx-chg-k">{label}</span>
+                  {ch && (ch.abs >= 0 ? <IconWalTriUp /> : <IconWalTriDown />)}
+                  <span className="walx-chg-v">{changeLabel(ch, currency)}</span>
                 </span>
               ))}
             </div>
+          </div>
 
-            {/* Assets / DeFi / NFT chips — honest counts or explicit not-indexed */}
-            <div className="wal-hero-chips">
-              <button type="button" className="wal-hero-chip" onClick={() => children?.onAssets?.()} title={t('wallet.assets')}>
+          {/* Assets / DeFi / NFT chips — honest counts or explicit not-indexed */}
+          <div className="wal-hero-chips walx-rise" style={{ '--walx-d': '90ms' }}>
+            <button type="button" className="wal-hero-chip" onClick={() => children?.onAssets?.()} title={t('wallet.assets')}>
+              <span className="walx-stat-ico t-assets" aria-hidden="true"><IconWalLayers width={17} height={17} /></span>
+              <span className="walx-stat-text">
                 <span className="wal-hero-chip-label">{t('wallet.assets')}</span>
                 <strong>{portfolio.totalCount}</strong>
-              </button>
-              <button type="button" className="wal-hero-chip" onClick={() => children?.onFarm?.()} title={t('nav.farm')}>
+              </span>
+            </button>
+            <button type="button" className="wal-hero-chip" onClick={() => children?.onFarm?.()} title={t('nav.farm')}>
+              <span className="walx-stat-ico t-defi" aria-hidden="true"><IconWalPool width={17} height={17} /></span>
+              <span className="walx-stat-text">
                 <span className="wal-hero-chip-label">{t('wallet.defi')}</span>
                 <strong className="faint">—</strong>
                 <small className="wal-hero-chip-note">{t('wallet.notIndexed')}</small>
-              </button>
-              <button type="button" className="wal-hero-chip" onClick={() => children?.onNft?.()} title={t('nav.nft')}>
+              </span>
+            </button>
+            <button type="button" className="wal-hero-chip" onClick={() => children?.onNft?.()} title={t('nav.nft')}>
+              <span className="walx-stat-ico t-nft" aria-hidden="true"><IconWalGem width={17} height={17} /></span>
+              <span className="walx-stat-text">
                 <span className="wal-hero-chip-label">{t('wallet.nft')}</span>
                 {chips.nft.state === 'count'
                   ? <strong>{chips.nft.count}</strong>
                   : <strong className="faint">—</strong>}
                 {chips.nft.state !== 'count' && <small className="wal-hero-chip-note">{t('wallet.notScanned')}</small>}
-              </button>
-            </div>
+              </span>
+            </button>
           </div>
 
           {/*
@@ -316,29 +441,27 @@ function WalHero({
                 «…» where a word belongs reads as missing text, and it flickered
                 every time the 30-second portfolio cycle started. */}
             <button className="wal-util" onClick={onRefresh} aria-busy={portfolio.loading ? 'true' : 'false'}>
-              <IconRefresh
-                width={15}
-                height={15}
+              <IconWalRefresh
                 className={portfolio.loading ? 'wal-spin' : undefined}
                 aria-hidden="true"
               />
               <span>{t('common.refresh')}</span>
             </button>
-            <button className="wal-util" onClick={() => onExplorer(wallet.address)} title={t('swap.viewOnExplorer')} aria-label={t('swap.viewOnExplorer')}><IconGlobe width={15} height={15} /></button>
+            <button className="wal-util walx-util-ico" onClick={() => onExplorer(wallet.address)} title={t('swap.viewOnExplorer')} aria-label={t('swap.viewOnExplorer')}><IconWalExternal /></button>
             {wallet.mode === 'local' && !wallet.locked && (
-              <button className="wal-util" onClick={wallet.lock}>{t('wallet.lock')}</button>
+              <button className="wal-util" onClick={wallet.lock}><IconWalLock aria-hidden="true" /><span>{t('wallet.lock')}</span></button>
             )}
             {wallet.locked ? (
-              <button className="wal-util" onClick={onConnect}>{t('wallet.unlock')}</button>
+              <button className="wal-util" onClick={onConnect}><IconWalKey aria-hidden="true" /><span>{t('wallet.unlock')}</span></button>
             ) : (
-              <button className="wal-util wal-util-danger wal-danger" onClick={onDisconnect}>{t('wallet.disconnect')}</button>
+              <button className="wal-util wal-util-danger wal-danger" onClick={onDisconnect}><IconWalPower aria-hidden="true" /><span>{t('wallet.disconnect')}</span></button>
             )}
           </div>
 
           {wallet.mode === 'local' && !wallet.locked && (
-            <div className="wal-utils">
-              <button className="wal-util" onClick={() => children?.setSeedSheet?.(true)}>{t('wallet.revealSeed')}</button>
-              <button className="wal-util" onClick={() => children?.setBackupSheet?.(true)}>{t('wallet.backupFile')}</button>
+            <div className="wal-utils" style={{ borderTop: 'none', paddingTop: 0, marginTop: -6 }}>
+              <button className="wal-util" onClick={() => children?.setSeedSheet?.(true)}><IconWalKey aria-hidden="true" /><span>{t('wallet.revealSeed')}</span></button>
+              <button className="wal-util" onClick={() => children?.setBackupSheet?.(true)}><IconWalArchive aria-hidden="true" /><span>{t('wallet.backupFile')}</span></button>
             </div>
           )}
 
@@ -405,7 +528,7 @@ function WalHero({
           )}
         </div>
       ) : (
-        <div className="wal-empty" style={{ position: 'relative', textAlign: 'center', padding: '6px 0 2px' }}>
+        <div className="wal-empty" style={{ position: 'relative' }}>
           {/*
             RECONNECTING vs NOT CONNECTED.
 
@@ -429,7 +552,7 @@ function WalHero({
               </p>
               <button
                 className="btn btn-ghost"
-                style={{ marginTop: 14, minHeight: 42, borderRadius: 14 }}
+                style={{ marginTop: 14, minHeight: 44, borderRadius: 14 }}
                 onClick={onRetry}
               >
                 {t('wallet.reconnectNow')}
@@ -437,14 +560,12 @@ function WalHero({
             </>
           ) : (
             <>
-              <div style={{ width: 68, height: 68, borderRadius: 19, margin: '0 auto 13px', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg, var(--rgb-1), var(--rgb-2))', color: '#fff', fontSize: 26, boxShadow: '0 12px 32px rgba(0,229,255,0.24)' }}>
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" /><path d="M4 6v12c0 1.1.9 2 2 2h14v-4" /><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" />
-                </svg>
+              <div className="walx-empty-orb walx-rise" aria-hidden="true">
+                <WalletEmptyMark />
               </div>
-              <div style={{ fontWeight: 800, fontSize: 16 }}>{t('wallet.emptyTitle')}</div>
-              <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0' }}>{t('wallet.emptyBody')}</p>
-              <button className="btn btn-primary" style={{ marginTop: 15, minHeight: 44, borderRadius: 14, padding: '0 24px' }} onClick={onConnect}>{t('wallet.connect')}</button>
+              <div style={{ fontWeight: 850, fontSize: 17, letterSpacing: '-0.01em' }}>{t('wallet.emptyTitle')}</div>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.85, margin: '8px 0 0', maxWidth: 340 }}>{t('wallet.emptyBody')}</p>
+              <button className="btn btn-primary walx-connect" style={{ marginTop: 16 }} onClick={onConnect}>{t('wallet.connect')}</button>
               <p className="faint" style={{ fontSize: 11.5, marginTop: 11, lineHeight: 1.7 }}>{t('wallet.emptyReassure')}</p>
             </>
           )}
@@ -454,45 +575,61 @@ function WalHero({
   );
 }
 
-function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, currency }) {
+function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, currency, hideBalances = false }) {
   const chains = portfolio.chains || [];
   const selected = selectedChain === 'all' ? null : selectedChain;
+  /* A chain's share of the hero total — the same figures, one division.
+     Withheld while balances are hidden (proportions leak allocation even
+     when amounts do not), and on errored chains that contributed nothing. */
+  const shareOf = (c) => {
+    if (hideBalances || c.error || !(portfolio.totalValue > 0) || !(c.totalValue > 0)) return null;
+    return Math.min(100, Math.max(0, (c.totalValue / portfolio.totalValue) * 100));
+  };
   return (
-    <section className="wallet-pie-card wal-card" style={{ padding: 14, borderRadius: 18 }}>
-      <div className="row-between" style={{ marginBottom: 10 }}>
-        <span className="wallet-section-title">{t('wallet.networks')}</span>
-        <span className="faint" style={{ fontSize: 11 }}>{chains.length} {t('wallet.networksUnit')}</span>
+    <section className="wallet-pie-card wal-card" style={{ padding: 15 }}>
+      <div className="walx-sec-head">
+        <span className="walx-sec-title">
+          <span className="walx-sec-ico" aria-hidden="true"><IconWalNodes width={16} height={16} /></span>
+          <span className="wallet-section-title">{t('wallet.networks')}</span>
+        </span>
+        <span className="walx-sec-count">{chains.length} {t('wallet.networksUnit')}</span>
       </div>
       <div className="wal-chain-grid">
         <button
+          type="button"
           className={`wal-chain-row ${selected === null ? 'is-active' : ''}`}
           onClick={() => onSelect('all')}
         >
-          <span className="wal-chain-dot-wrap"><IconGlobe width={14} height={14} /></span>
-          <span style={{ flex: 1 }}>
+          <span className="walx-chain-ico" aria-hidden="true"><IconGlobe width={18} height={18} /></span>
+          <span className="walx-chain-main">
             <strong>{t('wallet.allNetworks')}</strong>
             <small>{portfolio.totalCount} {t('wallet.assetsUnit')}</small>
           </span>
-          <span className="mono" style={{ fontWeight: 800 }}>
-            {fmtCurrencyValue(portfolio.totalValue, currency)}
+          <span className="walx-chain-fig">
+            <span className="walx-chain-val mono">{fmtCurrencyValue(portfolio.totalValue, currency)}</span>
           </span>
         </button>
         {chains.map((c) => {
           const isActive = activeChainId === c.chainId;
           const isSelected = selected === c.chainId;
+          const pct = shareOf(c);
           return (
             <button
+              type="button"
               key={c.chainId}
               className={`wal-chain-row ${isSelected ? 'is-active' : ''}`}
               onClick={() => onSelect(c.chainId)}
               style={{ '--chip-color': c.chainColor }}
             >
-              <span className="wal-chain-dot-wrap">
-                <span className="wal-chain-dot" style={{ background: c.chainColor }} />
+              {/* The network's own vendored SVG mark — the same artwork the
+                  NetworkSelect popup uses, so a chain looks like itself in
+                  both places instead of a coloured dot here and a logo there. */}
+              <span className="walx-chain-ico" aria-hidden="true">
+                <AssetIcon chain={c.chainId} size={26} radius={8} />
               </span>
-              <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="walx-chain-main">
                 <strong>
-                  {c.chainShort}
+                  <span dir="auto">{EVM_CHAINS[c.chainId]?.name || c.chainShort}</span>
                   {isActive && <span className="wal-badge-live">{t('wallet.active.title')}</span>}
                 </strong>
                 <small>
@@ -500,9 +637,19 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
                     ? t('wallet.chainUnavailable')
                     : `${c.rows.length} ${t('wallet.assetsUnit')} · ${fmtQty(c.nativeAmount)} ${c.native.symbol}`}
                 </small>
+                {pct != null && (
+                  <span
+                    className="walx-share"
+                    style={{ '--walx-cc': c.chainColor || 'var(--rgb-1)', '--walx-pct': pct.toFixed(1) }}
+                    aria-hidden="true"
+                  />
+                )}
               </span>
-              <span className="mono" style={{ fontWeight: 800, color: c.error ? 'var(--text-3)' : undefined }}>
-                {c.error ? '—' : (fmtCurrencyValue(c.totalValue, currency) ?? '—')}
+              <span className="walx-chain-fig">
+                <span className="walx-chain-val mono" style={{ color: c.error ? 'var(--text-3)' : undefined }}>
+                  {c.error ? '—' : (fmtCurrencyValue(c.totalValue, currency) ?? '—')}
+                </span>
+                {pct != null && <span className="walx-chain-pct mono">{pct < 0.1 ? '<0.1' : pct.toFixed(1)}%</span>}
               </span>
             </button>
           );
@@ -561,23 +708,25 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
   );
 
   return (
-    <section className="wallet-pie-card wal-card" style={{ padding: 14, borderRadius: 18 }}>
-      <div className="row-between" style={{ marginBottom: 10 }}>
-        <span className="wallet-section-title">{t('wallet.assets')}</span>
-        <span className="faint" style={{ fontSize: 11 }}>
+    <section className="wallet-pie-card wal-card" style={{ padding: 15 }}>
+      <div className="walx-sec-head">
+        <span className="walx-sec-title">
+          <span className="walx-sec-ico t-assets" aria-hidden="true"><IconWalLayers width={16} height={16} /></span>
+          <span className="wallet-section-title">{t('wallet.assets')}</span>
+        </span>
+        <span className="walx-sec-count">
           {groups.length} {t('wallet.assetsUnit')}
         </span>
       </div>
-      <div className="row" style={{ gap: 8, marginBottom: 10 }}>
-        <span className="icon-btn" style={{ pointerEvents: 'none' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        </span>
+      {/* Search as one glass field, icon inside the field it belongs to —
+          the old separate icon chip read as a button that did nothing. */}
+      <div className="walx-search">
+        <IconWalSearch aria-hidden="true" />
         <input
           type="text"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={t('wallet.searchAssets')}
-          style={{ flex: 1 }}
           aria-label={t('wallet.searchAssets')}
         />
       </div>
@@ -603,7 +752,6 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
       ) : (
         <div className="stack" style={{ gap: 8 }}>
           {groups.map((g) => {
-            const chain = EVM_CHAINS[g.items[0]?.chainId];
             const partial = g.total > g.priced;
             return (
               <button
@@ -612,7 +760,9 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
                 className="wallet-token-row-modern wal-asset-row wal-asset-group"
                 onClick={() => onOpenToken?.(g)}
               >
-                <TokenIcon token={{ symbol: g.symbol, address: g.items[0]?.address, native: g.items[0]?.native }} chainId={g.items[0]?.chainId} size={34} />
+                <span className="walx-token-ico" aria-hidden="true">
+                  <TokenIcon token={{ symbol: g.symbol, address: g.items[0]?.address, native: g.items[0]?.native }} chainId={g.items[0]?.chainId} size={37} />
+                </span>
                 {/*
                   ─── THE ROW IS PINNED TO EXACTLY TWO LINES ───────────────
                   `wal-asset-main` is the overflow context and `wal-asset-sym`
@@ -669,7 +819,17 @@ export default function Wallet() {
   const { haptic } = useTelegram();
   const wallet = useWallet();
   const currencyCode = useSettingsStore((s) => s.currency);
+  const toggleSetting = useSettingsStore((s) => s.toggle);
   const currency = currencyOf(currencyCode);
+
+  /* The balance box's eye — the Settings `hideBalances` switch, reachable
+     from the number itself. One store key, one formatter flag (the store
+     subscription pushes it into lib/format), and this page re-renders via
+     useHideBalances() above. */
+  const handleToggleHide = useCallback(() => {
+    haptic?.('select');
+    toggleSetting('hideBalances');
+  }, [haptic, toggleSetting]);
 
   const portfolio = useMultiChainPortfolio(wallet);
 
@@ -953,9 +1113,11 @@ export default function Wallet() {
         ))}
       </div>
 
-      {/* ----------------- on-chain wallet (non-custodial) ----------------- */}
+      {/* ----------------- on-chain wallet (non-custodial) -----------------
+          `.walx` scopes the Glass-3.0 stylesheet to THIS tab: the Solana
+          tab and every portalled sheet keep their existing surfaces. */}
       {tab === 'real' && (
-        <>
+        <div className="walx">
           <WalHero
             wallet={wallet}
             currency={currency}
@@ -963,6 +1125,7 @@ export default function Wallet() {
             intel={intel}
             chips={{ nft: nftChip }}
             hideBalances={hideBalances}
+            onToggleHide={handleToggleHide}
             t={t}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
@@ -984,11 +1147,11 @@ export default function Wallet() {
           {wallet.address && !wallet.locked && (
             <>
               {/* Intelligence | P&L | Risk — the command-center trio */}
-              <div style={{ marginTop: 14 }}>
+              <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '140ms' }}>
                 <WalletIntelTiles intel={intel} onIntel={() => setIntelSheet(true)} onPnl={() => setPnlSheet(true)} />
               </div>
 
-              <div style={{ marginTop: 14 }}>
+              <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '190ms' }}>
                 <ChainBreakdown
                   portfolio={portfolio}
                   activeChainId={wallet.chainId}
@@ -996,10 +1159,11 @@ export default function Wallet() {
                   selectedChain={selectedChain}
                   t={t}
                   currency={currency}
+                  hideBalances={hideBalances}
                 />
               </div>
 
-              <div style={{ marginTop: 14 }}>
+              <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '240ms' }}>
                 <AssetList
                   portfolio={portfolio}
                   selectedChain={selectedChain}
@@ -1011,27 +1175,41 @@ export default function Wallet() {
               </div>
 
               {/* ACTIVE: live orders + recent intents */}
-              <div style={{ marginTop: 14 }}>
+              <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '290ms' }}>
                 <ActiveOrdersCard />
               </div>
 
-              {/* Real-wallet holdings beyond the current chain: pools + NFTs */}
-              <section className="wallet-pie-card" style={{ marginTop: 14, padding: 14, borderRadius: 18 }}>
-                <div className="row-between" style={{ marginBottom: 12 }}>
-                  <span style={{ fontWeight: 800, fontSize: 13.5 }}>{t('wallet.holdingsMore')}</span>
+              {/* Real-wallet holdings beyond the current chain: pools + NFTs,
+                  as two accent doors over one trade CTA (same destinations,
+                  same copy — modern placement, honest size). */}
+              <section className="wallet-pie-card walx-rise" style={{ marginTop: 14, padding: 15, '--walx-d': '340ms' }}>
+                <div className="walx-sec-head" style={{ marginBottom: 8 }}>
+                  <span className="walx-sec-title">
+                    <span className="walx-sec-ico t-assets" aria-hidden="true"><IconWalPool width={16} height={16} /></span>
+                    <span className="wallet-section-title">{t('wallet.holdingsMore')}</span>
+                  </span>
                 </div>
-                <p className="muted" style={{ fontSize: 12.7, lineHeight: 1.85, margin: '0 0 14px' }}>{t('wallet.liquidityBody')}</p>
-                <div className="row" style={{ gap: 10 }}>
-                  <button className="btn btn-ghost" style={{ flex: 1, minHeight: 42, borderRadius: 12 }} onClick={() => navigate('/farm')}>{t('wallet.viewPools')}</button>
-                  <button className="btn btn-ghost" style={{ flex: 1, minHeight: 42, borderRadius: 12 }} onClick={() => navigate('/nft')}>{t('nav.nft')}</button>
+                <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85, margin: '0 0 13px' }}>{t('wallet.liquidityBody')}</p>
+                <div className="walx-more-grid">
+                  <button type="button" className="walx-more-card" onClick={() => navigate('/farm')}>
+                    <span className="walx-stat-ico t-defi" aria-hidden="true"><IconWalPool width={17} height={17} /></span>
+                    <span className="walx-more-label">{t('wallet.viewPools')}</span>
+                    <IconChevronRight className="walx-chev" width={15} height={15} />
+                  </button>
+                  <button type="button" className="walx-more-card t-nft" onClick={() => navigate('/nft')}>
+                    <span className="walx-stat-ico t-nft" aria-hidden="true"><IconWalGem width={17} height={17} /></span>
+                    <span className="walx-more-label">{t('nav.nft')}</span>
+                    <IconChevronRight className="walx-chev" width={15} height={15} />
+                  </button>
                 </div>
-                <div className="row" style={{ gap: 10, marginTop: 8 }}>
-                  <button className="btn btn-ghost btn-sm" style={{ flex: 1, minHeight: 36, borderRadius: 10 }} onClick={() => navigate('/trade')}>{t('wallet.startTrading')}</button>
-                </div>
+                <button type="button" className="walx-trade-cta" onClick={() => navigate('/trade')}>
+                  <IconWalTrend width={16} height={16} aria-hidden="true" />
+                  <span>{t('wallet.startTrading')}</span>
+                </button>
               </section>
             </>
           )}
-        </>
+        </div>
       )}
 
       {/* ----------------- internal bitcoin (same seed, BIP-84) -----------------
@@ -1198,3 +1376,10 @@ export default function Wallet() {
     </PageTransition>
   );
 }
+
+/* Named for the command-center probe (test/wallet-command-center-probe.jsx),
+   which mounts the connected hero with fabricated props — the page probe
+   can only ever see the disconnected state, and the hero is where this
+   screen's hardest-won behaviours live (number discipline, masking,
+   spectrum honesty). The default export above is the routed page. */
+export { WalHero, ChainBreakdown, AssetList };

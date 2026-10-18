@@ -9,6 +9,8 @@ import WalletPnl from '../src/components/WalletPnl.jsx';
 import ActiveOrdersCard from '../src/components/ActiveOrdersCard.jsx';
 import SecurityCenterCard from '../src/components/SecurityCenterCard.jsx';
 import TokenDetailSheet from '../src/components/TokenDetailSheet.jsx';
+import { WalHero } from '../src/pages/Wallet.jsx';
+import { setHideBalances } from '../src/lib/format.js';
 import { saveOrders } from '../src/lib/orders.js';
 import { saveCompiledIntent } from '../src/lib/intentOS.js';
 
@@ -189,6 +191,98 @@ export async function run(c) {
     t('the token sheet renders balances', sheetText.includes('0.500000') || sheetText.includes('0.5'));
     t('the token sheet offers Send and Swap', /Send|Swap|ارسال|سواپ/.test(sheetText));
     await act(async () => root.unmount());
+  }
+
+  /* ---- Glass-3.0 hero, CONNECTED ------------------------------------------
+     The page probe can only ever mount the disconnected shell, but the
+     balance box is where this screen's hard rules live. WalHero takes plain
+     props, so mount it directly with a fabricated read and assert:
+       • the number is a number — and stays a number while `loading` (the
+         «موجودی سه نقطه می‌شود» regression),
+       • the spectrum bar has one segment per PRICED network (the zeroed,
+         errored chain contributes nothing, exactly like its money),
+       • the privacy eye is a real toggle wired to the parent,
+       • with hide-balances ON, the total is the mask, the spectrum is gone
+         and the address blurs (this page's formatters used to bypass the
+         settings toggle entirely),
+       • every action carries an SVG, and no emoji survive anywhere. */
+  {
+    const tStub = (k) => k;
+    const heroWallet = {
+      address: '0x1234567890abcdef1234567890abcdef12345678',
+      locked: false, mode: 'wc', chainId: 56, chain: { short: 'BSC' },
+      lease: true, leaseMinutesLeft: 42, lock() {}
+    };
+    const heroPortfolio = {
+      loaded: true, loading: false, totalValue: 1234.5, totalCount: 3,
+      pricedCount: 3, partial: false, updatedAt: Date.now(), fromSnapshot: false,
+      rows: [],
+      chains: [
+        { chainId: 56, chainShort: 'BSC', chainColor: '#f0b90b', totalValue: 800, nativeAmount: 1.2, native: { symbol: 'BNB' }, rows: [{}, {}], error: false },
+        { chainId: 8453, chainShort: 'BASE', chainColor: '#0052ff', totalValue: 434.5, nativeAmount: 0.1, native: { symbol: 'ETH' }, rows: [{}], error: false },
+        { chainId: 137, chainShort: 'POL', chainColor: '#8247e5', totalValue: 0, nativeAmount: 0, native: { symbol: 'POL' }, rows: [], error: true }
+      ]
+    };
+    const heroChildren = {
+      onSend() {}, onReceive() {}, onBitcoin() {}, onSwap() {}, onBridge() {},
+      onBuy() {}, onEarn() {}, onOptimize() {}, canOptimize: true, showBitcoin: true,
+      onAssets() {}, onFarm() {}, onNft() {}, setSeedSheet() {}, setBackupSheet() {}
+    };
+    const heroProps = {
+      wallet: heroWallet,
+      currency: { code: 'USD', symbol: '$' },
+      portfolio: heroPortfolio,
+      intel: { change24h: { abs: 12, from: 1200 }, change7d: { abs: -30, from: 1200 }, change30d: null },
+      chips: { nft: { state: 'count', count: 4 } },
+      hideBalances: false, t: tStub,
+      onConnect() {}, onDisconnect() {}, onRefresh() {}, onCopy() {}, onExplorer() {},
+      switchChain: async () => true, haptic() {}, onRetry() {},
+      selectedChain: 'all', onSelectChain() {}
+    };
+
+    let toggled = 0;
+    const el = document.createElement('div');
+    host.appendChild(el);
+    const root = await render(el, (
+      <WalHero {...heroProps} onToggleHide={() => { toggled += 1; }}>{heroChildren}</WalHero>
+    ));
+    t('Glass hero mounts connected', !!el.querySelector('.walx-hero') && !!el.querySelector('.walx-identicon'));
+    const totalText = el.querySelector('.walx-total')?.textContent || '';
+    t('Glass hero shows the real total, not a placeholder', /\$/.test(totalText) && /1[.,]?235/.test(totalText) && !totalText.includes('…'));
+    t('spectrum has one segment per priced network', el.querySelectorAll('.walx-spectrum-seg').length === 2);
+    t('every action tile carries an SVG icon', [...el.querySelectorAll('.wallet-action-v2')].every((b) => b.querySelector('svg')));
+    t('no legacy emoji survive in the hero', !/[\u{2728}\u{1F512}\u{1F6E1}]/u.test(el.textContent));
+    await act(async () => el.querySelector('.walx-eye').click());
+    t('the privacy eye fires the parent toggle', toggled === 1);
+    await act(async () => root.unmount());
+
+    /* Refreshing: loaded + loading — the number must stay, with the quiet
+       «updating» cue beside it. */
+    const el2 = document.createElement('div');
+    host.appendChild(el2);
+    const root2 = await render(el2, (
+      <WalHero {...heroProps} portfolio={{ ...heroPortfolio, loading: true }} onToggleHide={() => {}}>{heroChildren}</WalHero>
+    ));
+    const total2 = el2.querySelector('.walx-total')?.textContent || '';
+    t('a refresh never replaces the number', /\$/.test(total2) && !!el2.querySelector('.wal-reval'));
+    await act(async () => root2.unmount());
+
+    /* Hidden: mask everywhere on this page, no spectrum, blurred address. */
+    setHideBalances(true);
+    try {
+      const el3 = document.createElement('div');
+      host.appendChild(el3);
+      const root3 = await render(el3, (
+        <WalHero {...heroProps} hideBalances onToggleHide={() => {}}>{heroChildren}</WalHero>
+      ));
+      const total3 = el3.querySelector('.walx-total')?.textContent || '';
+      t('hide-balances masks the hero total', total3.trim() === '•••');
+      t('hide-balances removes the spectrum (proportions leak too)', el3.querySelectorAll('.walx-spectrum-seg').length === 0);
+      t('hide-balances blurs the address pill', !!el3.querySelector('.walx-addr.wal-addr-blur'));
+      await act(async () => root3.unmount());
+    } finally {
+      setHideBalances(false);
+    }
   }
 
   host.remove();

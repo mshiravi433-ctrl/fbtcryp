@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { IconSwap, IconSparkle, IconPlus } from './Icons';
-import { IconSend, IconReceive, IconBitcoin } from './WalletArt';
+import { IconWalSend, IconWalReceive, IconWalSwap, IconWalBridge, IconWalBuy, IconWalEarn, IconWalSpark } from './WalletGlassIcons';
+import { IconBitcoin } from './WalletArt';
 
 /**
  * ACTION ROW — one equal-sized row of the primary actions plus the
@@ -24,8 +24,8 @@ export default function WalletActionRow({ onSend, onReceive, onBitcoin, onSwap, 
   const { t } = useTranslation();
 
   const actions = [
-    { key: 'send', label: t('send.title'), Icon: IconSend, tint: 'send', onClick: onSend },
-    { key: 'receive', label: t('receive.title'), Icon: IconReceive, tint: 'recv', onClick: onReceive },
+    { key: 'send', label: t('send.title'), Icon: IconWalSend, tint: 'send', onClick: onSend },
+    { key: 'receive', label: t('receive.title'), Icon: IconWalReceive, tint: 'recv', onClick: onReceive },
     /*
      * The bitcoin doorway exists ONLY for the internal local vault. When a
      * wallet is connected through WalletConnect / an injected provider (Trust
@@ -33,31 +33,34 @@ export default function WalletActionRow({ onSend, onReceive, onBitcoin, onSwap, 
      * removed entirely rather than left visible as a dead tap.
      */
     ...(showBitcoin ? [{ key: 'bitcoin', label: t('btc.hub.action'), Icon: IconBitcoin, tint: 'btc', onClick: onBitcoin }] : []),
-    { key: 'swap', label: t('swap.title'), Icon: IconSwap, tint: 'swap', onClick: onSwap },
-    { key: 'bridge', label: t('nav.bridge'), Icon: IconSwap, tint: 'bridge', onClick: onBridge },
-    { key: 'buy', label: t('nav.buy'), Icon: IconPlus, tint: 'buy', onClick: onBuy },
-    { key: 'earn', label: t('nav.earn'), Icon: IconSparkle, tint: 'earn', onClick: onEarn }
+    { key: 'swap', label: t('swap.title'), Icon: IconWalSwap, tint: 'swap', onClick: onSwap },
+    /* Bridge gets its own glyph at last — it wore Swap's icon, so two
+       different verbs (exchange here / move across chains) looked like one. */
+    { key: 'bridge', label: t('nav.bridge'), Icon: IconWalBridge, tint: 'bridge', onClick: onBridge },
+    { key: 'buy', label: t('nav.buy'), Icon: IconWalBuy, tint: 'buy', onClick: onBuy },
+    { key: 'earn', label: t('nav.earn'), Icon: IconWalEarn, tint: 'earn', onClick: onEarn }
   ];
 
   return (
     <div className="wallet-actions-v2">
       <div className="wallet-action-strip" role="list" aria-label={t('wallet.actions')}>
-        {actions.map((a) => (
+        {actions.map((a, i) => (
           <button
             key={a.key}
             type="button"
             role="listitem"
-            className={`wallet-action-v2 wal-action-${a.tint}`}
+            className={`wallet-action-v2 wal-action-${a.tint} walx-rise`}
+            style={{ '--walx-d': `${120 + i * 45}ms` }}
             onClick={a.onClick}
             aria-label={a.label}
           >
-            <span className="wallet-action-v2-icon" aria-hidden="true"><a.Icon width={19} height={19} /></span>
+            <span className="wallet-action-v2-icon" aria-hidden="true"><a.Icon width={20} height={20} /></span>
             <span className="wallet-action-v2-label">{a.label}</span>
           </button>
         ))}
       </div>
       <button type="button" className="wallet-optimize" onClick={onOptimize}>
-        <IconSparkle width={15} height={15} />
+        <span className="walx-opt-ico" aria-hidden="true"><IconWalSpark width={16} height={16} /></span>
         <span>{t('wallet.optimize')}</span>
         <span className="wallet-optimize-note">{t('wallet.optimizeNote')}</span>
       </button>

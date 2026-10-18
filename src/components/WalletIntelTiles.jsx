@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import SecurityCenterCard from './SecurityCenterCard';
 import { fmtUsd } from '../lib/format';
-import { IconChevronRight, IconSparkle, IconTrend } from './Icons';
+import { IconChevronRight } from './Icons';
+import { IconWalSpark, IconWalTrend } from './WalletGlassIcons';
 
 /**
  * INTELLIGENCE | P&L | RISK — the three tiles under the hero.
@@ -10,9 +11,12 @@ import { IconChevronRight, IconSparkle, IconTrend } from './Icons';
  * and realized from the local lot ledger (honest `—` when absent); Risk is
  * the Security Center sheet. All of it lives on /wallet — no menu entries.
  *
- * All three share one structure (icon + title/subtitle + chevron) so the row
- * stays equal-height in every language and theme instead of the earlier mix
- * of an icon box on one tile and bare text on the other two.
+ * Glass-3.0 layout: every tile is VERTICAL (icon + chevron on the top row,
+ * title, then its figure/hint), so the three stay equal-height and scannable
+ * in every language and theme instead of the earlier icon-left rows that
+ * crushed the text on narrow screens. Each tile owns one accent
+ * (`--walx-ac`, driven by the --ink-* tokens) so the trio reads as a family
+ * with distinct doors: violet intelligence, mint P&L, cyan security.
  */
 export default function WalletIntelTiles({ intel = null, onIntel, onPnl }) {
   const { t } = useTranslation();
@@ -28,32 +32,28 @@ export default function WalletIntelTiles({ intel = null, onIntel, onPnl }) {
 
   return (
     <div className="wallet-intel-row">
-      <button type="button" className="wallet-pie-card wal-sec-card" onClick={onIntel}>
-        <span className="row" style={{ gap: 10, flex: 1, minWidth: 0 }}>
-          <span className="wal-sec-ico"><IconSparkle width={18} height={18} /></span>
-          <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
-            <strong style={{ fontSize: 13, display: 'block' }}>{t('wallet.intel.tile')}</strong>
-            <small className="faint" style={{ display: 'block', fontSize: 10.5, marginTop: 2, lineHeight: 1.5 }}>{t('wallet.intel.tileHint')}</small>
-          </span>
+      <button type="button" className="wallet-pie-card wal-sec-card walx-tile-intel" onClick={onIntel}>
+        <span className="walx-tile-head">
+          <span className="wal-sec-ico"><IconWalSpark width={18} height={18} /></span>
+          <IconChevronRight className="walx-chev" width={14} height={14} />
         </span>
-        <IconChevronRight width={14} height={14} />
+        <span className="walx-tile-title">{t('wallet.intel.tile')}</span>
+        <span className="walx-tile-sub">{t('wallet.intel.tileHint')}</span>
       </button>
 
-      <button type="button" className="wallet-pie-card wal-sec-card" onClick={onPnl}>
-        <span className="row" style={{ gap: 10, flex: 1, minWidth: 0 }}>
-          <span className="wal-sec-ico"><IconTrend width={18} height={18} /></span>
-          <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
-            <strong style={{ fontSize: 13, display: 'block' }}>{t('wallet.pnl.title')}</strong>
-            <small className="mono" style={{ display: 'block', fontSize: 12, fontWeight: 900, marginTop: 2, color: hasCost && pnlUp(unreal) ? 'var(--up)' : hasCost ? 'var(--down)' : undefined }}>
-              {hasCost ? `${unreal >= 0 ? '+' : ''}${fmtUsd(unreal)}` : '—'}
-            </small>
-            <small className="faint" style={{ display: 'block', fontSize: 9.5, marginTop: 1 }}>
-              {t('wallet.pnl.unrealized')}
-              {hasLots && <span className={pnlUp(realised) ? 'up' : 'down'} style={{ marginInlineStart: 6 }}>{realised >= 0 ? '+' : ''}{fmtUsd(realised)}</span>}
-            </small>
-          </span>
+      <button type="button" className="wallet-pie-card wal-sec-card walx-tile-pnl" onClick={onPnl}>
+        <span className="walx-tile-head">
+          <span className="wal-sec-ico"><IconWalTrend width={18} height={18} /></span>
+          <IconChevronRight className="walx-chev" width={14} height={14} />
         </span>
-        <IconChevronRight width={14} height={14} />
+        <span className="walx-tile-title">{t('wallet.pnl.title')}</span>
+        <span className="walx-tile-fig mono" style={{ color: hasCost && pnlUp(unreal) ? 'var(--walx-up)' : hasCost ? 'var(--walx-down)' : undefined }}>
+          {hasCost ? `${unreal >= 0 ? '+' : ''}${fmtUsd(unreal)}` : '—'}
+        </span>
+        <span className="walx-tile-sub">
+          {t('wallet.pnl.unrealized')}
+          {hasLots && <span className={pnlUp(realised) ? 'up' : 'down'} style={{ marginInlineStart: 6 }}>{realised >= 0 ? '+' : ''}{fmtUsd(realised)}</span>}
+        </span>
       </button>
 
       <SecurityCenterCard />
