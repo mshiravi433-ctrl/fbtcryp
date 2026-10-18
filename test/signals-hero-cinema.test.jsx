@@ -48,6 +48,7 @@ import {
   HERO_TITLE_HOLD_MS,
   HERO_WORD_HOLD_MS,
   HERO_WORD_KEYS,
+  SignalsHeroMark,
   SignalsHeroScene,
   SignalsHeroWords,
   resolveHeroCredit,
@@ -276,6 +277,47 @@ describe('the 30-second cycle', () => {
     expect(ticks()[0].dataset.on).toBe('false');
   });
 
+  it('gives every phrase its own SVG glyph — and the glyph adds no text of its own', () => {
+    renderWords();
+    settle();
+    const word = () => screen.getByTestId('signals-hero-word');
+    expect(word().dataset.glyph).toBe('title');
+    expect(word().querySelector('.sigh-word-ic svg')).not.toBeNull();
+    expect(word().querySelector('.sigh-word-ic svg').getAttribute('aria-hidden')).toBe('true');
+    /* The chip is decoration: what is read off the element, by a screen
+       reader or by `shown()` above, stays exactly the phrase. */
+    expect(shown()).toBe('سیگنال هوشمند');
+    firstRotation();
+    expect(word().dataset.glyph).toBe('early');
+    expect(shown()).toBe(fa.signals.hero.words.early);
+  });
+
+  it('lets a tap advance the phrase, and a tap on a tick jump straight to it', () => {
+    renderWords();
+    settle();
+    fireEvent.click(document.querySelector('.sigh-words'));
+    expect(shown()).toBe(fa.signals.hero.words.early);
+    const ticks = [...document.querySelectorAll('.sigh-ticks i')];
+    fireEvent.click(ticks[3]);
+    expect(shown()).toBe(fa.signals.hero.words.history);
+    expect(screen.getByTestId('signals-hero-word').dataset.glyph).toBe('history');
+    /* …and the automatic cycle carries on from where the reader put it. */
+    settle();
+    act(() => { vi.advanceTimersByTime(SETTLE_MS + HERO_WORD_HOLD_MS); });
+    expect(shown()).toBe(fa.signals.hero.words.conclusion);
+  });
+
+  it('pauses the cycle while the ticker is pressed, and resumes on release', () => {
+    renderWords();
+    settle();
+    fireEvent.pointerDown(document.querySelector('.sigh-words'));
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(shown()).toBe('سیگنال هوشمند');
+    fireEvent.pointerUp(document.querySelector('.sigh-words'));
+    firstRotation();
+    expect(shown()).toBe(fa.signals.hero.words.early);
+  });
+
   it('reads the English cycle in the English locale', () => {
     renderWords({}, 'en');
     expect(shown()).toBe(en.signals.title);
@@ -450,6 +492,35 @@ describe('the film the request named is the DEFAULT — nothing to configure', (
     expect(window.HTMLMediaElement.prototype.load).not.toHaveBeenCalled();
   });
 
+  it('plays the film on an Android PHONE BROWSER — the bundled loop is 37 KB, not the old 4K clip', () => {
+    /* The denied-Android guard was written for a 4K stock hotlink; the clip
+       that ships now is a 640×240, six-second, ~37 KB same-origin loop.
+       Android Chrome/WebView readers get the same cinema as iPhone, with
+       the drawn sky kept cheaper behind it (18 stars, no turbulence). */
+    setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36');
+    renderScene();
+    const scene = screen.getByTestId('signals-hero-scene');
+    expect(scene.dataset.platform).toBe('android');
+    expect(document.querySelector('video')).not.toBeNull();
+    settle();
+    expect(document.querySelector('video').getAttribute('src')).toBe(HERO_FILM_SRC);
+    expect(scene.dataset.film).toBe('loading');
+    // …while the drawn fallback behind it stays the cheap Android sky.
+    expect(document.querySelectorAll('.sigh-star')).toHaveLength(18);
+    expect(document.querySelector('.sigh-neb g').getAttribute('filter')).toBeNull();
+  });
+
+  it('still refuses the film inside the APK even on an Android user agent', () => {
+    /* The APK's WebView also says "Android" — the native-shell answer, not
+       the user agent, is what keeps a decoder out of the packaged app. */
+    setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36');
+    window.Capacitor = { isNativePlatform: () => true };
+    renderScene();
+    settle();
+    expect(document.querySelector('video')).toBeNull();
+    expect(screen.getByTestId('signals-hero-scene').dataset.film).toBe('none');
+  });
+
   it('keeps the film off a reader who asked to save data', () => {
     setConnection({ saveData: true, effectiveType: '4g' });
     renderScene();
@@ -513,7 +584,7 @@ describe('the drawn scene (film switched off — VITE_SIGNALS_HERO_VIDEO=none)',
     expect(positions()).toBe(positions());
   });
 
-  it('does not mount or fetch a video decoder on Android', () => {
+  it('mounts no video decoder on Android either when the film is switched off', () => {
     setUserAgent('Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126.0 Mobile');
     const { container } = renderScene({ active: true });
     settle();
@@ -653,6 +724,38 @@ describe("an operator's own film (VITE_SIGNALS_HERO_VIDEO=/media/…)", () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
+   3b. THE MARK — the animated SVG sigil in the medallion
+   ══════════════════════════════════════════════════════════════════════════ */
+describe('the hero mark', () => {
+  it('draws the orbit rail, two breathing rings, the satellite and the trace', () => {
+    render(
+      <I18nextProvider i18n={makeI18n('fa')}>
+        <SignalsHeroMark />
+      </I18nextProvider>
+    );
+    const mark = screen.getByTestId('signals-hero-mark');
+    expect(mark.tagName.toLowerCase()).toBe('svg');
+    expect(mark.getAttribute('aria-hidden')).toBe('true');
+    expect(mark.querySelectorAll('.sigh-mark-ring')).toHaveLength(2);
+    expect(mark.querySelector('.sigh-mark-orbit')).not.toBeNull();
+    expect(mark.querySelector('.sigh-mark-core')).not.toBeNull();
+    expect(mark.querySelector('path')).not.toBeNull();
+    /* A brand mark beside an h1 carries no words of its own. */
+    expect(mark.textContent).toBe('');
+  });
+
+  it('freezes into the still sigil when motion is not allowed', () => {
+    motionAllowed.still = true;
+    render(
+      <I18nextProvider i18n={makeI18n('fa')}>
+        <SignalsHeroMark />
+      </I18nextProvider>
+    );
+    expect(screen.getByTestId('signals-hero-mark').classList.contains('is-still')).toBe(true);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
    4. THE COPY — three complete locales, nine honest fallbacks
    ══════════════════════════════════════════════════════════════════════════ */
 describe('the rotating words are real translations', () => {
@@ -771,6 +874,31 @@ describe('the stylesheet keeps its performance promises', () => {
     expect(css()).toMatch(/\.sigh-scene\.is-film \.sigh-film \{ opacity: 1; \}/);
   });
 
+  it('lays the band out as two rows: the ticker owns the full width of row 2', () => {
+    /* The proportions contract. The phrase row spans every column, which is
+       what lets one line hold the longest Persian sentence and keeps the
+       whole band ≈112–124px tall instead of stacking into ~160px. */
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema > \.sigh-words\s*\{[^}]*grid-column:\s*1 \/ -1/);
+    expect(css()).toMatch(/--sigh-slot-h:\s*24px/);
+    /* The live pill survives the narrow hero collapse in signals-intel.css —
+       live/offline is information a phone keeps, in its compact form. */
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-status \{\s*display:\s*flex/);
+  });
+
+  it('rests the big drawn layers while the film covers them', () => {
+    expect(css()).toMatch(/\.sigh-scene\.is-film \.sigh-neb,[\s\S]*?animation-play-state:\s*paused/);
+  });
+
+  it('keeps the medallion sigil to composited motion only', () => {
+    /* Rings scale around their own centre and the satellite rotates around
+       the mark's: transform-box is what makes an SVG group spin in place
+       instead of orbiting the page. */
+    expect(css()).toMatch(/\.sigh-mark-orbit\s*\{[^}]*transform-box:\s*view-box/);
+    expect(css()).toMatch(/\.sigh-mark-ring\s*\{[^}]*transform-box:\s*fill-box/);
+    expect(css()).toMatch(/\.sigh-mark\.is-still \.sigh-mark-orbit \{\s*animation:\s*none/);
+    expect(css()).toMatch(/:root\[data-native='true'\] \.sigh-mark-orbit,[\s\S]*?animation:\s*none/);
+  });
+
   it('gives the rotating line a fixed slot so a long phrase cannot move the hero', () => {
     const slot = css().match(/\.sigh-words-slot\s*\{[^}]*\}/)[0];
     expect(slot).toMatch(/height:\s*var\(--sigh-slot-h\)/);
@@ -866,8 +994,15 @@ describe('the Signals page wiring', () => {
     const hero = src.slice(src.indexOf('className="sic-page-hero has-cinema"'));
     expect(hero).toContain('<SignalsHeroScene active={!still} />');
     expect(hero).toContain('<SignalsHeroWords />');
+    expect(hero).toContain('<SignalsHeroMark />');
+    /* The ticker is a DIRECT child of the band (its own grid row), not a
+       third line inside the copy column — that placement is the whole
+       proportions fix, so it is pinned here: the copy div closes before
+       the ticker appears. */
+    const copy = hero.slice(hero.indexOf('sic-hero-copy'), hero.indexOf('<SignalsHeroWords />'));
+    expect(copy).toContain('</div>');
     expect(hero).toMatch(/<h1>\{t\('signals\.title'\)\}<\/h1>/);
-    expect(src).toMatch(/import \{ SignalsHeroScene, SignalsHeroWords \} from '\.\.\/components\/SignalsHeroCinema'/);
+    expect(src).toMatch(/import \{ SignalsHeroMark, SignalsHeroScene, SignalsHeroWords \} from '\.\.\/components\/SignalsHeroCinema'/);
     expect(src).toMatch(/import '\.\.\/styles\/signals-hero-cinema\.css'/);
   });
 
