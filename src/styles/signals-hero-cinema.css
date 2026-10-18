@@ -131,6 +131,11 @@
    live/offline is information, not decoration, so a phone keeps it. */
 .sic-page-hero.has-cinema .sic-hero-status {
   gap: 5px;
+  /* A hairline divider sets the status off as the band's instrument cluster
+     (salvaged from the parallel #531 refresh, whose appended layer this
+     rewrite supersedes). Logical edge, so it flips with direction. */
+  padding-inline-start: 13px;
+  border-inline-start: 1px solid rgba(207, 235, 255, 0.14);
 }
 .sic-page-hero.has-cinema .sic-hero-status i {
   white-space: nowrap;
@@ -587,6 +592,7 @@
 :root[data-theme='light'] .sigh-scene.is-film .sigh-film { opacity: 0.26; }
 :root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy h1 { text-shadow: none; }
 :root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { text-shadow: none; }
+:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-status { border-inline-start-color: rgba(21, 45, 89, 0.13); }
 :root[data-theme='light'] .sigh-ai { color: #2658c9; text-shadow: none; }
 :root[data-theme='light'] .sigh-words {
   border-color: rgba(21, 26, 48, 0.1);
@@ -632,6 +638,7 @@
   .sic-page-hero.has-cinema .sic-hero-icon svg { width: 36px; height: 36px; }
   .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: 19px; }
   .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { margin-top: 2px; font-size: 11px; }
+  .sic-page-hero.has-cinema .sic-hero-status { padding-inline-start: 10px; }
   .sic-page-hero.has-cinema .sic-hero-status i { padding: 4px 8px; font-size: 9px; }
   .sigh-ai { display: none; }
   .sigh-words { min-height: 36px; padding: 5px 9px; gap: 7px; border-radius: 12px; }
