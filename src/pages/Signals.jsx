@@ -2242,7 +2242,14 @@ export default function Signals() {
           The tagline is static below the heading, while the keyword line rotates. */}
       <motion.section className="sic-page-hero has-cinema" variants={riseIn} initial="hidden" animate="show">
         <SignalsHeroScene active={!still} />
-        <span className="sic-hero-icon"><IconSparkle /></span>
+        <span className="sic-hero-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" focusable="false">
+            <path d="M7 27h7l4-11 7 19 5-13 3 5h8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="34" cy="12" r="2" fill="currentColor" />
+            <circle cx="12" cy="37" r="1.5" fill="currentColor" opacity=".65" />
+          </svg>
+          <span className="sic-hero-icon-orbit" />
+        </span>
         <div className="sic-hero-copy">
           <h1>{t('signals.title')}</h1>
           <p className="sic-hero-tagline">{t('signals.hero.tagline')}</p>
