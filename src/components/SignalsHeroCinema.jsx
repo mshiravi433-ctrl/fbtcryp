@@ -4,11 +4,18 @@ import { useStill } from './AnimatedIcon';
 import { isNativeShell } from '../lib/nativeShell';
 
 /**
- * The first Signals banner: a lightweight, same-origin H.264 nebula loop with
- * a CSS/SVG fallback and a 30-second rotating phrase. No third-party hotlink
- * is needed to make the default experience work. The film is decorative and
+ * The first Signals banner — a compact GLASS capsule: a lightweight,
+ * same-origin H.264 nebula loop seen THROUGH a frosted glass veil, with a
+ * CSS/SVG nebula fallback, a small scrolling signal-wave etched along the
+ * bottom edge and a 30-second rotating phrase. No third-party hotlink is
+ * needed to make the default experience work. The film is decorative and
  * never blocks the page; reduced motion, native shell and slow/data-saving
  * connections keep the still scene instead.
+ *
+ * The glass is painted (translucent gradients over the scene), never blurred:
+ * a backdrop blur on this box is the one effect the performance law in
+ * signals-hero-cinema.css forbids, and the film behind the veil already
+ * supplies the softness a blur would fake.
  */
 
 /* The rotating line is the hero's own title plus four phrases. Slot 0 is the
@@ -170,6 +177,21 @@ function seeded(seed) {
   };
 }
 
+/**
+ * The signal wave etched along the bottom of the glass — one 200-unit pulse
+ * segment (flat → blip → spike → flat) repeated across an 800-unit strip.
+ * The strip is rendered at 200% width and slid by -50% in CSS (`transform`
+ * only, per the performance law), so the segment must tile seamlessly:
+ * every repeat starts and ends on the same baseline point. Built here, once,
+ * instead of hand-writing four copies of the same path in JSX.
+ */
+const HERO_WAVE_PATH = (() => {
+  const seg = (x) =>
+    `L${x + 44} 24 L${x + 54} 15 L${x + 63} 30 L${x + 70} 24 ` +
+    `L${x + 104} 24 L${x + 114} 7 L${x + 127} 35 L${x + 136} 24 L${x + 200} 24`;
+  return `M0 24 ${[0, 200, 400, 600].map(seg).join(' ')}`;
+})();
+
 function makeStars(count, seed) {
   const rand = seeded(seed);
   return Array.from({ length: count }, () => ({
@@ -181,7 +203,8 @@ function makeStars(count, seed) {
     /* Independent schedules. Without the random delay every star pulses
        together and the whole box reads as flickering. */
     delay: rand() * 6,
-    duration: 3.4 + rand() * 4.2,
+    // Calmer than the old sky: the glass capsule is a header, not a planetarium.
+    duration: 4.8 + rand() * 5.2,
     dim: 0.2 + rand() * 0.5
   }));
 }
@@ -371,7 +394,37 @@ export function SignalsHeroScene({ active = true }) {
         />
       )}
 
+      {/* Aurora glows over the film: two painted colour washes that drift a
+          few percent and back. They are what makes the loop read as light
+          moving inside glass rather than as a video glued to a card. */}
+      <div className="sigh-aurora" />
+
       <div className="sigh-vignette" />
+
+      {/* THE GLASS — a frosted veil painted over scene + film: translucent
+          white gradients and a hard top highlight. No backdrop blur (see the
+          performance law in the CSS); the film behind it is already soft. */}
+      <div className="sigh-glass" />
+
+      {/* A small live signal wave etched on the glass along the bottom edge.
+          30 px tall, one tiled path sliding on `transform` — the box's own
+          ECG, sized to garnish the capsule rather than headline it. */}
+      <div className="sigh-wave">
+        <svg viewBox="0 0 800 40" preserveAspectRatio="none" focusable="false">
+          <defs>
+            <linearGradient id={`${gid}-wave`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#00e5ff" />
+              <stop offset="52%" stopColor="#7c4dff" />
+              <stop offset="100%" stopColor="#ff2d95" />
+            </linearGradient>
+          </defs>
+          <path d={HERO_WAVE_PATH} fill="none" stroke={`url(#${gid}-wave)`} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+          <path d={HERO_WAVE_PATH} fill="none" stroke={`url(#${gid}-wave)`} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.16" transform="translate(0 5)" />
+        </svg>
+      </div>
+
+      {/* One slow light sweep across the pane, then a long rest. */}
+      <div className="sigh-shine" />
 
       {/* Optional credit for an operator-supplied video. */}
       {wantFilm && filmLive && credit && <span className="sigh-credit">{credit}</span>}

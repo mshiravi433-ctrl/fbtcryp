@@ -2238,15 +2238,18 @@ export default function Signals() {
 
   return (
     <PageTransition className="page sic-page">
-      {/* Same-origin video fills the first panel; the scene remains as a fallback.
-          The tagline is static below the heading, while the keyword line rotates. */}
+      {/* The compact glass capsule: same-origin film + drawn scene seen through
+          a frosted pane (SignalsHeroCinema), a tight title/tagline stack, and
+          the rotating keyword line. The scene remains as the film's fallback. */}
       <motion.section className="sic-page-hero has-cinema" variants={riseIn} initial="hidden" animate="show">
         <SignalsHeroScene active={!still} />
         <span className="sic-hero-icon" aria-hidden="true">
-          <svg viewBox="0 0 48 48" fill="none" focusable="false">
-            <path d="M7 27h7l4-11 7 19 5-13 3 5h8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="34" cy="12" r="2" fill="currentColor" />
-            <circle cx="12" cy="37" r="1.5" fill="currentColor" opacity=".65" />
+          {/* One small modern pulse mark: a single heartbeat line ending in a
+              live node. Drawn on a 24 grid and rendered at 20-22px — a
+              garnish on the glass tile, never a billboard. */}
+          <svg viewBox="0 0 24 24" fill="none" focusable="false">
+            <path d="M2.5 12h4l2.2-5.5 3.6 10 2.4-6.2 1.4 1.7h2.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="20.4" cy="12" r="1.7" fill="currentColor" />
           </svg>
           <span className="sic-hero-icon-orbit" />
         </span>

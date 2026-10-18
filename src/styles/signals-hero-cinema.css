@@ -1,7 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SIGNALS HERO CINEMA — the film/nebula behind the first box of /signals and
-   the words that fade through it. The default video is a local, lightweight
-   seamless loop; the drawn scene stays behind it throughout playback.
+   SIGNALS HERO — THE GLASS CAPSULE. The first box of /signals is a short,
+   frosted-glass capsule: a local lightweight film loop and a drawn nebula
+   seen THROUGH a painted glass veil (`.sigh-glass`), two aurora glows moving
+   inside the pane, one small signal wave etched along the bottom edge, a
+   slow light sweep, and the words that fade through it in a tight 3-line
+   stack. Compact by design — the capsule is a header, not a banner.
 
    Every rule here is scoped to `.sigh-` or to `.sic-page-hero.has-cinema`, so
    no other screen, language or spacing in the app moves. The hero's own
@@ -47,9 +50,12 @@
  * «بک‌گراند خالی» half of the request — empty of assets, not empty of design.
  */
 .sic-page-hero.has-cinema {
+  /* THE GLASS PANE: translucent white over a deep tint, so the scene painted
+     by the child layer glows THROUGH the box instead of sitting on a solid
+     slab. The gradient hairline (border-box) is the same one as before. */
   background:
-    linear-gradient(112deg, #060a1a 4%, #0b1030 46%, #160a2c 78%, #05070f) padding-box,
-    linear-gradient(140deg, rgba(0, 229, 255, 0.34), rgba(124, 77, 255, 0.22) 46%, rgba(255, 45, 149, 0.18)) border-box;
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.028) 42%, rgba(10, 14, 34, 0.22) 78%, rgba(255, 255, 255, 0.05)) padding-box,
+    linear-gradient(140deg, rgba(0, 229, 255, 0.42), rgba(124, 77, 255, 0.26) 46%, rgba(255, 45, 149, 0.22)) border-box;
 }
 
 /* ── The scene layer ────────────────────────────────────────────────────────
@@ -64,9 +70,12 @@
   overflow: hidden;
   pointer-events: none;
   border-radius: inherit;
+  /* Translucent at the edges so the pane above and the page glow behind the
+     capsule blend into one piece of glass; only the middle stays deep. */
   background:
-    radial-gradient(120% 160% at 82% -30%, rgba(0, 229, 255, 0.1), transparent 62%),
-    linear-gradient(112deg, #060a1a 4%, #0b1030 46%, #160a2c 78%, #05070f);
+    radial-gradient(120% 170% at 84% -40%, rgba(0, 229, 255, 0.14), transparent 60%),
+    radial-gradient(90% 150% at 8% 118%, rgba(124, 77, 255, 0.13), transparent 62%),
+    linear-gradient(112deg, rgba(6, 10, 26, 0.88) 4%, rgba(11, 16, 48, 0.82) 46%, rgba(22, 10, 44, 0.86) 78%, rgba(5, 7, 15, 0.9));
 }
 
 /* Content above the scene. The hero is a grid; lifting its direct children is
@@ -92,8 +101,8 @@
   inset: -12% -8%;
   width: 116%;
   height: 124%;
-  opacity: 0.62;
-  animation: sigh-neb-drift 64s ease-in-out infinite alternate;
+  opacity: 0.5;
+  animation: sigh-neb-drift 84s ease-in-out infinite alternate;
   will-change: transform;
 }
 
@@ -102,8 +111,8 @@
   inset: -8%;
   will-change: transform;
 }
-.sigh-plane-far  { animation: sigh-star-far 108s linear infinite; opacity: 0.85; }
-.sigh-plane-near { animation: sigh-star-near 74s linear infinite; }
+.sigh-plane-far  { animation: sigh-star-far 132s linear infinite; opacity: 0.8; }
+.sigh-plane-near { animation: sigh-star-near 96s linear infinite; }
 
 .sigh-star {
   position: absolute;
@@ -132,6 +141,12 @@
   opacity: 0;
   object-fit: cover;
   object-position: center;
+  /* The film, re-directed: a slow 22 s push-in (scale + drift on `transform`
+     only) so the loop feels shot for this capsule instead of tiled onto it.
+     The glass veil above it does the frosting; the film stays at full
+     opacity underneath, so a stalled frame can never flash the pane. */
+  animation: sigh-film-drift 22s ease-in-out infinite alternate;
+  will-change: transform;
   transition: opacity 900ms ease-out;
 }
 .sigh-scene.is-film .sigh-film { opacity: 1; }
@@ -141,11 +156,28 @@
   position: absolute;
   inset-block-end: 5px;
   inset-inline-end: 9px;
-  z-index: 4;
+  z-index: 8;
   color: rgba(255, 255, 255, 0.34);
   font-size: 7.5px;
   font-weight: 600;
   letter-spacing: 0.4px;
+}
+
+/* ── Aurora glows inside the pane ───────────────────────────────────────────
+   Two painted colour washes drifting a few percent and back (`transform`
+   only). They sit between the film and the glass, so the light reads as
+   moving INSIDE the capsule — the difference between a video on a card and
+   a living piece of glass. */
+.sigh-aurora {
+  position: absolute;
+  inset: -34% -12%;
+  z-index: 3;
+  background:
+    radial-gradient(30% 52% at 16% 22%, rgba(0, 229, 255, 0.17), transparent 70%),
+    radial-gradient(26% 46% at 84% 78%, rgba(255, 45, 149, 0.11), transparent 70%),
+    radial-gradient(22% 40% at 62% 8%, rgba(124, 77, 255, 0.13), transparent 70%);
+  animation: sigh-aurora-drift 17s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
 /* ── Readability ────────────────────────────────────────────────────────────
@@ -154,9 +186,71 @@
 .sigh-vignette {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 4;
   background:
-    radial-gradient(128% 190% at 50% 50%, transparent 46%, rgba(3, 5, 14, 0.42) 100%);
+    radial-gradient(128% 190% at 50% 50%, transparent 48%, rgba(3, 5, 14, 0.38) 100%);
+}
+
+/* ── THE GLASS VEIL ─────────────────────────────────────────────────────────
+   Frosted glass, painted: a translucent white wash that is brightest at the
+   top edge (where a real pane catches the light), a hard 1px highlight on the
+   top rim, and a faint inner bottom edge. The film behind it supplies the
+   softness; this layer supplies the surface. Static gradients — the only
+   things that move on the glass are the wave and the shine below. */
+.sigh-glass {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.035) 34%, rgba(255, 255, 255, 0.012) 58%, rgba(8, 12, 28, 0.16)),
+    linear-gradient(100deg, rgba(0, 229, 255, 0.05), transparent 42%, rgba(255, 45, 149, 0.035));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    inset 1px 0 0 rgba(255, 255, 255, 0.045),
+    inset -1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+/* ── The etched signal wave ─────────────────────────────────────────────────
+   A 30px strip along the bottom of the pane: one tiled ECG path at 200%
+   width sliding -50% on `transform`, so the pulse travels forever and the
+   loop point is invisible. Deliberately small — a garnish on the glass, and
+   faded at both ends so it never competes with the sentence above it. */
+.sigh-wave {
+  position: absolute;
+  inset-block-end: 0;
+  /* Physical `left`, not inline-start: the slide is a physical -50% shift of
+     a 200%-wide strip. Anchored to the inline start in RTL (right), the same
+     shift would carry the strip OUT of the pane instead of across it. */
+  left: 0;
+  z-index: 6;
+  width: 200%;
+  height: 30px;
+  opacity: 0.5;
+  animation: sigh-wave-slide 15s linear infinite;
+  will-change: transform;
+}
+.sigh-wave svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── One slow light sweep, then a long rest ─────────────────────────────────
+   A skewed white band crossing the pane in the first third of a 9s cycle and
+   parked off-pane for the rest: premium, not busy. `transform` + `opacity`. */
+.sigh-shine {
+  position: absolute;
+  top: -32%;
+  inset-inline-start: 0;
+  z-index: 7;
+  width: 42%;
+  height: 164%;
+  background: linear-gradient(92deg, transparent, rgba(255, 255, 255, 0.075) 46%, rgba(255, 255, 255, 0.13) 52%, rgba(255, 255, 255, 0.075) 58%, transparent);
+  opacity: 0;
+  animation: sigh-shine 9s ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 /* ── The rotating line ──────────────────────────────────────────────────────
@@ -288,6 +382,30 @@
   0%, 100% { opacity: 0.42; transform: scale(0.9); }
   50%      { opacity: 1; transform: scale(1); }
 }
+/* The film's slow push-in. Scale stays above 1 so the drifting frame can
+   never expose an edge of the drawn scene behind it. */
+@keyframes sigh-film-drift {
+  from { transform: translate3d(-0.7%, 0.4%, 0) scale(1.045); }
+  to   { transform: translate3d(0.8%, -0.8%, 0) scale(1.1); }
+}
+@keyframes sigh-aurora-drift {
+  from { transform: translate3d(-2.4%, -1.2%, 0) scale(1); opacity: 0.82; }
+  to   { transform: translate3d(2.6%, 1.6%, 0) scale(1.05); opacity: 1; }
+}
+/* -50% of a 200%-wide strip = exactly four wave segments: the loop point is
+   the same picture as the start, so the pulse never visibly restarts. */
+@keyframes sigh-wave-slide {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+/* Cross in the first third of the cycle, rest off-pane for the remainder. */
+@keyframes sigh-shine {
+  0%   { transform: translate3d(-130%, 0, 0) skewX(-16deg); opacity: 0; }
+  7%   { opacity: 1; }
+  30%  { transform: translate3d(285%, 0, 0) skewX(-16deg); opacity: 1; }
+  38%  { transform: translate3d(285%, 0, 0) skewX(-16deg); opacity: 0; }
+  100% { transform: translate3d(285%, 0, 0) skewX(-16deg); opacity: 0; }
+}
 
 /* ── Motion off: the scene stays, frozen ────────────────────────────────────
    `.is-still` is set by the component from `useStill()` (system
@@ -302,6 +420,16 @@
 }
 .sigh-scene.is-still .sigh-neb { opacity: 0.72; }
 .sigh-scene.is-still .sigh-star { opacity: 0.6; }
+/* The glass layers freeze with the sky; the shine parks invisible. */
+.sigh-scene.is-still .sigh-aurora,
+.sigh-scene.is-still .sigh-film,
+.sigh-scene.is-still .sigh-wave,
+.sigh-scene.is-still .sigh-shine {
+  animation: none;
+  will-change: auto;
+}
+.sigh-scene.is-still .sigh-shine { opacity: 0; }
+.sigh-scene.is-still .sigh-wave { opacity: 0.38; }
 
 @media (prefers-reduced-motion: reduce) {
   .sigh-neb,
@@ -310,6 +438,10 @@
   .sigh-words::before,
   .sigh-ticks i { animation: none; transition: none; }
   .sigh-film { transition: none; }
+  .sigh-aurora,
+  .sigh-wave,
+  .sigh-shine { animation: none; }
+  .sigh-shine { opacity: 0; }
 }
 
 /* ── Android: keep the headline live, make the decorative sky static ────────
@@ -323,6 +455,16 @@
   will-change: auto;
 }
 .sigh-scene.is-android .sigh-star { opacity: var(--dim, 0.4); }
+/* Android keeps the glass, skips the moving light: the pane and the etched
+   wave are painted once; the phrase cycle stays the only motion. */
+.sigh-scene.is-android .sigh-aurora,
+.sigh-scene.is-android .sigh-wave,
+.sigh-scene.is-android .sigh-shine {
+  animation: none;
+  will-change: auto;
+}
+.sigh-scene.is-android .sigh-shine { opacity: 0; }
+.sigh-scene.is-android .sigh-wave { opacity: 0.36; }
 
 /* ── Native APK: no decoder, no drifting layers ─────────────────────────────
    The component never mounts a film here; this freezes the drawn scene too,
@@ -334,6 +476,13 @@
   animation: none;
 }
 :root[data-native='true'] .sigh-neb { opacity: 0.7; }
+:root[data-native='true'] .sigh-aurora,
+:root[data-native='true'] .sigh-film,
+:root[data-native='true'] .sigh-wave,
+:root[data-native='true'] .sigh-shine {
+  animation: none;
+}
+:root[data-native='true'] .sigh-shine { opacity: 0; }
 
 /* ── Light theme ────────────────────────────────────────────────────────────
    A deep-space box in a light UI is still a dark box — that is what makes it
@@ -373,6 +522,20 @@
 :root[data-theme='light'] .sigh-ticks i[data-on='true'] { background: linear-gradient(90deg, #2658c9, #6c4bd8); }
 :root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { color: #30456f; }
 :root[data-theme='light'] .sigh-credit { color: rgba(21, 26, 48, 0.4); }
+/* The pane in daylight: brighter wash, softer sheen, a calmer wave. */
+:root[data-theme='light'] .sigh-glass {
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18) 36%, rgba(255, 255, 255, 0.06) 60%, rgba(38, 88, 201, 0.05)),
+    linear-gradient(100deg, rgba(38, 88, 201, 0.05), transparent 45%, rgba(255, 45, 149, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 0 rgba(21, 26, 48, 0.05),
+    inset 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset -1px 0 0 rgba(255, 255, 255, 0.3);
+}
+:root[data-theme='light'] .sigh-aurora { opacity: 0.55; }
+:root[data-theme='light'] .sigh-wave { opacity: 0.34; }
+:root[data-theme='light'] .sigh-shine { background: linear-gradient(92deg, transparent, rgba(255, 255, 255, 0.25) 46%, rgba(255, 255, 255, 0.42) 52%, rgba(255, 255, 255, 0.25) 58%, transparent); }
 
 /* ── Narrow phones ──────────────────────────────────────────────────────────
    Keep the tagline visible; hide only the decorative ticks for word room. */
@@ -398,7 +561,11 @@
 .sic-page-hero.has-cinema .sigh-words { display: grid; grid-template-columns: 5px minmax(0, 1fr) auto; }
 .sigh-word { animation: sigh-word-enter 420ms ease-out both; will-change: auto; }
 .sigh-words.is-still .sigh-word { animation: none; }
-@keyframes sigh-word-enter { from { opacity: .35; } to { opacity: 1; } }
+/* The phrase rises 4px as it lands — a breath, not a slide-show. */
+@keyframes sigh-word-enter {
+  from { opacity: 0; transform: translate3d(0, 4px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
 :root[data-theme='light'] .sigh-word.is-title { background: none; -webkit-text-fill-color: currentColor; }
 @media (prefers-reduced-motion: reduce) { .sigh-word { animation: none; } }
 @media (max-width: 600px) {
@@ -408,180 +575,199 @@
   .sic-page-hero.has-cinema .sic-hero-status { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
 }
 
-/* ── 2026 hero refresh: compact editorial layout with a tactile signal mark ──
-   Keep the scene and data behavior above; this layer only refines the first
-   impression and responsive geometry. Motion is restricted to transform and
-   opacity, with reduced-motion and still-state behavior inherited below. */
+/* ── 2026 GLASS CAPSULE — the compact layout ────────────────────────────────
+   The old box was a 154px banner: tall padding, a 54px icon, three text
+   lines spread far apart. This layer makes it a short capsule: ~90px on
+   desktop, ~84px on a phone. The icon shrinks to a 40px glass tile with a
+   22px mark, the sentence stack tightens to a 1.15/1.35 rhythm with 1-2px
+   gaps, and on phones the live status becomes a small chip parked in the
+   free corner instead of a whole extra row. Only `transform`/`opacity`
+   move; still / native / reduced-motion freezing is inherited below. */
 .sic-page-hero.has-cinema {
-  --sigh-slot-h: 24px;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
-  gap: clamp(12px, 2.2vw, 22px);
-  min-height: 154px;
-  padding: clamp(20px, 3.2vw, 30px) clamp(18px, 3.8vw, 34px);
-  border-radius: 26px;
-  box-shadow: 0 22px 55px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255,255,255,.08);
+  --sigh-slot-h: 18px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 0;
+  padding: 13px 16px;
+  border-radius: 20px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .sic-page-hero.has-cinema .sic-hero-icon {
-  width: 54px;
-  height: 54px;
+  width: 40px;
+  height: 40px;
   overflow: visible;
-  border-radius: 18px;
+  border: 1px solid rgba(180, 240, 255, 0.28);
+  border-radius: 13px;
   color: #b9f7ff;
-  background: linear-gradient(145deg, rgba(0,229,255,.2), rgba(124,77,255,.2) 68%, rgba(255,45,149,.12));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 10px 28px rgba(0,229,255,.17);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(0, 229, 255, 0.1) 52%, rgba(124, 77, 255, 0.12));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 -1px 0 rgba(255, 255, 255, 0.05), 0 6px 18px rgba(0, 229, 255, 0.13);
   isolation: isolate;
 }
 .sic-page-hero.has-cinema .sic-hero-icon svg {
   position: relative;
   z-index: 1;
-  width: 34px;
-  height: 34px;
+  width: 22px;
+  height: 22px;
   filter: none;
 }
 .sic-page-hero.has-cinema .sic-hero-icon-orbit {
   position: absolute;
-  inset: -5px;
+  inset: -3px;
   z-index: -1;
-  border: 1px solid rgba(123,236,255,.32);
-  border-radius: 22px;
-  opacity: .68;
-  animation: sigh-orbit 8s ease-in-out infinite;
+  border: 1px solid rgba(123, 236, 255, 0.3);
+  border-radius: 16px;
+  opacity: 0.6;
+  animation: sigh-orbit 9s ease-in-out infinite;
 }
 .sic-page-hero.has-cinema .sic-hero-icon-orbit::after {
   content: '';
   position: absolute;
-  top: 6px;
-  inset-inline-end: 3px;
-  width: 5px;
-  height: 5px;
+  top: 4px;
+  inset-inline-end: 2px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: #8ff5ff;
-  box-shadow: 0 0 10px rgba(0,229,255,.9);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.85);
 }
 @keyframes sigh-orbit {
-  0%, 100% { transform: rotate(-5deg) scale(.98); opacity: .42; }
-  50% { transform: rotate(5deg) scale(1.035); opacity: .85; }
+  0%, 100% { transform: rotate(-4deg) scale(0.99); opacity: 0.38; }
+  50% { transform: rotate(4deg) scale(1.02); opacity: 0.75; }
 }
 
+/* The three sentences, tight: title, tagline and the rotating line sit on a
+   1-2px vertical rhythm so the box reads as one breath, not three rows. */
 .sic-page-hero.has-cinema .sic-hero-copy { align-self: center; }
 .sic-page-hero.has-cinema .sic-hero-copy h1 {
-  font-size: clamp(22px, 3vw, 32px);
+  font-size: clamp(19px, 2.3vw, 24px);
   font-weight: 950;
-  letter-spacing: -.55px;
-  line-height: 1.22;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
 }
 .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline {
-  margin-top: 5px;
-  font-size: clamp(12px, 1.15vw, 14px);
+  margin-top: 1px;
+  font-size: clamp(11.5px, 1vw, 12.5px);
   font-weight: 650;
-  line-height: 1.5;
-  opacity: .88;
+  line-height: 1.35;
+  opacity: 0.88;
 }
 .sic-page-hero.has-cinema .sigh-words {
-  margin-top: 7px;
-  gap: 8px;
+  margin-top: 2px;
+  gap: 7px;
 }
 .sic-page-hero.has-cinema .sigh-words-slot { height: var(--sigh-slot-h); }
 .sic-page-hero.has-cinema .sigh-word {
   color: #c8f5ff;
-  font-size: 12px;
+  font-size: 11px;
   line-height: var(--sigh-slot-h);
-  text-shadow: 0 1px 12px rgba(0,0,0,.76);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.72);
 }
 .sic-page-hero.has-cinema .sigh-word.is-title {
   color: #fff;
-  font-size: 13px;
+  font-size: 11.5px;
 }
 .sic-page-hero.has-cinema .sigh-words::before {
-  width: 6px;
-  height: 6px;
-  box-shadow: 0 0 12px rgba(0,229,255,.9);
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 9px rgba(0, 229, 255, 0.85);
 }
-.sic-page-hero.has-cinema .sigh-ticks { gap: 4px; }
-.sic-page-hero.has-cinema .sigh-ticks i { width: 9px; height: 3px; }
+.sic-page-hero.has-cinema .sigh-ticks { gap: 3px; }
+.sic-page-hero.has-cinema .sigh-ticks i { width: 7px; height: 3px; }
 
+/* The status column becomes one slim glass edge: label over a 24px pill. */
 .sic-page-hero.has-cinema .sic-hero-status {
   align-self: center;
   align-items: flex-end;
-  gap: 8px;
-  padding-inline-start: clamp(12px, 2vw, 22px);
-  border-inline-start: 1px solid rgba(207,235,255,.16);
-  color: rgba(230,242,255,.76);
-  font-size: 10px;
-  line-height: 1.35;
+  gap: 4px;
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid rgba(207, 235, 255, 0.14);
+  color: rgba(230, 242, 255, 0.72);
+  font-size: 9px;
+  line-height: 1.3;
 }
 .sic-page-hero.has-cinema .sic-hero-status > span { font-weight: 750; }
 .sic-page-hero.has-cinema .sic-hero-status i {
-  min-height: 30px;
-  padding: 6px 10px;
-  border-radius: 11px;
-  font-size: 10px;
+  min-height: 24px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 9.5px;
   letter-spacing: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 .sic-page-hero.has-cinema .sic-hero-status i b {
-  flex: 0 0 6px;
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
   animation-duration: 3.2s;
 }
 
 :root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-icon {
   color: #1868a8;
-  background: linear-gradient(145deg, rgba(0,161,203,.14), rgba(108,75,216,.12));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.72), 0 8px 22px rgba(38,88,201,.12);
+  border-color: rgba(38, 88, 201, 0.24);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.65), rgba(0, 161, 203, 0.1) 55%, rgba(108, 75, 216, 0.1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 6px 16px rgba(38, 88, 201, 0.1);
 }
-:root[data-theme='light'] .sic-hero-icon-orbit { border-color: rgba(38,88,201,.28); }
+:root[data-theme='light'] .sic-hero-icon-orbit { border-color: rgba(38, 88, 201, 0.26); }
 :root[data-theme='light'] .sic-hero-icon-orbit::after { background: #287ad4; }
 :root[data-theme='light'] .sic-page-hero.has-cinema .sigh-word { color: #26395e; text-shadow: none; }
 :root[data-theme='light'] .sic-page-hero.has-cinema .sigh-word.is-title { color: #16264a; }
-:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-status { border-color: rgba(21,45,89,.13); color: #35496d; }
+:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-status { border-color: rgba(21, 45, 89, 0.12); color: #35496d; }
 
 @media (max-width: 600px) {
   .sic-page-hero.has-cinema {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 36px minmax(0, 1fr);
     align-items: center;
-    gap: 10px 12px;
+    gap: 10px;
     min-height: 0;
-    padding: 17px 16px;
-    border-radius: 21px;
+    padding: 11px 12px;
+    border-radius: 18px;
   }
-  .sic-page-hero.has-cinema .sic-hero-icon { width: 44px; height: 44px; border-radius: 15px; }
-  .sic-page-hero.has-cinema .sic-hero-icon svg { width: 29px; height: 29px; }
-  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: clamp(20px, 5.6vw, 25px); line-height: 1.26; }
-  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { margin-top: 3px; font-size: 12px; line-height: 1.45; }
-  .sic-page-hero.has-cinema .sigh-words { margin-top: 5px; gap: 6px; }
-  .sic-page-hero.has-cinema .sigh-words-slot { height: 36px; }
+  .sic-page-hero.has-cinema .sic-hero-icon { width: 36px; height: 36px; border-radius: 12px; }
+  .sic-page-hero.has-cinema .sic-hero-icon svg { width: 20px; height: 20px; }
+  /* Reserve the corner for the status chip so no sentence slides under it. */
+  .sic-page-hero.has-cinema .sic-hero-copy { padding-inline-end: 82px; }
+  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: clamp(17px, 5vw, 20px); line-height: 1.18; }
+  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { margin-top: 0; font-size: 11px; line-height: 1.32; }
+  .sic-page-hero.has-cinema .sigh-words { margin-top: 1px; gap: 6px; }
+  .sic-page-hero.has-cinema .sigh-words-slot { height: 28px; }
   .sic-page-hero.has-cinema .sigh-word,
   .sic-page-hero.has-cinema .sigh-word.is-title {
     display: flex;
     align-items: center;
-    height: 36px;
-    line-height: 1.35;
+    height: 28px;
+    line-height: 1.3;
     white-space: normal;
     overflow: hidden;
-    font-size: 11.5px;
+    font-size: 10.5px;
   }
+  /* The status is a floating glass chip in the free corner — the row it used
+     to occupy below the copy is gone, which is where most of the phone
+     height came from. The "AI powered" label is desktop-only context. */
   .sic-page-hero.has-cinema .sic-hero-status {
-    display: flex;
-    grid-column: 2;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 6px 9px;
+    position: absolute;
+    top: 10px;
+    inset-inline-end: 12px;
+    grid-column: auto;
+    display: block;
     padding: 0;
     border: 0;
-    font-size: 9px;
   }
-  .sic-page-hero.has-cinema .sic-hero-status i { min-height: 27px; padding: 5px 9px; font-size: 9px; }
+  .sic-page-hero.has-cinema .sic-hero-status > span { display: none; }
+  .sic-page-hero.has-cinema .sic-hero-status i { min-height: 22px; padding: 3px 8px; font-size: 9px; }
   .sic-page-hero.has-cinema .sigh-ticks { display: none; }
+  .sic-page-hero.has-cinema .sigh-wave { height: 24px; }
 }
 @media (max-width: 360px) {
-  .sic-page-hero.has-cinema { grid-template-columns: 40px minmax(0,1fr); gap: 9px 10px; padding: 14px 12px; }
-  .sic-page-hero.has-cinema .sic-hero-icon { width: 40px; height: 40px; }
-  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: 19px; }
-  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { font-size: 11.5px; }
+  .sic-page-hero.has-cinema { grid-template-columns: 34px minmax(0, 1fr); gap: 9px; padding: 10px 11px; }
+  .sic-page-hero.has-cinema .sic-hero-icon { width: 34px; height: 34px; }
+  .sic-page-hero.has-cinema .sic-hero-icon svg { width: 19px; height: 19px; }
+  .sic-page-hero.has-cinema .sic-hero-copy { padding-inline-end: 74px; }
+  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: 16.5px; }
+  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { font-size: 10.5px; }
   .sic-page-hero.has-cinema .sigh-word,
-  .sic-page-hero.has-cinema .sigh-word.is-title { font-size: 11px; }
+  .sic-page-hero.has-cinema .sigh-word.is-title { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sic-page-hero.has-cinema .sic-hero-icon-orbit { animation: none; }

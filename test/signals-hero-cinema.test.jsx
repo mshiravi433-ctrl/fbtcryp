@@ -858,6 +858,72 @@ describe('the stylesheet keeps its performance promises', () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
+   5b. THE GLASS CAPSULE — «طول باکس زیاده» + «پشت‌زمینه شیشه‌ای» + small SVG
+   ══════════════════════════════════════════════════════════════════════════ */
+describe('the compact glass capsule redesign', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_SIGNALS_HERO_VIDEO', 'none');
+  });
+
+  it('paints the glass pane: veil, aurora, etched wave and shine over the scene', () => {
+    renderScene();
+    const scene = screen.getByTestId('signals-hero-scene');
+    /* The glass is four painted layers, all decorative children of the scene:
+       the frosted veil itself, the aurora glowing inside it, the small
+       signal wave etched along the bottom, and the slow light sweep. */
+    expect(scene.querySelector('.sigh-glass')).not.toBeNull();
+    expect(scene.querySelector('.sigh-aurora')).not.toBeNull();
+    expect(scene.querySelector('.sigh-shine')).not.toBeNull();
+    const wave = scene.querySelector('.sigh-wave svg');
+    expect(wave).not.toBeNull();
+    /* One tiled pulse path (plus its faint echo) — small, drawn once. */
+    expect(wave.querySelectorAll('path')).toHaveLength(2);
+    expect(wave.querySelector('path').getAttribute('d')).toMatch(/^M0 24/);
+  });
+
+  it('keeps the box SHORT: no banner min-height, a tight 18px sentence slot', () => {
+    /* «طول باکس زیاده» — the old capsule forced min-height:154px. The final
+       layout layer must pin the compact contract instead: no forced height,
+       an 18px rotating slot, and sentences on a tightened rhythm. */
+    expect(css()).not.toMatch(/min-height:\s*154px/);
+    expect(css()).toMatch(/--sigh-slot-h:\s*18px/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-copy \.sic-hero-tagline \{[^}]*line-height:\s*1\.35/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sigh-words \{\s*margin-top:\s*2px/);
+  });
+
+  it('keeps every SVG small: a 22px hero mark and a 30px etched wave strip', () => {
+    /* «svg اندازه خیلی بزرگ نباشد» — the icon mark is capped at 22px in a
+       40px tile (was 34px in 54px), and the wave strip is a 30px garnish. */
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-icon \{[^}]*width:\s*40px/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-icon svg \{[^}]*width:\s*22px/);
+    expect(css()).not.toMatch(/\.sic-hero-icon svg \{[^}]*width:\s*34px/);
+    expect(css()).toMatch(/\.sigh-wave \{[^}]*height:\s*30px/);
+    const src = page();
+    const hero = src.slice(src.indexOf('className="sic-page-hero has-cinema"'), src.indexOf('className="sic-hero-copy"'));
+    expect(hero).toMatch(/viewBox="0 0 24 24"/);
+  });
+
+  it('frosts the glass WITHOUT a backdrop blur, and re-directs the film on transform only', () => {
+    /* The pane is painted gradients + a hard top highlight; the film's new
+       slow push-in and the wave's slide are `transform` keyframes, so the
+       performance law measured in section 5 still holds over the redesign. */
+    expect(css()).toMatch(/\.sigh-glass \{[^}]*inset 0 1px 0 rgba\(255, 255, 255, 0\.22\)/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \{[^}]*rgba\(255, 255, 255, 0\.1\)[^}]*padding-box/);
+    expect(css()).toMatch(/@keyframes sigh-film-drift \{[^}]*scale\(1\.045\)/);
+    expect(css()).toMatch(/@keyframes sigh-wave-slide \{[\s\S]*?translate3d\(-50%, 0, 0\)/);
+    /* The new moving layers freeze with everything else. */
+    expect(css()).toMatch(/\.sigh-scene\.is-still \.sigh-wave,[\s\S]*?animation:\s*none/);
+    expect(css()).toMatch(/\.sigh-scene\.is-android \.sigh-shine \{ opacity: 0; \}/);
+  });
+
+  it('floats the status as a chip on phones instead of a full extra row', () => {
+    const mobile = css().match(/@media \(max-width: 600px\) \{([\s\S]*?)\n\}/g)?.join('\n') ?? '';
+    expect(mobile).toMatch(/\.sic-hero-status \{\s*position:\s*absolute/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-copy \{ padding-inline-end: 82px; \}/);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
    6. THE WIRING — the page really mounts it, and the hero keeps its contract
    ══════════════════════════════════════════════════════════════════════════ */
 describe('the Signals page wiring', () => {
