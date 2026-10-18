@@ -1,110 +1,226 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   SIGNALS HERO CINEMA — the film/nebula behind the first box of /signals and
-   the words that fade through it. The default video is a local, lightweight
-   seamless loop; the drawn scene stays behind it throughout playback.
+   SIGNALS HERO BAND — the cinematic first box of the signals page, laid out
+   as a short, wide BAND instead of a tall stack.
 
-   Every rule here is scoped to `.sigh-` or to `.sic-page-hero.has-cinema`, so
-   no other screen, language or spacing in the app moves. The hero's own
-   contract (`.sic-page-hero`, `.sic-hero-copy h1`, the gradient hairline) is
-   untouched — this file only adds a background layer and one text slot.
+   THE PROPORTIONS (the fix this file exists for: «اندازهٔ طولی و عرضی باکس
+   متناسب باشد و بین جمله‌ها فاصلهٔ زیاد نباشد»)
+   The band is a two-row grid with a 4/8 spacing scale and no dead air:
+
+     row 1 · [ medallion 54 ] [ title + tagline · 1fr ] [ AI label + live pill ]
+     row 2 · [ the rotating phrase — a full-width glass ticker, 38 tall ] [ ticks ]
+
+   Measured, that is ≈124px tall on desktop and ≈112px on a 390px phone: the
+   medallion (54) and the two tight text lines (26 + 3 + 18) balance each
+   other in row 1, and the phrase gets the band's FULL width in row 2, which
+   is what lets even the longest Persian sentence sit on one line at 24px of
+   slot height instead of wrapping into the 42px double-height slot (and the
+   ~160px card) the old single-column copy needed. Gaps are 13/10 between
+   columns and rows, 3 between the two text lines — nothing in this box is
+   separated by more than the padding (15/13) around it.
 
    THE PERFORMANCE LAW THIS FILE OBEYS («بدون افت سرعت»)
-     · only `transform` and `opacity` animate — never `filter`, never
-       `backdrop-filter` (the two properties PageTransition.jsx documents as
-       the source of every stutter this app ever had);
-     · two drifting planes carry all the stars, so the browser animates two
-       elements instead of forty;
-     · the nebula's `feTurbulence` filter renders ONCE on a static group — the
-       drift happens on a parent layer, not inside the filter;
-     · `prefers-reduced-motion`, the app's own reduce-motion setting (both via
-       the `.is-still` class the component adds) and the native APK freeze
-       every animation here;
-     · the vignette is a plain gradient. No blur anywhere in this box.
+     · only transform and opacity ever animate — never a filter, never a
+       geometry property; the medallion's rings scale, its dot rotates, the
+       meteor and sheen translate, the stars twinkle, and that is all;
+     · when the film is actually playing, the big drawn layers behind it are
+       paused (they are invisible under an opaque frame on the dark theme);
+     · the nebula's turbulence filter renders ONCE on a static group and is
+       skipped entirely on Android, which gets the same sky from gradients;
+     · reduced motion (system or the app's own setting), the native APK and
+       a still scene freeze every loop below into a finished still picture;
+     · no blur anywhere: glows are gradients, the vignette is a gradient.
+
+   SCOPE: every selector lives under the sigh- prefix or the cinema hero, so
+   no other screen, language or spacing in the app can move. The hero's own
+   contract in signals-intel.css (grid box, 24px radius, gradient hairline)
+   is the foundation; this file tunes its proportions for the cinema state
+   and paints everything inside it.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* The hero already has `position: relative; overflow: hidden; isolation:
-   isolate`, so the scene is clipped to the 24px radius by the box itself and
-   creates no stacking context of its own above the page. */
+/* ── The band's grid ──────────────────────────────────────────────────────────
+   Two rows: identity, then the ticker. Row 2 spans every column, which is
+   the single change that gives the rotating sentence room to be one line. */
 .sic-page-hero.has-cinema {
-  --sigh-slot-h: 23px;
-  --sigh-ink: #dff3ff;
+  --sigh-slot-h: 24px;
+  --sigh-ink: #eef7ff;
+  --sigh-ink-dim: #bdd8f2;
   width: 100%;
   min-width: 0;
   margin-inline: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 13px;
+  row-gap: 10px;
+  padding: 15px 17px 13px;
 }
 
-/*
- * ─── WHY THE BOX'S OWN BACKGROUND HAS TO BE RE-DECLARED HERE ────────────────
- * signals-intel.css paints `.sic-page-hero` with a glass wash — two white
- * surfaces at 5.8% and 2% alpha over the page. A background is painted BELOW
- * every child, so the scene would sit behind ~92% opaque white and the nebula
- * would be a rumour rather than a background.
- *
- * So with a cinema present the padding-box layer becomes one deep-space wash at
- * 34%→10%: the panel still reads as the same glass box (the gradient hairline in
- * the border-box layer is untouched, and the light theme gets its own version
- * below), but the space behind the sentence is actually visible. This is the
- * «بک‌گراند خالی» half of the request — empty of assets, not empty of design.
- */
+/* The deep-space wash replaces the glass surface ONLY while a cinema is
+   mounted: a background paints below every child, so the intel glass (two
+   white surfaces) would otherwise sit on top of the scene and mute it. The
+   gradient hairline in the border-box layer is the hero's own, untouched. */
 .sic-page-hero.has-cinema {
   background:
     linear-gradient(112deg, #060a1a 4%, #0b1030 46%, #160a2c 78%, #05070f) padding-box,
-    linear-gradient(140deg, rgba(0, 229, 255, 0.34), rgba(124, 77, 255, 0.22) 46%, rgba(255, 45, 149, 0.18)) border-box;
+    linear-gradient(140deg, rgba(0, 229, 255, 0.4), rgba(124, 77, 255, 0.26) 46%, rgba(255, 45, 149, 0.22)) border-box;
 }
 
 /* ── The scene layer ────────────────────────────────────────────────────────
-   z-index 0 inside the hero's isolated context. The hero's own ::before aurora
-   is z-index -1 (behind the panel's background paint), so it is switched off
-   below rather than stacked against — two drifting washes over one box is
-   brightness and cost with nothing to show for it. */
+   Explicit physical edges (never the inset shorthand) dodge an older RTL
+   Chromium grid containing-block bug and work on every iOS that runs this
+   app. The hero clips it to the 24px radius itself. */
 .sigh-scene {
   position: absolute;
-  inset: 0;
+  top: 0; right: 0; bottom: 0; left: 0;
   z-index: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   pointer-events: none;
   border-radius: inherit;
+  grid-area: auto;
   background:
     radial-gradient(120% 160% at 82% -30%, rgba(0, 229, 255, 0.1), transparent 62%),
     linear-gradient(112deg, #060a1a 4%, #0b1030 46%, #160a2c 78%, #05070f);
 }
 
-/* Content above the scene. The hero is a grid; lifting its direct children is
-   one rule and it cannot be forgotten when a child is added later. */
+/* Content rides one layer above the scene — one rule for every child, so a
+   future child cannot be forgotten underneath the film. */
 .sic-page-hero.has-cinema > *:not(.sigh-scene) {
   position: relative;
   z-index: 1;
 }
 
-/* Fill the grid cell explicitly. WebView flex sizing can otherwise collapse the
-   rotating slot next to the icon/status columns, leaving an empty half-card. */
-.sic-page-hero.has-cinema .sic-hero-copy { width: 100%; }
-
-
+/* The hero's own aurora pseudo-element retires while the cinema is mounted:
+   two drifting washes over one box is brightness and cost for nothing. */
 .sic-page-hero.has-cinema::before {
   animation: none;
   opacity: 0;
 }
 
-/* ── Drawn nebula ─────────────────────────────────────────────────────────── */
+/* ── Row 1 · the copy ───────────────────────────────────────────────────────
+   Solid ink, never gradient-clipped text: transparent text-fill over a
+   moving film is exactly the compositing case old Android WebViews render
+   as an invisible title. The colour lives in the medallion and the film;
+   the words stay unconditionally legible on every phone. */
+.sic-page-hero.has-cinema .sic-hero-copy {
+  width: 100%;
+  min-width: 0;
+}
+.sic-page-hero.has-cinema .sic-hero-copy h1 {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--sigh-ink);
+  font-size: 21px;
+  line-height: 1.25;
+  text-shadow: 0 2px 14px rgba(2, 6, 18, 0.55);
+}
+.sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline {
+  margin: 3px 0 0;
+  color: var(--sigh-ink-dim);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: normal;
+  text-overflow: clip;
+  overflow: visible;
+  text-shadow: 0 1px 8px rgba(2, 6, 18, 0.5);
+}
+
+/* ── Row 1 · status: the AI label over the live pill, 5px apart ─────────────
+   The pill's own paint comes from signals-intel.css; here it only learns to
+   never wrap, and to survive the narrow breakpoints that hide it there —
+   live/offline is information, not decoration, so a phone keeps it. */
+.sic-page-hero.has-cinema .sic-hero-status {
+  gap: 5px;
+}
+.sic-page-hero.has-cinema .sic-hero-status i {
+  white-space: nowrap;
+}
+.sigh-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #9fd8ff;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  text-shadow: 0 1px 8px rgba(2, 6, 18, 0.6);
+}
+.sigh-ai svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+/* ── Row 1 · the medallion ──────────────────────────────────────────────────
+   A dark "instrument" squircle in both themes — the neon sigil inside it is
+   drawn for a dark field, so the medallion carries its own night with it
+   into the light UI instead of washing out there. */
+.sic-page-hero.has-cinema .sic-hero-icon {
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  border-radius: 17px;
+  color: #7ee9ff;
+  background: linear-gradient(145deg, #0a1230 0%, #141038 70%, #0a0f28 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 18px rgba(0, 229, 255, 0.1),
+    0 8px 22px rgba(2, 6, 18, 0.35);
+}
+.sic-page-hero.has-cinema .sic-hero-icon svg {
+  width: 42px;
+  height: 42px;
+  filter: none;
+}
+.sigh-mark {
+  display: block;
+}
+.sigh-mark-orbit {
+  transform-box: view-box;
+  transform-origin: 24px 24px;
+  animation: sigh-orbit 9s linear infinite;
+  will-change: transform;
+}
+.sigh-mark-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sigh-ring 2.8s ease-out infinite;
+  will-change: transform, opacity;
+}
+.sigh-mark-ring-late {
+  animation-delay: 1.4s;
+}
+.sigh-mark-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sigh-core 2.8s ease-in-out infinite;
+}
+.sigh-mark.is-still .sigh-mark-orbit { animation: none; }
+.sigh-mark.is-still .sigh-mark-ring { animation: none; opacity: 0.35; }
+.sigh-mark.is-still .sigh-mark-core { animation: none; }
+
+/* ── The drawn cosmos (always painted first; the film fades in over it) ──── */
 .sigh-neb {
   position: absolute;
-  inset: -12% -8%;
+  top: -12%;
+  left: -8%;
   width: 116%;
   height: 124%;
   opacity: 0.62;
   animation: sigh-neb-drift 64s ease-in-out infinite alternate;
   will-change: transform;
 }
-
 .sigh-plane {
   position: absolute;
-  inset: -8%;
+  top: -8%;
+  right: -8%;
+  bottom: -8%;
+  left: -8%;
   will-change: transform;
 }
-.sigh-plane-far  { animation: sigh-star-far 108s linear infinite; opacity: 0.85; }
+.sigh-plane-far { animation: sigh-star-far 108s linear infinite; opacity: 0.85; }
 .sigh-plane-near { animation: sigh-star-near 74s linear infinite; }
-
 .sigh-star {
   position: absolute;
   border-radius: 50%;
@@ -119,13 +235,48 @@
   box-shadow: 0 0 5px rgba(160, 220, 255, 0.5);
 }
 
-/* ── The same-origin film, or an operator-supplied replacement ──────────────
-   Opacity, not display, so the first decoded frame cross-fades over the drawn
-   scene instead of popping. Keep the fallback below it through playback: a
-   transparent or stalled frame cannot reveal the panel's dark surface. */
+/* One shooting star, ~1.3s of travel in every 11s: a single translated
+   gradient sliver, invisible for most of its own cycle. */
+.sigh-meteor {
+  position: absolute;
+  top: 20%;
+  left: 66%;
+  z-index: 1;
+  width: 92px;
+  height: 2px;
+  border-radius: 2px;
+  opacity: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(190, 235, 255, 0.9));
+  animation: sigh-meteor 11s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* One sheen pass as the band mounts, then permanent rest. It PARKS
+   off-canvas in its base style, so switching its animation off (reduced
+   motion, still scene) can never leave a static glass slab sitting on the
+   band — the parked position is the first keyframe, not a missing one. */
+.sigh-sheen {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  z-index: 3;
+  width: 36%;
+  pointer-events: none;
+  transform: translateX(-170%) skewX(-16deg);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  animation: sigh-sheen 1.5s cubic-bezier(0.22, 0.7, 0.3, 1) 0.15s 1 both;
+  will-change: transform;
+}
+
+/* ── The film ───────────────────────────────────────────────────────────────
+   Opacity, not display, so the first decoded frame cross-fades over the
+   drawn cosmos; the drawing stays mounted behind it for the life of the
+   box, so a stalled decoder can never show a black rectangle. */
 .sigh-film {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   z-index: 2;
   width: 100%;
   height: 100%;
@@ -136,7 +287,13 @@
 }
 .sigh-scene.is-film .sigh-film { opacity: 1; }
 
-/* A stock clip's source line — see VITE_SIGNALS_HERO_VIDEO_CREDIT. */
+/* While the film plays, the big drawn layers behind it stop moving. They
+   stay painted (the stall fallback), they just stop costing frames nobody
+   can see — on the dark theme the frame over them is opaque. */
+.sigh-scene.is-film .sigh-neb,
+.sigh-scene.is-film .sigh-plane,
+.sigh-scene.is-film .sigh-meteor { animation-play-state: paused; }
+
 .sigh-credit {
   position: absolute;
   inset-block-end: 5px;
@@ -148,34 +305,57 @@
   letter-spacing: 0.4px;
 }
 
-/* ── Readability ────────────────────────────────────────────────────────────
-   One gradient, no blur. The scene is decorative; the sentence on top of it is
-   the product, so the veil is stronger behind the text than at the edges. */
+/* ── Readability veil ───────────────────────────────────────────────────────
+   Gradients only: a shade rising from the ticker row, soft darkened edges,
+   and one breath of top light so the band reads as lit glass, not a hole. */
 .sigh-vignette {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 3;
   background:
-    radial-gradient(128% 190% at 50% 50%, transparent 46%, rgba(3, 5, 14, 0.42) 100%);
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05), transparent 34%),
+    linear-gradient(to top, rgba(3, 5, 14, 0.38), transparent 55%),
+    radial-gradient(128% 190% at 50% 50%, transparent 50%, rgba(3, 5, 14, 0.4) 100%);
 }
 
-/* ── The rotating line ──────────────────────────────────────────────────────
-   A fixed-height slot with absolutely stacked words. A long Persian phrase can
-   never push the hero's icon or status column around, because the words do not
-   participate in flow while they fade. */
+/* ── Row 2 · the ticker ─────────────────────────────────────────────────────
+   The rotating phrase as its own glass bar across the band's full width:
+   [ live dot ] [ glyph chip + sentence · 1fr ] [ segment ticks ]. It is
+   tappable (next phrase; ticks jump; hold pauses) — hence the manipulation
+   touch action, which also removes the 300ms tap delay class on iOS. */
 .sigh-words {
-  display: flex;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   width: 100%;
   min-width: 0;
-  margin-top: 9px;
+  min-height: 38px;
+  margin: 0;
+  padding: 6px 11px;
+  border: 1px solid rgba(160, 220, 255, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.028));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sic-page-hero.has-cinema > .sigh-words {
+  grid-column: 1 / -1;
+}
+.sigh-words:active {
+  border-color: rgba(0, 229, 255, 0.3);
 }
 
 .sigh-words-slot {
   position: relative;
   display: block;
-  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   height: var(--sigh-slot-h);
@@ -185,121 +365,156 @@
   position: absolute;
   inset-block-start: 0;
   inset-inline-start: 0;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
+  height: var(--sigh-slot-h);
   overflow: hidden;
   color: var(--sigh-ink);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 800;
   letter-spacing: 0.1px;
-  line-height: var(--sigh-slot-h);
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-shadow: 0 1px 10px rgba(3, 8, 20, 0.7);
-  will-change: opacity, transform;
+  animation: sigh-word-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.sigh-words.is-still .sigh-word { animation: none; }
 
-/* Slot 0 is the hero's own sentence — «سیگنال هوشمند» — so it carries the
-   brand wash instead of the plain ink the keywords use. */
+/* Slot 0 is the page's own sentence; it carries the heavier weight and the
+   brighter chip, in the same solid ink as every other phrase. */
 .sigh-word.is-title {
-  background: none;
-  -webkit-background-clip: text;
-  background-clip: text;
   -webkit-text-fill-color: currentColor;
   color: var(--sigh-ink);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 900;
-  text-shadow: none;
 }
 
-/* A breathing dot before the line: the one hint that this is live rather than
-   a printed label. Opacity only. */
+.sigh-word-ic {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 8px;
+  color: #7ee9ff;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.18), rgba(124, 77, 255, 0.16));
+}
+.sigh-word-ic svg {
+  width: 13px;
+  height: 13px;
+}
+.sigh-word.is-title .sigh-word-ic {
+  color: #eafcff;
+  border-color: rgba(0, 229, 255, 0.4);
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.34), rgba(124, 77, 255, 0.3));
+}
+.sigh-word-tx {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The breathing live dot that opens the ticker. Opacity and scale only. */
 .sigh-words::before {
   content: '';
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #00e5ff;
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.7);
+  box-shadow: 0 0 9px rgba(0, 229, 255, 0.75);
   animation: sigh-blip 3s ease-in-out infinite;
 }
+.sigh-words.is-still::before { animation: none; }
 
-/* Cycle ticks — one per slot, the current one lit. The affordance that tells
-   the reader a silent cross-fade has more to say. The "dot vs pill" change is a
-   `scaleX` on a fixed 10px box, not an animated `width`: layout on every tick
-   of a 30 s cycle is exactly the kind of invisible cost this file exists to
-   avoid. */
+/* Segment ticks — position in the cycle and jump targets in the same
+   pixels. The dot-to-pill change is a scaleX on a fixed box, never a
+   layout property, so a tick change costs one composited frame. */
 .sigh-ticks {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 .sigh-ticks i {
-  width: 10px;
+  width: 16px;
   height: 3px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.3);
-  opacity: 0.5;
-  transform: scaleX(0.3);
+  background: rgba(255, 255, 255, 0.32);
+  opacity: 0.45;
+  transform: scaleX(0.42);
   transform-origin: center;
   transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease;
 }
 .sigh-ticks i[data-on='true'] {
   background: linear-gradient(90deg, #00e5ff, #b47cff);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.45);
   opacity: 1;
   transform: scaleX(1);
 }
 
-/* The tagline is a real second line, visible even on narrow screens. */
-.sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline {
-  margin: 5px 0 0;
-  color: #c5d9f3;
-  font-size: clamp(12px, 1.05vw, 14px);
-  font-weight: 600;
-  line-height: 1.6;
-  white-space: normal;
-  text-overflow: clip;
-  overflow: visible;
-}
-
-/* ── Keyframes ────────────────────────────────────────────────────────────── */
+/* ── Keyframes · transform and opacity, nothing else ─────────────────────── */
 @keyframes sigh-neb-drift {
   from { transform: translate3d(-2%, -1%, 0) scale(1.02); }
-  to   { transform: translate3d(2.5%, 1.5%, 0) scale(1.09); }
+  to { transform: translate3d(2.5%, 1.5%, 0) scale(1.09); }
 }
 @keyframes sigh-star-far {
   from { transform: translate3d(0, 0, 0); }
-  50%  { transform: translate3d(-1.4%, 0.9%, 0); }
-  to   { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-1.4%, 0.9%, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
 @keyframes sigh-star-near {
   from { transform: translate3d(0, 0, 0); }
-  50%  { transform: translate3d(1.8%, -1.1%, 0); }
-  to   { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(1.8%, -1.1%, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
 @keyframes sigh-twinkle {
   0%, 100% { opacity: calc(var(--dim, 0.4) * 0.35); }
-  50%      { opacity: var(--dim, 0.4); }
+  50% { opacity: var(--dim, 0.4); }
 }
 @keyframes sigh-blip {
   0%, 100% { opacity: 0.42; transform: scale(0.9); }
-  50%      { opacity: 1; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+@keyframes sigh-word-in {
+  from { opacity: 0; transform: translate3d(0, 7px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes sigh-meteor {
+  0% { transform: translate3d(0, 0, 0) rotate(-16deg); opacity: 0; }
+  4% { opacity: 0.9; }
+  12% { transform: translate3d(-300px, 86px, 0) rotate(-16deg); opacity: 0; }
+  100% { transform: translate3d(-300px, 86px, 0) rotate(-16deg); opacity: 0; }
+}
+@keyframes sigh-sheen {
+  from { transform: translateX(-170%) skewX(-16deg); }
+  to { transform: translateX(430%) skewX(-16deg); }
+}
+@keyframes sigh-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes sigh-ring {
+  0% { transform: scale(0.72); opacity: 0.75; }
+  70% { opacity: 0.12; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+@keyframes sigh-core {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.8; }
 }
 
-/* ── Motion off: the scene stays, frozen ────────────────────────────────────
-   `.is-still` is set by the component from `useStill()` (system
-   prefers-reduced-motion OR the app's own setting); the media query below is
-   the belt-and-braces half for anything this file paints without the
-   component's knowledge. A frozen nebula still looks like deep space. */
+/* ── Motion off: the band stays, finished and frozen ─────────────────────── */
 .sigh-scene.is-still .sigh-neb,
 .sigh-scene.is-still .sigh-plane,
-.sigh-scene.is-still .sigh-star,
-.sigh-scene.is-still .sigh-words::before {
-  animation: none;
-}
+.sigh-scene.is-still .sigh-star { animation: none; }
+.sigh-scene.is-still .sigh-meteor,
+.sigh-scene.is-still .sigh-sheen { animation: none; opacity: 0; }
 .sigh-scene.is-still .sigh-neb { opacity: 0.72; }
 .sigh-scene.is-still .sigh-star { opacity: 0.6; }
 
@@ -307,40 +522,48 @@
   .sigh-neb,
   .sigh-plane,
   .sigh-star,
+  .sigh-meteor,
+  .sigh-sheen,
+  .sigh-mark-orbit,
+  .sigh-mark-ring,
+  .sigh-mark-core,
   .sigh-words::before,
-  .sigh-ticks i { animation: none; transition: none; }
+  .sigh-word { animation: none; }
+  .sigh-sheen { opacity: 0; }
+  .sigh-ticks i { transition: none; }
   .sigh-film { transition: none; }
 }
 
-/* ── Android: keep the headline live, make the decorative sky static ────────
-   The video filter and extra stars are already omitted by the component. Stop
-   the remaining background loops too: the 30-second phrase cycle is the useful
-   motion, and one low-frequency timeout is negligible beside a moving SVG sky. */
+/* ── Android browsers: the film plays, the DRAWN sky stays cheap ────────────
+   The component drops the turbulence pass and half the stars here; this
+   freezes what remains of the drawing so the decoder is the only moving
+   layer. The phrase cycle and the medallion (one tiny rotating group)
+   stay alive — they are the useful motion. */
 .sigh-scene.is-android .sigh-neb,
 .sigh-scene.is-android .sigh-plane,
-.sigh-scene.is-android .sigh-star {
-  animation: none;
-  will-change: auto;
-}
+.sigh-scene.is-android .sigh-star { animation: none; will-change: auto; }
 .sigh-scene.is-android .sigh-star { opacity: var(--dim, 0.4); }
+.sigh-scene.is-android .sigh-meteor,
+.sigh-scene.is-android .sigh-sheen { animation: none; opacity: 0; }
 
-/* ── Native APK: no decoder, no drifting layers ─────────────────────────────
-   The component never mounts a film here; this freezes the drawn scene too,
-   the same rule the wallet hero's aurora already follows. */
+/* ── Native APK: no decoder, no drifting layers, still a finished band ───── */
 :root[data-native='true'] .sigh-neb,
 :root[data-native='true'] .sigh-plane,
-:root[data-native='true'] .sigh-star,
-:root[data-native='true'] .sigh-words::before {
-  animation: none;
-}
+:root[data-native='true'] .sigh-star { animation: none; }
 :root[data-native='true'] .sigh-neb { opacity: 0.7; }
+:root[data-native='true'] .sigh-meteor,
+:root[data-native='true'] .sigh-sheen { animation: none; opacity: 0; }
+:root[data-native='true'] .sigh-mark-orbit,
+:root[data-native='true'] .sigh-mark-ring,
+:root[data-native='true'] .sigh-mark-core,
+:root[data-native='true'] .sigh-words::before { animation: none; }
 
 /* ── Light theme ────────────────────────────────────────────────────────────
-   A deep-space box in a light UI is still a dark box — that is what makes it
-   read as a screen. The wash is simply calmer, and the ink is the dark
-   gradient the hero's h1 already uses in this theme, so the sentence keeps its
-   AA contrast against the lighter veil. */
+   The band becomes a bright sky; the medallion keeps its own night (above)
+   and the film drops to a wash so dark ink keeps its contrast on top. */
 :root[data-theme='light'] .sic-page-hero.has-cinema {
+  --sigh-ink: #1d2b4d;
+  --sigh-ink-dim: #3c5583;
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.16)) padding-box,
     linear-gradient(140deg, rgba(38, 88, 201, 0.3), rgba(108, 75, 216, 0.2) 48%, rgba(255, 45, 149, 0.14)) border-box;
@@ -353,57 +576,91 @@
 :root[data-theme='light'] .sigh-neb { opacity: 0.3; }
 :root[data-theme='light'] .sigh-star { background: #2c3a63; }
 :root[data-theme='light'] .sigh-star-bright { background: #16224a; box-shadow: none; }
+:root[data-theme='light'] .sigh-meteor {
+  background: linear-gradient(90deg, rgba(38, 88, 201, 0), rgba(38, 88, 201, 0.55));
+}
 :root[data-theme='light'] .sigh-vignette {
   background:
     linear-gradient(to left, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.5) 44%, rgba(255, 255, 255, 0.72)),
     radial-gradient(128% 190% at 50% 50%, transparent 46%, rgba(255, 255, 255, 0.5) 100%);
 }
-:root[data-theme='light'] .sigh-scene.is-film .sigh-film { opacity: 0.24; }
-:root[data-theme='light'] .sigh-words { --sigh-ink: #23304f; }
+:root[data-theme='light'] .sigh-scene.is-film .sigh-film { opacity: 0.26; }
+:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy h1 { text-shadow: none; }
+:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { text-shadow: none; }
+:root[data-theme='light'] .sigh-ai { color: #2658c9; text-shadow: none; }
+:root[data-theme='light'] .sigh-words {
+  border-color: rgba(21, 26, 48, 0.1);
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.34));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
 :root[data-theme='light'] .sigh-word { text-shadow: none; }
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  :root[data-theme='light'] .sigh-word.is-title {
-    background: linear-gradient(94deg, #151a30 12%, #2658c9 62%, #6c4bd8);
-    -webkit-background-clip: text;
-    background-clip: text;
-  }
+:root[data-theme='light'] .sigh-word.is-title { color: #14224e; }
+:root[data-theme='light'] .sigh-word-ic {
+  color: #2658c9;
+  border-color: rgba(38, 88, 201, 0.24);
+  background: linear-gradient(135deg, rgba(38, 88, 201, 0.12), rgba(108, 75, 216, 0.1));
+}
+:root[data-theme='light'] .sigh-word.is-title .sigh-word-ic {
+  color: #1c44a8;
+  border-color: rgba(38, 88, 201, 0.38);
 }
 :root[data-theme='light'] .sigh-words::before { background: #2658c9; box-shadow: 0 0 7px rgba(38, 88, 201, 0.45); }
 :root[data-theme='light'] .sigh-ticks i { background: rgba(21, 26, 48, 0.2); }
-:root[data-theme='light'] .sigh-ticks i[data-on='true'] { background: linear-gradient(90deg, #2658c9, #6c4bd8); }
-:root[data-theme='light'] .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { color: #30456f; }
+:root[data-theme='light'] .sigh-ticks i[data-on='true'] {
+  background: linear-gradient(90deg, #2658c9, #6c4bd8);
+  box-shadow: none;
+}
 :root[data-theme='light'] .sigh-credit { color: rgba(21, 26, 48, 0.4); }
 
-/* ── Narrow phones ──────────────────────────────────────────────────────────
-   Keep the tagline visible; hide only the decorative ticks for word room. */
-@media (max-width: 440px) {
-  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { font-size: 12px; }
-  .sigh-word { font-size: 11px; }
-  .sigh-word.is-title { font-size: 12px; }
-  .sigh-ticks { display: none; }
-}
-@media (max-width: 360px) {
-  .sigh-ticks { display: none; }
-  .sigh-words { gap: 5px; }
+/* ── Wide screens: the band breathes a little, it never grows tall ───────── */
+@media (min-width: 1024px) {
+  .sic-page-hero.has-cinema { padding: 17px 20px 14px; column-gap: 15px; }
+  .sic-page-hero.has-cinema .sic-hero-icon { width: 58px; height: 58px; border-radius: 18px; }
+  .sic-page-hero.has-cinema .sic-hero-icon svg { width: 45px; height: 45px; }
+  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: 23px; }
+  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { font-size: 12.5px; }
+  .sigh-words { min-height: 40px; }
 }
 
-/* Explicit physical edges avoid older RTL Chromium grid containing-block bugs.
-   No glass/backdrop layer or decoded video is needed on Android. */
-.sic-page-hero.has-cinema > .sigh-scene {
-  position: absolute;
-  top: 0; right: 0; bottom: 0; left: 0;
-  width: 100%; height: 100%;
-  grid-area: auto;
-}
-.sic-page-hero.has-cinema .sigh-words { display: grid; grid-template-columns: 5px minmax(0, 1fr) auto; }
-.sigh-word { animation: sigh-word-enter 420ms ease-out both; will-change: auto; }
-.sigh-words.is-still .sigh-word { animation: none; }
-@keyframes sigh-word-enter { from { opacity: .35; } to { opacity: 1; } }
-:root[data-theme='light'] .sigh-word.is-title { background: none; -webkit-text-fill-color: currentColor; }
-@media (prefers-reduced-motion: reduce) { .sigh-word { animation: none; } }
+/* ── Phones ─────────────────────────────────────────────────────────────────
+   One scale step down everywhere, together: padding 12/10, medallion 46,
+   title 19, ticker 36. The AI label retires (the live pill stays), because
+   in this width the pill is the information and the label is the caption. */
 @media (max-width: 600px) {
-  .sic-page-hero.has-cinema { --sigh-slot-h: 42px; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
-  .sic-page-hero.has-cinema .sigh-word { height: 42px; line-height: 21px; white-space: normal; display: flex; align-items: center; }
-  .sic-page-hero.has-cinema .sic-hero-icon { width: 40px; height: 40px; }
-  .sic-page-hero.has-cinema .sic-hero-status { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .sic-page-hero.has-cinema { padding: 12px 12px 10px; column-gap: 10px; row-gap: 8px; }
+  .sic-page-hero.has-cinema .sic-hero-icon { width: 46px; height: 46px; border-radius: 14px; }
+  .sic-page-hero.has-cinema .sic-hero-icon svg { width: 36px; height: 36px; }
+  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: 19px; }
+  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { margin-top: 2px; font-size: 11px; }
+  .sic-page-hero.has-cinema .sic-hero-status i { padding: 4px 8px; font-size: 9px; }
+  .sigh-ai { display: none; }
+  .sigh-words { min-height: 36px; padding: 5px 9px; gap: 7px; border-radius: 12px; }
+  .sigh-word { font-size: 12px; }
+  .sigh-word.is-title { font-size: 12.5px; }
+}
+
+/* Narrow phones: signals-intel.css collapses the hero to two columns and
+   hides the status at this width. The cinema band keeps all three columns
+   and its pill — the ticker already moved to its own row, which is where
+   the width was needed, so nothing up here has to be sacrificed. */
+@media (max-width: 440px) {
+  .sic-page-hero.has-cinema { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .sic-page-hero.has-cinema .sic-hero-status { display: flex; }
+}
+
+/* The smallest phones (320–360): one more scale step, and the ticks retire
+   so the sentence itself keeps every pixel it can get. */
+@media (max-width: 360px) {
+  .sic-page-hero.has-cinema { --sigh-slot-h: 22px; padding: 11px 10px 9px; column-gap: 8px; }
+  .sic-page-hero.has-cinema .sic-hero-icon { width: 42px; height: 42px; border-radius: 13px; }
+  .sic-page-hero.has-cinema .sic-hero-icon svg { width: 33px; height: 33px; }
+  .sic-page-hero.has-cinema .sic-hero-copy h1 { font-size: 17px; }
+  .sic-page-hero.has-cinema .sic-hero-copy .sic-hero-tagline { font-size: 10.5px; }
+  .sic-page-hero.has-cinema .sic-hero-status i { padding: 3px 7px; font-size: 8.5px; }
+  .sigh-words { gap: 6px; padding: 5px 8px; }
+  .sigh-word { font-size: 11.5px; gap: 6px; }
+  .sigh-word.is-title { font-size: 12px; }
+  .sigh-word-ic { width: 22px; height: 22px; border-radius: 7px; }
+  .sigh-word-ic svg { width: 12px; height: 12px; }
+  .sigh-ticks { display: none; }
 }

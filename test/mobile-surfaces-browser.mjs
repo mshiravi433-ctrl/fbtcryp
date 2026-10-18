@@ -16,7 +16,13 @@ const read = () => page.evaluate(() => {
   return {hero:box('.sic-page-hero'),scene:box('.sigh-scene'),word:box('.sigh-word'),text:document.querySelector('.sigh-word').textContent,fill:getComputedStyle(document.querySelector('.sigh-word')).webkitTextFillColor,video:!!document.querySelector('video'),rotor:getComputedStyle(document.querySelector('.ordx-sweep')).transform,overflow:document.documentElement.scrollWidth>innerWidth};
 });
 const first=await read();
-assert.equal(first.video,false); assert(first.word.w>100); assert(Math.abs(first.hero.w-first.scene.w)<3); assert.equal(first.overflow,false); assert.notEqual(first.fill,'rgba(0, 0, 0, 0)');
+/* The band contract on a real Android phone: the bundled 37 KB film IS
+   mounted (Android browsers get the cinema, not a frozen sky), the phrase
+   keeps a real line of width, the scene fills the box, nothing overflows —
+   and the whole band stays a BAND: at 390px wide it must remain short
+   (≈112px), never the old ~160px stack. 150 is the tripwire, not the goal. */
+assert.equal(first.video,true); assert(first.word.w>100); assert(Math.abs(first.hero.w-first.scene.w)<3); assert.equal(first.overflow,false); assert.notEqual(first.fill,'rgba(0, 0, 0, 0)');
+assert(first.hero.h<150, `hero band too tall on a 390px phone: ${first.hero.h}px`);
 
 await new Promise(r=>setTimeout(r,8000));
 const second=await read();
