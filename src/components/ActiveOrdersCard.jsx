@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { loadOrders } from '../lib/orders';
 import { loadIntents } from '../lib/intentOS';
-import { IconClock, IconChevronRight } from './Icons';
+import { IconClock, IconChevronRight, IconShield } from './Icons';
 
 /**
  * ACTIVE CARD — up to 4 live orders + up to 2 recent local intents.
@@ -56,7 +56,7 @@ export default function ActiveOrdersCard() {
 
       {empty && (
         <div className="wal-empty-asset">
-          <div style={{ fontSize: 16, marginBottom: 6 }}>🛡</div>
+          <span className="walx-empty-ico" aria-hidden="true"><IconShield width={18} height={18} /></span>
           {t('wallet.active.empty')}
         </div>
       )}

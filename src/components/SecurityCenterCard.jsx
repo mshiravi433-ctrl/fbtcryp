@@ -50,21 +50,19 @@ export default function SecurityCenterCard() {
     <>
       <button
         type="button"
-        className="wallet-pie-card wal-sec-card"
+        className="wallet-pie-card wal-sec-card walx-tile-sec"
         onClick={() => setOpen(true)}
       >
-        <span className="row" style={{ gap: 10, flex: 1 }}>
+        <span className="walx-tile-head">
           <span className="wal-sec-ico"><IconShield width={18} height={18} /></span>
-          <span style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
-            <strong style={{ fontSize: 13 }}>{t('wallet.security.title')}</strong>
-            <small className="faint" style={{ display: 'block', fontSize: 10.5, marginTop: 2 }}>
-              {score.score != null
-                ? `${score.score} · ${t(`wallet.security.band.${score.band}`)}`
-                : t('wallet.security.notConfigured')}
-            </small>
-          </span>
+          <IconChevronRight className="walx-chev" width={14} height={14} />
         </span>
-        <IconChevronRight width={14} height={14} />
+        <span className="walx-tile-title">{t('wallet.security.title')}</span>
+        <span className="walx-tile-sub">
+          {score.score != null
+            ? `${score.score} · ${t(`wallet.security.band.${score.band}`)}`
+            : t('wallet.security.notConfigured')}
+        </span>
       </button>
 
       <Sheet open={open} onClose={() => setOpen(false)} title={t('wallet.security.title')} anchor="bottom">
