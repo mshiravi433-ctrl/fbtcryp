@@ -89,6 +89,13 @@ function useCheapLink() {
   }, []);
 }
 
+/** Android WebViews can miss the initial IntersectionObserver report for a
+ * nested flex text slot. Detect the platform once: the phrase timer is cheap,
+ * so Android gets a small reliability fallback without changing iPhone timing. */
+function isAndroidClient() {
+  return typeof navigator !== 'undefined' && /Android/i.test(String(navigator.userAgent ?? ''));
+}
+
 /* Derived, not chosen: the four phrases share what is left of the 30 s after the
    sentence has had its slot, so the cycle length cannot drift away from the
    phrase count. Add a fifth phrase and each one simply holds a little less. */
@@ -193,6 +200,7 @@ export function SignalsHeroScene({ active = true }) {
      `url(#…)` / `filter="url(#…)"`. Strip it. */
   const gid = `shc${rawId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const native = useMemo(() => isNativeShell(), []);
+  const android = useMemo(() => isAndroidClient(), []);
   const cheap = useCheapLink();
   /* Resolved per render, not per module: the answer has to move when the
      environment does, and it is three lines of string work. */
@@ -211,8 +219,10 @@ export function SignalsHeroScene({ active = true }) {
      nebula behind it is the fallback and it is already painted. */
   const [filmState, setFilmState] = useState('idle');
 
-  const far = useMemo(() => makeStars(24, 20261016), []);
-  const near = useMemo(() => makeStars(14, 770113), []);
+  /* Android gets a lighter static sky: the title/phrase cycle remains live,
+     while the SVG turbulence, extra stars and moving planes are removed. */
+  const far = useMemo(() => makeStars(android ? 12 : 24, 20261016), [android]);
+  const near = useMemo(() => makeStars(android ? 6 : 14, 770113), [android]);
   const filmLive = filmState === 'live';
 
   /* Attach the src only after visibility has been confirmed. `preload=none`
@@ -256,8 +266,9 @@ export function SignalsHeroScene({ active = true }) {
   return (
     <div
       ref={setHostNode}
-      className={`sigh-scene${active ? '' : ' is-still'}${filmLive ? ' is-film' : ''}`}
+      className={`sigh-scene${active ? '' : ' is-still'}${filmLive ? ' is-film' : ''}${android ? ' is-android' : ''}`}
       data-testid="signals-hero-scene"
+      data-platform={android ? 'android' : undefined}
       data-film={wantFilm ? filmState : 'none'}
       aria-hidden="true"
     >
@@ -284,17 +295,21 @@ export function SignalsHeroScene({ active = true }) {
                 <stop offset="0%" stopColor="#9fd8ff" stopOpacity="0.2" />
                 <stop offset="100%" stopColor="#000814" stopOpacity="0" />
               </radialGradient>
-              <filter id={`${gid}-clouds`} x="-18%" y="-18%" width="136%" height="136%">
-                {/* Low baseFrequency: large soft structure. High frequency here
-                    looks like television static, not gas. */}
-                <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="3" seed="11" result="noise" />
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="30" xChannelSelector="R" yChannelSelector="G" />
-                <feGaussianBlur stdDeviation="6" />
-              </filter>
+              {!android && (
+                <filter id={`${gid}-clouds`} x="-18%" y="-18%" width="136%" height="136%">
+                  {/* Low baseFrequency: large soft structure. High frequency here
+                      looks like television static, not gas. Older Android WebViews
+                      skip this one-time turbulence pass for a much cheaper sky. */}
+                  <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="3" seed="11" result="noise" />
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale="30" xChannelSelector="R" yChannelSelector="G" />
+                  <feGaussianBlur stdDeviation="6" />
+                </filter>
+              )}
             </defs>
-            {/* The filter runs once on a static group. Only the group's parent
-                layer drifts, and it drifts with `transform`. */}
-            <g filter={`url(#${gid}-clouds)`}>
+            {/* The filter runs once on a static group outside Android. On Android
+                the radial gradients alone provide the cloud, avoiding a costly
+                SVG turbulence pass that some WebViews composite as a blank wash. */}
+            <g filter={android ? undefined : `url(#${gid}-clouds)`}>
               <rect width="400" height="160" fill={`url(#${gid}-core)`} />
               <rect width="400" height="160" fill={`url(#${gid}-rose)`} />
               <rect width="400" height="160" fill={`url(#${gid}-ice)`} />
@@ -382,7 +397,12 @@ export function SignalsHeroScene({ active = true }) {
 export function SignalsHeroWords({ className = '', slotLabel }) {
   const { t } = useTranslation();
   const still = useStill();
+  const android = useMemo(() => isAndroidClient(), []);
   const [setHostNode, onScreen] = useOnScreen();
+  /* Android WebViews occasionally fail to report this tiny flex slot as
+     intersecting. Keeping one 6-second timeout alive is cheaper and safer than
+     losing the headline rotation; iOS and desktop retain visibility pausing. */
+  const rotationVisible = onScreen || android;
   const foreground = useForeground();
   const [index, setIndex] = useState(0);
 
@@ -407,7 +427,7 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
   indexRef.current = index;
 
   useEffect(() => {
-    if (still || slots.length < 2 || !onScreen || !foreground) return undefined;
+    if (still || slots.length < 2 || !rotationVisible || !foreground) return undefined;
     let timer = null;
     let cancelled = false;
 
@@ -453,7 +473,7 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [still, slots.length, onScreen, foreground]);
+  }, [still, slots.length, rotationVisible, foreground]);
 
   /* Re-entering the screen (or a language switch that changes the list) can
      leave `index` past the end. Clamping in render is cheaper than an effect. */

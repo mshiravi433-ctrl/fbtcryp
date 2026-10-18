@@ -166,6 +166,14 @@ const restoreConnection = () => {
   if (CONNECTION_OWN) Object.defineProperty(Navigator.prototype, 'connection', CONNECTION_OWN);
 };
 
+const USER_AGENT_OWN = Object.getOwnPropertyDescriptor(navigator, 'userAgent');
+const setUserAgent = (value) =>
+  Object.defineProperty(navigator, 'userAgent', { configurable: true, value });
+const restoreUserAgent = () => {
+  delete navigator.userAgent;
+  if (USER_AGENT_OWN) Object.defineProperty(navigator, 'userAgent', USER_AGENT_OWN);
+};
+
 beforeEach(() => {
   motionAllowed.still = false;
   io.instances = [];
@@ -196,6 +204,7 @@ afterEach(() => {
   delete window.Capacitor;
   restoreVisibility();
   restoreConnection();
+  restoreUserAgent();
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -320,6 +329,26 @@ describe('the timers stop when nobody is watching', () => {
     act(() => { vi.advanceTimersByTime(60_000); });
     expect(shown()).toBe('سیگنال هوشمند');
     // …and picks the cycle up again when it scrolls back into view.
+    act(() => { io.emit(true); });
+    firstRotation();
+    expect(shown()).toBe(fa.signals.hero.words.early);
+  });
+
+  it('keeps the rotating phrases alive if Android misses the observer report', () => {
+    io.wasVisible = false;
+    setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36');
+    renderWords();
+    firstRotation();
+    expect(shown()).toBe(fa.signals.hero.words.early);
+  });
+
+  it('preserves visibility pausing on iPhone', () => {
+    io.wasVisible = false;
+    setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148');
+    renderWords();
+    settle();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(shown()).toBe('سیگنال هوشمند');
     act(() => { io.emit(true); });
     firstRotation();
     expect(shown()).toBe(fa.signals.hero.words.early);
@@ -482,6 +511,21 @@ describe('the drawn scene (film switched off — VITE_SIGNALS_HERO_VIDEO=none)',
       return p;
     };
     expect(positions()).toBe(positions());
+  });
+
+  it('uses a lighter static SVG sky on Android but keeps the iPhone scene intact', () => {
+    setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36');
+    const android = renderScene();
+    expect(screen.getByTestId('signals-hero-scene').dataset.platform).toBe('android');
+    expect(document.querySelectorAll('.sigh-star')).toHaveLength(18);
+    expect(document.querySelector('.sigh-neb g').getAttribute('filter')).toBeNull();
+    android.unmount();
+
+    setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148');
+    renderScene();
+    expect(screen.getByTestId('signals-hero-scene').dataset.platform).toBeUndefined();
+    expect(document.querySelectorAll('.sigh-star')).toHaveLength(38);
+    expect(document.querySelector('.sigh-neb g').getAttribute('filter')).toMatch(/^url\(#shc/);
   });
 });
 
@@ -723,13 +767,22 @@ describe('the stylesheet keeps its performance promises', () => {
   it('gives the rotating line a fixed slot so a long phrase cannot move the hero', () => {
     const slot = css().match(/\.sigh-words-slot\s*\{[^}]*\}/)[0];
     expect(slot).toMatch(/height:\s*var\(--sigh-slot-h\)/);
-    expect(slot).toMatch(/flex:\s*1 1 auto/);
+    expect(slot).toMatch(/flex:\s*1 1 0%/);
+    expect(slot).toMatch(/width:\s*0/);
     const word = css().match(/\.sigh-word\s*\{[^}]*\}/)[0];
     expect(word).toMatch(/position:\s*absolute/);
     expect(word).toMatch(/width:\s*100%/);
     expect(word).toMatch(/white-space:\s*nowrap/);
     expect(word).toMatch(/text-overflow:\s*ellipsis/);
     expect(css()).toMatch(/--sigh-slot-h:\s*\d+px/);
+  });
+
+  it('fills the hero width and keeps Android motion to the phrase cycle', () => {
+    const hero = css().match(/\.sic-page-hero\.has-cinema\s*\{[^}]*\}/)?.[0] || '';
+    expect(hero).toMatch(/width:\s*100%/);
+    expect(css()).toMatch(/\.sigh-words\s*\{[^}]*width:\s*100%/);
+    expect(css()).toMatch(/\.sigh-scene\.is-android \.sigh-neb,[\s\S]*?animation:\s*none/);
+    expect(css()).toMatch(/\.sigh-scene\.is-android \.sigh-star\s*\{[^}]*opacity:\s*var\(--dim/);
   });
 
   it('frees the box from the glass wash that would hide the scene behind it', () => {

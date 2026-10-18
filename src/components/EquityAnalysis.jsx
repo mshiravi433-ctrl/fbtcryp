@@ -8,7 +8,7 @@ import { IconSwap, IconX } from './Icons';
 import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { equitySeriesFacts, equityStats } from '../lib/equityAnalysis';
 import { historyFactKey } from '../lib/history';
-import { fetchEquityChartWindowed, isUsableSeries } from '../lib/equityChart';
+import { fetchEquityChartWindowed, isDrawableSeries, isUsableSeries } from '../lib/equityChart';
 import { usePoll } from '../hooks/useMarket';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useStill } from './AnimatedIcon';
@@ -29,9 +29,9 @@ import { useStill } from './AnimatedIcon';
  * 2. THE 90-DAY OR NOTHING FETCH. Young ticker xStocks routinely have fewer
  *    than 90 days of closes anywhere, and the market-cap history for them is
  *    thin: the fetch asked for 90 and gave up. The fetcher now walks
- *    90 → 30 → 14 → 7 and keeps the longest window that returned a usable
- *    series, so the analysis renders real 30-day (or 14-day) numbers labelled
- *    «۳۰ روز» instead of refusing to render anything before 90.
+ *    90 → 30 → 14 and keeps the longest window with enough observations for
+ *    analysis. If none reaches that floor, a shorter real series still draws as
+ *    a chart while the panel withholds sample-size facts.
  *
  * ─── WHY A FULL-PAGE POPUP AND NOT THE INLINE BOX ──────────────────────────
  * The inline box kept the row on screen but squeezed the chart to 56px tall
@@ -96,6 +96,7 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
   );
 
   const series = useMemo(() => (chart?.series ?? []).map((d) => d.p), [chart]);
+  const chartDrawable = useMemo(() => isDrawableSeries(series), [series]);
   const usable = useMemo(() => isUsableSeries(series), [series]);
   /* The window the numbers actually cover — 90 if the full series came back,
      otherwise the longest window that did. This is the ONLY value fed to the
@@ -109,12 +110,13 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
   );
 
   const stats = useMemo(() => equityStats(asset, amountUsd, series), [asset, amountUsd, series]);
+  const hasQuote = Number.isFinite(stats.price) && stats.price > 0;
 
   /* Colour on the chart follows the WINDOW, not the 24h delta: the line being
      drawn is the returned series, and a green line for a series that ended
      below where it started would be the chart arguing with itself. */
   const sparkUp = (stats.windowChange ?? 0) >= 0;
-  const fellBack = usable && effectiveDays < DAYS;
+  const fellBack = chartDrawable && effectiveDays < DAYS;
 
   const formatFact = (id, values) => {
     const v = { ...values };
@@ -190,35 +192,50 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
           </div>
 
           {/* ── the series, full width ──────────────────────────────────── */}
-          {hasId && (
-            <section className="eqan-chart eqsh-card">
-              <div className="eqan-chart-head">
-                <span className="faint">{t('eqsheet.chartTitle', { days: effectiveDays })}</span>
-                {usable && stats.windowChange != null && (
-                  <span className={`mono ${sparkUp ? 'up' : 'down'}`}>
-                    {fmtPct(stats.windowChange, 1)}
-                  </span>
-                )}
-              </div>
-              {loading && series.length === 0 ? (
-                <div className="skel" style={{ aspectRatio: '360 / 140', borderRadius: 16 }} />
-              ) : usable ? (
-                <>
-                  {/* 360×140 with the CSS width:100% scaling: the viewBox keeps
-                      the ratio, so the phone renders ~124px tall and the desktop
-                      card ~250px without a stretch that would fatten the stroke. */}
-                  <Sparkline data={series} up={sparkUp} width={360} height={140} strokeWidth={1.8} />
-                  {fellBack && (
-                    <p className="eqan-nohist eqsh-fallback">
-                      {t('eqsheet.windowFallback', { days: effectiveDays })}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="eqan-nohist">{t('stocks.eq.noHistory')}</p>
+          <section className="eqan-chart eqsh-card">
+            <div className="eqan-chart-head">
+              <span className="faint">{t('eqsheet.chartTitle', { days: effectiveDays })}</span>
+              {chartDrawable && stats.windowChange != null && (
+                <span className={`mono ${sparkUp ? 'up' : 'down'}`}>
+                  {fmtPct(stats.windowChange, 1)}
+                </span>
               )}
-            </section>
-          )}
+            </div>
+            {loading && !chartDrawable ? (
+              <div className="skel" style={{ aspectRatio: '360 / 140', borderRadius: 16 }} />
+            ) : chartDrawable ? (
+              <>
+                {/* Two or more measured quotes make a real line. Facts stay
+                    behind the higher sample threshold below. */}
+                <div className="eqan-history-chart" data-testid="eqan-history-chart">
+                  <Sparkline data={series} up={sparkUp} width={360} height={140} strokeWidth={1.8} />
+                </div>
+                {fellBack && (
+                  <p className="eqan-nohist eqsh-fallback">
+                    {t('eqsheet.windowFallback', { days: effectiveDays })}
+                  </p>
+                )}
+              </>
+            ) : hasQuote ? (
+              <div
+                className="eqan-quote-snapshot"
+                data-testid="eqan-quote-snapshot"
+                role="img"
+                aria-label={t('eqsheet.quoteSnapshot', { price: `$${fmtPrice(stats.price)}` })}
+              >
+                <svg className="eqan-snapshot-mark" viewBox="0 0 360 140" aria-hidden="true" focusable="false">
+                  <circle cx="180" cy="70" r="30" />
+                  <circle cx="180" cy="70" r="15" />
+                  <circle className="eqan-snapshot-point" cx="180" cy="70" r="4" />
+                </svg>
+                <span className="eqan-snapshot-copy">
+                  {t('eqsheet.quoteSnapshot', { price: `$${fmtPrice(stats.price)}` })}
+                </span>
+              </div>
+            ) : (
+              <p className="eqan-nohist">{t('stocks.eq.noHistory')}</p>
+            )}
+          </section>
 
           {/* ── the numbers, as a grid ──────────────────────────────────── */}
           <section className="eqsh-card">
@@ -275,8 +292,8 @@ export default function EquityAnalysis({ asset, amountUsd = 1000, onBuy, onClose
             Saying "no history" for the first and "could not load" for the
             second is the difference between an honest screen and a vague one.
           */}
-          {!hasId && <p className="eqan-nohist eqsh-card">{t('stocks.eq.noHistoryBody')}</p>}
-          {hasId && !usable && !loading && (
+          {!hasId && !hasQuote && <p className="eqan-nohist eqsh-card">{t('stocks.eq.noHistoryBody')}</p>}
+          {hasId && !chartDrawable && !hasQuote && !loading && (
             <p className="eqan-nohist eqsh-card">{t('stocks.eq.noHistoryShort')}</p>
           )}
 

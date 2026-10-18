@@ -134,11 +134,24 @@ export async function fetchEquityChart(id, days = 90) {
  *
  * Twenty points is the same floor `historyFacts()` uses, and it is there for
  * the same reason: a support level "tested twice" is a coincidence with a
- * sample size, not a pattern. A series that short renders as a sparkline and
- * no facts, never as an empty panel with a spinner.
+ * sample size, not a pattern. Drawing has a lower bar: two measured prices make
+ * a real line, but they do not make a meaningful analysis sample. Both helpers
+ * accept the API's `{ p }` rows and the component's normalized number arrays.
  */
+const pointPrice = (point) => (typeof point === 'number' ? point : point?.p);
+
+export function isDrawableSeries(series) {
+  return Array.isArray(series) && series.filter((point) => {
+    const price = pointPrice(point);
+    return Number.isFinite(price) && price > 0;
+  }).length >= 2;
+}
+
 export function isUsableSeries(series, minPoints = 20) {
-  return Array.isArray(series) && series.filter((d) => Number.isFinite(d?.p) && d.p > 0).length >= minPoints;
+  return Array.isArray(series) && series.filter((point) => {
+    const price = pointPrice(point);
+    return Number.isFinite(price) && price > 0;
+  }).length >= minPoints;
 }
 
 /**
@@ -159,13 +172,18 @@ export function isUsableSeries(series, minPoints = 20) {
  */
 export async function fetchEquityChartWindowed(id, days = 90, windows = FALLBACK_WINDOWS) {
   const order = [days, ...windows.filter((w) => w < days)].filter((w) => Number.isFinite(w) && w > 0);
-  let lastSeries = [];
+  let bestDrawable = null;
   for (const w of order) {
     const series = await fetchEquityChart(id, w);
+    /* Prefer the first window with enough observations for analysis. */
     if (isUsableSeries(series)) return { series, days: w };
-    if (series.length > lastSeries.length) lastSeries = series;
+    /* A sparse but genuine history is still a chart. Keep the densest available
+       window for the visual, while the component withholds sample-size facts. */
+    if (isDrawableSeries(series) && (!bestDrawable || series.length > bestDrawable.series.length)) {
+      bestDrawable = { series, days: w };
+    }
   }
-  /* Nothing usable at any window: the honest empty answer, still with the
-     REQUESTED label so the error copy names 90 days, not 14. */
-  return { series: [], days };
+  /* Never fabricate a history: return the best measured short series when one
+     exists, otherwise the honest empty answer with the requested window label. */
+  return bestDrawable || { series: [], days };
 }

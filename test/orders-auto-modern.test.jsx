@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -338,5 +339,26 @@ describe('auto orders — networks, tokens and price feeds', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ord-edit-chain-select').textContent).toContain('Arbitrum');
     });
+  });
+});
+
+describe('auto orders beacon motion', () => {
+  it('rotates the sweep around the radar viewBox center, not its asymmetric wedge bounds', () => {
+    const css = readFileSync('src/styles/orders-hero.css', 'utf8');
+    const component = readFileSync('src/components/OrdersHero.jsx', 'utf8');
+    const sweep = css.match(/\.ordx-sweep\s*\{[^}]*\}/)?.[0] || '';
+
+    expect(component).toContain('viewBox="0 0 72 72"');
+    expect(component).toContain('M36 36 L36 6');
+    expect(sweep).toMatch(/transform-box:\s*view-box/);
+    expect(sweep).toMatch(/transform-origin:\s*50%\s+50%/);
+    expect(sweep).toMatch(/animation:\s*ordx-turn/);
+  });
+
+  it('keeps the illustration visible when either motion setting freezes it', () => {
+    const css = readFileSync('src/styles/orders-hero.css', 'utf8');
+    expect(css).toMatch(/\.ordx-hero\.is-still \.ordx-sweep,[\s\S]*?animation:\s*none;/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ordx-sweep[\s\S]*?animation:\s*none/);
+    expect(css).toMatch(/\.ordx-hero\.is-still \.ordx-sweep \{ transform: rotate\(38deg\); \}/);
   });
 });

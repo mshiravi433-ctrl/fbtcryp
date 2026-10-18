@@ -15554,7 +15554,8 @@
     "kicker": "Token analysis",
     "day": "24h",
     "chartTitle": "Price chart — {{days}} days",
-    "windowFallback": "A full 90-day series is not available for this ticker yet; the nearest real window — {{days}} days — is shown instead."
+    "windowFallback": "A full 90-day series is not available for this ticker yet; the nearest real window — {{days}} days — is shown instead.",
+    "quoteSnapshot": "Latest quote: {{price}} · no verified history yet."
   },
   "spot": {
     "subtitle": "Swap tokens from your own wallet. You sign every transaction.",

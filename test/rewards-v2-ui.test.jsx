@@ -7,6 +7,7 @@
  * The rewards tab is a DOCK, not a long page: one chip opens one section and
  * nothing else is mounted. That contract is what this file pins.
  */
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -95,5 +96,14 @@ describe('Rewards hub surface', () => {
     expect(container.textContent).toMatch(/موجودی وفاداری/);
     expect(container.textContent).not.toMatch(/rewards\.v2\./);
     await setLanguage('en');
+  });
+
+  it('keeps the rank animal upright and softens the distracting flicker', () => {
+    const css = readFileSync('src/styles/rewards.css', 'utf8');
+    expect(css).toMatch(/\.rwd-ring-wrap\s*>\s*svg\s*\{[^}]*transform:\s*rotate\(-90deg\)/);
+    expect(css).not.toMatch(/\.rwd-ring-wrap\s+svg\s*\{/);
+    expect(css).toMatch(/\.rwd-totem-float[\s\S]*?animation:\s*rwd-totem-float 8s/);
+    expect(css).toMatch(/\.rwd-totem-spark[\s\S]*?animation:\s*rwd-twinkle 6s/);
+    expect(css).not.toMatch(/\.rwd-totem-halo\s*\{[^}]*filter:\s*blur/);
   });
 });

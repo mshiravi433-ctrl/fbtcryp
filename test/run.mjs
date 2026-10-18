@@ -1163,6 +1163,10 @@ console.log('\n▸ probing equity list + per-row and gold history analysis…');
   const { default: equityAnalysisRows } = await import('./equity-analysis-probe.mjs');
   report('equity + gold history analysis', equityAnalysisRows);
 }
+console.log('\n▸ testing sparse/fallback tokenized equity charts…');
+execFileSync(process.execPath, ['--test', 'test/equity-chart-windowed.test.mjs'], {
+  stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname
+});
 
 /* App ↔ site parity. The website and the packaged Android app are one bundle
    built by two pipelines, which is how a fix lands on one and not the other:

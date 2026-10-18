@@ -45,13 +45,14 @@
   isolation: isolate;
   margin-top: 12px;
   padding: 15px 15px 12px;
-  border-radius: 22px;
-  border: 1px solid var(--line);
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 24%, var(--line));
   background:
-    linear-gradient(158deg, color-mix(in srgb, var(--rgb-1) 11%, transparent), transparent 48%),
-    linear-gradient(22deg, color-mix(in srgb, var(--rgb-2) 10%, transparent), transparent 54%),
+    radial-gradient(ellipse at 92% 0%, color-mix(in srgb, var(--rgb-4) 9%, transparent), transparent 38%),
+    linear-gradient(158deg, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 48%),
+    linear-gradient(22deg, color-mix(in srgb, var(--rgb-2) 11%, transparent), transparent 54%),
     var(--bg-panel);
-  box-shadow: 0 16px 40px -26px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 18px 44px -30px rgba(0, 0, 0, 0.78), inset 0 1px 0 color-mix(in srgb, var(--text-1) 5%, transparent);
 }
 
 /*
@@ -134,11 +135,17 @@
 }
 
 .ordx-beacon {
-  flex: 0 0 72px;
-  width: 72px;
-  height: 72px;
-  display: block;
+  flex: 0 0 76px;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 17%, var(--line));
+  border-radius: 22px;
   color: var(--text-1);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--rgb-1) 9%, var(--bg-panel)), color-mix(in srgb, var(--rgb-2) 5%, var(--bg-panel)));
 }
 
 .ordx-beacon svg {
@@ -149,20 +156,21 @@
 }
 
 /*
- * `transform-box: fill-box` + `transform-origin: center` is the whole trick
- * for rotating an SVG group about its own middle across browsers. Without
- * `transform-box`, `transform-origin` is resolved against the SVG viewport
- * origin, and a "rotating ring" visibly orbits its own centre instead.
+ * The sweep's painted bounds are intentionally asymmetric: its wedge extends
+ * up and right from (36,36). A `fill-box` origin therefore rotates around the
+ * wedge's own bounding-box centre, not the radar dish, which looks like a
+ * broken orbit on WebKit/WebView. Anchor both SVG transforms to the 72×72
+ * viewBox instead; 50% 50% is the dish centre in every viewport size.
  */
 .ordx-ring-dash {
-  transform-box: fill-box;
-  transform-origin: center;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
   animation: ordx-turn 9s linear infinite reverse;
 }
 
 .ordx-sweep {
-  transform-box: fill-box;
-  transform-origin: center;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
   animation: ordx-turn 4.6s linear infinite;
 }
 

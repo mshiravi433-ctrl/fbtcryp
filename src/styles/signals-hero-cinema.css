@@ -28,8 +28,9 @@
 .sic-page-hero.has-cinema {
   --sigh-slot-h: 23px;
   --sigh-ink: #dff3ff;
-  width: 94%;
-  margin-inline: auto;
+  width: 100%;
+  min-width: 0;
+  margin-inline: 0;
 }
 
 /*
@@ -74,6 +75,11 @@
   position: relative;
   z-index: 1;
 }
+
+/* Fill the grid cell explicitly. WebView flex sizing can otherwise collapse the
+   rotating slot next to the icon/status columns, leaving an empty half-card. */
+.sic-page-hero.has-cinema .sic-hero-copy { width: 100%; }
+
 
 .sic-page-hero.has-cinema::before {
   animation: none;
@@ -161,6 +167,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  width: 100%;
   min-width: 0;
   margin-top: 9px;
 }
@@ -168,7 +175,8 @@
 .sigh-words-slot {
   position: relative;
   display: block;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
+  width: 0;
   min-width: 0;
   height: var(--sigh-slot-h);
 }
@@ -303,6 +311,18 @@
   .sigh-ticks i { animation: none; transition: none; }
   .sigh-film { transition: none; }
 }
+
+/* ── Android: keep the headline live, make the decorative sky static ────────
+   The video filter and extra stars are already omitted by the component. Stop
+   the remaining background loops too: the 30-second phrase cycle is the useful
+   motion, and one low-frequency timeout is negligible beside a moving SVG sky. */
+.sigh-scene.is-android .sigh-neb,
+.sigh-scene.is-android .sigh-plane,
+.sigh-scene.is-android .sigh-star {
+  animation: none;
+  will-change: auto;
+}
+.sigh-scene.is-android .sigh-star { opacity: var(--dim, 0.4); }
 
 /* ── Native APK: no decoder, no drifting layers ─────────────────────────────
    The component never mounts a film here; this freezes the drawn scene too,

@@ -565,10 +565,11 @@
   position: absolute;
   inset: -20%;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--totem-color) 55%, transparent), transparent 66%);
-  filter: blur(10px);
-  opacity: 0.5;
-  animation: rwd-halo 4.6s ease-in-out infinite;
+  /* The radial gradient already has a feathered edge; an extra blur layer made
+     the medallion shimmer on some Android GPUs without adding useful depth. */
+  background: radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--totem-color) 46%, transparent), transparent 66%);
+  opacity: 0.36;
+  animation: rwd-halo 8s ease-in-out infinite;
   pointer-events: none;
 }
 /* NO ROTATION, EVER. The old build leaned the animal with rotateX/rotateY and
@@ -588,8 +589,8 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.42));
-  animation: rwd-medallion-breathe 5.4s ease-in-out infinite;
+  animation: rwd-medallion-breathe 8.5s ease-in-out infinite;
+  will-change: transform;
   pointer-events: none;
 }
 .rwd-totem-float {
@@ -598,7 +599,8 @@
   width: 92%;
   height: 92%;
   transform: translate3d(calc(var(--px, 0) * 3px), calc(var(--py, 0) * -3px), 0);
-  animation: rwd-totem-float 6.4s ease-in-out infinite;
+  animation: rwd-totem-float 8s ease-in-out infinite;
+  will-change: transform;
 }
 .rwd-totem-svg {
   width: 100%;
@@ -607,7 +609,7 @@
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.34));
 }
 .rwd-totem-spark {
-  animation: rwd-twinkle 3.6s ease-in-out infinite;
+  animation: rwd-twinkle 6s ease-in-out infinite;
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -630,12 +632,12 @@
 .rwd-totem-locked .rwd-totem-shadow { opacity: 0.4; }
 
 @keyframes rwd-halo {
-  0%, 100% { opacity: 0.34; transform: scale(0.95); }
-  50% { opacity: 0.72; transform: scale(1.08); }
+  0%, 100% { opacity: 0.3; transform: scale(0.98); }
+  50% { opacity: 0.46; transform: scale(1.03); }
 }
 @keyframes rwd-medallion-breathe {
-  0%, 100% { opacity: 0.9; transform: scale(0.99); }
-  50% { opacity: 1; transform: scale(1.015); }
+  0%, 100% { opacity: 0.94; transform: scale(0.995); }
+  50% { opacity: 1; transform: scale(1.01); }
 }
 /* A PURE VERTICAL FLOAT — no rotation, no skew. The animal is a badge, and a
    badge that leans looks broken. */
@@ -644,8 +646,8 @@
   50% { transform: translate3d(calc(var(--px, 0) * 3px), calc(var(--py, 0) * -3px - 2.6%), 0); }
 }
 @keyframes rwd-twinkle {
-  0%, 100% { opacity: 0.16; transform: scale(0.7); }
-  50% { opacity: 1; transform: scale(1.15); }
+  0%, 100% { opacity: 0.32; transform: scale(0.86); }
+  50% { opacity: 0.78; transform: scale(1.04); }
 }
 
 /* --------------------------------------------------------------------------
@@ -720,7 +722,9 @@
   height: 158px;
   flex: 0 0 auto;
 }
-.rwd-ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+/* Only the progress-ring SVG rotates. TierTotem owns another SVG inside this
+   wrapper; matching every descendant SVG used to turn the animal sideways. */
+.rwd-ring-wrap > svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
 .rwd-ring-track { stroke: color-mix(in srgb, var(--text-1) 9%, transparent); }
 .rwd-ring-track-inner { stroke: color-mix(in srgb, var(--accent) 32%, transparent); }
 .rwd-ring-fill {

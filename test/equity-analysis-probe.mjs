@@ -42,6 +42,7 @@ import {
   averageDailyMove,
   dailyExtremes
 } from '../src/lib/equityAnalysis.js';
+import { isDrawableSeries, isUsableSeries } from '../src/lib/equityChart.js';
 
 const results = [];
 const check = (name, ok) => results.push({ name, ok: Boolean(ok) });
@@ -243,6 +244,20 @@ check(
   /return \[\]/.test(CHART_CODE) && /no synthetic fallback/i.test(CHART)
 );
 check(
+  'a two-quote measured line is drawable while analysis still enforces its sample floor',
+  isDrawableSeries([{ p: 10 }, { p: 11 }]) &&
+    !isUsableSeries([{ p: 10 }, { p: 11 }]) &&
+    !isDrawableSeries([{ p: 10 }, { p: 0 }])
+);
+check(
+  'the analysis distinguishes a real sparse chart, its truthful time window and a quote-only snapshot',
+  /isDrawableSeries\(series\)/.test(CHART) &&
+    /bestDrawable = \{ series, days: w \}/.test(CHART) &&
+    /data-testid="eqan-history-chart"/.test(EQANALYSIS) &&
+    /data-testid="eqan-quote-snapshot"/.test(EQANALYSIS) &&
+    /eqsheet\.quoteSnapshot/.test(EQANALYSIS)
+);
+check(
   'the gold rows render GoldHistoryBox, which owns its own fetches',
   /<GoldHistoryBox/.test(STOCKS) && /GoldHistoryBox/.test(GOLDBOX)
 );
@@ -419,6 +434,7 @@ check(
 /* Every key the two components ask for must exist in English AND Persian. */
 const en = JSON.parse(readFileSync('src/i18n/locales/en.json', 'utf8'));
 const fa = JSON.parse(readFileSync('src/i18n/locales/fa.json', 'utf8'));
+const ar = JSON.parse(readFileSync('src/i18n/locales/ar.json', 'utf8'));
 const eqKeys = ['price', 'change24h', 'windowChange', 'range', 'drawdown', 'holders', 'youGet',
   'showAnalysis', 'hideAnalysis', 'window90', 'noHistory', 'noHistoryBody', 'noHistoryShort',
   'depthTitle', 'poolDepth', 'yourShare', 'tooDeep', 'youWouldGet'];
@@ -431,6 +447,10 @@ check('the gold box has every key in English', goldKeys.every((k) => en.stocks?.
 check('the gold box has every key in Persian', goldKeys.every((k) => fa.stocks?.goldHistory?.[k]));
 check('the three new history lines exist in English', histKeys.every((k) => en.history?.equity?.[k]));
 check('the three new history lines exist in Persian', histKeys.every((k) => fa.history?.equity?.[k]));
+check(
+  'the quote-only snapshot has English, Persian and Arabic copy',
+  Boolean(en.eqsheet?.quoteSnapshot && fa.eqsheet?.quoteSnapshot && ar.eqsheet?.quoteSnapshot)
+);
 check(
   'the Persian strings really are Persian, not English placeholders',
   eqKeys.every((k) => /[\u0600-\u06FF]/.test(fa.stocks.eq[k]))

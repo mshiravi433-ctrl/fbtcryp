@@ -9918,6 +9918,23 @@ export default function run() {
       && Boolean(faL.p2pMarket?.sheet?.payOwn) && Boolean(faL.p2pMarket?.sheet?.payRef));
   }
 
+  /* ---- 86b. P2P palette and hero finish -------------------------------- */
+  {
+    const p2pCss = read('src/styles/p2p-modern.css');
+    t('the P2P surface has a coordinated cyan, mint and violet palette',
+      /--p2p-cyan:\s*#[\da-f]{6}/i.test(p2pCss) &&
+      /--p2p-mint:\s*#[\da-f]{6}/i.test(p2pCss) &&
+      /--p2p-violet:\s*#[\da-f]{6}/i.test(p2pCss));
+    t('the P2P hero is layered, premium and content stays above its decoration',
+      /\.p2p-hero\s*\{[\s\S]*?border-radius:\s*26px[\s\S]*?radial-gradient[\s\S]*?linear-gradient/.test(p2pCss) &&
+      /\.p2p-hero-content\s*\{[^}]*z-index:\s*2/.test(p2pCss) &&
+      /\.p2p-hero-orbit\s*\{[^}]*z-index:\s*1/.test(p2pCss));
+    t('the P2P hero has a contrasting light-theme treatment and reduced-motion fallback',
+      /:root\[data-theme='light'\] \.p2p-page \.p2p-hero\s*\{[^}]*--p2p-hero-ink:\s*#16233d/.test(p2pCss) &&
+      /:root\[data-theme='light'\] \.p2p-page \.p2p-title\s*\{[^}]*#285d78/.test(p2pCss) &&
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.p2p-hero-mark-ring-inner \{ animation: none; \}/.test(p2pCss));
+  }
+
   /* ---- 87. Server features nobody can reach ----------------------------- */
   {
     /*
