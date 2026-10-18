@@ -672,7 +672,7 @@ describe('the rotating words are real translations', () => {
     expect(fa.signals.hero.words.early).toBe('سیگنال زودهنگام');
     expect(fa.signals.hero.words.momentum).toBe('رادار شتاب');
     expect(fa.signals.hero.words.history).toBe('تاریخچه سیگنال‌ها');
-    expect(fa.signals.hero.words.conclusion).toBe('نتیجه‌گیری با هوش مالی مدرن و زیبا');
+    expect(fa.signals.hero.words.conclusion).toBe('جمع‌بندی هوشمند');
   });
 
   it('never prints a promise the disclaimer two boxes below contradicts', () => {
