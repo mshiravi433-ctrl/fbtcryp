@@ -38,6 +38,14 @@
   font-size: 14px;
 }
 
+/*
+ * THE THEME PICKER.
+ *
+ * Six swatches, each the merchant's own accent. The colour IS the label, so
+ * the button keeps its swatch and gains a tick — selection read through an
+ * outline alone is invisible to anyone with a colour-vision difference, and
+ * this is the one choice that ends up on the page a stranger opens.
+ */
 .pay-themes {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -45,27 +53,55 @@
 }
 
 .pay-theme {
-  height: 40px;
-  border-radius: 12px;
-  border: 2px solid transparent;
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 42px;
+  border-radius: 13px;
+  border: 0;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  background: var(--swatch, #00e5a8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
+.pay-theme:hover { transform: translateY(-1px); }
+
 .pay-theme.is-on {
-  border-color: var(--text);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--swatch, #00e5a8) 55%, transparent);
+  box-shadow:
+    0 0 0 2px var(--bg-panel-solid),
+    0 0 0 4px var(--swatch, #00e5a8),
+    0 8px 18px -10px var(--swatch, #00e5a8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
+
+/* The tick sits at the swatch's own contrast-safe ink: `color-mix` toward
+   black on a light swatch and toward white on a dark one, so it is legible
+   on gold (#f0b90b) and on violet (#7c4dff) alike. */
+.pay-theme-tick {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  color: color-mix(in srgb, var(--swatch, #00e5a8) 22%, #05221b);
+  background: color-mix(in srgb, var(--swatch, #00e5a8) 12%, #ffffff);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.pay-theme.is-on .pay-theme-tick { opacity: 1; transform: scale(1); }
 
 .pay-bound {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 11px 13px;
+  border-radius: 14px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
 }
 
 .pay-bound .mono {
@@ -73,15 +109,56 @@
   word-break: break-all;
 }
 
+/*
+ * ─── A SAVED LINK ──────────────────────────────────────────────────────────
+ * The row's left edge carries the link's own accent, so a merchant with four
+ * links can tell them apart without reading the URLs.
+ */
 .pay-link-row {
+  position: relative;
   display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 14px;
+  gap: 9px;
+  padding: 13px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
   margin-top: 10px;
 }
+
+.pay-link-row::before {
+  content: '';
+  position: absolute;
+  inset-block: 14px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 3px;
+  background: linear-gradient(var(--pay-link-accent, #00e5a8), transparent);
+}
+
+.pay-link-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.pay-link-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  color: color-mix(in srgb, var(--pay-link-accent, #00e5a8) 24%, #06231d);
+  background: color-mix(in srgb, var(--pay-link-accent, #00e5a8) 20%, transparent);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.pay-link-title { min-width: 0; display: grid; gap: 2px; }
+.pay-link-title strong {
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pay-link-title span { color: var(--text-3); font-size: 11px; }
 
 .pay-link-url {
   font-size: 11.5px;
@@ -95,20 +172,14 @@
   gap: 8px;
 }
 
-.pay-qr {
-  width: 132px;
-  height: 132px;
-  padding: 8px;
-  margin: 4px auto 0;
-  background: #fff;
-  border-radius: 12px;
-}
+.pay-link-actions .pay-remove { margin-inline-start: auto; color: var(--text-3); }
 
-.pay-qr svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
+/* The QR is the shared FancyQr stage (components/FancyQr.jsx). Only the SIZE
+   is pinned here — the plate's own geometry belongs to fancy-qr.css, where a
+   test asserts the medallion still fits inside the stage's box. */
+.pay-link-row .fqr-stage { margin: 0 auto; }
+.pay-link-row .fqr-frame { width: min(176px, 50vw); }
+.pay-qr { border-radius: 16px; }
 
 /* ---- customer landing (headerless, themed, not Welcome) ---------------- */
 

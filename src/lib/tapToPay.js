@@ -103,13 +103,95 @@ export const isEvmAddress = (a) => /^0x[a-fA-F0-9]{40}$/.test(String(a || '').tr
  * same tag works if the other person scans it with MetaMask instead of us —
  * and a payment standard nobody else implements is a payment standard that
  * strands its users.
+ *
+ * ─── WHY ONLY THE NATIVE COIN CAN RIDE IN THE CODE ─────────────────────────
+ * `amount` is emitted as EIP-681's `?value=<wei>`, and `value` means the
+ * chain's NATIVE coin in that standard. There is a second EIP-681 form for
+ * tokens — `ethereum:<tokenContract>@<chain>/transfer?address=<recipient>` —
+ * and it is deliberately NOT used here, because in that form the address
+ * directly after `ethereum:` is the TOKEN, not the person being paid. Every
+ * parser in this app (including `parsePayLink` below) reads that position as
+ * the destination; emitting it would hand a payer's wallet the token contract
+ * as the recipient and the money would be gone.
+ *
+ * So: an amount is only encoded when the request is in the chain's own coin.
+ * A USDT request is still shown on screen — it simply travels as text next to
+ * the code rather than inside it, which is the honest thing to do with a
+ * number no wallet would read correctly.
+ *
+ * @param {string} address
+ * @param {number|string} chainId
+ * @param {object} [opts]
+ * @param {string}  [opts.amount]   human amount, e.g. "0.05"
+ * @param {number}  [opts.decimals] decimals of the coin the amount is in
+ * @param {boolean} [opts.native]   MUST be true for the amount to be emitted.
+ *        The guard lives here rather than in the caller on purpose: the safe
+ *        default is "do not encode", so a future call site that passes an
+ *        amount and forgets to say which kind of coin it is cannot emit a
+ *        dangerous URI. Silence is the recoverable mistake; a misread
+ *        recipient is not.
  */
-export function buildPayLink(address, chainId) {
+export function buildPayLink(address, chainId, { amount, decimals, native = false } = {}) {
   if (!isEvmAddress(address)) throw new Error('BAD_ADDRESS');
   const chain = Number(chainId);
-  return Number.isFinite(chain) && chain > 0
+  const base = Number.isFinite(chain) && chain > 0
     ? `ethereum:${address}@${chain}`
     : `ethereum:${address}`;
+
+  if (!native) return base;
+  const wei = parseUnits(amount, decimals);
+  if (wei === null || wei === 0n) return base;
+  return `${base}?value=${wei.toString()}`;
+}
+
+/**
+ * "0.05" with 18 decimals -> 50000000000000000n, as a BigInt.
+ *
+ * BigInt, not `Number(amount) * 10 ** decimals`: in floating point
+ * `0.07 * 1e18` is 70000000000000000.000000000001 and friends, and rounding a
+ * payment amount is how someone is quietly over- or under-charged.
+ *
+ * Returns null for anything that is not a plain non-negative decimal. Two
+ * deliberate calls in there:
+ *   — "1." reads as 1, not as an error. It is a number mid-keystroke on the
+ *     way to "1.5", and treating it as invalid would blink the amount out of
+ *     the code and back on the way there.
+ *   — "1e3", "-1" and "1.2.3" are rejected outright rather than truncated.
+ *     Silence is the recoverable mistake; a confidently wrong number is not.
+ */
+export function parseUnits(value, decimals = 18) {
+  const d = Number.isFinite(Number(decimals)) ? Math.max(0, Math.trunc(Number(decimals))) : 18;
+  const s = String(value ?? '').trim();
+  if (!s || !/^\d*(?:\.\d*)?$/.test(s)) return null;
+
+  const [whole = '0', frac = ''] = s.split('.');
+  if (!whole && !frac) return null;
+
+  const padded = (frac + '0'.repeat(d)).slice(0, d);
+  const joined = `${whole || '0'}${padded}`.replace(/^0+(?=\d)/, '');
+  if (!/^\d+$/.test(joined)) return null;
+  try {
+    return BigInt(joined);
+  } catch {
+    return null;
+  }
+}
+
+/** Turn a base-unit BigInt/string back into a human amount, for display. */
+export function formatUnits(value, decimals = 18) {
+  const d = Number.isFinite(Number(decimals)) ? Math.max(0, Math.trunc(Number(decimals))) : 18;
+  let s = '';
+  try {
+    s = BigInt(value ?? 0).toString();
+  } catch {
+    return null;
+  }
+  const neg = s.startsWith('-');
+  if (neg) s = s.slice(1);
+  s = s.padStart(d + 1, '0');
+  const whole = s.slice(0, s.length - d) || '0';
+  const frac = d ? s.slice(s.length - d).replace(/0+$/, '') : '';
+  return `${neg ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`;
 }
 
 /**
@@ -119,16 +201,26 @@ export function buildPayLink(address, chainId) {
  * app writing a full URL with the address in a query parameter. Anything that
  * does not yield a valid address returns null rather than a guess — guessing
  * here means sending money to a wrong address.
+ *
+ * `value` (the requested amount, in base units) comes along when it was
+ * present, so the payer can be shown what is being asked for rather than
+ * having to be told in person.
  */
 export function parsePayLink(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
 
-  if (isEvmAddress(text)) return { address: text, chainId: null };
+  if (isEvmAddress(text)) return { address: text, chainId: null, value: null };
 
   const m = /(?:ethereum:|pay-)?(0x[a-fA-F0-9]{40})(?:@(\d+))?/.exec(text);
   if (m && isEvmAddress(m[1])) {
-    return { address: m[1], chainId: m[2] ? Number(m[2]) : null };
+    let value = null;
+    const q = text.indexOf('?');
+    if (q !== -1) {
+      const rawValue = new URLSearchParams(text.slice(q + 1)).get('value');
+      if (rawValue && /^\d+$/.test(rawValue)) value = rawValue;
+    }
+    return { address: m[1], chainId: m[2] ? Number(m[2]) : null, value };
   }
   return null;
 }

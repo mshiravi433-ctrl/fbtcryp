@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import qrcode from 'qrcode-generator';
 import InfoBox from './InfoBox';
 import LanguagePicker from './LanguagePicker';
 import ModernSelect from './ModernSelect';
+import FancyQr from './FancyQr';
 import {
   IconWallet, IconSparkle, IconCoins, IconLink, IconCopy, IconCheck, IconQr
 } from './Icons';
@@ -18,25 +18,6 @@ import {
   loadSavedPayLinks, savePayLink, removePayLink
 } from '../lib/payLink';
 import '../styles/pay-gateway.css';
-
-function qrPathFor(text) {
-  if (!text) return null;
-  try {
-    const q = qrcode(0, 'M');
-    q.addData(text);
-    q.make();
-    const count = q.getModuleCount();
-    let d = '';
-    for (let r = 0; r < count; r += 1) {
-      for (let c = 0; c < count; c += 1) {
-        if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
-      }
-    }
-    return { d, count };
-  } catch {
-    return null;
-  }
-}
 
 export default function PayGatewayPanel() {
   const { t, i18n } = useTranslation();
@@ -198,11 +179,17 @@ export default function PayGatewayPanel() {
                 key={id}
                 type="button"
                 className={`pay-theme${theme === id ? ' is-on' : ''}`}
-                style={{ background: PAY_THEMES[id].accent, '--swatch': PAY_THEMES[id].accent }}
+                style={{ '--swatch': PAY_THEMES[id].accent }}
                 aria-pressed={theme === id}
                 aria-label={t(`pay.theme.${id}`)}
+                title={t(`pay.theme.${id}`)}
                 onClick={() => { haptic?.('select'); setTheme(id); }}
-              />
+              >
+                {/* A tick, not just a ring: six near-identical squares where the
+                    only signal is a 2px outline is a control you have to
+                    squint at, and this is the one choice the payer sees. */}
+                <span className="pay-theme-tick" aria-hidden="true"><IconCheck width={13} height={13} /></span>
+              </button>
             ))}
           </div>
         </div>
@@ -308,39 +295,65 @@ export default function PayGatewayPanel() {
   );
 }
 
+/**
+ * ONE SAVED LINK.
+ *
+ * ─── WHY THE QR IS THE APP'S FANCY QR NOW ──────────────────────────────────
+ * This row used to hand-roll its own matrix and paint it as a flat black
+ * square — a fourth copy of the same encoder, and the plainest thing on a
+ * screen whose whole job is to look like somebody's business. FancyQr is the
+ * component this repo built for exactly this, and it is the only QR surface
+ * whose decodability is pinned by a test that rasterises the painted path and
+ * pushes it through a real decoder. Four implementations is four chances to
+ * ship a code that scans to the wrong string; one is one.
+ *
+ * The frame ACCENT is the merchant's own theme colour, so a gold link reads
+ * gold and a night link reads blue — the choice they made in the box above is
+ * visible on the code they print.
+ */
 function SavedLink({ row, copied, onCopy, onShare, onPreview, onRemove, t }) {
-  const qr = useMemo(() => qrPathFor(row.url), [row.url]);
   const chain = EVM_CHAINS[row.chainId];
+  const theme = PAY_THEMES[row.theme] ?? PAY_THEMES.mint;
+  const accent = useMemo(
+    () => [theme.accent, PAY_THEMES.violet.accent, PAY_THEMES.cyan.accent],
+    [theme]
+  );
   return (
-    <div className="pay-link-row">
-      <div className="row-between">
-        <strong style={{ fontSize: 13 }}>
-          {row.name || shortAddress(row.to)} · {row.token}
-          {row.amount ? ` ${row.amount}` : ` · ${t('pay.amountOpen')}`}
-        </strong>
-        <span className="faint" style={{ fontSize: 11 }}>{chain?.name}</span>
+    <div className="pay-link-row" style={{ '--pay-link-accent': theme.accent }}>
+      <div className="pay-link-head">
+        <span className="pay-link-mark" aria-hidden="true">
+          {(row.name || row.token || '·').trim().charAt(0).toUpperCase()}
+        </span>
+        <div className="pay-link-title">
+          <strong>
+            {row.name || shortAddress(row.to)} · {row.token}
+            {row.amount ? ` ${row.amount}` : ` · ${t('pay.amountOpen')}`}
+          </strong>
+          <span>{chain?.name}</span>
+        </div>
       </div>
       <div className="pay-link-url mono">{row.url}</div>
-      {qr && (
-        <div className="pay-qr" aria-label={t('pay.qr')}>
-          <svg viewBox={`0 0 ${qr.count} ${qr.count}`} shapeRendering="crispEdges">
-            <path d={qr.d} fill="#000" />
-          </svg>
-        </div>
-      )}
+      <FancyQr
+        value={row.url}
+        label={t('pay.qr')}
+        className="pay-qr"
+        accent={accent}
+        badge={<IconQr width={17} height={17} />}
+      />
       <div className="pay-link-actions">
         <button type="button" className="btn btn-ghost btn-sm" onClick={onCopy}>
           {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
           {copied ? t('pay.copied') : t('pay.copy')}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onShare}>
+          <IconLink width={14} height={14} />
           {t('pay.share')}
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onPreview}>
           <IconQr width={14} height={14} />
           {t('pay.preview')}
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove}>
+        <button type="button" className="btn btn-ghost btn-sm pay-remove" onClick={onRemove}>
           {t('pay.remove')}
         </button>
       </div>

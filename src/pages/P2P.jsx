@@ -10,18 +10,29 @@ import { useWallet, shortAddress } from '../context/WalletContext';
 import SendSheet from '../components/SendSheet';
 import TapToPay from '../components/TapToPay';
 import P2PMarket from '../components/P2PMarket';
+import P2PHeroMark from '../components/P2PHeroMark';
+import { AnimatedMarket, AnimatedSwap, AnimatedWallet, useStill } from '../components/AnimatedIcon';
 import {
-  IconArrowUpRight, IconCard, IconCheck, IconChevronLeft, IconShield, IconSwap, IconTrend, IconWallet
+  IconArrowUpRight, IconCard, IconCheck, IconChevronLeft, IconShield, IconTrend, IconWallet
 } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
-import { useStill } from '../components/AnimatedIcon';
 import PayGatewayPanel from '../components/PayGatewayPanel';
 import '../styles/pay-gateway.css';
 import '../styles/p2p-modern.css';
 
 const TAB_KEYS = ['market', 'otc', 'pay'];
-const TAB_ICONS = { market: IconTrend, otc: IconSwap, pay: IconCard };
 const SCAMS = ['reversal', 'thirdParty', 'offPlatform', 'overpay'];
+
+/**
+ * The tab's own animated glyph.
+ *
+ * A static icon inside a live tab strip looks switched off next to a moving
+ * one, so each tab draws the same vocabulary as the bottom nav — geometry
+ * that animates, not a glyph that scales. `active` gates it: only the tab you
+ * are on is in motion, so three tabs never compete for the eye, and `still`
+ * (OS reduced-motion OR the app's own toggle) renders the plain shape.
+ */
+const TAB_ANIMATED = { market: AnimatedMarket, otc: AnimatedSwap, pay: AnimatedWallet };
 
 export default function P2P() {
   const { t } = useTranslation();
@@ -58,39 +69,48 @@ export default function P2P() {
     <PageTransition>
       <div className={`p2p-page${still ? ' is-still' : ''}`}>
         <motion.header className="p2p-hero" variants={riseIn} initial="hidden" animate="show">
-          <div className="p2p-hero-orbit p2p-hero-orbit-one" aria-hidden="true" />
-          <div className="p2p-hero-orbit p2p-hero-orbit-two" aria-hidden="true" />
+          <span className="p2p-hero-grid" aria-hidden="true" />
+          <span className="p2p-hero-bloom p2p-hero-bloom-a" aria-hidden="true" />
+          <span className="p2p-hero-bloom p2p-hero-bloom-b" aria-hidden="true" />
+
           <div className="p2p-hero-content">
             <div className="p2p-hero-topline">
               <button className="icon-btn p2p-back" type="button" onClick={() => navigate(-1)} aria-label={t('common.back')}>
                 <IconChevronLeft width={18} height={18} />
               </button>
               <span className="p2p-eyebrow"><span className="p2p-eyebrow-dot" />{t('p2p.eyebrow')}</span>
+              <span className="p2p-hero-live" aria-hidden="true"><i /><i /><i /></span>
             </div>
+
             <div className="p2p-hero-route" aria-hidden="true">
-              <span><IconWallet width={13} height={13} />{t('p2p.tab.otc')}</span>
-              <i /><IconSwap width={14} height={14} /><i />
-              <span><IconCard width={13} height={13} />{t('p2p.tab.pay')}</span>
+              <span className="p2p-hero-route-node">
+                <IconTrend width={13} height={13} />{t('p2p.tab.market')}
+              </span>
+              <i />
+              <span className="p2p-hero-route-node">
+                <IconWallet width={13} height={13} />{t('p2p.tab.otc')}
+              </span>
+              <i />
+              <span className="p2p-hero-route-node">
+                <IconCard width={13} height={13} />{t('p2p.tab.pay')}
+              </span>
             </div>
+
             <h1 className="p2p-title">{t('p2p.title')}</h1>
             <p className="p2p-subtitle">{t('p2p.subtitle')}</p>
+
             <div className="p2p-hero-footnote">
               <IconShield width={14} height={14} aria-hidden="true" />
               <span>{t('p2p.heroNote')}</span>
             </div>
           </div>
-          <div className="p2p-hero-mark" aria-hidden="true">
-            <span className="p2p-hero-mark-ring p2p-hero-mark-ring-outer" />
-            <span className="p2p-hero-mark-ring p2p-hero-mark-ring-inner" />
-            <span className="p2p-hero-mark-icon"><IconSwap width={30} height={30} /></span>
-            <span className="p2p-hero-mark-orbit p2p-hero-mark-orbit-a" />
-            <span className="p2p-hero-mark-orbit p2p-hero-mark-orbit-b" />
-          </div>
+
+          <P2PHeroMark still={still} />
         </motion.header>
 
         <nav className="segmented seg-lg p2p-main-tabs" role="tablist" aria-label={t('p2p.tabListLabel')}>
           {TAB_KEYS.map((key) => {
-            const Icon = TAB_ICONS[key];
+            const Glyph = TAB_ANIMATED[key];
             const active = tab === key;
             return (
               <button
@@ -108,7 +128,9 @@ export default function P2P() {
                 style={{ isolation: 'isolate' }}
               >
                 {active && <SegIndicator id="p2p-main-tabs" className="seg-indicator p2p-tab-indicator" />}
-                <span className="p2p-tab-icon"><Icon width={16} height={16} /></span>
+                <span className="p2p-tab-icon">
+                  <Glyph active={active} still={still} width={16} height={16} />
+                </span>
                 <span className="p2p-tab-copy">
                   <span className="p2p-tab-label">{t(`p2p.tab.${key}`)}</span>
                   <span className="p2p-tab-hint">{t(`p2p.tabHint.${key}`)}</span>
@@ -189,7 +211,7 @@ export default function P2P() {
             <>
               <motion.section className="p2p-otc-hero" variants={riseIn} initial="hidden" animate="show">
                 <div className="p2p-otc-hero-top">
-                  <span className="p2p-otc-icon"><IconSwap width={21} height={21} /></span>
+                  <span className="p2p-otc-icon"><IconSwapGlyph still={still} /></span>
                   <span className="p2p-otc-badge"><span className="p2p-otc-badge-dot" />{t('p2p.otcBadge')}</span>
                 </div>
                 <h2>{t('p2p.otcTitle')}</h2>
@@ -227,7 +249,7 @@ export default function P2P() {
                     <>
                       <div className="p2p-wallet-preview">
                         <div className="p2p-wallet-network">
-                          <span className="p2p-network-mark"><IconSwap width={14} height={14} /></span>
+                          <span className="p2p-network-mark"><IconWallet width={14} height={14} /></span>
                           <div>
                             <span className="p2p-wallet-label">{t('p2p.networkLabel')}</span>
                             <strong>{wallet.chainOk ? (wallet.chain?.name || String(wallet.chainId)) : t('p2p.chainId', { id: wallet.chainId })}</strong>
@@ -289,4 +311,9 @@ export default function P2P() {
       </div>
     </PageTransition>
   );
+}
+
+/** The OTC hero's own glyph — the animated swap, sized for a 40px tile. */
+function IconSwapGlyph({ still }) {
+  return <AnimatedSwap active still={still} width={21} height={21} />;
 }
