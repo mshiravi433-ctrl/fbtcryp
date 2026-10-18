@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { useStill } from '../components/AnimatedIcon';
-import { SignalsHeroScene, SignalsHeroWords } from '../components/SignalsHeroCinema';
+import { SignalsHeroMark, SignalsHeroScene, SignalsHeroWords } from '../components/SignalsHeroCinema';
 import InfoBox from '../components/InfoBox';
 import CoinLogo from '../components/CoinLogo';
 import AdBanner from '../components/AdBanner';
@@ -2238,33 +2238,35 @@ export default function Signals() {
 
   return (
     <PageTransition className="page sic-page">
-      {/* The compact glass capsule: same-origin film + drawn scene seen through
-          a frosted pane (SignalsHeroCinema), a tight title/tagline stack, and
-          the rotating keyword line. The scene remains as the film's fallback. */}
+      {/* The band: a two-row cinema strip. Row 1 is identity — the animated
+          SVG medallion, the title with its tagline tight beneath it, and the
+          AI/live status. Row 2 is the rotating phrase as a full-width glass
+          ticker (SignalsHeroWords spans every column), which is what keeps
+          the box wide and short with no dead air between its sentences on
+          any phone. The same-origin film fills the panel behind all of it;
+          the drawn scene remains as the fallback. */}
       <motion.section className="sic-page-hero has-cinema" variants={riseIn} initial="hidden" animate="show">
         <SignalsHeroScene active={!still} />
-        <span className="sic-hero-icon" aria-hidden="true">
-          {/* One small modern pulse mark: a single heartbeat line ending in a
-              live node. Drawn on a 24 grid and rendered at 20-22px — a
-              garnish on the glass tile, never a billboard. */}
-          <svg viewBox="0 0 24 24" fill="none" focusable="false">
-            <path d="M2.5 12h4l2.2-5.5 3.6 10 2.4-6.2 1.4 1.7h2.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="20.4" cy="12" r="1.7" fill="currentColor" />
-          </svg>
-          <span className="sic-hero-icon-orbit" />
-        </span>
+        <span className="sic-hero-icon"><SignalsHeroMark /></span>
         <div className="sic-hero-copy">
           <h1>{t('signals.title')}</h1>
           <p className="sic-hero-tagline">{t('signals.hero.tagline')}</p>
-          <SignalsHeroWords />
         </div>
         <div className="sic-hero-status">
-          <span>{t('signals.aiPowered')}</span>
+          <span className="sigh-ai">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12" rx="2.5" />
+              <rect x="10" y="10" width="4" height="4" rx="1" />
+              <path d="M9 3.5V6M15 3.5V6M9 18v2.5M15 18v2.5M3.5 9H6M3.5 15H6M18 9h2.5M18 15h2.5" />
+            </svg>
+            {t('signals.aiPowered')}
+          </span>
           <i className={pulseLive ? 'live' : 'offline'}>
             <b aria-hidden="true" />
             {t(`signals.intel.status.${pulseLive ? 'live' : pulse?.source === 'local' || pulse?.source === 'offline' ? 'offline' : 'unavailable'}`)}
           </i>
         </div>
+        <SignalsHeroWords />
       </motion.section>
 
       {/* Each panel below is fed by its own poll; SectionGuard confines a

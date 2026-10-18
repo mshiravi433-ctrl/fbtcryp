@@ -1,21 +1,42 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStill } from './AnimatedIcon';
 import { isNativeShell } from '../lib/nativeShell';
 
 /**
- * The first Signals banner — a compact GLASS capsule: a lightweight,
- * same-origin H.264 nebula loop seen THROUGH a frosted glass veil, with a
- * CSS/SVG nebula fallback, a small scrolling signal-wave etched along the
- * bottom edge and a 30-second rotating phrase. No third-party hotlink is
- * needed to make the default experience work. The film is decorative and
+ * The first Signals banner: a lightweight, same-origin H.264 nebula loop with
+ * a CSS/SVG fallback and a 30-second rotating phrase. No third-party hotlink
+ * is needed to make the default experience work. The film is decorative and
  * never blocks the page; reduced motion, native shell and slow/data-saving
  * connections keep the still scene instead.
  *
- * The glass is painted (translucent gradients over the scene), never blurred:
- * a backdrop blur on this box is the one effect the performance law in
- * signals-hero-cinema.css forbids, and the film behind the veil already
- * supplies the softness a blur would fake.
+ * THE BAND LAYOUT (the proportions live in signals-hero-cinema.css — a short,
+ * wide cinematic band, two rows: an animated SVG medallion + title/tagline +
+ * live status on the first row, and the rotating phrase as a full-width glass
+ * ticker on the second): this file owns the three pieces the page mounts —
+ * `SignalsHeroMark` (the animated SVG sigil: pulsing rings, an orbiting dot
+ * and the signal trace itself), `SignalsHeroScene` (film + drawn cosmos,
+ * shooting star and the one-pass sheen) and `SignalsHeroWords` (the ticker:
+ * a per-phrase SVG glyph, a tap to advance, a press-and-hold to pause, and
+ * segment ticks that can be tapped to jump).
+ *
+ * ANDROID GETS THE FILM TOO. The bundled loop is 640×240, six seconds and
+ * ~37 KB of baseline H.264 — a decoder workload any Android Chrome/WebView of
+ * the last decade shrugs off, and every failure mode (autoplay refused, codec
+ * missing, network stall) still lands on the drawn nebula painted behind it.
+ * What stays switched off is only what must: the packaged APK
+ * (`isNativeShell()`), `saveData`/2G readers, reduced motion, and any moment
+ * the box is off-screen or the tab is hidden. An earlier build denied Android
+ * browsers the film outright, which left most readers with a frozen sky;
+ * that guard was written for a 4K stock clip that no longer ships.
+ *
+ * THE GLASS REFINEMENT («طول باکس زیاده، پس‌زمینه شیشه‌ای شود»): the band is
+ * tightened once more (≈104px desktop / ≈93px on a 390px phone) and the film
+ * now plays THROUGH a painted frosted pane — `.sigh-glass` (a translucent
+ * veil with a hard top highlight), `.sigh-aurora` glows moving inside it, a
+ * small `.sigh-wave` etched along the bottom edge and a slow push-in on the
+ * film itself. No backdrop blur anywhere: the glass is gradients, the film
+ * behind it supplies the softness a blur would fake.
  */
 
 /* The rotating line is the hero's own title plus four phrases. Slot 0 is the
@@ -203,7 +224,7 @@ function makeStars(count, seed) {
     /* Independent schedules. Without the random delay every star pulses
        together and the whole box reads as flickering. */
     delay: rand() * 6,
-    // Calmer than the old sky: the glass capsule is a header, not a planetarium.
+    // Calmer than the original sky: a quiet twinkle under glass, not a flicker.
     duration: 4.8 + rand() * 5.2,
     dim: 0.2 + rand() * 0.5
   }));
@@ -229,11 +250,27 @@ export function SignalsHeroScene({ active = true }) {
   const film = resolveHeroFilm();
   const poster = String(import.meta.env?.VITE_SIGNALS_HERO_POSTER ?? '').trim() || undefined;
   const credit = resolveHeroCredit();
-  /* Opt-out, native shell and data-saving connections use the drawn scene. */
-  const wantFilm = Boolean(film) && !native && !cheap && !android;
+  /* Opt-out, native shell and data-saving connections use the drawn scene.
+     Android BROWSERS play the film (see the file header): the guard that
+     remains for them is the cheap-link one above, which is the reader's own
+     answer about spending data. */
+  const wantFilm = Boolean(film) && !native && !cheap;
 
   const [setHostNode, onScreen] = useOnScreen();
   const videoRef = useRef(null);
+  /* React's `muted` prop alone does not reliably set the muted PROPERTY (it
+     writes the attribute, and a browser that has already decided the element
+     is unmuted keeps refusing autoplay — the classic "works on Android,
+     frozen on iPhone" report). Setting both on the node the moment it
+     attaches is what makes the muted+playsInline autoplay contract real on
+     iOS Safari and in-app WebViews alike. */
+  const setVideoNode = useCallback((node) => {
+    videoRef.current = node;
+    if (node) {
+      node.muted = true;
+      node.defaultMuted = true;
+    }
+  }, []);
   const foreground = useForeground();
   /* 'idle' → no source attached · 'loading' → fetch started · 'live' → playing
      over the drawn scene · 'failed' → give up, stay drawn.
@@ -336,6 +373,24 @@ export function SignalsHeroScene({ active = true }) {
               <rect width="400" height="160" fill={`url(#${gid}-rose)`} />
               <rect width="400" height="160" fill={`url(#${gid}-ice)`} />
             </g>
+            {/* The constellation IS a signal trace: one faint polyline and its
+                nodes, drawn once with the nebula (zero per-frame cost), so the
+                still sky — APK, data-saver, reduced motion — still says what
+                this page measures instead of reading as generic space art. */}
+            <g opacity="0.5">
+              <polyline
+                points="18,118 92,96 150,108 214,64 268,82 330,44 384,58"
+                fill="none"
+                stroke="#7dd7ff"
+                strokeOpacity="0.34"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {[[18, 118], [92, 96], [150, 108], [214, 64], [268, 82], [330, 44], [384, 58]].map(([cx, cy]) => (
+                <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.7" fill="#bfeaff" fillOpacity="0.65" />
+              ))}
+            </g>
           </svg>
 
           <div className="sigh-plane sigh-plane-far">
@@ -375,9 +430,16 @@ export function SignalsHeroScene({ active = true }) {
 
       </>
 
+      {/* One shooting star on a long, lazy schedule and one sheen pass as the
+          band mounts: the two moments of "cinema" that cost a single
+          transform each and then get out of the way. Both freeze with the
+          rest of the scene (still / native / Android-static / film-live). */}
+      <div className="sigh-meteor" />
+      <div className="sigh-sheen" />
+
       {wantFilm && (
         <video
-          ref={videoRef}
+          ref={setVideoNode}
           className="sigh-film"
           src={filmState === 'loading' || filmLive ? film : undefined}
           poster={poster}
@@ -394,9 +456,8 @@ export function SignalsHeroScene({ active = true }) {
         />
       )}
 
-      {/* Aurora glows over the film: two painted colour washes that drift a
-          few percent and back. They are what makes the loop read as light
-          moving inside glass rather than as a video glued to a card. */}
+      {/* Aurora glows over the film: painted colour washes drifting a few
+          percent and back, so the light moves INSIDE the pane. */}
       <div className="sigh-aurora" />
 
       <div className="sigh-vignette" />
@@ -406,9 +467,9 @@ export function SignalsHeroScene({ active = true }) {
           performance law in the CSS); the film behind it is already soft. */}
       <div className="sigh-glass" />
 
-      {/* A small live signal wave etched on the glass along the bottom edge.
-          30 px tall, one tiled path sliding on `transform` — the box's own
-          ECG, sized to garnish the capsule rather than headline it. */}
+      {/* A small live signal wave etched on the glass along the bottom edge,
+          glowing through the ticker's own glass bar above it. One tiled
+          path sliding on `transform` — a garnish, never a headline. */}
       <div className="sigh-wave">
         <svg viewBox="0 0 800 40" preserveAspectRatio="none" focusable="false">
           <defs>
@@ -423,14 +484,93 @@ export function SignalsHeroScene({ active = true }) {
         </svg>
       </div>
 
-      {/* One slow light sweep across the pane, then a long rest. */}
-      <div className="sigh-shine" />
-
       {/* Optional credit for an operator-supplied video. */}
       {wantFilm && filmLive && credit && <span className="sigh-credit">{credit}</span>}
     </div>
   );
 }
+
+/**
+ * THE MARK — the animated SVG sigil in the band's medallion.
+ *
+ * Three motions, each a single `transform`/`opacity` loop on its own layer
+ * (the stylesheet's performance law applies to this file's CSS, and the test
+ * enforces it): two rings breathe outward around the core, one dot orbits
+ * the dashed rail, and the signal trace through the middle simply holds —
+ * it is the one element that stays put, which is what makes the rest read
+ * as motion *around a measurement*. `useStill()` freezes all of it into a
+ * complete static sigil; the native shell and reduced-motion CSS do the
+ * same without this component's help.
+ *
+ * The paths carry no text and the svg is `aria-hidden`: the medallion is a
+ * brand mark next to an h1 that already says «سیگنال هوشمند», never the
+ * only carrier of the page's name.
+ */
+export function SignalsHeroMark() {
+  const still = useStill();
+  const rawId = useId();
+  const gid = `shm${rawId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return (
+    <svg
+      className={`sigh-mark${still ? ' is-still' : ''}`}
+      viewBox="0 0 48 48"
+      fill="none"
+      focusable="false"
+      aria-hidden="true"
+      data-testid="signals-hero-mark"
+    >
+      <defs>
+        <linearGradient id={`${gid}-sig`} x1="6" y1="42" x2="42" y2="6" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#00e5ff" />
+          <stop offset="55%" stopColor="#7c4dff" />
+          <stop offset="100%" stopColor="#ff2d95" />
+        </linearGradient>
+      </defs>
+      {/* the rail the orbit rides on */}
+      <circle cx="24" cy="24" r="19" stroke={`url(#${gid}-sig)`} strokeOpacity="0.4" strokeWidth="1.3" strokeDasharray="3 5" strokeLinecap="round" />
+      {/* breathing rings — transform-box keeps the scale centred on the core */}
+      <circle className="sigh-mark-ring" cx="24" cy="24" r="12.5" stroke="#00e5ff" strokeOpacity="0.55" strokeWidth="1.2" />
+      <circle className="sigh-mark-ring sigh-mark-ring-late" cx="24" cy="24" r="12.5" stroke="#b47cff" strokeOpacity="0.45" strokeWidth="1.2" />
+      {/* the orbiting satellite dot */}
+      <g className="sigh-mark-orbit">
+        <circle cx="24" cy="5" r="2.6" fill="#00e5ff" />
+        <circle cx="24" cy="5" r="1.1" fill="#eafcff" />
+      </g>
+      {/* the signal trace itself */}
+      <path
+        d="M9 26h6.2l2.8-7.4 4.6 13.2 3-6.6 1.5 2.8H39"
+        stroke={`url(#${gid}-sig)`}
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle className="sigh-mark-core" cx="22.6" cy="31.8" r="2.1" fill="#fff" />
+    </svg>
+  );
+}
+
+/* One glyph per phrase — the ticker's words name real sections of this page
+   (early signals, the momentum radar, the ledger, the AI's conclusion), so
+   each carries the icon of the thing it names rather than one repeated
+   sparkle. Pure stroke SVG, currentColor, no text node anywhere: the
+   word element's textContent stays exactly the phrase, in every locale. */
+const wordGlyph = (paths) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" focusable="false" aria-hidden="true">
+    {paths}
+  </svg>
+);
+export const HERO_WORD_GLYPHS = Object.freeze({
+  /* the title slot — a broadcast source: one measured point, signal leaving it */
+  title: wordGlyph(<><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none" /><path d="M8.2 15.8a5.4 5.4 0 0 1 0-7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8" /></>),
+  /* early signal — the bolt: it arrived before the crowd did */
+  early: wordGlyph(<path d="M13 2.5 4.5 13.5H11l-1 8L18.5 10H12l1-7.5Z" />),
+  /* momentum radar — the trace breaking upward, with its direction read */
+  momentum: wordGlyph(<><path d="M3 17.5 8.5 12l3.5 3.5L19 8.5" /><path d="M14.5 8.5H19V13" /></>),
+  /* signal history — the ledger's clock, wound back */
+  history: wordGlyph(<><path d="M3.5 12a8.5 8.5 0 1 1 2.5 6" /><path d="M3.5 12H7M3.5 12l2.8-2.8" /><path d="M12 8v4.4l3 1.8" /></>),
+  /* the conclusion — a verdict reached: ring closed, tick inside */
+  conclusion: wordGlyph(<><circle cx="12" cy="12" r="8.5" /><path d="m8.6 12.4 2.4 2.4 4.4-5" /></>)
+});
 
 /**
  * THE ROTATING LINE.
@@ -457,6 +597,18 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
   const rotationVisible = onScreen || android;
   const foreground = useForeground();
   const [index, setIndex] = useState(0);
+  /* The ticker is touchable, because a line that names the sections below
+     should let the reader drive it: a tap moves to the next phrase (a tap
+     on a tick jumps to that one), and pressing & holding pauses the cycle
+     while a long Persian phrase is being read. `held` simply joins the
+     existing pause conditions; `epoch` restarts the chained timer after a
+     manual jump so the phrase the reader just asked for earns a full hold
+     instead of being dismissed by a step scheduled for its predecessor.
+     Under reduced motion there is no timer to restart — the tap still
+     browses, instantly and without animation, which is exactly the
+     user-initiated motion that setting exists to allow. */
+  const [held, setHeld] = useState(false);
+  const [epoch, setEpoch] = useState(0);
 
   /* Slots: 0 = the title, then one per word, in order. */
   const slots = useMemo(() => {
@@ -479,7 +631,7 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
   indexRef.current = index;
 
   useEffect(() => {
-    if (still || slots.length < 2 || !rotationVisible || !foreground) return undefined;
+    if (still || slots.length < 2 || !rotationVisible || !foreground || held) return undefined;
     let timer = null;
     let cancelled = false;
 
@@ -525,15 +677,36 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [still, slots.length, rotationVisible, foreground]);
+    /* `epoch` is in this list for one reason: a manual jump. It changes
+       nowhere else, so the chain is still never rebuilt by a rotation —
+       only by the reader's own tap. */
+  }, [still, slots.length, rotationVisible, foreground, held, epoch]);
 
   /* Re-entering the screen (or a language switch that changes the list) can
      leave `index` past the end. Clamping in render is cheaper than an effect. */
   const i = index % slots.length;
   const row = slots[i];
 
+  const jumpTo = (n) => {
+    if (slots.length < 2) return;
+    setIndex(((n % slots.length) + slots.length) % slots.length);
+    setEpoch((e) => e + 1);
+  };
+  const onTap = (event) => {
+    const tick = event.target?.closest?.('[data-tick]');
+    jumpTo(tick ? Number(tick.dataset.tick) : i + 1);
+  };
+
   return (
-    <span ref={setHostNode} className={`sigh-words${still ? ' is-still' : ''} ${className}`.trim()}>
+    <span
+      ref={setHostNode}
+      className={`sigh-words${still ? ' is-still' : ''} ${className}`.trim()}
+      onClick={onTap}
+      onPointerDown={() => setHeld(true)}
+      onPointerUp={() => setHeld(false)}
+      onPointerLeave={() => setHeld(false)}
+      onPointerCancel={() => setHeld(false)}
+    >
       <span
         className="sigh-words-slot"
         aria-live="polite"
@@ -541,14 +714,19 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
         aria-label={slotLabel || t('signals.hero.aria')}
       >
         {/* A plain, keyed glyph layer avoids Android's transparent text-clip
-            compositing bug. CSS fades the next phrase without a blank frame. */}
+            compositing bug. CSS fades the next phrase without a blank frame.
+            The glyph chip and the text ride in one flex line: the svg has no
+            text node, so what a screen reader (and the test) reads off this
+            element is still exactly the phrase. */}
         <span
           key={row.key}
           className={`sigh-word${row.title ? ' is-title' : ''}`}
           data-testid="signals-hero-word"
           data-title={row.title ? 'true' : 'false'}
+          data-glyph={row.key}
         >
-          {row.text}
+          <span className="sigh-word-ic" aria-hidden="true">{HERO_WORD_GLYPHS[row.key] || HERO_WORD_GLYPHS.title}</span>
+          <span className="sigh-word-tx">{row.text}</span>
         </span>
       </span>
 
@@ -557,11 +735,13 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
         is more than one phrase, so the box reads as a label instead of a cycle;
         these are the affordance, and they are hidden from assistive tech
         because the live region above already says the same thing in words.
+        Each one is also a jump target (`data-tick`) — the affordance and the
+        control are the same pixels.
       */}
       {!still && slots.length > 1 && (
         <span className="sigh-ticks" aria-hidden="true">
           {slots.map((s, n) => (
-            <i key={s.key} data-on={n === i} />
+            <i key={s.key} data-on={n === i} data-tick={n} />
           ))}
         </span>
       )}
