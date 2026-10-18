@@ -3643,5 +3643,57 @@
         "step3": "Track live execution progress and receive instant push notifications"
       }
     }
+  },
+  "tap": {
+    "title": "Pagar acercando el móvil",
+    "intro": "¿Estás junto a alguien? Comparte la dirección acercando los móviles o mostrando un código en vez de escribir 42 caracteres. Cada transferencia la confirmas tú en tu propia cartera: por acercarse solo no se envía nada.",
+    "iReceive": "Yo recibo",
+    "iPay": "Yo pago",
+    "showThis": "Muestra esto al otro móvil",
+    "receiveHelp": "La otra persona escanea este código o acerca los móviles si su Android lo permite. Esta es una dirección pública de recepción: mostrarla es seguro.",
+    "connectFirst": "Conecta primero tu cartera para saber qué dirección mostrar.",
+    "startScan": "Acerca el otro móvil",
+    "holdNear": "Junta los móviles…",
+    "orPaste": "O pega su dirección",
+    "gotAddress": "Listo: pagando a {{addr}}",
+    "nothingSentYet": "Todavía no se ha enviado nada. La dirección está rellenada; tu cartera te pedirá que confirmes el importe y el destino antes de que se mueva nada.",
+    "reason": {
+      "IOS_UNSUPPORTED": "El iPhone no permite que las webs usen NFC: Apple nunca lo ha añadido. Usa el código en su lugar; funciona exactamente igual.",
+      "DESKTOP_UNSUPPORTED": "El NFC necesita un móvil. En un ordenador, usa el código.",
+      "BROWSER_UNSUPPORTED": "Este navegador no admite NFC. Chrome en Android sí: o usa el código, que siempre funciona.",
+      "NO_WINDOW": "Aquí el NFC no está disponible. Usa el código en su lugar."
+    },
+    "err": {
+      "NFC_DENIED": "Se denegó el permiso de NFC. Habilítalo en los ajustes del navegador o usa el código.",
+      "NFC_TIMEOUT": "No se detectó ninguna etiqueta. Junta los móviles por la parte trasera, mitad superior con mitad superior.",
+      "NO_ADDRESS_ON_TAG": "Esa etiqueta no contenía una dirección de cartera.",
+      "NFC_READ_FAILED": "No se pudo leer la etiqueta. Inténtalo de nuevo.",
+      "NFC_SCAN_FAILED": "El NFC no pudo iniciarse. Usa el código en su lugar.",
+      "BAD_ADDRESS": "No es una dirección de cartera válida. Revísala carácter por carácter: una transferencia a una dirección equivocada no se puede deshacer.",
+      "CANCELLED": "Cancelado."
+    },
+    "scanCode": "Escanea su código",
+    "received": "Recibido",
+    "watching": "Esperando el pago…",
+    "watchHint": "Mantén esto abierto. Verás la confirmación en cuanto llegue.",
+    "nfcYes": "El NFC funciona en este móvil: puedes acercar los teléfonos en vez de escanear.",
+    "nfcNo": "El NFC no está disponible en este dispositivo, así que usa el código. Funciona exactamente igual.",
+    "watchAsset": "¿Qué activo vigilar?",
+    "share": "Compartir",
+    "copyLink": "Copiar enlace",
+    "copyAddress": "Copiar dirección",
+    "enlarge": "Ampliar el código",
+    "enlargeHint": "Toca para ampliar",
+    "network": "Red",
+    "networkHint": "Ambos móviles deben usar esta misma red.",
+    "amount": "Importe (opcional)",
+    "amountPlaceholder": "0,00",
+    "amountInCode": "incluido en el código: la mayoría de las carteras lo rellenan",
+    "amountOnScreenOnly": "solo se muestra en pantalla: las carteras no leen importes de tokens de este código, así que acordadlo en persona",
+    "nativeCoin": "moneda nativa de la red",
+    "watchOffline": "Sin vigilar: esta pestaña debe permanecer abierta",
+    "scanningHint": "Junta las partes traseras de los móviles, mitad superior con mitad superior.",
+    "theyAsk": "Piden {{amount}}",
+    "chainMismatch": "Esa dirección está en {{theirs}} y tú estás en {{mine}}. Enviar por la red equivocada suele significar perder los fondos."
   }
 }

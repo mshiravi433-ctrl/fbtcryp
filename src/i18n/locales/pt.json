@@ -3643,5 +3643,57 @@
         "step3": "Track live execution progress and receive instant push notifications"
       }
     }
+  },
+  "tap": {
+    "title": "Pagar aproximando o telemóvel",
+    "intro": "Está ao lado de alguém? Partilhe o endereço aproximando os telemóveis ou mostrando um código em vez de escrever 42 caracteres. Continua a confirmar cada transferência na sua carteira: a proximidade, por si só, não envia nada.",
+    "iReceive": "Estou a receber",
+    "iPay": "Estou a pagar",
+    "showThis": "Mostre isto ao outro telemóvel",
+    "receiveHelp": "A outra pessoa lê este código ou aproxima os telemóveis se o Android dela permitir. Este é um endereço público de receção: mostrá-lo é seguro.",
+    "connectFirst": "Ligue primeiro a sua carteira para sabermos que endereço mostrar.",
+    "startScan": "Aproxime o outro telemóvel",
+    "holdNear": "Aproxime os telemóveis…",
+    "orPaste": "Ou cole o endereço dele",
+    "gotAddress": "Recebido — a pagar a {{addr}}",
+    "nothingSentYet": "Ainda não foi enviado nada. O endereço está preenchido; a sua carteira vai pedir-lhe para confirmar o valor e o destino antes de algo se mover.",
+    "reason": {
+      "IOS_UNSUPPORTED": "O iPhone não permite que os sites usem NFC — a Apple nunca o adicionou. Use o código em vez disso; funciona exatamente da mesma forma.",
+      "DESKTOP_UNSUPPORTED": "O NFC precisa de um telemóvel. No computador, use o código.",
+      "BROWSER_UNSUPPORTED": "Este navegador não suporta NFC. O Chrome no Android suporta — ou use apenas o código, que funciona sempre.",
+      "NO_WINDOW": "O NFC não está disponível aqui. Use o código em vez disso."
+    },
+    "err": {
+      "NFC_DENIED": "A permissão de NFC foi recusada. Ative-a nas definições do navegador ou use o código.",
+      "NFC_TIMEOUT": "Nenhuma etiqueta detetada. Aproxime os telemóveis costas com costas, metade superior com metade superior.",
+      "NO_ADDRESS_ON_TAG": "Essa etiqueta não continha um endereço de carteira.",
+      "NFC_READ_FAILED": "Não foi possível ler a etiqueta. Tente novamente.",
+      "NFC_SCAN_FAILED": "O NFC não conseguiu iniciar. Use o código em vez disso.",
+      "BAD_ADDRESS": "Esse não é um endereço de carteira válido. Verifique carácter a carácter: uma transferência para um endereço errado não pode ser anulada.",
+      "CANCELLED": "Cancelado."
+    },
+    "scanCode": "Ler o código dele",
+    "received": "Recebido",
+    "watching": "A aguardar o pagamento…",
+    "watchHint": "Mantenha isto aberto. Verá a confirmação assim que chegar.",
+    "nfcYes": "O NFC funciona neste telemóvel: pode aproximar os telemóveis em vez de ler o código.",
+    "nfcNo": "O NFC não está disponível neste dispositivo, por isso use o código. Funciona exatamente da mesma forma.",
+    "watchAsset": "Qual ativo vigiar?",
+    "share": "Partilhar",
+    "copyLink": "Copiar ligação",
+    "copyAddress": "Copiar endereço",
+    "enlarge": "Ampliar o código",
+    "enlargeHint": "Toque para ampliar",
+    "network": "Rede",
+    "networkHint": "Ambos os telemóveis têm de usar a mesma rede.",
+    "amount": "Valor (opcional)",
+    "amountPlaceholder": "0,00",
+    "amountInCode": "transportado dentro do código — a maioria das carteiras preenche",
+    "amountOnScreenOnly": "mostrado apenas no ecrã — as carteiras não leem montantes de tokens deste código, por isso combine-o em pessoa",
+    "nativeCoin": "moeda nativa da rede",
+    "watchOffline": "Sem vigilância — este separador tem de ficar aberto",
+    "scanningHint": "Aproxime as costas dos telemóveis, metade superior com metade superior.",
+    "theyAsk": "Pedem {{amount}}",
+    "chainMismatch": "Esse endereço está em {{theirs}} e você está em {{mine}}. Enviar na rede errada normalmente significa perder os fundos."
   }
 }

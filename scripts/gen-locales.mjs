@@ -25,6 +25,7 @@ import about from './locales/about.mjs';
 import spot from './locales/spot.mjs';
 import spotDepth from './locales/spot-depth.mjs';
 import tpslHistory from './locales/tpsl-history.mjs';
+import tap from './locales/tap.mjs';
 
 const LANGS = ['zh', 'hi', 'es', 'fr', 'ru', 'tr', 'ur', 'id', 'pt'];
 // Hand-maintained. English is the source, so it is 100% by definition and is
@@ -34,7 +35,7 @@ const FULL = ['fa', 'ar'];
 const localePath = (code) => new URL(`../src/i18n/locales/${code}.json`, import.meta.url);
 const coveragePath = new URL('../src/i18n/coverage.json', import.meta.url);
 
-const SOURCES = { ...common, ...product, ...wallet, ...settings, ...about, ...spot, ...spotDepth, ...tpslHistory };
+const SOURCES = { ...common, ...product, ...wallet, ...settings, ...about, ...spot, ...spotDepth, ...tpslHistory, ...tap };
 
 function setPath(obj, dotted, value) {
   const parts = dotted.split('.');

@@ -3636,5 +3636,57 @@
         "step3": "Track live execution progress and receive instant push notifications"
       }
     }
+  },
+  "tap": {
+    "title": "面对面轻触支付",
+    "intro": "两个人面对面？与其手打 42 个字符，不如轻触手机或出示二维码来交换地址。每一笔转账仍然要你在自己的钱包里确认——仅仅靠近并不会转出任何东西。",
+    "iReceive": "我要收款",
+    "iPay": "我要付款",
+    "showThis": "把这个给另一部手机看",
+    "receiveHelp": "对方扫描这个二维码，或者如果他的安卓手机支持，就把两部手机轻触一下。这是一个公开的收款地址——展示它是安全的。",
+    "connectFirst": "请先连接钱包，这样我们才知道该显示哪个地址。",
+    "startScan": "轻触另一部手机",
+    "holdNear": "把两部手机靠在一起…",
+    "orPaste": "或者粘贴对方的地址",
+    "gotAddress": "收到了——正在向 {{addr}} 付款",
+    "nothingSentYet": "还没有转出任何东西。地址已经填好；在资金真正变动之前，你的钱包会要求你确认金额和收款方。",
+    "reason": {
+      "IOS_UNSUPPORTED": "iPhone 不允许网站使用 NFC——苹果从未开放。请改用二维码，效果完全一样。",
+      "DESKTOP_UNSUPPORTED": "NFC 需要手机。在电脑上请改用二维码。",
+      "BROWSER_UNSUPPORTED": "这个浏览器不支持 NFC。安卓上的 Chrome 支持——或者直接用二维码，它永远可用。",
+      "NO_WINDOW": "这里无法使用 NFC。请改用二维码。"
+    },
+    "err": {
+      "NFC_DENIED": "NFC 权限被拒绝。请在浏览器设置中允许，或改用二维码。",
+      "NFC_TIMEOUT": "没有检测到标签。试着把两部手机背靠背、上半部对上半部地靠在一起。",
+      "NO_ADDRESS_ON_TAG": "那个标签里没有钱包地址。",
+      "NFC_READ_FAILED": "无法读取标签。请再试一次。",
+      "NFC_SCAN_FAILED": "NFC 无法启动。请改用二维码。",
+      "BAD_ADDRESS": "这不是一个有效的钱包地址。请逐字符核对——转到错误地址的转账无法撤销。",
+      "CANCELLED": "已取消。"
+    },
+    "scanCode": "扫描对方的二维码",
+    "received": "已收到",
+    "watching": "正在等待付款…",
+    "watchHint": "请保持此页面打开。到账那一刻你会看到确认信息。",
+    "nfcYes": "这部手机的 NFC 可用——你可以轻触手机而不必扫描。",
+    "nfcNo": "此设备不支持 NFC，请使用二维码。效果完全一样。",
+    "watchAsset": "要监听哪个资产",
+    "share": "分享",
+    "copyLink": "复制链接",
+    "copyAddress": "复制地址",
+    "enlarge": "放大二维码",
+    "enlargeHint": "轻触放大",
+    "network": "网络",
+    "networkHint": "两部手机必须使用同一个网络。",
+    "amount": "金额（可选）",
+    "amountPlaceholder": "0.00",
+    "amountInCode": "已写入二维码中——大多数钱包会自动填入",
+    "amountOnScreenOnly": "仅在屏幕上显示——钱包不会从这个二维码里读取代币金额，所以请当面确认",
+    "nativeCoin": "网络原生币",
+    "watchOffline": "未在监听——此标签页必须保持打开",
+    "scanningHint": "把两部手机的背面靠在一起，上半部对上半部。",
+    "theyAsk": "对方要求 {{amount}}",
+    "chainMismatch": "那个地址在 {{theirs}} 上，而你在 {{mine}}。在错误的网络上转账通常会丢失资金。"
   }
 }

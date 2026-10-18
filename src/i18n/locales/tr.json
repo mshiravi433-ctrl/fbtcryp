@@ -3643,5 +3643,57 @@
         "step3": "Track live execution progress and receive instant push notifications"
       }
     }
+  },
+  "tap": {
+    "title": "Telefonu yaklaştırarak öde",
+    "intro": "Yanındaki biri mi? 42 karakter yazmak yerine telefonları dokundurarak ya da kod göstererek adres paylaşın. Her transferi yine kendi cüzdanınızda onaylarsınız — sadece yakın olmak hiçbir şey göndermez.",
+    "iReceive": "Ben alıyorum",
+    "iPay": "Ben ödüyorum",
+    "showThis": "Bunu diğer telefona gösterin",
+    "receiveHelp": "Karşı taraf bu kodu tarar ya da Android'i destekliyorsa telefonları dokundurur. Bu herkese açık bir alım adresidir — göstermek güvenlidir.",
+    "connectFirst": "Hangi adresi göstereceğimizi bilmek için önce cüzdanınızı bağlayın.",
+    "startScan": "Diğer telefona dokundurun",
+    "holdNear": "Telefonları birbirine yaklaştırın…",
+    "orPaste": "Ya da adresini yapıştırın",
+    "gotAddress": "Tamam — {{addr}} adresine ödeme yapılıyor",
+    "nothingSentYet": "Henüz hiçbir şey gönderilmedi. Adres dolduruldu; bir şey hareket etmeden önce cüzdanınız tutarı ve alıcıyı onaylamanızı isteyecek.",
+    "reason": {
+      "IOS_UNSUPPORTED": "iPhone, web sitelerinin NFC kullanmasına izin vermiyor — Apple bunu hiç eklemedi. Onun yerine kodu kullanın; tamamen aynı şekilde çalışır.",
+      "DESKTOP_UNSUPPORTED": "NFC için telefon gerekir. Bilgisayarda kod kullanın.",
+      "BROWSER_UNSUPPORTED": "Bu tarayıcı NFC'yi desteklemiyor. Android'de Chrome destekliyor — ya da her zaman çalışan kodu kullanın.",
+      "NO_WINDOW": "Burada NFC kullanılamıyor. Kod kullanın."
+    },
+    "err": {
+      "NFC_DENIED": "NFC izni reddedildi. Tarayıcı ayarlarından izin verin ya da kodu kullanın.",
+      "NFC_TIMEOUT": "Etiket algılanmadı. Telefonları arka arkaya, üst yarı üst yarıya gelecek şekilde tutun.",
+      "NO_ADDRESS_ON_TAG": "O etikette cüzdan adresi yoktu.",
+      "NFC_READ_FAILED": "Etiket okunamadı. Tekrar deneyin.",
+      "NFC_SCAN_FAILED": "NFC başlatılamadı. Kod kullanın.",
+      "BAD_ADDRESS": "Bu geçerli bir cüzdan adresi değil. Harf harf kontrol edin — yanlış adrese yapılan transfer geri alınamaz.",
+      "CANCELLED": "İptal edildi."
+    },
+    "scanCode": "Kodunu tarayın",
+    "received": "Alındı",
+    "watching": "Ödeme bekleniyor…",
+    "watchHint": "Bunu açık tutun. Geldiği anda onayı göreceksiniz.",
+    "nfcYes": "Bu telefonda NFC çalışıyor — taramak yerine telefonları dokundurabilirsiniz.",
+    "nfcNo": "Bu cihazda NFC yok, bu yüzden kodu kullanın. Tamamen aynı şekilde çalışır.",
+    "watchAsset": "Hangi varlık izlensin?",
+    "share": "Paylaş",
+    "copyLink": "Bağlantıyı kopyala",
+    "copyAddress": "Adresi kopyala",
+    "enlarge": "Kodu büyüt",
+    "enlargeHint": "Büyütmek için dokunun",
+    "network": "Ağ",
+    "networkHint": "Her iki telefon da aynı ağı kullanmalı.",
+    "amount": "Tutar (isteğe bağlı)",
+    "amountPlaceholder": "0,00",
+    "amountInCode": "kodun içinde taşınır — çoğu cüzdan otomatik doldurur",
+    "amountOnScreenOnly": "sadece ekranda görünür — cüzdanlar bu koddan token tutarını okumaz, bu yüzden yüz yüze kararlaştırın",
+    "nativeCoin": "ağın yerel coini",
+    "watchOffline": "İzlenmiyor — bu sekmenin açık kalması gerekiyor",
+    "scanningHint": "Telefonların arkalarını birbirine, üst yarıyı üst yarıya gelecek şekilde tutun.",
+    "theyAsk": "{{amount}} tutarı talep ediyorlar",
+    "chainMismatch": "Bu adres {{theirs}} üzerinde, siz ise {{mine}} üzerindesiniz. Yanlış ağda göndermek genellikle fonların kaybına yol açar."
   }
 }

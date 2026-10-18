@@ -1,17 +1,76 @@
 /*
- * P2P desk refresh.
+ * P2P DESK — the whole look of /p2p.
+ * ==========================================================================
+ * Page-scoped on purpose: every selector below hangs off `.p2p-page`, so the
+ * shared BTC/fiat market (P2PMarket) keeps its own styling on /buy and only
+ * picks up the desk's framing while it lives here.
  *
- * The page uses a clear visual hierarchy instead of a stack of identical
- * cards: route selection, trade context, action, then safety details. All
- * surfaces are token-driven and scoped so the shared market on /buy is not
- * restyled accidentally.
+ * ─── WHAT THIS FILE REPLACED, AND WHY IT IS ONE BLOCK NOW ──────────────────
+ * The previous version of this file grew by APPENDING: a "midnight desk" block
+ * at the bottom re-declared the hero, the tabs and the palette, and whatever
+ * it forgot to redeclare silently kept the older value. Two `.p2p-hero`
+ * rules, two `.p2p-main-tabs button.active` rules and two palettes in one
+ * file is how a screen ends up with a hero from one design and tabs from
+ * another — and how a light-theme fix in one place misses the other.
+ *
+ * Everything is now declared exactly once, in one palette, in two theme
+ * blocks. If a value needs to change, there is one line to change.
+ *
+ * ─── THE TWO-THEME CONTRACT ────────────────────────────────────────────────
+ * Every colour this page paints is one of the `--p2p-*` tokens declared at the
+ * top, and every one of those tokens has a value in BOTH themes. There is no
+ * raw hex outside those two blocks. That is the only way the light theme stays
+ * correct after the next tweak: a colour added here without a light value is
+ * a colour that will be unreadable for half the users.
+ *
+ * The neon accents are calibrated the way index.css calibrates its own: the
+ * dark theme gets full-strength colour that glows on near-black, the light
+ * theme gets the same HUE at a lightness that measures above 4.5:1 on white.
+ * `var(--p2p-cyan)` as text on a white card would be 1.5:1 — invisible — so in
+ * light theme it is a deep teal instead. Same colour family, readable.
+ *
+ * ─── MOTION BUDGET ─────────────────────────────────────────────────────────
+ * Continuous motion exists in exactly two places: the hero logo
+ * (components/P2PHeroMark.jsx) and the two hero blooms. Both animate
+ * `transform` only, are 148px and 320px respectively, and stop dead under
+ * `prefers-reduced-motion` or the in-app reduce-motion setting. Nothing else
+ * on this page loops — hover lifts and focus rings are one-shot transitions,
+ * because a screen whose job is careful reading should not be sweating.
  */
 
+/* ==========================================================================
+   1. TOKENS
+   ========================================================================== */
+
 .p2p-page {
-  --p2p-cyan: #60d7e8;
-  --p2p-mint: #6ee4bd;
-  --p2p-violet: #a995ff;
-  --p2p-tab-gradient: linear-gradient(125deg, #78ebd5, #73dff2 56%, #c1eda8);
+  /* accents — dark theme (neon on near-black) */
+  --p2p-cyan: #5ce1f5;
+  --p2p-mint: #6ef0c0;
+  --p2p-violet: #a78bfa;
+  --p2p-amber: #fbbf24;
+  --p2p-rose: #ff6d94;
+
+  /* surfaces */
+  --p2p-surface: rgba(255, 255, 255, 0.045);
+  --p2p-surface-2: rgba(255, 255, 255, 0.065);
+  --p2p-solid: #0b0f1a;
+  --p2p-line: rgba(255, 255, 255, 0.09);
+  --p2p-line-2: rgba(255, 255, 255, 0.16);
+
+  /* hero */
+  --p2p-hero-ink: #f2fbff;
+  --p2p-hero-muted: rgba(226, 244, 252, 0.72);
+  --p2p-hero-bg:
+    radial-gradient(120% 130% at 100% 0%, rgba(92, 225, 245, 0.16), transparent 52%),
+    radial-gradient(110% 120% at 0% 100%, rgba(167, 139, 250, 0.16), transparent 48%),
+    linear-gradient(135deg, #0a1121 0%, #101a30 52%, #191634 100%);
+  --p2p-hero-border: rgba(120, 210, 240, 0.28);
+  --p2p-hero-shadow: 0 26px 60px -46px rgba(92, 225, 245, 0.9);
+
+  /* the active tab's fill */
+  --p2p-tab-fill: linear-gradient(125deg, #8ff0dd, #86e2f7 54%, #c3b6ff);
+  --p2p-tab-ink: #04202a;
+
   display: grid;
   gap: 16px;
   width: 100%;
@@ -20,67 +79,129 @@
   min-width: 0;
 }
 
+:root[data-theme='light'] .p2p-page {
+  /* the same hues, darkened until each one is AA on white */
+  --p2p-cyan: #0a6f80;
+  --p2p-mint: #06795a;
+  --p2p-violet: #6a3ae0;
+  --p2p-amber: #8a6100;
+  --p2p-rose: #c2185b;
+
+  --p2p-surface: rgba(255, 255, 255, 0.92);
+  --p2p-surface-2: #ffffff;
+  --p2p-solid: #ffffff;
+  --p2p-line: rgba(16, 20, 40, 0.11);
+  --p2p-line-2: rgba(16, 20, 40, 0.2);
+
+  --p2p-hero-ink: #14213a;
+  --p2p-hero-muted: #4f5f7b;
+  --p2p-hero-bg:
+    radial-gradient(120% 130% at 100% 0%, rgba(10, 111, 128, 0.13), transparent 54%),
+    radial-gradient(110% 120% at 0% 100%, rgba(106, 58, 224, 0.11), transparent 50%),
+    linear-gradient(135deg, #ffffff 0%, #f4f8ff 56%, #fbf7ff 100%);
+  --p2p-hero-border: rgba(24, 74, 122, 0.18);
+  --p2p-hero-shadow: 0 20px 44px -34px rgba(24, 43, 78, 0.35);
+
+  --p2p-tab-fill: linear-gradient(125deg, #0a6f80, #2563a8 52%, #6a3ae0);
+  --p2p-tab-ink: #ffffff;
+}
+
+/* ==========================================================================
+   2. HERO — one surface, not nested glass
+   ========================================================================== */
+
 .p2p-hero {
-  --p2p-hero-ink: #f4fbff;
-  --p2p-hero-muted: rgba(232, 245, 250, 0.72);
   position: relative;
   isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  min-height: 190px;
-  padding: 22px 26px;
+  gap: 22px;
+  min-height: 224px;
+  padding: 26px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 34%, rgba(255, 255, 255, 0.08));
-  border-radius: 26px;
+  border: 1px solid var(--p2p-hero-border);
+  border-radius: 28px;
   color: var(--p2p-hero-ink);
-  background:
-    radial-gradient(ellipse at 92% 0%, color-mix(in srgb, var(--p2p-cyan) 16%, transparent), transparent 38%),
-    radial-gradient(ellipse at 8% 100%, color-mix(in srgb, var(--p2p-violet) 16%, transparent), transparent 43%),
-    linear-gradient(135deg, #091823 0%, #0b1422 52%, #171329 100%);
-  box-shadow: 0 22px 58px -42px color-mix(in srgb, var(--p2p-cyan) 62%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.085);
+  background: var(--p2p-hero-bg);
+  box-shadow: var(--p2p-hero-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-.p2p-hero::before {
-  content: '';
+/* A hairline grid, masked so it fades out instead of stopping. Static: a grid
+   that drifts is a distraction at the top of a page you have to read. */
+.p2p-hero-grid {
   position: absolute;
-  z-index: 0;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
-  opacity: 0.16;
+  opacity: 0.12;
   background-image:
-    linear-gradient(to right, rgba(213, 247, 255, 0.2) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(213, 247, 255, 0.2) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: linear-gradient(120deg, transparent 4%, #000 70%);
+    linear-gradient(to right, currentColor 1px, transparent 1px),
+    linear-gradient(to bottom, currentColor 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: linear-gradient(118deg, transparent 6%, #000 72%);
+  -webkit-mask-image: linear-gradient(118deg, transparent 6%, #000 72%);
 }
+:root[data-theme='light'] .p2p-hero-grid { opacity: 0.09; color: #2b4a72; }
 
-.p2p-hero::after {
-  content: '';
+/* Two slow accent blooms. Radial gradients with soft stops rather than
+   `filter: blur()` — a blurred layer this size repaints on every scroll. */
+.p2p-hero-bloom {
   position: absolute;
   z-index: 0;
-  inset: auto 8% -70% 36%;
-  height: 170px;
   pointer-events: none;
-  background: radial-gradient(ellipse, color-mix(in srgb, var(--p2p-cyan) 14%, transparent), transparent 70%);
+  border-radius: 50%;
+  will-change: transform;
+}
+.p2p-hero-bloom-a {
+  width: 340px;
+  height: 340px;
+  inset-block-start: -190px;
+  inset-inline-end: -80px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--p2p-cyan) 26%, transparent), transparent 66%);
+}
+.p2p-hero-bloom-b {
+  width: 300px;
+  height: 300px;
+  inset-block-end: -190px;
+  inset-inline-start: 26%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--p2p-violet) 24%, transparent), transparent 66%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-hero-bloom-a { animation: p2p-bloom-a 19s ease-in-out infinite alternate; }
+  .p2p-page:not(.is-still) .p2p-hero-bloom-b { animation: p2p-bloom-b 23s ease-in-out infinite alternate; }
+}
+@keyframes p2p-bloom-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-3%, 4%, 0) scale(1.08); }
+}
+@keyframes p2p-bloom-b {
+  from { transform: translate3d(0, 0, 0) scale(1.04); }
+  to { transform: translate3d(4%, -3%, 0) scale(1); }
 }
 
-.p2p-hero-content { position: relative; z-index: 2; max-width: 720px; min-width: 0; }
-.p2p-hero-topline { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.p2p-hero-content { position: relative; z-index: 2; max-width: 640px; min-width: 0; }
+
+.p2p-hero-topline { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 
 .p2p-back {
-  inline-size: 44px;
-  block-size: 44px;
-  min-inline-size: 44px;
-  min-block-size: 44px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  color: var(--p2p-hero-ink, #e7ffff);
-  background: rgba(255, 255, 255, 0.055);
+  inline-size: 42px;
+  block-size: 42px;
+  min-inline-size: 42px;
+  min-block-size: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--p2p-line-2);
+  border-radius: 13px;
+  color: var(--p2p-hero-ink);
+  background: color-mix(in srgb, var(--p2p-hero-ink) 8%, transparent);
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
-.p2p-back:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--p2p-cyan) 42%, transparent); background: color-mix(in srgb, var(--p2p-cyan) 11%, transparent); }
+.p2p-back:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--p2p-cyan) 48%, transparent);
+  background: color-mix(in srgb, var(--p2p-cyan) 14%, transparent);
+}
 
 .p2p-eyebrow,
 .p2p-section-kicker {
@@ -100,24 +221,83 @@
   height: 7px;
   border-radius: 50%;
   background: var(--p2p-mint);
-  box-shadow: 0 0 0 4px rgba(108, 242, 197, 0.1), 0 0 12px rgba(108, 242, 197, 0.45);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--p2p-mint) 14%, transparent);
   flex: 0 0 auto;
 }
-.p2p-eyebrow-dot { background: var(--p2p-cyan); box-shadow: 0 0 0 4px color-mix(in srgb, var(--p2p-cyan) 10%, transparent); }
+.p2p-eyebrow-dot {
+  background: var(--p2p-cyan);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--p2p-cyan) 14%, transparent);
+}
+
+/* A three-bar "live" mark. Not a status claim — it is the desk's ticker, and
+   it is aria-hidden because it carries no information a screen reader needs. */
+.p2p-hero-live {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 13px;
+  margin-inline-start: auto;
+  padding: 5px 8px;
+  border: 1px solid var(--p2p-line-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p2p-hero-ink) 7%, transparent);
+}
+.p2p-hero-live i {
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--p2p-mint);
+  opacity: 0.9;
+}
+.p2p-hero-live i:nth-child(1) { height: 5px; }
+.p2p-hero-live i:nth-child(2) { height: 9px; }
+.p2p-hero-live i:nth-child(3) { height: 6.5px; }
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-hero-live i { animation: p2p-live 1.9s ease-in-out infinite; }
+  .p2p-page:not(.is-still) .p2p-hero-live i:nth-child(2) { animation-delay: 0.25s; }
+  .p2p-page:not(.is-still) .p2p-hero-live i:nth-child(3) { animation-delay: 0.5s; }
+}
+/* scaleY, never opacity: a bar that fades in and out is a blinking light. */
+@keyframes p2p-live {
+  0%, 100% { transform: scaleY(0.62); }
+  50% { transform: scaleY(1); }
+}
+.p2p-hero-live i { transform-origin: bottom center; }
+
+.p2p-hero-route {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 330px;
+  margin-block: 0 14px;
+  color: var(--p2p-hero-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.p2p-hero-route-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--p2p-line-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--p2p-hero-ink) 6%, transparent);
+  white-space: nowrap;
+}
+.p2p-hero-route i { height: 1px; flex: 1; min-width: 10px; background: currentColor; opacity: 0.3; }
 
 .p2p-title {
   margin: 0;
-  color: var(--p2p-hero-ink, #f6ffff);
-  font-size: clamp(24px, 5vw, 31px);
+  color: var(--p2p-hero-ink);
+  font-size: clamp(25px, 5.2vw, 33px);
   font-weight: 850;
   letter-spacing: -0.035em;
-  line-height: 1.2;
+  line-height: 1.18;
 }
 
 .p2p-subtitle {
-  max-width: 66ch;
-  margin: 8px 0 0;
-  color: var(--p2p-hero-muted, rgba(232, 245, 250, 0.72));
+  max-width: 62ch;
+  margin: 9px 0 0;
+  color: var(--p2p-hero-muted);
   font-size: 13px;
   line-height: 1.75;
   text-wrap: pretty;
@@ -126,34 +306,33 @@
 .p2p-hero-footnote {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
-  margin-top: 12px;
-  max-width: 68ch;
-  color: var(--p2p-hero-muted, rgba(214, 232, 240, 0.63));
+  gap: 8px;
+  margin-top: 15px;
+  padding-top: 13px;
+  max-width: 66ch;
+  border-top: 1px solid color-mix(in srgb, var(--p2p-hero-ink) 14%, transparent);
+  color: var(--p2p-hero-muted);
   font-size: 11px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 .p2p-hero-footnote svg { flex: 0 0 auto; margin-top: 1px; color: var(--p2p-mint); }
 
-.p2p-hero-orbit { position: absolute; z-index: 1; pointer-events: none; border-radius: 50%; }
-.p2p-hero-orbit-one {
-  width: 250px;
-  height: 250px;
-  inset-block-start: -155px;
-  inset-inline-end: 7%;
-  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 16%, transparent);
-  box-shadow: 0 0 0 24px color-mix(in srgb, var(--p2p-cyan) 3%, transparent), 0 0 0 54px color-mix(in srgb, var(--p2p-cyan) 2%, transparent);
-}
-.p2p-hero-orbit-two {
-  width: 180px;
-  height: 180px;
-  inset-block-end: -125px;
-  inset-inline-start: 32%;
-  border: 1px solid color-mix(in srgb, var(--p2p-violet) 20%, transparent);
-  box-shadow: 0 0 0 26px color-mix(in srgb, var(--p2p-violet) 3%, transparent);
+/* The gradient wordmark. `background-clip: text` needs the fallback above it,
+   which is why `.p2p-title` sets a real colour first. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .p2p-title {
+    background: linear-gradient(100deg, var(--p2p-hero-ink) 10%, var(--p2p-cyan) 68%, var(--p2p-violet));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 }
 
-.p2p-hero-mark {
+/* ==========================================================================
+   3. THE HERO MARK — the animated logo (components/P2PHeroMark.jsx)
+   ========================================================================== */
+
+.p2p-mark {
   position: relative;
   z-index: 1;
   display: grid;
@@ -161,42 +340,197 @@
   flex: 0 0 148px;
   width: 148px;
   height: 148px;
-  margin-inline-end: 8px;
   color: var(--p2p-cyan);
 }
-.p2p-hero-mark-ring,
-.p2p-hero-mark-orbit { position: absolute; display: block; border-radius: 50%; }
-.p2p-hero-mark-ring-outer { inset: 5px; border: 1px solid color-mix(in srgb, var(--p2p-cyan) 30%, transparent); transform: rotate(-24deg) scaleY(0.64); }
-.p2p-hero-mark-ring-inner { inset: 20px; border: 1px dashed color-mix(in srgb, var(--p2p-mint) 32%, transparent); transform: rotate(35deg) scaleY(0.72); }
-.p2p-hero-mark-icon {
-  position: relative;
-  z-index: 2;
+.p2p-mark > * { position: absolute; display: block; border-radius: 50%; }
+
+.p2p-mark-aura {
+  inset: 4%;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--p2p-cyan) 22%, transparent), transparent 62%),
+    radial-gradient(circle at 68% 74%, color-mix(in srgb, var(--p2p-violet) 20%, transparent), transparent 60%);
+  pointer-events: none;
+}
+
+/*
+ * Two tilted elliptical orbits.
+ *
+ * ─── WHY EVERY INSET HERE IS A PERCENTAGE ──────────────────────────────────
+ * The first pass set these in px (0 / 17px) against a 148px box while the disc
+ * was 122px across. The inner ellipse's closest approach to the centre was
+ * ~48px — inside a 61px disc — so it was painted completely behind an opaque
+ * circle and simply did not exist on screen. Nobody would have caught it in
+ * review: the markup is there, the rule is there, only the arithmetic is wrong.
+ *
+ * Percentages make the whole mark scale as one object. Every inset below
+ * resolves against the same square box, so the 148px desktop mark, the 104px
+ * tablet one and the 76px phone one are the same drawing at three sizes.
+ *
+ * The number that decides whether a ring is visible is an ellipse's closest
+ * approach to the centre, which is its MINOR semi-axis — so the inner ring,
+ * not the outer one, is the ring that can vanish:
+ *
+ *   inner orbit, minor semi-axis = 0.405 × 0.84 × box ≈ 0.340 × box (50px @148)
+ *   disc radius                  = 0.275 × box                      (41px @148)
+ *
+ * ~9px of clearance at every size, so both rings read as rings.
+ *
+ * The transform is repeated inside the keyframes as well as on the rule, or
+ * the animation would snap the ellipse upright on its first frame — the
+ * classic "it jumps once when the page loads" bug.
+ */
+.p2p-mark-orbit {
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 26%, transparent);
+  pointer-events: none;
+}
+.p2p-mark-orbit-outer { inset: 0; transform: rotate(-18deg) scaleY(0.8); }
+.p2p-mark-orbit-inner {
+  inset: 9.5%;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--p2p-mint) 34%, transparent);
+  transform: rotate(28deg) scaleY(0.84);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-mark-orbit-outer {
+    animation: p2p-orbit-outer 46s linear infinite;
+    will-change: transform;
+  }
+  .p2p-page:not(.is-still) .p2p-mark-orbit-inner {
+    animation: p2p-orbit-inner 38s linear infinite;
+    will-change: transform;
+  }
+}
+@keyframes p2p-orbit-outer {
+  from { transform: rotate(-18deg) scaleY(0.8); }
+  to { transform: rotate(342deg) scaleY(0.8); }
+}
+@keyframes p2p-orbit-inner {
+  from { transform: rotate(28deg) scaleY(0.84); }
+  to { transform: rotate(-332deg) scaleY(0.84); }
+}
+
+/* The rim under the disc: a conic gradient that turns, showing only its lip. */
+.p2p-mark-rim {
+  inset: 20%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 8%,
+    var(--p2p-cyan) 20%,
+    var(--p2p-mint) 30%,
+    transparent 40% 58%,
+    var(--p2p-violet) 70%,
+    var(--p2p-cyan) 82%,
+    transparent 92%
+  );
+  opacity: 0.95;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-mark-rim {
+    animation: p2p-mark-spin 7.5s linear infinite;
+    will-change: transform;
+  }
+}
+@keyframes p2p-mark-spin { to { transform: rotate(360deg); } }
+
+/* The disc itself: opaque, so the rim's middle never shows through. */
+.p2p-mark-disc {
+  inset: 22.5%;
   display: grid;
   place-items: center;
-  width: 62px;
-  height: 62px;
-  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 42%, transparent);
-  border-radius: 21px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--p2p-cyan) 20%, transparent), color-mix(in srgb, var(--p2p-violet) 18%, transparent));
-  box-shadow: 0 0 36px -14px color-mix(in srgb, var(--p2p-cyan) 75%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  transform: rotate(-7deg);
+  color: color-mix(in srgb, var(--p2p-cyan) 82%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 40%, transparent);
+  background:
+    radial-gradient(circle at 32% 24%, color-mix(in srgb, var(--p2p-cyan) 20%, transparent), transparent 60%),
+    linear-gradient(150deg, #1b2a44, #201c3c);
+  box-shadow:
+    0 14px 30px -16px color-mix(in srgb, var(--p2p-cyan) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
-.p2p-hero-mark-icon svg { transform: rotate(7deg); }
-.p2p-hero-mark-orbit-a { width: 8px; height: 8px; inset-block-start: 19px; inset-inline-end: 28px; background: var(--p2p-mint); box-shadow: 0 0 14px color-mix(in srgb, var(--p2p-mint) 74%, transparent); }
-.p2p-hero-mark-orbit-b { width: 6px; height: 6px; inset-block-end: 26px; inset-inline-start: 15px; background: var(--p2p-violet); box-shadow: 0 0 12px color-mix(in srgb, var(--p2p-violet) 72%, transparent); }
+:root[data-theme='light'] .p2p-mark-disc {
+  color: #1f5f7a;
+  border-color: rgba(24, 74, 122, 0.22);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(10, 111, 128, 0.12), transparent 60%),
+    linear-gradient(150deg, #ffffff, #eef4fb);
+  box-shadow: 0 12px 26px -18px rgba(24, 43, 78, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.p2p-mark-glyph { width: 54%; height: 54%; overflow: visible; }
+.p2p-mark-glyph :is(circle, path, g) { transform-box: fill-box; transform-origin: center; }
+
+/* Peers and the exchange between them: the dashes slide, the arrows drift.
+   Nothing here changes opacity, so nothing here can blink. */
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-mark-link { animation: p2p-mark-flow 1.6s linear infinite; }
+  .p2p-page:not(.is-still) .p2p-mark-link-b { animation-direction: reverse; }
+  .p2p-page:not(.is-still) .p2p-mark-node-a { animation: p2p-mark-node 3.4s ease-in-out infinite; }
+  .p2p-page:not(.is-still) .p2p-mark-node-b { animation: p2p-mark-node 3.4s ease-in-out infinite 1.7s; }
+  .p2p-page:not(.is-still) .p2p-mark-arrow-a { animation: p2p-mark-arrow-a 3.4s ease-in-out infinite; }
+  .p2p-page:not(.is-still) .p2p-mark-arrow-b { animation: p2p-mark-arrow-b 3.4s ease-in-out infinite; }
+}
+@keyframes p2p-mark-flow { to { stroke-dashoffset: -12.8; } }
+@keyframes p2p-mark-node {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+@keyframes p2p-mark-arrow-a {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(2px, -2px); }
+}
+@keyframes p2p-mark-arrow-b {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-2px, 2px); }
+}
+.p2p-mark-link-b { opacity: 0.32; }
+
+/* Two sparks riding the outer orbit — one rotation each, different speeds. */
+.p2p-mark-spark { inset: -1.5%; pointer-events: none; }
+.p2p-mark-spark i {
+  position: absolute;
+  inset-block-start: 3%;
+  inset-inline-start: 50%;
+  width: 7px;
+  height: 7px;
+  margin-inline-start: -3.5px;
+  border-radius: 50%;
+  background: var(--p2p-mint);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--p2p-mint) 70%, transparent);
+}
+.p2p-mark-spark-b i { background: var(--p2p-violet); box-shadow: 0 0 12px color-mix(in srgb, var(--p2p-violet) 70%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-mark-spark-a {
+    animation: p2p-mark-spin 16s linear infinite;
+    will-change: transform;
+  }
+  .p2p-page:not(.is-still) .p2p-mark-spark-b {
+    animation: p2p-mark-spin 24s linear infinite reverse;
+    will-change: transform;
+  }
+}
+
+/* ==========================================================================
+   4. TABS
+   ========================================================================== */
 
 .p2p-main-tabs.segmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 5px;
   margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 6px;
+  border: 1px solid var(--p2p-line);
+  border-radius: 22px;
+  background: var(--p2p-surface);
 }
 
-.p2p-main-tabs button {
+/*
+ * Every rule here is `.p2p-main-tabs.segmented …` — two classes, not one —
+ * because index.css's own `.segmented button` is equally specific and gives
+ * the active state a NEAR-WHITE background and black text. Depending on which
+ * stylesheet the bundler emits last is how a tab ends up white-on-white in one
+ * build and correct in the next, so the override is stated outright.
+ */
+.p2p-main-tabs.segmented button {
   position: relative;
   display: flex;
   align-items: center;
@@ -206,26 +540,40 @@
   min-height: 66px;
   padding: 10px 13px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 15px;
+  border: 1px solid transparent;
+  border-radius: 17px;
   color: var(--text-2);
   text-align: start;
-  background: linear-gradient(150deg, color-mix(in srgb, var(--text-1) 5%, transparent), color-mix(in srgb, var(--text-1) 1%, transparent)), var(--bg-panel);
-  box-shadow: 0 4px 14px -12px rgba(0, 0, 0, 0.55);
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  background: transparent;
+  transition: transform 180ms ease, color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
-.p2p-main-tabs button:hover { transform: translateY(-1px); border-color: var(--line-strong); color: var(--text-1); }
-.p2p-main-tabs button:focus-visible,
-.p2p-back:focus-visible { outline: 2px solid var(--p2p-cyan); outline-offset: 3px; }
-.p2p-main-tabs button.active,
-:root[data-theme='light'] .p2p-main-tabs button.active {
+.p2p-main-tabs.segmented button:hover {
+  transform: translateY(-1px);
+  color: var(--text-1);
+  background: color-mix(in srgb, var(--p2p-cyan) 7%, transparent);
+}
+.p2p-main-tabs.segmented button.active,
+:root[data-theme='light'] .p2p-main-tabs.segmented button.active {
+  /* index.css paints the selected segment white with black text as a fallback
+     for screens that forgot the indicator pill. This screen HAS the pill — a
+     gradient — so the fallback would sit on top of it and erase it. */
+  background: transparent;
   border-color: transparent;
-  color: #06191b;
-  background: var(--p2p-tab-gradient);
-  box-shadow: 0 12px 25px -17px rgba(0, 229, 255, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  color: var(--p2p-tab-ink);
+  box-shadow: 0 10px 26px -18px color-mix(in srgb, var(--p2p-cyan) 90%, transparent);
 }
-.p2p-main-tabs button.active::before { content: none !important; }
-.p2p-main-tabs .p2p-tab-indicator { border-radius: 14px; background: var(--p2p-tab-gradient); }
+.p2p-main-tabs.segmented button.active::before { content: none !important; }
+.p2p-main-tabs.segmented button:focus-visible,
+.p2p-back:focus-visible {
+  outline: 2px solid var(--p2p-cyan);
+  outline-offset: 3px;
+}
+
+.p2p-main-tabs .p2p-tab-indicator {
+  border-radius: 16px;
+  background: var(--p2p-tab-fill);
+}
+
 .p2p-tab-icon {
   position: relative;
   z-index: 1;
@@ -234,33 +582,88 @@
   flex: 0 0 34px;
   width: 34px;
   height: 34px;
-  border: 1px solid color-mix(in srgb, currentColor 17%, transparent);
-  border-radius: 11px;
-  background: color-mix(in srgb, currentColor 7%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, currentColor 9%, transparent);
 }
 .p2p-tab-icon svg { flex: 0 0 auto; }
-.p2p-tab-copy { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
-.p2p-tab-label { display: block; overflow: hidden; max-width: 100%; font-size: 12.5px; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.p2p-tab-hint { display: block; overflow: hidden; max-width: 100%; color: color-mix(in srgb, currentColor 68%, transparent); font-size: 10px; font-weight: 600; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+
+.p2p-tab-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.p2p-tab-label {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p2p-tab-hint {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   5. PANEL SHELL + SECTION FURNITURE
+   ========================================================================== */
 
 .p2p-tab-panel { display: grid; gap: 16px; min-width: 0; outline: none; }
-.p2p-tab-panel:focus-visible { border-radius: 16px; outline: 2px solid color-mix(in srgb, var(--p2p-cyan) 70%, transparent); outline-offset: 5px; }
+.p2p-tab-panel:focus-visible {
+  border-radius: 16px;
+  outline: 2px solid color-mix(in srgb, var(--p2p-cyan) 70%, transparent);
+  outline-offset: 5px;
+}
 
-.p2p-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 2px 2px 0; }
+.p2p-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 0;
+}
 .p2p-section-heading h2,
-.p2p-safety-heading h2 { margin: 4px 0 0; font-size: 19px; font-weight: 800; line-height: 1.35; letter-spacing: -0.02em; }
+.p2p-safety-heading h2 {
+  margin: 4px 0 0;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
 .p2p-section-heading p,
-.p2p-safety-heading p { max-width: 64ch; margin: 5px 0 0; color: var(--text-2); font-size: 12px; line-height: 1.75; text-wrap: pretty; }
+.p2p-safety-heading p {
+  max-width: 64ch;
+  margin: 5px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
 .p2p-market-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
-  padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 24%, var(--line));
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 26%, var(--p2p-line));
   border-radius: 999px;
   color: var(--p2p-cyan);
-  background: color-mix(in srgb, var(--p2p-cyan) 7%, var(--bg-panel));
+  background: color-mix(in srgb, var(--p2p-cyan) 8%, var(--p2p-surface));
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
@@ -268,67 +671,117 @@
   white-space: nowrap;
 }
 
+/* ── the escrow note ─────────────────────────────────────────────────────── */
+
 .p2p-escrow-note {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 14px 15px;
+  padding: 15px 16px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--p2p-mint) 21%, var(--line));
-  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--p2p-mint) 24%, var(--p2p-line));
+  border-radius: 20px;
   background:
-    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--p2p-mint) 9%, transparent), transparent 58%),
-    linear-gradient(145deg, color-mix(in srgb, var(--text-1) 4%, transparent), transparent 70%),
-    var(--bg-panel);
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--p2p-mint) 10%, transparent), transparent 58%),
+    linear-gradient(145deg, var(--p2p-surface-2), transparent 70%),
+    var(--p2p-surface);
 }
-.p2p-escrow-note::before { content: ''; position: absolute; inset-block: 15px; inset-inline-start: 0; width: 2px; background: linear-gradient(var(--p2p-mint), transparent); border-radius: 3px; }
+.p2p-escrow-note::before {
+  content: '';
+  position: absolute;
+  inset-block: 16px;
+  inset-inline-start: 0;
+  width: 2px;
+  background: linear-gradient(var(--p2p-mint), transparent);
+  border-radius: 3px;
+}
 .p2p-note-icon {
   display: grid;
   place-items: center;
   flex: 0 0 38px;
   width: 38px;
   height: 38px;
-  border: 1px solid color-mix(in srgb, var(--p2p-mint) 26%, transparent);
-  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--p2p-mint) 28%, transparent);
+  border-radius: 13px;
   color: var(--p2p-mint);
-  background: color-mix(in srgb, var(--p2p-mint) 9%, transparent);
+  background: color-mix(in srgb, var(--p2p-mint) 10%, transparent);
 }
 .p2p-escrow-copy { min-width: 0; }
 .p2p-escrow-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .p2p-escrow-heading h3 { margin: 0; font-size: 13px; font-weight: 800; line-height: 1.55; }
-.p2p-escrow-heading > span { padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--p2p-mint) 27%, transparent); border-radius: 999px; color: var(--p2p-mint); background: color-mix(in srgb, var(--p2p-mint) 8%, transparent); font-size: 9px; font-weight: 800; }
+.p2p-escrow-heading > span {
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--p2p-mint) 30%, transparent);
+  border-radius: 999px;
+  color: var(--p2p-mint);
+  background: color-mix(in srgb, var(--p2p-mint) 9%, transparent);
+  font-size: 9px;
+  font-weight: 800;
+}
 .p2p-escrow-copy p { margin: 4px 0 0; color: var(--text-2); font-size: 11.6px; line-height: 1.75; text-wrap: pretty; }
+
+/* ── safety section ──────────────────────────────────────────────────────── */
 
 .p2p-safety-section { display: grid; gap: 11px; margin-top: 1px; }
 .p2p-safety-heading { display: flex; align-items: center; gap: 10px; }
-.p2p-safety-icon { display: grid; place-items: center; flex: 0 0 34px; width: 34px; height: 34px; border: 1px solid color-mix(in srgb, var(--rgb-5) 26%, var(--line)); border-radius: 11px; color: var(--rgb-5); background: color-mix(in srgb, var(--rgb-5) 8%, var(--bg-panel)); }
+.p2p-safety-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--p2p-amber) 30%, var(--p2p-line));
+  border-radius: 12px;
+  color: var(--p2p-amber);
+  background: color-mix(in srgb, var(--p2p-amber) 10%, var(--p2p-surface));
+}
 .p2p-safety-heading h2 { margin: 0; font-size: 15px; }
 .p2p-safety-heading p { margin-top: 2px; font-size: 11px; }
+
 .p2p-safety-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.p2p-page .p2p-safety-grid .infobox { min-width: 0; margin: 0; border-radius: 15px; }
+.p2p-page .p2p-safety-grid .infobox { min-width: 0; margin: 0; border-radius: 18px; }
 .p2p-page .p2p-safety-grid .infobox:first-child { grid-column: 1 / -1; }
 .p2p-page .p2p-safety-grid .infobox-head { min-height: 48px; padding: 10px 12px; }
 .p2p-page .p2p-safety-grid .infobox-title { font-size: 12px; }
+
 .p2p-scam-row { display: flex; }
-.p2p-scam-index { display: grid; place-items: center; flex: 0 0 21px; width: 21px; height: 21px; border: 1px solid rgba(255, 59, 107, 0.25); border-radius: 7px; color: var(--down); background: rgba(255, 59, 107, 0.1); font-family: var(--font-mono); font-size: 10px; font-weight: 800; }
+.p2p-scam-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 21px;
+  width: 21px;
+  height: 21px;
+  border: 1px solid color-mix(in srgb, var(--down) 28%, transparent);
+  border-radius: 7px;
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+}
 .p2p-scam-title { font-size: 12.4px; font-weight: 750; line-height: 1.5; }
 
-/* Direct on-chain settlement */
+/* ==========================================================================
+   6. OTC TAB
+   ========================================================================== */
+
 .p2p-otc-hero {
   position: relative;
-  padding: 18px;
+  padding: 19px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--rgb-2) 27%, var(--line));
-  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--p2p-violet) 30%, var(--p2p-line));
+  border-radius: 24px;
   background:
-    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--rgb-2) 16%, transparent), transparent 42%),
-    radial-gradient(ellipse at 0% 95%, color-mix(in srgb, var(--p2p-cyan) 8%, transparent), transparent 45%),
-    linear-gradient(140deg, color-mix(in srgb, var(--text-1) 5%, transparent), transparent 55%),
-    var(--bg-panel);
-  box-shadow: 0 14px 36px -30px rgba(124, 77, 255, 0.8), inset 0 1px 0 color-mix(in srgb, var(--text-1) 5%, transparent);
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--p2p-violet) 18%, transparent), transparent 44%),
+    radial-gradient(ellipse at 0% 95%, color-mix(in srgb, var(--p2p-cyan) 10%, transparent), transparent 46%),
+    linear-gradient(140deg, var(--p2p-surface-2), transparent 56%),
+    var(--p2p-surface);
+  box-shadow: 0 16px 40px -34px color-mix(in srgb, var(--p2p-violet) 90%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-1) 5%, transparent);
 }
 .p2p-otc-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
 .p2p-otc-icon,
 .p2p-send-icon,
 .p2p-checklist-icon {
@@ -337,190 +790,414 @@
   flex: 0 0 40px;
   width: 40px;
   height: 40px;
-  border: 1px solid color-mix(in srgb, var(--rgb-2) 32%, transparent);
-  border-radius: 13px;
-  color: #b7a6ff;
-  background: color-mix(in srgb, var(--rgb-2) 12%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--p2p-violet) 34%, transparent);
+  border-radius: 14px;
+  color: var(--p2p-violet);
+  background: color-mix(in srgb, var(--p2p-violet) 13%, var(--p2p-surface));
 }
-.p2p-otc-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--rgb-5) 26%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--rgb-5) 76%, var(--text-1)); background: color-mix(in srgb, var(--rgb-5) 7%, transparent); font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; }
-.p2p-otc-badge-dot { width: 6px; height: 6px; background: var(--rgb-5); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-5) 10%, transparent); }
-.p2p-otc-hero h2 { margin: 13px 0 5px; font-size: 19px; font-weight: 820; line-height: 1.4; }
+.p2p-otc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--p2p-amber) 30%, transparent);
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--p2p-amber) 82%, var(--text-1));
+  background: color-mix(in srgb, var(--p2p-amber) 9%, transparent);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.p2p-otc-badge-dot { width: 6px; height: 6px; background: var(--p2p-amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--p2p-amber) 14%, transparent); }
+
+.p2p-otc-hero h2 { margin: 14px 0 6px; font-size: 19px; font-weight: 820; line-height: 1.4; }
 .p2p-otc-hero > p { max-width: 78ch; margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.8; text-wrap: pretty; }
+
 .p2p-otc-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
-.p2p-otc-fact { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--text-2); background: color-mix(in srgb, var(--bg-panel-solid) 48%, transparent); font-size: 10.7px; font-weight: 700; line-height: 1.55; }
-.p2p-fact-icon { display: grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px; border-radius: 8px; color: var(--p2p-mint); background: color-mix(in srgb, var(--p2p-mint) 9%, transparent); }
+.p2p-otc-fact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--p2p-line);
+  border-radius: 14px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--p2p-solid) 55%, transparent);
+  font-size: 10.7px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+.p2p-fact-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 25px;
+  width: 25px;
+  height: 25px;
+  border-radius: 9px;
+  color: var(--p2p-mint);
+  background: color-mix(in srgb, var(--p2p-mint) 11%, transparent);
+}
 .p2p-fact-icon svg { flex: 0 0 auto; }
 
-.p2p-otc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: stretch; gap: 12px; }
+.p2p-otc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: stretch;
+  gap: 12px;
+}
 .p2p-send-card,
 .p2p-checklist-card {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 19px;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--text-1) 4%, transparent), transparent 55%), var(--bg-panel);
-  box-shadow: 0 8px 22px -20px rgba(0, 0, 0, 0.8), inset 0 1px 0 color-mix(in srgb, var(--text-1) 4%, transparent);
+  padding: 17px;
+  border: 1px solid var(--p2p-line);
+  border-radius: 21px;
+  background: linear-gradient(145deg, var(--p2p-surface-2), transparent 56%), var(--p2p-surface);
+  box-shadow: 0 10px 26px -24px rgba(0, 0, 0, 0.9), inset 0 1px 0 color-mix(in srgb, var(--text-1) 5%, transparent);
 }
-.p2p-send-card { border-color: color-mix(in srgb, var(--p2p-cyan) 20%, var(--line)); }
+.p2p-send-card { border-color: color-mix(in srgb, var(--p2p-cyan) 24%, var(--p2p-line)); }
+
 .p2p-send-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.p2p-send-icon { color: var(--p2p-cyan); border-color: color-mix(in srgb, var(--p2p-cyan) 25%, transparent); background: color-mix(in srgb, var(--p2p-cyan) 8%, var(--bg-panel)); }
+.p2p-send-icon {
+  color: var(--p2p-cyan);
+  border-color: color-mix(in srgb, var(--p2p-cyan) 28%, transparent);
+  background: color-mix(in srgb, var(--p2p-cyan) 10%, var(--p2p-surface));
+}
 .p2p-send-title-wrap { flex: 1; min-width: 0; }
 .p2p-send-title-wrap .p2p-section-kicker { font-size: 9px; }
 .p2p-send-title-wrap h3 { margin: 2px 0 0; font-size: 14px; font-weight: 800; line-height: 1.4; }
-.p2p-wallet-status { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-3); background: color-mix(in srgb, var(--text-1) 3%, transparent); font-size: 9px; font-weight: 750; }
+
+.p2p-wallet-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid var(--p2p-line);
+  border-radius: 999px;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-1) 4%, transparent);
+  font-size: 9px;
+  font-weight: 750;
+}
 .p2p-wallet-status > span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
-.p2p-wallet-status.is-connected { border-color: color-mix(in srgb, var(--p2p-mint) 26%, transparent); color: var(--p2p-mint); background: color-mix(in srgb, var(--p2p-mint) 6%, transparent); }
-.p2p-wallet-status.is-connected > span { background: var(--p2p-mint); box-shadow: 0 0 8px color-mix(in srgb, var(--p2p-mint) 65%, transparent); }
-.p2p-wallet-preview { display: grid; gap: 12px; margin-top: 17px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel-solid) 55%, transparent); }
+.p2p-wallet-status.is-connected {
+  border-color: color-mix(in srgb, var(--p2p-mint) 30%, transparent);
+  color: var(--p2p-mint);
+  background: color-mix(in srgb, var(--p2p-mint) 8%, transparent);
+}
+.p2p-wallet-status.is-connected > span { background: var(--p2p-mint); box-shadow: 0 0 8px color-mix(in srgb, var(--p2p-mint) 60%, transparent); }
+
+.p2p-wallet-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 17px;
+  padding: 13px;
+  border: 1px solid var(--p2p-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--p2p-solid) 58%, transparent);
+}
 .p2p-wallet-network { display: flex; align-items: center; gap: 9px; }
-.p2p-network-mark { display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid color-mix(in srgb, var(--p2p-cyan) 24%, transparent); border-radius: 10px; color: var(--p2p-cyan); background: color-mix(in srgb, var(--p2p-cyan) 8%, transparent); }
+.p2p-network-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 26%, transparent);
+  border-radius: 11px;
+  color: var(--p2p-cyan);
+  background: color-mix(in srgb, var(--p2p-cyan) 10%, transparent);
+}
 .p2p-wallet-label { display: block; margin-bottom: 2px; color: var(--text-3); font-size: 9px; font-weight: 750; letter-spacing: 0.06em; }
 .p2p-wallet-network strong,
 .p2p-wallet-address strong { display: block; color: var(--text-1); font-size: 12px; font-weight: 800; line-height: 1.45; }
-.p2p-wallet-address { padding-inline-start: 39px; }
-.p2p-wallet-address strong { color: var(--text-2); font-size: 11.5px; }
-.p2p-send-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; margin-top: 11px; border-radius: 13px; font-size: 12.5px; font-weight: 800; }
+.p2p-wallet-address strong { font-size: 11.5px; }
+
+.p2p-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  margin-top: 12px;
+  border-radius: 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+}
 .p2p-send-button svg { flex: 0 0 auto; }
-.p2p-wallet-empty { margin-top: 15px; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel-solid) 42%, transparent); }
+
+.p2p-wallet-empty {
+  margin-top: 15px;
+  padding: 13px;
+  border: 1px dashed var(--p2p-line-2);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--p2p-solid) 46%, transparent);
+}
 .p2p-wallet-empty p { margin: 0; color: var(--text-2); font-size: 12px; line-height: 1.7; }
 .p2p-wallet-empty .p2p-send-button { width: 100%; }
-.p2p-irreversible-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 13px; padding: 10px 11px; border: 1px solid rgba(255, 179, 0, 0.24); border-radius: 12px; color: var(--text-2); background: rgba(255, 179, 0, 0.055); }
-.p2p-irreversible-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--rgb-5); }
+
+.p2p-irreversible-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 13px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--p2p-amber) 28%, transparent);
+  border-radius: 14px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--p2p-amber) 7%, transparent);
+}
+.p2p-irreversible-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--p2p-amber); }
 .p2p-irreversible-note p { margin: 0; font-size: 10.8px; line-height: 1.7; }
 
 .p2p-checklist-head { display: flex; align-items: center; gap: 10px; }
-.p2p-checklist-icon { flex-basis: 34px; width: 34px; height: 34px; border-color: color-mix(in srgb, var(--p2p-mint) 24%, transparent); border-radius: 11px; color: var(--p2p-mint); background: color-mix(in srgb, var(--p2p-mint) 8%, transparent); }
+.p2p-checklist-icon {
+  flex-basis: 34px;
+  width: 34px;
+  height: 34px;
+  border-color: color-mix(in srgb, var(--p2p-mint) 28%, transparent);
+  border-radius: 12px;
+  color: var(--p2p-mint);
+  background: color-mix(in srgb, var(--p2p-mint) 10%, transparent);
+}
 .p2p-checklist-head h3 { margin: 0; font-size: 13px; font-weight: 800; line-height: 1.45; }
 .p2p-checklist-head p { margin: 3px 0 0; color: var(--text-3); font-size: 10.5px; line-height: 1.55; }
+
 .p2p-page .p2p-steps { list-style: none; margin: 16px 0 0; padding: 0; gap: 0; counter-reset: p2p-step; }
-.p2p-page .p2p-steps li { position: relative; min-height: 37px; padding-block: 0 12px; padding-inline: 35px 0; color: var(--text-2); font-size: 10.9px; line-height: 1.72; counter-increment: p2p-step; }
+.p2p-page .p2p-steps li {
+  position: relative;
+  min-height: 37px;
+  padding-block: 0 12px;
+  padding-inline: 35px 0;
+  color: var(--text-2);
+  font-size: 10.9px;
+  line-height: 1.72;
+  counter-increment: p2p-step;
+}
 .p2p-page .p2p-steps li:last-child { padding-bottom: 0; }
-.p2p-page .p2p-steps li::before { content: counter(p2p-step); position: absolute; inset-block-start: 0; inset-inline-start: 0; display: grid; place-items: center; width: 23px; height: 23px; border: 1px solid color-mix(in srgb, var(--p2p-cyan) 25%, var(--line)); border-radius: 8px; color: var(--p2p-cyan); background: color-mix(in srgb, var(--p2p-cyan) 7%, var(--bg-panel)); font-family: var(--font-mono); font-size: 10px; font-weight: 800; }
-.p2p-page .p2p-steps li:not(:last-child)::after { content: ''; position: absolute; inset-block: 26px 0; inset-inline-start: 11px; border-inline-start: 1px dashed color-mix(in srgb, var(--p2p-cyan) 25%, var(--line)); }
+.p2p-page .p2p-steps li::before {
+  content: counter(p2p-step);
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 28%, var(--p2p-line));
+  border-radius: 8px;
+  color: var(--p2p-cyan);
+  background: color-mix(in srgb, var(--p2p-cyan) 8%, var(--p2p-surface));
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+}
+.p2p-page .p2p-steps li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-block: 26px 0;
+  inset-inline-start: 11px;
+  border-inline-start: 1px dashed color-mix(in srgb, var(--p2p-cyan) 28%, var(--p2p-line));
+}
 
 .p2p-page > .p2p-tab-panel > .infobox { margin-top: 0; }
 .p2p-page .p2p-tab-panel > .ad-banner { margin-top: 0; }
 
-.p2p-pay-shell { min-width: 0; }
-.p2p-page .pay-gw > p:first-child { margin: 0; padding: 13px 15px; border: 1px solid color-mix(in srgb, var(--p2p-cyan) 19%, var(--line)); border-radius: 16px; color: var(--text-2); background: color-mix(in srgb, var(--p2p-cyan) 4%, var(--bg-panel)); line-height: 1.75; }
-.p2p-page .pay-gw .infobox { border-radius: 16px; }
+/* ==========================================================================
+   7. PAY TAB SHELL
+   ========================================================================== */
 
-/* The shared BTC/fiat market is intentionally styled only while it lives on
-   this page; /buy keeps its current framing. */
+.p2p-pay-shell { min-width: 0; }
+.p2p-page .pay-gw > p:first-child {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 22%, var(--p2p-line));
+  border-radius: 18px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--p2p-cyan) 5%, var(--p2p-surface));
+  line-height: 1.75;
+}
+.p2p-page .pay-gw .infobox { border-radius: 18px; }
+
+/* ==========================================================================
+   8. THE SHARED MARKET, IN THE DESK'S FRAMING
+   Only while it is mounted here — /buy keeps its own look.
+   ========================================================================== */
+
 .p2p-page .p2pm { gap: 12px; margin-top: 0; }
+
 .p2p-page .p2pm > .segmented {
   width: min(100%, 440px);
   padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-panel-solid) 58%, var(--bg-panel));
+  border: 1px solid var(--p2p-line);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--p2p-solid) 58%, var(--p2p-surface));
 }
-.p2p-page .p2pm > .segmented button { min-height: 40px; padding: 8px 12px; border-radius: 10px; font-size: 12px; }
+.p2p-page .p2pm > .segmented button { min-height: 40px; padding: 8px 12px; border-radius: 11px; font-size: 12px; }
+
 .p2p-page .p2pm-filters {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 19px;
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--text-1) 4%, transparent), transparent 56%),
-    var(--bg-panel);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-1) 4%, transparent);
+  padding: 15px;
+  border: 1px solid var(--p2p-line);
+  border-radius: 21px;
+  background: linear-gradient(150deg, var(--p2p-surface-2), transparent 56%), var(--p2p-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-1) 5%, transparent);
 }
+
 .p2p-page .p2pm-field input,
-.p2p-page .p2pm-picker-trigger { min-height: 47px; border-radius: 12px; border-color: color-mix(in srgb, var(--line-strong) 70%, transparent); background: color-mix(in srgb, var(--bg-panel-solid) 54%, var(--bg-panel)); }
+.p2p-page .p2pm-picker-trigger {
+  min-height: 47px;
+  border-radius: 13px;
+  border-color: color-mix(in srgb, var(--p2p-line-2) 72%, transparent);
+  background: color-mix(in srgb, var(--p2p-solid) 56%, var(--p2p-surface));
+}
 .p2p-page .p2pm-field input:focus,
-.p2p-page .p2pm-picker-trigger:focus-visible { outline: 2px solid color-mix(in srgb, var(--p2p-cyan) 62%, transparent); outline-offset: 2px; border-color: var(--p2p-cyan); }
+.p2p-page .p2pm-picker-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--p2p-cyan) 62%, transparent);
+  outline-offset: 2px;
+  border-color: var(--p2p-cyan);
+}
 .p2p-page .p2pm-field .field-label,
 .p2p-page .p2pm-picker .field-label { margin-bottom: 7px; font-size: 10px; }
-.p2p-page .p2pm-toggle { min-height: 44px; padding-inline: 11px; border-radius: 11px; font-size: 10.8px; }
-.p2p-page .p2pm-toggle.active { border-color: color-mix(in srgb, var(--p2p-cyan) 45%, transparent); color: var(--text-1); background: linear-gradient(120deg, color-mix(in srgb, var(--p2p-cyan) 13%, var(--bg-panel)), color-mix(in srgb, var(--p2p-mint) 9%, var(--bg-panel))); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p2p-cyan) 8%, transparent); }
+
+.p2p-page .p2pm-toggle {
+  min-height: 44px;
+  padding-inline: 12px;
+  border-radius: 12px;
+  font-size: 10.8px;
+}
+.p2p-page .p2pm-toggle.active {
+  border-color: color-mix(in srgb, var(--p2p-cyan) 48%, transparent);
+  color: var(--text-1);
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--p2p-cyan) 14%, var(--p2p-surface)),
+    color-mix(in srgb, var(--p2p-mint) 10%, var(--p2p-surface)));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p2p-cyan) 10%, transparent);
+}
 .p2p-page .p2pm-reset { color: var(--text-2); border-style: dashed; }
-.p2p-page .p2pm-reset:hover { color: var(--text-1); border-color: color-mix(in srgb, var(--p2p-cyan) 35%, var(--line-strong)); }
-.p2p-page .p2pm-refresh { color: var(--p2p-cyan); border-color: color-mix(in srgb, var(--p2p-cyan) 22%, var(--line)); }
+.p2p-page .p2pm-reset:hover { color: var(--text-1); border-color: color-mix(in srgb, var(--p2p-cyan) 38%, var(--p2p-line-2)); }
+
+.p2p-page .p2pm-refresh {
+  color: var(--p2p-cyan);
+  border-color: color-mix(in srgb, var(--p2p-cyan) 24%, var(--p2p-line));
+}
 .p2p-page .p2pm-refresh.is-loading svg { animation: p2p-refresh-spin 1s linear infinite; }
 @keyframes p2p-refresh-spin { to { transform: rotate(360deg); } }
-.p2p-page .p2pm-address { padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--p2p-cyan) 17%, var(--line)); border-radius: 17px; background: color-mix(in srgb, var(--p2p-cyan) 3%, var(--bg-panel)); }
-.p2p-page .p2pm-address input { min-height: 46px; border-radius: 12px; border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--bg-panel-solid) 60%, transparent); color: var(--text-1); font-size: 12px; }
-.p2p-page .p2pm-card { min-height: 154px; padding: 15px; border-radius: 18px; box-shadow: 0 8px 20px -18px rgba(0, 0, 0, 0.9), inset 0 1px 0 color-mix(in srgb, var(--text-1) 6%, transparent); }
-.p2p-page .p2pm-card:not(.skel):hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--p2p-cyan) 31%, var(--line-strong)); }
-.p2p-page .p2pm-price { font-size: 20px; }
-.p2p-page .p2pm-chip { padding: 4px 9px; border-radius: 8px; }
-.p2p-page .p2pm-trade-btn { border-radius: 11px; }
-.p2p-page .p2pm-empty { border-radius: 18px; background: color-mix(in srgb, var(--bg-panel) 80%, transparent); }
-.p2p-page .p2pm-bar { border-radius: 17px; border-color: color-mix(in srgb, var(--p2p-cyan) 24%, var(--line-strong)); background: linear-gradient(120deg, color-mix(in srgb, var(--p2p-cyan) 12%, var(--bg-panel-solid)), color-mix(in srgb, var(--p2p-mint) 7%, var(--bg-panel-solid)) 55%, var(--bg-panel-solid)); box-shadow: 0 14px 36px -20px rgba(0, 0, 0, 0.86), inset 0 1px 0 color-mix(in srgb, var(--text-1) 7%, transparent); }
-.p2p-page .p2pm-bar .btn { border-radius: 12px; }
-.p2p-page .p2pm-swap-cta { border-radius: 20px; }
 
-:root[data-theme='light'] .p2p-page .p2p-hero { border-color: rgba(14, 116, 144, 0.3); }
-:root[data-theme='light'] .p2p-page .p2p-hero-footnote { color: rgba(226, 243, 245, 0.72); }
-:root[data-theme='light'] .p2p-page .p2pm-filters,
-:root[data-theme='light'] .p2p-page .p2p-send-card,
-:root[data-theme='light'] .p2p-page .p2p-checklist-card,
-:root[data-theme='light'] .p2p-page .p2p-otc-hero { box-shadow: 0 8px 22px -20px rgba(15, 23, 42, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.65); }
-:root[data-theme='light'] .p2p-page .p2pm-field input,
-:root[data-theme='light'] .p2p-page .p2pm-picker-trigger,
-:root[data-theme='light'] .p2p-page .p2pm-address input { background: rgba(255, 255, 255, 0.86); }
-:root[data-theme='light'] .p2p-page .p2pm-toggle.active { color: #0c2940; }
-:root[data-theme='light'] .p2p-page .p2p-irreversible-note { color: #624713; background: #fff8e6; border-color: rgba(157, 110, 0, 0.28); }
+.p2p-page .p2pm-address {
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--p2p-cyan) 20%, var(--p2p-line));
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--p2p-cyan) 4%, var(--p2p-surface));
+}
+.p2p-page .p2pm-address input {
+  min-height: 46px;
+  border-radius: 13px;
+  border: 1px solid var(--p2p-line-2);
+  background: color-mix(in srgb, var(--p2p-solid) 62%, transparent);
+  color: var(--text-1);
+  font-size: 12px;
+}
+
+/* Offer cards: a real edge, a lift on hover, and the price as the loudest
+   thing in the box — which is the only fact being compared. */
+.p2p-page .p2pm-card {
+  min-height: 154px;
+  padding: 16px;
+  border-radius: 20px;
+  background: linear-gradient(150deg, var(--p2p-surface-2), transparent 58%), var(--p2p-surface);
+  box-shadow: 0 10px 24px -20px rgba(0, 0, 0, 0.9), inset 0 1px 0 color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.p2p-page .p2pm-card:not(.skel):hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--p2p-cyan) 34%, var(--p2p-line-2));
+  box-shadow: 0 18px 34px -24px rgba(0, 0, 0, 0.9), inset 0 1px 0 color-mix(in srgb, var(--text-1) 8%, transparent);
+}
+.p2p-page .p2pm-price { font-size: 20px; }
+.p2p-page .p2pm-chip {
+  padding: 4px 9px;
+  border-radius: 9px;
+  border-color: var(--p2p-line);
+  background: color-mix(in srgb, var(--text-1) 5%, transparent);
+}
+.p2p-page .p2pm-trade-btn { border-radius: 12px; }
+.p2p-page .p2pm-empty { border-radius: 20px; background: color-mix(in srgb, var(--p2p-surface) 80%, transparent); }
+
+.p2p-page .p2pm-bar {
+  border-radius: 19px;
+  border-color: color-mix(in srgb, var(--p2p-cyan) 26%, var(--p2p-line-2));
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--p2p-cyan) 13%, var(--p2p-solid)),
+    color-mix(in srgb, var(--p2p-mint) 8%, var(--p2p-solid)) 55%,
+    var(--p2p-solid));
+  box-shadow: 0 16px 40px -24px rgba(0, 0, 0, 0.9), inset 0 1px 0 color-mix(in srgb, var(--text-1) 8%, transparent);
+}
+.p2p-page .p2pm-bar .btn { border-radius: 13px; }
+.p2p-page .p2pm-swap-cta { border-radius: 22px; }
+
+/* ==========================================================================
+   9. RESPONSIVE
+   ========================================================================== */
 
 @media (min-width: 900px) {
   .p2p-page .p2pm-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
   .p2p-page .p2pm-card { height: 100%; }
 }
 
-@media (max-width: 720px) {
-  .p2p-hero { min-height: 0; padding: 18px; border-radius: 21px; }
-  .p2p-hero-mark { flex-basis: 100px; width: 100px; height: 100px; margin-inline-end: 0; }
-  .p2p-hero-mark-icon { width: 52px; height: 52px; border-radius: 17px; }
-  .p2p-hero-mark-ring-outer { inset: 0; }
-  .p2p-hero-mark-ring-inner { inset: 12px; }
-  .p2p-main-tabs { gap: 6px !important; }
-  .p2p-main-tabs button { min-height: 62px; gap: 7px; padding: 9px; }
-  .p2p-tab-icon { flex-basis: 30px; width: 30px; height: 30px; border-radius: 10px; }
-  .p2p-tab-label { font-size: 11.5px; }
-  .p2p-tab-hint { font-size: 9px; }
+@media (max-width: 760px) {
+  .p2p-hero { min-height: 0; padding: 20px 18px; border-radius: 24px; }
+  /* Only the box shrinks: every inset inside it is a percentage, so the mark
+     redraws itself at the new size with no second set of numbers to keep in
+     step (see the note above the orbit rules). */
+  .p2p-mark { flex-basis: 104px; width: 104px; height: 104px; }
   .p2p-otc-grid { grid-template-columns: minmax(0, 1fr); }
   .p2p-section-heading h2 { font-size: 17px; }
 }
 
+@media (max-width: 520px) {
+  .p2p-hero { min-height: 210px; padding: 18px 16px; gap: 10px; border-radius: 22px; }
+  .p2p-mark { flex-basis: 76px; width: 76px; height: 76px; }
+  .p2p-mark-spark i { width: 5px; height: 5px; margin-inline-start: -2.5px; }
+  .p2p-hero-route { font-size: 9px; gap: 5px; max-width: 100%; }
+  .p2p-hero-route-node { padding: 3px 6px; gap: 4px; }
+  .p2p-hero-live { display: none; }
+
+  .p2p-main-tabs.segmented button { flex-direction: column; gap: 6px; padding: 9px 5px; min-height: 76px; }
+  .p2p-main-tabs.segmented { border-radius: 19px; gap: 4px; }
+  .p2p-tab-icon { flex-basis: 30px; width: 30px; height: 30px; border-radius: 11px; }
+  .p2p-tab-copy { align-items: center; text-align: center; }
+  .p2p-tab-label { max-width: 100%; font-size: 11.5px; }
+  .p2p-tab-hint { max-width: 100%; font-size: 9px; }
+}
+
 @media (max-width: 480px) {
   .p2p-page { gap: 13px; }
-  .p2p-hero { gap: 10px; padding: 15px; border-radius: 19px; }
-  .p2p-hero-mark { flex-basis: 68px; width: 68px; height: 74px; }
-  .p2p-hero-mark-icon { width: 42px; height: 42px; border-radius: 14px; }
-  .p2p-hero-mark-icon svg { width: 23px; height: 23px; }
-  .p2p-hero-mark-ring-outer { inset: 2px; }
-  .p2p-hero-mark-ring-inner { inset: 9px; }
-  .p2p-hero-mark-orbit-a { inset-block-start: 5px; inset-inline-end: 11px; }
-  .p2p-hero-mark-orbit-b { inset-block-end: 12px; inset-inline-start: 4px; }
-  .p2p-hero-topline { gap: 8px; margin-bottom: 8px; }
+  .p2p-hero-topline { gap: 8px; margin-bottom: 9px; }
   .p2p-eyebrow { font-size: 9px; letter-spacing: 0.04em; }
   .p2p-title { font-size: 22px; }
-  .p2p-subtitle { max-width: 36ch; margin-top: 6px; font-size: 11.5px; line-height: 1.65; }
-  .p2p-hero-footnote { margin-top: 8px; font-size: 9.5px; line-height: 1.55; }
-  .p2p-main-tabs.segmented { gap: 5px; }
-  .p2p-main-tabs button { min-height: 59px; justify-content: center; gap: 5px; padding: 8px 5px; border-radius: 13px; }
-  .p2p-tab-icon { flex-basis: 25px; width: 25px; height: 25px; border: 0; background: transparent; }
-  .p2p-tab-icon svg { width: 15px; height: 15px; }
-  .p2p-tab-copy { align-items: center; text-align: center; }
-  .p2p-tab-label { max-width: 100%; font-size: 10.4px; }
-  .p2p-tab-hint { max-width: 100%; font-size: 8px; }
+  .p2p-subtitle { margin-top: 6px; font-size: 11.5px; line-height: 1.65; }
+  .p2p-hero-footnote { margin-top: 11px; padding-top: 10px; font-size: 9.5px; line-height: 1.55; }
+
   .p2p-section-heading { align-items: flex-start; }
   .p2p-section-heading p { font-size: 11px; }
-  .p2p-market-badge { padding: 6px 7px; font-size: 8px; }
-  .p2p-escrow-note { padding: 12px; gap: 9px; border-radius: 16px; }
-  .p2p-note-icon { flex-basis: 32px; width: 32px; height: 32px; border-radius: 10px; }
+  .p2p-market-badge { padding: 6px 8px; font-size: 8px; }
+  .p2p-escrow-note { padding: 13px; gap: 9px; border-radius: 17px; }
+  .p2p-note-icon { flex-basis: 32px; width: 32px; height: 32px; border-radius: 11px; }
   .p2p-escrow-copy p { font-size: 10.5px; line-height: 1.7; }
-  .p2p-otc-hero { padding: 15px; border-radius: 19px; }
+
+  .p2p-otc-hero { padding: 15px; border-radius: 20px; }
   .p2p-otc-hero h2 { font-size: 17px; }
   .p2p-otc-hero > p { font-size: 11.5px; }
   .p2p-otc-facts { grid-template-columns: 1fr; gap: 6px; margin-top: 13px; }
-  .p2p-otc-fact { padding: 7px 9px; font-size: 10px; }
+  .p2p-otc-fact { padding: 8px 10px; font-size: 10px; }
+
   .p2p-send-card,
-  .p2p-checklist-card { padding: 13px; border-radius: 17px; }
+  .p2p-checklist-card { padding: 14px; border-radius: 18px; }
   .p2p-send-card-head { gap: 8px; }
-  .p2p-send-icon { flex-basis: 34px; width: 34px; height: 34px; border-radius: 11px; }
-  .p2p-wallet-status { max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
-  .p2p-page .p2pm-filters { padding: 11px; border-radius: 16px; }
+  .p2p-send-icon { flex-basis: 34px; width: 34px; height: 34px; border-radius: 12px; }
+  .p2p-wallet-status { max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+
+  .p2p-page .p2pm-filters { padding: 12px; border-radius: 18px; }
   .p2p-page .p2pm-amount-row { gap: 7px; }
   .p2p-page .p2pm-field-amount { flex: 1.1; }
   .p2p-page .p2pm-picker-trigger { gap: 5px; padding-inline: 8px; font-size: 11px; }
@@ -530,102 +1207,77 @@
 }
 
 @media (max-width: 350px) {
-  .p2p-hero-mark { display: none; }
-  .p2p-main-tabs button { gap: 3px; padding-inline: 3px; }
-  .p2p-tab-label { font-size: 9.5px; }
-  .p2p-tab-hint { font-size: 7.5px; }
+  .p2p-mark { display: none; }
+  .p2p-main-tabs.segmented button { gap: 4px; padding-inline: 4px; }
+  .p2p-tab-label { font-size: 10.4px; }
+  .p2p-tab-hint { font-size: 8.5px; }
   .p2p-page .p2pm-amount-row { flex-direction: column; }
   .p2p-page .p2pm-field-amount { flex: 1; }
   .p2p-section-heading { flex-direction: column; gap: 8px; }
 }
 
-/* ── Refined hero and restrained orbit motion ────────────────────────────── */
-.p2p-hero-mark-ring-outer { animation: p2p-orbit-outer 42s linear infinite; }
-.p2p-hero-mark-ring-inner { animation: p2p-orbit-inner 34s linear infinite; }
-@keyframes p2p-orbit-outer {
-  from { transform: rotate(-24deg) scaleY(0.64); }
-  to { transform: rotate(336deg) scaleY(0.64); }
-}
-@keyframes p2p-orbit-inner {
-  from { transform: rotate(35deg) scaleY(0.72); }
-  to { transform: rotate(-325deg) scaleY(0.72); }
-}
+/* ==========================================================================
+   10. LIGHT-THEME SURFACE FIXES
+   The tokens above already carry the light palette; these are the handful of
+   places where a shadow or a fill has to be re-tuned for a white canvas.
+   ========================================================================== */
 
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .p2p-title {
-    background: linear-gradient(100deg, var(--p2p-hero-ink, #f4fbff) 12%, var(--p2p-cyan) 76%, var(--p2p-violet));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
+:root[data-theme='light'] .p2p-page .p2pm-filters,
+:root[data-theme='light'] .p2p-page .p2p-send-card,
+:root[data-theme='light'] .p2p-page .p2p-checklist-card,
+:root[data-theme='light'] .p2p-page .p2p-otc-hero,
+:root[data-theme='light'] .p2p-page .p2pm-card {
+  box-shadow: 0 10px 24px -20px rgba(15, 23, 42, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
-
-:root[data-theme='light'] .p2p-page .p2p-hero {
-  --p2p-hero-ink: #16233d;
-  --p2p-hero-muted: #50627e;
-  border-color: rgba(38, 88, 201, 0.22);
-  background:
-    radial-gradient(ellipse at 92% 0%, rgba(50, 178, 198, 0.16), transparent 40%),
-    radial-gradient(ellipse at 8% 100%, rgba(129, 102, 225, 0.12), transparent 45%),
-    linear-gradient(135deg, #ffffff 0%, #f5f9ff 56%, #faf6ff 100%);
-  box-shadow: 0 18px 40px -28px rgba(24, 43, 78, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-:root[data-theme='light'] .p2p-page .p2p-hero::before {
-  opacity: 0.2;
-  background-image:
-    linear-gradient(to right, rgba(37, 74, 126, 0.16) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(37, 74, 126, 0.16) 1px, transparent 1px);
-}
-:root[data-theme='light'] .p2p-page .p2p-hero-footnote { color: #52637c; }
-:root[data-theme='light'] .p2p-page .p2p-hero-footnote svg { color: #2f7a71; }
-:root[data-theme='light'] .p2p-page .p2p-eyebrow,
-:root[data-theme='light'] .p2p-page .p2p-section-kicker { color: #27617b; }
-:root[data-theme='light'] .p2p-page .p2p-title {
-  background: linear-gradient(100deg, #16233d 14%, #285d78 70%, #6654a2);
-}
+:root[data-theme='light'] .p2p-page .p2pm-field input,
+:root[data-theme='light'] .p2p-page .p2pm-picker-trigger,
+:root[data-theme='light'] .p2p-page .p2pm-address input { background: rgba(255, 255, 255, 0.9); }
+:root[data-theme='light'] .p2p-page .p2pm-toggle.active { color: var(--p2p-tab-ink); }
+:root[data-theme='light'] .p2p-page .p2p-otc-badge { color: var(--ink-amber); }
+:root[data-theme='light'] .p2p-page .p2p-safety-icon { color: var(--ink-amber); }
+:root[data-theme='light'] .p2p-page .p2p-hero-live { border-color: rgba(24, 74, 122, 0.2); background: rgba(255, 255, 255, 0.7); }
+:root[data-theme='light'] .p2p-page .p2p-hero-live i { background: var(--p2p-mint); }
 :root[data-theme='light'] .p2p-page .p2p-back {
   border-color: rgba(32, 63, 112, 0.16);
   color: #28446f;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.8);
 }
-:root[data-theme='light'] .p2p-page .p2p-hero-mark { color: #3f6db6; }
-:root[data-theme='light'] .p2p-page .p2p-hero-mark-ring-outer { border-color: rgba(38, 88, 201, 0.22); }
-:root[data-theme='light'] .p2p-page .p2p-hero-mark-ring-inner { border-color: rgba(27, 161, 148, 0.28); }
-:root[data-theme='light'] .p2p-page .p2p-hero-mark-icon {
-  border-color: rgba(38, 88, 201, 0.2);
-  background: linear-gradient(145deg, rgba(74, 177, 198, 0.17), rgba(124, 77, 255, 0.11));
-  box-shadow: 0 8px 24px -18px rgba(38, 88, 201, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
+
+/* ==========================================================================
+   11. REDUCED MOTION — still, but still dressed
+   ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
   .p2p-page .p2pm-refresh.is-loading svg,
-  .p2p-hero-mark-ring-outer,
-  .p2p-hero-mark-ring-inner { animation: none; }
-  .p2p-back,
-  .p2p-main-tabs button,
+  .p2p-page .p2p-hero-bloom,
+  .p2p-page .p2p-hero-live i,
+  .p2p-page .p2p-mark-orbit,
+  .p2p-page .p2p-mark-rim,
+  .p2p-page .p2p-mark-spark,
+  .p2p-page .p2p-mark-link,
+  .p2p-page .p2p-mark-node,
+  .p2p-page .p2p-mark-arrow { animation: none !important; }
+  .p2p-page .p2p-back,
+  .p2p-page .p2p-main-tabs.segmented button,
   .p2p-page .p2pm-card { transition: none; }
-  .p2p-back:hover,
-  .p2p-main-tabs button:hover,
+  .p2p-page .p2p-back:hover,
+  .p2p-page .p2p-main-tabs.segmented button:hover,
   .p2p-page .p2pm-card:not(.skel):hover { transform: none; }
 }
 
-/* Midnight / glacier desk. The hero is a single surface, not nested glass. */
-.p2p-page { --p2p-cyan: #80d8ff; --p2p-mint: #99ecd0; --p2p-violet: #c5b5ff; --p2p-tab-gradient: linear-gradient(120deg, #b6efff, #d2c9ff); }
-.p2p-hero { min-height: 224px; padding: 27px; border-radius: 30px; background: radial-gradient(ellipse at 100% 25%, #213967 0%, transparent 55%), linear-gradient(120deg, #101b31, #191d39 70%, #252340); }
-.p2p-hero::before { background-size: 48px 48px; opacity: .1; }
-.p2p-hero-route { display: flex; align-items: center; gap: 8px; max-width: 290px; margin-block: 16px 13px; color: var(--p2p-hero-muted); font-size: 10px; }
-.p2p-hero-route span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.p2p-hero-route i { height: 1px; flex: 1; background: currentColor; opacity: .35; }
-.p2p-hero-footnote { padding-top: 13px; border-top: 1px solid rgba(160, 200, 255, .15); }
-.p2p-hero-mark-icon { width: 70px; height: 70px; border-radius: 24px; background: linear-gradient(140deg, #314970, #34345c); color: #d5eeff; }
-.p2p-main-tabs.segmented { gap: 5px; padding: 6px; border: 1px solid var(--line); border-radius: 22px; background: var(--bg-panel); }
-.p2p-main-tabs button { border-color: transparent; box-shadow: none; background: transparent; border-radius: 16px; }
-.p2p-main-tabs .p2p-tab-indicator { border-radius: 15px; }
-.p2p-tab-icon { border: 0; background: color-mix(in srgb, currentColor 8%, transparent); }
-.p2p-main-tabs button.active { box-shadow: 0 4px 16px -10px #88caff; }
-.p2p-page.is-still .p2p-hero-mark-ring { animation: none; }
-@media (prefers-reduced-motion: no-preference) {
-  .p2p-page:not(.is-still) .p2p-hero-mark-icon { animation: p2p-desk-float 7s ease-in-out infinite; }
-}
-@keyframes p2p-desk-float { 0%, 100% { transform: translateY(0) rotate(-7deg); } 50% { transform: translateY(-5px) rotate(-3deg); } }
-@media (max-width: 520px) { .p2p-hero { min-height: 210px; padding: 19px 16px; gap: 10px; border-radius: 24px; } .p2p-hero-mark { margin-inline-end: 0; } .p2p-hero-mark-icon { width: 47px; height: 47px; border-radius: 16px; } .p2p-hero-route { font-size: 9px; gap: 5px; } .p2p-main-tabs button { flex-direction: column; gap: 5px; padding: 9px 4px; min-height: 75px; } .p2p-main-tabs.segmented { border-radius: 19px; gap: 3px; } }
+/* The in-app "reduce motion" setting, which the page mirrors onto the root
+   element as `.is-still`. Same rules, so both switches land in one place. */
+.p2p-page.is-still .p2p-hero-bloom,
+.p2p-page.is-still .p2p-hero-live i,
+.p2p-page.is-still .p2p-mark-orbit,
+.p2p-page.is-still .p2p-mark-rim,
+.p2p-page.is-still .p2p-mark-spark,
+.p2p-page.is-still .p2p-mark-link,
+.p2p-page.is-still .p2p-mark-node,
+.p2p-page.is-still .p2p-mark-arrow { animation: none !important; }
+.p2p-page.is-still .p2p-back,
+.p2p-page.is-still .p2p-main-tabs.segmented button,
+.p2p-page.is-still .p2pm-card { transition: none; }
+.p2p-page.is-still .p2p-back:hover,
+.p2p-page.is-still .p2p-main-tabs.segmented button:hover,
+.p2p-page.is-still .p2pm-card:not(.skel):hover { transform: none; }

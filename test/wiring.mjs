@@ -8553,7 +8553,7 @@ export default function run() {
     const tap = read('src/components/TapToPay.jsx');
     const tapCode = code(tap);
     t('tap-to-pay uses the real segmented control',
-      /className="segmented"/.test(tapCode));
+      /className="segmented[^"]*"/.test(tapCode));
     t('...with the real active class, not an invented one',
       /className=\{mode === k \? 'active' : ''\}/.test(tapCode));
     t('...and renders the selection pill every other control renders',
@@ -8572,10 +8572,32 @@ export default function run() {
      * while iPhone users — who cannot use NFC at all — were told to "use the
      * code" that was never rendered.
      */
-    t('the receive side renders a real scannable QR, not just text',
-      /qrcode\(0, 'M'\)/.test(tapCode) && /<svg/.test(tapCode));
+    /*
+     * «کیو ار کد جذاب تر … مطمئن شی کار میده حتما» — prettier AND provably
+     * scannable. The receive side no longer hand-rolls its own matrix: it
+     * renders <FancyQr>, the one QR surface in this repo whose decodability is
+     * pinned by a test that rasterises the painted path and decodes it with an
+     * independent decoder (test/fancy-qr.test.jsx). Four copies of the same
+     * encoder is four chances to ship a code that scans to the wrong string;
+     * one component is one.
+     *
+     * The white plate lives in fancy-qr.css now, not inline here, so the
+     * invariant is asserted where it is actually declared.
+     */
+    t('the receive side renders the shared, decode-tested QR component',
+      /import FancyQr/.test(tapCode) && /<FancyQr[\s\S]{0,400}?value=\{payLink/.test(tapCode));
     t('...on a white plate, since scanners need dark modules on light',
-      /background: '#fff'/.test(tapCode));
+      /\.fqr-plate\s*\{[\s\S]*?background:\s*#fff/.test(read('src/styles/fancy-qr.css')));
+    t('...and the code can be enlarged, because a counter is not a desk',
+      /setZoomOpen\(true\)/.test(tapCode) && /<Sheet[\s\S]{0,200}?open=\{zoomOpen\}/.test(tapCode));
+    /*
+     * The network on the face of the card. Every EVM chain reuses the same 0x
+     * address, so "wrong network" is how an in-person payment is lost — and
+     * the screen that asks two people to exchange an address in person used to
+     * name every fact EXCEPT this one.
+     */
+    t('...and the receiving network is named next to the code',
+      /tap-network/.test(tapCode) && /tap\.networkHint/.test(tapCode));
     t('the pay side can open the real camera scanner',
       /<QrScanner/.test(tapCode) && /tap\.scanCode/.test(tapCode));
     /*
@@ -9925,14 +9947,51 @@ export default function run() {
       /--p2p-cyan:\s*#[\da-f]{6}/i.test(p2pCss) &&
       /--p2p-mint:\s*#[\da-f]{6}/i.test(p2pCss) &&
       /--p2p-violet:\s*#[\da-f]{6}/i.test(p2pCss));
+    /*
+     * The hero is ONE surface with decoration painted UNDER the copy, not a
+     * stack of glass panels. `border-radius` is asserted loosely (≥24px) so a
+     * rounding tweak is not a wiring failure; what must hold is the stacking:
+     * blooms and grid at 0, the mark at 1, the words at 2.
+     */
     t('the P2P hero is layered, premium and content stays above its decoration',
-      /\.p2p-hero\s*\{[\s\S]*?border-radius:\s*26px[\s\S]*?radial-gradient[\s\S]*?linear-gradient/.test(p2pCss) &&
+      /\.p2p-hero\s*\{[\s\S]*?border-radius:\s*2[4-9]px[\s\S]*?radial-gradient[\s\S]*?linear-gradient/.test(p2pCss) &&
       /\.p2p-hero-content\s*\{[^}]*z-index:\s*2/.test(p2pCss) &&
-      /\.p2p-hero-orbit\s*\{[^}]*z-index:\s*1/.test(p2pCss));
+      /\.p2p-hero-grid\s*\{[\s\S]*?z-index:\s*0/.test(p2pCss) &&
+      /\.p2p-mark\s*\{[\s\S]*?z-index:\s*1/.test(p2pCss));
+    /*
+     * Both themes are token-driven: every colour the page paints resolves to a
+     * `--p2p-*` token, and the light-theme block re-declares the whole set. A
+     * colour added to the dark block with no light value is a colour that
+     * disappears for half the users, so the two blocks are asserted to define
+     * the same five accents.
+     */
+    t('the P2P palette is declared once per theme, with no colour left behind',
+      (() => {
+        const dark = /\.p2p-page\s*\{[\s\S]*?\}\s*\n/.exec(p2pCss)?.[0] ?? '';
+        const light = /:root\[data-theme='light'\] \.p2p-page\s*\{[\s\S]*?\n\}/.exec(p2pCss)?.[0] ?? '';
+        const accents = ['--p2p-cyan', '--p2p-mint', '--p2p-violet', '--p2p-amber', '--p2p-rose'];
+        return accents.every((a) => dark.includes(`${a}:`) && light.includes(`${a}:`))
+          && /--p2p-hero-ink:/.test(light) && /--p2p-hero-bg:/.test(light);
+      })());
     t('the P2P hero has a contrasting light-theme treatment and reduced-motion fallback',
-      /:root\[data-theme='light'\] \.p2p-page \.p2p-hero\s*\{[^}]*--p2p-hero-ink:\s*#16233d/.test(p2pCss) &&
-      /:root\[data-theme='light'\] \.p2p-page \.p2p-title\s*\{[^}]*#285d78/.test(p2pCss) &&
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.p2p-hero-mark-ring-inner \{ animation: none; \}/.test(p2pCss));
+      /:root\[data-theme='light'\] \.p2p-page\s*\{[\s\S]*?--p2p-hero-ink:\s*#[\da-f]{6}/i.test(p2pCss) &&
+      /:root\[data-theme='light'\] \.p2p-page\s*\{[\s\S]*?--p2p-hero-bg:[\s\S]*?linear-gradient/.test(p2pCss) &&
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.p2p-page \.p2p-mark-rim,\n[\s\S]*?animation: none !important;/.test(p2pCss));
+    /*
+     * «بدون … لامپ زدن چشمک زدن باگی» — no flicker, no blinking. The animated
+     * logo's keyframes are asserted structurally: every loop is `infinite`
+     * with matching first and last frames (so nothing snaps on restart), and
+     * no opacity keyframe reaches 0 — a strobe at the top of a payment screen
+     * reads as a fault, not as polish.
+     */
+    t('the animated hero logo loops smoothly and never blinks',
+      (() => {
+        const frames = [...p2pCss.matchAll(/@keyframes (p2p-[a-z-]+)\s*\{([\s\S]*?)\n\}/g)];
+        const loops = frames.filter(([, name]) => /orbit|spin|flow|node|arrow|bloom|live/.test(name));
+        return loops.length >= 6
+          && loops.every(([, , body]) => /(\d+%|\bto\b)\s*\{/.test(body))
+          && !frames.some(([, , body]) => /opacity:\s*0(;|\s*\})/.test(body));
+      })());
   }
 
   /* ---- 87. Server features nobody can reach ----------------------------- */
@@ -11476,8 +11535,16 @@ export default function run() {
     t('the landing stylesheet is page-scoped, not dumped into index.css',
       /import '\.\.\/styles\/pay-gateway\.css'/.test(read('src/pages/PayLanding.jsx'))
       && !/\.pay-landing/.test(read('src/index.css')));
-    t('a QR of the share URL is built with the same encoder as Receive',
-      /qrcode-generator/.test(panel) && /qrcode\(0, 'M'\)/.test(panel));
+    /*
+     * The saved-link QR used to be a FOURTH hand-rolled encoder painting a flat
+     * black square — the plainest thing on a screen whose job is to look like
+     * somebody's business. It now renders the same FancyQr the receive sheets
+     * use, so "looks good but does not scan" is not a failure mode available
+     * to it either.
+     */
+    t('a QR of the share URL is built with the same component as Receive',
+      /import FancyQr/.test(panel) && /<FancyQr[\s\S]{0,300}?value=\{row\.url\}/.test(panel)
+      && !/qrcode-generator/.test(panel));
     t('reduced motion drops the landing glow',
       /prefers-reduced-motion/.test(css));
   }

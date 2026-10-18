@@ -1,0 +1,512 @@
+/*
+ * TAP TO PAY — the in-person exchange surface (components/TapToPay.jsx).
+ * ==========================================================================
+ * Page-scoped: everything hangs off `.tap-box` or `.tap-zoom`, so nothing
+ * here can reach the receive sheets or the payment landing, which have their
+ * own styling and their own tests.
+ *
+ * ─── THE COLOUR RULE ───────────────────────────────────────────────────────
+ * Same contract as every other stylesheet in this app: the palette is declared
+ * once per theme as `--tap-*` tokens and no raw hex appears below them. The
+ * dark theme gets neon on a dark card; the light theme gets the same hues
+ * darkened until they measure above 4.5:1 on white. A colour added here with
+ * no light value is a colour that disappears for half the users.
+ */
+
+.tap-box {
+  --tap-cyan: #00e5ff;
+  --tap-mint: #00ff9d;
+  --tap-violet: #a78bfa;
+  --tap-amber: #ffb300;
+  --tap-rose: #ff6d94;
+
+  --tap-surface: rgba(255, 255, 255, 0.05);
+  --tap-surface-2: rgba(255, 255, 255, 0.075);
+  --tap-solid: #0b0f1a;
+  --tap-line: rgba(255, 255, 255, 0.1);
+  --tap-line-2: rgba(255, 255, 255, 0.18);
+
+  --tap-mode-fill: linear-gradient(125deg, #8ff0dd, #86e2f7 54%, #c3b6ff);
+  --tap-mode-ink: #04202a;
+
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+}
+
+:root[data-theme='light'] .tap-box {
+  --tap-cyan: #0a6f80;
+  --tap-mint: #06795a;
+  --tap-violet: #6a3ae0;
+  --tap-amber: #8a6100;
+  --tap-rose: #c2185b;
+
+  --tap-surface: rgba(255, 255, 255, 0.94);
+  --tap-surface-2: #ffffff;
+  --tap-solid: #ffffff;
+  --tap-line: rgba(16, 20, 40, 0.11);
+  --tap-line-2: rgba(16, 20, 40, 0.2);
+
+  --tap-mode-fill: linear-gradient(125deg, #0a6f80, #2563a8 52%, #6a3ae0);
+  --tap-mode-ink: #ffffff;
+}
+
+/* ── head ────────────────────────────────────────────────────────────────── */
+
+.tap-head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+
+.tap-head-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid color-mix(in srgb, var(--tap-cyan) 30%, transparent);
+  border-radius: 13px;
+  color: var(--tap-cyan);
+  background: color-mix(in srgb, var(--tap-cyan) 11%, var(--tap-surface));
+}
+.tap-head-copy { min-width: 0; }
+.tap-head-copy strong { display: block; font-size: 14px; line-height: 1.4; }
+.tap-head-copy p {
+  margin: 5px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+
+/*
+ * The availability pill. It ANSWERS rather than decorates: on iOS this says
+ * "not available, use the code", which is the advice that actually helps.
+ */
+.tap-nfc {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 4px 9px;
+  border: 1px solid var(--tap-line);
+  border-radius: 999px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text-1) 4%, transparent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.tap-nfc > i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.tap-nfc.is-on {
+  border-color: color-mix(in srgb, var(--tap-mint) 32%, transparent);
+  color: var(--tap-mint);
+  background: color-mix(in srgb, var(--tap-mint) 9%, transparent);
+}
+.tap-nfc.is-on > i { background: var(--tap-mint); box-shadow: 0 0 8px color-mix(in srgb, var(--tap-mint) 60%, transparent); }
+.tap-nfc.is-off {
+  border-color: color-mix(in srgb, var(--tap-amber) 30%, transparent);
+  color: color-mix(in srgb, var(--tap-amber) 88%, var(--text-1));
+  background: color-mix(in srgb, var(--tap-amber) 8%, transparent);
+}
+.tap-nfc.is-off > i { background: var(--tap-amber); }
+
+/* ── mode switch ─────────────────────────────────────────────────────────── */
+
+.tap-modes.segmented {
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--tap-line);
+  border-radius: 17px;
+  background: var(--tap-surface);
+}
+/*
+ * Two classes, not one. index.css's `.segmented button` is equally specific,
+ * and it gives the active segment a near-white background with black text as a
+ * fallback for screens that forgot the indicator pill. This control HAS the
+ * pill, the pill is `z-index: -1` inside the button (so it paints ON TOP of the
+ * button's own background), and that fallback would therefore hide it.
+ */
+.tap-modes.segmented button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 13px;
+  font-size: 12px;
+  font-weight: 750;
+  transition: color 180ms ease;
+}
+.tap-modes.segmented button.active,
+:root[data-theme='light'] .tap-modes.segmented button.active {
+  background: transparent;
+  color: var(--tap-mode-ink);
+}
+.tap-modes.segmented button:not(.active):hover { color: var(--text-1); }
+.tap-modes .seg-indicator { border-radius: 12px; background: var(--tap-mode-fill); }
+.tap-mode-icon {
+  position: relative;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+}
+
+/* ── body ────────────────────────────────────────────────────────────────── */
+
+.tap-body { display: grid; gap: 12px; min-width: 0; }
+
+/*
+ * THE CODE. `.tap-qr-button` wraps the FancyQr stage so the whole thing is one
+ * tap target: enlarging is the one action everybody wants within three
+ * seconds of standing next to someone.
+ */
+.tap-stage { display: flex; justify-content: center; }
+.tap-qr-button {
+  display: block;
+  width: 100%;
+  max-width: 300px;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 180ms ease;
+}
+.tap-qr-button:hover { transform: translateY(-2px); }
+.tap-qr-button:focus-visible {
+  outline: 2px solid var(--tap-cyan);
+  outline-offset: 6px;
+}
+.tap-qr-button .fqr-stage { margin: 0 auto 8px; }
+
+.tap-zoom-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px dashed color-mix(in srgb, var(--tap-cyan) 34%, transparent);
+  border-radius: 999px;
+  color: var(--tap-cyan);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+/* The network chip — the fact that used to be missing entirely. */
+.tap-network {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--tap-mint) 26%, var(--tap-line));
+  border-radius: 15px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--tap-mint) 8%, transparent), transparent 70%),
+    var(--tap-surface);
+}
+.tap-network-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  color: var(--tap-mint);
+  background: color-mix(in srgb, var(--tap-mint) 12%, transparent);
+}
+.tap-network-copy { min-width: 0; display: grid; gap: 1px; }
+.tap-network-copy b { font-size: 12.5px; font-weight: 800; }
+.tap-network-copy span { color: var(--text-3); font-size: 10.5px; line-height: 1.5; }
+
+/* The requested amount, and whether it travelled inside the code. */
+.tap-request {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--tap-violet) 28%, var(--tap-line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tap-violet) 8%, var(--tap-surface));
+  font-size: 11.5px;
+}
+.tap-request strong { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
+.tap-request span { color: var(--text-2); font-size: 10.5px; line-height: 1.55; }
+.tap-request.is-in-code {
+  border-color: color-mix(in srgb, var(--tap-mint) 30%, var(--tap-line));
+  background: color-mix(in srgb, var(--tap-mint) 8%, var(--tap-surface));
+}
+
+.tap-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.tap-actions .btn { gap: 6px; }
+
+.tap-raw {
+  padding: 9px 11px;
+  border: 1px solid var(--tap-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tap-solid) 55%, transparent);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: center;
+  word-break: break-all;
+}
+
+.tap-help,
+.tap-reason,
+.tap-scanning-note {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+.tap-reason { color: var(--text-2); }
+
+/* ── the watch block ─────────────────────────────────────────────────────── */
+
+.tap-watch {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--tap-line);
+  border-radius: 16px;
+  background: var(--tap-surface);
+}
+.tap-watch-row { display: flex; gap: 8px; }
+.tap-watch-field { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.tap-watch-field > span {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+}
+.tap-watch-field select,
+.tap-watch-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  border: 1px solid var(--tap-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tap-solid) 60%, transparent);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+}
+.tap-watch-field select:focus,
+.tap-watch-field input:focus {
+  outline: 2px solid color-mix(in srgb, var(--tap-cyan) 60%, transparent);
+  outline-offset: 1px;
+  border-color: var(--tap-cyan);
+}
+.tap-watch-amount { flex: 0 0 40%; }
+
+.tap-watching {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+.tap-watching-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--tap-mint);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tap-mint) 14%, transparent);
+}
+.tap-watching.is-idle { color: var(--text-3); }
+.tap-watching.is-idle .tap-watching-dot { background: var(--text-3); box-shadow: none; }
+
+/*
+ * The elapsed clock. `font-variant-numeric` and a fixed-width font stop the
+ * row reflowing every second, which on a phone reads as a twitch.
+ */
+.tap-clock {
+  margin-inline-start: auto;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--tap-cyan);
+}
+.tap-watch-hint { margin: 0; color: var(--text-3); font-size: 10px; line-height: 1.7; }
+
+/* ── pay side ────────────────────────────────────────────────────────────── */
+
+.tap-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 50px;
+  border-radius: 15px;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+/*
+ * The NFC button carries the radar while it is listening. Two things make it
+ * feedback rather than decoration: it runs ONLY during an active scan (30s
+ * timeout in readNfcAddress), and the rings expand outward and fade — a
+ * sonar, not a blinking lamp.
+ */
+.tap-nfc-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 50px;
+  border-radius: 15px;
+  font-size: 13px;
+  font-weight: 750;
+  overflow: hidden;
+}
+.tap-nfc-btn.is-scanning {
+  border-color: color-mix(in srgb, var(--tap-cyan) 55%, transparent);
+  color: var(--tap-cyan);
+  background: color-mix(in srgb, var(--tap-cyan) 10%, transparent);
+}
+.tap-radar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.tap-radar i {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--tap-cyan);
+  border-radius: 50%;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tap-radar i { animation: tap-radar 2.6s cubic-bezier(0.16, 0.7, 0.3, 1) infinite; }
+  .tap-radar i:nth-child(2) { animation-delay: 0.85s; }
+  .tap-radar i:nth-child(3) { animation-delay: 1.7s; }
+}
+@keyframes tap-radar {
+  0% { transform: scale(0.35); opacity: 0.75; }
+  70% { opacity: 0.12; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.tap-nfc-label { position: relative; z-index: 1; }
+
+.tap-or-label { color: var(--text-3); font-size: 10px; letter-spacing: 0.05em; }
+.tap-paste-row { display: flex; gap: 8px; }
+.tap-paste-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid var(--tap-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tap-solid) 60%, transparent);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+}
+.tap-paste-row input:focus {
+  outline: 2px solid color-mix(in srgb, var(--tap-cyan) 60%, transparent);
+  outline-offset: 1px;
+  border-color: var(--tap-cyan);
+}
+.tap-paste-row .btn { flex: 0 0 auto; align-self: stretch; }
+
+/* The address we captured, and the warning that matters. */
+.tap-got {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--tap-mint) 28%, var(--tap-line));
+  border-radius: 16px;
+  background:
+    linear-gradient(140deg, color-mix(in srgb, var(--tap-mint) 9%, transparent), transparent 60%),
+    var(--tap-surface);
+}
+.tap-got-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.tap-got-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  color: var(--tap-mint);
+  background: color-mix(in srgb, var(--tap-mint) 13%, transparent);
+}
+.tap-got-addr {
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+.tap-got-request {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 750;
+}
+.tap-got-warn {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--tap-rose) 34%, transparent);
+  border-radius: 12px;
+  color: var(--tap-rose);
+  background: color-mix(in srgb, var(--tap-rose) 10%, transparent);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.tap-got-note { margin: 0; color: var(--text-3); font-size: 10.5px; line-height: 1.75; }
+
+/* ── the enlarged code, inside the sheet ─────────────────────────────────── */
+
+.tap-zoom { display: grid; gap: 10px; justify-items: center; text-align: center; }
+.tap-zoom .fqr-stage { width: 100%; }
+.tap-zoom .fqr-frame { width: min(300px, 74vw); }
+.tap-zoom-qr { padding: 18px; }
+.tap-zoom-amount {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 850;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.tap-zoom-net { margin: 0; color: var(--text-2); font-size: 12px; }
+.tap-zoom-net b { color: var(--text-1); }
+.tap-zoom-raw {
+  margin: 0;
+  max-width: 100%;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+/* ── responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 420px) {
+  .tap-watch-row { flex-direction: column; }
+  .tap-watch-amount { flex: 1; }
+  .tap-actions .btn { flex: 1 1 auto; }
+  .tap-modes.segmented button { font-size: 11.5px; padding-inline: 6px; }
+}
+
+/* ── reduced motion: the radar parks, nothing else on this surface moves ──── */
+
+@media (prefers-reduced-motion: reduce) {
+  .tap-radar i { animation: none; }
+  .tap-qr-button { transition: none; }
+  .tap-qr-button:hover { transform: none; }
+}

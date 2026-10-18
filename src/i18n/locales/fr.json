@@ -3643,5 +3643,57 @@
         "step3": "Track live execution progress and receive instant push notifications"
       }
     }
+  },
+  "tap": {
+    "title": "Payer en approchant le téléphone",
+    "intro": "Vous êtes à côté de quelqu'un ? Partagez l'adresse en approchant les téléphones ou en montrant un code au lieu de taper 42 caractères. Vous confirmez chaque transfert dans votre propre portefeuille : la proximité seule n'envoie rien.",
+    "iReceive": "Je reçois",
+    "iPay": "Je paie",
+    "showThis": "Montrez ceci à l'autre téléphone",
+    "receiveHelp": "L'autre personne scanne ce code ou approche les téléphones si son Android le permet. C'est une adresse de réception publique : la montrer est sans risque.",
+    "connectFirst": "Connectez d'abord votre portefeuille pour savoir quelle adresse afficher.",
+    "startScan": "Approchez l'autre téléphone",
+    "holdNear": "Approchez les téléphones…",
+    "orPaste": "Ou collez son adresse",
+    "gotAddress": "Reçu : paiement à {{addr}}",
+    "nothingSentYet": "Rien n'a encore été envoyé. L'adresse est remplie ; votre portefeuille vous demandera de confirmer le montant et la destination avant que quoi que ce soit bouge.",
+    "reason": {
+      "IOS_UNSUPPORTED": "L'iPhone n'autorise pas les sites à utiliser le NFC : Apple ne l'a jamais ajouté. Utilisez le code à la place ; il fonctionne exactement de la même façon.",
+      "DESKTOP_UNSUPPORTED": "Le NFC nécessite un téléphone. Sur un ordinateur, utilisez le code.",
+      "BROWSER_UNSUPPORTED": "Ce navigateur ne prend pas en charge le NFC. Chrome sur Android oui — ou utilisez simplement le code, qui fonctionne toujours.",
+      "NO_WINDOW": "Le NFC n'est pas disponible ici. Utilisez le code à la place."
+    },
+    "err": {
+      "NFC_DENIED": "L'autorisation NFC a été refusée. Activez-la dans les réglages du navigateur ou utilisez le code.",
+      "NFC_TIMEOUT": "Aucune puce détectée. Approchez les téléphones dos à dos, partie haute contre partie haute.",
+      "NO_ADDRESS_ON_TAG": "Cette puce ne contenait pas d'adresse de portefeuille.",
+      "NFC_READ_FAILED": "Impossible de lire la puce. Réessayez.",
+      "NFC_SCAN_FAILED": "Le NFC n'a pas pu démarrer. Utilisez le code à la place.",
+      "BAD_ADDRESS": "Ce n'est pas une adresse de portefeuille valide. Vérifiez-la caractère par caractère : un transfert vers une mauvaise adresse ne peut pas être annulé.",
+      "CANCELLED": "Annulé."
+    },
+    "scanCode": "Scannez son code",
+    "received": "Reçu",
+    "watching": "En attente du paiement…",
+    "watchHint": "Laissez cette page ouverte. Vous verrez la confirmation dès qu'il arrivera.",
+    "nfcYes": "Le NFC fonctionne sur ce téléphone : vous pouvez approcher les téléphones au lieu de scanner.",
+    "nfcNo": "Le NFC n'est pas disponible sur cet appareil : utilisez le code. Il fonctionne exactement de la même façon.",
+    "watchAsset": "Quel actif surveiller ?",
+    "share": "Partager",
+    "copyLink": "Copier le lien",
+    "copyAddress": "Copier l'adresse",
+    "enlarge": "Agrandir le code",
+    "enlargeHint": "Touchez pour agrandir",
+    "network": "Réseau",
+    "networkHint": "Les deux téléphones doivent utiliser ce même réseau.",
+    "amount": "Montant (facultatif)",
+    "amountPlaceholder": "0,00",
+    "amountInCode": "inclus dans le code : la plupart des portefeuilles le pré-remplissent",
+    "amountOnScreenOnly": "affiché à l'écran uniquement : les portefeuilles ne lisent pas les montants de jetons dans ce code, convenez-en en personne",
+    "nativeCoin": "pièce native du réseau",
+    "watchOffline": "Pas de surveillance : cet onglet doit rester ouvert",
+    "scanningHint": "Approchez le dos des téléphones, partie haute contre partie haute.",
+    "theyAsk": "Ils demandent {{amount}}",
+    "chainMismatch": "Cette adresse est sur {{theirs}} et vous êtes sur {{mine}}. Envoyer sur le mauvais réseau fait généralement perdre les fonds."
   }
 }

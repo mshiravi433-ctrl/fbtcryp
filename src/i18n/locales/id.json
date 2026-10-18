@@ -3643,5 +3643,57 @@
         "step3": "Track live execution progress and receive instant push notifications"
       }
     }
+  },
+  "tap": {
+    "title": "Bayar dengan mendekatkan ponsel",
+    "intro": "Berdiri di sebelah seseorang? Bagikan alamat dengan mendekatkan ponsel atau menunjukkan kode, bukan mengetik 42 karakter. Anda tetap mengonfirmasi setiap transfer di dompet Anda sendiri — kedekatan saja tidak mengirim apa pun.",
+    "iReceive": "Saya menerima",
+    "iPay": "Saya membayar",
+    "showThis": "Tunjukkan ini ke ponsel lain",
+    "receiveHelp": "Orang lain memindai kode ini, atau mendekatkan ponsel jika Android-nya mendukung. Ini adalah alamat penerimaan publik — aman untuk ditunjukkan.",
+    "connectFirst": "Sambungkan dompet Anda dulu agar kami tahu alamat mana yang ditampilkan.",
+    "startScan": "Dekatkan ponsel lain",
+    "holdNear": "Dekatkan kedua ponsel…",
+    "orPaste": "Atau tempel alamat mereka",
+    "gotAddress": "Siap — membayar ke {{addr}}",
+    "nothingSentYet": "Belum ada yang dikirim. Alamat sudah terisi; dompet Anda akan meminta konfirmasi jumlah dan tujuan sebelum apa pun berpindah.",
+    "reason": {
+      "IOS_UNSUPPORTED": "iPhone tidak mengizinkan situs web memakai NFC — Apple tidak pernah menambahkannya. Gunakan kode saja; cara kerjanya sama persis.",
+      "DESKTOP_UNSUPPORTED": "NFC butuh ponsel. Di komputer, gunakan kode.",
+      "BROWSER_UNSUPPORTED": "Browser ini tidak mendukung NFC. Chrome di Android mendukung — atau gunakan saja kode, yang selalu berfungsi.",
+      "NO_WINDOW": "NFC tidak tersedia di sini. Gunakan kode."
+    },
+    "err": {
+      "NFC_DENIED": "Izin NFC ditolak. Aktifkan di pengaturan browser atau gunakan kode.",
+      "NFC_TIMEOUT": "Tidak ada tag terdeteksi. Coba tempelkan ponsel saling membelakangi, bagian atas berhadapan dengan bagian atas.",
+      "NO_ADDRESS_ON_TAG": "Tag itu tidak berisi alamat dompet.",
+      "NFC_READ_FAILED": "Tidak dapat membaca tag. Coba lagi.",
+      "NFC_SCAN_FAILED": "NFC tidak dapat dimulai. Gunakan kode.",
+      "BAD_ADDRESS": "Itu bukan alamat dompet yang valid. Periksa karakter demi karakter — transfer ke alamat yang salah tidak dapat dibatalkan.",
+      "CANCELLED": "Dibatalkan."
+    },
+    "scanCode": "Pindai kode mereka",
+    "received": "Diterima",
+    "watching": "Menunggu pembayaran…",
+    "watchHint": "Biarkan ini terbuka. Anda akan melihat konfirmasi begitu pembayaran tiba.",
+    "nfcYes": "NFC berfungsi di ponsel ini — Anda bisa mendekatkan ponsel, bukan memindai.",
+    "nfcNo": "NFC tidak tersedia di perangkat ini, jadi gunakan kode. Cara kerjanya sama persis.",
+    "watchAsset": "Aset mana yang dipantau?",
+    "share": "Bagikan",
+    "copyLink": "Salin tautan",
+    "copyAddress": "Salin alamat",
+    "enlarge": "Perbesar kode",
+    "enlargeHint": "Ketuk untuk memperbesar",
+    "network": "Jaringan",
+    "networkHint": "Kedua ponsel harus menggunakan jaringan yang sama.",
+    "amount": "Jumlah (opsional)",
+    "amountPlaceholder": "0,00",
+    "amountInCode": "terbawa di dalam kode — kebanyakan dompet mengisinya otomatis",
+    "amountOnScreenOnly": "hanya ditampilkan di layar — dompet tidak membaca jumlah token dari kode ini, jadi sepakati langsung",
+    "nativeCoin": "koin asli jaringan",
+    "watchOffline": "Tidak memantau — tab ini harus tetap terbuka",
+    "scanningHint": "Tempelkan bagian belakang ponsel, bagian atas berhadapan dengan bagian atas.",
+    "theyAsk": "Mereka meminta {{amount}}",
+    "chainMismatch": "Alamat itu ada di {{theirs}} dan Anda ada di {{mine}}. Mengirim di jaringan yang salah biasanya menghilangkan dana."
   }
 }
