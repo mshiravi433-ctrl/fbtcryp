@@ -14,6 +14,7 @@ import {
   IconArrowUpRight, IconCard, IconCheck, IconChevronLeft, IconShield, IconSwap, IconTrend, IconWallet
 } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
+import { useStill } from '../components/AnimatedIcon';
 import PayGatewayPanel from '../components/PayGatewayPanel';
 import '../styles/pay-gateway.css';
 import '../styles/p2p-modern.css';
@@ -25,6 +26,7 @@ const SCAMS = ['reversal', 'thirdParty', 'offPlatform', 'overpay'];
 export default function P2P() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const still = useStill();
   const { haptic } = useTelegram();
   const wallet = useWallet();
   const [tab, setTab] = useState('market');
@@ -54,7 +56,7 @@ export default function P2P() {
 
   return (
     <PageTransition>
-      <div className="p2p-page">
+      <div className={`p2p-page${still ? ' is-still' : ''}`}>
         <motion.header className="p2p-hero" variants={riseIn} initial="hidden" animate="show">
           <div className="p2p-hero-orbit p2p-hero-orbit-one" aria-hidden="true" />
           <div className="p2p-hero-orbit p2p-hero-orbit-two" aria-hidden="true" />
@@ -64,6 +66,11 @@ export default function P2P() {
                 <IconChevronLeft width={18} height={18} />
               </button>
               <span className="p2p-eyebrow"><span className="p2p-eyebrow-dot" />{t('p2p.eyebrow')}</span>
+            </div>
+            <div className="p2p-hero-route" aria-hidden="true">
+              <span><IconWallet width={13} height={13} />{t('p2p.tab.otc')}</span>
+              <i /><IconSwap width={14} height={14} /><i />
+              <span><IconCard width={13} height={13} />{t('p2p.tab.pay')}</span>
             </div>
             <h1 className="p2p-title">{t('p2p.title')}</h1>
             <p className="p2p-subtitle">{t('p2p.subtitle')}</p>

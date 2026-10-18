@@ -608,3 +608,24 @@
   .p2p-main-tabs button:hover,
   .p2p-page .p2pm-card:not(.skel):hover { transform: none; }
 }
+
+/* Midnight / glacier desk. The hero is a single surface, not nested glass. */
+.p2p-page { --p2p-cyan: #80d8ff; --p2p-mint: #99ecd0; --p2p-violet: #c5b5ff; --p2p-tab-gradient: linear-gradient(120deg, #b6efff, #d2c9ff); }
+.p2p-hero { min-height: 224px; padding: 27px; border-radius: 30px; background: radial-gradient(ellipse at 100% 25%, #213967 0%, transparent 55%), linear-gradient(120deg, #101b31, #191d39 70%, #252340); }
+.p2p-hero::before { background-size: 48px 48px; opacity: .1; }
+.p2p-hero-route { display: flex; align-items: center; gap: 8px; max-width: 290px; margin-block: 16px 13px; color: var(--p2p-hero-muted); font-size: 10px; }
+.p2p-hero-route span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.p2p-hero-route i { height: 1px; flex: 1; background: currentColor; opacity: .35; }
+.p2p-hero-footnote { padding-top: 13px; border-top: 1px solid rgba(160, 200, 255, .15); }
+.p2p-hero-mark-icon { width: 70px; height: 70px; border-radius: 24px; background: linear-gradient(140deg, #314970, #34345c); color: #d5eeff; }
+.p2p-main-tabs.segmented { gap: 5px; padding: 6px; border: 1px solid var(--line); border-radius: 22px; background: var(--bg-panel); }
+.p2p-main-tabs button { border-color: transparent; box-shadow: none; background: transparent; border-radius: 16px; }
+.p2p-main-tabs .p2p-tab-indicator { border-radius: 15px; }
+.p2p-tab-icon { border: 0; background: color-mix(in srgb, currentColor 8%, transparent); }
+.p2p-main-tabs button.active { box-shadow: 0 4px 16px -10px #88caff; }
+.p2p-page.is-still .p2p-hero-mark-ring { animation: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .p2p-page:not(.is-still) .p2p-hero-mark-icon { animation: p2p-desk-float 7s ease-in-out infinite; }
+}
+@keyframes p2p-desk-float { 0%, 100% { transform: translateY(0) rotate(-7deg); } 50% { transform: translateY(-5px) rotate(-3deg); } }
+@media (max-width: 520px) { .p2p-hero { min-height: 210px; padding: 19px 16px; gap: 10px; border-radius: 24px; } .p2p-hero-mark { margin-inline-end: 0; } .p2p-hero-mark-icon { width: 47px; height: 47px; border-radius: 16px; } .p2p-hero-route { font-size: 9px; gap: 5px; } .p2p-main-tabs button { flex-direction: column; gap: 5px; padding: 9px 4px; min-height: 75px; } .p2p-main-tabs.segmented { border-radius: 19px; gap: 3px; } }

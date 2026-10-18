@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useStill } from './AnimatedIcon';
 import { isNativeShell } from '../lib/nativeShell';
@@ -208,7 +207,7 @@ export function SignalsHeroScene({ active = true }) {
   const poster = String(import.meta.env?.VITE_SIGNALS_HERO_POSTER ?? '').trim() || undefined;
   const credit = resolveHeroCredit();
   /* Opt-out, native shell and data-saving connections use the drawn scene. */
-  const wantFilm = Boolean(film) && !native && !cheap;
+  const wantFilm = Boolean(film) && !native && !cheap && !android;
 
   const [setHostNode, onScreen] = useOnScreen();
   const videoRef = useRef(null);
@@ -481,33 +480,23 @@ export function SignalsHeroWords({ className = '', slotLabel }) {
   const row = slots[i];
 
   return (
-    <span ref={setHostNode} className={`sigh-words ${className}`.trim()}>
+    <span ref={setHostNode} className={`sigh-words${still ? ' is-still' : ''} ${className}`.trim()}>
       <span
         className="sigh-words-slot"
         aria-live="polite"
         aria-atomic="true"
         aria-label={slotLabel || t('signals.hero.aria')}
       >
-        {/*
-          The default (overlapping) mode is what a cross-fade needs: `mode="wait"`
-          would leave the slot empty for the whole fade, and `popLayout` would
-          pull the exiting word out of flow — both read as a blink rather than a
-          dissolve («با انیمیشن محو شود»).
-        */}
-        <AnimatePresence initial={false}>
-          <motion.span
-            key={row.key}
-            className={`sigh-word${row.title ? ' is-title' : ''}`}
-            data-testid="signals-hero-word"
-            data-title={row.title ? 'true' : 'false'}
-            initial={{ opacity: 0, y: still ? 0 : 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: still ? 0 : -4 }}
-            transition={{ duration: still ? 0 : HERO_FADE_MS / 1000, ease: [0.22, 1, 0.36, 1] }}
-          >
-            {row.text}
-          </motion.span>
-        </AnimatePresence>
+        {/* A plain, keyed glyph layer avoids Android's transparent text-clip
+            compositing bug. CSS fades the next phrase without a blank frame. */}
+        <span
+          key={row.key}
+          className={`sigh-word${row.title ? ' is-title' : ''}`}
+          data-testid="signals-hero-word"
+          data-title={row.title ? 'true' : 'false'}
+        >
+          {row.text}
+        </span>
       </span>
 
       {/*

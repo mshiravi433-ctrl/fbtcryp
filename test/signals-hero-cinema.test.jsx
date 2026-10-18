@@ -513,6 +513,13 @@ describe('the drawn scene (film switched off — VITE_SIGNALS_HERO_VIDEO=none)',
     expect(positions()).toBe(positions());
   });
 
+  it('does not mount or fetch a video decoder on Android', () => {
+    setUserAgent('Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126.0 Mobile');
+    const { container } = renderScene({ active: true });
+    settle();
+    expect(container.querySelector('video')).toBeNull();
+  });
+
   it('uses a lighter static SVG sky on Android but keeps the iPhone scene intact', () => {
     setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36');
     const android = renderScene();
@@ -753,7 +760,7 @@ describe('the stylesheet keeps its performance promises', () => {
   });
 
   it('cross-fades the film at exactly the speed the JS constant says', () => {
-    /* The WORD fade is a framer-motion transition built from HERO_FADE_MS; the
+    /* The WORD fade is a CSS opacity transition matching HERO_FADE_MS; the
        FILM fade is this rule. Both halves of «با انیمیشن محو می‌شود», each
        pinned to a constant the other file can read. */
     expect(HERO_FADE_MS).toBeGreaterThan(0);
@@ -767,14 +774,22 @@ describe('the stylesheet keeps its performance promises', () => {
   it('gives the rotating line a fixed slot so a long phrase cannot move the hero', () => {
     const slot = css().match(/\.sigh-words-slot\s*\{[^}]*\}/)[0];
     expect(slot).toMatch(/height:\s*var\(--sigh-slot-h\)/);
-    expect(slot).toMatch(/flex:\s*1 1 0%/);
-    expect(slot).toMatch(/width:\s*0/);
+    expect(slot).toMatch(/min-width:\s*0/);
+    expect(slot).toMatch(/width:\s*100%/);
     const word = css().match(/\.sigh-word\s*\{[^}]*\}/)[0];
     expect(word).toMatch(/position:\s*absolute/);
     expect(word).toMatch(/width:\s*100%/);
     expect(word).toMatch(/white-space:\s*nowrap/);
     expect(word).toMatch(/text-overflow:\s*ellipsis/);
     expect(css()).toMatch(/--sigh-slot-h:\s*\d+px/);
+  });
+
+  it('uses opaque text and a full-panel absolute scene for Chromium RTL grids', () => {
+    expect(css()).toMatch(/grid-area:\s*auto/);
+    expect(css()).toMatch(/top:\s*0; right:\s*0; bottom:\s*0; left:\s*0/);
+    const title = css().match(/\.sigh-word\.is-title\s*\{[^}]*\}/)[0];
+    expect(title).toMatch(/-webkit-text-fill-color:\s*currentColor/);
+    expect(title).not.toMatch(/color:\s*transparent/);
   });
 
   it('fills the hero width and keeps Android motion to the phrase cycle', () => {

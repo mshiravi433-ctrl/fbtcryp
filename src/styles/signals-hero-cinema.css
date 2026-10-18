@@ -175,8 +175,8 @@
 .sigh-words-slot {
   position: relative;
   display: block;
-  flex: 1 1 0%;
-  width: 0;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   height: var(--sigh-slot-h);
 }
@@ -203,11 +203,11 @@
 /* Slot 0 is the hero's own sentence — «سیگنال هوشمند» — so it carries the
    brand wash instead of the plain ink the keywords use. */
 .sigh-word.is-title {
-  background: linear-gradient(94deg, #ffffff 8%, #8fe6ff 58%, #cbb6ff 96%);
+  background: none;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+  -webkit-text-fill-color: currentColor;
+  color: var(--sigh-ink);
   font-size: 12.5px;
   font-weight: 900;
   text-shadow: none;
@@ -385,4 +385,25 @@
 @media (max-width: 360px) {
   .sigh-ticks { display: none; }
   .sigh-words { gap: 5px; }
+}
+
+/* Explicit physical edges avoid older RTL Chromium grid containing-block bugs.
+   No glass/backdrop layer or decoded video is needed on Android. */
+.sic-page-hero.has-cinema > .sigh-scene {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  width: 100%; height: 100%;
+  grid-area: auto;
+}
+.sic-page-hero.has-cinema .sigh-words { display: grid; grid-template-columns: 5px minmax(0, 1fr) auto; }
+.sigh-word { animation: sigh-word-enter 420ms ease-out both; will-change: auto; }
+.sigh-words.is-still .sigh-word { animation: none; }
+@keyframes sigh-word-enter { from { opacity: .35; } to { opacity: 1; } }
+:root[data-theme='light'] .sigh-word.is-title { background: none; -webkit-text-fill-color: currentColor; }
+@media (prefers-reduced-motion: reduce) { .sigh-word { animation: none; } }
+@media (max-width: 600px) {
+  .sic-page-hero.has-cinema { --sigh-slot-h: 42px; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
+  .sic-page-hero.has-cinema .sigh-word { height: 42px; line-height: 21px; white-space: normal; display: flex; align-items: center; }
+  .sic-page-hero.has-cinema .sic-hero-icon { width: 40px; height: 40px; }
+  .sic-page-hero.has-cinema .sic-hero-status { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
 }
