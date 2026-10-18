@@ -89,6 +89,7 @@ const Perp = SPECULATION_ENABLED ? lazyRetry(() => import('./pages/Perp')) : () 
  */
 const SpotPage = SPOT_TRADE_ENABLED && !SPECULATION_ENABLED ? lazyRetry(() => import('./pages/SpotPage')) : () => null;
 const Farm = lazyRetry(() => import('./pages/Farm'));
+const Collective = lazyRetry(() => import('./pages/Collective/CollectiveDashboard'));
 const Signals = lazyRetry(() => import('./pages/Signals'));
 const Stocks = lazyRetry(() => import('./pages/Stocks'));
 /* Real-money Ostium order path. It is gated from store-safe builds with the
@@ -442,6 +443,7 @@ function AnimatedRoutes() {
             {SPECULATION_ENABLED && <Route path="/perp" element={<Perp />} />}
             {!SPECULATION_ENABLED && SPOT_TRADE_ENABLED && <Route path="/perp" element={<SpotPage />} />}
             <Route path="/farm" element={<Farm />} />
+            <Route path="/collective" element={<Collective />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/stocks" element={<Stocks />} />
             {SPECULATION_ENABLED && <Route path="/ostium" element={<Ostium />} />}

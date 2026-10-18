@@ -147,6 +147,7 @@ const GROUPS = [
   {
     id: 'earn',
     items: [
+      { to: '/collective', key: 'nav.collective', Icon: IconActivity, hue: 'var(--rgb-6)' },
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
       /*
        * Loan — lending & borrowing page.

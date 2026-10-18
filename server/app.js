@@ -7031,6 +7031,7 @@ app.use('/api/v1/rewards', lazyMount('rewards', () => import('./rewards/index.js
  * in v1 — real providers are wired after their docs/contracts are verified.
  */
 app.use('/api/insurance', lazyMount('insurance', () => import('./insurance/index.js').then((m) => m.insuranceRouter())));
+app.use('/api/collective', lazyMount('collective', () => import('./collective/collectiveRoutes.js').then((m) => m.default || m)));
 app.use('/api', lazyMount('protocol', () => import('./protocolRoutes.js').then((m) => m.protocolRouter)));
 
 /* ------------------------------ order watch -------------------------------- */
