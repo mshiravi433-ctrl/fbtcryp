@@ -3,7 +3,33 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { rampOptions } from '../lib/rampDirectory';
 import { openUrl } from '../lib/browser';
-import { IconChevronRight, IconExternal, IconShield } from './Icons';
+import {
+  IconArrowUpRight, IconCard, IconCheck, IconChevronRight, IconExternal, IconGlobe, IconShield, IconSwap
+} from './Icons';
+
+/* Local line-art marks: no remote logo request and no implied official badge. */
+const PROVIDER_MARKS = Object.freeze({
+  ramp: IconArrowUpRight,
+  swapzone: IconSwap,
+  guardarian: IconShield,
+  mercuryo: IconCard
+});
+
+const PROVIDER_ACCENTS = Object.freeze({
+  ramp: '#f08b73',
+  swapzone: '#a68cff',
+  guardarian: '#53d7b1',
+  mercuryo: '#68c7ee'
+});
+
+function ProviderMark({ id }) {
+  const Mark = PROVIDER_MARKS[id] || IconGlobe;
+  return (
+    <span className={`bsw-ramp-mark is-${id}`} aria-hidden="true">
+      <Mark width={21} height={21} />
+    </span>
+  );
+}
 
 /**
  * RAMP PROVIDER LIST — the doors that are actually open for THIS user.
@@ -101,14 +127,27 @@ export default function RampProviderList({
       {result.options.length > 0 ? (
         <div className="bsw-ramp-list" role="list">
           {result.options.map((option) => (
-            <div className={`bsw-ramp-row${option.id === result.recommended ? ' is-recommended' : ''}`} role="listitem" key={option.id}>
-              <div className="bsw-ramp-head">
-                <span className="bsw-ramp-name">{option.name}</span>
-                {option.id === result.recommended && <span className="bsw-ramp-pill">{t('buySell.ramp.recommended')}</span>}
+            <div
+              className={`bsw-ramp-row${option.id === result.recommended ? ' is-recommended' : ''}`}
+              role="listitem"
+              key={option.id}
+              data-provider={option.id}
+              style={{ '--bsw-provider-accent': PROVIDER_ACCENTS[option.id] || '#44d8d4' }}
+            >
+              <div className="bsw-ramp-card-top">
+                <ProviderMark id={option.id} />
+                <div className="bsw-ramp-brand">
+                  <div className="bsw-ramp-head">
+                    <span className="bsw-ramp-name">{option.name}</span>
+                    {option.id === result.recommended && <span className="bsw-ramp-pill">{t('buySell.ramp.recommended')}</span>}
+                  </div>
+                </div>
               </div>
-              <p className="bsw-ramp-note">{prefillNote(option)}</p>
-              <p className="bsw-ramp-note">{coverageNote(option)}</p>
-              <p className="bsw-ramp-note bsw-ramp-kyc">{t('buySell.ramp.kycNote')}</p>
+              <div className="bsw-ramp-notes">
+                <p className="bsw-ramp-note"><IconCheck width={13} height={13} aria-hidden="true" /><span>{prefillNote(option)}</span></p>
+                <p className="bsw-ramp-note"><IconGlobe width={13} height={13} aria-hidden="true" /><span>{coverageNote(option)}</span></p>
+                <p className="bsw-ramp-note bsw-ramp-kyc"><IconShield width={13} height={13} aria-hidden="true" /><span>{t('buySell.ramp.kycNote')}</span></p>
+              </div>
               <button
                 type="button"
                 className="btn btn-primary bsw-ramp-open"
@@ -116,7 +155,7 @@ export default function RampProviderList({
                 onClick={() => openExternal(option)}
               >
                 {t('buySell.ramp.open', { provider: option.name })}
-                <IconChevronRight width={16} height={16} />
+                <IconArrowUpRight width={16} height={16} />
               </button>
             </div>
           ))}

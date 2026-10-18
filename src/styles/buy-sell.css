@@ -416,28 +416,78 @@
    doors — they are shown, never hidden, because a user deserves to see that
    we checked and what the answer was. */
 .bsw-ramp { margin-top: 12px; }
-.bsw-ramp-list { display: grid; gap: 9px; margin-top: 10px; }
+.bsw-ramp-list { display: grid; gap: 10px; margin-top: 10px; }
 .bsw-ramp-row {
-  padding: 11px 12px;
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.09));
-  border-radius: 14px;
-  background: var(--bg-panel, rgba(255, 255, 255, 0.025));
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 20%, var(--line, rgba(255, 255, 255, 0.09)));
+  border-radius: 18px;
+  background:
+    radial-gradient(150px 100px at 100% 0%, color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 10%, transparent), transparent 72%),
+    linear-gradient(145deg, color-mix(in srgb, var(--text-1) 4%, transparent), transparent 55%),
+    var(--bg-panel, rgba(255, 255, 255, 0.025));
+  box-shadow: 0 10px 26px -22px rgba(0, 0, 0, 0.88), inset 0 1px 0 color-mix(in srgb, var(--text-1) 5%, transparent);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
-.bsw-ramp-row.is-recommended { border-color: rgba(0, 229, 255, 0.28); background: rgba(0, 229, 255, 0.045); }
-.bsw-ramp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.bsw-ramp-name { color: var(--text-1); font-size: 12.4px; font-weight: 800; }
+.bsw-ramp-row::before {
+  content: '';
+  position: absolute;
+  inset-block: 13px;
+  inset-inline-start: 0;
+  z-index: 0;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--bsw-provider-accent, var(--rgb-1)), color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 18%, transparent));
+}
+.bsw-ramp-row:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 40%, var(--line-strong));
+}
+.bsw-ramp-row.is-recommended {
+  border-color: color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 44%, var(--line));
+  box-shadow: 0 12px 28px -22px color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--text-1) 6%, transparent);
+}
+.bsw-ramp-card-top { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; min-width: 0; }
+.bsw-ramp-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 36%, transparent);
+  border-radius: 14px;
+  color: var(--bsw-provider-accent, var(--rgb-1));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 17%, var(--bg-panel)), color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 5%, var(--bg-panel)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+}
+.bsw-ramp-mark svg { display: block; }
+.bsw-ramp-brand { flex: 1; min-width: 0; }
+.bsw-ramp-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.bsw-ramp-name { color: var(--text-1); font-size: 13px; font-weight: 850; letter-spacing: -0.01em; }
 .bsw-ramp-pill {
   flex: 0 0 auto;
-  padding: 2px 8px;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 30%, transparent);
   border-radius: 999px;
-  background: rgba(0, 229, 255, 0.14);
-  color: var(--rgb-4, var(--up));
-  font-size: 9.5px;
-  font-weight: 800;
+  background: color-mix(in srgb, var(--bsw-provider-accent, var(--rgb-1)) 11%, transparent);
+  color: var(--bsw-provider-accent, var(--rgb-4, var(--up)));
+  font-size: 9px;
+  font-weight: 850;
 }
-.bsw-ramp-note { margin: 5px 0 0; color: var(--text-3); font-size: 10.8px; line-height: 1.7; }
-.bsw-ramp-kyc { color: var(--text-3); opacity: .85; }
-.bsw-ramp-open { width: 100%; min-height: 40px; margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; }
+.bsw-ramp-notes { position: relative; z-index: 1; display: grid; gap: 6px; padding-inline-start: 2px; }
+.bsw-ramp-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--text-3); font-size: 10.8px; line-height: 1.65; }
+.bsw-ramp-note > svg { flex: 0 0 13px; margin-top: 2px; color: var(--bsw-provider-accent, var(--rgb-1)); }
+.bsw-ramp-note > span { min-width: 0; }
+.bsw-ramp-kyc { color: var(--text-3); opacity: .9; }
+.bsw-ramp-kyc > svg { color: var(--text-3); }
+.bsw-ramp-open { width: 100%; min-height: 43px; margin-top: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; font-size: 12px; font-weight: 800; }
+.bsw-ramp-open svg { flex: 0 0 auto; transition: transform 150ms ease; }
+.bsw-ramp-open:hover:not(:disabled) svg { transform: translate(1px, -1px); }
 .bsw-ramp-empty { margin-top: 10px; padding: 11px 12px; border: 1px solid rgba(255, 176, 32, .28); border-radius: 14px; background: rgba(255, 176, 32, .07); }
 .bsw-ramp-empty p { margin: 0; color: var(--text-2); font-size: 11.4px; line-height: 1.8; }
 .bsw-ramp-empty p b { display: block; color: var(--text-1); font-size: 12.2px; margin-bottom: 3px; }
@@ -470,9 +520,20 @@
 /* Light theme: the ramp cards are the only new surface on this screen, so the
    same trap applies — every border above is a token, and the pill keeps its
    accent instead of turning into a white box. */
-:root[data-theme='light'] .bsw-ramp-row { background: #f6f8fc; border-color: rgba(15, 23, 42, 0.14); }
-:root[data-theme='light'] .bsw-ramp-row.is-recommended { background: #eaf7ff; border-color: rgba(14, 116, 144, .45); }
-:root[data-theme='light'] .bsw-ramp-pill { background: rgba(14, 116, 144, .14); color: #0b3b52; }
+:root[data-theme='light'] .bsw-ramp-row {
+  border-color: color-mix(in srgb, var(--bsw-provider-accent, #0e7490) 28%, rgba(15, 23, 42, 0.12));
+  background:
+    radial-gradient(150px 100px at 100% 0%, color-mix(in srgb, var(--bsw-provider-accent, #0e7490) 8%, transparent), transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 253, 0.96));
+  box-shadow: 0 12px 25px -23px rgba(15, 23, 42, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+:root[data-theme='light'] .bsw-ramp-row.is-recommended {
+  border-color: color-mix(in srgb, var(--bsw-provider-accent, #0e7490) 50%, rgba(15, 23, 42, 0.12));
+  background:
+    radial-gradient(150px 100px at 100% 0%, color-mix(in srgb, var(--bsw-provider-accent, #0e7490) 11%, transparent), transparent 72%),
+    linear-gradient(145deg, #ffffff, #f5fbff);
+}
+:root[data-theme='light'] .bsw-ramp-pill { background: color-mix(in srgb, var(--bsw-provider-accent, #0e7490) 11%, white); color: #17354a; }
 :root[data-theme='light'] .bsw-ramp-note,
 :root[data-theme='light'] .bsw-ramp-closed li { color: #475569; }
 :root[data-theme='light'] .bsw-ramp-empty { background: rgba(180, 83, 9, .08); border-color: rgba(180, 83, 9, .35); }
@@ -481,3 +542,9 @@
 :root[data-theme='light'] .bsw-ramp-p2p-row { border-color: rgba(15, 23, 42, 0.14); color: #334155; }
 :root[data-theme='light'] .bsw-ramp-p2p-row:hover:not(:disabled) { background: #eef6fb; border-color: rgba(14, 116, 144, .4); }
 :root[data-theme='light'] .bsw-ramp-p2p-note { color: #475569; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bsw-ramp-row,
+  .bsw-ramp-open svg { transition: none; }
+  .bsw-ramp-row:hover { transform: none; }
+}

@@ -246,6 +246,14 @@ export async function run(container) {
       }));
     t('every listed door states what is pre-filled and who does the KYC',
       rampRows().every((row) => row.querySelectorAll('.bsw-ramp-note').length >= 2));
+    t('each provider card has its own local SVG mark and provider identity',
+      rampRows().every((row) => row.dataset.provider && row.querySelector('.bsw-ramp-mark svg')));
+    t('provider cards have distinct accents and the modern brand/notes hierarchy',
+      new Set(rampRows().map((row) => row.style.getPropertyValue('--bsw-provider-accent'))).size === rampRows().length
+        && rampRows().every((row) => row.querySelector('.bsw-ramp-card-top') && row.querySelector('.bsw-ramp-notes')));
+    t('provider notes and the checkout action carry meaningful icons',
+      rampRows().every((row) => row.querySelectorAll('.bsw-ramp-note svg').length === 3
+        && row.querySelector('.bsw-ramp-open svg')));
     t('doors that are closed are shown with a reason, never hidden',
       closedRows().every((row) => (row.querySelector('.bsw-ramp-closed-reason')?.textContent || '').trim().length > 2));
     t('the peer-to-peer rails are offered to everyone', p2pRows().length >= 3);
