@@ -877,9 +877,9 @@ describe('the stylesheet keeps its performance promises', () => {
   it('lays the band out as two rows: the ticker owns the full width of row 2', () => {
     /* The proportions contract. The phrase row spans every column, which is
        what lets one line hold the longest Persian sentence and keeps the
-       whole band ≈112–124px tall instead of stacking into ~160px. */
+       whole band ≈93–104px tall instead of stacking into ~160px. */
     expect(css()).toMatch(/\.sic-page-hero\.has-cinema > \.sigh-words\s*\{[^}]*grid-column:\s*1 \/ -1/);
-    expect(css()).toMatch(/--sigh-slot-h:\s*24px/);
+    expect(css()).toMatch(/--sigh-slot-h:\s*20px/);
     /* The live pill survives the narrow hero collapse in signals-intel.css —
        live/offline is information a phone keeps, in its compact form. */
     expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-status \{\s*display:\s*flex/);
@@ -982,6 +982,77 @@ describe('the stylesheet keeps its performance promises', () => {
   it("hands the hero's content a layer above the scene, and switches the old aurora off", () => {
     expect(css()).toMatch(/\.sic-page-hero\.has-cinema > \*:not\(\.sigh-scene\)\s*\{[^}]*z-index:\s*1/);
     expect(css()).toMatch(/\.sic-page-hero\.has-cinema::before\s*\{[^}]*animation:\s*none/);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5b. THE GLASS REFINEMENT — «طول باکس زیاده» + «پشت‌زمینه شیشه‌ای» + small SVG
+   (layered on the band: shorter, frosted, tighter sentences, smaller mark)
+   ══════════════════════════════════════════════════════════════════════════ */
+describe('the compact glass refinement of the band', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_SIGNALS_HERO_VIDEO', 'none');
+  });
+
+  it('paints the glass pane: veil, aurora and the etched wave over the scene', () => {
+    renderScene();
+    const scene = screen.getByTestId('signals-hero-scene');
+    /* The frosted pane is painted layers over film + cosmos: the veil
+       itself, the aurora glowing inside it, and the small signal wave
+       etched along the bottom. The band's one-pass sheen rides on top. */
+    expect(scene.querySelector('.sigh-glass')).not.toBeNull();
+    expect(scene.querySelector('.sigh-aurora')).not.toBeNull();
+    expect(scene.querySelector('.sigh-sheen')).not.toBeNull();
+    const wave = scene.querySelector('.sigh-wave svg');
+    expect(wave).not.toBeNull();
+    /* One tiled pulse path (plus its faint echo) — small, drawn once. */
+    expect(wave.querySelectorAll('path')).toHaveLength(2);
+    expect(wave.querySelector('path').getAttribute('d')).toMatch(/^M0 24/);
+  });
+
+  it('keeps the band SHORT and the sentences close: tight gaps, 20px slot', () => {
+    /* «طول باکس زیاده» + «فاصلهٔ جمله‌ها به هم نزدیک‌تر»: no banner
+       min-height anywhere, a 20px rotating slot, a 7px row gap and the two
+       copy lines on a 1px / 1.35 rhythm. */
+    expect(css()).not.toMatch(/min-height:\s*154px/);
+    expect(css()).toMatch(/--sigh-slot-h:\s*20px/);
+    expect(css()).toMatch(/row-gap:\s*7px/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-copy \.sic-hero-tagline \{[^}]*margin:\s*1px 0 0/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-copy \.sic-hero-tagline \{[^}]*line-height:\s*1\.35/);
+    expect(css()).toMatch(/\.sigh-words \{[^}]*min-height:\s*32px/);
+  });
+
+  it('keeps every SVG small: a 34px medallion mark and a 26px etched wave', () => {
+    /* «svg اندازه خیلی بزرگ نباشد» — the sigil is capped at 34px in a 44px
+       glass tile (was 42px in 54px, 45px in 58px on wide screens), the
+       per-phrase glyph chip is 20px, and the wave strip is a 26px garnish. */
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-icon \{[^}]*width:\s*44px/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \.sic-hero-icon svg \{[^}]*width:\s*34px/);
+    expect(css()).not.toMatch(/\.sic-hero-icon svg \{[^}]*width:\s*4[25]px/);
+    expect(css()).toMatch(/\.sigh-word-ic \{[^}]*width:\s*20px/);
+    expect(css()).toMatch(/\.sigh-wave \{[^}]*height:\s*26px/);
+  });
+
+  it('frosts the glass WITHOUT a backdrop blur, and re-directs the film on transform only', () => {
+    /* The pane is painted gradients + a hard top highlight; the film's slow
+       push-in and the wave's slide are `transform` keyframes, so the
+       performance law measured in section 5 still holds over the redesign. */
+    expect(css()).toMatch(/\.sigh-glass \{[^}]*inset 0 1px 0 rgba\(255, 255, 255, 0\.22\)/);
+    expect(css()).toMatch(/\.sic-page-hero\.has-cinema \{[^}]*rgba\(255, 255, 255, 0\.1\)[^}]*padding-box/);
+    expect(css()).toMatch(/@keyframes sigh-film-drift \{[^}]*scale\(1\.045\)/);
+    expect(css()).toMatch(/@keyframes sigh-wave-slide \{[\s\S]*?translate3d\(-50%, 0, 0\)/);
+    /* The new moving layers freeze with everything else. */
+    expect(css()).toMatch(/\.sigh-scene\.is-still \.sigh-wave \{ animation: none; will-change: auto; \}/);
+    expect(css()).toMatch(/\.sigh-scene\.is-android \.sigh-wave \{ animation: none; will-change: auto; \}/);
+    expect(css()).toMatch(/:root\[data-theme='light'\] \.sigh-glass \{/);
+  });
+
+  it('calms the medallion: one slow orbit, breathing rings on a longer cycle', () => {
+    /* «بازبینی انیمیشنی» — the satellite needed 9s per lap and the rings
+       pulsed every 2.8s; a header should breathe slower than it blinks. */
+    expect(css()).toMatch(/\.sigh-mark-orbit \{[^}]*animation:\s*sigh-orbit 14s/);
+    expect(css()).toMatch(/\.sigh-mark-ring \{[^}]*animation:\s*sigh-ring 3\.6s/);
+    expect(css()).toMatch(/\.sigh-neb \{[^}]*animation:\s*sigh-neb-drift 84s/);
   });
 });
 

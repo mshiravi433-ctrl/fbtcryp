@@ -29,6 +29,14 @@ import { isNativeShell } from '../lib/nativeShell';
  * the box is off-screen or the tab is hidden. An earlier build denied Android
  * browsers the film outright, which left most readers with a frozen sky;
  * that guard was written for a 4K stock clip that no longer ships.
+ *
+ * THE GLASS REFINEMENT («طول باکس زیاده، پس‌زمینه شیشه‌ای شود»): the band is
+ * tightened once more (≈104px desktop / ≈93px on a 390px phone) and the film
+ * now plays THROUGH a painted frosted pane — `.sigh-glass` (a translucent
+ * veil with a hard top highlight), `.sigh-aurora` glows moving inside it, a
+ * small `.sigh-wave` etched along the bottom edge and a slow push-in on the
+ * film itself. No backdrop blur anywhere: the glass is gradients, the film
+ * behind it supplies the softness a blur would fake.
  */
 
 /* The rotating line is the hero's own title plus four phrases. Slot 0 is the
@@ -190,6 +198,21 @@ function seeded(seed) {
   };
 }
 
+/**
+ * The signal wave etched along the bottom of the glass — one 200-unit pulse
+ * segment (flat → blip → spike → flat) repeated across an 800-unit strip.
+ * The strip is rendered at 200% width and slid by -50% in CSS (`transform`
+ * only, per the performance law), so the segment must tile seamlessly:
+ * every repeat starts and ends on the same baseline point. Built here, once,
+ * instead of hand-writing four copies of the same path in JSX.
+ */
+const HERO_WAVE_PATH = (() => {
+  const seg = (x) =>
+    `L${x + 44} 24 L${x + 54} 15 L${x + 63} 30 L${x + 70} 24 ` +
+    `L${x + 104} 24 L${x + 114} 7 L${x + 127} 35 L${x + 136} 24 L${x + 200} 24`;
+  return `M0 24 ${[0, 200, 400, 600].map(seg).join(' ')}`;
+})();
+
 function makeStars(count, seed) {
   const rand = seeded(seed);
   return Array.from({ length: count }, () => ({
@@ -201,7 +224,8 @@ function makeStars(count, seed) {
     /* Independent schedules. Without the random delay every star pulses
        together and the whole box reads as flickering. */
     delay: rand() * 6,
-    duration: 3.4 + rand() * 4.2,
+    // Calmer than the original sky: a quiet twinkle under glass, not a flicker.
+    duration: 4.8 + rand() * 5.2,
     dim: 0.2 + rand() * 0.5
   }));
 }
@@ -432,7 +456,33 @@ export function SignalsHeroScene({ active = true }) {
         />
       )}
 
+      {/* Aurora glows over the film: painted colour washes drifting a few
+          percent and back, so the light moves INSIDE the pane. */}
+      <div className="sigh-aurora" />
+
       <div className="sigh-vignette" />
+
+      {/* THE GLASS — a frosted veil painted over scene + film: translucent
+          white gradients and a hard top highlight. No backdrop blur (see the
+          performance law in the CSS); the film behind it is already soft. */}
+      <div className="sigh-glass" />
+
+      {/* A small live signal wave etched on the glass along the bottom edge,
+          glowing through the ticker's own glass bar above it. One tiled
+          path sliding on `transform` — a garnish, never a headline. */}
+      <div className="sigh-wave">
+        <svg viewBox="0 0 800 40" preserveAspectRatio="none" focusable="false">
+          <defs>
+            <linearGradient id={`${gid}-wave`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#00e5ff" />
+              <stop offset="52%" stopColor="#7c4dff" />
+              <stop offset="100%" stopColor="#ff2d95" />
+            </linearGradient>
+          </defs>
+          <path d={HERO_WAVE_PATH} fill="none" stroke={`url(#${gid}-wave)`} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+          <path d={HERO_WAVE_PATH} fill="none" stroke={`url(#${gid}-wave)`} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.16" transform="translate(0 5)" />
+        </svg>
+      </div>
 
       {/* Optional credit for an operator-supplied video. */}
       {wantFilm && filmLive && credit && <span className="sigh-credit">{credit}</span>}
