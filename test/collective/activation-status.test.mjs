@@ -29,6 +29,19 @@ const FACTORY = '0x1111111111111111111111111111111111111111';
 const ASSET = '0x3333333333333333333333333333333333333333';
 const RPC = 'https://rpc.example.test';
 
+const emptySnapshot = {
+  schema: 'fbt.collective.activation.snapshot.v1',
+  generatedAt: null,
+  source: 'uninitialized',
+  repo: 'mshiravi433-ctrl/fbtcryp',
+  commit: null,
+  workflow: 'collective-activation.yml',
+  run: null,
+  checks: [],
+  artifacts: [],
+  liveDeployment: null
+};
+
 const verifiedSnapshot = {
   schema: 'fbt.collective.activation.snapshot.v1',
   generatedAt: '2026-10-19T10:00:00.000Z',
@@ -72,7 +85,7 @@ test('unconfigured Collective reports run-deployment and never claims a live cha
   const payload = buildCollectiveActivationPayload({
     config: disabledConfig,
     pipeline: null,
-    snapshot: ACTIVATION_SNAPSHOT,
+    snapshot: emptySnapshot,
     now: () => '2026-10-19T10:00:00.000Z'
   });
   assert.equal(payload.schema, COLLECTIVE_ACTIVATION_SCHEMA);
@@ -224,7 +237,7 @@ test('a rate-limited or broken GitHub API falls back to the committed snapshot',
 test('a missing workflow file is reported as not installed, not as a green run', async () => {
   const status = createCollectiveActivationStatus({
     fetchImpl: async () => ({ ok: false, status: 404, json: async () => ({ message: 'Not Found' }) }),
-    snapshot: ACTIVATION_SNAPSHOT,
+    snapshot: emptySnapshot,
     cacheMs: 0
   });
   const payload = await status.get({ config: disabledConfig });
@@ -276,7 +289,7 @@ test('GET /api/collective/activation answers with the public payload', async () 
     get: async () => buildCollectiveActivationPayload({
       config: disabledConfig,
       pipeline: null,
-      snapshot: ACTIVATION_SNAPSHOT,
+      snapshot: emptySnapshot,
       now: () => '2026-10-19T10:00:00.000Z'
     })
   };
