@@ -1,94 +1,1456 @@
-/*
- * BRIDGE — the mode rail.
- * ---------------------------------------------------------------------------
- * ONE THING LIVES HERE NOW: `.brg-modes`, the four-way control that used to be
- * `.segmented seg-lg`.
- *
- * `*.brg-hero*` — the tron/solana carousel that was the top third of this page —
- * was deleted with its component. See the note where it used to be rendered in
- * pages/Bridge.jsx: it advertised two of the four tabs drawn immediately below
- * it, so the largest element on the screen repeated a control the user was
- * about to touch and pushed the bridge form under the fold. The advertising
- * slot it freed is now a Farm banner at the FOOT of the page
- * (styles/farm-promo.css).
- *
- * The rail is a NEW class rather than a restyle of `.segmented` on purpose:
- * fourteen other controls share `.segmented`, and changing its metrics to make
- * this one look like a product rail would have moved all fourteen. `.brg-modes`
- * keeps the same semantics (role="tablist", role="tab", aria-selected) and the
- * same visible labels, so nothing that reads the control has to change — it
- * just stops looking like a settings toggle.
- */
+/* ═══════════════════════════════════════════════════════════════════════════
+   BRIDGE — the redesigned cross-chain screen
+   (pages/Bridge.jsx; the sub-tab panels keep their logic and inherit the
+    surfaces from here)
 
-/* ─── the mode rail ──────────────────────────────────────────────────────── */
-.brg-modes {
+   ─── WHY THIS FILE IS SCOPED UNDER `.bridge-page` ──────────────────────────
+   `.brg-amount`, `.brg-quote`, `.brg-leg` and `.brg-out` are also used by the
+   Tron, Solana, dYdX, Ostium and Futures screens. Restyling those class names
+   globally to make one page look newer would have moved five other screens
+   with them. Every rule below that touches a shared class is prefixed with
+   `.bridge-page`, which raises its specificity above the base rule in
+   index.css and keeps the redesign exactly where it was asked for.
+
+   ─── THE LANGUAGE ──────────────────────────────────────────────────────────
+   One accent gradient (cyan → violet), used only for the mark, the primary
+   action and a selected state; hairline borders instead of drop shadows;
+   surfaces that are LIGHTER than the canvas rather than darker; numerals in
+   the mono face. The previous page stacked four bordered boxes with four
+   different backgrounds before the first input. This one has a head, a rail,
+   and a single ticket.
+
+   ─── PERFORMANCE ──────────────────────────────────────────────────────────
+   No `filter: blur()`, no `backdrop-filter` on this page (the shared
+   `.modern-select-trigger` blur is switched off below), and every continuous
+   motion is `transform`/`opacity` only. Reduced-motion stops all of them.
+
+   ─── RTL ──────────────────────────────────────────────────────────────────
+   Logical properties throughout (`inset-inline`, `margin-inline`, `padding-
+   inline`). No `left`/`right` in this file.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bridge-page {
+  --bx-ink: #eef3ff;
+  --bx-dim: #9aa4bf;
+  --bx-faint: #6b7695;
+  --bx-line: rgba(255, 255, 255, 0.085);
+  --bx-line-2: rgba(255, 255, 255, 0.055);
+  --bx-surface: rgba(255, 255, 255, 0.028);
+  --bx-surface-2: rgba(255, 255, 255, 0.05);
+  --bx-shell: #080b13;
+  --bx-ticket: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012) 24%, rgba(255, 255, 255, 0.02)) #080b13;
+  --bx-shadow:
+    0 20px 50px -36px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --bx-cyan: #35e0ff;
+  --bx-violet: #8b5cf6;
+  --bx-mint: #00ff9d;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+/* ─── THE HEAD ───────────────────────────────────────────────────────────── */
+
+.bridge-page .brg-head {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  align-items: center;
+  gap: 6px;
+  padding: 17px 18px 15px;
+  border: 1px solid var(--bx-line);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 150% at 100% 0%, rgba(53, 224, 255, 0.12), transparent 60%),
+    radial-gradient(110% 130% at 0% 100%, rgba(139, 92, 246, 0.13), transparent 58%),
+    var(--bx-ticket);
+  box-shadow: var(--bx-shadow);
+}
+
+/* a soft corner light, pure gradient — no blurred layer and nothing to paint
+   per frame */
+.bridge-page .brg-head-glow {
+  position: absolute;
+  inset-block-start: -70px;
+  inset-inline-end: -50px;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(53, 224, 255, 0.18), transparent 66%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.bridge-page .brg-head-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.bridge-page .brg-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid rgba(53, 224, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(53, 224, 255, 0.07);
+  color: #8ce9ff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.bridge-page .brg-pulse {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--bx-cyan);
+  animation: brg-blink 2.8s ease-in-out infinite;
+}
+
+.bridge-page .brg-title {
+  margin: 9px 0 0;
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  background: linear-gradient(118deg, #ffffff 18%, #a8ecff 58%, #cbb9ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.bridge-page .brg-sub {
+  margin: 7px 0 0;
+  max-width: 40ch;
+  color: var(--bx-dim);
+  font-size: 12.2px;
+  line-height: 1.9;
+  text-wrap: pretty;
+}
+
+.bridge-page .brg-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--bx-faint);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.7;
+}
+.bridge-page .brg-facts li {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.bridge-page .brg-facts li + li::before {
+  content: '·';
+  margin-inline: 7px;
+  color: var(--bx-cyan);
+  opacity: 0.55;
+}
+
+.bridge-page .brg-head-art {
+  display: block;
+  width: 92px;
+  height: 92px;
+  justify-self: end;
+  opacity: 0.95;
+  pointer-events: none;
+}
+.bridge-page .brg-head-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── THE MODE RAIL ──────────────────────────────────────────────────────── */
+
+.bridge-page .brg-modes {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin: 0 0 14px;
-  padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
-    color-mix(in srgb, var(--bg-panel) 88%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 5px;
+  border: 1px solid var(--bx-line-2);
+  border-radius: 19px;
+  background: var(--bx-surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
-.brg-modes button {
+.bridge-page .brg-modes button {
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 58px;
+  min-height: 64px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 8px 6px;
+  gap: 3px;
+  padding: 7px 4px 6px;
   border: 1px solid transparent;
   border-radius: 15px;
-  color: var(--text-3);
   background: transparent;
+  color: var(--bx-faint);
   font: inherit;
-  font-size: 10.8px;
-  font-weight: 780;
-  line-height: 1.45;
-  text-align: center;
   cursor: pointer;
-  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.brg-modes button svg { width: 18px; height: 18px; flex: none; }
-/* The label, not the glyph, is what the eye lands on — so it gets the width
-   budget: a two-word Persian label («توکن‌ها») must wrap inside the tile rather
-   than push the grid column wider and break the four-way rail. */
-.brg-modes-label {
-  display: block;
-  max-width: 100%;
-  overflow-wrap: anywhere;
+.bridge-page .brg-modes button:hover {
+  color: var(--bx-dim);
+  background: rgba(255, 255, 255, 0.025);
 }
-.brg-modes button:hover { color: var(--text-1); background: rgba(255, 255, 255, 0.035); }
-.brg-modes button.active {
-  color: var(--text-1);
-  border-color: color-mix(in srgb, var(--rgb-1) 42%, transparent);
-  background: linear-gradient(140deg, color-mix(in srgb, var(--rgb-1) 18%, transparent), color-mix(in srgb, var(--rgb-2) 18%, transparent));
-  box-shadow: 0 10px 24px -16px var(--rgb-1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+.bridge-page .brg-modes button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.bridge-page .brg-modes button:focus-visible {
+  outline: 2px solid var(--bx-cyan);
+  outline-offset: 2px;
+}
+
+.bridge-page .brg-modes button.active {
+  color: var(--bx-ink);
   transform: translateY(-1px);
 }
-.brg-modes button.active svg { color: var(--rgb-1); }
-.brg-modes button:disabled { opacity: 0.55; cursor: wait; }
-.brg-modes button:focus-visible { outline: 2px solid var(--rgb-1); outline-offset: 2px; }
-.brg-modes .seg-indicator { border-radius: 15px; }
 
-:root[data-theme='light'] .brg-modes { background: #ffffff; border-color: rgba(13, 16, 32, 0.1); }
-:root[data-theme='light'] .brg-modes button.active { background: rgba(13, 16, 32, 0.05); }
+.bridge-page .brg-tab-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 15px;
+  border: 1px solid rgba(53, 224, 255, 0.28);
+  background:
+    linear-gradient(158deg, rgba(53, 224, 255, 0.17), rgba(139, 92, 246, 0.17)),
+    #0a0f1a;
+  box-shadow:
+    0 10px 22px -16px rgba(53, 224, 255, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.bridge-page .brg-tab-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+.bridge-page .brg-tab-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.bridge-page .brg-modes button.active .brg-tab-icon {
+  color: var(--bx-cyan);
+}
+
+.bridge-page .brg-modes-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.bridge-page .brg-tab-hint {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--bx-faint);
+  opacity: 0.85;
+}
+.bridge-page .brg-modes button.active .brg-tab-hint {
+  color: #8ce9ff;
+  opacity: 0.9;
+}
+
+/* ─── THE TICKET ─────────────────────────────────────────────────────────── */
+
+.bridge-page .brg-ticket {
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--bx-line);
+  border-radius: 24px;
+  background: var(--bx-ticket);
+  box-shadow: var(--bx-shadow);
+}
+
+.bridge-page .brg-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-inline: 2px;
+}
+.bridge-page .brg-ticket-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--bx-dim);
+}
+.bridge-page .brg-ticket-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(0, 255, 157, 0.18);
+  border-radius: 999px;
+  background: rgba(0, 255, 157, 0.06);
+  color: #84f6c6;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.bridge-page .brg-ticket-live i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--bx-mint);
+  animation: brg-blink 3.2s ease-in-out infinite;
+}
+
+/* a leg is a group, not a box: the amount plate is the only surface, so the
+   ticket reads as one instrument instead of four nested panels */
+.bridge-page .brg-leg {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/*
+ * A leg is two rows: a label + chain chip, then the amount plate. The chain
+ * used to sit in a 216px picker stretched across the row, which left the
+ * amount field squeezed into roughly half the card and a 34px token mark
+ * hanging out of a 24px box. One decision per row, and the amount gets the
+ * width it needs to be legible at 28px.
+ */
+.bridge-page .brg-leg-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  margin-bottom: 8px;
+}
+
+.bridge-page .brg-leg-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--bx-dim);
+}
+.bridge-page .brg-leg-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+.bridge-page .brg-leg-dot--from {
+  background: var(--bx-cyan);
+  box-shadow: 0 0 0 3px rgba(53, 224, 255, 0.12);
+}
+.bridge-page .brg-leg-dot--to {
+  background: var(--bx-violet);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.14);
+}
+
+/* the chain picker is a chip, not a form field: it sizes to its content and
+   sits at the trailing edge of the label row */
+.bridge-page .brg-chain-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 62%;
+}
+
+/* ─── the shared picker, restyled only inside the bridge page ───────────── */
+
+.bridge-page .modern-select-trigger {
+  border-color: var(--bx-line-2);
+  background: var(--bx-surface);
+  box-shadow: none;
+  /* the global trigger carries a 14px backdrop blur; over a near-flat panel
+     it is pure cost, and the bridge ticket already has its own surface */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bridge-page .brg-chain-chip .modern-select-trigger {
+  min-height: 30px;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border-color: var(--bx-line);
+  background: rgba(255, 255, 255, 0.035);
+}
+.bridge-page .brg-chain-chip .modern-select-icon,
+.bridge-page .brg-chain-chip .modern-select-icon .coin-logo,
+.bridge-page .brg-chain-chip .modern-select-icon .tok-icon {
+  width: 20px !important;
+  height: 20px !important;
+  flex-basis: 20px;
+}
+.bridge-page .brg-chain-chip .modern-select-icon {
+  border-radius: 6px;
+}
+.bridge-page .brg-chain-chip .modern-select-icon .asset-icon {
+  width: 20px !important;
+  height: 20px !important;
+}
+.bridge-page .brg-chain-chip .modern-select-text {
+  gap: 0;
+}
+.bridge-page .brg-chain-chip .modern-select-label {
+  font-size: 11.2px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+.bridge-page .brg-chain-chip .modern-select-sublabel {
+  display: none;
+}
+.bridge-page .brg-chain-chip .modern-select-chevron {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--bx-faint);
+}
+.bridge-page .brg-chain-chip .modern-select-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+
+.bridge-page .brg-token-pick {
+  flex: 0 0 auto;
+  width: 124px;
+  max-width: 46%;
+}
+
+/*
+ * AssetIcon is THREE nested boxes: `.asset-icon` (positioned wrapper), an inner
+ * span that carries the artwork with an INLINE width/height (the `size` prop),
+ * and the <svg>. Overriding the outer box alone leaves the inner span at its
+ * inline size, so a 34px mark keeps painting at 34px inside a 26px slot and
+ * spills over the label next to it — which is exactly what happened on the
+ * first pass of this screen.
+ *
+ * The inner box is therefore pinned to 100% of whatever the outer box is told
+ * to be. The badge is excluded: it sizes itself as a fraction of the outer box.
+ */
+.bridge-page .asset-icon > span:not(.asset-icon-badge),
+.bridge-page .asset-icon > span:not(.asset-icon-badge) > svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+.bridge-page .brg-token-pick .modern-select-icon .asset-icon {
+  width: 26px !important;
+  height: 26px !important;
+}
+.bridge-page .brg-token-pick .modern-select-icon .asset-icon .asset-icon-badge {
+  box-shadow: 0 0 0 1.5px var(--bx-shell);
+}
+.bridge-page .brg-token-pick .modern-select-trigger {
+  min-height: 44px;
+  gap: 6px;
+  padding: 6px 7px;
+  border-radius: 12px;
+  border-color: var(--bx-line);
+  background: var(--bx-surface-2);
+}
+.bridge-page .brg-token-pick .modern-select-icon,
+.bridge-page .brg-token-pick .modern-select-icon .coin-logo,
+.bridge-page .brg-token-pick .modern-select-icon .tok-icon {
+  width: 26px !important;
+  height: 26px !important;
+  flex-basis: 26px;
+}
+.bridge-page .brg-token-pick .modern-select-icon {
+  border-radius: 8px;
+}
+.bridge-page .brg-token-pick .modern-select-label {
+  font-size: 13px;
+  font-weight: 850;
+}
+.bridge-page .brg-token-pick .modern-select-sublabel {
+  display: none;
+}
+.bridge-page .brg-token-pick .modern-select-chevron {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--bx-faint);
+  /* the trigger is a grid of [mark][name][chevron]; without this the chevron
+     is the first child that absorbs the leftover space and floats in the
+     middle of the chip */
+  margin-inline-start: auto;
+}
+.bridge-page .brg-token-pick .modern-select-chevron svg {
+  width: 11px;
+  height: 11px;
+}
+.bridge-page .brg-token-pick .modern-select-text {
+  gap: 1px;
+}
+
+/* ─── the amount plate ──────────────────────────────────────────────────── */
+
+.bridge-page .brg-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 62px;
+  padding: 6px;
+  padding-inline-start: 12px;
+  border: 1px solid var(--bx-line-2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(255, 255, 255, 0.018));
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.bridge-page .brg-amount-row--out {
+  background: rgba(255, 255, 255, 0.018);
+}
+.bridge-page .brg-amount-row--out:focus-within {
+  border-color: var(--bx-line-2);
+  box-shadow: none;
+}
+.bridge-page .brg-amount-row:focus-within {
+  border-color: rgba(53, 224, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(53, 224, 255, 0.09);
+}
+
+/* only the input INSIDE the new plate — standalone `.brg-amount` fields in the
+   Tron and Solana panels keep their own base rule (see the sub-panel section
+   further down) */
+.bridge-page .brg-amount-row .brg-amount {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--bx-ink);
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-align: start;
+}
+.bridge-page .brg-amount-row .brg-amount:focus {
+  outline: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.bridge-page .brg-amount-row .brg-amount::placeholder {
+  color: var(--bx-faint);
+  opacity: 0.6;
+}
+.bridge-page .brg-amount-row .brg-amount::-webkit-outer-spin-button,
+.bridge-page .brg-amount-row .brg-amount::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.bridge-page .brg-amount-row .brg-amount {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.bridge-page .brg-amount--out {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bridge-page .brg-amount--out.is-empty {
+  color: var(--bx-faint);
+  opacity: 0.75;
+}
+.bridge-page .brg-amount-shimmer {
+  display: block;
+  width: 92px;
+  height: 20px;
+  border-radius: 7px;
+  background: var(--bx-surface-2);
+  animation: brg-shimmer 1.5s ease-in-out infinite;
+}
+
+.bridge-page .brg-token-static {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 132px;
+  padding: 5px 9px 5px 6px;
+  border: 1px solid var(--bx-line);
+  border-radius: 12px;
+  background: var(--bx-surface-2);
+}
+.bridge-page .brg-token-static-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.bridge-page .brg-token-static-text b {
+  font-size: 12.5px;
+  font-weight: 850;
+  color: var(--bx-ink);
+}
+.bridge-page .brg-token-static-text em {
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8.5px;
+  color: var(--bx-faint);
+}
+.bridge-page .brg-token-static .asset-icon-badge {
+  box-shadow: 0 0 0 1.5px var(--bx-shell);
+}
+.bridge-page .brg-token-fallback {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--bx-surface-2);
+  color: var(--bx-faint);
+  font-size: 12px;
+}
+
+.bridge-page .brg-flip {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 7px auto;
+  border: 1px solid rgba(53, 224, 255, 0.24);
+  border-radius: 12px;
+  background:
+    linear-gradient(155deg, rgba(53, 224, 255, 0.14), rgba(139, 92, 246, 0.14)),
+    var(--bx-shell);
+  color: #a9ecff;
+  cursor: pointer;
+  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, 0.9);
+  transition: border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.bridge-page .brg-flip svg {
+  width: 17px;
+  height: 17px;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bridge-page .brg-flip:hover {
+  border-color: rgba(53, 224, 255, 0.5);
+  color: #d7f7ff;
+  box-shadow: 0 10px 22px -12px rgba(53, 224, 255, 0.35);
+}
+.bridge-page .brg-flip:hover svg {
+  transform: rotate(180deg);
+}
+.bridge-page .brg-flip:active {
+  transform: scale(0.94);
+}
+.bridge-page .brg-flip:focus-visible {
+  outline: 2px solid rgba(53, 224, 255, 0.65);
+  outline-offset: 2px;
+}
+
+.bridge-page .brg-receive-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding-inline: 2px;
+  color: var(--bx-faint);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.bridge-page .brg-receive-eta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #8ce9ff;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+/* ─── options, skeletons, empty ─────────────────────────────────────────── */
+
+.bridge-page .brg-options {
+  margin-top: 10px;
+}
+.bridge-page .brg-options .infobox {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.bridge-page .brg-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 2px;
+}
+
+.bridge-page .brg-panel-skel {
+  padding: 14px;
+  border: 1px solid var(--bx-line);
+  border-radius: 22px;
+  background: var(--bx-ticket);
+}
+
+/* ─── the cost grid ─────────────────────────────────────────────────────── */
+
+.bridge-page .brg-costs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+.bridge-page .brg-cost {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid var(--bx-line-2);
+  border-radius: 13px;
+  background: var(--bx-surface);
+}
+.bridge-page .brg-cost span {
+  color: var(--bx-faint);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.bridge-page .brg-cost b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bx-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.bridge-page .brg-cost--own {
+  border-color: rgba(53, 224, 255, 0.17);
+  background: rgba(53, 224, 255, 0.04);
+}
+.bridge-page .brg-cost--own b {
+  color: #9be9ff;
+}
+
+/* ─── the provider tiles ────────────────────────────────────────────────── */
+
+.bridge-page .brg-routes {
+  margin-top: 12px;
+}
+.bridge-page .brg-routes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--bx-dim);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.bridge-page .brg-routes-best {
+  padding: 3px 8px;
+  border: 1px solid rgba(0, 255, 157, 0.2);
+  border-radius: 999px;
+  background: rgba(0, 255, 157, 0.07);
+  color: #84f6c6;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.bridge-page .brg-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.bridge-page .brg-route {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--bx-line-2);
+  border-radius: 15px;
+  background: var(--bx-surface);
+  color: var(--bx-ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.bridge-page .brg-route:active {
+  transform: scale(0.985);
+}
+.bridge-page .brg-route:focus-visible {
+  outline: 2px solid var(--bx-cyan);
+  outline-offset: 2px;
+}
+.bridge-page .brg-route.is-on {
+  border-color: rgba(53, 224, 255, 0.42);
+  background:
+    linear-gradient(162deg, rgba(53, 224, 255, 0.1), rgba(139, 92, 246, 0.09)),
+    var(--bx-surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.bridge-page .brg-route-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.bridge-page .brg-route-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.bridge-page .brg-route-mark--lifi {
+  border: 1px solid rgba(53, 224, 255, 0.25);
+  background: rgba(53, 224, 255, 0.1);
+  color: #a9ecff;
+}
+.bridge-page .brg-route-mark--dln {
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.14);
+  color: #cdbcff;
+}
+.bridge-page .brg-route-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 800;
+}
+.bridge-page .brg-route-radio {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.bridge-page .brg-route.is-on .brg-route-radio {
+  border-color: var(--bx-cyan);
+  background: var(--bx-cyan);
+  box-shadow: inset 0 0 0 3px var(--bx-shell);
+}
+
+.bridge-page .brg-route-amt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--bx-ink);
+}
+.bridge-page .brg-route-amt em {
+  font-style: normal;
+  color: var(--bx-faint);
+  font-size: 9px;
+}
+.bridge-page .brg-route-fee {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bx-faint);
+  font-size: 8.8px;
+  line-height: 1.6;
+}
+
+.bridge-page .brg-hint {
+  margin: 8px 0 0;
+  color: var(--bx-faint);
+  font-size: 10px;
+  line-height: 1.85;
+  text-wrap: pretty;
+}
+.bridge-page .brg-hint--mono {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+/* ─── connect + primary action ──────────────────────────────────────────── */
+
+.bridge-page .brg-connect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 190, 77, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 190, 77, 0.05);
+  color: #ffd79a;
+  font-size: 11.5px;
+  line-height: 1.75;
+}
+.bridge-page .brg-connect svg {
+  flex: none;
+  opacity: 0.85;
+}
+
+.bridge-page .brg-cta {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 12px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(118deg, #22d3ee 0%, #6366f1 54%, #8b5cf6 100%);
+  color: #03060f;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 900;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  box-shadow:
+    0 16px 34px -18px rgba(53, 224, 255, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 140ms ease, filter 180ms ease, box-shadow 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.bridge-page .brg-cta:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow:
+    0 18px 40px -18px rgba(53, 224, 255, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.bridge-page .brg-cta:active:not(:disabled) {
+  transform: scale(0.985);
+}
+.bridge-page .brg-cta:disabled {
+  opacity: 0.4;
+  filter: grayscale(0.4);
+  cursor: not-allowed;
+}
+.bridge-page .brg-cta:focus-visible {
+  outline: 2px solid #9be9ff;
+  outline-offset: 3px;
+}
+[dir='rtl'] .bridge-page .brg-cta > svg {
+  transform: scaleX(-1);
+}
+.bridge-page .brg-cta-spin {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid rgba(3, 6, 15, 0.3);
+  border-top-color: #03060f;
+  border-radius: 50%;
+  animation: brg-spin 0.7s linear infinite;
+}
+
+.bridge-page .brg-cta-note {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-inline: 4px;
+  color: var(--bx-faint);
+  font-size: 9.5px;
+  line-height: 1.75;
+  text-align: center;
+}
+.bridge-page .brg-cta-note svg {
+  flex: none;
+  margin-top: 1px;
+  opacity: 0.8;
+}
+
+/* ─── waiting / alerts / sent ───────────────────────────────────────────── */
+
+.bridge-page .brg-waiting {
+  margin-top: 10px;
+}
+.bridge-page .brg-waiting p {
+  margin: 0 0 6px;
+  color: var(--bx-faint);
+  font-size: 10.5px;
+  line-height: 1.75;
+  text-align: center;
+}
+.bridge-page .brg-waiting .btn {
+  width: 100%;
+}
+
+.bridge-page .notice {
+  margin: 10px 0 0;
+  border-radius: 13px;
+  font-size: 11.3px;
+  line-height: 1.85;
+}
+/* an inline alert inside the ticket: same tone as `.notice`, tighter box, and
+   it must never be mistaken for a quote row */
+.bridge-page .brg-alert {
+  padding: 10px 12px;
+  border-radius: 12px;
+  text-wrap: pretty;
+}
+
+/* the destination leg is the second half of the ticket: a hair more air above
+   it than the flip control provides on its own, so the two legs read as two
+   steps rather than one long column */
+.bridge-page .brg-leg--to {
+  padding-block-start: 2px;
+}
+
+.bridge-page .brg-sent {
+  margin-top: 12px;
+  padding: 12px 13px;
+  border: 1px solid rgba(0, 255, 157, 0.2);
+  border-radius: 15px;
+  background: rgba(0, 255, 157, 0.045);
+}
+.bridge-page .brg-sent-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+  color: #c6ffe7;
+  font-size: 12.5px;
+  font-weight: 850;
+}
+.bridge-page .brg-sent-check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(0, 255, 157, 0.14);
+  color: var(--bx-mint);
+  font-size: 10px;
+}
+.bridge-page .brg-sent p {
+  margin: 0;
+  color: var(--bx-dim);
+  font-size: 11.3px;
+  line-height: 1.85;
+}
+.bridge-page .brg-sent-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--bx-cyan);
+  font-size: 11.5px;
+  font-weight: 750;
+  text-decoration: none;
+}
+.bridge-page .brg-sent-link:hover {
+  text-decoration: underline;
+}
+
+.bridge-page .brg-status {
+  margin-top: 12px;
+}
+
+/* ─── shared surfaces inside this page (sub-tabs + history included) ────── */
+
+.bridge-page .card {
+  padding: 14px;
+  border: 1px solid var(--bx-line);
+  border-radius: 22px;
+  background: var(--bx-ticket);
+  box-shadow: var(--bx-shadow);
+}
+
+.bridge-page .infobox {
+  border: 1px solid var(--bx-line-2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+}
+.bridge-page .infobox-head {
+  padding: 11px 13px;
+}
+.bridge-page .infobox-title {
+  font-size: 12.2px;
+  font-weight: 750;
+}
+.bridge-page .infobox-body {
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+/* sub-tab tickets: Tron puts `.brg-amount` straight into a card, Solana puts
+   it directly into a leg. Both keep the same inset plate as the new ticket,
+   just without the row wrapper. */
+
+/*
+ * Solana and Tron still use the ORIGINAL two-picker `.brg-pick-row` (network +
+ * token, side by side). The new ticket's compact chip metrics were written for
+ * the chip, and they leak here: a 20px chain mark inside a 34px slot, a
+ * half-size label. These rules restore a full-size mark and a readable label
+ * for any asset mark that is NOT inside the new chip or the token plate —
+ * so the redesign stays a redesign of the ticket, not a shrink of the panels.
+ */
+.bridge-page .brg-pick-row .modern-select-icon .asset-icon {
+  width: 30px !important;
+  height: 30px !important;
+}
+.bridge-page .brg-pick-row .modern-select-icon,
+.bridge-page .brg-pick-row .modern-select-icon .coin-logo,
+.bridge-page .brg-pick-row .modern-select-icon .tok-icon {
+  width: 30px !important;
+  height: 30px !important;
+  flex-basis: 30px;
+}
+.bridge-page .brg-pick-row .modern-select-label {
+  font-size: 12.5px;
+}
+.bridge-page .brg-pick-row .modern-select-trigger {
+  min-height: 50px;
+  padding: 7px 8px;
+  border-radius: 13px;
+  border-color: var(--bx-line-2);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(255, 255, 255, 0.02));
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.bridge-page .brg-pick-row .modern-select-chevron {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--bx-faint);
+}
+
+.bridge-page .card > .brg-amount,
+.bridge-page .brg-leg > .brg-amount {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 10px;
+  padding: 10px 13px;
+  border: 1px solid var(--bx-line-2);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(255, 255, 255, 0.018));
+  color: var(--bx-ink);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+}
+.bridge-page .card > .brg-amount:focus,
+.bridge-page .brg-leg > .brg-amount:focus {
+  outline: 0;
+  border-color: rgba(53, 224, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(53, 224, 255, 0.09);
+  background: rgba(0, 0, 0, 0.3);
+}
+.bridge-page .brg-pick-row {
+  gap: 8px;
+}
+.bridge-page .brg-recipient {
+  border: 1px solid var(--bx-line-2);
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--bx-ink);
+}
+.bridge-page .brg-recipient:focus {
+  outline: 0;
+  border-color: rgba(53, 224, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(53, 224, 255, 0.09);
+}
+.bridge-page .brg-quote {
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--bx-line-2);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11.5px;
+}
+.bridge-page .brg-out {
+  font-size: 16px;
+}
+.bridge-page .brg-fee-ours {
+  border-radius: 10px;
+}
+
+.bridge-page .btn-primary {
+  border-radius: 15px;
+  background: linear-gradient(118deg, #22d3ee 0%, #6366f1 54%, #8b5cf6 100%);
+  color: #03060f;
+  font-weight: 900;
+  box-shadow:
+    0 14px 30px -18px rgba(53, 224, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.bridge-page .btn-primary:disabled {
+  box-shadow: none;
+}
+
+/* ─── light theme ────────────────────────────────────────────────────────── */
+
+:root[data-theme='light'] .bridge-page {
+  --bx-ink: #0f172a;
+  --bx-dim: #475569;
+  --bx-faint: #78849a;
+  --bx-line: rgba(15, 23, 42, 0.1);
+  --bx-line-2: rgba(15, 23, 42, 0.07);
+  --bx-surface: rgba(15, 23, 42, 0.028);
+  --bx-surface-2: rgba(15, 23, 42, 0.05);
+  --bx-shell: #ffffff;
+  --bx-ticket: linear-gradient(180deg, #ffffff, #f8fafc);
+  --bx-shadow:
+    0 16px 36px -30px rgba(15, 23, 42, 0.45),
+    inset 0 1px 0 #ffffff;
+}
+:root[data-theme='light'] .bridge-page .brg-head {
+  background:
+    radial-gradient(120% 150% at 100% 0%, rgba(0, 190, 230, 0.1), transparent 62%),
+    radial-gradient(110% 130% at 0% 100%, rgba(124, 77, 255, 0.09), transparent 58%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow:
+    0 16px 36px -30px rgba(15, 23, 42, 0.4),
+    inset 0 1px 0 #ffffff;
+}
+:root[data-theme='light'] .bridge-page .brg-title {
+  background: linear-gradient(118deg, #0f172a 25%, #0369a1 70%, #6d28d9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme='light'] .bridge-page .brg-eyebrow {
+  border-color: rgba(2, 132, 199, 0.22);
+  background: rgba(2, 132, 199, 0.07);
+  color: #0369a1;
+}
+:root[data-theme='light'] .bridge-page .brg-tab-pill {
+  border-color: rgba(2, 132, 199, 0.26);
+  background:
+    linear-gradient(158deg, rgba(53, 224, 255, 0.16), rgba(139, 92, 246, 0.12)),
+    #ffffff;
+  box-shadow:
+    0 10px 22px -18px rgba(2, 132, 199, 0.5),
+    inset 0 1px 0 #ffffff;
+}
+:root[data-theme='light'] .bridge-page .brg-modes button.active .brg-tab-icon,
+:root[data-theme='light'] .bridge-page .brg-modes button.active .brg-tab-hint {
+  color: #0369a1;
+}
+:root[data-theme='light'] .bridge-page .brg-amount-row,
+:root[data-theme='light'] .bridge-page .card > .brg-amount,
+:root[data-theme='light'] .bridge-page .brg-leg > .brg-amount {
+  background: linear-gradient(180deg, #ffffff, #f4f7fb);
+  border-color: rgba(15, 23, 42, 0.09);
+}
+:root[data-theme='light'] .bridge-page .brg-ticket-live {
+  border-color: rgba(4, 120, 87, 0.2);
+  background: rgba(4, 120, 87, 0.07);
+  color: #047857;
+}
+:root[data-theme='light'] .bridge-page .brg-route.is-on {
+  border-color: rgba(2, 132, 199, 0.4);
+  background:
+    linear-gradient(162deg, rgba(53, 224, 255, 0.12), rgba(139, 92, 246, 0.07)),
+    #ffffff;
+}
+:root[data-theme='light'] .bridge-page .brg-route.is-on .brg-route-radio {
+  box-shadow: inset 0 0 0 3px #ffffff;
+}
+:root[data-theme='light'] .bridge-page .brg-cost {
+  background: rgba(15, 23, 42, 0.022);
+}
+:root[data-theme='light'] .bridge-page .brg-cost--own {
+  border-color: rgba(2, 132, 199, 0.2);
+  background: rgba(2, 132, 199, 0.05);
+}
+:root[data-theme='light'] .bridge-page .brg-cost--own b {
+  color: #0369a1;
+}
+:root[data-theme='light'] .bridge-page .brg-receive-eta,
+:root[data-theme='light'] .bridge-page .brg-sent-link {
+  color: #0369a1;
+}
+:root[data-theme='light'] .bridge-page .brg-connect {
+  border-color: rgba(180, 83, 9, 0.2);
+  background: rgba(251, 191, 36, 0.1);
+  color: #92400e;
+}
+:root[data-theme='light'] .bridge-page .brg-sent {
+  border-color: rgba(4, 120, 87, 0.2);
+  background: rgba(16, 185, 129, 0.06);
+}
+:root[data-theme='light'] .bridge-page .brg-sent-title {
+  color: #065f46;
+}
+:root[data-theme='light'] .bridge-page .brg-route-radio {
+  border-color: rgba(15, 23, 42, 0.22);
+}
+:root[data-theme='light'] .bridge-page .infobox {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+:root[data-theme='light'] .bridge-page .brg-amount::placeholder {
+  color: #94a3b8;
+}
+
+/* ─── small phones: the art shrinks before the copy does ─────────────────── */
 
 @media (max-width: 380px) {
-  .brg-modes button { min-height: 54px; font-size: 10.2px; padding: 7px 4px; }
-  .brg-modes button svg { width: 16px; height: 16px; }
+  .bridge-page .brg-head {
+    grid-template-columns: minmax(0, 1fr) 72px;
+    padding: 15px 14px 13px;
+    border-radius: 21px;
+  }
+  .bridge-page .brg-head-art {
+    width: 72px;
+    height: 72px;
+  }
+  .bridge-page .brg-title {
+    font-size: 24px;
+  }
+  .bridge-page .brg-sub {
+    font-size: 11.6px;
+  }
+  .bridge-page .brg-facts {
+    font-size: 9.3px;
+  }
+  .bridge-page .brg-modes {
+    padding: 4px;
+    gap: 2px;
+  }
+  .bridge-page .brg-modes button {
+    min-height: 60px;
+    padding: 6px 2px 5px;
+  }
+  .bridge-page .brg-modes-label {
+    font-size: 10.6px;
+  }
+  .bridge-page .brg-tab-hint {
+    font-size: 7.2px;
+  }
+  .bridge-page .brg-chain-chip {
+    max-width: 58%;
+  }
+  .bridge-page .brg-chain-chip .modern-select-label {
+    font-size: 11.2px;
+  }
+  .bridge-page .brg-chain-chip .modern-select-sublabel {
+    display: none;
+  }
+  .bridge-page .brg-ticket {
+    padding: 12px;
+    border-radius: 21px;
+  }
+  .bridge-page .brg-amount-row {
+    min-height: 58px;
+  }
+  .bridge-page .brg-amount-row .brg-amount {
+    font-size: 24px;
+  }
+  .bridge-page .brg-token-pick {
+    min-width: 112px;
+  }
+  .bridge-page .brg-token-pick .modern-select-trigger {
+    min-height: 42px;
+  }
+  .bridge-page .brg-token-static {
+    max-width: 112px;
+  }
+}
+
+@media (max-width: 340px) {
+  .bridge-page .brg-head-art {
+    display: none;
+  }
+  .bridge-page .brg-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bridge-page .brg-routes-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bridge-page .brg-facts li + li::before {
+    margin-inline: 5px;
+  }
+}
+
+/* ─── motion ─────────────────────────────────────────────────────────────── */
+
+@keyframes brg-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes brg-shimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+@keyframes brg-spin {
+  to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brg-modes button { transition: none; }
-  .brg-modes button.active { transform: none; }
+  .bridge-page .brg-pulse,
+  .bridge-page .brg-ticket-live i,
+  .bridge-page .brg-amount-shimmer,
+  .bridge-page .brg-cta-spin {
+    animation: none;
+  }
+  .bridge-page .brg-modes button,
+  .bridge-page .brg-flip,
+  .bridge-page .brg-flip svg,
+  .bridge-page .brg-route,
+  .bridge-page .brg-cta {
+    transition: none;
+  }
+  .bridge-page .brg-modes button.active {
+    transform: none;
+  }
+  .bridge-page .brg-flip:hover svg {
+    transform: none;
+  }
 }

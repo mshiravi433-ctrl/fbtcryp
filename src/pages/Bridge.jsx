@@ -1,6 +1,6 @@
 import BridgeSigningReview from '../components/BridgeSigningReview';
 import { validateBridgeRequest, assertBridgeSigner, assertBridgeContracts } from '../lib/bridgeSafety';
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -37,7 +37,7 @@ import {
 import { crossChainService } from '../services/cross-chain';
 import CrossChainStatus from '../components/crosschain/CrossChainStatus';
 import CrossChainHistory from '../components/crosschain/CrossChainHistory';
-import { IconExternal, IconGlobe, IconRoute, IconShield, IconSwap } from '../components/Icons';
+import { IconExternal, IconRoute, IconShield, IconSwap, IconWallet } from '../components/Icons';
 import InfoBox from '../components/InfoBox';
 import SegIndicator from '../components/SegIndicator';
 import FarmPromoBanner from '../components/FarmPromoBanner';
@@ -89,47 +89,17 @@ const MODES = ['tokens', 'native', 'tron', 'solana'];
 const PROVIDERS = ['lifi', 'dln'];
 
 /*
- * ─── WHY THESE TWO CARDS ARE MEMOISED ──────────────────────────────────────
- * WalletContext polls the balance every 30s, and every poll re-renders any
- * screen that reads `useWallet()`. These two sections are pure copy — they
- * depend on nothing but the active language — so re-rendering them on every
- * balance tick was wasted reconciliation for zero visual change. `memo` with
- * no props means React keeps the previous element and never descends into it.
+ * The asset class each route carries, printed under the tab label. Codes
+ * rather than prose on purpose: USDT/USDC, BTC/ETH and TRC20 read the same in
+ * every language the app ships, so this line never needs a translation and
+ * never wraps on a 320px phone.
  */
-const WhatBridge = memo(function WhatBridge() {
-  const { t } = useTranslation();
-  return (
-    <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
-      <div className="sheen" />
-      <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
-        <span style={{ color: 'var(--rgb-1)', flexShrink: 0 }}>
-          <IconSwap width={22} height={22} />
-        </span>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('bridge.whatTitle')}</div>
-          <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('bridge.whatBody')}</p>
-        </div>
-      </div>
-    </motion.section>
-  );
-});
-
-const RiskCard = memo(function RiskCard() {
-  const { t } = useTranslation();
-  return (
-    <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-      <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-        <span style={{ color: 'var(--rgb-5)', flexShrink: 0 }}>
-          <IconShield width={19} height={19} />
-        </span>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('bridge.riskTitle')}</div>
-          <p className="muted" style={{ fontSize: 12.2, margin: 0 }}>{t('bridge.riskBody')}</p>
-        </div>
-      </div>
-    </motion.section>
-  );
-});
+const MODE_HINTS = {
+  tokens: 'USDT · USDC',
+  native: 'BTC · ETH',
+  tron: 'TRC20',
+  solana: 'SOL · SPL'
+};
 
 /*
  * A skeleton that matches the quote card it replaces, so the ticket does not
@@ -138,10 +108,9 @@ const RiskCard = memo(function RiskCard() {
  */
 function QuoteSkeleton({ marginTop = 10 }) {
   return (
-    <div className="brg-quote" style={{ marginTop }} aria-hidden="true">
-      <div className="skel" style={{ height: 13, width: '42%' }} />
-      <div className="skel" style={{ height: 13, width: '64%' }} />
-      <div className="skel" style={{ height: 13, width: '52%' }} />
+    <div className="brg-skel" style={{ marginTop }} aria-hidden="true">
+      <div className="skel" style={{ height: 12, width: '38%' }} />
+      <div className="skel" style={{ height: 12, width: '58%' }} />
     </div>
   );
 }
@@ -149,9 +118,9 @@ function QuoteSkeleton({ marginTop = 10 }) {
 /* The fallback for the lazy tab panels — same skeleton language. */
 function PanelSkeleton() {
   return (
-    <div className="card" style={{ marginTop: 12 }} aria-hidden="true">
-      <div className="skel" style={{ height: 44, marginBottom: 12 }} />
-      <div className="skel" style={{ height: 44, marginBottom: 12 }} />
+    <div className="brg-panel-skel" aria-hidden="true">
+      <div className="skel" style={{ height: 46, marginBottom: 10 }} />
+      <div className="skel" style={{ height: 46, marginBottom: 10 }} />
       <div className="skel" style={{ height: 52 }} />
     </div>
   );
@@ -762,37 +731,82 @@ export default function Bridge() {
     haptic?.('select');
   };
 
+  /*
+   * ─── FRESHNESS ────────────────────────────────────────────────────────────
+   * `formKey` names the exact form a quote was requested for. A quote whose
+   * key no longer matches is STALE: the user has edited the amount, the pair,
+   * the destination or the slippage since it arrived. The old screen kept
+   * painting a stale receive amount under a fresh-looking input while the
+   * debounce was in flight, which is the one number on this page a person
+   * actually reads before signing. Stale quotes now render as unavailable
+   * instead of as a number.
+   */
+  const summaryFresh = summary && quoteFormKey === formKey ? summary : null;
+  const dlnFresh = dln && dlnFormKey === formKey ? dln : null;
+  const receiveAmount = summaryFresh
+    ? fromBaseUnits(summaryFresh.toAmount, toToken?.decimals ?? 6)
+    : null;
+
   return (
-    <PageTransition>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t('bridge.title')}</h1>
-        <p className="muted">{t('bridge.subtitle')}</p>
-      </motion.div>
-
+    <PageTransition className="page bridge-page">
       {/*
-        ─── THE TRON/SOLANA CAROUSEL USED TO BE HERE ──────────────────────
-        «بنر بالای صفحه که مربوط به ترون و سولانا هست را محو کن، به‌درد
-        نمی‌خورد.» It advertised two of the four modes whose rail is rendered
-        eight lines below it, so the biggest block on the first screen repeated
-        a control the user was about to touch — and pushed the bridge form, the
-        reason the screen exists, under the fold.
-
-        The two modes are not gone: they are the third and fourth tabs of the
-        rail below, with the same labels, the same glyphs and the same panels.
-        What is gone is the second copy of them.
-
-        The advertising slot this freed is now at the FOOT of the page, where
-        it sells something this screen cannot do (Farm) to a user who has just
-        finished doing what it can. See components/FarmPromoBanner.jsx.
+        ─── THE HEAD ────────────────────────────────────────────────────────
+        The old screen opened with an h1, a line of muted prose, a four-cell
+        settings rail, and then a paragraph explaining what a bridge is — so
+        the form the user came for started below the fold. The head is now a
+        single compact object: one live chip, the title, one sentence, and the
+        three facts that answer "is this safe and what will it cost me" in a
+        line. The explanation itself moved below the ticket, where it can be
+        opened by the people who want it and ignored by everyone else.
       */}
+      <motion.header className="brg-head" variants={riseIn} initial="hidden" animate="show">
+        <span className="brg-head-glow" aria-hidden="true" />
+        <div className="brg-head-copy">
+          <span className="brg-eyebrow">
+            <span className="brg-pulse" aria-hidden="true" />
+            {t('bridge.live')}
+          </span>
+          <h1 className="brg-title">{t('bridge.title')}</h1>
+          <p className="brg-sub">{t('bridge.subtitle')}</p>
+          <ul className="brg-facts">
+            <li>{t('bridge.factChains', { n: BRIDGE_CHAINS.length })}</li>
+            <li>{t('bridge.factSign')}</li>
+            <li>{t('bridge.factFee')}</li>
+          </ul>
+        </div>
+        <span className="brg-head-art" aria-hidden="true">
+          <svg viewBox="0 0 112 112" fill="none" focusable="false">
+            <defs>
+              <linearGradient id="brgHeadA" x1="16" y1="14" x2="96" y2="98" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#35e0ff" />
+                <stop offset="1" stopColor="#8b5cf6" />
+              </linearGradient>
+            </defs>
+            <circle cx="56" cy="56" r="50" stroke="url(#brgHeadA)" strokeOpacity="0.12" />
+            <circle cx="56" cy="56" r="37" stroke="url(#brgHeadA)" strokeOpacity="0.26" strokeDasharray="2 7" strokeLinecap="round" />
+            <path d="M29 69c8-24 46-24 54 0" stroke="url(#brgHeadA)" strokeOpacity="0.5" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="1 5" />
+            <circle cx="29" cy="69" r="7" fill="#0a0f1c" stroke="url(#brgHeadA)" strokeWidth="1.4" />
+            <circle cx="29" cy="69" r="2.4" fill="#35e0ff" />
+            <circle cx="83" cy="69" r="7" fill="#0a0f1c" stroke="url(#brgHeadA)" strokeWidth="1.4" />
+            <circle cx="83" cy="69" r="2.4" fill="#8b5cf6" />
+            <g stroke="#9be9ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.8">
+              <path d="M49 47h14" />
+              <path d="m60 43.5 3.5 3.5-3.5 3.5" />
+              <path d="M63 61H49" />
+              <path d="m52 57.5-3.5 3.5 3.5 3.5" />
+            </g>
+          </svg>
+        </span>
+      </motion.header>
 
       {/*
-        ─── THE MODE RAIL ─────────────────────────────────────────────────
-        Same semantics as before (tablist / tab / aria-selected, identical
-        labels), different object: a rail with a glyph per route instead of a
-        four-cell settings toggle. Each glyph is aria-hidden, so the accessible
-        name stays exactly the translated label the tests and screen readers
-        already match on.
+        ─── THE MODE RAIL ───────────────────────────────────────────────────
+        Four routes, not four settings. Each tab carries a small route glyph, a
+        one-word label and the asset class it handles, so the rail answers
+        "where is this going to land" before it is tapped. The accessible name
+        stays the full translated label (the visual label is shortened, and the
+        hint is decorative), so screen readers and the existing tests hear the
+        same words as before.
       */}
       <div className="brg-modes" role="tablist" aria-label={t('bridge.title')}>
         {MODES.map((k) => (
@@ -800,13 +814,14 @@ export default function Bridge() {
             key={k}
             role="tab"
             aria-selected={mode === k}
+            aria-label={t(`bridge.mode.${k}`)}
             className={mode === k ? 'active' : ''}
             disabled={busy}
             onClick={() => setMode(k)}
             style={{ isolation: 'isolate' }}
           >
-            {mode === k && <SegIndicator id="bridgemode" />}
-            <span aria-hidden="true">
+            {mode === k && <SegIndicator id="bridgemode" className="seg-indicator brg-tab-pill" />}
+            <span className="brg-tab-icon" aria-hidden="true">
               {k === 'tokens' ? <IconSwap /> : k === 'native' ? <IconRoute /> : k === 'tron' ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M2.6 3.2 21.4 6l-6.1 12.6z" />
@@ -820,18 +835,12 @@ export default function Bridge() {
                 </svg>
               )}
             </span>
-            <span className="brg-modes-label">{t(`bridge.mode.${k}`)}</span>
+            <span className="brg-modes-label" aria-hidden="true">{t(`bridge.modeShort.${k}`)}</span>
+            <span className="brg-tab-hint" aria-hidden="true">{MODE_HINTS[k]}</span>
           </button>
         ))}
       </div>
 
-      {/*
-        A third tab rather than an option inside the first. Tron is not another
-        EVM chain: the destination is a different address FORMAT, the fee rules
-        differ (0x refuse a fee on a Tron origin), and the flat activation cost
-        needs its own warning. Folding it into the token form would produce
-        fields that change meaning depending on a dropdown.
-      */}
       {mode === 'solana' ? (
         <Suspense fallback={<PanelSkeleton />}>
           <SolanaBridgePanel />
@@ -847,63 +856,78 @@ export default function Bridge() {
       ) : (
         <>
 
-      {/* what this is, before anything is tapped */}
-      <WhatBridge />
+      {/* ─── THE TICKET ────────────────────────────────────────────────── */}
+      <motion.section className="brg-ticket" variants={riseIn} initial="hidden" animate="show" aria-label={t('bridge.transfer')}>
+        <div className="brg-ticket-head">
+          <span className="brg-ticket-title">{t('bridge.transfer')}</span>
+          <span className="brg-ticket-live">
+            <i aria-hidden="true" />
+            {t('bridge.live')}
+          </span>
+        </div>
 
-      {/* ------------------------------ ticket — modern pickers ─────────── */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
         {/*
-          ─── THE TICKET IS TWO LEGS, NOT SIX LOOSE FIELDS ────────────────────
-          Each leg is its own raised surface: the pickers live in one row and
-          the amount gets its own breathing room below them (the «بهم نچسبیده
-          باشد» report). The flip control sits BETWEEN the legs — the direction
-          changes the whole transfer, so it belongs to neither leg.
+          The chain lives in the leg's header as a compact chip; the amount and
+          the token share one inset plate. That is one decision per line
+          (where → how much → in what) instead of the old two stacked pickers
+          plus a third field underneath them, which is what made the ticket
+          read as a settings form.
         */}
         <div className="brg-leg">
-          <span className="field-label">{t('bridge.from')}</span>
-          <div className="brg-pick-row">
-            <ModernSelect
-              value={fromChain}
-              onChange={(v) => { setFromChain(Number(v)); setQuote(null); }}
-              options={BRIDGE_CHAINS.map((c) => ({
-                value: c.id,
-                label: c.name,
-                sublabel: c.symbol,
-                chain: c.id,
-              }))}
-              title={t('bridge.from')}
-              placeholder={t('bridge.from')}
-              compact
-              testId="bridge-from-chain"
-            />
-            <ModernSelect
-              value={tokenSymbol}
-              onChange={(v) => { setTokenSymbol(v); setQuote(null); }}
-              options={fromTokens.map((tk) => ({
-                value: tk.symbol,
-                label: tk.symbol,
-                sublabel: BRIDGE_CHAINS.find((x) => x.id === fromChain)?.name || '',
-                /* curated stablecoins: offline artwork + the origin chain badge */
-                symbol: tk.symbol,
-                chain: fromChain,
-              }))}
-              title={t('bridge.from')}
-              placeholder={tokenSymbol || 'USDT'}
-              compact
-              testId="bridge-from-token"
-            />
+          <div className="brg-leg-top">
+            <span className="brg-leg-label">
+              <i className="brg-leg-dot brg-leg-dot--from" aria-hidden="true" />
+              {t('bridge.from')}
+            </span>
+            <div className="brg-chain-chip">
+              <ModernSelect
+                value={fromChain}
+                onChange={(v) => { setFromChain(Number(v)); setQuote(null); }}
+                options={BRIDGE_CHAINS.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                  sublabel: c.symbol,
+                  chain: c.id,
+                }))}
+                title={t('bridge.from')}
+                placeholder={t('bridge.from')}
+                compact
+                testId="bridge-from-chain"
+              />
+            </div>
           </div>
 
-          <input
-            className="brg-amount"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            placeholder="0.0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            aria-label={t('bridge.amount')}
-          />
+          <div className="brg-amount-row">
+            <input
+              className="brg-amount"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              placeholder="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              aria-label={t('bridge.amount')}
+            />
+            <div className="brg-token-pick">
+              <ModernSelect
+                value={tokenSymbol}
+                onChange={(v) => { setTokenSymbol(v); setQuote(null); }}
+                options={fromTokens.map((tk) => ({
+                  value: tk.symbol,
+                  label: tk.symbol,
+                  /* the chain is already on the row above; the sublabel is the
+                     token's own name, so the plate answers "which asset" and
+                     "on which network" in one glance */
+                  symbol: tk.symbol,
+                  chain: fromChain,
+                }))}
+                title={t('bridge.from')}
+                placeholder={tokenSymbol || 'USDT'}
+                compact
+                testId="bridge-from-token"
+              />
+            </div>
+          </div>
         </div>
 
         <button type="button" className="brg-flip" onClick={flip} aria-label={t('bridge.flip')}>
@@ -915,36 +939,54 @@ export default function Bridge() {
           </svg>
         </button>
 
-        <div className="brg-leg">
-          <span className="field-label">{t('bridge.to')}</span>
-          <div className="brg-pick-row">
-            <ModernSelect
-              value={toChain}
-              onChange={(v) => { setToChain(Number(v)); setQuote(null); }}
-              options={BRIDGE_CHAINS.filter((c) => c.id !== fromChain).map((c) => ({
-                value: c.id,
-                label: c.name,
-                sublabel: c.symbol,
-                chain: c.id,
-              }))}
-              title={t('bridge.to')}
-              placeholder={t('bridge.to')}
-              compact
-              testId="bridge-to-chain"
-            />
-            <div className="modern-select modern-select--compact" style={{ pointerEvents: 'none' }} aria-hidden="true">
-              <div className="modern-select-trigger" style={{ opacity: 0.92 }}>
-                <span className="modern-select-icon">
-                  {toToken
-                    ? <AssetIcon symbol={toToken.symbol} chain={toChain} size={34} />
-                    : <span style={{ width:34,height:34,display:'grid',placeItems:'center',borderRadius:10,background:'var(--bg-panel)',border:'1px solid var(--line)',color:'var(--text-3)',fontSize:12 }}>—</span>}
-                </span>
-                <span className="modern-select-text">
-                  <span className="modern-select-label">{toToken?.symbol ?? '—'}</span>
-                  <span className="modern-select-sublabel">{BRIDGE_CHAINS.find(x=>x.id===toChain)?.name || ''}</span>
-                </span>
-              </div>
+        <div className="brg-leg brg-leg--to">
+          <div className="brg-leg-top">
+            <span className="brg-leg-label">
+              <i className="brg-leg-dot brg-leg-dot--to" aria-hidden="true" />
+              {t('bridge.to')}
+            </span>
+            <div className="brg-chain-chip">
+              <ModernSelect
+                value={toChain}
+                onChange={(v) => { setToChain(Number(v)); setQuote(null); }}
+                options={BRIDGE_CHAINS.filter((c) => c.id !== fromChain).map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                  sublabel: c.symbol,
+                  chain: c.id,
+                }))}
+                title={t('bridge.to')}
+                placeholder={t('bridge.to')}
+                compact
+                testId="bridge-to-chain"
+              />
             </div>
+          </div>
+
+          <div className="brg-amount-row brg-amount-row--out">
+            <span className={`brg-amount brg-amount--out${receiveAmount ? '' : ' is-empty'}`} aria-live="polite">
+              {quoting && !receiveAmount ? <span className="brg-amount-shimmer" aria-hidden="true" /> : (receiveAmount ?? '—')}
+            </span>
+            <span className="brg-token-static">
+              {toToken
+                ? <AssetIcon symbol={toToken.symbol} chain={toChain} size={28} />
+                : <span className="brg-token-fallback" aria-hidden="true">—</span>}
+              <span className="brg-token-static-text">
+                <b>{toToken?.symbol ?? '—'}</b>
+                {/* only named when it DIFFERS from what was sent — Base, for
+                    instance, has no USDT and lands the user on USDC. Print
+                    "USDT" twice and say nothing would be the quiet version of
+                    a surprise; this is the sentence that prevents it. */}
+                {toToken && toToken.symbol !== tokenSymbol && (
+                  <em>{t('bridge.arrivesAs', { symbol: toToken.symbol })}</em>
+                )}
+              </span>
+            </span>
+          </div>
+
+          <div className="brg-receive-note">
+            <span>{receiveAmount ? t('bridge.youReceive') : (quoting ? t('bridge.quoting') : t('bridge.emptyHint'))}</span>
+            {summaryFresh?.durationSec != null && <span className="brg-receive-eta">~{summaryFresh.durationSec}s</span>}
           </div>
         </div>
 
@@ -959,7 +1001,7 @@ export default function Bridge() {
           would add two fields to the main path for a case most users never
           have.
         */}
-        <div style={{ marginTop: 12 }}>
+        <div className="brg-options">
           <InfoBox title={t('bridge.optionsTitle')} tone="info" id="bridge-options">
             <p>{t('bridge.slippageNote', { pct: slippage })}</p>
 
@@ -1002,7 +1044,7 @@ export default function Bridge() {
           const { text, detail } = bridgeErrorText(quoteErr?.code ?? quoteErr, t, { fallbackKey: 'bridge.err.QUOTE_FAILED' });
           const rawDetail = quoteErr?.detail || detail;
           return (
-            <p className="notice notice-danger" style={{ marginTop: 10 }}>
+            <p className="notice notice-danger brg-alert">
               {text}
               {rawDetail && (
                 <span dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75, wordBreak: 'break-word' }}>
@@ -1013,14 +1055,6 @@ export default function Bridge() {
           );
         })()}
 
-        {/* Empty state: connected, but no amount yet, so nothing to quote. */}
-        {!quoting && !quoteErr && !summary && wallet.isConnected && (
-          <div className="empty" style={{ padding: '18px 12px 6px', fontSize: 12 }}>
-            <span className="empty-icon">⇄</span>
-            {t('bridge.emptyHint')}
-          </div>
-        )}
-
         {/*
           ─── EVERY COST, ITEMISED ─────────────────────────────────────────
           A bridge quote carries several separate charges: LI.FI's 0.25%,
@@ -1030,43 +1064,37 @@ export default function Bridge() {
           is named rather than folded into "fees" — a fee the user cannot see
           is a fee they will feel tricked by later.
         */}
-        {summary && !quoting && (
-          <div className="brg-quote">
-            <div className="row-between">
-              <span className="faint">{t('bridge.youReceive')}</span>
-              <span className="mono brg-out">
-                {fromBaseUnits(summary.toAmount, toToken?.decimals ?? 6)} {toToken?.symbol}
-              </span>
+        {summaryFresh && !quoting && (
+          <div className="brg-costs">
+            <div className="brg-cost">
+              <span>{t('bridge.route')}</span>
+              <b>{summaryFresh.toolName}</b>
             </div>
-            <div className="row-between">
-              <span className="faint">{t('bridge.route')}</span>
-              <span className="mono" style={{ fontSize: 12 }}>{summary.toolName}</span>
-            </div>
-            <div className="row-between">
-              <span className="faint">{t('bridge.totalCost')}</span>
-              <span className="mono" style={{ fontSize: 12 }}>{fmtUsd(summary.totalCostUsd)}</span>
+            <div className="brg-cost">
+              <span>{t('bridge.totalCost')}</span>
+              <b className="mono">{fmtUsd(summaryFresh.totalCostUsd)}</b>
             </div>
             {/*
-              ─── OUR FEE, NAMED AND NUMBERS ──────────────────────────────────
-              The integrator cut is rendered as its own tinted row rather than
-              folded into "fees", with the live percentage next to the dollar
-              figure («کارمزد ما میاد»). The percentage is derived from THIS
-              quote, so it always matches what the server actually charged —
-              when there is no fee the row simply does not exist.
+              ─── OUR FEE, NAMED AND NUMBERED ────────────────────────────────
+              The integrator cut is its own cell rather than folded into
+              "fees", with the live percentage next to the dollar figure
+              («کارمزد ما میاد»). The percentage is derived from THIS quote, so
+              it always matches what the server actually charged — when there
+              is no fee the cell simply does not exist.
             */}
-            {summary.ourFeeUsd != null && (
-              <div className="row-between brg-fee-ours">
-                <span className="faint">{t('bridge.ourFee')}</span>
-                <span className="mono" style={{ fontSize: 12 }}>
-                  {fmtUsd(summary.ourFeeUsd)}
-                  {summary.fromAmountUsd > 0 && ` · ${((summary.ourFeeUsd / summary.fromAmountUsd) * 100).toFixed(2)}%`}
-                </span>
+            {summaryFresh.ourFeeUsd != null && (
+              <div className="brg-cost brg-cost--own">
+                <span>{t('bridge.ourFee')}</span>
+                <b className="mono">
+                  {fmtUsd(summaryFresh.ourFeeUsd)}
+                  {summaryFresh.fromAmountUsd > 0 && ` · ${((summaryFresh.ourFeeUsd / summaryFresh.fromAmountUsd) * 100).toFixed(2)}%`}
+                </b>
               </div>
             )}
-            {summary.durationSec != null && (
-              <div className="row-between">
-                <span className="faint">{t('bridge.eta')}</span>
-                <span className="mono" style={{ fontSize: 12 }}>~{summary.durationSec}s</span>
+            {summaryFresh.durationSec != null && (
+              <div className="brg-cost">
+                <span>{t('bridge.eta')}</span>
+                <b className="mono">~{summaryFresh.durationSec}s</b>
               </div>
             )}
           </div>
@@ -1083,47 +1111,53 @@ export default function Bridge() {
           Rendered only when DLN actually answered with a route. An empty
           "compare" box that never populates is worse than no box.
         */}
-        {dln?.toAmount && !quoting && (
-          <div className="brg-quote" style={{ marginTop: 10 }}>
-            <div className="field-label" style={{ marginTop: 0 }}>{t('bridge.routesTitle')}</div>
-
-            <div className="segmented">
-              {PROVIDERS.map((k) => (
-                <button
-                  key={k}
-                  className={provider === k ? 'active' : ''}
-                  onClick={() => setProvider(k)}
-                  style={{ isolation: 'isolate' }}
-                >
-                  {provider === k && <SegIndicator id="brgprov" />}
-                  {t(`bridge.provider.${k}`)}
-                </button>
-              ))}
-            </div>
-
-            <div className="row-between" style={{ marginTop: 8 }}>
-              <span className="faint">{t('bridge.provider.dln')}</span>
-              <span className="mono" style={{ fontSize: 12 }}>
-                {fromBaseUnits(dln.toAmount, toToken?.decimals ?? 6)} {toToken?.symbol}
-              </span>
-            </div>
-
-            {/*
-              The fixed fee is stated in the coin it is actually charged in,
-              and in dollars when we can price it. Showing only the dollar
-              figure would hide that the user needs that much NATIVE coin in
-              the wallet — a separate requirement, and a common reason a
-              bridge fails at signing.
-            */}
-            {dln.fixFee != null && (
-              <div className="row-between">
-                <span className="faint">{t('bridge.fixedFee')}</span>
-                <span className="mono" style={{ fontSize: 12 }}>
-                  {fixFeeNative(dln.fixFee)} {summary?.nativeSymbol ?? ''}
-                  {dlnFixedUsd != null ? ` · ${fmtUsd(dlnFixedUsd)}` : ''}
+        {dlnFresh?.toAmount && !quoting && (
+          <div className="brg-routes">
+            <div className="brg-routes-head">
+              <span>{t('bridge.routesTitle')}</span>
+              {comparison.winner && (
+                <span className="brg-routes-best">
+                  {t('bridge.best')} · {t(`bridge.provider.${comparison.winner}`)}
                 </span>
-              </div>
-            )}
+              )}
+            </div>
+
+            <div className="brg-routes-grid">
+              {PROVIDERS.map((k) => {
+                const isDln = k === 'dln';
+                const out = fromBaseUnits(
+                  isDln ? dlnFresh.toAmount : summaryFresh?.toAmount,
+                  toToken?.decimals ?? 6
+                );
+                const isWinner = comparison.winner === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`brg-route${provider === k ? ' is-on' : ''}${isWinner ? ' is-best' : ''}`}
+                    aria-label={t(`bridge.provider.${k}`)}
+                    aria-pressed={provider === k}
+                    onClick={() => setProvider(k)}
+                  >
+                    <span className="brg-route-top" aria-hidden="true">
+                      <span className={`brg-route-mark brg-route-mark--${k}`}>
+                        {isDln ? 'dB' : 'LI'}
+                      </span>
+                      <span className="brg-route-name">{t(`bridge.provider.${k}`)}</span>
+                      <span className="brg-route-radio" />
+                    </span>
+                    <span className="brg-route-amt" aria-hidden="true">
+                      {out ?? '—'} <em>{toToken?.symbol}</em>
+                    </span>
+                    <span className="brg-route-fee" aria-hidden="true">
+                      {isDln
+                        ? `${t('bridge.fixedFee')}${dlnFresh.fixFee != null ? ` · ${fixFeeNative(dlnFresh.fixFee)} ${summary?.nativeSymbol ?? ''}` : ''}`
+                        : `${t('bridge.totalCost')} · ${fmtUsd(summaryFresh?.totalCostUsd)}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
             {/*
               The warning that makes this honest. A fixed fee worth 19% of the
@@ -1131,7 +1165,7 @@ export default function Bridge() {
               into the wrong one, and it is invisible in the output amount.
             */}
             {burden?.severe && (
-              <p className="notice notice-danger" style={{ marginTop: 9 }}>
+              <p className="notice notice-danger brg-alert">
                 {t('bridge.fixedFeeWarn', { pct: burden.percent.toFixed(1) })}
               </p>
             )}
@@ -1142,16 +1176,21 @@ export default function Bridge() {
               exists is worse than no comparison.
             */}
             {comparison.reason === 'FIXED_FEE_UNPRICED' && (
-              <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
-                {t('bridge.cannotCompare')}
-              </p>
+              <p className="brg-hint">{t('bridge.cannotCompare')}</p>
             )}
             {comparison.winner && (
-              <p className="faint" style={{ marginTop: 9, fontSize: 12 }}>
+              <p className="brg-hint">
                 {t('bridge.betterRoute', {
                   name: t(`bridge.provider.${comparison.winner}`),
                   amount: fmtUsd(comparison.differenceUsd)
                 })}
+              </p>
+            )}
+
+            {dlnFresh.fixFee != null && (
+              <p className="brg-hint brg-hint--mono">
+                {t('bridge.fixedFee')}: {fixFeeNative(dlnFresh.fixFee)} {summary?.nativeSymbol ?? ''}
+                {dlnFixedUsd != null ? ` · ${fmtUsd(dlnFixedUsd)}` : ''}
               </p>
             )}
           </div>
@@ -1162,7 +1201,7 @@ export default function Bridge() {
           route" claim the user cannot check is just a slogan.
         */}
         {routes.length > 1 && !quoting && (
-          <p className="faint" style={{ marginTop: 9, fontSize: 12 }} dir="ltr">
+          <p className="brg-hint brg-hint--mono" dir="ltr">
             {t('bridge.routesCompared', {
               defaultValue: '{{count}} routes compared · best: {{name}}',
               count: routes.length,
@@ -1172,25 +1211,42 @@ export default function Bridge() {
         )}
 
         {!wallet.isConnected ? (
-          <p className="notice" style={{ marginTop: 12 }}>{t('bridge.connectFirst')}</p>
+          <p className="brg-connect">
+            <IconWallet width={17} height={17} aria-hidden="true" />
+            {t('bridge.connectFirst')}
+          </p>
         ) : (
-          <button
-            className="btn btn-primary"
-            style={{ marginTop: 12, width: '100%' }}
-            /*
-             * Each provider gates on ITS OWN readiness. Gating the DLN button
-             * on LI.FI's `transactionRequest` would disable a working route
-             * whenever the other provider had no path — which is precisely
-             * when the second route is most valuable.
-             */
-            disabled={busy || quoting || !toAddressValid || !toBaseUnits(amount, fromToken?.decimals)
-              || (provider === 'dln' ? !dln?.toAmount || dlnFormKey !== formKey : !quote?.transactionRequest || quoteFormKey !== formKey)}
-            onClick={run}
-          >
-            {busy
-              ? t(`crossChain.step.${execStep || 'confirm'}`, { defaultValue: t('bridge.sending') })
-              : t('bridge.send')}
-          </button>
+          <>
+            <button
+              className="brg-cta"
+              /*
+               * Each provider gates on ITS OWN readiness. Gating the DLN button
+               * on LI.FI's `transactionRequest` would disable a working route
+               * whenever the other provider had no path — which is precisely
+               * when the second route is most valuable.
+               */
+              disabled={busy || quoting || !toAddressValid || !toBaseUnits(amount, fromToken?.decimals)
+                || (provider === 'dln' ? !dln?.toAmount || dlnFormKey !== formKey : !quote?.transactionRequest || quoteFormKey !== formKey)}
+              onClick={run}
+            >
+              {busy && <span className="brg-cta-spin" aria-hidden="true" />}
+              <span>
+                {busy
+                  ? t(`crossChain.step.${execStep || 'confirm'}`, { defaultValue: t('bridge.sending') })
+                  : t('bridge.send')}
+              </span>
+              {!busy && (
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h13" />
+                  <path d="m12.5 5.5 6.5 6.5-6.5 6.5" />
+                </svg>
+              )}
+            </button>
+            <p className="brg-cta-note">
+              <IconShield width={13} height={13} aria-hidden="true" />
+              {t('bridge.sendNote')}
+            </p>
+          </>
         )}
 
         {/*
@@ -1200,18 +1256,18 @@ export default function Bridge() {
           catches the rest.
         */}
         {busy && awaitingWallet && (
-          <div className="bridge-waiting" style={{ marginTop: 8 }}>
-            <p className="faint" style={{ margin: '0 0 6px', fontSize: 11.5, lineHeight: 1.7, textAlign: 'center' }}>
+          <div className="bridge-waiting brg-waiting">
+            <p>
               {t('bridge.waitingHint')}
             </p>
-            <button type="button" className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={cancelWaiting}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={cancelWaiting}>
               {t('bridge.cancelWaiting')}
             </button>
           </div>
         )}
 
         {txErr && (
-          <p className="notice notice-danger" style={{ marginTop: 10 }}>
+          <p className="notice notice-danger brg-alert">
             {txErr?.text || txErr}
             {txErr?.detail && (
               <span dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, opacity: 0.75, wordBreak: 'break-word' }}>
@@ -1222,12 +1278,14 @@ export default function Bridge() {
         )}
 
         {txHash && (
-          <div className="notice" style={{ marginTop: 10 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>{t('bridge.sentTitle')}</div>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7 }}>{t('bridge.sentBody')}</p>
+          <div className="brg-sent">
+            <div className="brg-sent-title">
+              <span className="brg-sent-check" aria-hidden="true">✓</span>
+              {t('bridge.sentTitle')}
+            </div>
+            <p>{t('bridge.sentBody')}</p>
             <a
-              className="row"
-              style={{ gap: 6, marginTop: 8, fontSize: 12 }}
+              className="brg-sent-link"
               /*
                * The tracker has to match the provider that actually executed.
                * scan.li.fi knows nothing about a DLN order and would show a
@@ -1254,7 +1312,7 @@ export default function Bridge() {
           here until the user says yes to the NEW number.
         */}
         {changedQuote && (
-          <div className="notice notice-danger" style={{ marginTop: 10 }}>
+          <div className="notice notice-danger brg-alert">
             <div style={{ fontWeight: 700, marginBottom: 4 }}>{t('bridge.quoteChanged', { defaultValue: 'The rate changed while confirming.' })}</div>
             <p style={{ margin: 0, fontSize: 12 }} dir="ltr">
               ≈ {fromBaseUnits(changedQuote.quote.toAmount, toToken?.decimals ?? 6)} {toToken?.symbol}
@@ -1282,7 +1340,7 @@ export default function Bridge() {
           only the first of three things that have to happen.
         */}
         {tracked && provider !== 'dln' && (
-          <div style={{ marginTop: 12 }}>
+          <div className="brg-status">
             <CrossChainStatus
               transaction={tracked}
               chains={BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name }))}
@@ -1308,11 +1366,20 @@ export default function Bridge() {
       )}
 
       {/*
-        Placed BELOW the ticket rather than above it. Someone arriving here
-        already intends to bridge; the risk that matters is the one they meet
-        after tapping send, and that is what this covers.
+        ─── WHAT A BRIDGE IS, AND WHAT IT COSTS WHEN IT GOES WRONG ─────────
+        Both used to be permanently-open cards stacked above the form. They are
+        now two folded boxes BELOW it: someone arriving here already intends to
+        bridge, and the risk that matters is the one they meet after tapping
+        send. The disclosure stays tone="danger": "we cannot recover your
+        transfer" is the one sentence here that must never look decorative.
       */}
-      <RiskCard />
+      <InfoBox title={t('bridge.whatTitle')} tone="info" id="bridge-what" icon={<IconSwap width={17} height={17} />}>
+        <p>{t('bridge.whatBody')}</p>
+      </InfoBox>
+
+      <InfoBox title={t('bridge.riskTitle')} tone="warn" id="bridge-risk" icon={<IconShield width={17} height={17} />}>
+        <p>{t('bridge.riskBody')}</p>
+      </InfoBox>
 
         </>
       )}
@@ -1324,8 +1391,6 @@ export default function Bridge() {
         that read like product copy instead of legal rubble — and it lives in
         an InfoBox so the page opens calm and the disclosure is one tap away
         (the same treatment every non-blocking explanation on this screen got).
-        It stays tone="danger": "we cannot recover your transfer" is the one
-        sentence here that must never look decorative.
       */}
       <BridgeSigningReview review={signingReview} onDecision={finishSigningReview} />
       <InfoBox title={t('bridge.trustTitle')} tone="danger" id="bridge-trust">

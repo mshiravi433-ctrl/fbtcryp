@@ -6652,6 +6652,13 @@
   "bridge": {
     "title": "Bridge",
     "subtitle": "Move stablecoins between networks without leaving the app.",
+    "live": "Live routing",
+    "transfer": "Transfer",
+    "factChains": "{{n}} networks",
+    "factSign": "You sign in your wallet",
+    "factFee": "Fees before you sign",
+    "sendNote": "The signature happens only in your own wallet; we never hold your funds.",
+    "best": "Best",
     "whatTitle": "What a bridge does",
     "whatBody": "Your USDT on BNB Chain and USDT on Arbitrum are different tokens on different networks — you cannot send one to the other directly. A bridge locks the first and releases the second. We route through LI.FI, which compares every bridge and picks the cheapest, and your wallet signs it. We never hold your funds at any point.",
     "from": "From",
@@ -6667,6 +6674,7 @@
     "sending": "Confirm in your wallet…",
     "connectFirst": "Connect a wallet to get a quote.",
     "emptyHint": "Enter an amount to see the best route and its fees.",
+    "arrivesAs": "Arrives as {{symbol}}",
     "amount": "Amount",
     "sentTitle": "Sent",
     "sentBody": "The transaction is on-chain. Bridges take anywhere from seconds to several minutes — the funds will appear on the destination network when the relayer completes it. You can close this screen.",
@@ -6732,6 +6740,12 @@
       "tron": "Tron (USDT)",
       "solana": "Solana"
     },
+    "modeShort": {
+      "tokens": "Tokens",
+      "native": "Native",
+      "tron": "Tron",
+      "solana": "Solana"
+    },
     "routesTitle": "Compare routes",
     "fixedFee": "Fixed network fee",
     "fixedFeeWarn": "deBridge charges a fixed fee that is {{pct}}% of this transfer. Fixed fees hurt small amounts badly — the same fee would be a rounding error on a large one. LI.FI is almost certainly cheaper here.",
@@ -6788,7 +6802,7 @@
     "cancelWaiting": "Cancel waiting",
     "farmPromo": {
       "badge": "Farm",
-      "title": "Put the money you just moved to work",
+      "title": "Put your money to work",
       "chipLive": "Live yields",
       "chipSelf": "Non-custodial",
       "chipExit": "Exit any time",
