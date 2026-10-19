@@ -258,6 +258,7 @@ import { fetchTokenRisk } from './tokenRisk.js';
  * are GET-only by construction. See the mounter's header for the contract.
  */
 import { registerExploreRoutes, registerSecurityRoutes } from './exploreSecurityRoutes.js';
+import { registerCollectiveRoutes } from './collective/routes.js';
 import { INTENT_CAPABILITIES, validateIntentEnvelope } from './intents.js';
 import { flashLiquidityCapabilities, flashScan, flashSimulate, flashPlan } from './flashLiquidity.js';
 import {
@@ -5744,6 +5745,7 @@ app.get('/api/coin-venues', async (req, res) => {
  * shapes as the rest of the read-only API. They add no execution paths. */
 registerExploreRoutes(app);
 registerSecurityRoutes(app);
+registerCollectiveRoutes(app);
 
 /* ------------------------- THORChain native swaps ------------------------- */
 /*

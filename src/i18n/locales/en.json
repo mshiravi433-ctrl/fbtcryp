@@ -47,7 +47,8 @@
     "loan": "Loans",
     "protection": "Protection",
     "launch": "Launch",
-    "aparat": "Video Tutorials"
+    "aparat": "Video Tutorials",
+    "collective": "Collective"
   },
   "common": {
     "balance": "Balance",
@@ -16000,6 +16001,175 @@
         "step2": "Configure interval frequency, per-slice amount, and target price bounds",
         "step3": "Track live execution progress and receive instant push notifications"
       }
+    }
+  },
+  "collective": {
+    "title": "FBT AI Collective",
+    "subtitle": "A separate, public vault module. User-owned principal only; every transaction is visible on-chain.",
+    "refresh": "Refresh",
+    "disclosure": {
+      "title": "Risk and liquidity disclosure",
+      "body": "Returns are variable and not guaranteed. Principal may be lost. Withdrawals use a liquidity-aware queue and are not instant. Network gas is paid by the transacting wallet. The contracts are not independently audited."
+    },
+    "loading": "Checking verified Collective configuration…",
+    "readError": "Collective data is unavailable.",
+    "retry": "Retry",
+    "notConfigured": {
+      "title": "No verified Collective deployment is configured here.",
+      "body": "Addresses, RPC, and deployment height must be independently verified before public reads or deposits are enabled. No live-chain deployment or funding was performed by this build."
+    },
+    "empty": {
+      "title": "The factory is verified, but it has no registered vaults.",
+      "body": "Vaults appear only after an approved on-chain deployment."
+    },
+    "modules": {
+      "title": "Vault modules",
+      "stable": "Stable-yield vault",
+      "farming": "Farming & liquidity",
+      "trading": "Approved-token trading"
+    },
+    "module": {
+      "readConfigured": "Read configuration verified",
+      "disabled": "Disabled"
+    },
+    "wallet": {
+      "wrongChain": "Switch network to transact",
+      "readOnly": "Read-only until you connect a wallet",
+      "switch": "Switch to Robinhood Chain",
+      "connect": "Connect wallet"
+    },
+    "overview": {
+      "eyebrow": "LIVE ON-CHAIN ACCOUNTING"
+    },
+    "accounting": {
+      "epoch": "Epoch {{n}}"
+    },
+    "paused": "Emergency pause is active. Deposits and investments are blocked.",
+    "metric": {
+      "nav": "Net asset value",
+      "realizedIncome": "Income reserved for claims",
+      "queued": "Withdrawal liability",
+      "reserve": "Risk reserve",
+      "strategyAssets": "Strategy position value",
+      "idle": "Unencumbered idle principal",
+      "oracle": "Asset price feed",
+      "guard": "On-chain risk policy",
+      "pendingIncome": "Realized income awaiting settlement",
+      "targetLiquidity": "Target-reported withdrawable value",
+      "expenses": "Accrued operating expenses",
+      "lossCarry": "Unrecovered realized losses"
+    },
+    "epoch": {
+      "active": "Active epoch",
+      "window": "Subscription / withdrawal window",
+      "closed": "Epoch not active",
+      "end": "Ends",
+      "policy": "Epochs run for 30 days. Principal requests can open once the period ends; if the strategy is illiquid, settlement may be delayed. Deposits open only for up to seven days after settlement."
+    },
+    "strategy": {
+      "target": "Fixed strategy target"
+    },
+    "risk": {
+      "fresh": "Fresh",
+      "stale": "Stale / unavailable",
+      "enabled": "Enabled",
+      "blocked": "Blocked"
+    },
+    "position": {
+      "title": "Your position",
+      "shares": "Vault shares",
+      "principal": "Current redemption estimate",
+      "income": "Claimable realized income",
+      "connectToRead": "Connect a wallet to read its shares and income claims. No personal data is sent to the API beyond the public address."
+    },
+    "deposit": {
+      "label": "Deposit {{asset}}",
+      "submit": "Approve exact amount & deposit",
+      "closed": "Deposits closed during active epoch",
+      "note": "The wallet is asked for an exact token approval only. Deposits are open in the launch cohort or post-settlement window, never mid-epoch."
+    },
+    "withdraw": {
+      "label": "Request principal withdrawal",
+      "preview": "Preview queue request",
+      "closed": "Principal requests open after the 30-day period ends and for up to seven days after settlement. Requests enter a queue; strategy illiquidity can delay payment.",
+      "confirm": "Request a queued redemption estimated at {{amount}} {{symbol}}?",
+      "confirmButton": "Confirm request"
+    },
+    "claim": {
+      "button": "Claim realized income · {{amount}} {{symbol}}",
+      "scanMore": "More settled epochs remain to scan. Continue the claim checkpoint in batches of up to 12 epochs.",
+      "continue": "Continue claim scan (gas required)"
+    },
+    "action": {
+      "working": "Waiting for wallet…",
+      "depositSent": "Deposit transaction confirmed: {{hash}}",
+      "withdrawalSent": "Withdrawal request confirmed: {{hash}}",
+      "claimSent": "Income claim confirmed: {{hash}}"
+    },
+    "actionError": {
+      "INVALID_AMOUNT": "Enter a valid amount greater than zero.",
+      "WALLET_NOT_CONNECTED": "Connect a wallet first.",
+      "WRONG_CHAIN": "Switch the wallet to Robinhood Chain and try again.",
+      "INSUFFICIENT_SHARES": "The requested amount exceeds your available vault shares.",
+      "TRANSACTION_FAILED": "The transaction failed. Check the wallet and network, then retry."
+    },
+    "agent": {
+      "title": "Policy proposals",
+      "body": "A deterministic read-only planner proposes bounded operations from current contract state. It cannot sign, choose arbitrary calldata, or override on-chain risk checks.",
+      "noArgs": "No arguments",
+      "signatureRequired": "Requires an authorized keeper or user wallet signature.",
+      "none": "No action is currently proposed.",
+      "boundary": "Farm/LP and approved-token-trading adapters are disabled pending dedicated accounting and independent review."
+    },
+    "queue": {
+      "title": "Liquidity-aware withdrawal queue",
+      "pending": "Pending principal liability",
+      "available": "Available for funded payouts",
+      "empty": "No outstanding withdrawal requests.",
+      "note": "Requests burn vault shares and become FIFO principal liabilities. Income claims and reserves are protected from queue payouts; a blocked head is not skipped."
+    },
+    "history": {
+      "title": "Recent on-chain activity",
+      "empty": "No matching events in the indexed range yet.",
+      "note": "Event history is read from bounded, public chain logs. The connected address filter only changes which public events are displayed."
+    },
+    "footer": {
+      "title": "No guaranteed return. No company principal.",
+      "body": "All on-chain actions cost gas. Strategy addresses and risk limits must be verified before deployment. This software is not audited."
+    },
+    "reason": {
+      "READS_DISABLED": "Public chain reads are disabled until an operator verifies deployment settings.",
+      "RPC_NOT_CONFIGURED": "A verified read-only RPC endpoint is not configured.",
+      "RPC_URL_INVALID": "The configured RPC URL is invalid.",
+      "RPC_MUST_USE_HTTPS": "The RPC must use HTTPS; local HTTP is restricted to loopback test endpoints.",
+      "RPC_URL_CREDENTIALS_NOT_ALLOWED": "RPC credentials in URL user-info fields are rejected; keep provider secrets out of the URL.",
+      "FACTORY_ADDRESS_NOT_CONFIGURED": "No factory address is configured.",
+      "ASSET_ADDRESS_NOT_CONFIGURED": "No accounting-asset address is configured.",
+      "DEPLOYMENT_BLOCK_NOT_CONFIGURED": "The factory deployment block is not configured for bounded history indexing.",
+      "UNSUPPORTED_CHAIN": "Collective v1 is pinned to Robinhood Chain (4663).",
+      "CHAIN_ID_MISMATCH": "The configured RPC did not verify as the expected chain.",
+      "FACTORY_HAS_NO_CODE": "No contract code was found at the configured factory address.",
+      "ASSET_HAS_NO_CODE": "No contract code was found at the configured accounting-asset address.",
+      "FACTORY_ASSET_MISMATCH": "The factory accounting asset does not match the configured asset.",
+      "COLLECTIVE_NOT_CONFIGURED": "Public chain reads are not configured for this deployment.",
+      "UNKNOWN": "Configuration is not ready.",
+      "VERIFIED_DEPLOYMENT_CONFIGURATION_REQUIRED": "A deployment must be verified before this module can be used.",
+      "DEDICATED_LP_ADAPTER_AND_ORACLE_REVIEW_REQUIRED": "Disabled pending a dedicated liquidity/farming adapter and oracle review.",
+      "DEDICATED_TRADING_ACCOUNTING_AND_INDEPENDENT_REVIEW_REQUIRED": "Disabled pending separate trading accounting and independent review.",
+      "EVENT_INDEX_NOT_CONFIGURED": "The bounded public event index is not configured.",
+      "COLLECTIVE_READ_FAILED": "A safe read from the configured chain endpoint failed.",
+      "COLLECTIVE_API_UNAVAILABLE": "The Collective API is temporarily unavailable."
+    },
+    "policy": {
+      "title": "Active on-chain limits",
+      "maxTrade": "Maximum investment",
+      "maxAllocation": "Allocation cap",
+      "maxSlippage": "Maximum slippage",
+      "minLiquidity": "Minimum target liquidity",
+      "maxCost": "Transaction-cost ceiling",
+      "reserve": "Realized-income reserve",
+      "concentration": "Concentration cap",
+      "oracleAge": "Maximum oracle age"
     }
   }
 }

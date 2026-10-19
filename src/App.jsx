@@ -144,6 +144,9 @@ const GlobalWorld = lazyRetry(() => import('./pages/GlobalWorld'));
  * on this deployment" card when it is not — see src/pages/Vault.jsx.
  */
 const Vault = lazyRetry(() => import('./pages/Vault'));
+/* FBT AI Collective is an additive public-vault dashboard; the existing /vault
+   and Morpho card remain unchanged. */
+const Collective = lazyRetry(() => import('./pages/Collective'));
 
 /*
  * Loan — lending & borrowing page.
@@ -491,6 +494,7 @@ function AnimatedRoutes() {
             <Route path="/ai-global" element={<Navigate to="/global" replace />} />
             <Route path="/flash-liquidity" element={<FlashLiquidity />} />
             <Route path="/vault" element={<Vault />} />
+            <Route path="/collective" element={<Collective />} />
             <Route path="/loan" element={<Loan />} />
             {/* FBT Launch — token & liquidity launchpad. Non-custodial module. */}
             <Route path="/launch" element={<Launch />} />
