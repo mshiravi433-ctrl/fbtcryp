@@ -1,15 +1,15 @@
 import { Contract, getAddress, parseUnits } from 'ethers';
-import { COLLECTIVE_CHAIN_ID } from './constants.js';
 import { COLLECTIVE_ERC20_ABI, COLLECTIVE_VAULT_ABI } from './abi.js';
 
 const isAddress = (value) => typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value);
 
-async function resolveSigner(wallet) {
+async function resolveSigner(wallet, chainId) {
+  if (!Number.isSafeInteger(Number(chainId)) || Number(chainId) <= 0) throw new Error('UNSUPPORTED_CHAIN');
   if (!wallet?.isConnected || !wallet?.address) throw new Error('WALLET_NOT_CONNECTED');
   const signer = await wallet.ensureSigner?.() || wallet.getSigner?.();
   if (!signer?.provider) throw new Error('WALLET_SIGNER_UNAVAILABLE');
   const network = await signer.provider.getNetwork();
-  if (Number(network.chainId) !== COLLECTIVE_CHAIN_ID) throw new Error('WRONG_CHAIN');
+  if (Number(network.chainId) !== Number(chainId)) throw new Error('WRONG_CHAIN');
   const owner = await signer.getAddress();
   if (String(owner).toLowerCase() !== String(wallet.address).toLowerCase()) throw new Error('WALLET_ACCOUNT_MISMATCH');
   return { signer, owner: getAddress(owner) };
@@ -30,11 +30,11 @@ export function parseCollectiveAmount(value, decimals) {
 }
 
 /** Exact approval only. A pre-existing nonzero allowance is reset before use. */
-export async function depositIntoCollective({ wallet, assetAddress, vaultAddress, amountRaw }) {
+export async function depositIntoCollective({ wallet, chainId, assetAddress, vaultAddress, amountRaw }) {
   if (!isAddress(assetAddress) || !isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
   const amount = BigInt(amountRaw);
   if (amount <= 0n) throw new Error('INVALID_AMOUNT');
-  const { signer, owner } = await resolveSigner(wallet);
+  const { signer, owner } = await resolveSigner(wallet, chainId);
   const asset = new Contract(assetAddress, COLLECTIVE_ERC20_ABI, signer);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   const onchainAsset = await vault.asset();
@@ -53,53 +53,53 @@ export async function depositIntoCollective({ wallet, assetAddress, vaultAddress
   return { approvals, deposit, amountRaw: amount.toString() };
 }
 
-export async function previewCollectiveWithdrawal({ wallet, vaultAddress, assetsRaw }) {
+export async function previewCollectiveWithdrawal({ wallet, chainId, vaultAddress, assetsRaw }) {
   if (!isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
   const assets = BigInt(assetsRaw);
   if (assets <= 0n) throw new Error('INVALID_AMOUNT');
-  const { signer } = await resolveSigner(wallet);
+  const { signer } = await resolveSigner(wallet, chainId);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   const shares = await vault.previewWithdraw(assets);
   const quotedAssets = await vault.previewRedeem(shares);
   return { sharesRaw: shares.toString(), quotedAssetsRaw: quotedAssets.toString() };
 }
 
-export async function requestCollectiveWithdrawal({ wallet, vaultAddress, sharesRaw }) {
+export async function requestCollectiveWithdrawal({ wallet, chainId, vaultAddress, sharesRaw }) {
   if (!isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
   const shares = BigInt(sharesRaw);
   if (shares <= 0n) throw new Error('INVALID_SHARES');
-  const { signer } = await resolveSigner(wallet);
+  const { signer } = await resolveSigner(wallet, chainId);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   const tx = await vault.requestWithdrawal(shares);
   return { request: await waitConfirmed(tx), sharesRaw: shares.toString() };
 }
 
-export async function claimCollectiveIncome({ wallet, vaultAddress, maxEpochs = 12 }) {
+export async function claimCollectiveIncome({ wallet, chainId, vaultAddress, maxEpochs = 12 }) {
   if (!isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
   const batch = Math.max(1, Math.min(12, Number(maxEpochs) || 12));
-  const { signer } = await resolveSigner(wallet);
+  const { signer } = await resolveSigner(wallet, chainId);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   return waitConfirmed(await vault.claimIncome(batch));
 }
 
-export async function processCollectiveWithdrawals({ wallet, vaultAddress, maxItems = 20 }) {
+export async function processCollectiveWithdrawals({ wallet, chainId, vaultAddress, maxItems = 20 }) {
   if (!isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
   const batch = Math.max(1, Math.min(20, Number(maxItems) || 20));
-  const { signer } = await resolveSigner(wallet);
+  const { signer } = await resolveSigner(wallet, chainId);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   return waitConfirmed(await vault.processWithdrawals(batch));
 }
 
-export async function startCollectiveEpoch({ wallet, vaultAddress }) {
+export async function startCollectiveEpoch({ wallet, chainId, vaultAddress }) {
   if (!isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
-  const { signer } = await resolveSigner(wallet);
+  const { signer } = await resolveSigner(wallet, chainId);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   return waitConfirmed(await vault.startFirstEpoch());
 }
 
-export async function settleCollectiveEpoch({ wallet, vaultAddress }) {
+export async function settleCollectiveEpoch({ wallet, chainId, vaultAddress }) {
   if (!isAddress(vaultAddress)) throw new Error('BAD_CONTRACT_ADDRESS');
-  const { signer } = await resolveSigner(wallet);
+  const { signer } = await resolveSigner(wallet, chainId);
   const vault = new Contract(vaultAddress, COLLECTIVE_VAULT_ABI, signer);
   return waitConfirmed(await vault.settleEpoch());
 }

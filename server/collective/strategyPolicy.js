@@ -1,5 +1,8 @@
 import { Interface } from 'ethers';
 import { VAULT_ABI } from './abi.js';
+import { COLLECTIVE_CHAINS } from './config.js';
+
+const DEFAULT_COLLECTIVE_CHAIN_ID = 4663;
 
 const vaultInterface = new Interface(VAULT_ABI);
 const BPS = 10_000n;
@@ -16,7 +19,7 @@ function makeProposal(snapshot, action, args, reason, constraints) {
   return {
     id: `${snapshot.address.toLowerCase()}:${epoch}:${action}:${amount}`,
     vault: snapshot.address,
-    chainId: 4663,
+    chainId: snapshot.chainId ?? null,
     epoch,
     action,
     args: args.map((value) => typeof value === 'bigint' ? value.toString() : String(value)),
@@ -34,6 +37,7 @@ function empty(snapshot, status, reason) {
     schema: 'fbt.collective.proposals.v1',
     agent: { id: 'collective-policy-engine', mode: 'deterministic-read-only' },
     vault: snapshot.address,
+    chainId: snapshot.chainId ?? null,
     generatedAt: new Date().toISOString(),
     status,
     reason,
@@ -49,12 +53,24 @@ function empty(snapshot, status, reason) {
  * yield. The on-chain roles, oracle checks, timelocked policy, and pause remain
  * the actual execution boundary.
  */
-export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Date.now() / 1000) } = {}) {
-  if (!snapshot?.address || !snapshot?.epoch || !snapshot?.accounting || !snapshot?.strategy) {
-    return empty(snapshot || { address: null }, 'unavailable', 'VAULT_STATE_INCOMPLETE');
+export function buildCollectiveProposals(snapshot, {
+  nowSeconds = Math.floor(Date.now() / 1000),
+  chainId: requestedChainId = undefined
+} = {}) {
+  const candidateChainId = Number(requestedChainId ?? snapshot?.chainId ?? DEFAULT_COLLECTIVE_CHAIN_ID);
+  const chainId = Number.isSafeInteger(candidateChainId) && candidateChainId > 0 ? candidateChainId : null;
+  const networkSnapshot = snapshot && typeof snapshot === 'object'
+    ? { ...snapshot, chainId }
+    : { address: null, chainId };
+  if (!chainId || !COLLECTIVE_CHAINS[chainId]) {
+    return empty(networkSnapshot, 'unavailable', 'UNSUPPORTED_CHAIN');
   }
-  if (snapshot.emergency?.paused) return empty(snapshot, 'paused', 'EMERGENCY_PAUSE_ACTIVE');
+  if (!snapshot?.address || !snapshot?.epoch || !snapshot?.accounting || !snapshot?.strategy) {
+    return empty(networkSnapshot, 'unavailable', 'VAULT_STATE_INCOMPLETE');
+  }
+  if (snapshot.emergency?.paused) return empty(networkSnapshot, 'paused', 'EMERGENCY_PAUSE_ACTIVE');
 
+  const plannerSnapshot = networkSnapshot;
   const epoch = snapshot.epoch;
   const accounting = snapshot.accounting;
   const strategy = snapshot.strategy;
@@ -74,7 +90,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
   if (epoch.started && Number(epoch.end) > 0 && nowSeconds >= Number(epoch.end)) {
     if (withdrawalLiability > 0n && queueAvailable > 0n) {
       proposals.push(makeProposal(
-        snapshot,
+        plannerSnapshot,
         'processWithdrawals',
         [20],
         'PAY_FUNDED_FIFO_PRINCIPAL_WITHDRAWALS',
@@ -84,7 +100,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
       reason = 'FUNDED_WITHDRAWAL_QUEUE';
     } else if (hasStrategyPosition && strategyExitAmount > 0n) {
       proposals.push(makeProposal(
-        snapshot,
+        plannerSnapshot,
         'withdrawFromStrategy',
         [strategyExitAmount],
         'REALIZE_STRATEGY_POSITION_BEFORE_INCOME_SNAPSHOT',
@@ -97,7 +113,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
       reason = 'TARGET_REPORTS_NO_WITHDRAWABLE_LIQUIDITY';
     } else {
       proposals.push(makeProposal(
-        snapshot,
+        plannerSnapshot,
         'settleEpoch',
         [],
         'EPOCH_ENDED_FINALIZE_REALIZED_INCOME_SNAPSHOT',
@@ -109,7 +125,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
   } else if (withdrawalLiability > 0n) {
     if (queueAvailable > 0n) {
       proposals.push(makeProposal(
-        snapshot,
+        plannerSnapshot,
         'processWithdrawals',
         [20],
         'PAY_FUNDED_FIFO_PRINCIPAL_WITHDRAWALS',
@@ -119,7 +135,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
       reason = 'FUNDED_WITHDRAWAL_QUEUE';
     } else if (hasStrategyPosition && strategyExitAmount > 0n) {
       proposals.push(makeProposal(
-        snapshot,
+        plannerSnapshot,
         'withdrawFromStrategy',
         [strategyExitAmount],
         'RAISE_LIQUIDITY_FOR_QUEUED_PRINCIPAL',
@@ -141,7 +157,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
       reason = 'NO_SHARES_TO_START_AN_EPOCH';
     } else {
       proposals.push(makeProposal(
-        snapshot,
+        plannerSnapshot,
         'startFirstEpoch',
         [],
         'START_NEXT_EPOCH_AFTER_SUBSCRIPTION_WINDOW',
@@ -180,7 +196,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
         reason = 'TARGET_LIQUIDITY_BELOW_POLICY_MINIMUM';
       } else {
         proposals.push(makeProposal(
-          snapshot,
+          plannerSnapshot,
           'invest',
           [amount],
           'INVEST_IDLE_PRINCIPAL_WITHIN_CURRENT_ONCHAIN_LIMITS',
@@ -204,6 +220,7 @@ export function buildCollectiveProposals(snapshot, { nowSeconds = Math.floor(Dat
     schema: 'fbt.collective.proposals.v1',
     agent: { id: 'collective-policy-engine', mode: 'deterministic-read-only' },
     vault: snapshot.address,
+    chainId,
     generatedAt: new Date().toISOString(),
     observedBlock: snapshot.latestBlock,
     status,

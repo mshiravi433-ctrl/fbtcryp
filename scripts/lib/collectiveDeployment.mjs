@@ -16,6 +16,38 @@ import { Contract, ContractFactory, getAddress } from 'ethers';
 
 export const LOCAL_CHAIN_ID = 31337;
 export const ROBINHOOD_CHAIN_ID = 4663;
+export const ROBINHOOD_TESTNET_CHAIN_ID = 46630;
+export const NETWORKS = Object.freeze({
+  robinhood: Object.freeze({
+    name: 'robinhood',
+    chainId: ROBINHOOD_CHAIN_ID,
+    displayName: 'Robinhood Chain',
+    rpcUrl: 'https://rpc.mainnet.chain.robinhood.com',
+    explorer: 'https://robinhoodchain.blockscout.com',
+    testnet: false
+  }),
+  'robinhood-testnet': Object.freeze({
+    name: 'robinhood-testnet',
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
+    displayName: 'Robinhood Chain Testnet',
+    rpcUrl: 'https://rpc.testnet.chain.robinhood.com',
+    explorer: 'https://explorer.testnet.chain.robinhood.com',
+    testnet: true
+  })
+});
+
+export function networkByName(name) {
+  const normalized = String(name ?? '').trim().toLowerCase();
+  if (normalized === 'mainnet' || normalized === 'robinhood-mainnet') return NETWORKS.robinhood;
+  if (normalized === 'testnet') return NETWORKS['robinhood-testnet'];
+  return NETWORKS[normalized] ?? null;
+}
+
+export function networkByChainId(chainId) {
+  const id = Number(chainId);
+  return Object.values(NETWORKS).find((network) => network.chainId === id) ?? null;
+}
+
 export const RISK_KIND = { ALLOW_ASSET: 0, ALLOW_PROTOCOL: 1, ALLOW_ROUTER: 2, ALLOW_EXPENSE_RECIPIENT: 3, STABLE_YIELD: 0 };
 
 /** Load the local-only solc artifacts produced by scripts/compile-collective.mjs. */
@@ -364,6 +396,11 @@ export async function activatePhase({ signer, artifacts, deployment, limits = DE
 export function publicDeploymentRecord(deployment) {
   const record = JSON.parse(JSON.stringify(deployment));
   delete record.deployerKey;
+  const network = networkByChainId(record.chainId);
+  if (network) {
+    record.network = network.name;
+    record.testnet = network.testnet;
+  }
   return record;
 }
 

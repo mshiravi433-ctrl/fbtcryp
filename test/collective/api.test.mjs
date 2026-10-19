@@ -78,6 +78,8 @@ test('Collective read configuration fails closed and never publishes RPC credent
   assert.equal(invalidUrl.issues.includes('RPC_URL_INVALID'), true);
   const credentialedUrl = readCollectiveConfig({ ...common, COLLECTIVE_RPC_URL: 'https://user:secret@rpc.example' });
   assert.equal(credentialedUrl.issues.includes('RPC_URL_CREDENTIALS_NOT_ALLOWED'), true);
+  const queryTokenUrl = readCollectiveConfig({ ...common, COLLECTIVE_RPC_URL: 'https://rpc.example?api_key=must-not-be-published' });
+  assert.equal(queryTokenUrl.issues.includes('RPC_URL_CREDENTIALS_NOT_ALLOWED'), true);
 
   for (const locale of ['en', 'fa']) {
     const translations = JSON.parse(fs.readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));
@@ -146,6 +148,17 @@ test('dashboard integration is additive, same-origin, and available in every shi
   assert.ok(menu.includes("to: '/collective', key: 'nav.collective'"));
   assert.ok(client.includes("const ROOT = '/api/collective'"));
   assert.ok(page.includes('collective.notConfigured'));
+  assert.ok(page.includes('collectiveChainFromPayload(status)'));
+  assert.ok(page.includes('chain?.testnet === true'));
+  assert.ok(page.includes('wallet.switchChain?.(collectiveChainId)'));
+  assert.ok(page.includes('status.chain.explorer'));
+  const collectiveCss = fs.readFileSync('src/styles/collective.css', 'utf8');
+  assert.match(collectiveCss, /collective-testnet-banner[\s\S]*?background: linear-gradient/);
+  for (const locale of ['en', 'fa']) {
+    const translations = JSON.parse(fs.readFileSync(`src/i18n/locales/${locale}.json`, 'utf8'));
+    assert.equal(typeof translations.collective?.testnet?.title, 'string', `${locale} is missing the TESTNET warning`);
+    assert.equal(typeof translations.collective?.testnet?.body, 'string', `${locale} is missing the no-real-value disclosure`);
+  }
   assert.equal(client.includes('http://localhost'), false);
   assert.equal(client.includes('127.0.0.1'), false);
 
@@ -162,8 +175,17 @@ test('policy planner proposes only bounded fixed actions and fails closed for st
   const plan = buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000 });
   assert.equal(plan.status, 'action-ready');
   assert.equal(plan.proposals.length, 1);
+  assert.equal(plan.chainId, 4663);
+  assert.equal(plan.proposals[0].chainId, 4663);
   assert.equal(plan.proposals[0].action, 'invest');
   assert.equal(plan.proposals[0].args[0], '25000000'); // 25% of NAV, below idle balance
+  const testnetPlan = buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000, chainId: 46630 });
+  assert.equal(testnetPlan.chainId, 46630);
+  assert.equal(testnetPlan.proposals[0].chainId, 46630);
+  const unsupportedPlan = buildCollectiveProposals(activeSnapshot(), { nowSeconds: 1_800_500_000, chainId: 46631 });
+  assert.equal(unsupportedPlan.status, 'unavailable');
+  assert.equal(unsupportedPlan.reason, 'UNSUPPORTED_CHAIN');
+  assert.deepEqual(unsupportedPlan.proposals, []);
   const allocationBound = buildCollectiveProposals(activeSnapshot({
     strategy: { ...activeSnapshot().strategy, totalAssetsRaw: '20000000' }
   }), { nowSeconds: 1_800_500_000 });

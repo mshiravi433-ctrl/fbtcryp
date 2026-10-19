@@ -22,8 +22,7 @@ import { Contract, JsonRpcProvider } from 'ethers';
 import {
   FACTORY_ABI, VAULT_ABI, RISK_ABI, EMERGENCY_ABI, ORACLE_ABI, ADAPTER_ABI, ERC20_ABI, EPOCH_ABI, ACCESS_ABI
 } from '../server/collective/abi.js';
-import { COLLECTIVE_CHAIN_ID } from '../server/collective/config.js';
-import { deploymentEnv } from './lib/collectiveDeployment.mjs';
+import { NETWORKS, networkByChainId, networkByName, publicDeploymentRecord, deploymentEnv } from './lib/collectiveDeployment.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -33,16 +32,50 @@ const valueOf = (flag, fallback = null) => {
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
 };
 
-const file = path.resolve(root, valueOf('--deployment', path.join('deployments', `collective-${COLLECTIVE_CHAIN_ID}.json`)));
+const chainArg = valueOf('--chain', null);
+const requestedNetwork = chainArg == null
+  ? null
+  : networkByName(chainArg) ?? (Number.isSafeInteger(Number(chainArg)) ? networkByChainId(Number(chainArg)) : null);
+if (chainArg != null && !requestedNetwork) {
+  console.error(`✗ unsupported --chain ${chainArg}; supported chain IDs: ${Object.values(NETWORKS).map((row) => row.chainId).join(', ')}`);
+  process.exit(1);
+}
+const defaultNetwork = requestedNetwork ?? networkByName('robinhood');
+const file = path.resolve(root, valueOf('--deployment', path.join('deployments', `collective-${defaultNetwork.chainId}.json`)));
 if (!fs.existsSync(file)) {
   console.error(`✗ deployment record not found: ${path.relative(root, file)}`);
-  console.error('  Deploy first: node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute');
+  console.error(`  Deploy first: node scripts/collective-deploy.mjs --network ${defaultNetwork.name} --phase deploy --execute`);
   process.exit(1);
 }
 const deployment = JSON.parse(fs.readFileSync(file, 'utf8'));
-
-const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? '').trim();
+const recordNetwork = networkByChainId(deployment.chainId);
+if (!recordNetwork) {
+  console.error(`✗ unsupported deployment record chainId ${deployment.chainId}; refusing to read or update it`);
+  process.exit(1);
+}
+if (requestedNetwork && requestedNetwork.chainId !== recordNetwork.chainId) {
+  console.error(`✗ --chain ${requestedNetwork.chainId} does not match deployment record chainId ${deployment.chainId}; refusing cross-network reads`);
+  process.exit(1);
+}
+if ((recordNetwork.testnet && deployment.testnet !== true) ||
+    (deployment.testnet != null && Boolean(deployment.testnet) !== recordNetwork.testnet)) {
+  console.error('✗ deployment record testnet flag conflicts with its chainId; refusing cross-network reads');
+  process.exit(1);
+}
+const selectedNetwork = recordNetwork;
+const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? '').trim() || selectedNetwork.rpcUrl;
 const maxSpan = String(process.env.COLLECTIVE_EVENT_MAX_BLOCK_SPAN ?? '20000').trim();
+try {
+  const parsed = new URL(rpcUrl);
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error('invalid');
+} catch {
+  console.error('✗ COLLECTIVE_RPC_URL must be a credential-free HTTPS read endpoint with no query token or fragment.');
+  process.exit(1);
+}
+if (has('--write-verified') && !has('--check')) {
+  console.error('✗ --write-verified is only allowed together with --check');
+  process.exit(1);
+}
 
 if (has('--env') || has('--write')) {
   const block = deploymentEnv(deployment, { rpcUrl, maxEventSpan: maxSpan });
@@ -64,11 +97,6 @@ if (!has('--check') && !has('--env') && !has('--write')) {
   process.exit(0);
 }
 
-if (!rpcUrl) {
-  console.error('✗ COLLECTIVE_RPC_URL is required for --check. Use a verified read-only HTTPS endpoint.');
-  process.exit(1);
-}
-
 const checks = [];
 const record = (name, pass, detail = '') => {
   checks.push({ name, pass, detail });
@@ -76,10 +104,11 @@ const record = (name, pass, detail = '') => {
 };
 
 try {
-  const provider = new JsonRpcProvider(rpcUrl, COLLECTIVE_CHAIN_ID);
+  const provider = new JsonRpcProvider(rpcUrl, selectedNetwork.chainId);
   const network = await provider.getNetwork();
-  record('RPC chain id is Robinhood Chain (4663)', Number(network.chainId) === COLLECTIVE_CHAIN_ID, String(network.chainId));
-  if (Number(network.chainId) !== COLLECTIVE_CHAIN_ID) throw new Error('chain id mismatch');
+  record(`RPC chain id is ${selectedNetwork.displayName} (${selectedNetwork.chainId})`, Number(network.chainId) === selectedNetwork.chainId, String(network.chainId));
+  if (Number(network.chainId) !== selectedNetwork.chainId) throw new Error('chain id mismatch; refusing cross-network verification');
+  if (selectedNetwork.testnet) console.log('  TESTNET — test assets have no real-world value; no mainnet record is read or changed.');
 
   const { contracts, asset: assetRecord, target, vault: vaultRecord } = deployment;
   if (!vaultRecord?.address) {
@@ -154,9 +183,21 @@ try {
     console.error(`✗ ${failed.length} check(s) failed. Keep public reads disabled and investigate.`);
     process.exit(1);
   }
-  console.log(`✓ all ${checks.length} checks passed. Public reads and user-signed transactions can be enabled.`);
+  console.log(`✓ all ${checks.length} checks passed on ${selectedNetwork.displayName} (${selectedNetwork.chainId}).`);
   console.log('  gas: every user action is signed by the user wallet; sponsored=false, serverSigning=false');
-  if (has('--json')) console.log(JSON.stringify({ ok: true, checks, file: path.relative(root, file) }, null, 2));
+  if (has('--write-verified')) {
+    const verifiedRecord = publicDeploymentRecord({
+      ...deployment,
+      chainId: selectedNetwork.chainId,
+      network: selectedNetwork.name,
+      testnet: selectedNetwork.testnet,
+      verified: true,
+      verifiedAt: new Date().toISOString()
+    });
+    fs.writeFileSync(file, `${JSON.stringify(verifiedRecord, null, 2)}\n`);
+    console.log(`✓ marked ${path.relative(root, file)} verified=true testnet=${selectedNetwork.testnet}`);
+  }
+  if (has('--json')) console.log(JSON.stringify({ ok: true, checks, file: path.relative(root, file), chainId: selectedNetwork.chainId, testnet: selectedNetwork.testnet }, null, 2));
 } catch (cause) {
   console.error(`✗ verification aborted: ${cause?.shortMessage || cause?.message || cause}`);
   process.exit(1);
