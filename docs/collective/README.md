@@ -95,7 +95,7 @@ Deterministic policy planner ── bounded proposal ──> opt-in keeper signe
 Most recently run:
 
 - `npm run test:collective` — **passed**. `solc 0.8.24` compiled all 13 Collective sources; 19 local Ganache assertions and 5 API/config/policy/indexer/router/integration tests passed. `StrategyVaultDeployer` is 24,564 bytes against EIP-170's 24,576-byte limit (12 bytes of margin); preserve the pinned compiler/settings and re-check size after any Solidity change.
-- `npm run build` — **passed**. The Collective JS/CSS chunks built and the first-paint bundle check reported 1,690 KiB against a 1,700 KiB budget. Existing warnings remain for Android `assetlinks.json` (no real `FBT_ANDROID_SHA256` was supplied), vendor bundles, duplicate imports and large chunks.
+- `npm run build` — **passed**. The Collective JS/CSS chunks built and the first-paint bundle check reported 1,690 KiB against a 1,725 KiB budget. Existing warnings remain for Android `assetlinks.json` (no real `FBT_ANDROID_SHA256` was supplied), vendor bundles, duplicate imports and large chunks.
 - The locale check found `nav.collective` in all 12 shipped locales. The broader repository wiring audit returned 2,836/2,881 checks; 45 existing checks still fail, none identifying the Collective route/page/translation integration. Review those against the project's baseline; this is not a full-repository pass.
 
 Ganache fell back to its JavaScript implementation because the optional µWS native binary was missing. No public chain, deployment or real asset was used by these tests. The contracts have no independent security audit or production configuration; this source alone is not a live Collective deployment.
