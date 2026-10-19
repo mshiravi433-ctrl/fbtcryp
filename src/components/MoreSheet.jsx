@@ -148,6 +148,7 @@ const GROUPS = [
     id: 'earn',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
+      { to: '/collective', key: 'nav.collective', Icon: IconActivity, hue: 'var(--rgb-5)' },
       /*
        * Loan — lending & borrowing page.
        * FBT acts as Router + Fee layer only; non-custodial.
