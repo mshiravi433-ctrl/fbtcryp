@@ -16006,6 +16006,10 @@
   "collective": {
     "title": "FBT AI Collective",
     "subtitle": "A separate, public vault module. User-owned principal only; every transaction is visible on-chain.",
+    "public": {
+      "badge": "Public module",
+      "gas": "Every transaction is signed by your connected wallet, and your wallet pays the network gas. No sponsor, paymaster or company subsidy is enabled."
+    },
     "refresh": "Refresh",
     "disclosure": {
       "title": "Risk and liquidity disclosure",

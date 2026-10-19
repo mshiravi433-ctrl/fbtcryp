@@ -110,17 +110,26 @@ export function publicCollectiveConfig(config = readCollectiveConfig()) {
     operations: {
       userTransactions: config.configured,
       publicReads: config.configured,
+      publicDashboard: true,
       serverSigning: false,
       privateKeysStoredByApi: false,
       aiCanSign: false,
       keeperEnabled: config.keeperEnabled,
-      mainnetDeploymentPerformed: false
+      deploymentConfigured: config.configured,
+      // Gas policy is part of the public contract with users: the connected
+      // user wallet signs and pays every deposit/claim/withdrawal request.
+      // There is no relayer, paymaster, sponsor or server-held key in the API.
+      gasPayer: 'user-wallet',
+      gasSponsorshipEnabled: false,
+      userPaysGas: true,
+      relayerEnabled: false
     },
     disclosures: [
       'Deposits use user-owned principal only; no company investment principal is supplied.',
       'Returns are variable and not guaranteed; principal can lose value.',
       'Withdrawal requests are queued and can be delayed by strategy liquidity.',
-      'Transactions require user-paid network gas; zero company principal does not mean zero operating cost.',
+      'Every transaction is signed by the connected user wallet, which pays its own network gas. No sponsor, relayer or company gas subsidy is enabled.',
+      'The fixed ERC-4626 target can report zero yield; the dashboard shows its live position and reported liquidity.',
       'The contracts have not been independently audited.'
     ]
   };

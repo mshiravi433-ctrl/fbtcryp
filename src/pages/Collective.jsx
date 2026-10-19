@@ -287,6 +287,11 @@ export default function Collective() {
           </button>
         </header>
 
+        <div className="collective-publicbar">
+          <span className="collective-pill">{t('collective.public.badge', { defaultValue: 'Public module' })}</span>
+          <span>{t('collective.public.gas', { defaultValue: 'Every transaction is signed by your connected wallet, and your wallet pays the network gas. No sponsor, paymaster or company subsidy is enabled.' })}</span>
+        </div>
+
         <section className="collective-banner" role="note">
           <IconInfo width={18} height={18} />
           <div>

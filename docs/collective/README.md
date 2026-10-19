@@ -2,7 +2,7 @@
 
 ## Status
 
-This is an additive, **non-deployed** public-vault module. It is not an audit, a production launch approval, or evidence of a live Robinhood Chain vault. No production addresses, oracle, stablecoin contract, ERC-4626 strategy, or deployment block were available to verify in the repository. Reads and keeper execution are disabled by default.
+This is an additive, **non-deployed** public-vault module in this repository. It is not an audit, a production launch approval, or evidence of a live Robinhood Chain vault. No production addresses, oracle, stablecoin contract, ERC-4626 strategy, or deployment block were available to verify in the repository. Reads and keeper execution are disabled by default.
 
 The deliverable currently implements the **stable-yield lane only**. Farming/LP and approved-token trading are surfaced as disabled, and the v1 factory rejects those vault kinds. The `ExecutionRouter` and policy hooks are a constrained foundation for a separately reviewed future release; they are not an enabled user product. Do not activate those lanes by changing a flag or granting a role.
 
@@ -32,6 +32,9 @@ server/collective/
   routes.js                  GET-only /api/collective routes; no-store responses
   strategyPolicy.js          deterministic, read-only bounded proposal planner
 scripts/collective-keeper.mjs  one-shot keeper; dry-run unless separately enabled
+scripts/collective-deploy.mjs  two-phase deploy/activate; --local runs a full Ganache rehearsal
+scripts/collective-activate.mjs public read configuration + on-chain deployment verification
+scripts/lib/collectiveDeployment.mjs shared deploy/activate library (no secrets, user-paid gas)
 src/lib/collective/
   abi.js api.js constants.js wallet-signed transaction helpers
 src/pages/Collective.jsx      additive dashboard, disclosures and user actions
@@ -94,11 +97,38 @@ Deterministic policy planner ── bounded proposal ──> opt-in keeper signe
 
 Most recently run:
 
-- `npm run test:collective` — **passed**. `solc 0.8.24` compiled all 13 Collective sources; 19 local Ganache assertions and 5 API/config/policy/indexer/router/integration tests passed. `StrategyVaultDeployer` is 24,564 bytes against EIP-170's 24,576-byte limit (12 bytes of margin); preserve the pinned compiler/settings and re-check size after any Solidity change.
+- `npm run test:collective` (2026-10-19, additive activation changes) — **passed**. `solc 0.8.24` compiled all 15 Collective sources and every contract stayed under EIP-170. The 19 local Ganache assertions, 7 API/config/policy/indexer/router/integration tests and 4 new activation-oracle/strategy tests passed (the Ganache probe takes about 12 minutes on a 2-core/3 GiB host because µWS falls back to JavaScript). Separately, `node scripts/collective-deploy.mjs --local --rehearse` completed the full deploy → timelock → activate → user deposit → invest → reader path. `StrategyVaultDeployer` is 24,564 bytes against EIP-170's 24,576-byte limit (12 bytes of margin); preserve the pinned compiler/settings and re-check size after any Solidity change.
 - `npm run build` — **passed**. The Collective JS/CSS chunks built and the first-paint bundle check reported 1,690 KiB against a 1,700 KiB budget. Existing warnings remain for Android `assetlinks.json` (no real `FBT_ANDROID_SHA256` was supplied), vendor bundles, duplicate imports and large chunks.
 - The locale check found `nav.collective` in all 12 shipped locales. The broader repository wiring audit returned 2,836/2,881 checks; 45 existing checks still fail, none identifying the Collective route/page/translation integration. Review those against the project's baseline; this is not a full-repository pass.
 
 Ganache fell back to its JavaScript implementation because the optional µWS native binary was missing. No public chain, deployment or real asset was used by these tests. The contracts have no independent security audit or production configuration; this source alone is not a live Collective deployment.
+
+## Activation tooling (2026-10-19)
+
+The module can now be deployed and switched on without inventing any address:
+
+- `contracts/collective/oracles/DeclaredOracles.sol` — a fixed, operator-declared
+  USD price for the single accounting asset plus a declared native-gas price
+  (explicitly not a market feed), and a disabled liquidity oracle so the
+  unfinished trading lane stays fail-closed.
+- `contracts/collective/strategies/NoYield4626Strategy.sol` — a zero-yield,
+  no-admin ERC-4626 target used only when no audited target address is supplied.
+  A vault target is immutable, so real yield requires a new, reviewed vault.
+- `scripts/collective-deploy.mjs --local --rehearse` deploys everything on an
+  in-process Ganache chain, waits the real one-day RiskController timelock,
+  activates, creates the vault, has a separate user wallet deposit and pay its
+  own gas, starts the first epoch, invests through the keeper, and verifies the
+  deployment with the same reader the API uses.
+- `scripts/collective-deploy.mjs --network robinhood --phase deploy|activate
+  --execute` is the live path. Every transaction is signed by the operator's own
+  wallet (`COLLECTIVE_DEPLOYER_PRIVATE_KEY`, never stored). No relayer, paymaster
+  or sponsor exists; user deposits/claims/withdrawals are signed by the user.
+- `scripts/collective-activate.mjs --env|--check` emits the read-only public
+  configuration and verifies the exact on-chain conditions before public reads
+  are enabled.
+
+Full instructions, gas model, trust assumptions and residual blockers:
+**`docs/collective/ACTIVATION-FA.md`**.
 
 ## Change stages
 
@@ -107,6 +137,6 @@ Ganache fell back to its JavaScript implementation because the optional µWS nat
 3. Add opt-in keeper and tests; no write/broadcast API.
 4. Add relative-URL wallet client, a new dashboard route, More-menu link and localized disclosures.
 5. Run local compile, Ganache/API tests and frontend build.
-6. **Not done:** chain-address verification, audit, deployment rehearsal, deployment approval, mainnet deployment, funding, user-asset activation or merge to `main`.
+6. **Not done:** chain-address verification, audit, deployment approval, mainnet deployment, funding, user-asset activation or merge to `main`.
 
 See [Threat model](THREAT_MODEL.md) and [Environment/deployment runbook](RUNBOOK.md) before any future deployment work.
