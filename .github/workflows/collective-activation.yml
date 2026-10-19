@@ -1,49 +1,10 @@
-# ============================================================================
-# FBT AI COLLECTIVE — KEYLESS, GAS-FREE ACTIVATION PIPELINE
+# FBT AI Collective activation workflow.
 #
-# INSTALL: copy this whole file to .github/workflows/collective-activation.yml
-# (GitHub blocks automation tokens from writing under .github/workflows/, so
-# this copy lives here and the owner pastes it once in the GitHub UI).
-#
-# WHAT RUNS WITHOUT ANYBODY HOLDING A KEY
-#   Job `rehearsal` runs on every push to main that touches the Collective, and
-#   weekly. It needs NO repository secret and spends NO gas: it compiles the
-#   contracts, runs the Ganache contract probe, the API/activation tests and the
-#   complete local rehearsal (deploy → real 1-day timelock → activate → a user
-#   deposit signed and paid by the user's own wallet → invest → read through the
-#   production reader). It then publishes the evidence — contract bytecode
-#   hashes, sizes and check results — to:
-#       server/collective/activation.snapshot.js   (read by the API)
-#       public/collective/activation.json          (public, auditable)
-#   The commit-back is what makes the already-live site show a real, verifiable
-#   pipeline status with no Vercel environment variable.
-#
-# WHY THERE IS STILL A `live` JOB (AND WHY IT IS OFF BY DEFAULT)
-#   Contracts cannot be put on Robinhood Chain (4663) for free: an Arbitrum
-#   Orbit chain charges gas in ETH. No key and no gas exist inside this
-#   repository, and inventing either would be a lie. So the live job is:
-#       · manual only (workflow_dispatch),
-#       · gated by an explicit `acknowledge_gas=yes` input,
-#       · gated by a repository secret the owner adds themselves,
-#       · never printing, persisting or committing the key.
-#   The deploying wallet pays the gas — there is no sponsor, relayer or
-#   paymaster. Once phase 2 passes verification, the public read configuration
-#   becomes automatic (the API reads the verified snapshot), so "run the
-#   workflow once" is the whole operational step.
-#
-# ONE-TIME SETUP FOR THE LIVE JOB (entirely in the GitHub UI — no key is ever
-# sent to anybody, including the person who wrote this file):
-#   Settings → Secrets and variables → Actions
-#     Secret    COLLECTIVE_DEPLOYER_PRIVATE_KEY   burner wallet key (pays gas)
-#     Variable  COLLECTIVE_ASSET_ADDRESS          accounting stablecoin address
-#     Variable  COLLECTIVE_GUARDIAN_ADDRESS       a different wallet than above
-#     Variable  COLLECTIVE_RPC_URL               (optional) HTTPS RPC
-#   Then: Actions → "FBT Collective Activation" → Run workflow
-#         phase=deploy   acknowledge_gas=yes
-#   After ≥ 1 day (RiskController timelock):
-#         phase=activate acknowledge_gas=yes
-#         phase=check    (no key needed)
-# ============================================================================
+# The keyless rehearsal runs locally on Ganache. Live phases are manual,
+# network-specific, and fail closed. The transaction key is exposed only to the
+# individual deploy/activate process; it is never printed or written to disk.
+# Copy this file to .github/workflows/collective-activation.yml when the
+# repository's workflow-file permission policy requires a one-time UI install.
 name: FBT Collective Activation
 
 on:
@@ -54,6 +15,7 @@ on:
       - 'server/collective/**'
       - 'scripts/collective-*.mjs'
       - 'scripts/lib/collectiveDeployment.mjs'
+      - 'scripts/lib/collectivePreflight.mjs'
       - 'src/pages/Collective.jsx'
       - 'src/lib/collective/**'
       - 'src/styles/collective.css'
@@ -61,19 +23,43 @@ on:
       - 'public/collective/**'
       - 'deployments/**'
       - '.github/workflows/collective-activation.yml'
+      - 'ci/collective-activation.yml'
   schedule:
-    # Weekly, Monday 03:17 UTC — odd minute, outside the congested top of hour.
     - cron: '17 3 * * 1'
   workflow_dispatch:
     inputs:
       phase:
-        description: 'rehearse = keyless & gas-free · deploy/activate = your wallet pays gas · check = read-only'
+        description: 'rehearse; preflight (4663); deploy/activate/check (4663); testnet-preflight/deploy/activate/check (46630)'
         type: choice
         default: rehearse
-        options: [rehearse, deploy, activate, check]
+        options:
+          - rehearse
+          - preflight
+          - deploy
+          - activate
+          - check
+          - testnet-preflight
+          - testnet-deploy
+          - testnet-activate
+          - testnet-check
       acknowledge_gas:
-        description: 'Type yes only if you accept that the deploying wallet pays real gas'
+        description: "Type yes only for deploy/activate; the selected wallet will pay real network gas"
         type: string
+        default: ''
+      asset_address:
+        description: 'Public ERC-20 address on the selected chain (required for preflight/deploy); never guessed'
+        type: string
+        required: false
+        default: ''
+      guardian_address:
+        description: 'Public guardian address; must be different from the deployer for deploy'
+        type: string
+        required: false
+        default: ''
+      deployer_address:
+        description: 'Optional public deployer address for read-only preflight; never a private key'
+        type: string
+        required: false
         default: ''
 
 permissions:
@@ -85,7 +71,7 @@ concurrency:
 
 jobs:
   rehearsal:
-    name: Keyless rehearsal (no secrets, no gas)
+    name: Keyless rehearsal (no secrets, no public-chain gas)
     if: >-
       (github.event_name != 'workflow_dispatch' || inputs.phase == 'rehearse' || inputs.phase == '')
       && !contains(github.event.head_commit.message, '[collective-evidence]')
@@ -93,35 +79,25 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies (lockfile verified)
         run: npm ci --no-audit --no-fund
-
       - name: Mark start time
         run: echo "COLLECTIVE_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
-
       - name: Compile Collective contracts (solc 0.8.24)
         run: npm run compile:collective
-
-      - name: Contract probe (Ganache, no funds)
+      - name: Contract probe (Ganache, no public funds)
         run: node test/collective/contract-probe.mjs
-
-      - name: API + activation tests
-        run: node --test test/collective/api.test.mjs test/collective/activation.test.mjs test/collective/activation-status.test.mjs
-
+      - name: API, activation, network and preflight tests
+        run: node --test test/collective/api.test.mjs test/collective/activation.test.mjs test/collective/activation-status.test.mjs test/collective/network-config.test.mjs test/collective/preflight.test.mjs test/collective/evidence-network.test.mjs
       - name: Full local rehearsal (deploy → timelock → activate → deposit)
         run: node scripts/collective-deploy.mjs --local --rehearse
-
       - name: Write public activation evidence
         run: node scripts/collective-evidence.mjs --write --contract-ok --api-ok
-
       - name: Verify evidence (parses, no secret material)
         run: node scripts/collective-evidence.mjs --check
-
       - name: Upload rehearsal artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -133,164 +109,388 @@ jobs:
             test/.out/collective-deployment.local.json
             server/collective/activation.snapshot.js
             public/collective/activation.json
-
       - name: Publish evidence to main
-        # Public facts only: hashes, sizes, check results and (after a live run)
-        # public contract addresses. Never a key, never RPC credentials.
         if: github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch'
-        continue-on-error: true
         run: |
           set -euo pipefail
           git config user.name "fbt-collective-bot"
           git config user.email "actions@users.noreply.github.com"
           git add server/collective/activation.snapshot.js public/collective/activation.json
           if git diff --cached --quiet; then
-            echo "::notice::Evidence unchanged; nothing to publish."
+            echo "Evidence unchanged; nothing to publish."
             exit 0
           fi
           git commit -m "chore(collective): keyless rehearsal evidence [collective-evidence]"
           git push
-
       - name: Summary
         if: always()
         run: |
           {
-            echo "### FBT AI Collective — keyless pipeline"
+            echo "### FBT AI Collective — keyless rehearsal"
             echo ""
             echo "| property | value |"
             echo "| --- | --- |"
             echo "| secrets used | **none** |"
-            echo "| gas spent | **0** (in-process Ganache) |"
+            echo "| public-chain gas | **none** (local Ganache only) |"
             echo "| commit | \`${GITHUB_SHA::7}\` |"
             echo "| run | [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   live:
-    name: Live deployment (your wallet pays gas)
+    name: Explicit network operation (manual dispatch only)
     if: github.event_name == 'workflow_dispatch' && inputs.phase != 'rehearse'
     runs-on: ubuntu-latest
-    # No `environment:` is required: repository-level secrets/variables are
-    # enough, so the first run works without any extra setup. If you want a
-    # human approval gate, create an environment named `collective-live` in
-    # Settings → Environments with "Required reviewers" and add this line back.
     timeout-minutes: 45
     env:
-      # The key reaches this process only through this explicit env block.
-      # It is never echoed, never written to disk and never committed.
-      COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
-      COLLECTIVE_RPC_URL: ${{ vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
-      COLLECTIVE_ASSET_ADDRESS: ${{ vars.COLLECTIVE_ASSET_ADDRESS }}
-      COLLECTIVE_GOVERNOR_ADDRESS: ${{ vars.COLLECTIVE_GOVERNOR_ADDRESS }}
-      COLLECTIVE_GUARDIAN_ADDRESS: ${{ vars.COLLECTIVE_GUARDIAN_ADDRESS }}
-      COLLECTIVE_KEEPER_ADDRESS: ${{ vars.COLLECTIVE_KEEPER_ADDRESS }}
-      COLLECTIVE_STRATEGY_TARGET: ${{ vars.COLLECTIVE_STRATEGY_TARGET }}
-      COLLECTIVE_VAULT_NAME: ${{ vars.COLLECTIVE_VAULT_NAME }}
-      COLLECTIVE_VAULT_SYMBOL: ${{ vars.COLLECTIVE_VAULT_SYMBOL }}
-      COLLECTIVE_PUBLIC_RPC_URL: ${{ vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
-      COLLECTIVE_LIVE_ACK: ${{ inputs.acknowledge_gas }}
+      # Chain selection is derived from the phase prefix. Testnet never reuses a
+      # mainnet RPC, record path, explorer, or deployment address.
+      COLLECTIVE_TESTNET: ${{ startsWith(inputs.phase, 'testnet-') }}
+      COLLECTIVE_NETWORK: ${{ startsWith(inputs.phase, 'testnet-') && 'robinhood-testnet' || 'robinhood' }}
+      COLLECTIVE_CHAIN_ID: ${{ startsWith(inputs.phase, 'testnet-') && '46630' || '4663' }}
+      COLLECTIVE_RPC_URL: ${{ startsWith(inputs.phase, 'testnet-') && (vars.COLLECTIVE_TESTNET_RPC_URL || 'https://rpc.testnet.chain.robinhood.com') || (vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com') }}
+      COLLECTIVE_PUBLIC_RPC_URL: ${{ startsWith(inputs.phase, 'testnet-') && (vars.COLLECTIVE_TESTNET_RPC_URL || 'https://rpc.testnet.chain.robinhood.com') || (vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com') }}
       COLLECTIVE_PHASE: ${{ inputs.phase }}
+      COLLECTIVE_LIVE_ACK: ${{ inputs.acknowledge_gas }}
+      COLLECTIVE_POLICY_DELAY_SECONDS: ${{ vars.COLLECTIVE_POLICY_DELAY_SECONDS || '86400' }}
+      COLLECTIVE_ASSET_ADDRESS: ${{ inputs.asset_address || vars.COLLECTIVE_ASSET_ADDRESS || '' }}
+      COLLECTIVE_GUARDIAN_ADDRESS: ${{ inputs.guardian_address || vars.COLLECTIVE_GUARDIAN_ADDRESS || '' }}
+      COLLECTIVE_DEPLOYER_ADDRESS: ${{ inputs.deployer_address || vars.COLLECTIVE_DEPLOYER_ADDRESS || '' }}
+      COLLECTIVE_KEEPER_ADDRESS: ${{ vars.COLLECTIVE_KEEPER_ADDRESS || '' }}
+      COLLECTIVE_STRATEGY_TARGET: ${{ vars.COLLECTIVE_STRATEGY_TARGET || '' }}
+      COLLECTIVE_VAULT_NAME: ${{ vars.COLLECTIVE_VAULT_NAME || '' }}
+      COLLECTIVE_VAULT_SYMBOL: ${{ vars.COLLECTIVE_VAULT_SYMBOL || '' }}
+      COLLECTIVE_DEPLOYMENT_FILE: deployments/collective-${{ startsWith(inputs.phase, 'testnet-') && '46630' || '4663' }}.json
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies (lockfile verified)
         run: npm ci --no-audit --no-fund
 
-      - name: Preflight — presence only, never values
-        id: preflight
+      - name: Resolve public deployer address (never print the key)
+        id: operator
+        env:
+          PHASE: ${{ inputs.phase }}
+          INPUT_ADDRESS: ${{ inputs.deployer_address || vars.COLLECTIVE_DEPLOYER_ADDRESS || '' }}
+          # The secret is passed only for transaction phases, and only to this
+          # short-lived address-derivation process. It is never written to output.
+          PRIVATE_KEY: ${{ contains(fromJSON('["deploy","activate","testnet-deploy","testnet-activate"]'), inputs.phase) && secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY || '' }}
         run: |
           set -euo pipefail
-          has() { if [ -n "${!1:-}" ]; then echo true; else echo false; fi; }
-          echo "phase=${COLLECTIVE_PHASE}"
-          echo "key_present=$(has COLLECTIVE_DEPLOYER_PRIVATE_KEY)"
-          echo "asset_present=$(has COLLECTIVE_ASSET_ADDRESS)"
-          echo "guardian_present=$(has COLLECTIVE_GUARDIAN_ADDRESS)"
-          echo "rpc_present=$(has COLLECTIVE_RPC_URL)"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { Wallet, isAddress, getAddress } from 'ethers';
+          const phase = process.env.PHASE;
+          const chainId = process.env.COLLECTIVE_CHAIN_ID;
+          const file = `deployments/collective-${chainId}.json`;
+          const record = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+          const input = String(process.env.INPUT_ADDRESS || '').trim();
+          const transactionPhase = ['deploy', 'activate', 'testnet-deploy', 'testnet-activate'].includes(phase);
+          let address = input;
+          if (transactionPhase) {
+            const privateKey = String(process.env.PRIVATE_KEY || '').trim();
+            if (!privateKey) {
+              console.error('::error::Secret COLLECTIVE_DEPLOYER_PRIVATE_KEY is missing. Add it yourself in GitHub Settings; never paste it into chat.');
+              process.exit(1);
+            }
+            let derived;
+            try { derived = new Wallet(privateKey).address; }
+            catch { console.error('::error::The configured deployer secret is not a valid EVM signing key. No key value was printed.'); process.exit(1); }
+            if (input && input.toLowerCase() !== derived.toLowerCase()) {
+              console.error('::error::The supplied public deployer address does not match the wallet derived from the repository secret.');
+              process.exit(1);
+            }
+            if (phase.endsWith('-activate') || phase === 'activate') {
+              if (!record?.deployer || String(record.deployer).toLowerCase() !== derived.toLowerCase()) {
+                console.error('::error::The phase-1 deployment record belongs to a different deployer or is missing. No transaction was sent.');
+                process.exit(1);
+              }
+            }
+            address = derived;
+          } else if (!address && record?.deployer) {
+            address = String(record.deployer);
+          }
+          const needsInput = phase === 'preflight' || phase === 'testnet-preflight';
+          if (needsInput && !input) {
+            console.error('::error::Read-only preflight needs the public deployer_address input or COLLECTIVE_DEPLOYER_ADDRESS variable. This is not a private key.');
+            process.exit(1);
+          }
+          if (phase.endsWith('-check') || phase === 'check') {
+            if (!record?.deployer) {
+              console.error('::error::No deployment record for the selected chain. Run its deploy and activate phases first.');
+              process.exit(1);
+            }
+            if (input && input.toLowerCase() !== String(record.deployer).toLowerCase()) {
+              console.error('::error::The supplied public deployer address differs from the selected chain record.');
+              process.exit(1);
+            }
+          }
+          if (address && !isAddress(address)) {
+            console.error('::error::The public deployer address is not a valid EVM address.');
+            process.exit(1);
+          }
+          address = address ? getAddress(address) : '';
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `address=${address}\n`);
+          console.log(`Resolved public operator address for chain ${chainId}.`);
+          NODE
 
-          ready=true
-          if [ "${COLLECTIVE_PHASE}" = "check" ]; then
-            echo "::notice::verify mode is read-only and needs no key."
-          else
-            if [ "${COLLECTIVE_PHASE}" != "activate" ] && [ -z "${COLLECTIVE_ASSET_ADDRESS:-}" ]; then
-              echo "::warning::COLLECTIVE_ASSET_ADDRESS is not set. Add it under Settings → Secrets and variables → Actions → Variables."
-              ready=false
-            fi
-            if [ -z "${COLLECTIVE_DEPLOYER_PRIVATE_KEY:-}" ]; then
-              echo "::notice::COLLECTIVE_DEPLOYER_PRIVATE_KEY is not set, so no transaction can be signed. Nothing was sent. Add the secret yourself — do not paste a key anywhere else."
-              ready=false
-            fi
-            if [ "${COLLECTIVE_LIVE_ACK}" != "yes" ]; then
-              echo "::warning::acknowledge_gas must be exactly 'yes'. The deploying wallet pays real gas; there is no sponsor."
-              ready=false
-            fi
+      - name: Resolve chain-specific asset, guardian and timelock
+        id: config
+        env:
+          PHASE: ${{ inputs.phase }}
+          ASSET_INPUT: ${{ inputs.asset_address || vars.COLLECTIVE_ASSET_ADDRESS || '' }}
+          GUARDIAN_INPUT: ${{ inputs.guardian_address || vars.COLLECTIVE_GUARDIAN_ADDRESS || '' }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { isAddress, getAddress } from 'ethers';
+          const phase = process.env.PHASE;
+          const chainId = Number(process.env.COLLECTIVE_CHAIN_ID);
+          const testnet = process.env.COLLECTIVE_TESTNET === 'true';
+          const file = `deployments/collective-${chainId}.json`;
+          const record = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+          const deployPhase = phase === 'deploy' || phase === 'testnet-deploy';
+          const readPhase = phase === 'activate' || phase === 'check' || phase === 'testnet-activate' || phase === 'testnet-check';
+          if (readPhase && !record) {
+            console.error(`::error::Missing chain-specific deployment record ${file}. No other chain record will be used.`);
+            process.exit(1);
+          }
+          if (record && Number(record.chainId) !== chainId) {
+            console.error(`::error::Deployment record chainId does not match selected chain ${chainId}.`);
+            process.exit(1);
+          }
+          if (record && Boolean(record.testnet) !== testnet) {
+            console.error('::error::Deployment record testnet flag does not match its chain. Refusing cross-network operation.');
+            process.exit(1);
+          }
+          const assetInput = String(process.env.ASSET_INPUT || '').trim();
+          const guardianInput = String(process.env.GUARDIAN_INPUT || '').trim();
+          const recordAsset = String(record?.asset?.address || '').trim();
+          const recordGuardian = String(record?.guardian || '').trim();
+          if (readPhase && assetInput && assetInput.toLowerCase() !== recordAsset.toLowerCase()) {
+            console.error('::error::The supplied asset address differs from the asset in this chain-specific deployment record.');
+            process.exit(1);
+          }
+          if (readPhase && guardianInput && guardianInput.toLowerCase() !== recordGuardian.toLowerCase()) {
+            console.error('::error::The supplied guardian address differs from this chain-specific deployment record.');
+            process.exit(1);
+          }
+          const asset = deployPhase || phase === 'preflight' || phase === 'testnet-preflight' ? assetInput : recordAsset;
+          const guardian = deployPhase ? guardianInput : (recordGuardian || guardianInput);
+          if (asset && !isAddress(asset)) {
+            console.error('::error::asset_address must be a valid public EVM contract address.');
+            process.exit(1);
+          }
+          if (guardian && !isAddress(guardian)) {
+            console.error('::error::guardian_address must be a valid public EVM address.');
+            process.exit(1);
+          }
+          const delay = deployPhase
+            ? Number(process.env.COLLECTIVE_POLICY_DELAY_SECONDS || 86400)
+            : Number(record?.policyDelay || process.env.COLLECTIVE_POLICY_DELAY_SECONDS || 86400);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `asset_address=${asset ? getAddress(asset) : ''}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `guardian_address=${guardian ? getAddress(guardian) : ''}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `policy_delay=${delay}\n`);
+          NODE
+
+      - name: Discover testnet token balances (Blockscout, read-only)
+        if: startsWith(inputs.phase, 'testnet-')
+        env:
+          OPERATOR_ADDRESS: ${{ steps.operator.outputs.address }}
+        run: |
+          set -euo pipefail
+          address="${OPERATOR_ADDRESS:-}"
+          if [[ ! "$address" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::A public deployer_address is required to list testnet token balances. Supply it in the Run workflow form or COLLECTIVE_DEPLOYER_ADDRESS."
+            exit 1
           fi
-          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
+          curl --fail --silent --show-error --retry 2 --max-time 30 \
+            "https://explorer.testnet.chain.robinhood.com/api/v2/addresses/${address}/token-balances" \
+            --output "$RUNNER_TEMP/collective-testnet-token-balances.json"
+          node --input-type=module - "$RUNNER_TEMP/collective-testnet-token-balances.json" <<'NODE'
+          import fs from 'node:fs';
+          const file = process.argv[2];
+          const payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const entries = Array.isArray(payload) ? payload : (payload.token_balances || payload.items || payload.result || []);
+          const safe = (value) => String(value ?? '—').replace(/[|\r\n]/g, ' ').trim() || '—';
+          const format = (raw, decimals) => {
+            try {
+              const n = BigInt(String(raw ?? '0'));
+              const d = Number(decimals);
+              if (!Number.isInteger(d) || d < 0 || d > 255) return String(raw ?? '—');
+              const scale = 10n ** BigInt(d);
+              const whole = n / scale;
+              const fraction = (n % scale).toString().padStart(d, '0').replace(/0+$/, '');
+              return fraction ? `${whole}.${fraction}` : String(whole);
+            } catch { return String(raw ?? '—'); }
+          };
+          const rows = entries.map((entry) => {
+            const token = entry?.token || entry?.token_info || entry || {};
+            const address = token.address || token.contract_address || entry?.token_address || '—';
+            const symbol = token.symbol || entry?.token_symbol || '—';
+            const decimals = token.decimals ?? entry?.token_decimals ?? '—';
+            const balance = entry?.value ?? entry?.balance ?? entry?.token_balance ?? '—';
+            return { symbol: safe(symbol), address: safe(address), decimals: safe(decimals), balance: safe(format(balance, decimals)) };
+          });
+          const lines = [
+            '### Robinhood Chain Testnet token balances',
+            '',
+            'Read-only Blockscout discovery for the public deployer address. Choose the asset contract explicitly; this list never auto-selects or guesses one.',
+            '',
+            '| symbol | address | decimals | balance |',
+            '| --- | --- | ---: | ---: |',
+            ...(rows.length ? rows.map((row) => `| ${row.symbol} | \`${row.address}\` | ${row.decimals} | ${row.balance} |`) : ['| — | No token balances returned | — | — |']),
+            ''
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+          console.log(`Listed ${rows.length} public testnet token balance row(s) in the job summary.`);
+          NODE
 
-      - name: Compile Collective contracts
-        if: steps.preflight.outputs.ready == 'true'
-        run: npm run compile:collective
-
-      - name: Phase deploy (queues the ≥ 1-day RiskController timelock)
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase == 'deploy'
-        run: node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute
-
-      - name: Phase activate (after the timelock)
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase == 'activate'
-        run: node scripts/collective-deploy.mjs --network robinhood --phase activate --execute
-
-      - name: Verify the deployment on-chain (read-only)
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase != 'deploy'
+      - name: Safety gates (gas acknowledgement, asset, guardian and timelock)
+        id: gate
         env:
-          COLLECTIVE_VERIFIED: 'true'
-        run: node scripts/collective-activate.mjs --deployment deployments/collective-4663.json --check
+          PHASE: ${{ inputs.phase }}
+          ACK: ${{ inputs.acknowledge_gas }}
+          ASSET: ${{ steps.config.outputs.asset_address }}
+          GUARDIAN: ${{ steps.config.outputs.guardian_address }}
+          DEPLOYER: ${{ steps.operator.outputs.address }}
+          POLICY_DELAY: ${{ steps.config.outputs.policy_delay }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Live Collective phases must be run from main after the reviewed PR is merged."
+            exit 1
+          fi
+          case "$PHASE" in
+            preflight|testnet-preflight)
+              if [[ -z "${ASSET:-}" ]]; then
+                echo "::error::asset_address is required. Discover a token in the Blockscout summary, then enter its exact address in Run workflow; no address is guessed."
+                exit 1
+              fi
+              if [[ -z "${DEPLOYER:-}" ]]; then
+                echo "::error::deployer_address is required for read-only preflight; enter the public address, not a private key."
+                exit 1
+              fi
+              if [[ -n "${GUARDIAN:-}" && "${GUARDIAN,,}" == "${DEPLOYER,,}" ]]; then
+                echo "::error::guardian_address must differ from deployer_address."
+                exit 1
+              fi
+              ;;
+            deploy|testnet-deploy)
+              if [[ "$ACK" != "yes" ]]; then echo "::error::Set acknowledge_gas=yes; the deploying wallet pays real network gas."; exit 1; fi
+              if [[ -z "${ASSET:-}" ]]; then
+                echo "::error::asset_address is required. Discover a token in the Blockscout summary and enter its exact address. The workflow will not guess USDG or any other token."
+                exit 1
+              fi
+              if [[ -z "${GUARDIAN:-}" ]]; then echo "::error::guardian_address is required for deployment."; exit 1; fi
+              if [[ -z "${DEPLOYER:-}" || "${GUARDIAN,,}" == "${DEPLOYER,,}" ]]; then
+                echo "::error::guardian_address must be a valid wallet different from the deployer."
+                exit 1
+              fi
+              if ! [[ "$POLICY_DELAY" =~ ^[0-9]+$ ]] || (( POLICY_DELAY < 86400 || POLICY_DELAY > 2592000 )); then
+                echo "::error::RiskController timelock must be between 86400 and 2592000 seconds (1–30 days)."
+                exit 1
+              fi
+              ;;
+            activate|testnet-activate)
+              if [[ "$ACK" != "yes" ]]; then echo "::error::Set acknowledge_gas=yes; the activating wallet pays real network gas."; exit 1; fi
+              if [[ -z "${ASSET:-}" || -z "${GUARDIAN:-}" || -z "${DEPLOYER:-}" ]]; then
+                echo "::error::The selected network deployment record must include asset, guardian and deployer addresses."; exit 1
+              fi
+              if [[ "${GUARDIAN,,}" == "${DEPLOYER,,}" ]]; then echo "::error::Recorded guardian must differ from deployer."; exit 1; fi
+              if ! [[ "$POLICY_DELAY" =~ ^[0-9]+$ ]] || (( POLICY_DELAY < 86400 || POLICY_DELAY > 2592000 )); then
+                echo "::error::Recorded RiskController timelock must be between 1 and 30 days."; exit 1
+              fi
+              ;;
+            check|testnet-check)
+              if [[ -z "${ASSET:-}" || -z "${DEPLOYER:-}" ]]; then echo "::error::A complete deployment record is required for read-only check."; exit 1; fi
+              ;;
+            *) echo "::error::Unsupported phase: ${PHASE}"; exit 1 ;;
+          esac
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "Safety gates passed for ${PHASE}; no secret value was printed."
 
-      - name: Write verified activation evidence
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase != 'deploy'
+      - name: Read-only preflight — chain, asset and gas budget
+        if: steps.gate.outputs.ready == 'true' && (inputs.phase == 'preflight' || inputs.phase == 'testnet-preflight' || inputs.phase == 'deploy' || inputs.phase == 'testnet-deploy' || inputs.phase == 'activate' || inputs.phase == 'testnet-activate')
         env:
-          COLLECTIVE_VERIFIED: 'true'
-        run: node scripts/collective-evidence.mjs --write --contract-ok --api-ok
+          COLLECTIVE_ASSET_ADDRESS: ${{ steps.config.outputs.asset_address }}
+          COLLECTIVE_DEPLOYER_ADDRESS: ${{ steps.operator.outputs.address }}
+        run: node scripts/collective-preflight.mjs --network "$COLLECTIVE_NETWORK" --phase "$COLLECTIVE_PHASE"
 
-      - name: Publish the public record (addresses only, never the key)
-        if: steps.preflight.outputs.ready == 'true'
-        continue-on-error: true
+      - name: Run keyless contract, API and network regression suite
+        if: steps.gate.outputs.ready == 'true' && inputs.phase != 'preflight' && inputs.phase != 'testnet-preflight'
+        run: npm run test:collective
+
+      - name: Phase deploy — queue the selected chain's timelock
+        if: steps.gate.outputs.ready == 'true' && (inputs.phase == 'deploy' || inputs.phase == 'testnet-deploy')
+        env:
+          COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+        run: node scripts/collective-deploy.mjs --network "$COLLECTIVE_NETWORK" --phase deploy --execute
+
+      - name: Phase activate — after the selected chain's timelock
+        if: steps.gate.outputs.ready == 'true' && (inputs.phase == 'activate' || inputs.phase == 'testnet-activate')
+        env:
+          COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+        run: node scripts/collective-deploy.mjs --network "$COLLECTIVE_NETWORK" --phase activate --execute
+
+      - name: Read-only chain verification and mark this record verified
+        if: steps.gate.outputs.ready == 'true' && (inputs.phase == 'check' || inputs.phase == 'testnet-check')
+        run: node scripts/collective-activate.mjs --chain "$COLLECTIVE_CHAIN_ID" --deployment "$COLLECTIVE_DEPLOYMENT_FILE" --check --write-verified
+
+      - name: Write chain-specific public activation evidence
+        if: steps.gate.outputs.ready == 'true' && inputs.phase != 'preflight' && inputs.phase != 'testnet-preflight'
+        env:
+          COLLECTIVE_VERIFIED: ${{ (inputs.phase == 'check' || inputs.phase == 'testnet-check') && 'true' || 'false' }}
+          COLLECTIVE_EVIDENCE_CHAIN_ID: ${{ env.COLLECTIVE_CHAIN_ID }}
+          COLLECTIVE_PUBLIC_RPC_URL: ${{ env.COLLECTIVE_PUBLIC_RPC_URL }}
+        run: node scripts/collective-evidence.mjs --write --deployment "$COLLECTIVE_DEPLOYMENT_FILE" --chain "$COLLECTIVE_CHAIN_ID" --contract-ok --api-ok
+
+      - name: Verify public evidence (secret scan and exact chain binding)
+        if: steps.gate.outputs.ready == 'true' && inputs.phase != 'preflight' && inputs.phase != 'testnet-preflight'
+        run: node scripts/collective-evidence.mjs --check --deployment "$COLLECTIVE_DEPLOYMENT_FILE" --chain "$COLLECTIVE_CHAIN_ID"
+
+      - name: Publish only this chain record and its public evidence
+        if: steps.gate.outputs.ready == 'true' && inputs.phase != 'preflight' && inputs.phase != 'testnet-preflight'
         run: |
           set -euo pipefail
           git config user.name "fbt-collective-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add deployments server/collective/activation.snapshot.js public/collective/activation.json
+          git add "$COLLECTIVE_DEPLOYMENT_FILE" server/collective/activation.snapshot.js public/collective/activation.json
+          git diff --cached --check
           if git diff --cached --quiet; then
-            echo "::notice::No public-record change to commit."
+            echo "Public record and activation evidence are unchanged."
             exit 0
           fi
-          git commit -m "chore(collective): live deployment record [collective-evidence]"
+          git commit -m "chore(collective): ${COLLECTIVE_NETWORK} record [collective-evidence]"
           git push
 
-      - name: Upload live-run artifacts
-        if: always()
+      - name: Upload public live-phase artifacts
+        if: always() && (inputs.phase == 'deploy' || inputs.phase == 'activate' || inputs.phase == 'check' || inputs.phase == 'testnet-deploy' || inputs.phase == 'testnet-activate' || inputs.phase == 'testnet-check')
         uses: actions/upload-artifact@v4
         with:
-          name: collective-live-${{ github.run_id }}
+          name: collective-${{ inputs.phase }}-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 30
           path: |
-            deployments/collective-4663.json
+            ${{ env.COLLECTIVE_DEPLOYMENT_FILE }}
             server/collective/activation.snapshot.js
             public/collective/activation.json
 
-      - name: Summary
+      - name: Summary (no secret values)
         if: always()
         run: |
           {
-            echo "### FBT AI Collective — live job"
+            echo "### FBT AI Collective — ${COLLECTIVE_PHASE}"
             echo ""
             echo "| property | value |"
             echo "| --- | --- |"
-            echo "| phase | \`${COLLECTIVE_PHASE}\` |"
-            echo "| key present | \`${{ steps.preflight.outputs.ready }}\` |"
-            echo "| gas sponsor | **none** — the deploying wallet pays |"
-            echo "| key handling | secret → process env only; never printed, stored or committed |"
+            echo "| selected chain | ${COLLECTIVE_CHAIN_ID} (${COLLECTIVE_NETWORK}) |"
+            echo "| testnet | ${COLLECTIVE_TESTNET} |"
+            echo "| phase | ${COLLECTIVE_PHASE} |"
+            echo "| deployer secret | name-only; value never printed or committed |"
+            echo "| gas sponsor | **none**; the operator wallet pays when a transaction phase is chosen |"
+            echo "| asset | explicit workflow input or repository variable; never guessed |"
           } >> "$GITHUB_STEP_SUMMARY"
