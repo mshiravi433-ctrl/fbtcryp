@@ -9,8 +9,9 @@ import { buildCollectiveProposals, isAllowedKeeperAction } from '../../server/co
 import { readCollectiveConfig, publicCollectiveConfig } from '../../server/collective/config.js';
 import { createCollectiveReader } from '../../server/collective/reader.js';
 import { createCollectiveRouter } from '../../server/collective/routes.js';
-import { VAULT_EVENT_ABI, QUEUE_EVENT_ABI } from '../../server/collective/abi.js';
+import { VAULT_ABI, VAULT_EVENT_ABI, QUEUE_EVENT_ABI } from '../../server/collective/abi.js';
 import { scanVaultEvents } from '../../server/collective/indexer.js';
+import { DEFAULT_LIMITS, deploymentEnv, publicDeploymentRecord } from '../../scripts/lib/collectiveDeployment.mjs';
 
 const VAULT = '0x1111111111111111111111111111111111111111';
 const QUEUE = '0x2222222222222222222222222222222222222222';
@@ -84,6 +85,55 @@ test('Collective read configuration fails closed and never publishes RPC credent
       assert.equal(typeof translations.collective.reason[code], 'string', `${locale} translation missing for ${code}`);
     }
   }
+});
+
+test('read ABI covers every historical-balance call the reader makes for income claims', () => {
+  const reader = fs.readFileSync('server/collective/reader.js', 'utf8');
+  const abi = VAULT_ABI.join('\n');
+  for (const method of ['getPastBalance', 'incomeDistribution', 'nextIncomeEpoch', 'fractionalIncomeRemainder']) {
+    assert.ok(reader.includes(`vault.${method}(`), `reader no longer calls ${method}`);
+    assert.ok(abi.includes(`function ${method}(`), `VAULT_ABI is missing ${method}`);
+  }
+  assert.ok(abi.includes('function getPastTotalSupply('), 'VAULT_ABI is missing getPastTotalSupply');
+});
+
+test('public configuration states the user-paid gas policy and exposes no sponsor path', () => {
+  const config = readCollectiveConfig({
+    COLLECTIVE_READS_ENABLED: 'true', COLLECTIVE_CHAIN_ID: '4663',
+    COLLECTIVE_RPC_URL: 'https://rpc.example', COLLECTIVE_FACTORY_ADDRESS: VAULT,
+    COLLECTIVE_ASSET_ADDRESS: ASSET, COLLECTIVE_DEPLOYMENT_BLOCK: '1'
+  });
+  const publicConfig = publicCollectiveConfig(config);
+  assert.equal(publicConfig.operations.gasPayer, 'user-wallet');
+  assert.equal(publicConfig.operations.userPaysGas, true);
+  assert.equal(publicConfig.operations.gasSponsorshipEnabled, false);
+  assert.equal(publicConfig.operations.relayerEnabled, false);
+  assert.equal(publicConfig.operations.serverSigning, false);
+  assert.equal(publicConfig.operations.privateKeysStoredByApi, false);
+  assert.equal(publicConfig.operations.aiCanSign, false);
+  assert.ok(publicConfig.disclosures.some((line) => line.includes('connected user wallet')));
+  const serialized = JSON.stringify(publicConfig);
+  for (const secret of ['PRIVATE_KEY', 'rpc.example', 'paymaster', 'sponsorKey']) {
+    assert.equal(serialized.includes(secret), false, `public config leaked ${secret}`);
+  }
+
+  const record = publicDeploymentRecord({
+    schema: 'fbt.collective.deployment.v1',
+    vault: { address: VAULT }, asset: { address: ASSET },
+    contracts: { factory: VAULT }, gas: { policy: 'user-wallet-only' },
+    deployerKey: '0xshould-never-appear'
+  });
+  assert.equal('deployerKey' in record, false);
+  const env = deploymentEnv(record, { rpcUrl: 'https://rpc.example' });
+  assert.ok(env.includes('COLLECTIVE_FACTORY_ADDRESS=' + VAULT));
+  assert.ok(env.includes('COLLECTIVE_KEEPER_ENABLED=false'));
+  assert.equal(env.includes('PRIVATE_KEY'), false);
+  assert.equal(env.includes('rpc.example'), true);
+  assert.ok(env.includes('user wallet'));
+  assert.ok(BigInt(DEFAULT_LIMITS.maxTradeUsdE8) > 0n);
+  assert.ok(BigInt(DEFAULT_LIMITS.minLiquidityUsdE8) > 0n);
+  assert.ok(Number(DEFAULT_LIMITS.maxAllocationBps) <= 10_000);
+  assert.ok(Number(DEFAULT_LIMITS.maxOracleAgeSeconds) <= 86_400);
 });
 
 test('dashboard integration is additive, same-origin, and available in every shipped locale', () => {

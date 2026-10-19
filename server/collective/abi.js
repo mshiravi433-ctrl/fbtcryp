@@ -42,6 +42,8 @@ export const VAULT_ABI = [
   'function maxRedeem(address) view returns (uint256)',
   'function incomeDistribution(uint64) view returns (tuple(uint48 snapshotBlock,uint256 eligibleShares,uint256 amountAllocated,uint256 incomePerShare))',
   'function nextIncomeEpoch(address) view returns (uint64)',
+  'function getPastBalance(address account,uint48 snapshotBlock) view returns (uint256)',
+  'function getPastTotalSupply(uint48 snapshotBlock) view returns (uint256)',
   'function fractionalIncomeRemainder(address) view returns (uint256)',
   'function deposit(uint256,address) returns (uint256)',
   'function requestWithdrawal(uint256) returns (uint256)',

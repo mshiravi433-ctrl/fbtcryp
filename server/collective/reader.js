@@ -72,7 +72,7 @@ export function createCollectiveReader({ config = readCollectiveConfig(), provid
     if (!providerPromise) {
       providerPromise = Promise.resolve().then(() => providerFactory
         ? providerFactory(config)
-        : new JsonRpcProvider(config.rpcUrl, config.chainId, { staticNetwork: true }));
+        : new JsonRpcProvider(config.rpcUrl, config.chainId));
     }
     try {
       return await providerPromise;

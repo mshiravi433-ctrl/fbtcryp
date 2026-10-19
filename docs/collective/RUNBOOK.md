@@ -6,6 +6,38 @@
 
 The following steps describe the future operational sequence. They are not a deployment script and do not authorize mainnet transactions.
 
+## Activation tooling (added 2026-10-19)
+
+`docs/collective/ACTIVATION-FA.md` is the Persian end-to-end activation record.
+The operational commands are:
+
+```sh
+npm run compile:collective
+npm run deploy:collective:local                 # full Ganache rehearsal, no real funds
+#   live phase 1 (queues a >= 1 day RiskController timelock):
+COLLECTIVE_DEPLOYER_PRIVATE_KEY=... COLLECTIVE_RPC_URL=https://... \
+COLLECTIVE_ASSET_ADDRESS=0x... COLLECTIVE_GOVERNOR_ADDRESS=0x... \
+COLLECTIVE_GUARDIAN_ADDRESS=0x... COLLECTIVE_KEEPER_ADDRESS=0x... \
+  node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute
+#   live phase 2, after timelockReadyAt in deployments/collective-4663.json:
+  node scripts/collective-deploy.mjs --network robinhood --phase activate --execute
+#   emit and verify the public read configuration:
+COLLECTIVE_RPC_URL=https://... node scripts/collective-activate.mjs \
+  --deployment deployments/collective-4663.json --check
+  node scripts/collective-activate.mjs --deployment deployments/collective-4663.json --env
+```
+
+Every transaction is signed by the operator's own wallet, which pays its gas.
+The API and this tooling hold no key, relayer or paymaster. Users sign and pay
+for their own deposit, claim and withdrawal transactions.
+
+`DeclaredPriceOracle` is a fixed, declared $1 peg (and a declared native-gas
+price), **not a market feed**; use it only for a USD accounting asset with
+conservative limits, and replace it with a reviewed feed before any broadening.
+When no audited ERC-4626 target is supplied, deployment uses
+`NoYield4626Strategy` (zero yield, no admin). A vault target is immutable; real
+yield requires a new reviewed vault.
+
 ## Local build and tests
 
 Requirements: the repository's supported Node.js version (package engines require Node `>=20`) and npm. The current sandbox used Node `v22.22.3`.

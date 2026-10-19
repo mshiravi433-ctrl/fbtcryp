@@ -1,0 +1,102 @@
+# ============================================================================
+# FBT AI COLLECTIVE — ACTIVATION / VERIFICATION
+#
+# Copy this file to .github/workflows/collective-activation.yml by hand
+# (GitHub blocks agent tokens from writing under .github/workflows/).
+#
+# DEFAULT RUN (recommended): the "rehearse" phase needs no secrets. It compiles
+# every Collective contract, runs the API + activation tests, and performs the
+# complete local deployment, real one-day timelock, activation, user deposit,
+# keeper investment and reader verification on an in-process Ganache chain.
+#
+# LIVE RUN (only after the deployment checklist in
+# docs/collective/ACTIVATION-FA.md is signed off): choose phase "deploy" and add
+# these repository secrets. Every transaction is signed by that wallet and pays
+# its own gas; there is no relayer or paymaster anywhere in this job.
+#
+#   COLLECTIVE_DEPLOYER_PRIVATE_KEY   the operator wallet key (never printed)
+#   COLLECTIVE_RPC_URL                verified HTTPS Robinhood Chain RPC
+#   COLLECTIVE_ASSET_ADDRESS          verified accounting stablecoin
+#   COLLECTIVE_GOVERNOR_ADDRESS       must equal the deployer for phase 1
+#   COLLECTIVE_GUARDIAN_ADDRESS       separately controlled wallet
+#   COLLECTIVE_KEEPER_ADDRESS         optional keeper
+#   COLLECTIVE_STRATEGY_TARGET        optional audited ERC-4626 target
+#
+# Phase 1 only queues policy behind the on-chain RiskController timelock. Run
+# the "activate" phase manually after the recorded timelockReadyAt, then run
+# the "check" phase against the resulting deployment record.
+# ============================================================================
+name: FBT Collective Activation
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'rehearse | deploy | activate | check'
+        required: true
+        default: rehearse
+        type: choice
+        options: [rehearse, deploy, activate, check]
+permissions:
+  contents: read
+jobs:
+  rehearse:
+    if: inputs.phase == 'rehearse'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compile Collective contracts
+        run: node scripts/compile-collective.mjs
+      - name: API, policy, gas-model and activation contracts
+        run: node --test test/collective/api.test.mjs test/collective/activation.test.mjs
+      - name: Full local activation rehearsal (no real funds)
+        run: node scripts/collective-deploy.mjs --local --rehearse
+      - name: Upload rehearsal record (public addresses only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: collective-local-rehearsal
+          path: test/.out/collective-deployment.local.json
+          retention-days: 7
+
+  live:
+    if: inputs.phase == 'deploy' || inputs.phase == 'activate' || inputs.phase == 'check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+      COLLECTIVE_RPC_URL: ${{ secrets.COLLECTIVE_RPC_URL }}
+      COLLECTIVE_ASSET_ADDRESS: ${{ secrets.COLLECTIVE_ASSET_ADDRESS }}
+      COLLECTIVE_GOVERNOR_ADDRESS: ${{ secrets.COLLECTIVE_GOVERNOR_ADDRESS }}
+      COLLECTIVE_GUARDIAN_ADDRESS: ${{ secrets.COLLECTIVE_GUARDIAN_ADDRESS }}
+      COLLECTIVE_KEEPER_ADDRESS: ${{ secrets.COLLECTIVE_KEEPER_ADDRESS }}
+      COLLECTIVE_STRATEGY_TARGET: ${{ secrets.COLLECTIVE_STRATEGY_TARGET }}
+      COLLECTIVE_KEEPER_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/compile-collective.mjs
+      - name: Deploy phase 1 (queues the on-chain timelock)
+        if: inputs.phase == 'deploy'
+        run: node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute
+      - name: Activate phase 2 (after timelockReadyAt)
+        if: inputs.phase == 'activate'
+        run: node scripts/collective-deploy.mjs --network robinhood --phase activate --execute
+      - name: Verify deployment before enabling public reads
+        if: inputs.phase == 'check' || inputs.phase == 'activate'
+        run: node scripts/collective-activate.mjs --deployment deployments/collective-4663.json --check
+      - name: Upload public deployment record
+        if: inputs.phase == 'deploy' || inputs.phase == 'activate'
+        uses: actions/upload-artifact@v4
+        with:
+          name: collective-deployment-${{ github.run_id }}
+          path: deployments/collective-4663.json
+          retention-days: 30
