@@ -1,0 +1,198 @@
+{
+  "schema": "fbt.collective.deployment.v1",
+  "chainId": 46630,
+  "deployer": "0xEfFEe508B69B8705F0AA3187aD9d28f1B95D39E9",
+  "governor": "0xEfFEe508B69B8705F0AA3187aD9d28f1B95D39E9",
+  "guardian": "0x89618F6F93ED4b7cE0734BE314F77B418788c2c8",
+  "keeper": null,
+  "policyDelay": 86400,
+  "asset": {
+    "address": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+    "symbol": "TSLA",
+    "decimals": 18
+  },
+  "target": {
+    "address": "0x9FdE5FCF4cD90dCa54cC74866047bE9C5aA31742",
+    "kind": "no-yield-idle"
+  },
+  "contracts": {
+    "accessController": "0x9404530958AA94Ec828DfD30bdc13dd0Db42cf2A",
+    "emergencyModule": "0xA4a8c38179aEd68031A8bAa821a7E93C1763a3E3",
+    "priceOracle": "0x57666faB1b0585695Ae84124AEA23075Aa663848",
+    "liquidityOracle": "0x238A223502f3CD9ea059c42dA6354DF135CC29B3",
+    "riskController": "0xA5f83FB16983a2Be37C639f15829977fFB89Bac2",
+    "executionRouter": "0x60ecfAb01B74844E518cf2c0Dbfeb9bf292B8F46",
+    "vaultDeployer": "0x3e0bd2f6F7cd0C64fA2EbCBA90130C1A15D5bEa4",
+    "modulesDeployer": "0xc44Aa22bC8bbc8832e78e6E4AFB8c4d94Ca16dF1",
+    "factory": "0x6988820edb98b31A6B4f8922c3a3BE35e4Af1Dc5"
+  },
+  "oracle": {
+    "kind": "declared-fixed",
+    "assetUsdE8": "100000000",
+    "nativeUsdE8": "300000000000",
+    "note": "Declared prices, not a market feed. Staleness cannot be detected by design."
+  },
+  "factoryDeploymentBlock": 138962967,
+  "queuedAt": 1792443770,
+  "timelockReadyAt": 1792530170,
+  "gas": {
+    "payer": "0xEfFEe508B69B8705F0AA3187aD9d28f1B95D39E9",
+    "policy": "user-wallet-only",
+    "sponsored": false,
+    "totalGasUsed": "16055396",
+    "totalGasCostWei": "160553960000000"
+  },
+  "transactions": [
+    {
+      "label": "deploy NoYield4626Strategy",
+      "method": "deploy",
+      "address": "0x9FdE5FCF4cD90dCa54cC74866047bE9C5aA31742",
+      "hash": "0x6674ddac82f314667d9e23800cc9239cb50734acaddde7943462676e7b1af2c9",
+      "blockNumber": 138962634,
+      "gasUsed": "1067574",
+      "gasCostWei": "10675740000000"
+    },
+    {
+      "label": "deploy AccessController",
+      "method": "deploy",
+      "address": "0x9404530958AA94Ec828DfD30bdc13dd0Db42cf2A",
+      "hash": "0x6753d9336e661cda1687824154dc2f4cb1b583253acdcf1e6fb6361a7786957c",
+      "blockNumber": 138962673,
+      "gasUsed": "994654",
+      "gasCostWei": "9946540000000"
+    },
+    {
+      "label": "deploy EmergencyModule",
+      "method": "deploy",
+      "address": "0xA4a8c38179aEd68031A8bAa821a7E93C1763a3E3",
+      "hash": "0x1cea977deccc8844029a8573746bee101d86f2ba9aa9d6f4654fc146542a41b8",
+      "blockNumber": 138962713,
+      "gasUsed": "492723",
+      "gasCostWei": "4927230000000"
+    },
+    {
+      "label": "deploy DeclaredPriceOracle",
+      "method": "deploy",
+      "address": "0x57666faB1b0585695Ae84124AEA23075Aa663848",
+      "hash": "0x70cdd3c3ac260e778009211f68f3ad79b267e8aded8e39dcca2623d38fadb17b",
+      "blockNumber": 138962749,
+      "gasUsed": "184978",
+      "gasCostWei": "1849780000000"
+    },
+    {
+      "label": "deploy DisabledLiquidityOracle",
+      "method": "deploy",
+      "address": "0x238A223502f3CD9ea059c42dA6354DF135CC29B3",
+      "hash": "0x6094f63148a412a42c05d3ae05567023a32d96ab7bceb3012604264bfdd5c861",
+      "blockNumber": 138962787,
+      "gasUsed": "91891",
+      "gasCostWei": "918910000000"
+    },
+    {
+      "label": "deploy RiskController",
+      "method": "deploy",
+      "address": "0xA5f83FB16983a2Be37C639f15829977fFB89Bac2",
+      "hash": "0x5d2661be9706d8c5ef7bc8bd753beb7fe0b2b5f2f9050a4e6b0eceea2a400afe",
+      "blockNumber": 138962822,
+      "gasUsed": "2680486",
+      "gasCostWei": "26804860000000"
+    },
+    {
+      "label": "deploy ExecutionRouter",
+      "method": "deploy",
+      "address": "0x60ecfAb01B74844E518cf2c0Dbfeb9bf292B8F46",
+      "hash": "0xfa83ce79bc1e31e76f9b37d9a5cc21f48d874d052aa8a014da52f76a4474d3ac",
+      "blockNumber": 138962859,
+      "gasUsed": "1019075",
+      "gasCostWei": "10190750000000"
+    },
+    {
+      "label": "deploy StrategyVaultDeployer",
+      "method": "deploy",
+      "address": "0x3e0bd2f6F7cd0C64fA2EbCBA90130C1A15D5bEa4",
+      "hash": "0x34efed70a2ec0ab7a1a27f620faf1f6aebf40ac23005ca2500e2b199e9d3517d",
+      "blockNumber": 138962899,
+      "gasUsed": "5362486",
+      "gasCostWei": "53624860000000"
+    },
+    {
+      "label": "deploy CollectiveModulesDeployer",
+      "method": "deploy",
+      "address": "0xc44Aa22bC8bbc8832e78e6E4AFB8c4d94Ca16dF1",
+      "hash": "0xfd03cc337a4fa3eebb0a2a8ff3c458b166b46ba1c200d89bc771d3d7aa647329",
+      "blockNumber": 138962932,
+      "gasUsed": "2695113",
+      "gasCostWei": "26951130000000"
+    },
+    {
+      "label": "deploy CollectiveFactory",
+      "method": "deploy",
+      "address": "0x6988820edb98b31A6B4f8922c3a3BE35e4Af1Dc5",
+      "hash": "0x96911fe8f3876c6e2b5ae337f9c07ca73b28cc0b08ed48a1e8e8c7d35e3d0c0c",
+      "blockNumber": 138962967,
+      "gasUsed": "1078593",
+      "gasCostWei": "10785930000000"
+    },
+    {
+      "label": "bind vault deployer to factory",
+      "method": "setFactory",
+      "hash": "0xa27b53728948ebc6314f99d5e8230ea0a9ec823e3a62c5a06c042569238293f2",
+      "blockNumber": 138963003,
+      "gasUsed": "53167",
+      "gasCostWei": "531670000000"
+    },
+    {
+      "label": "bind modules deployer to factory",
+      "method": "setFactory",
+      "hash": "0xcef7a3ff100ad53a303c8c3be626ed079c5f70c59da84ef1036067b8ff1965ef",
+      "blockNumber": 138963043,
+      "gasUsed": "53153",
+      "gasCostWei": "531530000000"
+    },
+    {
+      "label": "grant FACTORY_ROLE",
+      "method": "grantRole",
+      "hash": "0x1d1a717d8057c407de7182f490999cb25ab7818c2642c12abeb1cd4263680a5f",
+      "blockNumber": 138963083,
+      "gasUsed": "49256",
+      "gasCostWei": "492560000000"
+    },
+    {
+      "label": "grant EXECUTION_ROUTER_ROLE",
+      "method": "grantRole",
+      "hash": "0xe53c57d44db4e065720f328d32fdab3a42cd5be74e306fe4530f3958f18e1367",
+      "blockNumber": 138963119,
+      "gasUsed": "49256",
+      "gasCostWei": "492560000000"
+    },
+    {
+      "label": "queue accounting-asset allowlist",
+      "method": "queueAddressChange",
+      "hash": "0x81e9a83d65f935e4faa131ec6c639fc7af25e4fa087a8fdf41bc7471f19cc324",
+      "blockNumber": 138963160,
+      "gasUsed": "53901",
+      "gasCostWei": "539010000000"
+    },
+    {
+      "label": "queue strategy-target allowlist",
+      "method": "queueAddressChange",
+      "hash": "0x638ef725407127cb0fbffdb579f59065fdde23326c03714f9a7e251e5bab7607",
+      "blockNumber": 138963198,
+      "gasUsed": "53913",
+      "gasCostWei": "539130000000"
+    },
+    {
+      "label": "queue stable-yield activation",
+      "method": "queueKindActivation",
+      "hash": "0x88cb4dc98174bfd690bf48886f4caebdef691599895c15c998e43bf6684c4513",
+      "blockNumber": 138963233,
+      "gasUsed": "75177",
+      "gasCostWei": "751770000000"
+    }
+  ],
+  "phase": "queued",
+  "verified": false,
+  "verifiedAt": null,
+  "network": "robinhood-testnet",
+  "testnet": true
+}

@@ -5,25 +5,25 @@
  * Contains public addresses and chain-bound verification facts only.
  * No private key, credentialed RPC, keeper secret or user data is published.
  *
- * run 39318635929 · commit b75e997 · 2026-10-19T20:24:37.351Z
+ * run 39323706583 · commit d36e348 · 2026-10-19T21:02:52.144Z
  */
 export const ACTIVATION_SNAPSHOT = Object.freeze({
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-10-19T20:24:37.351Z",
+  "generatedAt": "2026-10-19T21:02:52.144Z",
   "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "b75e997f812e58fa069dbe4f7aa83ae95239e8db",
+  "commit": "d36e3482d52e1f9f76c064b44f76a24ec2905bb9",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": 39318635929,
-    "number": 4,
-    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39318635929",
-    "event": "push",
+    "id": 39323706583,
+    "number": 8,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39323706583",
+    "event": "workflow_dispatch",
     "conclusion": "success",
-    "headSha": "b75e997f812e58fa069dbe4f7aa83ae95239e8db",
-    "createdAt": "2026-10-19T20:22:43.000Z",
-    "updatedAt": "2026-10-19T20:24:37.351Z",
-    "durationSeconds": 114
+    "headSha": "d36e3482d52e1f9f76c064b44f76a24ec2905bb9",
+    "createdAt": "1970-01-01T00:00:00.000Z",
+    "updatedAt": "2026-10-19T21:02:52.144Z",
+    "durationSeconds": null
   },
   "checks": [
     {
@@ -46,9 +46,9 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
     },
     {
       "id": "rehearsal",
-      "label": "Full local rehearsal (deploy → timelock → activate → deposit)",
-      "ok": true,
-      "detail": "23 transactions · vault created · gas 23658989 units"
+      "label": "Full local rehearsal",
+      "ok": null,
+      "detail": "no rehearsal record in this run"
     }
   ],
   "artifacts": [
@@ -208,7 +208,21 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
     }
   ],
   "defaultChainId": 4663,
-  "liveDeployments": {},
+  "liveDeployments": {
+    "46630": {
+      "status": "queued",
+      "chainId": 46630,
+      "testnet": true,
+      "factoryAddress": "0x6988820edb98b31A6B4f8922c3a3BE35e4Af1Dc5",
+      "assetAddress": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+      "deploymentBlock": 138962967,
+      "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
+      "timelockReadyAt": "2026-10-20T21:02:50.000Z",
+      "vaultAddress": null,
+      "verified": false,
+      "verifiedAt": null
+    }
+  },
   "liveDeployment": null
 });
 
