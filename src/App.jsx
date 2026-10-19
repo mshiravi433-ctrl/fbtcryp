@@ -28,7 +28,11 @@ import RouteBoundary, { noteRoutePainted } from './components/RouteBoundary';
  */
 import lazyRetry from './lib/lazyRetry';
 import { seoEntryHandoff } from './lib/webEntry';
-import Welcome from './pages/Welcome';
+
+// Welcome is reached only after the first-run splash's Start action. Loading it
+// on demand keeps its language/name UI out of the initial app payload; the
+// screen already renders inside the shared Suspense boundary below.
+const Welcome = lazyRetry(() => import('./pages/Welcome'));
 
 // These controls are non-critical overlays: most sessions never render them.
 // Keeping them out of the eager graph lowers the first-paint payload without
