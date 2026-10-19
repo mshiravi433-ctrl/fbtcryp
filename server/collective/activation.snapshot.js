@@ -5,25 +5,25 @@
  * Written by .github/workflows/collective-activation.yml. Contains no secret:
  * no private key, no RPC credential, no keeper secret, no user data.
  *
- * run — · commit 9a27ccf · 2026-10-19T13:59:50.277Z
+ * run 39269828448 · commit f361aee · 2026-10-19T14:35:25.758Z
  */
 export const ACTIVATION_SNAPSHOT = Object.freeze({
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-10-19T13:59:50.277Z",
-  "source": "local-rehearsal",
+  "generatedAt": "2026-10-19T14:35:25.758Z",
+  "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "9a27ccf5ce5aa72a3cd3dbbd7947b61de64912b4",
+  "commit": "f361aee270379d2a43d7c3e3e59356b7a17afcc0",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": null,
-    "number": null,
-    "url": null,
-    "event": "local-rehearsal",
+    "id": 39269828448,
+    "number": 2,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39269828448",
+    "event": "push",
     "conclusion": "success",
-    "headSha": "9a27ccf5ce5aa72a3cd3dbbd7947b61de64912b4",
-    "createdAt": "2026-10-19T13:59:50.000Z",
-    "updatedAt": "2026-10-19T13:59:50.277Z",
-    "durationSeconds": 0
+    "headSha": "f361aee270379d2a43d7c3e3e59356b7a17afcc0",
+    "createdAt": "2026-10-19T14:33:25.000Z",
+    "updatedAt": "2026-10-19T14:35:25.758Z",
+    "durationSeconds": 121
   },
   "checks": [
     {
@@ -48,7 +48,7 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
       "id": "rehearsal",
       "label": "Full local rehearsal (deploy → timelock → activate → deposit)",
       "ok": true,
-      "detail": "23 transactions · vault created · gas 23658893 units"
+      "detail": "23 transactions · vault created · gas 23658989 units"
     }
   ],
   "artifacts": [
