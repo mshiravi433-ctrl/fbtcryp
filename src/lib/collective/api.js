@@ -22,6 +22,9 @@ async function getJson(path, { signal } = {}) {
 }
 
 export const collectiveApi = Object.freeze({
+  // Public, read-only activation status: keyless GitHub Actions pipeline +
+  // verified deployment state. No key or credential is ever part of this read.
+  activation: (options) => getJson('/activation', options),
   status: (options) => getJson('/status', options),
   vaults: (options) => getJson('/vaults', options),
   vault: (address, options) => getJson(`/vault/${encodeURIComponent(address)}`, options),

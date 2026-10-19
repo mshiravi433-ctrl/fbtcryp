@@ -1,5 +1,6 @@
 import express from 'express';
 import { defaultCollectiveReader } from './reader.js';
+import { defaultCollectiveActivationStatus } from './activation.js';
 
 const noStore = (_req, res, next) => {
   res.set('cache-control', 'no-store, max-age=0');
@@ -24,9 +25,17 @@ function route(handler) {
   };
 }
 
-export function createCollectiveRouter({ reader = defaultCollectiveReader } = {}) {
+export function createCollectiveRouter({
+  reader = defaultCollectiveReader,
+  activation = defaultCollectiveActivationStatus
+} = {}) {
   const router = express.Router();
   router.use(noStore);
+
+  // Public, read-only activation status. It answers "is the keyless pipeline
+  // actually green, and what is the single next step?" without exposing a key,
+  // an RPC credential or any server secret. See server/collective/activation.js.
+  router.get('/activation', route(() => activation.get()));
 
   router.get('/status', route(() => reader.status()));
   router.get('/vaults', route(() => reader.listVaults().then((vaults) => ({
