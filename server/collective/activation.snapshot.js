@@ -5,24 +5,24 @@
  * Contains public addresses and chain-bound verification facts only.
  * No private key, credentialed RPC, keeper secret or user data is published.
  *
- * run 39312604124 · commit 88d2ae8 · 2026-10-19T19:41:18.391Z
+ * run 39318635929 · commit b75e997 · 2026-10-19T20:24:37.351Z
  */
 export const ACTIVATION_SNAPSHOT = Object.freeze({
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-10-19T19:41:18.391Z",
+  "generatedAt": "2026-10-19T20:24:37.351Z",
   "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "88d2ae889f0a618069be54e00f1858758434b992",
+  "commit": "b75e997f812e58fa069dbe4f7aa83ae95239e8db",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": 39312604124,
-    "number": 3,
-    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39312604124",
+    "id": 39318635929,
+    "number": 4,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39318635929",
     "event": "push",
     "conclusion": "success",
-    "headSha": "88d2ae889f0a618069be54e00f1858758434b992",
-    "createdAt": "2026-10-19T19:39:24.000Z",
-    "updatedAt": "2026-10-19T19:41:18.391Z",
+    "headSha": "b75e997f812e58fa069dbe4f7aa83ae95239e8db",
+    "createdAt": "2026-10-19T20:22:43.000Z",
+    "updatedAt": "2026-10-19T20:24:37.351Z",
     "durationSeconds": 114
   },
   "checks": [
