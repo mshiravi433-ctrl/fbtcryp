@@ -16005,6 +16005,10 @@
   },
   "collective": {
     "title": "FBT AI Collective",
+    "testnet": {
+      "title": "TESTNET",
+      "body": "This deployment is on a test network. Test assets have no real-world value."
+    },
     "subtitle": "A separate, public vault module. User-owned principal only; every transaction is visible on-chain.",
     "public": {
       "badge": "Public module",
@@ -16037,9 +16041,9 @@
       "disabled": "Disabled"
     },
     "wallet": {
-      "wrongChain": "Switch network to transact",
+      "wrongChain": "Switch to {{chain}} to transact",
       "readOnly": "Read-only until you connect a wallet",
-      "switch": "Switch to Robinhood Chain",
+      "switch": "Switch to {{chain}}",
       "connect": "Connect wallet"
     },
     "overview": {
@@ -16146,11 +16150,11 @@
       "RPC_NOT_CONFIGURED": "A verified read-only RPC endpoint is not configured.",
       "RPC_URL_INVALID": "The configured RPC URL is invalid.",
       "RPC_MUST_USE_HTTPS": "The RPC must use HTTPS; local HTTP is restricted to loopback test endpoints.",
-      "RPC_URL_CREDENTIALS_NOT_ALLOWED": "RPC credentials in URL user-info fields are rejected; keep provider secrets out of the URL.",
+      "RPC_URL_CREDENTIALS_NOT_ALLOWED": "RPC credentials and query tokens are rejected; keep provider secrets out of the URL.",
       "FACTORY_ADDRESS_NOT_CONFIGURED": "No factory address is configured.",
       "ASSET_ADDRESS_NOT_CONFIGURED": "No accounting-asset address is configured.",
       "DEPLOYMENT_BLOCK_NOT_CONFIGURED": "The factory deployment block is not configured for bounded history indexing.",
-      "UNSUPPORTED_CHAIN": "Collective v1 is pinned to Robinhood Chain (4663).",
+      "UNSUPPORTED_CHAIN": "The Collective supports Robinhood Chain (4663) and Robinhood Chain Testnet (46630) only.",
       "CHAIN_ID_MISMATCH": "The configured RPC did not verify as the expected chain.",
       "FACTORY_HAS_NO_CODE": "No contract code was found at the configured factory address.",
       "ASSET_HAS_NO_CODE": "No contract code was found at the configured accounting-asset address.",

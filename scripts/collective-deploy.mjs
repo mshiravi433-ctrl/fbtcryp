@@ -31,8 +31,10 @@ import { fileURLToPath } from 'node:url';
 import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import {
   DEFAULT_LIMITS,
+  NETWORKS,
   ROBINHOOD_CHAIN_ID,
   loadCollectiveArtifacts,
+  networkByName,
   deployPhase,
   activatePhase,
   publicDeploymentRecord
@@ -48,17 +50,19 @@ const valueOf = (flag, fallback = null) => {
 };
 
 const LOCAL = has('--local');
-const networkName = valueOf('--network', null);
-if (!LOCAL && networkName && networkName !== 'robinhood') {
-  console.error(`✗ unsupported --network ${networkName}; this tool only deploys the Collective on Robinhood Chain (4663)`);
+const networkName = valueOf('--network', 'robinhood');
+const network = networkByName(networkName);
+if (!LOCAL && !network) {
+  console.error(`✗ unsupported --network ${networkName}; supported networks: ${Object.keys(NETWORKS).join(', ')}`);
   process.exit(1);
 }
+const LIVE_NETWORK = network ?? NETWORKS.robinhood;
 const EXECUTE = has('--execute');
 const REHEARSE = has('--rehearse') || LOCAL;
 const PHASE = valueOf('--phase', LOCAL ? 'all' : 'deploy');
 const OUT = valueOf('--out', LOCAL
   ? path.join(root, 'test', '.out', 'collective-deployment.local.json')
-  : path.join(root, 'deployments', `collective-${ROBINHOOD_CHAIN_ID}.json`));
+  : path.join(root, 'deployments', `collective-${LIVE_NETWORK.chainId}.json`));
 const STATE = valueOf('--state', OUT);
 
 const log = (line = '') => console.log(line);
@@ -84,12 +88,15 @@ function readLimitsFromEnv() {
 
 function writeRecord(file, record) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(publicDeploymentRecord(record), null, 2)}\n`);
+  const publicRecord = publicDeploymentRecord({ ...record, verified: false, verifiedAt: null });
+  fs.writeFileSync(file, `${JSON.stringify(publicRecord, null, 2)}\n`);
   ok(`deployment record → ${path.relative(root, file)}`);
 }
 
 function printPlan() {
-  log('FBT AI Collective — live activation plan (no transaction was sent)');
+  log(`FBT AI Collective — ${LIVE_NETWORK.displayName} activation plan (no transaction was sent)`);
+  log(`  chainId=${LIVE_NETWORK.chainId} · testnet=${LIVE_NETWORK.testnet}`);
+  if (LIVE_NETWORK.testnet) log('  TESTNET: tokens have no real-world value; transactions still spend testnet ETH gas.');
   log('');
   log('  Phase 1  deploy AccessController, EmergencyModule, oracles, RiskController,');
   log('           ExecutionRouter, both deployers and the factory; bind roles; queue');
@@ -209,27 +216,26 @@ async function runLocal() {
   return phase2;
 }
 
-async function connectLive() {
-  const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? '').trim();
+async function connectLive(selectedNetwork) {
+  const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? '').trim() || selectedNetwork.rpcUrl;
   const key = String(process.env.COLLECTIVE_DEPLOYER_PRIVATE_KEY ?? '').trim();
-  if (!rpcUrl) throw new Error('COLLECTIVE_RPC_URL is required');
   if (!/^https:\/\//.test(rpcUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/)/.test(rpcUrl)) {
     throw new Error('COLLECTIVE_RPC_URL must use HTTPS (loopback http is allowed for a local node)');
   }
   try {
     const parsed = new URL(rpcUrl);
-    if (parsed.username || parsed.password) {
-      throw new Error('COLLECTIVE_RPC_URL must not embed credentials; use a read-only provider endpoint');
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error('COLLECTIVE_RPC_URL must not embed credentials or query tokens; use a credential-free provider endpoint');
     }
   } catch (cause) {
     if (String(cause?.message || '').includes('credentials')) throw cause;
     throw new Error('COLLECTIVE_RPC_URL is not a valid URL');
   }
   if (!key) throw new Error('COLLECTIVE_DEPLOYER_PRIVATE_KEY is required to sign with your own wallet');
-  const provider = new JsonRpcProvider(rpcUrl, ROBINHOOD_CHAIN_ID);
-  const network = await provider.getNetwork();
-  if (Number(network.chainId) !== ROBINHOOD_CHAIN_ID) {
-    throw new Error(`RPC chain id ${network.chainId} is not Robinhood Chain (${ROBINHOOD_CHAIN_ID})`);
+  const provider = new JsonRpcProvider(rpcUrl, selectedNetwork.chainId);
+  const connectedNetwork = await provider.getNetwork();
+  if (Number(connectedNetwork.chainId) !== selectedNetwork.chainId) {
+    throw new Error(`RPC chain id ${connectedNetwork.chainId} does not match ${selectedNetwork.displayName} (${selectedNetwork.chainId}); refusing to send transactions`);
   }
   const signer = new Wallet(key, provider);
   const balance = await provider.getBalance(signer.address);
@@ -241,7 +247,7 @@ async function connectLive() {
 async function runLive() {
   const artifacts = loadCollectiveArtifacts(root);
   if (!EXECUTE) return printPlan();
-  const { signer } = await connectLive();
+  const { signer } = await connectLive(LIVE_NETWORK);
   const address = await signer.getAddress();
   const assetAddress = String(process.env.COLLECTIVE_ASSET_ADDRESS ?? '').trim();
   const targetAddress = String(process.env.COLLECTIVE_STRATEGY_TARGET ?? '').trim() || null;
@@ -250,11 +256,16 @@ async function runLive() {
   const keeperAddress = process.env.COLLECTIVE_KEEPER_ADDRESS || '';
   const limits = readLimitsFromEnv();
 
-  log('FBT AI Collective — Robinhood Chain activation');
+  log(`FBT AI Collective — ${LIVE_NETWORK.displayName} activation`);
+  log(`  chainId: ${LIVE_NETWORK.chainId} · testnet=${LIVE_NETWORK.testnet}`);
+  if (LIVE_NETWORK.testnet) log('  TESTNET — assets have no real-world value; the wallet still pays testnet ETH gas.');
   log(`  gas payer: ${address} (your wallet); sponsored=false`);
   log(`  accounting asset: ${assetAddress || '<missing>'} · target: ${targetAddress || 'no-yield idle (deployed now)'}`);
 
   if (PHASE === 'deploy') {
+    if (fs.existsSync(OUT)) {
+      throw new Error(`Refusing to overwrite existing network-specific deployment record ${path.relative(root, OUT)}; review it and use a fresh, explicitly reviewed path before deploying again`);
+    }
     if (!assetAddress) throw new Error('COLLECTIVE_ASSET_ADDRESS is required — the tool never invents a token address');
     log('');
     const record = await deployPhase({
@@ -276,13 +287,16 @@ async function runLive() {
     log('');
     log(`  Phase 1 queued. The RiskController timelock unlocks at ${new Date(record.timelockReadyAt * 1000).toISOString()}.`);
     log('  Run phase 2 after that time with:');
-    log(`    node scripts/collective-deploy.mjs --network robinhood --phase activate --execute`);
+    log(`    node scripts/collective-deploy.mjs --network ${LIVE_NETWORK.name} --phase activate --execute`);
     return record;
   }
 
   if (PHASE === 'activate' || PHASE === 'all') {
     if (!fs.existsSync(STATE)) throw new Error(`No phase-1 record at ${STATE}. Run --phase deploy first.`);
     const deployment = JSON.parse(fs.readFileSync(STATE, 'utf8'));
+    if (Number(deployment.chainId) !== LIVE_NETWORK.chainId || Boolean(deployment.testnet) !== LIVE_NETWORK.testnet) {
+      throw new Error(`Deployment record chainId/testnet does not match ${LIVE_NETWORK.displayName} (${LIVE_NETWORK.chainId}); refusing to activate it`);
+    }
     const now = Number((await signer.provider.getBlock('latest'))?.timestamp ?? 0);
     if (now < deployment.timelockReadyAt) {
       throw new Error(`Policy timelock is not ready: ${new Date(deployment.timelockReadyAt * 1000).toISOString()} (now ${new Date(now * 1000).toISOString()})`);

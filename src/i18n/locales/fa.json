@@ -16005,6 +16005,10 @@
   },
   "collective": {
     "title": "مجموعه هوشمند FBT",
+    "testnet": {
+      "title": "شبکهٔ آزمایشی TESTNET",
+      "body": "این شبکهٔ آزمایشی است؛ دارایی‌های تست‌نت ارزش واقعی ندارند."
+    },
     "subtitle": "ماژول خزانه‌ای مستقل و عمومی؛ فقط با سرمایه اصلی کاربران. همه تراکنش‌ها روی زنجیره قابل مشاهده‌اند.",
     "public": {
       "badge": "عمومی",
@@ -16037,9 +16041,9 @@
       "disabled": "غیرفعال"
     },
     "wallet": {
-      "wrongChain": "برای تراکنش، شبکه را عوض کنید",
+      "wrongChain": "برای تراکنش به {{chain}} تغییر دهید",
       "readOnly": "تا اتصال کیف پول، فقط خواندنی",
-      "switch": "تغییر به Robinhood Chain",
+      "switch": "تغییر به {{chain}}",
       "connect": "اتصال کیف پول"
     },
     "overview": {
@@ -16146,11 +16150,11 @@
       "RPC_NOT_CONFIGURED": "RPC فقط‌خواندنی و تأییدشده تنظیم نشده است.",
       "RPC_URL_INVALID": "نشانی RPC تنظیم‌شده معتبر نیست.",
       "RPC_MUST_USE_HTTPS": "RPC باید از HTTPS استفاده کند؛ HTTP فقط برای نقطه پایانی آزمایشی حلقه‌باز مجاز است.",
-      "RPC_URL_CREDENTIALS_NOT_ALLOWED": "اعتبارنامه در بخش کاربری نشانی RPC پذیرفته نمی‌شود؛ راز ارائه‌دهنده را در URL قرار ندهید.",
+      "RPC_URL_CREDENTIALS_NOT_ALLOWED": "اعتبارنامه و tokenهای query در نشانی RPC پذیرفته نمی‌شوند؛ راز ارائه‌دهنده را در URL قرار ندهید.",
       "FACTORY_ADDRESS_NOT_CONFIGURED": "نشانی کارخانه تنظیم نشده است.",
       "ASSET_ADDRESS_NOT_CONFIGURED": "نشانی دارایی حسابداری تنظیم نشده است.",
       "DEPLOYMENT_BLOCK_NOT_CONFIGURED": "بلاک استقرار کارخانه برای شاخص‌سازی محدود تاریخچه تنظیم نشده است.",
-      "UNSUPPORTED_CHAIN": "نسخه نخست مجموعه به Robinhood Chain (4663) محدود است.",
+      "UNSUPPORTED_CHAIN": "مجموعه فقط از Robinhood Chain (4663) و Robinhood Chain Testnet (46630) پشتیبانی می‌کند.",
       "CHAIN_ID_MISMATCH": "RPC پیکربندی‌شده به‌عنوان شبکه مورد انتظار تأیید نشد.",
       "FACTORY_HAS_NO_CODE": "در نشانی کارخانه پیکربندی‌شده کدی پیدا نشد.",
       "ASSET_HAS_NO_CODE": "در نشانی دارایی پیکربندی‌شده کدی پیدا نشد.",

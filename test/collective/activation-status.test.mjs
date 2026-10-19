@@ -117,6 +117,9 @@ test('payload is secret-free', () => {
   assert.equal(/https?:\/\/[^"'@]+:[^"'@]+@/.test(text), false);
   // The *name* of the required secret is public knowledge; its value is not.
   assert.deepEqual(payload.deployment.requiredSecrets, ['COLLECTIVE_DEPLOYER_PRIVATE_KEY']);
+  assert.deepEqual(payload.deployment.requiredVariables, []);
+  assert.ok(payload.deployment.optionalVariables.includes('COLLECTIVE_ASSET_ADDRESS'));
+  assert.ok(payload.deployment.optionalVariables.includes('COLLECTIVE_GUARDIAN_ADDRESS'));
 });
 
 test('verified snapshot turns reads on with zero environment variables', () => {

@@ -22,10 +22,9 @@
  * have been configured, by name, as a repository secret.
  */
 import {
-  COLLECTIVE_CHAIN_ID,
-  COLLECTIVE_CHAIN_NAME,
-  COLLECTIVE_EXPLORER,
-  readCollectiveConfig
+  COLLECTIVE_CHAINS,
+  readCollectiveConfig,
+  snapshotDeploymentForChain
 } from './config.js';
 import { ACTIVATION_SNAPSHOT } from './activation.snapshot.js';
 
@@ -60,15 +59,17 @@ const STEP_MATCHERS = Object.freeze([
   { id: 'contract', re: /contract probe|contract-probe/i },
   { id: 'api', re: /\bapi\b|activation test/i },
   { id: 'rehearsal', re: /rehearsal/i },
-  { id: 'live', re: /live deploy|deploy on|activate on/i },
+  { id: 'live', re: /live deploy|deploy on|activate on|phase deploy|phase activate|chain verification|read-only preflight/i },
   { id: 'evidence', re: /evidence|snapshot/i }
 ]);
 
 const REQUIRED_SECRETS = Object.freeze(['COLLECTIVE_DEPLOYER_PRIVATE_KEY']);
-const REQUIRED_VARIABLES = Object.freeze([
+const OPTIONAL_VARIABLES = Object.freeze([
   'COLLECTIVE_ASSET_ADDRESS',
   'COLLECTIVE_GUARDIAN_ADDRESS',
-  'COLLECTIVE_RPC_URL'
+  'COLLECTIVE_DEPLOYER_ADDRESS',
+  'COLLECTIVE_TESTNET_RPC_URL',
+  'COLLECTIVE_POLICY_DELAY_SECONDS'
 ]);
 
 const shortSha = (value) => {
@@ -188,18 +189,23 @@ function snapshotRun(snapshot) {
 }
 
 function deploymentNextStep({ config, snapshot }) {
-  const live = snapshot?.liveDeployment;
+  const live = snapshotDeploymentForChain(snapshot, config.chainId);
   if (config.configured) return 'live';
   if (live && String(live.status) === 'queued') return 'run-activation';
+  if (live && String(live.status) === 'activated' && live.verified !== true) return 'run-check';
   return 'run-deployment';
 }
 
-function requiredAction(nextStep) {
-  if (nextStep === 'live' || nextStep === 'none') return null;
-  if (nextStep === 'run-activation') {
-    return `gh workflow run ${COLLECTIVE_ACTIVATION_WORKFLOW} -f phase=activate -f acknowledge_gas=yes`;
+function requiredAction(nextStep, chain) {
+  if (nextStep === 'live' || nextStep === 'none' || chain?.supported === false) return null;
+  const prefix = chain?.testnet === true ? 'testnet-' : '';
+  if (nextStep === 'run-check') {
+    return `gh workflow run ${COLLECTIVE_ACTIVATION_WORKFLOW} -f phase=${prefix}check`;
   }
-  return `gh workflow run ${COLLECTIVE_ACTIVATION_WORKFLOW} -f phase=deploy -f acknowledge_gas=yes`;
+  if (nextStep === 'run-activation') {
+    return `gh workflow run ${COLLECTIVE_ACTIVATION_WORKFLOW} -f phase=${prefix}activate -f acknowledge_gas=yes`;
+  }
+  return `gh workflow run ${COLLECTIVE_ACTIVATION_WORKFLOW} -f phase=${prefix}deploy -f acknowledge_gas=yes`;
 }
 
 /**
@@ -213,14 +219,23 @@ export function buildCollectiveActivationPayload({
   now = () => new Date().toISOString()
 } = {}) {
   const nextStep = deploymentNextStep({ config, snapshot });
-  const liveDeployment = snapshot?.liveDeployment && typeof snapshot.liveDeployment === 'object'
+  const chain = COLLECTIVE_CHAINS[config.chainId] ?? {
+    id: config.chainId,
+    name: config.chainName || 'Unsupported network',
+    explorer: config.explorer || '',
+    testnet: false,
+    supported: false
+  };
+  const record = snapshotDeploymentForChain(snapshot, config.chainId);
+  const liveDeployment = record
     ? {
-      status: String(snapshot.liveDeployment.status ?? 'unknown'),
-      chainId: Number(snapshot.liveDeployment.chainId) || COLLECTIVE_CHAIN_ID,
-      verified: snapshot.liveDeployment.verified === true,
-      verifiedAt: snapshot.liveDeployment.verifiedAt ?? null,
-      timelockReadyAt: snapshot.liveDeployment.timelockReadyAt ?? null,
-      vaultAddress: snapshot.liveDeployment.vaultAddress ?? null
+      status: String(record.status ?? 'unknown'),
+      chainId: Number(record.chainId),
+      testnet: record.testnet === true,
+      verified: record.verified === true,
+      verifiedAt: record.verifiedAt ?? null,
+      timelockReadyAt: record.timelockReadyAt ?? null,
+      vaultAddress: record.vaultAddress ?? null
     }
     : null;
 
@@ -228,9 +243,11 @@ export function buildCollectiveActivationPayload({
     schema: COLLECTIVE_ACTIVATION_SCHEMA,
     generatedAt: now(),
     chain: {
-      id: COLLECTIVE_CHAIN_ID,
-      name: COLLECTIVE_CHAIN_NAME,
-      explorer: COLLECTIVE_EXPLORER
+      id: chain.id,
+      name: chain.name,
+      explorer: chain.explorer,
+      testnet: chain.testnet === true,
+      supported: chain.supported !== false
     },
     policy: {
       // What is actually free: the whole build/verification pipeline.
@@ -251,12 +268,13 @@ export function buildCollectiveActivationPayload({
       configured: config.configured,
       issues: [...config.issues],
       nextStep,
-      command: requiredAction(nextStep),
+      command: requiredAction(nextStep, chain),
       workflowUrl: `https://github.com/${repo}/actions/workflows/${COLLECTIVE_ACTIVATION_WORKFLOW}`,
       installUrl: `https://github.com/${repo}/new/main?filename=.github/workflows/${COLLECTIVE_ACTIVATION_WORKFLOW}`,
       sourceUrl: `https://github.com/${repo}/blob/main/ci/${COLLECTIVE_ACTIVATION_WORKFLOW}`,
       requiredSecrets: [...REQUIRED_SECRETS],
-      requiredVariables: [...REQUIRED_VARIABLES],
+      requiredVariables: [],
+      optionalVariables: [...OPTIONAL_VARIABLES],
       acknowledgeInput: 'acknowledge_gas=yes',
       liveDeployment,
       notes: [

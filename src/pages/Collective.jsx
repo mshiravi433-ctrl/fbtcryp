@@ -13,7 +13,7 @@ import {
   IconWallet
 } from '../components/Icons';
 import { collectiveApi } from '../lib/collective/api';
-import { COLLECTIVE_CHAIN_ID, COLLECTIVE_CHAIN_NAME } from '../lib/collective/constants';
+import { collectiveChainFromPayload } from '../lib/collective/constants';
 import {
   claimCollectiveIncome,
   depositIntoCollective,
@@ -63,7 +63,7 @@ function reasonLabel(reason, t) {
     FACTORY_ADDRESS_NOT_CONFIGURED: 'No factory address is configured.',
     ASSET_ADDRESS_NOT_CONFIGURED: 'No accounting-asset address is configured.',
     DEPLOYMENT_BLOCK_NOT_CONFIGURED: 'The factory deployment block is not configured for bounded history indexing.',
-    UNSUPPORTED_CHAIN: 'Collective v1 is pinned to Robinhood Chain (4663).',
+    UNSUPPORTED_CHAIN: 'The Collective supports Robinhood Chain (4663) and Robinhood Chain Testnet (46630) only.',
     CHAIN_ID_MISMATCH: 'The configured RPC did not verify as the expected chain.',
     FACTORY_HAS_NO_CODE: 'No contract code was found at the configured factory address.',
     ASSET_HAS_NO_CODE: 'No contract code was found at the configured accounting-asset address.',
@@ -198,7 +198,11 @@ export default function Collective() {
   }, [loadVaultData]);
 
   const asset = vault?.asset;
-  const onCollectiveChain = wallet.isConnected && Number(wallet.chainId) === COLLECTIVE_CHAIN_ID;
+  const chain = collectiveChainFromPayload(status) || collectiveChainFromPayload(activation);
+  const collectiveChainId = Number(chain?.id);
+  const supportedChain = chain?.supported === true && Number.isSafeInteger(collectiveChainId) && collectiveChainId > 0;
+  const chainName = chain?.name || '';
+  const onCollectiveChain = wallet.isConnected && supportedChain && Number(wallet.chainId) === collectiveChainId;
   const depositsOpen = Boolean(vault?.epoch?.depositsOpen && !vault?.emergency?.paused);
   const withdrawalOpen = Boolean(vault?.epoch?.withdrawalWindowOpen);
   const claimable = BigInt(position?.claimableIncomeRaw || 0);
@@ -207,8 +211,9 @@ export default function Collective() {
 
   const ensureCollectiveChain = async () => {
     if (!wallet.isConnected || !wallet.address) throw new Error('WALLET_NOT_CONNECTED');
-    if (Number(wallet.chainId) !== COLLECTIVE_CHAIN_ID) {
-      const changed = await wallet.switchChain?.(COLLECTIVE_CHAIN_ID);
+    if (!supportedChain) throw new Error('UNSUPPORTED_CHAIN');
+    if (Number(wallet.chainId) !== collectiveChainId) {
+      const changed = await wallet.switchChain?.(collectiveChainId);
       if (!changed) throw new Error('WRONG_CHAIN');
     }
   };
@@ -242,6 +247,7 @@ export default function Collective() {
     catch { setActionError(t('collective.actionError.INVALID_AMOUNT', { defaultValue: 'Enter a valid amount greater than zero.' })); return; }
     await runAction(() => depositIntoCollective({
       wallet,
+      chainId: collectiveChainId,
       assetAddress: asset.address,
       vaultAddress: vault.address,
       amountRaw
@@ -257,7 +263,7 @@ export default function Collective() {
     try {
       await ensureCollectiveChain();
       const assetsRaw = parseCollectiveAmount(withdrawInput, asset.decimals);
-      const quote = await previewCollectiveWithdrawal({ wallet, vaultAddress: vault.address, assetsRaw });
+      const quote = await previewCollectiveWithdrawal({ wallet, chainId: collectiveChainId, vaultAddress: vault.address, assetsRaw });
       if (BigInt(quote.sharesRaw) > shares) throw new Error('INSUFFICIENT_SHARES');
       setWithdrawalQuote(quote);
     } catch (cause) {
@@ -274,6 +280,7 @@ export default function Collective() {
     setWithdrawalQuote(null);
     await runAction(() => requestCollectiveWithdrawal({
       wallet,
+      chainId: collectiveChainId,
       vaultAddress: vault.address,
       sharesRaw: quote.sharesRaw
     }), 'collective.action.withdrawalSent');
@@ -281,7 +288,7 @@ export default function Collective() {
 
   const claimIncome = async () => {
     if (!vault || (claimable === 0n && !position?.claimScanTruncated)) return;
-    await runAction(() => claimCollectiveIncome({ wallet, vaultAddress: vault.address, maxEpochs: 12 }), 'collective.action.claimSent');
+    await runAction(() => claimCollectiveIncome({ wallet, chainId: collectiveChainId, vaultAddress: vault.address, maxEpochs: 12 }), 'collective.action.claimSent');
   };
 
   const modules = status?.modules || {};
@@ -299,7 +306,7 @@ export default function Collective() {
             <IconChevronLeft width={18} height={18} />
           </button>
           <div className="collective-heading">
-            <span className="collective-eyebrow"><IconActivity width={14} height={14} /> FBT Swap · {COLLECTIVE_CHAIN_NAME}</span>
+            <span className="collective-eyebrow"><IconActivity width={14} height={14} /> FBT Swap{chainName ? ` · ${chainName}` : ''}</span>
             <h1>{t('collective.title', { defaultValue: 'FBT AI Collective' })}</h1>
             <p>{t('collective.subtitle', { defaultValue: 'A separate, public vault module. User-owned principal only; every transaction is visible on-chain.' })}</p>
           </div>
@@ -312,6 +319,13 @@ export default function Collective() {
           <span className="collective-pill">{t('collective.public.badge', { defaultValue: 'Public module' })}</span>
           <span>{t('collective.public.gas', { defaultValue: 'Every transaction is signed by your connected wallet, and your wallet pays the network gas. No sponsor, paymaster or company subsidy is enabled.' })}</span>
         </div>
+
+        {chain?.testnet === true && (
+          <section className="collective-testnet-banner" role="alert" aria-live="polite">
+            <strong>{t('collective.testnet.title', { defaultValue: 'TESTNET' })}</strong>
+            <span>{t('collective.testnet.body', { defaultValue: 'This is a test network. Test assets have no real-world value.' })}</span>
+          </section>
+        )}
 
         <section className="collective-banner" role="note">
           <IconInfo width={18} height={18} />
@@ -355,10 +369,12 @@ export default function Collective() {
             <div className="collective-walletbar">
               <div className="collective-walletinfo">
                 <IconWallet width={18} height={18} />
-                {wallet.isConnected ? <span>{shortAddress(wallet.address)}{onCollectiveChain ? ` · ${COLLECTIVE_CHAIN_NAME}` : ` · ${t('collective.wallet.wrongChain', { defaultValue: 'Switch network to transact' })}`}</span> : <span>{t('collective.wallet.readOnly', { defaultValue: 'Read-only until you connect a wallet' })}</span>}
+                {wallet.isConnected ? (
+                  <span>{shortAddress(wallet.address)}{chainName ? ` · ${chainName}` : ''}{!onCollectiveChain ? ` · ${t('collective.wallet.wrongChain', { chain: chainName, defaultValue: 'Switch network to transact' })}` : ''}</span>
+                ) : <span>{t('collective.wallet.readOnly', { defaultValue: 'Read-only until you connect a wallet' })}</span>}
               </div>
               {wallet.isConnected ? (
-                !onCollectiveChain && <button className="btn btn-ghost btn-sm" type="button" onClick={() => wallet.switchChain?.(COLLECTIVE_CHAIN_ID)}>{t('collective.wallet.switch', { defaultValue: 'Switch to Robinhood Chain' })}</button>
+                !onCollectiveChain && supportedChain && <button className="btn btn-ghost btn-sm" type="button" onClick={() => wallet.switchChain?.(collectiveChainId)}>{t('collective.wallet.switch', { chain: chainName, defaultValue: chainName ? `Switch to ${chainName}` : 'Switch network' })}</button>
               ) : (
                 <button className="btn btn-primary btn-sm" type="button" onClick={() => setConnectOpen(true)}>{t('collective.wallet.connect', { defaultValue: 'Connect wallet' })}</button>
               )}

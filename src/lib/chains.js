@@ -365,6 +365,16 @@ export const EVM_CHAINS = {
     wrapped: '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', // WETH — Blockscout-verified
     dexName: 'KyberSwap',
     color: '#00c805'
+  },
+  46630: {
+    id: 46630,
+    hexId: '0xb626',
+    name: 'Robinhood Chain Testnet',
+    short: 'HOOD-TEST',
+    native: { symbol: 'ETH', decimals: 18 },
+    rpc: ['https://rpc.testnet.chain.robinhood.com'],
+    explorer: 'https://explorer.testnet.chain.robinhood.com',
+    color: '#e5484d'
   }
 };
 

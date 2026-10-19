@@ -214,6 +214,7 @@ export function createCollectiveReader({ config = readCollectiveConfig(), provid
 
     return {
       schema: 'fbt.collective.vault.v1',
+      chainId: config.chainId,
       address: vaultAddress,
       name,
       symbol,
@@ -370,7 +371,7 @@ export function createCollectiveReader({ config = readCollectiveConfig(), provid
   async function getProposals(vaultAddress) {
     const { buildCollectiveProposals } = await import('./strategyPolicy.js');
     const snapshot = await getVault(vaultAddress);
-    return buildCollectiveProposals(snapshot);
+    return buildCollectiveProposals(snapshot, { chainId: config.chainId });
   }
 
   async function isKeeper(account) {

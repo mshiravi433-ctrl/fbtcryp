@@ -1,3 +1,15 @@
+# ۲۰۲۶-۱۰-۱۹ — حالت چندشبکه‌ای و تست‌نت Robinhood برای مجموعهٔ هوشمند FBT (46630)
+
+جزئیات اجرا و گام‌های عملی اپراتور: [2026-10-19-collective-testnet-mode-fa.md](docs/2026-10-19-collective-testnet-mode-fa.md).
+
+- **شبکه‌بندی جدا و fail-closed:** رجیستری Collective از `4663` (مین‌نت) و `46630` (تست‌نت) پشتیبانی می‌کند؛ هر chain ID دیگر رد می‌شود. رکورد هر شبکه جداست، فازهای `testnet-*` هرگز به فایل مین‌نت نمی‌نویسند و شاهد تأییدشده chain ID و برچسب `testnet` خودش را حمل می‌کند.
+- **پیش‌بررسی بدون کلید:** `scripts/collective-preflight.mjs` فقط chain ID از RPC، موجودی ETH آدرس عمومی، کد قرارداد و `symbol()/decimals()` توکنِ صریح و fee cap/gas price را می‌خواند؛ موجودی با برآورد gas مرجع هر فاز و ۱۰٪ حاشیه سنجیده می‌شود. endpoint با اعتبارنامه رد می‌شود و در صورت RPC ناموجود، حدس یا fallback زنجیره‌ای انجام نمی‌شود.
+- **ورک‌فلو دستی و محدود:** نسخهٔ مرجع `ci/collective-activation.yml` فازهای تمرین، preflight، mainnet و testnet را جدا می‌کند. به‌دلیل نداشتن مجوز GitHub برای نوشتن در مسیر workflow، فایل فعال `.github/workflows/collective-activation.yml` در این تغییر دست‌نخورده مانده است؛ مالک مخزن باید پس از merge یک‌بار نسخهٔ `ci/` را از رابط GitHub در مسیر فعال کپی کند. ورودی‌های عمومی `asset_address` و `guardian_address` بر Variables اولویت دارند؛ توکن تست‌نت با Blockscout فهرست می‌شود، اما انتخاب نمی‌شود. Secret فقط به فرایند تراکنش می‌رسد.
+- **سایت آگاه از شبکه:** صفحهٔ `/#/collective` chain ID، نام شبکه، سوییچ والت و مرورگر را از API می‌گیرد. برای تست‌نت بنر قرمز TESTNET با هشدار نداشتن ارزش واقعی نشان می‌دهد؛ ID تست‌نت فقط به رجیستری والت اضافه شده و mainnet پیش‌فرض/مسیرهای دیگر تغییر نکرده‌اند.
+- **صداقت انتشار:** این commit خودِ استقرار زنجیره‌ای را اجرا نمی‌کند و هیچ آدرس توکن را حدس نمی‌زند. `deployments/collective-46630.json` و شاهد `verified:true/testnet:true` فقط پس از `testnet-check` واقعی ساخته می‌شوند؛ کلید، RPC دارای اعتبارنامه و شاهد ساختگی منتشر نمی‌شود.
+
+---
+
 # ۲۰۲۶-۱۰-۱۹ — مجموعهٔ هوشمند FBT بدون کلید و بدون گس عملیاتی شد: خط لولهٔ GitHub Actions، کنسول فعال‌سازی و روشن‌شدن خودکار خواندن عمومی
 
 جزئیات و استدلال کامل: [2026-10-19-collective-keyless-gasless-activation-fa.md](docs/2026-10-19-collective-keyless-gasless-activation-fa.md).
