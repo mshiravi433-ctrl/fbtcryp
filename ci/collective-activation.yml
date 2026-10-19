@@ -1,102 +1,293 @@
 # ============================================================================
-# FBT AI COLLECTIVE — ACTIVATION / VERIFICATION
+# FBT AI COLLECTIVE — KEYLESS, GAS-FREE ACTIVATION PIPELINE
 #
-# Copy this file to .github/workflows/collective-activation.yml by hand
-# (GitHub blocks agent tokens from writing under .github/workflows/).
+# INSTALL: copy this whole file to .github/workflows/collective-activation.yml
+# (GitHub blocks automation tokens from writing under .github/workflows/, so
+# this copy lives here and the owner pastes it once in the GitHub UI).
 #
-# DEFAULT RUN (recommended): the "rehearse" phase needs no secrets. It compiles
-# every Collective contract, runs the API + activation tests, and performs the
-# complete local deployment, real one-day timelock, activation, user deposit,
-# keeper investment and reader verification on an in-process Ganache chain.
+# WHAT RUNS WITHOUT ANYBODY HOLDING A KEY
+#   Job `rehearsal` runs on every push to main that touches the Collective, and
+#   weekly. It needs NO repository secret and spends NO gas: it compiles the
+#   contracts, runs the Ganache contract probe, the API/activation tests and the
+#   complete local rehearsal (deploy → real 1-day timelock → activate → a user
+#   deposit signed and paid by the user's own wallet → invest → read through the
+#   production reader). It then publishes the evidence — contract bytecode
+#   hashes, sizes and check results — to:
+#       server/collective/activation.snapshot.js   (read by the API)
+#       public/collective/activation.json          (public, auditable)
+#   The commit-back is what makes the already-live site show a real, verifiable
+#   pipeline status with no Vercel environment variable.
 #
-# LIVE RUN (only after the deployment checklist in
-# docs/collective/ACTIVATION-FA.md is signed off): choose phase "deploy" and add
-# these repository secrets. Every transaction is signed by that wallet and pays
-# its own gas; there is no relayer or paymaster anywhere in this job.
+# WHY THERE IS STILL A `live` JOB (AND WHY IT IS OFF BY DEFAULT)
+#   Contracts cannot be put on Robinhood Chain (4663) for free: an Arbitrum
+#   Orbit chain charges gas in ETH. No key and no gas exist inside this
+#   repository, and inventing either would be a lie. So the live job is:
+#       · manual only (workflow_dispatch),
+#       · gated by an explicit `acknowledge_gas=yes` input,
+#       · gated by a repository secret the owner adds themselves,
+#       · never printing, persisting or committing the key.
+#   The deploying wallet pays the gas — there is no sponsor, relayer or
+#   paymaster. Once phase 2 passes verification, the public read configuration
+#   becomes automatic (the API reads the verified snapshot), so "run the
+#   workflow once" is the whole operational step.
 #
-#   COLLECTIVE_DEPLOYER_PRIVATE_KEY   the operator wallet key (never printed)
-#   COLLECTIVE_RPC_URL                verified HTTPS Robinhood Chain RPC
-#   COLLECTIVE_ASSET_ADDRESS          verified accounting stablecoin
-#   COLLECTIVE_GOVERNOR_ADDRESS       must equal the deployer for phase 1
-#   COLLECTIVE_GUARDIAN_ADDRESS       separately controlled wallet
-#   COLLECTIVE_KEEPER_ADDRESS         optional keeper
-#   COLLECTIVE_STRATEGY_TARGET        optional audited ERC-4626 target
-#
-# Phase 1 only queues policy behind the on-chain RiskController timelock. Run
-# the "activate" phase manually after the recorded timelockReadyAt, then run
-# the "check" phase against the resulting deployment record.
+# ONE-TIME SETUP FOR THE LIVE JOB (entirely in the GitHub UI — no key is ever
+# sent to anybody, including the person who wrote this file):
+#   Settings → Secrets and variables → Actions
+#     Secret    COLLECTIVE_DEPLOYER_PRIVATE_KEY   burner wallet key (pays gas)
+#     Variable  COLLECTIVE_ASSET_ADDRESS          accounting stablecoin address
+#     Variable  COLLECTIVE_GUARDIAN_ADDRESS       a different wallet than above
+#     Variable  COLLECTIVE_RPC_URL               (optional) HTTPS RPC
+#   Then: Actions → "FBT Collective Activation" → Run workflow
+#         phase=deploy   acknowledge_gas=yes
+#   After ≥ 1 day (RiskController timelock):
+#         phase=activate acknowledge_gas=yes
+#         phase=check    (no key needed)
 # ============================================================================
 name: FBT Collective Activation
+
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/collective/**'
+      - 'server/collective/**'
+      - 'scripts/collective-*.mjs'
+      - 'scripts/lib/collectiveDeployment.mjs'
+      - 'src/pages/Collective.jsx'
+      - 'src/lib/collective/**'
+      - 'src/styles/collective.css'
+      - 'test/collective/**'
+      - 'public/collective/**'
+      - 'deployments/**'
+      - '.github/workflows/collective-activation.yml'
+  schedule:
+    # Weekly, Monday 03:17 UTC — odd minute, outside the congested top of hour.
+    - cron: '17 3 * * 1'
   workflow_dispatch:
     inputs:
       phase:
-        description: 'rehearse | deploy | activate | check'
-        required: true
-        default: rehearse
+        description: 'rehearse = keyless & gas-free · deploy/activate = your wallet pays gas · check = read-only'
         type: choice
+        default: rehearse
         options: [rehearse, deploy, activate, check]
-permissions:
-  contents: read
-jobs:
-  rehearse:
-    if: inputs.phase == 'rehearse'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Compile Collective contracts
-        run: node scripts/compile-collective.mjs
-      - name: API, policy, gas-model and activation contracts
-        run: node --test test/collective/api.test.mjs test/collective/activation.test.mjs
-      - name: Full local activation rehearsal (no real funds)
-        run: node scripts/collective-deploy.mjs --local --rehearse
-      - name: Upload rehearsal record (public addresses only)
-        uses: actions/upload-artifact@v4
-        with:
-          name: collective-local-rehearsal
-          path: test/.out/collective-deployment.local.json
-          retention-days: 7
+      acknowledge_gas:
+        description: 'Type yes only if you accept that the deploying wallet pays real gas'
+        type: string
+        default: ''
 
-  live:
-    if: inputs.phase == 'deploy' || inputs.phase == 'activate' || inputs.phase == 'check'
+permissions:
+  contents: write
+
+concurrency:
+  group: collective-activation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rehearsal:
+    name: Keyless rehearsal (no secrets, no gas)
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.phase == 'rehearse' || inputs.phase == '')
+      && !contains(github.event.head_commit.message, '[collective-evidence]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
-      COLLECTIVE_RPC_URL: ${{ secrets.COLLECTIVE_RPC_URL }}
-      COLLECTIVE_ASSET_ADDRESS: ${{ secrets.COLLECTIVE_ASSET_ADDRESS }}
-      COLLECTIVE_GOVERNOR_ADDRESS: ${{ secrets.COLLECTIVE_GOVERNOR_ADDRESS }}
-      COLLECTIVE_GUARDIAN_ADDRESS: ${{ secrets.COLLECTIVE_GUARDIAN_ADDRESS }}
-      COLLECTIVE_KEEPER_ADDRESS: ${{ secrets.COLLECTIVE_KEEPER_ADDRESS }}
-      COLLECTIVE_STRATEGY_TARGET: ${{ secrets.COLLECTIVE_STRATEGY_TARGET }}
-      COLLECTIVE_KEEPER_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: node scripts/compile-collective.mjs
-      - name: Deploy phase 1 (queues the on-chain timelock)
-        if: inputs.phase == 'deploy'
-        run: node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute
-      - name: Activate phase 2 (after timelockReadyAt)
-        if: inputs.phase == 'activate'
-        run: node scripts/collective-deploy.mjs --network robinhood --phase activate --execute
-      - name: Verify deployment before enabling public reads
-        if: inputs.phase == 'check' || inputs.phase == 'activate'
-        run: node scripts/collective-activate.mjs --deployment deployments/collective-4663.json --check
-      - name: Upload public deployment record
-        if: inputs.phase == 'deploy' || inputs.phase == 'activate'
+
+      - name: Install dependencies (lockfile verified)
+        run: npm ci --no-audit --no-fund
+
+      - name: Mark start time
+        run: echo "COLLECTIVE_STARTED_AT=$(date -u +%s)" >> "$GITHUB_ENV"
+
+      - name: Compile Collective contracts (solc 0.8.24)
+        run: npm run compile:collective
+
+      - name: Contract probe (Ganache, no funds)
+        run: node test/collective/contract-probe.mjs
+
+      - name: API + activation tests
+        run: node --test test/collective/api.test.mjs test/collective/activation.test.mjs test/collective/activation-status.test.mjs
+
+      - name: Full local rehearsal (deploy → timelock → activate → deposit)
+        run: node scripts/collective-deploy.mjs --local --rehearse
+
+      - name: Write public activation evidence
+        run: node scripts/collective-evidence.mjs --write --contract-ok --api-ok
+
+      - name: Verify evidence (parses, no secret material)
+        run: node scripts/collective-evidence.mjs --check
+
+      - name: Upload rehearsal artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: collective-deployment-${{ github.run_id }}
-          path: deployments/collective-4663.json
+          name: collective-rehearsal-${{ github.run_id }}
+          if-no-files-found: warn
           retention-days: 30
+          path: |
+            test/.out/collective-deployment.local.json
+            server/collective/activation.snapshot.js
+            public/collective/activation.json
+
+      - name: Publish evidence to main
+        # Public facts only: hashes, sizes, check results and (after a live run)
+        # public contract addresses. Never a key, never RPC credentials.
+        if: github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git config user.name "fbt-collective-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add server/collective/activation.snapshot.js public/collective/activation.json
+          if git diff --cached --quiet; then
+            echo "::notice::Evidence unchanged; nothing to publish."
+            exit 0
+          fi
+          git commit -m "chore(collective): keyless rehearsal evidence [collective-evidence]"
+          git push
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### FBT AI Collective — keyless pipeline"
+            echo ""
+            echo "| property | value |"
+            echo "| --- | --- |"
+            echo "| secrets used | **none** |"
+            echo "| gas spent | **0** (in-process Ganache) |"
+            echo "| commit | \`${GITHUB_SHA::7}\` |"
+            echo "| run | [#${GITHUB_RUN_NUMBER}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  live:
+    name: Live deployment (your wallet pays gas)
+    if: github.event_name == 'workflow_dispatch' && inputs.phase != 'rehearse'
+    runs-on: ubuntu-latest
+    environment: collective-live
+    timeout-minutes: 45
+    env:
+      # The key reaches this process only through this explicit env block.
+      # It is never echoed, never written to disk and never committed.
+      COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+      COLLECTIVE_RPC_URL: ${{ vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+      COLLECTIVE_ASSET_ADDRESS: ${{ vars.COLLECTIVE_ASSET_ADDRESS }}
+      COLLECTIVE_GOVERNOR_ADDRESS: ${{ vars.COLLECTIVE_GOVERNOR_ADDRESS }}
+      COLLECTIVE_GUARDIAN_ADDRESS: ${{ vars.COLLECTIVE_GUARDIAN_ADDRESS }}
+      COLLECTIVE_KEEPER_ADDRESS: ${{ vars.COLLECTIVE_KEEPER_ADDRESS }}
+      COLLECTIVE_STRATEGY_TARGET: ${{ vars.COLLECTIVE_STRATEGY_TARGET }}
+      COLLECTIVE_VAULT_NAME: ${{ vars.COLLECTIVE_VAULT_NAME }}
+      COLLECTIVE_VAULT_SYMBOL: ${{ vars.COLLECTIVE_VAULT_SYMBOL }}
+      COLLECTIVE_PUBLIC_RPC_URL: ${{ vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+      COLLECTIVE_LIVE_ACK: ${{ inputs.acknowledge_gas }}
+      COLLECTIVE_PHASE: ${{ inputs.phase }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies (lockfile verified)
+        run: npm ci --no-audit --no-fund
+
+      - name: Preflight — presence only, never values
+        id: preflight
+        run: |
+          set -euo pipefail
+          has() { if [ -n "${!1:-}" ]; then echo true; else echo false; fi; }
+          echo "phase=${COLLECTIVE_PHASE}"
+          echo "key_present=$(has COLLECTIVE_DEPLOYER_PRIVATE_KEY)"
+          echo "asset_present=$(has COLLECTIVE_ASSET_ADDRESS)"
+          echo "guardian_present=$(has COLLECTIVE_GUARDIAN_ADDRESS)"
+          echo "rpc_present=$(has COLLECTIVE_RPC_URL)"
+
+          ready=true
+          if [ "${COLLECTIVE_PHASE}" = "check" ]; then
+            echo "::notice::verify mode is read-only and needs no key."
+          else
+            if [ "${COLLECTIVE_PHASE}" != "activate" ] && [ -z "${COLLECTIVE_ASSET_ADDRESS:-}" ]; then
+              echo "::warning::COLLECTIVE_ASSET_ADDRESS is not set. Add it under Settings → Secrets and variables → Actions → Variables."
+              ready=false
+            fi
+            if [ -z "${COLLECTIVE_DEPLOYER_PRIVATE_KEY:-}" ]; then
+              echo "::notice::COLLECTIVE_DEPLOYER_PRIVATE_KEY is not set, so no transaction can be signed. Nothing was sent. Add the secret yourself — do not paste a key anywhere else."
+              ready=false
+            fi
+            if [ "${COLLECTIVE_LIVE_ACK}" != "yes" ]; then
+              echo "::warning::acknowledge_gas must be exactly 'yes'. The deploying wallet pays real gas; there is no sponsor."
+              ready=false
+            fi
+          fi
+          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
+
+      - name: Compile Collective contracts
+        if: steps.preflight.outputs.ready == 'true'
+        run: npm run compile:collective
+
+      - name: Phase deploy (queues the ≥ 1-day RiskController timelock)
+        if: steps.preflight.outputs.ready == 'true' && inputs.phase == 'deploy'
+        run: node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute
+
+      - name: Phase activate (after the timelock)
+        if: steps.preflight.outputs.ready == 'true' && inputs.phase == 'activate'
+        run: node scripts/collective-deploy.mjs --network robinhood --phase activate --execute
+
+      - name: Verify the deployment on-chain (read-only)
+        if: steps.preflight.outputs.ready == 'true' && inputs.phase != 'deploy'
+        env:
+          COLLECTIVE_VERIFIED: 'true'
+        run: node scripts/collective-activate.mjs --deployment deployments/collective-4663.json --check
+
+      - name: Write verified activation evidence
+        if: steps.preflight.outputs.ready == 'true' && inputs.phase != 'deploy'
+        env:
+          COLLECTIVE_VERIFIED: 'true'
+        run: node scripts/collective-evidence.mjs --write --contract-ok --api-ok
+
+      - name: Publish the public record (addresses only, never the key)
+        if: steps.preflight.outputs.ready == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          git config user.name "fbt-collective-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add deployments server/collective/activation.snapshot.js public/collective/activation.json
+          if git diff --cached --quiet; then
+            echo "::notice::No public-record change to commit."
+            exit 0
+          fi
+          git commit -m "chore(collective): live deployment record [collective-evidence]"
+          git push
+
+      - name: Upload live-run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collective-live-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            deployments/collective-4663.json
+            server/collective/activation.snapshot.js
+            public/collective/activation.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### FBT AI Collective — live job"
+            echo ""
+            echo "| property | value |"
+            echo "| --- | --- |"
+            echo "| phase | \`${COLLECTIVE_PHASE}\` |"
+            echo "| key present | \`${{ steps.preflight.outputs.ready }}\` |"
+            echo "| gas sponsor | **none** — the deploying wallet pays |"
+            echo "| key handling | secret → process env only; never printed, stored or committed |"
+          } >> "$GITHUB_STEP_SUMMARY"

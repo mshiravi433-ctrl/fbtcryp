@@ -100,6 +100,8 @@ export default function Collective() {
   const [depositInput, setDepositInput] = useState('');
   const [withdrawInput, setWithdrawInput] = useState('');
   const [withdrawalQuote, setWithdrawalQuote] = useState(null);
+  const [activation, setActivation] = useState(null);
+  const [activationError, setActivationError] = useState('');
 
   const loadDeployment = useCallback(async ({ quiet = false } = {}) => {
     if (quiet) setRefreshing(true);
@@ -139,6 +141,25 @@ export default function Collective() {
     const timer = window.setInterval(() => void loadDeployment({ quiet: true }), 60_000);
     return () => window.clearInterval(timer);
   }, [loadDeployment]);
+
+  // The activation status comes from the public GitHub Actions API (through
+  // our own read-only endpoint) and is independent of our wallet. A failure
+  // here must never block the rest of the page: the panel degrades to the last
+  // committed evidence and says so.
+  const loadActivation = useCallback(async () => {
+    setActivationError('');
+    try {
+      setActivation(await collectiveApi.activation());
+    } catch (cause) {
+      setActivationError(String(cause?.code || 'ACTIVATION_STATUS_UNAVAILABLE'));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadActivation();
+    const timer = window.setInterval(() => void loadActivation(), 300_000);
+    return () => window.clearInterval(timer);
+  }, [loadActivation]);
 
   const loadVaultData = useCallback(async () => {
     if (!selectedAddress) {
@@ -282,7 +303,7 @@ export default function Collective() {
             <h1>{t('collective.title', { defaultValue: 'FBT AI Collective' })}</h1>
             <p>{t('collective.subtitle', { defaultValue: 'A separate, public vault module. User-owned principal only; every transaction is visible on-chain.' })}</p>
           </div>
-          <button type="button" className="collective-refresh" onClick={async () => { await loadDeployment({ quiet: true }); await loadVaultData(); }} disabled={refreshing}>
+          <button type="button" className="collective-refresh" onClick={async () => { await Promise.all([loadDeployment({ quiet: true }), loadActivation()]); await loadVaultData(); }} disabled={refreshing}>
             {refreshing ? '…' : t('collective.refresh', { defaultValue: 'Refresh' })}
           </button>
         </header>
@@ -299,6 +320,8 @@ export default function Collective() {
             <p>{t('collective.disclosure.body', { defaultValue: 'Returns are variable and not guaranteed. Principal may be lost. Withdrawals use a liquidity-aware queue and are not instant. Network gas is paid by the transacting wallet. The contracts are not independently audited.' })}</p>
           </div>
         </section>
+
+        <ActivationPanel activation={activation} error={activationError} locale={locale} t={t} />
 
         {loading ? (
           <section className="collective-state-card"><span className="collective-spinner" />{t('collective.loading', { defaultValue: 'Checking verified Collective configuration…' })}</section>
@@ -505,5 +528,135 @@ function ModuleCard({ icon, title, state, active = false }) {
       <div><strong>{title}</strong><span>{state}</span></div>
       <i aria-label={active ? 'enabled' : 'disabled'} />
     </article>
+  );
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Activation console                                                  */
+/* ------------------------------------------------------------------ */
+
+const ACTIVATION_STEP_IDS = ['compile', 'contract', 'api', 'rehearsal', 'live', 'evidence'];
+const ACTIVATION_TONE = {
+  passed: 'ok',
+  failed: 'bad',
+  blocked: 'bad',
+  running: 'busy',
+  queued: 'busy',
+  cancelled: 'muted',
+  skipped: 'muted',
+  unknown: 'muted',
+  'never-run': 'muted'
+};
+
+function relativeTime(iso, locale) {
+  const value = Date.parse(String(iso || ''));
+  if (!Number.isFinite(value)) return '';
+  const diffSeconds = Math.round((value - Date.now()) / 1000);
+  const absolute = Math.abs(diffSeconds);
+  const units = [['day', 86_400], ['hour', 3_600], ['minute', 60], ['second', 1]];
+  try {
+    const formatter = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    for (const [unit, seconds] of units) {
+      if (absolute >= seconds || unit === 'second') return formatter.format(Math.round(diffSeconds / seconds), unit);
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+function ActivationPanel({ activation, error, locale, t }) {
+  const pipeline = activation?.pipeline || null;
+  const deployment = activation?.deployment || null;
+  const state = error && !pipeline ? 'unknown' : String(pipeline?.state || 'never-run');
+  const steps = (Array.isArray(pipeline?.steps) ? pipeline.steps : [])
+    .filter((step) => ACTIVATION_STEP_IDS.includes(step.id));
+  const nextStep = String(deployment?.nextStep || 'run-deployment');
+  const tone = ACTIVATION_TONE[state] || 'muted';
+  const installMissing = pipeline?.installed === false;
+  const sourceNote = error
+    ? t('collective.activation.unavailable', { defaultValue: 'Activation status could not be fetched from GitHub; showing the last committed evidence.' })
+    : pipeline?.evidenceSource === 'local-rehearsal' || pipeline?.evidenceSource === 'local'
+      ? t('collective.activation.localNote', { defaultValue: 'This evidence comes from a full local rehearsal in this repository, not from CI yet. Add the workflow once to make the run automatic.' })
+      : pipeline?.source === 'snapshot'
+        ? t('collective.activation.snapshotNote', { defaultValue: 'GitHub is rate-limiting this read, so the last committed run evidence is shown instead.' })
+        : '';
+
+  return (
+    <section className="collective-activation" aria-label={t('collective.activation.title', { defaultValue: 'Activation' })}>
+      <header className="collective-activation-head">
+        <div>
+          <span className="collective-eyebrow"><IconActivity width={13} height={13} />{t('collective.activation.eyebrow', { defaultValue: 'ACTIVATION · GITHUB ACTIONS' })}</span>
+          <h2>{t('collective.activation.title', { defaultValue: 'Keyless, gas-free activation pipeline' })}</h2>
+          <p>{t('collective.activation.body', { defaultValue: 'Build, contract probe, API tests and the full local rehearsal run on GitHub Actions with no secret and no gas. A real chain deployment still needs a funded wallet — it signs inside the runner and is never shared.' })}</p>
+        </div>
+        <div className="collective-activation-badges">
+          <span className="collective-activation-badge is-on">{t('collective.activation.badge.keyless', { defaultValue: 'No key' })}</span>
+          <span className="collective-activation-badge is-on">{t('collective.activation.badge.gasFree', { defaultValue: 'Pipeline: no gas' })}</span>
+          <span className="collective-activation-badge">{t('collective.activation.badge.actions', { defaultValue: 'GitHub Actions' })}</span>
+        </div>
+      </header>
+
+      <div className="collective-activation-grid">
+        <div className="collective-activation-run">
+          <span className={`collective-activation-dot is-${tone}`} aria-hidden="true" />
+          <div>
+            <strong>{t(`collective.activation.state.${state}`, { defaultValue: state })}</strong>
+            {pipeline?.createdAt ? (
+              <span>{t('collective.activation.lastRun', { defaultValue: 'Last run' })} · {relativeTime(pipeline.updatedAt || pipeline.createdAt, locale)}</span>
+            ) : (
+              <span>{t('collective.activation.never', { defaultValue: 'The keyless pipeline has not run yet.' })}</span>
+            )}
+          </div>
+          {pipeline?.url && (
+            <a className="collective-activation-link" href={pipeline.url} target="_blank" rel="noreferrer">
+              {t('collective.activation.viewRun', { defaultValue: 'View run' })} ↗
+            </a>
+          )}
+        </div>
+
+        <div className="collective-activation-steps" role="list" aria-label={t('collective.activation.steps', { defaultValue: 'Pipeline steps' })}>
+          {steps.length ? steps.map((step) => (
+            <span
+              key={`${step.number}-${step.id}-${step.name}`}
+              role="listitem"
+              title={step.name}
+              className={`collective-activation-step is-${ACTIVATION_TONE[step.status] || 'muted'}`}
+            >
+              <i aria-hidden="true" />
+              {t(`collective.activation.step.${step.id}`, { defaultValue: step.id })}
+            </span>
+          )) : (
+            <span className="collective-activation-step is-muted" role="listitem">
+              {t('collective.activation.step.none', { defaultValue: 'No step evidence yet' })}
+            </span>
+          )}
+        </div>
+
+        <div className="collective-activation-next">
+          <strong>{t('collective.activation.next.title', { defaultValue: 'Next step' })}</strong>
+          <p>{t(`collective.activation.next.${nextStep}`, { defaultValue: nextStep })}</p>
+          {deployment?.command && <code>{deployment.command}</code>}
+        </div>
+      </div>
+
+      <p className="collective-activation-honesty">
+        <IconInfo width={14} height={14} />
+        {t('collective.activation.honesty', { defaultValue: 'This pipeline spends no key and no gas. A real deployment on Robinhood Chain always pays gas from the deploying wallet; there is no sponsor or paymaster.' })}
+      </p>
+
+      {installMissing && (
+        <div className="collective-activation-install" role="note">
+          <strong>{t('collective.activation.install.title', { defaultValue: 'One-time workflow install' })}</strong>
+          <p>{t('collective.activation.install.body', { defaultValue: 'GitHub blocks automation tokens from writing under .github/workflows. The ready file lives at ci/collective-activation.yml — copy it into that folder once and the weekly run starts by itself.' })}</p>
+          <div className="collective-activation-install-links">
+            {deployment?.installUrl && <a href={deployment.installUrl} target="_blank" rel="noreferrer">{t('collective.activation.install.action', { defaultValue: 'Create the file on GitHub' })} ↗</a>}
+            {deployment?.sourceUrl && <a href={deployment.sourceUrl} target="_blank" rel="noreferrer">{t('collective.activation.install.source', { defaultValue: 'Open the ready file' })} ↗</a>}
+          </div>
+        </div>
+      )}
+      {sourceNote && <p className="collective-activation-note">{sourceNote}</p>}
+    </section>
   );
 }

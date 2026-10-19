@@ -16174,6 +16174,57 @@
       "reserve": "Realized-income reserve",
       "concentration": "Concentration cap",
       "oracleAge": "Maximum oracle age"
+    },
+    "activation": {
+      "eyebrow": "ACTIVATION · GITHUB ACTIONS",
+      "title": "Keyless, gas-free activation pipeline",
+      "body": "Compile, contract probe, API tests and the full local rehearsal run on GitHub Actions with no secret and no gas. A real chain deployment always needs a wallet with gas: the key signs inside the runner and is never shared.",
+      "badge": {
+        "keyless": "No key",
+        "gasFree": "Pipeline: no gas",
+        "actions": "GitHub Actions"
+      },
+      "state": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "running": "Running",
+        "queued": "Queued",
+        "unknown": "Unknown",
+        "never-run": "Not run yet",
+        "cancelled": "Cancelled",
+        "blocked": "Action required",
+        "skipped": "Skipped"
+      },
+      "lastRun": "Last run",
+      "never": "The keyless pipeline has not run yet.",
+      "viewRun": "View run",
+      "steps": "Pipeline steps",
+      "step": {
+        "compile": "Compile",
+        "contract": "Contract probe",
+        "api": "API tests",
+        "rehearsal": "Full rehearsal",
+        "live": "Live deploy",
+        "evidence": "Evidence",
+        "none": "No step evidence yet",
+        "other": "Other"
+      },
+      "next": {
+        "title": "Next step",
+        "live": "The on-chain deployment is verified and public reads are active.",
+        "run-deployment": "To go live on-chain, add a dedicated burner wallet key as a repository secret and run the workflow with phase=deploy. The key is never shared and that wallet pays its own gas.",
+        "run-activation": "The one-day RiskController timelock is still running. Finish activation with phase=activate after it unlocks."
+      },
+      "honesty": "This pipeline spends no key and no gas. A real deployment on Robinhood Chain always pays gas from the deploying wallet; there is no sponsor or paymaster.",
+      "unavailable": "Activation status could not be fetched from GitHub; showing the last committed evidence.",
+      "snapshotNote": "GitHub is rate-limiting this read, so the last committed run evidence is shown instead.",
+      "install": {
+        "title": "One-time workflow install",
+        "body": "GitHub blocks automation tokens from writing under .github/workflows. The ready file lives at ci/collective-activation.yml — copy it into that folder once and the weekly run starts by itself.",
+        "action": "Create the file on GitHub",
+        "source": "Open the ready file"
+      },
+      "localNote": "This evidence comes from a full local rehearsal in this repository, not from CI yet. Add the workflow once to make the run automatic."
     }
   }
 }

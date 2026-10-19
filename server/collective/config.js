@@ -1,3 +1,5 @@
+import { ACTIVATION_SNAPSHOT } from './activation.snapshot.js';
+
 export const COLLECTIVE_SCHEMA = 'fbt.collective.v1';
 export const COLLECTIVE_CHAIN_ID = 4663;
 export const COLLECTIVE_CHAIN_NAME = 'Robinhood Chain';
@@ -21,17 +23,56 @@ const intOrNull = (value) => {
 };
 
 /**
+ * A live deployment written by the keyless CI workflow and committed to the
+ * repository. It is the ONLY automatic source of addresses, and it is accepted
+ * only when the activation workflow itself verified it on-chain:
+ *
+ *   status === 'activated'  — phase 2 (after the 1-day timelock) ran,
+ *   verified === true       — `collective-activate.mjs --check` passed,
+ *   chainId === 4663        — the deployed chain is Robinhood Chain,
+ *   addresses + block set   — nothing is guessed or defaulted.
+ *
+ * An explicit `COLLECTIVE_READS_ENABLED=false` always wins, so an operator can
+ * turn the automatic path off without deleting the record.
+ */
+export function readSnapshotDeployment(env = process.env, snapshot = ACTIVATION_SNAPSHOT) {
+  const explicit = String(env.COLLECTIVE_READS_ENABLED ?? '').trim().toLowerCase();
+  if (explicit === 'false') return null;
+  const live = snapshot?.liveDeployment;
+  if (!live || typeof live !== 'object') return null;
+  if (String(live.status ?? '') !== 'activated') return null;
+  if (live.verified !== true) return null;
+  if (Number(live.chainId) !== COLLECTIVE_CHAIN_ID) return null;
+  const rpcUrl = String(live.rpcUrl ?? '').trim();
+  const factoryAddress = String(live.factoryAddress ?? '').trim();
+  const assetAddress = String(live.assetAddress ?? '').trim();
+  const deploymentBlock = intOrNull(live.deploymentBlock);
+  if (!rpcUrl || !validAddress(factoryAddress) || !validAddress(assetAddress) || deploymentBlock == null) return null;
+  try {
+    if (new URL(rpcUrl).protocol !== 'https:') return null;
+  } catch {
+    return null;
+  }
+  return Object.freeze({ rpcUrl, factoryAddress, assetAddress, deploymentBlock, verifiedAt: live.verifiedAt ?? null });
+}
+
+/**
  * Read-only chain configuration. Contract/token/oracle/strategy addresses are
  * never inferred from symbols or copied from another network: operators must
- * provide the deployed factory and accounting asset explicitly.
+ * provide the deployed factory and accounting asset explicitly — or the
+ * activation workflow must have verified and committed them (see above).
  */
-export function readCollectiveConfig(env = process.env) {
+export function readCollectiveConfig(env = process.env, snapshot = ACTIVATION_SNAPSHOT) {
   const chainId = intOrNull(env.COLLECTIVE_CHAIN_ID) ?? COLLECTIVE_CHAIN_ID;
-  const enabled = isTrue(env.COLLECTIVE_READS_ENABLED);
-  const rpcUrl = String(env.COLLECTIVE_RPC_URL ?? '').trim();
-  const factoryAddress = String(env.COLLECTIVE_FACTORY_ADDRESS ?? '').trim();
-  const assetAddress = String(env.COLLECTIVE_ASSET_ADDRESS ?? '').trim();
-  const deploymentBlock = intOrNull(env.COLLECTIVE_DEPLOYMENT_BLOCK);
+  // The workflow-verified record is a fallback only: an explicit value in the
+  // environment always wins, and `COLLECTIVE_READS_ENABLED=false` disables the
+  // automatic path outright.
+  const snapshotRecord = readSnapshotDeployment(env, snapshot);
+  const enabled = isTrue(env.COLLECTIVE_READS_ENABLED) || (snapshotRecord != null && String(env.COLLECTIVE_READS_ENABLED ?? '').trim() === '');
+  const rpcUrl = String(env.COLLECTIVE_RPC_URL ?? '').trim() || snapshotRecord?.rpcUrl || '';
+  const factoryAddress = String(env.COLLECTIVE_FACTORY_ADDRESS ?? '').trim() || snapshotRecord?.factoryAddress || '';
+  const assetAddress = String(env.COLLECTIVE_ASSET_ADDRESS ?? '').trim() || snapshotRecord?.assetAddress || '';
+  const deploymentBlock = intOrNull(env.COLLECTIVE_DEPLOYMENT_BLOCK) ?? snapshotRecord?.deploymentBlock ?? null;
   const maxEventSpanRaw = intOrNull(env.COLLECTIVE_EVENT_MAX_BLOCK_SPAN);
   const maxEventSpan = maxEventSpanRaw == null
     ? COLLECTIVE_DEFAULT_EVENT_SPAN

@@ -1,0 +1,202 @@
+{
+  "schema": "fbt.collective.activation.snapshot.v1",
+  "generatedAt": "2026-10-19T13:59:50.277Z",
+  "source": "local-rehearsal",
+  "repo": "mshiravi433-ctrl/fbtcryp",
+  "commit": "9a27ccf5ce5aa72a3cd3dbbd7947b61de64912b4",
+  "workflow": "collective-activation.yml",
+  "run": {
+    "id": null,
+    "number": null,
+    "url": null,
+    "event": "local-rehearsal",
+    "conclusion": "success",
+    "headSha": "9a27ccf5ce5aa72a3cd3dbbd7947b61de64912b4",
+    "createdAt": "2026-10-19T13:59:50.000Z",
+    "updatedAt": "2026-10-19T13:59:50.277Z",
+    "durationSeconds": 0
+  },
+  "checks": [
+    {
+      "id": "compile",
+      "label": "Compile 22 contracts (solc)",
+      "ok": true,
+      "detail": "largest deployed bytecode 24564 / 24576 bytes (EIP-170)"
+    },
+    {
+      "id": "contract",
+      "label": "Contract probe on Ganache (no funds)",
+      "ok": true,
+      "detail": "local chain only, no real funds"
+    },
+    {
+      "id": "api",
+      "label": "API + activation tests",
+      "ok": true,
+      "detail": "node --test"
+    },
+    {
+      "id": "rehearsal",
+      "label": "Full local rehearsal (deploy → timelock → activate → deposit)",
+      "ok": true,
+      "detail": "23 transactions · vault created · gas 23658893 units"
+    }
+  ],
+  "artifacts": [
+    {
+      "contract": "AccessController",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 3746,
+      "limitBytes": 24576,
+      "sha256": "09cbb6ebdff5ac0d5b7e6a0d760a1e4357d76c289fbde8590754b8acbf802404"
+    },
+    {
+      "contract": "CollectiveFactory",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 4592,
+      "limitBytes": 24576,
+      "sha256": "0aad43127fd3562cd337f038ad2868a95bbda530d0627fd3e5d3a1eade554454"
+    },
+    {
+      "contract": "CollectiveModulesDeployer",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 12273,
+      "limitBytes": 24576,
+      "sha256": "0793042f3aed3bda8fde51e84433ea254a29b0309729843f02d2461647bcfa01"
+    },
+    {
+      "contract": "DeclaredPriceOracle",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 587,
+      "limitBytes": 24576,
+      "sha256": "d88357c3edd23e3d104f3c7a8cee96ad56695adb256d183d6afb66b075e9c940"
+    },
+    {
+      "contract": "DisabledLiquidityOracle",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 178,
+      "limitBytes": 24576,
+      "sha256": "69f4027b7d8544e187f070be13e6f086a7c795b41c4592e6bdb19c12190490a9"
+    },
+    {
+      "contract": "EmergencyModule",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 2024,
+      "limitBytes": 24576,
+      "sha256": "ac23ebd3acb2d502081d2cf86fabdbcbf44e4b6884b55894c11b8517af3e2938"
+    },
+    {
+      "contract": "EpochManager",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 1654,
+      "limitBytes": 24576,
+      "sha256": "3b143d7b81aea4e9a1f47a2905d3891b92de1c80e773b3562b9c4544b7064677"
+    },
+    {
+      "contract": "ExecutionRouter",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 4347,
+      "limitBytes": 24576,
+      "sha256": "3419ae3b51dcbe3630df78047962883f1ea3ce3321362a361017bfc3f09be48e"
+    },
+    {
+      "contract": "Mock4626Strategy",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 4672,
+      "limitBytes": 24576,
+      "sha256": "c514978811387cb29e219592cc093ddfd8067439600437486e73163da23b97b9"
+    },
+    {
+      "contract": "MockCollectiveLiquidityOracle",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 698,
+      "limitBytes": 24576,
+      "sha256": "2e0485b984fe2b225adfd03ea80916c94a6f1d580825033eef19688689ed9944"
+    },
+    {
+      "contract": "MockCollectiveOracle",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 763,
+      "limitBytes": 24576,
+      "sha256": "26b0292a08fb6f85e8f24ab2274cba78bef8a3a754e049b72c239fcc9f7bcd4b"
+    },
+    {
+      "contract": "MockFeeUSDT",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 2234,
+      "limitBytes": 24576,
+      "sha256": "585880ed188d14ba3765b0cf9cdba9c87b8950c8242766f862f88ca38f5b8f1e"
+    },
+    {
+      "contract": "MockSlippage4626",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 4605,
+      "limitBytes": 24576,
+      "sha256": "69a8bb192712ba54d215245c71184d180bf9b2f6dff3a6f34d648f65bba67c00"
+    },
+    {
+      "contract": "MockUSDT",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 2100,
+      "limitBytes": 24576,
+      "sha256": "1fc56ba4da25e31fb3bc950158dfbfd1d93a04447dc0ad18fdb228e368162137"
+    },
+    {
+      "contract": "MockV2Router",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 1446,
+      "limitBytes": 24576,
+      "sha256": "8d599875d2e6aab1e16991cb76066a048c2a1fdac62051e96a4db7f3672cae1d"
+    },
+    {
+      "contract": "NoYield4626Strategy",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 4353,
+      "limitBytes": 24576,
+      "sha256": "5e06cf1c54afaaddb9f1cdca5e0595ba03d7224ecf63cfd66333aa5e10b819e0"
+    },
+    {
+      "contract": "RewardAccounting",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 58,
+      "limitBytes": 24576,
+      "sha256": "b1dda9b5f24e3d9c9480d5838104393c038cbd5c79441383327464b3f9d34908"
+    },
+    {
+      "contract": "RiskController",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 12112,
+      "limitBytes": 24576,
+      "sha256": "e80c79a5e9fa18f93930fda737aaa549238f86e1bddfaeab64d48f90f995aa38"
+    },
+    {
+      "contract": "StrategyAdapter",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 6706,
+      "limitBytes": 24576,
+      "sha256": "92c06818829dd33ace7a8f67a42932d4928346bd96a4bc2966cb29906388f4f9"
+    },
+    {
+      "contract": "StrategyVault",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 21110,
+      "limitBytes": 24576,
+      "sha256": "e95daaaed873557f9f68393d199e33eda3564045ef1350ab92d0b49bc1ff74ec"
+    },
+    {
+      "contract": "StrategyVaultDeployer",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 24564,
+      "limitBytes": 24576,
+      "sha256": "aab54d3141d23a3fcd6df6d5265ed1e997f45a7a3d1825a1630c1d46999888ee"
+    },
+    {
+      "contract": "WithdrawalQueue",
+      "compiler": "0.8.24+commit.e11b9ed9.Emscripten.clang",
+      "bytes": 1602,
+      "limitBytes": 24576,
+      "sha256": "4cf434eb8f50e6016740160d9663d16b157054615c3f3e25e5514be4de80acf1"
+    }
+  ],
+  "liveDeployment": null
+}

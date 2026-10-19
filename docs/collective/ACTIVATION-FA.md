@@ -365,3 +365,22 @@ test/collective/api.test.mjs                 (آزمون مدل گس و رکور
 package.json                                 (اسکریپت‌های deploy/activate/check/env)
 docs/collective/ACTIVATION-FA.md             (همین سند)
 ```
+
+
+---
+
+## ۱۰. مسیر بدون کلید و بدون گس (افزوده‌شده ۲۰۲۶-۱۰-۱۹)
+
+از این تاریخ، هر چیزی که بدون کلید و بدون گس شدنی است، خودکار است:
+
+| کار | ابزار | کلید؟ | گس؟ |
+| --- | --- | --- | --- |
+| کامپایل + پروب قرارداد + تست‌های API | `.github/workflows/collective-activation.yml` (job `rehearsal`) | نه | نه |
+| تمرین کامل استقرار/تایم‌لاک/فعال‌سازی/واریز | همان job، Ganache درون‌فرآیندی | نه | نه |
+| شاهد عمومی اجرا | `scripts/collective-evidence.mjs` → snapshot + `public/collective/activation.json` | نه | نه |
+| نمایش وضعیت روی `/#/collective` | `GET /api/collective/activation` | نه | نه |
+| استقرار روی Robinhood Chain | همان ورک‌فلو، job `live`، فقط با Secret و `acknowledge_gas=yes` | فقط داخل رانر | گس کیف پول اپراتور |
+| روشن‌شدن خواندن عمومی بعد از استقرار | خودکار از رکورد تأییدشدهٔ CI | نه | نه |
+
+دستورهای دقیق و توجیه «چرا استقرار روی زنجیره هرگز رایگان نیست» در
+`docs/2026-10-19-collective-keyless-gasless-activation-fa.md` آمده است.
