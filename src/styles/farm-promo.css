@@ -1,252 +1,279 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   FARM PROMO — the ad banner at the foot of the bridge screen
+   FARM PROMO — the compact ad strip at the foot of the bridge screen
    (components/FarmPromoBanner.jsx; see that file for the reasoning)
 
+   ─── WHAT CHANGED AND WHY ──────────────────────────────────────────────────
+   The first version of this banner was a 200px card: a 96px illustration, a
+   three-line headline, three bordered chips and a full-width button. On a
+   360px phone it took a third of the viewport to sell the NEXT screen, on the
+   screen the user was still using. Reported as «خیلی بزرگه از نظر طولی و
+   شلوغه».
+
+   This layout is one row of content:
+     [ 44px mark ] [ badge + headline / one meta line ] [ compact CTA ]
+   ~92px tall on a 430px phone and ~104px on a 360px one, including padding.
+   Nothing was removed from the pitch: the same three claims are still there,
+   as a dot-separated line instead of three bordered pills.
+
    MOTION BUDGET
-     four keyframe animations, all `transform`/`opacity`, none perpetual-blur:
-       .farm-promo-sheen   a highlight travelling across the card
-       .farm-promo-ring    the dashed vault circle turning
-       .farm-promo-bar     the four columns growing, staggered
-       .farm-promo-orbit   the coin on its orbit
-     Everything stops under `prefers-reduced-motion` and under the app's own
+     two keyframe animations, both `transform`/`opacity`:
+       .farm-promo-sheen  one highlight pass every ~9s
+       .farm-promo-bar    three columns settling, staggered
+     Both stop under `prefers-reduced-motion` and under the app's own
      reduce-motion switch (the component adds `is-still`). No `filter: blur()`
-     and no `backdrop-filter` — see the performance notes in the component.
+     and no `backdrop-filter`.
 
    THEME
-     Dark is the base (the app's canvas is near-black). Light theme gets its own
-     block at the bottom: the neon pair is unreadable on white (1.3-1.8:1), so
-     the text switches to the same inks AdBanner uses.
+     Dark is the base. Light gets its own block at the bottom: the neon pair
+     is unreadable on white, so the text switches to deep greens.
 
    RTL
-     Logical properties only (`padding-inline`, `inset-inline`, `margin-inline`).
-     No `left`/`right` anywhere in this file.
+     Logical properties only (`padding-inline`, `inset-inline`). No
+     `left`/`right` in this file.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .farm-promo {
   position: relative;
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  margin-top: 14px;
-  padding: 16px 15px;
-  border-radius: 22px;
+  gap: 11px;
   overflow: hidden;
   isolation: isolate;
-  border: 1px solid rgba(0, 255, 157, 0.22);
+  padding: 12px;
+  border: 1px solid rgba(0, 255, 157, 0.16);
+  border-radius: 20px;
   background:
-    radial-gradient(120% 140% at 100% 0%, rgba(0, 255, 157, 0.14), transparent 62%),
-    radial-gradient(120% 160% at 0% 100%, rgba(0, 229, 255, 0.13), transparent 60%),
-    linear-gradient(150deg, rgba(10, 22, 26, 0.94), rgba(8, 14, 26, 0.96));
+    radial-gradient(120% 180% at 100% 0%, rgba(0, 255, 157, 0.1), transparent 60%),
+    radial-gradient(90% 150% at 0% 100%, rgba(53, 224, 255, 0.07), transparent 62%),
+    linear-gradient(160deg, rgba(11, 23, 23, 0.94), rgba(7, 11, 19, 0.97));
   box-shadow:
-    0 18px 44px -18px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    0 12px 30px -24px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* the aurora is a gradient, NOT a blurred layer: soft edge, zero per-frame cost */
-.farm-promo-aurora {
+/* the glow is a gradient, NOT a blurred layer: soft edge, zero per-frame cost */
+.farm-promo-glow {
   position: absolute;
-  inset: -40% -10% auto auto;
-  width: 320px;
-  height: 320px;
+  inset-block-start: -70px;
+  inset-inline-end: -40px;
+  width: 190px;
+  height: 190px;
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, rgba(0, 255, 157, 0.18), transparent 68%);
+  background: radial-gradient(circle, rgba(0, 255, 157, 0.14), transparent 66%);
   pointer-events: none;
-  animation: farm-promo-drift 11s ease-in-out infinite alternate;
+  z-index: -1;
 }
 
-/* one sheen pass every ~6s. `pointer-events: none` so it can never eat a tap
+/* one sheen pass every ~9s. `pointer-events: none` so it can never eat a tap
    meant for the CTA underneath it. */
 .farm-promo-sheen {
   position: absolute;
   inset-block: -30%;
   inset-inline-start: -30%;
-  width: 34%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.11), transparent);
+  width: 28%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.08), transparent);
   transform: skewX(-14deg);
   pointer-events: none;
-  animation: farm-promo-sheen 6.4s ease-in-out infinite;
+  animation: farm-promo-sheen 9s ease-in-out infinite;
 }
 
-.farm-promo-art {
-  position: relative;
+/* ─── the mark ───────────────────────────────────────────────────────────── */
+
+.farm-promo-mark {
   display: grid;
   place-items: center;
-  width: 96px;
-  height: 96px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(0, 255, 157, 0.2);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(0, 255, 157, 0.12), rgba(53, 224, 255, 0.05));
   color: #9dfbe0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
-.farm-promo-art svg { width: 96px; height: 96px; display: block; }
+.farm-promo-mark svg {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
 
-.farm-promo-ring {
-  transform-origin: 48px 48px;
-  animation: farm-promo-turn 22s linear infinite;
-}
 .farm-promo-bar {
   transform-origin: 50% 100%;
-  animation: farm-promo-grow 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
+  animation: farm-promo-grow 3.4s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
 }
-.farm-promo-bar:nth-child(2) { animation-delay: 0.18s; }
-.farm-promo-bar:nth-child(3) { animation-delay: 0.36s; }
-.farm-promo-bar:nth-child(4) { animation-delay: 0.54s; }
-.farm-promo-orbit {
-  transform-origin: 48px 48px;
-  animation: farm-promo-turn 7.5s linear infinite;
-}
+.farm-promo-bar:nth-child(2) { animation-delay: 0.22s; }
+.farm-promo-bar:nth-child(3) { animation-delay: 0.44s; }
+
+/* ─── copy ──────────────────────────────────────────────────────────────── */
 
 .farm-promo-copy {
   position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+
+.farm-promo-line {
+  display: flex;
+  align-items: center;
   gap: 7px;
+  min-width: 0;
 }
 
 .farm-promo-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: flex-start;
-  padding: 4px 9px;
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid rgba(0, 255, 157, 0.3);
   border-radius: 999px;
-  border: 1px solid rgba(0, 255, 157, 0.34);
-  background: rgba(0, 255, 157, 0.1);
+  background: rgba(0, 255, 157, 0.09);
   color: #7dfac0;
-  font-size: 10.5px;
+  font-size: 8.5px;
   font-weight: 800;
-  letter-spacing: 0.02em;
+  line-height: 1.55;
 }
-.farm-promo-spark { font-size: 11px; line-height: 1; }
 
 .farm-promo-title {
+  min-width: 0;
   margin: 0;
-  font-size: 15.5px;
-  font-weight: 900;
-  line-height: 1.4;
-  letter-spacing: -0.01em;
   color: #f3fffb;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
 }
 
-/*
- * NO `.farm-promo-body` RULE. The paragraph it styled was removed on request —
- * it was the only element on this banner that pushed the card past two lines
- * on a phone. A dead rule here would be worse than noise: the next person
- * adding copy would find a class that styles text nobody can see, and assume
- * the layout still expects a body line.
- */
-
-.farm-promo-chips {
+/* the three claims, one line, dot-separated. `i` is the separator: a real
+   element so RTL puts the dot between the words rather than at their edge. */
+.farm-promo-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 1px;
+  align-items: center;
+  gap: 5px;
+  color: rgba(226, 245, 240, 0.62);
+  font-size: 9.3px;
+  font-weight: 650;
+  line-height: 1.6;
 }
-.farm-promo-chip {
-  padding: 4px 9px;
-  border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.045);
-  color: rgba(226, 245, 240, 0.86);
-  font-size: 10.5px;
-  font-weight: 700;
+.farm-promo-meta > span {
   white-space: nowrap;
 }
+.farm-promo-meta i {
+  width: 2.5px;
+  height: 2.5px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(0, 255, 157, 0.55);
+}
+
+/* ─── CTA ───────────────────────────────────────────────────────────────── */
 
 .farm-promo-cta {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  align-self: flex-start;
-  min-height: 42px;
-  margin-top: 3px;
-  padding: 0 18px;
+  gap: 5px;
+  min-height: 36px;
+  padding: 0 11px;
   border: 0;
-  border-radius: 13px;
-  background: linear-gradient(135deg, #00ff9d, #00e5ff);
-  color: #00201a;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #00ff9d, #35e0ff);
+  color: #00221b;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 10.5px;
   font-weight: 900;
+  white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 10px 26px -10px rgba(0, 255, 157, 0.6);
-  transition: transform 140ms ease, box-shadow 180ms ease, filter 180ms ease;
+  box-shadow:
+    0 8px 18px -12px rgba(0, 255, 157, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 140ms ease, filter 180ms ease;
   -webkit-tap-highlight-color: transparent;
 }
-.farm-promo-cta:hover { filter: brightness(1.06); box-shadow: 0 14px 32px -10px rgba(0, 255, 157, 0.72); }
-.farm-promo-cta:active { transform: scale(0.98); }
-.farm-promo-cta:focus-visible { outline: 2px solid #00ff9d; outline-offset: 3px; }
-/* the arrow points forward in LTR and back in RTL, exactly like the label */
+.farm-promo-cta:hover {
+  filter: brightness(1.05);
+}
+.farm-promo-cta:active {
+  transform: scale(0.97);
+}
+.farm-promo-cta:focus-visible {
+  outline: 2px solid #00ff9d;
+  outline-offset: 3px;
+}
+/* the arrow points with the reading direction, like every arrow in the app */
 .farm-promo-cta svg { flex: none; }
 [dir='rtl'] .farm-promo-cta svg { transform: scaleX(-1); }
 
 /* ─────────────────────────────── keyframes ────────────────────────────── */
-@keyframes farm-promo-drift {
-  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.9; }
-  to { transform: translate3d(-14px, 12px, 0) scale(1.08); opacity: 1; }
-}
 @keyframes farm-promo-sheen {
-  0%, 62% { transform: translateX(0) skewX(-14deg); opacity: 0; }
-  68% { opacity: 1; }
-  100% { transform: translateX(420%) skewX(-14deg); opacity: 0; }
-}
-@keyframes farm-promo-turn {
-  to { transform: rotate(360deg); }
+  0%, 64% { transform: translateX(0) skewX(-14deg); opacity: 0; }
+  70% { opacity: 0.9; }
+  100% { transform: translateX(460%) skewX(-14deg); opacity: 0; }
 }
 @keyframes farm-promo-grow {
-  from { transform: scaleY(0.86); opacity: 0.82; }
+  from { transform: scaleY(0.9); opacity: 0.85; }
   to { transform: scaleY(1); opacity: 1; }
 }
 
 /* ── stopped: reduced motion, or the in-app switch ──────────────────────── */
-.farm-promo.is-still .farm-promo-aurora,
 .farm-promo.is-still .farm-promo-sheen,
-.farm-promo.is-still .farm-promo-ring,
-.farm-promo.is-still .farm-promo-bar,
-.farm-promo.is-still .farm-promo-orbit {
+.farm-promo.is-still .farm-promo-bar {
   animation: none;
 }
 .farm-promo.is-still .farm-promo-sheen { opacity: 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .farm-promo-aurora,
   .farm-promo-sheen,
-  .farm-promo-ring,
-  .farm-promo-bar,
-  .farm-promo-orbit { animation: none; }
+  .farm-promo-bar { animation: none; }
   .farm-promo-sheen { opacity: 0; }
   .farm-promo-cta { transition: none; }
 }
 
-/* ── narrow phones: the artwork shrinks before the copy does ───────────── */
-@media (max-width: 380px) {
-  .farm-promo { grid-template-columns: 74px minmax(0, 1fr); gap: 11px; padding: 14px 13px; }
-  .farm-promo-art, .farm-promo-art svg { width: 74px; height: 74px; }
-  .farm-promo-title { font-size: 14.5px; }
-  .farm-promo-cta { width: 100%; }
+/* ── narrow phones: the label disappears before the copy shrinks ───────── */
+@media (max-width: 390px) {
+  .farm-promo {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 9px;
+    padding: 11px;
+  }
+  .farm-promo-mark,
+  .farm-promo-mark svg { width: 40px; height: 40px; }
+  .farm-promo-mark svg { width: 28px; height: 28px; }
+  .farm-promo-title { font-size: 12.4px; }
+  .farm-promo-cta { min-height: 34px; padding: 0 9px; }
+  .farm-promo-cta-text { display: none; }
 }
 
 /* ── light theme: readable inks, not neon on white ─────────────────────── */
 :root[data-theme='light'] .farm-promo {
-  border-color: rgba(0, 136, 84, 0.22);
+  border-color: rgba(4, 120, 87, 0.2);
   background:
-    radial-gradient(120% 140% at 100% 0%, rgba(0, 200, 120, 0.1), transparent 62%),
-    radial-gradient(120% 160% at 0% 100%, rgba(0, 160, 200, 0.09), transparent 60%),
-    linear-gradient(150deg, #ffffff, #f2fbf8);
-  box-shadow: 0 14px 34px -18px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(15, 23, 42, 0.03) inset;
+    radial-gradient(120% 180% at 100% 0%, rgba(0, 200, 120, 0.1), transparent 60%),
+    radial-gradient(90% 150% at 0% 100%, rgba(0, 160, 200, 0.07), transparent 62%),
+    linear-gradient(160deg, #ffffff, #f3fbf8);
+  box-shadow:
+    0 12px 28px -22px rgba(15, 23, 42, 0.35),
+    inset 0 1px 0 #ffffff;
 }
-:root[data-theme='light'] .farm-promo-aurora {
-  background: radial-gradient(circle at 50% 50%, rgba(0, 200, 120, 0.16), transparent 68%);
+:root[data-theme='light'] .farm-promo-glow {
+  background: radial-gradient(circle, rgba(0, 200, 120, 0.14), transparent 66%);
 }
-:root[data-theme='light'] .farm-promo-art { color: #047857; }
+:root[data-theme='light'] .farm-promo-mark {
+  border-color: rgba(4, 120, 87, 0.22);
+  background: linear-gradient(160deg, rgba(0, 200, 120, 0.12), rgba(0, 160, 200, 0.06));
+  color: #047857;
+}
 :root[data-theme='light'] .farm-promo-badge {
-  border-color: rgba(0, 136, 84, 0.3);
-  background: rgba(0, 200, 120, 0.12);
-  color: #006b47;
+  border-color: rgba(4, 120, 87, 0.28);
+  background: rgba(0, 200, 120, 0.1);
+  color: #047857;
 }
-:root[data-theme='light'] .farm-promo-title { color: #0b1f1a; }
-:root[data-theme='light'] .farm-promo-chip {
-  border-color: rgba(15, 23, 42, 0.09);
-  background: rgba(15, 23, 42, 0.03);
-  color: #274a42;
+:root[data-theme='light'] .farm-promo-title {
+  color: #0b1f1a;
+}
+:root[data-theme='light'] .farm-promo-meta {
+  color: #3f5f57;
+}
+:root[data-theme='light'] .farm-promo-meta i {
+  background: rgba(4, 120, 87, 0.5);
 }

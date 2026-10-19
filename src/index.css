@@ -2415,8 +2415,12 @@ select option {
 .tag { min-height: 34px; display: inline-flex; align-items: center; }
 .icon-btn { min-width: 38px; min-height: 38px; }
 
-/* 16px inputs stop iOS Safari auto-zooming on focus. */
-input, select, textarea { font-size: 16px !important; }
+/* 16px inputs stop iOS Safari auto-zooming on focus.
+   `.brg-amount` is exempt on purpose: it is already LARGER than 16px (21px on
+   the bridge panels, 28px in the new bridge ticket), so it cannot zoom, and
+   the blanket rule was silently flattening every amount field in the app to
+   the same 16px — including the one number a bridge screen is built around. */
+input:not(.brg-amount), select, textarea { font-size: 16px !important; }
 
 /* Wallet picker cards */
 .wallet-option {
