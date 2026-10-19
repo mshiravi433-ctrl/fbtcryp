@@ -417,7 +417,7 @@
     "vitest": "^4.1.11"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   },
   "overrides": {
     "rpc-websockets": {
