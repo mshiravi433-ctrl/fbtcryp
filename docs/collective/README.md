@@ -98,7 +98,7 @@ Most recently run:
 - `npm run build` — **passed**. The Collective JS/CSS chunks built and the first-paint bundle check reported 1,690 KiB against a 1,700 KiB budget. Existing warnings remain for Android `assetlinks.json` (no real `FBT_ANDROID_SHA256` was supplied), vendor bundles, duplicate imports and large chunks.
 - The locale check found `nav.collective` in all 12 shipped locales. The broader repository wiring audit returned 2,836/2,881 checks; 45 existing checks still fail, none identifying the Collective route/page/translation integration. Review those against the project's baseline; this is not a full-repository pass.
 
-Ganache fell back to its JavaScript implementation because the optional µWS native binary was missing. No public chain, deployment or real asset was used by these tests. There is no independent security audit, production configuration, main-branch merge, or deployment.
+Ganache fell back to its JavaScript implementation because the optional µWS native binary was missing. No public chain, deployment or real asset was used by these tests. The contracts have no independent security audit or production configuration; this source alone is not a live Collective deployment.
 
 ## Change stages
 
