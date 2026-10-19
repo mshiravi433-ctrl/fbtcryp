@@ -13,7 +13,6 @@ import {
   IconWallet
 } from '../components/Icons';
 import { collectiveApi } from '../lib/collective/api';
-import { COLLECTIVE_CHAIN_ID, COLLECTIVE_CHAIN_NAME } from '../lib/collective/constants';
 import {
   claimCollectiveIncome,
   depositIntoCollective,
@@ -63,7 +62,7 @@ function reasonLabel(reason, t) {
     FACTORY_ADDRESS_NOT_CONFIGURED: 'No factory address is configured.',
     ASSET_ADDRESS_NOT_CONFIGURED: 'No accounting-asset address is configured.',
     DEPLOYMENT_BLOCK_NOT_CONFIGURED: 'The factory deployment block is not configured for bounded history indexing.',
-    UNSUPPORTED_CHAIN: 'Collective v1 is pinned to Robinhood Chain (4663).',
+    UNSUPPORTED_CHAIN: 'Only Robinhood Chain mainnet (4663) and testnet (46630) are supported.',
     CHAIN_ID_MISMATCH: 'The configured RPC did not verify as the expected chain.',
     FACTORY_HAS_NO_CODE: 'No contract code was found at the configured factory address.',
     ASSET_HAS_NO_CODE: 'No contract code was found at the configured accounting-asset address.',
@@ -197,6 +196,10 @@ export default function Collective() {
     return () => window.clearInterval(timer);
   }, [loadVaultData]);
 
+  const COLLECTIVE_CHAIN_ID = status?.chain?.id ?? activation?.chain?.id;
+  const COLLECTIVE_CHAIN_NAME = status?.chain?.name ?? activation?.chain?.name ?? '—';
+  const isTestnet = (status?.chain ?? activation?.chain)?.testnet === true;
+  const transactionWallet = { ...wallet, collectiveChainId: COLLECTIVE_CHAIN_ID };
   const asset = vault?.asset;
   const onCollectiveChain = wallet.isConnected && Number(wallet.chainId) === COLLECTIVE_CHAIN_ID;
   const depositsOpen = Boolean(vault?.epoch?.depositsOpen && !vault?.emergency?.paused);
@@ -241,7 +244,7 @@ export default function Collective() {
     try { amountRaw = parseCollectiveAmount(depositInput, asset.decimals); }
     catch { setActionError(t('collective.actionError.INVALID_AMOUNT', { defaultValue: 'Enter a valid amount greater than zero.' })); return; }
     await runAction(() => depositIntoCollective({
-      wallet,
+      wallet: transactionWallet,
       assetAddress: asset.address,
       vaultAddress: vault.address,
       amountRaw
@@ -257,7 +260,7 @@ export default function Collective() {
     try {
       await ensureCollectiveChain();
       const assetsRaw = parseCollectiveAmount(withdrawInput, asset.decimals);
-      const quote = await previewCollectiveWithdrawal({ wallet, vaultAddress: vault.address, assetsRaw });
+      const quote = await previewCollectiveWithdrawal({ wallet: transactionWallet, vaultAddress: vault.address, assetsRaw });
       if (BigInt(quote.sharesRaw) > shares) throw new Error('INSUFFICIENT_SHARES');
       setWithdrawalQuote(quote);
     } catch (cause) {
@@ -273,7 +276,7 @@ export default function Collective() {
     const quote = withdrawalQuote;
     setWithdrawalQuote(null);
     await runAction(() => requestCollectiveWithdrawal({
-      wallet,
+      wallet: transactionWallet,
       vaultAddress: vault.address,
       sharesRaw: quote.sharesRaw
     }), 'collective.action.withdrawalSent');
@@ -281,7 +284,7 @@ export default function Collective() {
 
   const claimIncome = async () => {
     if (!vault || (claimable === 0n && !position?.claimScanTruncated)) return;
-    await runAction(() => claimCollectiveIncome({ wallet, vaultAddress: vault.address, maxEpochs: 12 }), 'collective.action.claimSent');
+    await runAction(() => claimCollectiveIncome({ wallet: transactionWallet, vaultAddress: vault.address, maxEpochs: 12 }), 'collective.action.claimSent');
   };
 
   const modules = status?.modules || {};
@@ -294,6 +297,7 @@ export default function Collective() {
   return (
     <PageTransition>
       <div className="collective-page">
+        {isTestnet && <div className="collective-testnet-banner" role="alert">{t('collective.testnetBanner', { defaultValue: 'TESTNET — Test tokens have no real value. ارزش واقعی ندارد' })}</div>}
         <header className="collective-header">
           <button className="icon-btn" type="button" onClick={() => navigate(-1)} aria-label={t('common.back', { defaultValue: 'Back' })}>
             <IconChevronLeft width={18} height={18} />

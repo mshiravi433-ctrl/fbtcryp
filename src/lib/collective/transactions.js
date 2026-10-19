@@ -1,5 +1,4 @@
 import { Contract, getAddress, parseUnits } from 'ethers';
-import { COLLECTIVE_CHAIN_ID } from './constants.js';
 import { COLLECTIVE_ERC20_ABI, COLLECTIVE_VAULT_ABI } from './abi.js';
 
 const isAddress = (value) => typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value);
@@ -8,8 +7,10 @@ async function resolveSigner(wallet) {
   if (!wallet?.isConnected || !wallet?.address) throw new Error('WALLET_NOT_CONNECTED');
   const signer = await wallet.ensureSigner?.() || wallet.getSigner?.();
   if (!signer?.provider) throw new Error('WALLET_SIGNER_UNAVAILABLE');
+  const expectedChainId = Number(wallet.collectiveChainId);
+  if (![4663, 46630].includes(expectedChainId)) throw new Error('UNSUPPORTED_CHAIN');
   const network = await signer.provider.getNetwork();
-  if (Number(network.chainId) !== COLLECTIVE_CHAIN_ID) throw new Error('WRONG_CHAIN');
+  if (Number(network.chainId) !== expectedChainId) throw new Error('WRONG_CHAIN');
   const owner = await signer.getAddress();
   if (String(owner).toLowerCase() !== String(wallet.address).toLowerCase()) throw new Error('WALLET_ACCOUNT_MISMATCH');
   return { signer, owner: getAddress(owner) };

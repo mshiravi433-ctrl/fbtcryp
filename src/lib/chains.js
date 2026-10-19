@@ -354,6 +354,19 @@ export const EVM_CHAINS = {
    * runtime unverified and renders with the address + import warning. Do
    * not pin a Robinhood-chain token just because its symbol looks right.
    */
+  // Collective-only testnet: deliberately excluded from swap chain order.
+  // No token, wrapped-native or DEX addresses are inferred from mainnet.
+  46630: {
+    id: 46630,
+    hexId: '0xb626',
+    name: 'Robinhood Chain Testnet',
+    short: 'HOOD TESTNET',
+    testnet: true,
+    native: { symbol: 'ETH', decimals: 18 },
+    rpc: ['https://rpc.testnet.chain.robinhood.com'],
+    explorer: 'https://explorer.testnet.chain.robinhood.com',
+    color: '#dc2626'
+  },
   4663: {
     id: 4663,
     hexId: '0x1237',

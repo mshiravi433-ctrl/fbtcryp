@@ -70,7 +70,23 @@ on:
         description: 'rehearse = keyless & gas-free · deploy/activate = your wallet pays gas · check = read-only'
         type: choice
         default: rehearse
-        options: [rehearse, deploy, activate, check]
+        options: [rehearse, preflight, deploy, activate, check, testnet-deploy, testnet-activate, testnet-check]
+      asset_address:
+        description: 'Token contract on selected network (required for deploy/preflight; no guessing)'
+        type: string
+        required: false
+      guardian_address:
+        description: 'Guardian public address, different from deployer'
+        type: string
+        required: false
+      deployer_address:
+        description: 'Public deployer for read-only preflight/discovery'
+        type: string
+        default: '0xEfFEe508B69B8705F0AA3187aD9d28f1B95D39E9'
+      timelock_days:
+        description: 'RiskController delay: 1–30 days'
+        type: string
+        default: '1'
       acknowledge_gas:
         description: 'Type yes only if you accept that the deploying wallet pays real gas'
         type: string
@@ -138,7 +154,6 @@ jobs:
         # Public facts only: hashes, sizes, check results and (after a live run)
         # public contract addresses. Never a key, never RPC credentials.
         if: github.ref == 'refs/heads/main' && github.event_name != 'workflow_dispatch'
-        continue-on-error: true
         run: |
           set -euo pipefail
           git config user.name "fbt-collective-bot"
@@ -166,131 +181,102 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   live:
-    name: Live deployment (your wallet pays gas)
+    name: Selected-network activation (operator pays gas)
     if: github.event_name == 'workflow_dispatch' && inputs.phase != 'rehearse'
     runs-on: ubuntu-latest
-    # No `environment:` is required: repository-level secrets/variables are
-    # enough, so the first run works without any extra setup. If you want a
-    # human approval gate, create an environment named `collective-live` in
-    # Settings → Environments with "Required reviewers" and add this line back.
     timeout-minutes: 45
     env:
-      # The key reaches this process only through this explicit env block.
-      # It is never echoed, never written to disk and never committed.
-      COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
-      COLLECTIVE_RPC_URL: ${{ vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
-      COLLECTIVE_ASSET_ADDRESS: ${{ vars.COLLECTIVE_ASSET_ADDRESS }}
-      COLLECTIVE_GOVERNOR_ADDRESS: ${{ vars.COLLECTIVE_GOVERNOR_ADDRESS }}
-      COLLECTIVE_GUARDIAN_ADDRESS: ${{ vars.COLLECTIVE_GUARDIAN_ADDRESS }}
-      COLLECTIVE_KEEPER_ADDRESS: ${{ vars.COLLECTIVE_KEEPER_ADDRESS }}
-      COLLECTIVE_STRATEGY_TARGET: ${{ vars.COLLECTIVE_STRATEGY_TARGET }}
-      COLLECTIVE_VAULT_NAME: ${{ vars.COLLECTIVE_VAULT_NAME }}
-      COLLECTIVE_VAULT_SYMBOL: ${{ vars.COLLECTIVE_VAULT_SYMBOL }}
-      COLLECTIVE_PUBLIC_RPC_URL: ${{ vars.COLLECTIVE_RPC_URL || 'https://rpc.mainnet.chain.robinhood.com' }}
+      COLLECTIVE_NETWORK: ${{ (startsWith(inputs.phase, 'testnet-') || inputs.phase == 'preflight') && 'robinhood-testnet' || 'robinhood' }}
+      COLLECTIVE_CHAIN_ID: ${{ (startsWith(inputs.phase, 'testnet-') || inputs.phase == 'preflight') && '46630' || '4663' }}
+      COLLECTIVE_RPC_URL: ${{ (startsWith(inputs.phase, 'testnet-') || inputs.phase == 'preflight') && 'https://rpc.testnet.chain.robinhood.com' || 'https://rpc.mainnet.chain.robinhood.com' }}
+      COLLECTIVE_ASSET_ADDRESS: ${{ inputs.asset_address || vars.COLLECTIVE_ASSET_ADDRESS }}
+      COLLECTIVE_GUARDIAN_ADDRESS: ${{ inputs.guardian_address || vars.COLLECTIVE_GUARDIAN_ADDRESS }}
+      COLLECTIVE_DEPLOYER_ADDRESS: ${{ inputs.deployer_address || vars.COLLECTIVE_DEPLOYER_ADDRESS }}
       COLLECTIVE_LIVE_ACK: ${{ inputs.acknowledge_gas }}
       COLLECTIVE_PHASE: ${{ inputs.phase }}
-
+      TIMELOCK_DAYS: ${{ inputs.timelock_days || '1' }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Install dependencies (lockfile verified)
-        run: npm ci --no-audit --no-fund
-
-      - name: Preflight — presence only, never values
-        id: preflight
+      - run: npm ci --no-audit --no-fund
+      - name: Resolve signing identity and guard transaction phases
+        if: inputs.phase != 'preflight' && inputs.phase != 'check' && inputs.phase != 'testnet-check'
+        env:
+          COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { Wallet, isAddress } from 'ethers';
+          const e = process.env;
+          function fail(message) { console.error(message); process.exit(1); }
+          if (e.COLLECTIVE_LIVE_ACK !== 'yes') fail('acknowledge_gas=yes required; operator pays gas');
+          if (!e.COLLECTIVE_DEPLOYER_PRIVATE_KEY) fail('Set COLLECTIVE_DEPLOYER_PRIVATE_KEY in GitHub Secrets yourself. Never send it in chat.');
+          let address;
+          try { address = new Wallet(e.COLLECTIVE_DEPLOYER_PRIVATE_KEY).address; }
+          catch { fail('Invalid signing secret (value suppressed)'); }
+          const days = Number(e.TIMELOCK_DAYS);
+          if (!Number.isInteger(days) || days < 1 || days > 30) fail('timelock_days must be 1–30');
+          if (e.COLLECTIVE_PHASE.endsWith('deploy')) {
+            if (!isAddress(e.COLLECTIVE_GUARDIAN_ADDRESS) || address.toLowerCase() === e.COLLECTIVE_GUARDIAN_ADDRESS.toLowerCase()) fail('Distinct guardian_address required');
+          }
+          fs.appendFileSync(e.GITHUB_ENV, `COLLECTIVE_DEPLOYER_ADDRESS=${address}\nCOLLECTIVE_POLICY_DELAY_SECONDS=${days * 86400}\n`);
+          console.log(`Public deployer: ${address}`);
+          JS
+      - name: Discover TESTNET tokens (no token is auto-selected)
+        if: env.COLLECTIVE_CHAIN_ID == '46630'
+        run: node scripts/collective-discover-assets.mjs
+      - name: Require explicit asset for preflight/deploy
+        if: inputs.phase == 'preflight' || endsWith(inputs.phase, 'deploy')
+        run: |
+          if [ -z "$COLLECTIVE_ASSET_ADDRESS" ]; then
+            echo '::error::asset_address is required. Select a TESTNET token from the discovery summary and rerun. Mainnet USDG must not be used.'
+            exit 1
+          fi
+      - name: Read-only preflight
+        if: inputs.phase == 'preflight' || endsWith(inputs.phase, 'deploy')
+        run: node scripts/collective-preflight.mjs --network "$COLLECTIVE_NETWORK"
+      - name: Compile and test
+        if: inputs.phase != 'preflight'
+        run: npm run test:collective
+      - name: Deploy (queues timelock)
+        if: endsWith(inputs.phase, 'deploy')
+        env:
+          COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+        run: node scripts/collective-deploy.mjs --network "$COLLECTIVE_NETWORK" --phase deploy --execute
+      - name: Activate (fails until real timelock has elapsed)
+        if: endsWith(inputs.phase, 'activate')
+        env:
+          COLLECTIVE_DEPLOYER_PRIVATE_KEY: ${{ secrets.COLLECTIVE_DEPLOYER_PRIVATE_KEY }}
+        run: node scripts/collective-deploy.mjs --network "$COLLECTIVE_NETWORK" --phase activate --execute
+      - name: Verify on-chain (no key)
+        if: endsWith(inputs.phase, 'activate') || endsWith(inputs.phase, 'check')
+        run: node scripts/collective-activate.mjs --deployment "deployments/collective-${COLLECTIVE_CHAIN_ID}.json" --chain "$COLLECTIVE_CHAIN_ID" --check --mark-verified
+      - name: Local rehearsal
+        if: inputs.phase != 'preflight'
+        run: node scripts/collective-deploy.mjs --local --rehearse
+      - name: Write public evidence after successful checks only
+        if: inputs.phase != 'preflight'
+        env:
+          COLLECTIVE_VERIFIED: ${{ (endsWith(inputs.phase, 'activate') || endsWith(inputs.phase, 'check')) && 'true' || 'false' }}
+        run: |
+          node scripts/collective-evidence.mjs --write --deployment "deployments/collective-${COLLECTIVE_CHAIN_ID}.json" --contract-ok --api-ok
+          node scripts/collective-evidence.mjs --check
+      - name: Publish only selected-chain record and public evidence
+        if: inputs.phase != 'preflight' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
-          has() { if [ -n "${!1:-}" ]; then echo true; else echo false; fi; }
-          echo "phase=${COLLECTIVE_PHASE}"
-          echo "key_present=$(has COLLECTIVE_DEPLOYER_PRIVATE_KEY)"
-          echo "asset_present=$(has COLLECTIVE_ASSET_ADDRESS)"
-          echo "guardian_present=$(has COLLECTIVE_GUARDIAN_ADDRESS)"
-          echo "rpc_present=$(has COLLECTIVE_RPC_URL)"
-
-          ready=true
-          if [ "${COLLECTIVE_PHASE}" = "check" ]; then
-            echo "::notice::verify mode is read-only and needs no key."
-          else
-            if [ "${COLLECTIVE_PHASE}" != "activate" ] && [ -z "${COLLECTIVE_ASSET_ADDRESS:-}" ]; then
-              echo "::warning::COLLECTIVE_ASSET_ADDRESS is not set. Add it under Settings → Secrets and variables → Actions → Variables."
-              ready=false
-            fi
-            if [ -z "${COLLECTIVE_DEPLOYER_PRIVATE_KEY:-}" ]; then
-              echo "::notice::COLLECTIVE_DEPLOYER_PRIVATE_KEY is not set, so no transaction can be signed. Nothing was sent. Add the secret yourself — do not paste a key anywhere else."
-              ready=false
-            fi
-            if [ "${COLLECTIVE_LIVE_ACK}" != "yes" ]; then
-              echo "::warning::acknowledge_gas must be exactly 'yes'. The deploying wallet pays real gas; there is no sponsor."
-              ready=false
-            fi
-          fi
-          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
-
-      - name: Compile Collective contracts
-        if: steps.preflight.outputs.ready == 'true'
-        run: npm run compile:collective
-
-      - name: Phase deploy (queues the ≥ 1-day RiskController timelock)
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase == 'deploy'
-        run: node scripts/collective-deploy.mjs --network robinhood --phase deploy --execute
-
-      - name: Phase activate (after the timelock)
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase == 'activate'
-        run: node scripts/collective-deploy.mjs --network robinhood --phase activate --execute
-
-      - name: Verify the deployment on-chain (read-only)
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase != 'deploy'
-        env:
-          COLLECTIVE_VERIFIED: 'true'
-        run: node scripts/collective-activate.mjs --deployment deployments/collective-4663.json --check
-
-      - name: Write verified activation evidence
-        if: steps.preflight.outputs.ready == 'true' && inputs.phase != 'deploy'
-        env:
-          COLLECTIVE_VERIFIED: 'true'
-        run: node scripts/collective-evidence.mjs --write --contract-ok --api-ok
-
-      - name: Publish the public record (addresses only, never the key)
-        if: steps.preflight.outputs.ready == 'true'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          git config user.name "fbt-collective-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add deployments server/collective/activation.snapshot.js public/collective/activation.json
-          if git diff --cached --quiet; then
-            echo "::notice::No public-record change to commit."
-            exit 0
-          fi
-          git commit -m "chore(collective): live deployment record [collective-evidence]"
+          git config user.name 'fbt-collective-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add "deployments/collective-${COLLECTIVE_CHAIN_ID}.json" server/collective/activation.snapshot.js public/collective/activation.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'chore(collective): selected-network evidence [collective-evidence]'
           git push
-
-      - name: Upload live-run artifacts
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: collective-live-${{ github.run_id }}
-          if-no-files-found: warn
-          retention-days: 30
+          name: collective-public-${{ github.run_id }}
           path: |
-            deployments/collective-4663.json
-            server/collective/activation.snapshot.js
+            deployments/collective-${{ env.COLLECTIVE_CHAIN_ID }}.json
             public/collective/activation.json
-
-      - name: Summary
-        if: always()
-        run: |
-          {
-            echo "### FBT AI Collective — live job"
-            echo ""
-            echo "| property | value |"
-            echo "| --- | --- |"
-            echo "| phase | \`${COLLECTIVE_PHASE}\` |"
-            echo "| key present | \`${{ steps.preflight.outputs.ready }}\` |"
-            echo "| gas sponsor | **none** — the deploying wallet pays |"
-            echo "| key handling | secret → process env only; never printed, stored or committed |"
-          } >> "$GITHUB_STEP_SUMMARY"
