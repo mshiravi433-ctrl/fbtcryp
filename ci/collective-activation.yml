@@ -169,7 +169,10 @@ jobs:
     name: Live deployment (your wallet pays gas)
     if: github.event_name == 'workflow_dispatch' && inputs.phase != 'rehearse'
     runs-on: ubuntu-latest
-    environment: collective-live
+    # No `environment:` is required: repository-level secrets/variables are
+    # enough, so the first run works without any extra setup. If you want a
+    # human approval gate, create an environment named `collective-live` in
+    # Settings → Environments with "Required reviewers" and add this line back.
     timeout-minutes: 45
     env:
       # The key reaches this process only through this explicit env block.
