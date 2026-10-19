@@ -22,7 +22,7 @@ import { Contract, JsonRpcProvider } from 'ethers';
 import {
   FACTORY_ABI, VAULT_ABI, RISK_ABI, EMERGENCY_ABI, ORACLE_ABI, ADAPTER_ABI, ERC20_ABI, EPOCH_ABI, ACCESS_ABI
 } from '../server/collective/abi.js';
-import { COLLECTIVE_CHAIN_ID } from '../server/collective/config.js';
+import { COLLECTIVE_CHAIN_ID, COLLECTIVE_CHAINS } from '../server/collective/config.js';
 import { deploymentEnv } from './lib/collectiveDeployment.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,7 +41,10 @@ if (!fs.existsSync(file)) {
 }
 const deployment = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? '').trim();
+const chainId = Number(valueOf('--chain', deployment.chainId));
+if (!COLLECTIVE_CHAINS[chainId] || chainId !== Number(deployment.chainId)) throw new Error('UNSUPPORTED_CHAIN or CHAIN_ID_MISMATCH');
+if (COLLECTIVE_CHAINS[chainId].testnet) console.warn('TESTNET — no real value');
+const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? COLLECTIVE_CHAINS[chainId].rpcUrl).trim();
 const maxSpan = String(process.env.COLLECTIVE_EVENT_MAX_BLOCK_SPAN ?? '20000').trim();
 
 if (has('--env') || has('--write')) {
@@ -76,10 +79,10 @@ const record = (name, pass, detail = '') => {
 };
 
 try {
-  const provider = new JsonRpcProvider(rpcUrl, COLLECTIVE_CHAIN_ID);
+  const provider = new JsonRpcProvider(rpcUrl, chainId);
   const network = await provider.getNetwork();
-  record('RPC chain id is Robinhood Chain (4663)', Number(network.chainId) === COLLECTIVE_CHAIN_ID, String(network.chainId));
-  if (Number(network.chainId) !== COLLECTIVE_CHAIN_ID) throw new Error('chain id mismatch');
+  record(`RPC chain id matches ${chainId}`, Number(network.chainId) === chainId, String(network.chainId));
+  if (Number(network.chainId) !== chainId) throw new Error('chain id mismatch');
 
   const { contracts, asset: assetRecord, target, vault: vaultRecord } = deployment;
   if (!vaultRecord?.address) {
@@ -154,10 +157,16 @@ try {
     console.error(`✗ ${failed.length} check(s) failed. Keep public reads disabled and investigate.`);
     process.exit(1);
   }
+  if (has('--mark-verified')) {
+    deployment.verified = true;
+    deployment.testnet = COLLECTIVE_CHAINS[chainId].testnet;
+    deployment.verifiedAt = new Date().toISOString();
+    fs.writeFileSync(file, JSON.stringify(deployment, null, 2) + '\n');
+  }
   console.log(`✓ all ${checks.length} checks passed. Public reads and user-signed transactions can be enabled.`);
   console.log('  gas: every user action is signed by the user wallet; sponsored=false, serverSigning=false');
   if (has('--json')) console.log(JSON.stringify({ ok: true, checks, file: path.relative(root, file) }, null, 2));
 } catch (cause) {
-  console.error(`✗ verification aborted: ${cause?.shortMessage || cause?.message || cause}`);
+  console.error('✗ verification aborted (RPC/configuration failure; details suppressed)');
   process.exit(1);
 }

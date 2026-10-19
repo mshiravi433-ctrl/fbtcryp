@@ -4,6 +4,10 @@ export const COLLECTIVE_SCHEMA = 'fbt.collective.v1';
 export const COLLECTIVE_CHAIN_ID = 4663;
 export const COLLECTIVE_CHAIN_NAME = 'Robinhood Chain';
 export const COLLECTIVE_EXPLORER = 'https://robinhoodchain.blockscout.com';
+export const COLLECTIVE_CHAINS = Object.freeze({
+  4663: Object.freeze({ id: 4663, name: COLLECTIVE_CHAIN_NAME, explorer: COLLECTIVE_EXPLORER, rpcUrl: 'https://rpc.mainnet.chain.robinhood.com', testnet: false }),
+  46630: Object.freeze({ id: 46630, name: 'Robinhood Chain Testnet', explorer: 'https://explorer.testnet.chain.robinhood.com', rpcUrl: 'https://rpc.testnet.chain.robinhood.com', testnet: true })
+});
 export const COLLECTIVE_MAX_VAULTS = 32;
 export const COLLECTIVE_DEFAULT_EVENT_SPAN = 20_000;
 export const COLLECTIVE_MAX_EVENT_SPAN = 20_000;
@@ -29,7 +33,7 @@ const intOrNull = (value) => {
  *
  *   status === 'activated'  — phase 2 (after the 1-day timelock) ran,
  *   verified === true       — `collective-activate.mjs --check` passed,
- *   chainId === 4663        — the deployed chain is Robinhood Chain,
+ *   supported chainId      — with explicit testnet metadata for 46630,
  *   addresses + block set   — nothing is guessed or defaulted.
  *
  * An explicit `COLLECTIVE_READS_ENABLED=false` always wins, so an operator can
@@ -42,18 +46,23 @@ export function readSnapshotDeployment(env = process.env, snapshot = ACTIVATION_
   if (!live || typeof live !== 'object') return null;
   if (String(live.status ?? '') !== 'activated') return null;
   if (live.verified !== true) return null;
-  if (Number(live.chainId) !== COLLECTIVE_CHAIN_ID) return null;
+  const chainId = Number(live.chainId);
+  if (!COLLECTIVE_CHAINS[chainId]) return null;
+  if (env.COLLECTIVE_CHAIN_ID != null && String(env.COLLECTIVE_CHAIN_ID).trim() !== '' && Number(env.COLLECTIVE_CHAIN_ID) !== chainId) return null;
+  if (chainId === 46630 && live.testnet !== true) return null;
+  if (chainId === 4663 && live.testnet === true) return null;
   const rpcUrl = String(live.rpcUrl ?? '').trim();
   const factoryAddress = String(live.factoryAddress ?? '').trim();
   const assetAddress = String(live.assetAddress ?? '').trim();
   const deploymentBlock = intOrNull(live.deploymentBlock);
   if (!rpcUrl || !validAddress(factoryAddress) || !validAddress(assetAddress) || deploymentBlock == null) return null;
   try {
-    if (new URL(rpcUrl).protocol !== 'https:') return null;
+    const url = new URL(rpcUrl);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) return null;
   } catch {
     return null;
   }
-  return Object.freeze({ rpcUrl, factoryAddress, assetAddress, deploymentBlock, verifiedAt: live.verifiedAt ?? null });
+  return Object.freeze({ chainId, testnet: COLLECTIVE_CHAINS[chainId].testnet, rpcUrl, factoryAddress, assetAddress, deploymentBlock, verifiedAt: live.verifiedAt ?? null });
 }
 
 /**
@@ -63,7 +72,9 @@ export function readSnapshotDeployment(env = process.env, snapshot = ACTIVATION_
  * activation workflow must have verified and committed them (see above).
  */
 export function readCollectiveConfig(env = process.env, snapshot = ACTIVATION_SNAPSHOT) {
-  const chainId = intOrNull(env.COLLECTIVE_CHAIN_ID) ?? COLLECTIVE_CHAIN_ID;
+  const explicitChain = String(env.COLLECTIVE_CHAIN_ID ?? '').trim();
+  const chainId = explicitChain ? Number(explicitChain) : (readSnapshotDeployment(env, snapshot)?.chainId ?? COLLECTIVE_CHAIN_ID);
+  const chain = COLLECTIVE_CHAINS[chainId];
   // The workflow-verified record is a fallback only: an explicit value in the
   // environment always wins, and `COLLECTIVE_READS_ENABLED=false` disables the
   // automatic path outright.
@@ -80,7 +91,7 @@ export function readCollectiveConfig(env = process.env, snapshot = ACTIVATION_SN
   const keeperEnabled = isTrue(env.COLLECTIVE_KEEPER_ENABLED);
   const issues = [];
 
-  if (chainId !== COLLECTIVE_CHAIN_ID) issues.push('UNSUPPORTED_CHAIN');
+  if (!chain) issues.push('UNSUPPORTED_CHAIN');
   if (!enabled) issues.push('READS_DISABLED');
   if (!rpcUrl) issues.push('RPC_NOT_CONFIGURED');
   else {
@@ -98,7 +109,7 @@ export function readCollectiveConfig(env = process.env, snapshot = ACTIVATION_SN
   if (!validAddress(assetAddress)) issues.push('ASSET_ADDRESS_NOT_CONFIGURED');
   if (deploymentBlock == null) issues.push('DEPLOYMENT_BLOCK_NOT_CONFIGURED');
 
-  const baseReady = enabled && chainId === COLLECTIVE_CHAIN_ID &&
+  const baseReady = enabled && Boolean(chain) &&
     Boolean(rpcUrl) && !issues.includes('RPC_MUST_USE_HTTPS') && !issues.includes('RPC_URL_INVALID') &&
     !issues.includes('RPC_URL_CREDENTIALS_NOT_ALLOWED') && validAddress(factoryAddress) &&
     validAddress(assetAddress) && deploymentBlock != null;
@@ -107,8 +118,9 @@ export function readCollectiveConfig(env = process.env, snapshot = ACTIVATION_SN
   return Object.freeze({
     schema: COLLECTIVE_SCHEMA,
     chainId,
-    chainName: COLLECTIVE_CHAIN_NAME,
-    explorer: COLLECTIVE_EXPLORER,
+    chainName: chain?.name ?? 'Unsupported chain',
+    explorer: chain?.explorer ?? null,
+    testnet: chain?.testnet ?? false,
     enabled,
     configured: baseReady,
     status,
@@ -128,9 +140,10 @@ export function publicCollectiveConfig(config = readCollectiveConfig()) {
   return {
     schema: config.schema,
     chain: {
-      id: COLLECTIVE_CHAIN_ID,
-      name: COLLECTIVE_CHAIN_NAME,
-      explorer: COLLECTIVE_EXPLORER
+      id: config.chainId,
+      name: config.chainName,
+      explorer: config.explorer,
+      testnet: config.testnet
     },
     deployment: {
       status: config.status,

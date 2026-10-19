@@ -213,10 +213,11 @@ export function buildCollectiveActivationPayload({
   now = () => new Date().toISOString()
 } = {}) {
   const nextStep = deploymentNextStep({ config, snapshot });
-  const liveDeployment = snapshot?.liveDeployment && typeof snapshot.liveDeployment === 'object'
+  const liveDeployment = snapshot?.liveDeployment && Number(snapshot.liveDeployment.chainId) === Number(config.chainId) && typeof snapshot.liveDeployment === 'object'
     ? {
       status: String(snapshot.liveDeployment.status ?? 'unknown'),
       chainId: Number(snapshot.liveDeployment.chainId) || COLLECTIVE_CHAIN_ID,
+      testnet: snapshot.liveDeployment.testnet === true,
       verified: snapshot.liveDeployment.verified === true,
       verifiedAt: snapshot.liveDeployment.verifiedAt ?? null,
       timelockReadyAt: snapshot.liveDeployment.timelockReadyAt ?? null,
@@ -228,9 +229,10 @@ export function buildCollectiveActivationPayload({
     schema: COLLECTIVE_ACTIVATION_SCHEMA,
     generatedAt: now(),
     chain: {
-      id: COLLECTIVE_CHAIN_ID,
-      name: COLLECTIVE_CHAIN_NAME,
-      explorer: COLLECTIVE_EXPLORER
+      id: config.chainId,
+      name: config.chainName,
+      explorer: config.explorer,
+      testnet: config.testnet
     },
     policy: {
       // What is actually free: the whole build/verification pipeline.

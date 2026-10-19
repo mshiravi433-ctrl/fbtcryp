@@ -1,3 +1,9 @@
+# Collective testnet mode — 2026-10-19
+
+- Add isolated Robinhood testnet (46630), verified snapshot selection, TESTNET warning and chain-aware wallet signing.
+- Add read-only preflight, explicit Blockscout token discovery and prepared dual-network Actions workflow.
+- Keep mainnet deployment records unchanged; actual testnet activation requires owner configuration and real timelock.
+
 # ۲۰۲۶-۱۰-۱۹ — مجموعهٔ هوشمند FBT بدون کلید و بدون گس عملیاتی شد: خط لولهٔ GitHub Actions، کنسول فعال‌سازی و روشن‌شدن خودکار خواندن عمومی
 
 جزئیات و استدلال کامل: [2026-10-19-collective-keyless-gasless-activation-fa.md](docs/2026-10-19-collective-keyless-gasless-activation-fa.md).

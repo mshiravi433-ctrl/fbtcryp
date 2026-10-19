@@ -16225,6 +16225,7 @@
         "source": "Open the ready file"
       },
       "localNote": "This evidence comes from a full local rehearsal in this repository, not from CI yet. Add the workflow once to make the run automatic."
-    }
+    },
+    "testnetBanner": "TESTNET — Test tokens have no real value. All transactions cost testnet gas."
   }
 }

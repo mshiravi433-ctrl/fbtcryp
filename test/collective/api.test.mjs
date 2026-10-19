@@ -263,3 +263,39 @@ test('Collective HTTP router exposes only read paths with no-store responses', a
   const writeResponse = await fetch(`${url}/api/collective/execute`, { method: 'POST' });
   assert.equal(writeResponse.status, 404);
 });
+
+test('TESTNET snapshot selects 46630, publishes testnet and never becomes mainnet', () => {
+  const snapshot = { liveDeployment: {
+    status: 'activated', verified: true, chainId: 46630, testnet: true,
+    rpcUrl: 'https://rpc.testnet.chain.robinhood.com', factoryAddress: VAULT,
+    assetAddress: ASSET, deploymentBlock: 1
+  } };
+  const config = readCollectiveConfig({}, snapshot);
+  assert.equal(config.configured, true);
+  assert.equal(config.chainId, 46630);
+  assert.equal(publicCollectiveConfig(config).chain.testnet, true);
+  assert.match(config.explorer, /testnet/);
+  const explicitMain = readCollectiveConfig({ COLLECTIVE_CHAIN_ID: '4663' }, snapshot);
+  assert.equal(explicitMain.chainId, 4663);
+  assert.equal(explicitMain.configured, false);
+  assert.equal(explicitMain.factoryAddress, null);
+  const mislabeled = structuredClone(snapshot);
+  mislabeled.liveDeployment.testnet = false;
+  assert.equal(readCollectiveConfig({}, mislabeled).configured, false);
+});
+
+test('unknown and malformed chains fail closed, explicit env always wins', () => {
+  for (const id of ['1', '46631', 'garbage', '-1']) {
+    const config = readCollectiveConfig({ COLLECTIVE_CHAIN_ID: id, COLLECTIVE_READS_ENABLED: 'true' });
+    assert.equal(config.configured, false);
+    assert.ok(config.issues.includes('UNSUPPORTED_CHAIN'));
+  }
+});
+
+test('deployment network table rejects unknown network names', async () => {
+  const { networkByName } = await import('../../scripts/lib/collectiveDeployment.mjs');
+  assert.equal(networkByName('robinhood-testnet').id, 46630);
+  assert.equal(networkByName('robinhood-testnet').testnet, true);
+  assert.equal(networkByName('robinhood').testnet, false);
+  assert.throws(() => networkByName('unknown'), /UNSUPPORTED_CHAIN/);
+});

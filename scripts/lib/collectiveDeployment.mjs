@@ -14,6 +14,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Contract, ContractFactory, getAddress } from 'ethers';
 
+import { COLLECTIVE_CHAINS } from '../../server/collective/config.js';
+export const NETWORKS = Object.freeze({ robinhood: COLLECTIVE_CHAINS[4663], 'robinhood-testnet': COLLECTIVE_CHAINS[46630] });
+export function networkByName(name) {
+  if (!Object.hasOwn(NETWORKS, name)) throw new Error('UNSUPPORTED_CHAIN');
+  return NETWORKS[name];
+}
+
 export const LOCAL_CHAIN_ID = 31337;
 export const ROBINHOOD_CHAIN_ID = 4663;
 export const RISK_KIND = { ALLOW_ASSET: 0, ALLOW_PROTOCOL: 1, ALLOW_ROUTER: 2, ALLOW_EXPENSE_RECIPIENT: 3, STABLE_YIELD: 0 };
@@ -243,6 +250,7 @@ export async function deployPhase({ signer, artifacts, assetAddress = null, targ
   return {
     schema: 'fbt.collective.deployment.v1',
     chainId: Number((await signer.provider.getNetwork()).chainId),
+    testnet: Number((await signer.provider.getNetwork()).chainId) === 46630,
     deployer: deployerAddress,
     governor,
     guardian,

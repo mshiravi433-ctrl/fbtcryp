@@ -305,3 +305,5 @@
 .collective-activation-install-links { display: flex; flex-wrap: wrap; gap: 10px; }
 .collective-activation-install-links a { color: var(--collective-blue); font: 600 9.5px/1.4 var(--font-mono, monospace); text-decoration: none; }
 .collective-activation-install-links a:hover { text-decoration: underline; }
+
+.collective-testnet-banner { background: #991b1b; color: #fff; border: 2px solid #ef4444; border-radius: 12px; padding: 16px; font-weight: 800; text-align: center; margin-bottom: 16px; }

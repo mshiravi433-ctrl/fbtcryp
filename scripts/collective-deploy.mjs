@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { Contract, JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import {
   DEFAULT_LIMITS,
-  ROBINHOOD_CHAIN_ID,
+  ROBINHOOD_CHAIN_ID, networkByName,
   loadCollectiveArtifacts,
   deployPhase,
   activatePhase,
@@ -48,17 +48,15 @@ const valueOf = (flag, fallback = null) => {
 };
 
 const LOCAL = has('--local');
-const networkName = valueOf('--network', null);
-if (!LOCAL && networkName && networkName !== 'robinhood') {
-  console.error(`✗ unsupported --network ${networkName}; this tool only deploys the Collective on Robinhood Chain (4663)`);
-  process.exit(1);
-}
+const networkName = valueOf('--network', 'robinhood');
+const selectedNetwork = networkByName(networkName);
+const liveChainId = selectedNetwork.id;
 const EXECUTE = has('--execute');
 const REHEARSE = has('--rehearse') || LOCAL;
 const PHASE = valueOf('--phase', LOCAL ? 'all' : 'deploy');
 const OUT = valueOf('--out', LOCAL
   ? path.join(root, 'test', '.out', 'collective-deployment.local.json')
-  : path.join(root, 'deployments', `collective-${ROBINHOOD_CHAIN_ID}.json`));
+  : path.join(root, 'deployments', `collective-${liveChainId}.json`));
 const STATE = valueOf('--state', OUT);
 
 const log = (line = '') => console.log(line);
@@ -210,7 +208,7 @@ async function runLocal() {
 }
 
 async function connectLive() {
-  const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? '').trim();
+  const rpcUrl = String(process.env.COLLECTIVE_RPC_URL ?? selectedNetwork.rpcUrl).trim();
   const key = String(process.env.COLLECTIVE_DEPLOYER_PRIVATE_KEY ?? '').trim();
   if (!rpcUrl) throw new Error('COLLECTIVE_RPC_URL is required');
   if (!/^https:\/\//.test(rpcUrl) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/)/.test(rpcUrl)) {
@@ -226,10 +224,10 @@ async function connectLive() {
     throw new Error('COLLECTIVE_RPC_URL is not a valid URL');
   }
   if (!key) throw new Error('COLLECTIVE_DEPLOYER_PRIVATE_KEY is required to sign with your own wallet');
-  const provider = new JsonRpcProvider(rpcUrl, ROBINHOOD_CHAIN_ID);
+  const provider = new JsonRpcProvider(rpcUrl, liveChainId);
   const network = await provider.getNetwork();
-  if (Number(network.chainId) !== ROBINHOOD_CHAIN_ID) {
-    throw new Error(`RPC chain id ${network.chainId} is not Robinhood Chain (${ROBINHOOD_CHAIN_ID})`);
+  if (Number(network.chainId) !== liveChainId) {
+    throw new Error(`RPC chain id ${network.chainId} is not Robinhood Chain (${liveChainId})`);
   }
   const signer = new Wallet(key, provider);
   const balance = await provider.getBalance(signer.address);
@@ -239,6 +237,7 @@ async function connectLive() {
 }
 
 async function runLive() {
+  if (path.basename(OUT) !== `collective-${liveChainId}.json`) throw new Error('Output filename must match selected chain');
   const artifacts = loadCollectiveArtifacts(root);
   if (!EXECUTE) return printPlan();
   const { signer } = await connectLive();
@@ -255,6 +254,10 @@ async function runLive() {
   log(`  accounting asset: ${assetAddress || '<missing>'} · target: ${targetAddress || 'no-yield idle (deployed now)'}`);
 
   if (PHASE === 'deploy') {
+    const delay = Number(process.env.COLLECTIVE_POLICY_DELAY_SECONDS || 86400);
+    if (!Number.isInteger(delay) || delay < 86400 || delay > 2592000) throw new Error('Timelock must be 1–30 days');
+    if (!guardianAddress || guardianAddress.toLowerCase() === address.toLowerCase()) throw new Error('Distinct guardian required');
+    if (fs.existsSync(OUT)) throw new Error('Deployment record already exists; refusing overwrite');
     if (!assetAddress) throw new Error('COLLECTIVE_ASSET_ADDRESS is required — the tool never invents a token address');
     log('');
     const record = await deployPhase({
@@ -283,6 +286,7 @@ async function runLive() {
   if (PHASE === 'activate' || PHASE === 'all') {
     if (!fs.existsSync(STATE)) throw new Error(`No phase-1 record at ${STATE}. Run --phase deploy first.`);
     const deployment = JSON.parse(fs.readFileSync(STATE, 'utf8'));
+    if (Number(deployment.chainId) !== liveChainId) throw new Error('CHAIN_ID_MISMATCH');
     const now = Number((await signer.provider.getBlock('latest'))?.timestamp ?? 0);
     if (now < deployment.timelockReadyAt) {
       throw new Error(`Policy timelock is not ready: ${new Date(deployment.timelockReadyAt * 1000).toISOString()} (now ${new Date(now * 1000).toISOString()})`);
@@ -314,6 +318,6 @@ try {
   }
   process.exit(0);
 } catch (cause) {
-  console.error(`✗ ${cause?.shortMessage || cause?.message || cause}`);
+  console.error('✗ Deployment failed; check configuration, chain, balance and timelock. RPC details suppressed.');
   process.exit(1);
 }

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { ACTIVATION_SNAPSHOT as PREVIOUS_SNAPSHOT } from '../server/collective/activation.snapshot.js';
+import { COLLECTIVE_CHAINS } from '../server/collective/config.js';
 /**
  * FBT AI Collective — activation evidence writer.
  *
@@ -103,37 +105,27 @@ function rehearsalCheck() {
   };
 }
 
-const PUBLIC_RPC_FALLBACK = 'https://rpc.mainnet.chain.robinhood.com';
-
-/**
- * The read RPC is published (the API needs it) but a provider key must never
- * be: anything with user-info or a non-HTTPS scheme is replaced by the public
- * endpoint instead of being written to a committed file.
- */
-function publicRpcUrl() {
-  const raw = String(process.env.COLLECTIVE_PUBLIC_RPC_URL || '').trim();
-  if (!raw) return PUBLIC_RPC_FALLBACK;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'https:' || url.username || url.password) return PUBLIC_RPC_FALLBACK;
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return PUBLIC_RPC_FALLBACK;
-  }
+function publicRpcUrl(chainId) {
+  if (!COLLECTIVE_CHAINS[chainId]) throw new Error('UNSUPPORTED_CHAIN');
+  return COLLECTIVE_CHAINS[chainId].rpcUrl;
 }
 
 function liveDeployment() {
+  // Rehearsal must not erase/relabel a previously verified live network.
+  if (!has('--deployment') && PREVIOUS_SNAPSHOT?.liveDeployment?.verified === true) return PREVIOUS_SNAPSHOT.liveDeployment;
   const record = readJson(DEPLOYMENT_FILE);
   if (!record) return null;
+  if (path.basename(DEPLOYMENT_FILE) !== `collective-${record.chainId}.json`) throw new Error('Deployment filename/chain mismatch');
   const active = Boolean(record.vault?.address);
-  const verified = process.env.COLLECTIVE_VERIFIED === 'true' || process.env.COLLECTIVE_VERIFIED === '1';
+  const verified = record.verified === true && (process.env.COLLECTIVE_VERIFIED === 'true' || process.env.COLLECTIVE_VERIFIED === '1');
   return {
     status: active ? 'activated' : 'queued',
-    chainId: Number(record.chainId) || 4663,
+    chainId: Number(record.chainId),
+    testnet: COLLECTIVE_CHAINS[Number(record.chainId)]?.testnet === true,
     factoryAddress: record.contracts?.factory ?? null,
     assetAddress: record.asset?.address ?? null,
     deploymentBlock: Number(record.factoryDeploymentBlock) || null,
-    rpcUrl: publicRpcUrl(),
+    rpcUrl: publicRpcUrl(Number(record.chainId)),
     timelockReadyAt: iso(record.timelockReadyAt),
     vaultAddress: record.vault?.address ?? null,
     verified: active && verified,
