@@ -1,20 +1,20 @@
 {
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-10-19T14:35:25.758Z",
+  "generatedAt": "2026-10-19T19:41:18.391Z",
   "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "f361aee270379d2a43d7c3e3e59356b7a17afcc0",
+  "commit": "88d2ae889f0a618069be54e00f1858758434b992",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": 39269828448,
-    "number": 2,
-    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39269828448",
+    "id": 39312604124,
+    "number": 3,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39312604124",
     "event": "push",
     "conclusion": "success",
-    "headSha": "f361aee270379d2a43d7c3e3e59356b7a17afcc0",
-    "createdAt": "2026-10-19T14:33:25.000Z",
-    "updatedAt": "2026-10-19T14:35:25.758Z",
-    "durationSeconds": 121
+    "headSha": "88d2ae889f0a618069be54e00f1858758434b992",
+    "createdAt": "2026-10-19T19:39:24.000Z",
+    "updatedAt": "2026-10-19T19:41:18.391Z",
+    "durationSeconds": 114
   },
   "checks": [
     {
@@ -27,7 +27,7 @@
       "id": "contract",
       "label": "Contract probe on Ganache (no funds)",
       "ok": true,
-      "detail": "local chain only, no real funds"
+      "detail": "local chain only, no public funds"
     },
     {
       "id": "api",
@@ -198,5 +198,7 @@
       "sha256": "4cf434eb8f50e6016740160d9663d16b157054615c3f3e25e5514be4de80acf1"
     }
   ],
+  "defaultChainId": 4663,
+  "liveDeployments": {},
   "liveDeployment": null
 }
