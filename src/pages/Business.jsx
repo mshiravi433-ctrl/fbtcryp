@@ -110,6 +110,10 @@ const STEPS = [
   { id: 'launch', done: false }
 ];
 
+/* The three real steps of a request, in reading order. The numbers are
+   rendered from the reader's locale, not typed into the JSX. */
+const INTRO_STEPS = ['step1', 'step2', 'step3'];
+
 const MESSAGE_MAX = 600;
 const FIELD_ORDER = ['company', 'name', 'email', 'message'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -166,7 +170,7 @@ export default function Business() {
   const networkCount = NETWORK_REGISTRY.length;
   const evmNetworkCount = NETWORK_REGISTRY.filter((n) => n.type === 'EVM').length;
   /* Locale-safe: format from the number, never from a formatted string.
-     Number() on "0,7" (a European decimal comma) is NaN, and a fee tile that
+     Number() on \"0,7\" (a European decimal comma) is NaN, and a fee tile that
      reads NaN% is worse than one that reads nothing. */
   const feeNumber = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(FEE_BPS / 100);
   const feeLabel = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(FEE_BPS / 10_000);
@@ -223,7 +227,7 @@ export default function Business() {
     setOpenRequest(true);
     setErrors({});
     haptic?.('light');
-    requestAnimationFrame(() => setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 240));
+    requestAnimationFrame(() => setTimeout(() => formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }), 240));
   }, [haptic]);
 
   const toggleForm = useCallback(() => {
@@ -242,7 +246,7 @@ export default function Business() {
     const next = {};
     if (!form.company.trim()) next.company = t('biz.form.companyError');
     if (!form.name.trim()) next.name = t('biz.form.nameError');
-    /* An empty address is simply an invalid one — no separate "required"
+    /* An empty address is simply an invalid one — no separate \"required\"
        wording that then disagrees with the field label's own asterisk. */
     if (!EMAIL_RE.test(form.email.trim())) next.email = t('biz.form.emailError');
     if (form.message.trim().length < 12) next.message = t('biz.form.messageError');
@@ -319,7 +323,7 @@ export default function Business() {
           </span>
         </motion.header>
 
-        {/* ---------------- Hero ---------------- */}
+        {/* ---------------- Hero — compact & balanced ---------------- */}
         <motion.section className="biz-hero" variants={riseIn} initial="hidden" animate="show">
           <div className="biz-hero-grid">
             <div className="biz-hero-copy">
@@ -327,7 +331,10 @@ export default function Business() {
                 <IconSparkle width={12} height={12} />
                 {t('about.companyFull')}
               </span>
-              <h2 className="biz-hero-title">{t('biz.title')}</h2>
+              {/* The page <h1> above already names the section. Repeating it
+                  here was a second identical line 32px lower: pure height,
+                  no meaning. This line is the promise instead. */}
+              <h2 className="biz-hero-title">{t('biz.heroTitle')}</h2>
               <p className="biz-hero-sub">{t('biz.intro')}</p>
               <div className="biz-hero-chips">
                 <span className="biz-chip"><IconShield width={13} height={13} />{t('biz.heroChip.nonCustodial')}</span>
@@ -348,12 +355,12 @@ export default function Business() {
               </p>
             </div>
             <div className="biz-hero-art">
-              <BusinessOrbMark size={148} />
+              <BusinessOrbMark size={96} />
             </div>
           </div>
         </motion.section>
 
-        {/* ---------------- Stats ---------------- */}
+        {/* ---------------- Stats — compact ---------------- */}
         <motion.div className="biz-stats" variants={stagger} initial="hidden" animate="show" aria-label={t('biz.atGlance')}>
           {stats.map(({ Icon, a, b, value, label, sub }) => (
             <motion.div key={label} className="biz-stat" variants={riseIn} style={{ '--a': a, '--b': b }}>
@@ -439,7 +446,7 @@ export default function Business() {
           </div>
           {/* The hint is a sibling of the tablist, not a child: a tablist may
               only contain tabs, and a stray span inside it breaks screen
-              readers that count the tabs to announce "2 of 4". */}
+              readers that count the tabs to announce \"2 of 4\". */}
           <p className="biz-panel-hint">{t(`biz.panelHint.${activeSubTab}`)}</p>
         </motion.div>
 
@@ -486,6 +493,35 @@ export default function Business() {
                   ))}
                 </motion.div>
 
+                {/* --- Conditions & method --- */}
+                <div className="biz-card biz-conditions">
+                  <p className="biz-label biz-label--card">{t('biz.conditions.title')}</p>
+                  <div className="biz-conditions-grid">
+                    <div className="biz-cond" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
+                      <span className="biz-cond-icon" style={{ background: grad('#00e5ff', '#7c4dff') }}><IconShield width={18} height={18} /></span>
+                      <div className="biz-cond-body">
+                        <h3 className="biz-cond-title">{t('biz.conditions.eligible.title')}</h3>
+                        <p className="biz-cond-text">{t('biz.conditions.eligible.body', { fee: feeLabel })}</p>
+                      </div>
+                    </div>
+                    <div className="biz-cond" style={{ '--a': '#b06bff', '--b': '#ff2d95' }}>
+                      <span className="biz-cond-icon" style={{ background: grad('#b06bff', '#ff2d95') }}><IconActivity width={18} height={18} /></span>
+                      <div className="biz-cond-body">
+                        <h3 className="biz-cond-title">{t('biz.conditions.method.title')}</h3>
+                        <p className="biz-cond-text">{t('biz.conditions.method.body')}</p>
+                      </div>
+                    </div>
+                    <div className="biz-cond" style={{ '--a': '#00ff9d', '--b': '#00b8ff' }}>
+                      <span className="biz-cond-icon" style={{ background: grad('#00ff9d', '#00b8ff') }}><IconClock width={18} height={18} /></span>
+                      <div className="biz-cond-body">
+                        <h3 className="biz-cond-title">{t('biz.conditions.timeline.title')}</h3>
+                        <p className="biz-cond-text">{t('biz.conditions.timeline.body')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* --- Why us + guarantee --- */}
                 <div className="biz-card biz-why">
                   <p className="biz-label biz-label--card">{t('biz.whyUsTitle')}</p>
                   <motion.div className="biz-why-list" variants={stagger} initial="hidden" animate="show">
@@ -503,6 +539,11 @@ export default function Business() {
                       </motion.div>
                     ))}
                   </motion.div>
+                  <div className="biz-guarantee">
+                    <span className="biz-guarantee-icon"><IconCheck width={14} height={14} /></span>
+                    <p className="biz-guarantee-yes">{t('biz.guarantee.yes')}</p>
+                    <p className="biz-guarantee-no">{t('biz.guarantee.no')}</p>
+                  </div>
                 </div>
               </>
             )}
@@ -526,12 +567,51 @@ export default function Business() {
                     </motion.div>
                   ))}
                 </motion.div>
+                <div className="biz-card biz-trust-card">
+                  <p className="biz-label biz-label--card">{t('biz.trust.title')}</p>
+                  <div className="biz-trust-grid">
+                    <div className="biz-trust-item" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
+                      <span className="biz-trust-icon" style={{ background: grad('#00e5ff', '#7c4dff') }}><IconLock width={18} height={18} /></span>
+                      <div><strong>{t('biz.trust.nonCustodial.title')}</strong><p>{t('biz.trust.nonCustodial.body')}</p></div>
+                    </div>
+                    <div className="biz-trust-item" style={{ '--a': '#ffb300', '--b': '#ff5a3a' }}>
+                      <span className="biz-trust-icon" style={{ background: grad('#ffb300', '#ff5a3a') }}><IconBuilding width={18} height={18} /></span>
+                      <div><strong>{t('biz.trust.company.title')}</strong><p>{t('biz.trust.company.body')}</p></div>
+                    </div>
+                    <div className="biz-trust-item" style={{ '--a': '#00ff9d', '--b': '#00b8ff' }}>
+                      <span className="biz-trust-icon" style={{ background: grad('#00ff9d', '#00b8ff') }}><IconMail width={18} height={18} /></span>
+                      <div><strong>{t('biz.trust.response.title')}</strong><p>{t('biz.trust.response.body')}</p></div>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
 
             {/* ===== Follow-up / Requests ===== */}
             {activeTab === 'followup' && activeSubTab === 'requests' && (
               <>
+                {/* Intro — in plain language, the missing clarity */}
+                <div className="biz-card biz-intro-card">
+                  <div className="biz-intro-head">
+                    <span className="biz-intro-badge"><IconShield width={13} height={13} />{t('biz.requestsIntroLabel')}</span>
+                    <h3 className="biz-intro-title">{t('biz.requestsIntro.title')}</h3>
+                  </div>
+                  <p className="biz-intro-body">{t('biz.requestsIntro.body')}</p>
+                  <ol className="biz-intro-steps">
+                    {INTRO_STEPS.map((key, index) => (
+                      <li key={key} className="biz-intro-step">
+                        <span className="biz-intro-num" aria-hidden="true">{num(index + 1, locale)}</span>
+                        <span className="biz-intro-step-text">{t(`biz.requestsIntro.${key}`)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="biz-intro-trust">
+                    <span className="biz-intro-trust-item"><IconLock width={12} height={12} />{t('biz.trust.noStorage')}</span>
+                    <span className="biz-intro-trust-item"><IconShield width={12} height={12} />{t('biz.trust.noDeposit')}</span>
+                    <span className="biz-intro-trust-item"><IconClock width={12} height={12} />{t('biz.trust.humanReply')}</span>
+                  </div>
+                </div>
+
                 <div className="biz-row-head">
                   <div>
                     <p className="biz-label">{t('biz.requestsTitle')}</p>
@@ -544,6 +624,8 @@ export default function Business() {
                     <IconPlus width={16} height={16} />{t('biz.newRequest')}
                   </button>
                 </div>
+
+                <p className="biz-hint">{t('biz.requestsIntro.note')}</p>
 
                 <div className="biz-filters" role="group" aria-label={t('biz.filterLabel')}>
                   {FILTERS.map(({ id, Icon }) => {

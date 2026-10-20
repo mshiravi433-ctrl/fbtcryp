@@ -209,6 +209,42 @@ describe('Business console — Persian', () => {
     expect(selected[0].id).toContain('followup');
   });
 
+  it('explains what a request actually is before showing the list', async () => {
+    renderPage();
+    await clickTab('پیگیری');
+    await inPanel(() => {
+      /* «درخواست معنی نشده» — the panel opened on three status rows with no
+         explanation. The clarity card must be there, in Persian, with the
+         three real steps — and it must say the truth: no in-app inbox. */
+      expect(screen.getByText('ارسال درخواست چطور کار می‌کند — واضح و صادقانه')).toBeTruthy();
+      expect(screen.getByText(/هیچ صندوق داخلی/)).toBeTruthy();
+      expect(screen.getByText(/برنامهٔ ایمیل‌تان با موضوع و متن آماده باز می‌شود/)).toBeTruthy();
+      // the example-not-your-data note sits above the demo rows
+      expect(screen.getByText(/سه کارت پایین فقط مثال‌اند/)).toBeTruthy();
+      // three promises, each rendered as its own chip
+      expect(screen.getByText('بدون ذخیره سروری — فقط ایمیل')).toBeTruthy();
+      expect(screen.getByText('ما هرگز آدرس واریز نمی‌دهیم')).toBeTruthy();
+      expect(screen.getByText('پاسخ در یک روز کاری')).toBeTruthy();
+    });
+  });
+
+  it('spells out conditions and method on the services panel', () => {
+    renderPage();
+    expect(screen.getByText('شرایط و روش بررسی')).toBeTruthy();
+    expect(screen.getByText('این میز برای چه کسانی است')).toBeTruthy();
+    expect(screen.getByText('روش کار ما')).toBeTruthy();
+    expect(screen.getByText('زمان‌بندی و هزینه')).toBeTruthy();
+    /* The fee in the eligibility copy is interpolated from FEE_BPS, not typed
+       into the translation — a hardcoded 0.7% would be a lie the day the fee
+       changes. */
+    expect(screen.getByText(/کارمزد ۰٫۷٪ سازنده/)).toBeTruthy();
+  });
+
+  it('states what is guaranteed and what is not', () => {
+    renderPage();
+    expect(screen.getByText(/لیست شدن، حجم، قیمت یا سود را تضمین نمی‌کنیم/)).toBeTruthy();
+  });
+
   it('renders the emblem as decoration, never as a name', () => {
     renderPage();
     const marks = document.querySelectorAll('.bizmark');

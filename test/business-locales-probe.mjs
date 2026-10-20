@@ -51,6 +51,18 @@ const FULL = [
   'biz.requestsTitle', 'biz.requestsSub', 'biz.newRequest', 'biz.requestsEmptyTitle', 'biz.requestsEmptyText',
   'biz.requests.kind', 'biz.trackingTitle', 'biz.trackingSub', 'biz.viewTracking', 'biz.progress.label', 'biz.progress.done',
   'biz.filterLabel', 'biz.emptyFilterTitle', 'biz.emptyFilterText',
+  /* the clarity layer added for «درخواست معنی نشده» and «شرایط و روش‌ها» */
+  'biz.requestsIntroLabel', 'biz.requestsIntro.title', 'biz.requestsIntro.body',
+  'biz.requestsIntro.step1', 'biz.requestsIntro.step2', 'biz.requestsIntro.step3',
+  'biz.requestsIntro.note', 'biz.conditions.title',
+  'biz.conditions.eligible.title', 'biz.conditions.eligible.body',
+  'biz.conditions.method.title', 'biz.conditions.method.body',
+  'biz.conditions.timeline.title', 'biz.conditions.timeline.body',
+  'biz.guarantee.yes', 'biz.guarantee.no',
+  'biz.trust.title', 'biz.trust.nonCustodial.title', 'biz.trust.nonCustodial.body',
+  'biz.trust.company.title', 'biz.trust.company.body',
+  'biz.trust.response.title', 'biz.trust.response.body',
+  'biz.trust.noStorage', 'biz.trust.noDeposit', 'biz.trust.humanReply',
   'biz.stats.networks.value', 'biz.stats.networks.label', 'biz.stats.networks.sub',
   'biz.stats.fee.value', 'biz.stats.fee.label', 'biz.stats.fee.sub',
   'biz.stats.alwaysOpen.value', 'biz.stats.alwaysOpen.label', 'biz.stats.alwaysOpen.sub',
@@ -115,6 +127,9 @@ const FA_MUST_BE_PERSIAN = ['biz.tabs.partnership', 'biz.tabs.followup', 'biz.su
   'biz.subtab.requests', 'biz.subtab.tracking', 'biz.title', 'biz.intro', 'biz.requestsTitle', 'biz.trackingTitle',
   'biz.headerLive', 'biz.filterLabel', 'biz.emptyFilterTitle', 'biz.filter.all', 'biz.filter.responded',
   ...POINTS.map((id) => `biz.point.${id}`),
+  'biz.requestsIntro.title', 'biz.requestsIntro.body', 'biz.requestsIntro.step1', 'biz.requestsIntro.step2',
+  'biz.conditions.title', 'biz.conditions.eligible.body', 'biz.conditions.timeline.body',
+  'biz.guarantee.yes', 'biz.guarantee.no', 'biz.trust.nonCustodial.body',
   ...['companyError', 'nameError', 'messageError', 'privacy'].map((k) => `biz.form.${k}`)];
 for (const k of FA_MUST_BE_PERSIAN) if (!PERSIAN_RE.test(get(fa, k) || '')) fail(`fa ${k} has no Persian script`);
 ok(`fa: ${FA_MUST_BE_PERSIAN.length} labels and messages contain Persian script`);
@@ -204,6 +219,26 @@ for (const sel of ['.biz-offer-sheen', '.biz-orb', '.biz-live-dot']) {
   if (!motion.includes(sel)) fail(`prefers-reduced-motion does not stop ${sel}`);
 }
 if (motion.trim()) ok('css: reduced-motion stops the orbs, the live dot and the card sweep');
+
+/*
+ * THE HERO MUST STAY COMPACT.
+ *
+ * The reported bug was «اندازهٔ باکس اولیه طول خیلی زیادی پیدا کرده که قسمت
+ * بالایی بدون هیچ چیز دراز شده» — a hero that grew to roughly 460px on a
+ * 430px-wide phone, with its top third empty. It grew because the emblem's
+ * column was taller than the copy, the padding was 22px, and the title was
+ * clamp(28px…36px). These three assertions keep it from growing back.
+ */
+const heroRule = (css.match(/\.biz-hero \{[^}]*\}/) || [''])[0];
+if (!/padding:\s*1[0-9]px/.test(heroRule)) fail('hero padding is not on the compact scale (10–19px)');
+else ok('css: hero padding stays compact');
+if (/min-height|min-block-size/.test(heroRule)) fail('hero has a min-height — that is what let it stretch');
+else ok('css: hero has no min-height');
+if (!/\.biz-hero-title \{[^}]*font-size:\s*clamp\(2[0-6]px/.test(css)) fail('hero title clamp starts above 28px');
+else ok('css: hero title clamp starts at 26px or less');
+if (!/max-width: 430px[\s\S]*?\.biz-hero-art \{ display: none; \}/.test(css)) {
+  fail('the emblem is not dropped on the narrowest screens (it is what stretched the hero)');
+} else ok('css: narrow screens drop the decorative emblem');
 
 /* RTL: no physical direction properties anywhere in the file. */
 const physical = [...css.matchAll(/(?:^|[;{\s])(margin|padding)-(left|right)\s*:/g)];
