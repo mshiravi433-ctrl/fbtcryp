@@ -33,7 +33,10 @@ import {
   normalizeAmountInput,
   normalizeWalletInput
 } from '../lib/guidedCheckout';
-import { IconCheck, IconChevronRight, IconClock, IconRefresh, IconShield, IconWallet } from './Icons';
+import {
+  IconArrowDown, IconArrowUpRight, IconCash, IconCheck, IconChevronRight,
+  IconClock, IconCoins, IconRefresh, IconShield, IconSwap, IconWallet
+} from './Icons';
 import { pollWhileVisible } from '../lib/visibilityPoll';
 
 const POLL_MS = 15_000;
@@ -45,6 +48,10 @@ const FIAT_CURRENCIES = GUIDED_FIAT;
 /* The wizard: exactly the order that was asked for — amount first, then the
    wallet, then the asset, then one review screen. One decision per screen. */
 const STEPS = ['amount', 'wallet', 'asset', 'review'];
+
+/* One mark per wizard step, so the rail reads as a journey instead of
+   four numbered boxes: pay → receive → choose → review. */
+const STEP_ICONS = [IconCash, IconWallet, IconCoins, IconShield];
 
 const QUICK_FIAT = [50, 100, 250, 500];
 
@@ -163,7 +170,7 @@ function RecentOrders({ t }) {
       <p className="section-label" style={{ marginBottom: 9 }}>{t('buySell.recentTitle')}</p>
       <div className="stack" style={{ gap: 7 }}>
         {orders.slice(0, 8).map((order) => (
-          <div className="buy-sell-order-row" key={order.orderId}>
+          <div className={`buy-sell-order-row ${String(order.side).toUpperCase() === 'SELL' ? 'is-sell' : 'is-buy'}`} key={order.orderId}>
             <button type="button" onClick={() => setExpanded(expanded === order.orderId ? null : order.orderId)}>
               <span><b>{order.side} {order.asset}</b><small>{order.network}</small></span>
               <span className="buy-sell-order-amount">{amount(order.cryptoAmount, order.asset)}<small>{t(`buySell.orderState.${order.status}`, { defaultValue: order.status })}</small></span>
@@ -593,11 +600,13 @@ export default function BuySellPanel({ initialOrderId = null }) {
   const showWizard = sideAvailable && !initialOrderId && (!order || order.status === 'AWAITING_CONFIRMATION');
 
   return (
-    <div className="buy-sell-panel">
+    <div className={`buy-sell-panel ${sell ? 'is-sell' : 'is-buy'}`}>
       {iranBuyVisible && (
         <div className="segmented buy-sell-surface-switch" role="tablist" aria-label={t('buySell.title')}>
           <button type="button" role="tab" aria-selected={buySurface === 'general'} className={buySurface === 'general' ? 'active' : ''} onClick={() => setBuySurface('general')} style={{ isolation: 'isolate' }}>
-            {buySurface === 'general' && <SegIndicator id="buy-sell-surface" />}{t('buySell.title')}
+            {buySurface === 'general' && <SegIndicator id="buy-sell-surface" />}
+            <span className="bsw-tab-icon" aria-hidden="true"><IconSwap width={17} height={17} /></span>
+            <span className="bsw-tab-copy"><b>{t('buySell.title')}</b><small>{t('buySell.generalCaption')}</small></span>
           </button>
           <IranianBuyTabButton active={buySurface === 'iran'} onClick={() => setBuySurface('iran')} />
         </div>
@@ -608,8 +617,16 @@ export default function BuySellPanel({ initialOrderId = null }) {
       ) : (
         <>
       <div className="segmented buy-sell-switch" role="tablist" aria-label={t('buySell.directionLabel')}>
-        <button type="button" role="tab" aria-selected={side === 'BUY'} className={side === 'BUY' ? 'active' : ''} onClick={() => changeSide('BUY')} style={{ isolation: 'isolate' }}>{side === 'BUY' && <SegIndicator id="buy-sell-direction" />}{t('buySell.buy')}</button>
-        <button type="button" role="tab" aria-selected={side === 'SELL'} className={side === 'SELL' ? 'active' : ''} onClick={() => changeSide('SELL')} style={{ isolation: 'isolate' }}>{side === 'SELL' && <SegIndicator id="buy-sell-direction" />}{t('buySell.sell')}</button>
+        <button type="button" role="tab" aria-selected={side === 'BUY'} className={side === 'BUY' ? 'active' : ''} onClick={() => changeSide('BUY')} style={{ isolation: 'isolate' }}>
+          {side === 'BUY' && <SegIndicator id="buy-sell-direction" />}
+          <span className="bsw-side-icon" aria-hidden="true"><IconArrowDown width={14} height={14} /></span>
+          {t('buySell.buy')}
+        </button>
+        <button type="button" role="tab" aria-selected={side === 'SELL'} className={side === 'SELL' ? 'active' : ''} onClick={() => changeSide('SELL')} style={{ isolation: 'isolate' }}>
+          {side === 'SELL' && <SegIndicator id="buy-sell-direction" />}
+          <span className="bsw-side-icon" aria-hidden="true"><IconArrowUpRight width={14} height={14} /></span>
+          {t('buySell.sell')}
+        </button>
       </div>
 
       {sell && !sellAvailable && !guidedAvailable ? (
@@ -637,6 +654,9 @@ export default function BuySellPanel({ initialOrderId = null }) {
           {showWizard && (
             <motion.section className="lab-card buy-sell-ticket buy-sell-wizard" variants={riseIn} initial="hidden" animate="show">
               <div className="buy-sell-ticket-head">
+                <span className={`buy-sell-side-mark ${sell ? 'is-sell' : ''}`} aria-hidden="true">
+                  {sell ? <IconArrowUpRight width={19} height={19} /> : <IconArrowDown width={19} height={19} />}
+                </span>
                 <div>
                   <p className="section-label">{sell ? t('buySell.sellCrypto') : t('buySell.buyCrypto')}</p>
                   <p className="faint">{trackedAvailable ? (sell ? t('buySell.fiatPayout') : t('buySell.directSettlement')) : t('buySell.wizard.noRegistration')}</p>
@@ -644,21 +664,24 @@ export default function BuySellPanel({ initialOrderId = null }) {
                 <span className="buy-sell-secure"><IconShield width={15} height={15} /> {t('buySell.nonCustodial')}</span>
               </div>
 
-              {/* stepper — numbered, labelled, clickable backwards */}
+              {/* stepper — icon, labelled, clickable backwards */}
               <ol className="bsw-stepper" aria-label={t('buySell.wizard.stepOf', { current: step + 1, total: STEPS.length })}>
-                {STEPS.map((name, index) => (
-                  <li key={name} className={index < step ? 'done' : index === step ? 'active' : ''}>
-                    <button
-                      type="button"
-                      disabled={index > step}
-                      onClick={() => index < step && go(index)}
-                      aria-current={index === step ? 'step' : undefined}
-                    >
-                      <span>{index < step ? <IconCheck width={11} height={11} /> : index + 1}</span>
-                      <small>{t(`buySell.wizard.steps.${name}`)}</small>
-                    </button>
-                  </li>
-                ))}
+                {STEPS.map((name, index) => {
+                  const StepIcon = STEP_ICONS[index];
+                  return (
+                    <li key={name} className={index < step ? 'done' : index === step ? 'active' : ''}>
+                      <button
+                        type="button"
+                        disabled={index > step}
+                        onClick={() => index < step && go(index)}
+                        aria-current={index === step ? 'step' : undefined}
+                      >
+                        <span>{index < step ? <IconCheck width={12} height={12} /> : index === step ? <StepIcon width={13} height={13} /> : index + 1}</span>
+                        <small>{t(`buySell.wizard.steps.${name}`)}</small>
+                      </button>
+                    </li>
+                  );
+                })}
               </ol>
 
               <div className="bsw-viewport">

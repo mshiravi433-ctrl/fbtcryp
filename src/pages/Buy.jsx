@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import BuySellPanel from '../components/BuySellPanel';
-import { IconChevronLeft, IconShield } from '../components/Icons';
+import { IconChevronLeft, IconShield, IconSwap } from '../components/Icons';
 import '../styles/lab-modern.css';
 import '../styles/buy-sell.css';
 import '../styles/iran-buy.css';
@@ -30,6 +30,7 @@ export default function Buy() {
         <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
           <IconChevronLeft width={18} height={18} />
         </button>
+        <span className="buy-sell-page-mark" aria-hidden="true"><IconSwap width={17} height={17} /></span>
         <h1 className="h1" style={{ margin: 0 }}>{orderId ? t('buySell.resultTitle') : t('buySell.title')}</h1>
       </div>
       <p className="prose-sm buy-sell-page-intro">{orderId ? t('buySell.resultIntro') : t('buySell.pageIntro')}</p>
@@ -38,7 +39,7 @@ export default function Buy() {
 
       <motion.section className="lab-card buy-sell-safety" variants={riseIn} initial="hidden" animate="show">
         <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-          <span style={{ color: 'var(--rgb-5)', display: 'grid', placeItems: 'center' }}><IconShield width={17} height={17} /></span>
+          <span className="buy-sell-safety-mark" style={{ color: 'var(--rgb-5)', display: 'grid', placeItems: 'center' }}><IconShield width={17} height={17} /></span>
           <p className="section-label" style={{ margin: 0 }}>{t('buySell.safetyTitle')}</p>
         </div>
         <ul className="prose-list">
