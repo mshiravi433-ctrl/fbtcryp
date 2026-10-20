@@ -1123,3 +1123,107 @@
   .buy-sell-wizard { padding: 0 18px 18px; }
   .buy-sell-ticket-head { margin-inline: -18px; padding-inline: 18px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ULTRA MODERN OVERRIDES (Requested Redesign)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.buy-sell-panel::before {
+  filter: blur(60px);
+  inset: -60px -40px auto;
+  height: 350px;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--bsw-accent) 25%, transparent), transparent 70%);
+}
+
+.buy-sell-page-mark {
+  border-radius: 14px;
+  width: 38px; height: 38px; flex: 0 0 38px;
+  box-shadow: 0 10px 25px -5px rgba(0, 255, 157, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+.buy-sell-surface-switch {
+  border-radius: 99px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: 8px;
+  box-shadow: 0 8px 32px -10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.05);
+}
+.buy-sell-surface-switch > button, .buy-sell-switch > button {
+  border-radius: 99px;
+  min-height: 60px;
+}
+.buy-sell-surface-switch .seg-indicator, .buy-sell-switch .seg-indicator {
+  border-radius: 99px;
+  box-shadow: 0 12px 28px -8px color-mix(in srgb, var(--bsw-accent) 70%, transparent), inset 0 1px 2px rgba(255,255,255,0.4);
+}
+.bsw-tab-icon { border-radius: 50%; }
+.buy-sell-surface-switch > button.active .bsw-tab-icon {
+  transform: scale(1.05);
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 4px 12px -4px var(--bsw-accent-line);
+}
+
+.buy-sell-ticket {
+  border-radius: 32px;
+  background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  box-shadow: 0 20px 50px -10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.05);
+}
+.buy-sell-ticket-head { padding: 20px 20px 18px; margin: 0 -20px 18px; }
+.buy-sell-wizard { padding: 0 20px 20px; }
+
+.buy-sell-side-mark {
+  border-radius: 50%;
+  width: 52px; height: 52px; flex: 0 0 52px;
+  box-shadow: 0 12px 28px -8px color-mix(in srgb, var(--bsw-accent) 75%, transparent), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+}
+
+.bsw-stepper button > span {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+}
+.bsw-stepper li.active button > span {
+  transform: scale(1.15);
+  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--bsw-accent) 60%, transparent), inset 0 2px 2px rgba(255,255,255,0.4);
+}
+
+.bsw-input-row { border-radius: 20px; transition: all 250ms ease; }
+.bsw-input-row:focus-within {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 15%, transparent), inset 0 2px 6px rgba(0,0,0,0.1);
+}
+.bsw-input-row input { font-size: 24px; font-weight: 800; }
+
+.bsw-chips button { border-radius: 99px; transition: all 200ms ease; }
+.bsw-chips button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.bsw-assets button { border-radius: 24px; transition: all 250ms ease; }
+.bsw-assets button:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -8px rgba(0,0,0,0.3);
+}
+
+.bsw-ramp-row {
+  border-radius: 28px;
+  box-shadow: 0 12px 30px -10px rgba(0,0,0,0.4);
+  transition: all 300ms ease;
+}
+.bsw-ramp-row:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -12px rgba(0,0,0,0.5);
+}
+
+.bsw-nav .btn { border-radius: 99px; min-height: 56px; font-weight: 800; font-size: 16px; transition: all 250ms ease; }
+.bsw-nav .bsw-next {
+  box-shadow: 0 12px 28px -8px color-mix(in srgb, var(--bsw-accent) 60%, transparent), inset 0 2px 4px rgba(255,255,255,0.3);
+}
+.bsw-nav .bsw-next:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 16px 36px -10px color-mix(in srgb, var(--bsw-accent) 80%, transparent), inset 0 2px 4px rgba(255,255,255,0.4);
+}
+
+:root[data-theme='light'] .buy-sell-ticket {
+  box-shadow: 0 20px 50px -10px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.8);
+}

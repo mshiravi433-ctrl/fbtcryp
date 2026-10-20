@@ -703,3 +703,104 @@
   .iran-buy-live,
   .iran-buy-timeline li.active > span { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ULTRA MODERN OVERRIDES (Requested Redesign)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.iran-buy-subtab {
+  border-radius: 99px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: 8px;
+  box-shadow: 0 8px 32px -10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.05);
+  margin-bottom: 16px;
+}
+.segmented.iran-buy-subtab > button {
+  border-radius: 99px;
+  min-height: 52px;
+}
+.iran-buy-subtab .seg-indicator {
+  border-radius: 99px;
+  box-shadow: 0 12px 28px -8px color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 70%, transparent), inset 0 1px 2px rgba(255,255,255,0.4);
+}
+.iran-buy-subtab .bsw-side-icon { border-radius: 50%; }
+
+.iran-buy-ticket {
+  border-radius: 32px;
+  background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  box-shadow: 0 20px 50px -10px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.05);
+}
+.iran-buy-ticket-head { padding: 20px 20px 18px; margin: 0 -20px 18px; }
+
+.iran-buy-rate {
+  border-radius: 24px;
+  box-shadow: 0 12px 30px -10px color-mix(in srgb, var(--bsw-accent) 40%, transparent);
+  transition: transform 300ms ease;
+  padding: 20px 24px;
+}
+.iran-buy-rate:hover { transform: translateY(-2px) scale(1.01); }
+.iran-buy-rate::after { filter: blur(20px); }
+
+.iran-buy-rate-meta .icon-btn {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transition: all 200ms ease;
+}
+.iran-buy-rate-meta .icon-btn:hover:not(:disabled) {
+  transform: rotate(-30deg) scale(1.1);
+}
+
+.iran-buy-locked-rows > div {
+  border-radius: 18px;
+  transition: all 250ms ease;
+}
+.iran-buy-locked-rows > div:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.iran-buy-amount > div {
+  border-radius: 20px;
+  transition: all 250ms ease;
+}
+.iran-buy-amount > div:focus-within {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 20%, transparent), inset 0 2px 6px rgba(0,0,0,0.1);
+}
+.iran-buy-amount input { font-size: 24px; font-weight: 800; min-height: 64px; }
+
+.iran-buy-chips > button {
+  border-radius: 99px;
+  transition: all 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.iran-buy-chips > button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+.iran-buy-chips > button.is-active {
+  box-shadow: 0 8px 20px -6px color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 60%, transparent), inset 0 2px 4px rgba(255,255,255,0.4);
+}
+
+.iran-buy-destination { border-radius: 20px; transition: all 250ms ease; }
+.iran-buy-destination:hover { background: rgba(255, 255, 255, 0.05); }
+
+.iran-buy-actions .btn {
+  border-radius: 99px;
+  min-height: 60px;
+  transition: all 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.iran-buy-next {
+  box-shadow: 0 12px 30px -8px color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 60%, transparent), inset 0 2px 4px rgba(255,255,255,0.4);
+}
+.iran-buy-next:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 16px 40px -10px color-mix(in srgb, var(--bsw-accent, var(--rgb-4)) 80%, transparent), inset 0 2px 4px rgba(255,255,255,0.5);
+}
+
+.iran-buy-terms-body { border-radius: 16px; background: rgba(0,0,0,0.15); }
+
+:root[data-theme='light'] .iran-buy-ticket {
+  box-shadow: 0 20px 50px -10px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.8);
+}
