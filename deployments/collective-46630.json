@@ -39,8 +39,12 @@
     "payer": "0xEfFEe508B69B8705F0AA3187aD9d28f1B95D39E9",
     "policy": "user-wallet-only",
     "sponsored": false,
-    "totalGasUsed": "16055396",
-    "totalGasCostWei": "160553960000000"
+    "phase1GasUsed": "16055396",
+    "phase1GasCostWei": "160553960000000",
+    "phase2GasUsed": "7014925",
+    "phase2GasCostWei": "70149250000000",
+    "totalGasUsed": "23070321",
+    "totalGasCostWei": "230703210000000"
   },
   "transactions": [
     {
@@ -188,11 +192,69 @@
       "blockNumber": 138963233,
       "gasUsed": "75177",
       "gasCostWei": "751770000000"
+    },
+    {
+      "label": "execute accounting-asset allowlist",
+      "method": "executeAddressChange",
+      "hash": "0x2b9945c97582ce25c124f31e2f2966f3dcc5a118a616a8828a94699faaf449bc",
+      "blockNumber": 139671812,
+      "gasUsed": "49783",
+      "gasCostWei": "497830000000"
+    },
+    {
+      "label": "execute strategy-target allowlist",
+      "method": "executeAddressChange",
+      "hash": "0x9df8e75db395e789ac4517caded9ea662c85f91e54e8a81261fe396fd482106a",
+      "blockNumber": 139671845,
+      "gasUsed": "49830",
+      "gasCostWei": "498300000000"
+    },
+    {
+      "label": "execute stable-yield activation",
+      "method": "executeKindActivation",
+      "hash": "0x9c8d892922d7d545fe0c3a92fcf84590b03cc0e8fae6bf1f235b352e32154526",
+      "blockNumber": 139671880,
+      "gasUsed": "46746",
+      "gasCostWei": "467460000000"
+    },
+    {
+      "label": "create stable-yield vault",
+      "method": "createStableYieldVault",
+      "hash": "0x268c7a7241e3eea99854aeb48e66a9f3781f266e90ffcf453dce162b7408f3fe",
+      "blockNumber": 139671916,
+      "gasUsed": "6868566",
+      "gasCostWei": "68685660000000"
     }
   ],
-  "phase": "queued",
+  "phase": "active",
   "verified": false,
   "verifiedAt": null,
   "network": "robinhood-testnet",
-  "testnet": true
+  "testnet": true,
+  "vault": {
+    "address": "0xa9571559Cf794EacbA91EAAc17e2C500df4F386a",
+    "name": "FBT Collective TSLA Stable",
+    "symbol": "cTSLA",
+    "adapter": "0xb6184806923e4aDecd8579c76A5DEd513A03c18c",
+    "epochManager": "0x780A60d8Fb4a15DddB054D73E4Be4D9A19b0EBa7",
+    "withdrawalQueue": "0xF9b9C082046ae5DCF5F1f700a31ad1388fBC8559",
+    "index": 0
+  },
+  "shareDecimals": 18,
+  "limits": {
+    "maxTradeUsdE8": "5000000000000",
+    "maxTxCostUsdE8": "5000000000",
+    "minLiquidityUsdE8": "100000000",
+    "maxAllocationBps": 8000,
+    "maxConcentrationBps": 8000,
+    "maxSlippageBps": 50,
+    "reserveBps": 1000,
+    "maxOracleAgeSeconds": 3600,
+    "enabled": true
+  },
+  "activation": {
+    "activatedAt": 1792533548,
+    "gasPayer": "0xEfFEe508B69B8705F0AA3187aD9d28f1B95D39E9",
+    "sponsored": false
+  }
 }
