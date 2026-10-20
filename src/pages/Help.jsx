@@ -12,17 +12,15 @@ import { TELEGRAM_BOT_URL, TELEGRAM_BOT_USERNAME } from '../lib/telegramBot';
 import { openUrl } from '../lib/browser';
 import SubTabRail from '../components/learn/SubTabRail';
 import { LearnTop } from '../components/learn/LearnHero';
+import { GlyphBook, GlyphHeadset, GlyphMail, GlyphTelegram, GlyphVerified } from '../components/learn/LearnGlyphs';
 import '../styles/learn-hub.css';
 import {
   IconChevronRight,
   IconDoc,
   IconInfo,
   IconLock,
-  IconMail,
   IconSearch,
   IconShield,
-  IconTelegram,
-  IconUser,
   IconX,
   IconAlertTriangle
 } from '../components/Icons';
@@ -47,7 +45,7 @@ import {
  * assistant is now presented as what it is, and next to it sits the thing
  * that never guesses — the browsable FAQ below it.
  *
- * ─── THE 2026 REDESIGN: TWO SUB-TABS ───────────────────────────────────────
+ * ─── TWO SUB-TABS ──────────────────────────────────────────────────────────
  * The old page was one unbroken column: a guide button, an assistant, 37
  * questions, five resource rows and a scam warning, in that order, always.
  * Someone looking for the support address scrolled past 37 accordions to find
@@ -60,15 +58,29 @@ import {
  * The scam warning is on the support tab, next to the only two channels we
  * actually answer through: that is where someone is about to be told by a
  * stranger that they are "support".
+ *
+ * ─── THE SUPPORT TAB, SECOND PASS ──────────────────────────────────────────
+ * The first pass drew the three contact tiles with an icon tile that had no
+ * background: a near-black glyph on transparent glass, invisible on the dark
+ * theme («ایکون‌های تلگرام و ایمیل و تماس را درست کن»). The email tile was
+ * also a bare <a>, so it inherited the browser's underline, and an auto-fit
+ * grid of three left the third tile orphaned under one of the others.
+ *
+ * Now: the two OFFICIAL channels (the bot and the mailbox) sit side by side as
+ * equals, each wearing a «کانال رسمی» badge and a duotone glyph on a lit
+ * gradient tile; the contact page is one wide row underneath. The hint above
+ * them already says there are exactly two official channels — the layout now
+ * says the same thing.
  */
 
 const SUBTABS = [
   { id: 'faq', Icon: IconInfo, a: '#00e5ff', b: '#7c4dff' },
-  { id: 'support', Icon: IconLock, a: '#ff2d95', b: '#7c4dff' }
+  { id: 'support', Icon: GlyphHeadset, a: '#ff2d95', b: '#7c4dff' }
 ];
 
 /**
- * The documents behind «منابع». One row each, in reading order.
+ * The documents behind «منابع». One row each, in reading order, each with
+ * its own hue so five identical grey rows become five things.
  *
  * `key` is explicit on every row on purpose. Deriving it as `help.${id}` looked
  * tidy and printed `help.terms` / `help.privacy` on the screen — those two
@@ -77,11 +89,11 @@ const SUBTABS = [
  * reads as a broken app rather than a missing translation.
  */
 const RESOURCES = [
-  { id: 'docs', key: 'help.docs', to: '/docs', Icon: IconDoc, subKey: 'help.docsSub' },
-  { id: 'audit', key: 'help.audit', to: '/audit', Icon: IconShield, subKey: 'help.auditSub' },
-  { id: 'terms', key: 'terms.title', to: '/legal/terms', Icon: IconDoc },
-  { id: 'privacy', key: 'privacy.title', to: '/legal/privacy', Icon: IconShield },
-  { id: 'github', key: 'help.github', to: '/contact', Icon: IconLock, subKey: 'help.githubSub' }
+  { id: 'docs', key: 'help.docs', to: '/docs', Icon: GlyphBook, subKey: 'help.docsSub', hue: '#00e5ff' },
+  { id: 'audit', key: 'help.audit', to: '/audit', Icon: IconShield, subKey: 'help.auditSub', hue: '#00ff9d' },
+  { id: 'terms', key: 'terms.title', to: '/legal/terms', Icon: IconDoc, hue: '#7c4dff' },
+  { id: 'privacy', key: 'privacy.title', to: '/legal/privacy', Icon: IconLock, hue: '#ffb300' },
+  { id: 'github', key: 'help.github', to: '/contact', Icon: IconDoc, subKey: 'help.githubSub', hue: '#ff2d95' }
 ];
 
 export default function Help({ embedded = false }) {
@@ -173,9 +185,10 @@ export default function Help({ embedded = false }) {
                 }}
               >
                 <span className="lh-cta-icon" aria-hidden="true">
-                  <IconInfo width={21} height={21} />
+                  <GlyphBook width={24} height={24} style={{ position: 'relative', zIndex: 1 }} />
                 </span>
                 <span className="lh-cta-copy">
+                  <span className="lh-cta-eyebrow">{t('learn.faq.startHere')}</span>
                   <span className="lh-cta-title">{t('help.guideCta')}</span>
                   <span className="lh-cta-sub">{t('help.guideCtaSub')}</span>
                 </span>
@@ -186,22 +199,18 @@ export default function Help({ embedded = false }) {
               </motion.button>
 
               {/* ------------------------------ ask ------------------------ */}
-              <motion.div variants={riseIn} initial="hidden" animate="show">
+              <motion.div className="lh-ask" variants={riseIn} initial="hidden" animate="show">
                 <AskHelp />
               </motion.div>
 
               {/* ------------------------------ FAQ ------------------------ */}
               <motion.section variants={riseIn} initial="hidden" animate="show">
-                <div className="lh-rowhead">
-                  <p className="lh-label">{t('help.faqTitle')}</p>
-                  <span className="lh-count" aria-live="polite">
-                    <strong>{num(filtered.length)}</strong>
-                    <span> / {num(faqs.length)}</span>
-                  </span>
-                </div>
+                <p className="lh-label">{t('help.faqTitle')}</p>
 
                 <label className="lh-search">
-                  <IconSearch width={16} height={16} aria-hidden="true" />
+                  <span className="lh-search-ico" aria-hidden="true">
+                    <IconSearch width={16} height={16} style={{ position: 'relative', zIndex: 1 }} />
+                  </span>
                   <input
                     type="search"
                     value={query}
@@ -209,6 +218,11 @@ export default function Help({ embedded = false }) {
                     placeholder={t('learn.faq.searchPlaceholder')}
                     aria-label={t('learn.faq.searchLabel')}
                   />
+                  {/* «n / N», live: the count sits in the bar it describes. */}
+                  <span className="lh-count lh-search-count" aria-live="polite">
+                    <strong>{num(filtered.length)}</strong>
+                    <span>/{num(faqs.length)}</span>
+                  </span>
                   {query ? (
                     <button
                       type="button"
@@ -233,6 +247,7 @@ export default function Help({ embedded = false }) {
                       const isOpen = openId === id;
                       return (
                         <motion.div key={id} className="lh-faq" data-open={isOpen} variants={riseIn}>
+                          <span className="lh-faq-rail" aria-hidden="true" />
                           <button
                             type="button"
                             className="lh-faq-q"
@@ -276,7 +291,7 @@ export default function Help({ embedded = false }) {
                 ) : (
                   <div className="lh-empty" style={{ marginTop: 11 }} role="status">
                     <span className="lh-empty-icon" aria-hidden="true">
-                      <IconSearch width={18} height={18} />
+                      <IconSearch width={18} height={18} style={{ position: 'relative', zIndex: 1 }} />
                     </span>
                     <p className="lh-empty-title">{t('learn.faq.emptyTitle')}</p>
                     <p className="lh-empty-body">{t('learn.faq.emptyBody')}</p>
@@ -290,25 +305,30 @@ export default function Help({ embedded = false }) {
               <motion.section variants={riseIn} initial="hidden" animate="show">
                 <p className="lh-label">{t('learn.support.title')}</p>
                 <div className="lh-contact-grid">
+                  {/* Telegram first: for this audience it is the channel that
+                      actually gets answered, and the one most often faked. */}
                   <button
                     type="button"
                     className="lh-contact"
-                    style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}
-                    onClick={() => {
-                      haptic?.('light');
-                      navigate('/contact');
-                    }}
+                    style={{ '--a': '#2aabee', '--b': '#7c4dff' }}
+                    onClick={openTelegram}
+                    data-testid="help-contact-telegram"
                   >
-                    <span className="lh-contact-icon" aria-hidden="true">
-                      <IconUser width={20} height={20} />
+                    <span className="lh-contact-head">
+                      <span className="lh-contact-icon" aria-hidden="true">
+                        <GlyphTelegram width={23} height={23} />
+                      </span>
+                      <span className="lh-contact-badge">
+                        <GlyphVerified width={12} height={12} aria-hidden="true" />
+                        {t('learn.support.official')}
+                      </span>
                     </span>
-                    <span className="lh-contact-title">{t('help.contactUs')}</span>
-                    <p className="lh-contact-sub">{t('help.contactUsSub')}</p>
+                    <span className="lh-contact-title">{t('help.telegram')}</span>
+                    <p className="lh-contact-sub">{t('learn.support.telegramSub')}</p>
+                    <span className="lh-contact-value" dir="ltr">@{TELEGRAM_BOT_USERNAME}</span>
                     <span className="lh-contact-cta">
                       {t('learn.support.open')}
-                      <span className="lh-flip" aria-hidden="true">
-                        <IconChevronRight width={13} height={13} />
-                      </span>
+                      <IconChevronRight width={13} height={13} className="lh-flip" aria-hidden="true" />
                     </span>
                   </button>
 
@@ -316,27 +336,48 @@ export default function Help({ embedded = false }) {
                     className="lh-contact"
                     style={{ '--a': '#ffb300', '--b': '#ff5a3a' }}
                     href={SUPPORT_MAILTO}
+                    data-testid="help-contact-email"
                   >
-                    <span className="lh-contact-icon" aria-hidden="true">
-                      <IconMail width={20} height={20} />
+                    <span className="lh-contact-head">
+                      <span className="lh-contact-icon" aria-hidden="true">
+                        <GlyphMail width={23} height={23} />
+                      </span>
+                      <span className="lh-contact-badge">
+                        <GlyphVerified width={12} height={12} aria-hidden="true" />
+                        {t('learn.support.official')}
+                      </span>
                     </span>
                     <span className="lh-contact-title">{t('help.email')}</span>
                     <p className="lh-contact-sub">{t('learn.support.emailSub')}</p>
                     <span className="lh-contact-value" dir="ltr">{SUPPORT_EMAIL}</span>
+                    <span className="lh-contact-cta">
+                      {t('learn.support.open')}
+                      <IconChevronRight width={13} height={13} className="lh-flip" aria-hidden="true" />
+                    </span>
                   </a>
 
                   <button
                     type="button"
-                    className="lh-contact"
-                    style={{ '--a': '#2aabee', '--b': '#7c4dff' }}
-                    onClick={openTelegram}
+                    className="lh-contact lh-contact--wide"
+                    style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}
+                    onClick={() => {
+                      haptic?.('light');
+                      navigate('/contact');
+                    }}
+                    data-testid="help-contact-page"
                   >
-                    <span className="lh-contact-icon" aria-hidden="true">
-                      <IconTelegram width={20} height={20} />
+                    <span className="lh-contact-head">
+                      <span className="lh-contact-icon" aria-hidden="true">
+                        <GlyphHeadset width={23} height={23} />
+                      </span>
                     </span>
-                    <span className="lh-contact-title">{t('help.telegram')}</span>
-                    <p className="lh-contact-sub">{t('learn.support.telegramSub')}</p>
-                    <span className="lh-contact-value" dir="ltr">@{TELEGRAM_BOT_USERNAME}</span>
+                    <span className="lh-contact-body">
+                      <span className="lh-contact-title">{t('help.contactUs')}</span>
+                      <p className="lh-contact-sub">{t('help.contactUsSub')}</p>
+                    </span>
+                    <span className="lh-contact-cta" aria-hidden="true">
+                      <IconChevronRight width={15} height={15} className="lh-flip" />
+                    </span>
                   </button>
                 </div>
               </motion.section>
@@ -345,18 +386,19 @@ export default function Help({ embedded = false }) {
               <motion.section variants={riseIn} initial="hidden" animate="show">
                 <p className="lh-label">{t('help.resources')}</p>
                 <div className="lh-links">
-                  {RESOURCES.map(({ id, key, to, Icon, subKey }) => (
+                  {RESOURCES.map(({ id, key, to, Icon, subKey, hue }) => (
                     <button
                       key={id}
                       type="button"
                       className="lh-link"
+                      style={{ '--hue': hue }}
                       onClick={() => {
                         haptic?.('light');
                         navigate(to);
                       }}
                     >
                       <span className="lh-link-icon" aria-hidden="true">
-                        <Icon width={18} height={18} />
+                        <Icon width={18} height={18} style={{ position: 'relative', zIndex: 1 }} />
                       </span>
                       <span className="lh-link-body">
                         <span className="lh-link-title">{t(key)}</span>
@@ -374,9 +416,10 @@ export default function Help({ embedded = false }) {
               <motion.section variants={riseIn} initial="hidden" animate="show">
                 <div className="lh-alert" role="note">
                   <span className="lh-alert-icon" aria-hidden="true">
-                    <IconAlertTriangle width={18} height={18} />
+                    <span className="lh-alert-ring" />
+                    <IconAlertTriangle width={19} height={19} />
                   </span>
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, position: 'relative', zIndex: 1 }}>
                     <p className="lh-alert-title">{t('learn.support.scamTitle')}</p>
                     <p className="lh-alert-body">{t('help.scamWarning')}</p>
                   </div>

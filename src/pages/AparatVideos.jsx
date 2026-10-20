@@ -358,7 +358,7 @@ export default function AparatVideos({ embedded = false }) {
            * Persian screen right next to a count that WAS formatted. One
            * formatter, or the page argues with itself.
            */}
-          <div className="lh-stats" style={{ marginTop: 11 }}>
+          <div className="lh-stats lh-stats--quad" style={{ marginTop: 11 }}>
             <span className="lh-stat" style={{ '--a': '#ff2d95', '--b': '#7c4dff' }}>
               <span className="lh-stat-val mono">{num(APARAT_COURSES.length)}</span>
               <span className="lh-stat-lbl">{t('aparat.stats.courses')}</span>
@@ -434,9 +434,11 @@ export default function AparatVideos({ embedded = false }) {
                       onClick={() => setPlayingPreview((p) => !p)}
                       aria-pressed={playingPreview}
                     >
-                      {playingPreview
-                        ? <IconPause width={15} height={15} aria-hidden="true" />
-                        : <IconPlay width={15} height={15} aria-hidden="true" />}
+                      <span className="lh-play-toggle-ico" aria-hidden="true">
+                        {playingPreview
+                          ? <IconPause width={14} height={14} />
+                          : <IconPlay width={14} height={14} />}
+                      </span>
                       <span>{playingPreview ? t('aparat.player.pauseWalkthrough') : t('aparat.player.startWalkthrough')}</span>
                     </button>
                     <span className="lh-stage-level">{t(`aparat.level.${selectedCourse.level}`)}</span>
@@ -564,7 +566,9 @@ export default function AparatVideos({ embedded = false }) {
                                 accent2={course.accent2}
                               />
                               <span className="lh-thumb-play" aria-hidden="true">
-                                <IconPlay width={17} height={17} />
+                                <span className="lh-thumb-play-ico">
+                                  <IconPlay width={17} height={17} />
+                                </span>
                               </span>
                               <span className="lh-thumb-duration mono">{course.duration}</span>
                               <span className="lh-thumb-level">
@@ -625,28 +629,29 @@ export default function AparatVideos({ embedded = false }) {
                       style={{ '--a': courses[0]?.accent || '#00e5ff', '--b': courses[0]?.accent2 || '#7c4dff' }}
                     >
                       <div className="lh-path-head">
-                        <span className="lh-doc-icon" aria-hidden="true">
+                        <span className="lh-path-mark" aria-hidden="true">
                           <IconTrophy width={20} height={20} />
                         </span>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div className="lh-path-title">{t(`aparat.level.${levelId}`)}</div>
                           <p className="lh-path-sub">
-                            {t('learn.videos.lessonsCount', { count: courses.length })}
+                            {t('learn.videos.lessonsCount', { n: num(courses.length) })}
                           </p>
                         </div>
                         <span className="lh-subtab-count">{num(courses.length)}</span>
                       </div>
 
                       <div className="lh-path-list">
-                        {courses.map((course) => (
+                        {courses.map((course, i) => (
                           <button
                             key={course.id}
                             type="button"
                             className="lh-path-row"
                             onClick={() => pickCourse(course.id)}
                             aria-pressed={selectedCourse.id === course.id}
+                            style={{ '--dot': course.accent }}
                           >
-                            <span className="lh-path-dot" style={{ background: course.accent }} aria-hidden="true" />
+                            <span className="lh-path-num" aria-hidden="true">{num(i + 1)}</span>
                             <span className="lh-path-row-text">
                               <span className="lh-path-row-title">
                                 {t(`aparat.courses.${course.id}.title`)}

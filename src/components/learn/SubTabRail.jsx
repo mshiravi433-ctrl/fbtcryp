@@ -2,8 +2,8 @@
  * SubTabRail — the second navigation level inside every Learn tab.
  * ---------------------------------------------------------------------------
  * راهنما → پرسش‌های پرتکرار / پشتیبانی و منابع
- * مستندات → مبتدی / متوسط / حرفه‌ای
- * ویدیوها → درس‌ها / کانال رسمی
+ * مستندات → تازه‌کار / متوسط / حرفه‌ای
+ * ویدیوها → درس‌ها / مسیر یادگیری
  *
  * ─── WHY ONE COMPONENT, NOT THREE ──────────────────────────────────────────
  * Three rails written separately drift within a week: one gets a count badge,
@@ -21,13 +21,17 @@
  * A `role="tablist"` may only contain tabs. One stray <p> inside it makes
  * assistive tech count it as a tab and announce "3 of 4" on a two-tab rail,
  * which is a real bug fixed on the Business console and kept dead here.
+ *
+ * ─── THE ACTIVE STATE IS LIT GLASS ─────────────────────────────────────────
+ * The sliding sheet (`.lh-subtab-pill`) paints nothing of its own: its tint,
+ * hairline and light bar all read the `--a/--b` the tab sets, and the icon
+ * tile is the only solid gradient. White label, glowing tile, a bar of light
+ * underneath — a tab, not a button.
  */
 import { useId } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { onTabListKeyDown } from './rovingTabs';
-
-const grad = (a, b) => `linear-gradient(135deg, ${a}, ${b})`;
 
 export default function SubTabRail({
   items,
@@ -74,12 +78,15 @@ export default function SubTabRail({
                 <motion.span
                   className="lh-subtab-pill"
                   layoutId={layoutId}
-                  style={{ background: grad(st.a, st.b) }}
                   transition={{ type: 'spring', stiffness: 470, damping: 36 }}
                 />
               )}
               <span className="lh-subtab-inner">
-                {st.Icon && <st.Icon width={15} height={15} aria-hidden="true" />}
+                {st.Icon && (
+                  <span className="lh-subtab-ico" aria-hidden="true">
+                    <st.Icon width={15} height={15} style={{ position: 'relative', zIndex: 1 }} />
+                  </span>
+                )}
                 <span className="lh-subtab-label">{t(`${labelPrefix}.${st.id}`)}</span>
                 {typeof st.count === 'number' && (
                   <span className="lh-subtab-count">{fmt(st.count)}</span>

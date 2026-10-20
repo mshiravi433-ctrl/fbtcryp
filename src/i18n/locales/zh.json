@@ -1232,7 +1232,8 @@
       "step4": "使用任何新功能时，先从一笔小额测试交易开始。",
       "step5": "大额资产放在单独的硬件钱包里，而不是应用内钱包。",
       "pitfall": "任何正规方都不会要你的 12 个助记词。不是我们的客服，不是群管理员，不是任何网站。索要的人就是在偷你的钱。立即拉黑。"
-    }
+    },
+    "stepsCount": "{{n}} 步"
   },
   "exec": {
     "receipt": {
@@ -3801,14 +3802,16 @@
       "searchPlaceholder": "试试：手续费、Gas、助记词…",
       "emptyTitle": "没有匹配结果",
       "emptyBody": "换个关键词，或到「支持」标签提问 — 会有真人回复。",
-      "clear": "清除搜索"
+      "clear": "清除搜索",
+      "startHere": "从这里开始"
     },
     "support": {
       "title": "联系方式",
       "open": "打开",
       "emailSub": "如果涉及某笔交易，请一并发来交易哈希。",
       "telegramSub": "我们的官方 Telegram 机器人。",
-      "scamTitle": "防诈骗警告"
+      "scamTitle": "防诈骗警告",
+      "official": "官方渠道"
     },
     "videos": {
       "handle": "频道 ID",

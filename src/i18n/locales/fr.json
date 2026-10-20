@@ -1232,7 +1232,8 @@
       "step4": "Commencez par une petite transaction de test pour toute nouvelle fonctionnalité.",
       "step5": "Gardez les grosses sommes dans un portefeuille matériel séparé, pas dans l'app.",
       "pitfall": "Personne de légitime ne demandera jamais vos 12 mots. Ni notre support, ni un admin de groupe, ni un site. Quiconque les demande essaie de voler votre argent. Bloquez-le immédiatement."
-    }
+    },
+    "stepsCount": "{{n}} étapes"
   },
   "exec": {
     "receipt": {
@@ -3808,14 +3809,16 @@
       "searchPlaceholder": "Essayez : frais, gaz, phrase de récupération…",
       "emptyTitle": "Aucun résultat",
       "emptyBody": "Essayez un autre mot, ou demandez depuis l'onglet Assistance — une vraie personne répond.",
-      "clear": "Effacer la recherche"
+      "clear": "Effacer la recherche",
+      "startHere": "Commencez ici"
     },
     "support": {
       "title": "Moyens de nous joindre",
       "open": "Ouvrir",
       "emailSub": "S'il s'agit d'une transaction, envoyez aussi son hash.",
       "telegramSub": "Notre bot officiel sur Telegram.",
-      "scamTitle": "Avertissement arnaque"
+      "scamTitle": "Avertissement arnaque",
+      "official": "Canal officiel"
     },
     "videos": {
       "handle": "Identifiant de la chaîne",

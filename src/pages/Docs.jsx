@@ -21,7 +21,9 @@ import {
   IconGlobe,
   IconUser,
   IconClock,
-  IconAlertTriangle
+  IconAlertTriangle,
+  IconRoute,
+  IconPlay
 } from '../components/Icons';
 
 /**
@@ -152,8 +154,12 @@ export default function Docs({ embedded = false }) {
           initial="hidden"
           animate="show"
         >
-          {sections.map(({ id, Icon, steps, hue, en }) => {
+          {sections.map(({ id, Icon, steps, hue, en }, index) => {
             const isOpen = openId === id;
+            // «01 ·» — the reading order inside the level, printed in mono so
+            // the eye can walk the column; the steps chip says how long the
+            // section is before it is opened.
+            const order = String(index + 1).padStart(2, '0');
             return (
               <motion.div
                 key={id}
@@ -173,13 +179,26 @@ export default function Docs({ embedded = false }) {
                   aria-expanded={isOpen}
                 >
                   <span className="lh-doc-icon" aria-hidden="true">
-                    <Icon width={20} height={20} />
+                    <Icon width={20} height={20} style={{ position: 'relative', zIndex: 1 }} />
                   </span>
                   <span className="lh-doc-text">
                     <span className="lh-doc-title-row">
+                      <span className="lh-doc-order" aria-hidden="true">{order}</span>
                       <span className="lh-doc-title">{t(`docs.${id}.title`)}</span>
                     </span>
                     <span className="lh-doc-sub">{t(`docs.${id}.sub`)}</span>
+                    <span className="lh-doc-meta-row">
+                      <span className="lh-doc-chip">
+                        <IconRoute width={11} height={11} aria-hidden="true" />
+                        {t('docs.stepsCount', { n: num(steps) })}
+                      </span>
+                      {en ? (
+                        <span className="lh-doc-chip">
+                          <IconPlay width={10} height={10} aria-hidden="true" />
+                          {t('docs.watchVideo')}
+                        </span>
+                      ) : null}
+                    </span>
                   </span>
                   <motion.span
                     className="lh-doc-chev"

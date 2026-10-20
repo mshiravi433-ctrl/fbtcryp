@@ -1232,7 +1232,8 @@
       "step4": "Empieza con una transacción de prueba pequeña al usar cualquier función nueva.",
       "step5": "Guarda los importes grandes en una cartera hardware aparte, no en la de la app.",
       "pitfall": "Nadie legítimo te pedirá jamás las 12 palabras. Ni nuestro soporte, ni un admin de grupo, ni una web. Quien las pide intenta robarte. Bloquéalo de inmediato."
-    }
+    },
+    "stepsCount": "{{n}} pasos"
   },
   "exec": {
     "receipt": {
@@ -3808,14 +3809,16 @@
       "searchPlaceholder": "Prueba: comisiones, gas, frase de recuperación…",
       "emptyTitle": "Sin coincidencias",
       "emptyBody": "Prueba otra palabra o pregunta en la pestaña de soporte — responde una persona real.",
-      "clear": "Borrar la búsqueda"
+      "clear": "Borrar la búsqueda",
+      "startHere": "Empieza aquí"
     },
     "support": {
       "title": "Formas de contactarnos",
       "open": "Abrir",
       "emailSub": "Si es sobre una transacción, envía también su hash.",
       "telegramSub": "Nuestro bot oficial en Telegram.",
-      "scamTitle": "Aviso de estafa"
+      "scamTitle": "Aviso de estafa",
+      "official": "Canal oficial"
     },
     "videos": {
       "handle": "Identificador del canal",

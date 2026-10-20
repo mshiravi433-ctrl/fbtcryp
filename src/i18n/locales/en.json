@@ -3836,7 +3836,8 @@
       "step3": "Keep notifications on so you learn the moment it fills or fails.",
       "step4": "Cancel anytime before it triggers; an open order costs nothing.",
       "pitfall": "An order is not a price guarantee: in a fast move it fills with slippage, so size it with money you can afford to lose."
-    }
+    },
+    "stepsCount": "{{n}} steps"
   },
   "audit": {
     "title": "Security",
@@ -6184,14 +6185,16 @@
       "searchPlaceholder": "Try: fees, gas, recovery phrase…",
       "emptyTitle": "Nothing matched",
       "emptyBody": "Try another phrase, or ask on the Support tab — a real person answers.",
-      "clear": "Clear search"
+      "clear": "Clear search",
+      "startHere": "Start here"
     },
     "support": {
       "title": "Ways to reach us",
       "open": "Open",
       "emailSub": "If it is about a transaction, send the transaction hash too.",
       "telegramSub": "Our official bot on Telegram.",
-      "scamTitle": "Scam warning"
+      "scamTitle": "Scam warning",
+      "official": "Official channel"
     },
     "videos": {
       "handle": "Channel handle",
