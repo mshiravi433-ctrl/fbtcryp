@@ -1232,7 +1232,8 @@
       "step4": "Mulai dengan transaksi uji kecil saat menggunakan fitur baru apa pun.",
       "step5": "Simpan jumlah besar di dompet perangkat keras terpisah, bukan di dompet dalam aplikasi.",
       "pitfall": "Tidak ada pihak yang sah yang akan meminta 12 kata pemulihan Anda. Bukan dukungan kami, bukan admin grup, bukan situs mana pun. Yang memintanya sedang mencoba mencuri uang Anda. Blokir segera."
-    }
+    },
+    "stepsCount": "{{n}} langkah"
   },
   "exec": {
     "receipt": {
@@ -3808,14 +3809,16 @@
       "searchPlaceholder": "Coba: biaya, gas, frasa pemulihan…",
       "emptyTitle": "Tidak ada yang cocok",
       "emptyBody": "Coba kata lain, atau tanya lewat tab Dukungan — orang sungguhan yang menjawab.",
-      "clear": "Hapus pencarian"
+      "clear": "Hapus pencarian",
+      "startHere": "Mulai di sini"
     },
     "support": {
       "title": "Cara menghubungi kami",
       "open": "Buka",
       "emailSub": "Jika tentang suatu transaksi, sertakan juga hash transaksinya.",
       "telegramSub": "Bot resmi kami di Telegram.",
-      "scamTitle": "Peringatan penipuan"
+      "scamTitle": "Peringatan penipuan",
+      "official": "Saluran resmi"
     },
     "videos": {
       "handle": "ID kanal",

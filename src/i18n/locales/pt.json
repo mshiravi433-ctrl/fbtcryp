@@ -1232,7 +1232,8 @@
       "step4": "Comece com uma transação de teste pequena ao usar qualquer recurso novo.",
       "step5": "Guarde valores grandes em uma carteira de hardware separada, não na carteira do app.",
       "pitfall": "Ninguém legítimo jamais pedirá suas 12 palavras de recuperação. Nem nosso suporte, nem admin de grupo, nem site algum. Quem pede está tentando roubar seu dinheiro. Bloqueie na hora."
-    }
+    },
+    "stepsCount": "{{n}} passos"
   },
   "exec": {
     "receipt": {
@@ -3808,14 +3809,16 @@
       "searchPlaceholder": "Tente: taxas, gas, frase de recuperação…",
       "emptyTitle": "Nada encontrado",
       "emptyBody": "Tente outra palavra ou pergunte na aba Suporte — uma pessoa real responde.",
-      "clear": "Limpar a pesquisa"
+      "clear": "Limpar a pesquisa",
+      "startHere": "Comece aqui"
     },
     "support": {
       "title": "Como nos contatar",
       "open": "Abrir",
       "emailSub": "Se for sobre uma transação, envie também o hash dela.",
       "telegramSub": "Nosso bot oficial no Telegram.",
-      "scamTitle": "Alerta de golpe"
+      "scamTitle": "Alerta de golpe",
+      "official": "Canal oficial"
     },
     "videos": {
       "handle": "Identificador do canal",

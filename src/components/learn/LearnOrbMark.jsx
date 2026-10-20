@@ -1,8 +1,10 @@
 /**
- * LearnOrbMark — the hub's emblem.
+ * LearnOrbMark — the hub's emblem (the «prism»).
  * ---------------------------------------------------------------------------
- * Two orbits with a light node on each, a graduation-cap core and four marks
- * around it (the three sources plus the reader).
+ * A dashed outer ring with twelve ticks, a middle orbit carrying three light
+ * nodes — one per source, in that source's colour (cyan راهنما, mint مستندات,
+ * magenta ویدیوها) — and a glass core with the graduation cap, the one glyph
+ * that says "learning" in any language. The whole thing floats by 2.5px.
  *
  * ─── WHY CSS, NOT JAVASCRIPT ───────────────────────────────────────────────
  * Every movement here is a composited `transform` on `<g>` elements driven by
@@ -16,6 +18,17 @@
  * frame are identical. A loop that disappears reads as a loading placeholder,
  * and on a screen someone reads for minutes it reads as a fault.
  */
+const NODES = [
+  { angle: -90, color: '#00e5ff' },
+  { angle: 30, color: '#00ff9d' },
+  { angle: 150, color: '#ff2d95' }
+];
+
+const polar = (deg, r) => {
+  const rad = (deg * Math.PI) / 180;
+  return { x: 60 + r * Math.cos(rad), y: 60 + r * Math.sin(rad) };
+};
+
 export default function LearnOrbMark({ size = 96 }) {
   return (
     <svg
@@ -36,38 +49,73 @@ export default function LearnOrbMark({ size = 96 }) {
           <stop offset="0%" stopColor="#00e5ff" />
           <stop offset="100%" stopColor="#7c4dff" />
         </linearGradient>
+        <linearGradient id="lh-orb-glass" x1="30" y1="30" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="rgba(255,255,255,.14)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,.02)" />
+        </linearGradient>
         <radialGradient id="lh-orb-halo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#7c4dff" stopOpacity=".5" />
+          <stop offset="0%" stopColor="#7c4dff" stopOpacity=".55" />
           <stop offset="100%" stopColor="#7c4dff" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      <circle cx="60" cy="60" r="54" fill="url(#lh-orb-halo)" className="lh-orb-halo" />
+      <circle cx="60" cy="60" r="56" fill="url(#lh-orb-halo)" className="lh-orb-halo" />
 
-      <g className="lh-orb-spin lh-orb-spin--a">
-        <circle cx="60" cy="60" r="52" stroke="url(#lh-orb-ring)" strokeWidth="1.6" strokeOpacity=".7" strokeDasharray="5 7" />
-        <circle cx="60" cy="8" r="3.4" fill="#00e5ff" />
+      <g className="lh-orb-float">
+        {/* outer dial: dashed ring + twelve ticks */}
+        <g className="lh-orb-spin lh-orb-spin--a">
+          <circle cx="60" cy="60" r="53" stroke="url(#lh-orb-ring)" strokeWidth="1.4" strokeOpacity=".55" strokeDasharray="2 6" />
+          {Array.from({ length: 12 }).map((_, i) => {
+            const a = polar(i * 30, 49);
+            const b = polar(i * 30, i % 3 === 0 ? 44 : 46.5);
+            return (
+              <line
+                key={i}
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke="url(#lh-orb-ring)"
+                strokeWidth={i % 3 === 0 ? 1.8 : 1.1}
+                strokeOpacity={i % 3 === 0 ? .9 : .45}
+                strokeLinecap="round"
+              />
+            );
+          })}
+        </g>
+
+        {/* middle orbit: three light nodes, one per source */}
+        <g className="lh-orb-spin lh-orb-spin--b">
+          <circle cx="60" cy="60" r="40" stroke="url(#lh-orb-ring)" strokeWidth="1" strokeOpacity=".4" />
+          {NODES.map(({ angle, color }) => {
+            const p = polar(angle, 40);
+            return (
+              <g key={angle}>
+                <circle cx={p.x} cy={p.y} r="6.5" fill={color} fillOpacity=".18" />
+                <circle cx={p.x} cy={p.y} r="3.2" fill={color} />
+                <circle cx={p.x} cy={p.y} r="1.2" fill="#fff" fillOpacity=".85" />
+              </g>
+            );
+          })}
+        </g>
+
+        {/* a slow light sweep behind the core */}
+        <g className="lh-orb-spin lh-orb-spin--c">
+          <path d="M60 28a32 32 0 0 1 32 32" stroke="url(#lh-orb-ring)" strokeWidth="2.2" strokeLinecap="round" strokeOpacity=".7" />
+        </g>
+
+        {/* glass core */}
+        <circle cx="60" cy="60" r="30" fill="rgba(9,13,26,.78)" stroke="rgba(255,255,255,.12)" />
+        <circle cx="60" cy="60" r="30" fill="url(#lh-orb-glass)" />
+        <circle cx="60" cy="60" r="30" stroke="url(#lh-orb-ring)" strokeWidth="1" strokeOpacity=".5" />
+
+        {/* graduation cap */}
+        <path d="M41 55.5 60 47l19 8.5-19 8.5-19-8.5Z" fill="url(#lh-orb-core)" />
+        <path d="M49.5 61.5v7.2c0 3.6 4.7 6.6 10.5 6.6s10.5-3 10.5-6.6v-7.2" stroke="#00e5ff" strokeWidth="2" strokeLinecap="round" />
+        <path d="M79 56v10.5" stroke="#ff2d95" strokeWidth="2.2" strokeLinecap="round" />
+        <circle cx="79" cy="69.5" r="2.4" fill="#ff2d95" />
+        <circle cx="52" cy="52.5" r="1.3" fill="#fff" fillOpacity=".8" />
       </g>
-
-      <g className="lh-orb-spin lh-orb-spin--b">
-        <circle cx="60" cy="60" r="41" stroke="url(#lh-orb-ring)" strokeWidth="1.4" strokeOpacity=".5" strokeDasharray="3 9" />
-        <circle cx="101" cy="60" r="2.8" fill="#ff2d95" />
-      </g>
-
-      <circle cx="60" cy="60" r="31" fill="rgba(9,13,26,.72)" stroke="rgba(255,255,255,.1)" />
-      <circle cx="60" cy="60" r="31" stroke="url(#lh-orb-ring)" strokeWidth="1" strokeOpacity=".45" />
-
-      {/* graduation cap: the one glyph that says "learning" in any language */}
-      <path d="M42 54 60 46l18 8-18 8-18-8Z" fill="url(#lh-orb-core)" />
-      <path d="M50 60v8c0 3.6 4.5 6.5 10 6.5s10-2.9 10-6.5v-8" stroke="#00e5ff" strokeWidth="2" strokeLinecap="round" />
-      <path d="M78 51v10" stroke="#ff2d95" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="78" cy="64" r="2.4" fill="#ff2d95" />
-
-      {/* four marks: the three sources and the reader */}
-      <circle cx="60" cy="21" r="2" fill="#00e5ff" fillOpacity=".8" />
-      <circle cx="99" cy="60" r="2" fill="#7c4dff" fillOpacity=".8" />
-      <circle cx="60" cy="99" r="2" fill="#ff2d95" fillOpacity=".8" />
-      <circle cx="21" cy="60" r="2" fill="#00ff9d" fillOpacity=".8" />
     </svg>
   );
 }

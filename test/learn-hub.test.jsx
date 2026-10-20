@@ -24,6 +24,7 @@ import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { setLanguage } from '../src/i18n/index.js';
 import Learn from '../src/pages/Learn.jsx';
+import { TELEGRAM_BOT_USERNAME } from '../src/lib/telegramBot.js';
 
 const renderPage = (path = '/learn') =>
   render(
@@ -200,6 +201,18 @@ describe('Learn hub — Persian', () => {
        top-level tab label, so a bare getByText would match the rail instead. */
     const rows = Array.from(document.querySelectorAll('.lh-link-title')).map((el) => el.textContent);
     expect(rows).toEqual(['مستندات', 'امنیت و ممیزی', 'شرایط استفاده', 'حریم خصوصی', 'کد منبع']);
+
+    /* Three channels, three glyphs — the bug this redesign was asked to fix
+       was these tiles rendering with no visible icon. Each tile must carry a
+       drawn SVG, the two official ones a «کانال رسمی» badge, and the email
+       tile must be a real mailto link (not a button that opens nothing). */
+    const tiles = document.querySelectorAll('.lh-contact');
+    expect(tiles.length).toBe(3);
+    tiles.forEach((tile) => expect(tile.querySelector('.lh-contact-icon svg path, .lh-contact-icon svg rect')).toBeTruthy());
+    expect(screen.getAllByText('کانال رسمی').length).toBe(2);
+    expect(screen.getByTestId('help-contact-email').getAttribute('href')).toMatch(/^mailto:/);
+    expect(screen.getByText(`@${TELEGRAM_BOT_USERNAME}`)).toBeTruthy();
+    expect(screen.getByText('تماس با ما')).toBeTruthy();
   });
 
   it('navigates the docs tab by level, and the pro level holds only the two advanced screens', async () => {

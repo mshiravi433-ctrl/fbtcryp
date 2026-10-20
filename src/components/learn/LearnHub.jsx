@@ -32,8 +32,6 @@ import LearnHero from './LearnHero';
 import LearnOrbMark from './LearnOrbMark';
 import '../../styles/learn-hub.css';
 
-const grad = (a, b) => `linear-gradient(135deg, ${a}, ${b})`;
-
 export default function LearnHub({ tabs, stats }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -71,6 +69,7 @@ export default function LearnHub({ tabs, stats }) {
       <div className="lh-shell lh-focus">
         <span className="lh-orb a" aria-hidden="true" />
         <span className="lh-orb b" aria-hidden="true" />
+        <span className="lh-orb c" aria-hidden="true" />
 
         <LearnHero
           kicker={t('learn.kicker')}
@@ -105,17 +104,22 @@ export default function LearnHub({ tabs, stats }) {
                 onClick={() => select(tab.id)}
                 style={{ '--a': tab.a, '--b': tab.b }}
               >
+                {/*
+                  * The sliding sheet of lit glass. It paints nothing of its
+                  * own: fill, hairline and light bar all read the `--a/--b`
+                  * set on the tab, so the one element that moves between
+                  * tabs recolours itself on arrival.
+                  */}
                 {isActive && (
                   <motion.span
                     className="lh-tab-pill"
                     layoutId={`${uid}-mainpill`}
-                    style={{ background: grad(tab.a, tab.b) }}
                     transition={{ type: 'spring', stiffness: 430, damping: 34 }}
                   />
                 )}
                 <span className="lh-tab-inner">
                   <span className="lh-tab-badge">
-                    <tab.Icon width={18} height={18} aria-hidden="true" />
+                    <tab.Icon width={18} height={18} aria-hidden="true" style={{ position: 'relative', zIndex: 1 }} />
                   </span>
                   <span className="lh-tab-text">
                     <span className="lh-tab-name">{t(`learn.tabs.${tab.id}`)}</span>

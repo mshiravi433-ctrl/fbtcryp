@@ -160,13 +160,44 @@ const css = read('../src/styles/learn-hub.css');
    light theme: #00e5ff on a white card is ~1.4:1. */
 const ACCENT_TEXT = ['.lh-kicker', '.lh-contact-cta', '.lh-doc-video', '.lh-mini--accent',
   '.lh-play-toggle', '.lh-alert-icon', '.lh-pitfall-icon', '.lh-note-icon', '.lh-copy.is-copied',
-  '.lh-contact-icon', '.lh-doc-icon', '.lh-cta-icon'];
+  '.lh-contact-icon', '.lh-doc-icon', '.lh-cta-icon', '.lh-link-icon', '.lh-doc-order',
+  '.lh-contact-badge', '.lh-search-ico', '.lh-path-mark'];
 const escaped = (sel) => sel.replace(/[.[\]]/g, '\\$&');
 const unthemed = ACCENT_TEXT.filter(
   (sel) => !new RegExp(`:root\\[data-theme='light'\\][^{]*${escaped(sel)}`, 's').test(css)
 );
 if (unthemed.length) fail(`no light-theme override for ${unthemed.join(', ')}`);
 else ok(`css: ${ACCENT_TEXT.length} accent-on-glass rules have a light-theme partner`);
+
+/* Everything that sits ON a gradient tile takes its colour from `--lh-ink`:
+   near-black on the dark theme, white on the light one. The variable must flip
+   or every lit tile loses its glyph in the light theme at once. */
+if (!/:root\[data-theme='light'\][^{]*\{[^}]*--lh-ink:\s*#fff/.test(css)) fail('--lh-ink is not flipped to white for the light theme');
+else ok('css: --lh-ink flips for the light theme');
+
+/* The channel icons (Telegram, email, contact) sit on a GRADIENT tile. The
+   first pass shipped the tile with no background at all: a near-black glyph on
+   transparent glass, invisible on the dark theme — «ایکون‌های تلگرام و ایمیل و
+   تماس را درست کن». An icon tile that paints no background is that bug again. */
+for (const sel of ['.lh-contact-icon', '.lh-cta-icon', '.lh-doc-icon', '.lh-link-icon', '.lh-path-mark']) {
+  const rule = (css.match(new RegExp(`${escaped(sel)} \\{[^}]*\\}`)) || [''])[0];
+  if (!/background(?:-image)?:\s*(?:linear|radial|conic)-gradient|background:\s*(?:var|color-mix)/.test(rule)) {
+    fail(`${sel} paints no background — its glyph would be invisible on the dark theme`);
+  }
+}
+ok('css: every icon tile paints its own background');
+
+/* The email tile is an <a>: without this it inherits the browser underline. */
+if (!/\.lh-contact[^{]*\{[^}]*text-decoration:\s*none/.test(css)) fail('.lh-contact lacks text-decoration: none (the email tile is a link)');
+else ok('css: the contact link tile is not underlined');
+
+/* Buttons do not inherit the page font: any text inside a button without
+   `font: inherit` renders in the UA default and falls back to the system
+   Arabic face instead of the app face. */
+const buttonRules = [...css.matchAll(/([^{}]+)\{([^{}]*cursor:\s*pointer[^{}]*)\}/g)];
+const uaFont = buttonRules.filter(([, , body]) => !/font:\s*inherit|font-family/.test(body)).map(([sel]) => sel.trim().split('\n').pop());
+if (uaFont.length) fail(`clickable rules without font: inherit — ${uaFont.join(', ')}`);
+else ok(`css: all ${buttonRules.length} clickable rules inherit the page font`);
 
 /* No keyframe may fade to zero — a loop that disappears reads as a loading
    placeholder, and at 60fps for minutes it reads as a hardware fault. */

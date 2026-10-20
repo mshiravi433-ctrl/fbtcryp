@@ -1232,7 +1232,8 @@
       "step4": "Her yeni özellikte küçük bir test işlemiyle başlayın.",
       "step5": "Büyük tutarları uygulama içi cüzdanda değil, ayrı bir donanım cüzdanında tutun.",
       "pitfall": "Hiçbir meşru kişi 12 kurtarma kelimenizi istemez. Ne desteğimiz, ne grup yöneticisi, ne bir site. İsteyen paranızı çalmaya çalışıyordur. Hemen engelleyin."
-    }
+    },
+    "stepsCount": "{{n}} adım"
   },
   "exec": {
     "receipt": {
@@ -3808,14 +3809,16 @@
       "searchPlaceholder": "Örneğin: komisyon, gas, kurtarma cümlesi…",
       "emptyTitle": "Sonuç yok",
       "emptyBody": "Başka bir kelime deneyin ya da Destek sekmesinden sorun — gerçek biri yanıtlar.",
-      "clear": "Aramayı temizle"
+      "clear": "Aramayı temizle",
+      "startHere": "Buradan başla"
     },
     "support": {
       "title": "Bize ulaşma yolları",
       "open": "Aç",
       "emailSub": "Bir işlem hakkındaysa işlem hash’ini de gönderin.",
       "telegramSub": "Telegram’daki resmî botumuz.",
-      "scamTitle": "Dolandırıcılık uyarısı"
+      "scamTitle": "Dolandırıcılık uyarısı",
+      "official": "Resmi kanal"
     },
     "videos": {
       "handle": "Kanal kimliği",
