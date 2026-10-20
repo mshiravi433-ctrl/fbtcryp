@@ -5,25 +5,25 @@
  * Contains public addresses and chain-bound verification facts only.
  * No private key, credentialed RPC, keeper secret or user data is published.
  *
- * run 39504258306 · commit 1b50f24 · 2026-10-20T21:59:09.210Z
+ * run 39512943855 · commit 6ab2dc6 · 2026-10-20T23:10:54.512Z
  */
 export const ACTIVATION_SNAPSHOT = Object.freeze({
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-10-20T21:59:09.210Z",
+  "generatedAt": "2026-10-20T23:10:54.512Z",
   "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "1b50f24fc475ee48ceb58c86a2ceffd6df5572c3",
+  "commit": "6ab2dc6a45364872a9322c35507bc612a692e888",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": 39504258306,
-    "number": 10,
-    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39504258306",
-    "event": "workflow_dispatch",
+    "id": 39512943855,
+    "number": 13,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39512943855",
+    "event": "push",
     "conclusion": "success",
-    "headSha": "1b50f24fc475ee48ceb58c86a2ceffd6df5572c3",
-    "createdAt": "1970-01-01T00:00:00.000Z",
-    "updatedAt": "2026-10-20T21:59:09.210Z",
-    "durationSeconds": null
+    "headSha": "6ab2dc6a45364872a9322c35507bc612a692e888",
+    "createdAt": "2026-10-20T23:09:01.000Z",
+    "updatedAt": "2026-10-20T23:10:54.512Z",
+    "durationSeconds": 114
   },
   "checks": [
     {
@@ -46,9 +46,9 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
     },
     {
       "id": "rehearsal",
-      "label": "Full local rehearsal",
-      "ok": null,
-      "detail": "no rehearsal record in this run"
+      "label": "Full local rehearsal (deploy → timelock → activate → deposit)",
+      "ok": true,
+      "detail": "23 transactions · vault created · gas 23658953 units"
     }
   ],
   "artifacts": [
