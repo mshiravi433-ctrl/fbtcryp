@@ -4545,6 +4545,45 @@
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
       "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+    },
+    "tabsTitle": "Choose partnership area",
+    "subtabsTitle": "Sub-tabs",
+    "chooseArea": "Select a partnership area",
+    "servicesTitle": "Services & offers",
+    "whyUsTitle": "Why partner with us",
+    "brandsTitle": "Partner brands & companies",
+    "brandsSub": "Infrastructure and networks building on this platform, and our partner brands",
+    "brand": {
+      "fbt": "Core swap interface & protocol",
+      "solana": "Partner Layer-1 network",
+      "ethereum": "Partner EVM network",
+      "polygon": "Partner Layer-2 network",
+      "bnb": "Partner BNB network",
+      "arbitrum": "Partner rollup network"
+    },
+    "requestsTitle": "Your requests",
+    "requestsSub": "Status of your latest partnership requests",
+    "newRequest": "New request",
+    "requestsEmptyTitle": "No requests yet",
+    "requestsEmptyText": "Start by submitting your first partnership request.",
+    "requests": {
+      "kind": "Partnership request"
+    },
+    "status": {
+      "pending": "Pending review",
+      "review": "Under review",
+      "responded": "Responded"
+    },
+    "trackingTitle": "Track partnership status",
+    "trackingSub": "Progress of your request from submission to launch",
+    "tracking": {
+      "totalRequests": "Total requests",
+      "totalSub": "Submitted so far",
+      "responded": "Responded",
+      "respondedSub": "By business team",
+      "support": "24/7 support",
+      "supportSub": "No closing hours, no intermediary",
+      "pathTitle": "Request execution path"
     }
   },
   "ads": {
