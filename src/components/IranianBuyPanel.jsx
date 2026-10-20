@@ -19,7 +19,11 @@ import { useTranslation } from 'react-i18next';
 import SegIndicator from './SegIndicator';
 import AssetIcon from './AssetIcon';
 import WalletConnectSheet from './WalletConnectSheet';
-import { IconCheck, IconChevronRight, IconClock, IconCopy, IconExternal, IconLock, IconRefresh, IconShield, IconWallet } from './Icons';
+import {
+  IconArrowDown, IconArrowUpRight, IconBank, IconBuilding, IconCard,
+  IconCash, IconCheck, IconChevronRight, IconClock, IconCoins, IconCopy,
+  IconExternal, IconLock, IconRefresh, IconShield, IconUser, IconWallet
+} from './Icons';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { evmToTronAddress, isValidTronAddress } from '../lib/tronAddress';
 import { useAppStore } from '../store/useAppStore';
@@ -164,7 +168,8 @@ export function IranianBuyTabButton({ active, onClick }) {
       data-testid="iran-buy-top-tab"
     >
       {active && <SegIndicator id="iran-buy-surface" />}
-      {t('iranBuy.tab')}
+      <span className="bsw-tab-icon" aria-hidden="true"><IconBuilding width={17} height={17} /></span>
+      <span className="bsw-tab-copy"><b>{t('iranBuy.tab')}</b><small>{t('iranBuy.tabCaption')}</small></span>
     </button>
   );
 }
@@ -203,7 +208,10 @@ function RateStrip({ rate, loading, onRefresh, t }) {
   return (
     <section className="iran-buy-rate" data-testid="iran-buy-rate" aria-live="polite">
       <div className="iran-buy-rate-main">
-        <span>{t('iranBuy.rateLabel')}</span>
+        <span className="iran-buy-rate-label">
+          <i className="iran-buy-live" aria-hidden="true" />
+          {t('iranBuy.rateLabel')}
+        </span>
         <strong>{rate?.buyPrice ? `${formatToman(String(rate.buyPrice).split('.')[0])} ${t('iranBuy.toman')}` : t('iranBuy.rateUnavailable')}</strong>
       </div>
       <div className="iran-buy-rate-meta">
@@ -259,7 +267,7 @@ function AmountField({ amountToman, capability, disabled, estimate, onChange, t 
   return (
     <>
       <label className="iran-buy-amount">
-        <span>{t('iranBuy.amountLabel')}</span>
+        <span><IconCash width={12} height={12} /> {t('iranBuy.amountLabel')}</span>
         <div>
           <input
             value={amountToman}
@@ -293,15 +301,19 @@ function AmountField({ amountToman, capability, disabled, estimate, onChange, t 
 }
 
 /** The four steps, always visible so the flow is understood before paying. */
+const GUIDE_ICONS = { amount: IconCash, wallet: IconWallet, gateway: IconCard, delivery: IconCoins };
 function FlowGuide({ t }) {
   return (
     <ol className="iran-buy-guide" aria-label={t('iranBuy.guideTitle')}>
-      {['amount', 'wallet', 'gateway', 'delivery'].map((step, index) => (
-        <li key={step}>
-          <span>{index + 1}</span>
-          <div><b>{t(`iranBuy.guide.${step}.title`)}</b><small>{t(`iranBuy.guide.${step}.body`)}</small></div>
-        </li>
-      ))}
+      {['amount', 'wallet', 'gateway', 'delivery'].map((step, index) => {
+        const GuideIcon = GUIDE_ICONS[step];
+        return (
+          <li key={step}>
+            <span><GuideIcon width={11} height={11} /></span>
+            <div><b>{t(`iranBuy.guide.${step}.title`)}</b><small>{t(`iranBuy.guide.${step}.body`)}</small></div>
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -466,6 +478,7 @@ function ReferralAddressCard({ onConnect, onSwitch, onSelectNetwork, referral, s
  * reading. No step promises a price or a delivery time — the partner sets
  * both, and the closing note says exactly that.
  */
+const REFERRAL_STEP_ICONS = { signup: IconUser, kyc: IconShield, deposit: IconBank, buy: IconCash, withdraw: IconArrowUpRight, return: IconRefresh };
 function ReferralGuide({ onConnect, onSwitch, onSelectNetwork, referral, selectedNetwork, t, wallet }) {
   const networkLabel = String(selectedNetwork?.label || referral?.network?.label || referral?.network?.id || '').trim();
   return (
@@ -486,15 +499,18 @@ function ReferralGuide({ onConnect, onSwitch, onSelectNetwork, referral, selecte
           onSelectNetwork={onSelectNetwork}
         />
         <ol className="iran-buy-referral-steps" aria-label={t('iranBuy.referral.guideTitle')}>
-          {REFERRAL_STEPS.map((step, index) => (
-            <li key={step}>
-              <span>{index + 1}</span>
-              <div>
-                <b>{t(`iranBuy.referral.steps.${step}.title`, step === 'withdraw' ? { network: networkLabel } : {})}</b>
-                <small>{t(`iranBuy.referral.steps.${step}.body`, step === 'withdraw' ? { network: networkLabel } : {})}</small>
-              </div>
-            </li>
-          ))}
+          {REFERRAL_STEPS.map((step, index) => {
+            const StepIcon = REFERRAL_STEP_ICONS[step];
+            return (
+              <li key={step}>
+                <span><StepIcon width={10} height={10} /></span>
+                <div>
+                  <b>{t(`iranBuy.referral.steps.${step}.title`, step === 'withdraw' ? { network: networkLabel } : {})}</b>
+                  <small>{t(`iranBuy.referral.steps.${step}.body`, step === 'withdraw' ? { network: networkLabel } : {})}</small>
+                </div>
+              </li>
+            );
+          })}
         </ol>
         <p className="iran-buy-referral-note">{t('iranBuy.referral.stepsNote')}</p>
       </div>
@@ -511,7 +527,10 @@ function ReferralCard({ manualFallback, onOpen, referral, t }) {
   return (
     <section className="iran-buy-referral" data-testid="iran-buy-referral">
       <div className="iran-buy-referral-copy">
-        <b>{t('iranBuy.referral.cardTitle')}</b>
+        <b>
+          <span className="iran-buy-brand-mark" aria-hidden="true"><IconCoins width={14} height={14} /></span>
+          {t('iranBuy.referral.cardTitle')}
+        </b>
         <p>{t('iranBuy.referral.cardBody')}</p>
         {referral?.discountNote && (
           <small className="iran-buy-referral-perk" data-testid="iran-buy-referral-perk">
@@ -769,7 +788,9 @@ export default function IranianBuyPanel({ capability }) {
   const subTabs = (
     <div className="segmented iran-buy-subtab" role="tablist" aria-label={t('iranBuy.subtabLabel')}>
       <button type="button" role="tab" aria-selected="true" className="active" style={{ isolation: 'isolate' }}>
-        <SegIndicator id="iran-buy-subtab" />{t('iranBuy.buy')}
+        <SegIndicator id="iran-buy-subtab" />
+        <span className="bsw-side-icon" aria-hidden="true"><IconArrowDown width={13} height={13} /></span>
+        {t('iranBuy.buy')}
       </button>
     </div>
   );

@@ -1,213 +1,560 @@
-/* Hosted checkout Buy / Sell. Uses the existing card, button, input and
-   segmented primitives; these rules only lay out this transactional ticket. */
+/* ═══════════════════════════════════════════════════════════════════
+   BUY / SELL — "Aurora Desk"
+   The fiat on/off-ramp surface. One design language for every box:
+   glass cards, aurora washes, gradient accents — and a DIRECTIONAL
+   theme: the whole ticket tints mint→cyan for خرید (BUY) and
+   magenta→violet for فروش (SELL), so the two sub-tabs never feel
+   like the same screen with a word swapped.
+
+   Every colour flows from three custom properties set on the panel
+   root by the `is-buy` / `is-sell` class:
+
+     --bsw-accent   the direction's primary ink (mint | magenta)
+     --bsw-accent-2 the direction's secondary ink (cyan | violet)
+     --bsw-ink      text that sits ON a gradient fill of the above
+   ═══════════════════════════════════════════════════════════════════ */
+
+.buy-sell-panel {
+  --bsw-accent: var(--rgb-4);
+  --bsw-accent-2: var(--rgb-1);
+  --bsw-ink: #04140d;
+  --bsw-accent-soft: color-mix(in srgb, var(--bsw-accent) 12%, transparent);
+  --bsw-accent-line: color-mix(in srgb, var(--bsw-accent) 34%, transparent);
+
+  position: relative;
+  display: grid;
+  gap: 12px;
+  z-index: 0;
+}
+.buy-sell-panel.is-sell {
+  --bsw-accent: var(--rgb-3);
+  --bsw-accent-2: var(--rgb-2);
+  --bsw-ink: #ffffff;
+}
+
+/* A whisper of the direction's colour behind the whole desk — the
+   panel's aura. It never pushes content (absolute, behind everything). */
+.buy-sell-panel::before {
+  content: '';
+  position: absolute;
+  inset: -34px -18px auto;
+  height: 240px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(58% 100% at 50% 0%, var(--bsw-accent-soft), transparent 72%);
+}
+
 .buy-sell-page-intro { margin: 2px 0 14px; }
-.buy-sell-panel { display: grid; gap: 12px; }
+
+/* the page's own title mark — the desk's little badge */
+.buy-sell-page-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  color: #04140d;
+  background: linear-gradient(140deg, var(--rgb-4), var(--rgb-1));
+  box-shadow: 0 8px 18px -8px rgba(0, 255, 157, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.buy-sell-page-mark svg { flex: 0 0 auto; }
+.buy-sell-safety-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 179, 0, 0.08);
+  border: 1px solid rgba(255, 179, 0, 0.2);
+}
+:root[data-theme='light'] .buy-sell-safety-mark { background: rgba(180, 83, 9, 0.08); border-color: rgba(180, 83, 9, 0.25); }
+
+/* ─── THE TWO TOP TABS (سطح) ───────────────────────────────────────
+   Tall glass pills: an icon chip, a strong label and a quiet caption.
+   The sliding indicator is the shared SegIndicator, re-skinned here. */
+.buy-sell-surface-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.buy-sell-surface-switch > button,
+.buy-sell-switch > button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease, transform 160ms ease;
+}
+.buy-sell-surface-switch > button:hover,
+.buy-sell-switch > button:hover { color: var(--text-2); }
+.buy-sell-surface-switch > button.active,
+.buy-sell-switch > button.active { color: var(--bsw-ink); }
+/* index.css injects a ✓ glyph before every active segment — the
+   gradient pill IS the selection mark here, so the tick must not
+   double up in front of the icon chip. */
+.buy-sell-surface-switch > button.active::before,
+.buy-sell-switch > button.active::before { content: none !important; }
+
+/* icon chip — the tab's little tile */
+.bsw-tab-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-3);
+  transition: background 200ms ease, color 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.bsw-tab-icon svg { flex: 0 0 auto; }
+.buy-sell-surface-switch > button.active .bsw-tab-icon {
+  color: var(--bsw-accent);
+  border-color: var(--bsw-accent-line);
+  background: linear-gradient(145deg, var(--bsw-accent-soft), color-mix(in srgb, var(--bsw-accent-2) 8%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* label + caption stack */
+.bsw-tab-copy { display: grid; gap: 1px; min-width: 0; text-align: start; }
+.bsw-tab-copy b { display: block; font-size: 12.5px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.35; }
+.bsw-tab-copy small { display: block; font-size: 9px; font-weight: 600; color: var(--text-3); letter-spacing: 0.02em; }
+.buy-sell-surface-switch > button.active .bsw-tab-copy small { color: var(--text-2); }
+
+/* the sliding pill: a gradient of the direction, with a lit edge */
+.buy-sell-surface-switch .seg-indicator,
+.buy-sell-switch .seg-indicator {
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--bsw-accent), var(--bsw-accent-2));
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--bsw-accent) 65%, transparent);
+}
+.buy-sell-surface-switch > button.active,
+.buy-sell-switch > button.active { color: var(--bsw-ink); font-weight: 700; }
+.buy-sell-surface-switch > button.active .bsw-tab-icon,
+.buy-sell-switch > button.active .bsw-tab-icon { color: var(--bsw-ink); border-color: transparent; background: rgba(255, 255, 255, 0.16); box-shadow: none; }
+.buy-sell-surface-switch > button.active .bsw-tab-copy small,
+.buy-sell-switch > button.active .bsw-tab-copy small { color: color-mix(in srgb, var(--bsw-ink) 78%, transparent); }
+
+/* ─── THE TWO SUB-TABS (جهت: خرید / فروش) ──────────────────────────
+   Same language, tinted by the direction they choose. */
 .buy-sell-switch { margin: 0; }
-.buy-sell-switch button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.buy-sell-switch small { font-size: 9px; font-weight: 700; opacity: .74; }
-.buy-sell-ticket { padding: 15px; overflow: hidden; }
-.buy-sell-ticket-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
-.buy-sell-ticket-head .section-label { margin: 0 0 3px; }
-.buy-sell-ticket-head .faint { font-size: 11.5px; }
-.buy-sell-secure { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; color: var(--rgb-4); font-size: 10.5px; font-weight: 700; white-space: nowrap; }
-.buy-sell-secure svg, .buy-sell-cta svg, .buy-sell-use-wallet svg, .buy-sell-refresh-status svg, .buy-sell-tx-link svg { flex: 0 0 auto; }
-.buy-sell-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.buy-sell-fields .ord-field { min-width: 0; margin: 0; }
-.buy-sell-fields .ord-field > span { display: flex; align-items: center; justify-content: space-between; gap: 5px; font-size: 11px; }
-.buy-sell-fields .ord-field em { color: var(--up); font-size: 10px; font-style: normal; font-weight: 700; }
-.buy-sell-fields select, .buy-sell-fields input { min-width: 0; width: 100%; }
-.buy-sell-wallet-field { grid-column: 1 / -1; }
-.buy-sell-wallet-field input { direction: ltr; text-align: left; font-family: var(--font-mono); font-size: 12px; }
-.buy-sell-amount-input { display: flex; direction: ltr; }
-.buy-sell-amount-input input { border-radius: 11px 0 0 11px !important; }
-.buy-sell-amount-input select { max-width: 74px; border-radius: 0 11px 11px 0 !important; border-inline-start: 0 !important; }
-[dir="rtl"] .buy-sell-amount-input input { border-radius: 0 11px 11px 0 !important; }
-[dir="rtl"] .buy-sell-amount-input select { border-radius: 11px 0 0 11px !important; border-inline-start: 1px solid rgba(255,255,255,.12) !important; border-inline-end: 0 !important; }
-.buy-sell-readonly { display: flex; align-items: center; min-height: 38px; padding: 0 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 11px; background: rgba(255,255,255,.025); color: var(--text-2); font-size: 12px; }
-.buy-sell-use-wallet, .buy-sell-refresh-status { width: 100%; margin-top: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
-.buy-sell-wallet-note, .buy-sell-hosted-note { color: var(--text-3); font-size: 11px; line-height: 1.7; margin: 8px 0 0; }
-.buy-sell-summary { margin-top: 14px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 5px; }
-.buy-sell-summary .trade-summary-row { padding: 7px 1px; font-size: 11.7px; gap: 14px; }
-.buy-sell-summary .trade-summary-row strong { direction: ltr; text-align: end; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; overflow-wrap: anywhere; }
-.buy-sell-summary .buy-sell-zero strong { color: var(--up); }
-.buy-sell-summary .buy-sell-total { padding-top: 10px; font-size: 12.8px; border-top: 1px solid rgba(255,255,255,.1); border-bottom: 0; }
-.buy-sell-summary .buy-sell-total strong { font-size: 13px; color: var(--text-1); }
-.buy-sell-expiry { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--text-3); font-size: 11px; }
-.buy-sell-expiry.expired { color: var(--down); }
-.buy-sell-error { margin-top: 12px; }
-.buy-sell-cta { width: 100%; min-height: 48px; margin-top: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
-.buy-sell-confirm { margin-top: 13px; padding: 11px; border: 1px solid rgba(0,229,255,.18); border-radius: 13px; background: rgba(0,229,255,.045); }
-.buy-sell-confirm p { margin: 0; color: var(--text-2); font-size: 11.6px; line-height: 1.75; }
-.buy-sell-confirm p b { display: block; color: var(--text-1); font-size: 12.2px; margin-bottom: 3px; }
-.buy-sell-confirm .buy-sell-cta { margin-top: 11px; }
-.buy-sell-loading, .buy-sell-unavailable { display: flex; align-items: flex-start; gap: 10px; padding: 14px; }
-.buy-sell-loading { align-items: center; color: var(--text-2); font-size: 12px; }
-.buy-sell-loading .spinner { width: 17px; height: 17px; border-width: 2px; }
-.buy-sell-progress { padding: 13px 14px; border: 1px solid rgba(0,229,255,.16); border-radius: 16px; background: linear-gradient(140deg,rgba(0,229,255,.06),rgba(124,77,255,.035)); }
-.buy-sell-progress.is-error { border-color: rgba(255,59,107,.3); background: rgba(255,59,107,.05); }
-.buy-sell-progress-icon { color: var(--rgb-4); width: 28px; height: 28px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; background: rgba(0,229,255,.11); }
-.buy-sell-progress.is-error .buy-sell-progress-icon { color: var(--down); background: rgba(255,59,107,.12); }
-.buy-sell-timeline { display: flex; margin: 14px 0 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: thin; }
-.buy-sell-timeline li { position: relative; flex: 1 0 74px; min-width: 74px; display: grid; gap: 5px; color: var(--text-3); font-size: 9px; text-align: center; }
-.buy-sell-timeline li:not(:last-child)::after { content: ''; position: absolute; top: 9px; width: calc(100% - 19px); inset-inline-start: calc(50% + 10px); height: 1px; background: rgba(255,255,255,.13); }
-.buy-sell-timeline li.done:not(:last-child)::after { background: var(--up); }
-.buy-sell-timeline li > span { position: relative; z-index: 1; display: grid; place-items: center; width: 19px; height: 19px; margin: 0 auto; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-panel-solid); font-size: 9px; }
-.buy-sell-timeline li.active { color: var(--rgb-4); font-weight: 700; }
-.buy-sell-timeline li.active > span { border-color: var(--rgb-4); box-shadow: 0 0 0 4px rgba(0,229,255,.1); }
-.buy-sell-timeline li.done { color: var(--up); }
-.buy-sell-timeline li.done > span { border-color: var(--up); background: var(--up); color: #06140f; }
-.buy-sell-timeline small { font-size: inherit; line-height: 1.3; white-space: normal; }
-.buy-sell-tx-link { display: inline-flex; align-items: center; gap: 3px; color: var(--rgb-4); font-size: 11px; font-weight: 700; margin-top: 12px; text-decoration: none; }
-.buy-sell-recent { padding: 14px; }
-.buy-sell-order-row { border: 1px solid rgba(255,255,255,.075); border-radius: 12px; overflow: hidden; }
-.buy-sell-order-row > button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px; color: inherit; text-align: start; background: transparent; border: 0; cursor: pointer; }
-.buy-sell-order-row > button > span { min-width: 0; display: grid; gap: 2px; }
-.buy-sell-order-row b { font-size: 11.7px; }
-.buy-sell-order-row small { color: var(--text-3); font-size: 10px; }
-.buy-sell-order-amount { text-align: end; }
-.buy-sell-order-details { margin: 0; padding: 9px 10px; border-top: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.02); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
-.buy-sell-order-details div { min-width: 0; }
-.buy-sell-order-details dt { color: var(--text-3); font-size: 9.5px; }
-.buy-sell-order-details dd { margin: 2px 0 0; font-size: 10.5px; overflow-wrap: anywhere; }
-.buy-sell-safety { padding: 14px; }
-.buy-sell-safety .prose-list { margin-bottom: 0; }
-@media (max-width: 390px) { .buy-sell-ticket { padding: 13px; } .buy-sell-ticket-head { align-items: flex-start; } .buy-sell-secure { font-size: 9.5px; } .buy-sell-fields { grid-template-columns: 1fr; } .buy-sell-wallet-field { grid-column: auto; } .buy-sell-order-details { grid-template-columns: 1fr; } }
-@media (min-width: 700px) { .buy-sell-panel, .buy-sell-page-intro, .buy-sell-safety { max-width: 640px; margin-inline: auto; } .buy-sell-ticket { padding: 18px; } }
-.buy-sell-zero-fee { margin: 8px 0 0; color: var(--up); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
-/* Ramp hosted-checkout additions: provider identity, configuration status,
-   payment-method fallback note and the crypto unit tag on sell amounts. All
-   flow-relative so RTL (fa/ar) mirrors correctly. */
-.buy-sell-powered-by { margin: 6px 0 0; color: var(--text-3); font-size: 10.5px; line-height: 1.7; }
-.buy-sell-config-status { margin: 8px 0 0; direction: ltr; text-align: start; color: var(--rgb-4); font-size: 10.5px; font-weight: 700; overflow-wrap: anywhere; }
-[dir="rtl"] .buy-sell-config-status { text-align: end; }
-.buy-sell-method-note { margin: 6px 1px 0; color: var(--text-3); font-size: 10.5px; line-height: 1.7; }
-.buy-sell-amount-unit { display: flex; align-items: center; padding: 0 11px; border: 1px solid rgba(255,255,255,.12); border-inline-start: 0; border-radius: 0 11px 11px 0; background: rgba(255,255,255,.025); color: var(--text-2); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
-[dir="rtl"] .buy-sell-amount-unit { border-radius: 11px 0 0 11px; }
+.bsw-side-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+.bsw-side-icon svg { flex: 0 0 auto; }
+.buy-sell-switch > button { font-weight: 700; }
+.buy-sell-switch > button.active .bsw-side-icon {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: transparent;
+}
 
+/* ─── THE TICKET (بستهٔ wizard) ───────────────────────────────────── */
+.buy-sell-ticket { padding: 0; overflow: hidden; }
+.buy-sell-wizard { padding: 0 15px 15px; }
 
-/* ─── STEP WIZARD (خرید/فروش مرحله‌ای) ─────────────────────────────────────
-   One decision per screen: amount → wallet → asset → review. Sizes and
-   spacing tuned for one-hand phone use; everything flow-relative so fa/ar
-   mirror without exceptions. */
-.buy-sell-wizard { padding: 16px 15px 15px; }
-.bsw-stepper { display: flex; margin: 2px 0 0; padding: 0; list-style: none; }
+/* header strip: aurora wash in the direction's colours */
+.buy-sell-ticket-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 -15px 14px;
+  padding: 16px 15px 14px;
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(130% 170% at 0% 0%, var(--bsw-accent-soft), transparent 56%),
+    radial-gradient(110% 160% at 100% 0%, color-mix(in srgb, var(--bsw-accent-2) 9%, transparent), transparent 62%);
+}
+.buy-sell-ticket-head > div { flex: 1; min-width: 0; }
+.buy-sell-ticket-head .section-label { margin: 0 0 3px; color: var(--text-1); }
+.buy-sell-ticket-head .faint { font-size: 11px; }
+
+/* the direction's mark — a gradient tile with the buy/sell arrow */
+.buy-sell-side-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  color: var(--bsw-ink);
+  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
+  box-shadow: 0 10px 22px -10px color-mix(in srgb, var(--bsw-accent) 65%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.buy-sell-side-mark svg { flex: 0 0 auto; }
+
+.buy-sell-secure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid var(--bsw-accent-line);
+  border-radius: 999px;
+  color: var(--bsw-accent);
+  background: var(--bsw-accent-soft);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.buy-sell-secure svg, .buy-sell-refresh-status svg, .buy-sell-tx-link svg { flex: 0 0 auto; }
+
+/* ─── STEPPER (مراحل) ───────────────────────────────────────────────
+   Icon discs on a progress line that fills with the direction's
+   gradient as the wizard advances. */
+.bsw-stepper { display: flex; margin: 4px 0 0; padding: 0; list-style: none; }
 .bsw-stepper li { position: relative; flex: 1; min-width: 0; }
-.bsw-stepper li:not(:last-child)::after { content: ''; position: absolute; top: 12px; inset-inline-start: calc(50% + 14px); width: calc(100% - 28px); height: 2px; border-radius: 2px; background: rgba(255,255,255,.1); transition: background .25s; }
-.bsw-stepper li.done:not(:last-child)::after { background: linear-gradient(90deg, var(--rgb-4), rgba(0,229,255,.35)); }
-.bsw-stepper button { width: 100%; display: grid; justify-items: center; gap: 5px; padding: 0; background: transparent; border: 0; color: var(--text-3); cursor: pointer; }
+.bsw-stepper li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 15px;
+  inset-inline-start: calc(50% + 17px);
+  width: calc(100% - 34px);
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  transition: background 250ms ease;
+}
+.bsw-stepper li.done:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--bsw-accent), color-mix(in srgb, var(--bsw-accent) 30%, transparent));
+}
+.bsw-stepper button {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-3);
+  cursor: pointer;
+}
 .bsw-stepper button:disabled { cursor: default; }
-.bsw-stepper button > span { position: relative; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid rgba(255,255,255,.18); border-radius: 50%; background: var(--bg-panel-solid); font-size: 10.5px; font-weight: 800; transition: border-color .2s, box-shadow .2s, background .2s, color .2s; }
+.bsw-stepper button > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: var(--bg-panel-solid);
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 800;
+  transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease, color 200ms ease, transform 200ms ease;
+}
 .bsw-stepper button > small { font-size: 9.5px; line-height: 1.3; font-weight: 600; }
-.bsw-stepper li.active button { color: var(--rgb-4); }
-.bsw-stepper li.active button > span { border-color: var(--rgb-4); color: var(--rgb-4); box-shadow: 0 0 0 5px rgba(0,229,255,.09); }
-.bsw-stepper li.done button { color: var(--up); }
-.bsw-stepper li.done button > span { border-color: var(--up); background: var(--up); color: #06140f; }
+.bsw-stepper li.active button { color: var(--bsw-accent); }
+.bsw-stepper li.active button > span {
+  border-color: var(--bsw-accent);
+  color: var(--bsw-accent);
+  background: color-mix(in srgb, var(--bsw-accent) 10%, var(--bg-panel-solid));
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--bsw-accent) 11%, transparent);
+}
+.bsw-stepper li.done button { color: var(--bsw-accent); }
+.bsw-stepper li.done button > span {
+  border-color: transparent;
+  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
+  color: var(--bsw-ink);
+  box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--bsw-accent) 60%, transparent);
+}
+
 .bsw-viewport { margin-top: 16px; overflow: hidden; }
 .bsw-step { min-height: 168px; display: flex; flex-direction: column; }
-.bsw-title { margin: 0 0 13px; color: var(--text-1); font-size: 14.5px; font-weight: 800; line-height: 1.55; }
+.bsw-title { margin: 0 0 13px; color: var(--text-1); font-size: 15px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.55; }
 .bsw-subtitle { margin: 13px 0 7px; color: var(--text-3); font-size: 11px; font-weight: 700; }
 .bsw-hint { margin: 10px 0 0; color: var(--text-3); font-size: 11px; line-height: 1.75; }
 .bsw-hint.bsw-valid { color: var(--up); }
 .bsw-hint.bsw-invalid { color: var(--down); }
 
-/* the big amount — the whole first screen is one number */
-.bsw-amount { display: flex; align-items: stretch; direction: ltr; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.03); overflow: hidden; transition: border-color .2s, box-shadow .2s; }
-.bsw-amount:focus-within { border-color: rgba(0,229,255,.5); box-shadow: 0 0 0 4px rgba(0,229,255,.08); }
-.bsw-amount input { flex: 1; min-width: 0; border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 14px 16px; font-family: var(--font-mono); font-size: clamp(26px, 8vw, 34px); font-weight: 800; letter-spacing: -.5px; box-shadow: none !important; }
+/* ─── THE BIG AMOUNT — the whole first screen is one number ───────── */
+.bsw-amount {
+  display: flex;
+  align-items: stretch;
+  direction: ltr;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  overflow: hidden;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.bsw-amount:focus-within {
+  border-color: color-mix(in srgb, var(--bsw-accent) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 10%, transparent), 0 12px 30px -18px color-mix(in srgb, var(--bsw-accent) 55%, transparent);
+}
+.bsw-amount input {
+  flex: 1;
+  min-width: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 15px 16px;
+  font-family: var(--font-mono);
+  font-size: clamp(28px, 8.5vw, 36px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  box-shadow: none !important;
+}
 .bsw-amount input:focus { outline: none; }
-/* `background-color`, never `background` — see the long note at the bottom of
-   this file: the shorthand used to reset the themed chevron's repeat and
-   position, which tiled the arrow across the control in light mode. */
-.bsw-amount select { max-width: 92px; border: 0 !important; border-inline-start: 1px solid rgba(255,255,255,.1) !important; border-radius: 0 !important; background-color: rgba(255,255,255,.03); font-weight: 800; font-size: 13px; }
-.bsw-amount-unit { display: flex; align-items: center; padding: 0 16px; border-inline-start: 1px solid rgba(255,255,255,.1); color: var(--text-2); font-family: var(--font-mono); font-size: 13px; font-weight: 800; background: rgba(255,255,255,.03); }
+/* `background-color`, never `background` — see the long note at the
+   bottom of this file: the shorthand used to reset the themed
+   chevron's repeat and position, which tiled the arrow across the
+   control in light mode. */
+.bsw-amount select {
+  max-width: 92px;
+  border: 0 !important;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0 !important;
+  background-color: rgba(255, 255, 255, 0.03);
+  font-weight: 800;
+  font-size: 13px;
+}
+.bsw-amount-unit {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.03);
+}
 .bsw-payout { margin-top: 12px; }
 
-/* quick chips + asset/network choices */
+/* quick chips — quiet pills, alive on hover, loud when chosen */
 .bsw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.bsw-chips button { min-height: 34px; padding: 0 13px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(255,255,255,.03); color: var(--text-2); font-size: 11.5px; font-weight: 700; cursor: pointer; transition: border-color .18s, background .18s, color .18s; }
-.bsw-chips button.active { border-color: var(--rgb-4); background: rgba(0,229,255,.1); color: var(--rgb-4); }
-/* Network chips carry an icon + a name, so unlike the plain amount chips
-   they need to be an inline-flex row: the icon was a block-level span
-   inside a text-only pill, which stacked it above the label, blew up the
-   box height and left the name touching the edge. One fixed-height pill,
-   icon centred, even gap, name never clipped. */
+.bsw-chips button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 150ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+.bsw-chips button:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.24); color: var(--text-1); }
+.bsw-chips button.active {
+  border-color: var(--bsw-accent-line);
+  background: var(--bsw-accent-soft);
+  color: var(--bsw-accent);
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--bsw-accent) 55%, transparent);
+}
+
+/* ─── ASSET PICKER — glass tiles with the coin's own mark ─────────── */
+.bsw-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 9px; }
+.bsw-assets button {
+  min-height: 60px;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 120ms ease;
+}
+.bsw-assets button b { font-family: var(--font-mono); font-size: 13.5px; letter-spacing: 0.3px; }
+.bsw-assets button:active { transform: scale(0.97); }
+.bsw-assets button.active {
+  border-color: var(--bsw-accent-line);
+  background: linear-gradient(150deg, var(--bsw-accent-soft), color-mix(in srgb, var(--bsw-accent-2) 8%, transparent));
+  color: var(--text-1);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 8%, transparent), 0 12px 26px -16px color-mix(in srgb, var(--bsw-accent) 65%, transparent);
+}
+
+/* network chips — icon + name, one balanced row */
 .bsw-networks { gap: 9px; }
 .bsw-networks button {
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: 8px; min-height: 40px; padding: 0 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 15px;
   line-height: 1;
 }
-.bsw-networks button .asset-icon { flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(255,255,255,.14); border-radius: 7px; overflow: hidden; }
+.bsw-networks button .asset-icon {
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  overflow: hidden;
+}
 .bsw-networks button .bsw-network-label {
-  font-family: var(--font-mono); font-size: 11.5px; font-weight: 800;
-  letter-spacing: .2px; white-space: nowrap; line-height: 1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  line-height: 1;
 }
-.bsw-networks button.active .bsw-network-label { color: var(--rgb-4); }
-:root[data-theme='light'] .bsw-networks button .asset-icon { box-shadow: 0 0 0 1px rgba(15,23,42,.16); }
-.bsw-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
-.bsw-assets button { min-height: 52px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.025); color: var(--text-2); cursor: pointer; transition: border-color .18s, background .18s, color .18s, transform .12s; }
-.bsw-assets button b { font-family: var(--font-mono); font-size: 13.5px; letter-spacing: .3px; }
-.bsw-assets button { gap: 6px; }
-:root[data-theme='light'] .bsw-assets button {
-  background: #fff;
-  border-color: rgba(15,23,42,.16);
-  color: #334155;
-  box-shadow: 0 3px 12px rgba(15,23,42,.06);
-}
-:root[data-theme='light'] .bsw-assets button.active {
-  background: linear-gradient(145deg,#e0f7ff,#eef2ff);
-  border-color: #4f46e5;
-  color: #111827;
-}
-.bsw-assets button:active { transform: scale(.97); }
-.bsw-assets button.active { border-color: var(--rgb-4); background: linear-gradient(150deg, rgba(0,229,255,.12), rgba(124,77,255,.08)); color: var(--text-1); box-shadow: 0 0 0 4px rgba(0,229,255,.06); }
+.bsw-networks button.active .bsw-network-label { color: var(--bsw-accent); }
+:root[data-theme='light'] .bsw-networks button .asset-icon { box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.16); }
 
-/* wallet step */
-.bsw-wallet { position: relative; display: flex; align-items: center; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; background: rgba(255,255,255,.03); transition: border-color .2s, box-shadow .2s; }
-.bsw-wallet:focus-within { border-color: rgba(0,229,255,.5); box-shadow: 0 0 0 4px rgba(0,229,255,.08); }
-.bsw-wallet.valid { border-color: rgba(0,230,150,.45); }
-.bsw-wallet.invalid { border-color: rgba(255,59,107,.45); }
-.bsw-wallet input { flex: 1; min-width: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 13px 14px; direction: ltr; text-align: left; font-family: var(--font-mono); font-size: 12.5px; }
-.bsw-wallet-check { display: grid; place-items: center; width: 26px; height: 26px; margin-inline-end: 10px; border-radius: 50%; background: rgba(0,230,150,.14); color: var(--up); flex: 0 0 auto; }
+/* ─── WALLET STEP ─────────────────────────────────────────────────── */
+.bsw-wallet {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.bsw-wallet:focus-within {
+  border-color: color-mix(in srgb, var(--bsw-accent) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 10%, transparent);
+}
+.bsw-wallet.valid {
+  border-color: color-mix(in srgb, var(--up) 45%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--up) 9%, transparent);
+}
+.bsw-wallet.invalid { border-color: color-mix(in srgb, var(--down) 50%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--down) 8%, transparent); }
+.bsw-wallet input {
+  flex: 1;
+  min-width: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 14px;
+  direction: ltr;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.bsw-wallet-check {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  margin-inline-end: 10px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--up), #00e5ff);
+  color: #04140d;
+  flex: 0 0 auto;
+  box-shadow: 0 4px 12px -4px rgba(0, 255, 157, 0.55);
+}
 
-/* review step */
-.bsw-summary { display: grid; gap: 7px; }
-.bsw-summary-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(255,255,255,.02); }
+/* ─── REVIEW — summary ledger, quote rows, the confirm block ──────── */
+.bsw-summary { display: grid; gap: 8px; }
+.bsw-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.bsw-summary-row:hover { border-color: rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.03); }
 .bsw-summary-row > span { flex: 1; color: var(--text-3); font-size: 11px; }
 .bsw-summary-row > strong { font-family: var(--font-mono); font-size: 12px; color: var(--text-1); overflow-wrap: anywhere; }
-.bsw-summary-row > button { border: 0; background: transparent; color: var(--rgb-4); font-size: 10.5px; font-weight: 700; cursor: pointer; padding: 4px 2px; }
-.bsw-guided-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 13px; padding: 6px 11px; border: 1px solid rgba(0,230,150,.3); border-radius: 999px; background: rgba(0,230,150,.08); color: var(--up); font-size: 10.5px; font-weight: 800; }
+.bsw-summary-row > button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--bsw-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.bsw-summary-row > button:hover { background: var(--bsw-accent-soft); border-color: var(--bsw-accent-line); }
+.bsw-guided-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 13px;
+  padding: 6px 11px;
+  border: 1px solid rgba(0, 230, 150, 0.3);
+  border-radius: 999px;
+  background: rgba(0, 230, 150, 0.08);
+  color: var(--up);
+  font-size: 10.5px;
+  font-weight: 800;
+}
 
-/* wizard navigation */
+.buy-sell-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.buy-sell-fields .ord-field { min-width: 0; margin: 0; }
+.buy-sell-fields .ord-field > span { display: flex; align-items: center; justify-content: space-between; gap: 5px; font-size: 11px; }
+.buy-sell-fields .ord-field em { color: var(--up); font-size: 10px; font-style: normal; font-weight: 700; }
+.buy-sell-fields select, .buy-sell-fields input { min-width: 0; width: 100%; }
+
+.buy-sell-summary { margin-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 5px; }
+.buy-sell-summary .trade-summary-row { padding: 7px 1px; font-size: 11.7px; gap: 14px; }
+.buy-sell-summary .trade-summary-row strong { direction: ltr; text-align: end; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; overflow-wrap: anywhere; }
+.buy-sell-summary .buy-sell-zero strong { color: var(--up); }
+.buy-sell-summary .buy-sell-total { padding-top: 10px; font-size: 12.8px; border-top: 1px solid rgba(255, 255, 255, 0.1); border-bottom: 0; }
+.buy-sell-summary .buy-sell-total strong { font-size: 13px; color: var(--text-1); }
+.buy-sell-expiry { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--text-3); font-size: 11px; }
+.buy-sell-expiry.expired { color: var(--down); }
+.buy-sell-error { margin-top: 12px; }
+.buy-sell-confirm {
+  margin-top: 13px;
+  padding: 12px;
+  border: 1px solid var(--bsw-accent-line);
+  border-radius: 15px;
+  background: var(--bsw-accent-soft);
+}
+.buy-sell-confirm p { margin: 0; color: var(--text-2); font-size: 11.6px; line-height: 1.75; }
+.buy-sell-confirm p b { display: block; color: var(--text-1); font-size: 12.2px; margin-bottom: 3px; }
+.buy-sell-wallet-note, .buy-sell-hosted-note { color: var(--text-3); font-size: 11px; line-height: 1.7; margin: 8px 0 0; }
+.buy-sell-loading, .buy-sell-unavailable { display: flex; align-items: flex-start; gap: 10px; padding: 14px; }
+.buy-sell-loading { align-items: center; color: var(--text-2); font-size: 12px; }
+.buy-sell-loading .spinner { width: 17px; height: 17px; border-width: 2px; }
+.buy-sell-unavailable { border-radius: 16px; }
+.buy-sell-config-status { margin: 8px 0 0; direction: ltr; text-align: start; color: var(--rgb-1); font-size: 10.5px; font-weight: 700; overflow-wrap: anywhere; }
+[dir="rtl"] .buy-sell-config-status { text-align: end; }
+.buy-sell-method-note { margin: 6px 1px 0; color: var(--text-3); font-size: 10.5px; line-height: 1.7; }
+.buy-sell-zero-fee { margin: 8px 0 0; color: var(--up); font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+.buy-sell-powered-by { margin: 6px 0 0; color: var(--text-3); font-size: 10.5px; line-height: 1.7; }
+
+/* ─── WIZARD ACTION BAR — the direction's gradient CTA ────────────── */
 .bsw-actions { margin-top: 15px; }
-.bsw-blocked { margin: 0 0 9px; padding: 8px 11px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; background: rgba(255,255,255,.03); color: var(--text-2); }
-/* ─── WHY \"NEXT\" WAS MISSING AND \"BACK\" WAS HUGE ──────────────────────────
-   Reported: «قیمت در تب خرید یا فروش می‌زنه دکمه مرحله بعدی نیست و وقت دکمه
-   قبلی بزرگ‌تر میشه» — after typing an amount there is no Next button, and
-   Back grows to fill the row.
-
-   Both halves were ONE flexbox bug, and it is the same trap already
-   documented for `.btn-row` in index.css:
-
-     `.btn` sets `width: 100%`. For a flex item `flex-basis: auto` resolves
-     to that width, so
-
-       .bsw-back  flex: 0 0 auto  → basis = THE WHOLE ROW, shrink 0
-       .bsw-next  flex: 1         → basis 0, grow 1
-
-     Back's basis alone already exceeds the container, so free space is
-     NEGATIVE — `flex-grow` has nothing to distribute — and `flex-shrink: 0`
-     forbids Back from giving any of it back. Back therefore keeps the full
-     row (measured: 332px) while Next collapses to min-content, i.e. just its
-     chevron (measured: 44px), and the card's `overflow: hidden` then clips
-     that sliver off the edge entirely.
-
-   So the button was never absent from the DOM — it was squeezed to an icon
-   and cropped out of sight, which is indistinguishable from missing. Both
-   children now get `flex-basis: 0` + `width: auto`, exactly like `.btn-row`,
-   so the split is driven by flex-grow instead of by `width: 100%`. Next is
-   the wide primary action; Back keeps a comfortable tap target and may
-   shrink but never below one. */
+.bsw-blocked {
+  margin: 0 0 9px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+}
 .bsw-nav { display: flex; align-items: stretch; gap: 10px; margin-top: 0; }
 .bsw-back {
   flex: 0 1 auto;
@@ -221,66 +568,193 @@
   flex: 1 1 0;          /* basis 0 so grow actually has space to distribute */
   width: auto;
   min-width: 0;         /* a long fa/de label shrinks the box, not the row */
-  min-height: 46px;
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: 7px; font-weight: 800;
-  /* The label is the point of the button; never let it be clipped to a bare
-     chevron the way the collapsed state was. */
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   white-space: normal;
   line-height: 1.25;
-  padding-inline: 12px;
+  padding-inline: 14px;
+  color: var(--bsw-ink);
+  background: linear-gradient(135deg, var(--bsw-accent), var(--bsw-accent-2));
+  border: 0;
+  /* the app's signature rainbow flow belongs to the generic
+     .btn-primary; a direction CTA keeps its own steady gradient */
+  animation: none;
+  box-shadow: 0 12px 28px -12px color-mix(in srgb, var(--bsw-accent) 60%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 130ms ease, box-shadow 200ms ease, filter 200ms ease;
 }
-/* A primary button at 42% opacity on a dark card reads as "not there" — which
-   is exactly how a gated Next got reported as a missing button. Keep a gated
-   action clearly visible; the printed reason above it explains the state. */
-.bsw-next:disabled, .bsw-back:disabled { opacity: 1; filter: grayscale(1) brightness(.72); }
-/* The other half of "where is the next button": an ENABLED one has to look
-   like it is the point of the screen. The gated state stays visibly gated
-   (grey, with the reason printed above it) and the ready state glows. */
-.bsw-next.is-ready {
-  box-shadow: 0 10px 26px rgba(0, 230, 150, .22);
-  animation: bswNextIn 0.35s ease;
+.bsw-next:hover:not(:disabled) { filter: brightness(1.07); transform: translateY(-1px); box-shadow: 0 16px 34px -12px color-mix(in srgb, var(--bsw-accent) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.28); }
+.bsw-next:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+.bsw-next svg { flex: 0 0 auto; }
+/* A gated action must stay VISIBLE — .btn:disabled drops to 42%
+   opacity, which on a dark card reads as "not there", exactly
+   how the missing-Next bug was reported. The reason prints
+   above it instead. */
+.bsw-next:disabled {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-3);
+  box-shadow: none;
 }
-@keyframes bswNextIn { from { transform: translateY(2px); } to { transform: none; } }
-@media (prefers-reduced-motion: reduce) { .bsw-next.is-ready { animation: none; } }
-/* Keyless escape hatch under the tracked flow's primary action: the route to
-   the destination site that works even when the credentialed rail stalls. */
-.bsw-guided-fallback { display: flex; width: 100%; justify-content: center; margin-top: 9px; min-height: 38px; font-size: 12px; color: var(--text-2); border: 1px dashed rgba(255,255,255,.18); border-radius: 12px; }
-[dir="rtl"] .bsw-next svg, [dir="rtl"] .buy-sell-cta svg, [dir="rtl"] .buy-sell-tx-link svg { transform: scaleX(-1); }
+.bsw-back:disabled { opacity: 1; filter: grayscale(1) brightness(0.72); }
+@media (prefers-reduced-motion: reduce) { .bsw-next { transition: none; } }
+/* Keyless escape hatch under the tracked flow's primary action: the
+   route to the destination site that works even when the credentialed
+   rail stalls. */
+.bsw-guided-fallback {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 9px;
+  min-height: 38px;
+  font-size: 12px;
+  color: var(--text-2);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+}
+.bsw-use-wallet { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; margin-top: 9px; min-height: 42px; }
+.bsw-use-wallet svg { flex: 0 0 auto; }
+[dir="rtl"] .bsw-next svg, [dir="rtl"] .buy-sell-tx-link svg { transform: scaleX(-1); }
 
-/* ─── ON-CHAIN WALLET REPORT (گزارش واقعی، زیر هر دو تب) ──────────────────
-   Reads the public blockchain only. States: idle, watching (pulse),
-   movement detected. Copy discipline lives in i18n; these rules only make
-   the truth pleasant to look at. */
+/* ─── ORDER PROGRESS — the settlement timeline ────────────────────── */
+.buy-sell-progress {
+  padding: 14px;
+  border: 1px solid var(--bsw-accent-line);
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 150% at 0% 0%, var(--bsw-accent-soft), transparent 60%),
+    linear-gradient(140deg, color-mix(in srgb, var(--bsw-accent) 5%, transparent), color-mix(in srgb, var(--bsw-accent-2) 3%, transparent));
+}
+.buy-sell-progress.is-error { border-color: rgba(255, 59, 107, 0.3); background: rgba(255, 59, 107, 0.05); }
+.buy-sell-progress-icon {
+  color: var(--bsw-accent);
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--bsw-accent-soft);
+}
+.buy-sell-progress.is-error .buy-sell-progress-icon { color: var(--down); background: rgba(255, 59, 107, 0.12); }
+.buy-sell-timeline { display: flex; margin: 14px 0 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: thin; }
+.buy-sell-timeline li { position: relative; flex: 1 0 74px; min-width: 74px; display: grid; gap: 5px; color: var(--text-3); font-size: 9px; text-align: center; }
+.buy-sell-timeline li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  width: calc(100% - 20px);
+  inset-inline-start: calc(50% + 11px);
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.13);
+}
+.buy-sell-timeline li.done:not(:last-child)::after { background: linear-gradient(90deg, var(--bsw-accent), color-mix(in srgb, var(--bsw-accent) 40%, transparent)); }
+.buy-sell-timeline li > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  margin: 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: var(--bg-panel-solid);
+  font-size: 9px;
+}
+.buy-sell-timeline li.active { color: var(--bsw-accent); font-weight: 700; }
+.buy-sell-timeline li.active > span {
+  border-color: var(--bsw-accent);
+  color: var(--bsw-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 12%, transparent);
+  animation: bswNodePulse 1.8s ease-in-out infinite;
+}
+.buy-sell-timeline li.done { color: var(--bsw-accent); }
+.buy-sell-timeline li.done > span {
+  border-color: transparent;
+  background: linear-gradient(140deg, var(--bsw-accent), var(--bsw-accent-2));
+  color: var(--bsw-ink);
+}
+.buy-sell-timeline small { font-size: inherit; line-height: 1.3; white-space: normal; }
+.buy-sell-tx-link { display: inline-flex; align-items: center; gap: 3px; color: var(--bsw-accent); font-size: 11px; font-weight: 700; margin-top: 12px; text-decoration: none; }
+.buy-sell-refresh-status { width: 100%; margin-top: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+
+/* ─── ON-CHAIN WALLET REPORT (گزارش واقعی، زیر هر دو تب) ──────────── */
 .buy-sell-watch { padding: 14px; }
 .buy-sell-watch-head { display: flex; align-items: center; gap: 10px; }
 .buy-sell-watch-head > div { flex: 1; min-width: 0; }
-.buy-sell-watch-dot { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto; border-radius: 10px; background: rgba(255,255,255,.05); color: var(--text-3); transition: background .25s, color .25s; }
-.buy-sell-watch-dot.live { background: rgba(0,230,150,.13); color: var(--up); }
+.buy-sell-watch-dot {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-3);
+  transition: background 250ms ease, color 250ms ease, box-shadow 250ms ease;
+}
+.buy-sell-watch-dot.live {
+  background: var(--bsw-accent-soft);
+  color: var(--bsw-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bsw-accent) 10%, transparent);
+}
 .buy-sell-watch-toggle { flex: 0 0 auto; }
 .buy-sell-watch-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 11px; color: var(--text-3); font-size: 10.5px; }
 .buy-sell-watch-meta .mono { color: var(--text-2); }
 .buy-sell-watch-status { display: flex; align-items: center; gap: 8px; margin: 11px 0 0; color: var(--text-2); font-size: 11.5px; }
 .buy-sell-watch-status small { color: var(--text-3); font-size: 10px; }
-.buy-sell-watch-pulse { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--up); animation: bswPulse 1.6s ease-in-out infinite; }
-@keyframes bswPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,230,150,.35); } 50% { box-shadow: 0 0 0 6px rgba(0,230,150,0); } }
+.buy-sell-watch-pulse { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--bsw-accent); animation: bswPulse 1.6s ease-in-out infinite; }
+@keyframes bswPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bsw-accent) 35%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--bsw-accent) 0%, transparent); } }
 .buy-sell-watch-hint { margin: 10px 0 0; color: var(--text-3); font-size: 11px; line-height: 1.75; }
 .buy-sell-watch-events { margin: 11px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; }
-.buy-sell-watch-events li { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(255,255,255,.02); }
-.buy-sell-watch-events li.match { border-color: rgba(0,230,150,.35); background: rgba(0,230,150,.05); }
-.buy-sell-watch-kind { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; border-radius: 8px; background: rgba(255,255,255,.06); color: var(--text-3); }
-.buy-sell-watch-kind.in { background: rgba(0,230,150,.13); color: var(--up); }
-.buy-sell-watch-kind.out { background: rgba(255,59,107,.11); color: var(--down); }
+.buy-sell-watch-events li { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
+.buy-sell-watch-events li.match { border-color: var(--bsw-accent-line); background: var(--bsw-accent-soft); }
+.buy-sell-watch-kind { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; border-radius: 8px; background: rgba(255, 255, 255, 0.06); color: var(--text-3); }
+.buy-sell-watch-kind.in { background: var(--bsw-accent-soft); color: var(--bsw-accent); }
+.buy-sell-watch-kind.out { background: rgba(255, 59, 107, 0.11); color: var(--down); }
 .buy-sell-watch-events b { display: block; font-family: var(--font-mono); font-size: 12px; }
 .buy-sell-watch-events small { display: block; margin-top: 2px; color: var(--text-3); font-size: 10px; line-height: 1.6; }
-.buy-sell-watch-honesty { display: flex; align-items: flex-start; gap: 6px; margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,.1); color: var(--text-3); font-size: 10px; line-height: 1.7; }
+.buy-sell-watch-honesty { display: flex; align-items: flex-start; gap: 6px; margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed rgba(255, 255, 255, 0.1); color: var(--text-3); font-size: 10px; line-height: 1.7; }
 .buy-sell-watch-honesty svg { flex: 0 0 auto; margin-top: 2px; }
-@media (max-width: 390px) { .buy-sell-wizard { padding: 14px 12px 13px; } .bsw-stepper button > small { font-size: 8.5px; } .bsw-assets { grid-template-columns: repeat(3, 1fr); } }
+
+/* ─── RECENT ORDERS — side-marked rows ────────────────────────────── */
+.buy-sell-recent { padding: 14px; }
+.buy-sell-order-row { position: relative; border: 1px solid rgba(255, 255, 255, 0.075); border-radius: 14px; overflow: hidden; transition: border-color 160ms ease; }
+.buy-sell-order-row::before {
+  content: '';
+  position: absolute;
+  inset-block: 11px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--rgb-4), color-mix(in srgb, var(--rgb-4) 25%, transparent));
+}
+.buy-sell-order-row.is-sell::before { background: linear-gradient(180deg, var(--rgb-3), color-mix(in srgb, var(--rgb-3) 25%, transparent)); }
+.buy-sell-order-row:hover { border-color: rgba(255, 255, 255, 0.16); }
+.buy-sell-order-row > button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 12px; color: inherit; text-align: start; background: transparent; border: 0; cursor: pointer; }
+.buy-sell-order-row > button > span { min-width: 0; display: grid; gap: 2px; }
+.buy-sell-order-row b { font-size: 11.7px; }
+.buy-sell-order-row small { color: var(--text-3); font-size: 10px; }
+.buy-sell-order-amount { text-align: end; }
+.buy-sell-order-details { margin: 0; padding: 9px 10px; border-top: 1px solid rgba(255, 255, 255, 0.07); background: rgba(255, 255, 255, 0.02); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.buy-sell-order-details div { min-width: 0; }
+.buy-sell-order-details dt { color: var(--text-3); font-size: 9.5px; }
+.buy-sell-order-details dd { margin: 2px 0 0; font-size: 10.5px; overflow-wrap: anywhere; }
+
+/* ─── PAGE CHROME ─────────────────────────────────────────────────── */
+.buy-sell-safety { padding: 14px; }
+.buy-sell-safety .prose-list { margin-bottom: 0; }
 
 /* A required field the flow is waiting on, outlined rather than merely hinted. */
-.ord-field-needed input { border-color: rgba(255,196,0,.45) !important; }
+.ord-field-needed input { border-color: rgba(255, 196, 0, 0.45) !important; }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════
    FIAT CURRENCY FIELD — «باکس نوع ارز باید مدرن باشد، مثلا USD با پرچم آمریکا»
    ───────────────────────────────────────────────────────────────────────────
    THE HATCH, EXPLAINED. The currency used to be a native <select> that this
@@ -304,7 +778,7 @@
    real flag artwork from lib/assetIconData — vendored inline SVG, so a flag is
    never missing because a CDN was blocked), restyled here to sit flush inside
    the amount ticket.
-   ═══════════════════════════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════════ */
 
 /* inside the amount row: no second card, no shadow — one flush segment with a
    hairline between the number and the currency, like a real amount field */
@@ -321,20 +795,20 @@
   border: 0;
   border-radius: 0;
   border-inline-start: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.03);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 .bsw-amount .buy-sell-currency .modern-select-trigger:hover,
 .buy-sell-amount-input .buy-sell-currency .modern-select-trigger:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background-color: rgba(255, 255, 255, 0.06);
   box-shadow: none;
   border-color: rgba(255, 255, 255, 0.12);
   border-inline-start-color: rgba(255, 255, 255, 0.2);
 }
 .bsw-amount .buy-sell-currency .modern-select-trigger[aria-expanded='true'] {
-  background: rgba(0, 229, 255, 0.08);
+  background-color: rgba(0, 229, 255, 0.08);
   box-shadow: none;
 }
 .bsw-amount .buy-sell-currency .modern-select-icon,
@@ -368,22 +842,56 @@
 .bsw-payout .buy-sell-currency .modern-select-icon { width: 30px; height: 30px; flex-basis: 30px; }
 .bsw-payout .buy-sell-currency .modern-select-label { font-size: 13.5px; }
 
-/* ─── LIGHT THEME: the ticket had white-on-white seams ───────────────────────
-   Every border in the amount row was rgba(255,255,255,…), which is exactly the
-   colour of a white card — so in light mode the amount box, its currency
-   segment and the quick-amount chips all had "a border" that painted nothing.
-   Same trap as the Smart Money card; same fix: follow the theme tokens. */
+/* ─── LIGHT THEME — every new surface follows the theme tokens ─────── */
+:root[data-theme='light'] .buy-sell-panel::before { opacity: 0.7; }
+/* index.css's light-theme `.segmented button.active` wash would paint
+   OVER the gradient indicator (a button's own background sits above a
+   z-index:-1 child). This screen HAS the gradient pill, so the wash
+   must go — the same trap p2p-modern.css documents. */
+:root[data-theme='light'] .buy-sell-surface-switch > button.active,
+:root[data-theme='light'] .buy-sell-switch > button.active { background: transparent; }
+:root[data-theme='light'] .buy-sell-surface-switch,
+:root[data-theme='light'] .buy-sell-switch {
+  background: rgba(15, 23, 42, 0.045);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+:root[data-theme='light'] .bsw-tab-icon,
+:root[data-theme='light'] .bsw-side-icon {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #64748b;
+}
+:root[data-theme='light'] .buy-sell-surface-switch > button.active .bsw-tab-icon,
+:root[data-theme='light'] .buy-sell-switch > button.active .bsw-side-icon {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: transparent;
+}
+:root[data-theme='light'] .bsw-tab-copy small,
+:root[data-theme='light'] .buy-sell-ticket-head .faint { color: #64748b; }
+:root[data-theme='light'] .buy-sell-surface-switch > button.active .bsw-tab-copy small,
+:root[data-theme='light'] .buy-sell-switch > button.active .bsw-tab-copy small { color: #475569; }
+:root[data-theme='light'] .buy-sell-ticket-head {
+  background:
+    radial-gradient(130% 170% at 0% 0%, color-mix(in srgb, var(--bsw-accent) 10%, transparent), transparent 56%),
+    radial-gradient(110% 160% at 100% 0%, color-mix(in srgb, var(--bsw-accent-2) 7%, transparent), transparent 62%);
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+:root[data-theme='light'] .buy-sell-secure { background: #ffffff; }
+:root[data-theme='light'] .bsw-stepper button > span { background: #ffffff; border-color: rgba(15, 23, 42, 0.2); }
+:root[data-theme='light'] .bsw-stepper li.active button > span { background: color-mix(in srgb, var(--bsw-accent) 8%, #ffffff); }
+:root[data-theme='light'] .bsw-stepper li:not(:last-child)::after { background: rgba(15, 23, 42, 0.12); }
 :root[data-theme='light'] .bsw-amount {
   background: #ffffff;
-  border-color: var(--line-strong, rgba(15, 23, 42, 0.3));
+  border-color: rgba(15, 23, 42, 0.22);
   box-shadow: 0 4px 18px -10px rgba(15, 23, 42, 0.35);
 }
+:root[data-theme='light'] .bsw-amount select { background-color: #f3f6fb; }
 :root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-trigger {
-  background: #f3f6fb;
+  background-color: #f3f6fb;
   border-inline-start-color: rgba(15, 23, 42, 0.16);
   color: #0f172a;
 }
-:root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-trigger:hover { background: #e9eef7; }
+:root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-trigger:hover { background-color: #e9eef7; }
 :root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-icon { box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14); }
 :root[data-theme='light'] .bsw-amount .buy-sell-currency .modern-select-label { color: #0f172a; }
 :root[data-theme='light'] .bsw-amount-unit {
@@ -391,24 +899,48 @@
   color: #334155;
   border-inline-start-color: rgba(15, 23, 42, 0.16);
 }
-:root[data-theme='light'] .bsw-chips button {
+:root[data-theme='light'] .bsw-chips button { background: #ffffff; border-color: rgba(15, 23, 42, 0.16); color: #334155; }
+:root[data-theme='light'] .bsw-chips button.active {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bsw-accent) 16%, #ffffff), color-mix(in srgb, var(--bsw-accent-2) 10%, #ffffff));
+  border-color: color-mix(in srgb, var(--bsw-accent) 55%, rgba(15, 23, 42, 0.2));
+  color: color-mix(in srgb, var(--bsw-accent) 75%, #0f172a);
+}
+:root[data-theme='light'] .bsw-assets button {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.16);
   color: #334155;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
 }
-:root[data-theme='light'] .bsw-chips button.active {
-  background: linear-gradient(145deg, #dff6ff, #eaeaff);
-  border-color: #0e7490;
-  color: #0b3b52;
+:root[data-theme='light'] .bsw-assets button.active {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bsw-accent) 14%, #ffffff), color-mix(in srgb, var(--bsw-accent-2) 9%, #ffffff));
+  border-color: color-mix(in srgb, var(--bsw-accent) 55%, rgba(15, 23, 42, 0.2));
+  color: #111827;
 }
-:root[data-theme='light'] .buy-sell-readonly {
-  background: #f6f8fc;
-  border-color: rgba(15, 23, 42, 0.14);
-  color: #334155;
-}
-:root[data-theme='light'] .buy-sell-amount-input select,
-:root[data-theme='light'] .buy-sell-amount-input input { background-color: #ffffff; }
-[dir='rtl'] .bsw-amount .buy-sell-currency .modern-select-trigger { border-radius: 0; }
+:root[data-theme='light'] .bsw-wallet { background: #ffffff; border-color: rgba(15, 23, 42, 0.22); }
+:root[data-theme='light'] .bsw-wallet input { color: #0f172a; }
+:root[data-theme='light'] .bsw-summary-row { background: #ffffff; border-color: rgba(15, 23, 42, 0.14); color: #334155; }
+:root[data-theme='light'] .bsw-summary-row:hover { background: #f6f9ff; }
+:root[data-theme='light'] .bsw-summary-row > span { color: #64748b; }
+:root[data-theme='light'] .bsw-summary-row > strong { color: #0f172a; }
+:root[data-theme='light'] .buy-sell-summary .trade-summary-row strong { color: #0f172a; }
+:root[data-theme='light'] .buy-sell-progress,
+:root[data-theme='light'] .buy-sell-confirm { background-color: #ffffff; }
+:root[data-theme='light'] .buy-sell-timeline li > span { background: #ffffff; border-color: rgba(15, 23, 42, 0.2); }
+:root[data-theme='light'] .buy-sell-order-row { background: #ffffff; }
+:root[data-theme='light'] .buy-sell-order-row > button { color: #0f172a; }
+:root[data-theme='light'] .buy-sell-order-row small { color: #64748b; }
+:root[data-theme='light'] .buy-sell-order-details { background: #f6f8fc; border-top-color: rgba(15, 23, 42, 0.1); }
+:root[data-theme='light'] .buy-sell-order-details dt { color: #64748b; }
+:root[data-theme='light'] .buy-sell-order-details dd { color: #0f172a; }
+:root[data-theme='light'] .buy-sell-watch-events li { background: #ffffff; border-color: rgba(15, 23, 42, 0.12); }
+:root[data-theme='light'] .buy-sell-watch-dot { background: rgba(15, 23, 42, 0.05); color: #64748b; }
+:root[data-theme='light'] .bsw-blocked { background: #ffffff; border-color: rgba(15, 23, 42, 0.14); color: #334155; }
+:root[data-theme='light'] .bsw-guided-fallback { border-color: rgba(15, 23, 42, 0.2); color: #475569; }
+:root[data-theme='light'] .bsw-networks button,
+:root[data-theme='light'] .buy-sell-surface-switch > button,
+:root[data-theme='light'] .buy-sell-switch > button { color: #475569; }
+:root[data-theme='light'] .buy-sell-surface-switch > button:hover,
+:root[data-theme='light'] .buy-sell-switch > button:hover { color: #334155; }
 
 /* ─── RAMP DIRECTORY — the list of doors that are open for this country ────
    One card per provider: what it pre-fills, what we know about its coverage,
@@ -483,18 +1015,18 @@
 .bsw-ramp-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--text-3); font-size: 10.8px; line-height: 1.65; }
 .bsw-ramp-note > svg { flex: 0 0 13px; margin-top: 2px; color: var(--bsw-provider-accent, var(--rgb-1)); }
 .bsw-ramp-note > span { min-width: 0; }
-.bsw-ramp-kyc { color: var(--text-3); opacity: .9; }
+.bsw-ramp-kyc { color: var(--text-3); opacity: 0.9; }
 .bsw-ramp-kyc > svg { color: var(--text-3); }
 .bsw-ramp-open { width: 100%; min-height: 43px; margin-top: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; font-size: 12px; font-weight: 800; }
 .bsw-ramp-open svg { flex: 0 0 auto; transition: transform 150ms ease; }
 .bsw-ramp-open:hover:not(:disabled) svg { transform: translate(1px, -1px); }
-.bsw-ramp-empty { margin-top: 10px; padding: 11px 12px; border: 1px solid rgba(255, 176, 32, .28); border-radius: 14px; background: rgba(255, 176, 32, .07); }
+.bsw-ramp-empty { margin-top: 10px; padding: 11px 12px; border: 1px solid rgba(255, 176, 32, 0.28); border-radius: 14px; background: rgba(255, 176, 32, 0.07); }
 .bsw-ramp-empty p { margin: 0; color: var(--text-2); font-size: 11.4px; line-height: 1.8; }
 .bsw-ramp-empty p b { display: block; color: var(--text-1); font-size: 12.2px; margin-bottom: 3px; }
 .bsw-ramp-closed { margin: 11px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
 .bsw-ramp-closed li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--text-3); }
-.bsw-ramp-closed-name { font-weight: 700; opacity: .8; text-decoration: line-through; text-decoration-color: rgba(255, 59, 107, .5); }
-.bsw-ramp-closed-reason { flex: 0 1 auto; text-align: end; opacity: .8; }
+.bsw-ramp-closed-name { font-weight: 700; opacity: 0.8; text-decoration: line-through; text-decoration-color: rgba(255, 59, 107, 0.5); }
+.bsw-ramp-closed-reason { flex: 0 1 auto; text-align: end; opacity: 0.8; }
 .bsw-ramp-p2p { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, rgba(255, 255, 255, 0.09)); }
 .bsw-ramp-p2p-rows { display: grid; gap: 7px; margin-top: 8px; }
 .bsw-ramp-p2p-row {
@@ -509,10 +1041,10 @@
   color: var(--text-2);
   cursor: pointer;
   text-align: start;
-  transition: border-color .15s ease, background .15s ease;
+  transition: border-color 150ms ease, background 150ms ease;
 }
-.bsw-ramp-p2p-row:hover:not(:disabled) { border-color: rgba(0, 229, 255, .3); background: rgba(0, 229, 255, .04); }
-.bsw-ramp-p2p-row:disabled { opacity: .55; cursor: default; }
+.bsw-ramp-p2p-row:hover:not(:disabled) { border-color: rgba(0, 229, 255, 0.3); background: rgba(0, 229, 255, 0.04); }
+.bsw-ramp-p2p-row:disabled { opacity: 0.55; cursor: default; }
 .bsw-ramp-p2p-row .bsw-ramp-name { flex: 0 0 auto; }
 .bsw-ramp-p2p-note { flex: 1 1 auto; color: var(--text-3); font-size: 10.5px; line-height: 1.6; }
 .bsw-ramp-p2p-row svg { flex: 0 0 auto; color: var(--text-3); }
@@ -536,36 +1068,58 @@
 :root[data-theme='light'] .bsw-ramp-pill { background: color-mix(in srgb, var(--bsw-provider-accent, #0e7490) 11%, white); color: #17354a; }
 :root[data-theme='light'] .bsw-ramp-note,
 :root[data-theme='light'] .bsw-ramp-closed li { color: #475569; }
-:root[data-theme='light'] .bsw-ramp-empty { background: rgba(180, 83, 9, .08); border-color: rgba(180, 83, 9, .35); }
+:root[data-theme='light'] .bsw-ramp-empty { background: rgba(180, 83, 9, 0.08); border-color: rgba(180, 83, 9, 0.35); }
 :root[data-theme='light'] .bsw-ramp-empty p { color: #334155; }
 :root[data-theme='light'] .bsw-ramp-empty p b { color: #0f172a; }
 :root[data-theme='light'] .bsw-ramp-p2p-row { border-color: rgba(15, 23, 42, 0.14); color: #334155; }
-:root[data-theme='light'] .bsw-ramp-p2p-row:hover:not(:disabled) { background: #eef6fb; border-color: rgba(14, 116, 144, .4); }
+:root[data-theme='light'] .bsw-ramp-p2p-row:hover:not(:disabled) { background: #eef6fb; border-color: rgba(14, 116, 144, 0.4); }
 :root[data-theme='light'] .bsw-ramp-p2p-note { color: #475569; }
 
 @media (prefers-reduced-motion: reduce) {
   .bsw-ramp-row,
-  .bsw-ramp-open svg { transition: none; }
+  .bsw-ramp-open svg,
+  .bsw-chips button,
+  .bsw-assets button,
+  .buy-sell-surface-switch > button,
+  .buy-sell-switch > button,
+  .bsw-stepper button > span { transition: none; }
   .bsw-ramp-row:hover { transform: none; }
+  .buy-sell-timeline li.active > span { animation: none; }
 }
 
 /* Payment doors: editorial brand header, quiet requirements, one clear CTA. */
 .bsw-ramp { container-type: inline-size; }
 .bsw-ramp-list { gap: 14px; }
 .bsw-ramp-row { padding: 19px; border-radius: 23px; gap: 17px; background-color: var(--bg-panel-solid, #111827); }
-.bsw-ramp-row::before { inset-block: 0; width: 2px; opacity: .65; }
+.bsw-ramp-row::before { inset-block: 0; width: 2px; opacity: 0.65; }
 .bsw-ramp-card-top { align-items: center; gap: 13px; }
 .bsw-ramp-mark { flex-basis: 52px; width: 52px; height: 52px; border-radius: 17px; }
 .bsw-ramp-name { font-size: 16px; font-weight: 850; }
 .bsw-ramp-head { justify-content: flex-start; }
-.bsw-ramp-domain { display: block; margin-top: 5px; color: var(--text-3); font-size: 10px; letter-spacing: .04em; text-align: start; overflow-wrap: anywhere; }
+.bsw-ramp-domain { display: block; margin-top: 5px; color: var(--text-3); font-size: 10px; letter-spacing: 0.04em; text-align: start; overflow-wrap: anywhere; }
 .bsw-ramp-corner { margin-inline-start: auto; flex-shrink: 0; color: var(--bsw-provider-accent); }
 .bsw-ramp-notes { gap: 9px; padding: 14px 0; border-block: 1px solid var(--line); }
 .bsw-ramp-note { font-size: 11.5px; line-height: 1.8; color: var(--text-2); }
 .bsw-ramp-row .bsw-ramp-open { min-height: 48px; border: 1px solid var(--line-strong); border-radius: 14px; color: var(--text-1); background: var(--bg-panel); box-shadow: none; white-space: normal; }
 .bsw-ramp-row .bsw-ramp-open:hover:not(:disabled) { border-color: var(--bsw-provider-accent); background: color-mix(in srgb, var(--bsw-provider-accent) 10%, var(--bg-panel-solid)); }
 .bsw-ramp-row .bsw-ramp-open:focus-visible { outline: 2px solid var(--bsw-provider-accent); outline-offset: 3px; }
-.bsw-ramp-row .bsw-ramp-open:disabled { opacity: .55; }
+.bsw-ramp-row .bsw-ramp-open:disabled { opacity: 0.55; }
 @container (min-width: 720px) { .bsw-ramp-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } .bsw-ramp-card-top { flex-wrap: wrap; } .bsw-ramp-row .bsw-ramp-open { align-self: end; } }
 @media (prefers-reduced-motion: no-preference) { .bsw-ramp-row { animation: bsw-provider-enter 300ms ease-out both; } .bsw-ramp-row:nth-child(2) { animation-delay: 60ms; } .bsw-ramp-row:nth-child(3) { animation-delay: 120ms; } }
 @keyframes bsw-provider-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── RESPONSIVE ──────────────────────────────────────────────────── */
+@media (max-width: 390px) {
+  .buy-sell-wizard { padding: 0 12px 13px; }
+  .buy-sell-ticket-head { margin-inline: -12px; padding-inline: 12px; }
+  .bsw-stepper button > small { font-size: 8.5px; }
+  .bsw-assets { grid-template-columns: repeat(3, 1fr); }
+  .buy-sell-order-details { grid-template-columns: 1fr; }
+  .buy-sell-fields { grid-template-columns: 1fr; }
+  .buy-sell-side-mark { flex-basis: 38px; width: 38px; height: 38px; }
+}
+@media (min-width: 700px) {
+  .buy-sell-panel, .buy-sell-page-intro, .buy-sell-safety { max-width: 640px; margin-inline: auto; }
+  .buy-sell-wizard { padding: 0 18px 18px; }
+  .buy-sell-ticket-head { margin-inline: -18px; padding-inline: 18px; }
+}

@@ -13952,6 +13952,7 @@
       "BRL": "Brazilian Real"
     },
     "title": "Buy & Sell",
+    "generalCaption": "Any coin · any network",
     "pageIntro": "Buy crypto through an approved provider-hosted checkout. FBT never receives your payment or custody of your assets; delivery is complete only after blockchain verification.",
     "directionLabel": "Transaction direction",
     "buy": "Buy",
@@ -14722,6 +14723,7 @@
   },
   "iranBuy": {
     "tab": "Iranian users only",
+    "tabCaption": "Toman · Bitpin",
     "heading": "Buy USDT with Toman",
     "subheading": "Only USDT on the fixed approved network is sent to your active wallet.",
     "serverOnly": "Server controlled",
