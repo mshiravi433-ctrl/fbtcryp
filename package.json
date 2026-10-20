@@ -37,7 +37,7 @@
     "serve": "npm run build && node server/index.js",
     "compile:contract": "node scripts/compile.mjs",
     "compile:collective": "node scripts/compile-collective.mjs",
-    "test:collective": "node scripts/compile-collective.mjs && node test/collective/contract-probe.mjs && node --test test/collective/api.test.mjs test/collective/activation.test.mjs test/collective/activation-status.test.mjs test/collective/network-config.test.mjs test/collective/preflight.test.mjs test/collective/evidence-network.test.mjs",
+    "test:collective": "node scripts/compile-collective.mjs && node test/collective/contract-probe.mjs && node --test test/collective/api.test.mjs test/collective/activation.test.mjs test/collective/adapter-target.test.mjs test/collective/activation-status.test.mjs test/collective/network-config.test.mjs test/collective/preflight.test.mjs test/collective/evidence-network.test.mjs",
     "evidence:collective": "node scripts/collective-evidence.mjs --write",
     "check:collective-evidence": "node scripts/collective-evidence.mjs --check",
     "deploy:collective:local": "node scripts/collective-deploy.mjs --local --rehearse",
