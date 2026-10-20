@@ -1001,7 +1001,18 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "Batal",
+      "close": "Tutup formulir",
+      "optional": "Opsional",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT Business] {{topic}} — {{company}}",
+      "notProvided": "Tidak diisi",
+      "companyError": "Masukkan nama perusahaan Anda.",
+      "nameError": "Masukkan nama yang harus kami balas.",
+      "messageError": "Tambahkan sedikit detail: token, jaringan, volume.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "Tidak ada yang dikirim ke server kami: permintaan disusun di aplikasi email Anda sendiri."
     },
     "tabs": {
       "partnership": "Kemitraan",

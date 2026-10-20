@@ -1001,7 +1001,18 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "Отмена",
+      "close": "Закрыть форму",
+      "optional": "Необязательно",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT Бизнес] {{topic}} — {{company}}",
+      "notProvided": "Не указано",
+      "companyError": "Введите название компании.",
+      "nameError": "Введите имя, на которое мы должны ответить.",
+      "messageError": "Добавьте детали: токен, сеть, объём.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "Нам ничего не отправляется: запрос формируется в вашем почтовом приложении."
     },
     "tabs": {
       "partnership": "Партнёрство",

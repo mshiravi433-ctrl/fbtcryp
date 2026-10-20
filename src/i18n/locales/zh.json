@@ -1001,7 +1001,18 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "取消",
+      "close": "关闭表单",
+      "optional": "可选",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT 商务] {{topic}} — {{company}}",
+      "notProvided": "未填写",
+      "companyError": "请输入公司名称。",
+      "nameError": "请输入我们要回复的名字。",
+      "messageError": "补充一些细节：代币、网络、交易量。",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "不会向我们上传任何内容：请求在您自己的邮件应用中撰写。"
     },
     "tabs": {
       "partnership": "合作",

@@ -4547,7 +4547,15 @@
       "emailBody": "شرکت: {{company}}\nنام: {{name}}\nایمیل: {{email}}\nتلفن: {{phone}}\nموضوع: {{topic}}\n\nپیام:\n{{message}}\n\n—\nاز صفحهٔ بیزینس FBT Swap",
       "cancel": "انصراف",
       "close": "بستن فرم",
-      "optional": "اختیاری"
+      "optional": "اختیاری",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[بیزینس FBT] {{topic}} — {{company}}",
+      "notProvided": "وارد نشده",
+      "companyError": "نام شرکت را وارد کن.",
+      "nameError": "نامی که باید پاسخ بدهیم را وارد کن.",
+      "messageError": "کمی جزئیات بنویس: توکن، شبکه، حجم.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "هیچ چیز روی سرور ما ذخیره نمی‌شود؛ درخواست در برنامهٔ ایمیل خودتان ساخته می‌شود."
     },
     "tabsTitle": "انتخاب حوزه همکاری",
     "subtabsTitle": "زیرتب‌ها",
@@ -4588,8 +4596,9 @@
       "supportSub": "بدون تعطیل و واسطه",
       "pathTitle": "مسیر اجرای درخواست",
       "progressLabel": "پیشرفت کلی همکاری",
-      "progressSub": "۲ از ۳ قدم تکمیل شده",
-      "cta": "ثبت درخواست جدید"
+      "progressSub": "{{done}} از {{total}} قدم تکمیل شده",
+      "cta": "ثبت درخواست جدید",
+      "nextUp": "مرحلهٔ بعد"
     },
     "badge": "کسب‌وکار به کسب‌وکار",
     "heroKicker": "همکاری تجاری و سازمانی",
@@ -4645,7 +4654,27 @@
     },
     "requestsCount": "{{count}} درخواست",
     "viewTracking": "مشاهدهٔ پیگیری",
-    "startRequest": "شروع درخواست"
+    "startRequest": "شروع درخواست",
+    "headerLive": "پاسخ در کمتر از یک روز کاری",
+    "point": {
+      "listing": "نمایش در فهرست بازار",
+      "data": "دادهٔ قیمت زنده",
+      "depth": "عمق بیشتر استخر",
+      "slippage": "اسلیپیج کمتر",
+      "brand": "برند و رنگ خودتان",
+      "domain": "دامنهٔ اختصاصی",
+      "docs": "مستندات کامل",
+      "keys": "کلید API اختصاصی"
+    },
+    "filterLabel": "فیلتر بر اساس وضعیت",
+    "filter": {
+      "all": "همه",
+      "pending": "در انتظار",
+      "review": "در بررسی",
+      "responded": "پاسخ‌داده‌شده"
+    },
+    "emptyFilterTitle": "در این وضعیت موردی نیست",
+    "emptyFilterText": "فیلتر را عوض کن یا درخواست تازه‌ای ثبت کن."
   },
   "ads": {
     "swap": {

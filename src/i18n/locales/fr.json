@@ -1001,7 +1001,18 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "Annuler",
+      "close": "Fermer le formulaire",
+      "optional": "Facultatif",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT Business] {{topic}} — {{company}}",
+      "notProvided": "Non indiqué",
+      "companyError": "Saisissez le nom de votre entreprise.",
+      "nameError": "Saisissez le nom auquel nous devons répondre.",
+      "messageError": "Ajoutez quelques détails : token, réseau, volume.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "Rien n'est envoyé à nos serveurs : la demande est rédigée dans votre propre application de messagerie."
     },
     "tabs": {
       "partnership": "Partenariat",

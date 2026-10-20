@@ -1004,7 +1004,18 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "منسوخ کریں",
+      "close": "فارم بند کریں",
+      "optional": "اختیاری",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT بزنس] {{topic}} — {{company}}",
+      "notProvided": "فراہم نہیں",
+      "companyError": "اپنی کمپنی کا نام درج کریں۔",
+      "nameError": "وہ نام درج کریں جسے ہمیں جواب دینا ہے۔",
+      "messageError": "کچھ تفصیل شامل کریں: ٹوکن، نیٹ ورک، حجم۔",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "ہمارے سرور پر کچھ نہیں بھیجا جاتا: درخواست آپ کے اپنے میل ایپ میں تیار ہوتی ہے۔"
     },
     "tabs": {
       "partnership": "شراکت",

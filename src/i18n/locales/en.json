@@ -4547,7 +4547,15 @@
       "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
       "cancel": "Cancel",
       "close": "Close form",
-      "optional": "Optional"
+      "optional": "Optional",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT Business] {{topic}} — {{company}}",
+      "notProvided": "Not provided",
+      "companyError": "Enter your company name.",
+      "nameError": "Enter the name we should reply to.",
+      "messageError": "Add a little detail — token, network, volume.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "Nothing is uploaded to us: your request is composed in your own mail app."
     },
     "tabsTitle": "Choose partnership area",
     "subtabsTitle": "Sub-tabs",
@@ -4588,8 +4596,9 @@
       "supportSub": "No closing hours, no intermediary",
       "pathTitle": "Request execution path",
       "progressLabel": "Overall partnership progress",
-      "progressSub": "2 of 3 steps completed",
-      "cta": "File a new request"
+      "progressSub": "{{done}} of {{total}} steps complete",
+      "cta": "File a new request",
+      "nextUp": "Up next"
     },
     "badge": "B2B",
     "heroKicker": "Business & enterprise partnerships",
@@ -4645,7 +4654,27 @@
     },
     "requestsCount": "{{count}} requests",
     "viewTracking": "View tracking",
-    "startRequest": "Start request"
+    "startRequest": "Start request",
+    "headerLive": "Replies within one business day",
+    "point": {
+      "listing": "Listed in the market",
+      "data": "Live price data",
+      "depth": "Deeper pool depth",
+      "slippage": "Tighter slippage",
+      "brand": "Your brand and colours",
+      "domain": "Your own domain",
+      "docs": "Full documentation",
+      "keys": "Dedicated API key"
+    },
+    "filterLabel": "Filter by status",
+    "filter": {
+      "all": "All",
+      "pending": "Pending",
+      "review": "In review",
+      "responded": "Answered"
+    },
+    "emptyFilterTitle": "Nothing in this status",
+    "emptyFilterText": "Change the filter, or file a new request."
   },
   "ads": {
     "swap": {
