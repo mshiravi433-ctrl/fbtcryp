@@ -4544,7 +4544,10 @@
       "requiredError": "لطفاً نام شرکت، نام، ایمیل و پیام را کامل کن.",
       "emailError": "ایمیل معتبر وارد کن.",
       "ready": "درخواست‌تان آمادهٔ ارسال با ایمیل شد.",
-      "emailBody": "شرکت: {{company}}\nنام: {{name}}\nایمیل: {{email}}\nتلفن: {{phone}}\nموضوع: {{topic}}\n\nپیام:\n{{message}}\n\n—\nاز صفحهٔ بیزینس FBT Swap"
+      "emailBody": "شرکت: {{company}}\nنام: {{name}}\nایمیل: {{email}}\nتلفن: {{phone}}\nموضوع: {{topic}}\n\nپیام:\n{{message}}\n\n—\nاز صفحهٔ بیزینس FBT Swap",
+      "cancel": "انصراف",
+      "close": "بستن فرم",
+      "optional": "اختیاری"
     },
     "tabsTitle": "انتخاب حوزه همکاری",
     "subtabsTitle": "زیرتب‌ها",
@@ -4583,8 +4586,66 @@
       "respondedSub": "توسط تیم تجاری",
       "support": "پشتیبانی ۲۴/۷",
       "supportSub": "بدون تعطیل و واسطه",
-      "pathTitle": "مسیر اجرای درخواست"
-    }
+      "pathTitle": "مسیر اجرای درخواست",
+      "progressLabel": "پیشرفت کلی همکاری",
+      "progressSub": "۲ از ۳ قدم تکمیل شده",
+      "cta": "ثبت درخواست جدید"
+    },
+    "badge": "کسب‌وکار به کسب‌وکار",
+    "heroKicker": "همکاری تجاری و سازمانی",
+    "heroChip": {
+      "nonCustodial": "کاملاً غیرحضانتی",
+      "api": "API آمادهٔ اتصال",
+      "support": "پاسخ‌گویی ۲۴/۷"
+    },
+    "tabs": {
+      "partnership": "همکاری",
+      "followup": "پیگیری"
+    },
+    "tabsSub": {
+      "partnership": "خدمات و برندها",
+      "followup": "درخواست‌ها و وضعیت"
+    },
+    "subtab": {
+      "services": "خدمات",
+      "brands": "برندها",
+      "requests": "درخواست‌ها",
+      "tracking": "پیگیری وضعیت"
+    },
+    "panelHint": {
+      "services": "پیشنهادتان را انتخاب کنید و همان‌جا درخواست را شروع کنید.",
+      "brands": "شبکه‌ها و برندهایی که روی این زیرساخت کار می‌کنند.",
+      "requests": "درخواست تازه ثبت کنید و وضعیت قبلی‌ها را ببینید.",
+      "tracking": "از ثبت درخواست تا اجرا، قدم‌به‌قدم."
+    },
+    "offerMeta": {
+      "listing": "نمایش در بازار و سواپ",
+      "liquidity": "عمق بیشتر، اسلیپیج کمتر",
+      "whitelabel": "با برند و دامنهٔ خودتان",
+      "integration": "مستندات و نمونهٔ آماده"
+    },
+    "brandTag": {
+      "fbt": "پروتکل اصلی",
+      "solana": "لایهٔ ۱",
+      "ethereum": "EVM",
+      "polygon": "لایهٔ ۲",
+      "bnb": "EVM",
+      "arbitrum": "رول‌آپ"
+    },
+    "demo": {
+      "arta": "آرتا کوین",
+      "noor": "نور دیجیتال",
+      "bitplus": "بیت پلس",
+      "hoursAgo": "{{count}} ساعت قبل",
+      "daysAgo": "{{count}} روز قبل"
+    },
+    "progress": {
+      "label": "پیشرفت درخواست",
+      "done": "تکمیل شده"
+    },
+    "requestsCount": "{{count}} درخواست",
+    "viewTracking": "مشاهدهٔ پیگیری",
+    "startRequest": "شروع درخواست"
   },
   "ads": {
     "swap": {
