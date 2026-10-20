@@ -4544,7 +4544,10 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "Cancel",
+      "close": "Close form",
+      "optional": "Optional"
     },
     "tabsTitle": "Choose partnership area",
     "subtabsTitle": "Sub-tabs",
@@ -4583,8 +4586,66 @@
       "respondedSub": "By business team",
       "support": "24/7 support",
       "supportSub": "No closing hours, no intermediary",
-      "pathTitle": "Request execution path"
-    }
+      "pathTitle": "Request execution path",
+      "progressLabel": "Overall partnership progress",
+      "progressSub": "2 of 3 steps completed",
+      "cta": "File a new request"
+    },
+    "badge": "B2B",
+    "heroKicker": "Business & enterprise partnerships",
+    "heroChip": {
+      "nonCustodial": "Fully non-custodial",
+      "api": "Ready-to-use API",
+      "support": "24/7 response"
+    },
+    "tabs": {
+      "partnership": "Partnership",
+      "followup": "Follow-up"
+    },
+    "tabsSub": {
+      "partnership": "Services & brands",
+      "followup": "Requests & status"
+    },
+    "subtab": {
+      "services": "Services",
+      "brands": "Brands",
+      "requests": "Requests",
+      "tracking": "Tracking"
+    },
+    "panelHint": {
+      "services": "Pick an offer and start your request right there.",
+      "brands": "Networks and brands building on this infrastructure.",
+      "requests": "File a new request and see previous ones.",
+      "tracking": "From submission to launch, step by step."
+    },
+    "offerMeta": {
+      "listing": "Surfaced in market & swap",
+      "liquidity": "More depth, less slippage",
+      "whitelabel": "Your brand, your domain",
+      "integration": "Docs & ready examples"
+    },
+    "brandTag": {
+      "fbt": "Core protocol",
+      "solana": "Layer 1",
+      "ethereum": "EVM",
+      "polygon": "Layer 2",
+      "bnb": "EVM",
+      "arbitrum": "Rollup"
+    },
+    "demo": {
+      "arta": "Arta Coin",
+      "noor": "Noor Digital",
+      "bitplus": "BitPlus",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    },
+    "progress": {
+      "label": "Request progress",
+      "done": "Completed"
+    },
+    "requestsCount": "{{count}} requests",
+    "viewTracking": "View tracking",
+    "startRequest": "Start request"
   },
   "ads": {
     "swap": {

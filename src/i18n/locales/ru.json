@@ -1002,6 +1002,16 @@
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
       "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+    },
+    "tabs": {
+      "partnership": "Партнёрство",
+      "followup": "Сопровождение"
+    },
+    "subtab": {
+      "services": "Услуги",
+      "brands": "Бренды",
+      "requests": "Заявки",
+      "tracking": "Отслеживание"
     }
   },
   "shop": {

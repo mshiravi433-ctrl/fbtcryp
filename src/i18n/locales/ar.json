@@ -3037,6 +3037,16 @@
       "emailError": "أدخل عنوان بريد صالحاً.",
       "ready": "طلبك جاهز للإرسال بالبريد.",
       "emailBody": "الشركة: {{company}}\nالاسم: {{name}}\nالبريد: {{email}}\nالهاتف: {{phone}}\nالموضوع: {{topic}}\n\nالرسالة:\n{{message}}\n\n—\nمن صفحة أعمال FBT Swap"
+    },
+    "tabs": {
+      "partnership": "الشراكة",
+      "followup": "المتابعة"
+    },
+    "subtab": {
+      "services": "الخدمات",
+      "brands": "العلامات",
+      "requests": "الطلبات",
+      "tracking": "التتبع"
     }
   },
   "ads": {
