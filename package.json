@@ -75,6 +75,7 @@
     "test:mobile-surfaces": "node --test test/equity-chart-wire.test.mjs test/equity-chart-windowed.test.mjs && vitest run test/equity-live-panel.test.jsx test/signals-hero-cinema.test.jsx --maxWorkers=2 --no-file-parallelism",
     "test:mobile-surfaces:browser": "node test/mobile-surfaces-browser.mjs",
     "test:buy-sell": "node test/buy-sell-probe.mjs && node test/buy-sell-ramp-flow-probe.mjs && npm run test:buy-sell-wizard",
+    "test:business": "node test/business-locales-probe.mjs && vitest run test/business-console.test.jsx",
     "test:buy-sell-wizard": "vite build --config test/vite.buysellwizard.mjs && node test/run-one-probe.mjs ./.out/buysellwizard/buy-sell-wizard-probe.js",
     "test:shop-revenue": "node test/shop-revenue-probe.mjs && vitest run test/shop-howto-language.test.jsx",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",

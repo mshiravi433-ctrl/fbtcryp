@@ -1001,7 +1001,18 @@
       "requiredError": "Complete the company, name, email, and message fields.",
       "emailError": "Enter a valid email address.",
       "ready": "Your request is ready to send by email.",
-      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page"
+      "emailBody": "Company: {{company}}\nName: {{name}}\nEmail: {{email}}\nPhone: {{phone}}\nTopic: {{topic}}\n\nMessage:\n{{message}}\n\n—\nFrom the FBT Swap Business page",
+      "cancel": "İptal",
+      "close": "Formu kapat",
+      "optional": "İsteğe bağlı",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[FBT Business] {{topic}} — {{company}}",
+      "notProvided": "Belirtilmedi",
+      "companyError": "Şirket adını girin.",
+      "nameError": "Yanıt vermemiz gereken adı girin.",
+      "messageError": "Biraz ayrıntı ekleyin: token, ağ, hacim.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "Sunucularımıza hiçbir şey gönderilmez: talep kendi e-posta uygulamanızda oluşturulur."
     },
     "tabs": {
       "partnership": "Ortaklık",

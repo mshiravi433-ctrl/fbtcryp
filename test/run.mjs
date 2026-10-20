@@ -49,6 +49,12 @@ import './notification-sound-probe.mjs';
 /* The Market dashboard and Intent OS scale up only at tablet/desktop widths,
    while the established mobile shell and page gutters remain pinned. */
 import './responsive-layout-probe.mjs';
+/* The /business B2B console: every string it paints resolves in Persian and
+   English, the tab and sub-tab labels resolve in all twelve locales, and the
+   keys test/wiring.mjs also demands everywhere exist everywhere. It is the
+   regression guard for «با وجود زبان فارسی بعضی جملاتش انگلیسیه» — the tab
+   labels that were raw i18n keys, and «۲۴/۷» typed into a translation. */
+import './business-locales-probe.mjs';
 /* The shop's revenue wiring: the provider's margin over face value (and the
    lira-denominated trap that would turn it into a confident wrong number), the
    shareable deep link that carries a referral code back into this app, and the

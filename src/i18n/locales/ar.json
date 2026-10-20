@@ -3036,7 +3036,18 @@
       "requiredError": "أكمل حقول الشركة والاسم والبريد والرسالة.",
       "emailError": "أدخل عنوان بريد صالحاً.",
       "ready": "طلبك جاهز للإرسال بالبريد.",
-      "emailBody": "الشركة: {{company}}\nالاسم: {{name}}\nالبريد: {{email}}\nالهاتف: {{phone}}\nالموضوع: {{topic}}\n\nالرسالة:\n{{message}}\n\n—\nمن صفحة أعمال FBT Swap"
+      "emailBody": "الشركة: {{company}}\nالاسم: {{name}}\nالبريد: {{email}}\nالهاتف: {{phone}}\nالموضوع: {{topic}}\n\nالرسالة:\n{{message}}\n\n—\nمن صفحة أعمال FBT Swap",
+      "workEmailPlaceholder": "name@company.com",
+      "mailSubject": "[أعمال FBT] {{topic}} — {{company}}",
+      "notProvided": "غير مُدخل",
+      "companyError": "أدخل اسم الشركة.",
+      "nameError": "أدخل الاسم الذي سنرد عليه.",
+      "messageError": "أضف بعض التفاصيل: الرمز، الشبكة، الحجم.",
+      "chars": "{{count}}/{{max}}",
+      "privacy": "لا يُرفع إلينا أي شيء: يُجهَّز الطلب في تطبيق بريدك.",
+      "cancel": "إلغاء",
+      "close": "إغلاق النموذج",
+      "optional": "اختياري"
     },
     "tabs": {
       "partnership": "الشراكة",
@@ -3047,7 +3058,115 @@
       "brands": "العلامات",
       "requests": "الطلبات",
       "tracking": "التتبع"
-    }
+    },
+    "headerLive": "الرد خلال يوم عمل واحد",
+    "point": {
+      "listing": "ظهور في قائمة السوق",
+      "data": "بيانات أسعار مباشرة",
+      "depth": "عمق أكبر للسيولة",
+      "slippage": "انزلاق أقل",
+      "brand": "علامتك وألوانك",
+      "domain": "نطاقك الخاص",
+      "docs": "توثيق كامل",
+      "keys": "مفتاح API مخصص"
+    },
+    "filterLabel": "تصفية حسب الحالة",
+    "filter": {
+      "all": "الكل",
+      "pending": "قيد الانتظار",
+      "review": "قيد المراجعة",
+      "responded": "تمت الإجابة"
+    },
+    "emptyFilterTitle": "لا شيء بهذه الحالة",
+    "emptyFilterText": "غيّر التصفية أو أرسل طلباً جديداً.",
+    "tracking": {
+      "nextUp": "الخطوة التالية",
+      "progressSub": "اكتمل {{done}} من {{total}} خطوات",
+      "totalRequests": "إجمالي الطلبات",
+      "totalSub": "أُرسلت حتى الآن",
+      "responded": "تمت الإجابة عليها",
+      "respondedSub": "من فريق الأعمال",
+      "support": "دعم على مدار الساعة",
+      "supportSub": "بلا عطلات ولا وسطاء",
+      "pathTitle": "مسار تنفيذ الطلب",
+      "progressLabel": "التقدّم العام للشراكة",
+      "cta": "تقديم طلب جديد"
+    },
+    "tabsTitle": "اختيار مجال الشراكة",
+    "subtabsTitle": "التبويبات الفرعية",
+    "chooseArea": "اختر مجال الشراكة",
+    "servicesTitle": "الخدمات والعروض",
+    "whyUsTitle": "لماذا تشاركنا",
+    "brandsTitle": "العلامات والشركات الشريكة",
+    "brandsSub": "البنى التحتية والشبكات التي تعمل على هذه المنصة، والعلامات الشريكة لدينا",
+    "brand": {
+      "fbt": "واجهة السواب والبروتوكول الأساسي",
+      "solana": "شبكة طبقة أولى شريكة",
+      "ethereum": "شبكة EVM شريكة",
+      "polygon": "شبكة طبقة ثانية شريكة",
+      "bnb": "شبكة BNB شريكة",
+      "arbitrum": "شبكة رول‌آب شريكة"
+    },
+    "requestsTitle": "طلباتك",
+    "requestsSub": "حالة أحدث طلبات الشراكة التي أرسلتها",
+    "newRequest": "طلب جديد",
+    "requestsEmptyTitle": "لا توجد طلبات بعد",
+    "requestsEmptyText": "ابدأ بإرسال أول طلب شراكة.",
+    "requests": {
+      "kind": "طلب شراكة"
+    },
+    "status": {
+      "pending": "قيد الانتظار",
+      "review": "قيد المراجعة",
+      "responded": "تمت الإجابة"
+    },
+    "trackingTitle": "تتبّع حالة الشراكة",
+    "trackingSub": "تقدّم طلبك من الإرسال حتى التنفيذ",
+    "badge": "من شركة إلى شركة",
+    "heroKicker": "شراكات أعمال ومؤسسات",
+    "heroChip": {
+      "nonCustodial": "غير حاضنة بالكامل",
+      "api": "واجهة API جاهزة",
+      "support": "رد على مدار الساعة"
+    },
+    "tabsSub": {
+      "partnership": "الخدمات والعلامات",
+      "followup": "الطلبات والحالة"
+    },
+    "panelHint": {
+      "services": "اختر عرضك وابدأ الطلب من هنا.",
+      "brands": "الشبكات والعلامات التي تعمل على هذه البنية.",
+      "requests": "سجّل طلباً جديداً وشاهد حالة الطلبات السابقة.",
+      "tracking": "من تقديم الطلب حتى التنفيذ، خطوة بخطوة."
+    },
+    "offerMeta": {
+      "listing": "الظهور في السوق والسواب",
+      "liquidity": "عمق أكبر وانزلاق أقل",
+      "whitelabel": "بعلامتك ونطاقك الخاص",
+      "integration": "توثيق وأمثلة جاهزة"
+    },
+    "brandTag": {
+      "fbt": "البروتوكول الأساسي",
+      "solana": "طبقة أولى",
+      "ethereum": "EVM",
+      "polygon": "طبقة ثانية",
+      "bnb": "EVM",
+      "arbitrum": "رول‌آب"
+    },
+    "demo": {
+      "arta": "عملة آرتا",
+      "noor": "نور الرقمية",
+      "bitplus": "بيت بلس",
+      "hoursAgo": "قبل {{count}} ساعة",
+      "daysAgo": "قبل {{count}} يوم"
+    },
+    "progress": {
+      "label": "تقدّم الطلب",
+      "done": "مكتمل"
+    },
+    "requestsCount": "{{count}} طلبات",
+    "viewTracking": "عرض التتبّع",
+    "startRequest": "بدء الطلب"
   },
   "ads": {
     "swap": {
