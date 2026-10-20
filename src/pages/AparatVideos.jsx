@@ -1,20 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import PageTransition from '../components/PageTransition';
+import PageTransition, { riseIn } from '../components/PageTransition';
 import { useStill } from '../components/AnimatedIcon';
 import { openUrl } from '../lib/browser';
 import { useAppStore } from '../store/useAppStore';
+import SubTabRail from '../components/learn/SubTabRail';
+import { LearnTop } from '../components/learn/LearnHero';
 import {
   IconCheck,
+  IconChevronRight,
   IconCopy,
   IconExternal,
   IconPause,
   IconPlay,
+  IconRoute,
   IconSearch,
-  IconVideo
+  IconSparkle,
+  IconTrophy,
+  IconVideo,
+  IconX
 } from '../components/Icons';
-import '../styles/market-modern.css';
+import '../styles/learn-hub.css';
 
 export const APARAT_CHANNEL_URL = 'https://www.aparat.com/Fbtcompany';
 export const APARAT_HANDLE = '@Fbtcompany';
@@ -185,13 +193,51 @@ function CourseIllustration({ id, accent, accent2 }) {
     </svg>
   );
 }
+/**
+ * APARAT VIDEOS — the «ویدیوها» tab of the Learn hub.
+ * ---------------------------------------------------------------------------
+ * The official Persian video academy, hosted on Aparat. Six courses, each with
+ * its own illustration, duration, level and the section of the app it teaches.
+ *
+ * ─── THE 2026 REDESIGN: AN IDENTITY BLOCK + TWO SUB-TABS ───────────────────
+ * What was here before was one long column: a hero with an emblem, an
+ * interactive "stage", then a search box, six category chips and a grid — all
+ * scrolling as one undifferentiated page, with the channel's address at the
+ * very top and the actual lessons two screens down.
+ *
+ * The redesign separates the two questions a visitor asks:
+ *
+ *   · "Where does this come from?" — the identity block, always visible: the
+ *     channel, its real address with a copy button, and the one button that
+ *     opens it. That block never moves, so the address is findable from
+ *     anywhere on the tab.
+ *   · "What should I watch?" — the sub-tabs:
+ *       درس‌ها        the interactive stage plus the searchable catalogue;
+ *       مسیر یادگیری  the same six courses grouped by level, in the order they
+ *                     should be watched, with a duration per lesson.
+ *
+ * ─── WHY THE ILLUSTRATIONS ARE SVG, NOT THUMBNAILS ─────────────────────────
+ * A remote thumbnail would mean shipping every visitor's device fingerprint to
+ * a third-party CDN and showing a broken box whenever it is blocked — which,
+ * for an Iranian audience, is often. These are drawn from the course's own two
+ * accent colours, so a course keeps its identity without a single request.
+ */
+const SUBTABS = [
+  { id: 'lessons', Icon: IconPlay, a: '#ff2d95', b: '#7c4dff' },
+  { id: 'paths', Icon: IconRoute, a: '#00ff9d', b: '#00e5ff' }
+];
+
+/** The three levels, in the order the academy is meant to be watched. */
+const LEVEL_ORDER = ['beginner', 'intermediate', 'pro'];
 
 export default function AparatVideos({ embedded = false }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const still = useStill();
   const notify = useAppStore((s) => s.notify);
+  const locale = i18n.resolvedLanguage || i18n.language || 'en';
 
+  const [sub, setSub] = useState('lessons');
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('stocks');
@@ -204,7 +250,7 @@ export default function AparatVideos({ embedded = false }) {
     [selectedId]
   );
 
-  // Step auto-advance when preview player is playing
+  // Step auto-advance while the walkthrough is playing.
   useEffect(() => {
     if (!playingPreview || still) return undefined;
     const timer = setInterval(() => {
@@ -239,308 +285,396 @@ export default function AparatVideos({ embedded = false }) {
     });
   }, [category, query, t]);
 
+  const pickCourse = (id) => {
+    setSelectedId(id);
+    setActiveStep(0);
+    setSub('lessons');
+    setPlayingPreview(true);
+  };
+
+  const num = (n) => new Intl.NumberFormat(locale).format(n);
+  /* Percent, not a typed "100%": in Persian that is ۱۰۰٪, and the percent
+     sign is a different character (U+066A), not a Latin % next to a number. */
+  const pct = (n) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(n);
+
   return (
     <PageTransition embedded={embedded}>
-      <div className="aparat-page" data-testid="aparat-videos-page">
-        {/* ─── OFFICIAL APARAT CHANNEL HERO ─────────────────────────────── */}
-        <section className="card market-glass-surface aparat-hero-card">
-          {/* Same aurora field as the Market cards: overlapping soft light
-              clipped by the card, never a gradient "sphere" stuck on top. */}
-          <span className="market-glass-aurora" aria-hidden="true">
-            <i className="market-glass-bloom market-glass-bloom--a" />
-            <i className="market-glass-bloom market-glass-bloom--b" />
-            <i className="market-glass-grid" />
-            <i className="market-glass-sheen" />
-          </span>
+      {!embedded && (
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <LearnTop
+            title={t('nav.aparat')}
+            sub={t('learn.tabsSub.videos')}
+            onBack={() => navigate(-1)}
+            backLabel={t('common.back')}
+          />
+        </motion.div>
+      )}
 
-          <div className="aparat-hero-top">
-            <div className="aparat-hero-badge-row">
-              <span className="aparat-live-pill">
-                <span className="market-live-dot" aria-hidden="true" />
-                {t('aparat.hero.kicker')}
-              </span>
-              <span className="aparat-handle-pill mono" dir="ltr">
-                {APARAT_HANDLE}
-              </span>
-            </div>
-
-            <div className="aparat-hero-main">
-              <div className="aparat-hero-copy">
-                <h1 className="aparat-hero-title">{t('aparat.hero.title')}</h1>
-                <p className="aparat-hero-sub">{t('aparat.hero.subtitle')}</p>
-                <div className="aparat-url-box" dir="ltr">
-                  <IconVideo width={16} height={16} />
-                  <span className="mono aparat-url-text">{APARAT_CHANNEL_URL}</span>
-                  <button
-                    type="button"
-                    className="aparat-copy-btn"
-                    onClick={copyChannelUrl}
-                    aria-label={t('aparat.hero.copyLink')}
-                  >
-                    {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="aparat-hero-art" aria-hidden="true">
-                <span className="aparat-art-orbit aparat-art-orbit--outer" />
-                <span className="aparat-art-orbit aparat-art-orbit--inner" />
-                <div className="aparat-hero-emblem">
-                  <svg viewBox="0 0 120 120" fill="none" className="aparat-emblem-svg">
-                    <defs>
-                      <linearGradient id="aparat-hero-ring" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
-                        <stop offset="0%" stopColor="#ff5cad" />
-                        <stop offset="52%" stopColor="#a78bfa" />
-                        <stop offset="100%" stopColor="#38e1ff" />
-                      </linearGradient>
-                      <linearGradient id="aparat-hero-play" x1="42" y1="39" x2="82" y2="81" gradientUnits="userSpaceOnUse">
-                        <stop offset="0%" stopColor="#ffffff" />
-                        <stop offset="100%" stopColor="#d9e7ff" />
-                      </linearGradient>
-                    </defs>
-                    <circle cx="60" cy="60" r="52" stroke="url(#aparat-hero-ring)" strokeWidth="1.6" strokeDasharray="2 8" />
-                    <circle cx="60" cy="60" r="39" fill="rgba(255,92,173,0.09)" stroke="url(#aparat-hero-ring)" strokeWidth="1.5" />
-                    <circle cx="60" cy="60" r="25" fill="rgba(8,13,26,0.72)" stroke="rgba(255,255,255,0.18)" />
-                    <path d="M55 48.5a2 2 0 0 1 3-1.72l19 11.38a2.15 2.15 0 0 1 0 3.68L58 73.22a2 2 0 0 1-3-1.72V48.5z" fill="url(#aparat-hero-play)" />
-                    <circle cx="92" cy="26" r="3.5" fill="#38e1ff" />
-                    <circle cx="28" cy="92" r="3.5" fill="#ff5cad" />
-                  </svg>
-                </div>
-                <span className="aparat-art-play-chip"><IconPlay width={13} height={13} /></span>
-              </div>
-            </div>
-
-            <div className="aparat-hero-footer">
-              <div className="aparat-stats-row">
-                <div className="aparat-stat-chip">
-                  <span className="aparat-stat-val mono">{APARAT_COURSES.length}+</span>
-                  <span className="aparat-stat-lbl">{t('aparat.stats.courses')}</span>
-                </div>
-                <div className="aparat-stat-chip">
-                  <span className="aparat-stat-val mono">HD</span>
-                  <span className="aparat-stat-lbl">{t('aparat.stats.quality')}</span>
-                </div>
-                <div className="aparat-stat-chip">
-                  <span className="aparat-stat-val mono">100%</span>
-                  <span className="aparat-stat-lbl">{t('aparat.stats.free')}</span>
-                </div>
-              </div>
-
-              <div className="aparat-hero-actions">
-                <button
-                  type="button"
-                  className="btn btn-primary aparat-primary-cta"
-                  onClick={openOfficialChannel}
-                  data-testid="aparat-open-channel-btn"
-                >
-                  <IconPlay width={17} height={17} />
-                  <span>{t('aparat.hero.watchOnAparat')}</span>
-                  <IconExternal width={15} height={15} />
-                </button>
-              </div>
+      <div className="lh-page lh-videos" data-testid="aparat-videos-page">
+        {/* ─────────────────── IDENTITY BLOCK (always visible) ───────────── */}
+        <motion.section className="lh-card lh-channel" variants={riseIn} initial="hidden" animate="show">
+          <div className="lh-channel-top">
+            <span className="lh-channel-mark">
+              <IconVideo width={26} height={26} aria-hidden="true" />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p className="lh-channel-name">{t('aparat.hero.title')}</p>
+              <p className="lh-channel-handle" dir="ltr">{APARAT_HANDLE}</p>
             </div>
           </div>
-        </section>
 
-        {/* ─── INTERACTIVE COURSE STUDIO STAGE ──────────────────────────── */}
-        <section
-          className="card market-glass-surface aparat-stage-card"
-          data-testid="aparat-interactive-stage"
-          style={{ '--course-accent': selectedCourse.accent, '--course-accent2': selectedCourse.accent2 }}
-        >
-          <div className="row-between aparat-stage-header">
-            <div className="row" style={{ gap: 8 }}>
-              <span className="aparat-stage-dot" style={{ background: selectedCourse.accent }} />
-              <span className="section-label" style={{ margin: 0 }}>
-                {t('aparat.player.stageLabel')}
-              </span>
-            </div>
-            <span className="mono aparat-duration-pill">{selectedCourse.duration}</span>
+          <p className="lh-hero-sub lh-channel-sub">{t('aparat.hero.subtitle')}</p>
+
+          <div className="lh-url-box" dir="ltr">
+            <IconVideo width={16} height={16} aria-hidden="true" />
+            <span className="lh-url-text mono">{APARAT_CHANNEL_URL}</span>
+            <button
+              type="button"
+              className={`lh-copy${copied ? ' is-copied' : ''}`}
+              onClick={copyChannelUrl}
+              aria-label={t('aparat.hero.copyLink')}
+            >
+              {copied ? <IconCheck width={15} height={15} /> : <IconCopy width={15} height={15} />}
+            </button>
           </div>
 
-          <div className="aparat-stage-grid">
-            <div className="aparat-stage-visual">
-              <CourseIllustration
-                id={selectedCourse.id}
-                accent={selectedCourse.accent}
-                accent2={selectedCourse.accent2}
-              />
-              <div className="aparat-stage-controls">
-                <button
-                  type="button"
-                  className="aparat-play-toggle"
-                  onClick={() => setPlayingPreview((p) => !p)}
-                  aria-pressed={playingPreview}
-                >
-                  {playingPreview
-                    ? <IconPause width={15} height={15} aria-hidden="true" />
-                    : <IconPlay width={15} height={15} aria-hidden="true" />}
-                  <span>{playingPreview ? t('aparat.player.pauseWalkthrough') : t('aparat.player.startWalkthrough')}</span>
-                </button>
-                <span className="aparat-stage-level">
-                  {t(`aparat.level.${selectedCourse.level}`)}
-                </span>
-              </div>
-            </div>
-
-            <div className="aparat-stage-info">
-              <h2 className="aparat-stage-title">
-                {t(`aparat.courses.${selectedCourse.id}.title`)}
-              </h2>
-              <p className="aparat-stage-desc">
-                {t(`aparat.courses.${selectedCourse.id}.desc`)}
-              </p>
-
-              <div className="aparat-steps-list">
-                {[1, 2, 3].map((stepNum, idx) => (
-                  <button
-                    key={stepNum}
-                    type="button"
-                    className={`aparat-step-item ${activeStep === idx ? 'is-active' : ''}`}
-                    onClick={() => setActiveStep(idx)}
-                    aria-pressed={activeStep === idx}
-                    aria-current={activeStep === idx ? 'step' : undefined}
-                  >
-                    <span className="aparat-step-num mono">{stepNum}</span>
-                    <span className="aparat-step-text">
-                      {t(`aparat.courses.${selectedCourse.id}.step${stepNum}`)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="aparat-stage-actions">
-                <button
-                  type="button"
-                  className="btn btn-primary aparat-stage-cta"
-                  onClick={openOfficialChannel}
-                >
-                  <IconVideo width={16} height={16} />
-                  <span>{t('aparat.player.watchEpisode')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost aparat-stage-secondary"
-                  onClick={() => navigate(selectedCourse.appRoute)}
-                >
-                  <span>{t('aparat.player.openSection')}</span>
-                </button>
-              </div>
-            </div>
+          <div className="lh-btn-row">
+            <button
+              type="button"
+              className="lh-btn lh-btn--primary lh-btn--full"
+              style={{ '--a': '#ff2d95', '--b': '#7c4dff' }}
+              onClick={openOfficialChannel}
+              data-testid="aparat-open-channel-btn"
+            >
+              <IconPlay width={16} height={16} />
+              <span>{t('aparat.hero.watchOnAparat')}</span>
+              <IconExternal width={14} height={14} />
+            </button>
           </div>
-        </section>
 
-        {/* ─── SEARCH & CATEGORY TABS ───────────────────────────────────── */}
-        <section className="aparat-catalog-section">
-          <div className="aparat-catalog-head">
-            <div className="aparat-catalog-heading">
-              <span className="aparat-catalog-kicker">{t('aparat.catalog.kicker')}</span>
-              <h2 className="aparat-catalog-title">{t('aparat.catalog.title')}</h2>
-            </div>
-            <span className="aparat-course-count mono" aria-live="polite">
-              <strong>{filteredCourses.length}</strong>
-              <span>/ {APARAT_COURSES.length}</span>
+          {/*
+           * Every figure here is formatted, never typed: this block's ancestor
+           * painted a literal `6` and a literal `100%`, which stayed Latin on a
+           * Persian screen right next to a count that WAS formatted. One
+           * formatter, or the page argues with itself.
+           */}
+          <div className="lh-stats" style={{ marginTop: 11 }}>
+            <span className="lh-stat" style={{ '--a': '#ff2d95', '--b': '#7c4dff' }}>
+              <span className="lh-stat-val mono">{num(APARAT_COURSES.length)}</span>
+              <span className="lh-stat-lbl">{t('aparat.stats.courses')}</span>
+            </span>
+            <span className="lh-stat" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
+              <span className="lh-stat-val mono">HD</span>
+              <span className="lh-stat-lbl">{t('aparat.stats.quality')}</span>
+            </span>
+            <span className="lh-stat" style={{ '--a': '#00ff9d', '--b': '#00e5ff' }}>
+              <span className="lh-stat-val mono">{pct(1)}</span>
+              <span className="lh-stat-lbl">{t('aparat.stats.free')}</span>
+            </span>
+            <span className="lh-stat" style={{ '--a': '#ffb300', '--b': '#ff5a3a' }}>
+              <span className="lh-stat-val mono" dir="ltr">{APARAT_HANDLE}</span>
+              <span className="lh-stat-lbl">{t('learn.videos.handle')}</span>
             </span>
           </div>
+        </motion.section>
 
-          <label className="aparat-search-wrap">
-            <IconSearch width={16} height={16} aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('aparat.catalog.searchPlaceholder')}
-              aria-label={t('aparat.catalog.searchPlaceholder')}
-              className="aparat-search-input"
-            />
-          </label>
+        {/* ─────────────────────────── SUB-TABS ──────────────────────────── */}
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <SubTabRail
+            items={SUBTABS.map((s) => ({
+              ...s,
+              count: s.id === 'lessons' ? APARAT_COURSES.length : LEVEL_ORDER.length
+            }))}
+            value={sub}
+            onChange={setSub}
+            labelPrefix="learn.subtab"
+            label={t('learn.subtabsTitle')}
+            hint={t(`learn.hint.${sub === 'lessons' ? 'lessons' : 'paths'}`)}
+            locale={locale}
+          />
+        </motion.div>
 
-          <div className="tag-scroll aparat-category-rail" role="group" aria-label={t('aparat.catalog.title')}>
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={`tag aparat-category-chip ${category === cat ? 'active' : ''}`}
-                onClick={() => setCategory(cat)}
-                aria-pressed={category === cat}
-              >
-                {t(`aparat.categories.${cat}`)}
-              </button>
-            ))}
-          </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={sub}
+            className="lh-panel"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {sub === 'lessons' ? (
+              <>
+                {/* ─────────── INTERACTIVE STAGE ─────────── */}
+                <section
+                  className="lh-card lh-stage"
+                  data-testid="aparat-interactive-stage"
+                  style={{ '--course-accent': selectedCourse.accent, '--course-accent2': selectedCourse.accent2 }}
+                >
+                  <div className="lh-stage-head">
+                    <div className="lh-stage-head-left">
+                      <span className="lh-stage-dot" aria-hidden="true" />
+                      <span className="lh-stage-label">{t('aparat.player.stageLabel')}</span>
+                    </div>
+                    <span className="lh-duration mono">{selectedCourse.duration}</span>
+                  </div>
 
-          {filteredCourses.length > 0 ? (
-            <div className="aparat-video-grid">
-              {filteredCourses.map((course) => {
-                const isSelected = course.id === selectedCourse.id;
-                const courseTitle = t(`aparat.courses.${course.id}.title`);
-                return (
-                  <article
-                    key={course.id}
-                    className={`card market-glass-surface aparat-course-card ${isSelected ? 'is-selected' : ''}`}
-                    data-testid={`aparat-course-${course.id}`}
-                    style={{ '--course-accent': course.accent, '--course-accent2': course.accent2 }}
-                  >
+                  <div className="lh-stage-visual">
+                    <CourseIllustration
+                      id={selectedCourse.id}
+                      accent={selectedCourse.accent}
+                      accent2={selectedCourse.accent2}
+                    />
+                  </div>
+
+                  <div className="lh-stage-controls">
                     <button
                       type="button"
-                      className="aparat-course-thumb"
-                      aria-label={`${t('aparat.player.watchEpisode')}: ${courseTitle}`}
-                      aria-pressed={isSelected}
-                      onClick={() => {
-                        setSelectedId(course.id);
-                        setActiveStep(0);
-                        setPlayingPreview(true);
-                      }}
+                      className="lh-play-toggle"
+                      onClick={() => setPlayingPreview((p) => !p)}
+                      aria-pressed={playingPreview}
                     >
-                      <CourseIllustration
-                        id={course.id}
-                        accent={course.accent}
-                        accent2={course.accent2}
-                      />
-                      <span className="aparat-thumb-play" aria-hidden="true">
-                        <IconPlay width={17} height={17} />
-                      </span>
-                      <span className="aparat-thumb-duration mono">{course.duration}</span>
-                      <span className={`aparat-thumb-level aparat-level-${course.level}`}>
-                        {t(`aparat.level.${course.level}`)}
-                      </span>
+                      {playingPreview
+                        ? <IconPause width={15} height={15} aria-hidden="true" />
+                        : <IconPlay width={15} height={15} aria-hidden="true" />}
+                      <span>{playingPreview ? t('aparat.player.pauseWalkthrough') : t('aparat.player.startWalkthrough')}</span>
                     </button>
+                    <span className="lh-stage-level">{t(`aparat.level.${selectedCourse.level}`)}</span>
+                  </div>
 
-                    <div className="aparat-course-body">
-                      <h3 className="aparat-course-title">{courseTitle}</h3>
-                      <p className="aparat-course-desc">
-                        {t(`aparat.courses.${course.id}.desc`)}
-                      </p>
+                  <div className="lh-stage-info">
+                    <h3 className="aparat-stage-title lh-stage-title">
+                      {t(`aparat.courses.${selectedCourse.id}.title`)}
+                    </h3>
+                    <p className="lh-stage-desc">{t(`aparat.courses.${selectedCourse.id}.desc`)}</p>
 
-                      <div className="aparat-course-footer">
+                    <div className="lh-steps-list">
+                      {[1, 2, 3].map((stepNum, idx) => (
                         <button
+                          key={stepNum}
                           type="button"
-                          className="tag aparat-btn-watch"
-                          onClick={openOfficialChannel}
+                          className={`lh-step ${activeStep === idx ? 'is-active' : ''}`}
+                          onClick={() => setActiveStep(idx)}
+                          aria-pressed={activeStep === idx}
+                          aria-current={activeStep === idx ? 'step' : undefined}
                         >
-                          <IconVideo width={14} height={14} />
-                          <span>{t('aparat.player.watchEpisode')}</span>
+                          <span className="lh-step-num mono">{num(stepNum)}</span>
+                          <span className="lh-step-text">
+                            {t(`aparat.courses.${selectedCourse.id}.step${stepNum}`)}
+                          </span>
                         </button>
-                        <button
-                          type="button"
-                          className="tag aparat-btn-try"
-                          onClick={() => navigate(course.appRoute)}
-                        >
-                          <span>{t('aparat.player.openSection')}</span>
-                        </button>
+                      ))}
+                    </div>
+
+                    <div className="lh-stage-actions">
+                      <button
+                        type="button"
+                        className="lh-btn lh-btn--primary"
+                        style={{ '--a': selectedCourse.accent, '--b': selectedCourse.accent2 }}
+                        onClick={openOfficialChannel}
+                      >
+                        <IconVideo width={16} height={16} />
+                        <span>{t('aparat.player.watchEpisode')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="lh-btn lh-btn--ghost"
+                        onClick={() => navigate(selectedCourse.appRoute)}
+                      >
+                        <span>{t('aparat.player.openSection')}</span>
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                {/* ─────────── CATALOGUE ─────────── */}
+                <section className="lh-catalog">
+                  <div className="lh-catalog-head">
+                    <div>
+                      <span className="lh-catalog-kicker">{t('aparat.catalog.kicker')}</span>
+                      <h3 className="lh-catalog-title">{t('aparat.catalog.title')}</h3>
+                    </div>
+                    <span className="lh-count mono" aria-live="polite">
+                      <strong>{num(filteredCourses.length)}</strong>
+                      <span> / {num(APARAT_COURSES.length)}</span>
+                    </span>
+                  </div>
+
+                  <label className="lh-search">
+                    <IconSearch width={16} height={16} aria-hidden="true" />
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder={t('aparat.catalog.searchPlaceholder')}
+                      aria-label={t('aparat.catalog.searchPlaceholder')}
+                    />
+                    {query ? (
+                      <button
+                        type="button"
+                        className="lh-search-clear"
+                        onClick={() => setQuery('')}
+                        aria-label={t('learn.faq.clear')}
+                      >
+                        <IconX width={13} height={13} />
+                      </button>
+                    ) : null}
+                  </label>
+
+                  <div className="lh-chip-rail" role="group" aria-label={t('aparat.catalog.title')}>
+                    {CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={`lh-chip${category === cat ? ' is-active' : ''}`}
+                        onClick={() => setCategory(cat)}
+                        aria-pressed={category === cat}
+                      >
+                        {t(`aparat.categories.${cat}`)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {filteredCourses.length > 0 ? (
+                    <div className="lh-course-grid">
+                      {filteredCourses.map((course) => {
+                        const isSelected = course.id === selectedCourse.id;
+                        const courseTitle = t(`aparat.courses.${course.id}.title`);
+                        return (
+                          <article
+                            key={course.id}
+                            className={`lh-course${isSelected ? ' is-selected' : ''}`}
+                            data-testid={`aparat-course-${course.id}`}
+                            style={{ '--course-accent': course.accent, '--course-accent2': course.accent2 }}
+                          >
+                            <button
+                              type="button"
+                              className="aparat-course-thumb lh-thumb"
+                              aria-label={`${t('aparat.player.watchEpisode')}: ${courseTitle}`}
+                              aria-pressed={isSelected}
+                              onClick={() => {
+                                setSelectedId(course.id);
+                                setActiveStep(0);
+                                setPlayingPreview(true);
+                              }}
+                            >
+                              <CourseIllustration
+                                id={course.id}
+                                accent={course.accent}
+                                accent2={course.accent2}
+                              />
+                              <span className="lh-thumb-play" aria-hidden="true">
+                                <IconPlay width={17} height={17} />
+                              </span>
+                              <span className="lh-thumb-duration mono">{course.duration}</span>
+                              <span className="lh-thumb-level">
+                                {t(`aparat.level.${course.level}`)}
+                              </span>
+                            </button>
+
+                            <div className="lh-course-body">
+                              <h4 className="lh-course-title">{courseTitle}</h4>
+                              <p className="lh-course-desc">{t(`aparat.courses.${course.id}.desc`)}</p>
+
+                              <div className="lh-course-foot">
+                                <button
+                                  type="button"
+                                  className="lh-mini lh-mini--accent"
+                                  onClick={openOfficialChannel}
+                                >
+                                  <IconVideo width={13} height={13} />
+                                  <span>{t('aparat.player.watchEpisode')}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="lh-mini"
+                                  onClick={() => navigate(course.appRoute)}
+                                >
+                                  <span>{t('aparat.player.openSection')}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="lh-empty" role="status">
+                      <span className="lh-empty-icon" aria-hidden="true">
+                        <IconSearch width={18} height={18} />
+                      </span>
+                      <p className="lh-empty-title">{t('aparat.catalog.noResults')}</p>
+                      <p className="lh-empty-body">{t('learn.faq.emptyBody')}</p>
+                    </div>
+                  )}
+                </section>
+              </>
+            ) : (
+              /* ─────────── LEARNING PATH ─────────── */
+              <section className="lh-paths">
+                <div className="lh-rowhead">
+                  <p className="lh-label">{t('learn.videos.pathsTitle')}</p>
+                </div>
+
+                {LEVEL_ORDER.map((levelId) => {
+                  const courses = APARAT_COURSES.filter((c) => c.level === levelId);
+                  return (
+                    <div
+                      className="lh-card lh-path"
+                      key={levelId}
+                      style={{ '--a': courses[0]?.accent || '#00e5ff', '--b': courses[0]?.accent2 || '#7c4dff' }}
+                    >
+                      <div className="lh-path-head">
+                        <span className="lh-doc-icon" aria-hidden="true">
+                          <IconTrophy width={20} height={20} />
+                        </span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div className="lh-path-title">{t(`aparat.level.${levelId}`)}</div>
+                          <p className="lh-path-sub">
+                            {t('learn.videos.lessonsCount', { count: courses.length })}
+                          </p>
+                        </div>
+                        <span className="lh-subtab-count">{num(courses.length)}</span>
+                      </div>
+
+                      <div className="lh-path-list">
+                        {courses.map((course) => (
+                          <button
+                            key={course.id}
+                            type="button"
+                            className="lh-path-row"
+                            onClick={() => pickCourse(course.id)}
+                            aria-pressed={selectedCourse.id === course.id}
+                          >
+                            <span className="lh-path-dot" style={{ background: course.accent }} aria-hidden="true" />
+                            <span className="lh-path-row-text">
+                              <span className="lh-path-row-title">
+                                {t(`aparat.courses.${course.id}.title`)}
+                              </span>
+                              <span className="lh-path-row-meta">
+                                {t(`aparat.categories.${course.category}`)} · {course.duration}
+                              </span>
+                            </span>
+                            <span className="lh-flip lh-link-chev" aria-hidden="true">
+                              <IconChevronRight width={15} height={15} />
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="aparat-empty-state" role="status">
-              <span className="aparat-empty-icon" aria-hidden="true"><IconSearch width={18} height={18} /></span>
-              <p>{t('aparat.catalog.noResults')}</p>
-            </div>
-          )}
-        </section>
+                  );
+                })}
+
+                <div className="lh-note">
+                  <span className="lh-note-icon" aria-hidden="true">
+                    <IconSparkle width={16} height={16} />
+                  </span>
+                  <p className="lh-note-text">{t('learn.videos.pathsNote')}</p>
+                </div>
+              </section>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </PageTransition>
   );

@@ -1022,14 +1022,14 @@ export async function run(container) {
       ]);
     }
 
-    const rows = [...host.querySelectorAll('.faq-q')];
+    const rows = [...host.querySelectorAll('.lh-faq-q')];
     out.push([`Help lists the FAQ (${rows.length} questions)`, rows.length >= 10]);
     out.push(['FAQ questions are translated, not raw keys', rows.every((r) => !/^help\.q\./.test(r.textContent.trim()))]);
-    out.push(['answers are collapsed until asked for', !host.querySelector('.faq-a')]);
+    out.push(['answers are collapsed until asked for', !host.querySelector('.lh-faq-a')]);
 
     // Expanding must reveal a real answer, in the active language.
     await act(async () => rows[0].click());
-    const answer = host.querySelector('.faq-a');
+    const answer = host.querySelector('.lh-faq-a');
     out.push(['tapping a question reveals its answer', Boolean(answer && answer.textContent.length > 60)]);
     out.push(['the answer is in the active language', /[\u0600-\u06FF]/.test(answer?.textContent ?? '')]);
 

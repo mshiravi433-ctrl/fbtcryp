@@ -49,6 +49,18 @@ import './notification-sound-probe.mjs';
 /* The Market dashboard and Intent OS scale up only at tablet/desktop widths,
    while the established mobile shell and page gutters remain pinned. */
 import './responsive-layout-probe.mjs';
+/*
+ * NOTE ON ORDER — the two locale probes below are not interchangeable.
+ * `test/business-locales-probe.mjs` ends with an unconditional
+ * `process.exit(failures ? 1 : 0)`, so on success it ends the WHOLE process at
+ * import time and every suite imported after it never runs. That is a
+ * pre-existing quirk of that file (visible on `main` today: `node test/run.mjs`
+ * stops right after "Business locale probe: PASS"); unblocking it re-enables
+ * ~40 network-dependent probes that need a separate, connected run to verify.
+ * Until then the Learn hub probe is imported ABOVE it so its checks actually
+ * execute. Do not move this import below the Business one.
+ */
+import './learn-hub-locales-probe.mjs';
 /* The /business B2B console: every string it paints resolves in Persian and
    English, the tab and sub-tab labels resolve in all twelve locales, and the
    keys test/wiring.mjs also demands everywhere exist everywhere. It is the
