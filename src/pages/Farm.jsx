@@ -148,6 +148,12 @@ const SEARCH_ICON = (
   </svg>
 );
 
+const REFRESH_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 3v6h-6" />
+  </svg>
+);
+
 const STATS_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 19v-6" /><path d="M12.5 19V8.5" /><path d="M17 19v-4" />
@@ -961,38 +967,64 @@ export default function Farm() {
 
   return (
     <PageTransition className="page farm-page">
-      {/* ─── ULTRA MODERN HERO ─── */}
-      <motion.section className="farm-hero-modern" variants={riseIn} initial="hidden" animate="show">
-        <span className="farm-hero-orb a" aria-hidden="true" />
-        <span className="farm-hero-orb b" aria-hidden="true" />
-        <span className="farm-hero-orb c" aria-hidden="true" />
-        <div className="farm-hero-grid">
+      {/* ─── PREMIUM HERO — glass, mesh, orb, integrated refresh — no middle clutter */}
+      <motion.section className="farm-hero-premium" variants={riseIn} initial="hidden" animate="show">
+        <div className="farm-hero-bg" aria-hidden="true">
+          <span className="farm-hero-orb a" />
+          <span className="farm-hero-orb b" />
+          <span className="farm-hero-orb c" />
+          <span className="farm-hero-mesh" />
+        </div>
+        <div className="farm-hero-main">
           <div className="farm-hero-copy">
-            <span className="farm-hero-kicker">
-              <span className="farm-live-dot" aria-hidden="true" />
-              {t('farm.protocolActive')} · {EXECUTION_LIVE ? t('farm.executionLive') : t('farm.readOnly')}
-            </span>
+            <div className="farm-hero-top">
+              <span className="farm-hero-kicker">
+                <span className="farm-live-dot" aria-hidden="true" />
+                {t('farm.protocolActive')} · {EXECUTION_LIVE ? t('farm.executionLive') : t('farm.readOnly')}
+              </span>
+              <button
+                type="button"
+                className={`farm-hero-refresh ${refreshing ? 'is-loading' : ''}`}
+                onClick={refresh}
+                disabled={refreshing}
+                aria-label={error ? t('farm.retry') : t('farm.refresh')}
+                title={error ? t('farm.retry') : t('farm.refresh')}
+              >
+                <span className="farm-hero-refresh-icon" aria-hidden="true">{REFRESH_ICON}</span>
+                <span className="farm-hero-refresh-text">{error ? t('farm.retry') : t('farm.refresh')}</span>
+              </button>
+            </div>
             <h1 className="farm-hero-title">{t('farm.title')}</h1>
             <p className="farm-hero-sub">{t('farm.subtitle')}</p>
-            <div className="farm-hero-stats">
-              <div className="farm-hero-stat" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
-                <span className="farm-hero-stat-value mono">{heroStats.count || '—'}</span>
-                <span className="farm-hero-stat-label">{t('farm.pools')}</span>
-              </div>
-              <div className="farm-hero-stat" style={{ '--a': '#00ff9d', '--b': '#00e5ff' }}>
-                <span className="farm-hero-stat-value mono">{heroStats.avg}%</span>
-                <span className="farm-hero-stat-label">{t('farm.estimatedApy')}</span>
-              </div>
-              <div className="farm-hero-stat" style={{ '--a': '#ff2d95', '--b': '#ffb300' }}>
-                <span className="farm-hero-stat-value mono">{fmtCompact(heroStats.tvl)}</span>
-                <span className="farm-hero-stat-label">{t('farm.tvl')}</span>
-              </div>
-            </div>
           </div>
           <div className="farm-hero-art">
-            <FarmOrbMark size={112} />
+            <FarmOrbMark size={104} />
           </div>
         </div>
+        <div className="farm-hero-stats">
+          <div className="farm-hero-stat" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
+            <span className="farm-hero-stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.8l8 4.4v9.6l-8 4.4-8-4.4V7.2z"/><path d="M4 7.2l8 4.4 8-4.4"/><path d="M12 11.6v9.6"/></svg>
+            </span>
+            <span className="farm-hero-stat-value mono">{heroStats.count || '—'}</span>
+            <span className="farm-hero-stat-label">{t('farm.pools')}</span>
+          </div>
+          <div className="farm-hero-stat" style={{ '--a': '#00ff9d', '--b': '#00e5ff' }}>
+            <span className="farm-hero-stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l5-5 4 4 7-7"/><path d="M15 9h5v5"/></svg>
+            </span>
+            <span className="farm-hero-stat-value mono">{heroStats.avg}%</span>
+            <span className="farm-hero-stat-label">{t('farm.estimatedApy')}</span>
+          </div>
+          <div className="farm-hero-stat" style={{ '--a': '#ff2d95', '--b': '#ffb300' }}>
+            <span className="farm-hero-stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 7v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </span>
+            <span className="farm-hero-stat-value mono">{fmtCompact(heroStats.tvl)}</span>
+            <span className="farm-hero-stat-label">{t('farm.tvl')}</span>
+          </div>
+        </div>
+        <p className="farm-hero-footnote faint" role="status">{refreshing ? t('farm.refreshing') : t('farm.feedRefreshNote')}</p>
       </motion.section>
 
       <VenueRail
@@ -1004,11 +1036,7 @@ export default function Farm() {
       />
 
       <ProtocolStatusCard protocol={protocol} t={t} />
-      <div className="row-between" style={{ marginBlock: 12 }}>
-        <span className="faint" role="status">{refreshing ? t('farm.refreshing') : t('farm.feedRefreshNote')}</span>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={refresh} disabled={refreshing}>{error ? t('farm.retry') : t('farm.refresh')}</button>
-      </div>
-      {data?.freshness === 'STALE' && <p className="notice" role="status">{t('farm.staleNotice')}</p>}
+      {data?.freshness === 'STALE' && <p className="notice farm-stale-notice" role="status">{t('farm.staleNotice')}</p>}
 
       <div className="segmented seg-lg farm-tabs" role="tablist" aria-orientation="horizontal" ref={tabsRef}>
         {FARM_TABS.map((id) => (
@@ -1078,12 +1106,22 @@ export default function Farm() {
         )}
       </div>
 
-      <div className="farm-controls">
+      <div className="farm-unified-bar">
         <div className="farm-search-wrap">
           <span className="farm-search-icon" aria-hidden="true">{SEARCH_ICON}</span>
           <input className="farm-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('farm.search')} aria-label={t('farm.search')} />
         </div>
-        <div className="farm-amounts"><span className="faint">{t('farm.ifIDeposit')}</span><div className="row farm-amount-row">{AMOUNTS.map((n) => <button key={n} className={`tag ${amount === n && !customAmount ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>{fmtUsd(n)}</button>)}<input className="farm-amt-input" inputMode="decimal" value={customAmount} onChange={(e) => setCustomAmount(e.target.value.replace(/[^\d.]/g, ''))} placeholder={t('farm.customAmt')} /></div></div>
+        <span className="farm-unified-divider" aria-hidden="true" />
+        <div className="farm-amounts-inline">
+          <span className="farm-amounts-label faint">{t('farm.ifIDeposit')}</span>
+          <div className="farm-amount-chips">
+            {AMOUNTS.map((n) => (
+              <button key={n} className={`farm-amount-chip ${amount === n && !customAmount ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>
+                {fmtUsd(n)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {loading && <div className="stack" style={{ marginTop: 14 }}>{[0, 1, 2].map((i) => <div className="skel" key={i} style={{ height: 150, borderRadius: 16 }} />)}</div>}
@@ -1124,7 +1162,7 @@ export default function Farm() {
 
       <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody"><p>{t('farm.nativeCustodyNotice')}</p></InfoBox>
       <InfoBox title={t('farm.riskDisclosureTitle')} tone="warning"><p>{t('farm.riskDisclosure')}</p></InfoBox>
-      <AdBanner slot="stocks" />
+      <div className="farm-bottom-banner"><AdBanner slot="stocks" compact /></div>
     </PageTransition>
   );
 }
