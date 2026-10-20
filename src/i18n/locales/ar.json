@@ -3166,7 +3166,55 @@
     },
     "requestsCount": "{{count}} طلبات",
     "viewTracking": "عرض التتبّع",
-    "startRequest": "بدء الطلب"
+    "startRequest": "بدء الطلب",
+    "requestsIntro": {
+      "title": "How sending a request works — clearly",
+      "body": "There is no in-app inbox. You write the email in your own mail app and send it to us — that email is the request. Nothing is stored on our server until you hit send.",
+      "step1": "Choose a topic and fill the short form: company, name, work email and what you need.",
+      "step2": "Your mail app opens with subject and body prefilled. Review it and send — the request only exists after you do.",
+      "step3": "We reply within one business day to the email you wrote. If you do not see it, check spam and the address you typed.",
+      "note": "The three cards below are examples — not your data. They show what a real inbox looks like."
+    },
+    "conditions": {
+      "title": "Conditions & how we decide",
+      "eligible": {
+        "title": "Who this desk is for",
+        "body": "Tokens with a verifiable contract, teams that can sign from a deployer or treasury wallet, and projects that accept the {{fee}} builder fee shown before signing."
+      },
+      "method": {
+        "title": "How we work",
+        "body": "We read your actual message — no template reply. We propose a route (listing, liquidity, white-label or API) and you decide before anything goes on chain."
+      },
+      "timeline": {
+        "title": "Timeline & cost",
+        "body": "Reply in 24 business hours, proposal in 1–3 days, launch after you sign. No upfront fee — the fee is on-chain per swap and visible before signing."
+      }
+    },
+    "trust": {
+      "title": "Why teams trust this desk",
+      "nonCustodial": {
+        "title": "Non-custodial by design",
+        "body": "We never hold funds, never ask for your seed, and never give a deposit address. Every swap is signed in your own wallet."
+      },
+      "company": {
+        "title": "Real company, real address",
+        "body": "Fanous Bazaar Pishgam, Khomeyni Shahr, Isfahan — the same legal name on About and on every email you receive."
+      },
+      "response": {
+        "title": "A human replies",
+        "body": "Every request is answered by a person within one business day, not an auto-responder. The email thread is your record."
+      },
+      "noStorage": "No server storage — email only",
+      "noDeposit": "We never give a deposit address",
+      "humanReply": "Reply in 1 business day"
+    },
+    "guarantee": {
+      "title": "What we guarantee — and what we do not",
+      "yes": "We read your request, answer honestly, and show every fee before you sign.",
+      "no": "We do not guarantee listing, volume, price or profit. Market data is information, not financial advice."
+    },
+    "requestsIntroLabel": "In plain language",
+    "heroTitle": "Financial infrastructure for your business"
   },
   "ads": {
     "swap": {
