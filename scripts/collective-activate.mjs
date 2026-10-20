@@ -156,7 +156,10 @@ try {
   record('stable-yield kind activated', await risk.isKindEnabled(0));
   record('accounting asset allowlisted globally', await risk.isAssetAllowed(assetRecord.address));
   record('strategy target allowlisted globally', await risk.isProtocolAllowed(target.address));
-  record('adapter target matches the record', lower(await adapter.target()) === lower(target.address), await adapter.target());
+  // ethers v6 reserves Contract.target for the contract's own address, so the
+  // ABI target() view has to be reached explicitly via getFunction.
+  const adapterTarget = await adapter.getFunction('target')();
+  record('adapter target matches the record', lower(adapterTarget) === lower(target.address), adapterTarget);
   record('adapter asset matches the accounting asset', lower(await adapter.asset()) === lower(assetRecord.address));
   record('on-chain emergency pause is off', !(await emergency.paused()));
 
