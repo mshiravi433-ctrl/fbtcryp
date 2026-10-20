@@ -3758,5 +3758,63 @@
     "scanningHint": "把两部手机的背面靠在一起，上半部对上半部。",
     "theyAsk": "对方要求 {{amount}}",
     "chainMismatch": "那个地址在 {{theirs}} 上，而你在 {{mine}}。在错误的网络上转账通常会丢失资金。"
+  },
+  "learn": {
+    "title": "学习",
+    "kicker": "学习中心",
+    "heroTitle": "学习 FBT Swap",
+    "intro": "关于本应用的手写解答、每一页的分步指南，以及视频学院 — 三个来源，一个页面。",
+    "tabsTitle": "学习资源",
+    "subtabsTitle": "分区",
+    "tabs": {
+      "help": "帮助",
+      "docs": "文档",
+      "videos": "视频"
+    },
+    "tabsSub": {
+      "help": "解答与支持",
+      "docs": "每页逐步说明",
+      "videos": "视频课程"
+    },
+    "subtab": {
+      "faq": "常见问题",
+      "support": "支持与资源",
+      "lessons": "课程",
+      "paths": "学习路径"
+    },
+    "hint": {
+      "faq": "先搜索；如果这里没有答案，「支持」标签可以直接联系真人。",
+      "support": "我们只有两个官方渠道：电子邮件和 Telegram 机器人。我们绝不主动私信你。",
+      "lessons": "打开一门课程，即可在此查看摘要与步骤；视频本身托管在 Aparat。",
+      "paths": "三个级别共六门课程。如果你是新手，请从最上面开始。",
+      "beginner": "六篇指南：钱包、安全、为什么用这个应用、策略、兑换和资产组合。请先读这些。",
+      "intermediate": "流动性挖矿、信号、交易、智能钱包、P2P 与自动订单 — 掌握基础后再看。",
+      "pro": "Intent OS 与 dYdX。这些工具有真实风险 — 请在自己的钱包里逐笔核对。"
+    },
+    "stats": {
+      "guides": "指南",
+      "faq": "现成解答",
+      "lessons": "视频课程"
+    },
+    "faq": {
+      "searchLabel": "搜索问题",
+      "searchPlaceholder": "试试：手续费、Gas、助记词…",
+      "emptyTitle": "没有匹配结果",
+      "emptyBody": "换个关键词，或到「支持」标签提问 — 会有真人回复。",
+      "clear": "清除搜索"
+    },
+    "support": {
+      "title": "联系方式",
+      "open": "打开",
+      "emailSub": "如果涉及某笔交易，请一并发来交易哈希。",
+      "telegramSub": "我们的官方 Telegram 机器人。",
+      "scamTitle": "防诈骗警告"
+    },
+    "videos": {
+      "handle": "频道 ID",
+      "pathsTitle": "学习路径",
+      "lessonsCount": "本级别共 {{n}} 门课程",
+      "pathsNote": "视频托管在 Aparat；播放质量取决于你的网络。"
+    }
   }
 }

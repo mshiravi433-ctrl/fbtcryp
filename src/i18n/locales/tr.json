@@ -3765,5 +3765,63 @@
     "scanningHint": "Telefonların arkalarını birbirine, üst yarıyı üst yarıya gelecek şekilde tutun.",
     "theyAsk": "{{amount}} tutarı talep ediyorlar",
     "chainMismatch": "Bu adres {{theirs}} üzerinde, siz ise {{mine}} üzerindesiniz. Yanlış ağda göndermek genellikle fonların kaybına yol açar."
+  },
+  "learn": {
+    "title": "Öğren",
+    "kicker": "Öğrenme merkezi",
+    "heroTitle": "FBT Swap’i öğren",
+    "intro": "Bu uygulama hakkında elle yazılmış yanıtlar, her ekran için adım adım kılavuz ve video akademisi — üç kaynak, tek sayfa.",
+    "tabsTitle": "Öğrenme kaynakları",
+    "subtabsTitle": "Bölümler",
+    "tabs": {
+      "help": "Yardım",
+      "docs": "Belgeler",
+      "videos": "Videolar"
+    },
+    "tabsSub": {
+      "help": "Yanıtlar ve destek",
+      "docs": "Her ekran adım adım",
+      "videos": "Video dersler"
+    },
+    "subtab": {
+      "faq": "Sık sorulanlar",
+      "support": "Destek ve kaynaklar",
+      "lessons": "Dersler",
+      "paths": "Öğrenme yolu"
+    },
+    "hint": {
+      "faq": "Önce arayın; yanıt burada yoksa Destek sekmesi gerçek bir kişiye ulaşır.",
+      "support": "Yalnızca iki resmî kanalımız var: e-posta ve Telegram botumuz. Size asla önce biz yazmayız.",
+      "lessons": "Özetini ve adımlarını burada okumak için bir dersi açın; videonun kendisi Aparat’ta.",
+      "paths": "Üç seviyede altı ders. Yeniyseniz en üstten başlayın.",
+      "beginner": "Altı kılavuz: cüzdan, güvenlik, neden bu uygulama, strateji, takas ve portföyünüz. Önce bunları okuyun.",
+      "intermediate": "Farm, sinyaller, işlem, akıllı cüzdan, P2P ve otomatik emirler — temeller oturduktan sonra.",
+      "pro": "Intent OS ve dYdX. Gerçek riski olan araçlar — her işlemi kendi cüzdanınızda okuyun."
+    },
+    "stats": {
+      "guides": "kılavuz",
+      "faq": "hazır yanıt",
+      "lessons": "video ders"
+    },
+    "faq": {
+      "searchLabel": "Sorularda ara",
+      "searchPlaceholder": "Örneğin: komisyon, gas, kurtarma cümlesi…",
+      "emptyTitle": "Sonuç yok",
+      "emptyBody": "Başka bir kelime deneyin ya da Destek sekmesinden sorun — gerçek biri yanıtlar.",
+      "clear": "Aramayı temizle"
+    },
+    "support": {
+      "title": "Bize ulaşma yolları",
+      "open": "Aç",
+      "emailSub": "Bir işlem hakkındaysa işlem hash’ini de gönderin.",
+      "telegramSub": "Telegram’daki resmî botumuz.",
+      "scamTitle": "Dolandırıcılık uyarısı"
+    },
+    "videos": {
+      "handle": "Kanal kimliği",
+      "pathsTitle": "Öğrenme yolu",
+      "lessonsCount": "Bu seviyede {{n}} ders",
+      "pathsNote": "Videolar Aparat’ta barındırılıyor; oynatma kalitesi bağlantınıza bağlıdır."
+    }
   }
 }

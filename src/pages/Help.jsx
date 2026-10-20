@@ -7,19 +7,30 @@ import { useTelegram } from '../context/TelegramContext';
 import { faqList } from '../lib/faqLocal';
 import AskHelp from '../components/AskHelp';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../lib/contact';
+import { TELEGRAM_BOT_URL, TELEGRAM_BOT_USERNAME } from '../lib/telegramBot';
+import { openUrl } from '../lib/browser';
+import SubTabRail from '../components/learn/SubTabRail';
+import { LearnTop } from '../components/learn/LearnHero';
+import '../styles/learn-hub.css';
 import {
-  IconChevronLeft,
   IconChevronRight,
   IconDoc,
   IconInfo,
   IconLock,
-  IconShield
+  IconMail,
+  IconSearch,
+  IconShield,
+  IconTelegram,
+  IconUser,
+  IconX,
+  IconAlertTriangle
 } from '../components/Icons';
 
 /**
- * HELP
+ * HELP — the «راهنما» tab of the Learn hub.
  * ---------------------------------------------------------------------------
- * WHY THERE IS NO "ASK THE AI" HERE ANY MORE
+ * WHY THERE IS NO "ASK THE AI" AS A CHATBOT ANY MORE
  *
  * It was removed on purpose, and the reasoning is worth keeping.
  *
@@ -31,205 +42,350 @@ import {
  * someone acting on an invented recovery path loses funds. And either way the
  * user had to guess the right question before they got anything at all.
  *
- * The knowledge base was always the honest part: twelve answers written by
- * hand, about this exact app, checked against what the code actually does. So
- * that is now the whole feature, presented as what it is — a browsable FAQ.
- * You can see every question at a glance instead of guessing, every answer is
- * one we can stand behind, and it works offline with nothing configured.
+ * The knowledge base was always the honest part: answers written by hand,
+ * about this exact app, checked against what the code actually does. So the
+ * assistant is now presented as what it is, and next to it sits the thing
+ * that never guesses — the browsable FAQ below it.
  *
- * Anything the FAQ does not cover routes to the two places that can actually
- * help: the step-by-step guide, and a human on Telegram.
+ * ─── THE 2026 REDESIGN: TWO SUB-TABS ───────────────────────────────────────
+ * The old page was one unbroken column: a guide button, an assistant, 37
+ * questions, five resource rows and a scam warning, in that order, always.
+ * Someone looking for the support address scrolled past 37 accordions to find
+ * it. Splitting it in two is the whole fix:
+ *
+ *   · پرسش‌های پرتکرار — the guide, the assistant, and a SEARCHABLE FAQ
+ *     (37 entries with a filter is a list; 37 entries is a wall).
+ *   · پشتیبانی و منابع — how to reach a human, and the five documents.
+ *
+ * The scam warning is on the support tab, next to the only two channels we
+ * actually answer through: that is where someone is about to be told by a
+ * stranger that they are "support".
  */
+
+const SUBTABS = [
+  { id: 'faq', Icon: IconInfo, a: '#00e5ff', b: '#7c4dff' },
+  { id: 'support', Icon: IconLock, a: '#ff2d95', b: '#7c4dff' }
+];
+
+/**
+ * The documents behind «منابع». One row each, in reading order.
+ *
+ * `key` is explicit on every row on purpose. Deriving it as `help.${id}` looked
+ * tidy and printed `help.terms` / `help.privacy` on the screen — those two
+ * labels live under `terms.title` and `privacy.title` because the legal pages
+ * own them, and a raw key in a list of documents is the kind of thing that
+ * reads as a broken app rather than a missing translation.
+ */
+const RESOURCES = [
+  { id: 'docs', key: 'help.docs', to: '/docs', Icon: IconDoc, subKey: 'help.docsSub' },
+  { id: 'audit', key: 'help.audit', to: '/audit', Icon: IconShield, subKey: 'help.auditSub' },
+  { id: 'terms', key: 'terms.title', to: '/legal/terms', Icon: IconDoc },
+  { id: 'privacy', key: 'privacy.title', to: '/legal/privacy', Icon: IconShield },
+  { id: 'github', key: 'help.github', to: '/contact', Icon: IconLock, subKey: 'help.githubSub' }
+];
+
 export default function Help({ embedded = false }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const replayGuide = useSettingsStore((s) => s.replayGuide);
+  const locale = i18n.resolvedLanguage || i18n.language || 'en';
 
+  const [sub, setSub] = useState('faq');
   // Which FAQ row is expanded. One at a time: an accordion where everything
   // can be open at once is just a wall of text with extra taps.
   const [openId, setOpenId] = useState(null);
+  const [query, setQuery] = useState('');
 
   const faqs = useMemo(() => faqList(i18n.language), [i18n.language]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return faqs;
+    return faqs.filter(({ id, answer }) => {
+      const question = t(`help.q.${id}`).toLowerCase();
+      return question.includes(q) || String(answer).toLowerCase().includes(q);
+    });
+  }, [faqs, query, t]);
 
   const toggle = (id) => {
     haptic?.('select');
     setOpenId((cur) => (cur === id ? null : id));
   };
 
+  const openTelegram = () => {
+    haptic?.('light');
+    openUrl(TELEGRAM_BOT_URL);
+  };
+
+  const num = (n) => new Intl.NumberFormat(locale).format(n);
+
   return (
     <PageTransition embedded={embedded}>
-      {/* Suppressed when hosted in a tabbed page — the shell already draws a
-          back button and a title, and two of each is clutter. */}
+      {/* Suppressed when hosted in the hub — the shell already draws a back
+          button, a hero and the title, and two of each is clutter. */}
       {!embedded && (
-        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-            <IconChevronLeft width={18} height={18} />
-          </button>
-          <h1 className="h1" style={{ fontSize: 19 }}>{t('help.title')}</h1>
+        <motion.div variants={riseIn} initial="hidden" animate="show">
+          <LearnTop
+            title={t('help.title')}
+            sub={t('learn.tabsSub.help')}
+            onBack={() => navigate(-1)}
+            backLabel={t('common.back')}
+          />
         </motion.div>
       )}
 
-      {/* ---------- step-by-step guide: the highest-value destination ------- */}
-      <motion.button
-        className="card lift"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        whileTap={{ scale: 0.985 }}
-        onClick={() => {
-          haptic?.('light');
-          replayGuide();
-        }}
-        style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
-      >
-        <div className="row-between">
-          <div className="row" style={{ gap: 11, minWidth: 0 }}>
-            <span
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 12,
-                display: 'grid',
-                placeItems: 'center',
-                flexShrink: 0,
-                color: '#000',
-                background: 'linear-gradient(140deg, var(--rgb-1), var(--rgb-2))'
-              }}
-            >
-              <IconInfo width={19} height={19} />
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.guideCta')}</div>
-              <div className="faint" style={{ lineHeight: 1.6 }}>{t('help.guideCtaSub')}</div>
-            </div>
-          </div>
-          <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-        </div>
-      </motion.button>
-
-      {/* ------------------------------ ask --------------------------------- */}
-      {/* Above the FAQ: someone with a specific question should not have to
-          scan twelve headings first. The component tries the local FAQ before
-          any network call, so this is not a downgrade for common questions. */}
       <motion.div variants={riseIn} initial="hidden" animate="show">
-        <AskHelp />
+        <SubTabRail
+          items={SUBTABS.map((s) => ({
+            ...s,
+            count: s.id === 'faq' ? faqs.length : RESOURCES.length
+          }))}
+          value={sub}
+          onChange={setSub}
+          labelPrefix="learn.subtab"
+          label={t('learn.subtabsTitle')}
+          hint={t(`learn.hint.${sub}`)}
+          locale={locale}
+        />
       </motion.div>
 
-      {/* -------------------------------- FAQ ------------------------------- */}
-      <motion.section variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 4 }}>{t('help.faqTitle')}</p>
-        <p className="faint" style={{ margin: '0 0 10px', lineHeight: 1.7 }}>
-          {t('help.faqSubtitle')}
-        </p>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={sub}
+          className="lh-panel"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {sub === 'faq' ? (
+            <>
+              {/* ---------- the step-by-step guide: the best first read ----- */}
+              <motion.button
+                className="lh-cta"
+                variants={riseIn}
+                initial="hidden"
+                animate="show"
+                onClick={() => {
+                  haptic?.('light');
+                  replayGuide();
+                }}
+              >
+                <span className="lh-cta-icon" aria-hidden="true">
+                  <IconInfo width={21} height={21} />
+                </span>
+                <span className="lh-cta-copy">
+                  <span className="lh-cta-title">{t('help.guideCta')}</span>
+                  <span className="lh-cta-sub">{t('help.guideCtaSub')}</span>
+                </span>
+                <span className="lh-cta-arrow lh-flip" aria-hidden="true">
+                  <IconChevronRight width={17} height={17} />
+                </span>
+                <span className="lh-sheen" aria-hidden="true" />
+              </motion.button>
 
-        <motion.div className="stack" style={{ gap: 7 }} variants={stagger} initial="hidden" animate="show">
-          {faqs.map(({ id, answer }) => {
-            const isOpen = openId === id;
-            return (
-              <motion.div key={id} className="faq-item" data-open={isOpen} variants={riseIn}>
-                <button
-                  type="button"
-                  className="faq-q"
-                  onClick={() => toggle(id)}
-                  aria-expanded={isOpen}
-                >
-                  <span>{t(`help.q.${id}`)}</span>
-                  <motion.span
-                    className="faq-chev"
-                    animate={{ rotate: isOpen ? 90 : 0 }}
-                    transition={{ duration: 0.18 }}
-                    aria-hidden="true"
-                  >
-                    <IconChevronRight width={15} height={15} />
-                  </motion.span>
-                </button>
-
-                <AnimatePresence initial={false}>
-                  {isOpen && (
-                    <motion.div
-                      key="a"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                      style={{ overflow: 'hidden' }}
-                    >
-                      <p className="faq-a">{answer}</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+              {/* ------------------------------ ask ------------------------ */}
+              <motion.div variants={riseIn} initial="hidden" animate="show">
+                <AskHelp />
               </motion.div>
-            );
-          })}
+
+              {/* ------------------------------ FAQ ------------------------ */}
+              <motion.section variants={riseIn} initial="hidden" animate="show">
+                <div className="lh-rowhead">
+                  <p className="lh-label">{t('help.faqTitle')}</p>
+                  <span className="lh-count" aria-live="polite">
+                    <strong>{num(filtered.length)}</strong>
+                    <span> / {num(faqs.length)}</span>
+                  </span>
+                </div>
+
+                <label className="lh-search">
+                  <IconSearch width={16} height={16} aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t('learn.faq.searchPlaceholder')}
+                    aria-label={t('learn.faq.searchLabel')}
+                  />
+                  {query ? (
+                    <button
+                      type="button"
+                      className="lh-search-clear"
+                      onClick={() => setQuery('')}
+                      aria-label={t('learn.faq.clear')}
+                    >
+                      <IconX width={13} height={13} />
+                    </button>
+                  ) : null}
+                </label>
+
+                {filtered.length > 0 ? (
+                  <motion.div
+                    className="lh-faq-stack"
+                    style={{ marginTop: 11 }}
+                    variants={stagger}
+                    initial="hidden"
+                    animate="show"
+                  >
+                    {filtered.map(({ id, answer }, i) => {
+                      const isOpen = openId === id;
+                      return (
+                        <motion.div key={id} className="lh-faq" data-open={isOpen} variants={riseIn}>
+                          <button
+                            type="button"
+                            className="lh-faq-q"
+                            onClick={() => toggle(id)}
+                            aria-expanded={isOpen}
+                          >
+                            <span className="lh-faq-num" aria-hidden="true">{num(i + 1)}</span>
+                            <span className="lh-faq-text">{t(`help.q.${id}`)}</span>
+                            <motion.span
+                              className="lh-faq-chev"
+                              animate={{ rotate: isOpen ? 90 : 0 }}
+                              transition={{ duration: 0.18 }}
+                              aria-hidden="true"
+                            >
+                              <IconChevronRight width={15} height={15} />
+                            </motion.span>
+                          </button>
+
+                          <AnimatePresence initial={false}>
+                            {isOpen && (
+                              <motion.div
+                                key="a"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                                style={{ overflow: 'hidden' }}
+                              >
+                                <div className="lh-faq-body">
+                                  <div className="lh-faq-body-inner">
+                                    <p className="lh-faq-a">{answer}</p>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                ) : (
+                  <div className="lh-empty" style={{ marginTop: 11 }} role="status">
+                    <span className="lh-empty-icon" aria-hidden="true">
+                      <IconSearch width={18} height={18} />
+                    </span>
+                    <p className="lh-empty-title">{t('learn.faq.emptyTitle')}</p>
+                    <p className="lh-empty-body">{t('learn.faq.emptyBody')}</p>
+                  </div>
+                )}
+              </motion.section>
+            </>
+          ) : (
+            <>
+              {/* --------------------- reach a human ----------------------- */}
+              <motion.section variants={riseIn} initial="hidden" animate="show">
+                <p className="lh-label">{t('learn.support.title')}</p>
+                <div className="lh-contact-grid">
+                  <button
+                    type="button"
+                    className="lh-contact"
+                    style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}
+                    onClick={() => {
+                      haptic?.('light');
+                      navigate('/contact');
+                    }}
+                  >
+                    <span className="lh-contact-icon" aria-hidden="true">
+                      <IconUser width={20} height={20} />
+                    </span>
+                    <span className="lh-contact-title">{t('help.contactUs')}</span>
+                    <p className="lh-contact-sub">{t('help.contactUsSub')}</p>
+                    <span className="lh-contact-cta">
+                      {t('learn.support.open')}
+                      <span className="lh-flip" aria-hidden="true">
+                        <IconChevronRight width={13} height={13} />
+                      </span>
+                    </span>
+                  </button>
+
+                  <a
+                    className="lh-contact"
+                    style={{ '--a': '#ffb300', '--b': '#ff5a3a' }}
+                    href={SUPPORT_MAILTO}
+                  >
+                    <span className="lh-contact-icon" aria-hidden="true">
+                      <IconMail width={20} height={20} />
+                    </span>
+                    <span className="lh-contact-title">{t('help.email')}</span>
+                    <p className="lh-contact-sub">{t('learn.support.emailSub')}</p>
+                    <span className="lh-contact-value" dir="ltr">{SUPPORT_EMAIL}</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    className="lh-contact"
+                    style={{ '--a': '#2aabee', '--b': '#7c4dff' }}
+                    onClick={openTelegram}
+                  >
+                    <span className="lh-contact-icon" aria-hidden="true">
+                      <IconTelegram width={20} height={20} />
+                    </span>
+                    <span className="lh-contact-title">{t('help.telegram')}</span>
+                    <p className="lh-contact-sub">{t('learn.support.telegramSub')}</p>
+                    <span className="lh-contact-value" dir="ltr">@{TELEGRAM_BOT_USERNAME}</span>
+                  </button>
+                </div>
+              </motion.section>
+
+              {/* -------------------------- documents ---------------------- */}
+              <motion.section variants={riseIn} initial="hidden" animate="show">
+                <p className="lh-label">{t('help.resources')}</p>
+                <div className="lh-links">
+                  {RESOURCES.map(({ id, key, to, Icon, subKey }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className="lh-link"
+                      onClick={() => {
+                        haptic?.('light');
+                        navigate(to);
+                      }}
+                    >
+                      <span className="lh-link-icon" aria-hidden="true">
+                        <Icon width={18} height={18} />
+                      </span>
+                      <span className="lh-link-body">
+                        <span className="lh-link-title">{t(key)}</span>
+                        {subKey ? <span className="lh-link-sub">{t(subKey)}</span> : null}
+                      </span>
+                      <span className="lh-link-chev lh-flip" aria-hidden="true">
+                        <IconChevronRight width={15} height={15} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </motion.section>
+
+              {/* -------------------------- scam warning ------------------- */}
+              <motion.section variants={riseIn} initial="hidden" animate="show">
+                <div className="lh-alert" role="note">
+                  <span className="lh-alert-icon" aria-hidden="true">
+                    <IconAlertTriangle width={18} height={18} />
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <p className="lh-alert-title">{t('learn.support.scamTitle')}</p>
+                    <p className="lh-alert-body">{t('help.scamWarning')}</p>
+                  </div>
+                </div>
+              </motion.section>
+            </>
+          )}
         </motion.div>
-      </motion.section>
-
-      {/* ------------------- nothing matched → talk to a human -------------- */}
-      <motion.button
-        className="card lift"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        whileTap={{ scale: 0.985 }}
-        onClick={() => navigate('/contact')}
-        style={{ textAlign: 'start', cursor: 'pointer', width: '100%' }}
-      >
-        <div className="row-between">
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{t('help.stillStuck')}</div>
-            <div className="faint" style={{ lineHeight: 1.6 }}>{t('help.stillStuckSub')}</div>
-          </div>
-          <IconChevronRight width={17} height={17} style={{ color: 'var(--text-3)' }} />
-        </div>
-      </motion.button>
-
-      {/* ---------- docs & legal ---------- */}
-      <motion.section variants={riseIn} initial="hidden" animate="show">
-        <p className="section-label" style={{ marginBottom: 8 }}>{t('help.resources')}</p>
-        <div className="set-group">
-          <button className="set-row" onClick={() => navigate('/docs')}>
-            <span className="set-row-icon"><IconDoc width={19} height={19} /></span>
-            <span className="set-row-label">
-              <div>{t('help.docs')}</div>
-              <div className="set-row-sub">{t('help.docsSub')}</div>
-            </span>
-            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
-          </button>
-
-          <button className="set-row" onClick={() => navigate('/audit')}>
-            <span className="set-row-icon"><IconShield width={19} height={19} /></span>
-            <span className="set-row-label">
-              <div>{t('help.audit')}</div>
-              <div className="set-row-sub">{t('help.auditSub')}</div>
-            </span>
-            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
-          </button>
-
-          <button className="set-row" onClick={() => navigate('/legal/terms')}>
-            <span className="set-row-icon"><IconDoc width={19} height={19} /></span>
-            <span className="set-row-label"><div>{t('terms.title')}</div></span>
-            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
-          </button>
-
-          <button className="set-row" onClick={() => navigate('/legal/privacy')}>
-            <span className="set-row-icon"><IconShield width={19} height={19} /></span>
-            <span className="set-row-label"><div>{t('privacy.title')}</div></span>
-            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
-          </button>
-
-          <button className="set-row" onClick={() => navigate('/contact')}>
-            <span className="set-row-icon"><IconLock width={19} height={19} /></span>
-            <span className="set-row-label">
-              <div>{t('help.github')}</div>
-              <div className="set-row-sub">{t('help.githubSub')}</div>
-            </span>
-            <IconChevronRight width={16} height={16} style={{ color: 'var(--text-3)' }} />
-          </button>
-        </div>
-      </motion.section>
-
-      <p className="notice notice-danger">{t('help.scamWarning')}</p>
+      </AnimatePresence>
     </PageTransition>
   );
 }

@@ -6143,7 +6143,62 @@
     "title": "Explore"
   },
   "learn": {
-    "title": "Learn"
+    "title": "Learn",
+    "kicker": "Learning centre",
+    "heroTitle": "Learn FBT Swap",
+    "intro": "Answers written by hand about this app, a step-by-step guide for every screen, and the video academy — three sources, one page.",
+    "tabsTitle": "Learning sources",
+    "subtabsTitle": "Sections",
+    "tabs": {
+      "help": "Help",
+      "docs": "Docs",
+      "videos": "Videos"
+    },
+    "tabsSub": {
+      "help": "Answers and support",
+      "docs": "Every screen, step by step",
+      "videos": "Video lessons"
+    },
+    "subtab": {
+      "faq": "FAQ",
+      "support": "Support & resources",
+      "lessons": "Lessons",
+      "paths": "Learning path"
+    },
+    "hint": {
+      "faq": "Search first; if the answer is not here, the Support tab reaches a real person.",
+      "support": "We answer through two channels only: email and our Telegram bot. We never message you first.",
+      "lessons": "Open a lesson to read its summary and steps here; the video itself lives on Aparat.",
+      "paths": "Six lessons across three levels. If you are new, start at the top.",
+      "beginner": "Six guides: wallet, security, why this app, strategy, swapping and your portfolio. Read these first.",
+      "intermediate": "Farming, signals, trading, the smart wallet, P2P and automated orders — once the basics are yours.",
+      "pro": "Intent OS and dYdX. Tools with real risk — read every transaction in your own wallet."
+    },
+    "stats": {
+      "guides": "guides",
+      "faq": "answers",
+      "lessons": "video lessons"
+    },
+    "faq": {
+      "searchLabel": "Search the questions",
+      "searchPlaceholder": "Try: fees, gas, recovery phrase…",
+      "emptyTitle": "Nothing matched",
+      "emptyBody": "Try another phrase, or ask on the Support tab — a real person answers.",
+      "clear": "Clear search"
+    },
+    "support": {
+      "title": "Ways to reach us",
+      "open": "Open",
+      "emailSub": "If it is about a transaction, send the transaction hash too.",
+      "telegramSub": "Our official bot on Telegram.",
+      "scamTitle": "Scam warning"
+    },
+    "videos": {
+      "handle": "Channel handle",
+      "pathsTitle": "Learning path",
+      "lessonsCount": "{{n}} lessons at this level",
+      "pathsNote": "The videos are hosted on Aparat; playback quality depends on your connection."
+    }
   },
   "rewards": {
     "title": "Points & rewards",

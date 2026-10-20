@@ -3765,5 +3765,63 @@
     "scanningHint": "Aproxime as costas dos telemóveis, metade superior com metade superior.",
     "theyAsk": "Pedem {{amount}}",
     "chainMismatch": "Esse endereço está em {{theirs}} e você está em {{mine}}. Enviar na rede errada normalmente significa perder os fundos."
+  },
+  "learn": {
+    "title": "Aprender",
+    "kicker": "Centro de aprendizado",
+    "heroTitle": "Aprenda a usar a FBT Swap",
+    "intro": "Respostas escritas à mão sobre este app, um guia passo a passo de cada tela e a academia em vídeo — três fontes, uma página.",
+    "tabsTitle": "Fontes de aprendizado",
+    "subtabsTitle": "Seções",
+    "tabs": {
+      "help": "Ajuda",
+      "docs": "Documentação",
+      "videos": "Vídeos"
+    },
+    "tabsSub": {
+      "help": "Respostas e suporte",
+      "docs": "Cada tela passo a passo",
+      "videos": "Lições em vídeo"
+    },
+    "subtab": {
+      "faq": "Perguntas frequentes",
+      "support": "Suporte e recursos",
+      "lessons": "Lições",
+      "paths": "Trilha de aprendizado"
+    },
+    "hint": {
+      "faq": "Pesquise primeiro; se a resposta não estiver aqui, a aba Suporte fala com uma pessoa real.",
+      "support": "Temos apenas dois canais oficiais: o e-mail e nosso bot no Telegram. Nunca enviamos a primeira mensagem.",
+      "lessons": "Abra uma lição para ler aqui o resumo e os passos; o vídeo em si está no Aparat.",
+      "paths": "Seis lições em três níveis. Se você está começando, comece pelo topo.",
+      "beginner": "Seis guias: carteira, segurança, por que este app, estratégia, troca e sua carteira de ativos. Leia estes primeiro.",
+      "intermediate": "Farm, sinais, negociação, carteira inteligente, P2P e ordens automáticas — depois de dominar o básico.",
+      "pro": "Intent OS e dYdX. Ferramentas com risco real — leia cada transação na sua própria carteira."
+    },
+    "stats": {
+      "guides": "guias",
+      "faq": "respostas prontas",
+      "lessons": "lições em vídeo"
+    },
+    "faq": {
+      "searchLabel": "Pesquisar nas perguntas",
+      "searchPlaceholder": "Tente: taxas, gas, frase de recuperação…",
+      "emptyTitle": "Nada encontrado",
+      "emptyBody": "Tente outra palavra ou pergunte na aba Suporte — uma pessoa real responde.",
+      "clear": "Limpar a pesquisa"
+    },
+    "support": {
+      "title": "Como nos contatar",
+      "open": "Abrir",
+      "emailSub": "Se for sobre uma transação, envie também o hash dela.",
+      "telegramSub": "Nosso bot oficial no Telegram.",
+      "scamTitle": "Alerta de golpe"
+    },
+    "videos": {
+      "handle": "Identificador do canal",
+      "pathsTitle": "Trilha de aprendizado",
+      "lessonsCount": "{{n}} lições neste nível",
+      "pathsNote": "Os vídeos estão hospedados no Aparat; a qualidade depende da sua conexão."
+    }
   }
 }

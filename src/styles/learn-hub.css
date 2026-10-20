@@ -1,0 +1,397 @@
+/*
+ * LEARN HUB — «مرکز آموزش و راهنما» (2026 redesign)
+ * ---------------------------------------------------------------------------
+ * One hub, three tabs (راهنما · مستندات · ویدیوها), and a second rail of
+ * sub-tabs inside every one of them: پرسش‌های پرتکرار / پشتیبانی و منابع,
+ * مبتدی / متوسط / حرفه‌ای, درس‌ها / کانال رسمی.
+ *
+ * House rules this file follows — each one was learned the hard way
+ * elsewhere in this codebase:
+ *
+ *   · THEME. Every surface reads --bg-panel / --line / --text-* plus the
+ *     --rgb-* accents, and every accent-on-glass case has an explicit
+ *     `:root[data-theme='light']` partner. Accent cyan on a white card is
+ *     1.4:1; the light rules mix the accent toward near-black instead.
+ *   · RTL. No physical `left`/`right`/`margin-left`. Only `inset-inline-*`,
+ *     `margin-inline-*`, `padding-inline-*`, `text-align: start/end`, and
+ *     `transform: scaleX(-1)` for the arrows that must flip.
+ *   · MOTION. Nothing keyframes between opacity 0 and 1 — a loop that
+ *     disappears reads as a loading placeholder, not as craft. The ambience
+ *     animates `transform` only, and `prefers-reduced-motion` stops all of it.
+ *   · TOUCH. Global `button { min-height: 44px }` already applies; nothing
+ *     here shrinks a control below it.
+ *   · SPACING. 4 / 8 / 12 / 16 / 20 — the 8pt grid. The Business hero grew to
+ *     460px on a 430px phone once because three of its vertical steps were
+ *     off-grid; the hero here is capped the same way.
+ */
+
+.lh-shell { position: relative; display: flex; flex-direction: column; gap: 14px; padding-bottom: 6px; overflow-x: clip; }
+.lh-page { position: relative; display: flex; flex-direction: column; gap: 14px; }
+
+/* ─────────────────────────── ambient field ─────────────────────────────────
+ * Two soft blooms behind the hub. They are `filter: blur()` on a plain
+ * absolutely-positioned box, not a canvas and not a sphere: the reported bug
+ * on the market cards («باکس … پشتش یک کره هست که زشته») was a literal
+ * gradient ball, and an unclipped one bleeds over the content edges. */
+.lh-orb { position: absolute; border-radius: 50%; filter: blur(78px); opacity: .3; pointer-events: none; z-index: 0; }
+.lh-orb.a { width: 58vw; height: 58vw; max-width: 400px; max-height: 400px; background: var(--rgb-1); top: -150px; inset-inline-start: -130px; animation: lh-drift-a 38s ease-in-out infinite alternate; }
+.lh-orb.b { width: 48vw; height: 48vw; max-width: 340px; max-height: 340px; background: var(--rgb-3); top: 210px; inset-inline-end: -140px; animation: lh-drift-b 46s ease-in-out infinite alternate; }
+@keyframes lh-drift-a { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(22px, 26px, 0) scale(1.07); } }
+@keyframes lh-drift-b { from { transform: translate3d(0, 0, 0) scale(1.05); } to { transform: translate3d(-18px, 20px, 0) scale(.95); } }
+:root[data-theme='light'] .lh-orb { opacity: .14; }
+.lh-shell > *:not(.lh-orb), .lh-page > *:not(.lh-orb) { position: relative; z-index: 1; }
+
+/* ─────────────────────────── header + hero ─────────────────────────────── */
+.lh-top { display: flex; align-items: center; gap: 10px; padding-top: 2px; }
+.lh-back { width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-panel); color: var(--text-1); cursor: pointer; display: grid; place-items: center; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: background .2s ease, border-color .2s ease, transform .16s ease; }
+.lh-back:hover { border-color: var(--line-strong); }
+.lh-back:active { transform: scale(.96); }
+.lh-top-text { flex: 1; min-width: 0; }
+.lh-top-title { font-size: 18px; font-weight: 900; letter-spacing: -.02em; line-height: 1.2; margin: 0; color: var(--text-1); }
+.lh-top-sub { font-size: 10.5px; font-weight: 600; color: var(--text-3); margin: 2px 0 0; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lh-hero { position: relative; isolation: isolate; overflow: hidden; padding: 15px 15px 14px; border-radius: 22px;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--rgb-1) 13%, var(--bg-panel)), var(--bg-panel) 54%, color-mix(in srgb, var(--rgb-2) 10%, var(--bg-panel)));
+  border: 1px solid var(--line); box-shadow: 0 14px 34px rgba(0, 0, 0, .3); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); }
+/* The 1px gradient hairline is a masked border, not a real one: a real
+   border-image cannot follow a border-radius. */
+.lh-hero::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(120deg, var(--rgb-1), var(--rgb-2), var(--rgb-3), var(--rgb-4)); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: .3; pointer-events: none; }
+:root[data-theme='light'] .lh-hero { box-shadow: 0 12px 28px rgba(26, 26, 46, .09); }
+.lh-hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.lh-hero-copy { min-width: 0; }
+/* The kicker and the back button share one row: the page has one header, not
+   a title bar stacked on top of a hero. */
+.lh-hero-bar { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+.lh-hero-bar .lh-kicker { margin-bottom: 0; }
+.lh-kicker { display: inline-flex; align-items: center; gap: 6px; font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--rgb-2); background: color-mix(in srgb, var(--rgb-2) 12%, transparent); border: 1px solid color-mix(in srgb, var(--rgb-2) 30%, transparent); padding: 5px 9px; border-radius: 999px; margin-bottom: 9px; }
+:root[data-theme='light'] .lh-kicker { color: #6d3df0; }
+.lh-hero-title { font-size: clamp(20px, 5.4vw, 26px); font-weight: 900; letter-spacing: -.025em; line-height: 1.2; margin: 0 0 6px; background: linear-gradient(92deg, var(--rgb-1), var(--rgb-2) 46%, var(--rgb-3)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.lh-hero-sub { font-size: 12px; line-height: 1.75; color: var(--text-2); margin: 0 0 11px; max-width: 46ch; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.lh-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.lh-stat { position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 13px; background: var(--bg-panel); border: 1px solid var(--line); }
+.lh-stat::after { content: ''; position: absolute; inset: 0 0 auto; height: 2px; background: linear-gradient(90deg, var(--a), var(--b)); opacity: .7; }
+.lh-stat-val { font-family: var(--font-mono); font-size: 13px; font-weight: 900; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1; }
+.lh-stat-lbl { font-size: 10px; font-weight: 700; color: var(--text-3); line-height: 1.3; }
+.lh-hero-art { display: grid; place-items: center; }
+.lh-flip { flex-shrink: 0; }
+[dir='rtl'] .lh-flip { transform: scaleX(-1); }
+
+/* ─────────────────────────── main tab rail ─────────────────────────────────
+ * Three tiles. Business uses two 74px tiles; three across a 390px phone gives
+ * ~118px each, so the icon sits ABOVE the label and the count is a corner
+ * badge rather than a trailing pill — a trailing pill is what truncates a
+ * Persian label at this width. */
+.lh-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 7px; border-radius: 22px; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg-abyss) 58%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+:root[data-theme='light'] .lh-tabs { background: rgba(255, 255, 255, .75); box-shadow: 0 10px 30px rgba(26, 26, 46, .07); }
+.lh-tab { position: relative; min-height: 78px; padding: 9px 8px 8px; border: 0; border-radius: 16px; background: transparent; color: var(--text-2); font: inherit; cursor: pointer; text-align: center; transition: color .25s ease; }
+.lh-tab-pill { position: absolute; inset: 0; border-radius: 16px; box-shadow: 0 14px 32px color-mix(in srgb, var(--a) 40%, transparent); }
+.lh-tab-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.lh-tab-badge { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: var(--bg-panel); border: 1px solid var(--line); color: var(--text-2); transition: background .25s ease, color .25s ease, border-color .25s ease; }
+.lh-tab.is-active .lh-tab-badge { background: rgba(4, 18, 26, .22); border-color: transparent; color: #04121a; }
+:root[data-theme='light'] .lh-tab.is-active .lh-tab-badge { background: rgba(255, 255, 255, .26); color: #fff; }
+.lh-tab:not(.is-active):hover .lh-tab-badge { color: var(--text-1); border-color: color-mix(in srgb, var(--a) 40%, var(--line)); }
+.lh-tab-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; width: 100%; }
+.lh-tab-name { font-size: 12px; font-weight: 900; letter-spacing: -.01em; line-height: 1.25; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh-tab-hint { font-size: 9px; font-weight: 600; line-height: 1.35; opacity: .72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh-tab-count { position: absolute; top: 6px; inset-inline-end: 7px; z-index: 2; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 9.5px; font-weight: 900; font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--text-3) 26%, transparent); color: var(--text-2); transition: background .25s ease, color .25s ease; }
+.lh-tab.is-active .lh-tab-count { background: rgba(4, 18, 26, .24); color: #04121a; }
+:root[data-theme='light'] .lh-tab.is-active .lh-tab-count { background: rgba(255, 255, 255, .3); color: #fff; }
+.lh-tab.is-active { color: #04121a; }
+:root[data-theme='light'] .lh-tab.is-active { color: #fff; }
+.lh-tab:not(.is-active):hover { color: var(--text-1); background: var(--bg-panel); }
+
+/* ─────────────────────────── sub-tab rail ──────────────────────────────── */
+.lh-subwrap { display: flex; flex-direction: column; gap: 8px; }
+.lh-subtabs { display: flex; gap: 7px; padding: 6px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg-panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.lh-subtab { position: relative; flex: 1 1 0; min-width: 0; min-height: 46px; padding: 0 12px; border: 0; border-radius: 13px; background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; transition: color .25s ease; }
+.lh-subtab-pill { position: absolute; inset: 0; border-radius: 13px; box-shadow: 0 10px 26px color-mix(in srgb, var(--a) 36%, transparent); }
+.lh-subtab-inner { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; }
+.lh-subtab-inner svg { flex-shrink: 0; }
+.lh-subtab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh-subtab-count { flex-shrink: 0; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 10px; font-weight: 900; font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--text-3) 28%, transparent); color: var(--text-1); transition: background .25s ease, color .25s ease; }
+.lh-subtab.is-active .lh-subtab-count { background: rgba(4, 18, 26, .26); color: #04121a; }
+:root[data-theme='light'] .lh-subtab.is-active .lh-subtab-count { background: rgba(255, 255, 255, .3); color: #fff; }
+.lh-subtab.is-active { color: #04121a; }
+:root[data-theme='light'] .lh-subtab.is-active { color: #fff; }
+.lh-subtab:not(.is-active):hover { color: var(--text-1); background: color-mix(in srgb, var(--bg-raised) 70%, transparent); }
+/* The hint is a SIBLING of the tablist, never a child: a tablist may only
+   contain tabs, and one stray <span> makes a screen reader announce "3 of 4"
+   on a two-tab rail — the exact bug fixed on the Business console. */
+.lh-hint { font-size: 11px; line-height: 1.75; color: var(--text-3); margin: 0 2px; }
+
+/* ─────────────────────────── generic pieces ─────────────────────────────── */
+/* `.lh-viewport` is the hub's tab panel; `.lh-panel` is the root of a screen
+   inside it. Same rhythm, two names, so a rule aimed at one never hits both. */
+.lh-panel, .lh-viewport { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
+.lh-label { font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; color: var(--text-3); margin: 0 0 9px; padding-inline-start: 2px; }
+.lh-card { position: relative; overflow: hidden; border-radius: 20px; background: var(--bg-panel); border: 1px solid var(--line); backdrop-filter: blur(14px) saturate(1.35); -webkit-backdrop-filter: blur(14px) saturate(1.35); box-shadow: 0 16px 44px rgba(0, 0, 0, .3); }
+:root[data-theme='light'] .lh-card { box-shadow: 0 14px 36px rgba(26, 26, 46, .08); }
+.lh-rowhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.lh-rowhead .lh-label { margin-bottom: 0; }
+
+.lh-btn { min-height: 46px; padding: 0 16px; border-radius: 13px; border: 1px solid transparent; font: inherit; font-size: 12.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: transform .16s ease, box-shadow .25s ease, background .25s ease, border-color .25s ease, color .22s ease; white-space: nowrap; }
+.lh-btn svg { flex-shrink: 0; }
+.lh-btn--primary { background: linear-gradient(135deg, var(--a, var(--rgb-1)), var(--b, var(--rgb-2))); color: #04121a; box-shadow: 0 12px 28px color-mix(in srgb, var(--a, var(--rgb-1)) 32%, transparent); }
+:root[data-theme='light'] .lh-btn--primary { color: #fff; }
+.lh-btn--ghost { background: var(--bg-panel); border-color: var(--line); color: var(--text-1); }
+.lh-btn--ghost:hover { border-color: var(--line-strong); }
+.lh-btn:not(:disabled):active { transform: scale(.98); }
+.lh-btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+.lh-btn--full { width: 100%; }
+.lh-btn-row { display: flex; gap: 9px; flex-wrap: wrap; }
+.lh-btn-row .lh-btn { flex: 1 1 140px; }
+
+.lh-focus :focus-visible, .lh-tab:focus-visible, .lh-subtab:focus-visible, .lh-back:focus-visible,
+.lh-faq-q:focus-visible, .lh-doc-head:focus-visible, .lh-link:focus-visible, .lh-chip:focus-visible,
+.lh-thumb:focus-visible, .lh-step:focus-visible, .lh-cta:focus-visible, .lh-contact:focus-visible {
+  outline: 2px solid var(--rgb-1); outline-offset: 2px;
+}
+
+/* ─────────────────────────── help · guide CTA ───────────────────────────── */
+.lh-cta { position: relative; width: 100%; overflow: hidden; display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--rgb-1) 30%, var(--line)); cursor: pointer; text-align: start; font: inherit; color: var(--text-1);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rgb-1) 16%, var(--bg-panel)), color-mix(in srgb, var(--rgb-2) 14%, var(--bg-panel)));
+  transition: transform .18s ease, border-color .25s ease, box-shadow .25s ease; }
+.lh-cta:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--rgb-1) 52%, var(--line)); box-shadow: 0 18px 40px color-mix(in srgb, var(--rgb-1) 18%, transparent); }
+.lh-cta:active { transform: scale(.99); }
+.lh-cta-icon { width: 46px; height: 46px; flex-shrink: 0; border-radius: 15px; display: grid; place-items: center; background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2)); color: #04121a; box-shadow: 0 12px 28px color-mix(in srgb, var(--rgb-1) 34%, transparent); }
+:root[data-theme='light'] .lh-cta-icon { color: #fff; }
+.lh-cta-copy { flex: 1; min-width: 0; }
+.lh-cta-title { font-size: 13.5px; font-weight: 900; letter-spacing: -.01em; line-height: 1.35; margin: 0 0 3px; }
+.lh-cta-sub { font-size: 11px; line-height: 1.7; color: var(--text-2); margin: 0; }
+.lh-cta-arrow { flex-shrink: 0; color: var(--text-3); transition: transform .2s ease; }
+.lh-cta:hover .lh-cta-arrow { transform: translateX(-3px); }
+[dir='rtl'] .lh-cta:hover .lh-cta-arrow { transform: scaleX(-1) translateX(-3px); }
+/* One hairline sweep on hover. It starts off-canvas on the reading edge and
+   leaves on the other, so it flips with the direction. */
+.lh-sheen { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 36%, color-mix(in srgb, #fff 13%, transparent) 50%, transparent 64%); transform: translate3d(-110%, 0, 0); opacity: 0; transition: transform .7s cubic-bezier(.22, 1, .36, 1), opacity .3s ease; }
+[dir='rtl'] .lh-sheen { transform: translate3d(110%, 0, 0); }
+.lh-cta:hover .lh-sheen { transform: translate3d(110%, 0, 0); opacity: 1; }
+[dir='rtl'] .lh-cta:hover .lh-sheen { transform: translate3d(-110%, 0, 0); }
+
+/* ─────────────────────────── help · search ──────────────────────────────── */
+.lh-search { position: relative; display: flex; align-items: center; gap: 9px; padding: 0 13px; min-height: 46px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-panel); transition: border-color .22s ease, box-shadow .22s ease; }
+.lh-search:focus-within { border-color: color-mix(in srgb, var(--rgb-1) 46%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rgb-1) 12%, transparent); }
+.lh-search svg { color: var(--text-3); flex-shrink: 0; }
+.lh-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text-1); font: inherit; font-size: 13px; outline: none; padding: 0; }
+.lh-search input::placeholder { color: var(--text-3); }
+.lh-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.lh-search-clear { width: 26px; height: 26px; flex-shrink: 0; border-radius: 8px; border: 0; background: var(--bg-raised); color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.lh-search-clear:hover { color: var(--text-1); }
+
+/* ─────────────────────────── help · FAQ accordion ───────────────────────── */
+.lh-faq-stack { display: flex; flex-direction: column; gap: 8px; }
+.lh-faq { position: relative; overflow: hidden; border-radius: 16px; border: 1px solid var(--line); background: var(--bg-panel); transition: border-color .25s ease, box-shadow .25s ease, transform .18s ease; }
+.lh-faq[data-open='true'] { border-color: color-mix(in srgb, var(--rgb-1) 42%, var(--line)); box-shadow: 0 14px 34px rgba(0, 0, 0, .26); }
+.lh-faq:hover { border-color: var(--line-strong); }
+.lh-faq-q { width: 100%; min-height: 52px; display: flex; align-items: center; gap: 11px; padding: 11px 13px; border: 0; background: transparent; color: var(--text-1); font: inherit; font-size: 12.8px; font-weight: 700; line-height: 1.65; text-align: start; cursor: pointer; }
+.lh-faq-num { flex-shrink: 0; width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 10.5px; font-weight: 900; color: var(--text-3); background: var(--bg-raised); transition: background .25s ease, color .25s ease; }
+.lh-faq[data-open='true'] .lh-faq-num { background: linear-gradient(140deg, var(--rgb-1), var(--rgb-2)); color: #04121a; }
+:root[data-theme='light'] .lh-faq[data-open='true'] .lh-faq-num { color: #fff; }
+.lh-faq-text { flex: 1; min-width: 0; }
+.lh-faq-chev { flex-shrink: 0; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; color: var(--text-3); }
+.lh-faq-body { padding: 0 14px 14px 14px; padding-inline: 14px 14px; }
+.lh-faq-body-inner { padding-inline-start: 37px; }
+.lh-faq-a { font-size: 12.2px; line-height: 1.95; color: var(--text-2); margin: 0; white-space: pre-line; }
+.lh-empty { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 26px 18px; border-radius: 18px; border: 1px dashed var(--line-strong); background: var(--bg-panel); text-align: center; }
+.lh-empty-icon { width: 44px; height: 44px; border-radius: 15px; display: grid; place-items: center; background: var(--bg-raised); color: var(--text-3); }
+.lh-empty-title { font-size: 13px; font-weight: 900; color: var(--text-1); margin: 0; }
+.lh-empty-body { font-size: 11.5px; line-height: 1.8; color: var(--text-2); margin: 0; max-width: 40ch; }
+
+/* ─────────────────────────── help · support ─────────────────────────────── */
+/*
+ * auto-fit, not a fixed count: the app shell caps at 520px, so a "3 columns
+ * above 720px" rule could never fire. The tiles take the room they actually
+ * get — three on a 520px phone, two on a 360px one, one on the narrowest.
+ */
+.lh-contact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.lh-contact { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; gap: 0; width: 100%; padding: 14px 13px 13px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg-panel); color: var(--text-1); font: inherit; text-align: start; cursor: pointer; transition: transform .18s ease, border-color .25s ease, box-shadow .25s ease; }
+.lh-contact::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--a), var(--b)); opacity: .85; }
+.lh-contact:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--a) 44%, var(--line)); box-shadow: 0 16px 36px rgba(0, 0, 0, .28); }
+.lh-contact-icon { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; color: #04121a; margin-bottom: 11px; box-shadow: 0 10px 24px color-mix(in srgb, var(--a) 34%, transparent); }
+:root[data-theme='light'] .lh-contact-icon { color: #fff; }
+.lh-contact-title { font-size: 13px; font-weight: 900; letter-spacing: -.01em; line-height: 1.35; margin: 0 0 3px; }
+.lh-contact-sub { font-size: 10.5px; line-height: 1.7; color: var(--text-2); margin: 0 0 9px; }
+.lh-contact-value { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; color: var(--text-3); margin: 0; word-break: break-all; }
+.lh-contact-cta { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 900; color: var(--a); }
+:root[data-theme='light'] .lh-contact-cta { color: color-mix(in srgb, var(--a) 52%, #0b1020); }
+
+.lh-links { display: flex; flex-direction: column; border-radius: 18px; border: 1px solid var(--line); background: var(--bg-panel); overflow: hidden; }
+.lh-link { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 56px; padding: 10px 13px; border: 0; background: transparent; color: var(--text-1); font: inherit; text-align: start; cursor: pointer; transition: background .2s ease; }
+.lh-link + .lh-link { border-top: 1px solid var(--line); }
+.lh-link:hover { background: var(--bg-raised); }
+.lh-link-icon { width: 36px; height: 36px; flex-shrink: 0; border-radius: 12px; display: grid; place-items: center; background: var(--bg-raised); color: var(--text-2); border: 1px solid var(--line); }
+.lh-link-body { flex: 1; min-width: 0; }
+.lh-link-title { font-size: 12.5px; font-weight: 800; line-height: 1.4; }
+.lh-link-sub { font-size: 10.5px; line-height: 1.6; color: var(--text-3); margin-top: 2px; }
+.lh-link-chev { flex-shrink: 0; color: var(--text-3); }
+
+.lh-alert { display: flex; align-items: flex-start; gap: 11px; padding: 13px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--rgb-3) 40%, var(--line)); background: color-mix(in srgb, var(--rgb-3) 9%, var(--bg-panel)); }
+.lh-alert-icon { width: 34px; height: 34px; flex-shrink: 0; border-radius: 12px; display: grid; place-items: center; color: var(--rgb-3); background: color-mix(in srgb, var(--rgb-3) 14%, transparent); }
+:root[data-theme='light'] .lh-alert-icon { color: #c01d63; }
+.lh-alert-title { font-size: 12px; font-weight: 900; color: var(--text-1); margin: 0 0 4px; }
+.lh-alert-body { font-size: 11.5px; line-height: 1.85; color: var(--text-2); margin: 0; }
+
+/* ─────────────────────────── docs ───────────────────────────────────────── */
+.lh-doc-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
+.lh-doc { position: relative; overflow: hidden; border-radius: 20px; background: var(--bg-panel); border: 1px solid var(--line); backdrop-filter: blur(14px) saturate(1.35); -webkit-backdrop-filter: blur(14px) saturate(1.35); transition: border-color .25s ease, box-shadow .25s ease; }
+.lh-doc::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--hue), transparent 88%); opacity: .9; }
+.lh-doc[data-open='true'] { border-color: color-mix(in srgb, var(--hue) 46%, var(--line)); box-shadow: 0 18px 42px rgba(0, 0, 0, .3); }
+.lh-doc-head { width: 100%; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 14px; border: 0; background: transparent; color: var(--text-1); font: inherit; text-align: start; cursor: pointer; }
+.lh-doc-icon { width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; display: grid; place-items: center; color: #04121a; background: linear-gradient(140deg, var(--hue), color-mix(in srgb, var(--hue) 45%, var(--rgb-2))); box-shadow: 0 10px 24px color-mix(in srgb, var(--hue) 30%, transparent); }
+:root[data-theme='light'] .lh-doc-icon { color: #fff; }
+.lh-doc-text { flex: 1; min-width: 0; }
+.lh-doc-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lh-doc-title { font-size: 13.5px; font-weight: 900; letter-spacing: -.01em; line-height: 1.4; }
+.lh-doc-sub { display: block; font-size: 11px; line-height: 1.7; color: var(--text-3); margin-top: 3px; }
+.lh-doc-chev { flex-shrink: 0; width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center; color: var(--text-3); background: var(--bg-raised); }
+.lh-doc-body { padding: 0 14px 14px; }
+.lh-doc-steps { display: flex; flex-direction: column; gap: 0; margin: 0 0 12px; }
+.lh-doc-step { position: relative; display: flex; gap: 11px; padding-bottom: 11px; }
+.lh-doc-step:last-child { padding-bottom: 0; }
+.lh-doc-rail { position: relative; flex-shrink: 0; width: 26px; display: flex; flex-direction: column; align-items: center; }
+.lh-doc-num { width: 26px; height: 26px; flex-shrink: 0; border-radius: 9px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 10.5px; font-weight: 900; color: #04121a; background: linear-gradient(140deg, var(--hue), color-mix(in srgb, var(--hue) 45%, var(--rgb-2))); }
+:root[data-theme='light'] .lh-doc-num { color: #fff; }
+.lh-doc-line { width: 2px; flex: 1; margin-block: 4px; border-radius: 2px; background: linear-gradient(180deg, color-mix(in srgb, var(--hue) 45%, transparent), transparent); }
+.lh-doc-step-text { flex: 1; min-width: 0; font-size: 12.2px; line-height: 1.85; color: var(--text-2); padding-top: 3px; }
+.lh-pitfall { display: flex; align-items: flex-start; gap: 9px; padding: 11px 12px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--rgb-5) 38%, var(--line)); background: color-mix(in srgb, var(--rgb-5) 9%, var(--bg-panel)); margin-bottom: 11px; }
+.lh-pitfall-icon { flex-shrink: 0; color: var(--rgb-5); margin-top: 1px; }
+:root[data-theme='light'] .lh-pitfall-icon { color: #a86900; }
+.lh-pitfall-text { font-size: 11.5px; line-height: 1.85; color: var(--text-2); margin: 0; }
+.lh-pitfall-text strong { color: var(--text-1); font-weight: 900; }
+.lh-doc-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lh-doc-meta { font-size: 10.5px; font-weight: 700; color: var(--text-3); }
+.lh-doc-video { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; border-radius: 11px; border: 1px solid color-mix(in srgb, var(--hue) 34%, transparent); background: color-mix(in srgb, var(--hue) 9%, transparent); color: var(--hue); font: inherit; font-size: 11.5px; font-weight: 900; cursor: pointer; transition: background .22s ease, color .22s ease; }
+:root[data-theme='light'] .lh-doc-video { color: color-mix(in srgb, var(--hue) 55%, #0b1020); }
+.lh-doc-video:hover { background: color-mix(in srgb, var(--hue) 18%, transparent); }
+
+/* ─────────────────────────── videos · stage ─────────────────────────────── */
+.lh-stage { position: relative; overflow: hidden; padding: 14px; border-radius: 22px; }
+.lh-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.lh-stage-head-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lh-stage-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--course-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--course-accent) 22%, transparent); flex-shrink: 0; }
+.lh-stage-label { font-size: 10.5px; font-weight: 800; color: var(--text-2); letter-spacing: .04em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh-duration { flex-shrink: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 800; color: var(--text-1); background: var(--bg-raised); border: 1px solid var(--line); padding: 4px 9px; border-radius: 999px; }
+.lh-stage-visual { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: color-mix(in srgb, var(--course-accent) 7%, var(--bg-panel)); }
+.lh-stage-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; flex-wrap: wrap; }
+.lh-play-toggle { min-height: 42px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--course-accent) 42%, var(--line)); background: color-mix(in srgb, var(--course-accent) 14%, transparent); color: var(--course-accent); font: inherit; font-size: 11.5px; font-weight: 900; cursor: pointer; transition: background .22s ease; }
+:root[data-theme='light'] .lh-play-toggle { color: color-mix(in srgb, var(--course-accent) 55%, #0b1020); }
+.lh-play-toggle:hover { background: color-mix(in srgb, var(--course-accent) 22%, transparent); }
+.lh-stage-level { font-size: 10.5px; font-weight: 800; color: var(--text-3); }
+.lh-stage-info { min-width: 0; display: flex; flex-direction: column; gap: 0; padding-top: 12px; }
+/* The class carries its 2024 name because a contract test queries it; the
+   scope keeps the rule from colliding with the old academy stylesheet. */
+.lh-stage .aparat-stage-title, .lh-stage-title { font-size: 16px; font-weight: 900; letter-spacing: -.02em; line-height: 1.35; color: var(--text-1); margin: 0 0 7px; }
+.lh-stage-desc { font-size: 12px; line-height: 1.85; color: var(--text-2); margin: 0 0 12px; }
+.lh-steps-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 13px; }
+.lh-step { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 9px 11px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg-panel); color: var(--text-2); font: inherit; font-size: 11.5px; line-height: 1.7; text-align: start; cursor: pointer; transition: border-color .22s ease, background .22s ease, color .22s ease; }
+.lh-step:hover { border-color: color-mix(in srgb, var(--course-accent) 38%, var(--line)); }
+.lh-step.is-active { border-color: color-mix(in srgb, var(--course-accent) 58%, var(--line)); background: color-mix(in srgb, var(--course-accent) 12%, var(--bg-panel)); color: var(--text-1); }
+.lh-step-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 10px; font-weight: 900; background: var(--bg-raised); color: var(--text-3); }
+.lh-step.is-active .lh-step-num { background: linear-gradient(140deg, var(--course-accent), var(--course-accent2)); color: #04121a; }
+:root[data-theme='light'] .lh-step.is-active .lh-step-num { color: #fff; }
+.lh-step-text { flex: 1; min-width: 0; }
+.lh-stage-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+.lh-stage-actions .lh-btn { flex: 1 1 140px; }
+
+/* ─────────────────────────── videos · catalog ───────────────────────────── */
+.lh-catalog { display: flex; flex-direction: column; gap: 11px; }
+.lh-catalog-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lh-catalog-kicker { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); margin-bottom: 3px; }
+.lh-catalog-title { font-size: 14px; font-weight: 900; letter-spacing: -.015em; color: var(--text-1); margin: 0; }
+.lh-count { font-family: var(--font-mono); font-size: 11px; font-weight: 800; color: var(--text-3); flex-shrink: 0; }
+.lh-count strong { color: var(--text-1); font-size: 13px; }
+.lh-chip-rail { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.lh-chip-rail::-webkit-scrollbar { display: none; }
+.lh-chip { min-height: 38px; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-panel); color: var(--text-2); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; transition: color .2s ease, border-color .2s ease, background .22s ease, box-shadow .22s ease; }
+.lh-chip:hover { color: var(--text-1); border-color: var(--line-strong); }
+.lh-chip.is-active { color: #04121a; background: linear-gradient(135deg, var(--rgb-3), var(--rgb-2)); border-color: transparent; box-shadow: 0 8px 20px color-mix(in srgb, var(--rgb-3) 30%, transparent); }
+:root[data-theme='light'] .lh-chip.is-active { color: #fff; }
+.lh-course-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 11px; }
+.lh-course { position: relative; overflow: hidden; display: flex; flex-direction: column; border-radius: 18px; border: 1px solid var(--line); background: var(--bg-panel); transition: transform .18s ease, border-color .25s ease, box-shadow .25s ease; }
+.lh-course:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--course-accent) 44%, var(--line)); box-shadow: 0 16px 36px rgba(0, 0, 0, .3); }
+.lh-course.is-selected { border-color: color-mix(in srgb, var(--course-accent) 62%, var(--line)); box-shadow: 0 16px 38px color-mix(in srgb, var(--course-accent) 18%, transparent); }
+.lh-course .aparat-course-thumb, .lh-thumb { position: relative; display: block; width: 100%; padding: 0; border: 0; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--course-accent) 6%, transparent); cursor: pointer; overflow: hidden; }
+.lh-thumb-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; opacity: 0; transition: opacity .24s ease; background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, .42), transparent 68%); }
+.lh-thumb:hover .lh-thumb-play, .lh-course.is-selected .lh-thumb-play { opacity: 1; }
+.lh-thumb-duration { position: absolute; inset-block-end: 7px; inset-inline-end: 7px; font-family: var(--font-mono); font-size: 9.5px; font-weight: 800; color: #fff; background: rgba(4, 10, 22, .72); padding: 3px 7px; border-radius: 7px; }
+.lh-thumb-level { position: absolute; inset-block-start: 7px; inset-inline-start: 7px; font-size: 9px; font-weight: 900; letter-spacing: .04em; color: #04121a; background: linear-gradient(135deg, var(--course-accent), var(--course-accent2)); padding: 3px 8px; border-radius: 7px; }
+:root[data-theme='light'] .lh-thumb-level { color: #fff; }
+.lh-course-body { flex: 1; display: flex; flex-direction: column; padding: 11px 12px 12px; }
+.lh-course-title { font-size: 12.5px; font-weight: 900; letter-spacing: -.01em; line-height: 1.5; color: var(--text-1); margin: 0 0 6px; }
+.lh-course-desc { font-size: 10.5px; line-height: 1.75; color: var(--text-2); margin: 0 0 11px; }
+.lh-course-foot { margin-top: auto; display: flex; gap: 7px; flex-wrap: wrap; }
+.lh-mini { min-height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-2); font: inherit; font-size: 10.5px; font-weight: 800; cursor: pointer; transition: color .2s ease, border-color .2s ease, background .2s ease; flex: 1 1 0; justify-content: center; }
+.lh-mini:hover { color: var(--text-1); border-color: color-mix(in srgb, var(--course-accent) 44%, var(--line)); }
+.lh-mini--accent { color: var(--course-accent); border-color: color-mix(in srgb, var(--course-accent) 38%, var(--line)); background: color-mix(in srgb, var(--course-accent) 10%, transparent); }
+:root[data-theme='light'] .lh-mini--accent { color: color-mix(in srgb, var(--course-accent) 55%, #0b1020); }
+
+/* ─────────────────────────── videos · learning path ─────────────────────── */
+.lh-paths { display: flex; flex-direction: column; gap: 11px; }
+.lh-path { padding: 14px; border-radius: 20px; }
+.lh-path::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: linear-gradient(90deg, var(--a), var(--b)); opacity: .85; }
+.lh-path-head { display: flex; align-items: center; gap: 11px; margin-bottom: 8px; }
+.lh-path-title { font-size: 13.5px; font-weight: 900; letter-spacing: -.01em; color: var(--text-1); }
+.lh-path-sub { font-size: 10.5px; line-height: 1.6; color: var(--text-3); margin: 2px 0 0; }
+.lh-path-list { display: flex; flex-direction: column; }
+.lh-path-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 9px 4px; border: 0; background: transparent; color: var(--text-2); font: inherit; text-align: start; cursor: pointer; transition: color .2s ease; }
+.lh-path-row + .lh-path-row { border-top: 1px solid var(--line); }
+.lh-path-row:hover, .lh-path-row[aria-pressed='true'] { color: var(--text-1); }
+.lh-path-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.lh-path-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lh-path-row-title { font-size: 11.8px; font-weight: 800; line-height: 1.55; }
+.lh-path-row-meta { font-size: 10px; color: var(--text-3); }
+
+/* ─────────────────────────── videos · channel ───────────────────────────── */
+.lh-channel { position: relative; overflow: hidden; padding: 16px 15px; border-radius: 22px; }
+.lh-channel-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.lh-channel-mark { width: 52px; height: 52px; flex-shrink: 0; border-radius: 17px; display: grid; place-items: center; background: linear-gradient(140deg, var(--rgb-3), var(--rgb-2)); color: #04121a; box-shadow: 0 12px 28px color-mix(in srgb, var(--rgb-3) 32%, transparent); }
+:root[data-theme='light'] .lh-channel-mark { color: #fff; }
+.lh-channel-name { font-size: 14px; font-weight: 900; letter-spacing: -.015em; color: var(--text-1); margin: 0 0 2px; }
+.lh-channel-handle { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); margin: 0; }
+/* Two lines, not three: inside the hub this card sits under the page hero, so
+   it is a badge of identity rather than the page's opening paragraph. */
+.lh-channel-sub { -webkit-line-clamp: 2; }
+.lh-url-box { display: flex; align-items: center; gap: 9px; min-height: 46px; padding: 0 11px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg-panel); margin-bottom: 11px; }
+.lh-url-box svg { flex-shrink: 0; color: var(--text-3); }
+.lh-url-text { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lh-copy { width: 38px; height: 38px; flex-shrink: 0; border-radius: 11px; border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-2); display: grid; place-items: center; cursor: pointer; transition: color .2s ease, border-color .2s ease; }
+.lh-copy:hover { color: var(--text-1); border-color: var(--line-strong); }
+.lh-copy.is-copied { color: var(--rgb-4); border-color: color-mix(in srgb, var(--rgb-4) 46%, var(--line)); }
+:root[data-theme='light'] .lh-copy.is-copied { color: #00a86b; }
+.lh-note { display: flex; gap: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-panel); }
+.lh-note-icon { flex-shrink: 0; color: var(--rgb-2); margin-top: 1px; }
+:root[data-theme='light'] .lh-note-icon { color: #6d3df0; }
+.lh-note-text { font-size: 11.5px; line-height: 1.85; color: var(--text-2); margin: 0; }
+
+/* ─────────────────────────── the emblem ────────────────────────────────────
+ * `transform` only, and the halo breathes between .34 and .62 — never to
+ * zero, so it never reads as a disconnected socket. */
+.lh-orb-svg { display: block; overflow: visible; }
+.lh-hero-art { width: 92px; height: 92px; }
+.lh-orb-halo { transform-origin: 60px 60px; animation: lh-halo 5.4s ease-in-out infinite; }
+@keyframes lh-halo { 0%, 100% { opacity: .34; transform: scale(.94); } 50% { opacity: .62; transform: scale(1.05); } }
+.lh-orb-spin { transform-origin: 60px 60px; }
+.lh-orb-spin--a { animation: lh-spin 24s linear infinite; }
+.lh-orb-spin--b { animation: lh-spin 36s linear infinite reverse; }
+@keyframes lh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ─────────────────────────── responsive ─────────────────────────────────── */
+@media (max-width: 400px) {
+  .lh-hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .lh-hero-art { display: none; }
+  .lh-course-grid { grid-template-columns: minmax(0, 1fr); }
+  .lh-contact-grid { grid-template-columns: minmax(0, 1fr); }
+  .lh-tab-hint { display: none; }
+}
+/*
+ * There is deliberately NO wide-screen breakpoint here. `.app-shell` caps the
+ * whole app at 520px, so anything above that width never reaches these rules —
+ * a media query for it would be dead code promising a layout that cannot
+ * happen. The grids above reflow on their own with auto-fit.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  .lh-orb, .lh-sheen, .lh-orb-halo, .lh-orb-spin--a, .lh-orb-spin--b { animation: none !important; }
+  .lh-sheen { transition: none !important; }
+  .lh-cta:hover, .lh-course:hover, .lh-contact:hover, .lh-doc:hover { transform: none; }
+}

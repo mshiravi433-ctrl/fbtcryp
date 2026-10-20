@@ -13379,7 +13379,17 @@ export default function run() {
       missing.length === 0);
     t('the level labels exist in English and Persian', hasKey(dicts.en, 'docs.level.beginner')
       && hasKey(dicts.fa, 'docs.level.beginner') && hasKey(dicts.en, 'docs.level.pro') && hasKey(dicts.fa, 'docs.level.pro'));
-    t('the Docs screen renders the level badge', /docs-level-badge/.test(docs) && /docs\.level\./.test(docs));
+    /*
+     * The level used to be a badge painted on every card, next to a column
+     * that mixed all three levels. Since the 2026 redesign the level IS the
+     * navigation — a sub-tab per level, so a first-time reader is not shown
+     * Intent OS beside «شروع کار». The fact is stated more strongly, not
+     * dropped, so the assertion accepts the rail (`lh-subtab`) as well as the
+     * badge, and the `docs.level` prefix without requiring a literal dot —
+     * the interpolation now happens inside the shared rail component.
+     */
+    t('the Docs screen renders the level', /docs\.level\b/.test(docs)
+      && (/docs-level-badge/.test(docs) || /SubTabRail/.test(docs)));
     t('the Wallet empty state offers "show all networks" for cross-chain holdings',
       hasKey(dicts.en, 'wallet.showAllNetworks') && hasKey(dicts.fa, 'wallet.showAllNetworks')
         && /wallet\.showAllNetworks/.test(read('src/pages/Wallet.jsx')));

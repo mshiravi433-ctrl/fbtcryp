@@ -3765,5 +3765,63 @@
     "scanningHint": "Junta las partes traseras de los móviles, mitad superior con mitad superior.",
     "theyAsk": "Piden {{amount}}",
     "chainMismatch": "Esa dirección está en {{theirs}} y tú estás en {{mine}}. Enviar por la red equivocada suele significar perder los fondos."
+  },
+  "learn": {
+    "title": "Aprender",
+    "kicker": "Centro de aprendizaje",
+    "heroTitle": "Aprende FBT Swap",
+    "intro": "Respuestas escritas a mano sobre esta app, una guía paso a paso de cada pantalla y la academia en vídeo — tres fuentes, una página.",
+    "tabsTitle": "Fuentes de aprendizaje",
+    "subtabsTitle": "Secciones",
+    "tabs": {
+      "help": "Ayuda",
+      "docs": "Documentación",
+      "videos": "Vídeos"
+    },
+    "tabsSub": {
+      "help": "Respuestas y soporte",
+      "docs": "Cada pantalla paso a paso",
+      "videos": "Lecciones en vídeo"
+    },
+    "subtab": {
+      "faq": "Preguntas frecuentes",
+      "support": "Soporte y recursos",
+      "lessons": "Lecciones",
+      "paths": "Ruta de aprendizaje"
+    },
+    "hint": {
+      "faq": "Busca primero; si la respuesta no está aquí, la pestaña de soporte llega a una persona real.",
+      "support": "Solo tenemos dos canales oficiales: el correo y nuestro bot de Telegram. Nunca te escribimos primero.",
+      "lessons": "Abre una lección para ver aquí su resumen y sus pasos; el vídeo en sí está en Aparat.",
+      "paths": "Seis lecciones en tres niveles. Si empiezas, comienza por arriba.",
+      "beginner": "Seis guías: billetera, seguridad, por qué esta app, estrategia, intercambio y tu cartera. Lee estas primero.",
+      "intermediate": "Farming, señales, trading, billetera inteligente, P2P y órdenes automáticas — cuando ya domines lo básico.",
+      "pro": "Intent OS y dYdX. Herramientas con riesgo real: lee cada transacción en tu billetera."
+    },
+    "stats": {
+      "guides": "guías",
+      "faq": "respuestas",
+      "lessons": "lecciones en vídeo"
+    },
+    "faq": {
+      "searchLabel": "Buscar en las preguntas",
+      "searchPlaceholder": "Prueba: comisiones, gas, frase de recuperación…",
+      "emptyTitle": "Sin coincidencias",
+      "emptyBody": "Prueba otra palabra o pregunta en la pestaña de soporte — responde una persona real.",
+      "clear": "Borrar la búsqueda"
+    },
+    "support": {
+      "title": "Formas de contactarnos",
+      "open": "Abrir",
+      "emailSub": "Si es sobre una transacción, envía también su hash.",
+      "telegramSub": "Nuestro bot oficial en Telegram.",
+      "scamTitle": "Aviso de estafa"
+    },
+    "videos": {
+      "handle": "Identificador del canal",
+      "pathsTitle": "Ruta de aprendizaje",
+      "lessonsCount": "{{n}} lecciones en este nivel",
+      "pathsNote": "Los vídeos se alojan en Aparat; la calidad depende de tu conexión."
+    }
   }
 }

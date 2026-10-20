@@ -3765,5 +3765,63 @@
     "scanningHint": "Tempelkan bagian belakang ponsel, bagian atas berhadapan dengan bagian atas.",
     "theyAsk": "Mereka meminta {{amount}}",
     "chainMismatch": "Alamat itu ada di {{theirs}} dan Anda ada di {{mine}}. Mengirim di jaringan yang salah biasanya menghilangkan dana."
+  },
+  "learn": {
+    "title": "Pelajari",
+    "kicker": "Pusat pembelajaran",
+    "heroTitle": "Pelajari FBT Swap",
+    "intro": "Jawaban yang ditulis tangan tentang aplikasi ini, panduan langkah demi langkah untuk setiap layar, dan akademi video — tiga sumber, satu halaman.",
+    "tabsTitle": "Sumber pembelajaran",
+    "subtabsTitle": "Bagian",
+    "tabs": {
+      "help": "Bantuan",
+      "docs": "Dokumentasi",
+      "videos": "Video"
+    },
+    "tabsSub": {
+      "help": "Jawaban dan dukungan",
+      "docs": "Setiap layar langkah demi langkah",
+      "videos": "Pelajaran video"
+    },
+    "subtab": {
+      "faq": "Pertanyaan umum",
+      "support": "Dukungan & sumber",
+      "lessons": "Pelajaran",
+      "paths": "Jalur belajar"
+    },
+    "hint": {
+      "faq": "Cari dulu; jika jawabannya tidak ada di sini, tab Dukungan menghubungkan Anda dengan orang sungguhan.",
+      "support": "Kami hanya punya dua kanal resmi: email dan bot Telegram kami. Kami tidak pernah menghubungi Anda lebih dulu.",
+      "lessons": "Buka sebuah pelajaran untuk membaca ringkasan dan langkahnya di sini; videonya sendiri ada di Aparat.",
+      "paths": "Enam pelajaran dalam tiga level. Jika Anda baru, mulailah dari atas.",
+      "beginner": "Enam panduan: dompet, keamanan, mengapa aplikasi ini, strategi, swap, dan portofolio Anda. Baca ini dulu.",
+      "intermediate": "Farming, sinyal, trading, dompet pintar, P2P, dan order otomatis — setelah dasarnya Anda kuasai.",
+      "pro": "Intent OS dan dYdX. Alat dengan risiko nyata — bacalah setiap transaksi di dompet Anda sendiri."
+    },
+    "stats": {
+      "guides": "panduan",
+      "faq": "jawaban siap",
+      "lessons": "pelajaran video"
+    },
+    "faq": {
+      "searchLabel": "Cari di pertanyaan",
+      "searchPlaceholder": "Coba: biaya, gas, frasa pemulihan…",
+      "emptyTitle": "Tidak ada yang cocok",
+      "emptyBody": "Coba kata lain, atau tanya lewat tab Dukungan — orang sungguhan yang menjawab.",
+      "clear": "Hapus pencarian"
+    },
+    "support": {
+      "title": "Cara menghubungi kami",
+      "open": "Buka",
+      "emailSub": "Jika tentang suatu transaksi, sertakan juga hash transaksinya.",
+      "telegramSub": "Bot resmi kami di Telegram.",
+      "scamTitle": "Peringatan penipuan"
+    },
+    "videos": {
+      "handle": "ID kanal",
+      "pathsTitle": "Jalur belajar",
+      "lessonsCount": "{{n}} pelajaran di level ini",
+      "pathsNote": "Video dihosting di Aparat; kualitas pemutaran bergantung pada koneksi Anda."
+    }
   }
 }

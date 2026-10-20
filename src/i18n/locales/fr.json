@@ -3765,5 +3765,63 @@
     "scanningHint": "Approchez le dos des téléphones, partie haute contre partie haute.",
     "theyAsk": "Ils demandent {{amount}}",
     "chainMismatch": "Cette adresse est sur {{theirs}} et vous êtes sur {{mine}}. Envoyer sur le mauvais réseau fait généralement perdre les fonds."
+  },
+  "learn": {
+    "title": "Apprendre",
+    "kicker": "Centre d'apprentissage",
+    "heroTitle": "Apprendre FBT Swap",
+    "intro": "Des réponses écrites à la main sur cette application, un guide pas à pas pour chaque écran et l'académie vidéo — trois sources, une page.",
+    "tabsTitle": "Sources d'apprentissage",
+    "subtabsTitle": "Sections",
+    "tabs": {
+      "help": "Aide",
+      "docs": "Documentation",
+      "videos": "Vidéos"
+    },
+    "tabsSub": {
+      "help": "Réponses et assistance",
+      "docs": "Chaque écran pas à pas",
+      "videos": "Leçons vidéo"
+    },
+    "subtab": {
+      "faq": "Questions fréquentes",
+      "support": "Assistance et ressources",
+      "lessons": "Leçons",
+      "paths": "Parcours d'apprentissage"
+    },
+    "hint": {
+      "faq": "Cherchez d'abord ; si la réponse n'est pas ici, l'onglet Assistance joint une vraie personne.",
+      "support": "Nous n'avons que deux canaux officiels : l'e-mail et notre bot Telegram. Nous ne vous écrivons jamais en premier.",
+      "lessons": "Ouvrez une leçon pour voir ici son résumé et ses étapes ; la vidéo elle-même est sur Aparat.",
+      "paths": "Six leçons en trois niveaux. Si vous débutez, commencez par le haut.",
+      "beginner": "Six guides : portefeuille, sécurité, pourquoi cette application, stratégie, échange et votre portefeuille. Lisez ceux-là.",
+      "intermediate": "Farm, signaux, trading, portefeuille intelligent, P2P et ordres automatiques — une fois les bases acquises.",
+      "pro": "Intent OS et dYdX. Des outils à risque réel : lisez chaque transaction dans votre portefeuille."
+    },
+    "stats": {
+      "guides": "guides",
+      "faq": "réponses prêtes",
+      "lessons": "leçons vidéo"
+    },
+    "faq": {
+      "searchLabel": "Rechercher dans les questions",
+      "searchPlaceholder": "Essayez : frais, gaz, phrase de récupération…",
+      "emptyTitle": "Aucun résultat",
+      "emptyBody": "Essayez un autre mot, ou demandez depuis l'onglet Assistance — une vraie personne répond.",
+      "clear": "Effacer la recherche"
+    },
+    "support": {
+      "title": "Moyens de nous joindre",
+      "open": "Ouvrir",
+      "emailSub": "S'il s'agit d'une transaction, envoyez aussi son hash.",
+      "telegramSub": "Notre bot officiel sur Telegram.",
+      "scamTitle": "Avertissement arnaque"
+    },
+    "videos": {
+      "handle": "Identifiant de la chaîne",
+      "pathsTitle": "Parcours d'apprentissage",
+      "lessonsCount": "{{n}} leçons à ce niveau",
+      "pathsNote": "Les vidéos sont hébergées sur Aparat ; la qualité dépend de votre connexion."
+    }
   }
 }
