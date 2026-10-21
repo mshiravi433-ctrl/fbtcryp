@@ -148,7 +148,18 @@ const GROUPS = [
     id: 'earn',
     items: [
       { to: '/farm', key: 'nav.farm', Icon: IconPools, hue: 'var(--rgb-4)' },
-      { to: '/collective', key: 'nav.collective', Icon: IconActivity, hue: 'var(--rgb-5)' },
+      /*
+       * ─── FBT SMART COLLECTIVE IS HIDDEN FROM THE MENU FOR NOW ────────────
+       * Owner instruction (2026-10-21): «مجموعه هوشمند fbt را الان از منو محو
+       * کن و ناپدید کن که در منو دیگر نباشد فعلا».
+       *
+       * The /collective ROUTE stays mounted in App.jsx exactly like the
+       * /solana and /portfolio doorways: a menu entry is discovery, a route is
+       * a contract, and saved/shared links must keep resolving. Only this
+       * doorway is removed — re-add the tile (and the IconActivity import if
+       * nothing else uses it) when the feature is ready to surface again.
+       */
+      // { to: '/collective', key: 'nav.collective', Icon: IconActivity, hue: 'var(--rgb-5)' },
       /*
        * Loan — lending & borrowing page.
        * FBT acts as Router + Fee layer only; non-custodial.
