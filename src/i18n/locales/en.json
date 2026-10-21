@@ -1993,7 +1993,7 @@
   },
   "farm": {
     "title": "Farm",
-    "subtitle": "Native yield, liquidity pools and strategies — without leaving FBT Swap.",
+    "subtitle": "Discover, compare and track the best yield opportunities.",
     "whatTitle": "How farming works",
     "whatBody": "You deposit into a pool and earn a share of what it makes: interest from borrowers, a cut of every swap, or rewards for helping secure a network. All of it is paid by someone doing something real — which is why a pool advertising 900% a year is not paying you out of revenue.",
     "ilTitle": "Impermanent loss — read before depositing",
@@ -2916,7 +2916,7 @@
       "below": "at or below",
       "enable": "Enable alert",
       "disable": "Disable alert",
-      "notice": "Farm alerts use the app’s Price alerts preference and are checked while Farm is open. Background delivery is not available here.",
+      "notice": "Farm alerts follow your Price alerts preference and are delivered even in the background via FCM push notifications.",
       "titleForPool": "Farm rate alert: {{symbol}}",
       "body": "{{symbol}} APY is {{apy}}%, {{direction}} your {{threshold}}% threshold.",
       "apyUnavailable": "Rate alerts require a fresh APY; APR-only or unavailable rates cannot be used.",
@@ -3021,7 +3021,7 @@
     "sharePool": "Share pool",
     "copyLink": "Copy link",
     "shareTitle": "{{name}} pool on FBT Farm",
-    "shareText": "Explore {{name}} on FBT Farm. Current reported APY: {{apy}}.",
+    "shareText": "Explore {{name}} on FBT Farm. Current reported rate: {{rate}}.",
     "shareCopied": "Pool link copied",
     "shareFailed": "Could not copy the pool link"
   },
