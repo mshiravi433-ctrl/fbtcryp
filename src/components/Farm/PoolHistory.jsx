@@ -3,11 +3,17 @@ import { getYieldHistory } from '../../lib/yields';
 import { fmtCompact } from '../../lib/format';
 import TrendChart from '../TrendChart';
 
+const HISTORY_RANGES = Object.freeze([
+  { id: '7d', days: 7 },
+  { id: '30d', days: 30 },
+  { id: '90d', days: 90 }
+]);
+
 export default function PoolHistory({ poolId, available = true, t }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
+  const [range, setRange] = useState('30d');
   const [metric, setMetric] = useState('apy');
   const [retry, setRetry] = useState(0);
 
@@ -17,7 +23,8 @@ export default function PoolHistory({ poolId, available = true, t }) {
     setError(!available);
     setLoading(available);
     if (!available) return () => ctrl.abort();
-    getYieldHistory(poolId, { signal: ctrl.signal }).then((result) => {
+
+    getYieldHistory(poolId, { signal: ctrl.signal, range }).then((result) => {
       if (!ctrl.signal.aborted) setData(result);
     }).catch(() => {
       if (!ctrl.signal.aborted) setError(true);
@@ -25,33 +32,102 @@ export default function PoolHistory({ poolId, available = true, t }) {
       if (!ctrl.signal.aborted) setLoading(false);
     });
     return () => ctrl.abort();
-  }, [poolId, retry, available]);
+  }, [poolId, range, retry, available]);
 
+  const selectedRange = HISTORY_RANGES.find((item) => item.id === range) ?? HISTORY_RANGES[1];
   const points = useMemo(() => {
-    const cutoff = Date.now() - days * 86_400_000;
+    const cutoff = Date.now() - selectedRange.days * 86_400_000;
     return (data?.pool === poolId ? data.points : [])
       .filter((row) => row.timestamp >= cutoff && Number.isFinite(row[metric]))
       .map((row) => ({ x: row.timestamp, y: row[metric] }));
-  }, [data, poolId, days, metric]);
-  const format = (n) => metric === 'apy' ? `${n.toFixed(2)}%` : `$${fmtCompact(n)}`;
+  }, [data, poolId, metric, selectedRange.days]);
+  const format = (value) => metric === 'apy' ? `${value.toFixed(2)}%` : `$${fmtCompact(value)}`;
+  const summary = useMemo(() => {
+    if (!points.length) return null;
+    const values = points.map((point) => point.y);
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+      average: values.reduce((sum, value) => sum + value, 0) / values.length
+    };
+  }, [points]);
 
   return (
-    <section className="card card-soft" aria-label={t('farm.historyTitle')} data-testid={!available ? 'farm-pool-history' : undefined} style={{ marginTop: 12 }}>
-      <div className="row-between" style={{ gap: 8, flexWrap: 'wrap' }}>
+    <section className="card card-soft farm-history" aria-label={t('farm.historyTitle')} data-testid="farm-pool-history">
+      <div className="farm-history-head">
         <h3 className="section-label">{t('farm.historyTitle')}</h3>
-        <div className="row" role="group" aria-label={t('farm.historyMetric')}>
-          {['apy', 'tvlUsd'].map((key) => <button type="button" key={key} className={`tag ${metric === key ? 'active' : ''}`} aria-pressed={metric === key} onClick={() => setMetric(key)}>{key === 'apy' ? 'APY' : 'TVL'}</button>)}
-        </div>
-        <div className="row" role="group" aria-label={t('farm.historyRange')}>
-          {[30, 90, 365].map((n) => <button type="button" key={n} className={`tag ${days === n ? 'active' : ''}`} aria-pressed={days === n} onClick={() => setDays(n)}>{t('farm.historyDays', { count: n })}</button>)}
+        <div className="farm-history-controls">
+          <div className="farm-history-pills" role="group" aria-label={t('farm.historyMetric')}>
+            {['apy', 'tvlUsd'].map((key) => (
+              <button
+                type="button"
+                key={key}
+                className={`farm-tab-pill-button${metric === key ? ' active' : ''}`}
+                aria-pressed={metric === key}
+                onClick={() => setMetric(key)}
+              >
+                {key === 'apy' ? 'APY' : 'TVL'}
+              </button>
+            ))}
+          </div>
+          <div className="farm-history-pills" role="group" aria-label={t('farm.historyRange')}>
+            {HISTORY_RANGES.map(({ id }) => (
+              <button
+                type="button"
+                key={id}
+                className={`farm-tab-pill-button${range === id ? ' active' : ''}`}
+                aria-pressed={range === id}
+                onClick={() => setRange(id)}
+              >
+                {t(`farm.historyRanges.${id}`)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      {!available ? <p className="faint" role="status">{t('farm.historyUnavailable')}</p> : error ? <div role="alert"><p className="faint">{t('farm.historyUnavailable')}</p><button type="button" className="btn btn-ghost btn-sm" onClick={() => setRetry((n) => n + 1)}>{t('farm.retry')}</button></div> : <>
-        <TrendChart timeScale points={points} height={120} loading={loading} up={points.length > 1 && points.at(-1).y >= points[0].y} formatValue={format} emptyLabel={t('farm.historyEmpty')} testId="farm-pool-history" />
-        {!loading && points.length > 0 && <div className="row-between faint" dir="ltr"><span>{new Date(points[0].x).toLocaleDateString()} · {format(points[0].y)}</span><span>{new Date(points.at(-1).x).toLocaleDateString()} · {format(points.at(-1).y)}</span></div>}
-      </>}
+
+      {!available ? (
+        <p className="faint" role="status">{t('farm.historyUnavailable')}</p>
+      ) : error ? (
+        <div className="farm-history-error">
+          <p className="faint" role="alert">{t('farm.historyUnavailable')}</p>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRetry((value) => value + 1)}>{t('farm.retry')}</button>
+        </div>
+      ) : loading ? (
+        <div className="farm-history-skeleton" role="status" aria-label={t('farm.historyLoading')}>
+          <span />
+          <span />
+          <span />
+        </div>
+      ) : (
+        <>
+          <TrendChart
+            timeScale
+            points={points}
+            height={120}
+            loading={false}
+            up={points.length > 1 && points.at(-1).y >= points[0].y}
+            formatValue={format}
+            emptyLabel={t('farm.historyEmpty')}
+            testId="farm-pool-history-chart"
+          />
+          {summary && (
+            <div className="farm-history-summary" aria-label={t('farm.historySummary')}>
+              <div><span>{t('farm.historyMin')}</span><strong className="mono" dir="ltr">{format(summary.min)}</strong></div>
+              <div><span>{t('farm.historyMax')}</span><strong className="mono" dir="ltr">{format(summary.max)}</strong></div>
+              <div><span>{t('farm.historyAverage')}</span><strong className="mono" dir="ltr">{format(summary.average)}</strong></div>
+            </div>
+          )}
+          {points.length > 0 && (
+            <div className="farm-history-endpoints faint" dir="ltr">
+              <span>{new Date(points[0].x).toLocaleDateString()} · {format(points[0].y)}</span>
+              <span>{new Date(points.at(-1).x).toLocaleDateString()} · {format(points.at(-1).y)}</span>
+            </div>
+          )}
+        </>
+      )}
       {data?.freshness === 'STALE' && <p className="notice" role="status">{t('farm.staleNotice')}</p>}
-      <p className="faint">{t('farm.historyNote')}</p>
+      <p className="faint farm-history-note">{t('farm.historyNote')}</p>
     </section>
   );
 }

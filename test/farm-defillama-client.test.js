@@ -27,6 +27,17 @@ describe('DefiLlama client and metrics', () => {
     await vi.advanceTimersByTimeAsync(51); await timed;
     expect(vi.getTimerCount()).toBe(0);
   });
+  it.each(['7d', '30d', '90d'])('requests and validates the %s history response shape', async (range) => {
+    const history = { pool: id, range, points: [{ timestamp: Date.now(), apy: 5, tvlUsd: 100 }], at: Date.now(), freshness: 'FRESH' };
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(history));
+    await expect(getYieldHistory(id, { range })).resolves.toMatchObject({ pool: id, range, points: history.points });
+    expect(String(spy.mock.calls[0][0])).toContain(`/history?range=${range}`);
+  });
+  it('rejects unsupported history ranges locally', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch');
+    await expect(getYieldHistory(id, { range: '365d' })).rejects.toThrow('INVALID_HISTORY_RANGE');
+    expect(spy).not.toHaveBeenCalled();
+  });
   it('validates history identity and refuses unsafe IDs locally', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ pool: 'different', points: [] }));
     await expect(getYieldHistory('../pools')).rejects.toThrow('INVALID_POOL_ID');

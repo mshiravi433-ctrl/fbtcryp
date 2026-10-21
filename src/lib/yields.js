@@ -387,6 +387,46 @@ export function projectEarnings(pool, amountUsd) {
   };
 }
 
+const COMPOUND_PERIODS = Object.freeze({ daily: 365, weekly: 52, monthly: 12, yearly: 1 });
+
+/**
+ * Pure earnings projection for the Farm calculator. APY is expressed as a
+ * percentage (5 means 5%), amount is USD, and the return is profit only — the
+ * principal is deliberately not included in the chart or earnings rows.
+ *
+ * `simple` applies the annual rate linearly. For compound scenarios, the
+ * reported annual rate is treated as a nominal scenario input and compounded
+ * at the user-selected frequency using P × (1 + r/n)^(n×t). This is an
+ * illustration, not a forecast or an assertion about a protocol's cadence.
+ * Unsupported or unsafe inputs return null rather than a plausible-looking zero.
+ */
+export function projectCompoundedEarnings({ amount, apy, frequency, years } = {}) {
+  const toInputNumber = (value) => {
+    if (typeof value !== 'number' && typeof value !== 'string') return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  };
+  const principal = toInputNumber(amount);
+  const rate = toInputNumber(apy);
+  const duration = toInputNumber(years);
+  if (
+    principal == null || principal <= 0 ||
+    rate == null || rate < 0 || rate > 10_000 ||
+    duration == null || duration < 0 || duration > 100 ||
+    !(frequency === 'simple' || Object.hasOwn(COMPOUND_PERIODS, frequency))
+  ) return null;
+
+  const annualRate = rate / 100;
+  const endingBalance = frequency === 'simple'
+    ? principal * (1 + annualRate * duration)
+    : principal * (1 + annualRate / COMPOUND_PERIODS[frequency]) ** (COMPOUND_PERIODS[frequency] * duration);
+  if (!Number.isFinite(endingBalance) || endingBalance < principal) return null;
+  return endingBalance - principal;
+}
+
+export const YIELD_HISTORY_RANGES = Object.freeze(['7d', '30d', '90d']);
+
 /**
  * What a 50/50 LP position loses (as a fraction, negative) when the two legs'
  * price ratio moves by `ratio` (1 = no move, 1.5 = one leg is worth 50% more
@@ -519,7 +559,9 @@ export async function getYields(options = {}) {
 
 export async function getYieldHistory(id, options = {}) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('INVALID_POOL_ID');
-  const data = await fetchYieldData(`${API_BASE}/yields/${encodeURIComponent(id)}/history`, { timeout: 65_000, ...options });
-  if (data?.pool !== id || !Array.isArray(data.points)) throw new Error('BAD_SHAPE');
+  const { range = '30d', ...fetchOptions } = options ?? {};
+  if (!YIELD_HISTORY_RANGES.includes(range)) throw new Error('INVALID_HISTORY_RANGE');
+  const data = await fetchYieldData(`${API_BASE}/yields/${encodeURIComponent(id)}/history?range=${encodeURIComponent(range)}`, { timeout: 65_000, ...fetchOptions });
+  if (data?.pool !== id || !Array.isArray(data.points) || (data.range != null && data.range !== range)) throw new Error('BAD_SHAPE');
   return data;
 }

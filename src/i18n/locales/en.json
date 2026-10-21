@@ -258,7 +258,7 @@
     "referralDesc": "Share your code to grow your streak bonus",
     "referralNote": "Referral points are a score, not a payment. If you ever reward invites with real money or crypto, that can count as a financial promotion in many countries — check the rules where you are before doing it.",
     "shareInvite": "Share invite link",
-    "shareText": "Join me on Fanous Bazaar Pishgam SWAP — the crypto terminal mini app",
+    "shareText": "Explore {{name}} on FBT Farm. Current reported rate: {{rate}}.",
     "quests": "Quests",
     "quest": {
       "firstTrade": "Place your first trade",
@@ -2950,7 +2950,78 @@
       "morphoPinnedMarket": "Morpho API · pinned Base market",
       "lidoSevenDayApr": "Lido · 7-day SMA APR API"
     },
-    "watchlistIntro": "This list and its alert thresholds are saved in settings; optional settings sync may carry them across devices. No wallet connection is required."
+    "watchlistIntro": "This list and its alert thresholds are saved in settings; optional settings sync may carry them across devices. No wallet connection is required.",
+    "compare": {
+      "title": "Compare pools",
+      "kicker": "POOL COMPARISON",
+      "subtitle": "Compare {{count}} pools side by side using the same live source.",
+      "cta": "Compare",
+      "clear": "Clear",
+      "selectedPools": "Selected pools for comparison",
+      "selectedCount": "{{count}} selected",
+      "removePool": "Remove {{name}} from comparison",
+      "addToComparison": "Add pool to comparison",
+      "removeFromComparison": "Remove pool from comparison",
+      "maxPools": "Maximum of three pools",
+      "best": "Best",
+      "criteria": "Metric",
+      "close": "Close comparison",
+      "ilRisk": "Impermanent-loss risk",
+      "labels": {
+        "grossApy": "Gross APY",
+        "split": "Base / reward APY",
+        "netApy": "APY after FBT fee",
+        "tvl": "TVL",
+        "risk": "Risk",
+        "realShare": "Real-yield share",
+        "il": "Impermanent loss",
+        "freshness": "Data freshness",
+        "score": "Quality score"
+      }
+    },
+    "calculator": {
+      "title": "Advanced earnings calculator",
+      "mode": "Earnings method",
+      "simple": "Simple",
+      "compound": "Compound",
+      "frequency": "Compounding frequency",
+      "frequencies": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+        "simple": "Simple (no compounding)"
+      },
+      "gross": "Gross earnings",
+      "fee": "FBT fee",
+      "net": "Net earnings after FBT fee",
+      "gasNeedsWallet": "Gas: connect a wallet to estimate this cost.",
+      "feeAssumption": "FBT fee assumes one deposit operation on the entered amount.",
+      "projectionAssumption": "Compound projections treat the reported APY as the nominal annual input rate; actual returns may differ."
+    },
+    "historyRanges": {
+      "7d": "7D",
+      "30d": "30D",
+      "90d": "90D"
+    },
+    "historyLoading": "Loading the selected history range…",
+    "historySummary": "Summary for the selected history range",
+    "historyMin": "Minimum",
+    "historyMax": "Maximum",
+    "historyAverage": "Average",
+    "searchEmpty": "No pool matching “{{query}}” was found.",
+    "clearSearch": "Clear search",
+    "clearFilters": "Clear active filters",
+    "activeFilters": "Active filters — tap one to remove it",
+    "filterNetwork": "Network",
+    "filterCategory": "Category",
+    "filterSort": "Sort",
+    "feedErrorTitle": "Live yield feed unavailable",
+    "sharePool": "Share pool",
+    "shareTitle": "{{name}} pool on FBT Farm",
+    "shareText": "Explore {{name}} on FBT Farm. Current reported APY: {{apy}}.",
+    "shareCopied": "Pool link copied",
+    "shareFailed": "Could not copy the pool link"
   },
   "signals": {
     "title": "AI Signals",

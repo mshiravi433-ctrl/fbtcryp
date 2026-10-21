@@ -1079,7 +1079,7 @@
       "topup": "simcard"
     },
     "share": "分享",
-    "shareText": "{{brand}} — 在 FBT Swap 用加密货币购买",
+    "shareText": "Explore {{name}} on FBT Farm. Current reported rate: {{rate}}.",
     "spread": "高于面值 {{pct}}%",
     "spreadWhy": "供应商的价格已经包含其利润。面值是这张卡本身的价值；高亮的金额是这里最划算的一档。",
     "alt": {
@@ -3083,8 +3083,79 @@
     "apr": "Current APR",
     "venue": {
       "verdictUnavailable": "No APY and 30-day mean are available to assess this rate yet."
-    }
-  },
+    },
+    "compare": {
+      "title": "Compare pools",
+      "kicker": "POOL COMPARISON",
+      "subtitle": "Compare {{count}} pools side by side using the same live source.",
+      "cta": "Compare",
+      "clear": "Clear",
+      "selectedPools": "Selected pools for comparison",
+      "selectedCount": "{{count}} selected",
+      "removePool": "Remove {{name}} from comparison",
+      "addToComparison": "Add pool to comparison",
+      "removeFromComparison": "Remove pool from comparison",
+      "maxPools": "Maximum of three pools",
+      "best": "Best",
+      "criteria": "Metric",
+      "close": "Close comparison",
+      "ilRisk": "Impermanent-loss risk",
+      "labels": {
+        "grossApy": "Gross APY",
+        "split": "Base / reward APY",
+        "netApy": "APY after FBT fee",
+        "tvl": "TVL",
+        "risk": "Risk",
+        "realShare": "Real-yield share",
+        "il": "Impermanent loss",
+        "freshness": "Data freshness",
+        "score": "Quality score"
+      }
+    },
+    "calculator": {
+      "title": "Advanced earnings calculator",
+      "mode": "Earnings method",
+      "simple": "Simple",
+      "compound": "Compound",
+      "frequency": "Compounding frequency",
+      "frequencies": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+        "simple": "Simple (no compounding)"
+      },
+      "gross": "Gross earnings",
+      "fee": "FBT fee",
+      "net": "Net earnings after FBT fee",
+      "gasNeedsWallet": "Gas: connect a wallet to estimate this cost.",
+      "feeAssumption": "FBT fee assumes one deposit operation on the entered amount.",
+      "projectionAssumption": "Compound projections treat the reported APY as the nominal annual input rate; actual returns may differ."
+    },
+    "historyRanges": {
+      "7d": "7D",
+      "30d": "30D",
+      "90d": "90D"
+    },
+    "historyLoading": "Loading the selected history range…",
+    "historySummary": "Summary for the selected history range",
+    "historyMin": "Minimum",
+    "historyMax": "Maximum",
+    "historyAverage": "Average",
+    "searchEmpty": "No pool matching “{{query}}” was found.",
+    "clearSearch": "Clear search",
+    "clearFilters": "Clear active filters",
+    "activeFilters": "Active filters — tap one to remove it",
+    "filterNetwork": "Network",
+    "filterCategory": "Category",
+    "filterSort": "Sort",
+    "feedErrorTitle": "Live yield feed unavailable",
+    "sharePool": "Share pool",
+    "shareTitle": "{{name}} pool on FBT Farm",
+    "shareText": "Explore {{name}} on FBT Farm. Current reported APY: {{apy}}.",
+    "shareCopied": "Pool link copied",
+    "shareFailed": "Could not copy the pool link"
+},
   "aiGlobal": {
     "title": "全球智能",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"

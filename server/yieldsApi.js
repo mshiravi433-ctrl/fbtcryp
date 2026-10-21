@@ -1,4 +1,4 @@
-import { fetchYields, fetchYieldHistory, isYieldPoolId } from './yields.js';
+import { fetchYields, fetchYieldHistory, isYieldPoolId, isYieldHistoryRange } from './yields.js';
 
 const TTL_MS = 60 * 60_000;
 const MAX_AGE_MS = 2 * TTL_MS;
@@ -72,7 +72,9 @@ export function createYieldsApi({ pools = fetchYields, history = fetchYieldHisto
     },
     async history(req, res) {
       const id = req.params.id;
+      const range = req.query?.range || '30d';
       if (!isYieldPoolId(id)) return res.status(400).set('Cache-Control', 'no-store').json({ error: 'INVALID_POOL_ID' });
+      if (!isYieldHistoryRange(range)) return res.status(400).set('Cache-Control', 'no-store').json({ error: 'INVALID_HISTORY_RANGE' });
       try {
         const feed = await read('pools', pools);
         /*
@@ -87,7 +89,8 @@ export function createYieldsApi({ pools = fetchYields, history = fetchYieldHisto
         if (!known) {
           return res.status(404).set('Cache-Control', 'no-store').json({ error: 'POOL_NOT_FOUND' });
         }
-        return send(res, await read(`history:${id}`, () => history(id)));
+        const value = await read(`history:${id}:${range}`, () => history(id, range));
+        return send(res, { ...value, range });
       } catch { return fail(res); }
     }
   };

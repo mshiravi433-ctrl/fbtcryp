@@ -179,7 +179,8 @@ function VenueChart({ venue, pool, chainRows, t }) {
     let alive = true;
     const ctrl = new AbortController();
     setHistory({ status: 'LOADING', points: [] });
-    getYieldHistory(poolId, { signal: ctrl.signal })
+    // The chart offers 7/30/90-day views locally, so fetch its widest supported window once.
+    getYieldHistory(poolId, { signal: ctrl.signal, range: '90d' })
       .then((result) => {
         if (!alive) return;
         setHistory({ status: 'READY', points: Array.isArray(result?.points) ? result.points : [] });

@@ -3,7 +3,7 @@ import {
   AUTOCOMPOUND_PROJECTS, FARM_EXECUTION_STATES, FbtFeeEngine, FarmAdapter, VAULT_PROJECTS,
   buildYieldStrategies, farmPoolResearch, metricFreshness, normalizeFarmOpportunity
 } from '../src/lib/farmDeFi';
-import { FARM_SCORE_WEIGHTS, farmScoreBreakdown, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
+import { FARM_SCORE_WEIGHTS, farmScoreBreakdown, projectCompoundedEarnings, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 
 const pool = {
   id: 'pool-1', symbol: 'USDC-USDT', project: 'uniswap-v3', chain: 'Base',
@@ -48,6 +48,21 @@ describe('farm DeFi architecture', () => {
     expect(projectEarnings({ apy: '' }, 1000)).toBeNull();
     expect(projectEarnings({ apy: false }, 1000)).toBeNull();
     expect(projectEarnings({ apy: 0 }, 1000)?.year).toBe(0);
+  });
+
+  it('projects transparent simple and compounded earnings and rejects invalid inputs', () => {
+    expect(projectCompoundedEarnings({ amount: 1000, apy: 0, frequency: 'daily', years: 1 })).toBe(0);
+    expect(projectCompoundedEarnings({ amount: 1000, apy: 12, frequency: 'simple', years: 0 })).toBe(0);
+    for (const [frequency, periods] of [['daily', 365], ['weekly', 52], ['monthly', 12], ['yearly', 1]]) {
+      expect(projectCompoundedEarnings({ amount: 1000, apy: 12, frequency, years: 1 }))
+        .toBeCloseTo(1000 * (1 + 0.12 / periods) ** periods - 1000, 10);
+    }
+    expect(projectCompoundedEarnings({ amount: 1000, apy: 12, frequency: 'simple', years: 1 })).toBeCloseTo(120);
+    expect(projectCompoundedEarnings({ amount: 1000, apy: -0.01, frequency: 'daily', years: 1 })).toBeNull();
+    expect(projectCompoundedEarnings({ amount: 1000, apy: null, frequency: 'daily', years: 1 })).toBeNull();
+    expect(projectCompoundedEarnings({ amount: 1000, apy: false, frequency: 'daily', years: 1 })).toBeNull();
+    expect(projectCompoundedEarnings({ amount: 1000, apy: 12, frequency: 'quarterly', years: 1 })).toBeNull();
+    expect(projectCompoundedEarnings({ amount: 0, apy: 12, frequency: 'daily', years: 1 })).toBeNull();
   });
 
   it('uses the visible 40/25/20/15 score weights and scores only evidenced inputs', () => {
