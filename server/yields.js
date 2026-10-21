@@ -597,16 +597,21 @@ export async function fetchYields() {
 
 export const isYieldPoolId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
+const YIELD_HISTORY_RANGE_DAYS = Object.freeze({ '7d': 7, '30d': 30, '90d': 90 });
+export const isYieldHistoryRange = (range) => Object.hasOwn(YIELD_HISTORY_RANGE_DAYS, range);
+
 /** Real daily observations, never the earnings projection used by the calculator. */
-export async function fetchYieldHistory(id) {
+export async function fetchYieldHistory(id, range = '30d') {
   if (!isYieldPoolId(id)) throw new Error('INVALID_POOL_ID');
+  if (!isYieldHistoryRange(range)) throw new Error('INVALID_HISTORY_RANGE');
   const raw = await fetchJson(`https://yields.llama.fi/chart/${id}`);
   if (raw?.status !== 'success' || !Array.isArray(raw.data)) throw new Error('INVALID_YIELD_HISTORY');
+  const now = Date.now();
   const byDay = new Map();
   for (const row of raw.data) {
     if (!row || typeof row.timestamp !== 'string') continue;
     const at = Date.parse(row.timestamp);
-    if (!Number.isFinite(at) || at > Date.now() + 60_000) continue;
+    if (!Number.isFinite(at) || at > now + 60_000) continue;
     const apy = metric(row.apy);
     const tvlUsd = metric(row.tvlUsd);
     if (apy == null && tvlUsd == null) continue;
@@ -617,6 +622,9 @@ export async function fetchYieldHistory(id) {
       apyBase: rounded(row.apyBase), apyReward: rounded(row.apyReward)
     });
   }
-  const points = [...byDay.values()].sort((a, b) => a.timestamp - b.timestamp).slice(-365);
-  return { pool: id, points, at: Date.now(), source: 'defillama', freshness: 'FRESH' };
+  const cutoff = now - YIELD_HISTORY_RANGE_DAYS[range] * 86_400_000;
+  const points = [...byDay.values()]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .filter((row) => row.timestamp >= cutoff);
+  return { pool: id, range, points, at: now, source: 'defillama', freshness: 'FRESH' };
 }

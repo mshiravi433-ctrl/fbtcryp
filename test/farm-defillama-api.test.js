@@ -49,19 +49,40 @@ describe('DefiLlama upstream contract', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
   it('normalizes chronological daily history, keeping the latest observation and null gaps', async () => {
+    const dayAgo = 86_400_000;
+    const midnightUtc = (time) => {
+      const date = new Date(time);
+      date.setUTCHours(0, 0, 0, 0);
+      return date;
+    };
+    const yesterday = midnightUtc(Date.now() - dayAgo);
+    const twoDaysAgo = midnightUtc(Date.now() - 2 * dayAgo);
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ status: 'success', data: [
-      { timestamp: '2026-08-02T12:00:00Z', apy: 4, tvlUsd: 15 },
-      { timestamp: '2026-08-01T00:00:00Z', apy: null, tvlUsd: 0 },
-      { timestamp: '2026-08-02T00:00:00Z', apy: 3, tvlUsd: 12 },
+      { timestamp: new Date(yesterday.getTime() + 12 * 60 * 60_000).toISOString(), apy: 4, tvlUsd: 15 },
+      { timestamp: twoDaysAgo.toISOString(), apy: null, tvlUsd: 0 },
+      { timestamp: yesterday.toISOString(), apy: 3, tvlUsd: 12 },
       { timestamp: 'invalid', apy: 9 }, null,
       { timestamp: '2099-01-01T00:00:00Z', apy: 999 },
-      { timestamp: '2026-08-03T00:00:00Z', apy: null, tvlUsd: null }
+      { timestamp: new Date(Date.now() - 3 * dayAgo).toISOString(), apy: null, tvlUsd: null }
     ] }));
     const data = await fetchYieldHistory(id);
     expect(data.pool).toBe(id);
     expect(data.points).toHaveLength(2);
     expect(data.points[0]).toMatchObject({ apy: null, tvlUsd: 0, apyBase: null });
     expect(data.points[1].apy).toBe(4);
+  });
+  it.each(['7d', '30d', '90d'])('returns only observed points inside the requested %s history window', async (range) => {
+    const now = Date.now();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ status: 'success', data: [
+      { timestamp: new Date(now - 1 * 86_400_000).toISOString(), apy: 5, tvlUsd: 100 },
+      { timestamp: new Date(now - 10 * 86_400_000).toISOString(), apy: 4, tvlUsd: 90 },
+      { timestamp: new Date(now - 40 * 86_400_000).toISOString(), apy: 3, tvlUsd: 80 },
+      { timestamp: new Date(now - 100 * 86_400_000).toISOString(), apy: 2, tvlUsd: 70 }
+    ] }));
+    const result = await fetchYieldHistory(id, range);
+    const expectedCount = range === '7d' ? 1 : range === '30d' ? 2 : 3;
+    expect(result).toMatchObject({ pool: id, range, points: expect.any(Array) });
+    expect(result.points).toHaveLength(expectedCount);
   });
   it('rejects path injection before any upstream request', async () => {
     const spy = vi.spyOn(globalThis, 'fetch');
@@ -120,6 +141,20 @@ describe('Farm API cache and HTTP handlers', () => {
     const ok = res(); await api.history({ params: { id } }, ok);
     await api.history({ params: { id } }, res());
     expect(ok.body.pool).toBe(id); expect(history).toHaveBeenCalledTimes(1);
+  });
+  it('validates range names and caches each history window independently for an hour', async () => {
+    const history = vi.fn(async (pool, range) => ({ pool, range, points: [], at: Date.now() }));
+    const api = createYieldsApi({ pools: async () => feed(), history });
+    const bad = res();
+    await api.history({ params: { id }, query: { range: '365d' } }, bad);
+    expect(bad.statusCode).toBe(400);
+    expect(history).not.toHaveBeenCalled();
+
+    const read = (range) => api.history({ params: { id }, query: { range } }, res());
+    await read('7d');
+    await read('30d');
+    await read('7d');
+    expect(history.mock.calls.map((call) => call[1])).toEqual(['7d', '30d']);
   });
   it('serves real HTTP routes with structured errors and no CDN caching', async () => {
     const api = createYieldsApi({ pools: async () => feed(), history: async (pool) => ({ pool, points: [], at: Date.now() }) });

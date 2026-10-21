@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -18,13 +19,15 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import { useFarmYields } from '../hooks/useFarmYields';
 import { useFarmRateAlerts } from '../hooks/useFarmRateAlerts';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAppStore } from '../store/useAppStore';
+import { copyText } from '../lib/share';
 import PoolHistory from '../components/Farm/PoolHistory';
 import PoolGlyph from '../components/Farm/PoolGlyph';
 import FullScreenSheet from '../components/FullScreenSheet';
 import { TOKENS } from '../lib/chains';
 import {
   farmScore, farmScoreBreakdown, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
-  projectEarnings, rateIsUnusual, realShare
+  projectCompoundedEarnings, projectEarnings, rateIsUnusual, realShare
 } from '../lib/yields';
 import { getSolanaAssets, MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
 import { LST_ASSETS } from '../lib/solanaAssets';
@@ -43,6 +46,35 @@ const EXECUTION_LIVE = FARM_EXECUTION_ADAPTERS.some((adapter) => adapter.openToP
 const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'realYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
 const AMOUNTS = [100, 1000, 10000];
 const HORIZONS = ['day', 'week', 'month', 'year'];
+
+function detectLowFarmHardware() {
+  try {
+    const nav = typeof navigator === 'undefined' ? null : navigator;
+    if (!nav) return false;
+    const cores = Number(nav.hardwareConcurrency);
+    const memory = Number(nav.deviceMemory);
+    return (Number.isFinite(cores) && cores > 0 && cores <= 4)
+      || (Number.isFinite(memory) && memory > 0 && memory <= 4);
+  } catch {
+    return false;
+  }
+}
+
+function isFarmSwipeExcluded(target) {
+  try {
+    if (!target?.closest) return false;
+    if (target.closest('.farm-tabs, .farm-venue-rail, .farm-hot-grid, .farm-secondary-filters, .farm-history-pills, .farm-compare-chips, [data-tab-swipe-ignore]')) return true;
+    let node = target;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      if (/(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 2) return true;
+      node = node.parentElement;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
 
 const ETH_STAKE_JOIN = {
   stETH: { project: 'lido', feedSymbol: 'STETH' },
@@ -242,42 +274,71 @@ function Metric({ label, value, unavailable, strong, tone }) {
   );
 }
 
-function HorizonEarningsChart({ pool, amount, t }) {
-  const proj = useMemo(() => projectEarnings(pool, amount), [pool, amount]);
-  const points = useMemo(() => {
-    if (!proj) return [];
-    return HORIZONS.map((h, i) => ({ x: i, y: Math.max(0, Number(proj[h]) || 0) }));
-  }, [proj]);
-  if (!proj || points.length < 2) return null;
-  const yearUp = Number(proj.year) >= 0;
+function HorizonEarningsChart({ pool, amount, frequency, onFrequencyChange, t }) {
+  const grossApy = finiteMetric(pool?.apy);
+  const feeQuote = fbtFeeEngine.quoteOperation({ amountUsd: amount });
+  const operationFee = feeQuote.status === 'AVAILABLE' ? finiteMetric(feeQuote.fbtFeeUsd) : null;
+  const projections = useMemo(() => HORIZONS.map((horizon) => {
+    const years = horizon === 'day' ? 1 / 365 : horizon === 'week' ? 1 / 52 : horizon === 'month' ? 1 / 12 : 1;
+    const gross = projectCompoundedEarnings({ amount, apy: grossApy, frequency, years });
+    const fee = operationFee;
+    return { horizon, gross, fee, net: gross == null || fee == null ? null : gross - fee };
+  }), [amount, grossApy, frequency, operationFee]);
+  const points = projections
+    .map(({ net }, index) => net == null ? null : ({ x: index, y: net }))
+    .filter(Boolean);
+  const compound = frequency !== 'simple';
+
   return (
-    <section className="farm-horizon-chart" aria-label={t('farm.horizonChartTitle')}>
+    <section className="farm-horizon-chart" aria-label={t('farm.calculator.title')} data-testid={`farm-horizon-${pool.id}`}>
       <div className="farm-horizon-chart-head">
-        <p className="farm-horizon-chart-title">{t('farm.horizonChartTitle')}</p>
-        <p className="farm-horizon-chart-sub">{t('farm.horizonChartSub', { amount: fmtUsd(amount) })}</p>
+        <div className="farm-calculator-heading">
+          <p className="farm-horizon-chart-title">{t('farm.calculator.title')}</p>
+          <p className="farm-horizon-chart-sub">{t('farm.horizonChartSub', { amount: fmtUsd(amount) })}</p>
+        </div>
+        <div className="farm-calculator-mode" role="group" aria-label={t('farm.calculator.mode')}>
+          <button type="button" className={!compound ? 'active' : ''} aria-pressed={!compound} onClick={() => onFrequencyChange('simple')}>
+            {t('farm.calculator.simple')}
+          </button>
+          <button type="button" className={compound ? 'active' : ''} aria-pressed={compound} onClick={() => onFrequencyChange(frequency === 'simple' ? 'daily' : frequency)}>
+            {t('farm.calculator.compound')}
+          </button>
+        </div>
       </div>
-      <TrendChart
-        points={points}
-        height={96}
-        up={yearUp}
-        emptyLabel={t('farm.horizonChartEmpty')}
-        formatValue={(v) => fmtUsd(v)}
-        testId={`farm-horizon-${pool.id}`}
-      />
-      <div className="farm-horizon-rail">
-        {HORIZONS.map((h) => (
-          <div key={h} className={`farm-horizon-cell${h === 'year' ? ' is-year' : ''}`}>
-            <span>{t(`farm.${h}`)}</span>
-            <span className="mono" dir="ltr">{fmtUsd(proj[h])}</span>
-          </div>
+      <label className="farm-calculator-frequency">
+        <span>{t('farm.calculator.frequency')}</span>
+        <select value={frequency} onChange={(event) => onFrequencyChange(event.target.value)} aria-label={t('farm.calculator.frequency')}>
+          {['daily', 'weekly', 'monthly', 'yearly', 'simple'].map((value) => (
+            <option value={value} key={value}>{t(`farm.calculator.frequencies.${value}`)}</option>
+          ))}
+        </select>
+      </label>
+      <div className="farm-calculator-chart">
+        <TrendChart
+          points={points}
+          height={96}
+          up={points.length > 1 && points.at(-1).y >= points[0].y}
+          emptyLabel={t('farm.horizonChartEmpty')}
+          formatValue={(value) => fmtUsd(value)}
+          testId={`farm-horizon-chart-${pool.id}`}
+        />
+      </div>
+      <div className="farm-calculator-horizons">
+        {projections.map(({ horizon, gross, fee, net }) => (
+          <section className="farm-calculator-horizon" key={horizon} aria-label={t(`farm.${horizon}`)}>
+            <h4>{t(`farm.${horizon}`)}</h4>
+            <div><span>{t('farm.calculator.gross')}</span><strong className="mono" dir="ltr">{gross == null ? '—' : fmtUsd(gross)}</strong></div>
+            <div><span>{t('farm.calculator.fee')}</span><strong className="mono" dir="ltr">{fee == null ? '—' : fmtUsd(fee)}</strong></div>
+            <div className="is-net"><span>{t('farm.calculator.net')}</span><strong className="mono" dir="ltr">{net == null ? '—' : fmtUsd(net)}</strong></div>
+          </section>
         ))}
       </div>
-      <p className="faint farm-calc-cond" style={{ marginTop: 8 }}>
-        {t('farm.rateConditional')}
-        {proj.fromRealYield != null && (
-          <> · {t('farm.realShareMoney', { amount: fmtUsd(proj.fromRealYield) })}</>
-        )}
-      </p>
+      <div className="farm-calculator-gas" role="note">
+        <span>{t('farm.gasEstimate')}</span><strong className="mono" dir="ltr">—</strong>
+        <p>{t('farm.calculator.gasNeedsWallet')}</p>
+      </div>
+      <p className="faint farm-calc-cond">{t('farm.calculator.projectionAssumption')} · {t('farm.calculator.feeAssumption')}</p>
+      <p className="faint farm-calc-cond">{t('farm.rateConditional')}</p>
     </section>
   );
 }
@@ -485,7 +546,7 @@ function ProtocolStatusCard({ protocol, t }) {
   );
 }
 
-function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, onGetTokens, onOpenPool, isWatched = false, onToggleWatch, t }) {
+function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, onGetTokens, onOpenPool, isWatched = false, onToggleWatch, compareSelected = false, compareDisabled = false, onToggleCompare, t }) {
   const route = investRoute(pool);
   const executable = Boolean(farmExecutionAdapterFor(pool)?.openToPublic);
   const economics = fbtFeeEngine.estimateNetYield({
@@ -523,6 +584,20 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
             <span className="faint farm-apy-label">{t(rate?.label ?? 'farm.estimatedApy')}</span>
           </span>
           <span className="farm-pool-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
+        </button>
+        <button
+          type="button"
+          className={`farm-compare-toggle${compareSelected ? ' is-selected' : ''}`}
+          aria-label={t(compareDisabled ? 'farm.compare.maxPools' : compareSelected ? 'farm.compare.removeFromComparison' : 'farm.compare.addToComparison')}
+          aria-pressed={compareSelected}
+          title={t(compareDisabled ? 'farm.compare.maxPools' : compareSelected ? 'farm.compare.removeFromComparison' : 'farm.compare.addToComparison')}
+          disabled={compareDisabled}
+          data-testid={`farm-compare-toggle-${pool.id}`}
+          onClick={() => onToggleCompare?.(pool)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 6h7v12H4z" /><path d="M13 6h7v12h-7" /><path d="M8 9h.01M8 12h.01M8 15h.01M16 9h.01M16 12h.01M16 15h.01" />
+          </svg>
         </button>
         <button
           type="button"
@@ -589,6 +664,165 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
   );
 }
 
+function FarmCompareBar({ pools, onCompare, onClear, onRemove, t }) {
+  if (!pools.length || typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="farm-page farm-portal-root">
+      <aside className="farm-compare-bar" aria-label={t('farm.compare.selectedPools')}>
+        <div className="farm-compare-chips" role="list" aria-label={t('farm.compare.selectedCount', { count: pools.length })}>
+          {pools.map((pool) => (
+            <div className="farm-compare-chip" role="listitem" key={pool.id}>
+              <PoolGlyph pool={pool} size={22} chainKey={chainIconKey(pool.chain)} />
+              <span dir="auto">{pool.symbol}</span>
+              <button type="button" onClick={() => onRemove(pool.id)} aria-label={t('farm.compare.removePool', { name: pool.symbol })} title={t('farm.compare.removePool', { name: pool.symbol })}>
+                {CLOSE_ICON}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="farm-compare-actions">
+          <button type="button" className="btn btn-primary farm-compare-open" disabled={pools.length < 2} onClick={onCompare}>
+            {t('farm.compare.cta')}
+          </button>
+          <button type="button" className="btn btn-ghost farm-compare-clear" onClick={onClear}>
+            {t('farm.compare.clear')}
+          </button>
+        </div>
+      </aside>
+    </div>,
+    document.body
+  );
+}
+
+function FarmCompareSheet({ pools, amount, open, onClose, t }) {
+  const rows = useMemo(() => {
+    const metrics = [
+      {
+        id: 'grossApy', label: t('farm.compare.labels.grossApy'), best: 'max',
+        value: (pool) => finiteMetric(pool.apy),
+        render: (pool) => {
+          const apy = finiteMetric(pool.apy);
+          return <span className="mono" dir="ltr">{apy == null ? '—' : `${apy.toFixed(2)}%`}</span>;
+        }
+      },
+      {
+        id: 'split', label: t('farm.compare.labels.split'), best: 'max',
+        value: () => null,
+        render: (pool) => {
+          const research = farmPoolResearch(pool);
+          const base = finiteMetric(research.apyBase);
+          const reward = finiteMetric(research.apyReward);
+          return (
+            <span className="farm-compare-split">
+              <span>{t('farm.apyBase')} <b className="mono" dir="ltr">{base == null ? '—' : `${base.toFixed(2)}%`}</b></span>
+              <span>{t('farm.apyReward')} <b className="mono" dir="ltr">{reward == null ? '—' : `${reward.toFixed(2)}%`}</b></span>
+            </span>
+          );
+        }
+      },
+      {
+        id: 'netApy', label: t('farm.compare.labels.netApy'), best: 'max',
+        value: (pool) => {
+          const grossApy = finiteMetric(pool.apy);
+          if (grossApy == null) return null;
+          const estimate = fbtFeeEngine.estimateNetYield({ grossApy, protocolCostApy: 0, gasUsd: null, amountUsd: amount });
+          return estimate.status === 'AVAILABLE' && finiteMetric(estimate.fbtFeeApy) != null ? grossApy - estimate.fbtFeeApy : null;
+        },
+        render: (_pool, value) => <span className="mono" dir="ltr">{value == null ? '—' : `${value.toFixed(2)}%`}</span>
+      },
+      {
+        id: 'tvl', label: t('farm.compare.labels.tvl'), best: 'max',
+        value: (pool) => finiteMetric(pool.tvlUsd),
+        render: (_pool, value) => <span className="mono" dir="ltr">{value == null ? '—' : fmtCompact(value)}</span>
+      },
+      {
+        id: 'risk', label: t('farm.compare.labels.risk'), best: 'max',
+        value: (pool) => ({ low: 3, medium: 2, high: 1 }[pool.risk] ?? null),
+        render: (pool) => t(`farm.risk.${pool.risk}`, { defaultValue: t('farm.risk.unknown') })
+      },
+      {
+        id: 'realShare', label: t('farm.compare.labels.realShare'), best: 'max',
+        value: (pool) => {
+          const share = farmPoolResearch(pool).realShare;
+          return share == null ? null : share * 100;
+        },
+        render: (_pool, value) => <span className="mono" dir="ltr">{value == null ? '—' : `${value.toFixed(1)}%`}</span>
+      },
+      {
+        id: 'il', label: t('farm.compare.labels.il'), best: 'max',
+        value: (pool) => pool.ilRisk === true ? 0 : pool.exposure === 'single' || (pool.ilRisk === false && pool.exposure != null) ? 1 : null,
+        render: (pool) => pool.ilRisk === true ? t('farm.compare.ilRisk') : pool.exposure === 'single' || (pool.ilRisk === false && pool.exposure != null) ? t('farm.noIl') : t('farm.risk.unknown')
+      },
+      {
+        id: 'freshness', label: t('farm.compare.labels.freshness'), best: 'max',
+        value: (pool) => ({ FRESH: 3, STALE: 2 }[farmPoolResearch(pool).freshness] ?? null),
+        render: (pool) => <FreshnessPill freshness={farmPoolResearch(pool).freshness} t={t} />
+      },
+      {
+        id: 'score', label: t('farm.compare.labels.score'), best: 'max',
+        value: (pool) => finiteMetric(farmScore(pool)),
+        render: (_pool, value) => <span className="mono" dir="ltr">{value == null ? '—' : value}</span>
+      }
+    ];
+    return metrics.map((metric) => {
+      const values = pools.map((pool) => metric.value(pool));
+      const known = values.filter((value) => Number.isFinite(value));
+      const bestValue = known.length ? (metric.best === 'min' ? Math.min(...known) : Math.max(...known)) : null;
+      return { ...metric, cells: pools.map((pool, index) => ({
+        pool,
+        value: values[index],
+        best: bestValue != null && values[index] === bestValue
+      })) };
+    });
+  }, [pools, amount, t]);
+
+  return (
+    <FullScreenSheet
+      open={open}
+      onClose={onClose}
+      testId="farm-compare-sheet"
+      className="farm-compare-sheet"
+      kicker={t('farm.compare.kicker')}
+      title={t('farm.compare.title')}
+      subtitle={t('farm.compare.subtitle', { count: pools.length })}
+      closeLabel={t('farm.compare.close')}
+    >
+      <div className="farm-page farm-compare-content">
+      <div className="farm-compare-table-wrap">
+        <table className="farm-compare-table" dir="rtl">
+          <thead>
+            <tr>
+              <th scope="col">{t('farm.compare.criteria')}</th>
+              {pools.map((pool) => (
+                <th scope="col" key={pool.id}>
+                  <span className="farm-compare-pool-head">
+                    <PoolGlyph pool={pool} size={24} chainKey={chainIconKey(pool.chain)} />
+                    <span><b dir="auto">{pool.symbol}</b><small>{projectLabel(pool.project, t)}</small></span>
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} data-testid={`farm-compare-row-${row.id}`}>
+                <th scope="row">{row.label}</th>
+                {row.cells.map(({ pool, value, best }) => (
+                  <td key={pool.id} className={best ? 'is-best' : ''} data-best={best || undefined}>
+                    {row.render(pool, value)}
+                    {best && <small className="farm-compare-best" aria-label={t('farm.compare.best')}>{t('farm.compare.best')}</small>}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </FullScreenSheet>
+  );
+}
+
 function FarmRateAlertControls({ id, config, onChange, rateAvailable = false, t }) {
   const value = config?.threshold == null ? '' : String(config.threshold);
   const hasThreshold = value !== '' && Number.isFinite(Number(value));
@@ -639,7 +873,7 @@ function FarmRateAlertControls({ id, config, onChange, rateAvailable = false, t 
 }
 
 function WatchlistPanel({
-  rows, amount, expandedId, selectedId, alertConfigs, onTogglePool, onShowDetails,
+  rows, amount, expandedId, selectedId, alertConfigs, compareIds = [], onToggleCompare, onTogglePool, onShowDetails,
   onGetTokens, onOpenPool, onToggleWatch, onSetAlert, t
 }) {
   return (
@@ -670,6 +904,9 @@ function WatchlistPanel({
                   onGetTokens={onGetTokens}
                   onOpenPool={onOpenPool}
                   onToggleWatch={onToggleWatch}
+                  compareSelected={compareIds.includes(pool.id)}
+                  compareDisabled={compareIds.length >= 3 && !compareIds.includes(pool.id)}
+                  onToggleCompare={onToggleCompare}
                   t={t}
                 />
               ) : (
@@ -713,6 +950,33 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
   const hasInlineActions = Boolean(route || pool.url);
   const inlineActionsRef = useRef(null);
   const [inlineActionsVisible, setInlineActionsVisible] = useState(false);
+  const [frequency, setFrequency] = useState('daily');
+
+  const sharePool = async () => {
+    if (typeof window === 'undefined') return;
+    const sharedUrl = new URL(window.location.href);
+    const route = (sharedUrl.hash || '#/farm').slice(1);
+    const [routePath, routeQuery = ''] = route.split('?');
+    const shareParams = new URLSearchParams(routeQuery);
+    shareParams.set('pool', String(pool.id));
+    shareParams.set('amount', String(amount));
+    sharedUrl.hash = `${routePath || '/farm'}?${shareParams.toString()}`;
+    const url = sharedUrl.toString();
+    const reportedRate = rate == null ? '—' : `${t(rate.label)} ${rate.value}%`;
+    const title = t('farm.shareTitle', { name: pool.symbol });
+    const text = t('farm.shareText', { name: pool.symbol, rate: reportedRate });
+
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+    const copied = await copyText(url);
+    useAppStore.getState().notify(copied ? 'farm.shareCopied' : 'farm.shareFailed', copied ? 'success' : 'error');
+  };
 
   useEffect(() => {
     setInlineActionsVisible(false);
@@ -754,6 +1018,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         </div>
       )}
     >
+    <div className="farm-page farm-analysis-content">
     <motion.section className="farm-details farm-details-full" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
       <header className="farm-ana-hero">
         <div className="farm-ana-hero-top">
@@ -810,7 +1075,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       </AnaSection>
 
       <PoolHistory poolId={pool.id} available={pool.historyAvailable !== false} t={t} />
-      <HorizonEarningsChart pool={pool} amount={amount} t={t} />
+      <HorizonEarningsChart pool={pool} amount={amount} frequency={frequency} onFrequencyChange={setFrequency} t={t} />
       <FeeEngineCard pool={pool} amount={amount} t={t} />
 
       {ExecutionPanel ? <p className="notice">{t('farm.executionActivated')}</p> : null}
@@ -857,6 +1122,9 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
           {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
           {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
         </div>
+        <button type="button" className="farm-share-button" onClick={sharePool}>
+          {t('farm.sharePool')}
+        </button>
         {ExecutionPanel && (
           <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
             <ExecutionPanel pool={pool} />
@@ -865,6 +1133,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         {!wallet.isConnected && <p className="faint">{t(ExecutionPanel ? 'farm.connectToExecute' : 'farm.readOnly')}</p>}
       </AnaSection>
     </motion.section>
+    </div>
     </FullScreenSheet>
   );
 }
@@ -947,6 +1216,37 @@ function HotStrip({ rows, onSelect, t }) {
   );
 }
 
+function FarmLoadingSkeleton({ kind }) {
+  const count = kind === 'pool-list' ? 3 : kind === 'hero-venue' ? 2 : 4;
+  return (
+    <div className={`farm-skeleton farm-skeleton-${kind}`} data-testid={`farm-skeleton-${kind}`} aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => <span className="farm-skeleton-piece" key={index} />)}
+    </div>
+  );
+}
+
+function FarmEmptyState({ q, filter, chain, sort, chainLabelText, sortLabelText, onClearSearch, onClearFilters, onClearCategory, onClearNetwork, onClearSort, t }) {
+  const hasActiveFilters = filter !== 'all' || chain !== 'all' || sort !== 'score';
+  return (
+    <section className="farm-empty-state" aria-live="polite" data-testid="farm-empty-state">
+      <p className="farm-empty-title" role="status">
+        {q.trim() ? t('farm.searchEmpty', { query: q.trim() }) : t('farm.noneForFilter')}
+      </p>
+      <div className="farm-empty-actions">
+        <button type="button" className="btn btn-ghost btn-sm" disabled={!q.trim()} onClick={onClearSearch}>{t('farm.clearSearch')}</button>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={!hasActiveFilters} onClick={onClearFilters}>{t('farm.clearFilters')}</button>
+      </div>
+      {hasActiveFilters && (
+        <div className="farm-empty-active-filters" role="group" aria-label={t('farm.activeFilters')}>
+          {chain !== 'all' && <button type="button" onClick={onClearNetwork}>{t('farm.filterNetwork')}: {chainLabelText}</button>}
+          {filter !== 'all' && <button type="button" onClick={onClearCategory}>{t('farm.filterCategory')}: {t(`farm.category.${filter}`)}</button>}
+          {sort !== 'score' && <button type="button" onClick={onClearSort}>{t('farm.filterSort')}: {sortLabelText}</button>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Farm() {
   useHideBalances();
   const { t } = useTranslation();
@@ -958,6 +1258,9 @@ export default function Farm() {
   const farmRateAlerts = useSettingsStore((state) => state.farmRateAlerts ?? {});
   const toggleFarmWatchlist = useSettingsStore((state) => state.toggleFarmWatchlist);
   const setFarmRateAlert = useSettingsStore((state) => state.setFarmRateAlert);
+  const reduceMotionSetting = useSettingsStore((state) => state.reduceMotion);
+  const [lowHardware] = useState(detectLowFarmHardware);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const legacyTab = params.get('tab');
   const tab = FARM_TABS.includes(legacyTab) ? legacyTab : 'recommended';
   const focus = params.get('focus');
@@ -973,12 +1276,30 @@ export default function Farm() {
   const [customAmount, setCustomAmount] = useState('');
   const [selected, setSelected] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [compareIds, setCompareIds] = useState([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [feedErrorOpen, setFeedErrorOpen] = useState(true);
   const [yieldCenterOpen, setYieldCenterOpen] = useState(false);
   const tabsRef = useRef(null);
+  const swipeStartRef = useRef(null);
+  const previousTabRef = useRef(tab);
 
   useEffect(() => {
     tabsRef.current?.querySelector('button.active')?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [tab]);
+
+  useEffect(() => {
+    try {
+      const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const update = () => setPrefersReducedMotion(media.matches);
+      update();
+      media.addEventListener?.('change', update);
+      return () => media.removeEventListener?.('change', update);
+    } catch {
+      setPrefersReducedMotion(false);
+      return undefined;
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -1027,6 +1348,7 @@ export default function Farm() {
   }, [data, opportunities]);
 
   const poolsById = useMemo(() => new Map(venueOpportunities.map((pool) => [String(pool.id), pool])), [venueOpportunities]);
+  const comparePools = useMemo(() => compareIds.map((id) => poolsById.get(String(id))).filter(Boolean), [compareIds, poolsById]);
   const watchlistRows = useMemo(() => watchlist.map((id) => ({
     id: String(id),
     pool: poolsById.get(String(id)) ?? null
@@ -1076,6 +1398,33 @@ export default function Farm() {
       }, 120);
     }
   }, [params, opportunities, venueOpportunities, setParams]);
+
+  const initialCompareQuery = useRef(params.get('compare'));
+  const comparePrefillDone = useRef(!initialCompareQuery.current);
+  useEffect(() => {
+    const encoded = initialCompareQuery.current;
+    if (comparePrefillDone.current || !encoded || params.get('compare') !== encoded || !data) return;
+    const ids = [...new Set(encoded.split(',').map((id) => id.trim()).filter(Boolean))].slice(0, 3);
+    const matches = ids.map((id) => poolsById.get(id)).filter(Boolean);
+    if (matches.length >= 2) {
+      comparePrefillDone.current = true;
+      setCompareIds(matches.map((pool) => String(pool.id)));
+      setCompareOpen(true);
+      return;
+    }
+    // A cached snapshot can be incomplete. Wait for its refresh before giving
+    // up on IDs that may arrive in the network response.
+    if (!loading && !refreshing) comparePrefillDone.current = true;
+  }, [params, data, loading, refreshing, poolsById]);
+
+  useEffect(() => {
+    if (previousTabRef.current === tab) return;
+    previousTabRef.current = tab;
+    setCompareIds([]);
+    setCompareOpen(false);
+    swipeStartRef.current = null;
+  }, [tab]);
+
   const chains = useMemo(() => [...new Set(opportunities.map((p) => p.chain))].sort(), [opportunities]);
   const selectedPool = opportunities.find((p) => p.id === selected?.id)
     || venueOpportunities.find((p) => p.id === selected?.id)
@@ -1143,9 +1492,76 @@ export default function Farm() {
     haptic?.('select');
     setSelected(null);
     setExpandedId(null);
+    setCompareIds([]);
+    setCompareOpen(false);
+    swipeStartRef.current = null;
     const next = new URLSearchParams(params);
     next.set('tab', id);
+    next.delete('compare');
     setParams(next, { replace: true });
+  };
+
+  const toggleCompare = (pool) => {
+    if (!pool?.id) return;
+    haptic?.('select');
+    const id = String(pool.id);
+    const nextIds = compareIds.includes(id)
+      ? compareIds.filter((selectedId) => selectedId !== id)
+      : compareIds.length < 3 ? [...compareIds, id] : compareIds;
+    setCompareIds(nextIds);
+    syncCompareQuery(nextIds);
+  };
+
+  const syncCompareQuery = (ids) => {
+    const next = new URLSearchParams(params);
+    if (ids.length >= 2) next.set('compare', ids.slice(0, 3).join(','));
+    else next.delete('compare');
+    setParams(next, { replace: true });
+  };
+
+  const openCompare = () => {
+    if (comparePools.length < 2) return;
+    syncCompareQuery(comparePools.map((pool) => String(pool.id)));
+    setCompareOpen(true);
+  };
+
+  const removeCompare = (id) => {
+    const nextIds = compareIds.filter((selectedId) => selectedId !== String(id));
+    setCompareIds(nextIds);
+    syncCompareQuery(nextIds);
+    if (compareOpen && nextIds.length < 2) setCompareOpen(false);
+  };
+
+  const clearCompare = () => {
+    setCompareIds([]);
+    setCompareOpen(false);
+    const next = new URLSearchParams(params);
+    next.delete('compare');
+    setParams(next, { replace: true });
+  };
+
+  const startTabSwipe = (event) => {
+    if (event.touches?.length !== 1 || isFarmSwipeExcluded(event.target)) {
+      swipeStartRef.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY, at: Date.now() };
+  };
+
+  const finishTabSwipe = (event) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    const touch = event.changedTouches?.[0];
+    if (!start || !touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const elapsed = Math.max(1, Date.now() - start.at);
+    const distance = Math.abs(dx);
+    if (distance < 60 || distance / elapsed < 0.08 || elapsed > 1000 || distance <= Math.abs(dy) * 1.2) return;
+    const currentIndex = FARM_TABS.indexOf(tab);
+    const nextIndex = currentIndex + (dx < 0 ? 1 : -1);
+    if (nextIndex >= 0 && nextIndex < FARM_TABS.length) selectTab(FARM_TABS[nextIndex]);
   };
   const togglePool = (pool) => {
     haptic?.('light');
@@ -1192,15 +1608,22 @@ export default function Farm() {
     <motion.div className="farm-pool-grid" variants={stagger} initial="hidden" animate="show">
       {rows.map((pool) => (
         <div key={pool.id} className="farm-pool-with-details">
-          <PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
+          <PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} compareSelected={compareIds.includes(String(pool.id))} compareDisabled={compareIds.length >= 3 && !compareIds.includes(String(pool.id))} onToggleCompare={toggleCompare} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
           {selected?.id === pool.id && <PoolDetails pool={pool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(pool)} t={t} />}
         </div>
       ))}
     </motion.div>
   );
 
+  const isInitialLoading = loading && !data;
+  const farmPageClass = `page farm-page${lowHardware || reduceMotionSetting || prefersReducedMotion ? ' reduce-blur' : ''}${compareIds.length ? ' has-compare-selection' : ''}`;
+  const activeChainLabel = chain === 'all' ? t('farm.allNetworks') : chainLabel(chain, t);
+  const activeSortLabel = sortOptions.find((option) => option.value === sort)?.label ?? t('farm.sort.score');
+
   return (
-    <PageTransition className="page farm-page">
+    <>
+    <PageTransition className={farmPageClass}>
+      {isInitialLoading ? <FarmLoadingSkeleton kind="hero-venue" /> : <>
       {/* ─── PREMIUM HERO — glass, mesh, orb, integrated refresh — no middle clutter */}
       <motion.section className="farm-hero-premium" variants={riseIn} initial="hidden" animate="show">
         <div className="farm-hero-bg" aria-hidden="true">
@@ -1272,9 +1695,24 @@ export default function Farm() {
         onGetTokens={getTokens}
         onOpenPool={openPool}
       />
+      </>}
 
       <ProtocolStatusCard protocol={protocol} t={t} />
       {data?.freshness === 'STALE' && <p className="notice farm-stale-notice" role="status">{t('farm.staleNotice')}</p>}
+      {error && (
+        <section className="farm-feed-error" data-testid="farm-feed-error">
+          <button type="button" className="farm-feed-error-toggle" aria-expanded={feedErrorOpen} onClick={() => setFeedErrorOpen((open) => !open)}>
+            <span>{t('farm.feedErrorTitle')}</span><span aria-hidden="true">{CHEVRON_ICON}</span>
+          </button>
+          {feedErrorOpen && (
+            <div className="farm-feed-error-body">
+              <p role="alert">{t('farm.unavailable')}</p>
+              <p>{feedErrorLabel(error, t)}</p>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={refresh} disabled={refreshing}>{t('farm.retry')}</button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/*
         Static selection pill instead of the shared-layout SegIndicator: the
@@ -1310,6 +1748,7 @@ export default function Farm() {
         )}
       </motion.section>
 
+      {isInitialLoading ? <FarmLoadingSkeleton kind="filter-console" /> : <>
       <div className="farm-secondary-filters" role="group" aria-label={t('farm.filters')}>
         {FILTERS.map((id) => (
           <button key={id} className={`tag ${filter === id ? 'active' : ''}`} onClick={() => setFilter(id)}>
@@ -1388,11 +1827,27 @@ export default function Farm() {
           </div>
         </div>
       </div>
+      </>}
 
-      {loading && <div className="stack" style={{ marginTop: 14 }}>{[0, 1, 2].map((i) => <div className="skel" key={i} style={{ height: 150, borderRadius: 16 }} />)}</div>}
-      {!loading && error && <p className="notice notice-danger" style={{ marginTop: 14 }}>{t('farm.unavailable')}</p>}
-      {!loading && !error && !['inapp', 'watchlist'].includes(tab) && filtered.length === 0 && <p className="notice" style={{ marginTop: 14 }}>{t('farm.noneForFilter')}</p>}
-      {!loading && !error && data && !['inapp', 'watchlist'].includes(tab) && filtered.length > 0 && (
+      <div className="farm-tab-content" data-testid="farm-tab-content" onTouchStart={startTabSwipe} onTouchEnd={finishTabSwipe}>
+      {isInitialLoading && <FarmLoadingSkeleton kind="pool-list" />}
+      {!isInitialLoading && !error && data && !['inapp', 'watchlist'].includes(tab) && filtered.length === 0 && (
+        <FarmEmptyState
+          q={q}
+          filter={filter}
+          chain={chain}
+          sort={sort}
+          chainLabelText={activeChainLabel}
+          sortLabelText={activeSortLabel}
+          onClearSearch={() => setQ('')}
+          onClearFilters={() => { setFilter('all'); setChain('all'); setSort('score'); }}
+          onClearCategory={() => setFilter('all')}
+          onClearNetwork={() => setChain('all')}
+          onClearSort={() => setSort('score')}
+          t={t}
+        />
+      )}
+      {!isInitialLoading && !error && data && !['inapp', 'watchlist'].includes(tab) && filtered.length > 0 && (
         <p className="farm-filtered faint">{t('farm.filteredNote', { shown: filtered.length, returned: data.pools.length, passed: data.passed ?? data.pools.length, considered: data.considered ?? data.pools.length })}</p>
       )}
 
@@ -1425,6 +1880,8 @@ export default function Farm() {
             expandedId={expandedId}
             selectedId={selected?.id}
             alertConfigs={farmRateAlerts}
+            compareIds={compareIds}
+            onToggleCompare={toggleCompare}
             onTogglePool={togglePool}
             onShowDetails={selectPool}
             onGetTokens={getTokens}
@@ -1438,16 +1895,22 @@ export default function Farm() {
       )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
       {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
-      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
-      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} compareSelected={compareIds.includes(String(pool.id))} compareDisabled={compareIds.length >= 3 && !compareIds.includes(String(pool.id))} onToggleCompare={toggleCompare} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} compareSelected={compareIds.includes(String(pool.id))} compareDisabled={compareIds.length >= 3 && !compareIds.includes(String(pool.id))} onToggleCompare={toggleCompare} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered.slice(0, visibleCount))}{filtered.length > visibleCount && <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => setVisibleCount((n) => n + 24)}>{t('farm.showMore')}</button>}</section>}
 
       {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
+      </div>
 
       <InfoBox title={t('farm.custodyTitle')} tone="info" id="farm-custody"><p>{t('farm.nativeCustodyNotice')}</p></InfoBox>
       <InfoBox title={t('farm.riskDisclosureTitle')} tone="warning"><p>{t('farm.riskDisclosure')}</p></InfoBox>
       <div className="farm-bottom-banner"><AdBanner slot="stocks" compact /></div>
     </PageTransition>
+    <FarmCompareBar pools={comparePools} onCompare={openCompare} onClear={clearCompare} onRemove={removeCompare} t={t} />
+    {compareOpen && comparePools.length >= 2 && (
+      <FarmCompareSheet pools={comparePools} amount={deposit} open={compareOpen} onClose={() => setCompareOpen(false)} t={t} />
+    )}
+    </>
   );
 }
 

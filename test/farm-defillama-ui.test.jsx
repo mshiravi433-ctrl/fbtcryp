@@ -56,7 +56,7 @@ beforeEach(() => {
   localStorage.removeItem(FARM_YIELDS_CACHE_KEY);
   useSettingsStore.getState().setFarmWatchlist([]);
   Element.prototype.scrollIntoView = vi.fn();
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).endsWith('/history') ? history() : feed()));
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).includes('/history') ? history() : feed()));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -133,6 +133,12 @@ describe('Farm discovery UI', () => {
       .filter((metric) => metric.textContent.includes(t('farm.grossApy')));
     expect(grossMetrics.length).toBeGreaterThan(0);
     expect(grossMetrics.every((metric) => metric.lastElementChild?.textContent === '—')).toBe(true);
+    const calculator = sheet.querySelector(`[data-testid="farm-horizon-${id}"]`);
+    const horizons = [...calculator.querySelectorAll('.farm-calculator-horizon')];
+    expect(horizons).toHaveLength(4);
+    expect(horizons.every((horizon) => horizon.querySelector(':scope > div:first-of-type strong')?.textContent === '—')).toBe(true);
+    expect(horizons.every((horizon) => horizon.querySelector(':scope > div:nth-of-type(2) strong')?.textContent !== '—')).toBe(true);
+    expect(horizons.every((horizon) => horizon.querySelector(':scope > div:last-of-type strong')?.textContent === '—')).toBe(true);
     expect(sheet.textContent).not.toMatch(/(?:null|undefined|NaN)%/);
   });
 
@@ -140,7 +146,7 @@ describe('Farm discovery UI', () => {
     fetch.mockRejectedValueOnce(new Error('offline'));
     mount();
     await screen.findByText(t('farm.unavailable'));
-    fireEvent.click(screen.getByRole('button', { name: t('farm.retry') }));
+    fireEvent.click(screen.getByTestId('farm-feed-error').querySelector('.btn-ghost'));
     await waitFor(() => expect(screen.queryByText(t('farm.unavailable'))).toBeNull());
     expect(screen.getAllByText('USDC').length).toBeGreaterThan(0);
   });
@@ -177,7 +183,9 @@ describe('Farm discovery UI', () => {
     await pick('farm-sort-select', t('farm.sort.apy'));
     expect(container.querySelector('.farm-pool-with-details').textContent).toContain('ASSET28');
     fireEvent.change(screen.getByRole('textbox', { name: t('farm.search') }), { target: { value: 'not-present' } });
-    expect(screen.getByText(t('farm.noneForFilter'))).toBeTruthy();
+    expect(screen.getByText(t('farm.searchEmpty', { query: 'not-present' })).textContent).toBe(t('farm.searchEmpty', { query: 'not-present' }));
+    fireEvent.click(screen.getByRole('button', { name: t('farm.clearSearch') }));
+    expect(screen.queryByTestId('farm-empty-state')).toBeNull();
   });
   it.each(['market', 'strategies'])('actually opens pool analytics from the %s tab', async (tab) => {
     const { container } = mount(tab);
@@ -195,7 +203,7 @@ describe('Farm discovery UI', () => {
     expect(score.textContent).toContain('25%');
     expect(score.textContent).toContain('20%');
     expect(score.textContent).toContain('15%');
-    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/${id}/history`))).toBe(true));
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes(`/${id}/history`))).toBe(true));
   });
 
   it('keeps the two analysis actions equal and fades the pinned copy when the inline row is visible', async () => {
@@ -209,7 +217,7 @@ describe('Farm discovery UI', () => {
       }
     }
     vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
-    fetch.mockImplementation(async (url) => String(url).endsWith('/history')
+    fetch.mockImplementation(async (url) => String(url).includes('/history')
       ? json(history())
       : json(feed([{ ...pool, url: 'https://example.org/pool' }])));
 
@@ -237,6 +245,197 @@ describe('Farm discovery UI', () => {
     await waitFor(() => expect(footer.getAttribute('data-footer-visible')).toBe('true'));
     expect(footer.getAttribute('aria-hidden')).toBeNull();
   });
+
+  it('renders a section skeleton per loading area and keeps the controls usable after data resolves', async () => {
+    fetch.mockImplementation(() => new Promise(() => {}));
+    mount('pools');
+    expect(await screen.findByTestId('farm-skeleton-hero-venue')).toBeTruthy();
+    expect(screen.getByTestId('farm-skeleton-filter-console')).toBeTruthy();
+    expect(screen.getByTestId('farm-skeleton-pool-list')).toBeTruthy();
+  });
+
+  it('shows a collapsible feed error with a real retry path', async () => {
+    fetch.mockRejectedValueOnce(new Error('offline'));
+    mount('pools');
+    await screen.findByTestId('farm-feed-error');
+    expect(screen.getByText(t('farm.unavailable'))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('farm.feedErrorTitle') }));
+    expect(screen.getByRole('button', { name: t('farm.feedErrorTitle') }).getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: t('farm.feedErrorTitle') }));
+    fireEvent.click(screen.getByTestId('farm-feed-error').querySelector('.btn-ghost'));
+    await waitFor(() => expect(screen.queryByTestId('farm-feed-error')).toBeNull());
+    expect(screen.getAllByText('USDC').length).toBeGreaterThan(0);
+  });
+
+  it('compares up to three pools, marks best sourced values, and writes a shareable query', async () => {
+    const ids = [id, '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444'];
+    const pools = ids.map((poolId, index) => ({
+      ...pool,
+      id: poolId,
+      symbol: ['USDC', 'DAI', 'USDT', 'FRAX'][index],
+      apy: [5, 10, 8, 4][index],
+      apyBase: [4, 9, 6, 3][index],
+      apyReward: [1, 1, 2, 1][index],
+      tvlUsd: [200_000_000, 500_000_000, 300_000_000, 100_000_000][index],
+      risk: index === 1 ? 'low' : 'medium',
+      exposure: index === 1 ? 'single' : 'multi',
+      ilRisk: index !== 1
+    }));
+    fetch.mockImplementation(async (url) => String(url).includes('/history') ? json(history()) : json(feed(pools)));
+    const { container } = render(
+      <MemoryRouter initialEntries={['/farm?tab=pools']}>
+        <Farm />
+        <RouteProbe />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(container.querySelectorAll('.farm-pool')).toHaveLength(4));
+    for (const poolId of ids.slice(0, 3)) fireEvent.click(await screen.findByTestId(`farm-compare-toggle-${poolId}`));
+    expect(screen.getByTestId(`farm-compare-toggle-${ids[0]}`).getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector(`[data-testid="farm-compare-toggle-${ids[3]}"]`).disabled).toBe(true);
+    expect(document.body.querySelector('.farm-compare-bar')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('farm.compare.cta') }));
+
+    const sheet = await screen.findByTestId('farm-compare-sheet');
+    expect(sheet.querySelector('[data-testid="farm-compare-row-grossApy"] [data-best="true"]')?.textContent).toContain('10.00%');
+    expect(sheet.querySelector('[data-testid="farm-compare-row-split"]')).toBeTruthy();
+    expect(sheet.querySelector('[data-testid="farm-compare-row-netApy"] [data-best="true"]')).toBeTruthy();
+    await waitFor(() => {
+      const routeParams = new URLSearchParams(screen.getByTestId('farm-route-query').textContent);
+      expect(routeParams.get('compare')).toBe(ids.slice(0, 3).join(','));
+    });
+    fireEvent.click(screen.getByTestId('farm-compare-sheet-close'));
+    fireEvent.click(screen.getByRole('tab', { name: t('farm.tab.strategies') }));
+    expect(document.body.querySelector('.farm-compare-bar')).toBeNull();
+  });
+
+  it('opens comparison from a compare deep link after the live pool list arrives', async () => {
+    const second = '22222222-2222-4222-8222-222222222222';
+    fetch.mockImplementation(async () => json(feed([pool, { ...pool, id: second, symbol: 'DAI', apy: 7 }])));
+    render(<MemoryRouter initialEntries={[`/farm?compare=${id},${second}`]}><Farm /></MemoryRouter>);
+    const sheet = await screen.findByTestId('farm-compare-sheet');
+    expect(sheet.textContent).toContain('USDC');
+    expect(sheet.textContent).toContain('DAI');
+  });
+
+  it('waits for a refreshing cache to supply missing compare deep-link pools', async () => {
+    const second = '22222222-2222-4222-8222-222222222222';
+    localStorage.setItem(FARM_YIELDS_CACHE_KEY, JSON.stringify({ ...feed([pool]), at: Date.now(), venues: [] }));
+    fetch.mockImplementation(async () => json(feed([pool, { ...pool, id: second, symbol: 'DAI', apy: 7 }])));
+    render(<MemoryRouter initialEntries={[`/farm?compare=${id},${second}`]}><Farm /></MemoryRouter>);
+    const sheet = await screen.findByTestId('farm-compare-sheet');
+    expect(sheet.textContent).toContain('USDC');
+    expect(sheet.textContent).toContain('DAI');
+  });
+
+  it('prefills comparison from an already-cached feed on the first render', async () => {
+    const second = '22222222-2222-4222-8222-222222222222';
+    localStorage.setItem(FARM_YIELDS_CACHE_KEY, JSON.stringify({
+      ...feed([pool, { ...pool, id: second, symbol: 'DAI', apy: 7 }]),
+      at: Date.now(),
+      venues: []
+    }));
+    render(<MemoryRouter initialEntries={[`/farm?compare=${id},${second}`]}><Farm /></MemoryRouter>);
+    const sheet = await screen.findByTestId('farm-compare-sheet');
+    expect(sheet.textContent).toContain('USDC');
+    expect(sheet.textContent).toContain('DAI');
+  });
+
+  it('removes and clears comparison selections without leaving stale deep-link IDs', async () => {
+    const second = '22222222-2222-4222-8222-222222222222';
+    fetch.mockImplementation(async () => json(feed([pool, { ...pool, id: second, symbol: 'DAI', apy: 7 }])));
+    const { container } = render(
+      <MemoryRouter initialEntries={['/farm?tab=pools']}>
+        <Farm />
+        <RouteProbe />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(container.querySelectorAll('.farm-pool')).toHaveLength(2));
+    fireEvent.click(screen.getByTestId(`farm-compare-toggle-${id}`));
+    fireEvent.click(screen.getByTestId(`farm-compare-toggle-${second}`));
+    expect(document.body.querySelector('[data-testid="farm-compare-sheet"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: t('farm.compare.cta') }));
+    await screen.findByTestId('farm-compare-sheet');
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('farm-route-query').textContent).get('compare')).toBe(`${id},${second}`));
+    fireEvent.click(screen.getByTestId('farm-compare-sheet-close'));
+
+    fireEvent.click(screen.getByRole('button', { name: t('farm.compare.removePool', { name: 'USDC' }) }));
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('farm-route-query').textContent).has('compare')).toBe(false));
+    expect(screen.getByTestId(`farm-compare-toggle-${id}`).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId(`farm-compare-toggle-${second}`).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByTestId(`farm-compare-toggle-${id}`));
+    expect(document.body.querySelectorAll('.farm-compare-chip')).toHaveLength(2);
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('farm-route-query').textContent).get('compare')).toBe(`${second},${id}`));
+    fireEvent.click(screen.getByRole('button', { name: t('farm.compare.clear') }));
+    expect(document.body.querySelector('.farm-compare-bar')).toBeNull();
+    expect(screen.getByTestId(`farm-compare-toggle-${id}`).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId(`farm-compare-toggle-${second}`).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('prefills a compare deep link when the response contains venues but no ordinary pools', async () => {
+    const second = '22222222-2222-4222-8222-222222222222';
+    fetch.mockImplementation(async () => json({ ...feed([]), venues: [pool, { ...pool, id: second, symbol: 'DAI', apy: 7 }] }));
+    render(<MemoryRouter initialEntries={[`/farm?compare=${id},${second}`]}><Farm /></MemoryRouter>);
+    const sheet = await screen.findByTestId('farm-compare-sheet');
+    expect(sheet.textContent).toContain('USDC');
+    expect(sheet.textContent).toContain('DAI');
+  });
+
+  it('uses the single deposit amount for simple and compound horizon estimates', async () => {
+    const { container } = mount('pools');
+    await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
+    const amountInput = container.querySelector('.farm-deposit-input');
+    fireEvent.change(amountInput, { target: { value: '250' } });
+    fireEvent.click(container.querySelector('.farm-pool-toggle'));
+    fireEvent.click(await screen.findByTestId(`farm-view-analytics-${id}`));
+    const sheet = await screen.findByTestId('farm-analysis-sheet');
+    const frequency = screen.getByRole('combobox', { name: t('farm.calculator.frequency') });
+    fireEvent.change(frequency, { target: { value: 'monthly' } });
+    const calculator = sheet.querySelector(`[data-testid="farm-horizon-${id}"]`);
+    expect(frequency.value).toBe('monthly');
+    expect(calculator.querySelectorAll('.farm-calculator-horizon')).toHaveLength(4);
+    expect(calculator.querySelectorAll('.farm-calculator-horizon .is-net')).toHaveLength(4);
+    const horizonFees = [...calculator.querySelectorAll('.farm-calculator-horizon')]
+      .map((horizon) => horizon.querySelector(':scope > div:nth-of-type(2) strong')?.textContent);
+    expect(new Set(horizonFees).size).toBe(1);
+    expect(calculator.textContent).toContain(t('farm.calculator.gasNeedsWallet'));
+    expect(calculator.textContent).toContain(t('farm.calculator.projectionAssumption'));
+    expect(calculator.textContent).toContain(t('farm.calculator.feeAssumption'));
+    expect(container.querySelector('.farm-deposit-input').value).toBe('250');
+    fireEvent.click(screen.getByRole('button', { name: t('farm.calculator.simple') }));
+    expect(frequency.value).toBe('simple');
+    expect(screen.getByRole('button', { name: t('farm.calculator.simple') }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('updates PoolHistory range, chart data, and min/max/average together', async () => {
+    const { container } = render(<PoolHistory poolId={id} t={t} />);
+    await screen.findByTestId('farm-pool-history-chart');
+    expect(container.querySelector('.farm-history-summary').textContent).toContain('3.00%');
+    expect(container.querySelector('.farm-history-summary').textContent).toContain('5.00%');
+    fireEvent.click(screen.getByRole('button', { name: t('farm.historyRanges.7d') }));
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/history?range=7d'))).toBe(true));
+    expect(screen.getByRole('button', { name: t('farm.historyRanges.7d') }).getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(container.querySelector('.farm-history-summary').textContent).toContain('4.00%'));
+  });
+
+  it('swipes between tabs on content but ignores horizontal inner rails', async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={['/farm?tab=recommended']}>
+        <Farm />
+        <RouteProbe />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(container.querySelector('.farm-hot-grid')).toBeTruthy());
+    const rail = container.querySelector('.farm-hot-grid');
+    fireEvent.touchStart(rail, { touches: [{ identifier: 0, clientX: 220, clientY: 30 }] });
+    fireEvent.touchEnd(rail, { changedTouches: [{ identifier: 0, clientX: 100, clientY: 32 }] });
+    expect(screen.getByRole('tab', { name: t('farm.tab.recommended') }).getAttribute('aria-selected')).toBe('true');
+
+    const content = container.querySelector('[data-testid="farm-tab-content"]');
+    fireEvent.touchStart(content, { touches: [{ identifier: 0, clientX: 220, clientY: 30 }] });
+    fireEvent.touchEnd(content, { changedTouches: [{ identifier: 0, clientX: 140, clientY: 32 }] });
+    await waitFor(() => expect(screen.getByRole('tab', { name: t('farm.tab.market') }).getAttribute('aria-selected')).toBe('true'));
+    await waitFor(() => expect(new URLSearchParams(screen.getByTestId('farm-route-query').textContent).get('tab')).toBe('market'));
+  });
 });
 
 describe('Pool history and request lifecycle', () => {
@@ -251,8 +450,8 @@ describe('Pool history and request lifecycle', () => {
     await waitFor(() => expect(container.querySelector('[data-testid="farm-pool-history"] svg')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'TVL' }));
     expect(screen.getByRole('button', { name: 'TVL' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: t('farm.historyDays', { count: 90 }) }));
-    expect(fetch).toHaveBeenCalledTimes(2); // range and metric use the same real observations
+    fireEvent.click(screen.getByRole('button', { name: t('farm.historyRanges.90d') }));
+    expect(fetch).toHaveBeenCalledTimes(3); // selected date windows are fetched from the BFF
   });
   it('aborts discovery on unmount', async () => {
     let signal;

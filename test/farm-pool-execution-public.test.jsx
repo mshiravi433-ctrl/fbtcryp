@@ -81,7 +81,7 @@ beforeEach(() => {
   language = 'en';
   localStorage.removeItem(FARM_YIELDS_CACHE_KEY);
   Element.prototype.scrollIntoView = vi.fn();
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).endsWith('/history') ? history() : feed([aaveRow, otherRow])));
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).includes('/history') ? history() : feed([aaveRow, otherRow])));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

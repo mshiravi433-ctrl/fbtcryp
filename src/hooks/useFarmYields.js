@@ -64,7 +64,8 @@ export function useFarmYields({ getReadProvider } = {}) {
   const [data, setData] = useState(initialCache);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(!initialCache);
-  const [refreshing, setRefreshing] = useState(false);
+  // A hydrated last-good snapshot is rendered while the mount refresh starts.
+  const [refreshing, setRefreshing] = useState(Boolean(initialCache));
   const [revision, setRevision] = useState(0);
   const pending = useRef(false);
   const dataRef = useRef(data);

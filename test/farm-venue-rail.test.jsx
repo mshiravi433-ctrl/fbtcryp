@@ -133,7 +133,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(320);
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
     const href = String(url);
-    if (href.endsWith('/history')) return json(history(aaveRow.id));
+    if (href.includes('/history')) return json(history(aaveRow.id));
     return json(feed([aaveRow, lidoRow, highRow, lowRow]));
   });
 });
@@ -190,6 +190,7 @@ describe('the venue rail at the top of Farm', () => {
     // …and the chart: this row has history, so the high/low tiles come from it.
     await screen.findByText(t('farm.venue.highInWindow', { days: 30 }));
     expect(screen.getByTestId('farm-venue-history-aave-base')).toBeTruthy();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes(`/${aaveRow.id}/history?range=90d`))).toBe(true);
   });
 
   it('falls back to the live spread — and says so — when a venue has no feed row', async () => {
@@ -282,7 +283,7 @@ describe('the venue rail at the top of Farm', () => {
     expect(venues).toHaveLength(5);
     fetch.mockImplementation(async (url) => {
       const href = String(url);
-      if (href.endsWith('/history')) return json(history(aaveRow.id));
+      if (href.includes('/history')) return json(history(aaveRow.id));
       return json(feed([aaveRow, lidoRow, highRow, lowRow], venues));
     });
     const { container } = mount();
@@ -308,7 +309,7 @@ describe('the venue rail at the top of Farm', () => {
     const { venues } = extractVenueRows(RAW_VENUE_ROWS.slice(0, 3));
     fetch.mockImplementation(async (url) => {
       const href = String(url);
-      if (href.endsWith('/history')) return json(history(aaveRow.id));
+      if (href.includes('/history')) return json(history(aaveRow.id));
       return json(feed([aaveRow, lidoRow, highRow, lowRow], venues));
     });
     const { container } = mount();
