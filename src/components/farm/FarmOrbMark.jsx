@@ -2,7 +2,7 @@ import { IconPools } from '../Icons';
 
 export default function FarmOrbMark({ size = 112 }) {
   return (
-    <div className="farm-mark" style={{ '--mark-size': `${size}px` }} aria-hidden="true">
+    <div className="farm-mark farm-mark--v2" style={{ '--mark-size': `${size}px` }} aria-hidden="true">
       <span className="farm-mark-halo" />
       <span className="farm-mark-ring farm-mark-ring--outer" />
       <span className="farm-mark-ring farm-mark-ring--inner" />
@@ -12,8 +12,9 @@ export default function FarmOrbMark({ size = 112 }) {
       <span className="farm-mark-orbit farm-mark-orbit--slow">
         <span className="farm-mark-node farm-mark-node--b" />
       </span>
-      <span className="farm-mark-core">
-        <IconPools width={28} height={28} />
+      <span className="farm-mark-core farm-mark-core--glass">
+        <IconPools width={30} height={30} />
+        <span className="farm-mark-core-shine" aria-hidden="true" />
       </span>
       <span className="farm-mark-bars">
         <i /><i /><i /><i />

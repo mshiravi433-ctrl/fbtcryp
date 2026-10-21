@@ -467,6 +467,26 @@
   box-shadow: 0 14px 32px color-mix(in srgb, var(--rgb-2) 42%, transparent), inset 0 1px 0 rgba(255, 255, 255, .4);
 }
 :root[data-theme='light'] .farm-mark-core { color: #fff; }
+.farm-mark--v2 .farm-mark-core--glass {
+  width: 46%; height: 46%;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--rgb-1) 92%, white 8%), var(--rgb-2) 55%, var(--rgb-3) 95%);
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--rgb-2) 38%, transparent), 0 0 18px color-mix(in srgb, var(--rgb-1) 22%, transparent), inset 0 1px 1px rgba(255,255,255,.55), inset 0 -1px 1px rgba(0,0,0,.12);
+  position: relative;
+  overflow: hidden;
+}
+.farm-mark-core-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: farm-mark-shine 4.5s ease-in-out infinite;
+  border-radius: 50%;
+  pointer-events: none;
+}
+@keyframes farm-mark-shine {
+  0%, 75%, 100% { transform: translateX(-110%); }
+  50% { transform: translateX(110%); }
+}
 .farm-mark-bars { inset: -6%; }
 .farm-mark-bars i { position: absolute; inset-inline: 50%; width: 1px; height: 7px; margin-inline-start: -.5px; background: linear-gradient(180deg, color-mix(in srgb, var(--text-1) 58%, transparent), transparent); }
 .farm-mark-bars i:nth-child(1) { top: 0; }

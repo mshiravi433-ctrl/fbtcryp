@@ -1,8 +1,17 @@
 import { useEffect } from 'react';
-import { getNotifySettings, showLocalNotification } from '../lib/notify';
+import { getNotifySettings, registerPushAnywhere, showLocalNotification } from '../lib/notify';
 import { processFarmRateAlerts } from '../lib/farmRateAlerts';
 
 export function useFarmRateAlerts({ data, watchlist, alerts, t } = {}) {
+  useEffect(() => {
+    const hasEnabled = alerts && Object.values(alerts).some((a) => a?.enabled && a?.threshold != null);
+    if (hasEnabled) {
+      // Ensure push subscription exists so alerts arrive in background via FCM
+      // Fire-and-forget, never blocks alert delivery
+      try { registerPushAnywhere(); } catch { /* best effort */ }
+    }
+  }, [alerts]);
+
   useEffect(() => {
     if (!data || data.freshness === 'STALE') return;
     const pools = [...(data.pools ?? []), ...(data.venues ?? [])];

@@ -18,6 +18,7 @@ import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useFarmYields } from '../hooks/useFarmYields';
 import { useFarmRateAlerts } from '../hooks/useFarmRateAlerts';
+import { useFarmGasEstimate } from '../hooks/useFarmGasEstimate';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAppStore } from '../store/useAppStore';
 import { copyText } from '../lib/share';
@@ -337,13 +338,13 @@ function HorizonEarningsChart({ pool, amount, frequency, onFrequencyChange, wall
   );
 }
 
-function FeeEngineCard({ pool, amount, t }) {
-  const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
+function FeeEngineCard({ pool, amount, gasUsd = null, t }) {
+  const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd });
   const grossApy = finiteMetric(pool.apy);
   const yieldEst = grossApy == null ? null : fbtFeeEngine.estimateNetYield({
     grossApy,
     protocolCostApy: 0,
-    gasUsd: null,
+    gasUsd,
     amountUsd: amount
   });
   if (fee?.status === 'UNAVAILABLE' && yieldEst?.status === 'UNAVAILABLE') return null;
@@ -590,11 +591,16 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
           data-testid={`farm-compare-toggle-${pool.id}`}
           onClick={() => onToggleCompare?.(pool)}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M9 3h6v18H9z" opacity=".3"/>
-            <path d="M3 7h6v14H3z"/>
-            <path d="M15 5h6v16h-6z"/>
-            <path d="M6 11v4M18 9v6" strokeWidth="2"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 7h16" opacity="0.5"/>
+            <circle cx="9" cy="7" r="2.2" fill="currentColor" opacity="0.14" stroke="none"/>
+            <circle cx="9" cy="7" r="2.2"/>
+            <path d="M4 12h16" opacity="0.5"/>
+            <circle cx="15" cy="12" r="2.2" fill="currentColor" opacity="0.14" stroke="none"/>
+            <circle cx="15" cy="12" r="2.2"/>
+            <path d="M4 17h16" opacity="0.5"/>
+            <circle cx="9" cy="17" r="2.2" fill="currentColor" opacity="0.14" stroke="none"/>
+            <circle cx="9" cy="17" r="2.2"/>
           </svg>
         </button>
         <button
@@ -606,16 +612,12 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
           data-testid={`farm-watch-toggle-${pool.id}`}
           onClick={() => onToggleWatch?.(pool.id)}
         >
-          <svg viewBox="0 0 24 24" fill={isWatched ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill={isWatched ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 4.2h11.6a1 1 0 0 1 1 1V20.2L12 16.1l-6.6 4.1V5.2a1 1 0 0 1 1-1z"/>
             {isWatched ? (
-              <>
-                <path d="M12 3l2.5 5.2L20 9l-4 4 1 5.8L12 16l-5 2.8 1-5.8-4-4 5.5-.8z"/>
-                <path d="M8 12l2.5 2.5L15 10" strokeWidth="2" fill="none"/>
-              </>
+              <path d="M8.2 10.6l2.2 2.2 4.3-4.3" stroke="#fff" strokeWidth="1.9" fill="none"/>
             ) : (
-              <>
-                <path d="M12 3l2.5 5.2L20 9l-4 4 1 5.8L12 16l-5 2.8 1-5.8-4-4 5.5-.8z"/>
-              </>
+              <path d="M12 8.7v5M9.5 11.2h5" opacity="0.7"/>
             )}
           </svg>
         </button>
@@ -844,9 +846,10 @@ function FarmRateAlertControls({ id, config, poolApy, onChange, rateAvailable = 
     <div className={`farm-rate-alert-v2${enabled ? ' is-active' : ''}${isTargetReached ? ' is-reached' : hasThreshold ? ' is-missed' : ''}`} role="group" aria-label={t('farm.alerts.title')} data-testid={`farm-rate-alert-${id}`}>
       <div className="farm-alert-v2-head">
         <span className="farm-alert-v2-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 8.2a6 6 0 0 1 12 0c0 6.2 2.4 8.3 2.4 8.3H3.6S6 14.4 6 8.2z"/>
+            <path d="M9.2 18.9a2.8 2.8 0 0 0 5.6 0"/>
+            <circle cx="18.3" cy="5.2" r="1.9" fill="currentColor" opacity="0.14" stroke="currentColor" strokeWidth="1.1"/>
           </svg>
         </span>
         <span className="farm-alert-v2-title">{t('farm.alerts.title')}</span>
@@ -983,8 +986,9 @@ function WatchlistPanel({
 function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t }) {
   const route = investRoute(pool);
   const rate = poolRate(pool);
-  const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
-  const feeYield = fbtFeeEngine.estimateNetYield({ grossApy: finiteMetric(pool.apy), protocolCostApy: 0, gasUsd: null, amountUsd: amount });
+  const { gasUsd } = useFarmGasEstimate({ pool, walletConnected: wallet?.isConnected, getReadProvider: wallet?.getReadProvider });
+  const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd });
+  const feeYield = fbtFeeEngine.estimateNetYield({ grossApy: finiteMetric(pool.apy), protocolCostApy: 0, gasUsd, amountUsd: amount });
   const factors = pool.riskFactors || {};
   const research = useMemo(() => farmPoolResearch(pool), [pool]);
   const gross = finiteMetric(pool.apy) ?? NaN;
@@ -1127,7 +1131,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         <Metric label={t('farm.apr')} value={pool.apr == null ? null : `${pool.apr}%`} unavailable={pool.apr == null} />
         <Metric label={t('farm.rewardApr')} value={pool.rewardApr == null ? null : `${pool.rewardApr}%`} unavailable={pool.rewardApr == null} tone="emission" />
         <Metric label={t('farm.protocolFees')} value={t('farm.includedInApy')} />
-        <Metric label={t('farm.gasEstimate')} unavailable />
+        <Metric label={t('farm.gasEstimate')} value={gasUsd == null ? null : fmtUsd(gasUsd)} unavailable={gasUsd == null} />
         <Metric label={t('farm.fbtFee')} value={`${fmtUsd(fee.fbtFeeUsd)} (${(fee.fbtFeeBps / 100).toFixed(2)}%)`} tone="fee" />
         <Metric label={t('farm.netBeforeGas')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong tone="net" />
         <Metric label={t('farm.realYieldShare')} value={realPct == null ? null : `${realPct}%`} unavailable={realPct == null} tone="real" />
@@ -1138,8 +1142,8 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       </AnaSection>
 
       <PoolHistory poolId={pool.id} available={pool.historyAvailable !== false} t={t} />
-      <HorizonEarningsChart pool={pool} amount={amount} frequency={frequency} onFrequencyChange={setFrequency} walletConnected={wallet?.isConnected} gasUsd={null} t={t} />
-      <FeeEngineCard pool={pool} amount={amount} t={t} />
+      <HorizonEarningsChart pool={pool} amount={amount} frequency={frequency} onFrequencyChange={setFrequency} walletConnected={wallet?.isConnected} gasUsd={gasUsd} t={t} />
+      <FeeEngineCard pool={pool} amount={amount} gasUsd={gasUsd} t={t} />
 
       {ExecutionPanel ? <p className="notice">{t('farm.executionActivated')}</p> : null}
       <p className="faint">{t('farm.netIsAnalysis')}</p>
@@ -1187,16 +1191,17 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         </div>
         <div className="farm-share-row">
           <button type="button" className="farm-share-btn farm-share-btn--native" onClick={sharePool}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-              <path d="M8.6 13.5l6.8 4"/><path d="M15.4 6.5l-6.8 4"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2.8l0 11.2"/>
+              <path d="M8.6 6.2l3.4-3.4 3.4 3.4"/>
+              <path d="M4 12.9v5.6a2.2 2.2 0 0 0 2.2 2.2h11.6a2.2 2.2 0 0 0 2.2-2.2v-5.6"/>
             </svg>
             <span>{t('farm.sharePool')}</span>
           </button>
           <button type="button" className="farm-share-btn farm-share-btn--copy" onClick={copyPoolLink}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.8 1.7"/>
-              <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.8-1.7"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9.2" y="10" width="10.5" height="10.5" rx="2.2"/>
+              <path d="M5.3 14.2V5.5a1.8 1.8 0 0 1 1.8-1.8h8.6"/>
             </svg>
             <span>{t('farm.copyLink')}</span>
           </button>
@@ -1450,7 +1455,7 @@ export default function Farm() {
     return [...rows].sort((a, b) => (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity));
   }, [opportunities, filter, q, chain, sort]);
 
-  useEffect(() => { setVisibleCount(24); }, [filter, q, chain, sort]);
+  useEffect(() => { setVisibleCount(250); }, [filter, q, chain, sort]);
 
   const poolPrefillDone = useRef(false);
   useEffect(() => {
@@ -1737,7 +1742,7 @@ export default function Farm() {
             <p className="farm-hero-sub">{t('farm.subtitle')}</p>
           </div>
           <div className="farm-hero-art">
-            <FarmOrbMark size={104} />
+            <FarmOrbMark size={116} />
           </div>
         </div>
         <div className="farm-hero-stats">
@@ -1766,15 +1771,17 @@ export default function Farm() {
         <p className="farm-hero-footnote faint" role="status">{refreshing ? t('farm.refreshing') : t('farm.feedRefreshNote')}</p>
       </motion.section>
 
-      <VenueRail
-        pools={venueOpportunities}
-        watchlistIds={watchlistSet}
-        onToggleWatch={toggleWatch}
-        t={t}
-        onGoToPositions={gotoVenuePositions}
-        onGetTokens={getTokens}
-        onOpenPool={openPool}
-      />
+      {tab !== 'watchlist' && (
+        <VenueRail
+          pools={venueOpportunities}
+          watchlistIds={watchlistSet}
+          onToggleWatch={toggleWatch}
+          t={t}
+          onGoToPositions={gotoVenuePositions}
+          onGetTokens={getTokens}
+          onOpenPool={openPool}
+        />
+      )}
       </>}
 
       <ProtocolStatusCard protocol={protocol} t={t}>

@@ -1203,7 +1203,7 @@
   },
   "farm": {
     "title": "المزرعة",
-    "subtitle": "Earn yield by providing liquidity.",
+    "subtitle": "اكتشف أفضل فرص العائد وقارنها وتابعها.",
     "whatTitle": "How farming works",
     "whatBody": "You deposit two tokens into a liquidity pool and receive LP tokens representing your share. Traders swapping through that pool pay fees, which accrue to you. Staking the LP tokens in a farm adds a second reward stream on top.",
     "ilTitle": "Impermanent loss — read before depositing",
@@ -1692,7 +1692,7 @@
       "below": "at or below",
       "enable": "Enable alert",
       "disable": "Disable alert",
-      "notice": "Farm alerts use the app’s Price alerts preference and are checked while Farm is open. Background delivery is not available here.",
+      "notice": "تنبيهات المزرعة تتبع إعداد تنبيهات الأسعار وتصل حتى في الخلفية عبر إشعارات FCM.",
       "titleForPool": "Farm rate alert: {{symbol}}",
       "body": "{{symbol}} APY is {{apy}}%, {{direction}} your {{threshold}}% threshold.",
       "apyUnavailable": "Rate alerts require a fresh APY; APR-only or unavailable rates cannot be used.",
@@ -1810,7 +1810,7 @@
     "sharePool": "Share pool",
     "copyLink": "Copy link",
     "shareTitle": "{{name}} pool on FBT Farm",
-    "shareText": "Explore {{name}} on FBT Farm. Current reported APY: {{apy}}.",
+    "shareText": "Explore {{name}} on FBT Farm. Current reported rate: {{rate}}.",
     "shareCopied": "Pool link copied",
     "shareFailed": "Could not copy the pool link"
   },
