@@ -32,6 +32,16 @@ import { loadSplitRouterInfo, routeSupplyPlan } from '../../lib/defi/splitRouter
 
 const fmtUsdc = (wei) => (wei == null ? '—' : Number(fromUsdcWei(wei)).toFixed(2));
 const fmtUsd = (n) => (n == null ? '—' : `$${Number(n).toFixed(2)}`);
+const transactionStatusBucket = (status) => ['pending', 'timeout'].includes(status) ? 'pending' : status === 'confirmed' ? 'confirmed' : 'failed';
+
+function upsertHistoryRow(setHistory, row) {
+  if (!row) return;
+  setHistory((current) => {
+    const exists = current.some((item) => item.id === row.id);
+    const next = exists ? current.map((item) => item.id === row.id ? row : item) : [row, ...current];
+    return next.sort((a, b) => Number(b.at ?? 0) - Number(a.at ?? 0)).slice(0, 20);
+  });
+}
 
 function Row({ label, value, mono = true }) {
   return (
@@ -136,10 +146,10 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
 
   const maxSupplyUsdc = useMemo(() => {
     /* No platform caps: the wallet balance is the only ceiling. */
-    const limits = [];
-    if (walletUsdc != null) limits.push(Number(fromUsdcWei(walletUsdc)));
-    return Math.max(0, Math.min(...limits));
-  }, [position, walletUsdc]);
+    const walletBalance = walletUsdc == null ? null : Number(fromUsdcWei(walletUsdc));
+    if (!Number.isFinite(walletBalance) || walletBalance < 0) return null;
+    return walletBalance;
+  }, [walletUsdc]);
 
   const maxWithdrawUsdc = position ? Number(fromUsdcWei(position.suppliedUsdc)) : 0;
 
@@ -236,14 +246,14 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
       provider = await wallet.getReadProvider(MORPHO_BLUE_BASE.chainId);
       for (let i = 0; i < plan.steps.length; i += 1) {
         const step = plan.steps[i];
-        const record = recordMorphoAction({
+        const actionRecord = {
           action: step.kind,
           owner,
           chainId: MORPHO_BLUE_BASE.chainId,
           amountUsdcWei: plan.checks.amountWei == null ? null : String(plan.checks.amountWei),
-          amountUsdc: plan.checks.amountUsdc ?? null,
-          status: 'pending'
-        });
+          amountUsdc: plan.checks.amountUsdc ?? null
+        };
+        let record = null;
         try {
           await simulateGuardedStep({
             provider, owner, step,
@@ -254,6 +264,10 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
           const before = step.kind === 'supply' || step.kind === 'withdraw' ? await getPosition(provider, owner) : null;
           const result = await executeGuardedStep({
             signer, provider, owner, chainId: MORPHO_BLUE_BASE.chainId, step,
+            onBroadcast: (tx) => {
+              record = recordMorphoAction({ ...actionRecord, txHash: tx?.hash ?? null, status: 'pending' });
+              upsertHistoryRow(setHistory, record);
+            },
             verifyReceipt: ({ receipt }) => verifyMorphoReceipt({
               provider, receipt, owner, action: step.kind,
               amountWei: plan.checks.amountWei,
@@ -264,19 +278,31 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
               splitRouter: plan.checks.splitRouter ?? null
             })
           });
-          confirmMorphoAction(record.id, {
+          if (!record) {
+            record = recordMorphoAction({ ...actionRecord, txHash: result.tx.hash ?? null, status: 'pending' });
+            upsertHistoryRow(setHistory, record);
+          }
+          const confirmed = confirmMorphoAction(record.id, {
             txHash: result.receipt?.hash ?? result.tx.hash,
             blockNumber: result.receipt?.blockNumber ?? null
           });
+          upsertHistoryRow(setHistory, confirmed);
           setLastTx({ hash: result.receipt?.hash ?? result.tx.hash, kind: step.kind });
         } catch (err) {
-          if (isUserRejection(err)) cancelMorphoAction(record.id, 'USER_REJECTED');
-          else if (isTransactionTimeout(err)) timeoutMorphoAction(record.id);
-          else if (isTransactionReplacement(err)) replaceMorphoAction(record.id, {
+          let updated;
+          if (record && isUserRejection(err)) updated = cancelMorphoAction(record.id, 'USER_REJECTED');
+          else if (record && isTransactionTimeout(err)) updated = timeoutMorphoAction(record.id);
+          else if (record && isTransactionReplacement(err)) updated = replaceMorphoAction(record.id, {
             error: err?.code ?? 'TRANSACTION_REPLACED',
             txHash: err?.replacement?.hash ?? err?.receipt?.hash ?? null
           });
-          else failMorphoAction(record.id, { error: err?.code ?? err?.message ?? 'FAILED' });
+          else if (record) updated = failMorphoAction(record.id, { error: err?.code ?? err?.message ?? 'FAILED' });
+          else updated = recordMorphoAction({
+            ...actionRecord,
+            status: isUserRejection(err) ? 'cancelled' : 'failed',
+            error: err?.code ?? err?.message ?? 'FAILED'
+          });
+          upsertHistoryRow(setHistory, updated);
           const label = isUserRejection(err) ? t('farm.morpho.userRejected', { defaultValue: 'Signature rejected' })
             : isTransactionTimeout(err) ? t('farm.morpho.timeout', { defaultValue: 'Pending; check wallet.' })
             : isTransactionReplacement(err) ? t('farm.morpho.replaced', { defaultValue: 'Replaced/cancelled' })
@@ -291,8 +317,10 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
       setError(farmErrorLabel(err, t));
     }
     setBusy('');
-    setOpen(false);
     setAmount('');
+    setPlan(null);
+    setSimulation(null);
+    // Keep the analysis sheet open so the final receipt status is visible.
     await refresh();
   }, [owner, plan, refresh, t, wallet]);
 
@@ -329,6 +357,7 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
   if (!shouldRender) return null;
   const wrongChain = wallet.isConnected && wallet.chainId !== MORPHO_BLUE_BASE.chainId;
   const knownHere = wrongChain && (hasPosition || history.some((r) => r.action === 'supply' && (r.status === 'confirmed' || r.status === 'pending')));
+  const latestHistory = history[0] ?? null;
 
     /*
    * Visibility, not permission. In a public-open build the entry point is
@@ -489,6 +518,21 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
 
           {error && <p className="notice notice-danger" style={{ margin: 0 }}>{error}</p>}
 
+          {latestHistory && (
+            <div
+              className="farm-morpho-transaction-status"
+              data-testid="farm-morpho-transaction-status"
+              data-status={transactionStatusBucket(latestHistory.status)}
+              role="status"
+              aria-live="polite"
+            >
+              <span>{t('farm.transactionStatus.label')}</span>
+              <span className="farm-morpho-status-pill" data-status={transactionStatusBucket(latestHistory.status)}>
+                {t(`farm.transactionStatus.${transactionStatusBucket(latestHistory.status)}`)}
+              </span>
+            </div>
+          )}
+
           {lastTx && <a className="faint" href={explorerTx(MORPHO_BLUE_BASE.chainId, lastTx.hash)} target="_blank" rel="noopener noreferrer" dir="ltr">{t('farm.morpho.viewTx', { defaultValue: 'View tx' })}</a>}
 
           <div className="farm-actions">
@@ -501,12 +545,15 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
           {history.length > 0 && (
             <div>
               <p className="section-label" style={{ margin: '6px 0 4px' }}>{t('farm.morpho.recentTitle', { defaultValue: 'Recent' })}</p>
-              {history.slice(0, 5).map((r) => (
-                <div key={r.id} className="farm-metric">
-                  <span className="faint">{r.action} · {r.amountUsdc != null ? `${r.amountUsdc} USDC` : '—'} · {new Date(r.at).toLocaleString()}</span>
-                  <span className="mono">{r.status}</span>
-                </div>
-              ))}
+              {history.slice(0, 5).map((r) => {
+                const bucket = transactionStatusBucket(r.status);
+                return (
+                  <div key={r.id} className="farm-metric">
+                    <span className="faint">{r.action} · {r.amountUsdc != null ? `${r.amountUsdc} USDC` : '—'} · {new Date(r.at).toLocaleString()}</span>
+                    <span className="farm-morpho-status-pill" data-status={bucket}>{t(`farm.transactionStatus.${bucket}`)}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
 

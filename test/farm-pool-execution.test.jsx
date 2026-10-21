@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { FARM_YIELDS_CACHE_KEY } from '../src/hooks/useFarmYields';
 import en from '../src/i18n/locales/en.json';
 import fa from '../src/i18n/locales/fa.json';
 
@@ -70,6 +71,7 @@ const mount = (pools, tab = 'recommended') => render(<MemoryRouter initialEntrie
 
 beforeEach(() => {
   language = 'en';
+  localStorage.removeItem(FARM_YIELDS_CACHE_KEY);
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).endsWith('/history') ? history() : feed([aaveRow, otherRow])));
 });

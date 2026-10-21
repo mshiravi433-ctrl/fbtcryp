@@ -36,7 +36,7 @@ export async function simulateGuardedStep({ provider, owner, step, allowance } =
  * failure, and protocol failure separately for recovery and the local ledger.
  */
 export async function executeGuardedStep({
-  signer, provider, owner, chainId, step, verifyReceipt, timeoutMs = 180_000
+  signer, provider, owner, chainId, step, verifyReceipt, onBroadcast, timeoutMs = 180_000
 } = {}) {
   await assertSignerContext(signer, { owner, chainId });
   const tx = await signer.sendTransaction({
@@ -44,6 +44,7 @@ export async function executeGuardedStep({
     data: step.data,
     value: step.value ?? 0n
   });
+  try { onBroadcast?.(tx); } catch { /* local status reporting must never interrupt a broadcast transaction */ }
   const mined = await waitForMinedReceipt(tx, { timeoutMs });
   const proof = typeof verifyReceipt === 'function'
     ? await verifyReceipt({ receipt: mined.receipt, tx, replaced: mined.replaced })

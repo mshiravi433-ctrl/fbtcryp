@@ -76,7 +76,13 @@ function matches(adapter, pool) {
   }
 }
 
-const finiteApy = (pool) => (Number.isFinite(Number(pool?.apy)) ? Number(pool.apy) : null);
+const finiteRateValue = (value) => value == null || value === '' || typeof value === 'boolean' ? null : Number.isFinite(Number(value)) ? Number(value) : null;
+const finiteApy = (pool) => finiteRateValue(pool?.apy);
+const finiteApr = (pool) => finiteRateValue(pool?.apr);
+const finiteRate = (pool) => finiteApy(pool) ?? finiteApr(pool);
+const rateFieldFor = (pool) => finiteApy(pool) != null ? 'apy' : finiteApr(pool) != null ? 'apr' : 'apy';
+const rateForField = (pool, field) => finiteRateValue(pool?.[field]);
+const rateLabel = (pool, t) => t(finiteApy(pool) != null || finiteApr(pool) == null ? 'farm.estimatedApy' : 'farm.apr');
 
 /** Every chain gets a readable label; the locale files own the translations. */
 const chainLabel = (name, t) => t(`farm.chainLabels.${name}`, { defaultValue: name });
@@ -115,24 +121,25 @@ export function venuePosition(apy, low, high) {
  * below it. The venue's own pool is outlined, which is the one thing a bar
  * chart has to answer here: «where does the pool I can actually use sit».
  */
-function VenueBreadthChart({ rows, hereId, t, chain }) {
+function VenueBreadthChart({ rows, hereId, t, chain, rateField = 'apy' }) {
   const bars = useMemo(() => {
-    const withRate = rows.filter((p) => finiteApy(p) != null).sort((a, b) => finiteApy(b) - finiteApy(a)).slice(0, 9);
+    const withRate = rows.filter((pool) => rateForField(pool, rateField) != null)
+      .sort((a, b) => rateForField(b, rateField) - rateForField(a, rateField)).slice(0, 9);
     if (withRate.length < 2) return [];
-    const rates = withRate.map(finiteApy);
+    const rates = withRate.map((pool) => rateForField(pool, rateField));
     const high = Math.max(...rates);
     const low = Math.max(0, Math.min(...rates));
     const span = high - low || high || 1;
     return withRate.map((pool, i) => ({
       id: pool.id,
       symbol: pool.symbol,
-      apy: finiteApy(pool),
+      rate: rateForField(pool, rateField),
       /* a floor of 16% so the shortest bar is still a bar and not a line */
-      height: 16 + ((finiteApy(pool) - low) / span) * 84,
+      height: 16 + ((rateForField(pool, rateField) - low) / span) * 84,
       role: i === 0 ? 'high' : i === withRate.length - 1 ? 'low' : 'mid',
       here: pool.id === hereId
     }));
-  }, [rows, hereId]);
+  }, [rows, hereId, rateField]);
 
   if (bars.length === 0) return <p className="farm-venue-empty">{t('farm.venue.noSpread')}</p>;
 
@@ -141,13 +148,13 @@ function VenueBreadthChart({ rows, hereId, t, chain }) {
       <div className="farm-venue-bars" role="img" aria-label={t('farm.venue.breadthAria', { chain: chainLabel(chain, t) })}>
         {bars.map((bar) => (
           <span key={bar.id} className={`farm-venue-bar is-${bar.role}${bar.here ? ' is-here' : ''}`}>
-            <span className="farm-venue-bar-value mono" dir="ltr">{bar.apy}%</span>
+            <span className="farm-venue-bar-value mono" dir="ltr">{bar.rate}%</span>
             <span className="farm-venue-bar-fill" style={{ height: `${bar.height}%` }} />
             <span className="farm-venue-bar-label" dir="ltr">{bar.symbol}</span>
           </span>
         ))}
       </div>
-      <p className="faint farm-venue-note">{t('farm.venue.breadthNote')}</p>
+      <p className="faint farm-venue-note">{t('farm.venue.breadthNote')} · {t(rateField === 'apr' ? 'farm.apr' : 'farm.estimatedApy')}</p>
     </div>
   );
 }
@@ -165,7 +172,7 @@ function VenueChart({ venue, pool, chainRows, t }) {
   const poolId = pool?.id ?? null;
 
   useEffect(() => {
-    if (!poolId) {
+    if (!poolId || pool?.historyAvailable === false || (finiteApy(pool) == null && finiteApr(pool) != null)) {
       setHistory({ status: 'IDLE', points: [] });
       return undefined;
     }
@@ -181,7 +188,7 @@ function VenueChart({ venue, pool, chainRows, t }) {
         if (alive) setHistory({ status: 'ERROR', points: [] });
       });
     return () => { alive = false; ctrl.abort(); };
-  }, [poolId, retry]);
+  }, [poolId, retry, pool?.historyAvailable, pool?.apy, pool?.apr]);
 
   /* Named `range`, NOT `window`: shadowing the global inside a component is
      the kind of thing that turns a later `window.location` into a crash. */
@@ -189,7 +196,8 @@ function VenueChart({ venue, pool, chainRows, t }) {
     if (history.status !== 'READY') return null;
     const cutoff = Date.now() - days * 86_400_000;
     const points = history.points
-      .filter((row) => Number.isFinite(Number(row?.apy)) && Number(row?.timestamp) >= cutoff)
+      .filter((row) => row?.apy != null && row.apy !== '' && typeof row.apy !== 'boolean'
+        && Number.isFinite(Number(row.apy)) && Number(row.timestamp) >= cutoff)
       .map((row) => ({ x: Number(row.timestamp), y: Number(row.apy) }))
       .sort((a, b) => a.x - b.x);
     if (points.length < 2) return null;
@@ -257,7 +265,7 @@ function VenueChart({ venue, pool, chainRows, t }) {
           <p className="faint farm-venue-note">
             {pool ? t('farm.venue.noHistoryNote') : t('farm.venue.noPoolNote', { chain: chainLabel(venue.chain, t) })}
           </p>
-          <VenueBreadthChart rows={chainRows} hereId={pool?.id ?? null} t={t} chain={venue.chain} />
+          <VenueBreadthChart rows={chainRows} hereId={pool?.id ?? null} t={t} chain={venue.chain} rateField={venue.rateField} />
         </>
       )}
     </section>
@@ -268,21 +276,25 @@ function VenueChart({ venue, pool, chainRows, t }) {
 /* one venue, opened                                                          */
 /* ------------------------------------------------------------------------- */
 
-function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPositions, onGetTokens, onOpenPool }) {
-  const apy = finiteApy(pool);
+function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPositions, onGetTokens, onOpenPool, isWatched = false, onToggleWatch }) {
+  const apy = finiteRate(pool);
   const share = pool ? realShare(pool) : null;
   const realPct = share == null ? null : Math.round(share * 100);
   const unusual = pool ? rateIsUnusual(pool) : null;
+  const hasComparison = finiteApy(pool) != null && finiteRateValue(pool?.apyMean30d) != null && finiteRateValue(pool?.apyMean30d) > 0;
   const route = pool ? investRoute(pool) : null;
   const title = t(venue.titleKey, { defaultValue: projectDisplayName(venue.project) });
 
-  const cell = (role, row, key) => (
-    <div className={`farm-venue-range-cell is-${role}`}>
-      <span className="farm-venue-range-role">{t(key)}</span>
-      <span className="farm-venue-range-value mono" dir="ltr">{row == null ? '—' : `${row.apy}%`}</span>
-      <span className="farm-venue-range-sym" dir="ltr">{row?.symbol ?? '—'}</span>
-    </div>
-  );
+  const cell = (role, row, key) => {
+    const value = role === 'here' ? finiteRate(row) : rateForField(row, venue.rateField);
+    return (
+      <div className={`farm-venue-range-cell is-${role}`}>
+        <span className="farm-venue-range-role">{t(key)}</span>
+        <span className="farm-venue-range-value mono" dir="ltr">{value == null ? '—' : `${value}%`}</span>
+        <span className="farm-venue-range-sym" dir="ltr">{row?.symbol ?? '—'}</span>
+      </div>
+    );
+  };
 
   return (
     <motion.section
@@ -300,14 +312,26 @@ function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPos
         <div className="farm-venue-pills">
           <span className={`pill ${apy == null ? 'pill-down' : 'pill-neutral'} mono`} dir="ltr">{apy == null ? t('farm.venue.noRate') : `${apy}%`}</span>
           <span className="pill pill-neutral">{t('farm.venue.chipAnalysis')}</span>
+          {pool && (
+            <button
+              type="button"
+              className={`farm-venue-watch${onToggleWatch && isWatched ? ' is-watched' : ''}`}
+              aria-label={t(isWatched ? 'farm.watchRemove' : 'farm.watchAdd')}
+              aria-pressed={Boolean(isWatched)}
+              onClick={() => onToggleWatch?.(pool.id)}
+              data-testid={`farm-venue-watch-${venue.id}`}
+            >
+              {t(isWatched ? 'farm.watchRemove' : 'farm.watchAdd')}
+            </button>
+          )}
         </div>
       </header>
-      {apy != null && <p className="faint farm-venue-note">{t('farm.estimatedApy')}</p>}
+      {apy != null && <p className="faint farm-venue-note">{rateLabel(pool, t)}</p>}
 
       {/* HIGH · THIS POOL · LOW — the three numbers, side by side */}
       <div className="farm-venue-range-row">
         {cell('high', chainHigh, 'farm.venue.highOnChain')}
-        {cell('here', pool ? { apy: pool.apy, symbol: pool.symbol } : null, 'farm.venue.thisPool')}
+        {cell('here', pool ? { apy: pool.apy, apr: pool.apr, symbol: pool.symbol } : null, 'farm.venue.thisPool')}
         {cell('low', chainLow, 'farm.venue.lowOnChain')}
       </div>
 
@@ -331,7 +355,7 @@ function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPos
         <div className="farm-venue-analysis-row">
           <span className="farm-venue-analysis-key">{t('farm.rateVs30d')}</span>
           <span className="farm-venue-analysis-val mono" dir="ltr">
-            {pool?.apyMean30d == null ? '—' : `${pool.apy}% / ${pool.apyMean30d}%`}
+            {finiteApy(pool) == null || finiteRateValue(pool?.apyMean30d) == null ? '—' : `${finiteApy(pool)}% / ${finiteRateValue(pool.apyMean30d)}%`}
           </span>
         </div>
         <div className="farm-venue-analysis-row">
@@ -351,7 +375,7 @@ function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPos
       <p className={`farm-venue-verdict ${unusual?.direction === 'above' ? 'is-high' : unusual?.direction === 'below' ? 'is-low' : ''}`}>
         {unusual
           ? t(`farm.unusual.${unusual.direction}`, { ratio: unusual.ratio, mean: unusual.mean })
-          : t('farm.venue.verdictNormal')}
+          : hasComparison ? t('farm.venue.verdictNormal') : t('farm.venue.verdictUnavailable')}
       </p>
 
       <div className="farm-venue-actions">
@@ -378,22 +402,25 @@ function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPos
 /* the rail                                                                   */
 /* ------------------------------------------------------------------------- */
 
-export default function VenueRail({ pools = [], t, onGoToPositions, onGetTokens, onOpenPool }) {
+export default function VenueRail({ pools = [], watchlistIds = new Set(), onToggleWatch, t, onGoToPositions, onGetTokens, onOpenPool }) {
   const [openId, setOpenId] = useState(null);
 
   const venues = useMemo(() => FARM_EXECUTION_ADAPTERS.map((adapter) => {
     const meta = VENUE_META[adapter.id] ?? {};
     const matched = pools.filter((pool) => matches(adapter, pool));
+    const pool = matched[0] ?? null;
+    const rateField = rateFieldFor(pool);
     const chainRows = pools
-      .filter((pool) => pool.chain === adapter.descriptor.chain && finiteApy(pool) != null)
-      .sort((a, b) => finiteApy(b) - finiteApy(a));
+      .filter((row) => row.chain === adapter.descriptor.chain && rateForField(row, rateField) != null)
+      .sort((a, b) => rateForField(b, rateField) - rateForField(a, rateField));
     return {
       id: adapter.id,
       project: adapter.descriptor.project,
       chain: adapter.descriptor.chain,
       symbol: adapter.descriptor.symbol,
       ...meta,
-      pool: matched[0] ?? null,
+      pool,
+      rateField,
       chainRows,
       chainHigh: chainRows[0] ?? null,
       chainLow: chainRows.length > 1 ? chainRows.at(-1) : null
@@ -401,7 +428,7 @@ export default function VenueRail({ pools = [], t, onGoToPositions, onGetTokens,
   }), [pools]);
 
   const open = venues.find((v) => v.id === openId) ?? null;
-  const rated = venues.filter((v) => finiteApy(v.pool) != null).length;
+  const rated = venues.filter((v) => finiteRate(v.pool) != null).length;
 
   return (
     <motion.section className="farm-venue-box" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} aria-label={t('farm.venue.title')}>
@@ -419,8 +446,8 @@ export default function VenueRail({ pools = [], t, onGoToPositions, onGetTokens,
           the container's label plus each card's `aria-expanded` says enough. */}
       <div className="farm-venue-rail">
         {venues.map((venue) => {
-          const apy = finiteApy(venue.pool);
-          const position = venuePosition(apy, finiteApy(venue.chainLow), finiteApy(venue.chainHigh));
+          const apy = finiteRate(venue.pool);
+          const position = venuePosition(apy, rateForField(venue.chainLow, venue.rateField), rateForField(venue.chainHigh, venue.rateField));
           const isOpen = venue.id === openId;
           return (
             <button
@@ -441,7 +468,7 @@ export default function VenueRail({ pools = [], t, onGoToPositions, onGetTokens,
               </span>
               <span className="farm-venue-card-name">{projectDisplayName(venue.project)}</span>
               <span className="farm-venue-card-apy mono" dir="ltr">{apy == null ? '—' : `${apy}%`}</span>
-              <span className="farm-venue-card-apy-label">{t('farm.estimatedApy')}</span>
+              <span className="farm-venue-card-apy-label">{rateLabel(venue.pool, t)}</span>
               {position == null
                 ? <span className="farm-venue-card-range is-empty" aria-hidden="true" />
                 : (
@@ -468,6 +495,8 @@ export default function VenueRail({ pools = [], t, onGoToPositions, onGetTokens,
             onGoToPositions={onGoToPositions}
             onGetTokens={onGetTokens}
             onOpenPool={onOpenPool}
+            isWatched={Boolean(open.pool && watchlistIds?.has?.(String(open.pool.id)))}
+            onToggleWatch={onToggleWatch}
           />
         )
         : <p className="faint farm-venue-note">{t('farm.venue.tapHint')}</p>}
