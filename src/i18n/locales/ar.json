@@ -1695,7 +1695,8 @@
       "notice": "Farm alerts use the app’s Price alerts preference and are checked while Farm is open. Background delivery is not available here.",
       "titleForPool": "Farm rate alert: {{symbol}}",
       "body": "{{symbol}} APY is {{apy}}%, {{direction}} your {{threshold}}% threshold.",
-      "apyUnavailable": "Rate alerts require a fresh APY; APR-only or unavailable rates cannot be used."
+      "apyUnavailable": "Rate alerts require a fresh APY; APR-only or unavailable rates cannot be used.",
+      "margin": "Margin from target"
     },
     "scoreBreakdown": {
       "title": "Quality score breakdown",
@@ -1807,6 +1808,7 @@
     "filterSort": "Sort",
     "feedErrorTitle": "Live yield feed unavailable",
     "sharePool": "Share pool",
+    "copyLink": "Copy link",
     "shareTitle": "{{name}} pool on FBT Farm",
     "shareText": "Explore {{name}} on FBT Farm. Current reported APY: {{apy}}.",
     "shareCopied": "Pool link copied",
