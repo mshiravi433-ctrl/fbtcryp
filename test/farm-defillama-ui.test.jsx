@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useSearchParams } from 'react-router-dom';
 import en from '../src/i18n/locales/en.json';
 import fa from '../src/i18n/locales/fa.json';
 
@@ -36,7 +36,8 @@ vi.mock('framer-motion', () => {
 
 import Farm from '../src/pages/Farm';
 import PoolHistory from '../src/components/Farm/PoolHistory';
-import { useFarmYields } from '../src/hooks/useFarmYields';
+import { FARM_YIELDS_CACHE_KEY, useFarmYields } from '../src/hooks/useFarmYields';
+import { useSettingsStore } from '../src/store/useSettingsStore.js';
 const id = '11111111-1111-4111-8111-111111111111';
 const pool = { id, project: 'aave-v3', chain: 'Base', symbol: 'USDC', apy: 5, apyBase: 5, apyReward: 0, apr: null, tvlUsd: 500_000_000, stablecoin: true, ilRisk: false, risk: 'low', exposure: 'single', source: 'defillama' };
 const json = (data) => new Response(JSON.stringify(data));
@@ -46,8 +47,14 @@ const history = (poolId = id) => ({ pool: poolId, points: [
   { timestamp: Date.now() - 86_400_000, apy: 5, tvlUsd: 20_000_000 }
 ], at: Date.now(), freshness: 'FRESH' });
 const mount = (tab = 'recommended') => render(<MemoryRouter initialEntries={[`/farm?tab=${tab}`]}><Farm /></MemoryRouter>);
+function RouteProbe() {
+  const [params] = useSearchParams();
+  return <output data-testid="farm-route-query">{params.toString()}</output>;
+}
 beforeEach(() => {
   language = 'en';
+  localStorage.removeItem(FARM_YIELDS_CACHE_KEY);
+  useSettingsStore.getState().setFarmWatchlist([]);
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => json(String(url).endsWith('/history') ? history() : feed()));
 });
@@ -63,6 +70,72 @@ describe('Farm discovery UI', () => {
     expect(container.textContent).not.toMatch(/farm\.(refresh|history|sortBy|allNetworks)/);
     expect(screen.getByRole('button', { name: t('farm.refresh') }).disabled).toBe(false);
   });
+  it('filters to evidenced real yield instead of treating rewards as base yield', async () => {
+    const pools = [
+      { ...pool, id: 'real-yield', symbol: 'REAL', apy: 10, apyBase: 8, apyReward: 2 },
+      { ...pool, id: 'reward-only', symbol: 'REWARD', apy: 10, apyBase: 0, apyReward: 10 },
+      { ...pool, id: 'unknown-split', symbol: 'UNKNOWN', apy: 10, apyBase: null, apyReward: null }
+    ];
+    fetch.mockImplementation(async () => json(feed(pools)));
+    const { container } = mount('pools');
+    await waitFor(() => expect(container.querySelectorAll('.farm-pool-with-details')).toHaveLength(3));
+    fireEvent.click(screen.getByRole('button', { name: t('farm.category.realYield') }));
+    await waitFor(() => expect(container.querySelectorAll('.farm-pool-with-details')).toHaveLength(1));
+    expect(container.querySelector('.farm-pool').textContent).toContain('REAL');
+  });
+
+  it('keeps a wallet-free watchlist and configures a fresh-APY threshold alert', async () => {
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector(`[data-testid="farm-watch-toggle-${id}"]`)).toBeTruthy());
+    fireEvent.click(container.querySelector(`[data-testid="farm-watch-toggle-${id}"]`));
+    expect(useSettingsStore.getState().farmWatchlist).toEqual([id]);
+    expect(useSettingsStore.getState().farmWatchlist).not.toContain('0x0000000000000000000000000000000000000000');
+
+    fireEvent.click(screen.getByRole('tab', { name: t('farm.tab.watchlist') }));
+    await screen.findByTestId('farm-watchlist');
+    const threshold = screen.getByRole('spinbutton', { name: t('farm.alerts.threshold') });
+    expect(threshold.disabled).toBe(false);
+    fireEvent.change(threshold, { target: { value: '7.5' } });
+    const enable = screen.getByRole('button', { name: t('farm.alerts.enable') });
+    expect(enable.disabled).toBe(false);
+    fireEvent.click(enable);
+    expect(useSettingsStore.getState().farmRateAlerts[id]).toEqual({ enabled: true, direction: 'above', threshold: 7.5 });
+  });
+
+  it('never offers an APY alert for APR-only data', async () => {
+    const aprPool = { ...pool, apy: null, apyBase: null, apyReward: null, apr: 3.4 };
+    fetch.mockImplementation(async () => json(feed([aprPool])));
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector(`[data-testid="farm-watch-toggle-${id}"]`)).toBeTruthy());
+    expect(container.querySelector('.farm-apy-label').textContent).toBe(t('farm.apr'));
+    fireEvent.click(container.querySelector('.farm-pool-toggle'));
+    expect(container.querySelector('.farm-pool').textContent).toContain(t('farm.apr'));
+    fireEvent.click(container.querySelector(`[data-testid="farm-watch-toggle-${id}"]`));
+    fireEvent.click(screen.getByRole('tab', { name: t('farm.tab.watchlist') }));
+    const threshold = await screen.findByRole('spinbutton', { name: t('farm.alerts.threshold') });
+    expect(threshold.disabled).toBe(true);
+    expect(screen.getByText(t('farm.alerts.apyUnavailable'))).toBeTruthy();
+  });
+
+  it('shows an unknown APY as unavailable instead of a fabricated zero', async () => {
+    const unknown = { ...pool, apy: null, apyBase: null, apyReward: null, apr: null, rewardApr: null };
+    fetch.mockImplementation(async () => json(feed([unknown])));
+    const { container } = mount('pools');
+    await waitFor(() => expect(container.querySelector('.farm-pool')).toBeTruthy());
+    expect(container.querySelector('.farm-apy').textContent).toBe('—');
+    expect(container.querySelectorAll('.farm-hero-stat-value')[1].textContent).toBe('—');
+
+    fireEvent.click(container.querySelector('.farm-pool-toggle'));
+    fireEvent.click(container.querySelector(`[data-testid="farm-view-analytics-${id}"]`));
+    const sheet = await screen.findByTestId('farm-analysis-sheet');
+    expect(sheet.querySelector('.farm-ana-apy-value').textContent).toBe('—');
+    const grossMetrics = [...sheet.querySelectorAll('.farm-metric')]
+      .filter((metric) => metric.textContent.includes(t('farm.grossApy')));
+    expect(grossMetrics.length).toBeGreaterThan(0);
+    expect(grossMetrics.every((metric) => metric.lastElementChild?.textContent === '—')).toBe(true);
+    expect(sheet.textContent).not.toMatch(/(?:null|undefined|NaN)%/);
+  });
+
   it('recovers from a failed feed via the retry button', async () => {
     fetch.mockRejectedValueOnce(new Error('offline'));
     mount();
@@ -71,6 +144,20 @@ describe('Farm discovery UI', () => {
     await waitFor(() => expect(screen.queryByText(t('farm.unavailable'))).toBeNull());
     expect(screen.getAllByText('USDC').length).toBeGreaterThan(0);
   });
+  it('opens the pool-and-amount deep link and preserves other query parameters across tabs', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/farm?tab=recommended&pool=${id}&amount=250&ref=keep`]}>
+        <Farm />
+        <RouteProbe />
+      </MemoryRouter>
+    );
+    const sheet = await screen.findByTestId('farm-analysis-sheet');
+    expect(sheet.textContent).toMatch(/Amount\$250(?:\D|$)/);
+    await waitFor(() => expect(screen.getByTestId('farm-route-query').textContent).toContain('ref=keep'));
+    fireEvent.click(screen.getByRole('tab', { name: t('farm.tab.pools') }));
+    expect(screen.getByTestId('farm-route-query').textContent).toContain('ref=keep');
+  });
+
   it('filters by network, searches, sorts and paginates instead of mounting 500 cards', async () => {
     const pools = Array.from({ length: 30 }, (_, i) => ({ ...pool, id: `pool-${i}`, symbol: `ASSET${i}`, chain: i % 2 ? 'Ethereum' : 'Base', apy: i + 1 }));
     fetch.mockImplementation(async () => json(feed(pools)));
@@ -103,6 +190,11 @@ describe('Farm discovery UI', () => {
     expect(details).toBeTruthy();
     fireEvent.click(details);
     await screen.findByText(t('farm.historyTitle'));
+    const score = await screen.findByTestId(`farm-score-breakdown-${id}`);
+    expect(score.textContent).toContain('40%');
+    expect(score.textContent).toContain('25%');
+    expect(score.textContent).toContain('20%');
+    expect(score.textContent).toContain('15%');
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith(`/${id}/history`))).toBe(true));
   });
 

@@ -79,6 +79,7 @@ vi.mock('framer-motion', () => {
 import Farm from '../src/pages/Farm';
 import { FARM_VENUES, venuePosition } from '../src/components/Farm/VenueRail';
 import { FARM_EXECUTION_ADAPTERS } from '../src/components/Farm/FarmPositionHub';
+import { FARM_YIELDS_CACHE_KEY } from '../src/hooks/useFarmYields';
 /* The server half of the same five venues: the pin table and the extractor
    that resolves it against the raw upstream feed. Imported here so the rail
    test drives the REAL pinned rows rather than a hand-written copy of them. */
@@ -127,6 +128,7 @@ const mount = (tab = 'recommended') => render(<MemoryRouter initialEntries={[`/f
 
 beforeEach(() => {
   language = 'en';
+  localStorage.removeItem(FARM_YIELDS_CACHE_KEY);
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(320);
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {

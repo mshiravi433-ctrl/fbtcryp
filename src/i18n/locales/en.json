@@ -2019,7 +2019,8 @@
     "risk": {
       "low": "Lower risk",
       "medium": "Medium risk",
-      "high": "Higher risk"
+      "high": "Higher risk",
+      "unknown": "Unknown"
     },
     "filter": {
       "all": "All",
@@ -2047,7 +2048,8 @@
       "trade": "Trade",
       "recommended": "Recommended",
       "strategies": "Strategies",
-      "pools": "Pools"
+      "pools": "Pools",
+      "watchlist": "Watchlist"
     },
     "month": "mo",
     "day": "d",
@@ -2120,7 +2122,7 @@
     "positionsUnavailable": "Other pools do not yet have a verified position indexer. No position or profit is inferred from the wallet address.",
     "connectForPositions": "Connect the central wallet to read supported positions. Browsing and comparison remain available.",
     "recommendedFarms": "Recommended farms",
-    "scoreExplanation": "Ranked by sustainable yield, TVL, reward quality and rate stability — never by APY alone.",
+    "scoreExplanation": "Quality score: 40% base yield, 25% TVL, 20% real-yield share, and 15% rate stability. Missing inputs contribute zero; no values are guessed.",
     "defiMarket": "DeFi farm market",
     "yieldStrategies": "Yield strategies",
     "strategyDisclaimer": "Estimated and historical rates are variable, not guaranteed profit. Strategy cards use live eligible pools only.",
@@ -2163,7 +2165,8 @@
       "autoCompound": "Auto compound",
       "lp": "LP",
       "staking": "Staking",
-      "vault": "Vault"
+      "vault": "Vault",
+      "realYield": "Real yield"
     },
     "market": {
       "topTvl": "Top TVL",
@@ -2664,7 +2667,7 @@
     "retry": "Try again",
     "refreshing": "Updating DefiLlama data…",
     "feedRefreshNote": "Checks every 5 minutes · source cache up to 1 hour",
-    "staleNotice": "DefiLlama is temporarily unavailable. These are earlier observations (under 2 hours old), not current rates.",
+    "staleNotice": "The live feed is unavailable. These last-known values are under 2 hours old and are marked STALE; they are not current rates.",
     "allNetworks": "All networks",
     "sortBy": "Sort by",
     "sort": {
@@ -2883,6 +2886,7 @@
       "type": "Type",
       "chipAnalysis": "Analysis",
       "verdictNormal": "The rate is in line with its own recent average and with the rest of its network — nothing here looks like an incentive spike.",
+      "verdictUnavailable": "No APY and 30-day mean are available to assess this rate yet.",
       "executeCta": "Execute & position (in-app tab)",
       "executeNote": "This card is analysis only: it holds no keys and signs nothing. Supply, withdraw and revoke live in the in-app tab, behind the adapter for this venue."
     },
@@ -2898,7 +2902,55 @@
     "equityNote": "These are NOT shares: no voting rights, and the issuer can freeze the token in your wallet — the same risk as any frozen-address token. You can sell on-chain whenever there is liquidity, which the depth figure on each row shows.",
     "equityAll": "All equities",
     "equityNew": "Recently added",
-    "equityFreeze": "Issuer can freeze"
+    "equityFreeze": "Issuer can freeze",
+    "watchlistTitle": "Farm watchlist",
+    "watchlistEmpty": "Your watchlist is empty. Add a pool to track it without connecting a wallet.",
+    "watchlistMissing": "This pool is not in the latest available feed. Its rate is not shown.",
+    "watchAdd": "Add to watchlist",
+    "watchRemove": "Remove from watchlist",
+    "alerts": {
+      "title": "Rate alert",
+      "threshold": "APY threshold (%)",
+      "direction": "Notify when APY is",
+      "above": "at or above",
+      "below": "at or below",
+      "enable": "Enable alert",
+      "disable": "Disable alert",
+      "notice": "Farm alerts use the app’s Price alerts preference and are checked while Farm is open. Background delivery is not available here.",
+      "titleForPool": "Farm rate alert: {{symbol}}",
+      "body": "{{symbol}} APY is {{apy}}%, {{direction}} your {{threshold}}% threshold.",
+      "apyUnavailable": "Rate alerts require a fresh APY; APR-only or unavailable rates cannot be used."
+    },
+    "scoreBreakdown": {
+      "title": "Quality score breakdown",
+      "baseYield": "Base yield · {{weight}}%",
+      "tvl": "TVL · {{weight}}%",
+      "realYield": "Real-yield share · {{weight}}%",
+      "stability": "Rate stability · {{weight}}%",
+      "unknown": "Unknown — contributes 0",
+      "baseValue": "Base APY: {{value}}%",
+      "tvlValue": "TVL: {{value}}",
+      "realValue": "Real yield: {{value}}%",
+      "meanValue": "30-day mean: {{value}}%",
+      "points": "{{points}} / {{weight}} points",
+      "total": "Quality score: {{score}} / 100"
+    },
+    "transactionStatus": {
+      "label": "Latest transaction",
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "failed": "Failed"
+    },
+    "sources": {
+      "defillama": "DefiLlama",
+      "protocolDirect": "Verified protocol sources",
+      "aaveBaseOnchain": "Aave v3 · Base on-chain",
+      "compoundBaseOnchain": "Compound v3 · Base on-chain",
+      "aaveArbitrumOnchain": "Aave v3 · Arbitrum on-chain",
+      "morphoPinnedMarket": "Morpho API · pinned Base market",
+      "lidoSevenDayApr": "Lido · 7-day SMA APR API"
+    },
+    "watchlistIntro": "This list and its alert thresholds are saved in settings; optional settings sync may carry them across devices. No wallet connection is required."
   },
   "signals": {
     "title": "AI Signals",

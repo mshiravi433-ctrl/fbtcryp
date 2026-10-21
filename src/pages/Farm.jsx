@@ -16,12 +16,14 @@ import { useWallet } from '../context/WalletContext';
 import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useFarmYields } from '../hooks/useFarmYields';
+import { useFarmRateAlerts } from '../hooks/useFarmRateAlerts';
+import { useSettingsStore } from '../store/useSettingsStore';
 import PoolHistory from '../components/Farm/PoolHistory';
 import PoolGlyph from '../components/Farm/PoolGlyph';
 import FullScreenSheet from '../components/FullScreenSheet';
 import { TOKENS } from '../lib/chains';
 import {
-  farmScore, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
+  farmScore, farmScoreBreakdown, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
   projectEarnings, rateIsUnusual, realShare
 } from '../lib/yields';
 import { getSolanaAssets, MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
@@ -36,9 +38,9 @@ import { feedErrorLabel } from '../lib/defi/farmErrors';
 import TrendChart from '../components/TrendChart';
 import FarmOrbMark from '../components/farm/FarmOrbMark';
 
-const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools'];
+const FARM_TABS = ['inapp', 'recommended', 'market', 'strategies', 'pools', 'watchlist'];
 const EXECUTION_LIVE = FARM_EXECUTION_ADAPTERS.some((adapter) => adapter.openToPublic);
-const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
+const FILTERS = ['all', 'stable', 'blueChip', 'highYield', 'realYield', 'lowRisk', 'autoCompound', 'lp', 'staking', 'vault'];
 const AMOUNTS = [100, 1000, 10000];
 const HORIZONS = ['day', 'week', 'month', 'year'];
 
@@ -53,6 +55,14 @@ const GOLD_TOKENS = ['PAXG', 'XAUt'];
 
 const chainLabel = (name, t) => t(`farm.chainLabels.${name}`, { defaultValue: name });
 const projectLabel = (slug, t) => t(`farm.projectLabels.${slug}`, { defaultValue: projectDisplayName(slug) });
+const sourceLabel = (source, t) => t(`farm.sources.${source}`, { defaultValue: source || '—' });
+const finiteMetric = (value) => value == null || value === '' || typeof value === 'boolean' ? null : Number.isFinite(Number(value)) ? Number(value) : null;
+function poolRate(pool) {
+  const apy = finiteMetric(pool?.apy);
+  if (apy != null) return { value: apy, label: 'farm.estimatedApy', kind: 'apy' };
+  const apr = finiteMetric(pool?.apr);
+  return apr == null ? null : { value: apr, label: 'farm.apr', kind: 'apr' };
+}
 
 const GLOBE_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -108,6 +118,11 @@ const TAB_ICONS = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
     </svg>
+  ),
+  watchlist: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.5 14.7 9l6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3L9.3 9z" />
+    </svg>
   )
 };
 
@@ -123,6 +138,9 @@ const FILTER_ICONS = {
   ),
   highYield: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l5-5 4 4 7-7" /><path d="M15 9h5v5" /></svg>
+  ),
+  realYield: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16" /><path d="M7 8h10" /><path d="M8 16h8" /><circle cx="12" cy="12" r="9" /></svg>
   ),
   lowRisk: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.2 20 6v6.2c0 4.2-3.2 7-8 8.6-4.8-1.6-8-4.4-8-8.6V6z" /></svg>
@@ -266,16 +284,17 @@ function HorizonEarningsChart({ pool, amount, t }) {
 
 function FeeEngineCard({ pool, amount, t }) {
   const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
-  const yieldEst = fbtFeeEngine.estimateNetYield({
-    grossApy: Number(pool.apy),
+  const grossApy = finiteMetric(pool.apy);
+  const yieldEst = grossApy == null ? null : fbtFeeEngine.estimateNetYield({
+    grossApy,
     protocolCostApy: 0,
     gasUsd: null,
     amountUsd: amount
   });
   if (fee?.status === 'UNAVAILABLE' && yieldEst?.status === 'UNAVAILABLE') return null;
-  const beforeGas = Number.isFinite(Number(pool.apy))
-    ? Math.max(-100, Number(pool.apy) - (yieldEst?.fbtFeeApy || 0))
-    : null;
+  const beforeGas = grossApy == null
+    ? null
+    : Math.max(-100, grossApy - (yieldEst?.fbtFeeApy || 0));
   return (
     <section className="farm-engine-card" aria-label={t('farm.engineTitle')}>
       <div className="farm-engine-card-head">
@@ -293,8 +312,8 @@ function FeeEngineCard({ pool, amount, t }) {
         />
         <Metric
           label={t('farm.grossApy')}
-          value={Number.isFinite(Number(pool.apy)) ? `${pool.apy}%` : null}
-          unavailable={!Number.isFinite(Number(pool.apy))}
+          value={grossApy == null ? null : `${grossApy}%`}
+          unavailable={grossApy == null}
         />
         <Metric
           label={t('farm.netBeforeGas')}
@@ -407,7 +426,8 @@ function ProtocolStatusCard({ protocol, t }) {
   const updated = protocol?.updatedAt
     ? new Date(protocol.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '—';
-  const source = protocol?.source || FARM_PROTOCOL.source;
+  const source = protocol?.source || 'defillama';
+  const sourceText = sourceLabel(source, t);
   const capabilities = (protocol?.capabilities || FARM_PROTOCOL.capabilities).join(' · ');
 
   return (
@@ -444,7 +464,7 @@ function ProtocolStatusCard({ protocol, t }) {
       <div className="farm-protocol-meta">
         <div className="farm-protocol-meta-cell">
           <span className="faint">{t('farm.protocolSource')}</span>
-          <span className="mono" dir="ltr" title={source}>{source}</span>
+          <span className="mono" title={source}>{sourceText}</span>
         </div>
         <div className="farm-protocol-meta-cell">
           <span className="faint">{t('farm.protocolPools')}</span>
@@ -465,7 +485,7 @@ function ProtocolStatusCard({ protocol, t }) {
   );
 }
 
-function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, onGetTokens, onOpenPool, t }) {
+function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, onGetTokens, onOpenPool, isWatched = false, onToggleWatch, t }) {
   const route = investRoute(pool);
   const executable = Boolean(farmExecutionAdapterFor(pool)?.openToPublic);
   const economics = fbtFeeEngine.estimateNetYield({
@@ -474,31 +494,50 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
     gasUsd: null,
     amountUsd: amount
   });
-  const beforeGas = Math.max(-100, Number(pool.apy || 0) - economics.fbtFeeApy);
+  const grossApy = finiteMetric(pool.apy);
+  const beforeGas = grossApy == null || economics.fbtFeeApy == null
+    ? null
+    : Math.max(-100, grossApy - economics.fbtFeeApy);
+  const rate = poolRate(pool);
   const iconKey = chainIconKey(pool.chain);
 
   return (
     <motion.article className={`farm-pool ${selected ? 'farm-pool-selected' : ''} ${expanded ? 'is-open' : ''}`} variants={riseIn} id={`farm-pool-${pool.id}`}>
-      <button
-        type="button"
-        className="farm-pool-toggle"
-        aria-expanded={expanded}
-        onClick={() => onToggle(pool)}
-        title={`${pool.symbol} · ${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}
-      >
-        <span className="farm-pool-icon" aria-hidden="true">
-          <PoolGlyph pool={pool} size={38} chainKey={iconKey} />
-        </span>
-        <span className="farm-pool-id">
-          <span className="farm-pool-sym" dir="ltr">{pool.symbol}</span>
-          <span className="farm-pool-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</span>
-        </span>
-        <span className="farm-apy-wrap">
-          <span className="farm-apy mono" dir="ltr">{pool.apy}%</span>
-          <span className="faint farm-apy-label">{t('farm.estimatedApy')}</span>
-        </span>
-        <span className="farm-pool-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
-      </button>
+      <div className="farm-pool-head-row">
+        <button
+          type="button"
+          className="farm-pool-toggle"
+          aria-expanded={expanded}
+          onClick={() => onToggle(pool)}
+          title={`${pool.symbol} · ${projectLabel(pool.project, t)} · ${chainLabel(pool.chain, t)}`}
+        >
+          <span className="farm-pool-icon" aria-hidden="true">
+            <PoolGlyph pool={pool} size={38} chainKey={iconKey} />
+          </span>
+          <span className="farm-pool-id">
+            <span className="farm-pool-sym" dir="ltr">{pool.symbol}</span>
+            <span className="farm-pool-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</span>
+          </span>
+          <span className="farm-apy-wrap">
+            <span className="farm-apy mono" dir="ltr">{rate == null ? '—' : `${rate.value}%`}</span>
+            <span className="faint farm-apy-label">{t(rate?.label ?? 'farm.estimatedApy')}</span>
+          </span>
+          <span className="farm-pool-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
+        </button>
+        <button
+          type="button"
+          className={`farm-watch-toggle${isWatched ? ' is-watched' : ''}`}
+          aria-label={t(isWatched ? 'farm.watchRemove' : 'farm.watchAdd')}
+          title={t(isWatched ? 'farm.watchRemove' : 'farm.watchAdd')}
+          aria-pressed={isWatched}
+          data-testid={`farm-watch-toggle-${pool.id}`}
+          onClick={() => onToggleWatch?.(pool.id)}
+        >
+          <svg viewBox="0 0 24 24" fill={isWatched ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3.5 14.7 9l6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3L9.3 9z" />
+          </svg>
+        </button>
+      </div>
 
       {expanded && (
         <div className="farm-pool-body">
@@ -524,11 +563,11 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
             <Metric label={t('farm.apr')} value={pool.apr == null ? null : `${pool.apr}%`} unavailable={pool.apr == null} />
             <Metric label={t('farm.volume24h')} value={pool.volumeUsd1d == null ? null : fmtCompact(pool.volumeUsd1d)} unavailable={pool.volumeUsd1d == null} />
             <Metric label={t('farm.rewardApr')} value={pool.rewardApr == null ? null : `${pool.rewardApr}%`} unavailable={pool.rewardApr == null} />
-            <Metric label={t('farm.fbtFee')} value={`${economics.fbtFeeApy.toFixed(2)}%`} />
-            <Metric label={t('farm.netBeforeGas')} value={`${beforeGas.toFixed(2)}%`} strong />
+            <Metric label={t('farm.fbtFee')} value={economics.fbtFeeApy == null ? null : `${economics.fbtFeeApy.toFixed(2)}%`} unavailable={economics.fbtFeeApy == null} />
+            <Metric label={t('farm.netBeforeGas')} value={beforeGas == null ? null : `${beforeGas.toFixed(2)}%`} unavailable={beforeGas == null} strong />
           </div>
           <p className="faint farm-source-line">
-            {t('farm.sourceLine', { source: pool.source, time: pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' })}
+            {t('farm.sourceLine', { source: sourceLabel(pool.source, t), time: pool.updatedAt ? new Date(pool.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' })}
           </p>
 
           <ILToy pool={pool} t={t} />
@@ -550,13 +589,119 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
   );
 }
 
+function FarmRateAlertControls({ id, config, onChange, rateAvailable = false, t }) {
+  const value = config?.threshold == null ? '' : String(config.threshold);
+  const hasThreshold = value !== '' && Number.isFinite(Number(value));
+  const enabled = Boolean(config?.enabled && hasThreshold && rateAvailable);
+  return (
+    <div className="farm-rate-alert-controls" role="group" aria-label={t('farm.alerts.title')} data-testid={`farm-rate-alert-${id}`}>
+      <label className="farm-rate-alert-field">
+        <span>{t('farm.alerts.threshold')}</span>
+        <input
+          className="farm-rate-alert-input mono"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          max="1000"
+          step="0.1"
+          value={value}
+          disabled={!rateAvailable}
+          dir="ltr"
+          aria-label={t('farm.alerts.threshold')}
+          onChange={(event) => onChange(id, { threshold: event.target.value === '' ? null : Number(event.target.value) })}
+        />
+      </label>
+      <label className="farm-rate-alert-field">
+        <span>{t('farm.alerts.direction')}</span>
+        <select
+          className="farm-rate-alert-select"
+          value={config?.direction === 'below' ? 'below' : 'above'}
+          disabled={!rateAvailable}
+          aria-label={t('farm.alerts.direction')}
+          onChange={(event) => onChange(id, { direction: event.target.value })}
+        >
+          <option value="above">{t('farm.alerts.above')}</option>
+          <option value="below">{t('farm.alerts.below')}</option>
+        </select>
+      </label>
+      <button
+        type="button"
+        className={`farm-rate-alert-toggle${enabled ? ' is-enabled' : ''}`}
+        disabled={!hasThreshold || !rateAvailable}
+        aria-pressed={enabled}
+        onClick={() => onChange(id, { enabled: !enabled })}
+      >
+        {t(enabled ? 'farm.alerts.disable' : 'farm.alerts.enable')}
+      </button>
+      {!rateAvailable && <p className="faint farm-alert-unavailable">{t('farm.alerts.apyUnavailable')}</p>}
+    </div>
+  );
+}
+
+function WatchlistPanel({
+  rows, amount, expandedId, selectedId, alertConfigs, onTogglePool, onShowDetails,
+  onGetTokens, onOpenPool, onToggleWatch, onSetAlert, t
+}) {
+  return (
+    <section className="farm-watchlist-panel" data-testid="farm-watchlist">
+      <header className="farm-watchlist-head">
+        <div>
+          <p className="section-label">{t('farm.watchlistTitle')}</p>
+          <p className="faint">{t('farm.watchlistIntro')}</p>
+        </div>
+        <span className="pill pill-neutral mono" dir="ltr">{rows.length}</span>
+      </header>
+      <p className="faint farm-alerts-note">{t('farm.alerts.notice')}</p>
+      {rows.length === 0 ? (
+        <p className="notice">{t('farm.watchlistEmpty')}</p>
+      ) : (
+        <div className="farm-watchlist-rows">
+          {rows.map(({ id, pool }) => (
+            <div className="farm-watchlist-item" key={id}>
+              {pool ? (
+                <PoolCard
+                  pool={pool}
+                  amount={amount}
+                  expanded={expandedId === pool.id}
+                  selected={selectedId === pool.id}
+                  isWatched
+                  onToggle={onTogglePool}
+                  onShowDetails={onShowDetails}
+                  onGetTokens={onGetTokens}
+                  onOpenPool={onOpenPool}
+                  onToggleWatch={onToggleWatch}
+                  t={t}
+                />
+              ) : (
+                <div className="farm-watchlist-missing">
+                  <span className="mono" dir="ltr">{id}</span>
+                  <p className="faint">{t('farm.watchlistMissing')}</p>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => onToggleWatch(id)}>{t('farm.watchRemove')}</button>
+                </div>
+              )}
+              <FarmRateAlertControls
+                id={id}
+                config={alertConfigs?.[id]}
+                onChange={onSetAlert}
+                rateAvailable={pool != null && pool.freshness !== 'STALE' && finiteMetric(pool.apy) != null}
+                t={t}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t }) {
   const route = investRoute(pool);
+  const rate = poolRate(pool);
   const fee = fbtFeeEngine.quoteOperation({ amountUsd: amount, protocolFeeUsd: null, gasUsd: null });
-  const feeYield = fbtFeeEngine.estimateNetYield({ grossApy: Number(pool.apy), protocolCostApy: 0, gasUsd: null, amountUsd: amount });
+  const feeYield = fbtFeeEngine.estimateNetYield({ grossApy: finiteMetric(pool.apy), protocolCostApy: 0, gasUsd: null, amountUsd: amount });
   const factors = pool.riskFactors || {};
   const research = useMemo(() => farmPoolResearch(pool), [pool]);
-  const gross = Number(pool.apy);
+  const gross = finiteMetric(pool.apy) ?? NaN;
   const netAnalysisApy = Number.isFinite(gross) ? Math.max(-100, gross - (feeYield?.fbtFeeApy || 0)) : null;
   const realPct = research.realShare == null ? null : Math.round(research.realShare * 100);
   const rewardPct = research.emissionShare == null ? null : Math.round(research.emissionShare * 100);
@@ -615,12 +760,12 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
           <div className="farm-ana-rate-label">
             <span className="farm-ana-rate-icon" aria-hidden="true">{APY_ICON}</span>
             <span className="farm-ana-rate-copy">
-              <span className="farm-ana-kicker">{t('farm.estimatedApy')}</span>
-              <span className="farm-ana-rate-caption">{t('farm.grossApy')}</span>
+              <span className="farm-ana-kicker">{t(rate?.label ?? 'farm.estimatedApy')}</span>
+              <span className="farm-ana-rate-caption">{t(rate?.kind === 'apr' ? 'farm.apr' : 'farm.grossApy')}</span>
             </span>
           </div>
           <div className="farm-ana-apy">
-            <span className="farm-ana-apy-value mono" dir="ltr">{pool.apy}%</span>
+            <span className="farm-ana-apy-value mono" dir="ltr">{rate == null ? '—' : `${rate.value}%`}</span>
           </div>
         </div>
         <div className="farm-ana-pills">
@@ -636,6 +781,10 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         <UnusualNote pool={pool} t={t} />
       </header>
 
+      <AnaSection icon={SCORE_ICON} title={t('farm.scoreBreakdown.title')}>
+        <FarmScoreBreakdown pool={pool} t={t} />
+      </AnaSection>
+
       <AnaSection icon={STATS_ICON} title={t('farm.ana.stats')}>
       <div className="farm-economics">
         <Metric label={t('farm.amount')} value={fmtUsd(amount)} />
@@ -644,7 +793,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         <Metric label={t('farm.tvl')} value={fmtCompact(pool.tvlUsd)} />
         <Metric label={t('farm.volume24h')} value={pool.volumeUsd1d == null ? null : fmtCompact(pool.volumeUsd1d)} unavailable={pool.volumeUsd1d == null} />
         <Metric label={t('farm.volume7d')} value={research.volumeUsd7d == null ? null : fmtCompact(research.volumeUsd7d)} unavailable={research.volumeUsd7d == null} />
-        <Metric label={t('farm.grossApy')} value={`${pool.apy}%`} tone="apy" />
+        <Metric label={t('farm.grossApy')} value={finiteMetric(pool.apy) == null ? null : `${pool.apy}%`} unavailable={finiteMetric(pool.apy) == null} tone="apy" />
         <Metric label={t('farm.apyBase')} value={research.apyBase == null ? null : `${research.apyBase}%`} unavailable={research.apyBase == null} tone="real" />
         <Metric label={t('farm.apyReward')} value={research.apyReward == null ? null : `${research.apyReward}%`} unavailable={research.apyReward == null} tone="emission" />
         <Metric label={t('farm.apr')} value={pool.apr == null ? null : `${pool.apr}%`} unavailable={pool.apr == null} />
@@ -655,12 +804,12 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         <Metric label={t('farm.netBeforeGas')} value={netAnalysisApy == null ? null : `${netAnalysisApy.toFixed(2)}%`} unavailable={netAnalysisApy == null} strong tone="net" />
         <Metric label={t('farm.realYieldShare')} value={realPct == null ? null : `${realPct}%`} unavailable={realPct == null} tone="real" />
         <Metric label={t('farm.rewardYieldShare')} value={rewardPct == null ? null : `${rewardPct}%`} unavailable={rewardPct == null} tone="emission" />
-        <Metric label={t('farm.rateVs30d')} value={mean30 == null ? null : `${pool.apy}% / ${mean30}%`} unavailable={mean30 == null} />
+        <Metric label={t('farm.rateVs30d')} value={mean30 == null || finiteMetric(pool.apy) == null ? null : `${pool.apy}% / ${mean30}%`} unavailable={mean30 == null || finiteMetric(pool.apy) == null} />
       </div>
       <p className="faint farm-ana-note">{t('farm.ana.statsNote')}</p>
       </AnaSection>
 
-      <PoolHistory poolId={pool.id} t={t} />
+      <PoolHistory poolId={pool.id} available={pool.historyAvailable !== false} t={t} />
       <HorizonEarningsChart pool={pool} amount={amount} t={t} />
       <FeeEngineCard pool={pool} amount={amount} t={t} />
 
@@ -695,7 +844,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       </InfoBox>
 
       <div className="farm-source-line faint">
-        {t('farm.sourceLine', { source: research.source, time: updateTime })}
+        {t('farm.sourceLine', { source: sourceLabel(research.source, t), time: updateTime })}
         {research.freshness && <> · {research.freshness}</>}
       </div>
 
@@ -717,6 +866,36 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       </AnaSection>
     </motion.section>
     </FullScreenSheet>
+  );
+}
+
+function FarmScoreBreakdown({ pool, t }) {
+  const breakdown = farmScoreBreakdown(pool);
+  if (!breakdown) return <p className="faint">{t('farm.scoreBreakdown.unknown')}</p>;
+  const rows = [
+    ['baseYield', breakdown.components.baseYield, (value) => t('farm.scoreBreakdown.baseValue', { value: Number(value).toFixed(2) })],
+    ['tvl', breakdown.components.tvl, (value) => t('farm.scoreBreakdown.tvlValue', { value: fmtCompact(value) })],
+    ['realYield', breakdown.components.realYield, (value) => t('farm.scoreBreakdown.realValue', { value: Math.round(Number(value) * 100) })],
+    ['stability', breakdown.components.stability, (value) => t('farm.scoreBreakdown.meanValue', { value: Number(value).toFixed(2) })]
+  ];
+  return (
+    <div className="farm-score-breakdown" data-testid={`farm-score-breakdown-${pool.id}`}>
+      {rows.map(([key, component, format]) => (
+        <div className="farm-score-breakdown-row" key={key}>
+          <div className="farm-score-breakdown-meta">
+            <span className="farm-score-breakdown-label">{t(`farm.scoreBreakdown.${key}`, { weight: component.weight })}</span>
+            <span className="farm-score-breakdown-points mono" dir="ltr">
+              {t('farm.scoreBreakdown.points', { points: component.points.toFixed(1), weight: component.weight })}
+            </span>
+          </div>
+          <div className="farm-score-track" aria-hidden="true">
+            <span style={{ width: `${Math.max(0, Math.min(100, component.factor * 100))}%` }} />
+          </div>
+          <p className="faint farm-score-breakdown-detail">{component.known ? format(component.raw) : t('farm.scoreBreakdown.unknown')}</p>
+        </div>
+      ))}
+      <p className="farm-score-total mono" dir="ltr">{t('farm.scoreBreakdown.total', { score: breakdown.score })}</p>
+    </div>
   );
 }
 
@@ -759,7 +938,7 @@ function HotStrip({ rows, onSelect, t }) {
               <span className="farm-hot-sym" dir="ltr">{pool.symbol}</span>
             </span>
             <span className="farm-hot-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</span>
-            <span className="farm-hot-apy mono" dir="ltr">{pool.apy}%</span>
+            <span className="farm-hot-apy mono" dir="ltr">{finiteMetric(pool.apy) == null ? '—' : `${finiteMetric(pool.apy)}%`}</span>
             {pool.score != null && <span className="farm-hot-score">{t('farm.score', { score: pool.score })}</span>}
           </button>
         ))}
@@ -775,10 +954,15 @@ export default function Farm() {
   const [params, setParams] = useSearchParams();
   const { haptic } = useTelegram();
   const wallet = useWallet();
+  const watchlist = useSettingsStore((state) => state.farmWatchlist ?? []);
+  const farmRateAlerts = useSettingsStore((state) => state.farmRateAlerts ?? {});
+  const toggleFarmWatchlist = useSettingsStore((state) => state.toggleFarmWatchlist);
+  const setFarmRateAlert = useSettingsStore((state) => state.setFarmRateAlert);
   const legacyTab = params.get('tab');
   const tab = FARM_TABS.includes(legacyTab) ? legacyTab : 'recommended';
   const focus = params.get('focus');
-  const { data, error, loading, refreshing, refresh } = useFarmYields();
+  const { data, error, loading, refreshing, refresh } = useFarmYields({ getReadProvider: wallet.getReadProvider });
+  useFarmRateAlerts({ data, watchlist, alerts: farmRateAlerts, t });
   const [solAssets, setSolAssets] = useState(null);
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -842,12 +1026,22 @@ export default function Farm() {
     return [...pinned, ...opportunities.filter((p) => !ids.has(p.id))];
   }, [data, opportunities]);
 
+  const poolsById = useMemo(() => new Map(venueOpportunities.map((pool) => [String(pool.id), pool])), [venueOpportunities]);
+  const watchlistRows = useMemo(() => watchlist.map((id) => ({
+    id: String(id),
+    pool: poolsById.get(String(id)) ?? null
+  })), [watchlist, poolsById]);
+
   const filtered = useMemo(() => {
     let rows = opportunities;
     if (chain !== 'all') rows = rows.filter((p) => p.chain === chain);
     if (filter === 'stable') rows = rows.filter((p) => p.stablecoin);
     if (filter === 'blueChip') rows = rows.filter((p) => p.tvlUsd >= 500_000_000);
     if (filter === 'highYield') rows = rows.filter((p) => p.apy >= 15);
+    if (filter === 'realYield') rows = rows.filter((p) => {
+      const share = realShare(p);
+      return share != null && share > 0;
+    });
     if (filter === 'lowRisk') rows = rows.filter((p) => p.risk === 'low');
     if (filter === 'lp') rows = rows.filter((p) => p.type === 'lp');
     if (filter === 'staking') rows = rows.filter((p) => p.type === 'staking');
@@ -864,7 +1058,7 @@ export default function Farm() {
   useEffect(() => {
     if (poolPrefillDone.current) return;
     const want = params.get('pool');
-    if (!want || !opportunities.length) return;
+    if (!want || (!opportunities.length && !venueOpportunities.length)) return;
     poolPrefillDone.current = true;
     const amt = Number(params.get('amount'));
     const next = new URLSearchParams(params);
@@ -883,7 +1077,16 @@ export default function Farm() {
     }
   }, [params, opportunities, venueOpportunities, setParams]);
   const chains = useMemo(() => [...new Set(opportunities.map((p) => p.chain))].sort(), [opportunities]);
-  const selectedPool = opportunities.find((p) => p.id === selected?.id) || null;
+  const selectedPool = opportunities.find((p) => p.id === selected?.id)
+    || venueOpportunities.find((p) => p.id === selected?.id)
+    || selected
+    || null;
+  const watchlistSet = useMemo(() => new Set(watchlist.map(String)), [watchlist]);
+  const toggleWatch = (id) => {
+    haptic?.('select');
+    toggleFarmWatchlist?.(id);
+  };
+  const updateRateAlert = (id, config) => setFarmRateAlert?.(id, config);
 
   const networkOptions = useMemo(() => [
     { value: 'all', label: t('farm.allNetworks'), iconNode: GLOBE_ICON },
@@ -913,7 +1116,7 @@ export default function Farm() {
   const strategies = useMemo(() => buildYieldStrategies(filtered, { source: data?.source, updatedAt: data?.at }), [filtered, data]);
 
   const protocol = useMemo(() => farmProtocolSummary({
-    pools: data?.pools || [],
+    pools: data?.pools?.length ? data.pools : (data?.venues || []),
     at: data?.at || null,
     source: data?.source || null,
     error: error || null,
@@ -923,19 +1126,27 @@ export default function Farm() {
   // hero stats
   const heroStats = useMemo(() => {
     const pools = opportunities;
-    const tvl = pools.reduce((s, p) => s + (Number(p.tvlUsd) || 0), 0);
-    const apys = pools.map(p => Number(p.apy)).filter(n => Number.isFinite(n));
-    const avg = apys.length ? apys.reduce((a,b)=>a+b,0)/apys.length : 0;
-    const liveVenues = venueOpportunities.filter(p => Number.isFinite(Number(p.apy))).length;
+    const statsRows = pools.length ? pools : venueOpportunities;
+    const tvl = statsRows.reduce((sum, pool) => sum + (finiteMetric(pool.tvlUsd) || 0), 0);
+    const apys = statsRows.map((pool) => finiteMetric(pool.apy)).filter((value) => value != null);
+    const avg = apys.length ? (apys.reduce((a, b) => a + b, 0) / apys.length).toFixed(1) : null;
+    const liveVenues = venueOpportunities.filter((pool) => poolRate(pool) != null).length;
     return {
-      count: pools.length,
+      count: pools.length || liveVenues,
       tvl,
-      avg: avg.toFixed(1),
+      avg,
       liveVenues
     };
   }, [opportunities, venueOpportunities]);
 
-  const selectTab = (id) => { haptic?.('select'); setSelected(null); setExpandedId(null); setParams({ tab: id }, { replace: true }); };
+  const selectTab = (id) => {
+    haptic?.('select');
+    setSelected(null);
+    setExpandedId(null);
+    const next = new URLSearchParams(params);
+    next.set('tab', id);
+    setParams(next, { replace: true });
+  };
   const togglePool = (pool) => {
     haptic?.('light');
     setExpandedId((v) => (v === pool.id ? null : pool.id));
@@ -969,7 +1180,9 @@ export default function Farm() {
   };
   const gotoVenuePositions = (venueId) => {
     haptic?.('select');
-    setParams({ tab: 'inapp' }, { replace: true });
+    const next = new URLSearchParams(params);
+    next.set('tab', 'inapp');
+    setParams(next, { replace: true });
     setTimeout(() => {
       document.querySelector(`[data-testid="farm-hub-row-${venueId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 140);
@@ -979,7 +1192,7 @@ export default function Farm() {
     <motion.div className="farm-pool-grid" variants={stagger} initial="hidden" animate="show">
       {rows.map((pool) => (
         <div key={pool.id} className="farm-pool-with-details">
-          <PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
+          <PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} />
           {selected?.id === pool.id && <PoolDetails pool={pool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(pool)} t={t} />}
         </div>
       ))}
@@ -1036,7 +1249,7 @@ export default function Farm() {
             <span className="farm-hero-stat-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l5-5 4 4 7-7"/><path d="M15 9h5v5"/></svg>
             </span>
-            <span className="farm-hero-stat-value mono">{heroStats.avg}%</span>
+            <span className="farm-hero-stat-value mono">{heroStats.avg == null ? '—' : `${heroStats.avg}%`}</span>
             <span className="farm-hero-stat-label">{t('farm.estimatedApy')}</span>
           </div>
           <div className="farm-hero-stat" style={{ '--a': '#ff2d95', '--b': '#ffb300' }}>
@@ -1052,6 +1265,8 @@ export default function Farm() {
 
       <VenueRail
         pools={venueOpportunities}
+        watchlistIds={watchlistSet}
+        onToggleWatch={toggleWatch}
         t={t}
         onGoToPositions={gotoVenuePositions}
         onGetTokens={getTokens}
@@ -1176,8 +1391,8 @@ export default function Farm() {
 
       {loading && <div className="stack" style={{ marginTop: 14 }}>{[0, 1, 2].map((i) => <div className="skel" key={i} style={{ height: 150, borderRadius: 16 }} />)}</div>}
       {!loading && error && <p className="notice notice-danger" style={{ marginTop: 14 }}>{t('farm.unavailable')}</p>}
-      {!loading && !error && tab !== 'inapp' && filtered.length === 0 && <p className="notice" style={{ marginTop: 14 }}>{t('farm.noneForFilter')}</p>}
-      {!loading && !error && data && tab !== 'inapp' && filtered.length > 0 && (
+      {!loading && !error && !['inapp', 'watchlist'].includes(tab) && filtered.length === 0 && <p className="notice" style={{ marginTop: 14 }}>{t('farm.noneForFilter')}</p>}
+      {!loading && !error && data && !['inapp', 'watchlist'].includes(tab) && filtered.length > 0 && (
         <p className="farm-filtered faint">{t('farm.filteredNote', { shown: filtered.length, returned: data.pools.length, passed: data.passed ?? data.pools.length, considered: data.considered ?? data.pools.length })}</p>
       )}
 
@@ -1202,10 +1417,29 @@ export default function Farm() {
           <PositionPanel wallet={wallet} t={t} navigate={navigate} />
         </>
       )}
+      {!loading && tab === 'watchlist' && (
+        <>
+          <WatchlistPanel
+            rows={watchlistRows}
+            amount={deposit}
+            expandedId={expandedId}
+            selectedId={selected?.id}
+            alertConfigs={farmRateAlerts}
+            onTogglePool={togglePool}
+            onShowDetails={selectPool}
+            onGetTokens={getTokens}
+            onOpenPool={openPool}
+            onToggleWatch={toggleWatch}
+            onSetAlert={updateRateAlert}
+            t={t}
+          />
+          {selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
+        </>
+      )}
       {!loading && !error && tab === 'recommended' && <section><p className="section-label">{t('farm.recommendedFarms')}</p><p className="farm-filtered faint">{t('farm.scoreExplanation')}</p><HotStrip rows={filtered} onSelect={selectPool} t={t} />{renderCards(recommended)}</section>}
       {!loading && !error && tab === 'recommended' && selectedPool && !recommended.some((p) => p.id === selectedPool.id) && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
-      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
-      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'market' && <section><p className="section-label">{t('farm.defiMarket')}</p><div className="farm-market-grid">{marketRows.map(([category, pool]) => <div key={category}><p className="farm-market-label">{t(`farm.market.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
+      {!loading && !error && tab === 'strategies' && <section><p className="section-label">{t('farm.yieldStrategies')}</p><p className="farm-filtered faint">{t('farm.strategyDisclaimer')}</p><div className="farm-strategy-grid">{strategies.map(({ category, pool }) => <div key={category}><p className="farm-market-label">{t(`farm.strategy.${category}`)}</p><PoolCard pool={pool} amount={deposit} expanded={expandedId === pool.id} selected={selected?.id === pool.id} isWatched={watchlistSet.has(String(pool.id))} onToggleWatch={toggleWatch} onToggle={togglePool} onShowDetails={selectPool} onGetTokens={getTokens} onOpenPool={openPool} t={t} /></div>)}</div></section>}
       {!loading && !error && tab === 'pools' && <section><div className="row-between"><p className="section-label">{t('farm.pools')}</p><span className="faint">{t('farm.poolCount', { count: filtered.length })}</span></div>{renderCards(filtered.slice(0, visibleCount))}{filtered.length > visibleCount && <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => setVisibleCount((n) => n + 24)}>{t('farm.showMore')}</button>}</section>}
 
       {!loading && !error && ['market', 'strategies'].includes(tab) && selectedPool && <PoolDetails key={selectedPool.id} pool={selectedPool} amount={deposit} wallet={wallet} onGetTokens={getTokens} onOpenPool={openPool} onClose={() => selectPool(selectedPool)} t={t} />}
@@ -1227,7 +1461,7 @@ function LstRow({ asset, live, pools, deposit, onStake, t }) {
         <div className="coin-sym" dir="ltr">{asset.symbol}</div>
         <div className="coin-name">{asset.name}</div>
         <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          {y && <span className="pill pill-neutral mono" dir="ltr">{y.apy}% {t('farm.estimatedApy')}</span>}
+          {y && finiteMetric(y.apy) != null && <span className="pill pill-neutral mono" dir="ltr">{finiteMetric(y.apy)}% {t('farm.estimatedApy')}</span>}
           {asset.capturesMev && <span className="pill pill-rgb">{t('farm.mevBoost')}</span>}
           {asset.protocolFeePct != null && <span className="pill pill-neutral">{t('farm.protocolFee', { pct: asset.protocolFeePct })}</span>}
           {live?.liquidity != null && <span className="pill pill-neutral mono" dir="ltr">{fmtCompact(live.liquidity)}</span>}
@@ -1259,7 +1493,7 @@ function EthStakeRow({ token, pools, deposit, onBuy, t }) {
         <div className="coin-sym" dir="ltr">{token.symbol}</div>
         <div className="coin-name">{token.name}</div>
         <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          {match && <span className="pill pill-neutral mono" dir="ltr">{match.apy}% {t('farm.estimatedApy')}</span>}
+          {match && finiteMetric(match.apy) != null && <span className="pill pill-neutral mono" dir="ltr">{finiteMetric(match.apy)}% {t('farm.estimatedApy')}</span>}
           {score != null && <span className="pill pill-neutral">{t('farm.score', { score })}</span>}
           <span className="pill pill-neutral">Ethereum</span>
         </div>

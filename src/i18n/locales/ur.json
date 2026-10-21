@@ -3025,6 +3025,67 @@
       "risk5": "No fee on this page — Lido stake/wrap/unwrap/request/claim costs only Ethereum gas here. Swaps elsewhere still carry the platform fee ({{fee}}%).",
       "fee": "Fee",
       "explorerTitle": "Lido contracts"
+    },
+    "watchlistTitle": "Farm watchlist",
+    "watchlistEmpty": "Your watchlist is empty. Add a pool to track it without connecting a wallet.",
+    "watchlistMissing": "This pool is not in the latest available feed. Its rate is not shown.",
+    "watchAdd": "Add to watchlist",
+    "watchRemove": "Remove from watchlist",
+    "alerts": {
+      "title": "Rate alert",
+      "threshold": "APY threshold (%)",
+      "direction": "Notify when APY is",
+      "above": "at or above",
+      "below": "at or below",
+      "enable": "Enable alert",
+      "disable": "Disable alert",
+      "notice": "Farm alerts use the app’s Price alerts preference and are checked while Farm is open. Background delivery is not available here.",
+      "titleForPool": "Farm rate alert: {{symbol}}",
+      "body": "{{symbol}} APY is {{apy}}%, {{direction}} your {{threshold}}% threshold.",
+      "apyUnavailable": "Rate alerts require a fresh APY; APR-only or unavailable rates cannot be used."
+    },
+    "scoreBreakdown": {
+      "title": "Quality score breakdown",
+      "baseYield": "Base yield · {{weight}}%",
+      "tvl": "TVL · {{weight}}%",
+      "realYield": "Real-yield share · {{weight}}%",
+      "stability": "Rate stability · {{weight}}%",
+      "unknown": "Unknown — contributes 0",
+      "baseValue": "Base APY: {{value}}%",
+      "tvlValue": "TVL: {{value}}",
+      "realValue": "Real yield: {{value}}%",
+      "meanValue": "30-day mean: {{value}}%",
+      "points": "{{points}} / {{weight}} points",
+      "total": "Quality score: {{score}} / 100"
+    },
+    "transactionStatus": {
+      "label": "Latest transaction",
+      "pending": "Pending",
+      "confirmed": "Confirmed",
+      "failed": "Failed"
+    },
+    "sources": {
+      "defillama": "DefiLlama",
+      "protocolDirect": "Verified protocol sources",
+      "aaveBaseOnchain": "Aave v3 · Base on-chain",
+      "compoundBaseOnchain": "Compound v3 · Base on-chain",
+      "aaveArbitrumOnchain": "Aave v3 · Arbitrum on-chain",
+      "morphoPinnedMarket": "Morpho API · pinned Base market",
+      "lidoSevenDayApr": "Lido · 7-day SMA APR API"
+    },
+    "tab": {
+      "watchlist": "Watchlist"
+    },
+    "category": {
+      "realYield": "Real yield"
+    },
+    "risk": {
+      "unknown": "Unknown"
+    },
+    "watchlistIntro": "This list and its alert thresholds are saved in settings; optional settings sync may carry them across devices. No wallet connection is required.",
+    "apr": "Current APR",
+    "venue": {
+      "verdictUnavailable": "No APY and 30-day mean are available to assess this rate yet."
     }
   },
   "aiGlobal": {

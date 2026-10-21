@@ -1552,7 +1552,187 @@
 }
 
 /* ==========================================================================
-   15. REDUCED MOTION — every ambient loop and entrance stops here
+   15. PRIORITY 1 — watchlist, rate alerts, score details, and protocol status
+   ========================================================================== */
+.farm-page .farm-pool-head-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 5px;
+}
+.farm-page .farm-pool-head-row .farm-pool-toggle { min-width: 0; }
+.farm-page .farm-watch-toggle,
+.farm-page .farm-venue-watch {
+  display: inline-grid;
+  place-items: center;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: 14px;
+  background: var(--farm-glass-2);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.farm-page .farm-watch-toggle { align-self: stretch; margin: 7px; }
+.farm-page .farm-watch-toggle svg { width: 19px; height: 19px; }
+.farm-page .farm-watch-toggle:hover,
+.farm-page .farm-venue-watch:hover,
+.farm-page .farm-watch-toggle.is-watched,
+.farm-page .farm-venue-watch.is-watched {
+  border-color: color-mix(in srgb, var(--rgb-1) 55%, var(--farm-hairline));
+  background: color-mix(in srgb, var(--rgb-1) 12%, var(--farm-glass-2));
+  color: var(--rgb-1);
+}
+.farm-page .farm-venue-watch { min-height: 32px; padding: 5px 9px; border-radius: 999px; }
+.farm-page .farm-watchlist-panel { margin-top: 12px; }
+.farm-page .farm-watchlist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.farm-page .farm-watchlist-head .section-label,
+.farm-page .farm-watchlist-head .faint { margin: 0; }
+.farm-page .farm-watchlist-head .faint { margin-top: 3px; }
+.farm-page .farm-alerts-note { margin: 0 0 10px; font-size: 11.5px; line-height: 1.7; }
+.farm-page .farm-watchlist-rows { display: grid; gap: 12px; }
+.farm-page .farm-watchlist-item { display: grid; gap: 7px; min-width: 0; }
+.farm-page .farm-watchlist-missing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px 10px;
+  padding: 12px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: var(--farm-radius-lg);
+  background: var(--farm-glass-2);
+}
+.farm-page .farm-watchlist-missing > span { min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
+.farm-page .farm-watchlist-missing p { grid-column: 1; margin: 0; font-size: 11.5px; line-height: 1.65; }
+.farm-page .farm-watchlist-missing button { grid-column: 2; grid-row: 1 / span 2; }
+.farm-page .farm-rate-alert-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: var(--farm-radius-md);
+  background: var(--farm-glass-2);
+}
+.farm-page .farm-rate-alert-field { display: grid; gap: 5px; min-width: 0; color: var(--text-2); font-size: 10.8px; font-weight: 750; }
+.farm-page .farm-rate-alert-input,
+.farm-page .farm-rate-alert-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 9px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: 11px;
+  background: var(--bg-panel);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+}
+.farm-page .farm-rate-alert-toggle {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: 11px;
+  background: var(--farm-glass);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+.farm-page .farm-rate-alert-toggle.is-enabled {
+  border-color: color-mix(in srgb, var(--rgb-2) 55%, var(--farm-hairline));
+  background: color-mix(in srgb, var(--rgb-2) 12%, var(--farm-glass));
+}
+.farm-page .farm-rate-alert-toggle:disabled { opacity: .5; cursor: not-allowed; }
+.farm-page .farm-rate-alert-input:disabled,
+.farm-page .farm-rate-alert-select:disabled { opacity: .6; cursor: not-allowed; }
+.farm-page .farm-alert-unavailable { grid-column: 1 / -1; margin: 0; font-size: 10.5px; line-height: 1.5; }
+.farm-page .farm-score-breakdown { display: grid; gap: 10px; }
+.farm-page .farm-score-breakdown-row { display: grid; gap: 4px; min-width: 0; }
+.farm-page .farm-score-breakdown-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.farm-page .farm-score-breakdown-label { color: var(--text-1); font-size: 11.5px; font-weight: 800; }
+.farm-page .farm-score-breakdown-points { flex: 0 0 auto; color: var(--text-2); font-size: 10.5px; }
+.farm-page .farm-score-track { height: 6px; overflow: hidden; border-radius: 999px; background: var(--farm-glass-2); }
+.farm-page .farm-score-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--rgb-1), var(--rgb-2));
+  transition: width .22s ease;
+}
+.farm-page .farm-score-breakdown-detail { margin: 0; font-size: 10.5px; }
+.farm-page .farm-score-total { margin: 2px 0 0; color: var(--text-1); font-size: 12px; font-weight: 850; }
+.farm-page .farm-morpho-transaction-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: var(--farm-radius-md);
+  background: var(--farm-glass-2);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 800;
+}
+.farm-page .farm-morpho-status-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border: 1px solid var(--farm-hairline);
+  border-radius: 999px;
+  background: var(--farm-glass);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 850;
+}
+.farm-page .farm-morpho-status-pill[data-status="pending"] {
+  border-color: color-mix(in srgb, var(--rgb-3) 50%, var(--farm-hairline));
+  background: color-mix(in srgb, var(--rgb-3) 12%, var(--farm-glass));
+  color: var(--rgb-3);
+}
+.farm-page .farm-morpho-status-pill[data-status="confirmed"] {
+  border-color: color-mix(in srgb, var(--rgb-2) 50%, var(--farm-hairline));
+  background: color-mix(in srgb, var(--rgb-2) 12%, var(--farm-glass));
+  color: var(--rgb-2);
+}
+.farm-page .farm-morpho-status-pill[data-status="failed"] {
+  border-color: color-mix(in srgb, var(--rgb-5) 50%, var(--farm-hairline));
+  background: color-mix(in srgb, var(--rgb-5) 12%, var(--farm-glass));
+  color: var(--rgb-5);
+}
+
+@media (max-width: 640px) {
+  .farm-page .farm-rate-alert-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .farm-page .farm-rate-alert-toggle { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  .farm-page .farm-pool-head-row { gap: 3px; }
+  .farm-page .farm-pool-head-row .farm-pool-toggle { padding-inline: 9px; }
+  .farm-page .farm-watch-toggle { min-width: 36px; margin: 5px; }
+  .farm-page .farm-watchlist-missing { grid-template-columns: minmax(0, 1fr); }
+  .farm-page .farm-watchlist-missing p,
+  .farm-page .farm-watchlist-missing button { grid-column: 1; grid-row: auto; }
+}
+
+/* ==========================================================================
+   16. REDUCED MOTION — every ambient loop and entrance stops here
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
   .farm-hero-orb,
@@ -1575,7 +1755,11 @@
   .farm-page .farm-tabs button,
   .farm-page .farm-secondary-filters .tag,
   .farm-page .farm-hero-stat,
-  .farm-page .farm-deposit-chip { transition: none; }
+  .farm-page .farm-deposit-chip,
+  .farm-page .farm-watch-toggle,
+  .farm-page .farm-venue-watch,
+  .farm-page .farm-rate-alert-toggle,
+  .farm-page .farm-score-track > span { transition: none; }
   .farm-page .farm-venue-card:hover,
   .farm-page .farm-pool:hover,
   .farm-page .farm-hot-card:hover,

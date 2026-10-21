@@ -8833,15 +8833,36 @@ export default function run() {
     /*
      * --- MERGED 2026-09-06: the parallel wiring audit on main pinned the
      * 4-tab recommended-first Farm; this branch restores the in-app invest
-     * tab on top of it. Both halves survive: five tabs, recommended default,
-     * in-app first. The old three-tab (inapp/market/trade) design with its
+     * tab on top of it. Both halves survive: the watchlist is appended after
+     * the original five tabs, with the recommended default and in-app first.
+     * The old three-tab (inapp/market/trade) design with its
      * /stocks /ostium /dydx CTAs stays retired — /ostium and /dydx exist
      * only behind SPECULATION_ENABLED, so unconditional trade CTAs in Farm
      * would navigate to missing routes in every store-safe build.
      */
     t('Farm opens on curated investable discovery, not the raw pool dump',
-      /FARM_TABS = \['inapp', 'recommended', 'market', 'strategies', 'pools'\]/.test(read('src/pages/Farm.jsx'))
+      /FARM_TABS = \['inapp', 'recommended', 'market', 'strategies', 'pools', 'watchlist'\]/.test(read('src/pages/Farm.jsx'))
       && /FARM_TABS\.includes\(legacyTab\) \? legacyTab : 'recommended'/.test(read('src/pages/Farm.jsx')));
+    const farmP1Keys = [
+      'farm.tab.watchlist', 'farm.category.realYield', 'farm.watchlistTitle', 'farm.watchlistEmpty',
+      'farm.watchlistMissing', 'farm.watchAdd', 'farm.watchRemove', 'farm.watchlistIntro',
+      'farm.alerts.title', 'farm.alerts.threshold', 'farm.alerts.direction', 'farm.alerts.above',
+      'farm.alerts.below', 'farm.alerts.enable', 'farm.alerts.disable', 'farm.alerts.notice',
+      'farm.alerts.titleForPool', 'farm.alerts.body', 'farm.alerts.apyUnavailable',
+      'farm.scoreBreakdown.title', 'farm.scoreBreakdown.baseYield', 'farm.scoreBreakdown.tvl',
+      'farm.scoreBreakdown.realYield', 'farm.scoreBreakdown.stability', 'farm.scoreBreakdown.unknown',
+      'farm.scoreBreakdown.baseValue', 'farm.scoreBreakdown.tvlValue', 'farm.scoreBreakdown.realValue',
+      'farm.scoreBreakdown.meanValue', 'farm.scoreBreakdown.points', 'farm.scoreBreakdown.total',
+      'farm.transactionStatus.label', 'farm.transactionStatus.pending', 'farm.transactionStatus.confirmed',
+      'farm.transactionStatus.failed', 'farm.sources.defillama', 'farm.sources.protocolDirect',
+      'farm.sources.aaveBaseOnchain', 'farm.sources.compoundBaseOnchain', 'farm.sources.aaveArbitrumOnchain',
+      'farm.sources.morphoPinnedMarket', 'farm.sources.lidoSevenDayApr', 'farm.venue.verdictUnavailable'
+    ];
+    t('all 12 locales include every Farm Priority 1 label',
+      ['ar', 'en', 'es', 'fa', 'fr', 'hi', 'id', 'pt', 'ru', 'tr', 'ur', 'zh'].every((lang) => {
+        const locale = JSON.parse(read(`src/i18n/locales/${lang}.json`));
+        return farmP1Keys.every((key) => hasKey(locale, key));
+      }));
     t('Farm primary CTAs stay in-app',
       /navigate\(`\/swap\?chain=\$\{route\.chainId\}&from=/.test(code(read('src/pages/Farm.jsx')))
       && /navigate\(`\/solana\?toMint=/.test(code(read('src/pages/Farm.jsx'))));

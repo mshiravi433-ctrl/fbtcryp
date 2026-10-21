@@ -302,8 +302,10 @@ export function poolRiskFactors(pool) {
   const pair = pairTokens(pool);
   return {
     smartContract: 'unknown',
-    protocol: pool?.risk || 'high',
-    liquidity: Number(pool?.tvlUsd) >= 100_000_000 ? 'low' : 'medium',
+    protocol: pool?.risk || 'unknown',
+    liquidity: pool?.tvlUsd == null || !Number.isFinite(Number(pool.tvlUsd))
+      ? 'unknown'
+      : Number(pool.tvlUsd) >= 100_000_000 ? 'low' : 'medium',
     oracle: pool?.exposure === 'single' ? 'low' : 'unknown',
     impermanentLoss: pool?.ilRisk ? 'high' : 'low',
     rewardToken: realShare(pool) == null ? 'unknown' : realShare(pool) < 0.5 ? 'high' : 'medium',
@@ -407,8 +409,8 @@ export function normalizeFarmOpportunity(pool, metadata = {}) {
     ...pool,
     score,
     type: pool.exposure === 'single' ? 'staking' : 'lp',
-    source: metadata.source || pool.source || 'defillama',
-    updatedAt: metadata.updatedAt || pool.updatedAt || null,
+    source: pool.source || metadata.source || 'defillama',
+    updatedAt: pool.updatedAt || metadata.updatedAt || null,
     freshness: metadata.freshness === 'STALE' || pool.freshness === 'STALE' ? 'STALE' : metricFreshness(metadata.updatedAt || pool.updatedAt),
     riskFactors: poolRiskFactors(pool),
     actions: {

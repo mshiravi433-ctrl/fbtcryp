@@ -19,6 +19,41 @@ import {
   walletLeaseMinutes
 } from '../lib/walletSessionPolicy.js';
 
+const FARM_PREF_ID = /^[A-Za-z0-9:_-]{1,120}$/;
+const MAX_FARM_WATCHLIST = 100;
+const MAX_FARM_ALERT_THRESHOLD = 1000;
+
+export function sanitizeFarmWatchlist(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((id) => String(id ?? '').trim()).filter((id) => FARM_PREF_ID.test(id)))].slice(0, MAX_FARM_WATCHLIST);
+}
+
+function sanitizeFarmAlertConfig(config = {}) {
+  const raw = config?.threshold;
+  const threshold = raw == null || raw === '' ? null : Number(raw);
+  const safeThreshold = Number.isFinite(threshold)
+    ? Math.min(MAX_FARM_ALERT_THRESHOLD, Math.max(0, threshold))
+    : null;
+  const direction = config?.direction === 'below' ? 'below' : 'above';
+  return {
+    enabled: Boolean(config?.enabled && safeThreshold != null),
+    direction,
+    threshold: safeThreshold
+  };
+}
+
+export function sanitizeFarmRateAlerts(value, watchlist = []) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const allowed = new Set(sanitizeFarmWatchlist(watchlist));
+  const result = {};
+  for (const [rawId, config] of Object.entries(value)) {
+    const id = String(rawId ?? '').trim();
+    if (!allowed.has(id)) continue;
+    result[id] = sanitizeFarmAlertConfig(config);
+  }
+  return result;
+}
+
 export const useSettingsStore = create(
   persist(
     (set, get) => ({
@@ -88,6 +123,10 @@ export const useSettingsStore = create(
       expertMode: false,
       defaultSlippage: 0.5,
       defaultDeadlineMin: 20,
+
+      /* ---------------- Farm (wallet-free local preferences) ---------------- */
+      farmWatchlist: [],
+      farmRateAlerts: {},
 
       /* ---------------- networks ---------------- */
       // Testnet is opt-in and off by default: this is a commercial product and
@@ -242,6 +281,36 @@ export const useSettingsStore = create(
       markSynced() {
         set({ lastSyncedAt: Date.now() });
       },
+      setFarmWatchlist(ids) {
+        const farmWatchlist = sanitizeFarmWatchlist(ids);
+        set((state) => ({
+          farmWatchlist,
+          farmRateAlerts: sanitizeFarmRateAlerts(state.farmRateAlerts, farmWatchlist)
+        }));
+      },
+      toggleFarmWatchlist(id) {
+        const safeId = String(id ?? '').trim();
+        if (!FARM_PREF_ID.test(safeId)) return;
+        set((state) => {
+          const current = sanitizeFarmWatchlist(state.farmWatchlist);
+          const farmWatchlist = current.includes(safeId)
+            ? current.filter((item) => item !== safeId)
+            : sanitizeFarmWatchlist([...current, safeId]);
+          const farmRateAlerts = sanitizeFarmRateAlerts(state.farmRateAlerts, farmWatchlist);
+          return { farmWatchlist, farmRateAlerts };
+        });
+      },
+      setFarmRateAlert(id, config) {
+        const safeId = String(id ?? '').trim();
+        if (!FARM_PREF_ID.test(safeId)) return;
+        set((state) => {
+          const farmWatchlist = sanitizeFarmWatchlist(state.farmWatchlist);
+          if (!farmWatchlist.includes(safeId)) return {};
+          const current = state.farmRateAlerts?.[safeId] ?? { enabled: false, direction: 'above', threshold: null };
+          const next = sanitizeFarmAlertConfig({ ...current, ...config });
+          return { farmRateAlerts: { ...sanitizeFarmRateAlerts(state.farmRateAlerts, farmWatchlist), [safeId]: next } };
+        });
+      },
 
       /** Everything safe to mirror to the cloud — never keys or secrets. */
       exportSyncable() {
@@ -255,7 +324,9 @@ export const useSettingsStore = create(
           autoLockMinutes: s.autoLockMinutes,
           walletSessionMinutes: s.walletSessionMinutes,
           defaultSlippage: s.defaultSlippage,
-          defaultDeadlineMin: s.defaultDeadlineMin
+          defaultDeadlineMin: s.defaultDeadlineMin,
+          farmWatchlist: sanitizeFarmWatchlist(s.farmWatchlist),
+          farmRateAlerts: sanitizeFarmRateAlerts(s.farmRateAlerts, s.farmWatchlist)
         };
       },
 
@@ -265,6 +336,17 @@ export const useSettingsStore = create(
         allowed.forEach((k) => {
           if (remote[k] !== undefined) patch[k] = remote[k];
         });
+        if (remote.farmWatchlist !== undefined || remote.farmRateAlerts !== undefined) {
+          const current = get();
+          const farmWatchlist = remote.farmWatchlist === undefined
+            ? sanitizeFarmWatchlist(current.farmWatchlist)
+            : sanitizeFarmWatchlist(remote.farmWatchlist);
+          patch.farmWatchlist = farmWatchlist;
+          patch.farmRateAlerts = sanitizeFarmRateAlerts(
+            remote.farmRateAlerts === undefined ? current.farmRateAlerts : remote.farmRateAlerts,
+            farmWatchlist
+          );
+        }
         set(patch);
         if (patch.theme) applyTheme(patch.theme);
         if (patch.accent) applyAccent(patch.accent);
@@ -272,7 +354,7 @@ export const useSettingsStore = create(
     }),
     {
       name: SETTINGS_STORAGE_KEY,
-      version: 2,
+      version: 3,
       /**
        * WHY A MIGRATION, AND WHY IT IS SAFE TO CHANGE A USER'S CHOICE
        * ---------------------------------------------------------------
@@ -306,6 +388,8 @@ export const useSettingsStore = create(
         if (Number(next.walletSessionMinutes) > MAX_LEASE_MINUTES) {
           next.walletSessionMinutes = MAX_LEASE_MINUTES;
         }
+        next.farmWatchlist = sanitizeFarmWatchlist(next.farmWatchlist);
+        next.farmRateAlerts = sanitizeFarmRateAlerts(next.farmRateAlerts, next.farmWatchlist);
         return next;
       },
       // 2FA secret stays out of the synced payload by construction

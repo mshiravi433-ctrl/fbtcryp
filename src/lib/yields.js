@@ -62,7 +62,10 @@ export const RISK_BANDS = ['low', 'medium', 'high'];
  * — an unknown split must not be rendered as "100% real".
  */
 export function realShare(pool) {
-  if (!pool || pool.apyBase == null || pool.apyBase === '') return null;
+  if (
+    !pool || pool.apyBase == null || pool.apyBase === '' || typeof pool.apyBase === 'boolean' ||
+    pool.apy == null || pool.apy === '' || typeof pool.apy === 'boolean'
+  ) return null;
   const apy = Number(pool.apy);
   const base = Number(pool.apyBase);
   if (!Number.isFinite(apy) || apy <= 0 || !Number.isFinite(base)) return null;
@@ -81,8 +84,12 @@ export function realShare(pool) {
  * against, which the UI renders as nothing rather than as "normal".
  */
 export function rateIsUnusual(pool, factor = 1.6) {
-  const apy = Number(pool?.apy);
-  const mean = Number(pool?.apyMean30d);
+  if (
+    pool?.apy == null || pool?.apy === '' || typeof pool?.apy === 'boolean' ||
+    pool?.apyMean30d == null || pool?.apyMean30d === '' || typeof pool?.apyMean30d === 'boolean'
+  ) return null;
+  const apy = Number(pool.apy);
+  const mean = Number(pool.apyMean30d);
   if (!Number.isFinite(apy) || !Number.isFinite(mean) || mean <= 0) return null;
   const ratio = apy / mean;
   if (ratio >= factor) return { direction: 'above', ratio: Math.round(ratio * 10) / 10, mean };
@@ -358,7 +365,8 @@ export function investRoute(pool) {
  * make and always errs in the flattering direction.
  */
 export function projectEarnings(pool, amountUsd) {
-  const apy = Number(pool?.apy);
+  if (pool?.apy == null || pool.apy === '' || typeof pool.apy === 'boolean') return null;
+  const apy = Number(pool.apy);
   const amt = Number(amountUsd);
   if (!Number.isFinite(apy) || !Number.isFinite(amt) || amt <= 0) return null;
 
@@ -406,54 +414,72 @@ export function impermanentLoss(ratio) {
  * Weights (each factor is normalised to 0–1):
  *
  *   40%  base yield   — `apyBase` (interest/fees actually paid), NOT the
- *                       emissions headline. If the feed left the split out we
- *                       use the headline discounted, because an unknown split
- *                       is more likely emissions than revenue.
+ *                       emissions headline. Missing base yield scores 0.
  *   25%  size         — log10 of TVL with a soft cap, so $10bn cannot
  *                       auto-win: $10m→0.25, $1bn→0.75, $10bn→1.0, flat
- *                       above that.
- *   20%  real share   — `realShare`. null is NOT treated as 1; an unknown
- *                       split scores 0, not "all real".
- *   15%  stability    — penalises `rateIsUnusual` spikes. A pool spiking far
- *                       above its own 30-day mean is usually an incentive
- *                       burst about to vanish.
+ *                       above that. Missing TVL scores 0.
+ *   20%  real share   — `realShare`. An unknown split scores 0, not "all real".
+ *   15%  stability    — penalises `rateIsUnusual` spikes, but scores 0 until a
+ *                       real 30-day mean exists; missing history is not treated
+ *                       as evidence of stability.
  *
  * Returns null for a pool we cannot score at all (no APY and no base), so the
  * UI shows nothing rather than a default "100".
  */
-export function farmScore(pool) {
+export const FARM_SCORE_WEIGHTS = Object.freeze({
+  baseYield: 40,
+  tvl: 25,
+  realYield: 20,
+  stability: 15
+});
+
+/** The normalized factors and weighted points shown in the analysis sheet. */
+export function farmScoreBreakdown(pool) {
   if (!pool || typeof pool !== 'object') return null;
-  const apy = Number(pool.apy);
-  const base = pool.apyBase == null ? NaN : Number(pool.apyBase);
-  const tvl = Number(pool.tvlUsd);
+  const read = (value) => value == null || value === '' || typeof value === 'boolean' ? NaN : Number(value);
+  const apy = read(pool.apy);
+  const base = read(pool.apyBase);
+  const tvl = read(pool.tvlUsd);
   if (!Number.isFinite(apy) && !Number.isFinite(base)) return null;
 
-  const share = realShare(pool);
-
   const clamp01 = (n) => Math.max(0, Math.min(1, n));
+  const share = realShare(pool);
+  const mean = read(pool.apyMean30d);
+  const hasBase = Number.isFinite(base);
+  const hasTvl = Number.isFinite(tvl) && tvl > 0;
+  const hasRealShare = share != null;
+  const hasStability = Number.isFinite(apy) && Number.isFinite(mean) && mean > 0;
 
-  // Base yield — prefer the real (non-emissions) part of the rate.
-  const baseRate = Number.isFinite(base) ? base : apy * 0.6;
-  const baseFactor = clamp01(baseRate / 30);
+  // Missing inputs contribute zero; the score never fills a gap with a guess.
+  const baseFactor = hasBase ? clamp01(base / 30) : 0;
+  const sizeFactor = hasTvl ? clamp01(Math.log10(tvl / 1_000_000) / 4) : 0;
+  const realFactor = hasRealShare ? share : 0;
 
-  // Size with a soft cap (log10 keeps a $10bn pool from auto-winning).
-  const sizeFactor = Number.isFinite(tvl) && tvl > 0
-    ? clamp01(Math.log10(tvl / 1_000_000) / 4)
-    : 0;
-
-  // Real share; null → 0, never a flattering "1".
-  const realFactor = share == null ? 0 : share;
-
-  // Stability: penalise a spike away from the pool's own 30-day mean.
-  const unusual = rateIsUnusual(pool);
-  let stability = 1;
+  // Stability only scores when a real 30-day comparison exists.
+  const unusual = hasStability ? rateIsUnusual(pool) : null;
+  let stabilityFactor = hasStability ? 1 : 0;
   if (unusual) {
-    if (unusual.direction === 'above') stability = Math.max(0.4, 1 - (unusual.ratio - 1) * 0.12);
-    else stability = Math.max(0.5, 1 - (1 - unusual.ratio) * 0.25);
+    if (unusual.direction === 'above') stabilityFactor = Math.max(0.4, 1 - (unusual.ratio - 1) * 0.12);
+    else stabilityFactor = Math.max(0.5, 1 - (1 - unusual.ratio) * 0.25);
   }
 
-  const score = 100 * (0.4 * baseFactor + 0.25 * sizeFactor + 0.2 * realFactor + 0.15 * stability);
-  return Math.round(Math.max(0, Math.min(100, score)));
+  const components = {
+    baseYield: { factor: baseFactor, points: FARM_SCORE_WEIGHTS.baseYield * baseFactor, weight: FARM_SCORE_WEIGHTS.baseYield, known: hasBase, raw: hasBase ? base : null },
+    tvl: { factor: sizeFactor, points: FARM_SCORE_WEIGHTS.tvl * sizeFactor, weight: FARM_SCORE_WEIGHTS.tvl, known: hasTvl, raw: hasTvl ? tvl : null },
+    realYield: { factor: realFactor, points: FARM_SCORE_WEIGHTS.realYield * realFactor, weight: FARM_SCORE_WEIGHTS.realYield, known: hasRealShare, raw: share },
+    stability: { factor: stabilityFactor, points: FARM_SCORE_WEIGHTS.stability * stabilityFactor, weight: FARM_SCORE_WEIGHTS.stability, known: hasStability, raw: hasStability ? mean : null }
+  };
+  const total = Object.values(components).reduce((sum, component) => sum + component.points, 0);
+  return {
+    score: Math.round(Math.max(0, Math.min(100, total))),
+    weights: FARM_SCORE_WEIGHTS,
+    components,
+    unusual
+  };
+}
+
+export function farmScore(pool) {
+  return farmScoreBreakdown(pool)?.score ?? null;
 }
 
 /**

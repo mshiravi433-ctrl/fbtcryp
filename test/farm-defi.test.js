@@ -3,6 +3,7 @@ import {
   AUTOCOMPOUND_PROJECTS, FARM_EXECUTION_STATES, FbtFeeEngine, FarmAdapter, VAULT_PROJECTS,
   buildYieldStrategies, farmPoolResearch, metricFreshness, normalizeFarmOpportunity
 } from '../src/lib/farmDeFi';
+import { FARM_SCORE_WEIGHTS, farmScoreBreakdown, projectEarnings, rateIsUnusual, realShare } from '../src/lib/yields.js';
 
 const pool = {
   id: 'pool-1', symbol: 'USDC-USDT', project: 'uniswap-v3', chain: 'Base',
@@ -40,6 +41,35 @@ describe('farm DeFi architecture', () => {
     expect(row.actions.view).toBe('AVAILABLE');
     expect(row.score).toBeTypeOf('number');
     expect(metricFreshness(Date.now() - 3 * 60 * 60 * 1000)).toBe('STALE');
+  });
+
+  it('does not project zero earnings for an unknown APY', () => {
+    expect(projectEarnings({ apy: null }, 1000)).toBeNull();
+    expect(projectEarnings({ apy: '' }, 1000)).toBeNull();
+    expect(projectEarnings({ apy: false }, 1000)).toBeNull();
+    expect(projectEarnings({ apy: 0 }, 1000)?.year).toBe(0);
+  });
+
+  it('uses the visible 40/25/20/15 score weights and scores only evidenced inputs', () => {
+    expect(FARM_SCORE_WEIGHTS).toEqual({ baseYield: 40, tvl: 25, realYield: 20, stability: 15 });
+    const breakdown = farmScoreBreakdown({ ...pool, apyMean30d: 10 });
+    expect(breakdown.components.baseYield.points).toBeCloseTo(40 * (8 / 30));
+    expect(breakdown.components.tvl.points).toBeCloseTo(25 * (Math.log10(500) / 4));
+    expect(breakdown.components.realYield.points).toBeCloseTo(20 * 0.8);
+    expect(breakdown.components.stability.points).toBe(15);
+
+    const incomplete = farmScoreBreakdown({ apy: 8, apyBase: null, tvlUsd: null, apyMean30d: null });
+    expect(incomplete.score).toBe(0);
+    expect(Object.values(incomplete.components).every((component) => component.points === 0)).toBe(true);
+    expect(Object.values(incomplete.components).some((component) => component.known)).toBe(false);
+  });
+
+  it('does not coerce boolean yield inputs into APYs or score evidence', () => {
+    expect(realShare({ apy: 8, apyBase: true })).toBeNull();
+    expect(realShare({ apy: true, apyBase: 4 })).toBeNull();
+    expect(rateIsUnusual({ apy: true, apyMean30d: 4 })).toBeNull();
+    expect(rateIsUnusual({ apy: 8, apyMean30d: false })).toBeNull();
+    expect(farmScoreBreakdown({ apy: true, apyBase: false, tvlUsd: true, apyMean30d: false })).toBeNull();
   });
 
   it('builds strategy categories from live rows without inventing products', () => {
