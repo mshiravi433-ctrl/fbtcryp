@@ -7,7 +7,6 @@ import '../styles/farm-modern.css';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
-import SegIndicator from '../components/SegIndicator';
 import ModernSelect from '../components/ModernSelect';
 import AssetIcon from '../components/AssetIcon';
 import TokenIcon from '../lib/tokenIcon';
@@ -151,6 +150,28 @@ const SEARCH_ICON = (
 const REFRESH_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 3v6h-6" />
+  </svg>
+);
+
+/* Modern rounded chevron — replaces the old text glyphs (⌃ ⌄ ▾ ▸) so every
+   collapsible on the screen shares one crisp, animatable SVG mark. */
+const CHEVRON_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
+const CLOSE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+  </svg>
+);
+
+const DEPOSIT_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2.8" y="6" width="18.4" height="12.5" rx="2.6" />
+    <path d="M2.8 10h18.4" />
+    <circle cx="17" cy="14.2" r="1.15" fill="currentColor" stroke="none" />
   </svg>
 );
 
@@ -341,7 +362,7 @@ function ILToy({ pool, t }) {
   return (
     <div className="farm-il">
       <button type="button" className="farm-il-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span aria-hidden="true">{open ? '▾' : '▸'}</span> {t('farm.ilToyTitle')}
+        <span className="farm-il-toggle-caret" aria-hidden="true">{CHEVRON_ICON}</span> {t('farm.ilToyTitle')}
       </button>
       {open && (
         <div className="farm-il-body">
@@ -405,7 +426,7 @@ function ProtocolStatusCard({ protocol, t }) {
           <span className="farm-protocol-sub">{FARM_PROTOCOL.name}</span>
         </span>
         <span className={`pill ${status === 'ACTIVE' ? 'pill-neutral' : status === 'UNAVAILABLE' ? 'pill-down' : 'pill-rgb'}`}>{statusLabel}</span>
-        <span className="farm-protocol-chevron" aria-hidden="true">{open ? '⌃' : '⌄'}</span>
+        <span className="farm-protocol-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
       </button>
 
       {open && <>
@@ -476,7 +497,7 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
           <span className="farm-apy mono" dir="ltr">{pool.apy}%</span>
           <span className="faint farm-apy-label">{t('farm.estimatedApy')}</span>
         </span>
-        <span className="farm-pool-chevron" aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+        <span className="farm-pool-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
       </button>
 
       {expanded && (
@@ -974,6 +995,8 @@ export default function Farm() {
           <span className="farm-hero-orb b" />
           <span className="farm-hero-orb c" />
           <span className="farm-hero-mesh" />
+          <span className="farm-hero-grid" />
+          <span className="farm-hero-sheen" />
         </div>
         <div className="farm-hero-main">
           <div className="farm-hero-copy">
@@ -994,7 +1017,7 @@ export default function Farm() {
                 <span className="farm-hero-refresh-text">{error ? t('farm.retry') : t('farm.refresh')}</span>
               </button>
             </div>
-            <h1 className="farm-hero-title">{t('farm.title')}</h1>
+            <h1 className="farm-hero-title" data-text={t('farm.title')}>{t('farm.title')}</h1>
             <p className="farm-hero-sub">{t('farm.subtitle')}</p>
           </div>
           <div className="farm-hero-art">
@@ -1038,12 +1061,19 @@ export default function Farm() {
       <ProtocolStatusCard protocol={protocol} t={t} />
       {data?.freshness === 'STALE' && <p className="notice farm-stale-notice" role="status">{t('farm.staleNotice')}</p>}
 
-      <div className="segmented seg-lg farm-tabs" role="tablist" aria-orientation="horizontal" ref={tabsRef}>
+      {/*
+        Static selection pill instead of the shared-layout SegIndicator: the
+        cross-button layoutId animation measured while this rail was scrolling
+        and could paint the pill off-screen for a frame — the reported «زیر تب‌ها
+        گاهی محو می‌شود». A per-button span never leaves its own button, so it
+        cannot disappear; only its CSS entrance animates.
+      */}
+      <div className="farm-tabs farm-tab-rail" role="tablist" aria-orientation="horizontal" ref={tabsRef}>
         {FARM_TABS.map((id) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => selectTab(id)} style={{ isolation: 'isolate' }}>
-            {tab === id && <SegIndicator id="farmtab" />}
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => selectTab(id)}>
+            {tab === id && <span className="farm-tab-pill" aria-hidden="true" />}
             <span className="farm-tab-icon" aria-hidden="true">{TAB_ICONS[id]}</span>
-            <span>{t(`farm.tab.${id}`)}</span>
+            <span className="farm-tab-label">{t(`farm.tab.${id}`)}</span>
           </button>
         ))}
       </div>
@@ -1055,7 +1085,7 @@ export default function Farm() {
             <span className="farm-yield-center-title">{t('farm.yieldCenterTitle')}</span>
             <span className="farm-yield-center-sub">{t('farm.whatBody')}</span>
           </span>
-          <span className="farm-yield-chevron" aria-hidden="true">{yieldCenterOpen ? '⌃' : '⌄'}</span>
+          <span className="farm-yield-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
         </button>
         {yieldCenterOpen && (
           <div className="farm-yield-center-body">
@@ -1110,16 +1140,36 @@ export default function Farm() {
         <div className="farm-search-wrap">
           <span className="farm-search-icon" aria-hidden="true">{SEARCH_ICON}</span>
           <input className="farm-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('farm.search')} aria-label={t('farm.search')} />
+          {q.trim() && (
+            <button type="button" className="farm-search-clear" onClick={() => setQ('')} aria-label={t('common.clear')}>
+              {CLOSE_ICON}
+            </button>
+          )}
         </div>
-        <span className="farm-unified-divider" aria-hidden="true" />
         <div className="farm-amounts-inline">
-          <span className="farm-amounts-label faint">{t('farm.ifIDeposit')}</span>
-          <div className="farm-amount-chips">
-            {AMOUNTS.map((n) => (
-              <button key={n} className={`farm-amount-chip ${amount === n && !customAmount ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>
-                {fmtUsd(n)}
-              </button>
-            ))}
+          <span className="farm-deposit-label">
+            <span className="farm-deposit-label-icon" aria-hidden="true">{DEPOSIT_ICON}</span>
+            {t('farm.ifIDeposit')}
+          </span>
+          <div className="farm-deposit-console">
+            <div className="farm-deposit-chips">
+              {AMOUNTS.map((n) => (
+                <button key={n} type="button" className={`farm-deposit-chip ${amount === n && !customAmount ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>
+                  {fmtUsd(n)}
+                </button>
+              ))}
+            </div>
+            <div className="farm-deposit-custom">
+              <span className="farm-deposit-currency" aria-hidden="true">$</span>
+              <input
+                className="farm-deposit-input"
+                inputMode="decimal"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                placeholder={t('farm.amount')}
+                aria-label={t('farm.amount')}
+              />
+            </div>
           </div>
         </div>
       </div>
