@@ -227,8 +227,8 @@
     }
   ],
   "phase": "active",
-  "verified": false,
-  "verifiedAt": null,
+  "verified": true,
+  "verifiedAt": "2026-10-21T05:01:35.605Z",
   "network": "robinhood-testnet",
   "testnet": true,
   "vault": {

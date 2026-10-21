@@ -5,25 +5,25 @@
  * Contains public addresses and chain-bound verification facts only.
  * No private key, credentialed RPC, keeper secret or user data is published.
  *
- * run 39512943855 · commit 6ab2dc6 · 2026-10-20T23:10:54.512Z
+ * run 39546959331 · commit 15eef01 · 2026-10-21T05:01:35.790Z
  */
 export const ACTIVATION_SNAPSHOT = Object.freeze({
   "schema": "fbt.collective.activation.snapshot.v1",
-  "generatedAt": "2026-10-20T23:10:54.512Z",
+  "generatedAt": "2026-10-21T05:01:35.790Z",
   "source": "github-actions",
   "repo": "mshiravi433-ctrl/fbtcryp",
-  "commit": "6ab2dc6a45364872a9322c35507bc612a692e888",
+  "commit": "15eef012261d0210b6f40783994f20fe3ba269b6",
   "workflow": "collective-activation.yml",
   "run": {
-    "id": 39512943855,
-    "number": 13,
-    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39512943855",
-    "event": "push",
+    "id": 39546959331,
+    "number": 15,
+    "url": "https://github.com/mshiravi433-ctrl/fbtcryp/actions/runs/39546959331",
+    "event": "workflow_dispatch",
     "conclusion": "success",
-    "headSha": "6ab2dc6a45364872a9322c35507bc612a692e888",
-    "createdAt": "2026-10-20T23:09:01.000Z",
-    "updatedAt": "2026-10-20T23:10:54.512Z",
-    "durationSeconds": 114
+    "headSha": "15eef012261d0210b6f40783994f20fe3ba269b6",
+    "createdAt": "1970-01-01T00:00:00.000Z",
+    "updatedAt": "2026-10-21T05:01:35.790Z",
+    "durationSeconds": null
   },
   "checks": [
     {
@@ -46,9 +46,9 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
     },
     {
       "id": "rehearsal",
-      "label": "Full local rehearsal (deploy → timelock → activate → deposit)",
-      "ok": true,
-      "detail": "23 transactions · vault created · gas 23658953 units"
+      "label": "Full local rehearsal",
+      "ok": null,
+      "detail": "no rehearsal record in this run"
     }
   ],
   "artifacts": [
@@ -207,7 +207,7 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
       "sha256": "4cf434eb8f50e6016740160d9663d16b157054615c3f3e25e5514be4de80acf1"
     }
   ],
-  "defaultChainId": 4663,
+  "defaultChainId": 46630,
   "liveDeployments": {
     "46630": {
       "status": "activated",
@@ -219,11 +219,23 @@ export const ACTIVATION_SNAPSHOT = Object.freeze({
       "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
       "timelockReadyAt": "2026-10-20T21:02:50.000Z",
       "vaultAddress": "0xa9571559Cf794EacbA91EAAc17e2C500df4F386a",
-      "verified": false,
-      "verifiedAt": null
+      "verified": true,
+      "verifiedAt": "2026-10-21T05:01:35.605Z"
     }
   },
-  "liveDeployment": null
+  "liveDeployment": {
+    "status": "activated",
+    "chainId": 46630,
+    "testnet": true,
+    "factoryAddress": "0x6988820edb98b31A6B4f8922c3a3BE35e4Af1Dc5",
+    "assetAddress": "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
+    "deploymentBlock": 138962967,
+    "rpcUrl": "https://rpc.testnet.chain.robinhood.com",
+    "timelockReadyAt": "2026-10-20T21:02:50.000Z",
+    "vaultAddress": "0xa9571559Cf794EacbA91EAAc17e2C500df4F386a",
+    "verified": true,
+    "verifiedAt": "2026-10-21T05:01:35.605Z"
+  }
 });
 
 export default ACTIVATION_SNAPSHOT;
