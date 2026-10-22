@@ -20,8 +20,10 @@ FBT cut in this feature and no code here that can move money.
 | Connection manager (per-user OAuth, sealed credentials, revoke) | ✅ implemented, **no provider configured** |
 | Webhook verification (HMAC + timestamp + single-use) | ✅ implemented, requires Upstash |
 | Operator kill switches (global + per provider, durable) | ✅ implemented |
+| **First-party (native) agents** — analysis, DeFi, security | ✅ implemented, **ON by default** (`AGENT_HUB_NATIVE_AGENTS`) |
+| **User key** for a user-supplied agent | ✅ implemented (AES-256-GCM, owner-scoped, revocable) |
 | Recommended / Discover / Connected / Activity UI in `/intent` → Agents | ✅ implemented |
-| Editorial recommendations with official product/pricing links | ✅ informational only; never executable or FBT-reviewed |
+| Editorial recommendations with official product/pricing links | ✅ 38 cards in 12 categories; informational only, never executable or FBT-reviewed |
 | Direct on-chain payment (x402-style relay) | ⛔ **not implemented** — Phase 3 deferred |
 | User-supplied agent cards (bring your own agent) | ✅ implemented |
 | Any approved live provider | ⛔ **none** — see the decision matrix |
@@ -100,9 +102,11 @@ A real count of live agents is shown next to the switch when it is non-zero.
 | GET | `/api/ai/agent-hub/catalog` | reviewed listings + the owner's own sources, with live status |
 | GET | `/api/ai/agent-hub/sources` | the agent cards this device added | 
 | POST | `/api/ai/agent-hub/sources` | verify + store one card URL (max 8 per owner) |
-| DELETE | `/api/ai/agent-hub/sources/:id` | remove one of your own sources |
+| DELETE | `/api/ai/agent-hub/sources/:id` | remove one of your own sources **and its key** |
+| POST | `/api/ai/agent-hub/sources/:id/credential` | store the user's own key for the user's own agent (sealed) |
+| DELETE | `/api/ai/agent-hub/sources/:id/credential` | delete the sealed key before the metadata |
 | GET | `/api/ai/agent-hub/agents/:agentId` | detail incl. provider terms/privacy |
-| GET | `/api/ai/agent-hub/connections` | device-scoped owner |
+| GET | `/api/ai/agent-hub/connections` | OAuth connections **and** stored agent keys (never the secret) |
 | POST | `/api/ai/agent-hub/providers/:id/connections/start` | OAuth + PKCE, owner-bound state |
 | GET/POST | `/api/ai/agent-hub/providers/:id/connections/callback` | single-use code |
 | DELETE | `/api/ai/agent-hub/connections/:id` | revoke + delete sealed secret |
@@ -117,6 +121,41 @@ A real count of live agents is shown next to the switch when it is non-zero.
 Route names were chosen against the existing surface: `/api/ai/agents` belongs to
 the command-center roster and `/api/ai/external-agents` to the FI trust registry.
 Both are asserted still alive by `test/agent-hub/hub-api-probe.mjs`.
+
+## First-party agents (`fbt-native`)
+
+The reviewed registry stays empty until an operator signs a decision record, and
+an OAuth connection needs a reviewed provider to exist. That gate is correct — and
+it used to leave the Agents tab with nothing that could actually run. Native
+agents close the gap **without weakening the gate**:
+
+- they are FBT's *own* agents (`server/agentHub/native/`), executed in-process
+  against public data the app already serves (CoinGecko, DefiLlama yields,
+  DefiLlama protocols/hacks, GoPlus, LI.FI, the explorer and smart-money reads);
+- there is nothing to review because there is no third party, nothing to
+  authorise because there is no external account, and nothing to bill;
+- they are labelled `FBT native` (`approvalStatus: FBT_FIRST_PARTY`,
+  `integrationType: NATIVE`, `accessModel: FREE_PUBLIC`) and are rendered from
+  the server's catalogue only — a disabled agent disappears from the UI;
+- every agent names its **data sources** on the card, and every result says which
+  source answered, which was unavailable, and when it was read;
+- they cannot execute: no order, no swap, no signature, no transfer. The
+  swap-assistant reads a LI.FI *quote*; it never builds a transaction request;
+- kill switches, consent, idempotency, history and rendering are the same code
+  paths as any external provider — this adds a source of agents, not a second
+  runtime.
+
+Eleven agents ship in three groups:
+
+| Group | Agents |
+|---|---|
+| Analysis & trading | AI Trading Analyst · Smart Money Tracker · Token Research Agent · Strategy Backtesting Agent |
+| DeFi | Yield Optimizer · Liquidity Pool Analyzer · Lending Risk Agent · Cross-chain Swap Assistant |
+| Security & research | Token Risk Scanner · Wallet Exposure Auditor · Protocol Security Brief |
+
+`AGENT_HUB_NATIVE_AGENTS=false` removes all of them; the hub then reports an
+honest empty catalogue again (this is what the API probe asserts for a deploy
+with no providers).
 
 ## User-supplied agents (bring your own agent)
 
@@ -141,7 +180,17 @@ earth. `server/agentHub/userAgents.js` is the second, narrower path:
 - every listing carries `source: "user"`, and the UI labels it *Added by you* —
   a self-added agent can never be displayed as FBT-reviewed, or the reverse;
 - the same adapter, broker, consent and kill-switch code paths apply. The global
-  kill switch stops user sources too.
+  kill switch stops user sources too;
+- **if the agent needs a key**, the user can store their own for their own agent
+  (`POST /sources/:id/credential`). It is sealed with AES-256-GCM under
+  `AGENT_HUB_SECRET_KEY`, stored under an owner-scoped key, never returned in a
+  response and never logged; the header name and scheme come from an allowlist
+  (`authorization`, `x-api-key`, `api-key`, `x-auth-token`) so a request body can
+  never choose an arbitrary header. The key is unsealed only while a task for
+  that same source and owner is being created or synced, and is deleted first
+  when the key or the source is removed. Without `AGENT_HUB_SECRET_KEY` the
+  server refuses to store one (`AGENT_HUB_SECRET_KEY_REQUIRED`) rather than
+  keeping it in plaintext.
 
 ## Invariants the code enforces
 
@@ -169,8 +218,9 @@ earth. `server/agentHub/userAgents.js` is the second, narrower path:
 npm run test:agent-hub
 ```
 
-- `test/agent-hub/a2a-adapter.test.mjs` — adapter contract + SSRF/redirect rules
-  (24 tests, local A2A conformance server)
+- `test/agent-hub/a2a-adapter.test.mjs` — adapter contract + SSRF/redirect rules,
+  including a user key forwarded as allowlisted headers (24 tests, local A2A
+  conformance server)
 - `test/agent-hub/hub-security.test.mjs` — consent, registry refusals, webhook
   signatures/replay, idempotency semantics, redaction (36 tests)
 - `test/agent-hub/user-sources.test.mjs` — card-URL validation (scheme, IP,
@@ -178,11 +228,13 @@ npm run test:agent-hub
   idempotency, cap, rate limit, owner-scoped delete (21 tests)
 - `test/agent-hub/hub-api-probe.mjs` — the real `server/app.js` over HTTP:
   owner isolation, IP-only refusal, payment/account gates, double-click,
-  lost response, kill switches, user sources end to end, routing hygiene
-  (110 assertions)
-- `test/agent-hub/agent-hub-ui.test.jsx` — source-linked recommendation list,
+  lost response, kill switches, first-party agents end to end, user sources and
+  their sealed keys end to end, routing hygiene (127 assertions)
+- `test/agent-hub/agent-hub-ui.test.jsx` — source-linked recommendation list
+  (38 cards, crypto categories), native-agent cards and their run path,
   category/search filters, disabled-catalogue behavior, Persian labels, the
-  add-source form, consent preview, sanitized rendering, injection warning
+  add-source form, the user-key form, consent preview, sanitized rendering,
+  injection warning (28 tests)
 
 `test/agent-hub/conformance-server.mjs` is the only fake agent in the repository.
 It binds to `127.0.0.1`, is never imported by production code, and refuses to

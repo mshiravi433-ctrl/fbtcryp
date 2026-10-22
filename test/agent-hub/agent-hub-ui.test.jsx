@@ -95,6 +95,35 @@ const renderDiscoverPanel = (props = {}) => {
 };
 
 const OFFICIAL_DOMAINS_BY_AGENT = {
+  '1inch': ['1inch.io', '1inch.dev'],
+  lifi: ['li.fi'],
+  jupiter: ['jup.ag'],
+  odos: ['odos.xyz'],
+  kyberswap: ['kyberswap.com'],
+  zerion: ['zerion.io'],
+  debank: ['debank.com'],
+  rotki: ['rotki.com'],
+  'yield-xyz': ['yield.xyz'],
+  beefy: ['beefy.com', 'beefy.finance'],
+  pendle: ['pendle.finance'],
+  'defillama-yields': ['defillama.com'],
+  coingecko: ['coingecko.com'],
+  defillama: ['defillama.com'],
+  dune: ['dune.com'],
+  nansen: ['nansen.ai'],
+  arkham: ['arkhamintelligence.com'],
+  coinglass: ['coinglass.com'],
+  quantconnect: ['quantconnect.com'],
+  tradingview: ['tradingview.com'],
+  hummingbot: ['hummingbot.org'],
+  freqtrade: ['freqtrade.io'],
+  composer: ['composer.trade'],
+  goplus: ['gopluslabs.io'],
+  'token-sniffer': ['tokensniffer.com'],
+  rugcheck: ['rugcheck.xyz'],
+  honeypot: ['honeypot.is'],
+  blockaid: ['blockaid.io'],
+  santiment: ['santiment.net'],
   chatgpt: ['chatgpt.com'],
   perplexity: ['perplexity.ai'],
   claude: ['claude.ai', 'claude.com'],
@@ -102,8 +131,8 @@ const OFFICIAL_DOMAINS_BY_AGENT = {
   'microsoft-copilot': ['microsoft.com'],
   'github-copilot': ['github.com'],
   cursor: ['cursor.com'],
-  'zapier-agents': ['zapier.com'],
-  n8n: ['n8n.io']
+  n8n: ['n8n.io'],
+  'zapier-agents': ['zapier.com']
 };
 
 describe('editorial recommendations', () => {
@@ -116,14 +145,22 @@ describe('editorial recommendations', () => {
 
     const panel = await screen.findByTestId('agent-hub-recommended');
     expect(screen.getByTestId('agent-hub-tab-recommended').getAttribute('aria-selected')).toBe('true');
-    expect(panel.textContent).toMatch(/does not mean FBT-reviewed or connected/i);
+    expect(panel.textContent).toMatch(/not reviewed or connected/i);
     expect(panel.textContent).toMatch(/free access/i);
     expect(panel.textContent).toMatch(/paid option/i);
-    expect(RECOMMENDED_EXTERNAL_AGENTS).toHaveLength(9);
+    expect(RECOMMENDED_EXTERNAL_AGENTS).toHaveLength(38);
     expect(screen.getByTestId('agent-hub-recommendation-perplexity')).toBeTruthy();
     expect(screen.getByTestId('agent-hub-recommendation-github-copilot')).toBeTruthy();
     expect(screen.getByTestId('agent-hub-recommendation-n8n')).toBeTruthy();
+    /* The crypto-first order is part of the contract, not decoration: the five
+       categories the user asked for are on screen before the general tools. */
+    for (const id of ['1inch', 'zerion', 'yield-xyz', 'coingecko', 'quantconnect']) {
+      expect(screen.getByTestId(`agent-hub-recommendation-${id}`)).toBeTruthy();
+    }
     expect(document.querySelector('[data-testid^="agent-hub-card-"]')).toBeNull();
+    /* With no catalogue agents, the native rail must say so rather than
+       invent cards it cannot run. */
+    expect(screen.getByTestId('agent-hub-native-empty')).toBeTruthy();
 
     for (const agent of RECOMMENDED_EXTERNAL_AGENTS) {
       expect(agent.productUrl).toMatch(/^https:\/\//);
@@ -151,10 +188,19 @@ describe('editorial recommendations', () => {
     expect(screen.getByTestId('agent-hub-recommendation-cursor')).toBeTruthy();
     expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
 
+    fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-swap'));
+    expect(screen.getByTestId('agent-hub-recommendation-1inch')).toBeTruthy();
+    expect(screen.getByTestId('agent-hub-recommendation-lifi')).toBeTruthy();
+    expect(screen.queryByTestId('agent-hub-recommendation-zerion')).toBeNull();
+
     fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-all'));
     fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'n8n' } });
     expect(screen.getByTestId('agent-hub-recommendation-n8n')).toBeTruthy();
     expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'zerion' } });
+    expect(screen.getByTestId('agent-hub-recommendation-zerion')).toBeTruthy();
+    expect(screen.queryByTestId('agent-hub-recommendation-1inch')).toBeNull();
   });
 
   it('offers an explicit route to add a compatible A2A card to FBT', async () => {
@@ -172,7 +218,8 @@ describe('editorial recommendations', () => {
     const panel = await screen.findByTestId('agent-hub-recommended');
     expect(panel.getAttribute('dir')).toBe('rtl');
     expect(panel.textContent).toContain('ایجنت‌های پیشنهادی');
-    expect(panel.textContent).toContain('قیمت و طرح‌ها');
+    expect(panel.textContent).toContain('تعرفه و دسترسی');
+    expect(panel.textContent).toContain('ایجنت‌های بومی FBT');
   });
 });
 
@@ -353,17 +400,97 @@ describe('invocation and result honesty', () => {
   });
 });
 
+describe('first-party agents', () => {
+  const NATIVE = {
+    ...AGENT,
+    id: 'fbt-native:ai-trading-analyst',
+    providerId: 'fbt-native',
+    providerName: 'FBT Native',
+    source: 'native',
+    native: true,
+    name: 'AI Trading Analyst',
+    nameFa: 'تحلیل‌گر معامله',
+    summary: 'Reads trend, momentum and levels from live candles.',
+    summaryFa: 'روند و مومنتوم را از کندل‌های واقعی می‌خواند.',
+    category: 'trading',
+    capabilities: ['trend', 'momentum'],
+    dataSources: ['CoinGecko'],
+    status: 'LIVE',
+    accessModel: 'FREE_PUBLIC',
+    costSummary: 'Free — runs inside FBT, no account and no payment'
+  };
+
+  it('renders the agents the server listed, labelled as FBT native, with their data source', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({
+      ...CATALOG, status: 'LIVE', agents: [NATIVE],
+      providers: [{ id: 'fbt-native', name: 'FBT Native', source: 'native' }]
+    });
+    renderPanel();
+    const card = await screen.findByTestId('agent-hub-native-fbt-native-ai-trading-analyst');
+    expect(card.textContent).toMatch(/AI Trading Analyst/);
+    expect(card.textContent).toMatch(/FBT native/);
+    expect(card.textContent).toMatch(/CoinGecko/);
+    expect(screen.getByTestId('agent-hub-native-count').textContent).toMatch(/1/);
+    expect(screen.queryByTestId('agent-hub-native-empty')).toBeNull();
+  });
+
+  it('never invents a native card when the catalogue has none', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+    renderPanel();
+    expect(await screen.findByTestId('agent-hub-native-empty')).toBeTruthy();
+    expect(document.querySelector('[data-testid^="agent-hub-native-run-"]')).toBeNull();
+  });
+
+  it('opens the real run form from a native card, not a dead link', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({
+      ...CATALOG, status: 'LIVE', agents: [NATIVE],
+      providers: [{ id: 'fbt-native', name: 'FBT Native', source: 'native' }]
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('agent-hub-native-run-fbt-native-ai-trading-analyst'));
+    /* The run screen replaces the tabbed view — a native card must land on the
+       real consent + run form, not on a marketing page. */
+    expect(await screen.findByTestId('agent-hub-detail')).toBeTruthy();
+    expect(screen.getByTestId('agent-hub-task-text')).toBeTruthy();
+  });
+});
+
 describe('connected and activity', () => {
   beforeEach(() => {
     routes['GET /ai/agent-hub/catalog'] = () => respond(CATALOG);
   });
 
-  it('says no connection is configured instead of showing a fake provider', async () => {
+  it('offers the two real paths instead of showing a fake provider connection', async () => {
     routes['GET /ai/agent-hub/connections'] = () => respond({ ok: true, connections: [], capability: { configured: false } });
     renderDiscoverPanel();
     fireEvent.click(await screen.findByTestId('agent-hub-tab-connected'));
     const empty = await screen.findByTestId('agent-hub-connections-empty');
-    expect(empty.textContent).toMatch(/connection is configured yet/i);
+    /* The old copy was a dead end: it named the one thing FBT could not do.
+       The new copy names the two things it can, and the native agents behind
+       the first one are already on screen in the recommended tab. */
+    expect(empty.textContent).toMatch(/nothing is connected/i);
+    expect(empty.textContent).toMatch(/native agents run right now/i);
+    expect(empty.textContent).toMatch(/store the key you were issued/i);
+    expect(screen.getByTestId('agent-hub-connections-go-native')).toBeTruthy();
+  });
+
+  it('lists a stored key as a connection without ever showing its value', async () => {
+    routes['GET /ai/agent-hub/connections'] = () => respond({
+      ok: true,
+      connections: [{
+        id: 'cred_u-abc123', kind: 'api_key', providerId: 'u-abc123', status: 'ACTIVE',
+        headerName: 'authorization', scheme: 'bearer', scopes: [], externalAccountLabel: null,
+        credentialStored: true, createdAt: Date.now(), expiresAt: null
+      }],
+      capability: { configured: false, apiKey: { supported: true } }
+    });
+    renderDiscoverPanel();
+    fireEvent.click(await screen.findByTestId('agent-hub-tab-connected'));
+    const row = await screen.findByTestId('agent-hub-connection-cred_u-abc123');
+    expect(row.textContent).toMatch(/Your agent key/);
+    expect(row.textContent).toMatch(/Encrypted/);
+    expect(row.textContent).toMatch(/authorization/);
+    expect(row.textContent).not.toMatch(/sk-live/);
   });
 
   it('lists past tasks with their real state and provider', async () => {
@@ -459,7 +586,24 @@ describe('user-supplied agents', () => {
     expect(removed).toBe('u-abc123');
     await waitFor(() => expect(screen.queryByTestId('agent-hub-card-u-abc123-token-research')).toBeNull());
   });
-});
+  it('stores the user\'s own key for the user\'s own agent without keeping it in the field', async () => {
+    let posted = null;
+    routes['GET /ai/agent-hub/catalog'] = () => respond({ ...EMPTY, status: 'LIVE', agents: [SOURCE_AGENT], providers: [SOURCE_PROVIDER] });
+    routes['POST /ai/agent-hub/sources/u-abc123/credential'] = (init) => {
+      posted = JSON.parse(init.body);
+      return respond({ ok: true, connection: { id: 'cred_u-abc123', kind: 'api_key', providerId: 'u-abc123', status: 'ACTIVE' } });
+    };
+    routes['GET /ai/agent-hub/connections'] = () => respond({ ok: true, connections: [], capability: {} });
+    renderDiscoverPanel();
+    fireEvent.click(await screen.findByTestId('agent-hub-source-key-toggle-u-abc123'));
+    const field = await screen.findByTestId('agent-hub-source-key-secret');
+    fireEvent.change(field, { target: { value: 'sk-my-own-key-123' } });
+    fireEvent.click(screen.getByTestId('agent-hub-source-key-save'));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(posted).toEqual({ secret: 'sk-my-own-key-123', headerName: 'authorization', scheme: 'bearer' });
+    await waitFor(() => expect(screen.queryByTestId('agent-hub-source-key-secret')).toBeNull());
+    expect(document.body.textContent).not.toMatch(/sk-my-own-key-123/);
+  });
 
 describe('agents tab: which view opens first', () => {
   it('opens the external hub only when a reviewed agent is actually live', () => {
@@ -472,4 +616,6 @@ describe('agents tab: which view opens first', () => {
     expect(defaultAgentsView({ known: false, enabled: false, count: 0 })).toBe('mine');
     expect(defaultAgentsView()).toBe('mine');
   });
+
+});
 });

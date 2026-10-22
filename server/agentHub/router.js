@@ -159,8 +159,47 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
     if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
     const out = await hub.userSources.remove({ owner, sourceId: req.params.sourceId });
     if (!out.ok) return fail(res, sourceStatus(out.code), out.code);
+    /* A key that outlives the source it belongs to is a secret nobody can
+       revoke from the UI. Removing the source removes its key too. */
+    await hub.sourceCredentials?.remove({ owner, sourceId: req.params.sourceId }).catch(() => null);
     hub.adapters._reset();
     return ok(res, { removedId: out.removedId, durable: out.durable });
+  }));
+
+  /* ── the user's own key for their own A2A agent ─────────────────────────
+     This is the connection path that works without an OAuth provider record:
+     the user pastes a key THEY hold, for an agent THEY added. Nothing is
+     reviewed, nothing is bundled, and the key is sealed server-side. */
+
+  const credentialStatus = (code) => (
+    code === 'SOURCE_NOT_FOUND' ? 404
+      : code === 'AGENT_HUB_SECRET_KEY_REQUIRED' ? 503
+        : 400
+  );
+
+  router.post('/sources/:sourceId/credential', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.sourceCredentials) return fail(res, 503, 'CREDENTIAL_STORE_UNCONFIGURED');
+    const body = req.body || {};
+    const out = await hub.sourceCredentials.save({
+      owner,
+      sourceId: req.params.sourceId,
+      headerName: body.headerName || 'authorization',
+      scheme: body.scheme || 'bearer',
+      secret: body.secret || body.key || ''
+    });
+    if (!out.ok) return fail(res, credentialStatus(out.code), out.code, { field: out.field || null });
+    return ok(res, { connection: out.connection, capability: hub.sourceCredentials.capability() });
+  }));
+
+  router.delete('/sources/:sourceId/credential', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.sourceCredentials) return fail(res, 503, 'CREDENTIAL_STORE_UNCONFIGURED');
+    const out = await hub.sourceCredentials.remove({ owner, sourceId: req.params.sourceId });
+    if (!out.ok) return fail(res, credentialStatus(out.code), out.code);
+    return ok(res, { connection: out.connection });
   }));
 
   /* ══════════════════════ connections ══════════════════════ */
@@ -169,7 +208,18 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
     const owner = ownerOf(req);
     if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
     const out = await hub.connections.list(owner);
-    return ok(res, { connections: out.connections, durable: out.durable, capability: hub.connections.capability() });
+    /* One list, two kinds of relationship: an OAuth account the user linked,
+       and a key the user stored for an agent they added. The UI labels them
+       differently; neither is a reviewed provider. */
+    const keys = hub.sourceCredentials ? await hub.sourceCredentials.list({ owner }).catch(() => ({ credentials: [] })) : { credentials: [] };
+    return ok(res, {
+      connections: [...out.connections, ...(keys.credentials || [])],
+      durable: out.durable,
+      capability: {
+        ...hub.connections.capability(),
+        apiKey: hub.sourceCredentials ? hub.sourceCredentials.capability() : { supported: false }
+      }
+    });
   }));
 
   router.post('/providers/:providerId/connections/start', handle(async (req, res) => {
@@ -307,7 +357,9 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
   router.post('/provider-health/kill', handle(async (req, res) => {
     if (!opsAllowed(req)) return fail(res, 404, 'NOT_FOUND');
     const { scope = 'global', providerId = null, tripped = true, reason = null } = req.body || {};
-    if (scope === 'provider' && !hub.registry.all().some((p) => p.id === providerId)) {
+    const knownProvider = hub.registry.all().some((p) => p.id === providerId)
+      || (hub.native?.enabled?.() && providerId === hub.native.provider.id);
+    if (scope === 'provider' && !knownProvider) {
       return fail(res, 404, 'PROVIDER_NOT_FOUND');
     }
     const out = await hub.broker.setKill({ scope, providerId, tripped: tripped === true, reason, by: 'ops' });

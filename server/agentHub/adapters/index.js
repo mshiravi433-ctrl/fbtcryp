@@ -50,7 +50,7 @@ export function capabilities(adapter) {
  * five minutes instead of one per page view) and is why a provider's kill
  * switch must be checked by the broker on every request, not by the adapter.
  */
-export function createAdapterFactory({ env = process.env, now = () => Date.now(), request } = {}) {
+export function createAdapterFactory({ env = process.env, now = () => Date.now(), request, native = null } = {}) {
   const cache = new Map();
 
   return {
@@ -61,7 +61,11 @@ export function createAdapterFactory({ env = process.env, now = () => Date.now()
       const hit = cache.get(key);
       if (hit) return hit;
       let adapter = null;
-      if (provider.integrationType === 'A2A') {
+      /* A first-party agent runs in this process. It is a provider-shaped
+         source only so the broker, consent and history stay one code path. */
+      if (provider.integrationType === 'NATIVE' && provider.native === true) {
+        adapter = native?.adapter || null;
+      } else if (provider.integrationType === 'A2A') {
         adapter = createA2AAdapter({ provider, env, now, ...(request ? { request } : {}) });
       }
       /* PROVIDER_TASK_API is a declared integration type that this build does

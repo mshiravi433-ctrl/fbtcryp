@@ -97,6 +97,8 @@ export function createTaskBroker({
   store,
   connections,
   userSources = null,
+  sourceCredentials = null,
+  native = null,
   env = process.env,
   now = () => Date.now(),
   log = () => {}
@@ -208,7 +210,9 @@ export function createTaskBroker({
         userProviders = [];
       }
     }
+    const nativeOn = Boolean(native?.enabled?.());
     const merged = [
+      ...(nativeOn ? [{ provider: native.provider, source: 'native' }] : []),
       ...registry.list().map((provider) => ({ provider, source: 'reviewed' })),
       ...userProviders.map((provider) => ({ provider, source: 'user' }))
     ];
@@ -221,7 +225,8 @@ export function createTaskBroker({
       const connected = source === 'reviewed'
         && connectionsList.some((c) => c.providerId === provider.id && c.status === 'ACTIVE');
       const providerView = {
-        ...(source === 'user' ? userSources.publicView(provider) : registry.publicView(provider)),
+        ...(source === 'native' ? native.publicView()
+          : source === 'user' ? userSources.publicView(provider) : registry.publicView(provider)),
         source,
         health: { status: health.status, ok: health.ok === true, checkedAt: health.checkedAt || null, latencyMs: health.latencyMs ?? null, code: health.code || null },
         connections: connected ? 1 : 0
@@ -240,10 +245,17 @@ export function createTaskBroker({
           providerName: provider.name,
           source,
           name: agent.name,
+          nameFa: agent.nameFa || null,
           summary: agent.summary,
+          summaryFa: agent.summaryFa || null,
           category: agent.category,
           capabilities: agent.capabilities,
           examples: agent.examples,
+          examplesFa: agent.examplesFa || null,
+          inputHint: agent.inputHint || null,
+          inputHintFa: agent.inputHintFa || null,
+          dataSources: Array.isArray(agent.dataSources) ? agent.dataSources : [],
+          native: source === 'native',
           accessModel: provider.accessModel,
           costSummary: provider.costSummary,
           requiresAccount: provider.accessModel === 'FREE_ACCOUNT' || provider.accessModel === 'EXTERNAL_SUBSCRIPTION',
@@ -291,6 +303,9 @@ export function createTaskBroker({
 
   /** The provider that owns `agentId`, from either source, for this owner only. */
   async function providerForAgentId(id, owner) {
+    if (native?.enabled?.() && (id === `${native.provider.id}:default` || id.startsWith(`${native.provider.id}:`))) {
+      return native.provider;
+    }
     const fromRegistry = registry.list().find((p) => id === `${p.id}:default` || id.startsWith(`${p.id}:`));
     if (fromRegistry) return fromRegistry;
     if (!userSources || !owner) return null;
@@ -321,7 +336,7 @@ export function createTaskBroker({
     const resolved = await resolveAgent(agentId, { owner });
     if (!resolved.ok) return { ok: false, code: resolved.code };
     const { provider, agent, adapter } = resolved;
-    const source = provider.userSupplied ? 'user' : 'reviewed';
+    const source = provider.native === true ? 'native' : provider.userSupplied ? 'user' : 'reviewed';
     const kill = await killState(provider);
     const health = kill.provider || kill.global
       ? { ok: false, status: 'DISABLED', code: 'KILL_SWITCH', checkedAt: now() }
@@ -340,10 +355,17 @@ export function createTaskBroker({
         providerName: provider.name,
         source,
         name: agent.name,
+        nameFa: agent.nameFa || null,
         summary: agent.summary,
+        summaryFa: agent.summaryFa || null,
         category: agent.category,
         capabilities: agent.capabilities,
         examples: agent.examples,
+        examplesFa: agent.examplesFa || null,
+        inputHint: agent.inputHint || null,
+        inputHintFa: agent.inputHintFa || null,
+        dataSources: Array.isArray(agent.dataSources) ? agent.dataSources : [],
+        native: source === 'native',
         accessModel: provider.accessModel,
         costSummary: provider.costSummary,
         requiresAccount: provider.accessModel === 'FREE_ACCOUNT' || provider.accessModel === 'EXTERNAL_SUBSCRIPTION',
@@ -358,7 +380,8 @@ export function createTaskBroker({
         inputModes: agent.inputModes,
         outputModes: agent.outputModes,
         provider: {
-          ...(source === 'user' ? userSources.publicView(provider) : registry.publicView(provider)),
+          ...(source === 'native' ? native.publicView()
+            : source === 'user' ? userSources.publicView(provider) : registry.publicView(provider)),
           health: { status: health.status, ok: health.ok === true, checkedAt: health.checkedAt || null, code: health.code || null }
         }
       }
@@ -454,6 +477,12 @@ export function createTaskBroker({
 
     const needsAccount = provider.accessModel === 'FREE_ACCOUNT' || provider.accessModel === 'EXTERNAL_SUBSCRIPTION';
     let credential = null;
+    if (provider.userSupplied === true && sourceCredentials) {
+      /* Optional by design: many A2A agents are public. If the user stored a
+         key for this source, it is attached here — and only here. */
+      const got = await sourceCredentials.credentialFor({ owner, sourceId: provider.id }).catch(() => ({ ok: false }));
+      if (got.ok) credential = got.credential;
+    }
     if (needsAccount) {
       /* The user-facing reason first: "connect an account" is actionable, while
          "the deployment has no durable store" is an operator problem. Only once
@@ -637,6 +666,7 @@ export function createTaskBroker({
    * though the provider is not in the reviewed registry.
    */
   async function providerForTask(owner, task) {
+    if (native?.enabled?.() && task.providerId === native.provider.id) return native.provider;
     const reviewed = registry.get(task.providerId);
     if (reviewed) return reviewed;
     if (!userSources) return null;
@@ -659,6 +689,9 @@ export function createTaskBroker({
     let credential = null;
     if (hasConnection) {
       const got = await connections.credentialFor(owner, provider.id);
+      if (got.ok) credential = got.credential;
+    } else if (provider.userSupplied === true && sourceCredentials) {
+      const got = await sourceCredentials.credentialFor({ owner, sourceId: provider.id }).catch(() => ({ ok: false }));
       if (got.ok) credential = got.credential;
     }
     const remote = await adapter.getTask(task.remoteTaskId, credential);
@@ -789,6 +822,18 @@ export function createTaskBroker({
         accessModel: provider.accessModel,
         enabled: provider.enabled,
         killSwitch: { global: kill.global || truthy(env.AGENT_HUB_KILL_SWITCH), provider: kill.provider, reason: kill.reason },
+        health: { status: live.status, ok: live.ok === true, latencyMs: live.latencyMs ?? null, code: live.code || null, checkedAt: live.checkedAt || null }
+      });
+    }
+    if (native?.enabled?.()) {
+      const live = await healthFor(native.provider, { force });
+      providers.unshift({
+        id: native.provider.id,
+        name: native.provider.name,
+        approvalStatus: 'FBT_FIRST_PARTY',
+        accessModel: 'FREE_PUBLIC',
+        enabled: true,
+        killSwitch: { global: global.tripped || truthy(env.AGENT_HUB_KILL_SWITCH), provider: false, reason: global.reason || null },
         health: { status: live.status, ok: live.ok === true, latencyMs: live.latencyMs ?? null, code: live.code || null, checkedAt: live.checkedAt || null }
       });
     }
