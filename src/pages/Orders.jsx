@@ -13,7 +13,6 @@ import { findToken, getTokensSync, loadTokens, tokenKey } from '../lib/tokenList
 import { isOrderable, resolveCoinIds, withCoinId } from '../lib/coinId';
 import ModernSelect from '../components/ModernSelect';
 import AssetIcon from '../components/AssetIcon';
-import SolanaOrderCard from '../components/SolanaOrderCard';
 import TokenIcon from '../lib/tokenIcon';
 import '../styles/wallet-modern.css';
 import '../styles/orders-modern.css';
@@ -61,7 +60,6 @@ import { getQuote } from '../lib/swap';
 import OrderStats from '../components/OrderStats';
 import { activateDca, confirmDcaCancel, createDcaRevision, dcaDisplayStatus, loadDcaReceipts, requestDcaCancel } from '../lib/dcaExecution';
 import { loadGoal } from '../lib/goalStore';
-import { loadSolanaHandoffs } from '../lib/solanaOrders';
 import { IconChevronLeft, IconClock, IconPools, IconShield, IconTrend } from '../components/Icons';
 import SegIndicator from '../components/SegIndicator';
 import { useHideBalances } from '../hooks/useHideBalances';
@@ -72,7 +70,6 @@ import { loadLearningParams, orderTune } from '../lib/learning';
 import AutopilotPanel from '../components/AutopilotPanel';
 import AutopilotGuideSheet from '../components/AutopilotGuideSheet';
 import OrdersHero from '../components/OrdersHero';
-import CollapsibleCard from '../components/CollapsibleCard';
 import '../styles/orders-hero.css';
 
 /**
@@ -152,13 +149,6 @@ export default function Orders() {
    * asks for it, and the component is not even mounted until then.
    */
   const [guideOpen, setGuideOpen] = useState(false);
-  /*
-   * How many Solana handoffs are stored, for the fold's badge. Read here
-   * rather than inside the fold because the badge lives in the header, which
-   * is rendered by CollapsibleCard — and kept in sync by the card's own
-   * `onSaved` so saving one updates the count without closing the fold.
-   */
-  const [solanaCount, setSolanaCount] = useState(() => loadSolanaHandoffs().length);
   const [cancelReview, setCancelReview] = useState(null);
   /* The DCA revision draft being edited, if any. `null` means no row is open. */
   const [editDraft, setEditDraft] = useState(null);
@@ -703,11 +693,6 @@ export default function Orders() {
         })}
       </div>
 
-      {/* The limitation, stated before the user creates anything. */}
-      <motion.p className="notice" variants={riseIn} initial="hidden" animate="show">
-        {t('orders.manualNotice')}
-      </motion.p>
-
       {/*
         LEVEL 1 HONEST CARD — the non-custodial guarantee, stated plainly.
         No automatic execution, no silent fills. This is the promise the
@@ -793,43 +778,6 @@ export default function Orders() {
           <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.85 }}>{t('orders.empty')}</p>
         </motion.div>
       )}
-
-      {/*
-        ─── SOLANA, AT THE FOOT OF THE PAGE, BEHIND A FOLD ───────────────────
-        Requested: «سفارش سولانا را در باکس بازشونده و پایین صفحه ببر با ظاهری
-        مدرن‌تر.»
-
-        Where it sat before — between the EVM rail and the user's own live
-        orders — was the worst of the three possible places: an open form, for
-        a different network family, above the list the person opened this
-        screen to see. Its own comment argued it belonged "next to the EVM
-        cards", and it does; what it must not be is in the way of the orders
-        that are already running.
-
-        A Solana handoff is still not a price-watched order (no CoinGecko id,
-        no server watcher, nothing signed until the user signs it), so the fold
-        still says that in its own sub-line and again inside, before the first
-        field. The count badge is read from local storage when the page mounts
-        and again whenever the fold is opened — the card's own state is private
-        to it, and the badge is a reading, not a copy.
-      */}
-      <CollapsibleCard
-        id="ord-sol-fold"
-        icon={(
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3.5 8.5 6 6h14.5L18 8.5H3.5Z" />
-            <path d="M3.5 15.5 6 18h14.5L18 15.5H3.5Z" />
-          </svg>
-        )}
-        title={t('orders.solana.title')}
-        subtitle={t('orders.solana.sub')}
-        hint={t('orders.solana.hint')}
-        badge={solanaCount > 0 ? solanaCount : null}
-        unmountOnClose
-        onToggle={(open) => { if (open) setSolanaCount(loadSolanaHandoffs().length); }}
-      >
-        <SolanaOrderCard embedded onSaved={setSolanaCount} />
-      </CollapsibleCard>
 
       {/*
         ─── THE ONE WAY INTO THE GUIDE ─────────────────────────────────────

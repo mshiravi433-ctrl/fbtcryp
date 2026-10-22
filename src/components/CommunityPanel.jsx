@@ -31,8 +31,9 @@ function Cast({ row, lang }) {
   const { t } = useTranslation();
 
   return (
-    <motion.div variants={riseIn} className="cmt-row">
+    <motion.article variants={riseIn} className="cmt-row">
       <div className="cmt-head">
+        <span className="cmt-avatar" aria-hidden="true">{String(row.author || '?').slice(0, 1).toUpperCase()}</span>
         <span className="cmt-author">@{row.author}</span>
         <span className="cmt-time">{timeAgo(row.at, lang)}</span>
       </div>
@@ -53,7 +54,7 @@ function Cast({ row, lang }) {
           <IconExternal width={12} height={12} />
         </button>
       </div>
-    </motion.div>
+    </motion.article>
   );
 }
 
@@ -94,9 +95,11 @@ export default function CommunityPanel() {
 
   return (
     <>
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t('community.title')}</div>
-        <p className="prose-sm" style={{ margin: 0 }}>{t('community.intro')}</p>
+      <motion.section className="cmt-hero" variants={riseIn} initial="hidden" animate="show">
+        <div className="cmt-hero-orbit" aria-hidden="true"><span/><span/><i>✦</i></div>
+        <div className="cmt-live"><span /> FARCASTER LIVE</div>
+        <h2>{t('community.title')}</h2>
+        <p>{t('community.intro')}</p>
       </motion.section>
 
       <div className="cmt-tabs">
@@ -130,8 +133,7 @@ export default function CommunityPanel() {
         </div>
       ) : (
         <motion.div
-          className="stack"
-          style={{ gap: 9, marginTop: 10 }}
+          className="cmt-feed"
           variants={stagger}
           initial="hidden"
           animate="show"
@@ -140,7 +142,7 @@ export default function CommunityPanel() {
         </motion.div>
       )}
 
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 12 }}>
+      <motion.section className="cmt-join" variants={riseIn} initial="hidden" animate="show">
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{t('community.joinTitle')}</div>
         <p className="prose-sm" style={{ marginTop: 0 }}>{t('community.joinBody')}</p>
         <button className="btn btn-ghost" onClick={() => openUrl(FARCASTER_HOME)}>

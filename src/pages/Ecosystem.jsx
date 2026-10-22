@@ -55,6 +55,8 @@ const FILTER_CATEGORIES = [
 const STATUS_FILTERS = [
   { id: 'all', label: 'eco.statusFilter.all' },
   { id: 'operational', label: 'eco.status.operational' },
+  { id: 'partial', label: 'eco.status.partial' },
+  { id: 'unknown', label: 'eco.status.unknown' },
   { id: 'degraded', label: 'eco.status.degraded' },
   { id: 'offline', label: 'eco.status.offline' }
 ];
@@ -141,6 +143,7 @@ function HowFbtWorks({ t, providers = [], networks = [] }) {
 
   return (
     <div className="eco-flow-container">
+      <div className="eco-network-flow" aria-hidden="true"><span/><span/><span/><i/><i/><i/></div>
       <div className="eco-flow-timeline">
         {steps.map((step, index) => (
           <motion.article
