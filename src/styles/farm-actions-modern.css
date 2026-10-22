@@ -1,0 +1,53 @@
+/* Farm action layer — pair preparation, connection and in-analysis execution */
+
+.farm-pair-intro { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 13px; }
+.farm-pair-mark { display: grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; border: 1px solid color-mix(in srgb, var(--rgb-1) 25%, var(--line)); border-radius: 12px; color: var(--rgb-1); background: color-mix(in srgb, var(--rgb-1) 8%, transparent); }
+.farm-pair-intro strong { display: block; color: var(--text-1); font-size: 12.5px; line-height: 1.6; }
+.farm-pair-intro p { margin: 3px 0 0; color: var(--text-3); font-size: 10.5px; line-height: 1.8; }
+.farm-pair-legs { display: grid; gap: 8px; }
+.farm-pair-leg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text-1);
+  background: var(--bg-panel);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.farm-pair-leg:hover { border-color: color-mix(in srgb, var(--rgb-1) 38%, var(--line)); background: color-mix(in srgb, var(--rgb-1) 5%, var(--bg-panel)); }
+.farm-pair-leg:active { transform: scale(.985); }
+.farm-pair-step { display: grid; flex: 0 0 30px; width: 30px; height: 30px; place-items: center; border-radius: 9px; color: var(--rgb-1); background: color-mix(in srgb, var(--rgb-1) 10%, transparent); font: 850 11px var(--font-mono); }
+.farm-pair-leg-copy { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.farm-pair-leg-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.farm-pair-leg-copy small { color: var(--text-3); font-size: 9.5px; }
+.farm-pair-leg-action { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--rgb-1); font-size: 10px; font-weight: 750; }
+.farm-pair-note { margin: 12px 1px 0; color: var(--text-3); font-size: 9.5px; line-height: 1.8; }
+
+.farm-connect-action { display: grid; flex: 1 1 100%; gap: 8px; min-width: 0; }
+.farm-connect-action > .faint { font-size: 10.5px; line-height: 1.7; }
+.farm-connect-action > .farm-btn { width: fit-content; min-width: 150px; }
+.farm-execution-notice { margin: 0 0 10px; }
+.farm-execution-connect-note { margin: 9px 1px 0; font-size: 10.5px; line-height: 1.75; }
+.farm-pool-execution > section { margin: 0; }
+.farm-pool-execution .farm-actions { align-items: center; }
+.farm-pool-execution .farm-aave-panel,
+.farm-pool-execution .farm-compound-panel,
+.farm-pool-execution .farm-morpho-panel,
+.farm-pool-execution .farm-lido-panel { background: color-mix(in srgb, var(--bg-panel-solid) 58%, transparent); }
+
+@media (max-width: 360px) {
+  .farm-pair-leg { gap: 8px; padding: 9px; }
+  .farm-pair-leg-action { font-size: 0; }
+  .farm-pair-leg-action svg { width: 17px; height: 17px; }
+  .farm-connect-action > .farm-btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .farm-pair-leg { transition: none; }
+}

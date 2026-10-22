@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Sheet from '../Sheet';
+import FarmConnectButton from './FarmConnectButton';
 import InfoBox from '../InfoBox';
 import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
@@ -484,7 +485,7 @@ export default function LidoPanel({ pool }) {
 
       {/* Actions */}
       <div className="farm-actions" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-        {!wallet.isConnected && <span className="faint">{t('farm.lido.connectFirst')}</span>}
+        {!wallet.isConnected && <FarmConnectButton hint={t('farm.lido.connectFirst')} />}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(LIDO.chainId)}>
             {t('farm.lido.switchChain', { chain: localChainLabel(EVM_CHAINS[LIDO.chainId].name, t) })}

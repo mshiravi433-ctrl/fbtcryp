@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { riseIn, stagger } from './PageTransition';
@@ -9,65 +9,47 @@ import { openUrl } from '../lib/browser';
 import { useRadioStore } from '../store/useRadioStore';
 import { IconExternal } from './Icons';
 
+const MUSIC_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M9 18V6l10-2v11.5" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="15.5" r="2.5" />
+  </svg>
+);
+
+function Equalizer({ active = false }) {
+  return (
+    <span className={`calm-equalizer${active ? ' is-active' : ''}`} aria-hidden="true">
+      <i /><i /><i /><i />
+    </span>
+  );
+}
+
 /**
- * CALM MUSIC — the tab that is about the trader, not the market.
- * ---------------------------------------------------------------------------
- * Asked for:
- *   «یک تب از اهنگ های ارامشبخش ... ارامش در سرمایه گذاری، با فکر بهتر میشود
- *    تصمیم بهتر گرفت»
- *
- * ─── WHY THIS IS NOT DECORATION ─────────────────────────────────────────────
- * Background music next to somebody's money needs a justification, and the
- * owner supplied the right one: a calmer person makes a better decision. The
- * two most expensive habits in retail trading — panic selling and revenge
- * buying — are states of arousal, not failures of analysis. Nothing else in
- * this app addresses that half of the problem.
- *
- * So the collapsible box says exactly that, in the owner's own framing, rather
- * than treating the tab as a perk. It is the only honest way to put music on a
- * trading screen.
- *
- * ─── ONE PLAYER, SHARED WITH THE RADIO ──────────────────────────────────────
- * This writes to the same `useRadioStore` the podcast tab uses, so the docked
- * transport in `RadioDock` serves both and a track keeps playing when you
- * navigate to the swap screen. That is also why `server/calm.js` returns items
- * in the podcast item shape: a second track type would have meant a second
- * player, and two players means two things playing at once.
- *
- * ─── THE THREE STATES ARE NOW DISTINCT, AND THE BUG THAT DELETED THE MUSIC ──
- * This panel used to `return null` in BOTH failure modes — a fetch error AND
- * a genuinely empty list. Combined with a server that cached an empty
- * response for six hours, one archive.org outage emptied the tab for every
- * visitor with no message and no way to retry. The removal was never a
- * removal; it was a swallowed error.
- *
- * Now: loading is a skeleton, an error is a sentence plus a Retry button that
- * re-fetches for real, and the empty state only appears when the server
- * says — successfully — that today there is nothing to list.
+ * Calm listening room. The catalogue, licences and shared background-audio
+ * queue remain real; the visual layer is a compact, modern player rather than
+ * a stack of generic cards. Loading, empty and failure are separate states so
+ * a network error can never masquerade as an empty catalogue.
  */
 export default function CalmPanel() {
   const { t } = useTranslation();
-
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
-  /* A second spinner-path while re-fetching with data already on screen:
-     the list stays, only the Retry button shows progress. */
   const [retrying, setRetrying] = useState(false);
 
   const current = useRadioStore((s) => s.track);
+  const playing = useRadioStore((s) => s.playing);
   const toggleTrack = useRadioStore((s) => s.toggleTrack);
 
   const load = useCallback(async (force = false) => {
     setFailed(false);
     if (data) setRetrying(true);
     try {
-      const d = await getCalm({ force });
-      setData(d);
+      setData(await getCalm({ force }));
     } catch {
       setFailed(true);
     } finally {
       setRetrying(false);
     }
+    // The latest catalogue decides whether this is a first load or a refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -76,154 +58,125 @@ export default function CalmPanel() {
     getCalm()
       .then((d) => alive && setData(d))
       .catch(() => alive && setFailed(true));
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
-  /* Soft refresh (the header button) re-fetches through the same code path
-     as Retry — one contract, no reload, nothing else disturbed. */
-  useEffect(() => onSoftRefresh(() => getCalm({ force: true }).then(setData).catch(() => {})), []);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => onSoftRefresh(() => loadRef.current(true)), []);
 
   const items = data?.items ?? [];
+  const currentIsCalm = items.some((item) => item.id === current?.id);
+  const heroTrack = currentIsCalm ? current : items[0];
 
   return (
-    <section style={{ marginTop: 4 }}>
-      <p className="section-label">{t('calm.title')}</p>
+    <section className="calm-panel">
+      <motion.div className="calm-hero" variants={riseIn} initial="hidden" animate="show">
+        <span className="calm-hero-orbit" aria-hidden="true" />
+        <div className="calm-hero-top">
+          <span className="calm-hero-mark">{MUSIC_ICON}</span>
+          <span className="calm-hero-badge"><Equalizer active={currentIsCalm && playing} />{t('calm.heroBadge', { defaultValue: 'فضای تمرکز' })}</span>
+        </div>
+        <p className="calm-hero-kicker">{t('calm.kicker', { defaultValue: 'FBT · CALM SESSION' })}</p>
+        <h2 className="calm-hero-title">{t('calm.title')}</h2>
+        <p className="calm-hero-sub">{t('calm.heroSub', { defaultValue: 'چند دقیقه فاصله از هیاهوی بازار؛ برای تصمیم آرام‌تر و آگاهانه‌تر.' })}</p>
+        <div className="calm-hero-actions">
+          <button
+            type="button"
+            className="calm-play-all"
+            disabled={!items.length}
+            onClick={() => heroTrack && toggleTrack(heroTrack, items)}
+          >
+            {currentIsCalm ? (
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" /></svg>
+            ) : (
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.6v10.8a.8.8 0 0 0 1.22.68l8.6-5.4a.8.8 0 0 0 0-1.36l-8.6-5.4A.8.8 0 0 0 4 2.6Z" /></svg>
+            )}
+            {currentIsCalm ? t('calm.stopSession', { defaultValue: 'توقف جلسه' }) : t('calm.playAll', { defaultValue: 'شروع جلسه آرامش' })}
+          </button>
+          <button type="button" className={`calm-refresh${retrying ? ' is-loading' : ''}`} onClick={() => load(true)} disabled={retrying} aria-label={t('common.refresh', { defaultValue: 'تازه‌سازی' })}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 5.5" /><path d="M20 4v7h-7" /></svg>
+          </button>
+        </div>
+        <div className="calm-hero-meta">
+          <span>{t('calm.trackCount', { count: items.length, defaultValue: '{{count}} قطعه' })}</span>
+          <span>{t('calm.backgroundNote', { defaultValue: 'پخش در پس‌زمینه ادامه دارد' })}</span>
+        </div>
+      </motion.div>
 
-      <InfoBox title={t('calm.whyTitle')} tone="info" id="calm-why" defaultOpen>
+      <InfoBox title={t('calm.whyTitle')} tone="info" id="calm-why" defaultOpen={false}>
         <p>{t('calm.why1')}</p>
         <p>{t('calm.why2')}</p>
         <p>{t('calm.why3')}</p>
       </InfoBox>
 
       {!data && !failed && (
-        /* LOADING — the skeleton, unchanged. */
-        <div className="stack" style={{ gap: 9, marginTop: 10 }}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="skel" style={{ height: 62 }} />
-          ))}
+        <div className="stack calm-loading-list">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="skel calm-track-skel" />)}
         </div>
       )}
 
       {failed && (
-        /* ERROR — said out loud, with a way back. */
-        <div className="empty" role="alert">
-          <span className="empty-icon">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18V6l10-2v11.5" />
-              <circle cx="6.5" cy="18" r="2.5" />
-              <circle cx="16.5" cy="15.5" r="2.5" />
-            </svg>
-          </span>
-          <p className="prose-sm" style={{ textAlign: 'center' }}>{t('calm.error')}</p>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ width: 'auto', marginTop: 8 }}
-            disabled={retrying}
-            onClick={() => load(true)}
-          >
+        <div className="empty calm-state" role="alert">
+          <span className="empty-icon">{MUSIC_ICON}</span>
+          <p className="prose-sm">{t('calm.error')}</p>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={retrying} onClick={() => load(true)}>
             {retrying ? t('common.loading') : t('common.retry')}
           </button>
         </div>
       )}
 
       {data && items.length === 0 && !failed && (
-        /*
-         * GENUINELY EMPTY — the server answered fine and had nothing today.
-         * Kept honest: this is the ONLY state this message is allowed to
-         * describe, distinct from the error state above it.
-         */
-        <div className="empty">
-          <span className="empty-icon">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18V6l10-2v11.5" />
-              <circle cx="6.5" cy="18" r="2.5" />
-              <circle cx="16.5" cy="15.5" r="2.5" />
-            </svg>
-          </span>
-          <p className="prose-sm" style={{ textAlign: 'center' }}>{t('calm.empty')}</p>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ width: 'auto', marginTop: 8 }}
-            disabled={retrying}
-            onClick={() => load(true)}
-          >
+        <div className="empty calm-state">
+          <span className="empty-icon">{MUSIC_ICON}</span>
+          <p className="prose-sm">{t('calm.empty')}</p>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={retrying} onClick={() => load(true)}>
             {retrying ? t('common.loading') : t('common.retry')}
           </button>
         </div>
       )}
 
-      <motion.div
-        className="stack"
-        style={{ gap: 9, marginTop: 10 }}
-        variants={stagger}
-        initial="hidden"
-        animate="show"
-      >
-        {items.map((item) => {
+      {items.length > 0 && (
+        <div className="calm-list-head">
+          <span>{t('calm.playlist', { defaultValue: 'فهرست پخش' })}</span>
+          <span className="mono" dir="ltr">{String(items.length).padStart(2, '0')}</span>
+        </div>
+      )}
+
+      <motion.div className="stack calm-track-list" variants={stagger} initial="hidden" animate="show">
+        {items.map((item, index) => {
           const isCurrent = current?.id === item.id;
           const dur = fmtDuration(item.durationSec);
           return (
-            <motion.article
-              key={item.id}
-              className="card card-tight"
-              variants={riseIn}
-              style={
-                isCurrent
-                  ? { borderColor: 'var(--rgb-4)', background: 'rgba(0, 255, 157, 0.045)' }
-                  : undefined
-              }
-            >
-              <div className="row" style={{ gap: 11, alignItems: 'center' }}>
-                <button
-                  className="icon-btn"
-                  onClick={() => toggleTrack(item, items)}
-                  aria-label={isCurrent ? t('radio.stop') : t('radio.play')}
-                  style={{
-                    flexShrink: 0,
-                    width: 38,
-                    height: 38,
-                    color: isCurrent ? 'var(--rgb-4)' : 'var(--rgb-1)',
-                    borderColor: isCurrent ? 'var(--rgb-4)' : undefined
-                  }}
-                >
-                  {isCurrent ? (
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                      <rect x="3" y="3" width="10" height="10" rx="2" />
-                    </svg>
-                  ) : (
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M4 2.6v10.8a.8.8 0 0 0 1.22.68l8.6-5.4a.8.8 0 0 0 0-1.36l-8.6-5.4A.8.8 0 0 0 4 2.6Z" />
-                    </svg>
-                  )}
-                </button>
+            <motion.article key={item.id} className={`calm-track${isCurrent ? ' is-current' : ''}`} variants={riseIn}>
+              <span className="calm-track-index mono" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+              <button
+                type="button"
+                className="calm-track-play"
+                onClick={() => toggleTrack(item, items)}
+                aria-label={isCurrent ? t('radio.stop') : t('radio.play')}
+              >
+                {isCurrent ? (
+                  <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" /></svg>
+                ) : (
+                  <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.6v10.8a.8.8 0 0 0 1.22.68l8.6-5.4a.8.8 0 0 0 0-1.36l-8.6-5.4A.8.8 0 0 0 4 2.6Z" /></svg>
+                )}
+              </button>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.5 }}>{item.title}</div>
-                  <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                    <span className="faint" style={{ fontSize: 11 }}>{item.stationName}</span>
-                    {dur && <span className="pill pill-neutral" style={{ fontSize: 10 }}>{dur}</span>}
-                    {/*
-                      The licence is shown on every row, not hidden in a
-                      footer. For CC BY and CC BY-SA attribution is a CONDITION
-                      of the licence — leaving it off would make the use
-                      unlicensed, not merely impolite.
-                    */}
-                    <span className="pill" style={{ fontSize: 9.5 }}>{item.licence}</span>
-                  </div>
+              <div className="calm-track-copy">
+                <h3>{item.title}</h3>
+                <div className="calm-track-meta">
+                  <span>{item.stationName}</span>
+                  {dur && <span className="calm-duration mono" dir="ltr">{dur}</span>}
+                  <span className="calm-licence">{item.licence}</span>
                 </div>
+              </div>
 
+              <div className="calm-track-side">
+                {isCurrent && <Equalizer active={playing} />}
                 {item.pageUrl && (
-                  <button
-                    className="icon-btn"
-                    onClick={() => openUrl(item.pageUrl)}
-                    aria-label={t('calm.source')}
-                    style={{ flexShrink: 0, width: 32, height: 32 }}
-                  >
-                    <IconExternal width={13} height={13} />
+                  <button type="button" className="calm-source" onClick={() => openUrl(item.pageUrl)} aria-label={t('calm.source')}>
+                    <IconExternal width={14} height={14} />
                   </button>
                 )}
               </div>
@@ -232,9 +185,7 @@ export default function CalmPanel() {
         })}
       </motion.div>
 
-      <p className="faint" style={{ fontSize: 11.3, marginTop: 10, lineHeight: 1.8 }}>
-        {t('calm.credit')}
-      </p>
+      <p className="calm-credit">{t('calm.credit')}</p>
     </section>
   );
 }

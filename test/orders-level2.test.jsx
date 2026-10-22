@@ -471,6 +471,24 @@ describe('OrderStats component', () => {
     fireEvent.click(screen.getByRole('button', { name: 'orders.stats.win30' }));
     expect(screen.getByText('1 (100%)')).toBeTruthy(); // 30 days: only the new one
   });
+
+  it('keeps the default card compact and expands every analysis control on demand', () => {
+    const orders = [
+      limitOrder({ id: 'a', status: 'filled', createdAt: NOW - DAY, filledAt: NOW }),
+      limitOrder({ id: 'b', status: 'expired', createdAt: NOW - DAY }),
+      limitOrder({ id: 'c', status: 'active', createdAt: NOW - DAY })
+    ];
+    render(<OrderStats orders={orders} now={NOW} />);
+    expect(screen.queryByText('orders.stats.closedNote')).toBeNull();
+    const toggle = screen.getByRole('button', { name: /orders\.stats\.showDetails/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(screen.getByText('orders.stats.closedNote')).toBeTruthy();
+    expect(screen.getByText(/orders\.stats\.byType/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /orders\.stats\.hideDetails/ }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: /orders\.stats\.hideDetails/ }));
+    expect(screen.queryByText('orders.stats.closedNote')).toBeNull();
+  });
 });
 
 /* -------------------------------------------------------------------------- */

@@ -57,11 +57,14 @@ afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('panel visibility in a public-open build, with no wallet connected', () => {
   it.each(CASES)('%s renders its card and still hides the money button', (_label, Panel, pool, titleKey, actionKey) => {
-    const { container, getByText, queryByText } = render(<Panel pool={pool} />);
+    const { container, getByText, getAllByText, getByTestId, queryByText } = render(<Panel pool={pool} />);
     // Visible to everybody…
     expect(container.firstChild).toBeTruthy();
     expect(getByText(titleKey)).toBeTruthy();
-    expect(getByText(/connectFirst|connect/i)).toBeTruthy();
+    expect(getAllByText(/connectFirst|connect/i).length).toBeGreaterThan(0);
+    // The disconnected state is an actionable route into the shared wallet,
+    // not a second disabled transaction button.
+    expect(getByTestId('farm-connect-wallet')).toBeTruthy();
     // …but nothing can be signed without an owner.
     expect(queryByText(actionKey)).toBeNull();
   });

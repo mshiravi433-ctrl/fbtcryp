@@ -91,6 +91,7 @@ function Icon({ kind }) {
 export default function OrderStats({ orders = [], now }) {
   const { t } = useTranslation();
   const [windowDays, setWindowDays] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const stats = useMemo(
     () => computeOrderStats(orders, { windowDays, now: now ?? Date.now() }),
     [orders, windowDays, now]
@@ -150,7 +151,9 @@ export default function OrderStats({ orders = [], now }) {
         </div>
       </header>
 
-      {/* ── 2 · fill-rate ring + legend ─────────────────────────────────── */}
+      {/* ── 2 · expanded fill-rate ring + legend ────────────────────────── */}
+      {detailsOpen && (
+      <div className="ord2-details ord2-details--hero">
       <div className="ord2-hero">
         <div className="ord2-ring-wrap">
           <svg className="ord2-ring" viewBox="0 0 84 84" role="img" aria-label={`${t('orders.stats.fillRate', { defaultValue: 'Fill rate' })} ${fmtPct(fillRate)}`}>
@@ -195,6 +198,8 @@ export default function OrderStats({ orders = [], now }) {
           </li>
         </ul>
       </div>
+      </div>
+      )}
 
       {/* ── 3 · KPI tiles ───────────────────────────────────────────────── */}
       <div className="ord2-grid">
@@ -225,7 +230,22 @@ export default function OrderStats({ orders = [], now }) {
         </div>
       )}
 
-      {/* ── 5 · insights ────────────────────────────────────────────────── */}
+      <button
+        type="button"
+        className="ord2-details-toggle"
+        aria-expanded={detailsOpen}
+        aria-controls="ord2-breakdown"
+        onClick={() => setDetailsOpen((open) => !open)}
+      >
+        <span>{t(detailsOpen ? 'orders.stats.hideDetails' : 'orders.stats.showDetails', { defaultValue: detailsOpen ? 'کاهش جزئیات' : 'نمایش تحلیل کامل' })}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {/* ── 5 · expandable insights and per-type breakdown ──────────────── */}
+      {detailsOpen && (
+      <div className="ord2-details ord2-details--breakdown" id="ord2-breakdown">
       <div className="ord2-insights">
         <div className="ord2-insight">
           <span className="ord2-insight-icon ord2-insight-icon--timer"><Icon kind="timer" /></span>
@@ -269,6 +289,8 @@ export default function OrderStats({ orders = [], now }) {
       )}
 
       <p className="ord2-note">{t('orders.stats.closedNote')}</p>
+      </div>
+      )}
     </section>
   );
 }

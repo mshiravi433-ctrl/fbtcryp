@@ -147,6 +147,7 @@ function writeCache(chainId, tokens) {
 
 /** Clear all cached token lists from localStorage. */
 export function clearTokenListCache() {
+  memory.clear();
   try {
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -298,7 +299,14 @@ export async function loadTokens(chainId, { refresh = true } = {}) {
 /** Whatever we already have for this chain, with no network access. */
 export function getTokensSync(chainId) {
   const cid = Number(chainId);
-  return memory.get(cid) ?? readCache(cid) ?? curatedFor(cid);
+  const existing = memory.get(cid);
+  if (existing) return existing;
+  // Keep the synchronous snapshot stable. Besides avoiding repeated JSON
+  // parsing, a stable array lets consumers memoize symbol/address lookups;
+  // async list refreshes replace this snapshot through loadTokens().
+  const list = readCache(cid) ?? curatedFor(cid);
+  memory.set(cid, list);
+  return list;
 }
 
 /** How many tokens are currently swappable across every supported chain. */

@@ -388,10 +388,11 @@ describe('Farm discovery UI', () => {
     fireEvent.click(container.querySelector('.farm-pool-toggle'));
     fireEvent.click(await screen.findByTestId(`farm-view-analytics-${id}`));
     const sheet = await screen.findByTestId('farm-analysis-sheet');
-    const frequency = screen.getByRole('combobox', { name: t('farm.calculator.frequency') });
-    fireEvent.change(frequency, { target: { value: 'monthly' } });
+    const compound = screen.getByRole('button', { name: t('farm.calculator.compound') });
+    const simple = screen.getByRole('button', { name: t('farm.calculator.simple') });
+    fireEvent.click(compound);
     const calculator = sheet.querySelector(`[data-testid="farm-horizon-${id}"]`);
-    expect(frequency.value).toBe('monthly');
+    expect(compound.getAttribute('aria-pressed')).toBe('true');
     expect(calculator.querySelectorAll('.farm-calculator-horizon')).toHaveLength(4);
     expect(calculator.querySelectorAll('.farm-calculator-horizon .is-net')).toHaveLength(4);
     const horizonFees = [...calculator.querySelectorAll('.farm-calculator-horizon')]
@@ -401,9 +402,9 @@ describe('Farm discovery UI', () => {
     expect(calculator.textContent).toContain(t('farm.calculator.projectionAssumption'));
     expect(calculator.textContent).toContain(t('farm.calculator.feeAssumption'));
     expect(container.querySelector('.farm-deposit-input').value).toBe('250');
-    fireEvent.click(screen.getByRole('button', { name: t('farm.calculator.simple') }));
-    expect(frequency.value).toBe('simple');
-    expect(screen.getByRole('button', { name: t('farm.calculator.simple') }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(simple);
+    expect(simple.getAttribute('aria-pressed')).toBe('true');
+    expect(compound.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('updates PoolHistory range, chart data, and min/max/average together', async () => {

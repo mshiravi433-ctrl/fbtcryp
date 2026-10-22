@@ -39,6 +39,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import AssetIcon from '../AssetIcon';
 import PoolGlyph from './PoolGlyph';
+import InvestButton from './InvestButton';
 import TrendChart from '../TrendChart';
 import { FARM_EXECUTION_ADAPTERS } from './FarmPositionHub';
 import { projectDisplayName } from '../../lib/farmDeFi';
@@ -383,11 +384,7 @@ function VenueDetail({ venue, pool, chainRows, chainHigh, chainLow, t, onGoToPos
         <button type="button" className="btn btn-primary farm-btn" onClick={() => onGoToPositions(venue.id)}>
           {t('farm.venue.executeCta')}
         </button>
-        {route && (
-          <button type="button" className="btn btn-ghost farm-btn" onClick={() => onGetTokens(route)}>
-            {t('farm.getTokens', { a: route.from, b: route.to })}
-          </button>
-        )}
+        {route && <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />}
         {pool?.url && (
           <button type="button" className="btn btn-ghost farm-btn farm-btn-minor" onClick={() => onOpenPool(pool.url)}>
             {t('farm.openPool')}

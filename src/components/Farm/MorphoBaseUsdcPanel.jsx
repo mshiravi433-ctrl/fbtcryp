@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Sheet from '../Sheet';
+import FarmConnectButton from './FarmConnectButton';
 import InfoBox from '../InfoBox';
 import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
@@ -370,7 +371,7 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
 
   const openSheet = (nextMode) => {
     setMode(nextMode);
-    setAmount('');
+    setAmount(nextMode === 'supply' ? (initialAmount || '') : '');
     setError(null);
     setPlan(null);
     setSimulation(null);
@@ -434,7 +435,7 @@ export default function MorphoBaseUsdcPanel({ pool, initialAmount = null }) {
       )}
 
       <div className="farm-actions" style={{ marginTop: 10 }}>
-        {!wallet.isConnected && <span className="faint">{t('farm.morpho.connectFirst', { defaultValue: 'Connect wallet' })}</span>}
+        {!wallet.isConnected && <FarmConnectButton hint={t('farm.morpho.connectFirst', { defaultValue: 'Connect wallet' })} />}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(MORPHO_BLUE_BASE.chainId)}>
             {t('farm.morpho.switchChain', { defaultValue: 'Switch to {{chain}}', chain: localChainLabel(EVM_CHAINS[MORPHO_BLUE_BASE.chainId].name, t) })}
