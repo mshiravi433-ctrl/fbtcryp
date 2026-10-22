@@ -23,6 +23,7 @@
  *      rather than from a build-time flag.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
   FREE_SOLANA_PROVIDER,
@@ -37,11 +38,17 @@ import {
 } from '../src/lib/solana/routeOrder.js';
 
 import {
+  clearDerivedFeeAccounts,
+  deriveFeeAta,
+  derivedFeeAccounts,
   jupFeeAccountFor,
   jupFeeAccounts,
   jupFeeQuote,
   jupFeeStatus,
-  jupFeeSwapQuote
+  jupFeeStatusAsync,
+  jupFeeSwapQuote,
+  refreshDerivedFeeAccount,
+  refreshJupFeeCoverage
 } from '../server/solanaJupFee.js';
 
 import { verifySolanaFeeEcho } from '../server/solanaLifi.js';
@@ -94,7 +101,10 @@ const ENV_KEYS = [
   'JUP_FEE_ACCOUNTS',
   'JUPITER_API_KEY',
   'SOLANA_FEE_BPS',
-  'FEE_BPS'
+  'FEE_BPS',
+  /* Derived-fee-account tests pin the RPC to one stubbed host. */
+  'SOLANA_RPC_URL',
+  'SOLANA_FEE_RECIPIENT'
 ];
 const savedEnv = {};
 
@@ -103,6 +113,9 @@ beforeEach(() => {
     savedEnv[key] = process.env[key];
     delete process.env[key];
   }
+  /* The derived-fee cache is module state: a leak between tests would be a
+     lie about what is configured. */
+  clearDerivedFeeAccounts();
 });
 
 afterEach(() => {
@@ -446,5 +459,194 @@ describe('the fee a jupiter /order actually carries', () => {
     expect(jupiterEchoedFeeBps({ referralAccount: WALLET, feeBps: 0 })).toBeNull();
     expect(jupiterEchoedFeeBps(null)).toBeNull();
     expect(jupiterEchoedFeeBps({ referralAccount: 'not an address', feeBps: 70 })).toBeNull();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+/**
+ * DERIVED FEE ACCOUNTS — the paid route without the env chore.
+ * ==========================================================================
+ * Reported 2026-10-10 as «الان اومده روی ژوپیتر که کارمزد صفره»: the fee-earning
+ * route sat unconfigured because naming token accounts in env is a manual,
+ * per-mint operation and configuration debt was winning. The server can now
+ * discover what the payout wallet already holds on-chain — an INITIALIZED
+ * token account of the pair's mint is Jupiter's whole requirement — and use it.
+ * What is pinned here: known-answer derivation, discovery through real RPC
+ * shapes, the fail-safes (never invent an account that is not on-chain), the
+ * preference order (input first, env always wins), and the sync-reader
+ * contract the rest of this suite depends on.
+ */
+const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+/* Known answers, cross-checked against @solana/spl-token's own
+   getAssociatedTokenAddressSync for owner FEE_ACCOUNT: these pin the SEED
+   ORDER of the derivation, which is the part a mistake would silently break. */
+const USDC_ATA = 'FeKVWLQzBz8ifbEMCoZsxx8nD6sHbPsdTrJmsR4NfacX';
+const SOL_ATA = 'NCmP1GnE5U8kQzrVBgLjoeoRgQn8wWUYSTdtHmyjGYh';
+
+const liveTokenAccount = (mint, owner, program) => ({
+  data: {
+    program: program === TOKEN_2022_PROGRAM ? 'spl-token-2022' : 'spl-token',
+    parsed: {
+      type: 'account',
+      info: { mint, owner, tokenAmount: { amount: '5000000', decimals: 6, uiAmount: 5 } }
+    },
+    space: 165
+  },
+  executable: false,
+  lamports: 2039280,
+  owner: program,
+  space: 165
+});
+
+/**
+ * RPC getAccountInfo + Jupiter in one stub, the way the HTTP layer sees them.
+ * `accountFor(address)` answers what the chain "holds"; `rpcDown` makes every
+ * node fail instead.
+ */
+function stubRpcThenJup(accountFor, { rpcDown = false } = {}) {
+  process.env.SOLANA_RPC_URL = 'https://rpc.test.invalid';
+  calls = [];
+  vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    const sent = init?.body ? JSON.parse(init.body) : null;
+    if (sent?.method === 'getAccountInfo') {
+      if (rpcDown) return new Response('rpc down', { status: 500 });
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: sent.id ?? 1,
+        result: { context: { slot: 1 }, value: accountFor(sent.params[0]) }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    const isSwap = /\/swap$/.test(String(url));
+    const body = isSwap ? jupSwapBody : jupQuoteBody;
+    if (!body) return new Response(JSON.stringify({ error: 'no stub' }), { status: 500 });
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  }));
+}
+
+const rpcCalls = () => calls.filter((c) => /rpc\.test\.invalid/.test(c.url));
+const jupCalls = () => calls.filter((c) => /jup\.ag/.test(c.url));
+
+describe('derived fee accounts — server/solanaJupFee.js on-chain discovery', () => {
+  it('derives the payout wallet ATA — known answers pin the seed order', () => {
+    expect(deriveFeeAta(USDC, FEE_ACCOUNT, TOKEN_PROGRAM)).toBe(USDC_ATA);
+    expect(deriveFeeAta(SOL, FEE_ACCOUNT, TOKEN_PROGRAM)).toBe(SOL_ATA);
+    /* The Token-2022 spelling is a DIFFERENT address: same wallet and mint,
+       different token program. Mixing them up builds an account Jupiter
+       cannot transfer the fee to, which fails the whole swap. */
+    expect(deriveFeeAta(USDC, FEE_ACCOUNT, TOKEN_2022_PROGRAM)).not.toBe(USDC_ATA);
+    /* Garbage never throws — it must come back unbuildable. */
+    expect(deriveFeeAta('not-a-mint', FEE_ACCOUNT)).toBeNull();
+  });
+
+  it('discovers an initialized account the wallet already holds, and uses it', async () => {
+    stubRpcThenJup((addr) => (addr === USDC_ATA ? liveTokenAccount(USDC, FEE_ACCOUNT, TOKEN_PROGRAM) : null));
+    jupQuoteBody = paidQuote(70);
+
+    expect(await refreshDerivedFeeAccount(USDC)).toBe(USDC_ATA);
+    expect(derivedFeeAccounts()).toEqual({ [USDC]: USDC_ATA });
+    /* The sync reader sees it — that is what the money path consults. */
+    expect(jupFeeAccountFor(USDC, MEME)).toEqual({ mint: USDC, account: USDC_ATA });
+    expect(jupFeeStatus({ inputMint: USDC, outputMint: MEME }).feeReady).toBe(true);
+    expect(jupFeeStatus({ inputMint: USDC, outputMint: MEME }).configured).toBe(true);
+    expect(jupFeeStatus({ inputMint: USDC, outputMint: MEME }).feeMints).toContain(USDC);
+
+    /* One discovery, then the cache — the money path pays no RPC of its own. */
+    const before = rpcCalls().length;
+    const r = await jupFeeQuote({ inputMint: USDC, outputMint: MEME, amount: '1000000', slippageBps: 50 });
+    expect(r.ok).toBe(true);
+    expect(r.body.feeAccount).toBe(USDC_ATA);
+    expect(r.body.feeApplied).toBe(true);
+    expect(rpcCalls().length).toBe(before);
+    expect(new URL(jupCalls()[0].url).searchParams.get('platformFeeBps')).toBe('70');
+  });
+
+  it('discovers the Token-2022 ATA when the classic one does not exist', async () => {
+    const ata2022 = deriveFeeAta(USDC, FEE_ACCOUNT, TOKEN_2022_PROGRAM);
+    stubRpcThenJup((addr) => (addr === ata2022 ? liveTokenAccount(USDC, FEE_ACCOUNT, TOKEN_2022_PROGRAM) : null));
+    expect(await refreshDerivedFeeAccount(USDC)).toBe(ata2022);
+  });
+
+  it('never invents an account: a missing one stays unconfigured', async () => {
+    stubRpcThenJup(() => null);
+    expect(await refreshDerivedFeeAccount(MEME)).toBeNull();
+    expect(jupFeeAccountFor(MEME, SOL)).toBeNull();
+    const s = jupFeeStatus({ inputMint: MEME, outputMint: SOL });
+    expect(s.feeReady).toBe(false);
+    /* The pair the env map can still serve keeps serving it. */
+    process.env.JUP_FEE_ACCOUNT = FEE_ACCOUNT;
+    expect(jupFeeAccountFor(MEME, SOL)).toEqual({ mint: SOL, account: FEE_ACCOUNT });
+  });
+
+  it('degrades to "not configured" when every node fails — never to a broken swap', async () => {
+    stubRpcThenJup(() => null, { rpcDown: true });
+    expect(await refreshDerivedFeeAccount(USDC)).toBeNull();
+    expect(jupFeeAccountFor(USDC, MEME)).toBeNull();
+    expect(jupFeeStatus().configured).toBe(false);
+  });
+
+  it('prefers the input mint, and env always beats discovery', async () => {
+    stubRpcThenJup((addr) => (addr === USDC_ATA ? liveTokenAccount(USDC, FEE_ACCOUNT, TOKEN_PROGRAM) : null));
+    process.env.JUP_FEE_ACCOUNTS = JSON.stringify({ [SOL]: SOL_ATA });
+
+    /* Input-side discovery wins over an output-side env account: the fee is
+       taken from the input on an exact-in swap. */
+    const pair = await refreshJupFeeCoverage({ inputMint: USDC, outputMint: SOL });
+    expect(pair).toEqual({ mint: USDC, account: USDC_ATA });
+
+    /* An input mint with nothing at all falls back to the env output account —
+       and the env-covered side is never probed on-chain (discovery spends its
+       round trips only where configuration is silent). */
+    clearDerivedFeeAccounts();
+    calls = [];
+    const fallback = await refreshJupFeeCoverage({ inputMint: MEME, outputMint: SOL });
+    expect(fallback).toEqual({ mint: SOL, account: SOL_ATA });
+    expect(rpcCalls().some((c) => JSON.parse(c.init.body).params[0] === SOL_ATA)).toBe(false);
+  });
+
+  it('serves the pair from the cache through the async status, sync contract intact', async () => {
+    stubRpcThenJup((addr) => (addr === USDC_ATA ? liveTokenAccount(USDC, FEE_ACCOUNT, TOKEN_PROGRAM) : null));
+    jupQuoteBody = paidQuote(70);
+
+    const s = await jupFeeStatusAsync({ inputMint: USDC, outputMint: MEME });
+    expect(s.configured).toBe(true);
+    expect(s.feeReady).toBe(true);
+    expect(s.feeAccount ?? jupFeeAccountFor(USDC, MEME).account).toBe(USDC_ATA);
+
+    /* The sync readers the rest of this suite pins still answer from a
+       snapshot — no promise, no hidden fetch. */
+    expect(typeof jupFeeStatus().configured).toBe('boolean');
+    expect(jupFeeStatus().feeMints).toContain(USDC);
+  });
+
+  it('builds the swap with the derived account, whatever the caller sent', async () => {
+    stubRpcThenJup((addr) => (addr === USDC_ATA ? liveTokenAccount(USDC, FEE_ACCOUNT, TOKEN_PROGRAM) : null));
+    jupQuoteBody = paidQuote(70);
+    jupSwapBody = { swapTransaction: 'SlVQVEVSVjFUWENPTVBPTkVOVA==', lastValidBlockHeight: 12345 };
+
+    await refreshJupFeeCoverage({ inputMint: USDC, outputMint: MEME });
+    const r = await jupFeeSwapQuote({
+      inputMint: USDC,
+      outputMint: MEME,
+      amount: '1000000',
+      account: WALLET,
+      /* Hostile: a caller's own fee account must never reach upstream. */
+      feeAccount: '11111111111111111111111111111112'
+    });
+    expect(r.ok).toBe(true);
+    const sent = JSON.parse(jupCalls()[1].init.body);
+    expect(sent.feeAccount).toBe(USDC_ATA);
+  });
+
+  it('the HTTP layer is wired to refresh before status, quote and swap', () => {
+    const app = readFileSync(new URL('../server/app.js', import.meta.url), 'utf8');
+    expect(app).toMatch(/jupfee\/status[\s\S]{0,120}jupFeeStatusAsync/);
+    expect(app).toMatch(/refreshJupFeeCoverage\(req\.query/);
+    expect(app).toMatch(/refreshJupFeeCoverage\(req\.body/);
+    expect(app).toMatch(/jupfee:\s*await jupFeeStatusAsync\(pair\)/);
   });
 });

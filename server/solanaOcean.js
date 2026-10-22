@@ -94,17 +94,63 @@
  * the next rebrand or outage, not a place for anything secret (it is a plain
  * host, the key stays in OPENOCEAN_API_KEY).
  */
-const OO_ROOT = String(process.env.OPENOCEAN_BASE_URL || 'https://open-api-enterprise.de1.exchange/v4')
-  .trim()
-  .replace(/\/+$/, '');
-const OO_BASE = `${OO_ROOT}/solana`;
 const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 15000);
 
-/** The upstream we talk to, for /status. Never carries the key. */
-export const upstreamBase = () => OO_BASE;
+/**
+ * ─── WHY A ROOT LADDER INSTEAD OF ONE HOST ─────────────────────────────────
+ * The history above is a single-host history: the public domain challenged
+ * our egress, so the enterprise gateway became the only root — and the
+ * enterprise gateway's own failures ("No API key found in request.",
+ * "Unauthorized.", a whitelist miss) then killed every Solana price the same
+ * single-host way. 2026-10-22: the screen reports «مشکلی پیش آمده» on Solana
+ * swaps again, which is what that looks like from the user's seat.
+ *
+ * Neither host is safe alone. The enterprise root needs the key to answer;
+ * the public root needs our egress to look residential. What survives is a
+ * LADDER over both, in the order the operator would want them tried:
+ *
+ *   1. OPENOCEAN_BASE_URL (when set) — the operator's own front door first.
+ *   2. The De¹ enterprise gateway — keyed (header + query), our revenue host.
+ *   3. The public gateway — keyed too, then ONE keyless pass, because the
+ *      public host has historically answered keylessly and PAID the referrer
+ *      fee on-chain (verified in the header above) while the enterprise
+ *      gateway rejects keyless traffic outright.
+ *
+ * The keyless pass only happens when a keyed attempt was refused for an
+ * auth-class reason ("No API key found", "Unauthorized", a whitelist miss):
+ * that is the one signal that the key itself — not the network — is what a
+ * host disliked, and it is the only case where dropping the key changes
+ * anything. A Cloudflare interstitial is not auth-class; a timeout is not
+ * auth-class; those fall through to the next root without the dance.
+ *
+ * BAD_AMOUNT is authoritative and stops the ladder: a "too small" answer is a
+ * property of the user's input, identical on every host, and retrying it
+ * across roots would just multiply the latency of an answer we already have.
+ *
+ * Timeouts: the first root gets the full budget (15s default); retries get
+ * min(budget, 8s), because a fallback that can eat half a minute is a
+ * fallback the user has already given up on. Fee params ride inside `path`,
+ * so every attempt carries the same unforgeable referrer fields.
+ */
+const OO_ENTERPRISE_ROOT = 'https://open-api-enterprise.de1.exchange/v4';
+const OO_PUBLIC_ROOT = 'https://open-api.openocean.finance/v4';
+
+/** The roots this request will try, in order. Public, nothing secret. */
+export function ooRoots() {
+  const roots = [];
+  const override = String(process.env.OPENOCEAN_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (override) roots.push(override);
+  for (const root of [OO_ENTERPRISE_ROOT, OO_PUBLIC_ROOT]) {
+    if (!roots.includes(root)) roots.push(root);
+  }
+  return roots;
+}
+
+/** The upstream we talk to first, for /status. Never carries the key. */
+export const upstreamBase = () => `${ooRoots()[0]}/solana`;
 
 /*
- * ─── THE KEY IS NOW LOAD-BEARING, NOT OPTIONAL ──────────────────────────────
+ * ─── THE KEY IS LOAD-BEARING ON THE ENTERPRISE ROOT ────────────────────────
  * On the old public host the key was optional: Solana answered keylessly and
  * still paid the referrer fee (verified on-chain, see the header above). The
  * enterprise gateway rejects unauthenticated traffic outright — proved with a
@@ -114,10 +160,11 @@ export const upstreamBase = () => OO_BASE;
  *     (no key)      -> { "error": "No API key found in request." }
  *     (wrong key)   -> { "error": "Unauthorized." }
  *
- * Both are gateway errors, not v4 bodies, so ooFetch() below classifies them
- * as UPSTREAM_FAILED and the Solana screen falls back to Jupiter exactly as
- * it does for a timeout. A missing key therefore costs us the fee, never the
- * user's swap.
+ * Both are gateway errors, not v4 bodies. The root ladder below classifies
+ * them as auth-class refusals and walks the request to the next root — the
+ * public gateway, which has historically answered keylessly and still PAID
+ * the referrer fee. A missing or rejected key therefore costs a round trip,
+ * never the user's swap and (on the public root) never even our fee.
  *
  * WHERE THE KEY GOES: the gateway is demonstrably reading the `apikey` QUERY
  * parameter (that is the request that came back "Unauthorized." rather than
@@ -181,9 +228,16 @@ export function feeBps() {
  */
 export const bpsToPercent = (bps) => Number(bps) / 100;
 
-async function ooFetch(path) {
+/**
+ * One attempt against one root. Classifies, never throws.
+ *
+ * `kind` is 'ok', 'bad-amount' (authoritative — stop the ladder), or
+ * 'failure' (worth another root). `auth` marks the one failure class where
+ * dropping the key can change the answer.
+ */
+async function ooAttempt(root, path, { useKey, timeoutMs }) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const headers = { accept: 'application/json' };
     /*
@@ -192,9 +246,9 @@ async function ooFetch(path) {
      * gateway's authenticator. Sending both costs one query parameter and
      * removes a class of "silently unauthenticated" failure.
      */
-    const key = apiKey();
+    const key = useKey ? apiKey() : '';
     if (key) headers['x-api-key'] = key;
-    const url = new URL(`${OO_BASE}${path}`);
+    const url = new URL(`${root}/solana${path}`);
     if (key) url.searchParams.set('apikey', key);
     const res = await fetch(url, {
       signal: ctrl.signal,
@@ -218,18 +272,70 @@ async function ooFetch(path) {
         body?.code === 400 ||
         /amount|too small|lamport|minimum|below/i.test(String(detail || ''));
       return {
-        ok: false,
-        status: isBadAmount ? 400 : (res.ok ? 502 : res.status),
-        body: { error: isBadAmount ? 'BAD_AMOUNT' : 'UPSTREAM_FAILED', detail }
+        kind: isBadAmount ? 'bad-amount' : 'failure',
+        auth:
+          !isBadAmount &&
+          (res.status === 401 || res.status === 403 || /api\s*key|unauthorized|unauthorised|whitelist|forbidden|not allowed/i.test(String(detail || ''))),
+        result: {
+          ok: false,
+          status: isBadAmount ? 400 : (res.ok ? 502 : res.status),
+          body: { error: isBadAmount ? 'BAD_AMOUNT' : 'UPSTREAM_FAILED', detail }
+        }
       };
     }
-    return { ok: true, status: 200, body: body.data };
+    return { kind: 'ok', result: { ok: true, status: 200, body: body.data } };
   } catch (err) {
     // AbortError included: a timeout is an upstream failure, not a 500 of ours.
-    return { ok: false, status: 504, body: { error: 'UPSTREAM_FAILED', detail: String(err?.name || err) } };
+    return {
+      kind: 'failure',
+      auth: false,
+      result: { ok: false, status: 504, body: { error: 'UPSTREAM_FAILED', detail: String(err?.name || err) } }
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * The ladder. See "WHY A ROOT LADDER" above: no single host survives both
+ * kinds of outage this route has actually seen, so a request walks the roots
+ * and only stops early for an answer every root would give identically.
+ *
+ * The first failure is what gets reported if nothing succeeds — the primary
+ * root's reason is the actionable one (that is the host the operator
+ * configured); the later roots are recovery attempts, not new truth.
+ */
+async function ooFetch(path) {
+  const roots = ooRoots();
+  const key = apiKey();
+  const retryTimeout = Math.min(TIMEOUT, 8000);
+  let authRefusal = false;
+  let firstFailure = null;
+
+  for (let i = 0; i < roots.length; i += 1) {
+    const r = await ooAttempt(roots[i], path, {
+      useKey: Boolean(key),
+      timeoutMs: i === 0 ? TIMEOUT : retryTimeout
+    });
+    if (r.kind !== 'failure') return r.result;
+    if (r.auth) authRefusal = true;
+    if (!firstFailure) firstFailure = r.result;
+  }
+
+  /*
+   * One keyless pass on the public root, only when a keyed attempt was
+   * refused for auth reasons: the public host historically answers keylessly
+   * AND pays the referrer fee on-chain (verified in the header), while the
+   * enterprise gateway rejects keyless traffic outright. Anywhere else this
+   * pass is a wasted round trip, so it is gated on the one signal that makes
+   * dropping the key meaningful.
+   */
+  if (key && authRefusal) {
+    const r = await ooAttempt(OO_PUBLIC_ROOT, path, { useKey: false, timeoutMs: retryTimeout });
+    if (r.kind !== 'failure') return r.result;
+  }
+
+  return firstFailure;
 }
 
 /**
@@ -435,6 +541,9 @@ export function oceanStatus() {
     // De¹ Exchange is the rebranded OpenOcean; the v4 API is unchanged.
     brand: 'de1',
     endpoint: upstreamBase(),
+    /* The whole ladder, in try-order — one host lying is now a visible fact
+       rather than an invisible outage. Override + enterprise + public. */
+    roots: ooRoots().map((r) => `${r}/solana`),
     keyConfigured: keyConfigured(),
     /*
      * Kept false so the UI's fail-safe behaviour is untouched: the Solana

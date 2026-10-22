@@ -24,6 +24,13 @@
  *      authenticates on — and is never echoed back to a caller.
  *   5b. Every outgoing call goes to the enterprise host, so a silent revert
  *      to the challenged public domain fails the suite instead of the user.
+ *   5c. THE ROOT LADDER (2026-10-22): no single host survives both outage
+ *      kinds this route has seen (Cloudflare vs auth). When the enterprise
+ *      root refuses for auth reasons ("No API key found", "Unauthorized",
+ *      whitelist) or answers a Cloudflare interstitial, the quote falls
+ *      through to the public root — keyed when a key exists, with exactly one
+ *      keyless pass when a keyed attempt was auth-refused — and BAD_AMOUNT
+ *      stops the ladder dead. OPENOCEAN_BASE_URL overrides the first root.
  *   6. /api/revenue/readiness reports swap-solana as live: true keylessly.
  *   7. The Jupiter proxy (insurance fallback) answers keyless and keyed.
  *
@@ -59,9 +66,29 @@ const realFetch = globalThis.fetch;
  * `jup` decides what Jupiter answers: 'ok' (with taker → transaction).
  */
 const OO_HOST = 'https://open-api-enterprise.de1.exchange/v4/solana';
+const OO_PUBLIC_HOST = 'https://open-api.openocean.finance/v4/solana';
+const OO_OVERRIDE_HOST = 'https://oo-proxy.example.test/v4/solana';
 
+/**
+ * The upstream weather. `ocean` decides what the enterprise gateway answers:
+ *   'ok'         — a real quote/swap answer
+ *   'bad-amount' — upstream amount-too-small error
+ *   'reject-403' — HTTP 403 refusal (whitelist)
+ *   'reject-401' — HTTP 401 refusal
+ *   'auth-nokey' — "No API key found in request." (keyless gateway refusal)
+ *   'auth-unauth'— "Unauthorized." (bad key)
+ *   'cloudflare' — the Just-a-moment interstitial the public domain served
+ * `publicOcean` decides the public root's answer; null means "mirror `ocean`",
+ * which is how the single-host cases above stay honest in a two-host world.
+ * `publicKeylessOk` makes the public root answer 'ok' whenever the request
+ * carries NO key — the historical keyless-pays-referrer behaviour the ladder's
+ * last-resort pass is built on. `jup` decides what Jupiter answers: 'ok'
+ * (with taker → transaction).
+ */
 const weather = {
   ocean: 'ok',
+  publicOcean: null,
+  publicKeylessOk: false,
   expectedKey: null,
   jup: 'ok',
   oceanKeys: [],
@@ -70,10 +97,58 @@ const weather = {
   oceanQueryKeys: []
 };
 
+const publicTries = () => weather.oceanUrls.filter((u) => u.startsWith(OO_PUBLIC_HOST)).length;
+const keylessPublicTries = () =>
+  weather.oceanUrls.filter((u, i) => u.startsWith(OO_PUBLIC_HOST) && weather.oceanKeys[i] == null).length;
+
 const json = (status, body) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json' }
 });
+
+function ooAnswer(u, key, mode) {
+  if (mode === 'ok') {
+    if (weather.expectedKey && key !== weather.expectedKey) return json(403, { code: 403, message: 'bad key' });
+    if (u.includes('/swap?')) {
+      return json(200, {
+        code: 200,
+        data: {
+          data: OCEAN_TX,
+          feeRatio: 0.007,
+          isVersioned: true,
+          inAmount: AMOUNT,
+          outAmount: '265000000',
+          minOutAmount: '263500000'
+        }
+      });
+    }
+    return json(200, {
+      code: 200,
+      data: {
+        inToken: { symbol: 'SOL', decimals: 9, usd: '180.1', volume: 1 },
+        outToken: { symbol: 'USDC', decimals: 6, usd: '1', volume: 1 },
+        inAmount: AMOUNT,
+        outAmount: '265000000',
+        minOutAmount: '263500000',
+        price_impact: '0.01%'
+      }
+    });
+  }
+  if (mode === 'bad-amount') {
+    return json(200, { code: 500, message: 'amount is too small (minimum 10000 lamports)' });
+  }
+  if (mode === 'auth-nokey') return json(200, { error: 'No API key found in request.' });
+  if (mode === 'auth-unauth') return json(401, { error: 'Unauthorized.' });
+  if (mode === 'cloudflare') {
+    return new Response('<!DOCTYPE html><html><title>Just a moment...</title></html>', {
+      status: 503,
+      headers: { 'content-type': 'text/html' }
+    });
+  }
+  /* Upstream refusal pass-through */
+  const code = mode === 'reject-401' ? 401 : 403;
+  return json(code, { code, message: 'Solana is available only to whitelisted users' });
+}
 
 function installUpstreamStub() {
   globalThis.fetch = async (url, init) => {
@@ -81,43 +156,19 @@ function installUpstreamStub() {
     const h = init?.headers || {};
     const key = h['x-api-key'] ?? h['X-Api-Key'] ?? (h instanceof Headers ? h.get('x-api-key') : null);
 
-    if (u.startsWith(OO_HOST)) {
+    const isEnterprise = u.startsWith(OO_HOST);
+    const isPublic = u.startsWith(OO_PUBLIC_HOST);
+    const isOverride = u.startsWith(OO_OVERRIDE_HOST);
+    if (isEnterprise || isPublic || isOverride) {
       weather.oceanKeys.push(key ?? null);
       weather.oceanUrls.push(u);
       weather.oceanQueryKeys.push(new URL(u).searchParams.get('apikey'));
-      if (weather.ocean === 'bad-amount') {
-        return json(200, { code: 500, message: 'amount is too small (minimum 10000 lamports)' });
+      if (isOverride) return ooAnswer(u, key, weather.overrideOcean || 'ok');
+      if (isPublic) {
+        if (weather.publicKeylessOk && key == null) return ooAnswer(u, key, 'ok');
+        return ooAnswer(u, key, weather.publicOcean ?? weather.ocean);
       }
-      if (weather.ocean === 'ok') {
-        if (weather.expectedKey && key !== weather.expectedKey) return json(403, { code: 403, message: 'bad key' });
-        if (u.includes('/swap?')) {
-          return json(200, {
-            code: 200,
-            data: {
-              data: OCEAN_TX,
-              feeRatio: 0.007,
-              isVersioned: true,
-              inAmount: AMOUNT,
-              outAmount: '265000000',
-              minOutAmount: '263500000'
-            }
-          });
-        }
-        return json(200, {
-          code: 200,
-          data: {
-            inToken: { symbol: 'SOL', decimals: 9, usd: '180.1', volume: 1 },
-            outToken: { symbol: 'USDC', decimals: 6, usd: '1', volume: 1 },
-            inAmount: AMOUNT,
-            outAmount: '265000000',
-            minOutAmount: '263500000',
-            price_impact: '0.01%'
-          }
-        });
-      }
-      /* Upstream refusal pass-through */
-      const code = weather.ocean === 'reject-401' ? 401 : 403;
-      return json(code, { code, message: 'Solana is available only to whitelisted users' });
+      return ooAnswer(u, key, weather.ocean);
     }
 
     if (u.startsWith('https://api.jup.ag/swap/v2')) {
@@ -267,6 +318,95 @@ try {
     const raw = await res.text();
     t('no route echoes the key value', !raw.includes('probe-ocean-key'));
   }
+
+  /* ---------------- 5c. THE ROOT LADDER ---------------- */
+  /* A. Keyless: enterprise auth-refuses ("No API key found"), public answers
+     keylessly — the documented historical behaviour the ladder restores. */
+  delete process.env.OPENOCEAN_API_KEY;
+  weather.expectedKey = null;
+  weather.ocean = 'auth-nokey';
+  weather.publicOcean = 'ok';
+  weather.publicKeylessOk = false;
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
+    const body = await res.json();
+    t('a keyless quote survives the enterprise "No API key found" refusal', res.status === 200 && body.outAmount === '265000000');
+    t('...by falling through to the public root', publicTries() === 1);
+    t('the public attempt carried no key at all', weather.oceanKeys.every((k) => k === null) && weather.oceanQueryKeys.every((k) => k === null));
+    t('the fee fields ride in the path on every attempt', weather.oceanUrls.every((u) => u.includes(`referrer=${WIFER}`) && u.includes('referrerFee=0.7')));
+  }
+
+  /* B. Keyed: an "Unauthorized." on the enterprise root falls through to the
+     public root WITH the key — every root is tried authenticated first. */
+  process.env.OPENOCEAN_API_KEY = 'probe-ocean-key';
+  weather.ocean = 'auth-unauth';
+  weather.publicOcean = 'ok';
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
+    const body = await res.json();
+    t('a keyed quote survives "Unauthorized." the same way', res.status === 200 && body.outAmount === '265000000');
+    t('...and the public attempt still carries the key (header)', weather.oceanKeys.includes('probe-ocean-key'));
+    t('...and the apikey query parameter', weather.oceanQueryKeys.includes('probe-ocean-key'));
+  }
+
+  /* C. Both keyed roots auth-refuse: exactly ONE keyless pass on public. */
+  weather.ocean = 'auth-unauth';
+  weather.publicOcean = 'auth-unauth';
+  weather.publicKeylessOk = true;
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
+    const body = await res.json();
+    t('with both keyed roots auth-refusing, the keyless public pass saves the quote', res.status === 200 && body.outAmount === '265000000');
+    t('...and it is exactly one keyless pass, not a storm', publicTries() === 2 && keylessPublicTries() === 1);
+  }
+
+  /* D. BAD_AMOUNT is authoritative: the ladder stops dead. */
+  weather.ocean = 'bad-amount';
+  weather.publicOcean = 'ok';
+  weather.publicKeylessOk = false;
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}`);
+    const body = await res.json();
+    t('BAD_AMOUNT stops the ladder: 400 with zero public attempts', res.status === 400 && body.error === 'BAD_AMOUNT' && publicTries() === 0);
+  }
+
+  /* E. The historical failure itself: a Cloudflare interstitial on one root
+     falls through to the other instead of killing every Solana price. */
+  weather.ocean = 'cloudflare';
+  weather.publicOcean = 'ok';
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
+    const body = await res.json();
+    t('a Cloudflare interstitial on the enterprise root falls through to public', res.status === 200 && body.outAmount === '265000000' && publicTries() === 1);
+  }
+
+  /* F. Status names the whole ladder in try-order. */
+  {
+    const res = await fetch(`${base}/api/solana/oo/status`);
+    const body = await res.json();
+    t('status lists both roots in try-order (enterprise first)', Array.isArray(body.roots) && body.roots[0] === OO_HOST && body.roots[1] === OO_PUBLIC_HOST);
+  }
+
+  /* G. OPENOCEAN_BASE_URL overrides the first root. */
+  process.env.OPENOCEAN_BASE_URL = 'https://oo-proxy.example.test/v4';
+  weather.overrideOcean = 'ok';
+  clearWeather();
+  {
+    const res = await fetch(`${base}/api/solana/oo/quote?inputMint=${SOL}&outputMint=${USDC}&amount=${AMOUNT}&slippageBps=50`);
+    const body = await res.json();
+    t('OPENOCEAN_BASE_URL becomes the first root tried', res.status === 200 && body.outAmount === '265000000' && weather.oceanUrls.every((u) => u.startsWith(OO_OVERRIDE_HOST)));
+    const st = await (await fetch(`${base}/api/solana/oo/status`)).json();
+    t('...and status reports it first, ladder intact behind it', st.endpoint === OO_OVERRIDE_HOST && st.roots[0] === OO_OVERRIDE_HOST && st.roots[1] === OO_HOST && st.roots[2] === OO_PUBLIC_HOST);
+  }
+  delete process.env.OPENOCEAN_BASE_URL;
+  delete process.env.OPENOCEAN_API_KEY;
+  weather.publicOcean = null;
+  weather.publicKeylessOk = false;
 
   /* ---------------- 6. the Jupiter fallback, keyless ---------------- */
   delete process.env.OPENOCEAN_API_KEY;

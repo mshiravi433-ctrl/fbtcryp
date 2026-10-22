@@ -66,6 +66,43 @@ export const LIFI_INTEGRATOR = 'fbt-swap';
 const isAddr = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a);
 
 /**
+ * ─── READING A FEE AMOUNT WITHOUT TRUSTING ITS SHAPE ────────────────────────
+ * LI.FI echoes fee amounts as integer base-unit strings in the common case —
+ * but "common" is not "only": the same value can arrive as a decimal string
+ * ("86419.2"), as a JSON number, or in the decimal.js-shaped `{ c: [...] }`
+ * form the `includedSteps` payload already uses (see the fixtures in
+ * test/fivechain-swap-probe.mjs). `BigInt(String(v))` throws on every one of
+ * those except the integer string, and an uncaught throw here is exactly as
+ * fatal as a rejection: the quote dies and the screen says «قیمت دریافت نشد».
+ *
+ * So: parse defensively, floor toward zero, and return null when the value
+ * cannot be read at all — null is handled as a fee that is not proven, never
+ * as an exception.
+ */
+export function parseFeeUnits(v) {
+  if (v == null) return null;
+  if (typeof v === 'bigint') return v < 0n ? null : v;
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || v < 0) return null;
+    return BigInt(Math.floor(v));
+  }
+  if (typeof v === 'object') {
+    /* decimal.js-style { c: ['7000000000000'] } — the coefficient carries the
+       whole magnitude when there is a single chunk. Anything more exotic is
+       unreadable, and unreadable is "not proven". */
+    const c = v.c;
+    if (Array.isArray(c) && c.length === 1) return parseFeeUnits(c[0]);
+    return null;
+  }
+  const s = String(v).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  const [intPart] = s.split('.');
+  /* Floor: 86419.2 base units is 86419 units — never round a fee upward in
+     our own favour before checking it against what was asked. */
+  return BigInt(intPart);
+}
+
+/**
  * ─── THE FEE ECHO GATE ──────────────────────────────────────────────────────
  * Same discipline as KyberSwap's extraFee check and OpenOcean's decode check:
  * the fee that gets enforced on-chain is whatever LI.FI signs into the
@@ -73,22 +110,55 @@ const isAddr = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a);
  * we verify the recipient. A quote that does not prove our cut goes to our
  * wallet is rejected before it can ever reach a signer.
  *
+ * ─── THE ROUNDING BAND, AND WHY EXACT EQUALITY WAS THE BUG ──────────────────
+ * LI.FI computes the share as a fraction of fromAmount and rounds it DOWN to a
+ * whole base unit (their fee-forwarder docs: "each amount rounds down"). The
+ * old gate demanded `share * 10000 === fromAmount * feeBps` — an exact
+ * product — so EVERY quote whose input amount did not divide cleanly was
+ * rejected as FEE_NOT_APPLIED: a MAX-balance swap (18-decimal dust), a
+ * 6-decimal stable typed past the third decimal, anything. On the chains whose
+ * only fee executor is LI.FI (Mantle/Scroll/zkSync Era) that was a total
+ * outage for those amounts — «مشکلی پیش آمده» instead of a price. The Solana
+ * LI.FI gate (server/solanaLifi.js#verifySolanaFeeEcho) already carries this
+ * exact tolerance; this ports it to the EVM side.
+ *
+ * The band is ±1 base unit around floor(fromAmount × feeBps / 10000): floor is
+ * LI.FI's documented rounding, +1 covers a half-up implementation, −1 covers
+ * a double truncation. Anything wider is not rounding — a half share is still
+ * refused — and the recipient check below is unchanged.
+ *
  * @returns {{ ok: boolean, code: string|null, totalFeeWei: bigint, shareWei: bigint }}
  */
 export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integratorId = LIFI_INTEGRATOR }) {
-  const fromWei = BigInt(body?.action?.fromAmount ?? 0);
+  let fromWei = 0n;
+  try {
+    fromWei = BigInt(body?.action?.fromAmount ?? 0);
+  } catch {
+    fromWei = 0n;
+  }
   const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
   const split = feeCosts.find((fc) => fc?.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
   const ours = split?.recipients?.find((r) => String(r?.name) === integratorId) ?? null;
 
-  if (String(body?.integrator ?? '') !== integratorId || Math.abs(Number(body?.fee ?? 0) - feeBps / 10000) > 1e-9) {
+  const echoedRate = Number(body?.fee ?? 0);
+  if (
+    String(body?.integrator ?? '') !== integratorId ||
+    !Number.isFinite(echoedRate) ||
+    Math.abs(echoedRate - feeBps / 10000) > 1e-9
+  ) {
     return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
   }
   if (!ours || fromWei <= 0n) {
     return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
   }
-  const shareWei = BigInt(String(ours.fee ?? 0));
-  if (shareWei * 10000n !== fromWei * BigInt(feeBps)) {
+  const shareWei = parseFeeUnits(ours.fee);
+  if (shareWei == null || shareWei < 1n) {
+    return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
+  }
+  const expected = (fromWei * BigInt(Math.round(Number(feeBps) || 0))) / 10000n; // floor
+  const withinRounding =
+    shareWei === expected || shareWei + 1n === expected || shareWei === expected + 1n;
+  if (!withinRounding) {
     return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
   }
   if (!isAddr(feeReceiver)) {
@@ -124,7 +194,7 @@ export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integrator
     return { ok: false, code: 'FEE_RECIPIENT_MISMATCH', totalFeeWei: 0n, shareWei: 0n };
   }
 
-  const lifiFeeWei = BigInt(String(split.lifiFee ?? 0));
+  const lifiFeeWei = parseFeeUnits(split.lifiFee) ?? 0n;
   return { ok: true, code: null, totalFeeWei: lifiFeeWei + shareWei, shareWei };
 }
 
