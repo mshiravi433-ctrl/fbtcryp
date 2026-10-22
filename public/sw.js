@@ -236,8 +236,15 @@
  *      rent of an output token account that does not exist yet;
  *   4. the wallet health panel grew a «Chain read» row that says which door
  *      answered, from which host, in how many ms — so the next report names the
- *      failing path instead of guessing at it. */
-const SHELL = 'fbt-shell-v25';
+ *      failing path instead of guessing at it.
+ *
+ * v25 -> v26 (2026-10-22): the LI.FI fee gate lived in the CLIENT bundle too,
+ * and it was reading two fields the API does not return (`fee`,
+ * `includedSteps[].action.integratorFees`). A device holding the v25 shell
+ * keeps the old JS — and the old gate — no matter what the server does, so the
+ * zkSync/Scroll «مشکلی پیش آمده» would survive the deploy on every installed
+ * PWA and APK. Renaming the cache evicts that shell. */
+const SHELL = 'fbt-shell-v26';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

@@ -60,8 +60,53 @@ const LIFI_SWAP_CHAINS = new Set([5000, 534352, 324, 143, 4663]);
 
 export const lifiSupports = (chainId) => LIFI_SWAP_CHAINS.has(Number(chainId));
 
-/** LI.FI's integrator id — mirrored from server/lifi.js (attached server-side). */
-export const LIFI_INTEGRATOR = 'fbt-swap';
+/**
+ * LI.FI's integrator ids — mirrored from server/lifi.js (attached server-side).
+ *
+ * ─── WHY A LIST AND NOT ONE STRING ─────────────────────────────────────────
+ * LI.FI pays the integrator fee only for a VERIFIED integrator, and a verified
+ * id is whatever the portal registered — the string is normalised on
+ * registration (`fbt-swap` → `fbtswap` in the portal's own record, see
+ * docs/LIFI-SETUP-FA.md §2, and the live lookup pinned in test/units.mjs). The server therefore sends whichever id of ours
+ * LI.FI actually honours, and caches the winner. The client cannot know which
+ * one that was, so it accepts the whole set: every id here is OURS, and the
+ * proof that matters — the amount and the receiving wallet — is checked
+ * against the signed fee split regardless of the label it travelled under.
+ *
+ * The first entry is the code default; the server may pick another.
+ */
+export const LIFI_INTEGRATOR_CANDIDATES = ['fbtswap', 'fbt-swap'];
+
+/** The default id, kept exported for callers that only need one. */
+export const LIFI_INTEGRATOR = LIFI_INTEGRATOR_CANDIDATES[0];
+
+/**
+ * Normalise an integrator id the way LI.FI's portal does: lower case, only
+ * `[a-z0-9_-]`, at most 23 characters. Returns '' for anything unusable.
+ */
+export function normalizeIntegratorId(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '')
+    .slice(0, 23);
+}
+
+/** Every integrator id that is ours, normalised and de-duplicated. */
+export function integratorCandidates() {
+  const out = [];
+  for (const raw of LIFI_INTEGRATOR_CANDIDATES) {
+    const id = normalizeIntegratorId(raw);
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/** True when `name` is one of our integrator ids (case-insensitive). */
+export function isOurIntegratorName(name) {
+  const id = normalizeIntegratorId(name);
+  return Boolean(id) && integratorCandidates().includes(id);
+}
 
 const isAddr = (a) => typeof a === 'string' && /^0x[a-fA-F0-9]{40}$/.test(a);
 
@@ -103,54 +148,108 @@ export function parseFeeUnits(v) {
 }
 
 /**
- * ─── THE FEE ECHO GATE ──────────────────────────────────────────────────────
+ * ─── THE FEE EVIDENCE GATE ──────────────────────────────────────────────────
  * Same discipline as KyberSwap's extraFee check and OpenOcean's decode check:
  * the fee that gets enforced on-chain is whatever LI.FI signs into the
- * calldata, so we verify the ECHO — the feeSplit signed for this quote — and
- * we verify the recipient. A quote that does not prove our cut goes to our
- * wallet is rejected before it can ever reach a signer.
+ * calldata, so we verify the SIGNED SPLIT — the recipients LI.FI put in
+ * `estimate.feeCosts[].feeSplit` — and we verify the wallet that split pays.
+ * A quote that does not prove our cut goes to our wallet is rejected before it
+ * can ever reach a signer.
  *
- * ─── THE ROUNDING BAND, AND WHY EXACT EQUALITY WAS THE BUG ──────────────────
+ * ─── WHERE THE PROOF ACTUALLY LIVES (2026-10-22, the total-outage bug) ──────
+ * The gate used to require two TOP-LEVEL fields on the quote body:
+ *
+ *     body.integrator === <our id>       and   body.fee === feeBps / 10000
+ *
+ * `fee` is a REQUEST parameter only. LI.FI's own response types — the
+ * published `@lifi/types` package, `StepBase`/`LiFiStep` — carry `integrator`
+ * (optional), `intermediary`, `referrer`, `action`, `estimate`,
+ * `includedSteps`, `transactionRequest` … and NO `fee` field at all. So
+ * `Number(body.fee ?? 0)` was always 0, `|0 − 0.007| > 1e-9` was always true,
+ * and EVERY LI.FI quote was thrown away as FEE_NOT_APPLIED.
+ *
+ * That is exactly the reported shape of the outage: zkSync Era (LI.FI is the
+ * only fee-carrying executor) showed «مشکلی پیش آمده» for every pair, Scroll
+ * almost always, Monad/Robinhood whenever KyberSwap's slug was unavailable —
+ * and it survived the earlier rounding/wallet patches because the gate died
+ * one line before reaching them.
+ *
+ * The same audit found the wallet check reading a field that does not exist
+ * either: `includedSteps[].action.integratorFees` is absent from the response
+ * types. The modern proof is `feeSplit.recipients[].walletAddress` — the
+ * source-chain address each recipient is paid at. The legacy shape is still
+ * accepted (older/proxied bodies, and the synthetic bodies built at signing
+ * time), but it is no longer the ONLY way to prove the wallet.
+ *
+ * ─── THE ROUNDING BAND, AND WHY EXACT EQUALITY WAS A BUG ────────────────────
  * LI.FI computes the share as a fraction of fromAmount and rounds it DOWN to a
  * whole base unit (their fee-forwarder docs: "each amount rounds down"). The
  * old gate demanded `share * 10000 === fromAmount * feeBps` — an exact
  * product — so EVERY quote whose input amount did not divide cleanly was
  * rejected as FEE_NOT_APPLIED: a MAX-balance swap (18-decimal dust), a
- * 6-decimal stable typed past the third decimal, anything. On the chains whose
- * only fee executor is LI.FI (Mantle/Scroll/zkSync Era) that was a total
- * outage for those amounts — «مشکلی پیش آمده» instead of a price. The Solana
- * LI.FI gate (server/solanaLifi.js#verifySolanaFeeEcho) already carries this
- * exact tolerance; this ports it to the EVM side.
- *
- * The band is ±1 base unit around floor(fromAmount × feeBps / 10000): floor is
- * LI.FI's documented rounding, +1 covers a half-up implementation, −1 covers
- * a double truncation. Anything wider is not rounding — a half share is still
- * refused — and the recipient check below is unchanged.
+ * 6-decimal stable typed past the third decimal, anything. The band is ±1 base
+ * unit around floor(fromAmount × feeBps / 10000): floor is LI.FI's documented
+ * rounding, +1 covers a half-up implementation, −1 covers a double
+ * truncation. Anything wider is not rounding — a half share is still refused.
  *
  * @returns {{ ok: boolean, code: string|null, totalFeeWei: bigint, shareWei: bigint }}
  */
-export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integratorId = LIFI_INTEGRATOR }) {
+export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integratorId = null }) {
+  const ids = new Set(integratorCandidates());
+  if (integratorId) ids.add(normalizeIntegratorId(integratorId));
+
   let fromWei = 0n;
   try {
     fromWei = BigInt(body?.action?.fromAmount ?? 0);
   } catch {
     fromWei = 0n;
   }
-  const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
-  const split = feeCosts.find((fc) => fc?.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
-  const ours = split?.recipients?.find((r) => String(r?.name) === integratorId) ?? null;
+  if (fromWei <= 0n) {
+    return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
+  }
 
-  const echoedRate = Number(body?.fee ?? 0);
-  if (
-    String(body?.integrator ?? '') !== integratorId ||
-    !Number.isFinite(echoedRate) ||
-    Math.abs(echoedRate - feeBps / 10000) > 1e-9
-  ) {
+  /*
+   * ─── THE IDENTITY ECHO IS ADVISORY, THE NUMBERS ARE NOT ─────────────────
+   * `integrator` is optional in the response. When it IS present it must name
+   * one of OUR registered ids: a quote attributed to somebody else's
+   * integrator is somebody else's fee. When it is absent the split below still
+   * proves everything that matters.
+   *
+   * `fee` (when present, on older bodies) must agree with the requested rate.
+   * A present-but-unreadable value is ignored rather than fatal: it is a label,
+   * not the payment.
+   */
+  if (body?.integrator != null && String(body.integrator) !== '') {
+    if (!ids.has(normalizeIntegratorId(body.integrator))) {
+      return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
+    }
+  }
+  if (body?.fee != null) {
+    const echoedRate = Number(body.fee);
+    if (Number.isFinite(echoedRate) && Math.abs(echoedRate - feeBps / 10000) > 1e-9) {
+      return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
+    }
+  }
+
+  /* Every fee cost is inspected, not just the first with a split: a route can
+     carry LI.FI's own fee, distributions and the integrator cut in separate
+     entries, and the integrator entry is not guaranteed to come first. */
+  const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
+  let split = null;
+  let ours = null;
+  for (const fc of feeCosts) {
+    const recipients = Array.isArray(fc?.feeSplit?.recipients) ? fc.feeSplit.recipients : [];
+    const hit = recipients.find((r) => ids.has(normalizeIntegratorId(r?.name)));
+    if (hit) {
+      split = fc.feeSplit;
+      ours = hit;
+      break;
+    }
+  }
+  if (!ours) {
     return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
   }
-  if (!ours || fromWei <= 0n) {
-    return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
-  }
+
   const shareWei = parseFeeUnits(ours.fee);
   if (shareWei == null || shareWei < 1n) {
     return { ok: false, code: 'FEE_NOT_APPLIED', totalFeeWei: 0n, shareWei: 0n };
@@ -164,37 +263,50 @@ export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integrator
   if (!isAddr(feeReceiver)) {
     return { ok: false, code: 'FEE_RECIPIENT_MISMATCH', totalFeeWei: 0n, shareWei: 0n };
   }
-  /* The recipient's wallet is signed via the integratorFees payload of the
-     first step — the same place the server-side gate reads it. */
-  const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
-  const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
-  const walletEntry = wallets.find((r) => String(r?.name) === integratorId) ?? null;
-  const wallet = walletEntry?.config?.defaultWallet ?? null;
+
   /*
-   * ─── THE WALLET MUST BE OURS, NOT NECESSARILY THE ONE THIS BUILD NAMED ────
+   * ─── WHERE THE FEE IS PAID — READ FROM EVERY SHAPE LI.FI USES ────────────
+   *  1. `feeSplit.recipients[].walletAddress` — the modern, source-chain
+   *     recipient address (see FeeRecipient in @lifi/types). This is the
+   *     authoritative one: it is the address the router pays.
+   *  2. `includedSteps[].action.integratorFees.recipients[].config.defaultWallet`
+   *     — the older integrator-fee payload; still accepted, and it is the
+   *     shape the signing-time re-verification builds.
+   *  3. `includedSteps[].integrator`/`body.integrator` — identity only, never
+   *     an address.
+   *
+   * ─── THE WALLET MUST BE OURS, NOT NECESSARILY THE ONE THIS BUILD NAMED ───
    * The fee wallet is attached SERVER-side from `LIFI_SWAP_FEE_RECIPIENT`
    * (server/lifi.js) — a variable this bundle cannot read. The client used to
    * demand it equal `feeRecipientFor(chainId)`, which is `VITE_FEE_RECIPIENT`
    * when that build variable exists. The website and the APK are built by two
    * pipelines with two variable sets, so the moment those two names diverged,
-   * EVERY LI.FI quote failed here with FEE_RECIPIENT_MISMATCH — and since
-   * LI.FI is the primary router on Mantle / Scroll / zkSync Era, the swap
-   * screen reported «no route between these two tokens» for pairs that route
-   * perfectly on the website. Same code, different build, opposite behaviour.
-   *
-   * The security property is unchanged: the wallet still has to be echoed by
-   * LI.FI's own signed feeSplit AND be one of the operator's own addresses
-   * (lib/payout.js#knownPayoutAddresses). A quote that pays a stranger is
-   * still rejected before it can reach a signer.
+   * EVERY LI.FI quote failed here with FEE_RECIPIENT_MISMATCH. The security
+   * property is unchanged: the wallet still has to be echoed by LI.FI's own
+   * signed split AND be one of the operator's own addresses
+   * (lib/payout.js#knownPayoutAddresses).
    */
-  const walletOk =
-    isAddr(wallet) &&
-    (wallet.toLowerCase() === feeReceiver.toLowerCase() || isKnownPayoutAddress(wallet, FAMILY.EVM));
+  const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
+  const wallets = [];
+  if (isAddr(ours.walletAddress)) wallets.push(ours.walletAddress);
+  for (const s of steps) {
+    for (const r of s?.action?.integratorFees?.recipients ?? []) {
+      const name = normalizeIntegratorId(r?.name);
+      const addr = r?.config?.defaultWallet;
+      if ((ids.has(name) || isAddr(r?.walletAddress)) && isAddr(addr)) wallets.push(addr);
+      if (isAddr(r?.walletAddress)) wallets.push(r.walletAddress);
+    }
+  }
+  const walletOk = wallets.some(
+    (w) =>
+      w.toLowerCase() === feeReceiver.toLowerCase() ||
+      isKnownPayoutAddress(w, FAMILY.EVM)
+  );
   if (!walletOk) {
     return { ok: false, code: 'FEE_RECIPIENT_MISMATCH', totalFeeWei: 0n, shareWei: 0n };
   }
 
-  const lifiFeeWei = parseFeeUnits(split.lifiFee) ?? 0n;
+  const lifiFeeWei = parseFeeUnits(split?.lifiFee) ?? 0n;
   return { ok: true, code: null, totalFeeWei: lifiFeeWei + shareWei, shareWei };
 }
 
@@ -339,16 +451,51 @@ export async function getLifiQuote({
     lifi: {
       integrator: body.integrator,
       fee: body.fee,
-      feeSplit: body.estimate?.feeCosts?.find((fc) => fc?.feeSplit)?.feeSplit ?? null,
-      feeWallet: body.includedSteps
-        ?.flatMap((s) => s?.action?.integratorFees?.recipients ?? [])
-        .find((r) => String(r?.name) === LIFI_INTEGRATOR)?.config?.defaultWallet ?? null,
+      feeSplit:
+        body.estimate?.feeCosts?.find((fc) =>
+          Array.isArray(fc?.feeSplit?.recipients) &&
+          fc.feeSplit.recipients.some((r) => isOurIntegratorName(r?.name))
+        )?.feeSplit ?? null,
+      /*
+       * Where our cut is paid, from whichever shape this body carries: the
+       * modern recipient-level `walletAddress` first (what LI.FI's router
+       * actually pays), then the legacy integrator-fee payload. Reading only
+       * the legacy one is what left this field null on every current quote —
+       * and a null here made the signing-time re-verification fail with
+       * FEE_RECIPIENT_MISMATCH, i.e. a swap that priced but could never be
+       * signed.
+       */
+      feeWallet:
+        body.estimate?.feeCosts
+          ?.flatMap((fc) => fc?.feeSplit?.recipients ?? [])
+          .find((r) => isOurIntegratorName(r?.name) && isAddr(r?.walletAddress))
+          ?.walletAddress ??
+        body.includedSteps
+          ?.flatMap((s) => s?.action?.integratorFees?.recipients ?? [])
+          .find((r) => isOurIntegratorName(r?.name))
+          ?.config?.defaultWallet ??
+        null,
+      /*
+       * ─── THE WHOLE REQUEST, NOT JUST to/data/value ─────────────────────
+       * LI.FI builds a CHAIN-SPECIFIC transaction, and on zkSync Era that
+       * means `customData` (gasPerPubdata, paymaster params) — the fields the
+       * Era node needs to accept the transaction at all. Keeping only
+       * to/data/value/gasLimit meant the quote worked and the SIGNATURE could
+       * not be broadcast on the one chain whose only executor is LI.FI. Fee
+       * fields are carried for the same reason: on an L2 the quote knows the
+       * gas price it priced against, and re-deriving it a minute later is how
+       * an otherwise valid swap reverts on `maxFeePerGas`.
+       */
       transactionRequest: {
         to: tr.to,
         data: tr.data,
         value: String(tr.value ?? '0'),
         gasLimit: String(tr.gasLimit ?? ''),
-        chainId: Number(tr.chainId)
+        chainId: Number(tr.chainId),
+        ...(tr.customData ? { customData: tr.customData } : {}),
+        ...(tr.gasPrice ? { gasPrice: String(tr.gasPrice) } : {}),
+        ...(tr.maxFeePerGas ? { maxFeePerGas: String(tr.maxFeePerGas) } : {}),
+        ...(tr.maxPriorityFeePerGas ? { maxPriorityFeePerGas: String(tr.maxPriorityFeePerGas) } : {})
       },
       quotedAt: Date.now()
     }
@@ -393,7 +540,12 @@ export async function executeLifiSwap({
     to: tr.to,
     data: tr.data,
     value,
-    ...(tr.gasLimit ? { gasLimit: (BigInt(tr.gasLimit) * 12n) / 10n } : {}) // +20% headroom
+    ...(tr.gasLimit ? { gasLimit: (BigInt(tr.gasLimit) * 12n) / 10n } : {}), // +20% headroom
+    /* zkSync Era's transaction envelope. Harmless elsewhere, required there. */
+    ...(tr.customData ? { customData: tr.customData } : {}),
+    ...(tr.gasPrice ? { gasPrice: BigInt(tr.gasPrice) } : {}),
+    ...(tr.maxFeePerGas ? { maxFeePerGas: BigInt(tr.maxFeePerGas) } : {}),
+    ...(tr.maxPriorityFeePerGas ? { maxPriorityFeePerGas: BigInt(tr.maxPriorityFeePerGas) } : {})
   });
 
   return { hash: tx.hash, wait: () => tx.wait(), viaLifi: true };

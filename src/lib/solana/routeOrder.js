@@ -123,9 +123,25 @@ export function solanaQuoteProviders({ address = null, routes = null } = {}) {
   const jupfee = routes?.jupfee ?? null;
 
   const out = [];
-  /* De¹: without the enterprise key its gateway answers «No API key found in
-     request.» — a guaranteed failure, so it is skipped rather than timed out. */
-  if (de1?.keyConfigured !== false) out.push('openocean');
+  /*
+   * ─── De¹/OpenOcean IS ALWAYS ASKED — THE MISSING KEY IS NOT A NO ────────
+   * This used to skip De¹ whenever `/api/solana/routes` reported
+   * `keyConfigured: false`, on the theory that its enterprise gateway rejects
+   * keyless traffic. That theory is true of ONE root and false of the whole
+   * route: server/solanaOcean.js walks a ROOT LADDER (operator override →
+   * enterprise (keyed) → public (keyed, then keyless)), and the public root
+   * has historically answered keylessly AND paid the referrer fee on-chain.
+   * Skipping on the missing key therefore deleted the fee-paying route from
+   * every single quote — which is precisely the report: «سواپ سولانا فقط با
+   * ژوپیتر می‌رود و هیچ‌وقت سراغ مسیرهای کارمزددار مثل اوپن‌اوشن نمی‌رود».
+   *
+   * A route the SERVER says cannot pay (`feeReady === false`, i.e. no valid
+   * receiver or a zero rate) is still skipped: that is our own configuration,
+   * and asking would only spend a round trip on a guaranteed refusal.
+   * Reachability is NOT checked here — a 503 guess per keystroke was the
+   * original sin; a fast failure inside the race costs nothing.
+   */
+  if (de1?.feeReady !== false) out.push('openocean');
   /* LI.FI: needs a wallet even to price, and a configured receiver to pay us. */
   if (address && lifi?.feeReady !== false) out.push('lifi');
   /* Jupiter with our fee: only exists once a fee token account is configured,
@@ -142,6 +158,11 @@ export function solanaQuoteProviders({ address = null, routes = null } = {}) {
  * invisible for weeks — the exact failure this file exists to end. Codes, not
  * sentences: they are read by whoever has to fix the configuration, and they
  * need no translation.
+ *
+ * `NO_API_KEY` is deliberately GONE: the key is not required to ask De¹ any
+ * more (see `solanaQuoteProviders`), so a missing key is not a reason we can
+ * print — De¹ either answers or it does not, and the answer is reported by the
+ * race itself (`UPSTREAM_FAILED`, `BAD_AMOUNT`, …).
  */
 export function solanaSkippedReasons({ address = null, routes = null } = {}) {
   const de1 = routes?.de1 ?? routes?.openocean ?? null;
@@ -149,7 +170,7 @@ export function solanaSkippedReasons({ address = null, routes = null } = {}) {
   const jupfee = routes?.jupfee ?? null;
 
   const out = {};
-  if (de1?.keyConfigured === false) out.openocean = 'NO_API_KEY';
+  if (de1?.feeReady === false) out.openocean = 'FEE_NOT_CONFIGURED';
   if (!address) out.lifi = 'NEEDS_WALLET';
   else if (lifi?.feeReady === false) out.lifi = 'FEE_NOT_CONFIGURED';
   if (jupfee?.configured === false) out.jupfee = 'FEE_ACCOUNT_NOT_CONFIGURED';

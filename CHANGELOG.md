@@ -1,3 +1,17 @@
+# ۲۰۲۶-۱۰-۲۲ — ریشهٔ واقعیِ «مشکلی پیش آمده» در سواپ Zk/Scr/Mon/Hood و مسیرِ کارمزددارِ سولانا
+
+جزئیات و استدلال کامل: [2026-10-22-lifi-fee-evidence-and-solana-openocean-route-fa.md](2026-10-22-lifi-fee-evidence-and-solana-openocean-route-fa.md).
+
+- **علتِ اصلی (EVM):** گیتِ کارمزد LI.FI دو چیز می‌خواست که **در پاسخِ API وجود ندارند** — فیلدِ `fee` (که فقط پارامترِ *درخواست* است) و کیف پول از `includedSteps[].action.integratorFees` (که در تایپ‌های رسمی `@lifi/types` نیست). نتیجه: هر کوئتِ LI.FI با `FEE_NOT_APPLIED` دور ریخته می‌شد و روی zkSync (که تنها اجراکنندهٔ کارمزددارش LI.FI است) **هیچ جفتی قیمت نمی‌داد**؛ Scroll تقریباً همیشه و Monad/Robinhood وقتی Kyber جواب نداشت.
+- **گیت حالا از شاهدِ امضاشده می‌خواند:** `estimate.feeCosts[].feeSplit.recipients[]` (سهمِ ما با باندِ ±۱ واحدِ گِردکردن) و **کیف پولِ هر recipient از `walletAddress`**؛ شکلِ قدیمی هم پذیرفته می‌شود. `body.integrator`/`body.fee` فقط اگر حاضر و مخالف باشند رد می‌کنند.
+- **نردبانِ شناسهٔ integrator:** `LIFI_INTEGRATOR` → شناسهٔ اثبات‌شده (حافظهٔ ۱۰ دقیقه‌ای) → `fbtswap` → `fbt-swap`. پورتال خط تیره را حذف می‌کند و `fbt-swap` با «Integrator not found» برمی‌گشت؛ پاسخِ شناسهٔ تأییدنشده کوئتِ **بی‌کارمزد** است، پس گیت آن را رد می‌کرد. همین نردبان به مسیرِ سولانای LI.FI (`distributionFees`) هم اضافه شد.
+- **اجرا روی zkSync:** `transactionRequest` حالا کامل نگه داشته/فرستاده می‌شود — `customData` (gasPerPubdata/paymaster)، `gasPrice`، `maxFeePerGas`، `maxPriorityFeePerGas`؛ قبلاً فقط `to/data/value/gasLimit` می‌رفت و تراکنش روی Era قابلِ پخش نبود.
+- **علتِ اصلی (سولانا):** `solanaQuoteProviders` با `keyConfigured === false` کلِ مسیرِ De¹/OpenOcean را حذف می‌کرد — یعنی بدونِ `OPENOCEAN_API_KEY` **هرگز** پرسیده نمی‌شد، در حالی که سرور یک نردبانِ ریشه با پاسِ بدونِ کلید دارد. حالا De¹ همیشه پرسیده می‌شود و فقط با `feeReady === false` (پیکربندیِ خودمان) رد می‌شود؛ دلیلِ `NO_API_KEY` هم برداشته شد.
+- **ابزارِ اپراتور و شل:** `scripts/verify-fees.mjs` همان دو فیلدِ ناموجود را چک می‌کرد و حالا از split/walletAddress می‌خواند؛ `public/sw.js` → `fbt-shell-v26` تا PWA/APKهای نصب‌شده گیتِ قدیمی را در باندل نگه ندارند.
+- **تست:** پروب جدید `test/lifi-response-shape-probe.mjs` **۲۷/۲۷** (بدنه‌های دقیقاً به شکلِ واقعی: بدونِ `fee`، کیف پول روی `walletAddress`)؛ `zkscroll`/`fivechain` همه ✓؛ `app-network-parity` **۵۰/۵۰**؛ `execution-sources` **۱۰/۱۰**؛ `quote-race` **۱۰/۱۰**؛ `solana-fee-route` **۳۵/۳۵**؛ `solana-price-probe` ✓؛ سولانا-سواپ **۵۱/۵۱**؛ `units` و `wiring` بدونِ خطای تازه (۸ و ۵۰ خطای پیش‌ترموجودِ `main`)؛ `vite build` سبز.
+
+---
+
 # ۲۰۲۶-۱۰-۲۲ — باکس آمار سفارش‌ها، فید گفتگو و اکوسیستم از نو طراحی شدند (و دو حذفِ سفارش سولانا و جملهٔ هشدار)
 
 جزئیات و استدلال کامل: [2026-10-22-orders-stats-community-ecosystem-redesign-fa.md](2026-10-22-orders-stats-community-ecosystem-redesign-fa.md).

@@ -135,7 +135,22 @@ const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 15000);
 const OO_ENTERPRISE_ROOT = 'https://open-api-enterprise.de1.exchange/v4';
 const OO_PUBLIC_ROOT = 'https://open-api.openocean.finance/v4';
 
-/** The roots this request will try, in order. Public, nothing secret. */
+/**
+ * The roots this request will try, in order. Public, nothing secret.
+ *
+ * ─── WHY THE ORDER IS FIXED EVEN WHEN THERE IS NO KEY ─────────────────────
+ * The enterprise gateway needs the key and the public one does not, so with no
+ * key configured the first attempt is a guaranteed "No API key found in
+ * request." — one fast refusal, not a timeout. Reordering the ladder around
+ * that would be a micro-optimisation paid for in unpredictability: `/status`
+ * prints this list as "what will be tried", and an order that changes with an
+ * environment variable makes an outage report unreadable.
+ *
+ * The real bug in this area was never the order — it was the CLIENT skipping
+ * the whole route when `keyConfigured` was false, so NO root was ever asked.
+ * See lib/solana/routeOrder.js#solanaQuoteProviders. The ladder below has
+ * always attempted every root keylessly when no key exists.
+ */
 export function ooRoots() {
   const roots = [];
   const override = String(process.env.OPENOCEAN_BASE_URL || '').trim().replace(/\/+$/, '');
@@ -335,6 +350,11 @@ async function ooFetch(path) {
     if (r.kind !== 'failure') return r.result;
   }
 
+  /* With no key configured the ladder above already tried every root
+     keylessly (`useKey` is false), so there is nothing to add here. What used
+     to happen instead: the CLIENT skipped this whole route when
+     `keyConfigured` was false, so none of it ever ran — see
+     lib/solana/routeOrder.js#solanaQuoteProviders. */
   return firstFailure;
 }
 

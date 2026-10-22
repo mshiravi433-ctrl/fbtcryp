@@ -26,11 +26,77 @@ const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 20000);
  * capital letter without saying so and a wrong id fails SILENTLY (error 1011
  * → our fee-free retry → bridging works, revenue is zero forever).
  */
-export const integratorId = () =>
-  String(process.env.LIFI_INTEGRATOR || 'fbt-swap')
+export function normalizeIntegratorId(value) {
+  return String(value ?? '')
+    .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 23);
+}
+
+/**
+ * ─── WHY THE INTEGRATOR ID IS A LADDER AND NOT ONE STRING ───────────────────
+ * LI.FI pays the integrator fee only for a VERIFIED integrator, and the
+ * verified string is whatever the portal registered — it is not necessarily
+ * the one typed into the form. This project has already been through that
+ * exact trap: docs/LIFI-SETUP-FA.md records `fbt-swap` → «Integrator not
+ * found» and `fbtswap` → registered, because the portal strips the hyphen on
+ * save. A wrong id does not error loudly: the quote comes back looking fine
+ * and simply carries no fee, which our own gate then (correctly) refuses — so
+ * from the user's seat a mis-registered id is «مشکلی پیش آمده» on every pair
+ * of every LI.FI-only chain (zkSync Era, Scroll, Mantle).
+ *
+ * So the ids are a candidate ladder, in priority order:
+ *
+ *   1. whatever the operator configured (LIFI_INTEGRATOR, comma-separated);
+ *   2. the id this process has already SEEN produce a verified fee split
+ *      (remembered for 10 minutes, so the ladder costs nothing on the hot
+ *      path);
+ *   3. the two ids this project has ever registered — `fbtswap` (the id the
+ *      portal actually stored, and the one a live
+ *      `GET /v1/integrators/<id>` found) and `fbt-swap` (the earlier default,
+ *      kept as a fallback because the portal's normalisation is not ours to
+ *      control).
+ *
+ * A quote is only accepted when the SIGNED split proves our amount and our
+ * wallet, so trying the next candidate can never buy fee-free volume: it can
+ * only turn a fee-less answer into a fee-paying one.
+ */
+const INTEGRATOR_FALLBACKS = ['fbtswap', 'fbt-swap'];
+let integratorMemory = { id: null, until: 0 };
+const INTEGRATOR_MEMORY_TTL_MS = 10 * 60 * 1000;
+
+/** Every candidate id, normalised, configured-first and de-duplicated. */
+export function integratorCandidates() {
+  /* Commas only: an id may legitimately contain `_`/`-` but never a space, and
+     splitting on whitespace would turn a typo'd "FBT Swap" into two ids. */
+  const configured = String(process.env.LIFI_INTEGRATOR || '')
+    .split(',')
+    .map(normalizeIntegratorId)
+    .filter(Boolean);
+  const remembered = integratorMemory.until > Date.now() && integratorMemory.id ? [integratorMemory.id] : [];
+  return [...new Set([...configured, ...remembered, ...INTEGRATOR_FALLBACKS.map(normalizeIntegratorId)].filter(Boolean))];
+}
+
+/** The id to try FIRST. Kept as the module's public "our integrator" answer. */
+export const integratorId = () => integratorCandidates()[0];
+
+/** Remember which id LI.FI actually paid, for the next 10 minutes. */
+export function rememberIntegrator(id) {
+  const norm = normalizeIntegratorId(id);
+  if (!norm) return;
+  integratorMemory = { id: norm, until: Date.now() + INTEGRATOR_MEMORY_TTL_MS };
+}
+
+/** Test seam: forget the remembered integrator. */
+export function _resetLifiIntegratorState() {
+  integratorMemory = { id: null, until: 0 };
+}
+
+/** True when `name` is one of our integrator ids. */
+export function isOurIntegratorName(name) {
+  return integratorCandidates().includes(normalizeIntegratorId(name));
+}
 
 export const apiKey = () => process.env.LIFI_API_KEY || '';
 export const lifiConfigured = () => true; /* LI.FI serves quotes without a key; the key only raises the rate limit. */
@@ -299,7 +365,137 @@ async function checksummed(addr) {
 }
 
 /**
- * LI.FI same-chain swap quote with OUR fee attached and the echo verified.
+ * The signed-split evidence, read from the shapes LI.FI actually returns.
+ *
+ * Returns `{ ok, code, shareWei, lifiFeeWei, integrator }`, never throws.
+ *
+ * ─── THE 2026-10-22 ROOT CAUSE, WRITTEN DOWN ────────────────────────────────
+ * This gate used to demand `body.integrator === id` AND
+ * `body.fee === feeBps/10000`. `fee` is a REQUEST parameter: it is not part of
+ * LI.FI's quote response at all (`@lifi/types`, `StepBase`/`LiFiStep`), so
+ * `Number(body.fee ?? 0)` was 0 on every real quote and the gate answered
+ * FEE_NOT_APPLIED forever. Because the fee gate's verdict outranks every other
+ * failure in `classifyQuoteFailure`, that surfaced as a generic «مشکلی پیش
+ * آمده» — and on the chains where LI.FI is the only fee-carrying executor
+ * (zkSync Era 324, Scroll 534352, Mantle 5000) it meant NO pair could price,
+ * while Monad/Robinhood broke only when KyberSwap's slug was down. Exactly the
+ * report.
+ *
+ * The wallet half had the same defect: it read
+ * `includedSteps[].action.integratorFees.recipients[].config.defaultWallet`,
+ * a structure the response types do not contain. The modern proof is
+ * `feeSplit.recipients[].walletAddress` (FeeRecipient in @lifi/types), which
+ * is the source-chain address the router pays. Both shapes are accepted here;
+ * neither is required to be the only one.
+ *
+ * What has NOT changed: the share must be the amount we asked for (±1 base
+ * unit of LI.FI's documented rounding), it must be at least one base unit, and
+ * the wallet it is paid to must be one of OURS. A half share is still refused.
+ */
+export function verifyLifiSwapFee(body, { integratorIds = integratorCandidates(), feeBps = 0 } = {}) {
+  const ids = new Set(integratorIds.map(normalizeIntegratorId).filter(Boolean));
+  const fromWei = fromWeiOf(body);
+  const expected = (fromWei * BigInt(Math.max(0, Math.round(Number(feeBps) || 0)))) / 10000n; // floor
+  const fail = (code) => ({ ok: false, code, shareWei: 0n, lifiFeeWei: 0n, integrator: null });
+
+  if (!(feeBps > 0)) return fail('FEE_NOT_APPLIED');
+  if (fromWei <= 0n) return fail('FEE_NOT_APPLIED');
+
+  /* Identity echo: optional in the response, never ignored when present — a
+     quote attributed to another integrator is another integrator's fee. */
+  if (body?.integrator != null && String(body.integrator) !== '') {
+    if (!ids.has(normalizeIntegratorId(body.integrator))) return fail('FEE_NOT_APPLIED');
+  }
+  /* Legacy/optional rate label. Present ⇒ must match; absent ⇒ the split is
+     the evidence (the actual bug was treating "absent" as "mismatch"). */
+  if (body?.fee != null) {
+    const echoedRate = Number(body.fee);
+    if (Number.isFinite(echoedRate) && Math.abs(echoedRate - feeBps / 10000) > 1e-9) {
+      return fail('FEE_NOT_APPLIED');
+    }
+  }
+
+  const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
+  let split = null;
+  let ours = null;
+  for (const fc of feeCosts) {
+    const recipients = Array.isArray(fc?.feeSplit?.recipients) ? fc.feeSplit.recipients : [];
+    const hit = recipients.find((r) => ids.has(normalizeIntegratorId(r?.name)));
+    if (hit) {
+      split = fc.feeSplit;
+      ours = hit;
+      break;
+    }
+  }
+  if (!ours) return fail('FEE_NOT_APPLIED');
+
+  const shareWei = parseFeeUnits(ours.fee);
+  if (shareWei == null || shareWei < 1n) return fail('FEE_NOT_APPLIED');
+  const withinRounding =
+    shareWei === expected || shareWei + 1n === expected || shareWei === expected + 1n;
+  if (!withinRounding) return fail('FEE_NOT_APPLIED');
+
+  const wallets = feeWallets(body, ids, ours);
+  if (!wallets.length || !wallets.some((w) => ourEvmWallets().has(w.toLowerCase()))) {
+    return fail('FEE_RECIPIENT_MISMATCH');
+  }
+
+  return {
+    ok: true,
+    code: null,
+    shareWei,
+    lifiFeeWei: parseFeeUnits(split?.lifiFee) ?? 0n,
+    integrator: normalizeIntegratorId(ours.name) || null
+  };
+}
+
+/** `action.fromAmount` as an integer, or 0n when unreadable. */
+function fromWeiOf(body) {
+  try {
+    return BigInt(body?.action?.fromAmount ?? 0);
+  } catch {
+    return 0n;
+  }
+}
+
+/**
+ * Every wallet this quote pays us at, from every shape LI.FI uses.
+ * See verifyLifiSwapFee for why there is more than one.
+ */
+function feeWallets(body, ids, ours = null) {
+  const out = new Set();
+  const add = (a) => {
+    const v = String(a ?? '').trim();
+    if (isAddr(v)) out.add(v);
+  };
+  if (ours) add(ours.walletAddress);
+  const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
+  for (const fc of feeCosts) {
+    for (const r of fc?.feeSplit?.recipients ?? []) {
+      if (ids.has(normalizeIntegratorId(r?.name))) add(r?.walletAddress);
+    }
+  }
+  const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
+  for (const s of steps) {
+    for (const r of s?.action?.integratorFees?.recipients ?? []) {
+      if (ids.has(normalizeIntegratorId(r?.name)) || isAddr(r?.walletAddress)) {
+        add(r?.config?.defaultWallet);
+        add(r?.walletAddress);
+      }
+    }
+  }
+  return [...out];
+}
+
+/**
+ * LI.FI same-chain swap quote with OUR fee attached and the evidence verified.
+ *
+ * Walks the integrator ladder (see `integratorCandidates`): the first id that
+ * yields a quote whose signed split proves our amount AND our wallet wins, and
+ * is remembered for ten minutes. A candidate that produces a fee-less quote is
+ * rejected — trying the next id never buys fee-free volume, it only turns a
+ * fee-less answer into a fee-paying one. A hard upstream failure (timeout,
+ * 5xx) stops the ladder immediately: another id cannot fix a down host.
  *
  * @returns {Promise<{ok:boolean, status:number, body:object}>}
  */
@@ -327,82 +523,71 @@ export async function lifiSwapQuote(params = {}) {
     return { ok: false, status: 400, body: { error: 'BAD_TOKEN' } };
   }
 
-  const q = new URLSearchParams({
-    fromChain: String(fromChain),
-    toChain: String(toChain),
-    fromToken: isAddr(fromToken) ? await checksummed(fromToken) : fromToken,
-    toToken: isAddr(toToken) ? await checksummed(toToken) : toToken,
-    fromAmount,
-    fromAddress,
-    /* The user's own address is always the destination for a swap. */
-    toAddress: String(params.toAddress ?? fromAddress),
-    slippage: String(Math.min(0.5, Math.max(0.0005, Number(params.slippage) || 0.005))),
-    integrator: integratorId(),
-    fee: String(swapFee())
-  });
+  const [fromRef, toRef] = [
+    isAddr(fromToken) ? await checksummed(fromToken) : fromToken,
+    isAddr(toToken) ? await checksummed(toToken) : toToken
+  ];
 
-  const res = await lifiFetch(`/quote?${q.toString()}`);
-  if (!res.ok) return { ok: false, status: res.status, body: res.body ?? { error: 'UPSTREAM_FAILED' } };
-
-  /* ── THE FEE ECHO GATE — before this response leaves the server ──────────
-   * What ends up signed is the calldata LI.FI built for THIS quote, and its
-   * fee fields must prove OUR cut lands in OUR wallet. Anything less is
-   * rejected here so the client never even sees a quote we cannot honour.
-   * (The client re-verifies the same evidence before signing — one gate is
-   * a wall, two is a wall with an alarm.)
-   *
-   * The share check allows LI.FI's documented rounding (each fee amount
-   * rounds DOWN to a whole base unit) within ±1 unit — the same band as
-   * src/lib/lifi.js and the Solana gate in server/solanaLifi.js. The old
-   * exact product `share * 10000 === fromAmount * bps` rejected every quote
-   * whose input amount did not divide cleanly (MAX balances, 6-decimal
-   * stables past the third decimal, …), which on the LI.FI-only chains read
-   * as «مشکلی پیش آمده» instead of a price. */
   const fee = swapFee();
-  const id = integratorId();
-  const body = res.body;
-  const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
-  const split = feeCosts.find((fc) => fc && fc.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
-  const ours = split?.recipients?.find((r) => String(r?.name) === id) ?? null;
-  let fromWei = 0n;
-  try {
-    fromWei = BigInt(body?.action?.fromAmount ?? 0);
-  } catch {
-    fromWei = 0n;
-  }
-  const expectBps = Math.round(fee * 10000);
-  const share = ours != null ? parseFeeUnits(ours.fee) : null;
-  const expectedShare = (fromWei * BigInt(expectBps)) / 10000n; // floor
-  const shareOk =
-    ours != null &&
-    fromWei > 0n &&
-    share != null &&
-    share >= 1n &&
-    (share === expectedShare || share + 1n === expectedShare || share === expectedShare + 1n);
+  const candidates = integratorCandidates();
+  let lastRefusal = null;
 
-  const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
-  const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
-  const walletEntry = wallets.find((r) => String(r?.name) === id) ?? null;
-  const echoedWallet = String(walletEntry?.config?.defaultWallet ?? '');
-  const walletOk = isAddr(echoedWallet) && ourEvmWallets().has(echoedWallet.toLowerCase());
+  for (const id of candidates) {
+    const q = new URLSearchParams({
+      fromChain: String(fromChain),
+      toChain: String(toChain),
+      fromToken: fromRef,
+      toToken: toRef,
+      fromAmount,
+      fromAddress,
+      /* The user's own address is always the destination for a swap. */
+      toAddress: String(params.toAddress ?? fromAddress),
+      slippage: String(Math.min(0.5, Math.max(0.0005, Number(params.slippage) || 0.005))),
+      integrator: id,
+      fee: String(fee)
+    });
 
-  const echoedRate = Number(body?.fee ?? 0);
-  if (
-    String(body?.integrator) !== id ||
-    !Number.isFinite(echoedRate) ||
-    Math.abs(echoedRate - fee) >= 1e-9
-  ) {
-    return { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
-  }
-  if (!shareOk) {
-    return { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
-  }
-  if (!walletOk) {
-    return { ok: false, status: 502, body: { error: 'FEE_RECIPIENT_MISMATCH' } };
-  }
-  if (!body?.transactionRequest?.data || !body?.transactionRequest?.to) {
-    return { ok: false, status: 502, body: { error: 'NO_TRANSACTION_REQUEST' } };
+    const res = await lifiFetch(`/quote?${q.toString()}`);
+    if (!res.ok) {
+      /*
+       * An integrator-specific refusal (LI.FI answers 400/422 with a message
+       * naming the integrator, or 1011 "Integrator not found") is worth one
+       * retry under the next id — that is the whole point of the ladder.
+       * Anything else is transport or liquidity: another id cannot help, and
+       * walking it would multiply the user's wait.
+       */
+      const message = String(res.body?.message || res.body?.error || '');
+      const integratorRefusal =
+        (res.status === 400 || res.status === 422) &&
+        /integrator|fee/i.test(message) &&
+        !/amount|token|route|slippage/i.test(message);
+      lastRefusal = { ok: false, status: res.status, body: res.body ?? { error: 'UPSTREAM_FAILED' } };
+      if (integratorRefusal) continue;
+      return lastRefusal;
+    }
+
+    /* ── THE EVIDENCE GATE — before this response leaves the server ─────────
+     * What ends up signed is the calldata LI.FI built for THIS quote, and its
+     * fee fields must prove OUR cut lands in OUR wallet. Anything less is
+     * rejected here so the client never even sees a quote we cannot honour.
+     * (The client re-verifies the same evidence before signing — one gate is a
+     * wall, two is a wall with an alarm.)
+     */
+    const gate = verifyLifiSwapFee(res.body, { integratorIds: candidates, feeBps: Math.round(fee * 10000) });
+    if (gate.ok) {
+      /* A quote without buildable bytes is not executable, whatever it proves
+         about the fee — the client would have to refuse it anyway. */
+      if (!res.body?.transactionRequest?.data || !res.body?.transactionRequest?.to) {
+        return { ok: false, status: 502, body: { error: 'NO_TRANSACTION_REQUEST' } };
+      }
+      rememberIntegrator(gate.integrator || id);
+      return { ok: true, status: 200, body: res.body };
+    }
+    lastRefusal = { ok: false, status: 502, body: { error: gate.code } };
+    /* A wallet mismatch is about the address LI.FI pays, not about the id we
+       asked under — the other candidates would fail identically. */
+    if (gate.code === 'FEE_RECIPIENT_MISMATCH') break;
   }
 
-  return { ok: true, status: 200, body };
+  return lastRefusal ?? { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
 }
