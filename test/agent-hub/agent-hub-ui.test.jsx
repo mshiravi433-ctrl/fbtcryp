@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AgentHubPanel from '../../src/components/AgentHub/AgentHubPanel.jsx';
 import { defaultAgentsView } from '../../src/lib/intent-ai/agentHub/availability.js';
+import { RECOMMENDED_EXTERNAL_AGENTS } from '../../src/lib/intent-ai/agentHub/recommendations.js';
 
 const AGENT = {
   id: 'conformance-free:token-research',
@@ -87,6 +88,93 @@ afterEach(() => {
 });
 
 const renderPanel = (props = {}) => render(<AgentHubPanel fa={false} {...props} />);
+const renderDiscoverPanel = (props = {}) => {
+  const view = renderPanel(props);
+  fireEvent.click(screen.getByTestId('agent-hub-tab-discover'));
+  return view;
+};
+
+const OFFICIAL_DOMAINS_BY_AGENT = {
+  chatgpt: ['chatgpt.com'],
+  perplexity: ['perplexity.ai'],
+  claude: ['claude.ai', 'claude.com'],
+  gemini: ['gemini.google'],
+  'microsoft-copilot': ['microsoft.com'],
+  'github-copilot': ['github.com'],
+  cursor: ['cursor.com'],
+  'zapier-agents': ['zapier.com'],
+  n8n: ['n8n.io']
+};
+
+describe('editorial recommendations', () => {
+  it('opens on official recommendations even when the reviewed registry is disabled', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({
+      ok: true, enabled: false, status: 'DISABLED', agents: [], providers: [],
+      detail: 'AGENT_HUB_ENABLED is off'
+    });
+    renderPanel();
+
+    const panel = await screen.findByTestId('agent-hub-recommended');
+    expect(screen.getByTestId('agent-hub-tab-recommended').getAttribute('aria-selected')).toBe('true');
+    expect(panel.textContent).toMatch(/does not mean FBT-reviewed or connected/i);
+    expect(panel.textContent).toMatch(/free access/i);
+    expect(panel.textContent).toMatch(/paid option/i);
+    expect(RECOMMENDED_EXTERNAL_AGENTS).toHaveLength(9);
+    expect(screen.getByTestId('agent-hub-recommendation-perplexity')).toBeTruthy();
+    expect(screen.getByTestId('agent-hub-recommendation-github-copilot')).toBeTruthy();
+    expect(screen.getByTestId('agent-hub-recommendation-n8n')).toBeTruthy();
+    expect(document.querySelector('[data-testid^="agent-hub-card-"]')).toBeNull();
+
+    for (const agent of RECOMMENDED_EXTERNAL_AGENTS) {
+      expect(agent.productUrl).toMatch(/^https:\/\//);
+      expect(agent.pricingUrl).toMatch(/^https:\/\//);
+      for (const url of [agent.productUrl, agent.pricingUrl]) {
+        const host = new URL(url).hostname;
+        expect(OFFICIAL_DOMAINS_BY_AGENT[agent.id].some((domain) => host === domain || host.endsWith(`.${domain}`))).toBe(true);
+      }
+      const officialLink = screen.getByTestId(`agent-hub-recommendation-site-${agent.id}`);
+      const pricingLink = screen.getByTestId(`agent-hub-recommendation-pricing-${agent.id}`);
+      expect(officialLink.getAttribute('href')).toBe(agent.productUrl);
+      expect(pricingLink.getAttribute('href')).toBe(agent.pricingUrl);
+      expect(officialLink.getAttribute('rel')).toMatch(/noopener/);
+      expect(pricingLink.getAttribute('rel')).toMatch(/noopener/);
+    }
+  });
+
+  it('filters the list by use case and by product name', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+    renderPanel();
+
+    await screen.findByTestId('agent-hub-recommendation-perplexity');
+    fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-coding'));
+    expect(screen.getByTestId('agent-hub-recommendation-github-copilot')).toBeTruthy();
+    expect(screen.getByTestId('agent-hub-recommendation-cursor')).toBeTruthy();
+    expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('agent-hub-recommendation-filter-all'));
+    fireEvent.change(screen.getByTestId('agent-hub-recommendation-search'), { target: { value: 'n8n' } });
+    expect(screen.getByTestId('agent-hub-recommendation-n8n')).toBeTruthy();
+    expect(screen.queryByTestId('agent-hub-recommendation-chatgpt')).toBeNull();
+  });
+
+  it('offers an explicit route to add a compatible A2A card to FBT', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+    renderPanel();
+
+    fireEvent.click(await screen.findByTestId('agent-hub-recommended-add'));
+    expect(screen.getByTestId('agent-hub-tab-discover').getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByTestId('agent-hub-source-url')).toBeTruthy();
+  });
+
+  it('localizes the recommendations and sets right-to-left direction for Persian', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
+    render(<AgentHubPanel fa />);
+    const panel = await screen.findByTestId('agent-hub-recommended');
+    expect(panel.getAttribute('dir')).toBe('rtl');
+    expect(panel.textContent).toContain('ایجنت‌های پیشنهادی');
+    expect(panel.textContent).toContain('قیمت و طرح‌ها');
+  });
+});
 
 describe('catalogue states', () => {
   it('says the hub is disabled instead of rendering placeholder agents', async () => {
@@ -94,7 +182,7 @@ describe('catalogue states', () => {
       ok: true, enabled: false, status: 'DISABLED', agents: [], providers: [],
       detail: 'AGENT_HUB_ENABLED is off'
     });
-    renderPanel();
+    renderDiscoverPanel();
     const status = await screen.findByTestId('agent-hub-status');
     expect(status.textContent).toMatch(/not enabled/i);
     expect(document.querySelector('[data-testid^="agent-hub-card-"]')).toBeNull();
@@ -102,14 +190,14 @@ describe('catalogue states', () => {
 
   it('shows an honest empty state when no provider has passed review', async () => {
     routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [] });
-    renderPanel();
+    renderDiscoverPanel();
     const status = await screen.findByTestId('agent-hub-status');
     expect(status.textContent).toMatch(/passed review/i);
   });
 
   it('reports a failed catalogue read', async () => {
     routes['GET /ai/agent-hub/catalog'] = () => respond({ ok: false, code: 'STORE_READ_FAILED' }, 500);
-    renderPanel();
+    renderDiscoverPanel();
     const status = await screen.findByTestId('agent-hub-status');
     expect(status.textContent).toMatch(/could not be read/i);
   });
@@ -121,7 +209,7 @@ describe('discovery', () => {
   });
 
   it('lists the agent with its provider, its access model and its cost', async () => {
-    renderPanel();
+    renderDiscoverPanel();
     const card = await screen.findByTestId('agent-hub-card-conformance-free-token-research');
     expect(within(card).getByTestId('agent-hub-provider').textContent).toBe('Conformance Provider');
     expect(card.textContent).toMatch(/Free \(provider limits apply\)/);
@@ -133,7 +221,7 @@ describe('discovery', () => {
       ...CATALOG,
       agents: [AGENT, { ...AGENT, id: 'conformance-paid:research', name: 'Paid research', accessModel: 'DIRECT_CRYPTO_PAYMENT', providerId: 'conformance-paid', providerName: 'Paid Provider', status: 'PAYMENT_REQUIRED' }]
     });
-    renderPanel();
+    renderDiscoverPanel();
     await screen.findByTestId('agent-hub-card-conformance-free-token-research');
     expect(screen.getByTestId('agent-hub-card-conformance-paid-research')).toBeTruthy();
 
@@ -152,7 +240,7 @@ describe('invocation and result honesty', () => {
   });
 
   const openDetail = async () => {
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.click(await screen.findByTestId('agent-hub-open-conformance-free-token-research'));
     return screen.findByTestId('agent-hub-detail');
   };
@@ -257,7 +345,7 @@ describe('invocation and result honesty', () => {
       ...CATALOG,
       agents: [{ ...AGENT, id: 'conformance-paid:research', status: 'PAYMENT_REQUIRED', accessModel: 'DIRECT_CRYPTO_PAYMENT', requiresPayment: true }]
     });
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.click(await screen.findByTestId('agent-hub-open-conformance-paid-research'));
     const note = await screen.findByTestId('agent-hub-paid-note');
     expect(note.textContent).toMatch(/not enabled/i);
@@ -272,7 +360,7 @@ describe('connected and activity', () => {
 
   it('says no connection is configured instead of showing a fake provider', async () => {
     routes['GET /ai/agent-hub/connections'] = () => respond({ ok: true, connections: [], capability: { configured: false } });
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.click(await screen.findByTestId('agent-hub-tab-connected'));
     const empty = await screen.findByTestId('agent-hub-connections-empty');
     expect(empty.textContent).toMatch(/connection is configured yet/i);
@@ -286,7 +374,7 @@ describe('connected and activity', () => {
         taskTitle: 'Research ETH', state: 'completed', createdAt: Date.now(), contextCategories: ['task_text']
       }]
     });
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.click(await screen.findByTestId('agent-hub-tab-activity'));
     const activity = await screen.findByTestId('agent-hub-activity');
     await waitFor(() => expect(activity.textContent).toMatch(/Research ETH/));
@@ -318,7 +406,7 @@ describe('user-supplied agents', () => {
 
   it('explains what an external agent is and offers the add form when nothing is listed', async () => {
     routes['GET /ai/agent-hub/catalog'] = () => respond(EMPTY);
-    renderPanel();
+    renderDiscoverPanel();
     const intro = await screen.findByTestId('agent-hub-intro');
     expect(intro.textContent).toMatch(/task broker/i);
     expect(screen.getByTestId('agent-hub-source-url')).toBeTruthy();
@@ -336,7 +424,7 @@ describe('user-supplied agents', () => {
       added = true;
       return respond({ ok: true, source: { id: 'u-abc123', card: { name: 'My agent' } } });
     };
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.change(await screen.findByTestId('agent-hub-source-url'), {
       target: { value: 'https://agent.example.com/.well-known/agent-card.json' }
     });
@@ -351,7 +439,7 @@ describe('user-supplied agents', () => {
   it('says why a card was refused instead of pretending it was added', async () => {
     routes['GET /ai/agent-hub/catalog'] = () => respond(EMPTY);
     routes['POST /ai/agent-hub/sources'] = () => respond({ ok: false, code: 'SOURCE_CARD_UNREACHABLE' }, 422);
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.change(await screen.findByTestId('agent-hub-source-url'), { target: { value: 'https://nope.example.com/card' } });
     fireEvent.click(screen.getByTestId('agent-hub-source-add'));
     const error = await screen.findByTestId('agent-hub-source-error');
@@ -365,7 +453,7 @@ describe('user-supplied agents', () => {
     let deleted = false;
     routes['GET /ai/agent-hub/catalog'] = () => respond(deleted ? EMPTY : { ...EMPTY, status: 'LIVE', agents: [SOURCE_AGENT], providers: [SOURCE_PROVIDER] });
     routes['DELETE /ai/agent-hub/sources/u-abc123'] = () => { deleted = true; removed = 'u-abc123'; return respond({ ok: true, removedId: 'u-abc123' }); };
-    renderPanel();
+    renderDiscoverPanel();
     fireEvent.click(await screen.findByTestId('agent-hub-source-remove-u-abc123'));
     await waitFor(() => expect(deleted).toBe(true));
     expect(removed).toBe('u-abc123');

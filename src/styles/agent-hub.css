@@ -12,10 +12,13 @@
   color: var(--nc-ink, #eef8fc);
 }
 
-.ah-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ah-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 
 .ah-segments {
   display: inline-flex;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
   padding: 3px;
   gap: 2px;
   border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.15));
@@ -33,6 +36,7 @@
   padding: 7px 13px;
   border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
   transition: color 140ms ease, background 140ms ease;
 }
 
@@ -375,3 +379,156 @@
   border-radius: 999px; background: rgba(96, 228, 235, .18); color: var(--nc-cyan-strong, #8af9f2);
 }
 .ah-viewswitch button[data-active='true'] .ah-viewcount { background: rgba(4, 16, 24, .22); color: #041018; }
+
+/* ── curated, non-executable recommendations ────────────────────────────────
+   This editorial directory is deliberately styled apart from live catalogue
+   cards; its labels and official links make the source of each suggestion clear. */
+.ah-recommendations { display: flex; flex-direction: column; gap: 12px; }
+
+.ah-rec-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(96, 228, 235, .23);
+  border-radius: 17px;
+  padding: 16px;
+  background:
+    radial-gradient(90% 130% at 100% 0%, rgba(96, 228, 235, .12), transparent 66%),
+    linear-gradient(160deg, rgba(13, 29, 42, .94), rgba(8, 18, 28, .88));
+}
+.ah-rec-hero-copy { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.ah-rec-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--nc-cyan-strong, #8af9f2);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.ah-rec-kicker-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--nc-cyan, #60e4eb);
+  box-shadow: 0 0 12px rgba(96, 228, 235, .7);
+}
+.ah-rec-hero h3 { margin: 0; font-size: 18px; }
+.ah-rec-hero p { max-width: 760px; margin: 0; line-height: 1.75; }
+.ah-rec-updated { color: var(--nc-dim, #829eae); font-size: 10.5px; }
+.ah-rec-add { flex: 0 0 auto; white-space: nowrap; }
+
+.ah-rec-disclaimer {
+  border: 1px solid rgba(255, 212, 121, .26);
+  border-radius: 13px;
+  padding: 11px 13px;
+  color: #f6ddb0;
+  background: linear-gradient(100deg, rgba(82, 57, 20, .22), rgba(10, 22, 33, .48));
+  font-size: 11.5px;
+  line-height: 1.75;
+}
+.ah-rec-disclaimer strong { color: #ffe4aa; }
+.ah-rec-disclaimer p { margin: 3px 0 0; }
+
+.ah-rec-tools { display: flex; flex-direction: column; gap: 9px; }
+.ah-rec-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ah-rec-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-width: 0;
+  border: 1px solid rgba(136, 207, 220, .17);
+  border-radius: 17px;
+  padding: 14px;
+  background:
+    radial-gradient(120% 100% at 100% 0%, rgba(96, 228, 235, .08), transparent 58%),
+    linear-gradient(180deg, rgba(13, 29, 42, .93), rgba(8, 18, 28, .88));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .12);
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+.ah-rec-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(96, 228, 235, .38);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .2);
+}
+.ah-rec-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ah-rec-brand {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(96, 228, 235, .3);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(96, 228, 235, .2), rgba(132, 127, 255, .12));
+  color: var(--nc-cyan-strong, #8af9f2);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -.04em;
+}
+.ah-rec-name-wrap { flex: 1 1 auto; min-width: 0; }
+.ah-rec-vendor { display: block; color: var(--nc-dim, #829eae); font-size: 10.5px; }
+.ah-rec-name { margin: 1px 0 0; color: var(--nc-ink, #eef8fc); font-size: 15px; line-height: 1.3; }
+.ah-rec-recommended {
+  flex: 0 0 auto;
+  border: 1px solid rgba(96, 228, 235, .28);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--nc-cyan-strong, #8af9f2);
+  background: rgba(96, 228, 235, .07);
+  font-size: 10px;
+  font-weight: 750;
+}
+.ah-rec-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.ah-rec-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid rgba(136, 207, 220, .15);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--nc-muted, #a3bac9);
+  background: rgba(7, 18, 28, .58);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.ah-rec-tag-category { color: #d6d4ff; border-color: rgba(157, 149, 255, .25); }
+.ah-rec-tag-free { color: #a9f7dc; border-color: rgba(110, 243, 198, .24); background: rgba(30, 95, 75, .14); }
+.ah-rec-tag-paid { color: #ffd996; border-color: rgba(255, 212, 121, .22); background: rgba(82, 57, 20, .13); }
+.ah-rec-summary { margin: 0; color: var(--nc-muted, #a3bac9); font-size: 12.5px; line-height: 1.7; }
+.ah-rec-facts { display: grid; gap: 0; margin: 0; }
+.ah-rec-facts > div { border-top: 1px solid rgba(136, 207, 220, .09); padding: 8px 0 0; }
+.ah-rec-facts dt { color: var(--nc-cyan-strong, #8af9f2); font-size: 10.5px; font-weight: 750; }
+.ah-rec-facts dd { margin: 3px 0 0; color: var(--nc-muted, #a3bac9); font-size: 11.5px; line-height: 1.65; }
+.ah-rec-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 2px; }
+.ah-rec-actions a { text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+.ah-rec-link-primary { color: var(--nc-ink, #eef8fc); }
+.ah-rec-link { color: var(--nc-muted, #a3bac9); }
+.ah-rec-external-mark { font-size: 11px; line-height: 1; }
+.ah-rec-actions a:focus-visible,
+.ah-rec-add:focus-visible { outline: 2px solid var(--nc-cyan-strong, #8af9f2); outline-offset: 2px; }
+
+@media (min-width: 720px) {
+  .ah-rec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .ah-rec-hero { align-items: stretch; flex-direction: column; }
+  .ah-rec-add { align-self: flex-start; white-space: normal; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-rec-card { transition: none !important; }
+  .ah-rec-card:hover { transform: none; }
+}

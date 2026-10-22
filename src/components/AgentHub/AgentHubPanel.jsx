@@ -4,9 +4,9 @@
  * Discover · Connected · Activity, inside the existing Agents area of the AI
  * page. Three behaviours are non-negotiable here:
  *
- *   1. THE LIST IS THE SERVER'S LIST. Nothing is hard-coded, nothing is
- *      suggested by the client, and an empty catalogue renders an honest empty
- *      state instead of placeholder cards.
+ *   1. THE EXECUTION LIST IS THE SERVER'S LIST. The separate recommendations
+ *      directory is editorial, links only to official sites, and can never be
+ *      mistaken for an approved or executable provider listing.
  *   2. THE PREVIEW IS THE PAYLOAD. The context preview is produced by the same
  *      `composeConsentMessage` the server calls, so what the user reads is
  *      byte-for-byte the message the provider receives.
@@ -33,6 +33,7 @@ import {
   removeSource,
   revokeConnection
 } from '../../lib/intent-ai/agentHub/client.js';
+import RecommendedAgents from './RecommendedAgents.jsx';
 import '../../styles/agent-hub.css';
 
 const ACCESS_FILTERS = [
@@ -116,9 +117,9 @@ function Badge({ status, fa }) {
   return <span className="ah-badge" data-tone={STATUS_TONE[status] || 'muted'}>{label}</span>;
 }
 
-function Segments({ items, value, onChange, testPrefix }) {
+function Segments({ items, value, onChange, testPrefix, ariaLabel = 'Agent hub views' }) {
   return (
-    <div className="ah-segments" role="tablist" aria-label="Agent hub views">
+    <div className="ah-segments" role="tablist" aria-label={ariaLabel}>
       {items.map((item) => (
         <button
           key={item.id}
@@ -202,9 +203,9 @@ export function ResultView({ result, fa }) {
  *
  * It is here because the honest possible states of this page used to be "a
  * single line saying nothing is enabled" and that reads like a broken screen.
- * The rule is unchanged — nothing is invented, no provider is promoted — but a
- * page with no reviewed agent still has something true to say: the user can
- * bring their own agent, and this is the shape of the flow.
+ * The reviewed execution catalogue remains server-owned; a separate editorial
+ * directory is clearly labelled and never promotes a provider as FBT-approved.
+ * This explains the user-supplied A2A path and its consent boundary.
  */
 export function HubIntro({ fa }) {
   const steps = fa
@@ -244,7 +245,9 @@ export function HubIntro({ fa }) {
 }
 
 export default function AgentHubPanel({ fa = false, onClose = null }) {
-  const [tab, setTab] = useState('discover');
+  /* Recommendations are useful even while the reviewed execution registry is
+     empty, so make that honest, source-linked view the landing subtab. */
+  const [tab, setTab] = useState('recommended');
   const [catalog, setCatalog] = useState({ state: 'loading', data: null, error: null });
   const [query, setQuery] = useState('');
   const [access, setAccess] = useState('all');
@@ -683,13 +686,15 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
       <div className="ah-top">
         <Segments
           items={[
-            { id: 'discover', label: fa ? 'کشف' : 'Discover' },
+            { id: 'recommended', label: fa ? 'پیشنهادی' : 'Recommended' },
+            { id: 'discover', label: fa ? 'کشف / افزودن' : 'Discover / Add' },
             { id: 'connected', label: fa ? 'متصل‌ها' : 'Connected' },
             { id: 'activity', label: fa ? 'فعالیت' : 'Activity' }
           ]}
           value={tab}
           onChange={setTab}
           testPrefix="agent-hub-tab"
+          ariaLabel={fa ? 'بخش‌های ایجنت خارجی' : 'External agent sections'}
         />
         {onClose ? <button type="button" className="ah-ghost" onClick={onClose}>{fa ? 'بستن' : 'Close'}</button> : null}
       </div>
@@ -698,6 +703,10 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
         <p className={`ah-note ${notice.tone === 'ok' ? 'ah-note-ok' : 'ah-note-warn'}`} role="status" data-testid="agent-hub-notice">
           {notice.text}
         </p>
+      ) : null}
+
+      {tab === 'recommended' ? (
+        <RecommendedAgents fa={fa} onAddOwnAgent={() => setTab('discover')} />
       ) : null}
 
       {tab === 'discover' ? (
