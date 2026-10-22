@@ -1,0 +1,305 @@
+/* FBT EXTERNAL AGENT HUB — /intent → Agents → external agents.
+   Presentation only: no simulated telemetry, no fake badges. Tokens fall back
+   to the neural-command palette so the panel reads as part of the same surface,
+   and every state is also conveyed by TEXT (a badge is never the only signal,
+   which is what makes the colour choices safe for colour-blind users). */
+
+.ah-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px 48px;
+  color: var(--nc-ink, #eef8fc);
+}
+
+.ah-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.ah-segments {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.15));
+  border-radius: 999px;
+  background: rgba(10, 22, 33, 0.6);
+}
+
+.ah-segment {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--nc-muted, #a3bac9);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.ah-segment[data-active='true'] {
+  color: #041018;
+  background: var(--nc-cyan, #60e4eb);
+  font-weight: 700;
+}
+
+.ah-segment:focus-visible,
+.ah-chip:focus-visible,
+.ah-primary:focus-visible,
+.ah-ghost:focus-visible,
+.ah-input:focus-visible {
+  outline: 2px solid var(--nc-cyan-strong, #8af9f2);
+  outline-offset: 2px;
+}
+
+.ah-tools { display: flex; flex-direction: column; gap: 8px; }
+
+.ah-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ah-chip {
+  appearance: none;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.2));
+  background: rgba(148, 197, 255, 0.05);
+  color: var(--nc-muted, #a3bac9);
+  border-radius: 999px;
+  padding: 6px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  text-align: start;
+  max-width: 100%;
+}
+
+.ah-chip[data-active='true'] {
+  color: var(--nc-ink, #eef8fc);
+  border-color: var(--nc-cyan, #60e4eb);
+  background: rgba(96, 228, 235, 0.14);
+}
+
+.ah-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.2));
+  background: rgba(6, 15, 24, 0.72);
+  color: var(--nc-ink, #eef8fc);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.ah-textarea { min-height: 96px; resize: vertical; }
+.ah-textarea-sm { min-height: 68px; }
+
+.ah-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+
+.ah-card {
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.15));
+  background: linear-gradient(180deg, rgba(13, 29, 42, 0.86), rgba(8, 18, 28, 0.78));
+  border-radius: 14px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ah-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ah-card-name { font-weight: 750; font-size: 13.5px; }
+.ah-card-summary { margin: 0; color: var(--nc-muted, #a3bac9); font-size: 12.5px; line-height: 1.65; }
+.ah-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--nc-dim, #829eae);
+  font-size: 11.5px;
+}
+
+.ah-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  border-radius: 999px;
+  padding: 3px 9px;
+  border: 1px solid currentColor;
+}
+.ah-badge[data-tone='ok'] { color: #6ef3c6; }
+.ah-badge[data-tone='warn'] { color: #ffd479; }
+.ah-badge[data-tone='bad'] { color: #ff9cae; }
+.ah-badge[data-tone='info'] { color: var(--nc-cyan, #60e4eb); }
+.ah-badge[data-tone='muted'] { color: var(--nc-dim, #829eae); }
+
+.ah-primary {
+  appearance: none;
+  border: 1px solid rgba(96, 228, 235, 0.5);
+  background: linear-gradient(180deg, rgba(96, 228, 235, 0.24), rgba(96, 228, 235, 0.1));
+  color: var(--nc-ink, #eef8fc);
+  border-radius: 12px;
+  padding: 11px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ah-primary-sm { align-self: flex-start; padding: 8px 12px; font-size: 12px; }
+.ah-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ah-ghost {
+  appearance: none;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.2));
+  background: transparent;
+  color: var(--nc-muted, #a3bac9);
+  border-radius: 10px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ah-muted { color: var(--nc-muted, #a3bac9); }
+.ah-small { font-size: 11.5px; line-height: 1.6; }
+
+.ah-note {
+  margin: 0;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.18));
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--nc-muted, #a3bac9);
+  background: rgba(10, 22, 33, 0.5);
+}
+.ah-note-warn { border-color: rgba(255, 168, 120, 0.4); color: #ffd0ac; }
+.ah-error { color: #ff9cae; font-size: 12.5px; margin: 0; }
+
+.ah-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ah-panel h3 { margin: 2px 0 0; font-size: 18px; }
+.ah-attrib { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--nc-muted, #a3bac9); }
+.ah-attrib a { color: var(--nc-cyan, #60e4eb); text-decoration: none; border-bottom: 1px dotted currentColor; }
+
+.ah-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 14px;
+  font-size: 12px;
+}
+.ah-facts div { border: 1px solid var(--tag-line-soft, rgba(136, 207, 220, 0.09)); border-radius: 10px; padding: 8px 10px; }
+.ah-facts dt { color: var(--nc-dim, #829eae); font-size: 10.5px; letter-spacing: 0.04em; }
+.ah-facts dd { margin: 3px 0 0; }
+
+.ah-form, .ah-run { display: flex; flex-direction: column; gap: 10px; }
+.ah-label { font-size: 12px; font-weight: 700; }
+.ah-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.ah-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+.ah-context {
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.15));
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ah-context legend { font-size: 12px; font-weight: 700; padding: 0 4px; }
+
+.ah-check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; line-height: 1.6; }
+.ah-check input { margin-top: 3px; accent-color: var(--nc-cyan, #60e4eb); }
+.ah-check-strong { border-top: 1px dashed var(--tag-line, rgba(136, 207, 220, 0.2)); padding-top: 10px; }
+
+.ah-preview {
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, 0.18));
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(5, 13, 21, 0.7);
+}
+.ah-preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; margin-bottom: 8px; }
+.ah-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--nc-ink, #eef8fc);
+  max-height: 260px;
+  overflow: auto;
+}
+
+.ah-run-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ah-state {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--nc-muted, #a3bac9);
+}
+.ah-state[data-state='completed'] { color: #6ef3c6; }
+.ah-state[data-state='failed'] { color: #ff9cae; }
+.ah-state[data-state='running'], .ah-state[data-state='queued'] { color: var(--nc-cyan, #60e4eb); }
+.ah-state[data-state='reconciling'], .ah-state[data-state='input_required'] { color: #ffd479; }
+
+.ah-result { display: flex; flex-direction: column; gap: 10px; }
+.ah-result-body { font-size: 13px; line-height: 1.8; }
+.ah-result-body h4, .ah-result-body h5 { margin: 6px 0; font-size: 13.5px; }
+.ah-result-body p { margin: 0 0 8px; }
+.ah-result-body ul { margin: 0 0 8px; padding-inline-start: 18px; }
+.ah-result-body a { color: var(--nc-cyan, #60e4eb); }
+.ah-result-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: rgba(5, 13, 21, 0.8);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 11.5px;
+}
+.ah-warn {
+  border: 1px solid rgba(255, 168, 120, 0.45);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(60, 26, 12, 0.4);
+  font-size: 12px;
+  line-height: 1.7;
+  color: #ffd0ac;
+}
+.ah-warn ul { margin: 6px 0 0; padding-inline-start: 18px; }
+.ah-citations { font-size: 11.5px; color: var(--nc-muted, #a3bac9); }
+.ah-citations ul { margin: 6px 0 0; padding-inline-start: 16px; display: grid; gap: 4px; }
+.ah-citations a { color: var(--nc-cyan, #60e4eb); overflow-wrap: anywhere; }
+
+@media (min-width: 720px) {
+  .ah-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ah-list > li:only-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 420px) {
+  .ah-row { grid-template-columns: 1fr; }
+  .ah-segment { padding: 7px 10px; font-size: 11.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-panel, .ah-panel * { transition: none !important; animation: none !important; }
+}
+
+/* The in-tab switch between this account's automations and the external hub.
+   Same visual language as the hub's own segments so the two read as one
+   control hierarchy rather than two competing navs. */
+.ah-viewswitch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px;
+  border: 1px solid var(--tag-line, rgba(136, 207, 220, .15)); background: rgba(10, 22, 33, .6); align-self: flex-start; }
+.ah-viewswitch button {
+  appearance: none; border: 0; background: transparent; color: var(--nc-muted, #a3bac9);
+  font: inherit; font-size: 12px; padding: 7px 13px; border-radius: 999px; cursor: pointer; }
+.ah-viewswitch button[data-active='true'] { color: #041018; background: var(--nc-cyan, #60e4eb); font-weight: 700; }
+.ah-viewswitch button:focus-visible { outline: 2px solid var(--nc-cyan-strong, #8af9f2); outline-offset: 2px; }
+
+/* The live count beside the external-agents switch. It is a real number from
+   the catalogue (reviewed agents that are LIVE right now), never a decoration —
+   and it is absent when the count is zero. */
+.ah-viewswitch button { display: inline-flex; align-items: center; gap: 6px; }
+.ah-viewcount {
+  font-size: 10px; font-weight: 800; min-width: 18px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: rgba(96, 228, 235, .18); color: var(--nc-cyan-strong, #8af9f2);
+}
+.ah-viewswitch button[data-active='true'] .ah-viewcount { background: rgba(4, 16, 24, .22); color: #041018; }

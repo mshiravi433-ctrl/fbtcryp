@@ -523,7 +523,23 @@ app.post('/api/intents/v1/confidential/reveal', rejectUnavailableConfidentialWri
  */
 app.use(sloMeterMiddleware());
 
-app.use(express.json({ limit: '256kb' }));
+/*
+ * RAW BODY, ONLY WHERE A SIGNATURE NEEDS IT.
+ *
+ * Provider webhooks (server/agentHub/webhooks.js) are signed over the exact
+ * bytes the provider sent. `JSON.stringify(JSON.parse(body))` is not those
+ * bytes — key order and whitespace change — so the Hub must keep the raw text.
+ * The capture is limited to the one webhook path so no other route pays for a
+ * second copy of a 256 KB body.
+ */
+app.use(express.json({
+  limit: '256kb',
+  verify: (req, _res, buf) => {
+    if (/^\/api\/ai\/agent-hub\/providers\/[a-z0-9-]+\/webhook$/.test(String(req.originalUrl || '').split('?')[0])) {
+      req.rawBody = buf.toString('utf8');
+    }
+  }
+}));
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(telegramAuth(BOT_TOKEN)); // optional — populates req.tgUser when present
 
@@ -6818,6 +6834,28 @@ const ensureBrainRouter = () => {
  * already covers these paths, since this mount sits under that middleware.
  */
 app.use('/api/ai', lazyMount('ai-command', () => import('./aiCommand.js')));
+
+/* ─── FBT EXTERNAL AGENT HUB (env-gated, default OFF) ───────────────────────
+ * `AGENT_HUB_ENABLED` is the master switch; without it every route answers an
+ * honest `HUB_DISABLED` and the catalog is empty. It is mounted at
+ * `/api/ai/agent-hub` — NOT `/api/ai/agents` (command-center roster) and NOT
+ * `/api/ai/external-agents` (the FI trust registry) — so three surfaces that
+ * mean three different things keep three different paths. Mounted BEFORE the
+ * financial-intelligence mount: the more specific prefix answers first, and the
+ * FI router never has to know this path exists.
+ *
+ * The owner is `ci.ownerFor`, the same derivation the rest of the AI surface
+ * uses, so "this device's tasks" means the same device here as everywhere else.
+ */
+app.use('/api/ai/agent-hub', lazyMount('agent-hub', async () => {
+  const [{ createAgentHub }, ci] = await Promise.all([import('./agentHub/index.js'), ensureCentralIntelligence()]);
+  const hub = createAgentHub({
+    ownerFor: ci.ownerFor,
+    log: (line) => app.locals.ciLog?.push?.(line)
+  });
+  app.set('agentHub', hub);
+  return hub.router;
+}));
 
 /* ---------------------- FBT INTENT AI OS (unified V1) ---------------------- */
 /*
