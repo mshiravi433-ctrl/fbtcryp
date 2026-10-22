@@ -153,6 +153,15 @@ export default async function run() {
     t('gate: a split paying a stranger is FEE_RECIPIENT_MISMATCH',
       stranger.ok === false && stranger.code === 'FEE_RECIPIENT_MISMATCH');
 
+    /* A split that pays a stranger stays refused even when an unrelated legacy
+       row names a wallet of ours — the wallet is scoped to OUR integrator. */
+    const mixed = quoteBody({ feeWallet: STRANGER });
+    mixed.includedSteps = [
+      { action: { integratorFees: { recipients: [{ name: 'fbtswap', config: { defaultWallet: FEE_WALLET } }] } } }
+    ];
+    t('gate: a legacy row naming our wallet cannot rescue a split paying a stranger',
+      verifyLifiFee({ body: mixed, feeBps: 70, feeReceiver: FEE_WALLET }).code === 'FEE_RECIPIENT_MISMATCH');
+
     /* ── 3. FEE-FREE AND HALF-SHARE QUOTES ARE STILL REFUSED ─────────────── */
     const free = verifyLifiFee({ body: quoteBody({ includeFeeCost: false }), feeBps: 70, feeReceiver: FEE_WALLET });
     t('gate: a quote with no fee cost at all is FEE_NOT_APPLIED',

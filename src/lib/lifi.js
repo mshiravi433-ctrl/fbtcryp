@@ -288,12 +288,22 @@ export function verifyLifiFee({ body, feeBps = 0, feeReceiver = null, integrator
    */
   const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
   const wallets = [];
-  if (isAddr(ours.walletAddress)) wallets.push(ours.walletAddress);
-  for (const s of steps) {
+  if (isAddr(ours.walletAddress)) {
+    /*
+     * The signed split names the payout address, so it is the ONLY address we
+     * accept for this quote. Letting a legacy row add a second candidate would
+     * mean a body that pays a stranger could still pass on the strength of a
+     * field that is not what the router reads.
+     */
+    wallets.push(ours.walletAddress);
+  }
+  for (const s of isAddr(ours.walletAddress) ? [] : steps) {
     for (const r of s?.action?.integratorFees?.recipients ?? []) {
-      const name = normalizeIntegratorId(r?.name);
-      const addr = r?.config?.defaultWallet;
-      if ((ids.has(name) || isAddr(r?.walletAddress)) && isAddr(addr)) wallets.push(addr);
+      /* Scoped to OUR name on purpose: accepting any wallet in this array
+         would let a body that pays a stranger pass as long as one of the
+         entries happened to name an address of ours. */
+      if (!ids.has(normalizeIntegratorId(r?.name))) continue;
+      if (isAddr(r?.config?.defaultWallet)) wallets.push(r.config.defaultWallet);
       if (isAddr(r?.walletAddress)) wallets.push(r.walletAddress);
     }
   }

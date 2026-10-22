@@ -468,7 +468,16 @@ function feeWallets(body, ids, ours = null) {
     const v = String(a ?? '').trim();
     if (isAddr(v)) out.add(v);
   };
-  if (ours) add(ours.walletAddress);
+  /*
+   * The signed split names the payout address, so when it is present it is the
+   * ONLY address this quote may pay. The legacy shapes are consulted only for
+   * bodies that carry no recipient-level address at all (older responses and
+   * the synthetic body rebuilt at signing time).
+   */
+  if (ours && isAddr(ours.walletAddress)) {
+    add(ours.walletAddress);
+    return [...out];
+  }
   const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
   for (const fc of feeCosts) {
     for (const r of fc?.feeSplit?.recipients ?? []) {
@@ -478,10 +487,11 @@ function feeWallets(body, ids, ours = null) {
   const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
   for (const s of steps) {
     for (const r of s?.action?.integratorFees?.recipients ?? []) {
-      if (ids.has(normalizeIntegratorId(r?.name)) || isAddr(r?.walletAddress)) {
-        add(r?.config?.defaultWallet);
-        add(r?.walletAddress);
-      }
+      /* Scoped to OUR name: a stranger's row in this array must never be able
+         to make a quote pass just because one of the entries is ours. */
+      if (!ids.has(normalizeIntegratorId(r?.name))) continue;
+      add(r?.config?.defaultWallet);
+      add(r?.walletAddress);
     }
   }
   return [...out];
