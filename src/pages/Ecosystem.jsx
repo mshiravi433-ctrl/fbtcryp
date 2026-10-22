@@ -15,6 +15,7 @@ import {
   NETWORK_REGISTRY,
   monogram
 } from '../lib/ecosystemData';
+import '../styles/ecosystem-modern.css';
 
 /* ============================================================================
  * ECOSYSTEM — FBT Swap Infrastructure Map
@@ -56,7 +57,8 @@ const STATUS_FILTERS = [
   { id: 'all', label: 'eco.statusFilter.all' },
   { id: 'operational', label: 'eco.status.operational' },
   { id: 'partial', label: 'eco.status.partial' },
-  { id: 'unknown', label: 'eco.status.unknown' },
+  /* No «نامشخص» chip: supported options are marked فعال on request, so the
+     filter would only ever be an empty list (lib/ecosystemData). */
   { id: 'degraded', label: 'eco.status.degraded' },
   { id: 'offline', label: 'eco.status.offline' }
 ];
@@ -105,6 +107,97 @@ function StatusDot({ status, size = 8 }) {
     <span className="eco-status-dot" style={{ width: size, height: size, background: color }}>
       {(status === 'OPERATIONAL' || status === 'PARTIAL') && <span className="eco-status-pulse" style={{ borderColor: color }} />}
     </span>
+  );
+}
+
+/* ─── Status Pill: dot + the word, so «فعال» is read, not decoded ────────────── */
+function StatusPill({ status, t }) {
+  const s = STATUS_COLORS[status] ? status : 'OPERATIONAL';
+  return (
+    <span className={`eco2-pill eco2-pill--${s.toLowerCase()}`}>
+      <StatusDot status={s} size={6} />
+      {t(STATUS_LABELS[s] || 'eco.status.operational')}
+    </span>
+  );
+}
+
+/* ─── Network mesh hero art ───────────────────────────────────────────────────
+ * Requested: «با فلو شبکه‌ای، یک انیمیشن جذاب و ریدیزاین صفحه خیلی جذاب‌تر».
+ * An SVG mesh whose outer nodes are the REAL networks from the fetched
+ * sections (first eight), wired to the FBT core. Links flow via a CSS
+ * stroke-dash animation, nodes pulse with their own status colour, and two
+ * orbital rings turn slowly. Everything is transform/opacity/stroke, and it
+ * all parks under prefers-reduced-motion (ecosystem-modern.css). While data
+ * is still loading the nodes render as unlabelled placeholders — the mesh
+ * never invents a network. */
+function NetworkMesh({ networks = [], t }) {
+  const nodes = (Array.isArray(networks) ? networks : []).slice(0, 8);
+  const shown = nodes.length ? nodes : Array.from({ length: 6 }, (_, i) => ({ id: `ph-${i}`, short: '···', hue: '#5b647f', status: 'OPERATIONAL' }));
+  const CX = 180;
+  const CY = 108;
+  const placed = shown.map((n, i) => {
+    const a = (i / shown.length) * Math.PI * 2 - Math.PI / 2;
+    return { ...n, x: CX + Math.cos(a) * 138, y: CY + Math.sin(a) * 76, i };
+  });
+
+  return (
+    <svg
+      className="eco2-mesh"
+      viewBox="0 0 360 216"
+      role="img"
+      aria-label={t('eco.viz.ariaLabel', 'Network mesh of the ecosystem around FBT Swap')}
+      focusable="false"
+    >
+      <defs>
+        <radialGradient id="eco2Core" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stopColor="#00e5ff" />
+          <stop offset="100%" stopColor="#7c4dff" />
+        </radialGradient>
+      </defs>
+      <ellipse className="eco2-orbit eco2-orbit--a" cx={CX} cy={CY} rx="138" ry="76" />
+      <ellipse className="eco2-orbit eco2-orbit--b" cx={CX} cy={CY} rx="92" ry="50" />
+      {placed.map((n) => (
+        <line
+          key={`l-${n.id}`}
+          className="eco2-link"
+          x1={CX} y1={CY} x2={n.x} y2={n.y}
+          style={{ animationDelay: `${n.i * 0.35}s` }}
+        />
+      ))}
+      {placed.map((n, idx) => {
+        const next = placed[(idx + 1) % placed.length];
+        return (
+          <line
+            key={`r-${n.id}`}
+            className="eco2-link eco2-link--rim"
+            x1={n.x} y1={n.y} x2={next.x} y2={next.y}
+            style={{ animationDelay: `${idx * 0.5}s` }}
+          />
+        );
+      })}
+      <circle className="eco2-core-halo" cx={CX} cy={CY} r="26" />
+      <circle cx={CX} cy={CY} r="15" fill="url(#eco2Core)" />
+      <text className="eco2-core-label" x={CX} y={CY + 3} textAnchor="middle">FBT</text>
+      {placed.map((n) => (
+        <g key={n.id}>
+          <circle
+            className="eco2-node-halo"
+            cx={n.x} cy={n.y} r="11"
+            fill={n.hue || 'var(--rgb-1)'}
+            style={{ animationDelay: `${n.i * 0.4}s` }}
+          />
+          <circle
+            className="eco2-node"
+            cx={n.x} cy={n.y} r="6"
+            fill={STATUS_COLORS[n.status] || n.hue || '#00ff9d'}
+            stroke={n.hue || 'transparent'}
+          />
+          <text className="eco2-node-label" x={n.x} y={n.y + 21} textAnchor="middle">
+            {n.short || n.name}
+          </text>
+        </g>
+      ))}
+    </svg>
   );
 }
 
@@ -409,30 +502,36 @@ export default function Ecosystem() {
         <h1 className="h1 eco-new-title">{t('eco.newTitle', 'FBT Swap Ecosystem')}</h1>
       </motion.div>
 
-      {/* ─── Hero ─── */}
-      <motion.div className="eco-hero" variants={riseIn} initial="hidden" animate="show" transition={{ delay: 0.05 }}>
-        <div className="eco-hero-bg">
-          <div className="eco-hero-orb eco-hero-orb--1" />
-          <div className="eco-hero-orb eco-hero-orb--2" />
-          <div className="eco-hero-orb eco-hero-orb--3" />
-          <div className="eco-hero-grid-lines" />
-        </div>
-        <div className="eco-hero-content">
-          <div className="eco-hero-icon">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-              <circle cx="20" cy="20" r="18" stroke="var(--rgb-1)" strokeWidth="1" opacity="0.4" />
-              <circle cx="20" cy="20" r="12" stroke="var(--rgb-2)" strokeWidth="0.8" opacity="0.3" />
-              <circle cx="20" cy="20" r="4" fill="var(--rgb-1)" opacity="0.8" />
-              <line x1="20" y1="2" x2="20" y2="8" stroke="var(--rgb-1)" strokeWidth="1" opacity="0.5" />
-              <line x1="20" y1="32" x2="20" y2="38" stroke="var(--rgb-1)" strokeWidth="1" opacity="0.5" />
-              <line x1="2" y1="20" x2="8" y2="20" stroke="var(--rgb-1)" strokeWidth="1" opacity="0.5" />
-              <line x1="32" y1="20" x2="38" y2="20" stroke="var(--rgb-1)" strokeWidth="1" opacity="0.5" />
-            </svg>
-          </div>
+      {/* ─── Hero: live network mesh ─── */}
+      <motion.div className="eco2-hero" variants={riseIn} initial="hidden" animate="show" transition={{ delay: 0.05 }}>
+        <NetworkMesh networks={sections?.networks || []} t={t} />
+        <div className="eco2-hero-copy">
+          <span className="eco2-hero-live">
+            <span className="eco2-hero-live-dot" aria-hidden="true" />
+            {t('eco.meshLive', { defaultValue: 'شبکهٔ زندهٔ اکوسیستم' })}
+          </span>
           <h2 className="eco-hero-heading">{t('eco.heroTitle', 'The infrastructure powering FBT Swap')}</h2>
           <p className="eco-hero-subtitle">
             {t('eco.heroSubtitle', 'Networks, liquidity sources, DeFi protocols, data infrastructure and intelligence systems working together behind FBT Swap.')}
           </p>
+        </div>
+        <div className="eco2-hero-stats">
+          <div className="eco2-hero-stat">
+            <strong>{allItems.length || '—'}</strong>
+            <small>{t('eco.meshIntegrations', { defaultValue: 'یکپارچه‌سازی' })}</small>
+          </div>
+          <div className="eco2-hero-stat eco2-hero-stat--active">
+            <strong>{allItems.length ? allItems.filter((i) => i.status === 'OPERATIONAL').length : '—'}</strong>
+            <small>{t('eco.status.operational')}</small>
+          </div>
+          <div className="eco2-hero-stat">
+            <strong>{sections?.networks?.length || '—'}</strong>
+            <small>{t('eco.networks', 'Networks')}</small>
+          </div>
+          <div className="eco2-hero-stat eco2-hero-stat--health">
+            <strong>{allItems.length ? `${Math.round((allItems.filter((i) => i.status === 'OPERATIONAL').length / allItems.length) * 100)}%` : '—'}</strong>
+            <small>{t('eco.meshHealth', { defaultValue: 'سلامت شبکه' })}</small>
+          </div>
         </div>
       </motion.div>
 
@@ -471,25 +570,25 @@ export default function Ecosystem() {
           <div className="eco-status-grid">
             <StatusRow
               label={t('eco.networks', 'Networks')}
-              value={`${summary.networks.operational}/${summary.networks.total}`}
+              ok={summary.networks.operational} total={summary.networks.total}
               status={summaryStatus(summary.networks)}
               t={t}
             />
             <StatusRow
               label={t('eco.dexSources', 'DEX Sources')}
-              value={`${summary.dex.operational}/${summary.dex.total}`}
+              ok={summary.dex.operational} total={summary.dex.total}
               status={summaryStatus(summary.dex)}
               t={t}
             />
             <StatusRow
               label={t('eco.bridges', 'Bridges')}
-              value={`${summary.bridges.operational}/${summary.bridges.total}`}
+              ok={summary.bridges.operational} total={summary.bridges.total}
               status={summaryStatus(summary.bridges)}
               t={t}
             />
             <StatusRow
               label={t('eco.dataInfra', 'Data Infra')}
-              value={`${summary.dataInfra.operational}/${summary.dataInfra.total}`}
+              ok={summary.dataInfra.operational} total={summary.dataInfra.total}
               status={summaryStatus(summary.dataInfra)}
               t={t}
             />
@@ -562,7 +661,7 @@ export default function Ecosystem() {
               >
                 <div className="eco-new-card-top">
                   <Logo url={getNetworkUrl(network.id)} name={network.name} hue={network.hue} />
-                  <StatusDot status={network.status} />
+                  <StatusPill status={network.status} t={t} />
                 </div>
                 <span className="eco-new-card-name">{network.name}</span>
                 <span className="eco-new-card-type">{network.type} • {network.chainType}</span>
@@ -619,7 +718,7 @@ export default function Ecosystem() {
               >
                 <div className="eco-new-card-top">
                   <Logo url={getDataUrl(infra.id)} name={infra.name} hue={infra.hue} />
-                  <StatusDot status={infra.status} />
+                  <StatusPill status={infra.status} t={t} />
                 </div>
                 <span className="eco-new-card-name">{infra.name}</span>
                 <span className="eco-new-card-type">{infra.type}</span>
@@ -655,7 +754,7 @@ export default function Ecosystem() {
                       <line x1="22" y1="14" x2="26" y2="14" stroke="var(--rgb-2)" strokeWidth="0.8" opacity="0.5" />
                     </svg>
                   </span>
-                  <StatusDot status={ai.status} />
+                  <StatusPill status={ai.status} t={t} />
                 </div>
                 <span className="eco-new-card-name">{ai.name}</span>
                 <span className="eco-new-card-desc">{ai.purpose}</span>
@@ -688,7 +787,7 @@ export default function Ecosystem() {
               >
                 <div className="eco-new-card-top">
                   <Logo url={getWalletUrl(wallet.id)} name={wallet.name} hue={wallet.hue} />
-                  <StatusDot status={wallet.status} />
+                  <StatusPill status={wallet.status} t={t} />
                 </div>
                 <span className="eco-new-card-name">{wallet.name}</span>
                 <span className="eco-new-card-type">{wallet.type}</span>
@@ -762,23 +861,30 @@ function SectionHeader({ title, count }) {
 function summaryStatus(group) {
   const total = Number(group?.total || 0);
   const ok = Number(group?.operational || 0);
-  const observed = group?.observed == null ? total : Number(group.observed || 0);
-  if (total <= 0 || observed <= 0) return 'UNKNOWN';
+  /* No UNKNOWN summary any more: supported options are marked فعال on
+     request, so a group is operational, partly operational, or degraded —
+     only a group with nothing in it at all has no word for itself. */
+  if (total <= 0) return 'UNKNOWN';
   if (ok >= total) return 'OPERATIONAL';
-  if (ok > 0 || observed < total) return 'PARTIAL';
+  if (ok > 0) return 'PARTIAL';
   return 'DEGRADED';
 }
 
-function StatusRow({ label, value, status, t }) {
+function StatusRow({ label, ok = 0, total = 0, status, t }) {
+  const pct = total > 0 ? Math.round((ok / total) * 100) : 0;
+  const color = STATUS_COLORS[status] || STATUS_COLORS.OPERATIONAL;
   return (
-    <div className="eco-status-item">
-      <span className="eco-status-label">{label}</span>
-      <span className="eco-status-value">
-        <StatusDot status={status} size={6} />
-        <span className="mono">{value}</span>
-        <span className="eco-status-text" style={{ color: STATUS_COLORS[status] }}>
-          {t(STATUS_LABELS[status] || 'eco.status.unknown')}
-        </span>
+    <div className="eco2-health-tile">
+      <div className="eco2-health-top">
+        <span className="eco-status-label">{label}</span>
+        <StatusPill status={status} t={t} />
+      </div>
+      <div className="eco2-health-nums">
+        <strong className="mono">{`${ok}/${total}`}</strong>
+        <span className="eco2-health-pct mono" style={{ color }}>{`${pct}%`}</span>
+      </div>
+      <span className="eco2-health-bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={ok} aria-label={label}>
+        <span style={{ width: `${pct}%`, background: color }} />
       </span>
     </div>
   );
@@ -795,7 +901,7 @@ function ProtocolCard({ item, onSelect, t }) {
     >
       <div className="eco-new-card-top">
         <Logo url={getProviderUrl(item.id)} name={item.name} hue={item.hue} />
-        <StatusDot status={item.status} />
+        <StatusPill status={item.status} t={t} />
       </div>
       <span className="eco-new-card-name">{item.name}</span>
       <span className="eco-new-card-type">{item.type}</span>

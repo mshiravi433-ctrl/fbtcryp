@@ -253,36 +253,25 @@ describe('auto orders — networks, tokens and price feeds', () => {
   });
 
   /*
-   * THE SOLANA HANDOFF MOVED BEHIND A FOLD AT THE FOOT OF THE PAGE.
+   * THE SOLANA HANDOFF IS GONE FROM THIS PAGE.
    *
-   * Requested: «سفارش سولانا را در باکس بازشونده و پایین صفحه ببر با ظاهری
-   * مدرن‌تر.» It used to render open, between the EVM rail and the user's own
-   * live orders — an unrequested form, for a different network family, above
-   * the list the screen exists to show.
+   * Requested: «سفارش سولانا را هم پاک کن — صفحه را شلوغ کرده». It used to sit
+   * (open, then behind a fold) between the EVM rail and the user's own live
+   * orders — a form for a different network family on a screen that exists to
+   * watch price-triggered orders. Solana swaps live on their own screen.
    *
-   * What must survive the move: the card still says it is a saved handoff and
-   * not a fill (both in the fold header, before the tap, and inside, before the
-   * first field), and the form is one tap away rather than gone.
+   * The standing disclaimer paragraph went with it («این جمله را پاک کن»):
+   * neither the Solana fold/card nor the level-1 honest card may render here.
    */
-  it('keeps the Solana handoff behind a fold, and still says what it is', async () => {
+  it('does not render the Solana handoff or the standing disclaimer', async () => {
     mount();
-    const fold = await screen.findByTestId('ord-sol-fold');
-    expect(fold.dataset.open).toBe('false');
-    /* the disclosure is readable WITHOUT opening anything: that is the promise
-       that must not be one tap deep */
-    expect(fold.textContent).toContain('orders.solana.title');
-    expect(fold.textContent).toContain('orders.solana.hint');
-    /* and the body really is absent while closed, not merely styled away */
+    /* the page itself rendered (the hero is the stable landmark) */
+    await screen.findByTestId('orders-hero');
+    expect(screen.queryByTestId('ord-sol-fold')).toBeNull();
     expect(screen.queryByTestId('ord-sol-card')).toBeNull();
-
-    fireEvent.click(within(fold).getByRole('button', { expanded: false }));
-    await waitFor(() => expect(fold.dataset.open).toBe('true'));
-
-    const card = await screen.findByTestId('ord-sol-card');
-    /* it says what it is before it is used: a saved handoff, not a fill */
-    expect(card.textContent).toContain('orders.solana.body');
-    expect(card.textContent).toContain('orders.solana.evmHint');
-    expect(within(card).getByText('orders.solana.create')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('orders.solana.title');
+    expect(document.body.textContent).not.toContain('orders.level1.honestCard');
+    expect(document.body.textContent).not.toContain('orders.manualNotice');
   });
 
   it('edits a DCA plan in real fields, including a picked network', async () => {

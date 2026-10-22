@@ -4485,6 +4485,9 @@
     "feeNotice": "The DEX & Liquidity integrations above are connected to FBT Swap. When a swap or bridge executes, FBT is paid the platform commission from inside the transaction (70 bps on swaps, 30–40 bps on bridges). FBT is not affiliated with these projects and has no equity or control in them.",
     "feeToFbt": "Fee → FBT",
     "newTitle": "FBT Swap Ecosystem",
+    "meshLive": "LIVE ECOSYSTEM MESH",
+    "meshIntegrations": "Integrations",
+    "meshHealth": "Network health",
     "heroTitle": "The infrastructure powering FBT Swap",
     "heroSubtitle": "Networks, liquidity sources, DeFi protocols, data infrastructure and intelligence systems working together behind FBT Swap.",
     "statusTitle": "FBT ECOSYSTEM STATUS",
@@ -5657,7 +5660,6 @@
       "twap": "New TWAP",
       "rebalance": "New rebalance"
     },
-    "manualNotice": "These are alerts, not automatic trades. This app never holds your keys, so nothing can swap on your behalf — when a target is hit we notify you and the swap is one tap away, already filled in. If your phone is off, the order waits.",
     "readyNow": "Ready now",
     "waiting": "Waiting",
     "history": "Finished",
@@ -5854,7 +5856,13 @@
       "days": "{{n}} days",
       "bestType": "Best fill rate: {{type}} ({{rate}})",
       "bestNone": "Best fill rate: not enough closed orders yet (at least {{n}} per type).",
-      "closedCount": "{{n}} closed"
+      "closedCount": "{{n}} closed",
+      "live": "LIVE ANALYTICS",
+      "fillRate": "Fill rate",
+      "distribution": "Order distribution",
+      "byType": "By order type",
+      "best": "Best order type",
+      "closedOf": "{{closed}} closed of {{total}}"
     },
     "avgFillTime": "Average time to fill",
     "typeName": {
@@ -7624,7 +7632,21 @@
     "joinTitle": "Want to post?",
     "joinBody": "You need a Farcaster account, which costs a few dollars a year in storage rent paid to the protocol — not to us. We deliberately cannot post on your behalf: that would mean holding your signing key, and we do not hold keys of any kind.",
     "openFarcaster": "Open Farcaster",
-    "notice": "These posts are written by strangers on a public network. We do not host them, verify them or moderate them, and showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here."
+    "notice": "These posts are written by strangers on a public network. We do not host them, verify them or moderate them, and showing a post is not a recommendation. Never send anyone money or a recovery phrase because of something you read here.",
+    "search": "Search the feed…",
+    "refresh": "Refresh",
+    "loadMore": "Load more posts",
+    "more": "Read more",
+    "less": "Show less",
+    "copy": "Copy",
+    "copied": "Copied",
+    "autoRefresh": "Auto-refresh (every 90s)",
+    "postsCount": "posts",
+    "updated": "Updated",
+    "noSearchResults": "Nothing in this feed matches “{{q}}”.",
+    "clearSearch": "Clear search",
+    "liveNow": "FARCASTER · LIVE",
+    "offlineBadge": "FARCASTER · OFFLINE"
   },
   "shop": {
     "title": "Shop",

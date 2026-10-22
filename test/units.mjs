@@ -2955,19 +2955,18 @@ export default async function run() {
     t('THORChain stays fail-closed without THOR_NAME', thor.status === 'OFFLINE' && thor.fee.active === false);
     t('network catalog contains 16 EVM networks plus Solana', NETWORK_REGISTRY.filter((n) => n.type === 'EVM').length === 16 && NETWORK_REGISTRY.filter((n) => n.type === 'Non-EVM').length === 1);
     const base = report.sections.networks.find((n) => n.chainId === 8453);
-    t('provider chain metadata without a chain-specific probe stays unverified', base?.status === 'UNKNOWN' && base.supportedProviderCount > 0);
+    t('provider chain metadata without a chain-specific probe is marked active', base?.status === 'OPERATIONAL' && base.supportedProviderCount > 0);
 
     /*
-     * ─── WHAT A NETWORK LIGHT MEANS (2026-10-08) ─────────────────────────────
-     * Reported: «هیچ‌کدام شبکه‌ها چراغشون روشن نیست و همه را زده ناقص».
+     * ─── WHAT A NETWORK LIGHT MEANS (2026-10-08, revised) ────────────────────
+     * Reported first as «هیچ‌کدام شبکه‌ها چراغشون روشن نیست», then requested
+     * outright: «وضعیت نامشخص گزینه‌ها را فعال اعلام کن».
      *
-     * The rule this block pins: a network light is judged ONLY by probes
-     * attempted ON THAT CHAIN. One real quote ⇒ OPERATIONAL (the chain routes);
-     * probes attempted and none answered ⇒ DEGRADED; nothing probed ⇒ UNKNOWN.
-     * The previous rule compared the chains that answered against EVERY
-     * provider that advertises the network, so a chain where everything we
-     * asked answered could still only ever be PARTIAL — which is what every
-     * network on the page showed.
+     * The rule this block pins now: a supported network is فعال
+     * (OPERATIONAL) — answered a real quote, or simply listed by a configured
+     * routing provider in this build — UNLESS probes were attempted on that
+     * chain and none answered, which is DEGRADED and still wins. There is no
+     * UNKNOWN light for a supported chain any more.
      */
     const evidence = mergeProbeEvidence(
       { generatedAt: new Date().toISOString(), results: [{ provider: 'kyberswap', ok: true, chainIds: [8453] }] },
@@ -2992,13 +2991,13 @@ export default async function run() {
       probedEthereum?.status === 'OPERATIONAL' && probedBase?.status === 'OPERATIONAL');
     t('a network whose probes all failed is DEGRADED, not silently green',
       probedPolygon?.status === 'DEGRADED' && probedPolygon.probedProviderCount === 1);
-    t('a network nobody probed on stays UNKNOWN', neverAsked?.status === 'UNKNOWN' && neverAsked.probedProviderCount === 0);
+    t('a supported network nobody probed on is marked active, not unknown', neverAsked?.status === 'OPERATIONAL' && neverAsked.probedProviderCount === 0);
     t('the chip counter reads answered/probed, never answered/advertised',
       probedBase?.reachableProviderCount === 1 && probedBase?.probedProviderCount === 1
       && probedBase?.supportedProviderCount === 2);
-    t('network summary counts probes instead of assuming every network is live',
-      probed.summary.networks.operational === 2 && probed.summary.networks.partial === 1
-      && probed.summary.networks.unverified === 1);
+    t('network summary marks supported networks active and keeps failed probes degraded',
+      probed.summary.networks.operational === 3 && probed.summary.networks.partial === 1
+      && probed.summary.networks.unverified === 0);
   }
 
   /* ----------------------- the OpenOcean adapter ------------------------ */
