@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CONSENT_CATEGORIES, composeConsentMessage } from '../../lib/intent-ai/agentHub/consent.js';
 import { HUB_STATUS_COPY, parseResultBlocks, stateLabel } from '../../lib/intent-ai/agentHub/render.js';
 import {
+  addSource,
   cancelTask,
   createTask,
   getCatalog,
@@ -29,6 +30,7 @@ import {
   listConnections,
   listTasks,
   newIdempotencyKey,
+  removeSource,
   revokeConnection
 } from '../../lib/intent-ai/agentHub/client.js';
 import '../../styles/agent-hub.css';
@@ -41,6 +43,7 @@ const ACCESS_FILTERS = [
 ];
 
 const ACCESS_LABELS = {
+  USER_SUPPLIED: { fa: 'ایجنت خودتان', en: 'Your own agent' },
   FREE_PUBLIC: { fa: 'رایگان', en: 'Free' },
   PROVIDER_SPONSORED: { fa: 'حمایت ارائه‌دهنده', en: 'Provider sponsored' },
   FREE_ACCOUNT: { fa: 'با حساب ارائه‌دهنده', en: 'Provider account' },
@@ -71,6 +74,35 @@ const STATUS_LABELS = {
 };
 
 const accessKey = (model) => (model === 'DIRECT_CRYPTO_PAYMENT' ? 'paid' : (model === 'FREE_ACCOUNT' || model === 'EXTERNAL_SUBSCRIPTION') ? 'account' : 'free');
+
+/* The add-source form is the one place a user types a URL, so every refusal
+   the server can produce has a sentence that tells them what to fix. The raw
+   code is printed next to it — an operator pasting it into a ticket is how
+   these get diagnosed — but the sentence is what the user acts on. */
+const SOURCE_ERROR_COPY = Object.freeze({
+  SOURCE_URL_REQUIRED: { fa: 'نشانی کارت ایجنت را وارد کنید.', en: 'Enter the agent card URL.' },
+  SOURCE_URL_INVALID: { fa: 'نشانی معتبر نیست؛ باید با https:// شروع شود.', en: 'That is not a valid URL. It must start with https://.' },
+  PROVIDER_URL_NOT_HTTPS: { fa: 'فقط نشانی‌های https:// پذیرفته می‌شود.', en: 'Only https:// addresses are accepted.' },
+  PROVIDER_URL_IS_IP: { fa: 'به‌جای IP عددی، دامنهٔ ارائه‌دهنده را وارد کنید.', en: 'Use the provider domain, not a numeric IP.' },
+  PROVIDER_URL_PRIVATE_HOST: { fa: 'این میزبان خصوصی است و از اینجا در دسترس نیست.', en: 'That host is private and cannot be reached from here.' },
+  PROVIDER_URL_HAS_CREDENTIALS: { fa: 'نام‌کاربری یا گذرواژه را از نشانی بردارید.', en: 'Remove the username or password from the URL.' },
+  PROVIDER_URL_HAS_QUERY: { fa: 'بخش پرس‌وجو (?) را از نشانی بردارید.', en: 'Remove the query string from the URL.' },
+  PROVIDER_URL_NONSTANDARD_PORT: { fa: 'فقط پورت استاندارد https (443) پذیرفته می‌شود.', en: 'Only the standard https port (443) is accepted.' },
+  SOURCE_CARD_UNREACHABLE: {
+    fa: 'از آن نشانی کارت ایجنتی نیامد. نشانی را بررسی کنید و مطمئن شوید ارائه‌دهنده درخواست از بیرون را می‌پذیرد.',
+    en: 'Nothing answered with an agent card at that address. Check the URL and that the provider accepts external requests.'
+  },
+  SOURCE_CARD_INVALID: { fa: 'آن صفحه کارت ایجنت A2A معتبر نیست (نام ایجنت ندارد).', en: 'That page is not a valid A2A agent card (no agent name).' },
+  SOURCE_LIMIT_REACHED: { fa: 'به سقف ایجنت‌های قابل‌افزودن رسیده‌اید؛ اول یکی را حذف کنید.', en: 'You have reached the number of agents you can add. Remove one first.' },
+  SOURCE_RATE_LIMITED: { fa: 'افزودن ایجنت بیش از حد پشت‌سرهم بود؛ چند دقیقه بعد دوباره امتحان کنید.', en: 'Too many new agents in a short time. Try again in a few minutes.' },
+  STRONG_OWNER_REQUIRED: { fa: 'این کار را از اپ روی دستگاه خودتان انجام دهید تا حساب شما شناسایی شود.', en: 'Do this from the app on your device so FBT can identify your account.' }
+});
+
+export function sourceErrorText(code, fa, detail = null) {
+  const row = SOURCE_ERROR_COPY[code];
+  if (row) return fa ? row.fa : row.en;
+  return detail || (fa ? 'افزودن ایجنت انجام نشد.' : 'The agent could not be added.');
+}
 const testIdPart = (id) => String(id || '').replace(/[^A-Za-z0-9_-]+/g, '-');
 const fmt = (value, fa) => {
   if (value === null || value === undefined || value === '') return '—';
@@ -165,6 +197,52 @@ export function ResultView({ result, fa }) {
   );
 }
 
+/**
+ * What this surface is, in three sentences, before any list.
+ *
+ * It is here because the honest possible states of this page used to be "a
+ * single line saying nothing is enabled" and that reads like a broken screen.
+ * The rule is unchanged — nothing is invented, no provider is promoted — but a
+ * page with no reviewed agent still has something true to say: the user can
+ * bring their own agent, and this is the shape of the flow.
+ */
+export function HubIntro({ fa }) {
+  const steps = fa
+    ? [
+      { n: '۱', t: 'کارت ایجنت', d: 'نشانی کارت A2A ایجنت را می‌دهید؛ FBT همان کارت را می‌خواند و مهارت‌های اعلام‌شده را فهرست می‌کند.' },
+      { n: '۲', t: 'رضایت شما', d: 'پیش از هر ارسال، دقیقاً همان متنی را که فرستاده می‌شود می‌بینید و انتخاب می‌کنید چه چیزی به اشتراک گذاشته شود.' },
+      { n: '۳', t: 'اجرا نزد ارائه‌دهنده', d: 'هوش و اجرای ایجنت روی زیرساخت خودِ ارائه‌دهنده می‌ماند. FBT واسط است، نه مالک و نه واسطهٔ پول.' }
+    ]
+    : [
+      { n: '1', t: 'Agent card', d: 'You supply an A2A card URL; FBT reads that card and lists the skills it declares.' },
+      { n: '2', t: 'Your consent', d: 'Before anything is sent you see the exact message, and you choose what is shared.' },
+      { n: '3', t: 'Runs at the provider', d: 'The agent and its intelligence stay on the provider’s infrastructure. FBT is the interface, not the owner and not a payment intermediary.' }
+    ];
+  return (
+    <section className="ah-intro" data-testid="agent-hub-intro">
+      <div className="ah-intro-head">
+        <h3>{fa ? 'ایجنت خارجی چیست؟' : 'What is an external agent?'}</h3>
+        <p className="ah-muted ah-small">
+          {fa
+            ? 'ایجنت خارجی، ایجنتی است که شخص دیگری آن را اجرا می‌کند. FBT آن را نمی‌سازد، نمی‌فروشد و کمیسیون نمی‌گیرد؛ فقط رابط، بروکرِ وظیفه و رضایت شماست.'
+            : 'An external agent is one somebody else runs. FBT does not build it, sell it or take a commission — it is the interface, the task broker and your consent.'}
+        </p>
+      </div>
+      <ol className="ah-steps">
+        {steps.map((step) => (
+          <li key={step.n} className="ah-step">
+            <span className="ah-step-n" aria-hidden="true">{step.n}</span>
+            <div>
+              <strong>{step.t}</strong>
+              <p className="ah-muted ah-small">{step.d}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export default function AgentHubPanel({ fa = false, onClose = null }) {
   const [tab, setTab] = useState('discover');
   const [catalog, setCatalog] = useState({ state: 'loading', data: null, error: null });
@@ -180,6 +258,7 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
   const [activity, setActivity] = useState({ state: 'idle', tasks: [] });
   const [connections, setConnections] = useState({ state: 'idle', list: [], capability: null });
   const [notice, setNotice] = useState(null);
+  const [sourceForm, setSourceForm] = useState({ url: '', label: '', state: 'idle', error: null, detail: null });
   const keyRef = useRef(newIdempotencyKey('hub'));
   const inflightRef = useRef(false);
 
@@ -236,6 +315,8 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
   }, [taskId, taskActive]);
 
   const agents = catalog.data?.agents || [];
+  const providers = catalog.data?.providers || [];
+  const sources = providers.filter((provider) => provider.source === 'user');
   const filtered = useMemo(() => agents.filter((agent) => {
     if (access !== 'all' && accessKey(agent.accessModel) !== access) return false;
     if (!query.trim()) return true;
@@ -302,6 +383,41 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
     }
     setRun({ state: 'ready', task: out.task, error: null, code: null, detail: null });
   }, [selected, preview, approved, taskText, context]);
+
+  /* Adding or removing a source re-reads the catalogue instead of patching the
+     local copy: the server is the only place that knows whether the card was
+     reachable, and a card that fails verification must never appear as if it
+     had been added. */
+  const addSourceToHub = useCallback(async () => {
+    const cardUrl = sourceForm.url.trim();
+    if (!cardUrl) {
+      setSourceForm((prev) => ({ ...prev, state: 'error', error: 'SOURCE_URL_REQUIRED', detail: null }));
+      return;
+    }
+    setSourceForm((prev) => ({ ...prev, state: 'working', error: null, detail: null }));
+    const out = await addSource({ cardUrl, label: sourceForm.label.trim() });
+    if (!out.ok) {
+      setSourceForm((prev) => ({ ...prev, state: 'error', error: out.code || 'SOURCE_CARD_UNREACHABLE', detail: out.detail || out.reason || null }));
+      return;
+    }
+    setSourceForm({ url: '', label: '', state: 'idle', error: null, detail: null });
+    setNotice({
+      tone: 'ok',
+      text: fa
+        ? `ایجنت «${out.source?.card?.name || cardUrl}» اضافه و کارتش بررسی شد.`
+        : `“${out.source?.card?.name || cardUrl}” was added and its card verified.`
+    });
+    await reloadCatalog();
+  }, [sourceForm.url, sourceForm.label, fa, reloadCatalog]);
+
+  const removeSourceFromHub = useCallback(async (sourceId) => {
+    const out = await removeSource(sourceId);
+    if (!out.ok) {
+      setNotice({ tone: 'warn', text: out.detail || out.code || (fa ? 'حذف انجام نشد.' : 'The agent could not be removed.') });
+      return;
+    }
+    await reloadCatalog();
+  }, [fa, reloadCatalog]);
 
   const stopTask = useCallback(async () => {
     if (!run.task?.id) return;
@@ -578,7 +694,11 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
         {onClose ? <button type="button" className="ah-ghost" onClick={onClose}>{fa ? 'بستن' : 'Close'}</button> : null}
       </div>
 
-      {notice ? <p className="ah-note ah-note-warn" role="status">{notice.text}</p> : null}
+      {notice ? (
+        <p className={`ah-note ${notice.tone === 'ok' ? 'ah-note-ok' : 'ah-note-warn'}`} role="status" data-testid="agent-hub-notice">
+          {notice.text}
+        </p>
+      ) : null}
 
       {tab === 'discover' ? (
         <>
@@ -594,42 +714,172 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
               {catalog.data?.detail ? ` — ${catalog.data.detail}` : ''}
             </p>
           ) : null}
-          {empty ? (
-            <p className="ah-note" role="status" data-testid="agent-hub-status">
-              {fa ? HUB_STATUS_COPY.EMPTY.fa : HUB_STATUS_COPY.EMPTY.en}
-            </p>
+
+          {!disabled ? (
+            <HubIntro fa={fa} />
           ) : null}
 
-          {!disabled && !empty ? (
+          {!disabled ? (
             <>
-              <div className="ah-tools">
-                <input
-                  className="ah-input"
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={fa ? 'جستجوی ایجنت یا قابلیت…' : 'Search agents or capabilities…'}
-                  aria-label={fa ? 'جستجو' : 'Search'}
-                  data-testid="agent-hub-search"
-                />
-                <div className="ah-filters" role="group" aria-label={fa ? 'نوع دسترسی' : 'Access type'}>
-                  {ACCESS_FILTERS.map((filter) => (
-                    <button
-                      key={filter.id}
-                      type="button"
-                      className="ah-chip"
-                      data-active={access === filter.id}
-                      onClick={() => setAccess(filter.id)}
-                      data-testid={`agent-hub-filter-${filter.id}`}
-                    >
-                      {fa ? filter.fa : filter.en}
-                    </button>
-                  ))}
+              {empty ? (
+                <p className="ah-note" role="status" data-testid="agent-hub-status">
+                  {fa ? HUB_STATUS_COPY.EMPTY.fa : HUB_STATUS_COPY.EMPTY.en}
+                </p>
+              ) : null}
+
+              {/* ── YOUR OWN AGENTS ────────────────────────────────────────
+                  The reviewed catalogue can be empty for a whole deployment.
+                  This block is what makes the page useful in that state: the
+                  user names an A2A agent card, FBT verifies the address and
+                  the card, and the agent appears below labelled as THEIRS —
+                  never as an FBT-reviewed listing. */}
+              <section className="ah-sources" data-testid="agent-hub-sources">
+                <div className="ah-sources-head">
+                  <div>
+                    <strong>{fa ? 'ایجنت خودتان را اضافه کنید' : 'Add your own agent'}</strong>
+                    <p className="ah-muted ah-small">
+                      {fa
+                        ? 'نشانی «کارت ایجنت» (A2A) را وارد کنید. FBT نشانی و کارت را بررسی می‌کند، اما این ایجنت را خودتان انتخاب کرده‌اید و تأییدِ FBT نیست.'
+                        : 'Paste an A2A agent-card URL. FBT checks the address and the card; the agent is your choice, not an FBT-reviewed listing.'}
+                    </p>
+                  </div>
+                  <span className="ah-badge" data-tone="muted" data-testid="agent-hub-source-count">
+                    {sources.length}/{catalog.data?.sources?.cap ?? 8}
+                  </span>
                 </div>
-              </div>
+
+                <div className="ah-row">
+                  <input
+                    className="ah-input"
+                    inputMode="url"
+                    autoComplete="off"
+                    spellCheck={false}
+                    dir="ltr"
+                    value={sourceForm.url}
+                    onChange={(event) => setSourceForm((prev) => ({ ...prev, url: event.target.value, error: null }))}
+                    onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void addSourceToHub(); } }}
+                    placeholder="https://agent.example.com/.well-known/agent-card.json"
+                    aria-label={fa ? 'نشانی کارت ایجنت' : 'Agent card URL'}
+                    data-testid="agent-hub-source-url"
+                  />
+                  <input
+                    className="ah-input"
+                    value={sourceForm.label}
+                    onChange={(event) => setSourceForm((prev) => ({ ...prev, label: event.target.value }))}
+                    maxLength={60}
+                    placeholder={fa ? 'نام دلخواه (اختیاری)' : 'Label (optional)'}
+                    aria-label={fa ? 'نام دلخواه' : 'Label'}
+                    data-testid="agent-hub-source-label"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="ah-primary ah-primary-sm"
+                  disabled={sourceForm.state === 'working' || !sourceForm.url.trim()}
+                  onClick={() => void addSourceToHub()}
+                  data-testid="agent-hub-source-add"
+                >
+                  {sourceForm.state === 'working'
+                    ? (fa ? 'در حال بررسی کارت…' : 'Checking the card…')
+                    : (fa ? 'افزودن و بررسی' : 'Add and verify')}
+                </button>
+
+                {sourceForm.error ? (
+                  <p className="ah-error" role="alert" data-testid="agent-hub-source-error">
+                    {sourceErrorText(sourceForm.error, fa, sourceForm.detail)}
+                    <code className="ah-code">{sourceForm.error}</code>
+                  </p>
+                ) : null}
+
+                {catalog.data?.durable === false ? (
+                  <p className="ah-note ah-note-warn" data-testid="agent-hub-sources-durability">
+                    {fa
+                      ? 'این نسخه ذخیره‌سازی پایدار ندارد؛ ایجنت‌هایی که اضافه می‌کنید ممکن است با راه‌اندازی مجدد سرور از فهرست بروند. وظیفه‌ها هم در همان حالت فقط در حافظهٔ همین پروسه می‌مانند.'
+                      : 'This deployment has no durable store: an agent you add may disappear when the server restarts, and task history stays in this process only.'}
+                  </p>
+                ) : null}
+
+                {sources.length === 0 ? (
+                  <p className="ah-muted ah-small" data-testid="agent-hub-sources-empty">
+                    {fa
+                      ? 'هنوز ایجنتی اضافه نکرده‌اید. هر ایجنتی که پروتکل A2A دارد و کارت عمومی منتشر می‌کند قابل افزودن است.'
+                      : 'You have not added an agent yet. Anything that speaks A2A and publishes a public agent card can be added.'}
+                  </p>
+                ) : (
+                  <ul className="ah-list">
+                    {sources.map((provider) => (
+                      <li key={provider.id} className="ah-card ah-card-compact" data-testid={`agent-hub-source-${testIdPart(provider.id)}`}>
+                        <div className="ah-card-head">
+                          <span className="ah-card-name">{provider.name}</span>
+                          <span className="ah-badge" data-tone="info">{fa ? 'افزودهٔ شما' : 'Added by you'}</span>
+                          <Badge status={provider.health?.ok ? 'LIVE' : 'UNAVAILABLE'} fa={fa} />
+                        </div>
+                        <div className="ah-card-meta">
+                          <span dir="ltr">{provider.host || provider.websiteUrl || provider.id}</span>
+                          <span>
+                            {fa ? 'بررسی: ' : 'checked '}
+                            {fmt(provider.health?.checkedAt, fa)}
+                          </span>
+                          {provider.health?.code ? <span dir="ltr">{provider.health.code}</span> : null}
+                        </div>
+                        <div className="ah-card-actions">
+                          <a
+                            className="ah-ghost"
+                            href={provider.websiteUrl || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer nofollow"
+                            onClick={(event) => { if (!provider.websiteUrl) event.preventDefault(); }}
+                          >
+                            {fa ? 'سایت ارائه‌دهنده' : 'Provider site'}
+                          </a>
+                          <button
+                            type="button"
+                            className="ah-ghost"
+                            onClick={() => void removeSourceFromHub(provider.id)}
+                            data-testid={`agent-hub-source-remove-${testIdPart(provider.id)}`}
+                          >
+                            {fa ? 'حذف' : 'Remove'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              {agents.length ? (
+                <div className="ah-tools">
+                  <input
+                    className="ah-input"
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={fa ? 'جستجوی ایجنت یا قابلیت…' : 'Search agents or capabilities…'}
+                    aria-label={fa ? 'جستجو' : 'Search'}
+                    data-testid="agent-hub-search"
+                  />
+                  <div className="ah-filters" role="group" aria-label={fa ? 'نوع دسترسی' : 'Access type'}>
+                    {ACCESS_FILTERS.map((filter) => (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        className="ah-chip"
+                        data-active={access === filter.id}
+                        onClick={() => setAccess(filter.id)}
+                        data-testid={`agent-hub-filter-${filter.id}`}
+                      >
+                        {fa ? filter.fa : filter.en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {filtered.length === 0 ? (
-                <p className="ah-muted" role="status">{fa ? 'چیزی با این جستجو پیدا نشد.' : 'Nothing matches that search.'}</p>
+                agents.length === 0 ? null : (
+                  <p className="ah-muted" role="status">{fa ? 'چیزی با این جستجو پیدا نشد.' : 'Nothing matches that search.'}</p>
+                )
               ) : (
                 <ul className="ah-list">
                   {filtered.map((agent) => (
@@ -637,6 +887,9 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                       <div className="ah-card-head">
                         <span className="ah-card-name">{agent.name}</span>
                         <Badge status={agent.status} fa={fa} />
+                        {agent.source === 'user'
+                          ? <span className="ah-badge" data-tone="info">{fa ? 'افزودهٔ شما' : 'Added by you'}</span>
+                          : <span className="ah-badge" data-tone="muted">{fa ? 'بازبینی‌شده' : 'Reviewed'}</span>}
                       </div>
                       <p className="ah-card-summary">{agent.summary}</p>
                       <div className="ah-card-meta">

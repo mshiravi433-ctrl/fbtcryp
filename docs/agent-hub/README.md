@@ -22,16 +22,20 @@ FBT cut in this feature and no code here that can move money.
 | Operator kill switches (global + per provider, durable) | ✅ implemented |
 | Discover / Connected / Activity UI in `/intent` → Agents | ✅ implemented |
 | Direct on-chain payment (x402-style relay) | ⛔ **not implemented** — Phase 3 deferred |
+| User-supplied agent cards (bring your own agent) | ✅ implemented |
 | Any approved live provider | ⛔ **none** — see the decision matrix |
 
-The feature ships **off**: `AGENT_HUB_ENABLED` defaults to `false` and the
-catalogue is empty until an operator configures a reviewed provider. That is the
-honest outcome of Phase 0: no provider could be verified from this environment
-(only `github.com` + package registries are reachable), and the operator
-jurisdiction needed for a jurisdiction-sensitive approval has not been supplied.
+**The feature is ON by default** (`AGENT_HUB_ENABLED` unset/`true`). That does
+not put a provider in front of anybody: the *reviewed* catalogue is still empty
+until an operator writes a decision record — no provider could be verified from
+the build environment, and the operator jurisdiction for a jurisdiction-sensitive
+approval has never been supplied.
 
-One reviewed provider + one config entry makes the end-to-end slice live; the
-whole path is already tested against a local A2A conformance server.
+What the default-on switch changes is that the page is no longer a dead end. It
+opens with an explanation of what an external agent is and **one real action**:
+the user can paste an A2A agent-card URL (see *User-supplied agents* below). No
+third party is contacted until the user names an address, and nothing is
+promoted. `AGENT_HUB_ENABLED=false` still turns the whole surface off.
 
 ---
 
@@ -83,7 +87,10 @@ A real count of live agents is shown next to the switch when it is non-zero.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/ai/agent-hub/catalog` | server-resolved listings + live status |
+| GET | `/api/ai/agent-hub/catalog` | reviewed listings + the owner's own sources, with live status |
+| GET | `/api/ai/agent-hub/sources` | the agent cards this device added | 
+| POST | `/api/ai/agent-hub/sources` | verify + store one card URL (max 8 per owner) |
+| DELETE | `/api/ai/agent-hub/sources/:id` | remove one of your own sources |
 | GET | `/api/ai/agent-hub/agents/:agentId` | detail incl. provider terms/privacy |
 | GET | `/api/ai/agent-hub/connections` | device-scoped owner |
 | POST | `/api/ai/agent-hub/providers/:id/connections/start` | OAuth + PKCE, owner-bound state |
@@ -100,6 +107,30 @@ A real count of live agents is shown next to the switch when it is non-zero.
 Route names were chosen against the existing surface: `/api/ai/agents` belongs to
 the command-center roster and `/api/ai/external-agents` to the FI trust registry.
 Both are asserted still alive by `test/agent-hub/hub-api-probe.mjs`.
+
+## User-supplied agents (bring your own agent)
+
+The reviewed registry is the right gate for a *listing* — FBT vouches for what
+it shows. It is the wrong gate for "I already use this agent and I want it in
+the app", because it needs a written decision record for every provider on
+earth. `server/agentHub/userAgents.js` is the second, narrower path:
+
+- the user pastes an A2A **agent-card URL**; FBT fetches that card once and lists
+  the skills the card actually declares — nothing bundled, nothing suggested;
+- the address must be `https`, on port 443, on a public domain (no IP literal, no
+  private/internal name, no credentials, no query string) — the same
+  `httpSafe.js` rules a reviewed provider gets, because "nobody reviewed this
+  destination" is exactly when they matter;
+- the RPC endpoint comes from the card's own `url` field and must be on the same
+  host; a card that declares none falls back to the origin only when it was
+  served from a conventional discovery path;
+- a source is stored **only after a successful verification**, is owner-scoped
+  (another device cannot see, run or delete it), capped at 8 per owner and rate
+  limited (12 attempts / 10 min, because a failing card still costs a fetch);
+- every listing carries `source: "user"`, and the UI labels it *Added by you* —
+  a self-added agent can never be displayed as FBT-reviewed, or the reverse;
+- the same adapter, broker, consent and kill-switch code paths apply. The global
+  kill switch stops user sources too.
 
 ## Invariants the code enforces
 
@@ -131,11 +162,16 @@ npm run test:agent-hub
   (24 tests, local A2A conformance server)
 - `test/agent-hub/hub-security.test.mjs` — consent, registry refusals, webhook
   signatures/replay, idempotency semantics, redaction (36 tests)
+- `test/agent-hub/user-sources.test.mjs` — card-URL validation (scheme, IP,
+  private name, credentials, query, port), RPC-host pinning, verify-before-store,
+  idempotency, cap, rate limit, owner-scoped delete (21 tests)
 - `test/agent-hub/hub-api-probe.mjs` — the real `server/app.js` over HTTP:
   owner isolation, IP-only refusal, payment/account gates, double-click,
-  lost response, kill switches, routing hygiene (83 assertions)
-- `test/agent-hub/agent-hub-ui.test.jsx` — catalogue states, context preview,
-  approval gate, sanitized rendering, injection warning (13 tests)
+  lost response, kill switches, user sources end to end, routing hygiene
+  (110 assertions)
+- `test/agent-hub/agent-hub-ui.test.jsx` — catalogue states, the intro and the
+  add-source form, context preview, approval gate, sanitized rendering,
+  injection warning (19 tests)
 
 `test/agent-hub/conformance-server.mjs` is the only fake agent in the repository.
 It binds to `127.0.0.1`, is never imported by production code, and refuses to
@@ -145,8 +181,9 @@ represent a real provider.
 
 1. Complete `docs/agent-hub/provider-decision-matrix.md` for that provider.
 2. Add the record to `AGENT_HUB_PROVIDERS_JSON` (shape in the matrix doc).
-3. Set `AGENT_HUB_ENABLED=true`, the webhook/OAuth secrets **by the env names the
-   record declares**, and `AGENT_HUB_OPS_TOKEN`.
+3. Set the webhook/OAuth secrets **by the env names the record declares**, and
+   `AGENT_HUB_OPS_TOKEN` (the hub itself is on by default; `AGENT_HUB_ENABLED=false`
+   turns it off).
 4. `GET /api/ai/agent-hub/provider-health` — every provider must read `LIVE` and
    `registryErrors` must be empty.
 5. Run `npm run test:agent-hub`.
@@ -166,6 +203,13 @@ represent a real provider.
   future Tools experience, not this page.
 
 ## Residual risks
+
+- **DNS rebinding on user-supplied card hosts.** The address rules reject IP
+  literals and private names, but a public name that resolves to a private
+  address at request time cannot be seen by a hostname check. Same residual risk
+  the reviewed registry carries; it now also applies to user sources, which are
+  more numerous by nature. Closing it needs resolver-level pinning, which this
+  runtime does not expose.
 
 - **No atomic cross-instance lock without Upstash.** The idempotency claim is
   atomic on Redis. With only Blob/memory, two simultaneous cold-start requests

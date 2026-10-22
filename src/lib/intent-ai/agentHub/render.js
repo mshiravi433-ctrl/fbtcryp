@@ -133,8 +133,8 @@ export const HUB_STATUS_COPY = Object.freeze({
     fa: 'ایجنت‌های خارجی روی این نسخه فعال نیستند.'
   },
   EMPTY: {
-    en: 'No external agent has passed review yet. This page stays empty until one does — it is not a catalogue of links.',
-    fa: 'هنوز هیچ ایجنت خارجی از بازبینی عبور نکرده است. این صفحه تا آن زمان خالی می‌ماند — فهرستی از لینک نیست.'
+    en: 'No external agent has passed review on this deployment, and this is not a catalogue of links — but you can add your own agent below by its card URL.',
+    fa: 'هیچ ایجنت خارجی روی این نسخه از بازبینی عبور نکرده و این صفحه فهرستی از لینک نیست — اما می‌توانید ایجنت خودتان را با نشانی کارت پایین اضافه کنید.'
   },
   UNAVAILABLE: {
     en: 'The provider is not answering right now.',

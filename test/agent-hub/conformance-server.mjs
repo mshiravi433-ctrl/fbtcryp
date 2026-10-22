@@ -198,6 +198,10 @@ export async function startConformanceServer({ port = 0 } = {}) {
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
   const address = server.address();
   const base = `http://127.0.0.1:${address.port}`;
+  /* A2A cards declare their own service endpoint. The fixture sets it after
+     listen because the port is not known before, and the user-supplied source
+     path reads `url` exactly as a real card would. */
+  card.url = `${base}/rpc`;
 
   return {
     base,

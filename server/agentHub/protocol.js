@@ -330,7 +330,23 @@ export const USER_MESSAGES = Object.freeze({
   PAID_INVOCATION_DISABLED: 'Paid agent invocation is not enabled. Nothing was charged.',
   CONSENT_REQUIRED: 'Choose what to share before starting the task.',
   IDEMPOTENCY_CONFLICT: 'That request key was already used with different content.',
-  REQUEST_IN_PROGRESS: 'An identical request is already being processed.'
+  REQUEST_IN_PROGRESS: 'An identical request is already being processed.',
+
+  /* User-supplied sources: the user typed a URL, so the message must say what
+     is wrong with THAT URL rather than blame the deployment. */
+  SOURCE_URL_REQUIRED: 'Enter the agent card URL of the agent you want to add.',
+  SOURCE_URL_INVALID: 'That is not a valid URL. It must start with https:// and point at an agent card.',
+  SOURCE_CARD_UNREACHABLE: 'Nothing answered at that URL with an agent card. Check the address and that the provider allows requests from FBT.',
+  SOURCE_CARD_INVALID: 'That page answered, but it is not a valid A2A agent card (no agent name).',
+  SOURCE_LIMIT_REACHED: 'You have reached the number of agents you can add here. Remove one before adding another.',
+  SOURCE_RATE_LIMITED: 'Too many new agents in a short time. Try again in a few minutes.',
+  SOURCE_NOT_FOUND: 'That agent source no longer exists.',
+  PROVIDER_URL_NOT_HTTPS: 'Only https:// addresses are accepted.',
+  PROVIDER_URL_IS_IP: 'A numeric IP address is not accepted — use the provider’s domain name.',
+  PROVIDER_URL_PRIVATE_HOST: 'That host is private or internal and cannot be reached from here.',
+  PROVIDER_URL_HAS_CREDENTIALS: 'Remove the username or password from the URL.',
+  PROVIDER_URL_HAS_QUERY: 'Remove the query string from the URL.',
+  PROVIDER_URL_NONSTANDARD_PORT: 'Only the standard https port (443) is accepted.'
 });
 
 export function userMessageFor(code, fallback = null) {

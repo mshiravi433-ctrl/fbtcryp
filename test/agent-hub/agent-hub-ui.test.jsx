@@ -295,6 +295,84 @@ describe('connected and activity', () => {
   });
 });
 
+describe('user-supplied agents', () => {
+  const EMPTY = { ok: true, enabled: true, status: 'EMPTY', agents: [], providers: [], sources: { cap: 8, added: 0 } };
+  const SOURCE_PROVIDER = {
+    id: 'u-abc123',
+    name: 'My agent',
+    source: 'user',
+    websiteUrl: 'https://agent.example.com',
+    host: 'agent.example.com',
+    health: { ok: true, status: 'LIVE', checkedAt: Date.now() }
+  };
+  const SOURCE_AGENT = {
+    ...AGENT,
+    id: 'u-abc123:token-research',
+    providerId: 'u-abc123',
+    providerName: 'My agent',
+    source: 'user',
+    accessModel: 'USER_SUPPLIED',
+    costSummary: '',
+    provider: { ...AGENT.provider, source: 'user', termsUrl: null, privacyUrl: null }
+  };
+
+  it('explains what an external agent is and offers the add form when nothing is listed', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(EMPTY);
+    renderPanel();
+    const intro = await screen.findByTestId('agent-hub-intro');
+    expect(intro.textContent).toMatch(/task broker/i);
+    expect(screen.getByTestId('agent-hub-source-url')).toBeTruthy();
+    expect(screen.getByTestId('agent-hub-sources-empty')).toBeTruthy();
+  });
+
+  it('adds a card URL, re-reads the catalogue and labels the agent as the user\'s own', async () => {
+    let posted = null;
+    let added = false;
+    routes['GET /ai/agent-hub/catalog'] = () => respond(added
+      ? { ...EMPTY, status: 'LIVE', agents: [SOURCE_AGENT], providers: [SOURCE_PROVIDER] }
+      : EMPTY);
+    routes['POST /ai/agent-hub/sources'] = (init) => {
+      posted = JSON.parse(init.body);
+      added = true;
+      return respond({ ok: true, source: { id: 'u-abc123', card: { name: 'My agent' } } });
+    };
+    renderPanel();
+    fireEvent.change(await screen.findByTestId('agent-hub-source-url'), {
+      target: { value: 'https://agent.example.com/.well-known/agent-card.json' }
+    });
+    fireEvent.click(screen.getByTestId('agent-hub-source-add'));
+    const card = await screen.findByTestId('agent-hub-card-u-abc123-token-research');
+    expect(posted.cardUrl).toBe('https://agent.example.com/.well-known/agent-card.json');
+    expect(card.textContent).toMatch(/Added by you/);
+    expect(card.textContent).not.toMatch(/Reviewed/);
+    expect(card.textContent).toMatch(/Your own agent/);
+  });
+
+  it('says why a card was refused instead of pretending it was added', async () => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(EMPTY);
+    routes['POST /ai/agent-hub/sources'] = () => respond({ ok: false, code: 'SOURCE_CARD_UNREACHABLE' }, 422);
+    renderPanel();
+    fireEvent.change(await screen.findByTestId('agent-hub-source-url'), { target: { value: 'https://nope.example.com/card' } });
+    fireEvent.click(screen.getByTestId('agent-hub-source-add'));
+    const error = await screen.findByTestId('agent-hub-source-error');
+    expect(error.textContent).toMatch(/Nothing answered/i);
+    expect(error.textContent).toMatch(/SOURCE_CARD_UNREACHABLE/);
+    expect(document.querySelector('[data-testid^="agent-hub-card-"]')).toBeNull();
+  });
+
+  it('removes a source by id and re-reads the catalogue', async () => {
+    let removed = null;
+    let deleted = false;
+    routes['GET /ai/agent-hub/catalog'] = () => respond(deleted ? EMPTY : { ...EMPTY, status: 'LIVE', agents: [SOURCE_AGENT], providers: [SOURCE_PROVIDER] });
+    routes['DELETE /ai/agent-hub/sources/u-abc123'] = () => { deleted = true; removed = 'u-abc123'; return respond({ ok: true, removedId: 'u-abc123' }); };
+    renderPanel();
+    fireEvent.click(await screen.findByTestId('agent-hub-source-remove-u-abc123'));
+    await waitFor(() => expect(deleted).toBe(true));
+    expect(removed).toBe('u-abc123');
+    await waitFor(() => expect(screen.queryByTestId('agent-hub-card-u-abc123-token-research')).toBeNull());
+  });
+});
+
 describe('agents tab: which view opens first', () => {
   it('opens the external hub only when a reviewed agent is actually live', () => {
     expect(defaultAgentsView({ known: true, enabled: true, count: 2 })).toBe('external');
