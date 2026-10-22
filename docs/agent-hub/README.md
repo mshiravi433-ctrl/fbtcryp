@@ -20,7 +20,8 @@ FBT cut in this feature and no code here that can move money.
 | Connection manager (per-user OAuth, sealed credentials, revoke) | ✅ implemented, **no provider configured** |
 | Webhook verification (HMAC + timestamp + single-use) | ✅ implemented, requires Upstash |
 | Operator kill switches (global + per provider, durable) | ✅ implemented |
-| Discover / Connected / Activity UI in `/intent` → Agents | ✅ implemented |
+| Recommended / Discover / Connected / Activity UI in `/intent` → Agents | ✅ implemented |
+| Editorial recommendations with official product/pricing links | ✅ informational only; never executable or FBT-reviewed |
 | Direct on-chain payment (x402-style relay) | ⛔ **not implemented** — Phase 3 deferred |
 | User-supplied agent cards (bring your own agent) | ✅ implemented |
 | Any approved live provider | ⛔ **none** — see the decision matrix |
@@ -31,18 +32,24 @@ until an operator writes a decision record — no provider could be verified fro
 the build environment, and the operator jurisdiction for a jurisdiction-sensitive
 approval has never been supplied.
 
-What the default-on switch changes is that the page is no longer a dead end. It
-opens with an explanation of what an external agent is and **one real action**:
-the user can paste an A2A agent-card URL (see *User-supplied agents* below). No
-third party is contacted until the user names an address, and nothing is
-promoted. `AGENT_HUB_ENABLED=false` still turns the whole surface off.
+The external-agent view opens on a small editorial directory of well-known
+services, with links to each vendor's official product and pricing pages. These
+recommendations are informational only: they are not FBT-reviewed, do not appear
+in the execution catalogue, and are never run or connected by this page. The
+separate **Discover / Add** subtab explains the A2A flow and lets a user paste a
+compatible public agent-card URL (see *User-supplied agents* below).
+`AGENT_HUB_ENABLED=false` disables provider discovery and execution; the
+informational recommendation directory remains separate from provider records
+and execution authority.
 
 ---
 
 ## Layers
 
 ```
-src/components/AgentHub/AgentHubPanel.jsx     Discover · Connected · Activity
+src/components/AgentHub/AgentHubPanel.jsx     Recommended · Discover · Connected · Activity
+src/components/AgentHub/RecommendedAgents.jsx editorial cards; never executable
+src/lib/intent-ai/agentHub/recommendations.js curated entries and official source links
 src/lib/intent-ai/agentHub/client.js          browser transport (device identity)
 src/lib/intent-ai/agentHub/consent.js         ONE consent composer (shared)
 src/lib/intent-ai/agentHub/render.js          safe result rendering
@@ -71,7 +78,10 @@ provider receives. There is no second implementation to drift.
 switch at the top:
 
 - **My automations** — this account's existing automations and monitors, unchanged.
-- **External agents** — the hub: Discover · Connected · Activity.
+- **External agents** — the hub: Recommended · Discover / Add · Connected · Activity.
+  Recommended opens first and lists official links for everyday, research, coding,
+  and workflow tools. It is an editorial directory, not a reviewed or executable
+  provider listing.
 
 The default follows the server: the external view opens first **only** when the
 hub is enabled *and* at least one reviewed agent is live (`defaultAgentsView`);
@@ -116,7 +126,8 @@ the app", because it needs a written decision record for every provider on
 earth. `server/agentHub/userAgents.js` is the second, narrower path:
 
 - the user pastes an A2A **agent-card URL**; FBT fetches that card once and lists
-  the skills the card actually declares — nothing bundled, nothing suggested;
+  the skills the card actually declares — no bundled or editorial suggestion is
+  ever inserted into the executable source list;
 - the address must be `https`, on port 443, on a public domain (no IP literal, no
   private/internal name, no credentials, no query string) — the same
   `httpSafe.js` rules a reviewed provider gets, because "nobody reviewed this
@@ -169,9 +180,9 @@ npm run test:agent-hub
   owner isolation, IP-only refusal, payment/account gates, double-click,
   lost response, kill switches, user sources end to end, routing hygiene
   (110 assertions)
-- `test/agent-hub/agent-hub-ui.test.jsx` — catalogue states, the intro and the
-  add-source form, context preview, approval gate, sanitized rendering,
-  injection warning (19 tests)
+- `test/agent-hub/agent-hub-ui.test.jsx` — source-linked recommendation list,
+  category/search filters, disabled-catalogue behavior, Persian labels, the
+  add-source form, consent preview, sanitized rendering, injection warning
 
 `test/agent-hub/conformance-server.mjs` is the only fake agent in the repository.
 It binds to `127.0.0.1`, is never imported by production code, and refuses to
@@ -196,9 +207,10 @@ represent a real provider.
   `false` everywhere instead of a button that would fail at the last step.
 - **Streaming, push completion, multi-turn `input-required` continuation.** The
   adapter declares them unsupported so the UI cannot promise them.
-- **Agent suggestions from the chat brain.** The surface exists, but suggesting a
-  third-party agent from a chat turn needs its own consent design; it is not in
-  this slice.
+- **Contextual agent suggestions from the chat brain.** A separate editorial
+  directory with official product/pricing links now exists. Recommending a
+  third-party agent from a specific chat turn still needs its own consent design
+  and remains deferred.
 - **MCP tools.** MCP servers expose tools, not agents (§5). They belong to a
   future Tools experience, not this page.
 

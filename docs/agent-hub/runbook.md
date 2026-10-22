@@ -28,10 +28,12 @@ field exists for).
 
 ## 2. Turning it on safely
 
-0. `AGENT_HUB_ENABLED` is **on by default**; set it to `false` to remove the
-   surface entirely. On its own it publishes **no** provider — the reviewed
-   catalogue is empty and the page only offers "add your own agent card", which
-   contacts nobody until a user types a URL.
+0. `AGENT_HUB_ENABLED` is **on by default**; set it to `false` to disable
+   provider discovery and execution. On its own it publishes **no** provider —
+   the reviewed catalogue may be empty. The separate recommendation subtab only
+   links to official vendor pages and never runs or connects an agent. Under
+   **Discover / Add**, a user can paste a compatible A2A card URL; FBT contacts
+   that address only after the user submits it.
 1. (Optional) `AGENT_HUB_PROVIDERS_JSON` = the reviewed record(s). Start with
    **one free, read-only agent**.
 3. `AGENT_HUB_OPS_TOKEN` (≥16 chars) — otherwise the ops routes 404 by design.
