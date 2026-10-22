@@ -2,103 +2,49 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BEST_TYPE_MIN_CLOSED, STATS_TYPES, STATS_WINDOWS, computeOrderStats } from '../lib/orderHistory';
 
-/*
- * LEVEL 2 — the fill-rate card on the Orders screen.
- *
- * Shows nothing at all when the user has no price-triggered orders: an empty
- * statistics card would only add noise to a screen the user opens to act on.
- *
- * Every percentage is over CLOSED orders (filled + expired). See
- * lib/orderHistory.js for why open orders are left out of the rate.
- */
+const fmtPct = (v) => (v == null ? '—' : `${Math.round(v)}%`);
 
-const fmtPct = (v) => (v === null || v === undefined ? '—' : `${Math.round(v)}%`);
+const icons = {
+  total: <><path d="M5 7h14M5 12h14M5 17h9"/><circle cx="18" cy="17" r="2"/></>,
+  open: <><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></>,
+  filled: <><path d="m5 12 4 4L19 7"/></>,
+  expired: <><path d="M7 4h10M8 4v3c0 2 2 3 4 5-2 2-4 3-4 5v3h8v-3c0-2-2-3-4-5 2-2 4-3 4-5V4"/></>
+};
 
 export default function OrderStats({ orders = [], now }) {
   const { t } = useTranslation();
   const [windowDays, setWindowDays] = useState(0);
-
-  const stats = useMemo(
-    () => computeOrderStats(orders, { windowDays, now: now ?? Date.now() }),
-    [orders, windowDays, now]
-  );
-
-  const hasAny = (Array.isArray(orders) ? orders : []).some((o) => o && STATS_TYPES.includes(o.type));
-  if (!hasAny) return null;
+  const stats = useMemo(() => computeOrderStats(orders, { windowDays, now: now ?? Date.now() }), [orders, windowDays, now]);
+  if (!(Array.isArray(orders) ? orders : []).some((o) => o && STATS_TYPES.includes(o.type))) return null;
 
   const bestLabel = stats.bestType ? t(`orders.typeName.${stats.bestType}`) : null;
   const bestRate = stats.bestType ? stats.byType[stats.bestType].fillRate : null;
-
   return (
-    <section className="card" aria-label={t('orders.stats.title')} style={{ display: 'grid', gap: 10 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-        <p className="section-label" style={{ margin: 0 }}>{t('orders.stats.title')}</p>
-        <div className="row" role="group" aria-label={t('orders.stats.windowLabel')} style={{ gap: 4 }}>
-          {STATS_WINDOWS.map((days) => (
-            <button
-              key={days}
-              type="button"
-              aria-pressed={windowDays === days}
-              onClick={() => setWindowDays(days)}
-              style={{
-                padding: '3px 9px',
-                borderRadius: 999,
-                border: '1px solid rgba(127,127,127,0.45)',
-                background: windowDays === days ? 'rgba(127,127,127,0.25)' : 'transparent',
-                color: 'inherit',
-                fontSize: 12,
-                fontWeight: windowDays === days ? 600 : 400,
-                cursor: 'pointer'
-              }}
-            >
-              {days === 0 ? t('orders.stats.winAll') : t(`orders.stats.win${days}`)}
-            </button>
-          ))}
+    <section className="ord-stats" aria-label={t('orders.stats.title')}>
+      <header className="ord-stats-head">
+        <div><span className="ord-stats-kicker">LIVE ANALYTICS</span><h2>{t('orders.stats.title')}</h2></div>
+        <div className="ord-stats-windows" role="group" aria-label={t('orders.stats.windowLabel')}>
+          {STATS_WINDOWS.map((days) => <button key={days} type="button" aria-pressed={windowDays === days} onClick={() => setWindowDays(days)}>{days === 0 ? t('orders.stats.winAll') : t(`orders.stats.win${days}`)}</button>)}
         </div>
+      </header>
+      <div className="ord-stats-grid">
+        <Stat kind="total" label={t('orders.stats.total')} value={stats.total} />
+        <Stat kind="open" label={t('orders.stats.open')} value={stats.open} />
+        <Stat kind="filled" label={t('orders.stats.filled')} value={stats.filled} detail={fmtPct(stats.fillRate)} />
+        <Stat kind="expired" label={t('orders.stats.expired')} value={stats.expired} detail={fmtPct(stats.expireRate)} />
       </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-        <Stat label={t('orders.stats.total')} value={stats.total} />
-        <Stat label={t('orders.stats.open')} value={stats.open} />
-        <Stat label={t('orders.stats.filled')} value={`${stats.filled} (${fmtPct(stats.fillRate)})`} />
-        <Stat label={t('orders.stats.expired')} value={`${stats.expired} (${fmtPct(stats.expireRate)})`} />
+      <div className="ord-stats-insights">
+        <div><span>{t('orders.avgFillTime')}</span><strong>{stats.avgFillTimeDays == null ? '—' : t('orders.stats.days', { n: stats.avgFillTimeDays.toFixed(1) })}</strong></div>
+        <div><span>{bestLabel ? t('orders.stats.bestType', { type: bestLabel, rate: fmtPct(bestRate) }) : t('orders.stats.bestNone', { n: BEST_TYPE_MIN_CLOSED })}</span></div>
       </div>
-
-      <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.8 }}>
-        <div>
-          {t('orders.avgFillTime')}:{' '}
-          <span className="mono">
-            {stats.avgFillTimeDays === null ? '—' : t('orders.stats.days', { n: stats.avgFillTimeDays.toFixed(1) })}
-          </span>
-        </div>
-        <div>
-          {bestLabel
-            ? t('orders.stats.bestType', { type: bestLabel, rate: fmtPct(bestRate) })
-            : t('orders.stats.bestNone', { n: BEST_TYPE_MIN_CLOSED })}
-        </div>
-        <div style={{ marginTop: 4 }}>
-          {STATS_TYPES.map((type) => {
-            const b = stats.byType[type];
-            if (!b.total) return null;
-            return (
-              <div key={type}>
-                {t(`orders.typeName.${type}`)}: {fmtPct(b.fillRate)}{' '}
-                <span className="faint">({t('orders.stats.closedCount', { n: b.closed })})</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="faint" style={{ marginTop: 4 }}>{t('orders.stats.closedNote')}</div>
+      <div className="ord-stats-types">
+        {STATS_TYPES.map((type) => { const b = stats.byType[type]; return b.total ? <span key={type}><b>{t(`orders.typeName.${type}`)}</b><i>{fmtPct(b.fillRate)}</i><small>{t('orders.stats.closedCount', { n: b.closed })}</small></span> : null; })}
       </div>
+      <p className="ord-stats-note">{t('orders.stats.closedNote')}</p>
     </section>
   );
 }
 
-function Stat({ label, value }) {
-  return (
-    <div style={{ display: 'grid', gap: 2 }}>
-      <span className="muted" style={{ fontSize: 12 }}>{label}</span>
-      <span className="mono" style={{ fontSize: 15, fontWeight: 600 }}>{value}</span>
-    </div>
-  );
+function Stat({ kind, label, value, detail }) {
+  return <div className={`ord-stat ord-stat--${kind}`}><span className="ord-stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{icons[kind]}</svg></span><span className="ord-stat-copy"><small>{label}</small><strong>{value}</strong></span>{detail && <em>{detail}</em>}</div>;
 }
