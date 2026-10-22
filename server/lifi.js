@@ -218,6 +218,69 @@ export const swapFeeRecipient = () =>
 
 const isAddr = (a) => typeof a === 'string' && ADDR_RE.test(a);
 
+/**
+ * Read a fee amount LI.FI echoed into integer base units (floor).
+ *
+ * Same reader as src/lib/lifi.js#parseFeeUnits — LI.FI usually echoes integer
+ * strings, but the same value can arrive as "86419.2", a JSON number, or the
+ * decimal.js-shaped { c: [...] } form. `BigInt(String(v))` throws on those,
+ * and a throw inside this gate would surface as a 500 for a pair that routes
+ * fine. Unreadable is "not proven", never an exception.
+ */
+export function parseFeeUnits(v) {
+  if (v == null) return null;
+  if (typeof v === 'bigint') return v < 0n ? null : v;
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || v < 0) return null;
+    return BigInt(Math.floor(v));
+  }
+  if (typeof v === 'object') {
+    const c = v.c;
+    if (Array.isArray(c) && c.length === 1) return parseFeeUnits(c[0]);
+    return null;
+  }
+  const s = String(v).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) return null;
+  return BigInt(s.split('.')[0]);
+}
+
+/**
+ * Every EVM wallet that is legitimately OURS.
+ *
+ * ─── WHY MEMBERSHIP AND NOT ONE STRING ──────────────────────────────────────
+ * This gate used to demand `defaultWallet === swapFeeRecipient()` exactly. The
+ * client-side gate (src/lib/lifi.js) was fixed on 2026-09-15 to accept any of
+ * the operator's own receiving addresses, because the website and the APK are
+ * built by two pipelines whose `VITE_*` names drifted apart — but the SERVER
+ * gate runs FIRST, so its stricter rule still killed every quote before the
+ * client's tolerance ever applied. The fee wallet LI.FI signs comes from the
+ * portal registration; the env var is our local name for it. When the two
+ * name different wallets of ours, the fee is genuinely ours and refusing it
+ * takes down the only routing source on Mantle/Scroll/zkSync Era.
+ *
+ * The security property is unchanged: the echoed wallet must be one of OUR
+ * addresses (env-configured or the published default). A quote that pays a
+ * stranger is still refused here, before it ever reaches the client's alarm.
+ */
+function ourEvmWallets() {
+  const out = new Set();
+  const add = (a) => {
+    const v = String(a ?? '').trim();
+    if (isAddr(v)) out.add(v.toLowerCase());
+  };
+  add(swapFeeRecipient());
+  add(process.env.VITE_FEE_RECIPIENT);
+  add(process.env.VITE_PAYOUT_EVM);
+  add(process.env.VITE_PAYOUT_ETHEREUM);
+  add(process.env.VITE_PAYOUT_BSC);
+  add(process.env.VITE_PAYOUT_SCROLL);
+  add(process.env.VITE_PAYOUT_ZKSYNC);
+  /* The published default, mirrored from src/lib/payout.js — kept literal so
+     this module has no build-time dependency on the client bundle. */
+  add('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6');
+  return out;
+}
+
 /** Checksum a token address with ethers when available; falls back to the
  *  LOWERCASE form, never the raw string: LI.FI resolves an all-lowercase
  *  address fine, but a DISPLAY-cased string with an invalid EIP-55 checksum
@@ -286,26 +349,49 @@ export async function lifiSwapQuote(params = {}) {
    * fee fields must prove OUR cut lands in OUR wallet. Anything less is
    * rejected here so the client never even sees a quote we cannot honour.
    * (The client re-verifies the same evidence before signing — one gate is
-   * a wall, two is a wall with an alarm.) */
+   * a wall, two is a wall with an alarm.)
+   *
+   * The share check allows LI.FI's documented rounding (each fee amount
+   * rounds DOWN to a whole base unit) within ±1 unit — the same band as
+   * src/lib/lifi.js and the Solana gate in server/solanaLifi.js. The old
+   * exact product `share * 10000 === fromAmount * bps` rejected every quote
+   * whose input amount did not divide cleanly (MAX balances, 6-decimal
+   * stables past the third decimal, …), which on the LI.FI-only chains read
+   * as «مشکلی پیش آمده» instead of a price. */
   const fee = swapFee();
   const id = integratorId();
   const body = res.body;
   const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
   const split = feeCosts.find((fc) => fc && fc.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
   const ours = split?.recipients?.find((r) => String(r?.name) === id) ?? null;
-  const fromWei = BigInt(body?.action?.fromAmount ?? 0);
+  let fromWei = 0n;
+  try {
+    fromWei = BigInt(body?.action?.fromAmount ?? 0);
+  } catch {
+    fromWei = 0n;
+  }
   const expectBps = Math.round(fee * 10000);
+  const share = ours != null ? parseFeeUnits(ours.fee) : null;
+  const expectedShare = (fromWei * BigInt(expectBps)) / 10000n; // floor
   const shareOk =
-    ours != null && fromWei > 0n && BigInt(String(ours.fee ?? 0)) * 10000n === fromWei * BigInt(expectBps);
+    ours != null &&
+    fromWei > 0n &&
+    share != null &&
+    share >= 1n &&
+    (share === expectedShare || share + 1n === expectedShare || share === expectedShare + 1n);
 
   const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
   const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
   const walletEntry = wallets.find((r) => String(r?.name) === id) ?? null;
-  const walletOk =
-    walletEntry != null && isAddr(walletEntry?.config?.defaultWallet) &&
-    walletEntry.config.defaultWallet.toLowerCase() === swapFeeRecipient().toLowerCase();
+  const echoedWallet = String(walletEntry?.config?.defaultWallet ?? '');
+  const walletOk = isAddr(echoedWallet) && ourEvmWallets().has(echoedWallet.toLowerCase());
 
-  if (!(String(body?.integrator) === id && Math.abs(Number(body?.fee ?? 0) - fee) < 1e-9)) {
+  const echoedRate = Number(body?.fee ?? 0);
+  if (
+    String(body?.integrator) !== id ||
+    !Number.isFinite(echoedRate) ||
+    Math.abs(echoedRate - fee) >= 1e-9
+  ) {
     return { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
   }
   if (!shareOk) {

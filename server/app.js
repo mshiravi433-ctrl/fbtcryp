@@ -114,7 +114,7 @@ import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail, s
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
 import { lifiSolanaStatus, lifiSolanaSwapQuote } from './solanaLifi.js';
-import { jupFeeQuote, jupFeeStatus, jupFeeSwapQuote } from './solanaJupFee.js';
+import { jupFeeQuote, jupFeeStatus, jupFeeStatusAsync, jupFeeSwapQuote, refreshJupFeeCoverage } from './solanaJupFee.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
 import { btcAddress, btcFees, btcBroadcast, btcStatus } from './btcChain.js';
 import { proxyKyberBuild, proxyKyberRoutes, proxyOoDecode, proxyOoQuote, proxyOoSwap, proxyVeloraPrices } from './swapProxy.js';
@@ -6302,15 +6302,19 @@ app.get('/api/solana/lifi/quote', async (req, res) => {
  * upstream echo before a transaction is returned: a caller can supply the pair,
  * the amount and their own address, and nothing that decides our revenue.
  */
-app.get('/api/solana/jupfee/status', (req, res) => res.json(jupFeeStatus(req.query ?? {})));
+app.get('/api/solana/jupfee/status', async (req, res) => res.json(await jupFeeStatusAsync(req.query ?? {})));
 
 app.get('/api/solana/jupfee/quote', async (req, res) => {
+  /* Warm the derived-fee-account cache for this pair before the quote runs, so
+     the fee-account lookup inside sees on-chain coverage, not just env. */
+  await refreshJupFeeCoverage(req.query ?? {});
   const r = await jupFeeQuote(req.query);
   recordProviderHealth('solana-jupiter-fee', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
 });
 
 app.post('/api/solana/jupfee/swap', async (req, res) => {
+  await refreshJupFeeCoverage(req.body ?? {});
   const r = await jupFeeSwapQuote(req.body ?? {});
   recordProviderHealth('solana-jupiter-fee', r);
   return res.status(r.status).json(r.body ?? { error: 'UPSTREAM_FAILED' });
@@ -6323,15 +6327,17 @@ app.post('/api/solana/jupfee/swap', async (req, res) => {
  * This exists because the failure it replaces was invisible: the screen fell
  * back to the free Jupiter route and looked perfectly healthy while every swap
  * earned zero, for as long as an upstream key stayed unconfigured. Every field
- * here is configuration, not reachability, so the answer costs no upstream call
- * and cannot be wrong because a provider was briefly slow. Reachability is
- * what /api/providers/status and the Ecosystem lights are for.
+ * here is configuration — env, or what the payout wallet already holds
+ * on-chain (cached 10 min; a slow RPC degrades to "not configured", never to
+ * "broken") — so the answer cannot be wrong because a provider was briefly
+ * slow. Reachability is what /api/providers/status and the Ecosystem lights
+ * are for.
  *
  * The client uses it to stop asking routes that cannot pay (a 503 per keystroke
  * is a wasted round trip on the networks our users are on), and to name the
  * reason on screen when the free route ends up running.
  */
-app.get('/api/solana/routes', (req, res) => {
+app.get('/api/solana/routes', async (req, res) => {
   const q = req.query ?? {};
   const pair = q.inputMint && q.outputMint ? { inputMint: q.inputMint, outputMint: q.outputMint } : {};
   const ref = String(referralAccount() || '');
@@ -6340,7 +6346,7 @@ app.get('/api/solana/routes', (req, res) => {
     houseFeeBps: jupFeeStatus().feeBps,
     de1: oceanStatus(),
     lifi: lifiSolanaStatus(),
-    jupfee: jupFeeStatus(pair),
+    jupfee: await jupFeeStatusAsync(pair),
     /* The free route: it exists, it routes the widest, and it pays us only
        when a referral account is configured — which needs on-chain accounts. */
     jupiter: {

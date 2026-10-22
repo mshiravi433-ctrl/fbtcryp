@@ -76,7 +76,10 @@
  * `signAndSendSolana` and only the Jupiter **V2** route signs-only.
  */
 
-import { feeBps as houseFeeBps, SOL_MINT } from './solanaOcean.js';
+import { feeBps as houseFeeBps, feeReceiver, SOL_MINT } from './solanaOcean.js';
+import { PublicKey } from '@solana/web3.js';
+import { solanaRpcCall } from '../src/lib/solanaRpc.js';
+import { solanaReadCandidates } from './solanaChainReads.js';
 
 /** Jupiter's Metis Swap API. Overridable for a staging key/host, never secret. */
 const JUP_BASE = String(process.env.JUP_FEE_BASE_URL || 'https://api.jup.ag/swap/v1')
@@ -154,14 +157,162 @@ export function jupFeeAccounts() {
  * account for a third mint makes the whole swap fail, so the pair decides —
  * the input mint first, because that is the side the fee is taken from on an
  * exact-in swap and therefore the one the account is guaranteed to match.
+ *
+ * Env-configured accounts win per mint; anything the payout wallet already
+ * holds on-chain (see `refreshJupFeeCoverage` below) fills the gaps.
  */
 export function jupFeeAccountFor(inputMint, outputMint) {
   const map = jupFeeAccounts();
+  const derived = derivedFeeAccounts();
   const from = String(inputMint || '');
   const to = String(outputMint || '');
-  if (map[from]) return { mint: from, account: map[from] };
-  if (map[to]) return { mint: to, account: map[to] };
+  if (map[from] || derived[from]) return { mint: from, account: map[from] || derived[from] };
+  if (map[to] || derived[to]) return { mint: to, account: map[to] || derived[to] };
   return null;
+}
+
+/* ── DERIVED FEE ACCOUNTS — turning the paid route on without a per-mint ──
+ *   env chore ─────────────────────────────────────────────────────────────
+ * `JUP_FEE_ACCOUNT(S)` names token accounts that must already exist on-chain.
+ * Setting them is a manual, per-mint operation, and until it happens the
+ * screen answers «فقط با ژوپیتر که کارمزد نمی‌گیریم» — every swap falls to the
+ * free route while the fee-earning one sits unconfigured. That is exactly the
+ * 2026-10-10 report this module was written for, and configuration debt was
+ * still winning it.
+ *
+ * Jupiter's rule is only that the feeAccount be an INITIALIZED token account
+ * whose mint is part of the pair. The payout wallet's own associated token
+ * account (ATA) for that mint satisfies it — the fee lands in OUR wallet — and
+ * whether it is initialized is a fact the chain already knows. So, when the
+ * env map has no account for the pair, the server DERIVES the payout wallet's
+ * ATA (classic SPL Token and Token-2022 both) and asks an RPC node whether it
+ * exists. An account that exists is a fee account; one that does not is the
+ * same "not configured" answer as today, with no lie and no broken swap.
+ *
+ * What this does NOT do: create anything. An ATA that was never initialized
+ * stays unusable until the owner receives that token once (or funds the rent
+ * once) — we never spend the user's gas to create OUR fee account, and we
+ * never invent an address that is not on-chain, because a feeAccount Jupiter
+ * cannot transfer to makes the whole swap revert, which is worse than free.
+ *
+ * Results are cached per mint (10 min) and the cache is filled by
+ * `refreshJupFeeCoverage` at the HTTP layer — the sync readers below stay
+ * sync, and the money paths never pay an RPC round trip they did not ask for.
+ */
+const ATA_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+
+const DERIVED_TTL_MS = 10 * 60 * 1000;
+/** mint → { account: string|null, checkedAt }. Null is cached too: "no such
+ *  account" is a fact that does not change per keystroke. */
+const derivedCache = new Map();
+
+/** Forget derived coverage (a network switch, or a test). */
+export function clearDerivedFeeAccounts() {
+  derivedCache.clear();
+}
+
+/** The derived accounts known so far, as { mint: account }. Sync snapshot. */
+export function derivedFeeAccounts() {
+  const out = {};
+  const now = Date.now();
+  for (const [mint, row] of derivedCache) {
+    if (row?.account && now - row.checkedAt < DERIVED_TTL_MS) out[mint] = row.account;
+  }
+  return out;
+}
+
+/** The payout wallet's ATA for `mint`, under one token program. */
+export function deriveFeeAta(mint, owner, tokenProgram = SPL_TOKEN_PROGRAM) {
+  try {
+    const [ata] = PublicKey.findProgramAddressSync(
+      [new PublicKey(owner).toBuffer(), new PublicKey(tokenProgram).toBuffer(), new PublicKey(mint).toBuffer()],
+      new PublicKey(ATA_PROGRAM)
+    );
+    return ata.toBase58();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is this account an initialized token account of `mint` owned by `owner`?
+ *
+ * Asked of the chain, walking the same RPC candidates the balance reads use.
+ * A missing account (`value: null`) is an AUTHORITATIVE answer from that host
+ * — but only for this token program's ATA; the Token-2022 spelling is a
+ * different address and is checked separately. Host failures walk on; an
+ * account we could not verify is never used.
+ */
+async function tokenAccountLive(account, mint, owner, tokenProgram) {
+  for (const url of solanaReadCandidates()) {
+    let r;
+    try {
+      r = await solanaRpcCall(
+        url,
+        'getAccountInfo',
+        [account, { encoding: 'jsonParsed', commitment: 'confirmed' }],
+        { timeoutMs: 5000 }
+      );
+    } catch {
+      continue;
+    }
+    if (!r?.ok) continue;
+    const v = r.result?.value ?? null;
+    if (!v) return false;
+    const parsed = v?.data?.parsed;
+    const info = parsed?.info;
+    return (
+      parsed?.type === 'account' &&
+      String(v?.owner || '') === tokenProgram &&
+      String(info?.mint || '') === mint &&
+      String(info?.owner || '') === owner
+    );
+  }
+  return false;
+}
+
+/**
+ * Find (and remember) an on-chain fee account the payout wallet already has
+ * for `mint`. Returns the account base58, or null.
+ */
+export async function refreshDerivedFeeAccount(mint) {
+  const m = String(mint || '');
+  const owner = String(feeReceiver() || '');
+  if (!BASE58.test(m) || !BASE58.test(owner)) return null;
+  const hit = derivedCache.get(m);
+  if (hit && Date.now() - hit.checkedAt < DERIVED_TTL_MS) return hit.account;
+  let account = null;
+  for (const tokenProgram of [SPL_TOKEN_PROGRAM, TOKEN_2022_PROGRAM]) {
+    const ata = deriveFeeAta(m, owner, tokenProgram);
+    if (!ata) continue;
+    if (await tokenAccountLive(ata, m, owner, tokenProgram)) {
+      account = ata;
+      break;
+    }
+  }
+  derivedCache.set(m, { account, checkedAt: Date.now() });
+  return account;
+}
+
+/**
+ * Pre-flight the pair's derived coverage, then answer like the sync path.
+ *
+ * Input mint first (the fee is taken from the input side on an exact-in
+ * swap); the output mint is the fallback, matching `jupFeeAccountFor`.
+ * Env-covered mints cost no RPC at all.
+ */
+export async function refreshJupFeeCoverage({ inputMint, outputMint } = {}) {
+  const env = jupFeeAccounts();
+  for (const mint of [String(inputMint || ''), String(outputMint || '')]) {
+    if (!BASE58.test(mint)) continue;
+    /* Pair already covered at this preference level — one account is all the
+       pair needs, so nothing downstream deserves an RPC round trip. */
+    if (env[mint]) break;
+    if (await refreshDerivedFeeAccount(mint)) break;
+  }
+  return jupFeeAccountFor(inputMint, outputMint);
 }
 
 /**
@@ -410,7 +561,7 @@ export async function jupFeeSwapQuote(body = {}) {
  * wrapped-SOL account makes SOL pairs paid and memecoin↔memecoin pairs free.
  */
 export function jupFeeStatus(query = {}) {
-  const accounts = jupFeeAccounts();
+  const accounts = { ...jupFeeAccounts(), ...derivedFeeAccounts() };
   const pair = query?.inputMint && query?.outputMint
     ? jupFeeAccountFor(query.inputMint, query.outputMint)
     : null;
@@ -428,4 +579,16 @@ export function jupFeeStatus(query = {}) {
        Ultra/referral path this module deliberately does not use. */
     providerCutPercent: 0
   };
+}
+
+/**
+ * Same answer as `jupFeeStatus`, after the pair's derived coverage has been
+ * refreshed from chain state. Request handlers call this; the sync form above
+ * is the snapshot reader (and the pinned contract for tests).
+ */
+export async function jupFeeStatusAsync(query = {}) {
+  if (query?.inputMint && query?.outputMint) {
+    await refreshJupFeeCoverage({ inputMint: query.inputMint, outputMint: query.outputMint });
+  }
+  return jupFeeStatus(query);
 }
