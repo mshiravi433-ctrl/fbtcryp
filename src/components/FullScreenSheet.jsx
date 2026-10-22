@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
+import { OverlayDepthContext } from './OverlayDepthContext';
 import { useStill } from './AnimatedIcon';
 import { IconX } from './Icons';
 import '../styles/fullscreen-sheet.css';
@@ -51,6 +52,7 @@ export default function FullScreenSheet({
   closeLabel = 'close'
 }) {
   const still = useStill();
+  const overlayDepth = useContext(OverlayDepthContext) + 1;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -66,7 +68,9 @@ export default function FullScreenSheet({
   // SSR / test harnesses have no document until mount.
   if (typeof document === 'undefined') return null;
 
-  return createPortal(
+  return (
+    <OverlayDepthContext.Provider value={overlayDepth}>
+      {createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -128,5 +132,7 @@ export default function FullScreenSheet({
       )}
     </AnimatePresence>,
     document.body
+      )}
+    </OverlayDepthContext.Provider>
   );
 }

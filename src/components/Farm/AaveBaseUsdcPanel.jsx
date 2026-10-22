@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Sheet from '../Sheet';
+import FarmConnectButton from './FarmConnectButton';
 import InfoBox from '../InfoBox';
 import { IconShield, IconSwap } from '../Icons';
 import { useWallet } from '../../context/WalletContext';
@@ -409,7 +410,7 @@ export default function AaveBaseUsdcPanel({ pool, initialAmount = null }) {
 
   const openSheet = (nextMode) => {
     setMode(nextMode);
-    setAmount('');
+    setAmount(nextMode === 'supply' ? (initialAmount || '') : '');
     setError(null);
     setPlan(null);
     setSimulation(null);
@@ -471,7 +472,7 @@ export default function AaveBaseUsdcPanel({ pool, initialAmount = null }) {
 
       {/* ── actions ──────────────────────────────────────────────────────── */}
       <div className="farm-actions" style={{ marginTop: 10 }}>
-        {!wallet.isConnected && <span className="faint">{t('farm.aave.connectFirst')}</span>}
+        {!wallet.isConnected && <FarmConnectButton hint={t('farm.aave.connectFirst')} />}
         {wrongChain && (
           <button className="btn btn-ghost farm-btn" onClick={() => wallet.switchChain(AAVE_V3_BASE.chainId)}>
             {t('farm.aave.switchChain', { chain: localChainLabel(EVM_CHAINS[AAVE_V3_BASE.chainId].name, t) })}

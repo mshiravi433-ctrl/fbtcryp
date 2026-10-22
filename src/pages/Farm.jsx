@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import '../styles/farm-venue.css';
 import '../styles/farm-modern.css';
+import '../styles/farm-actions-modern.css';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
@@ -14,7 +15,7 @@ import TokenIcon from '../lib/tokenIcon';
 import { fmtCompact, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
-import { IconLock, IconPools, IconShield, IconSwap } from '../components/Icons';
+import { IconLock, IconPools, IconShield } from '../components/Icons';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useFarmYields } from '../hooks/useFarmYields';
 import { useFarmRateAlerts } from '../hooks/useFarmRateAlerts';
@@ -27,7 +28,7 @@ import PoolGlyph from '../components/Farm/PoolGlyph';
 import FullScreenSheet from '../components/FullScreenSheet';
 import { TOKENS } from '../lib/chains';
 import {
-  farmScore, farmScoreBreakdown, impermanentLoss, investRoute, pairSwapRoute, pairTokens,
+  farmScore, farmScoreBreakdown, impermanentLoss, investRoute, pairTokens,
   projectCompoundedEarnings, projectEarnings, rateIsUnusual, realShare
 } from '../lib/yields';
 import { getSolanaAssets, MIN_EQUITY_LIQUIDITY, projectStake, yieldForLst } from '../lib/solanaAssetsClient';
@@ -37,6 +38,7 @@ import {
   farmPoolResearch, farmProtocolSummary, normalizeFarmOpportunity, projectDisplayName, VAULT_PROJECTS
 } from '../lib/farmDeFi';
 import FarmPositionHub, { FARM_EXECUTION_ADAPTERS, farmExecutionAdapterFor } from '../components/Farm/FarmPositionHub';
+import InvestButton from '../components/Farm/InvestButton';
 import VenueRail from '../components/Farm/VenueRail';
 import { feedErrorLabel } from '../lib/defi/farmErrors';
 import TrendChart from '../components/TrendChart';
@@ -457,19 +459,6 @@ function ILToy({ pool, t }) {
         </div>
       )}
     </div>
-  );
-}
-
-function InvestButton({ pool, route, onGetTokens, t }) {
-  const pairRoute = pairSwapRoute(pool);
-  if (!route) return <span className="farm-unavailable-action faint">{t('farm.noRouteHint')}</span>;
-  const label = pairRoute
-    ? t('farm.getTokens', { a: route.from, b: route.to })
-    : t('farm.stakeNow', { sym: route.to });
-  return (
-    <button className="btn btn-ghost farm-btn" onClick={() => onGetTokens(route)}>
-      <IconSwap width={15} height={15} /> {label}
-    </button>
   );
 }
 
@@ -1069,9 +1058,9 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       icon={<PoolGlyph pool={pool} size={22} chainKey={chainIconKey(pool.chain)} />}
       closeLabel={t('farm.hideAnalytics')}
       footerVisible={!inlineActionsVisible}
-      footer={(
+      footer={hasInlineActions ? (
         <div className={`farm-ana-foot${route && pool.url ? ' has-two-actions' : ''}`}>
-          <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />
+          {route && <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} t={t} />}
           {pool.url && (
             <button
               type="button"
@@ -1083,7 +1072,7 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
             </button>
           )}
         </div>
-      )}
+      ) : null}
     >
     <div className="farm-page farm-analysis-content">
     <motion.section className="farm-details farm-details-full" variants={riseIn} initial="hidden" animate="show" aria-live="polite">
@@ -1101,6 +1090,9 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
           </div>
         </div>
         <div className="farm-ana-pills">
+          {ExecutionPanel
+            ? <span className="pill pill-neutral farm-exec-badge">{t('farm.execBadge')}</span>
+            : <span className="pill pill-neutral">{t('farm.readOnly')}</span>}
           <span className="pill pill-neutral">{FARM_PROTOCOL.name}</span>
           <span className="pill pill-neutral">{pool.type === 'staking' ? t('farm.category.staking') : t('farm.category.lp')}</span>
           {pool.score != null && <span className="pill pill-neutral">{t('farm.score', { score: pool.score })}</span>}
@@ -1112,6 +1104,16 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
         <SplitBar pool={pool} t={t} />
         <UnusualNote pool={pool} t={t} />
       </header>
+
+      {ExecutionPanel && (
+        <AnaSection icon={ACTIONS_ICON} title={t('farm.investInApp')}>
+          <p className="notice farm-execution-notice">{t('farm.executionActivated')}</p>
+          <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
+            <ExecutionPanel pool={pool} initialAmount={execution.id === 'lido' ? null : String(amount)} />
+          </div>
+          {!wallet.isConnected && <p className="faint farm-execution-connect-note">{t('farm.connectToExecute')}</p>}
+        </AnaSection>
+      )}
 
       <AnaSection icon={SCORE_ICON} title={t('farm.scoreBreakdown.title')}>
         <FarmScoreBreakdown pool={pool} t={t} />
@@ -1145,7 +1147,6 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       <HorizonEarningsChart pool={pool} amount={amount} frequency={frequency} onFrequencyChange={setFrequency} walletConnected={wallet?.isConnected} gasUsd={gasUsd} t={t} />
       <FeeEngineCard pool={pool} amount={amount} gasUsd={gasUsd} t={t} />
 
-      {ExecutionPanel ? <p className="notice">{t('farm.executionActivated')}</p> : null}
       <p className="faint">{t('farm.netIsAnalysis')}</p>
 
       {isPair ? (
@@ -1181,14 +1182,16 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
       </div>
 
       <AnaSection icon={ACTIONS_ICON} title={t('farm.ana.actionsTitle')}>
-        <div
-          ref={inlineActionsRef}
-          className={`farm-action-grid farm-ana-inline-actions${route && pool.url ? ' has-two-actions' : ''}`}
-          data-testid="farm-analysis-inline-actions"
-        >
-          {route && <button className="btn btn-primary farm-btn" onClick={() => onGetTokens(route)}>{pairSwapRoute(pool) ? t('farm.getTokens', { a: route.from, b: route.to }) : t('farm.stakeNow', { sym: route.to })}</button>}
-          {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
-        </div>
+        {hasInlineActions && (
+          <div
+            ref={inlineActionsRef}
+            className={`farm-action-grid farm-ana-inline-actions${route && pool.url ? ' has-two-actions' : ''}`}
+            data-testid="farm-analysis-inline-actions"
+          >
+            {route && <InvestButton pool={pool} route={route} onGetTokens={onGetTokens} variant="primary" t={t} />}
+            {pool.url && <button className="btn btn-ghost farm-btn" onClick={() => onOpenPool(pool.url)} title={t('farm.openPoolHint')}>{t('farm.openPool')}</button>}
+          </div>
+        )}
         <div className="farm-share-row">
           <button type="button" className="farm-share-btn farm-share-btn--native" onClick={sharePool}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1206,12 +1209,6 @@ function PoolDetails({ pool, amount, wallet, onGetTokens, onOpenPool, onClose, t
             <span>{t('farm.copyLink')}</span>
           </button>
         </div>
-        {ExecutionPanel && (
-          <div className="farm-pool-execution" data-testid={`farm-pool-execution-${execution.id}`}>
-            <ExecutionPanel pool={pool} />
-          </div>
-        )}
-        {!wallet.isConnected && <p className="faint">{t(ExecutionPanel ? 'farm.connectToExecute' : 'farm.readOnly')}</p>}
       </AnaSection>
     </motion.section>
     </div>
@@ -1352,7 +1349,7 @@ export default function Farm() {
   const [q, setQ] = useState('');
   const [chain, setChain] = useState('all');
   const [sort, setSort] = useState('score');
-  const [visibleCount, setVisibleCount] = useState(250);
+  const [visibleCount, setVisibleCount] = useState(24);
   const [amount, setAmount] = useState(1000);
   const [customAmount, setCustomAmount] = useState('');
   const [selected, setSelected] = useState(null);
@@ -1455,7 +1452,7 @@ export default function Farm() {
     return [...rows].sort((a, b) => (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity));
   }, [opportunities, filter, q, chain, sort]);
 
-  useEffect(() => { setVisibleCount(250); }, [filter, q, chain, sort]);
+  useEffect(() => { setVisibleCount(24); }, [filter, q, chain, sort]);
 
   const poolPrefillDone = useRef(false);
   useEffect(() => {
@@ -1658,9 +1655,21 @@ export default function Farm() {
     emitFarmEvent('POOL_UPDATED', context);
   };
   const getTokens = (route) => {
+    if (!route) return;
     haptic?.('select');
-    if (route.kind === 'solana') navigate(`/solana?toMint=${encodeURIComponent(route.toMint)}`);
-    else navigate(`/swap?chain=${route.chainId}&from=${encodeURIComponent(route.from)}&to=${encodeURIComponent(route.to)}`);
+    const query = new URLSearchParams();
+    if (route.kind === 'solana') {
+      if (route.fromMint) query.set('fromMint', route.fromMint);
+      if (route.toMint) query.set('toMint', route.toMint);
+      navigate(`/solana?${query.toString()}`);
+      return;
+    }
+    query.set('chain', String(route.chainId));
+    if (route.fromAddress) query.set('fromAddress', route.fromAddress);
+    else if (route.from) query.set('from', route.from);
+    if (route.toAddress) query.set('toAddress', route.toAddress);
+    else if (route.to) query.set('to', route.to);
+    navigate(`/swap?${query.toString()}`);
   };
   const openPool = (url) => {
     haptic?.('light');
@@ -1824,11 +1833,25 @@ export default function Farm() {
                 <span className="farm-deposit-label-text">{t('farm.ifIDeposit')}</span>
                 <div className="farm-deposit-chips">
                   {AMOUNTS.map((n) => (
-                    <button key={n} type="button" className={`farm-deposit-chip ${amount === n ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>
+                    <button key={n} type="button" className={`farm-deposit-chip ${amount === n && !customAmount ? 'active' : ''}`} onClick={() => { setAmount(n); setCustomAmount(''); }}>
                       {fmtUsd(n)}
                     </button>
                   ))}
                 </div>
+                <label className="farm-deposit-custom">
+                  <span className="farm-deposit-currency" aria-hidden="true">$</span>
+                  <input
+                    className="farm-deposit-input mono"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={customAmount}
+                    onChange={(event) => setCustomAmount(event.target.value)}
+                    placeholder="0.00"
+                    aria-label={t('farm.ifIDeposit')}
+                  />
+                </label>
               </div>
             </div>
           )}

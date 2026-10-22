@@ -13,6 +13,7 @@ import MarketInsightsPanel from '../components/MarketInsightsPanel';
 import WhaleTrackingPanel from '../components/WhaleTrackingPanel';
 import SegIndicator from '../components/SegIndicator';
 import '../styles/whales.css';
+import '../styles/news-modern.css';
 import { useTelegram } from '../context/TelegramContext';
 import { useMarkets } from '../hooks/useMarket';
 import { getNews } from '../lib/news';
@@ -65,6 +66,22 @@ const CATEGORIES = [...DESK_CATEGORIES, ...TOPIC_CATEGORIES];
  * by the wrapper below — see `News`.
  */
 const NEWS_TABS = ['read', 'community', 'listen', 'insights', 'calm'];
+
+const NEWS_TAB_PATHS = {
+  read: <><path d="M5 4.5h14v15H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+  community: <><path d="M4 5.5h16v10H9l-5 4z" /><path d="M8 9h8M8 12h5" /></>,
+  listen: <><path d="M9 17V6l10-2v11" /><circle cx="6" cy="17" r="3" /><circle cx="16" cy="15" r="3" /></>,
+  insights: <><path d="M4 18V6M4 18h16" /><path d="m7 14 4-4 3 2 5-6" /></>,
+  calm: <><path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z" /><path d="M16 4v4M14 6h4" /></>
+};
+
+function NewsTabIcon({ tab }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {NEWS_TAB_PATHS[tab]}
+    </svg>
+  );
+}
 
 const CATEGORY_TERMS = {
   bitcoin: ['bitcoin', 'btc', 'satoshi', 'halving'],
@@ -232,19 +249,22 @@ function NewsPage() {
   };
 
   return (
-    <PageTransition>
-      <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
-        <div className="row" style={{ gap: 10 }}>
-          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+    <PageTransition className="page news-page">
+      <motion.div className="row-between news-header" variants={riseIn} initial="hidden" animate="show">
+        <div className="news-header-main">
+          <button className="icon-btn news-header-back" onClick={() => navigate(-1)} aria-label={t('common.back')}>
             <IconChevronLeft width={18} height={18} />
           </button>
-          <div>
-            <h1 className="h1" style={{ fontSize: 19 }}>{t('news.title')}</h1>
-            <p className="prose-sm">{t('news.subtitle')}</p>
+          <div className="news-header-copy">
+            <div className="news-title-line">
+              <h1 className="h1 news-title">{t('news.title')}</h1>
+              <span className="news-live-badge"><i aria-hidden="true" />{t('news.live', { defaultValue: 'زنده' })}</span>
+            </div>
+            <p className="prose-sm news-subtitle">{t('news.subtitle')}</p>
           </div>
         </div>
         <button
-          className="icon-btn"
+          className={`icon-btn news-notify${notifyOn ? ' is-on' : ''}`}
           onClick={toggleNotify}
           aria-label={t('news.notifyToggle')}
           style={{ color: notifyOn ? 'var(--rgb-1)' : undefined }}
@@ -253,7 +273,7 @@ function NewsPage() {
         </button>
       </motion.div>
 
-      <div className="segmented news-mode-tabs">
+      <div className="segmented news-mode-tabs" role="tablist" aria-label={t('news.title')}>
         {/* Calm stays last because it is about the reader rather than the
             market. (Global Intelligence used to sit before it; it is its own
             page now — see NEWS_TABS.) */}
@@ -270,13 +290,17 @@ function NewsPage() {
         {NEWS_TABS.map((k) => (
           <button
             key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
             className={tab === k ? 'active' : ''}
             onClick={() => setTab(k)}
             title={t(`news.tab.${k}`)}
             style={{ isolation: 'isolate' }}
           >
             {tab === k && <SegIndicator id="newstab" />}
-            {t(`news.tab.${k}`)}
+            <span className="news-tab-icon"><NewsTabIcon tab={k} /></span>
+            <span className="news-tab-label">{t(`news.tab.${k}`)}</span>
           </button>
         ))}
       </div>
@@ -326,91 +350,96 @@ function NewsPage() {
         />
       ) : (
         <>
-      <motion.div className="card card-tight row-between" variants={riseIn} initial="hidden" animate="show">
-        <span className="faint">
-          {feed.at ? t('news.updated', { ago: timeAgo(feed.at, i18n.language) }) : t('news.loading')}
-        </span>
-        <button className="btn btn-sm btn-ghost" style={{ width: 'auto' }} onClick={() => load(true)} disabled={loading}>
-          {loading ? t('news.loading') : t('news.refresh')}
-        </button>
-      </motion.div>
-
-      {feed.generated && <p className="notice">{t('news.generatedNotice')}</p>}
-
-      <div className="row" style={{ gap: 8 }}>
-        <span className="icon-btn" style={{ pointerEvents: 'none' }}>
-          <AnimatedSearch active={Boolean(query)} still={still} width={16} height={16} />
-        </span>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('news.search')}
-          style={{ flex: 1 }}
-        />
-      </div>
-
-      <div className="tag-scroll">
-        {CATEGORIES.map((c) => (
-          <button key={c} className={`tag ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)}>
-            {t(`news.cat.${c}`)}
+      <motion.section className="news-desk" variants={riseIn} initial="hidden" animate="show">
+        <div className="news-desk-status">
+          <span className="news-desk-updated" role="status">
+            <i aria-hidden="true" />
+            {feed.at ? t('news.updated', { ago: timeAgo(feed.at, i18n.language) }) : t('news.loading')}
+          </span>
+          <button className={`news-refresh${loading ? ' is-loading' : ''}`} onClick={() => load(true)} disabled={loading} aria-label={t('news.refresh')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 5.5" /><path d="M20 4v7h-7" /></svg>
+            <span>{loading ? t('news.loading') : t('news.refresh')}</span>
           </button>
-        ))}
-      </div>
+        </div>
+
+        <label className="news-search">
+          <span className="news-search-icon" aria-hidden="true">
+            <AnimatedSearch active={Boolean(query)} still={still} width={17} height={17} />
+          </span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('news.search')}
+            aria-label={t('news.search')}
+          />
+          {query && <button type="button" className="news-search-clear" onClick={() => setQuery('')} aria-label={t('common.clear')}>×</button>}
+        </label>
+
+        <div className="tag-scroll news-categories" aria-label={t('news.categories', { defaultValue: 'دسته‌بندی خبرها' })}>
+          {CATEGORIES.map((c) => (
+            <button key={c} className={`tag ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)} aria-pressed={cat === c}>
+              {t(`news.cat.${c}`)}
+            </button>
+          ))}
+        </div>
+      </motion.section>
+
+      {feed.generated && <p className="notice news-generated">{t('news.generatedNotice')}</p>}
 
       {loading && !items.length ? (
-        <div className="stack">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="skel" style={{ height: 78 }} />
+        <div className="stack news-loading-list">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skel news-story-skel" />
           ))}
         </div>
       ) : !items.length ? (
-        <div className="empty">
+        <div className="empty news-empty">
           <span className="empty-icon"><IconNews width={26} height={26} /></span>
-          {t('news.empty')}
+          <strong>{t('news.empty')}</strong>
+          {(query || cat !== 'all') && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setQuery(''); setCat('all'); }}>{t('news.clearFilters', { defaultValue: 'پاک کردن فیلترها' })}</button>}
         </div>
       ) : (
-        <motion.div className="stack" style={{ gap: 9 }} variants={stagger} initial="hidden" animate="show">
-          {items.map((n) => (
+        <motion.div className="stack news-story-list" variants={stagger} initial="hidden" animate="show">
+          {items.map((n, index) => (
             <motion.article
               key={n.id}
-              className="docs-card"
+              className={`docs-card news-story${index === 0 ? ' is-lead' : ''}`}
               data-open="false"
               variants={riseIn}
-              whileTap={n.url ? { scale: 0.985 } : undefined}
+              whileTap={n.url ? { scale: 0.988 } : undefined}
               onClick={() => open(n.url)}
-              style={{ cursor: n.url ? 'pointer' : 'default', '--card-hue': 'var(--rgb-1)', padding: 16 }}
+              onKeyDown={(event) => {
+                if (n.url && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  open(n.url);
+                }
+              }}
+              role={n.url ? 'link' : undefined}
+              tabIndex={n.url ? 0 : undefined}
+              style={{ cursor: n.url ? 'pointer' : 'default', '--card-hue': 'var(--rgb-1)' }}
             >
-              <div className="row-between" style={{ marginBottom: 5 }}>
-                <span className="row" style={{ gap: 5 }}>
-                  <span className="pill pill-rgb" style={{ fontSize: 10 }}>
-                    {n.digest ? t('news.digest') : n.source}
-                  </span>
-                  {/*
-                    Language badge. Without it the "other languages" tab is a
-                    trap: you tap a headline expecting your own language and
-                    land on a German page. Shown only when the article is NOT
-                    in the language the UI is already set to, so it stays quiet
-                    in the common case.
-                  */}
-                  {n.lang && n.lang !== i18n.language && (
-                    <span className="pill" style={{ fontSize: 9.5, textTransform: 'uppercase' }}>
-                      {n.lang}
-                    </span>
-                  )}
-                </span>
-                <span className="faint mono" style={{ fontSize: 10.5 }}>{timeAgo(n.at, i18n.language)}</span>
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1.6 }}>{n.title}</div>
-              {n.summary && (
-                <p className="prose-sm" style={{ marginTop: 5 }}>{n.summary}</p>
-              )}
-              {n.url && (
-                <div className="row" style={{ gap: 5, marginTop: 8, color: 'var(--rgb-1)', fontSize: 11.5 }}>
-                  <IconExternal width={13} height={13} />
-                  <span>{t('news.readAt', { source: n.source })}</span>
+              {index === 0 && <span className="news-lead-label"><i aria-hidden="true" />{t('news.topStory', { defaultValue: 'تیتر نخست' })}</span>}
+              <div className="news-story-top">
+                <div className="news-source">
+                  <span className="news-source-mark" aria-hidden="true">{n.digest ? 'AI' : String(n.source || 'N').trim().charAt(0).toUpperCase()}</span>
+                  <span className="news-source-name">{n.digest ? t('news.digest') : n.source}</span>
                 </div>
-              )}
+                <time className="news-story-time mono">{timeAgo(n.at, i18n.language)}</time>
+              </div>
+              <h2 className="news-story-title">{n.title}</h2>
+              {n.summary && <p className="news-story-summary">{n.summary}</p>}
+              <div className="news-story-foot">
+                <span className="news-story-badges">
+                  {n.lang && n.lang !== i18n.language && <span className="news-language">{n.lang}</span>}
+                </span>
+                {n.url && (
+                  <span className="news-read-link">
+                    <span>{t('news.readAt', { source: n.source })}</span>
+                    <IconExternal width={13} height={13} />
+                  </span>
+                )}
+              </div>
             </motion.article>
           ))}
         </motion.div>
@@ -420,7 +449,7 @@ function NewsPage() {
         </>
       )}
 
-      <p className="prose-sm" style={{ marginTop: 12 }}>{t('news.disclaimer')}</p>
+      <p className="prose-sm news-disclaimer">{t('news.disclaimer')}</p>
     </PageTransition>
   );
 }

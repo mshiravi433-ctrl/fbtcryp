@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { lockBodyScroll } from '../lib/scrollLock';
+import { OverlayDepthContext } from './OverlayDepthContext';
 import { useStill } from './AnimatedIcon';
 import { IconX } from './Icons';
 
@@ -34,6 +35,9 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
    * someone with a vestibular condition it is a reason to leave.
    */
   const still = useStill();
+  const overlayDepth = useContext(OverlayDepthContext);
+  const backdropStyle = overlayDepth > 0 ? { zIndex: 240 + overlayDepth * 10 } : undefined;
+  const layerStyle = overlayDepth > 0 ? { zIndex: 241 + overlayDepth * 10 } : undefined;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -64,13 +68,17 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
            */}
           <motion.div
             className="sheet-backdrop"
+            style={backdropStyle}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: still ? 0 : 0.18 }}
             onClick={onClose}
           />
-          <div className={`sheet-layer ${anchor === 'bottom' ? 'sheet-layer-bottom' : ''}`}>
+          <div
+            className={`sheet-layer ${anchor === 'bottom' ? 'sheet-layer-bottom' : ''}`}
+            style={layerStyle}
+          >
             <motion.div
               className={`sheet sheet-${size} ${anchor === 'bottom' ? 'sheet-bottom' : ''}${className ? ` ${className}` : ''}`}
               data-testid={testId}

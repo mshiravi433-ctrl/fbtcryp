@@ -107,8 +107,9 @@ describe('farm DeFi architecture', () => {
   });
 
   it('keeps a pair with an unlisted leg honestly unavailable', () => {
-    // Base lists USDC but no USDT, so USDC-USDT cannot prefill a swap.
-    const row = normalizeFarmOpportunity(pool, { source: 'defillama', updatedAt: new Date().toISOString() });
+    // USDT is now a verified Base token, so use a genuinely unknown leg:
+    // widening the real registry must not turn ticker-only guesswork into a route.
+    const row = normalizeFarmOpportunity({ ...pool, symbol: 'USDC-UNLISTED' }, { source: 'defillama', updatedAt: new Date().toISOString() });
     expect(row.type).toBe('lp');
     expect(row.actions.getTokens).toBe('UNAVAILABLE');
   });

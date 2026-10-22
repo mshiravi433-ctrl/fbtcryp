@@ -19,6 +19,7 @@
  */
 
 import { TOKENS } from './chains';
+import { getTokensSync } from './tokenLists';
 import { LST_ASSETS, EQUITY_ASSETS, COMMODITY_ASSETS } from './solanaAssets';
 import { SOLANA_SIGNAL_ASSETS } from './solanaSignals';
 import { SOL_MINT, USDC_MINT, USDT_MINT } from './solana';
@@ -219,19 +220,82 @@ const EQUIVALENT_SYMBOLS = {
   WS: ['S']
 };
 
+/**
+ * Verified tokens already understood by the Swap screen.
+ *
+ * Farm previously looked only at the small `TOKENS` registry even though the
+ * app ships a much larger, hand-checked baseline in tokenLists. That made a
+ * large number of legitimate pairs look action-less. Remote list entries are
+ * deliberately excluded here: an automatic handoff must never choose one of
+ * two same-symbol, unverified contracts by ticker alone.
+ */
+const ROUTE_TOKEN_LOOKUPS = new WeakMap();
+
+function routeTokenData(chainId) {
+  const source = getTokensSync(chainId) ?? [];
+  const cached = ROUTE_TOKEN_LOOKUPS.get(source);
+  if (cached) return cached;
+  const verified = source.filter((token) => token?.verified);
+  const list = verified.length ? verified : (TOKENS[chainId] ?? []);
+  const bySymbol = new Map();
+  let native = null;
+  for (const token of list) {
+    const key = String(token?.symbol ?? '').trim().toUpperCase();
+    if (key && !bySymbol.has(key)) bySymbol.set(key, token);
+    if (!native && token?.native) native = token;
+  }
+  const data = { list, bySymbol, native };
+  ROUTE_TOKEN_LOOKUPS.set(source, data);
+  return data;
+}
+
 function tokenOnChain(chainId, symbol) {
-  const list = TOKENS[chainId] ?? [];
+  const { bySymbol } = routeTokenData(chainId);
   const want = String(symbol ?? '').trim().toUpperCase();
-  if (!want || list.length === 0) return null;
-  const byUpper = (s) => list.find((tk) => String(tk.symbol).toUpperCase() === s) ?? null;
-  const exact = byUpper(want);
+  if (!want || bySymbol.size === 0) return null;
+  const exact = bySymbol.get(want);
   if (exact) return exact;
   /* Same asset, different spelling — wrapped/native pairs and renames only. */
   for (const alt of EQUIVALENT_SYMBOLS[want] ?? []) {
-    const hit = byUpper(alt);
+    const hit = bySymbol.get(alt);
     if (hit) return hit;
   }
   return null;
+}
+
+function paymentTokenFor(chainId, target) {
+  const { list, bySymbol, native } = routeTokenData(chainId);
+  const targetUp = String(target?.symbol ?? '').toUpperCase();
+  for (const stable of ['USDC', 'USDT', 'DAI']) {
+    const hit = bySymbol.get(stable);
+    if (hit && String(hit.symbol).toUpperCase() !== targetUp) return hit;
+  }
+  if (native && String(native.symbol).toUpperCase() !== targetUp) return native;
+  return list.find((token) => String(token.symbol).toUpperCase() !== targetUp) ?? null;
+}
+
+/* Symbols are safe only for the small curated registry consumed by Swap's
+   symbol-prefill path. A bundled-baseline token travels by its verified
+   contract address instead, which is precisely what Swap's address handoff
+   is for and avoids a same-ticker clone being selected. */
+function isCoreSwapToken(chainId, token) {
+  const core = TOKENS[chainId] ?? [];
+  return core.some((entry) => token?.native
+    ? entry.native && entry.symbol === token.symbol
+    : String(entry.address ?? '').toLowerCase() === String(token?.address ?? '').toLowerCase());
+}
+
+function evmAcquisitionRoute(chainId, target) {
+  const payment = paymentTokenFor(chainId, target);
+  if (!payment || !target) return null;
+  return {
+    chainId,
+    from: payment.symbol,
+    to: target.symbol,
+    fromAddress: !payment.native && !isCoreSwapToken(chainId, payment) ? payment.address : undefined,
+    toAddress: !target.native && !isCoreSwapToken(chainId, target) ? target.address : undefined,
+    single: true
+  };
 }
 
 /**
@@ -262,7 +326,22 @@ export function pairSwapRoute(pool) {
        (e.g. a SOL-USDC pool) there is nothing interesting to target, so the
        second leg is the honest default. */
     const toMint = !isBase(mintA) && isBase(mintB) ? mintA : mintB;
-    return { kind: 'solana', from: pair[0], to: pair[1], toMint };
+    const legRoute = (symbol, mint, pairLeg) => {
+      const fromMint = mint === USDC_MINT ? SOL_MINT : USDC_MINT;
+      return {
+        kind: 'solana',
+        from: fromMint === SOL_MINT ? 'SOL' : 'USDC',
+        to: symbol,
+        fromMint,
+        toMint: mint,
+        single: true,
+        pairLeg
+      };
+    };
+    return {
+      kind: 'solana', from: pair[0], to: pair[1], toMint,
+      legRoutes: [legRoute(pair[0], mintA, 0), legRoute(pair[1], mintB, 1)]
+    };
   }
 
   const chainId = llamaChainId(pool?.chain);
@@ -270,13 +349,15 @@ export function pairSwapRoute(pool) {
   const legA = tokenOnChain(chainId, pair[0]);
   const legB = tokenOnChain(chainId, pair[1]);
   if (!legA || !legB) return null;
+  const legRoutes = [evmAcquisitionRoute(chainId, legA), evmAcquisitionRoute(chainId, legB)];
+  if (legRoutes.some((route) => !route)) return null;
   /*
    * Registry symbols, not feed spellings. The swap screen resolves `from`/`to`
    * against its curated list case-sensitively, so a feed spelling of "WETH"
    * resolving to our "ETH" entry must travel as "ETH" — echoing the feed
    * string would prefill a leg the swap screen cannot select.
    */
-  return { chainId, from: legA.symbol, to: legB.symbol };
+  return { chainId, from: legA.symbol, to: legB.symbol, legRoutes };
 }
 
 /**
@@ -323,22 +404,7 @@ export function singleSwapRoute(pool) {
   if (!chainId) return null;
   const entry = tokenOnChain(chainId, sym);
   if (!entry) return null;
-  const list = TOKENS[chainId] ?? [];
-  const entryUp = String(entry.symbol).toUpperCase();
-  const byUpper = (s) => list.find((tk) => String(tk.symbol).toUpperCase() === s) ?? null;
-  let pay = null;
-  for (const stable of ['USDC', 'USDT', 'DAI']) {
-    const hit = byUpper(stable);
-    if (hit && String(hit.symbol).toUpperCase() !== entryUp) { pay = hit; break; }
-  }
-  if (!pay) {
-    const native = list.find((tk) => tk.native);
-    pay = native && String(native.symbol).toUpperCase() !== entryUp
-      ? native
-      : (list.find((tk) => String(tk.symbol).toUpperCase() !== entryUp) ?? null);
-  }
-  if (!pay) return null;
-  return { chainId, from: pay.symbol, to: entry.symbol, single: true };
+  return evmAcquisitionRoute(chainId, entry);
 }
 
 /**
