@@ -143,7 +143,17 @@ export function createA2AAdapter({ provider, env = process.env, now = () => Date
     const url = endpoint();
     if (!url) return { ok: false, code: 'PROVIDER_RPC_URL_UNCONFIGURED' };
     const headers = { 'content-type': 'application/json' };
+    /* Two credential shapes reach this line:
+       · an OAuth token from connections.js (accessToken/tokenType), and
+       · a user-supplied key from sourceCredentials.js (already-framed headers).
+       The second is an allowlisted header set built on the server; a request
+       body can never contribute a header name here. */
     if (credential?.accessToken) headers.authorization = `${credential.tokenType || 'Bearer'} ${credential.accessToken}`;
+    else if (credential?.headers && typeof credential.headers === 'object') {
+      for (const [name, value] of Object.entries(credential.headers)) {
+        if (/^[a-z0-9-]{2,40}$/i.test(name) && typeof value === 'string' && value.length <= 2200) headers[name.toLowerCase()] = value;
+      }
+    }
     const response = await request({
       url,
       allowedHosts: provider.allowedHosts,

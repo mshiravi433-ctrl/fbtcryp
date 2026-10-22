@@ -131,5 +131,15 @@ export const addSource = ({ cardUrl, label = '' }) =>
 export const removeSource = (sourceId) => call(`/sources/${encodeURIComponent(sourceId)}`, { method: 'DELETE' });
 
 export const listConnections = () => call('/connections');
+/* The user's own key for the user's own A2A agent. Sent once, sealed
+   server-side, never returned. The value is not kept in any client store. */
+export const saveSourceCredential = (sourceId, { secret, headerName = 'authorization', scheme = 'bearer' }) =>
+  call(`/sources/${encodeURIComponent(sourceId)}/credential`, {
+    method: 'POST',
+    body: { secret, headerName, scheme },
+    timeout: 20_000
+  });
+export const removeSourceCredential = (sourceId) =>
+  call(`/sources/${encodeURIComponent(sourceId)}/credential`, { method: 'DELETE' });
 export const startConnection = (providerId) => call(`/providers/${encodeURIComponent(providerId)}/connections/start`, { method: 'POST', body: {} });
 export const revokeConnection = (connectionId) => call(`/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });

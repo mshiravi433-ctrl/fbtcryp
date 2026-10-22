@@ -187,10 +187,41 @@ t('agent detail states the data policy the review recorded', detail.body.agent.p
 const { createAgentHub } = await import('../../server/agentHub/index.js');
 const defaultHub = createAgentHub({ env: {}, ownerFor: () => 'dev:probe' });
 const defaultCatalog = await defaultHub.broker.catalog({ owner: 'dev:probe' });
-t('with AGENT_HUB_ENABLED unset the hub is ON and publishes zero reviewed agents',
-  defaultCatalog.enabled === true && defaultCatalog.status === 'EMPTY'
-  && defaultCatalog.agents.length === 0 && defaultCatalog.providers.length === 0,
-  defaultCatalog);
+/* A hub with nothing runnable is a directory. The default build therefore
+   ships the first-party agents — and NOTHING else: no reviewed vendor is
+   registered here, so this still catches a provider that leaks into an
+   operator's empty deploy. */
+t('with AGENT_HUB_ENABLED unset the hub is ON and publishes only first-party agents',
+  defaultCatalog.enabled === true && defaultCatalog.status === 'LIVE'
+  && defaultCatalog.agents.length >= 10
+  && defaultCatalog.agents.every((a) => a.source === 'native' && a.providerId === 'fbt-native')
+  && defaultCatalog.providers.length === 1
+  && defaultCatalog.providers[0].id === 'fbt-native'
+  && defaultCatalog.providers[0].source === 'native',
+  { status: defaultCatalog.status, agents: defaultCatalog.agents.length, providers: defaultCatalog.providers.map((p) => p.id) });
+t('every first-party agent is free, credential-free and cannot be paid for',
+  defaultCatalog.agents.every((a) => a.accessModel === 'FREE_PUBLIC' && a.requiresAccount === false && a.requiresPayment === false && a.paidInvocationEnabled === false));
+t('a first-party agent runs without any connection, consent still required',
+  (await (async () => {
+    const noConsent = await createTask('fbt-native:ai-trading-analyst', 'ETH trend please', { extra: { consent: { approved: false, categories: ['task_text'] } } });
+    return noConsent.status === 400 && noConsent.body.code === 'CONSENT_REQUIRED';
+  })()));
+/* End-to-end through the REAL server: no OAuth, no credential, no payment,
+   no remote host. This is the path the user asked to work. */
+const nativeRun = await createTask('fbt-native:yield-optimizer', 'best stablecoin yield on arbitrum', { key: 'native-run-0001' });
+t('a first-party agent completes a task with no account and no payment',
+  nativeRun.status === 200 && nativeRun.body.task?.state === 'completed'
+  && nativeRun.body.task?.providerId === 'fbt-native'
+  && typeof nativeRun.body.task?.result?.text === 'string'
+  && nativeRun.body.task.result.text.length > 80,
+  { status: nativeRun.status, state: nativeRun.body.task?.state, code: nativeRun.body.code });
+const nativeRead = await call(`${HUB}/tasks/${nativeRun.body.task?.id}`);
+t('the first-party result is readable afterwards and records its source',
+  nativeRead.status === 200 && nativeRead.body.task?.providerId === 'fbt-native'
+  && nativeRead.body.events?.length >= 1, nativeRead.body.task && { state: nativeRead.body.task.state });
+t('a first-party result names its data source and never claims execution',
+  /DefiLlama/i.test(nativeRead.body.task?.result?.text || '') && !/\b(sign|broadcast|private key)\b/i.test(nativeRead.body.task?.result?.text || ''));
+
 const offHub = createAgentHub({ env: { AGENT_HUB_ENABLED: 'false' }, ownerFor: () => 'dev:probe' });
 const offCatalog = await offHub.broker.catalog({ owner: 'dev:probe' });
 t('AGENT_HUB_ENABLED=false still disables the whole surface',
@@ -361,7 +392,7 @@ t('an unknown provider webhook is a plain 404', unknownProviderWebhook.status ==
 console.log('\n10. kill switches');
 t('provider health without the ops token is a 404, not a hint', (await call(`${HUB}/provider-health`)).status === 404);
 const opsHealth = await call(`${HUB}/provider-health`, { headers: { 'x-fbt-ops-token': OPS_TOKEN } });
-t('provider health with the token reports each provider and its switch', opsHealth.status === 200 && opsHealth.body.providers.length === 3 && opsHealth.body.killSwitch.global === false, opsHealth.body?.providers?.length);
+t('provider health with the token reports each provider and its switch', opsHealth.status === 200 && opsHealth.body.providers.length === 4 && opsHealth.body.providers.some((p) => p.id === 'fbt-native') && opsHealth.body.killSwitch.global === false, opsHealth.body?.providers?.map((p) => p.id));
 t('provider health reports the truth about durability', opsHealth.body.durable === false);
 
 const tripped = await post(`${HUB}/provider-health/kill`, { scope: 'provider', providerId: 'conformance-free', tripped: true, reason: 'probe' }, { headers: { 'x-fbt-ops-token': OPS_TOKEN } });
@@ -464,10 +495,43 @@ const userAgentId = `${sourceId}:wallet-risk`;
 const userDetail = await call(`${HUB}/agents/${encodeURIComponent(userAgentId)}`);
 t('the user agent has its own detail page', userDetail.status === 200 && userDetail.body.agent.source === 'user' && userDetail.body.agent.providerName === 'Conformance Research Agent', userDetail.body.agent && { id: userDetail.body.agent.id, source: userDetail.body.agent.source });
 
+/* ── the key path: the user's own key, for the user's own agent ───────────
+   This is what makes an agent that requires auth actually runnable without an
+   OAuth provider record. The assertions that matter are that the secret is
+   never echoed back, another device cannot write it, and removing the source
+   takes the key with it. */
+const KEY_SECRET = 'sk-conformance-0123456789';
+const keyAnon = await post(`${HUB}/sources/${sourceId}/credential`, { secret: KEY_SECRET }, { device: null });
+t('an IP-only caller cannot store a key', keyAnon.status === 401 && keyAnon.body.code === 'STRONG_OWNER_REQUIRED', keyAnon.body);
+const keyUnknown = await post(`${HUB}/sources/u-doesnotexist/credential`, { secret: KEY_SECRET });
+t('a key cannot be stored for a source that does not exist', keyUnknown.status === 404 && keyUnknown.body.code === 'SOURCE_NOT_FOUND', keyUnknown.body);
+const keyBadHeader = await post(`${HUB}/sources/${sourceId}/credential`, { secret: KEY_SECRET, headerName: 'x-evil' });
+t('a header outside the allowlist is refused', keyBadHeader.status === 400 && keyBadHeader.body.code === 'CREDENTIAL_HEADER_UNSUPPORTED', keyBadHeader.body);
+const keyCrlf = await post(`${HUB}/sources/${sourceId}/credential`, { secret: 'abc\r\nX-Evil: 1' });
+t('a key containing a newline is refused', keyCrlf.status === 400 && keyCrlf.body.code === 'CREDENTIAL_SECRET_INVALID', keyCrlf.body);
+const keySaved = await post(`${HUB}/sources/${sourceId}/credential`, { secret: KEY_SECRET, headerName: 'authorization', scheme: 'bearer' });
+t('the owner can store a key for their own agent', keySaved.status === 200 && keySaved.body.connection?.status === 'ACTIVE' && keySaved.body.connection?.kind === 'api_key', keySaved.body);
+t('the key is never echoed back', !JSON.stringify(keySaved.body).includes(KEY_SECRET));
+const keyListed = await call(`${HUB}/connections`);
+const keyRow = keyListed.body.connections.find((c) => c.kind === 'api_key');
+t('the stored key is listed as a connection without its value', keyListed.status === 200 && keyRow?.providerId === sourceId && !JSON.stringify(keyListed.body).includes(KEY_SECRET), keyRow);
+const keyOtherDevice = await post(`${HUB}/sources/${sourceId}/credential`, { secret: 'sk-other-device-000000' }, { device: DEVICE_B });
+t('another device cannot write a key onto someone else\'s source', keyOtherDevice.status === 404 && keyOtherDevice.body.code === 'SOURCE_NOT_FOUND', keyOtherDevice.body);
+const keyOtherDelete = await call(`${HUB}/sources/${sourceId}/credential`, { method: 'DELETE', device: DEVICE_B });
+/* The refusal names the credential, not the other device's source: a caller
+   who cannot see a source learns nothing about whether it exists. */
+t('another device cannot delete another owner\'s key',
+  keyOtherDelete.status === 404 || (keyOtherDelete.status === 400 && keyOtherDelete.body.code === 'CREDENTIAL_NOT_FOUND'),
+  keyOtherDelete.body);
+
 const sendBeforeUserTask = A.calls.send;
 const userTask = await createTask(userAgentId, 'instant: user supplied agent');
 t('a task runs against the user-supplied agent', userTask.status === 200 && userTask.body.task.state === 'completed' && A.calls.send === sendBeforeUserTask + 1, { status: userTask.status, body: userTask.body.task?.state, code: userTask.body.code });
 t('the task records which source it came from', userTask.body.task?.providerId === sourceId);
+const keyDeleted = await call(`${HUB}/sources/${sourceId}/credential`, { method: 'DELETE' });
+t('the owner can delete the key', keyDeleted.status === 200 && keyDeleted.body.connection?.status === 'REVOKED', keyDeleted.body);
+t('a deleted key is gone from the connection list', (await call(`${HUB}/connections`)).body.connections.every((c) => c.kind !== 'api_key'));
+t('a task still runs on a public agent after its key is deleted', (await createTask(userAgentId, 'instant: no key needed')).status === 200);
 
 /* Ownership: device B must not see, use or delete device A's source. */
 const bCatalog = await call(`${HUB}/catalog`, { device: DEVICE_B });

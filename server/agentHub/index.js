@@ -26,18 +26,24 @@ import { createHubStore } from './store.js';
 import { createConnectionManager } from './connections.js';
 import { createTaskBroker } from './tasks.js';
 import { createUserAgentSources } from './userAgents.js';
+import { createNativeRuntime } from './native/index.js';
+import { createSourceCredentials } from './sourceCredentials.js';
 import { createAgentHubRouter } from './router.js';
 
 export const AGENT_HUB_VERSION = '1.0.0';
 
-export function createAgentHub({ ownerFor, env = process.env, log = () => {}, now = () => Date.now() } = {}) {
+export function createAgentHub({ ownerFor, env = process.env, log = () => {}, now = () => Date.now(), nativeData = null } = {}) {
   const store = createHubStore({ now, log });
   const registry = createRegistry({ env, now });
-  const adapters = createAdapterFactory({ env, now });
+  /* First-party agents: real work, no third party, no OAuth. Optional by env,
+     but on by default because a hub with nothing runnable is not a hub. */
+  const native = createNativeRuntime({ env, now, ...(nativeData ? { data: nativeData } : {}) });
+  const adapters = createAdapterFactory({ env, now, native });
   const userSources = createUserAgentSources({ store, env, now, log });
+  const sourceCredentials = createSourceCredentials({ userSources, env, now, log });
   const connections = createConnectionManager({ store, registry, env, now, log });
-  const broker = createTaskBroker({ registry, adapters, store, connections, userSources, env, now, log });
-  const hub = { version: AGENT_HUB_VERSION, store, registry, adapters, userSources, connections, broker };
+  const broker = createTaskBroker({ registry, adapters, store, connections, userSources, sourceCredentials, native, env, now, log });
+  const hub = { version: AGENT_HUB_VERSION, store, registry, adapters, userSources, sourceCredentials, connections, native, broker };
   hub.router = createAgentHubRouter({ hub, ownerFor, env, log });
   return hub;
 }

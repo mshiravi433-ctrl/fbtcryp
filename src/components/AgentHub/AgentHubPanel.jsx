@@ -31,7 +31,9 @@ import {
   listTasks,
   newIdempotencyKey,
   removeSource,
-  revokeConnection
+  removeSourceCredential,
+  revokeConnection,
+  saveSourceCredential
 } from '../../lib/intent-ai/agentHub/client.js';
 import RecommendedAgents from './RecommendedAgents.jsx';
 import '../../styles/agent-hub.css';
@@ -96,7 +98,26 @@ const SOURCE_ERROR_COPY = Object.freeze({
   SOURCE_CARD_INVALID: { fa: 'آن صفحه کارت ایجنت A2A معتبر نیست (نام ایجنت ندارد).', en: 'That page is not a valid A2A agent card (no agent name).' },
   SOURCE_LIMIT_REACHED: { fa: 'به سقف ایجنت‌های قابل‌افزودن رسیده‌اید؛ اول یکی را حذف کنید.', en: 'You have reached the number of agents you can add. Remove one first.' },
   SOURCE_RATE_LIMITED: { fa: 'افزودن ایجنت بیش از حد پشت‌سرهم بود؛ چند دقیقه بعد دوباره امتحان کنید.', en: 'Too many new agents in a short time. Try again in a few minutes.' },
-  STRONG_OWNER_REQUIRED: { fa: 'این کار را از اپ روی دستگاه خودتان انجام دهید تا حساب شما شناسایی شود.', en: 'Do this from the app on your device so FBT can identify your account.' }
+  STRONG_OWNER_REQUIRED: { fa: 'این کار را از اپ روی دستگاه خودتان انجام دهید تا حساب شما شناسایی شود.', en: 'Do this from the app on your device so FBT can identify your account.' },
+  CREDENTIAL_STORE_UNCONFIGURED: {
+    fa: 'برای ذخیرهٔ امن کلید، سرور باید AGENT_HUB_SECRET_KEY داشته باشد. بدون آن هیچ کلیدی ذخیره نمی‌شود.',
+    en: 'Storing a key safely needs AGENT_HUB_SECRET_KEY on the server. Without it nothing is stored.'
+  },
+  AGENT_HUB_SECRET_KEY_REQUIRED: {
+    fa: 'کلید رمزنگاری سرور تنظیم نشده است؛ ذخیرهٔ کلید غیرفعال است.',
+    en: 'The server sealing key is not configured, so key storage is disabled.'
+  },
+  CREDENTIAL_SECRET_REQUIRED: { fa: 'کلید را وارد کنید (حداقل ۶ نویسه).', en: 'Enter the key (at least 6 characters).' },
+  CREDENTIAL_SECRET_TOO_LONG: { fa: 'این مقدار بیش از حد بلند است.', en: 'That value is too long.' },
+  CREDENTIAL_SECRET_INVALID: { fa: 'کلید نباید خط جدید یا نویسهٔ کنترلی داشته باشد.', en: 'A key cannot contain newlines or control characters.' },
+  CREDENTIAL_HEADER_UNSUPPORTED: { fa: 'نام هدر پشتیبانی نمی‌شود.', en: 'That header name is not supported.' },
+  CREDENTIAL_SCHEME_UNSUPPORTED: { fa: 'نوع احراز هویت پشتیبانی نمی‌شود.', en: 'That authentication scheme is not supported.' },
+  CREDENTIAL_NOT_FOUND: { fa: 'کلیدی برای این ایجنت ذخیره نشده است.', en: 'No key is stored for this agent.' },
+  CREDENTIAL_UNREADABLE: {
+    fa: 'کلید ذخیره‌شده قابل خواندن نیست (کلید سرور عوض شده است). دوباره ذخیره کنید.',
+    en: 'The stored key cannot be decrypted (the server key changed). Store it again.'
+  },
+  SOURCE_NOT_FOUND: { fa: 'این ایجنت دیگر در فهرست شما نیست.', en: 'That agent is no longer in your list.' }
 });
 
 export function sourceErrorText(code, fa, detail = null) {
@@ -262,6 +283,10 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
   const [connections, setConnections] = useState({ state: 'idle', list: [], capability: null });
   const [notice, setNotice] = useState(null);
   const [sourceForm, setSourceForm] = useState({ url: '', label: '', state: 'idle', error: null, detail: null });
+  const [credentialForm, setCredentialForm] = useState({
+    sourceId: null, open: false, secret: '', headerName: 'authorization', scheme: 'bearer',
+    state: 'idle', error: null, detail: null, message: null
+  });
   const keyRef = useRef(newIdempotencyKey('hub'));
   const inflightRef = useRef(false);
 
@@ -413,7 +438,51 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
     await reloadCatalog();
   }, [sourceForm.url, sourceForm.label, fa, reloadCatalog]);
 
+  const saveKeyForSource = useCallback(async () => {
+    const sourceId = credentialForm.sourceId;
+    if (!sourceId) return;
+    if (credentialForm.secret.trim().length < 6) {
+      setCredentialForm((prev) => ({ ...prev, state: 'error', error: 'CREDENTIAL_SECRET_REQUIRED', detail: null }));
+      return;
+    }
+    setCredentialForm((prev) => ({ ...prev, state: 'working', error: null, detail: null, message: null }));
+    const out = await saveSourceCredential(sourceId, {
+      secret: credentialForm.secret.trim(),
+      headerName: credentialForm.headerName,
+      scheme: credentialForm.scheme
+    });
+    if (!out.ok) {
+      setCredentialForm((prev) => ({ ...prev, state: 'error', error: out.code || 'CREDENTIAL_STORE_UNCONFIGURED', detail: out.detail || null }));
+      return;
+    }
+    /* The secret never goes back into component state after the request. */
+    setCredentialForm({ sourceId: null, open: false, secret: '', headerName: 'authorization', scheme: 'bearer', state: 'idle', error: null, detail: null, message: null });
+    setNotice({
+      tone: 'info',
+      text: fa
+        ? 'کلید ذخیره و رمزنگاری شد. فقط هنگام اجرای همین ایجنت، در سرور باز و به همان میزبان فرستاده می‌شود.'
+        : 'Key stored and encrypted. It is unsealed only while running this agent, and sent only to its host.'
+    });
+    void loadConnections();
+  }, [credentialForm, fa, loadConnections]);
+
+  const removeKeyForSource = useCallback(async (sourceId) => {
+    const out = await removeSourceCredential(sourceId);
+    if (!out.ok) {
+      setNotice({ tone: 'warn', text: sourceErrorText(out.code, fa, out.detail) });
+      return;
+    }
+    setNotice({ tone: 'info', text: fa ? 'کلید ذخیره‌شده حذف شد.' : 'The stored key was deleted.' });
+    if (credentialForm.sourceId === sourceId) {
+      setCredentialForm({ sourceId: null, open: false, secret: '', headerName: 'authorization', scheme: 'bearer', state: 'idle', error: null, detail: null, message: null });
+    }
+    void loadConnections();
+  }, [credentialForm.sourceId, fa, loadConnections]);
+
   const removeSourceFromHub = useCallback(async (sourceId) => {
+    if (credentialForm.sourceId === sourceId) {
+      setCredentialForm({ sourceId: null, open: false, secret: '', headerName: 'authorization', scheme: 'bearer', state: 'idle', error: null, detail: null, message: null });
+    }
     const out = await removeSource(sourceId);
     if (!out.ok) {
       setNotice({ tone: 'warn', text: out.detail || out.code || (fa ? 'حذف انجام نشد.' : 'The agent could not be removed.') });
@@ -706,7 +775,12 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
       ) : null}
 
       {tab === 'recommended' ? (
-        <RecommendedAgents fa={fa} onAddOwnAgent={() => setTab('discover')} />
+        <RecommendedAgents
+          fa={fa}
+          onAddOwnAgent={() => setTab('discover')}
+          nativeAgents={agents}
+          onRunAgent={(agent) => { setTab('discover'); void openAgent(agent); }}
+        />
       ) : null}
 
       {tab === 'discover' ? (
@@ -845,12 +919,107 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                           <button
                             type="button"
                             className="ah-ghost"
+                            onClick={() => {
+                              setCredentialForm((prev) => {
+                                if (prev.sourceId === provider.id) {
+                                  return { ...prev, open: !prev.open, secret: '', error: null, detail: null };
+                                }
+                                return { sourceId: provider.id, open: true, secret: '', headerName: 'authorization', scheme: 'bearer', state: 'idle', error: null, detail: null, message: null };
+                              });
+                            }}
+                            data-testid={`agent-hub-source-key-toggle-${testIdPart(provider.id)}`}
+                          >
+                            {fa ? 'کلید دسترسی (اختیاری)' : 'Access key (optional)'}
+                          </button>
+                          <button
+                            type="button"
+                            className="ah-ghost"
                             onClick={() => void removeSourceFromHub(provider.id)}
                             data-testid={`agent-hub-source-remove-${testIdPart(provider.id)}`}
                           >
                             {fa ? 'حذف' : 'Remove'}
                           </button>
                         </div>
+                        {credentialForm.open && credentialForm.sourceId === provider.id ? (
+                          <div className="ah-key" data-testid={`agent-hub-source-key-${testIdPart(provider.id)}`}>
+                            <p className="ah-muted ah-small">
+                              {fa
+                                ? 'اگر این ایجنت به کلید ساختهٔ خودتان نیاز دارد، اینجا بگذارید. کلید با AES-256-GCM روی سرور رمز می‌شود، در مرورگر نگه داشته نمی‌شود و فقط برای همین ایجنت به همان میزبان فرستاده می‌شود. اگر ایجنت عمومی است، خالی بگذارید.'
+                                : 'If this agent needs a key you were issued, store it here. It is sealed with AES-256-GCM on the server, never kept in the browser, and sent only for this agent to the host you already added. If the agent is public, leave this empty.'}
+                            </p>
+                            <div className="ah-key-row">
+                              <label className="ah-field">
+                                <span>{fa ? 'هدر' : 'Header'}</span>
+                                <select
+                                  className="ah-input"
+                                  value={credentialForm.headerName}
+                                  onChange={(event) => setCredentialForm((prev) => ({ ...prev, headerName: event.target.value }))}
+                                  data-testid="agent-hub-source-key-header"
+                                >
+                                  <option value="authorization">Authorization</option>
+                                  <option value="x-api-key">X-API-Key</option>
+                                  <option value="api-key">Api-Key</option>
+                                  <option value="x-auth-token">X-Auth-Token</option>
+                                </select>
+                              </label>
+                              <label className="ah-field">
+                                <span>{fa ? 'نوع' : 'Scheme'}</span>
+                                <select
+                                  className="ah-input"
+                                  value={credentialForm.scheme}
+                                  onChange={(event) => setCredentialForm((prev) => ({ ...prev, scheme: event.target.value }))}
+                                  data-testid="agent-hub-source-key-scheme"
+                                >
+                                  <option value="bearer">Bearer</option>
+                                  <option value="token">Token</option>
+                                  <option value="key">Key</option>
+                                  <option value="raw">{fa ? 'خام' : 'Raw value'}</option>
+                                </select>
+                              </label>
+                            </div>
+                            <label className="ah-field">
+                              <span>{fa ? 'کلید' : 'Key'}</span>
+                              <input
+                                className="ah-input"
+                                type="password"
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={credentialForm.secret}
+                                onChange={(event) => setCredentialForm((prev) => ({ ...prev, secret: event.target.value, error: null }))}
+                                placeholder={fa ? 'مقدار کلید خودتان' : 'The key you were issued'}
+                                data-testid="agent-hub-source-key-secret"
+                              />
+                            </label>
+                            {credentialForm.error ? (
+                              <p className="ah-error" role="alert" data-testid="agent-hub-source-key-error">
+                                {sourceErrorText(credentialForm.error, fa, credentialForm.detail)}
+                                <code className="ah-code">{credentialForm.error}</code>
+                              </p>
+                            ) : null}
+                            <div className="ah-key-actions">
+                              <button
+                                type="button"
+                                className="ah-primary ah-primary-sm"
+                                disabled={credentialForm.state === 'working' || credentialForm.secret.trim().length < 6}
+                                onClick={() => void saveKeyForSource()}
+                                data-testid="agent-hub-source-key-save"
+                              >
+                                {credentialForm.state === 'working' ? (fa ? 'در حال ذخیره…' : 'Saving…') : (fa ? 'ذخیره و رمزنگاری' : 'Store and encrypt')}
+                              </button>
+                              <button
+                                type="button"
+                                className="ah-ghost"
+                                onClick={() => {
+                                  setCredentialForm((prev) => ({ ...prev, open: false, secret: '', error: null, detail: null }));
+                                  void removeKeyForSource(provider.id);
+                                }}
+                                data-testid="agent-hub-source-key-remove"
+                              >
+                                {fa ? 'حذف کلید ذخیره‌شده' : 'Delete stored key'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -898,7 +1067,9 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                         <Badge status={agent.status} fa={fa} />
                         {agent.source === 'user'
                           ? <span className="ah-badge" data-tone="info">{fa ? 'افزودهٔ شما' : 'Added by you'}</span>
-                          : <span className="ah-badge" data-tone="muted">{fa ? 'بازبینی‌شده' : 'Reviewed'}</span>}
+                          : agent.source === 'native'
+                            ? <span className="ah-badge" data-tone="ok">{fa ? 'بومی FBT' : 'FBT native'}</span>
+                            : <span className="ah-badge" data-tone="muted">{fa ? 'بازبینی‌شده' : 'Reviewed'}</span>}
                       </div>
                       <p className="ah-card-summary">{agent.summary}</p>
                       <div className="ah-card-meta">
@@ -923,38 +1094,65 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
         <div data-testid="agent-hub-connected">
           {connections.state === 'loading' ? <p className="ah-muted" role="status">{fa ? 'در حال خواندن…' : 'Loading…'}</p> : null}
           {connections.state === 'ready' && connections.list.length === 0 ? (
-            <p className="ah-note" data-testid="agent-hub-connections-empty">
-              {fa
-                ? 'اتصال حساب فعلاً برای هیچ ارائه‌دهنده‌ای پیکربندی نشده است. اتصال فقط وقتی ممکن می‌شود که ارائه‌دهنده‌ای OAuth رسمی داشته باشد و در رجیستری تأیید شده باشد.'
-                : 'No provider account connection is configured yet. A connection becomes possible only when a reviewed provider offers official OAuth.'}
-            </p>
+            <div className="ah-connect-empty" data-testid="agent-hub-connections-empty">
+              <h4>{fa ? 'هیچ حسابی وصل نیست — و برای شروع لازم هم نیست' : 'Nothing is connected — and you do not need a connection to start'}</h4>
+              <p>
+                {fa
+                  ? 'دو راه جدا وجود دارد. ایجنت‌های بومی FBT همین حالا و بدون هیچ اتصالی کار می‌کنند. برای ایجنتی که خودتان اضافه کرده‌اید، اگر سازنده‌اش به کلید نیاز داشته باشد، می‌توانید کلید خودتان را ذخیره کنید؛ این کلید رمزنگاری‌شده و فقط برای همان ایجنت استفاده می‌شود.'
+                  : 'There are two separate paths. FBT’s native agents run right now with no connection at all. For an agent you added yourself, if its author requires a key, you can store the key you were issued; it is encrypted and used only for that agent.'}
+              </p>
+              <p className="ah-muted ah-small">
+                {fa
+                  ? 'اتصال OAuth فقط برای ارائه‌دهنده‌ای فعال می‌شود که در رجیستری بازبینی‌شدهٔ FBT ثبت شده باشد. تا آن زمان هیچ دکمهٔ «اتصال» جعلی نمایش داده نمی‌شود.'
+                  : 'OAuth connects only to a provider registered in FBT’s reviewed registry. Until then no fake “Connect” button is shown.'}
+              </p>
+              <div className="ah-connect-actions">
+                <button type="button" className="ah-primary ah-primary-sm" onClick={() => setTab('recommended')} data-testid="agent-hub-connections-go-native">
+                  {fa ? 'دیدن ایجنت‌های بومی' : 'See native agents'}
+                </button>
+                <button type="button" className="ah-ghost" onClick={() => setTab('discover')} data-testid="agent-hub-connections-go-sources">
+                  {fa ? 'افزودن ایجنت خودم' : 'Add my own agent'}
+                </button>
+              </div>
+            </div>
           ) : null}
           {connections.state === 'ready' && connections.list.length > 0 ? (
             <ul className="ah-list">
-              {connections.list.map((connection) => (
-                <li key={connection.id} className="ah-card">
-                  <div className="ah-card-head">
-                    <span className="ah-card-name">{connection.providerId}</span>
-                    <Badge status="LIVE" fa={fa} />
-                  </div>
-                  <div className="ah-card-meta">
-                    <span>{connection.externalAccountLabel || (fa ? 'حساب ارائه‌دهنده' : 'provider account')}</span>
-                    <span>{connection.scopes.join(' · ')}</span>
-                    <span>{connection.expiresAt ? `${fa ? 'انقضا: ' : 'expires '}${fmt(connection.expiresAt, fa)}` : (fa ? 'بدون تاریخ انقضا' : 'no expiry reported')}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="ah-ghost"
-                    onClick={async () => {
-                      const out = await revokeConnection(connection.id);
-                      if (out.ok) void loadConnections();
-                      else setNotice({ tone: 'warn', text: out.detail || out.code });
-                    }}
-                  >
-                    {fa ? 'قطع اتصال' : 'Disconnect'}
-                  </button>
-                </li>
-              ))}
+              {connections.list.map((connection) => {
+                const isKey = connection.kind === 'api_key';
+                return (
+                  <li key={connection.id} className="ah-card" data-testid={`agent-hub-connection-${testIdPart(connection.id)}`}>
+                    <div className="ah-card-head">
+                      <span className="ah-card-name">{isKey ? (fa ? 'کلید ایجنت شما' : 'Your agent key') : connection.providerId}</span>
+                      <Badge status="LIVE" fa={fa} />
+                      {isKey ? <span className="ah-badge" data-tone="info">{fa ? 'رمزنگاری‌شده' : 'Encrypted'}</span> : null}
+                    </div>
+                    <div className="ah-card-meta">
+                      <span>{isKey ? `${connection.providerId}` : (connection.externalAccountLabel || (fa ? 'حساب ارائه‌دهنده' : 'provider account'))}</span>
+                      {isKey ? (
+                        <span dir="ltr">{connection.headerName}{connection.scheme !== 'raw' ? ` · ${connection.scheme}` : ''}</span>
+                      ) : connection.scopes.length ? (
+                        <span>{connection.scopes.join(' · ')}</span>
+                      ) : null}
+                      <span>{connection.expiresAt ? `${fa ? 'انقضا: ' : 'expires '}${fmt(connection.expiresAt, fa)}` : (fa ? 'بدون تاریخ انقضا' : 'no expiry reported')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="ah-ghost"
+                      onClick={async () => {
+                        const out = isKey
+                          ? await removeSourceCredential(connection.providerId)
+                          : await revokeConnection(connection.id);
+                        if (out.ok) void loadConnections();
+                        else setNotice({ tone: 'warn', text: sourceErrorText(out.code, fa, out.detail) });
+                      }}
+                      data-testid={`agent-hub-connection-revoke-${testIdPart(connection.id)}`}
+                    >
+                      {isKey ? (fa ? 'حذف کلید' : 'Delete key') : (fa ? 'قطع اتصال' : 'Disconnect')}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </div>

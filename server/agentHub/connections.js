@@ -26,11 +26,12 @@
  * `CONNECTIONS_NOT_CONFIGURED` rather than pretending a flow exists.
  */
 
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { upstashConfigured, upstashSetIfAbsent } from '../blobCache.js';
 import { storeGetFresh, storeSet, storeDurable } from '../store.js';
 import { AGENT_HUB_CONNECTION_SCHEMA } from './protocol.js';
 import { jsonRequest } from './httpSafe.js';
+import { loadSealingKey, seal, unseal } from './seal.js';
 
 const PENDING_TTL_MS = 10 * 60_000;
 const STATE_TTL_MS = 10 * 60_000;
@@ -45,36 +46,6 @@ const safeEqual = (a, b) => {
   if (x.length !== y.length) return false;
   return timingSafeEqual(x, y);
 };
-
-/** `AGENT_HUB_SECRET_KEY`: 32 bytes as 64 hex chars or base64. */
-export function loadSealingKey(env = process.env) {
-  const raw = String(env.AGENT_HUB_SECRET_KEY || '').trim();
-  if (!raw) return null;
-  if (/^[0-9a-f]{64}$/i.test(raw)) return Buffer.from(raw, 'hex');
-  try {
-    const buf = Buffer.from(raw, 'base64');
-    return buf.length === 32 ? buf : null;
-  } catch {
-    return null;
-  }
-}
-
-function seal(key, plaintext) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(plaintext), 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${b64url(iv)}.${b64url(tag)}.${b64url(encrypted)}`;
-}
-
-function unseal(key, payload) {
-  const [ivPart, tagPart, dataPart] = String(payload || '').split('.');
-  if (!ivPart || !tagPart || !dataPart) throw new Error('SEALED_PAYLOAD_MALFORMED');
-  const decipher = createDecipheriv('aes-256-gcm', key, fromB64url(ivPart));
-  decipher.setAuthTag(fromB64url(tagPart));
-  const plain = Buffer.concat([decipher.update(fromB64url(dataPart)), decipher.final()]);
-  return JSON.parse(plain.toString('utf8'));
-}
 
 export function createConnectionManager({
   store,
