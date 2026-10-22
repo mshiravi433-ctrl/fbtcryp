@@ -24,6 +24,7 @@ import {
   cancelTask,
   createTask,
   getCatalog,
+  primeCatalogCache,
   getTask,
   listConnections,
   listTasks,
@@ -189,6 +190,9 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
       setCatalog({ state: 'error', data: null, error: out.code || 'CATALOG_UNAVAILABLE' });
       return;
     }
+    /* The tab switch reads the same answer, so it never shows a count that
+       disagrees with the list right below it. */
+    primeCatalogCache(out);
     setCatalog({ state: 'ready', data: out, error: null });
   }, []);
 

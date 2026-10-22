@@ -76,6 +76,35 @@ export function newIdempotencyKey(prefix = 'hub') {
 }
 
 export const getCatalog = () => call('/catalog');
+
+/* One cached read for the CHROME (the agents-tab switch asks "is anything
+   available?" without opening the panel). In-flight requests are shared, so
+   opening the tab does not fire two catalogues. 60 s is short enough that a
+   kill switch still lands quickly, long enough that tab-hopping is free. */
+let catalogCache = { at: 0, value: null, promise: null };
+export async function getCatalogCached(ttlMs = 60_000) {
+  const now = Date.now();
+  if (catalogCache.value && now - catalogCache.at < ttlMs) return catalogCache.value;
+  if (catalogCache.promise) return catalogCache.promise;
+  catalogCache.promise = getCatalog()
+    .then((out) => {
+      catalogCache = { at: Date.now(), value: out, promise: null };
+      return out;
+    })
+    .catch((error) => {
+      catalogCache.promise = null;
+      throw error;
+    });
+  return catalogCache.promise;
+}
+/** Called by the panel after a real read so the badge and the list agree. */
+export function primeCatalogCache(out) {
+  if (out && typeof out === 'object') catalogCache = { at: Date.now(), value: out, promise: null };
+}
+/** Test hook. */
+export function _resetCatalogCache() {
+  catalogCache = { at: 0, value: null, promise: null };
+}
 export const getAgent = (agentId) => call(`/agents/${encodeURIComponent(agentId)}`);
 export const listTasks = (limit = 30) => call(`/tasks?limit=${Number(limit) || 30}`);
 export const getTask = (taskId) => call(`/tasks/${encodeURIComponent(taskId)}`);

@@ -61,6 +61,24 @@ The consent composer lives in `src/lib` and is imported by **both** the browser
 and the server, so the preview a user approves is byte-for-byte the payload the
 provider receives. There is no second implementation to drift.
 
+## Where it lives in the app
+
+`/intent` → bottom tab **Agents** (`tag-tab-agents`). That tab now has a two-way
+switch at the top:
+
+- **My automations** — this account's existing automations and monitors, unchanged.
+- **External agents** — the hub: Discover · Connected · Activity.
+
+The default follows the server: the external view opens first **only** when the
+hub is enabled *and* at least one reviewed agent is live (`defaultAgentsView`);
+otherwise the user's own automations stay in front. A manual choice is sticky for
+the session.
+
+Deep link: `/intent?tab=agents&view=external` (or `view=mine`), handled by the
+same `?tab=` resolver as every other in-app destination.
+
+A real count of live agents is shown next to the switch when it is non-zero.
+
 ## Routes
 
 | Method | Path | Notes |

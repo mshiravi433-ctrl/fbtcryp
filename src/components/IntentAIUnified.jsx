@@ -222,6 +222,7 @@ import NeuralAgentGraph from './intent-neural/NeuralAgentGraph';
    it costs nothing on first paint; the first-paint budget stays a ratchet
    (scripts/check-first-paint.mjs). */
 import AgentHubPanel from './AgentHub/AgentHubPanel.jsx';
+import { defaultAgentsView, useAgentHubAvailability } from '../lib/intent-ai/agentHub/availability.js';
 import ChatNeuralCore from './chat/NeuralCore.jsx';
 import { SPECULATION_ENABLED } from '../lib/features.js';
 
@@ -6240,7 +6241,16 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
       return;
     }
     if (target.kind === 'ecosystem') { setDrawerOpen(false); openEcosystem(target.ecoKind); return; }
-    if (target.kind === 'tab') { setPanel(null); setDrawerOpen(false); setAiTab(target.tab); }
+    if (target.kind === 'tab') {
+      setPanel(null);
+      setDrawerOpen(false);
+      setAiTab(target.tab);
+      /* A deep link to the external agents is a deliberate destination, so it
+         counts as a manual choice — the user is not overridden by the default. */
+      let view = null;
+      try { view = new URLSearchParams(search).get('view'); } catch { view = null; }
+      if (target.tab === 'agents' && (view === 'external' || view === 'mine')) setAgentsViewChoice(view);
+    }
   }, [location.search, openPanel, openEcosystem]);
 
 
@@ -7355,9 +7365,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * Everything below READS state this component already owns. No new data
    * source, no fabricated status — the skin only re-presents real facts. */
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  /* Which kind of agent the user is looking at. Defaults to the existing
-     automations so nothing about today's behaviour changes on first render. */
-  const [agentsView, setAgentsView] = useState('mine');
+  /* Which kind of agent the user is looking at.
+     `null` = the user has not chosen yet, so the DEFAULT follows the server:
+     external agents when at least one reviewed agent is live, otherwise this
+     account's own automations (today's behaviour). A manual choice is sticky. */
+  const [agentsViewChoice, setAgentsViewChoice] = useState(null);
+  const hubAvailability = useAgentHubAvailability();
+  const agentsView = agentsViewChoice || defaultAgentsView(hubAvailability);
   const showEmpty = messages.length <= 1 && messages.every((m) => m?.kind === 'hello');
   const visibleMessages = showEmpty ? [] : messages;
   const neuralHasError = messages.length > 0 && messages[messages.length - 1]?.kind === 'error';
@@ -7881,7 +7895,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 role="tab"
                 aria-selected={agentsView === 'mine'}
                 data-active={agentsView === 'mine'}
-                onClick={() => setAgentsView('mine')}
+                onClick={() => setAgentsViewChoice('mine')}
                 data-testid="agents-view-mine"
               >
                 {fa ? 'خودکارسازی‌های من' : 'My automations'}
@@ -7891,10 +7905,11 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
                 role="tab"
                 aria-selected={agentsView === 'external'}
                 data-active={agentsView === 'external'}
-                onClick={() => setAgentsView('external')}
+                onClick={() => setAgentsViewChoice('external')}
                 data-testid="agents-view-external"
               >
                 {fa ? 'ایجنت‌های خارجی' : 'External agents'}
+                {hubAvailability.count > 0 ? <span className="ah-viewcount" aria-hidden="true">{hubAvailability.count}</span> : null}
               </button>
             </div>
 

@@ -292,3 +292,14 @@
   font: inherit; font-size: 12px; padding: 7px 13px; border-radius: 999px; cursor: pointer; }
 .ah-viewswitch button[data-active='true'] { color: #041018; background: var(--nc-cyan, #60e4eb); font-weight: 700; }
 .ah-viewswitch button:focus-visible { outline: 2px solid var(--nc-cyan-strong, #8af9f2); outline-offset: 2px; }
+
+/* The live count beside the external-agents switch. It is a real number from
+   the catalogue (reviewed agents that are LIVE right now), never a decoration —
+   and it is absent when the count is zero. */
+.ah-viewswitch button { display: inline-flex; align-items: center; gap: 6px; }
+.ah-viewcount {
+  font-size: 10px; font-weight: 800; min-width: 18px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: rgba(96, 228, 235, .18); color: var(--nc-cyan-strong, #8af9f2);
+}
+.ah-viewswitch button[data-active='true'] .ah-viewcount { background: rgba(4, 16, 24, .22); color: #041018; }

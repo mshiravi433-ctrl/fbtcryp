@@ -19,6 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AgentHubPanel from '../../src/components/AgentHub/AgentHubPanel.jsx';
+import { defaultAgentsView } from '../../src/lib/intent-ai/agentHub/availability.js';
 
 const AGENT = {
   id: 'conformance-free:token-research',
@@ -291,5 +292,18 @@ describe('connected and activity', () => {
     await waitFor(() => expect(activity.textContent).toMatch(/Research ETH/));
     expect(activity.textContent).toMatch(/Conformance Provider/);
     expect(activity.textContent).toMatch(/Completed/);
+  });
+});
+
+describe('agents tab: which view opens first', () => {
+  it('opens the external hub only when a reviewed agent is actually live', () => {
+    expect(defaultAgentsView({ known: true, enabled: true, count: 2 })).toBe('external');
+  });
+
+  it('keeps the user\'s own automations in front when the hub is off, empty or unknown', () => {
+    expect(defaultAgentsView({ known: true, enabled: false, count: 0 })).toBe('mine');
+    expect(defaultAgentsView({ known: true, enabled: true, count: 0 })).toBe('mine');
+    expect(defaultAgentsView({ known: false, enabled: false, count: 0 })).toBe('mine');
+    expect(defaultAgentsView()).toBe('mine');
   });
 });
