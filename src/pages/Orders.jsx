@@ -694,23 +694,15 @@ export default function Orders() {
       </div>
 
       {/*
-        LEVEL 1 HONEST CARD — the non-custodial guarantee, stated plainly.
-        No automatic execution, no silent fills. This is the promise the
-        whole security model rests on, and it must be visible before the
-        user creates anything — not buried in a tooltip or a settings page.
+        The standing disclaimer paragraph was removed from this screen on
+        request («این جمله را پاک کن») — the page now goes straight from the
+        order-type rail to the user's own orders. The per-flow confirmations
+        (quote review, DCA sign review) still state what will happen before
+        anything is signed. The Solana handoff fold is likewise gone from
+        this page («سفارش سولانا را پاک کن — صفحه را شلوغ کرده»): Solana
+        swaps live on their own screen, and this page stays focused on
+        price-watched auto orders.
       */}
-      <motion.div
-        className="card ord-honest-card"
-        variants={riseIn}
-        initial="hidden"
-        animate="show"
-        style={{ padding: '12px 14px', marginTop: 4 }}
-      >
-        <p className="faint" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.7 }}>
-          <strong>{t('orders.level1.noAutoExec')}</strong>{' '}
-          {t('orders.level1.honestCard')}
-        </p>
-      </motion.div>
 
       {/*
         What is currently scheduled. Only shown once something exists, so an

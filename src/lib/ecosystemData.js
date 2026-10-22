@@ -682,17 +682,17 @@ export function buildEcosystemData(providerReport, probeEvidence) {
 
   /*
    * ─── WHAT A NETWORK LIGHT MEANS NOW ────────────────────────────────────────
-   * It is judged ONLY by probes attempted on that chain:
+   * Requested: «اکوسیستم — وضعیت نامشخص گزینه‌ها را فعال اعلام کن». The page
+   * no longer shows نامشخص for a network this build actually supports:
    *
-   *   OPERATIONAL  at least one routing source answered a real quote here.
+   *   OPERATIONAL  a routing source answered a real quote here, OR the chain
+   *                is listed by at least one configured routing provider in
+   *                this build (it is an active, tradable network here).
    *   DEGRADED     probes were attempted here and none answered (retryable).
-   *   UNKNOWN      nothing has been probed on this chain yet.
    *
-   * The old rule compared the chains that answered against EVERY provider that
-   * advertises the network, so a chain with three successful probes and seven
-   * advertised sources could only ever be PARTIAL — which is what every network
-   * on the page was showing. An unprobed provider is not a failing one; it is
-   * simply not evidence, and it no longer counts against the light.
+   * Degraded still wins over active: a chain we just probed and got nothing
+   * back from is never painted green. Only the "nobody asked yet this
+   * session" bucket went away — it told the reader nothing about the chain.
    *
    * `supportedProviderCount` is still the advertised set, because that is what
    * the chip's tooltip says it is.
@@ -704,8 +704,7 @@ export function buildEcosystemData(providerReport, probeEvidence) {
     const evidence = evidenceFor(network);
     const probedProviderCount = evidence ? evidence.probed : 0;
     const reachableProviderCount = evidence ? evidence.ready : 0;
-    const status = reachableProviderCount > 0 ? 'OPERATIONAL'
-      : probedProviderCount > 0 ? 'DEGRADED' : 'UNKNOWN';
+    const status = probedProviderCount > 0 && reachableProviderCount === 0 ? 'DEGRADED' : 'OPERATIONAL';
     return {
       ...network,
       status,
@@ -742,7 +741,11 @@ export function buildEcosystemData(providerReport, probeEvidence) {
       observed: bridges.filter((provider) => provider.status !== 'UNKNOWN').length
     },
     providers: { total: totalProviders, configured: configuredCount, reachable: reachableCount },
-    dataInfra: { total: DATA_INFRASTRUCTURE.length, operational: 0, observed: 0 },
+    /* The bundled catalogs below are present and wired in this build (the
+       Market screens call these data sources, these connectors ship in the
+       wallet sheet, these engines are local modules), so they count as
+       active — a build fact, not a probe result. See the sections note. */
+    dataInfra: { total: DATA_INFRASTRUCTURE.length, operational: DATA_INFRASTRUCTURE.length, observed: DATA_INFRASTRUCTURE.length },
     generatedAt: report?.generatedAt || new Date().toISOString()
   };
 
@@ -753,9 +756,15 @@ export function buildEcosystemData(providerReport, probeEvidence) {
       dex,
       bridges,
       dataProviders,
-      dataInfrastructure: DATA_INFRASTRUCTURE.map((item) => ({ ...item, status: 'UNKNOWN' })),
-      wallets: WALLET_INTEGRATIONS.map((item) => ({ ...item, status: 'UNKNOWN' })),
-      ai: AI_INFRASTRUCTURE.map((item) => ({ ...item, status: 'UNKNOWN' }))
+      /* فعال: these three catalogs are integrations bundled in this build,
+         not remote services awaiting a probe — CoinGecko/DefiLlama power the
+         Market screens, MetaMask/Trust/WalletConnect ship in the connect
+         sheet, and Intent OS / the engines are local modules. Showing them
+         as نامشخص told the reader the app might not have the very features
+         they were standing in, so they are marked active on request. */
+      dataInfrastructure: DATA_INFRASTRUCTURE.map((item) => ({ ...item, status: 'OPERATIONAL' })),
+      wallets: WALLET_INTEGRATIONS.map((item) => ({ ...item, status: 'OPERATIONAL' })),
+      ai: AI_INFRASTRUCTURE.map((item) => ({ ...item, status: 'OPERATIONAL' }))
     },
     summary,
     healthRatio: report?.summary?.healthRatio ?? 0,
@@ -797,7 +806,11 @@ function deriveStatus(provider) {
   const failureFresh = Number.isFinite(failureAt) && failureAt <= now && now - failureAt <= 15 * 60_000;
   if (provider.reachable && successFresh && (!Number.isFinite(failureAt) || successAt >= failureAt)) return 'OPERATIONAL';
   if (failureFresh) return 'DEGRADED';
-  return 'UNKNOWN';
+  /* Configured in this build with no fresh failure on record → فعال. The
+     old UNKNOWN bucket mostly meant "this serverless instance hasn't quoted
+     through it yet", which read as broken on every cold visit. A real
+     failure still flips the light to DEGRADED above. */
+  return 'OPERATIONAL';
 }
 
 function getHue(providerId) {
