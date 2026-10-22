@@ -6835,9 +6835,12 @@ const ensureBrainRouter = () => {
  */
 app.use('/api/ai', lazyMount('ai-command', () => import('./aiCommand.js')));
 
-/* ─── FBT EXTERNAL AGENT HUB (env-gated, default OFF) ───────────────────────
- * `AGENT_HUB_ENABLED` is the master switch; without it every route answers an
- * honest `HUB_DISABLED` and the catalog is empty. It is mounted at
+/* ─── FBT EXTERNAL AGENT HUB (env-gated, default ON) ────────────────────────
+ * `AGENT_HUB_ENABLED` is the master switch; `false` makes every route answer an
+ * honest `HUB_DISABLED` and empties the catalog. The default is ON because the
+ * reviewed catalogue starts empty and the page's other path — a card URL THE
+ * USER supplied (POST /sources) — needs no operator decision and contacts
+ * nobody until the user names an address. No provider is bundled either way. It is mounted at
  * `/api/ai/agent-hub` — NOT `/api/ai/agents` (command-center roster) and NOT
  * `/api/ai/external-agents` (the FI trust registry) — so three surfaces that
  * mean three different things keep three different paths. Mounted BEFORE the

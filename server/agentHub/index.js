@@ -4,6 +4,7 @@
  * Five layers, built once per process, wired in one direction:
  *
  *   registry   reviewed provider + agent definitions (server config)
+ *   sources    agent cards THIS USER added themselves (owner-scoped rows)
  *     ↓
  *   adapters   protocol translation (A2A); no agent logic lives here
  *     ↓
@@ -24,6 +25,7 @@ import { createAdapterFactory } from './adapters/index.js';
 import { createHubStore } from './store.js';
 import { createConnectionManager } from './connections.js';
 import { createTaskBroker } from './tasks.js';
+import { createUserAgentSources } from './userAgents.js';
 import { createAgentHubRouter } from './router.js';
 
 export const AGENT_HUB_VERSION = '1.0.0';
@@ -32,9 +34,10 @@ export function createAgentHub({ ownerFor, env = process.env, log = () => {}, no
   const store = createHubStore({ now, log });
   const registry = createRegistry({ env, now });
   const adapters = createAdapterFactory({ env, now });
+  const userSources = createUserAgentSources({ store, env, now, log });
   const connections = createConnectionManager({ store, registry, env, now, log });
-  const broker = createTaskBroker({ registry, adapters, store, connections, env, now, log });
-  const hub = { version: AGENT_HUB_VERSION, store, registry, adapters, connections, broker };
+  const broker = createTaskBroker({ registry, adapters, store, connections, userSources, env, now, log });
+  const hub = { version: AGENT_HUB_VERSION, store, registry, adapters, userSources, connections, broker };
   hub.router = createAgentHubRouter({ hub, ownerFor, env, log });
   return hub;
 }

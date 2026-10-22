@@ -28,9 +28,12 @@ field exists for).
 
 ## 2. Turning it on safely
 
-1. `AGENT_HUB_ENABLED=true`.
-2. `AGENT_HUB_PROVIDERS_JSON` = the reviewed record(s). Start with **one free,
-   read-only agent**.
+0. `AGENT_HUB_ENABLED` is **on by default**; set it to `false` to remove the
+   surface entirely. On its own it publishes **no** provider — the reviewed
+   catalogue is empty and the page only offers "add your own agent card", which
+   contacts nobody until a user types a URL.
+1. (Optional) `AGENT_HUB_PROVIDERS_JSON` = the reviewed record(s). Start with
+   **one free, read-only agent**.
 3. `AGENT_HUB_OPS_TOKEN` (≥16 chars) — otherwise the ops routes 404 by design.
 4. `AGENT_HUB_SECRET_KEY` only if the provider uses OAuth (`connections.start`
    refuses without it; free public agents do not need it).

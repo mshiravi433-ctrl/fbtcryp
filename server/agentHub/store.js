@@ -35,7 +35,8 @@ const CAPS = Object.freeze({
   events: 120,
   usage: 400,
   audit: 300,
-  connections: 24
+  connections: 24,
+  userSources: 8
 });
 
 const key = (collection, owner, extra = '') => `${PREFIX}:${collection}:v1:${String(owner).slice(0, 90)}${extra ? `:${extra}` : ''}`;
@@ -180,6 +181,56 @@ export function createHubStore({ now = () => Date.now(), log = () => {} } = {}) 
     return { ok: saved.ok, durable: saved.durable, connection: tombstoned };
   }
 
+  /* ── user-supplied agent sources ─────────────────────────────────────────
+     A row here is a card URL THE USER typed, not a reviewed listing. It is
+     owner-scoped (the same URL added by two people is two rows, two ids) so a
+     delete can never touch somebody else's source, and it is capped per owner
+     because an unbounded list of outbound endpoints is a way to make the
+     deployment do work for free. */
+
+  async function putUserSource(owner, source) {
+    return writeRaw(key('usource', owner, source.id), source);
+  }
+
+  async function getUserSource(owner, sourceId) {
+    try {
+      const row = await storeGetFresh(key('usource', owner, sourceId), null);
+      return row && typeof row === 'object' ? { ok: true, source: row } : { ok: false, code: 'SOURCE_NOT_FOUND' };
+    } catch {
+      return { ok: false, code: 'STORE_READ_FAILED' };
+    }
+  }
+
+  async function indexUserSource(owner, sourceId) {
+    const storageKey = key('usources', owner);
+    const ids = asArray(await readRaw(storageKey, []));
+    const next = [sourceId, ...ids.filter((id) => id !== sourceId)].slice(0, CAPS.userSources);
+    return writeRaw(storageKey, next);
+  }
+
+  async function listUserSources(owner) {
+    const ids = asArray(await readRaw(key('usources', owner), [])).slice(0, CAPS.userSources);
+    const rows = [];
+    for (const id of ids) {
+      const got = await getUserSource(owner, id);
+      if (got.ok && got.source.status !== 'REMOVED') rows.push(got.source);
+    }
+    return { ok: true, sources: rows, durable: durable() };
+  }
+
+  async function deleteUserSource(owner, sourceId) {
+    const found = await getUserSource(owner, sourceId);
+    if (!found.ok) return { ok: false, code: found.code };
+    /* Tombstone, same reason as a connection: the row is removed from the
+       index but the record of it having existed survives. Nothing secret is
+       in a source row — a card URL is already public. */
+    const saved = await putUserSource(owner, { ...found.source, status: 'REMOVED', removedAt: now() });
+    const storageKey = key('usources', owner);
+    const ids = asArray(await readRaw(storageKey, [])).filter((id) => id !== sourceId);
+    await writeRaw(storageKey, ids);
+    return { ok: saved.ok, durable: saved.durable, source: { ...found.source, status: 'REMOVED', removedAt: now() } };
+  }
+
   /* ── usage + audit ─────────────────────────────────────────────────────── */
 
   async function appendUsage(owner, row) {
@@ -225,6 +276,7 @@ export function createHubStore({ now = () => Date.now(), log = () => {} } = {}) 
     linkRemoteTask, resolveRemoteTask,
     appendEvent, listEvents,
     putConnection, getConnection, listConnections, indexConnection, deleteConnection,
+    putUserSource, getUserSource, listUserSources, indexUserSource, deleteUserSource,
     appendUsage, listUsage, appendAudit,
     setKillSwitch, getKillSwitch,
     keyFor: key

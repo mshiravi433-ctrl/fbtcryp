@@ -92,6 +92,11 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
       paidInvocationEnabled: false,
       agents: out.agents,
       providers: out.providers,
+      /* How many agent cards this owner may add, and how many they have.
+         `sources.durable` is the same fact as the top-level `durable`; it is
+         repeated here so the add form can warn about a lost row without the
+         caller having to join two fields. */
+      sources: out.sources || null,
       registryErrors: out.registryErrors || [],
       at: out.at
     });
@@ -101,6 +106,61 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
     const out = await hub.broker.getAgent({ owner: ownerOf(req), agentId: req.params.agentId });
     if (!out.ok) return fail(res, out.code === 'HUB_DISABLED' ? 503 : 404, out.code);
     return ok(res, { agent: out.agent, durable: hub.store.durable() });
+  }));
+
+  /* ══════════════════════ user-supplied sources ══════════════════════
+     The user's own agent cards. Owner-scoped, capped, and verified by a real
+     fetch before a row is written — the URL is checked by the network layer
+     (HTTPS, no IP literal, no private host, no credentials, no query), never
+     by a client-side rule. */
+
+  const sourceStatus = (code) => (
+    code === 'SOURCE_RATE_LIMITED' ? 429
+      : code === 'SOURCE_LIMIT_REACHED' ? 409
+        : code === 'SOURCE_CARD_UNREACHABLE' ? 422
+          : code === 'SOURCE_NOT_FOUND' ? 404
+            : code === 'HUB_DISABLED' ? 503
+              : 400
+  );
+
+  router.get('/sources', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.broker.flags().enabled) return fail(res, 503, 'HUB_DISABLED');
+    const out = await hub.userSources.list({ owner });
+    return ok(res, { sources: out.sources, cap: hub.userSources.cap, durable: out.durable });
+  }));
+
+  router.post('/sources', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    if (!hub.broker.flags().enabled) return fail(res, 503, 'HUB_DISABLED');
+    const body = req.body || {};
+    const out = await hub.userSources.add({
+      owner,
+      cardUrl: body.cardUrl || body.url || '',
+      label: body.label || body.name || ''
+    });
+    if (!out.ok) {
+      return fail(res, sourceStatus(out.code), out.code, {
+        providerStatus: out.httpStatus || null,
+        /* The upstream reason is a machine code (PROVIDER_TIMEOUT, …), never
+           provider prose: the user needs to know WHICH check failed. */
+        reason: out.detail || null
+      });
+    }
+    /* A new/updated card must not be served from a warm adapter cache. */
+    hub.adapters._reset();
+    return ok(res, { source: out.source, existing: out.existing === true, cap: hub.userSources.cap, durable: out.durable });
+  }));
+
+  router.delete('/sources/:sourceId', handle(async (req, res) => {
+    const owner = ownerOf(req);
+    if (!isStrongOwner(owner)) return fail(res, 401, 'STRONG_OWNER_REQUIRED');
+    const out = await hub.userSources.remove({ owner, sourceId: req.params.sourceId });
+    if (!out.ok) return fail(res, sourceStatus(out.code), out.code);
+    hub.adapters._reset();
+    return ok(res, { removedId: out.removedId, durable: out.durable });
   }));
 
   /* ══════════════════════ connections ══════════════════════ */

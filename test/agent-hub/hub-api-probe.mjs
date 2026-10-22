@@ -181,11 +181,24 @@ const detail = await call(`${HUB}/agents/${encodeURIComponent(freeAgent)}`);
 t('agent detail exposes provider terms, privacy and the review date', detail.status === 200 && detail.body.agent.provider.termsUrl && detail.body.agent.provider.privacyUrl && detail.body.agent.provider.reviewedAt === '2026-10-20', detail.body.agent?.provider);
 t('agent detail states the data policy the review recorded', detail.body.agent.provider.dataPolicy?.promptTraining === 'no');
 
-/* a hub built with the flag OFF is disabled, not empty-and-usable */
+/* The master switch defaults ON: an unset deployment still serves the page,
+   with an empty REVIEWED catalogue and nothing reachable until the user adds
+   a card URL of their own. An explicit false is still a hard off. */
 const { createAgentHub } = await import('../../server/agentHub/index.js');
-const offHub = createAgentHub({ env: {}, ownerFor: () => 'dev:probe' });
+const defaultHub = createAgentHub({ env: {}, ownerFor: () => 'dev:probe' });
+const defaultCatalog = await defaultHub.broker.catalog({ owner: 'dev:probe' });
+t('with AGENT_HUB_ENABLED unset the hub is ON and publishes zero reviewed agents',
+  defaultCatalog.enabled === true && defaultCatalog.status === 'EMPTY'
+  && defaultCatalog.agents.length === 0 && defaultCatalog.providers.length === 0,
+  defaultCatalog);
+const offHub = createAgentHub({ env: { AGENT_HUB_ENABLED: 'false' }, ownerFor: () => 'dev:probe' });
 const offCatalog = await offHub.broker.catalog({ owner: 'dev:probe' });
-t('with AGENT_HUB_ENABLED unset the catalog is DISABLED with zero agents', offCatalog.enabled === false && offCatalog.status === 'DISABLED' && offCatalog.agents.length === 0);
+t('AGENT_HUB_ENABLED=false still disables the whole surface',
+  offCatalog.enabled === false && offCatalog.status === 'DISABLED' && offCatalog.agents.length === 0);
+const offAdd = await offHub.userSources.add({ owner: 'dev:probe', cardUrl: `${A.base}/.well-known/agent-card.json` });
+t('a disabled hub cannot store a user source either',
+  offAdd.ok === false && (await offHub.userSources.list({ owner: 'dev:probe' })).sources.length === 0,
+  offAdd);
 
 /* ══════════════════════ 2. identity gates ══════════════════════ */
 console.log('\n2. identity');
@@ -404,6 +417,73 @@ const urlInBody = await createTask(freeAgent, 'instant: url injection', {
   }
 });
 t('client-supplied provider URLs are ignored (the registry decides)', urlInBody.status === 200 && urlInBody.body.task.providerId === 'conformance-free' && A.calls.send === sendBeforeUrl + 1, { status: urlInBody.status, provider: urlInBody.body.task?.providerId, code: urlInBody.body.code, delta: A.calls.send - sendBeforeUrl });
+
+/* ══════════════════════ 13. user-supplied agents ══════════════════════
+   The reviewed catalogue in this probe is fixture-only. This section drives
+   the OTHER honest path: the user names an agent card, FBT verifies the address
+   and the card, and the agent is listed for THAT owner as `source: user`. */
+console.log('\n13. user-supplied agent sources');
+
+const sourceUrl = `${A.base}/.well-known/agent-card.json`;
+const noDeviceSource = await post(`${HUB}/sources`, { cardUrl: sourceUrl }, { device: null });
+t('an IP-only caller cannot add a source', noDeviceSource.status === 401 && noDeviceSource.body.code === 'STRONG_OWNER_REQUIRED', noDeviceSource.body);
+
+const rejected = [
+  ['http://agent.example.com/card', 'PROVIDER_URL_NOT_HTTPS', 'a plain-http card URL is refused'],
+  ['https://169.254.169.254/latest/meta-data', 'PROVIDER_URL_IS_IP', 'an IP literal is refused'],
+  /* `localhost` itself is allowed ONLY because this probe runs the conformance
+     fixture with AGENT_HUB_ALLOW_LOOPBACK=1; every other internal name is not. */
+  ['https://metadata.google.internal/card', 'PROVIDER_URL_PRIVATE_HOST', 'a private hostname is refused'],
+  ['https://user:pass@agent.example.com/card', 'PROVIDER_URL_HAS_CREDENTIALS', 'credentials in the URL are refused'],
+  ['https://agent.example.com/card?token=abc', 'PROVIDER_URL_HAS_QUERY', 'a query string is refused'],
+  ['https://agent.example.com:8443/card', 'PROVIDER_URL_NONSTANDARD_PORT', 'a non-standard port is refused'],
+  ['not a url', 'SOURCE_URL_INVALID', 'a non-URL is refused']
+];
+for (const [badUrl, code, label] of rejected) {
+  const out = await post(`${HUB}/sources`, { cardUrl: badUrl });
+  t(label, out.status === 400 && out.body.code === code, { status: out.status, body: out.body });
+}
+
+const unreachable = await post(`${HUB}/sources`, { cardUrl: `${A.base}/nothing-here` });
+t('a URL that serves no agent card is refused, not stored', unreachable.status === 422 && unreachable.body.code === 'SOURCE_CARD_UNREACHABLE', unreachable.body);
+t('a refused source leaves no row behind', (await call(`${HUB}/sources`)).body.sources.length === 0);
+
+const added = await post(`${HUB}/sources`, { cardUrl: sourceUrl, label: 'My research agent' });
+const sourceId = added.body.source?.id;
+t('a valid A2A card is verified and stored for this device only', added.status === 200 && typeof sourceId === 'string' && sourceId.startsWith('u-') && added.body.source.card?.name === 'Conformance Research Agent', added.body);
+const again = await post(`${HUB}/sources`, { cardUrl: sourceUrl });
+t('adding the same card twice is a re-check, not a duplicate row', again.status === 200 && again.body.existing === true && (await call(`${HUB}/sources`)).body.sources.length === 1, again.body);
+
+const withSource = await call(`${HUB}/catalog`);
+const userAgents = withSource.body.agents.filter((a) => a.source === 'user');
+t('the verified agent is listed from the card it declares', userAgents.length === 2 && userAgents.every((a) => a.providerId === sourceId), userAgents.map((a) => a.id));
+t('a user-supplied listing is labelled as such and never as reviewed', userAgents.every((a) => a.provider?.source === 'user') && withSource.body.providers.find((p) => p.id === sourceId)?.source === 'user', withSource.body.providers.find((p) => p.id === sourceId));
+t('the reviewed catalogue is unaffected by a user source', withSource.body.providers.some((p) => p.source === 'reviewed'));
+
+const userAgentId = `${sourceId}:wallet-risk`;
+const userDetail = await call(`${HUB}/agents/${encodeURIComponent(userAgentId)}`);
+t('the user agent has its own detail page', userDetail.status === 200 && userDetail.body.agent.source === 'user' && userDetail.body.agent.providerName === 'Conformance Research Agent', userDetail.body.agent && { id: userDetail.body.agent.id, source: userDetail.body.agent.source });
+
+const sendBeforeUserTask = A.calls.send;
+const userTask = await createTask(userAgentId, 'instant: user supplied agent');
+t('a task runs against the user-supplied agent', userTask.status === 200 && userTask.body.task.state === 'completed' && A.calls.send === sendBeforeUserTask + 1, { status: userTask.status, body: userTask.body.task?.state, code: userTask.body.code });
+t('the task records which source it came from', userTask.body.task?.providerId === sourceId);
+
+/* Ownership: device B must not see, use or delete device A's source. */
+const bCatalog = await call(`${HUB}/catalog`, { device: DEVICE_B });
+t('another device cannot see the source at all', bCatalog.body.providers.every((p) => p.id !== sourceId) && bCatalog.body.agents.every((a) => a.source !== 'user'));
+const bSources = await call(`${HUB}/sources`, { device: DEVICE_B });
+t('another device has an empty source list', bSources.status === 200 && bSources.body.sources.length === 0);
+const bUse = await createTask(userAgentId, 'instant: cross owner', { device: DEVICE_B });
+t('another device cannot run a task on that agent', bUse.status === 404 && bUse.body.code === 'AGENT_NOT_FOUND', bUse.body);
+const bDelete = await call(`${HUB}/sources/${sourceId}`, { method: 'DELETE', device: DEVICE_B });
+t('another device cannot delete that source', bDelete.status === 404 && bDelete.body.code === 'SOURCE_NOT_FOUND', bDelete.body);
+t('and it still exists for its owner', (await call(`${HUB}/sources`)).body.sources.length === 1);
+
+const deleted = await call(`${HUB}/sources/${sourceId}`, { method: 'DELETE' });
+t('the owner can remove the source', deleted.status === 200 && deleted.body.removedId === sourceId, deleted.body);
+const afterDelete = await call(`${HUB}/catalog`);
+t('a removed source disappears from the catalogue and cannot be run', afterDelete.body.agents.every((a) => a.source !== 'user') && (await createTask(userAgentId, 'instant: gone')).status === 404);
 
 /* ══════════════════════ 12. routing hygiene ══════════════════════ */
 console.log('\n12. routing');

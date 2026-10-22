@@ -123,6 +123,13 @@ export const createTask = ({ agentId, taskText, categories, context, termsVersio
 
 export const cancelTask = (taskId) => call(`/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST', body: {} });
 
+/* The user's own A2A sources. The URL is validated on the server — this is a
+   transport call, not a place to decide whether an address is safe. */
+export const listSources = () => call('/sources');
+export const addSource = ({ cardUrl, label = '' }) =>
+  call('/sources', { method: 'POST', timeout: 30_000, body: { cardUrl, label } });
+export const removeSource = (sourceId) => call(`/sources/${encodeURIComponent(sourceId)}`, { method: 'DELETE' });
+
 export const listConnections = () => call('/connections');
 export const startConnection = (providerId) => call(`/providers/${encodeURIComponent(providerId)}/connections/start`, { method: 'POST', body: {} });
 export const revokeConnection = (connectionId) => call(`/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' });

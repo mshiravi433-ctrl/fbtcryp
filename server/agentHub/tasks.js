@@ -61,10 +61,29 @@ const MAX_TASKS_PER_OWNER_WINDOW = 20;
 
 const truthy = (value) => ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value ?? '').trim().toLowerCase());
 
-/** Flags are read per call, never captured at import: an operator can stop the Hub without a redeploy. */
+/**
+ * Flags are read per call, never captured at import: an operator can stop the
+ * Hub without a redeploy.
+ *
+ * `AGENT_HUB_ENABLED` now defaults to ON. The reason is the feature it guards:
+ * the reviewed catalogue is empty until an operator writes a decision record,
+ * so the old default made the External Agents view a permanent blank page for
+ * every deployment that never opted in — a page that existed but could not do
+ * anything. Nothing is reachable by default in either case: there is no
+ * bundled provider, no commission, no payment path, and the only way any
+ * third party is contacted is a card URL the user typed themselves. An
+ * operator who wants the surface gone sets `AGENT_HUB_ENABLED=false` (or
+ * trips the kill switch), and every route answers HUB_DISABLED again.
+ */
+function hubEnabled(env) {
+  const raw = env?.AGENT_HUB_ENABLED;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return true;
+  return truthy(raw);
+}
+
 export function hubFlags(env = process.env) {
   return {
-    enabled: truthy(env.AGENT_HUB_ENABLED),
+    enabled: hubEnabled(env),
     paidTasksEnabled: truthy(env.AGENT_HUB_PAID_TASKS_ENABLED),
     devLoopback: truthy(env.AGENT_HUB_ALLOW_LOOPBACK) && String(env.NODE_ENV || '') !== 'production'
   };
@@ -77,6 +96,7 @@ export function createTaskBroker({
   adapters,
   store,
   connections,
+  userSources = null,
   env = process.env,
   now = () => Date.now(),
   log = () => {}
@@ -173,14 +193,36 @@ export function createTaskBroker({
 
     const agents = [];
     const providers = [];
-    for (const provider of registry.list()) {
+
+    /* Two sources of providers, one pipeline. Reviewed listings come from the
+       server registry; user-supplied ones come from this owner's own rows.
+       They are merged only HERE — and each one keeps its `source` label all
+       the way to the card, so a user's own agent can never be displayed as an
+       FBT-reviewed provider (or the reverse). */
+    let userProviders = [];
+    if (userSources) {
+      try {
+        userProviders = (await userSources.providersFor({ owner })).providers || [];
+      } catch (error) {
+        log(`agenthub:user-sources-read-failed:${String(error?.message || error).slice(0, 80)}`);
+        userProviders = [];
+      }
+    }
+    const merged = [
+      ...registry.list().map((provider) => ({ provider, source: 'reviewed' })),
+      ...userProviders.map((provider) => ({ provider, source: 'user' }))
+    ];
+
+    for (const { provider, source } of merged) {
       const kill = await killState(provider);
       const health = kill.provider || kill.global
         ? { ok: false, status: 'DISABLED', checkedAt: now(), code: kill.provider ? 'PROVIDER_KILL_SWITCH' : 'GLOBAL_KILL_SWITCH', cached: false }
         : await healthFor(provider);
-      const connected = connectionsList.some((c) => c.providerId === provider.id && c.status === 'ACTIVE');
+      const connected = source === 'reviewed'
+        && connectionsList.some((c) => c.providerId === provider.id && c.status === 'ACTIVE');
       const providerView = {
-        ...registry.publicView(provider),
+        ...(source === 'user' ? userSources.publicView(provider) : registry.publicView(provider)),
+        source,
         health: { status: health.status, ok: health.ok === true, checkedAt: health.checkedAt || null, latencyMs: health.latencyMs ?? null, code: health.code || null },
         connections: connected ? 1 : 0
       };
@@ -196,6 +238,7 @@ export function createTaskBroker({
           id: agent.remoteAgentId,
           providerId: provider.id,
           providerName: provider.name,
+          source,
           name: agent.name,
           summary: agent.summary,
           category: agent.category,
@@ -214,12 +257,13 @@ export function createTaskBroker({
           inputModes: agent.inputModes,
           outputModes: agent.outputModes,
           provider: {
+            source,
             websiteUrl: provider.websiteUrl,
             documentationUrl: provider.documentationUrl,
-            termsUrl: provider.termsUrl,
-            privacyUrl: provider.privacyUrl,
-            supportUrl: provider.supportUrl,
-            reviewedAt: provider.approvalEvidence.reviewedAt,
+            termsUrl: provider.termsUrl || null,
+            privacyUrl: provider.privacyUrl || null,
+            supportUrl: provider.supportUrl || null,
+            reviewedAt: provider.approvalEvidence?.reviewedAt || null,
             jurisdiction: providerView.jurisdiction,
             dataPolicy: providerView.dataPolicy
           }
@@ -236,13 +280,31 @@ export function createTaskBroker({
       providers,
       agents,
       registryErrors: registry.errors,
+      sources: {
+        cap: userSources ? userSources.cap : 0,
+        added: userProviders.length,
+        durable: store.durable()
+      },
       at: now()
     };
   }
 
-  async function resolveAgent(agentId) {
+  /** The provider that owns `agentId`, from either source, for this owner only. */
+  async function providerForAgentId(id, owner) {
+    const fromRegistry = registry.list().find((p) => id === `${p.id}:default` || id.startsWith(`${p.id}:`));
+    if (fromRegistry) return fromRegistry;
+    if (!userSources || !owner) return null;
+    try {
+      const mine = (await userSources.providersFor({ owner })).providers || [];
+      return mine.find((p) => id === `${p.id}:default` || id.startsWith(`${p.id}:`)) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolveAgent(agentId, { owner } = {}) {
     const id = String(agentId || '');
-    const provider = registry.list().find((p) => id === `${p.id}:default` || id.startsWith(`${p.id}:`));
+    const provider = await providerForAgentId(id, owner);
     if (!provider) return { ok: false, code: 'AGENT_NOT_FOUND' };
     const adapter = adapters.for(provider);
     if (!adapter) return { ok: false, code: 'PROVIDER_ADAPTER_NOT_IMPLEMENTED', provider };
@@ -256,9 +318,10 @@ export function createTaskBroker({
   async function getAgent({ owner, agentId }) {
     const flags = hubFlags(env);
     if (!flags.enabled) return { ok: false, code: 'HUB_DISABLED' };
-    const resolved = await resolveAgent(agentId);
+    const resolved = await resolveAgent(agentId, { owner });
     if (!resolved.ok) return { ok: false, code: resolved.code };
     const { provider, agent, adapter } = resolved;
+    const source = provider.userSupplied ? 'user' : 'reviewed';
     const kill = await killState(provider);
     const health = kill.provider || kill.global
       ? { ok: false, status: 'DISABLED', code: 'KILL_SWITCH', checkedAt: now() }
@@ -275,6 +338,7 @@ export function createTaskBroker({
         id: agent.remoteAgentId,
         providerId: provider.id,
         providerName: provider.name,
+        source,
         name: agent.name,
         summary: agent.summary,
         category: agent.category,
@@ -294,7 +358,7 @@ export function createTaskBroker({
         inputModes: agent.inputModes,
         outputModes: agent.outputModes,
         provider: {
-          ...registry.publicView(provider),
+          ...(source === 'user' ? userSources.publicView(provider) : registry.publicView(provider)),
           health: { status: health.status, ok: health.ok === true, checkedAt: health.checkedAt || null, code: health.code || null }
         }
       }
@@ -361,7 +425,7 @@ export function createTaskBroker({
     const flags = hubFlags(env);
     if (!flags.enabled) return fail('HUB_DISABLED');
 
-    const resolved = await resolveAgent(agentId);
+    const resolved = await resolveAgent(agentId, { owner });
     if (!resolved.ok) return fail(resolved.code);
     const { provider, agent, adapter } = resolved;
 
@@ -567,12 +631,24 @@ export function createTaskBroker({
     }).catch(() => null);
   }
 
+  /**
+   * The provider row for a task, from either source. A task created against a
+   * user-supplied agent must keep syncing and cancelling for that owner even
+   * though the provider is not in the reviewed registry.
+   */
+  async function providerForTask(owner, task) {
+    const reviewed = registry.get(task.providerId);
+    if (reviewed) return reviewed;
+    if (!userSources) return null;
+    return userSources.providerFor({ owner, providerId: task.providerId });
+  }
+
   async function syncTask(owner, task, { force = false } = {}) {
     if (!task.remoteTaskId) return task;
     if (isTerminal(task.state)) return task;
     const since = now() - Number(task.lastProviderSyncAt || 0);
     if (!force && since < SYNC_MIN_INTERVAL_MS) return task;
-    const provider = registry.get(task.providerId);
+    const provider = await providerForTask(owner, task);
     const adapter = provider ? adapters.for(provider) : null;
     if (!adapter) {
       task.state = 'reconciling';
@@ -657,7 +733,7 @@ export function createTaskBroker({
     if (isTerminal(task.state)) {
       return { ok: false, status: 409, code: 'TASK_ALREADY_TERMINAL', task: publicTask(task) };
     }
-    const provider = registry.get(task.providerId);
+    const provider = await providerForTask(owner, task);
     const adapter = provider ? adapters.for(provider) : null;
     if (!adapter || typeof adapter.cancelTask !== 'function') {
       return { ok: false, status: 409, code: 'CANCELLATION_UNSUPPORTED', task: publicTask(task) };
