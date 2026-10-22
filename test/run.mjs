@@ -2246,6 +2246,24 @@ console.log('\n▸ proving the five-chain LI.FI swap path (client + server)…')
 }
 
 /*
+ * LI.FI's RESPONSE SHAPE — the bug the two probes above could not see.
+ *
+ * Both replays feed bodies that carry top-level `fee` + `integratorFees`,
+ * which the real API does not return. The gate required exactly those fields,
+ * so it rejected every live quote as FEE_NOT_APPLIED while the stubbed probes
+ * stayed green — a test suite agreeing with the bug. This probe uses bodies
+ * shaped from LI.FI's published `@lifi/types` (no top-level `fee`; the wallet
+ * on `feeSplit.recipients[].walletAddress`) and pins the integrator-id ladder,
+ * including the case this repo has already been through once: the portal
+ * registered `fbtswap`, not `fbt-swap`.
+ */
+console.log('\n▸ proving LI.FI quotes are read in the shape LI.FI returns…');
+{
+  const { default: runShape } = await import('./lifi-response-shape-probe.mjs');
+  report('LI.FI response shape', await runShape());
+}
+
+/*
  * The wallet panel. Its geometry broke twice from class-cascade conflicts, so
  * the structure is now asserted rather than assumed.
  */

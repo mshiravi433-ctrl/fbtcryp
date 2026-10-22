@@ -62,7 +62,7 @@
  * helper both use). We never hold a Solana key.
  */
 
-import { lifiFetch, integratorId } from './lifi.js';
+import { lifiFetch, integratorId, integratorCandidates, rememberIntegrator } from './lifi.js';
 import { feeReceiver as oceanFeeReceiver, feeBps as oceanFeeBps, SOL_MINT } from './solanaOcean.js';
 
 /** LI.FI's chain id for Solana (SVM). */
@@ -227,38 +227,72 @@ export async function lifiSolanaSwapQuote(query = {}) {
     return { ok: false, status: 503, body: { error: 'SOLANA_FEE_NOT_CONFIGURED' } };
   }
 
-  const params = new URLSearchParams({
-    fromChain: SOLANA_CHAIN_ID,
-    toChain: SOLANA_CHAIN_ID,
+  const base = {
+    fromChain: String(SOLANA_CHAIN_ID),
+    toChain: String(SOLANA_CHAIN_ID),
     fromToken: lifiTokenRef(inputMint),
     toToken: lifiTokenRef(outputMint),
     fromAmount: amount,
     fromAddress: account,
     /* Same-chain swap: the user receives at their own address. */
     toAddress: account,
-    slippage: String(slippageFraction(query?.slippageBps)),
-    integrator: integratorId()
-  });
-  /* Indexed keys, exactly as the docs require on GET:
-     a JSON string in one parameter is rejected by the validator. */
-  params.set('distributionFees[0][receiver]', receiver);
-  params.set('distributionFees[0][percentage]', String(bpsToFraction(bps)));
+    slippage: String(slippageFraction(query?.slippageBps))
+  };
 
-  const res = await lifiFetch(`/quote?${params.toString()}`);
-  if (!res.ok) {
-    return {
-      ok: false,
-      status: res.status,
-      body: { error: 'UPSTREAM_FAILED', detail: res.body?.message || res.body?.error || null }
-    };
+  /*
+   * ─── THE INTEGRATOR LADDER, AND WHY SOLANA NEEDS IT TOO ─────────────────
+   * `distributionFees` are only honoured for a VERIFIED integrator with an
+   * active fee agreement (LI.FI's own types: "Requires a verified `integrator`
+   * with an active fee agreement"). An unverified id does not error — LI.FI
+   * returns a perfectly normal quote with no `Distributions` entry, which our
+   * echo gate refuses. Same failure family as the EVM side, same cure: try our
+   * registered ids in order and keep the first one that actually pays.
+   *
+   * This can never buy fee-free volume — the echo gate still has to prove the
+   * amount and the wallet — it can only turn a fee-less answer into a paying
+   * one. A transport failure stops the ladder (another id cannot fix a down
+   * host).
+   */
+  const candidates = integratorCandidates();
+  let body = null;
+  let lastRefusal = null;
+  for (const id of candidates) {
+    const params = new URLSearchParams({ ...base, integrator: id });
+    /* Indexed keys, exactly as the docs require on GET:
+       a JSON string in one parameter is rejected by the validator. */
+    params.set('distributionFees[0][receiver]', receiver);
+    params.set('distributionFees[0][percentage]', String(bpsToFraction(bps)));
+
+    const res = await lifiFetch(`/quote?${params.toString()}`);
+    if (!res.ok) {
+      lastRefusal = {
+        ok: false,
+        status: res.status,
+        body: { error: 'UPSTREAM_FAILED', detail: res.body?.message || res.body?.error || null }
+      };
+      const message = String(res.body?.message || res.body?.error || '');
+      const integratorRefusal =
+        (res.status === 400 || res.status === 422) && /integrator|fee/i.test(message);
+      if (integratorRefusal) continue;
+      return lastRefusal;
+    }
+
+    const echo = verifySolanaFeeEcho(res.body, { bps, receiver, integratorId: id });
+    if (!echo.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`[solanaLifi] fee echo rejected for integrator ${id}: ${echo.code}`);
+      lastRefusal = { ok: false, status: 502, body: { error: echo.code } };
+      if (echo.code === 'FEE_RECIPIENT_MISMATCH') break;
+      continue;
+    }
+
+    rememberIntegrator(id);
+    body = res.body;
+    break;
   }
 
-  const body = res.body;
-  const echo = verifySolanaFeeEcho(body, { bps, receiver, integratorId: integratorId() });
-  if (!echo.ok) {
-    // eslint-disable-next-line no-console
-    console.warn(`[solanaLifi] fee echo rejected: ${echo.code}`);
-    return { ok: false, status: 502, body: { error: echo.code } };
+  if (!body) {
+    return lastRefusal ?? { ok: false, status: 502, body: { error: 'FEE_NOT_APPLIED' } };
   }
 
   const tx = body?.transactionRequest?.data;

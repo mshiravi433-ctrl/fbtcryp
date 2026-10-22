@@ -142,7 +142,10 @@ const OO_TARGET = {
  * spells them.
  */
 const LIFI_BASE = 'https://li.quest/v1';
-const LIFI_INTEGRATOR = 'fbt-swap';
+/* Both ids this project has ever registered: the code default and the form
+   the portal actually stored (it strips the hyphen — see docs/LIFI-SETUP-FA.md). */
+const LIFI_INTEGRATORS = ['fbt-swap', 'fbtswap'];
+const LIFI_INTEGRATOR = LIFI_INTEGRATORS[0];
 const LIFI_NATIVE = {
   5000: 'MNT',
   143: 'MON',
@@ -162,26 +165,50 @@ async function checkLifi(row, resolved) {
   const { chainId, gas } = row;
   const target = LIFI_TARGET[chainId];
   const amountIn = 10n ** 18n; // 1 native unit
-  const params = new URLSearchParams({
-    fromChain: String(chainId),
-    toChain: String(chainId),
-    fromToken: LIFI_NATIVE[chainId],
-    toToken: target.address,
-    fromAmount: String(amountIn),
-    /* Quote-only, never signed — the payout address can receive nothing here. */
-    fromAddress: resolved.address,
-    integrator: LIFI_INTEGRATOR,
-    fee: String(FEE_BPS / 10000) // 70 bps -> 0.007 (LI.FI takes fractions)
-  });
+  /*
+   * Ask under EVERY id this project has registered, and keep the first answer
+   * that actually carries our split. LI.FI honours a fee only for a VERIFIED
+   * integrator and answers a fee-less quote — not an error — for anything
+   * else, so a single id can make a healthy integration look broken.
+   */
+  let body = null;
+  let status = 0;
+  let lastError = null;
+  for (const integrator of LIFI_INTEGRATORS) {
+    const params = new URLSearchParams({
+      fromChain: String(chainId),
+      toChain: String(chainId),
+      fromToken: LIFI_NATIVE[chainId],
+      toToken: target.address,
+      fromAmount: String(amountIn),
+      /* Quote-only, never signed — the payout address can receive nothing here. */
+      fromAddress: resolved.address,
+      integrator,
+      fee: String(FEE_BPS / 10000) // 70 bps -> 0.007 (LI.FI takes fractions)
+    });
+    try {
+      const res = await fetch(`${LIFI_BASE}/quote?${params}`, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(20000)
+      });
+      const parsed = await res.json().catch(() => null);
+      status = res.status;
+      lastError = parsed?.message ?? null;
+      if (!res.ok || !parsed) continue;
+      const costs = Array.isArray(parsed?.estimate?.feeCosts) ? parsed.estimate.feeCosts : [];
+      const paid = costs.some((fc) =>
+        (fc?.feeSplit?.recipients ?? []).some((r) => LIFI_INTEGRATORS.includes(String(r?.name)))
+      );
+      body = parsed;
+      if (paid) break;
+    } catch (e) {
+      lastError = String(e?.message ?? e).slice(0, 80);
+    }
+  }
 
   try {
-    const res = await fetch(`${LIFI_BASE}/quote?${params}`, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(20000)
-    });
-    const body = await res.json().catch(() => null);
-    if (!res.ok || !body) {
-      console.log(warn(`LI.FI returned HTTP ${res.status} (${body?.message ?? 'no body'}) — could not verify live`));
+    if (!body) {
+      console.log(warn(`LI.FI returned HTTP ${status} (${lastError ?? 'no body'}) — could not verify live`));
       return;
     }
 
@@ -195,31 +222,58 @@ async function checkLifi(row, resolved) {
     const tool = body?.tool ?? 'unknown';
     console.log(ok(`LI.FI route exists via ${tool} — 1 ${gas} → ${(Number(out) / 10 ** target.decimals).toFixed(4)} ${target.name} (transactionRequest present)`));
 
-    /* 2. ECHO — root integrator/fee, the feeSplit share, and the wallet the
-       share is signed to. Mirrors verifyLifiFee() in src/lib/lifi.js and the
-       server-side gate in server/lifi.js. */
-    if (String(body?.integrator ?? '') !== LIFI_INTEGRATOR) {
-      console.log(bad(`LI.FI quote integrator is ${body?.integrator}, not ${LIFI_INTEGRATOR} — fee is not ours`));
-      failures += 1;
-      return;
-    }
-    if (Math.abs(Number(body?.fee ?? 0) - FEE_BPS / 10000) > 1e-9) {
-      console.log(bad(`LI.FI quote fee is ${body?.fee}, expected ${FEE_BPS / 10000} (${FEE_BPS} bps)`));
-      failures += 1;
-      return;
+    /* 2. EVIDENCE — the feeSplit signed into the calldata: our share, the
+       wallet it is paid to, and the identity echo when one is present.
+       Mirrors verifyLifiFee() in src/lib/lifi.js and verifyLifiSwapFee() in
+       server/lifi.js.
+
+       ⚠️ `fee` is a REQUEST parameter. It is NOT part of LI.FI's quote
+       response (see @lifi/types: StepBase/LiFiStep), so an earlier version of
+       this check compared `body.fee` against 0 forever and would have declared
+       every healthy quote broken — the same mistake the app's own gate made,
+       which is why zkSync/Scroll showed «مشکلی پیش آمده» on every pair. The
+       proof that matters is the split, and the wallet now travels on each
+       recipient as `walletAddress`. */
+    if (body?.integrator != null && String(body.integrator) !== '') {
+      const ours = LIFI_INTEGRATORS.map((id) => id.toLowerCase());
+      if (!ours.includes(String(body.integrator).toLowerCase())) {
+        console.log(bad(`LI.FI quote integrator is ${body?.integrator}, not ours — fee is not ours`));
+        failures += 1;
+        return;
+      }
     }
     const feeCosts = Array.isArray(body?.estimate?.feeCosts) ? body.estimate.feeCosts : [];
-    const split = feeCosts.find((fc) => fc?.feeSplit && Array.isArray(fc.feeSplit.recipients))?.feeSplit ?? null;
-    const ours = split?.recipients?.find((r) => String(r?.name) === LIFI_INTEGRATOR) ?? null;
+    const split =
+      feeCosts.find((fc) =>
+        Array.isArray(fc?.feeSplit?.recipients) &&
+        fc.feeSplit.recipients.some((r) => LIFI_INTEGRATORS.includes(String(r?.name)))
+      )?.feeSplit ?? null;
+    const ours = split?.recipients?.find((r) => LIFI_INTEGRATORS.includes(String(r?.name))) ?? null;
     const fromWei = BigInt(body?.action?.fromAmount ?? 0);
-    if (!ours || fromWei <= 0n || BigInt(String(ours.fee ?? 0)) * 10000n !== fromWei * BigInt(FEE_BPS)) {
-      console.log(bad('our share is MISSING or not 70 bps of the input — this swap would pay us nothing'));
+    const expectedShare = (fromWei * BigInt(FEE_BPS)) / 10000n; // LI.FI floors
+    const share = ours ? BigInt(String(ours.fee ?? 0)) : null;
+    const shareOk =
+      share != null &&
+      fromWei > 0n &&
+      (share === expectedShare || share + 1n === expectedShare || share === expectedShare + 1n);
+    if (!shareOk) {
+      console.log(
+        bad(
+          `our share is MISSING or not ${FEE_BPS} bps of the input (got ${ours?.fee ?? 'none'}, expected ~${expectedShare}) — this swap would pay us nothing`
+        )
+      );
       failures += 1;
       return;
     }
+    /* The wallet: recipient-level `walletAddress` (current shape) or the
+       legacy integratorFees payload, whichever this body carries. */
     const steps = Array.isArray(body?.includedSteps) ? body.includedSteps : [];
-    const wallets = steps.flatMap((s) => s?.action?.integratorFees?.recipients ?? []);
-    const wallet = wallets.find((r) => String(r?.name) === LIFI_INTEGRATOR)?.config?.defaultWallet ?? null;
+    const legacyWallets = steps
+      .flatMap((s) => s?.action?.integratorFees?.recipients ?? [])
+      .filter((r) => LIFI_INTEGRATORS.includes(String(r?.name)))
+      .map((r) => r?.config?.defaultWallet);
+    const wallets = [ours?.walletAddress, ...legacyWallets].filter(Boolean);
+    const wallet = wallets.find((w) => String(w).toLowerCase() === resolved.address.toLowerCase()) ?? wallets[0] ?? null;
     if (!wallet || String(wallet).toLowerCase() !== resolved.address.toLowerCase()) {
       console.log(bad(`LI.FI signed the fee to ${wallet ?? '(missing)'}, NOT ${resolved.address}`));
       failures += 1;
@@ -230,10 +284,10 @@ async function checkLifi(row, resolved) {
     /* 3. ARITHMETIC — our share + LI.FI's fixed fee = the total the user pays. */
     const lifiFeeWei = BigInt(String(split?.lifiFee ?? 0));
     const total = lifiFeeWei + BigInt(String(ours.fee));
-    const expectedShare = (amountIn * BigInt(FEE_BPS)) / 10000n;
+    const expectedTotal = (amountIn * BigInt(FEE_BPS)) / 10000n;
     console.log(
       ok(
-        `arithmetic: 1.0 ${gas} in → ${(Number(expectedShare) / 1e18).toFixed(6)} ${gas} ours + ` +
+        `arithmetic: 1.0 ${gas} in → ${(Number(expectedTotal) / 1e18).toFixed(6)} ${gas} ours + ` +
           `${(Number(lifiFeeWei) / 1e18).toFixed(6)} ${gas} LI.FI = ${(Number(total) / 1e18).toFixed(6)} ${gas} total (${(Number(total) * 10000n) / Number(amountIn)} bps shown to the user)`
       )
     );

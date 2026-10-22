@@ -181,17 +181,30 @@ describe('solana route order — which route runs, and which one pays', () => {
 
   it('stops asking routes our own server says cannot pay', () => {
     const routes = {
-      de1: { keyConfigured: false },
+      de1: { keyConfigured: false, feeReady: true },
       lifi: { feeReady: true },
       jupfee: { configured: false }
     };
-    /* This is the exact configuration behind the report: no De¹ key, no
-       Jupiter fee account ⇒ the only paid route left is LI.FI. */
-    expect(solanaQuoteProviders({ address: WALLET, routes })).toEqual(['lifi']);
+    /* No De¹ key is NOT a reason to skip De¹: the server's root ladder answers
+       keylessly on the public host and still pays the referrer. Only a route
+       whose FEE plumbing is missing (no receiver / zero rate) is skipped. */
+    expect(solanaQuoteProviders({ address: WALLET, routes })).toEqual(['openocean', 'lifi']);
     expect(solanaSkippedReasons({ address: WALLET, routes })).toEqual({
-      openocean: 'NO_API_KEY',
       jupfee: 'FEE_ACCOUNT_NOT_CONFIGURED'
     });
+  });
+
+  it('asks De¹ even when no OpenOcean API key is configured', () => {
+    /* THE REPORTED BUG: the screen never asked the fee-bearing De¹/OpenOcean
+       route at all when OPENOCEAN_API_KEY was absent, so every Solana swap fell
+       through to the fee-less Jupiter route. */
+    const routes = { de1: { keyConfigured: false, feeReady: true } };
+    expect(solanaQuoteProviders({ address: WALLET, routes })).toContain('openocean');
+    expect(solanaSkippedReasons({ address: WALLET, routes }).openocean).toBeUndefined();
+    /* …and a De¹ that genuinely cannot pay us is still skipped. */
+    const noFee = { de1: { keyConfigured: true, feeReady: false } };
+    expect(solanaQuoteProviders({ address: WALLET, routes: noFee })).not.toContain('openocean');
+    expect(solanaSkippedReasons({ address: WALLET, routes: noFee })).toEqual({ openocean: 'FEE_NOT_CONFIGURED' });
   });
 
   it('names the wallet, not the configuration, when LI.FI is skipped for want of one', () => {

@@ -352,7 +352,7 @@ export default function SolanaSwap({ embedded = false }) {
    * quoting effect then asks every route exactly as it did before.
    */
   const [routes, setRoutes] = useState(null);
-  /* Why each paid route did not price this pair — { openocean: 'NO_API_KEY',
+  /* Why each paid route did not price this pair — { openocean: 'UPSTREAM_FAILED',
      lifi: 'UPSTREAM_FAILED', … }. Shown only when the FREE route runs, which
      is the only moment the user is owed an explanation. */
   const [routeNotes, setRouteNotes] = useState(null);
