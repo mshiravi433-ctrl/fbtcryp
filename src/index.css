@@ -188,91 +188,90 @@ body {
   overflow: hidden;
   pointer-events: none;
   background: var(--bg-void);
+  isolation: isolate;
+  contain: strict;
 }
 
 /*
- * The orbs are large, heavily blurred and permanently in motion, so they are
- * the single most expensive thing on screen when nothing is happening.
+ * The orbs sit behind every route for the entire session.
  *
- * `contain: strict` + `content-visibility` let the browser treat each orb as
- * an isolated painting unit. Without containment, a moving orb marks the whole
- * stacking context dirty, and everything above it that uses `backdrop-filter`
- * (cards, the top bar, the nav) has to re-sample its backdrop — so three
- * drifting orbs were forcing continuous repaints of the entire UI even on a
- * completely idle screen.
- *
- * `translateZ(0)` promotes each orb to its own compositor layer so the drift
- * animation is a texture transform rather than a repaint. `will-change` is
- * kept to `transform` only; listing `filter` too would make the browser keep
- * a second, blur-sized backing store per orb for no benefit, since the blur
- * radius never animates.
- *
- * Note: CSS `contain` is deliberately NOT used here. Paint containment clips
- * to the border box, and a 70px blur halo extends well outside it — the orbs
- * would get visible hard edges.
+ * Desktop stability notes:
+ *   1. `mix-blend-mode: screen` was removed: in desktop Chromium/WebKit,
+ *      blending three animated, blurred layers forces destination-backdrop
+ *      readback and tile eviction under `backdrop-filter` surfaces, seen as
+ *      background flashing/flickering on wide monitors. A radial-gradient
+ *      falloff with normal alpha over `--bg-void` gives the same glow with
+ *      zero readback.
+ *   2. Orb sizes and drift distances are pixel-capped rather than uncapped
+ *      `vw`/`vh` units, which previously grew to ~1500px and moved 5–6× faster
+ *      across desktop viewports than on phones.
  */
 .rgb-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.5;
-  mix-blend-mode: screen;
+  filter: blur(48px);
+  opacity: 0.44;
   will-change: transform;
-  transform: translateZ(0);
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
 }
 
-.rgb-orb.a { width: 60vw; height: 60vw; background: var(--rgb-1); top: -18vw; left: -14vw; animation: drift-a 34s ease-in-out infinite; }
-.rgb-orb.b { width: 55vw; height: 55vw; background: var(--rgb-3); bottom: -16vw; right: -14vw; animation: drift-b 42s ease-in-out infinite; }
-.rgb-orb.c { width: 48vw; height: 48vw; background: var(--rgb-2); top: 34%; left: 24%; animation: drift-c 52s ease-in-out infinite; }
+.rgb-orb.a {
+  width: min(60vw, 520px);
+  height: min(60vw, 520px);
+  background: radial-gradient(circle, var(--rgb-1) 0%, transparent 70%);
+  top: -14vw;
+  left: -12vw;
+  animation: drift-a 48s ease-in-out infinite;
+}
+.rgb-orb.b {
+  width: min(55vw, 480px);
+  height: min(55vw, 480px);
+  background: radial-gradient(circle, var(--rgb-3) 0%, transparent 70%);
+  bottom: -14vw;
+  right: -12vw;
+  animation: drift-b 58s ease-in-out infinite;
+}
+.rgb-orb.c {
+  width: min(48vw, 440px);
+  height: min(48vw, 440px);
+  background: radial-gradient(circle, var(--rgb-2) 0%, transparent 70%);
+  top: 34%;
+  left: 24%;
+  animation: drift-c 68s ease-in-out infinite;
+}
 
-/*
- * Drift keyframes translate ONLY — the scale() they used to carry has been
- * removed. A scale change on a `blur(70px)` element re-rasterises the blurred
- * texture every frame on the main thread (the blur must be re-rendered at the
- * new size), which on a laptop GPU was the single biggest cost of an idle
- * screen and the direct cause of the reported «تا صفحه لود بشه نصفش نیست»
- * jank. Pure translate3d is a compositor-only texture move; the orbs now
- * drift at their baked size. The size variety the scale() provided comes
- * from the per-orb widths above instead.
- */
 @keyframes drift-a {
   0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(18vw, 14vh, 0); }
+  50% { transform: translate3d(40px, 28px, 0); }
 }
 @keyframes drift-b {
   0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(-16vw, -12vh, 0); }
+  50% { transform: translate3d(-36px, -26px, 0); }
 }
 @keyframes drift-c {
   0%, 100% { transform: translate3d(0, 0, 0); }
-  33% { transform: translate3d(-14vw, 10vh, 0); }
-  66% { transform: translate3d(12vw, -14vh, 0); }
+  33% { transform: translate3d(-28px, 22px, 0); }
+  66% { transform: translate3d(26px, -24px, 0); }
 }
 
-/* fine scanline / grid texture over the orbs */
 /*
- * The scanline grid used to animate `background-position` directly on this
- * full-screen element. Background-position is a paint property: every frame
- * the browser had to re-tile two gradients across a box that is 200% of the
- * viewport, re-apply the perspective transform, and re-apply the radial mask.
- * That is a full-screen repaint at 60fps, forever, on the idle screen.
+ * Fine perspective grid over the orbs.
  *
- * Split into two elements instead: the outer one owns the perspective and the
- * mask and never changes, the inner ::before owns the tiled gradient and is
- * moved with `transform: translate3d`. Because the tile repeats every 46px,
- * translating by exactly 46px is visually identical to scrolling the
- * background by 46px — but a transform on a promoted layer is handled by the
- * compositor with zero repaints.
- *
- * The inner element is oversized by one extra tile so the translation never
- * exposes an untiled edge.
+ * `transform-origin: 50% 0%` tilts the plane strictly away from the camera
+ * (`z <= 0` everywhere). Previously `inset: -50%` + centre-origin
+ * `perspective(420px) rotateX(62deg)` pushed the lower half past `z = +420px`
+ * on tall desktop monitors (`w <= 0` near-plane singularity), causing 1px
+ * scanline strobing/flickering during `grid-scroll`.
  */
 .rgb-grid {
   position: absolute;
-  inset: -50%;
-  transform: perspective(420px) rotateX(62deg);
-  mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 62%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 62%);
+  inset: 0 -18% -14%;
+  transform-origin: 50% 0%;
+  transform: perspective(900px) rotateX(55deg);
+  backface-visibility: hidden;
+  mask-image: radial-gradient(ellipse at 50% 24%, #000 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 24%, #000 0%, transparent 62%);
   overflow: hidden;
 }
 
@@ -281,11 +280,27 @@ body {
   position: absolute;
   inset: -46px 0 0 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 46px 46px;
-  animation: grid-scroll 28s linear infinite;
+  animation: grid-scroll 36s linear infinite;
   will-change: transform;
+}
+
+@media (min-width: 720px) {
+  .rgb-orb {
+    filter: blur(40px);
+    opacity: 0.36;
+  }
+  .rgb-orb.a { top: -110px; left: -90px; animation-duration: 56s; }
+  .rgb-orb.b { bottom: -110px; right: -90px; animation-duration: 68s; }
+  .rgb-orb.c { top: 28%; left: 32%; animation-duration: 80s; }
+  /* Keep the 1px perspective grid static on desktop monitors so subpixel
+     scanlines never shimmer or flicker under frosted panels. */
+  .rgb-grid::before {
+    animation: none;
+    will-change: auto;
+  }
 }
 
 @keyframes grid-scroll {

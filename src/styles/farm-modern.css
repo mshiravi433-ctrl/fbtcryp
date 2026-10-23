@@ -104,25 +104,27 @@
   opacity: .5;
   pointer-events: none;
 }
-/* slow diagonal light sweep */
+/* slow diagonal light sweep — compositor-only transform (never inset/left) */
 .farm-hero-sheen {
   position: absolute;
   top: -60%;
   bottom: -60%;
   width: 38%;
-  inset-inline-start: -45%;
+  left: 0;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .09), transparent);
-  transform: skewX(-18deg);
-  animation: farm-sheen 9s cubic-bezier(.22, 1, .36, 1) infinite;
+  transform: translate3d(-130%, 0, 0) skewX(-18deg);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  animation: farm-sheen 16s cubic-bezier(.22, 1, .36, 1) infinite;
   pointer-events: none;
 }
 @keyframes farm-sheen {
-  0%, 55% { inset-inline-start: -45%; opacity: 0; }
-  68% { opacity: 1; }
-  100% { inset-inline-start: 120%; opacity: 0; }
+  0%, 62% { transform: translate3d(-130%, 0, 0) skewX(-18deg); opacity: 0; }
+  74% { opacity: .75; }
+  100% { transform: translate3d(340%, 0, 0) skewX(-18deg); opacity: 0; }
 }
-@keyframes farm-drift-a { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(18px, 22px, 0) scale(1.07); } }
-@keyframes farm-drift-b { from { transform: translate3d(0, 0, 0) scale(1.04); } to { transform: translate3d(-16px, 18px, 0) scale(.96); } }
+@keyframes farm-drift-a { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(16px, 18px, 0); } }
+@keyframes farm-drift-b { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-14px, 16px, 0); } }
 :root[data-theme='light'] .farm-hero-orb { opacity: .15; }
 :root[data-theme='light'] .farm-hero-sheen { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55), transparent); }
 
