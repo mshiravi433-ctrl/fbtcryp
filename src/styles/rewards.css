@@ -593,11 +593,15 @@
   will-change: transform;
   pointer-events: none;
 }
+/* The artwork keeps a constant 84% inset inside the rim. Every WebP is already
+   optically sized (86–94% of its own square), so this is the ONLY place a
+   scale is applied — a 16 px ladder dot and a 112 px hero medal therefore
+   frame their animal identically. */
 .rwd-totem-float {
   position: relative;
   display: block;
-  width: 92%;
-  height: 92%;
+  width: 84%;
+  height: 84%;
   transform: translate3d(calc(var(--px, 0) * 3px), calc(var(--py, 0) * -3px), 0);
   animation: rwd-totem-float 8s ease-in-out infinite;
   will-change: transform;
@@ -618,16 +622,16 @@
   object-position: center;
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.38));
 }
-.rwd-totem-artwork-portrait {
-  border-radius: 50%;
+/* The dashed orbit is the only thing on the medal that turns; the animal and
+   the rim only breathe. transform-box keeps the rotation centred on the SVG. */
+.rwd-totem-orbit {
+  transform-box: view-box;
+  transform-origin: 60px 60px;
+  animation: rwd-orbit-spin 26s linear infinite;
+  will-change: transform;
 }
 .rwd-totem-locked .rwd-totem-artwork {
   filter: grayscale(0.85) brightness(0.55) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.32));
-}
-.rwd-totem-spark {
-  animation: rwd-twinkle 6s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
 }
 .rwd-totem-shadow {
   position: absolute;
@@ -644,7 +648,8 @@
 .rwd-totem-locked .rwd-totem-svg { filter: grayscale(0.85) brightness(0.55) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.32)); }
 .rwd-totem-locked .rwd-totem-halo { opacity: 0.1; }
 .rwd-totem-locked .rwd-totem-float,
-.rwd-totem-locked .rwd-totem-medallion { animation: none; }
+.rwd-totem-locked .rwd-totem-medallion,
+.rwd-totem-locked .rwd-totem-orbit { animation: none; }
 .rwd-totem-locked .rwd-totem-shadow { opacity: 0.4; }
 
 @keyframes rwd-halo {
@@ -661,9 +666,9 @@
   0%, 100% { transform: translate3d(calc(var(--px, 0) * 3px), calc(var(--py, 0) * -3px + 1.8%), 0); }
   50% { transform: translate3d(calc(var(--px, 0) * 3px), calc(var(--py, 0) * -3px - 2.6%), 0); }
 }
-@keyframes rwd-twinkle {
-  0%, 100% { opacity: 0.32; transform: scale(0.86); }
-  50% { opacity: 0.78; transform: scale(1.04); }
+@keyframes rwd-orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* --------------------------------------------------------------------------
@@ -2377,7 +2382,7 @@
   .rwd-totem-halo,
   .rwd-totem-float,
   .rwd-totem-medallion,
-  .rwd-totem-spark,
+  .rwd-totem-orbit,
   .rwd-ring-orbit,
   .rwd-wheel-glow,
   .rwd-wheel-pointer,
