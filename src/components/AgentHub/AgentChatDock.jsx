@@ -251,6 +251,13 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
                         {fa ? 'این ایجنت برای جواب دقیق به یک ورودی روشن‌تر نیاز دارد. یکی از نمونه‌ها را بزنید یا نماد/آدرس را بنویسید.' : 'This agent needs a clearer input. Tap an example or include the symbol/address.'}
                       </p>
                     ) : null}
+                    {message.task.result?.data?.dataStatus === 'unavailable' ? (
+                      <p className="agentchat-hint" data-testid="agent-chat-data-unavailable">
+                        {fa
+                          ? 'اجرا کامل شد، اما خواندن داده از منبع عمومی در این لحظه ناموفق بود و هیچ عددی ساخته نشد. چند لحظه بعد دوباره بفرستید.'
+                          : 'The run completed, but the public-data read failed and no number was invented. Send it again in a moment.'}
+                      </p>
+                    ) : null}
                     {message.task.result ? (
                       <ResultView result={message.task.result} fa={fa} />
                     ) : (
