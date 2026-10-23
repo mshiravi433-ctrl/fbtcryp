@@ -36,6 +36,7 @@ import {
   saveSourceCredential
 } from '../../lib/intent-ai/agentHub/client.js';
 import RecommendedAgents from './RecommendedAgents.jsx';
+import { setActiveAgent } from '../../lib/intent-ai/agentHub/activeAgent.js';
 import '../../styles/agent-hub.css';
 
 const ACCESS_FILTERS = [
@@ -120,6 +121,46 @@ const SOURCE_ERROR_COPY = Object.freeze({
   SOURCE_NOT_FOUND: { fa: 'این ایجنت دیگر در فهرست شما نیست.', en: 'That agent is no longer in your list.' }
 });
 
+/**
+ * Task failures, in the user's language.
+ *
+ * The server's `detail` is English on purpose (it is the support-facing
+ * sentence). A Persian UI that printed it read like a broken provider
+ * connection, when the real message was "this agent is rate-limited" or "you
+ * have not approved the share yet". Each code below says what happened and
+ * what to do; the raw code stays on screen for a ticket.
+ */
+const TASK_ERROR_COPY = Object.freeze({
+  AGENT_UNAVAILABLE: { fa: 'این ایجنت در این لحظه در دسترس نیست. وضعیت ارائه‌دهنده را در فهرست بالا ببینید.', en: 'This agent is not available right now. Check the provider status above.' },
+  RATE_LIMITED: { fa: 'درخواست‌ها پشت‌سرهم بود؛ یک دقیقه بعد دوباره امتحان کنید.', en: 'Too many requests in a row. Try again in a minute.' },
+  TASK_TEXT_REQUIRED: { fa: 'متن درخواست خیلی کوتاه است (حداقل ۴ نویسه).', en: 'The request is too short (4 characters minimum).' },
+  TASK_TEXT_TOO_LONG: { fa: 'متن درخواست بلندتر از حد مجاز است.', en: 'The request is longer than the limit.' },
+  CONSENT_REQUIRED: { fa: 'تأیید ارسال را تیک بزنید.', en: 'Tick the approval box first.' },
+  CONTEXT_REQUIRED: { fa: 'حداقل یک مورد برای اشتراک انتخاب کنید.', en: 'Choose at least one item to share.' },
+  CONTEXT_WALLET_INVALID: { fa: 'آدرس کیف پول معتبر نیست (EVM یا Solana).', en: 'That wallet address is not valid (EVM or Solana).' },
+  CONTEXT_PORTFOLIO_INVALID: { fa: 'جمع پورتفوی باید عدد باشد.', en: 'Portfolio totals must be numbers.' },
+  CONTEXT_EXCERPT_INVALID: { fa: 'بخش گفتگو باید حداقل ۱۰ نویسه باشد.', en: 'The chat excerpt must be at least 10 characters.' },
+  CONTEXT_CATEGORY_UNKNOWN: { fa: 'یکی از موارد انتخابی پشتیبانی نمی‌شود.', en: 'One of the selected items is not supported.' },
+  PAYMENT_REQUIRED: { fa: 'این ایجنت پرداخت مستقیم می‌خواهد و پرداخت در این نسخه فعال نیست؛ چیزی از شما کم نشد.', en: 'This agent needs a direct payment, which is not enabled here. Nothing was charged.' },
+  AUTH_REQUIRED: { fa: 'این ایجنت به حساب ارائه‌دهنده نیاز دارد؛ در تب «متصل‌ها» وصل کنید.', en: 'This agent needs your provider account. Connect it in the Connected tab.' },
+  AGENT_NOT_FOUND: { fa: 'این ایجنت دیگر در فهرست نیست.', en: 'That agent is no longer listed.' },
+  HUB_DISABLED: { fa: 'ایجنت‌های خارجی روی این نسخه خاموش‌اند.', en: 'External agents are switched off on this deployment.' },
+  STRONG_OWNER_REQUIRED: { fa: 'این کار را از اپ روی دستگاه خودتان انجام دهید تا حساب شما شناسایی شود.', en: 'Do this from the app on your device so FBT can identify your account.' },
+  IDEMPOTENCY_CONFLICT: { fa: 'همین درخواست با متن دیگری ثبت شده؛ فرم را تازه کنید.', en: 'That request was already used with different text. Refresh the form.' },
+  REQUEST_IN_PROGRESS: { fa: 'همین درخواست در حال اجراست؛ چند لحظه صبر کنید.', en: 'That request is already running. Wait a moment.' },
+  PROVIDER_TIMEOUT: { fa: 'ارائه‌دهنده در زمان مقرر پاسخ نداد؛ نتیجه نامشخص است و FBT درخواست دوم نمی‌سازد.', en: 'The provider did not answer in time. The outcome is unknown and FBT will not send a second request.' },
+  PROVIDER_UNREACHABLE: { fa: 'به ارائه‌دهنده نرسیدیم؛ درخواست دوباره ساخته نشد.', en: 'The provider could not be reached. No duplicate request was created.' },
+  PROVIDER_ERROR: { fa: 'ارائه‌دهنده درخواست را رد کرد.', en: 'The provider rejected the request.' },
+  NETWORK_UNAVAILABLE: { fa: 'ارتباط با سرور FBT برقرار نشد.', en: 'FBT could not be reached.' },
+  TIMEOUT: { fa: 'پاسخ دیر آمد؛ دوباره بفرستید.', en: 'The reply took too long. Send it again.' }
+});
+
+export function taskErrorText(code, fa, detail = null) {
+  const row = TASK_ERROR_COPY[code];
+  if (row) return fa ? row.fa : row.en;
+  return detail || (fa ? 'درخواست انجام نشد.' : 'The request could not be completed.');
+}
+
 export function sourceErrorText(code, fa, detail = null) {
   const row = SOURCE_ERROR_COPY[code];
   if (row) return fa ? row.fa : row.en;
@@ -132,6 +173,43 @@ const fmt = (value, fa) => {
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString(fa ? 'fa-IR' : 'en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
+
+/**
+ * A provider link, with one correction that fixes every broken link on this
+ * screen: FBT's own pages are HASH routes inside a single-page app. The server
+ * used to publish `https://fbtswap.ir/help`, which is a 404 — the page only
+ * exists at `/#/help`. Absolute same-origin links are therefore reduced to
+ * their hash (which the router understands and which still works when the URL
+ * is copied), and only genuinely external links open in a new tab.
+ */
+export function internalHash(url) {
+  try {
+    const here = typeof window !== 'undefined' && window.location ? window.location.origin : null;
+    const parsed = new URL(String(url), here || 'https://fbtswap.ir/');
+    const isFbt = /(^|\.)fbtswap\.ir$/i.test(parsed.hostname) || (here && parsed.origin === here);
+    if (!isFbt) return null;
+    if (!parsed.hash || parsed.hash === '#') return parsed.pathname === '/' ? '#/' : null;
+    return parsed.hash;
+  } catch {
+    return null;
+  }
+}
+
+function ProviderLink({ href, children, testId = null }) {
+  if (!href) return null;
+  const hash = internalHash(href);
+  return (
+    <a
+      className="ah-link"
+      href={hash || href}
+      {...(hash ? {} : { target: '_blank', rel: 'noopener noreferrer nofollow' })}
+      data-internal={hash ? 'true' : 'false'}
+      {...(testId ? { 'data-testid': testId } : {})}
+    >
+      {children}
+    </a>
+  );
+}
 
 function Badge({ status, fa }) {
   const label = STATUS_LABELS[status]?.[fa ? 'fa' : 'en'] || status;
@@ -265,7 +343,7 @@ export function HubIntro({ fa }) {
   );
 }
 
-export default function AgentHubPanel({ fa = false, onClose = null }) {
+export default function AgentHubPanel({ fa = false, onClose = null, onActivateInChat = null }) {
   /* Recommendations are useful even while the reviewed execution registry is
      empty, so make that honest, source-linked view the landing subtab. */
   const [tab, setTab] = useState('recommended');
@@ -345,11 +423,31 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
   const agents = catalog.data?.agents || [];
   const providers = catalog.data?.providers || [];
   const sources = providers.filter((provider) => provider.source === 'user');
+  /* One place decides how an agent is NAMED on screen, so the list, the detail
+     header and the run result cannot disagree — and so a Persian UI never
+     prints the English name as the primary label. The English string stays as
+     the secondary line, because an operator or a support reply needs it. */
+  const agentName = useCallback((agent) => (
+    fa ? (agent?.nameFa || agent?.name || '') : (agent?.name || agent?.nameFa || '')
+  ), [fa]);
+  const agentSummary = useCallback((agent) => (
+    fa ? (agent?.summaryFa || agent?.summary || '') : (agent?.summary || agent?.summaryFa || '')
+  ), [fa]);
+  const agentExamples = useCallback((agent) => {
+    const list = fa ? (agent?.examplesFa?.length ? agent.examplesFa : agent?.examples) : (agent?.examples?.length ? agent.examples : agent?.examplesFa);
+    return Array.isArray(list) ? list : [];
+  }, [fa]);
+
   const filtered = useMemo(() => agents.filter((agent) => {
     if (access !== 'all' && accessKey(agent.accessModel) !== access) return false;
     if (!query.trim()) return true;
     const needle = query.trim().toLowerCase();
-    return [agent.name, agent.summary, agent.providerName, ...(agent.capabilities || [])]
+    /* Both languages are searchable in both directions: an Iranian user may
+       type "اتریوم" or "ETH", and an English one may paste a Persian label. */
+    return [
+      agent.name, agent.nameFa, agent.summary, agent.summaryFa,
+      agent.providerName, ...(agent.capabilities || []), ...(agent.dataSources || [])
+    ]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(needle));
   }), [agents, access, query]);
@@ -498,6 +596,25 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
     else setNotice({ tone: 'warn', text: out.detail || (fa ? 'ارائه‌دهنده لغو را تأیید نکرد.' : 'The provider did not confirm the cancellation.') });
   }, [run.task?.id, fa]);
 
+  /* Activation is a UI fact, not a run: it stores a small snapshot and hands
+     the chat the agent's own examples. Every execution still goes through the
+     broker, so activating nothing here can bypass consent or a kill switch. */
+  const activateInChat = useCallback(() => {
+    if (!selected) return;
+    try {
+      setActiveAgent({ ...selected, native: selected.source === 'native' });
+      setNotice({
+        tone: 'ok',
+        text: fa
+          ? `«${selected.nameFa || selected.name}» در چت فعال شد. حالا در تب گفتگو پیشنهادها و نتایج همین ایجنت را می‌بینید.`
+          : `“${selected.name}” is active in the chat. Its suggestions and results now appear in the chat tab.`
+      });
+      onActivateInChat?.(selected);
+    } catch {
+      setNotice({ tone: 'warn', text: fa ? 'فعال‌سازی در چت انجام نشد.' : 'The agent could not be activated for the chat.' });
+    }
+  }, [selected, fa, onActivateInChat]);
+
   const previewLines = preview.ok ? preview.text : null;
   const detailAgent = selected;
   const canStart = Boolean(preview.ok && approved && run.state !== 'starting' && detailAgent?.status === 'LIVE');
@@ -511,18 +628,37 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
           <button type="button" className="ah-ghost" onClick={() => { setSelected(null); setRun({ state: 'idle', task: null, error: null }); }}>
             {fa ? '→ بازگشت' : '← Back'}
           </button>
-          <Badge status={detailAgent.status} fa={fa} />
+          <div className="ah-detail-head-right">
+            <Badge status={detailAgent.status} fa={fa} />
+            {detailAgent.status === 'LIVE' ? (
+              <button
+                type="button"
+                className="ah-ghost ah-activate"
+                onClick={activateInChat}
+                data-testid="agent-hub-use-in-chat"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
+                {fa ? 'استفاده در چت' : 'Use in chat'}
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        <h3>{detailAgent.name}</h3>
-        <p className="ah-muted">{detailAgent.summary}</p>
+        <h3>{agentName(detailAgent)}</h3>
+        {fa && detailAgent.name && detailAgent.nameFa ? <p className="ah-sublabel" dir="ltr">{detailAgent.name}</p> : null}
+        <p className="ah-muted">{agentSummary(detailAgent)}</p>
         <div className="ah-attrib" data-testid="agent-hub-attribution">
-          {fa ? 'ارائه‌دهنده: ' : 'Provider: '}
-          <strong>{detailAgent.providerName}</strong>
-          {provider.websiteUrl ? <a href={provider.websiteUrl} target="_blank" rel="noopener noreferrer nofollow">{fa ? 'سایت' : 'site'}</a> : null}
-          {provider.documentationUrl ? <a href={provider.documentationUrl} target="_blank" rel="noopener noreferrer nofollow">{fa ? 'مستندات' : 'docs'}</a> : null}
-          {provider.termsUrl ? <a href={provider.termsUrl} target="_blank" rel="noopener noreferrer nofollow">{fa ? 'شرایط' : 'terms'}</a> : null}
-          {provider.privacyUrl ? <a href={provider.privacyUrl} target="_blank" rel="noopener noreferrer nofollow">{fa ? 'حریم خصوصی' : 'privacy'}</a> : null}
+          <span className="ah-attrib-name">
+            {fa ? 'ارائه‌دهنده: ' : 'Provider: '}
+            <strong>{detailAgent.providerName}</strong>
+          </span>
+          <nav className="ah-attrib-links" aria-label={fa ? 'پیوندهای ارائه‌دهنده' : 'Provider links'}>
+            <ProviderLink href={provider.websiteUrl} testId="agent-hub-link-site">{fa ? 'سایت' : 'site'}</ProviderLink>
+            <ProviderLink href={provider.documentationUrl} testId="agent-hub-link-docs">{fa ? 'مستندات' : 'docs'}</ProviderLink>
+            <ProviderLink href={provider.termsUrl} testId="agent-hub-link-terms">{fa ? 'شرایط' : 'terms'}</ProviderLink>
+            <ProviderLink href={provider.privacyUrl} testId="agent-hub-link-privacy">{fa ? 'حریم خصوصی' : 'privacy'}</ProviderLink>
+            <ProviderLink href={provider.supportUrl} testId="agent-hub-link-support">{fa ? 'پشتیبانی' : 'support'}</ProviderLink>
+          </nav>
         </div>
 
         <dl className="ah-facts">
@@ -573,7 +709,15 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                   : 'The outcome is unknown. FBT deliberately does not send a second request: the first may still be running at the provider.'}
               </p>
             ) : null}
-            {run.task.errorCode ? <p className="ah-note ah-note-warn">{run.task.safeErrorMessage || run.task.errorCode}</p> : null}
+            {run.task.errorCode ? <p className="ah-note ah-note-warn">{taskErrorText(run.task.errorCode, fa, run.task.safeErrorMessage)}</p> : null}
+            {run.task.result?.data?.needsInput ? (
+              <p className="ah-note" role="status" data-testid="agent-hub-needs-input">
+                {fa
+                  ? 'این اجرا کامل شد، اما ایجنت برای پاسخ دقیق به یک ورودی روشن‌تر نیاز دارد: نماد کوین (مثل BTC یا اتریوم)، آدرس، یا نام پروتکل را بنویسید. یکی از نمونه‌های زیر را هم می‌توانید بزنید.'
+                  : 'The run completed, but the agent needs a clearer input: a coin symbol (e.g. BTC or ETH), an address, or a protocol name. You can also tap one of the examples below.'}
+              </p>
+            ) : null}
+            {run.task.replay ? <p className="ah-note">{fa ? 'این پاسخ از همان درخواست قبلی است؛ درخواست تازه‌ای ساخته نشد.' : 'This is the same earlier request; no new task was created.'}</p> : null}
             {run.task.result ? <ResultView result={run.task.result} fa={fa} /> : null}
             <p className="ah-muted ah-small">
               {fa ? 'ارجاع وظیفه نزد ارائه‌دهنده: ' : 'Provider task reference: '}
@@ -600,9 +744,9 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
               onChange={(event) => { setTaskText(event.target.value); setApproved(false); keyRef.current = newIdempotencyKey('hub'); }}
               placeholder={fa ? 'مثلاً: ریسک تمرکز این کیف پول را بررسی کن' : 'e.g. Review the concentration risk of this wallet'}
             />
-            {detailAgent.examples?.length ? (
+            {agentExamples(detailAgent).length ? (
               <div className="ah-suggest">
-                {detailAgent.examples.slice(0, 3).map((example) => (
+                {agentExamples(detailAgent).slice(0, 3).map((example) => (
                   <button
                     key={example}
                     type="button"
@@ -615,84 +759,165 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
               </div>
             ) : null}
 
-            <fieldset className="ah-context">
-              <legend>{fa ? 'چه چیزی با ارائه‌دهنده به اشتراک گذاشته شود؟' : 'What is shared with the provider?'}</legend>
-              <p className="ah-muted ah-small">
-                {fa
-                  ? 'متن درخواست همیشه ارسال می‌شود. بقیه موارد فقط اگر خودتان تیک بزنید. FBT هیچ داده‌ای را بدون انتخاب شما اضافه نمی‌کند.'
-                  : 'The request text is always sent. Everything else only if you tick it. FBT adds no data you did not choose.'}
+            <fieldset className="ah-consent" aria-labelledby="ah-consent-title" data-testid="agent-hub-context">
+              {/* A legend is not a flex item in several engines, so the visible
+                  header is a normal row and the legend stays for screen readers
+                  (it still names the group). */}
+              <legend className="ah-sr-only">
+                {fa ? 'چه چیزی با ارائه‌دهنده به اشتراک گذاشته شود؟' : 'What is shared with the provider?'}
+              </legend>
+              <div className="ah-consent-legend">
+                <span className="ah-consent-title" id="ah-consent-title">
+                  {fa ? 'چه چیزی با ارائه‌دهنده به اشتراک گذاشته شود؟' : 'What is shared with the provider?'}
+                </span>
+                <span className="ah-consent-count" data-on={categories.length > 1 ? 'true' : 'false'}>
+                  {fa
+                    ? `${categories.length} مورد`
+                    : `${categories.length} item${categories.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <p className="ah-consent-lead">
+                {detailAgent.source === 'native'
+                  ? (fa
+                    ? 'این ایجنت داخل خودِ FBT اجرا می‌شود؛ متن درخواست به هیچ ارائه‌دهندهٔ خارجی فرستاده نمی‌شود. بقیهٔ موارد را فقط اگر خودتان بخواهید اضافه می‌کنید.'
+                    : 'This agent runs inside FBT; the request is not sent to any third-party provider. Everything else is added only if you switch it on.')
+                  : (fa
+                    ? 'متن درخواست همیشه ارسال می‌شود. بقیهٔ موارد فقط اگر خودتان روشن کنید. FBT هیچ داده‌ای را بدون انتخاب شما اضافه نمی‌کند.'
+                    : 'The request text is always sent. Everything else only if you switch it on. FBT adds no data you did not choose.')}
               </p>
-              <label className="ah-check">
-                <input type="checkbox" checked readOnly data-testid="agent-hub-context-task" />
-                <span>{fa ? 'متن درخواست' : 'Request text'} ({CONSENT_CATEGORIES.includes('task_text') ? 'task_text' : ''})</span>
-              </label>
-              <label className="ah-check">
-                <input
-                  type="checkbox"
-                  checked={sharing.wallet_address}
-                  onChange={(event) => { setSharing((prev) => ({ ...prev, wallet_address: event.target.checked })); setApproved(false); }}
-                  data-testid="agent-hub-context-wallet"
-                />
-                <span>{fa ? 'آدرس عمومی کیف پول' : 'Public wallet address'}</span>
-              </label>
-              {sharing.wallet_address ? (
-                <input
-                  className="ah-input"
-                  value={values.walletAddress}
-                  onChange={(event) => { setValues((prev) => ({ ...prev, walletAddress: event.target.value })); setApproved(false); }}
-                  placeholder="0x… / Solana address"
-                  aria-label={fa ? 'آدرس کیف پول' : 'Wallet address'}
-                  data-testid="agent-hub-wallet-value"
-                />
-              ) : null}
-              <label className="ah-check">
-                <input
-                  type="checkbox"
-                  checked={sharing.portfolio_summary}
-                  onChange={(event) => { setSharing((prev) => ({ ...prev, portfolio_summary: event.target.checked })); setApproved(false); }}
-                  data-testid="agent-hub-context-portfolio"
-                />
-                <span>{fa ? 'جمع پورتفوی (عددی که خودتان وارد می‌کنید)' : 'Portfolio totals (numbers you type)'}</span>
-              </label>
-              {sharing.portfolio_summary ? (
-                <div className="ah-row">
+
+              <div className="ah-share-list">
+                <div className="ah-share" data-on="true" data-locked="true">
+                  <span className="ah-share-icon" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16" /><path d="M4 12h10" /><path d="M4 17h13" /></svg>
+                  </span>
+                  <span className="ah-share-body">
+                    <span className="ah-share-title">
+                      {fa ? 'متن درخواست' : 'Request text'}
+                      <code className="ah-share-code">task_text</code>
+                    </span>
+                    <span className="ah-share-note">{fa ? 'همیشه ارسال می‌شود و قابل خاموش‌کردن نیست' : 'Always sent; it cannot be switched off'}</span>
+                  </span>
                   <input
-                    className="ah-input"
-                    inputMode="decimal"
-                    value={values.totalUsd}
-                    onChange={(event) => { setValues((prev) => ({ ...prev, totalUsd: event.target.value })); setApproved(false); }}
-                    placeholder={fa ? 'ارزش کل (دلار)' : 'total USD'}
-                    aria-label={fa ? 'ارزش کل' : 'Total USD'}
-                  />
-                  <input
-                    className="ah-input"
-                    inputMode="decimal"
-                    value={values.ethUsd}
-                    onChange={(event) => { setValues((prev) => ({ ...prev, ethUsd: event.target.value })); setApproved(false); }}
-                    placeholder={fa ? 'بخش ETH (دلار)' : 'ETH USD'}
-                    aria-label={fa ? 'بخش ETH' : 'ETH USD'}
+                    className="ah-share-input"
+                    type="checkbox"
+                    checked
+                    readOnly
+                    aria-label={fa ? 'متن درخواست (همیشه ارسال می‌شود)' : 'Request text (always sent)'}
+                    data-testid="agent-hub-context-task"
                   />
                 </div>
-              ) : null}
-              <label className="ah-check">
-                <input
-                  type="checkbox"
-                  checked={sharing.conversation_excerpt}
-                  onChange={(event) => { setSharing((prev) => ({ ...prev, conversation_excerpt: event.target.checked })); setApproved(false); }}
-                  data-testid="agent-hub-context-excerpt"
-                />
-                <span>{fa ? 'بخشی از این گفتگو' : 'An excerpt of this chat'}</span>
-              </label>
-              {sharing.conversation_excerpt ? (
-                <textarea
-                  className="ah-input ah-textarea ah-textarea-sm"
-                  value={values.excerpt}
-                  maxLength={1200}
-                  onChange={(event) => { setValues((prev) => ({ ...prev, excerpt: event.target.value })); setApproved(false); }}
-                  placeholder={fa ? 'متنی را که اجازه می‌دهید ارسال شود بچسبانید' : 'Paste the text you allow to be sent'}
-                  aria-label={fa ? 'بخش گفتگو' : 'Conversation excerpt'}
-                />
-              ) : null}
+
+                <div className="ah-share" data-on={sharing.wallet_address ? 'true' : 'false'}>
+                  <span className="ah-share-icon" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M16 12h.01" /></svg>
+                  </span>
+                  <label className="ah-share-body" htmlFor="ah-share-wallet">
+                    <span className="ah-share-title">{fa ? 'آدرس عمومی کیف پول' : 'Public wallet address'}</span>
+                    <span className="ah-share-note">{fa ? 'فقط آدرس عمومی؛ هیچ کلید خصوصی پذیرفته نمی‌شود' : 'A public address only; no private key is ever accepted'}</span>
+                  </label>
+                  <input
+                    id="ah-share-wallet"
+                    className="ah-share-input"
+                    type="checkbox"
+                    checked={sharing.wallet_address}
+                    onChange={(event) => { setSharing((prev) => ({ ...prev, wallet_address: event.target.checked })); setApproved(false); }}
+                    aria-label={fa ? 'ارسال آدرس عمومی کیف پول' : 'Share a public wallet address'}
+                    data-testid="agent-hub-context-wallet"
+                  />
+                </div>
+                {sharing.wallet_address ? (
+                  <div className="ah-share-field">
+                    <input
+                      className="ah-input"
+                      dir="ltr"
+                      value={values.walletAddress}
+                      onChange={(event) => { setValues((prev) => ({ ...prev, walletAddress: event.target.value })); setApproved(false); }}
+                      placeholder="0x… / Solana address"
+                      aria-label={fa ? 'آدرس کیف پول' : 'Wallet address'}
+                      data-testid="agent-hub-wallet-value"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="ah-share" data-on={sharing.portfolio_summary ? 'true' : 'false'}>
+                  <span className="ah-share-icon" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="m7 14 4-4 3 3 5-6" /></svg>
+                  </span>
+                  <label className="ah-share-body" htmlFor="ah-share-portfolio">
+                    <span className="ah-share-title">{fa ? 'جمع پورتفوی' : 'Portfolio totals'}</span>
+                    <span className="ah-share-note">{fa ? 'فقط عددهایی که خودتان وارد می‌کنید؛ هیچ دارایی‌ای خوانده نمی‌شود' : 'Only numbers you type; no holding is read from any wallet'}</span>
+                  </label>
+                  <input
+                    id="ah-share-portfolio"
+                    className="ah-share-input"
+                    type="checkbox"
+                    checked={sharing.portfolio_summary}
+                    onChange={(event) => { setSharing((prev) => ({ ...prev, portfolio_summary: event.target.checked })); setApproved(false); }}
+                    aria-label={fa ? 'ارسال جمع پورتفوی' : 'Share portfolio totals'}
+                    data-testid="agent-hub-context-portfolio"
+                  />
+                </div>
+                {sharing.portfolio_summary ? (
+                  <div className="ah-share-field ah-share-field-split">
+                    <label className="ah-share-mini">
+                      <span>{fa ? 'ارزش کل (دلار)' : 'Total USD'}</span>
+                      <input
+                        className="ah-input"
+                        inputMode="decimal"
+                        dir="ltr"
+                        value={values.totalUsd}
+                        onChange={(event) => { setValues((prev) => ({ ...prev, totalUsd: event.target.value })); setApproved(false); }}
+                        placeholder="0"
+                        aria-label={fa ? 'ارزش کل' : 'Total USD'}
+                      />
+                    </label>
+                    <label className="ah-share-mini">
+                      <span>{fa ? 'بخش ETH (دلار)' : 'ETH USD'}</span>
+                      <input
+                        className="ah-input"
+                        inputMode="decimal"
+                        dir="ltr"
+                        value={values.ethUsd}
+                        onChange={(event) => { setValues((prev) => ({ ...prev, ethUsd: event.target.value })); setApproved(false); }}
+                        placeholder="0"
+                        aria-label={fa ? 'بخش ETH' : 'ETH USD'}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                <div className="ah-share" data-on={sharing.conversation_excerpt ? 'true' : 'false'}>
+                  <span className="ah-share-icon" aria-hidden="true">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
+                  </span>
+                  <label className="ah-share-body" htmlFor="ah-share-excerpt">
+                    <span className="ah-share-title">{fa ? 'بخشی از این گفتگو' : 'An excerpt of this chat'}</span>
+                    <span className="ah-share-note">{fa ? 'متنی را که اجازه می‌دهید ارسال شود، خودتان می‌چسبانید' : 'You paste the exact text you allow to be sent'}</span>
+                  </label>
+                  <input
+                    id="ah-share-excerpt"
+                    className="ah-share-input"
+                    type="checkbox"
+                    checked={sharing.conversation_excerpt}
+                    onChange={(event) => { setSharing((prev) => ({ ...prev, conversation_excerpt: event.target.checked })); setApproved(false); }}
+                    aria-label={fa ? 'ارسال بخشی از گفتگو' : 'Share a chat excerpt'}
+                    data-testid="agent-hub-context-excerpt"
+                  />
+                </div>
+                {sharing.conversation_excerpt ? (
+                  <div className="ah-share-field">
+                    <textarea
+                      className="ah-input ah-textarea ah-textarea-sm"
+                      value={values.excerpt}
+                      maxLength={1200}
+                      onChange={(event) => { setValues((prev) => ({ ...prev, excerpt: event.target.value })); setApproved(false); }}
+                      placeholder={fa ? 'متنی را که اجازه می‌دهید ارسال شود بچسبانید' : 'Paste the text you allow to be sent'}
+                      aria-label={fa ? 'بخش گفتگو' : 'Conversation excerpt'}
+                    />
+                  </div>
+                ) : null}
+              </div>
             </fieldset>
 
             <div className="ah-preview" data-testid="agent-hub-preview">
@@ -707,23 +932,39 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
               )}
             </div>
 
-            <label className="ah-check ah-check-strong">
+            <label className="ah-approve" data-on={approved ? 'true' : 'false'}>
               <input
+                className="ah-approve-input"
                 type="checkbox"
                 checked={approved}
                 onChange={(event) => setApproved(event.target.checked)}
                 data-testid="agent-hub-consent-approve"
               />
-              <span>
-                {fa
-                  ? 'می‌دانم این متن به ارائه‌دهنده خارجی ارسال می‌شود و شرایط و حریم خصوصی او اعمال می‌شود.'
-                  : 'I understand this text goes to an external provider, under their terms and privacy policy.'}
+              <span className="ah-approve-box" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              </span>
+              <span className="ah-approve-copy">
+                <strong>
+                  {detailAgent.source === 'native'
+                    ? (fa ? 'اجرای این درخواست در FBT را تأیید می‌کنم' : 'I approve running this request inside FBT')
+                    : (fa ? 'تأیید ارسال به ارائه‌دهنده' : 'Approve sending to the provider')}
+                </strong>
+                <span>
+                  {detailAgent.source === 'native'
+                    ? (fa
+                      ? 'این ایجنت درون FBT اجرا می‌شود؛ متن درخواست به سرویس خارجی نمی‌رود و چیزی از شما کم نمی‌شود.'
+                      : 'This agent runs inside FBT. Nothing is sent to a third party and nothing is charged.')
+                    : (fa
+                      ? 'می‌دانم این متن به ارائه‌دهنده خارجی ارسال می‌شود و شرایط و حریم خصوصی او اعمال می‌شود.'
+                      : 'I understand this text goes to an external provider, under their terms and privacy policy.')}
+                </span>
               </span>
             </label>
 
             {run.state === 'error' ? (
               <p className="ah-error" role="alert" data-testid="agent-hub-error">
-                {run.detail || run.error}
+                {taskErrorText(run.code || run.error, fa, run.detail)}
+                <code className="ah-code">{run.code || run.error}</code>
               </p>
             ) : null}
 
@@ -1063,7 +1304,7 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                   {filtered.map((agent) => (
                     <li key={agent.id} className="ah-card" data-testid={`agent-hub-card-${testIdPart(agent.id)}`}>
                       <div className="ah-card-head">
-                        <span className="ah-card-name">{agent.name}</span>
+                        <span className="ah-card-name">{agentName(agent)}</span>
                         <Badge status={agent.status} fa={fa} />
                         {agent.source === 'user'
                           ? <span className="ah-badge" data-tone="info">{fa ? 'افزودهٔ شما' : 'Added by you'}</span>
@@ -1071,7 +1312,8 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                             ? <span className="ah-badge" data-tone="ok">{fa ? 'بومی FBT' : 'FBT native'}</span>
                             : <span className="ah-badge" data-tone="muted">{fa ? 'بازبینی‌شده' : 'Reviewed'}</span>}
                       </div>
-                      <p className="ah-card-summary">{agent.summary}</p>
+                      {fa && agent.nameFa ? <span className="ah-card-sub" dir="ltr">{agent.name}</span> : null}
+                      <p className="ah-card-summary">{agentSummary(agent)}</p>
                       <div className="ah-card-meta">
                         <span data-testid="agent-hub-provider">{agent.providerName}</span>
                         <span>{ACCESS_LABELS[agent.accessModel]?.[fa ? 'fa' : 'en'] || agent.accessModel}</span>
@@ -1181,8 +1423,24 @@ export default function AgentHubPanel({ fa = false, onClose = null }) {
                   className="ah-ghost"
                   onClick={async () => {
                     const out = await getTask(task.id);
-                    if (!out.ok) { setNotice({ tone: 'warn', text: out.detail || out.code }); return; }
-                    setSelected({ id: task.agentId, name: task.agentName, providerName: task.providerName, provider: {}, status: 'LIVE', accessModel: task.priceQuote?.model || 'FREE_PUBLIC', summary: '' });
+                    if (!out.ok) { setNotice({ tone: 'warn', text: taskErrorText(out.code, fa, out.detail) }); return; }
+                    /* Open the REAL agent when it is still listed, so the result
+                       is attributed with its provider links and its Persian
+                       name. The minimal fallback keeps history readable for an
+                       agent the user has since removed; it never invents a
+                       provider URL, and it says so by carrying no provider. */
+                    const known = agents.find((agent) => agent.id === task.agentId);
+                    setSelected(known || {
+                      id: task.agentId,
+                      name: task.agentName,
+                      nameFa: null,
+                      providerName: task.providerName,
+                      provider: {},
+                      status: 'LIVE',
+                      accessModel: task.priceQuote?.model || 'FREE_PUBLIC',
+                      source: task.providerId === 'fbt-native' ? 'native' : 'reviewed',
+                      summary: ''
+                    });
                     setRun({ state: 'ready', task: out.task, error: null });
                   }}
                 >
