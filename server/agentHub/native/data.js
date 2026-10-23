@@ -414,11 +414,11 @@ export function createDataAccess(overrides = {}, {
   explorerLoader = null,
   smartMoneyLoader = null
 } = {}) {
-  const providers = lazy(() => providerLoader ? providerLoader() : import('../providers.js'));
-  const yields = lazy(() => yieldsLoader ? yieldsLoader() : import('../yields.js'));
-  const explorer = lazy(() => explorerLoader ? explorerLoader() : import('../explorerData.js'));
-  const tokenRisk = lazy(() => import('../tokenRisk.js'));
-  const smartMoney = lazy(() => smartMoneyLoader ? smartMoneyLoader() : import('../smartMoney/index.js'));
+  const providers = lazy(() => providerLoader ? providerLoader() : import('../../providers.js'));
+  const yields = lazy(() => yieldsLoader ? yieldsLoader() : import('../../yields.js'));
+  const explorer = lazy(() => explorerLoader ? explorerLoader() : import('../../explorerData.js'));
+  const tokenRisk = lazy(() => import('../../tokenRisk.js'));
+  const smartMoney = lazy(() => smartMoneyLoader ? smartMoneyLoader() : import('../../smartMoney/index.js'));
 
   const api = {
     /* ── market ── */

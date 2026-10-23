@@ -721,6 +721,16 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
                   : 'The run completed, but the agent needs a clearer input: a coin symbol (e.g. BTC or ETH), an address, or a protocol name. You can also tap one of the examples below.'}
               </p>
             ) : null}
+            {run.task.result?.data?.dataStatus === 'unavailable' ? (
+              /* A completed run whose public read failed is NOT a provider
+                 outage and NOT an empty answer. Saying which one it is keeps
+                 "data was not read" from being read as "the agent is broken". */
+              <p className="ah-note ah-note-warn" role="status" data-testid="agent-hub-data-unavailable">
+                {fa
+                  ? 'این اجرا کامل شد، اما خواندن داده از منبع عمومی در این لحظه ناموفق بود. هیچ عددی ساخته نشد. چند لحظه بعد دوباره بفرستید؛ متن نتیجه می‌گوید کدام منبع پاسخ نداد.'
+                  : 'The run completed, but the public-data read failed at this moment. No number was invented. Send it again in a moment; the result says which source did not answer.'}
+              </p>
+            ) : null}
             {run.task.replay ? <p className="ah-note">{fa ? 'این پاسخ از همان درخواست قبلی است؛ درخواست تازه‌ای ساخته نشد.' : 'This is the same earlier request; no new task was created.'}</p> : null}
             {run.task.result ? <ResultView result={run.task.result} fa={fa} /> : null}
             <p className="ah-muted ah-small">
@@ -782,9 +792,13 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
               </div>
               <p className="ah-consent-lead">
                 {detailAgent.source === 'native'
-                  ? (fa
-                    ? 'این ایجنت داخل خودِ FBT اجرا می‌شود؛ متن درخواست به هیچ ارائه‌دهندهٔ خارجی فرستاده نمی‌شود. بقیهٔ موارد را فقط اگر خودتان بخواهید اضافه می‌کنید.'
-                    : 'This agent runs inside FBT; the request is not sent to any third-party provider. Everything else is added only if you switch it on.')
+                  ? ((detailAgent.dataSources || []).length
+                    ? (fa
+                      ? 'منطق این ایجنت داخل خودِ FBT اجرا می‌شود و متن کامل درخواست به هیچ مدل ثالثی نمی‌رود. اما برای خواندن دادهٔ عمومی، همان منابع و فیلدهای فهرست‌شده در پایین فرستاده می‌شوند — و فقط پس از تأیید شما. بقیهٔ موارد را فقط اگر خودتان بخواهید اضافه می‌کنید.'
+                      : 'This agent’s logic runs inside FBT and the full request is not sent to a third-party model. Reading public data does send the sources and query fields listed below — and only after you approve them. Everything else is added only if you switch it on.')
+                    : (fa
+                      ? 'این ایجنت داخل خودِ FBT اجرا می‌شود؛ متن درخواست به هیچ ارائه‌دهندهٔ خارجی فرستاده نمی‌شود. بقیهٔ موارد را فقط اگر خودتان بخواهید اضافه می‌کنید.'
+                      : 'This agent runs inside FBT; the request is not sent to any third-party provider. Everything else is added only if you switch it on.'))
                   : (fa
                     ? 'متن درخواست همیشه ارسال می‌شود. بقیهٔ موارد فقط اگر خودتان روشن کنید. FBT هیچ داده‌ای را بدون انتخاب شما اضافه نمی‌کند.'
                     : 'The request text is always sent. Everything else only if you switch it on. FBT adds no data you did not choose.')}

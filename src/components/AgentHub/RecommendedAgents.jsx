@@ -144,8 +144,8 @@ export default function RecommendedAgents({ fa = false, onAddOwnAgent = null, na
             <h4>{fa ? 'ایجنت‌های بومی FBT' : 'FBT native agents'}</h4>
             <p className="ah-muted ah-small">
               {fa
-                ? 'این تحلیل‌ها را خودِ FBT روی دادهٔ عمومی بازار (CoinGecko، DefiLlama، GoPlus، LI.FI) محاسبه می‌کند. نیازی به اتصال حساب نیست و چیزی به سرویس دیگری فرستاده نمی‌شود. هر کارت می‌گوید داده از کجاست.'
-                : 'FBT computes these itself over public market data (CoinGecko, DefiLlama, GoPlus, LI.FI). No account connection, and nothing is sent to another service. Each card names its data source.'}
+                ? 'منطق این ایجنت‌ها داخل خودِ FBT اجرا می‌شود و به اتصال حساب نیازی نیست. پیش از هر پرس‌وجوی دادهٔ عمومی، نام منبع (CoinGecko، DefiLlama، GoPlus) و فیلدهایی که فرستاده می‌شود نمایش داده می‌شود و تا تأیید نکنید هیچ درخواستی به بیرون نمی‌رود. هر کارت می‌گوید داده از کجاست.'
+                : 'Their logic runs inside FBT and needs no account connection. Before any public-data query, the named source (CoinGecko, DefiLlama, GoPlus) and the fields that are sent are shown; nothing leaves FBT until you approve them. Each card names its data source.'}
             </p>
           </div>
           <span className="ah-native-count" data-testid="agent-hub-native-count">
