@@ -29,6 +29,16 @@
 
 /* ── the ticket ──────────────────────────────────────────────────────────── */
 .xcc-ticket { display: flex; flex-direction: column; }
+.xcc-data-consent {
+  margin-bottom: 12px; padding: 10px 11px; border-radius: 11px;
+  background: var(--ios-panel-2, rgba(255,255,255,.04));
+  box-shadow: inset 0 0 0 1px rgba(96, 228, 235, .23);
+}
+.xcc-data-consent label { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.xcc-data-consent input { margin-top: 3px; accent-color: var(--rgb-1, #4ad2ff); flex: 0 0 auto; }
+.xcc-data-consent label > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.xcc-data-consent strong { color: var(--text-1); font-size: 11.5px; }
+.xcc-data-consent label span span { color: var(--text-3); font-size: 10.5px; line-height: 1.65; }
 .xcc-leg { display: flex; flex-direction: column; gap: 7px; }
 .xcc-leg-label {
   font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3);

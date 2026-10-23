@@ -11,7 +11,7 @@
  *   Yield Optimizer             DefiLlama yields, safety-filtered upstream
  *   Liquidity Pool Analyzer     APY quality, turnover, IL and exit depth
  *   Lending Risk Agent          lending supply rates + protocol incident facts
- *   Cross-chain Swap Assistant  a read-only LI.FI route ESTIMATE
+ *   Cross-chain Swap Assistant  a local draft, then an approved Bridge/Swap quote
  *   Token Risk Scanner          GoPlus contract flags + DEX liquidity/holders
  *   Wallet Exposure Auditor     a wallet's priced holdings and observed risk
  *   Protocol Security Brief     TVL, audits, age and incident history
@@ -23,10 +23,12 @@
  *
  * NOTHING HERE HAS EXECUTION AUTHORITY. There is no import of a signer, a swap
  * builder or a payment path; the backtest is arithmetic and the bridge agent
- * reads a quote without ever asking LI.FI to build a transaction.
+ * returns a local draft. Bridge/Swap separately asks permission before any
+ * route or quote lookup.
  */
 
 import {
+  BACKTEST_DEADLINE_MS,
   CHAINS,
   CHAIN_LABELS,
   GOPLUS_CHAINS,
@@ -281,7 +283,6 @@ const aiTradingAnalyst = {
   summaryFa: 'روند، مومنتوم، نوسان و سطوح حمایت/مقاومت را از کندل‌های واقعی می‌خواند؛ بازار را توصیف می‌کند و هیچ سفارشی نمی‌گذارد.',
   category: 'trading',
   capabilities: ['price-action', 'trend', 'momentum', 'volatility', 'levels'],
-  dataSources: ['CoinGecko'],
   examples: ['Analyse ETH on the daily timeframe', 'BTC trend and volatility'],
   examplesFa: ['ETH را در تایم‌فریم روزانه تحلیل کن', 'روند و نوسان BTC'],
   inputHint: null,
@@ -389,7 +390,13 @@ const smartMoneyTracker = {
   summaryFa: 'جریان انتقال‌های بزرگ مشاهده‌شده، انباشت به تفکیک توکن و تمرکز هولدرها؛ اندازه‌گیری‌شده، نه روایت‌شده.',
   category: 'trading',
   capabilities: ['whale-flow', 'token-flow', 'holders', 'liquidity'],
-  dataSources: ['DEX pairs', 'Holder ledger', 'Smart-money stream'],
+  dataSources: [
+    'DexScreener',
+    'Blockscout',
+    'Public EVM RPC / Etherscan-compatible explorer',
+    'CoinGecko / CryptoCompare / Coinbase',
+    'Solana public RPC'
+  ],
   examples: ['Smart money flow for token 0x… on Base', 'Where is large-wallet flow going today?'],
   examplesFa: ['جریان پول هوشمند برای توکن 0x… روی Base', 'امروز جریان کیف‌پول‌های بزرگ کجاست؟'],
   async run({ request, data, fa, at }) {
@@ -444,7 +451,7 @@ const smartMoneyTracker = {
       };
     }
 
-    const overview = await withDeadline(data.smartMoneyOverview('24h'), { ms: 8_500 });
+    const overview = await withDeadline(data.smartMoneyOverview('24h', { timeoutMs: 8_000 }), { ms: 8_500 });
     if (!overview.ok || !overview.value) {
       return needInput(fa, {
         title: this.name,
@@ -609,8 +616,22 @@ const strategyBacktestingAgent = {
   examples: ['Backtest SMA 20/50 on BTC', 'DCA weekly on ETH for a year'],
   examplesFa: ['بک‌تست SMA 20/50 روی BTC', 'DCA هفتگی روی ETH برای یک سال'],
   async run({ request, data, fa, at }) {
-    const resolved = await resolveCoin(data, request);
-    if (!resolved.ok) {
+    const deadlineAt = Date.now() + BACKTEST_DEADLINE_MS;
+    const resolvedRead = await withDeadline(resolveCoin(data, request), {
+      ms: BACKTEST_DEADLINE_MS,
+      code: 'BACKTEST_TIMEOUT'
+    });
+    if (!resolvedRead.ok) {
+      return {
+        title: this.name,
+        text: [`## ${fa ? 'مهلت خواندن داده تمام شد' : 'Backtest data deadline reached'}`,
+          fa ? 'خواندن نماد یا تاریخچه در مهلت ۲۵ ثانیه‌ای کامل نشد؛ نتیجه‌ای ساخته نمی‌شود.' : 'Symbol resolution did not finish within the 25-second outer budget; no result was invented.',
+          '', footer(fa, [['CoinGecko', resolvedRead.code || 'BACKTEST_TIMEOUT']], at)].join('\n'),
+        citations: [], dataStatus: 'unavailable'
+      };
+    }
+    const resolved = resolvedRead.value;
+    if (!resolved?.ok) {
       return needInput(fa, {
         title: this.name,
         need: fa ? 'نماد کوین را بدهید (و اگر می‌خواهید بنویسید «DCA» برای خرید دوره‌ای).' : 'Give a coin symbol (add “DCA” if you want a recurring-buy test).',
@@ -618,7 +639,11 @@ const strategyBacktestingAgent = {
       });
     }
     const coin = resolved.coin;
-    const candles = await withDeadline(data.candles(coin.id, 365), { ms: 10_000 });
+    const remainingMs = Math.max(250, Math.min(14_000, deadlineAt - Date.now()));
+    const candles = await withDeadline(data.candles(coin.id, 365, { timeoutMs: remainingMs }), {
+      ms: remainingMs,
+      code: 'BACKTEST_TIMEOUT'
+    });
     const closes = candles.ok ? closesFromCandles(candles.value) : [];
     if (!candles.ok || closes.length < 70) {
       return {
@@ -700,7 +725,7 @@ const yieldOptimizer = {
   examples: ['Best stablecoin yields on Arbitrum', 'USDC yield opportunities'],
   examplesFa: ['بهترین بازده استیبل‌کوین روی Arbitrum', 'فرصت‌های بازده USDC'],
   async run({ request, data, fa, at }) {
-    const out = await withDeadline(data.yields(), { ms: 12_000 });
+    const out = await withDeadline(data.yields({ timeoutMs: 12_000 }), { ms: 12_000 });
     if (!out.ok || !out.value) {
       return {
         title: this.name,
@@ -771,7 +796,7 @@ const liquidityPoolAnalyzer = {
   examples: ['Analyse the ETH/USDC pool', 'Deepest liquidity pools on Base'],
   examplesFa: ['استخر ETH/USDC را تحلیل کن', 'عمیق‌ترین استخرهای نقدینگی روی Base'],
   async run({ request, data, fa, at }) {
-    const out = await withDeadline(data.yields(), { ms: 12_000 });
+    const out = await withDeadline(data.yields({ timeoutMs: 12_000 }), { ms: 12_000 });
     if (!out.ok || !out.value) {
       return {
         title: this.name,
@@ -848,7 +873,7 @@ const lendingRiskAgent = {
   async run({ request, data, fa, at }) {
     const LENDING = new Set(['aave-v3', 'compound-v3', 'morpho-blue', 'venus-core-pool', 'spark', 'sparklend']);
     const [yieldsOut, incidentsOut] = await Promise.all([
-      withDeadline(data.yields(), { ms: 12_000 }),
+      withDeadline(data.yields({ timeoutMs: 12_000 }), { ms: 12_000 }),
       withDeadline(data.incidents(), { ms: 9_000 })
     ]);
     if (!yieldsOut.ok || !yieldsOut.value) {
@@ -925,97 +950,66 @@ const crossChainSwapAssistant = {
   slug: 'cross-chain-swap-assistant',
   name: 'Cross-chain Swap Assistant',
   nameFa: 'دستیار سواپ بین‌زنجیره‌ای',
-  summary: 'Returns a read-only LI.FI route estimate for moving an asset across chains: output, fees, duration and bridge used.',
-  summaryFa: 'یک برآورد مسیر فقط‌خواندنی از LI.FI برای انتقال دارایی بین زنجیره‌ها می‌دهد: خروجی، کارمزد، زمان و پل استفاده‌شده.',
+  summary: 'Turns a chat request into an in-app swap draft. No route or quote is requested until the user opens Bridge/Swap and approves LI.FI data sharing.',
+  summaryFa: 'درخواست چت را به پیش‌نویس سواپ درون‌برنامه‌ای تبدیل می‌کند. تا وقتی کاربر Bridge/Swap را باز نکند و ارسال داده به LI.FI را نپذیرد، هیچ مسیری یا قیمتی درخواست نمی‌شود.',
   category: 'defi',
-  capabilities: ['bridge-estimate', 'route', 'fees', 'duration'],
-  dataSources: ['LI.FI quote'],
+  capabilities: ['bridge-intent', 'route', 'fees', 'duration'],
+  dataSources: [],
   examples: ['Swap 100 USDC from Arbitrum to Base', 'Route 1 ETH from Ethereum to Arbitrum'],
   examplesFa: ['۱۰۰ USDC را از Arbitrum به Base سواپ کن', '۱ ETH را از Ethereum به Arbitrum مسیریابی کن'],
-  async run({ request, data, fa, at }) {
+  async run({ request, fa }) {
     const fromChain = request.chains[0] || null;
     const toChain = request.chains[1] || null;
     const toMatch = request.text.match(/\bto\s+\$?([A-Za-z][A-Za-z0-9]{1,9})\b/i)?.[1] || null;
-    /* A chain name after "to" is a destination chain, not a token. A token
-       after "to" is the destination asset. When the sentence names only an
-       amount and two chains, the same asset is assumed — and the output says
-       so instead of silently choosing something else. */
+    /* A chain after "to" is the destination chain; otherwise it can be the
+       destination token. If omitted, keep the same symbol as a draft. */
     const explicitToToken = toMatch && !CHAINS[String(toMatch).toLowerCase()] && !/^(the|a|an)$/i.test(toMatch)
       ? String(toMatch).toUpperCase()
       : null;
-    const outToken = explicitToToken || request.amountToken;
+    const toToken = explicitToToken || request.amountToken;
     if (!request.amount || !request.amountToken || !fromChain || !toChain) {
       return needInput(fa, {
         title: this.name,
         need: fa
-          ? 'برای برآورد مسیر به مقدار، دارایی، زنجیرهٔ مبدأ و مقصد نیاز است — مثلاً «۱۰۰ USDC از Arbitrum به USDC روی Base». بدون مقدار، مسیر ساخته نمی‌شود.'
-          : 'A route estimate needs an amount, an asset, a source chain and a destination chain — e.g. “100 USDC from Arbitrum to USDC on Base”. No amount means no route.',
+          ? 'برای ساخت پیش‌نویس به مقدار، دارایی، زنجیرهٔ مبدأ و مقصد نیاز است — مثلاً «۱۰۰ USDC از Arbitrum به Base». هنوز هیچ قیمتی درخواست نمی‌شود.'
+          : 'A draft needs an amount, asset, source chain and destination chain — e.g. “100 USDC from Arbitrum to Base”. No quote is requested yet.',
         examples: fa ? this.examplesFa : this.examples
       });
     }
     if (String(fromChain) === String(toChain)) {
       return needInput(fa, {
         title: this.name,
-        need: fa ? 'مبدأ و مقصد یکسان است؛ برای سواپ درون‌زنجیره‌ای از بخش Swap خود FBT استفاده کنید. این ایجنت مخصوص مسیر بین‌زنجیره‌ای است.' : 'Source and destination are the same chain. Use FBT’s own Swap for that; this agent is for cross-chain routes.',
+        need: fa ? 'مبدأ و مقصد یکسان است؛ برای سواپ درون‌زنجیره‌ای از بخش Swap خود FBT استفاده کنید.' : 'Source and destination are the same chain; use FBT’s Swap for an in-chain trade.',
         examples: fa ? this.examplesFa : this.examples
       });
     }
-    const NATIVE_DECIMALS = { ETH: 18, BNB: 18, MATIC: 18, POL: 18, AVAX: 18, MNT: 18, SOL: 9, USDC: 6, USDT: 6, DAI: 18, WBTC: 8 };
-    const fromDecimals = NATIVE_DECIMALS[request.amountToken] ?? 18;
-    const atomic = BigInt(Math.round(request.amount * 10 ** fromDecimals)).toString();
-    const quoted = await withDeadline(data.bridgeQuote({
-      fromChain: String(fromChain),
-      toChain: String(toChain),
+
+    const amount = request.amountText || String(request.amount);
+    const chatAction = {
+      type: 'cross_chain_swap',
+      fromChain,
+      toChain,
       fromToken: request.amountToken,
-      toToken: outToken,
-      fromAmount: atomic,
-      slippage: '0.005'
-    }), { ms: 12_000 });
-    if (!quoted.ok || !quoted.value?.ok) {
-      const reason = quoted.value?.body?.message || quoted.value?.body?.error || quoted.code || 'UPSTREAM_FAILED';
-      return {
-        title: this.name,
-        text: [
-          `## ${fa ? 'مسیری برنگشت' : 'No route returned'}`,
-          fa ? `LI.FI برای این جفت پاسخی نداد: ${String(reason).slice(0, 160)}` : `LI.FI returned no route for that pair: ${String(reason).slice(0, 160)}`,
-          fa ? 'هیچ عدد جایگزینی ساخته نشد. زنجیره‌ها، توکن یا مقدار را تغییر دهید.' : 'No substitute number was produced. Try different chains, tokens or an amount.',
-          '',
-          footer(fa, [['LI.FI quote', 'unavailable']], at)
-        ].join('\n'),
-        citations: [], dataStatus: 'unavailable'
-      };
-    }
-    const body = quoted.value.value || quoted.value.body || {};
-    const est = body.estimate || {};
-    const tokenInfo = await withDeadline(data.tokenInfo(toChain, outToken), { ms: 6_000 });
-    const toDecimals = NATIVE_DECIMALS[outToken] ?? (Number(tokenInfo.ok ? tokenInfo.value?.decimals : NaN) || 18);
-    const outAmount = Number(est.toAmount || 0) / 10 ** toDecimals;
-    const fees = Array.isArray(est.feeCosts) ? est.feeCosts : [];
-    const gas = Array.isArray(est.gasCosts) ? est.gasCosts : [];
-    const feeUsd = fees.reduce((s, f) => s + (Number(f.amountUSD) || 0), 0) + gas.reduce((s, g) => s + (Number(g.amountUSD) || 0), 0);
-    const lines = [
-      `# ${this.name}`,
-      '',
-      `## ${fa ? 'مسیر برآوردشده' : 'Estimated route'}`,
-      `- ${num(request.amount, 6)} ${request.amountToken} ${fa ? 'روی' : 'on'} ${CHAIN_LABELS[fromChain] || fromChain} → ${num(outAmount, 6)} ${outToken} ${fa ? 'روی' : 'on'} ${CHAIN_LABELS[toChain] || toChain}${explicitToToken ? '' : (fa ? ' (توکن مقصد ذکر نشده؛ همان دارایی مبدأ فرض شد)' : ' (destination token not stated; the source asset was assumed)')}`,
-      `- ${fa ? 'ابزار مسیریابی' : 'Routing tool'}: ${est.tool || body.tool || '—'}`,
-      `- ${fa ? 'حداقل دریافتی (با اسلیپیج ۰٫۵٪)' : 'Minimum received (0.5% slippage)'}: ${num(Number(est.toAmountMin || 0) / 10 ** toDecimals, 6)} ${outToken}`,
-      `- ${fa ? 'زمان تقریبی' : 'Estimated duration'}: ${est.executionDuration != null ? `${Math.max(1, Math.round(Number(est.executionDuration) / 60))} min` : '—'}`,
-      `- ${fa ? 'کارمزد + گس برآوردی' : 'Fees + gas estimate'}: ${usd(feeUsd)}`,
-      `- ${fa ? 'ارزش ورودی/خروجی' : 'Input/output value'}: ${usd(est.fromAmountUSD)} → ${usd(est.toAmountUSD)}`,
-      '',
-      `## ${fa ? 'این چیست و چه چیزی نیست' : 'What this is and is not'}`,
-      fa
-        ? '- این یک «برآورد» از LI.FI است: نرخ و مسیر بین لحظهٔ خواندن و اجرا تغییر می‌کند.\n- هیچ تراکنشی ساخته، امضا یا ارسال نشد. FBT برای این برآورد آدرس کیف‌پول شما را نمی‌خواهد.\n- برای اجرا، مسیر را در بخش Bridge/Swap خود برنامه با کیف‌پول خودتان بررسی و تأیید کنید.'
-        : '- This is an ESTIMATE from LI.FI: the rate and route move between this read and any execution.\n- No transaction was built, signed or sent. FBT did not ask for your wallet address for this estimate.\n- To execute, review and confirm the route in the app’s own Bridge/Swap with your wallet.',
-      '',
-      footer(fa, [['LI.FI quote', 'live']], at)
-    ];
+      toToken,
+      amount,
+      assumedDestinationToken: !explicitToToken
+    };
     return {
       title: this.name,
-      text: lines.join('\n'),
-      citations: ['https://li.fi/'],
-      dataStatus: 'live'
+      text: [
+        `## ${fa ? 'پیش‌نویس سواپ' : 'Swap draft'}`,
+        `- ${amount} ${request.amountToken} · ${CHAIN_LABELS[fromChain] || fromChain} → ${CHAIN_LABELS[toChain] || toChain}`,
+        `- ${fa ? 'دارایی مقصد' : 'Destination asset'}: ${toToken}${explicitToToken ? '' : (fa ? ' (همان دارایی مبدأ، فقط برای پیش‌نویس)' : ' (same as source, draft only)')}`,
+        '',
+        fa
+          ? 'هنوز هیچ درخواستی به LI.FI ارسال نشده است. برای ادامه، Bridge/Swap را باز کنید؛ پیش از دریافت قیمت، زنجیره، توکن، مقدار و در صورت اتصال، آدرس عمومی لازم برای مسیر نمایش داده می‌شود و رضایت جداگانه می‌گیرد.'
+          : 'Nothing has been sent to LI.FI. Open Bridge/Swap to continue; before a quote, it will disclose the chain, token, amount and any public address needed for routing, then ask for separate approval.',
+        '',
+        fa ? 'هیچ تراکنشی ساخته، امضا یا ارسال نشده است.' : 'No transaction was built, signed or sent.'
+      ].join('\n'),
+      citations: [],
+      dataStatus: 'intent',
+      chatAction
     };
   }
 };
@@ -1028,7 +1022,7 @@ const tokenRiskScanner = {
   summaryFa: 'هانی‌پات، مالیات، قابلیت ضرب، پروکسی، تمرکز هولدر و نقدینگی یک قرارداد را بررسی می‌کند — و «نامشخص» را نامشخص نگه می‌دارد.',
   category: 'security',
   capabilities: ['honeypot', 'taxes', 'ownership', 'liquidity', 'holders'],
-  dataSources: ['GoPlus', 'DEX pairs'],
+  dataSources: ['GoPlus', 'DexScreener', 'Blockscout', 'Solana public RPC'],
   examples: ['Scan 0x… on Base', 'Is this token a honeypot? 0x…'],
   examplesFa: ['قرارداد 0x… روی Base را اسکن کن', 'آیا این توکن هانی‌پات است؟ 0x…'],
   async run({ request, data, fa, at }) {
@@ -1143,7 +1137,7 @@ const walletExposureAuditor = {
   summaryFa: 'دارایی‌های قابل‌مشاهدهٔ کیف‌پول را قیمت می‌زند، تمرکز را می‌سنجد و پرچم‌های ریسک مشاهده‌شده را فهرست می‌کند — بدون اتصال و بدون امضا.',
   category: 'security',
   capabilities: ['wallet', 'holdings', 'concentration', 'risk-flags'],
-  dataSources: ['Blockscout / explorer', 'DEX prices'],
+  dataSources: ['Blockscout / Etherscan-compatible explorer', 'DexScreener', 'CoinGecko', 'Solana public RPC'],
   examples: ['Audit wallet 0x…', 'What is this wallet exposed to? 0x…'],
   examplesFa: ['کیف‌پول 0x… را بررسی کن', 'این کیف‌پول در معرض چه چیزی است؟ 0x…'],
   async run({ request, data, fa, at }) {
@@ -1358,6 +1352,15 @@ export async function runNativeAgent(slug, { text = '', context = null } = {}, d
     const rawTitle = out.title || agent.name;
     const title = fa && agent.nameFa ? String(rawTitle).split(agent.name).join(agent.nameFa) : rawTitle;
     const dataStatus = out.dataStatus || 'live';
+    const chatAction = out.chatAction?.type === 'cross_chain_swap' ? {
+      type: 'cross_chain_swap',
+      fromChain: out.chatAction.fromChain,
+      toChain: out.chatAction.toChain,
+      fromToken: String(out.chatAction.fromToken || '').slice(0, 16),
+      toToken: String(out.chatAction.toToken || '').slice(0, 16),
+      amount: String(out.chatAction.amount || '').slice(0, 40),
+      assumedDestinationToken: out.chatAction.assumedDestinationToken === true
+    } : null;
     return {
       ok: true,
       agent,
@@ -1372,6 +1375,7 @@ export async function runNativeAgent(slug, { text = '', context = null } = {}, d
         /* `awaiting_input` is a completed run that needs a better question.
            Saying so explicitly stops the UI from painting it as a failure. */
         needsInput: dataStatus === 'awaiting_input',
+        ...(chatAction ? { chatAction } : {}),
         readAt: at,
         request: {
           symbol: request.symbol,
@@ -1392,6 +1396,56 @@ export async function runNativeAgent(slug, { text = '', context = null } = {}, d
 }
 
 /** Metadata used by the catalog and by tests. No user data, no network. */
+const NATIVE_DATA_DISCLOSURES = Object.freeze({
+  'ai-trading-analyst': [
+    { source: 'CoinGecko', en: 'FBT sends the resolved coin ID (or search symbol for an unknown asset), USD currency and requested candle range to read public prices. The full natural-language prompt is not sent.', fa: 'FBT برای خواندن قیمت عمومی، شناسهٔ کوین (یا نماد جست‌وجو برای دارایی ناشناخته)، ارز USD و بازهٔ کندل را به CoinGecko می‌فرستد؛ متن کامل درخواست ارسال نمی‌شود.' }
+  ],
+  'smart-money-tracker': [
+    { source: 'DexScreener', en: 'Token or mint addresses and chain IDs are queried for public pairs, liquidity and trading data; overview reads public token profiles and pairs too. The full chat is not sent.', fa: 'آدرس توکن یا مینت و شناسهٔ زنجیره برای جفت‌ها، نقدینگی و معامله‌های عمومی پرس‌وجو می‌شود؛ نمای کلی پروفایل و جفت‌های عمومی توکن را هم می‌خواند. متن کامل گفتگو ارسال نمی‌شود.' },
+    { source: 'Blockscout', en: 'For EVM token or wallet reads, public contract/address IDs are queried for holders, balances, history, counters and labels. Overview may query public addresses seen in chain events; no private key or wallet connection is used.', fa: 'برای خواندن توکن یا کیف‌پول EVM، شناسهٔ عمومی قرارداد/آدرس جهت هولدر، موجودی، تاریخچه، شمارنده و برچسب پرس‌وجو می‌شود. نمای کلی ممکن است آدرس‌های عمومیِ دیده‌شده در رویدادهای زنجیره را بخواند؛ کلید خصوصی یا اتصال کیف‌پول استفاده نمی‌شود.' },
+    { source: 'Public EVM RPC / Etherscan-compatible explorer', en: 'Overview reads public block numbers, transfer/liquidity logs and (when configured) explorer token transfers. Requests contain chain, block range, event topics and public token IDs—not the chat text.', fa: 'نمای کلی شمارهٔ بلاک‌ها، رویدادهای انتقال/نقدینگی و در صورت پیکربندی، انتقال توکن در اکسپلورر را می‌خواند. پرس‌وجو شامل زنجیره، بازهٔ بلاک، موضوع رویداد و شناسهٔ عمومی توکن است، نه متن گفتگو.' },
+    { source: 'CoinGecko / CryptoCompare / Coinbase', en: 'Price lookup sends public asset IDs and the requested quote currency. CoinGecko is tried first; CryptoCompare and Coinbase are fallbacks if needed. No wallet address or chat prompt is sent to price services.', fa: 'برای قیمت، شناسهٔ عمومی دارایی و ارز مظنه ارسال می‌شود. ابتدا CoinGecko و در صورت نیاز CryptoCompare و Coinbase به‌عنوان جایگزین بررسی می‌شوند. آدرس کیف‌پول یا متن گفتگو به سرویس قیمت ارسال نمی‌شود.' },
+    { source: 'Solana public RPC', en: 'Only for a Solana token or wallet read: the public mint/address is queried for holder, balance or activity data. No signing or transaction is requested.', fa: 'فقط برای خواندن توکن یا کیف‌پول Solana، مینت/آدرس عمومی جهت دریافت دادهٔ هولدر، موجودی یا فعالیت پرس‌وجو می‌شود. امضا یا تراکنش درخواست نمی‌شود.' }
+  ],
+  'token-research-agent': [
+    { source: 'CoinGecko', en: 'The resolved coin ID (or search symbol), USD currency and requested 90-day candle range are used for public market data.', fa: 'شناسهٔ کوین (یا نماد جست‌وجو)، ارز USD و بازهٔ کندل ۹۰روزه برای دادهٔ عمومی بازار استفاده می‌شود.' },
+    { source: 'DefiLlama', en: 'FBT reads the public protocol catalogue, then filters it inside FBT using the requested asset/protocol; the full prompt is not sent.', fa: 'FBT فهرست عمومی پروتکل‌ها را می‌خواند و فیلتر دارایی/پروتکل را داخل FBT انجام می‌دهد؛ متن کامل درخواست ارسال نمی‌شود.' },
+    { source: 'GoPlus', en: 'Only when you provide a contract: its public contract address and chain are sent for a read-only risk scan.', fa: 'فقط اگر قرارداد بدهید، آدرس عمومی قرارداد و زنجیره برای اسکن فقط‌خواندنی ریسک ارسال می‌شود.' }
+  ],
+  'strategy-backtesting-agent': [
+    { source: 'CoinGecko daily candles', en: 'FBT requests the resolved coin ID, USD currency and up to 365 days of public daily closing prices. The strategy text stays inside FBT.', fa: 'FBT شناسهٔ کوین، ارز USD و حداکثر ۳۶۵ روز قیمت پایانی روزانهٔ عمومی را می‌خواند؛ متن استراتژی داخل FBT می‌ماند.' }
+  ],
+  'yield-optimizer': [
+    { source: 'DefiLlama yields', en: 'FBT requests the public yield-pool feed. Any requested chain, asset or protocol filter is applied inside FBT; no wallet address or full prompt is sent.', fa: 'FBT فید عمومی استخرهای بازده را می‌خواند. فیلتر زنجیره، دارایی یا پروتکل داخل FBT انجام می‌شود؛ آدرس کیف‌پول یا متن کامل درخواست ارسال نمی‌شود.' }
+  ],
+  'liquidity-pool-analyzer': [
+    { source: 'DefiLlama yields', en: 'FBT requests the public pool feed and applies the named pair/chain filter inside FBT; no wallet address or full prompt is sent.', fa: 'FBT فید عمومی استخرها را می‌خواند و فیلتر جفت/زنجیره را داخل FBT اعمال می‌کند؛ آدرس کیف‌پول یا متن کامل درخواست ارسال نمی‌شود.' }
+  ],
+  'lending-risk-agent': [
+    { source: 'DefiLlama yields', en: 'FBT reads the public lending-pool feed and filters by the requested chain, asset or protocol inside FBT.', fa: 'FBT فید عمومی استخرهای وام‌دهی را می‌خواند و فیلتر زنجیره، دارایی یا پروتکل را داخل FBT انجام می‌دهد.' },
+    { source: 'DefiLlama hacks', en: 'FBT reads the public incident catalogue and matches the requested protocol locally; no wallet data is sent.', fa: 'FBT فهرست عمومی رخدادها را می‌خواند و پروتکل را داخل FBT تطبیق می‌دهد؛ دادهٔ کیف‌پول ارسال نمی‌شود.' }
+  ],
+  'cross-chain-swap-assistant': [
+    { source: 'Local intent only', en: 'This agent only parses a swap draft inside FBT. It makes no LI.FI call. If you open Bridge/Swap, a separate consent notice appears before LI.FI receives chain, token, amount and optional public wallet/destination details.', fa: 'این ایجنت فقط پیش‌نویس سواپ را داخل FBT می‌سازد و LI.FI را صدا نمی‌زند. در صورت بازکردن Bridge/Swap، پیش از ارسال زنجیره، توکن، مقدار و در صورت وجود آدرس عمومی کیف‌پول/مقصد به LI.FI، رضایت جداگانه نمایش داده می‌شود.' }
+  ],
+  'token-risk-scanner': [
+    { source: 'GoPlus', en: 'Only for supported EVM chains, the public token contract address and chain are sent for a read-only risk report; GoPlus is not called for Solana.', fa: 'فقط در زنجیره‌های EVM پشتیبانی‌شده، آدرس عمومی قرارداد و زنجیره برای گزارش ریسکِ فقط‌خواندنی ارسال می‌شود؛ GoPlus برای Solana فراخوانی نمی‌شود.' },
+    { source: 'DexScreener', en: 'The public token/mint address and chain are queried for pair, liquidity and market signals; no wallet connection is used.', fa: 'آدرس عمومی توکن/مینت و زنجیره برای جفت، نقدینگی و نشانه‌های بازار پرس‌وجو می‌شود؛ اتصال کیف‌پول استفاده نمی‌شود.' },
+    { source: 'Blockscout', en: 'For EVM tokens, the public contract address is used to query holder concentration and token facts.', fa: 'برای توکن‌های EVM، آدرس عمومی قرارداد جهت خواندن تمرکز هولدرها و اطلاعات توکن پرس‌وجو می‌شود.' },
+    { source: 'Solana public RPC', en: 'For a Solana mint, the public mint address is queried for supply and largest-holder data; no signing or transaction is requested.', fa: 'برای مینت Solana، آدرس عمومی مینت جهت دریافت عرضه و بزرگ‌ترین هولدرها پرس‌وجو می‌شود؛ امضا یا تراکنش درخواست نمی‌شود.' }
+  ],
+  'wallet-exposure-auditor': [
+    { source: 'Blockscout / Etherscan-compatible explorer', en: 'The public EVM wallet address and chain are queried for balances, history, counters and labels; an explorer fast path is used only when configured. No connection, signature or private key is used.', fa: 'آدرس عمومی کیف‌پول EVM و زنجیره برای موجودی، تاریخچه، شمارنده و برچسب پرس‌وجو می‌شود؛ مسیر اکسپلورر فقط در صورت پیکربندی استفاده می‌شود. اتصال، امضا یا کلید خصوصی لازم نیست.' },
+    { source: 'DexScreener', en: 'Public token identifiers found in the wallet are queried for pair prices and liquidity; the wallet address is not sent to this price lookup.', fa: 'شناسهٔ عمومی توکن‌های موجود در کیف‌پول برای قیمت جفت‌ها و نقدینگی پرس‌وجو می‌شود؛ آدرس کیف‌پول به این جست‌وجوی قیمت ارسال نمی‌شود.' },
+    { source: 'CoinGecko', en: 'CoinGecko may receive public asset IDs for SOL pricing or optional historical exit analysis; the wallet address itself is not sent.', fa: 'CoinGecko ممکن است شناسهٔ عمومی دارایی را برای قیمت SOL یا تحلیل اختیاری قیمت تاریخی دریافت کند؛ خود آدرس کیف‌پول ارسال نمی‌شود.' },
+    { source: 'Solana public RPC', en: 'For a Solana wallet, its public address is queried for signatures, SOL balance and token accounts. This is a read-only request with no signature or transaction.', fa: 'برای کیف‌پول Solana، آدرس عمومی جهت امضاهای ثبت‌شده، موجودی SOL و حساب‌های توکن پرس‌وجو می‌شود. درخواست فقط‌خواندنی است و امضا یا تراکنشی ندارد.' }
+  ],
+  'protocol-security-brief': [
+    { source: 'DefiLlama protocols', en: 'FBT reads the public protocol catalogue and requests metadata for the matched protocol slug/name.', fa: 'FBT فهرست عمومی پروتکل‌ها را می‌خواند و فرادادهٔ نام/شناسهٔ پروتکلِ تطبیق‌یافته را درخواست می‌کند.' },
+    { source: 'DefiLlama hacks', en: 'FBT reads the public incident catalogue and filters it inside FBT for the matched protocol; no wallet data is sent.', fa: 'FBT فهرست عمومی رخدادها را می‌خواند و داخل FBT بر اساس پروتکل فیلتر می‌کند؛ دادهٔ کیف‌پول ارسال نمی‌شود.' }
+  ]
+});
+
 export function nativeAgentCatalog() {
   return NATIVE_AGENTS.map((a) => ({
     slug: a.slug,
@@ -1405,6 +1459,7 @@ export function nativeAgentCatalog() {
     examplesFa: [...a.examplesFa],
     inputHint: a.inputHint || null,
     inputHintFa: a.inputHintFa || null,
-    dataSources: [...a.dataSources]
+    dataSources: [...a.dataSources],
+    dataDisclosure: (NATIVE_DATA_DISCLOSURES[a.slug] || []).map((row) => ({ ...row }))
   }));
 }

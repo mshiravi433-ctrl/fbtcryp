@@ -42,11 +42,15 @@ export function buildConsentPayload({ taskText, categories, context = {} } = {})
   };
 }
 
-export function consentRecord({ provider, categories, hash, termsVersion = null, privacyVersion = null, scope = 'per_task', at = Date.now() }) {
+export function consentRecord({ provider, categories, hash, termsVersion = null, privacyVersion = null, scope = 'per_task', at = Date.now(), nativeDataApproved = false, nativeDataSources = [] }) {
   return {
     providerId: provider.id,
     contextCategories: [...categories],
     approvedContextHash: hash,
+    nativeDataApproved: nativeDataApproved === true,
+    nativeDataSources: nativeDataApproved === true
+      ? [...new Set((Array.isArray(nativeDataSources) ? nativeDataSources : []).map((source) => String(source).slice(0, 80)))].slice(0, 8)
+      : [],
     termsVersion: termsVersion ? String(termsVersion).slice(0, 40) : null,
     privacyVersion: privacyVersion ? String(privacyVersion).slice(0, 40) : null,
     scope: scope === 'persistent' ? 'persistent' : 'per_task',

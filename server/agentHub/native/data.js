@@ -8,12 +8,12 @@
  * The point of this file is that it does NOT add a data source. Every reader
  * here delegates to a module the app already ships and already audits:
  *
- *   prices / candles     server/providers.js      (CoinGecko + CoinLore backup)
+ *   prices / candles     server/providers.js      (CoinGecko; native detail is single-shot, no CoinLore fallback)
  *   yields               server/yields.js         (DefiLlama, safety-filtered)
  *   protocols / hacks    server/explorerData.js   (DefiLlama)
  *   token security       server/tokenRisk.js      (GoPlus, keyless)
- *   token / wallet intel server/smartMoney        (DexScreener + Blockscout)
- *   bridge routes        server/lifi.js           (LI.FI quote, read-only)
+ *   token / wallet intel server/smartMoney        (DexScreener, Blockscout, EVM/Solana RPC, explorer and price sources)
+ *   bridge intent        local parser only; LI.FI is reached by Bridge/Swap after separate UI consent
  *
  * Two rules make a native agent honest instead of impressive:
  *
@@ -32,7 +32,8 @@
 export const NATIVE_DATA_SCHEMA = 'fbt.agent-hub.native-data.v1';
 
 /** Per-read budget. Four reads run in parallel, so this is the agent's worst case. */
-export const READ_DEADLINE_MS = 9_000;
+export const READ_DEADLINE_MS = 14_000;
+export const BACKTEST_DEADLINE_MS = 25_000;
 
 /* Chain names as people type them. Only chains the app can read today. */
 export const CHAINS = Object.freeze({
@@ -274,10 +275,12 @@ export function extractRequest(text = '') {
   const protocol = protocolEn || protocolFa;
 
   const AMOUNT_STOP = new Set(['ON', 'IN', 'AT', 'TO', 'FROM', 'PER', 'FOR', 'AND', 'OF', 'WITH', 'BY', 'THE', 'A', 'AN']);
-  const rawAmount = amountMatch ? Number(amountMatch[1].replace(',', '')) : null;
+  const rawAmountText = amountMatch ? amountMatch[1].replace(/,/g, '') : null;
+  const rawAmount = rawAmountText == null ? null : Number(rawAmountText);
   const rawAmountToken = amountMatch ? amountMatch[2] : null;
   const amountUsable = amountMatch && !AMOUNT_STOP.has(String(rawAmountToken).toUpperCase());
   const amount = amountUsable && Number.isFinite(rawAmount) && rawAmount > 0 ? rawAmount : null;
+  const amountText = amount != null ? rawAmountText : null;
   const amountToken = amountUsable ? rawAmountToken : null;
 
   const pair = normalized.match(/\b([A-Za-z0-9]{2,10})\s*(?:\/|-)\s*([A-Za-z0-9]{2,10})\b/);
@@ -294,6 +297,7 @@ export function extractRequest(text = '') {
     symbolCandidates,
     protocolQuery: protocol,
     amount,
+    amountText,
     amountToken: amountToken ? amountToken.toUpperCase() : null,
     pair: pair ? [pair[1].toUpperCase(), pair[2].toUpperCase()] : null
   };
@@ -302,11 +306,11 @@ export function extractRequest(text = '') {
 /**
  * The canonical CoinGecko id for symbols everybody means by that symbol.
  *
- * WHY THIS EXISTS: `fetchSearch` is one CoinGecko call with no backup. From a
- * network where that host is slow or filtered, the search throws for every
- * candidate, `resolveCoin` fails, and EVERY native agent answers «ورودی لازم
- * است» — reported by users as "the native agents do not work / the provider
- * connection looks broken". The agents were fine; resolution was.
+ * Major symbols resolve locally from a canonical ID map; unknown assets use a
+ * short, single-shot CoinGecko search. The actual price/history read still
+ * verifies every ID, so the map never supplies a price or a plausible result.
+ * This avoids spending the whole task deadline repeatedly searching arbitrary
+ * capitalized words from a prompt when CoinGecko is slow or filtered.
  *
  * The table is only a NAME MAP: it says which id the symbol conventionally
  * means. It never contains a price, and the agent still reads live data and
@@ -335,22 +339,11 @@ export async function resolveCoin(data, request) {
     request.symbol,
     request.amountToken
   ].filter(Boolean);
-  for (const query of [...new Set(candidates)].slice(0, 6)) {
-    try {
-      const rows = await data.searchCoins(query);
-      const exact = Array.isArray(rows)
-        ? rows.find((row) => String(row.symbol || '').toUpperCase() === query.toUpperCase())
-          || rows.find((row) => String(row.name || '').toLowerCase() === query.toLowerCase())
-        : null;
-      if (exact?.id) return { ok: true, query, coin: exact };
-    } catch {
-      /* One failed search is not a resolution failure yet; the static map at
-         the end of this function is the fallback for a blocked search. */
-    }
-  }
-  /* Search failed or returned nothing: the conventional id for a major symbol
-     is still a real id, and the agent will prove it by reading live data. */
-  for (const query of [...new Set(candidates)].slice(0, 6)) {
+  const uniqueCandidates = [...new Set(candidates)].slice(0, 6);
+  /* Major symbols already have a canonical id. Resolve those locally first:
+     the live price/history read still verifies that id, while avoiding an
+     unnecessary search request (and needless disclosure of the prompt text). */
+  for (const query of uniqueCandidates) {
     const id = COIN_IDS[String(query).toUpperCase()];
     if (id) {
       return {
@@ -359,6 +352,20 @@ export async function resolveCoin(data, request) {
         resolvedWithoutSearch: true,
         coin: { id, symbol: String(query).toUpperCase(), name: String(query).toUpperCase() }
       };
+    }
+  }
+  /* Unknown assets use a bounded, single-shot search. Trying every capitalised
+     word in a prompt multiplies latency and discloses irrelevant text. */
+  for (const query of uniqueCandidates.slice(0, 2)) {
+    try {
+      const rows = await data.searchCoins(query);
+      const exact = Array.isArray(rows)
+        ? rows.find((row) => String(row.symbol || '').toUpperCase() === query.toUpperCase())
+          || rows.find((row) => String(row.name || '').toLowerCase() === query.toLowerCase())
+        : null;
+      if (exact?.id) return { ok: true, query, coin: exact };
+    } catch {
+      /* A blocked search is reported below; never invent a replacement id. */
     }
   }
   return { ok: false, code: 'COIN_NOT_RESOLVED', query: request.symbol || request.amountToken || null };
@@ -401,27 +408,64 @@ const lazy = (loader) => {
  * hand it three deterministic readers and assert the exact analysis without a
  * network call. Production passes nothing.
  */
-export function createDataAccess(overrides = {}) {
-  const providers = lazy(() => import('../providers.js'));
-  const yields = lazy(() => import('../yields.js'));
-  const explorer = lazy(() => import('../explorerData.js'));
+export function createDataAccess(overrides = {}, {
+  providerLoader = null,
+  yieldsLoader = null,
+  explorerLoader = null,
+  smartMoneyLoader = null
+} = {}) {
+  const providers = lazy(() => providerLoader ? providerLoader() : import('../providers.js'));
+  const yields = lazy(() => yieldsLoader ? yieldsLoader() : import('../yields.js'));
+  const explorer = lazy(() => explorerLoader ? explorerLoader() : import('../explorerData.js'));
   const tokenRisk = lazy(() => import('../tokenRisk.js'));
-  const smartMoney = lazy(() => import('../smartMoney/index.js'));
-  const lifi = lazy(() => import('../lifi.js'));
+  const smartMoney = lazy(() => smartMoneyLoader ? smartMoneyLoader() : import('../smartMoney/index.js'));
 
   const api = {
     /* ── market ── */
     async searchCoins(query) {
       const mod = await providers();
-      return mod.fetchSearch(String(query || '').slice(0, 60));
+      return mod.fetchSearch(String(query || '').slice(0, 60), {
+        timeoutMs: Math.min(5_000, READ_DEADLINE_MS),
+        retry: false
+      });
     },
-    async coinDetail(id) {
+    async coinDetail(id, { timeoutMs = 9_000 } = {}) {
       const mod = await providers();
-      return mod.fetchCoinDetail(id);
+      return mod.fetchCoinDetail(id, 'usd', {
+        timeoutMs: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 9_000)),
+        retry: false,
+        allowCoinLoreFallback: false
+      });
     },
-    async candles(id, days = 180) {
+    async candles(id, days = 180, { timeoutMs = READ_DEADLINE_MS } = {}) {
+      const budgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS));
+      const deadlineAt = Date.now() + budgetMs;
+      const boundedDays = Math.min(365, Math.max(1, Number(days) || 180));
       const mod = await providers();
-      return mod.fetchOhlc(id, Math.min(365, Math.max(1, Number(days) || 180)));
+      let primary = [];
+      let primaryError = null;
+      try {
+        /* One bounded OHLC attempt. Leave time in this same 14s read budget
+           for the close-history fallback instead of spending it on retries. */
+        const timeoutMs = Math.max(250, Math.min(8_000, deadlineAt - Date.now()));
+        primary = await mod.fetchOhlc(id, boundedDays, 'usd', { timeoutMs, retry: false });
+        if (Array.isArray(primary) && (boundedDays < 300 || primary.length >= 70)) return primary;
+      } catch (error) {
+        primaryError = error;
+      }
+
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs >= 250 && typeof mod.fetchDailyCloses === 'function') {
+        try {
+          const closes = await mod.fetchDailyCloses(id, boundedDays, 'usd', { timeoutMs: remainingMs });
+          if (Array.isArray(closes) && closes.length) return closes;
+        } catch (error) {
+          if (!primaryError) primaryError = error;
+        }
+      }
+      if (Array.isArray(primary) && primary.length) return primary;
+      if (primaryError) throw primaryError;
+      return [];
     },
     async markets({ perPage = 20 } = {}) {
       const mod = await providers();
@@ -429,23 +473,25 @@ export function createDataAccess(overrides = {}) {
     },
 
     /* ── DeFi ── */
-    async yields() {
+    async yields({ timeoutMs = READ_DEADLINE_MS } = {}) {
       const mod = await yields();
-      return mod.fetchYields();
+      return mod.fetchYields({
+        timeoutMs: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS))
+      });
     },
-    async protocols() {
+    async protocols({ timeoutMs = 8_500 } = {}) {
       const mod = await explorer();
-      const out = await mod.llamaProtocols();
+      const out = await mod.llamaProtocols({ timeout: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 8_500)) });
       return out?.data?.protocols || [];
     },
-    async protocolDetail(slug) {
+    async protocolDetail(slug, { timeoutMs = 12_000 } = {}) {
       const mod = await explorer();
-      const out = await mod.protocolDetail(slug);
+      const out = await mod.protocolDetail(slug, { timeout: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 12_000)) });
       return out?.data || null;
     },
-    async incidents() {
+    async incidents({ timeoutMs = 8_500 } = {}) {
       const mod = await explorer();
-      const out = await mod.hacksIndex();
+      const out = await mod.hacksIndex({ timeout: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 8_500)) });
       return out?.data?.incidents || [];
     },
 
@@ -454,43 +500,30 @@ export function createDataAccess(overrides = {}) {
       const mod = await tokenRisk();
       return mod.fetchTokenRisk(chainId, address);
     },
-    async tokenIntel(address, chainId = 1) {
+    async tokenIntel(address, chainId = 1, { timeoutMs = READ_DEADLINE_MS } = {}) {
       const mod = await smartMoney();
-      return mod.analyzeToken(address, chainId);
+      return mod.analyzeToken(address, chainId, {
+        timeoutMs: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS))
+      });
     },
     async topTraders(address, chainId = 1, window = '24h') {
       const mod = await smartMoney();
       return mod.topTraders(address, chainId, window);
     },
-    async walletIntel(address, chainHint = null) {
+    async walletIntel(address, chainHint = null, { timeoutMs = 12_000 } = {}) {
       const mod = await smartMoney();
-      return mod.analyzeWallet(address, chainHint);
+      return mod.analyzeWallet(address, chainHint, {
+        timeoutMs: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 12_000))
+      });
     },
-    async smartMoneyOverview(window = '24h') {
+    async smartMoneyOverview(window = '24h', { timeoutMs = 8_000 } = {}) {
       const mod = await smartMoney();
-      return mod.getOverview({ window });
+      return mod.getOverview({
+        window,
+        timeoutMs: Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 8_000))
+      });
     },
 
-    /* ── bridge estimate (read-only) ── */
-    async tokenInfo(chainId, token) {
-      const mod = await lifi();
-      const query = new URLSearchParams({ chain: String(chainId), token: String(token) });
-      const res = await mod.lifiFetch(`/token?${query.toString()}`, { timeoutMs: 6_000 });
-      return res.ok ? res.body || null : null;
-    },
-    async bridgeQuote(params) {
-      const mod = await lifi();
-      const query = new URLSearchParams();
-      for (const [key, value] of Object.entries(params || {})) {
-        if (value === null || value === undefined || value === '') continue;
-        query.set(key, String(value));
-      }
-      /* The low-level reader, NOT `lifiSwapQuote`: that one builds an executable,
-         fee-bearing swap for the app's own flow. An agent answers a question;
-         it must not mint a transaction request. */
-      const res = await mod.lifiFetch(`/quote?${query.toString()}`, { timeoutMs: READ_DEADLINE_MS });
-      return res;
-    },
 
     schema: NATIVE_DATA_SCHEMA
   };

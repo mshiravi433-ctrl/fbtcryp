@@ -36,6 +36,7 @@ import {
   saveSourceCredential
 } from '../../lib/intent-ai/agentHub/client.js';
 import RecommendedAgents from './RecommendedAgents.jsx';
+import NativeDataDisclosure from './NativeDataDisclosure.jsx';
 import { setActiveAgent } from '../../lib/intent-ai/agentHub/activeAgent.js';
 import '../../styles/agent-hub.css';
 
@@ -136,6 +137,7 @@ const TASK_ERROR_COPY = Object.freeze({
   TASK_TEXT_REQUIRED: { fa: 'متن درخواست خیلی کوتاه است (حداقل ۴ نویسه).', en: 'The request is too short (4 characters minimum).' },
   TASK_TEXT_TOO_LONG: { fa: 'متن درخواست بلندتر از حد مجاز است.', en: 'The request is longer than the limit.' },
   CONSENT_REQUIRED: { fa: 'تأیید ارسال را تیک بزنید.', en: 'Tick the approval box first.' },
+  NATIVE_DATA_CONSENT_REQUIRED: { fa: 'رضایت منابع داده ناقص یا قدیمی است؛ افشای فعلی را دوباره بررسی و تأیید کنید.', en: 'Data-source consent is missing or out of date. Review the current disclosure and approve it again.' },
   CONTEXT_REQUIRED: { fa: 'حداقل یک مورد برای اشتراک انتخاب کنید.', en: 'Choose at least one item to share.' },
   CONTEXT_WALLET_INVALID: { fa: 'آدرس کیف پول معتبر نیست (EVM یا Solana).', en: 'That wallet address is not valid (EVM or Solana).' },
   CONTEXT_PORTFOLIO_INVALID: { fa: 'جمع پورتفوی باید عدد باشد.', en: 'Portfolio totals must be numbers.' },
@@ -500,6 +502,8 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
       taskText,
       categories: preview.categories,
       context,
+      nativeDataApproved: selected.source === 'native' && (selected.dataSources || []).length > 0,
+      nativeDataSources: selected.source === 'native' ? (selected.dataSources || []) : null,
       idempotencyKey: keyRef.current
     });
     inflightRef.current = false;
@@ -932,6 +936,8 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
               )}
             </div>
 
+            {detailAgent.source === 'native' ? <NativeDataDisclosure agent={detailAgent} fa={fa} /> : null}
+
             <label className="ah-approve" data-on={approved ? 'true' : 'false'}>
               <input
                 className="ah-approve-input"
@@ -946,16 +952,22 @@ export default function AgentHubPanel({ fa = false, onClose = null, onActivateIn
               <span className="ah-approve-copy">
                 <strong>
                   {detailAgent.source === 'native'
-                    ? (fa ? 'اجرای این درخواست در FBT را تأیید می‌کنم' : 'I approve running this request inside FBT')
+                    ? ((detailAgent.dataSources || []).length
+                      ? (fa ? 'اجرای FBT و پرس‌وجوهای عمومیِ فهرست‌شده را تأیید می‌کنم' : 'Approve FBT and the listed public-data queries')
+                      : (fa ? 'ساخت پیش‌نویس محلی در FBT را تأیید می‌کنم' : 'Approve creating this local draft in FBT'))
                     : (fa ? 'تأیید ارسال به ارائه‌دهنده' : 'Approve sending to the provider')}
                 </strong>
                 <span>
                   {detailAgent.source === 'native'
-                    ? (fa
-                      ? 'این ایجنت درون FBT اجرا می‌شود؛ متن درخواست به سرویس خارجی نمی‌رود و چیزی از شما کم نمی‌شود.'
-                      : 'This agent runs inside FBT. Nothing is sent to a third party and nothing is charged.')
+                    ? ((detailAgent.dataSources || []).length
+                      ? (fa
+                        ? 'منابع و فیلدهای ارسالی بالا مشخص‌اند؛ فقط پس از این تأیید خوانده می‌شوند. متن کامل به مدل ثالث فرستاده نمی‌شود و هیچ هزینه یا تراکنشی ایجاد نمی‌شود.'
+                        : 'The sources and query fields are listed above; reads start only after approval. The full prompt is not sent to a third-party model, and no fee or transaction is created.')
+                      : (fa
+                        ? 'این ایجنت فقط درخواست را داخل FBT به پیش‌نویس تبدیل می‌کند. برای قیمت‌گیری Bridge/Swap رضایت جداگانه می‌گیرد.'
+                        : 'This agent only turns your request into a draft inside FBT. Bridge/Swap asks separately before requesting a quote.'))
                     : (fa
-                      ? 'می‌دانم این متن به ارائه‌دهنده خارجی ارسال می‌شود و شرایط و حریم خصوصی او اعمال می‌شود.'
+                      ? 'می‌دانم این متن به ارائه‌دهندهٔ خارجی ارسال می‌شود و شرایط و حریم خصوصی او اعمال می‌شود.'
                       : 'I understand this text goes to an external provider, under their terms and privacy policy.')}
                 </span>
               </span>

@@ -23,6 +23,10 @@ import { withCache, memoryStore } from './cache.js';
 import { EVM_CHAINS, EVM_CHAIN_ORDER, TOKENS } from './chainsLite.js';
 
 const UPSTREAM_TIMEOUT_MS = 8000;
+const READ_DEADLINE_MS = 14_000;
+const MIN_UPSTREAM_TIMEOUT_MS = 250;
+const PRICE_LOOKUP_BUDGET_MS = 5000;
+const COINGECKO_ATTEMPT_TIMEOUT_MS = 1500;
 
 // How many blocks we scan per chain when no explorer key is available. We keep
 // this modest because each `eth_getLogs` call across a wide block range is
@@ -76,9 +80,20 @@ const EXPLORERS = {
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
 function ctrlTimeout(ms = UPSTREAM_TIMEOUT_MS) {
+  const boundedMs = Math.max(MIN_UPSTREAM_TIMEOUT_MS, Math.min(READ_DEADLINE_MS, Number(ms) || UPSTREAM_TIMEOUT_MS));
   const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
+  const t = setTimeout(() => c.abort(), boundedMs);
   return { signal: c.signal, done: () => clearTimeout(t) };
+}
+
+function timeoutForDeadline(deadlineAt, capMs = UPSTREAM_TIMEOUT_MS) {
+  const remainingMs = Math.min(Number(deadlineAt) - Date.now(), READ_DEADLINE_MS);
+  const abortHeadroomMs = Math.min(100, Math.max(10, Math.floor(remainingMs * 0.1)));
+  const safeRemainingMs = remainingMs - abortHeadroomMs;
+  if (!Number.isFinite(safeRemainingMs) || safeRemainingMs < MIN_UPSTREAM_TIMEOUT_MS) {
+    throw new Error('SMART_MONEY_READ_DEADLINE_EXCEEDED');
+  }
+  return Math.floor(Math.min(safeRemainingMs, capMs));
 }
 
 async function rpcCall(url, method, params, { timeout = UPSTREAM_TIMEOUT_MS } = {}) {
@@ -200,16 +215,18 @@ function explorerAddrUrl(chainId, addr) {
  * is a VALID answer and stops the walk — we never pay extra upstream calls
  * for a chain that is genuinely quiet.
  */
-async function fetchWhalesRpc(chainId, minValueUsd, priceLookup) {
+async function fetchWhalesRpc(chainId, minValueUsd, priceLookup, deadlineAt) {
   const cfg = EVM_CHAINS[chainId];
   if (!cfg?.rpc?.length) return [];
   const known = knownTokenMap(chainId);
   let lastErr = null;
   for (const rpc of cfg.rpc) {
+    if (deadlineAt - Date.now() < MIN_UPSTREAM_TIMEOUT_MS) break;
     try {
-      return await fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known);
+      return await fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known, deadlineAt);
     } catch (e) {
-      // This endpoint failed (rate-limited / down) — try the next one.
+      // This endpoint failed (rate-limited / down) — try the next one only
+      // while the shared read budget still permits another upstream request.
       lastErr = e;
     }
   }
@@ -219,7 +236,7 @@ async function fetchWhalesRpc(chainId, minValueUsd, priceLookup) {
   throw lastErr || new Error("ALL_RPC_ENDPOINTS_FAILED");
 }
 
-async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known) {
+async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known, deadlineAt) {
   /*
    * THE BUG THAT BLANKED SMART MONEY: this function referenced `cfg`
    * (chain metadata for chainShort/name/color) without defining it. A chain
@@ -230,41 +247,41 @@ async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known)
    * activity, the harder it failed. That is why «هیچ اتصالی برقرار نیست».
    */
   const cfg = EVM_CHAINS[chainId];
-  const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
+  const latestHex = await rpcCall(rpc, 'eth_blockNumber', [], { timeout: timeoutForDeadline(deadlineAt) });
   const latest = Number(BigInt(latestHex));
   const windowBlocks = blockWindowFor(chainId);
   const fromBlock = Math.max(0, latest - windowBlocks);
   const toBlock = latest;
 
   // ERC-20 Transfer logs across the whole window. Some public RPCs cap this
-  // range; we retry with progressively smaller windows on failure.
+  // range; shrink the window on failure, but every try shares the same read
+  // deadline and gets an aborting timeout based on the remaining budget.
+  const logWindows = [
+    fromBlock,
+    Math.max(0, latest - Math.max(3, Math.floor(windowBlocks / 2))),
+    Math.max(0, latest - 3)
+  ];
   let logs = [];
-  try {
-    logs = await rpcCall(rpc, 'eth_getLogs', [{
-      fromBlock: '0x' + fromBlock.toString(16),
-      toBlock: '0x' + toBlock.toString(16),
-      topics: [TRANSFER_TOPIC]
-    }]);
-  } catch {
-    // Try a half-size window, then a tight 3-block window.
+  let logError = null;
+  let attemptedLogRead = false;
+  for (const logFromBlock of logWindows) {
+    if (deadlineAt - Date.now() < MIN_UPSTREAM_TIMEOUT_MS) break;
+    attemptedLogRead = true;
     try {
       logs = await rpcCall(rpc, 'eth_getLogs', [{
-        fromBlock: '0x' + Math.max(0, latest - Math.max(3, Math.floor(windowBlocks / 2))).toString(16),
+        fromBlock: '0x' + logFromBlock.toString(16),
         toBlock: '0x' + toBlock.toString(16),
         topics: [TRANSFER_TOPIC]
-      }]);
-    } catch {
-      try {
-        logs = await rpcCall(rpc, 'eth_getLogs', [{
-          fromBlock: '0x' + Math.max(0, latest - 3).toString(16),
-          toBlock: '0x' + toBlock.toString(16),
-          topics: [TRANSFER_TOPIC]
-        }]);
-      } catch (e) {
-        throw e; // this endpoint cannot serve logs — let the caller try the next
-      }
+      }], { timeout: timeoutForDeadline(deadlineAt) });
+      logError = null;
+      break;
+    } catch (error) {
+      logError = error;
     }
   }
+  if (logError || !attemptedLogRead) {
+    throw logError || new Error('SMART_MONEY_READ_DEADLINE_EXCEEDED');
+  } // this endpoint cannot serve logs; try the next endpoint only if time remains
   if (!Array.isArray(logs)) logs = [];
 
   const events = [];
@@ -336,7 +353,9 @@ async function fetchWhalesRpcFrom(rpc, chainId, minValueUsd, priceLookup, known)
 
   // Native large transfers — pull last block's coinbase + high-value transactions
   try {
-    const block = await rpcCall(rpc, 'eth_getBlockByNumber', ['0x' + latest.toString(16), true]);
+    const block = await rpcCall(rpc, 'eth_getBlockByNumber', ['0x' + latest.toString(16), true], {
+      timeout: timeoutForDeadline(deadlineAt)
+    });
     const ts = Number(BigInt(block.timestamp ?? '0x0')) * 1000;
     if (block?.transactions) {
       for (const tx of block.transactions) {
@@ -433,7 +452,7 @@ async function explorerRequestUrl(chainId) {
   return null;
 }
 
-async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup) {
+async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup, deadlineAt) {
   const conf = await explorerRequestUrl(chainId);
   if (!conf) return [];
   const cfg = EVM_CHAINS[chainId];
@@ -447,7 +466,7 @@ async function fetchWhalesExplorer(chainId, minValueUsd, priceLookup) {
   const pages = await Promise.allSettled(contracts.map(async (tok) => {
     const url = `${conf.api}?module=account&action=tokentx&contractaddress=${tok.address}` +
       `&page=1&offset=100&sort=desc&apikey=${encodeURIComponent(conf.key)}${conf.chainParam}`;
-    const { signal, done } = ctrlTimeout();
+    const { signal, done } = ctrlTimeout(timeoutForDeadline(deadlineAt));
     try {
       const res = await fetch(url, { signal, headers: { accept: 'application/json' } });
       if (!res.ok) throw new Error(`explorer ${res.status}`);
@@ -568,7 +587,7 @@ const CG_TO_SYMBOL = {
 const PEGGED_USD = { tether: 1, 'usd-coin': 1, dai: 1 };
 
 /** CryptoCompare keyless multi-price. `{ ETH: { USD: 4300 } }` shape in. */
-async function fetchCryptoComparePrices(ids, vsCcy = 'usd') {
+async function fetchCryptoComparePrices(ids, vsCcy = 'usd', { deadlineAt } = {}) {
   const bySymbol = new Map(); // SYMBOL → [cgId, ...]
   for (const id of ids) {
     const sym = CG_TO_SYMBOL[id];
@@ -582,7 +601,10 @@ async function fetchCryptoComparePrices(ids, vsCcy = 'usd') {
   const tsym = vsCcy.toUpperCase();
   const res = await fetch(
     `https://min-api.cryptocompare.com/data/pricemulti?fsyms=${encodeURIComponent(fsyms)}&tsyms=${encodeURIComponent(tsym)}`,
-    { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
+    {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(timeoutForDeadline(deadlineAt))
+    }
   );
   if (!res.ok) throw new Error(`cryptocompare ${res.status}`);
   const body = await res.json();
@@ -601,10 +623,11 @@ async function fetchCryptoComparePrices(ids, vsCcy = 'usd') {
  * generous keyless rates and (unlike some exchange APIs) answers from US
  * serverless IPs.
  */
-async function fetchCoinbasePrices(ids, vsCcy = 'usd') {
+async function fetchCoinbasePrices(ids, vsCcy = 'usd', { deadlineAt } = {}) {
   if (vsCcy !== 'usd') return {}; // rates are only meaningful against USD here
   const res = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD', {
-    headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000)
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(timeoutForDeadline(deadlineAt))
   });
   if (!res.ok) throw new Error(`coinbase ${res.status}`);
   const body = await res.json();
@@ -635,11 +658,15 @@ async function fetchCoinbasePrices(ids, vsCcy = 'usd') {
  * literally nothing priced anything does the response carry
  * `pricesOutage: true` so the UI says "no data" instead of "zero activity".
  */
-async function priceLookupFor(vsCcy) {
-  // Use the existing providers.js simple-price fetch so keys stay server-side
-  // and caching is shared with every other market endpoint. Import lazily to
-  // avoid a circular load during test setup.
-  const { fetchSimplePrices } = await import('./providers.js');
+async function priceLookupFor(vsCcy, { deadlineAt } = {}) {
+  const readDeadlineAt = Number.isFinite(deadlineAt) ? deadlineAt : Date.now() + READ_DEADLINE_MS;
+  const priceDeadlineAt = Math.min(readDeadlineAt, Date.now() + PRICE_LOOKUP_BUDGET_MS);
+  // Use the existing providers.js fetch so keys stay server-side and caching
+  // is shared. Import lazily to avoid a circular load during test setup.
+  let fetchSimplePrices = null;
+  try { ({ fetchSimplePrices } = await import('./providers.js')); }
+  catch { /* continue with the independent public fallbacks */ }
+
   const cgIds = new Set();
   for (const cid of EVM_CHAIN_ORDER) {
     const cfg = EVM_CHAINS[cid];
@@ -652,23 +679,26 @@ async function priceLookupFor(vsCcy) {
 
   let prices = null;
   let source = null;
-  for (let attempt = 0; attempt < 2 && !prices; attempt += 1) {
+  // Two short, no-retry CoinGecko attempts leave time for the fallback
+  // providers instead of spending the complete read budget in one vendor.
+  for (let attempt = 0; fetchSimplePrices && attempt < 2 && !prices; attempt += 1) {
+    let timeoutMs;
+    try { timeoutMs = timeoutForDeadline(priceDeadlineAt, COINGECKO_ATTEMPT_TIMEOUT_MS); }
+    catch { break; }
     try {
-      const got = await fetchSimplePrices(ids, vsCcy);
+      const got = await fetchSimplePrices(ids, vsCcy, { timeoutMs, retry: false });
       if (got && Object.keys(got).length) { prices = got; source = 'coingecko'; }
-    } catch {
-      if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
-    }
+    } catch { /* the next source gets only the budget that remains */ }
   }
-  if (!prices) {
+  if (!prices && priceDeadlineAt - Date.now() >= MIN_UPSTREAM_TIMEOUT_MS) {
     try {
-      const cc = await fetchCryptoComparePrices(ids, vsCcy);
+      const cc = await fetchCryptoComparePrices(ids, vsCcy, { deadlineAt: priceDeadlineAt });
       if (cc && Object.keys(cc).length) { prices = cc; source = 'cryptocompare'; }
-    } catch { /* try the next source */ }
+    } catch { /* try the next source, if the shared deadline permits it */ }
   }
-  if (!prices) {
+  if (!prices && priceDeadlineAt - Date.now() >= MIN_UPSTREAM_TIMEOUT_MS) {
     try {
-      const cb = await fetchCoinbasePrices(ids, vsCcy);
+      const cb = await fetchCoinbasePrices(ids, vsCcy, { deadlineAt: priceDeadlineAt });
       if (cb && Object.keys(cb).length) { prices = cb; source = 'coinbase'; }
     } catch { /* fall through to the pegged backstop */ }
   }
@@ -717,27 +747,39 @@ export async function fetchWhales({
   tokenQuery = '',
   since = 0,
   vs = 'usd',
-  limit = 40
+  limit = 40,
+  timeoutMs = READ_DEADLINE_MS
 } = {}) {
+  const readBudgetMs = Math.max(
+    MIN_UPSTREAM_TIMEOUT_MS,
+    Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS)
+  );
+  const deadlineAt = Date.now() + readBudgetMs;
   const selectedIds = chains?.length
     ? EVM_CHAIN_ORDER.filter((id) => chains.includes(EVM_CHAINS[id]?.short?.toLowerCase()) || chains.includes(String(id)))
     : EVM_CHAIN_ORDER;
 
-  const { lookup: priceLookup, ok: pricesOk, source: priceSource } = await priceLookupFor(vs);
+  const { lookup: priceLookup, ok: pricesOk, source: priceSource } = await priceLookupFor(vs, { deadlineAt });
 
-  // Fetch chains in parallel; tolerate partial failure per chain. Each chain
-  // gets a hard deadline: walking 3 RPC endpoints × (blockNumber + getLogs +
-  // retries) could otherwise take >60s for ONE dead chain — longer than the
-  // client (and a serverless function) is willing to wait for ALL of them.
+  // Fetch chains in parallel and share one read deadline across pricing,
+  // explorer and RPC requests. Each upstream request gets an AbortSignal whose
+  // timeout is capped by the remaining budget; retries cannot outlive it.
   const results = await Promise.allSettled(
-    selectedIds.map((cid) => withDeadline((async () => {
-      // Prefer explorer fast-path when configured; fall back to RPC logs.
-      try {
-        const fast = await fetchWhalesExplorer(cid, minUsd, priceLookup);
-        if (fast.length) return fast;
-      } catch { /* ignore */ }
-      return fetchWhalesRpc(cid, minUsd, priceLookup);
-    })(), 15_000, `CHAIN_${cid}`))
+    selectedIds.map((cid) => {
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs < MIN_UPSTREAM_TIMEOUT_MS) {
+        return Promise.reject(new Error(`CHAIN_${cid}_READ_DEADLINE_EXCEEDED`));
+      }
+      const chainRead = (async () => {
+        // Prefer explorer fast-path when configured; fall back to RPC logs.
+        try {
+          const fast = await fetchWhalesExplorer(cid, minUsd, priceLookup, deadlineAt);
+          if (fast.length) return fast;
+        } catch { /* use RPC only while the shared deadline still permits it */ }
+        return fetchWhalesRpc(cid, minUsd, priceLookup, deadlineAt);
+      })();
+      return withDeadline(chainRead, remainingMs, `CHAIN_${cid}`);
+    })
   );
 
   const failures = [];
@@ -796,7 +838,11 @@ export async function fetchWhales({
 }
 
 /** Cached wrapper used by the route handler. */
-export function cachedWhales(opts) {
-  const key = `whales:${opts.vs || 'usd'}:${opts.minUsd || 0}:${(opts.chains || []).join(',')}:${opts.since || 0}`;
-  return withCache(key, 60_000, () => fetchWhales(opts), memoryStore);
+export function cachedWhales(opts = {}) {
+  const readBudgetMs = Math.max(
+    MIN_UPSTREAM_TIMEOUT_MS,
+    Math.min(READ_DEADLINE_MS, Number(opts.timeoutMs) || READ_DEADLINE_MS)
+  );
+  const key = `whales:${opts.vs || 'usd'}:${opts.minUsd || 0}:${(opts.chains || []).join(',')}:${opts.since || 0}:${readBudgetMs}`;
+  return withCache(key, 60_000, () => fetchWhales({ ...opts, timeoutMs: readBudgetMs }), memoryStore);
 }

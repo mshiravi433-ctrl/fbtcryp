@@ -26,6 +26,8 @@ import {
 import { composeConsentMessage } from '../../lib/intent-ai/agentHub/consent.js';
 import { createTask, getTask, newIdempotencyKey } from '../../lib/intent-ai/agentHub/client.js';
 import { internalHash, ResultView } from './AgentHubPanel.jsx';
+import NativeDataDisclosure from './NativeDataDisclosure.jsx';
+import CrossChainDesk from '../crosschain/CrossChainDesk.jsx';
 import '../../styles/agent-hub.css';
 
 /* Results live for this tab only. Not localStorage: a provider answer is
@@ -48,6 +50,10 @@ const ERROR_COPY = Object.freeze({
   CONSENT_REQUIRED: {
     fa: 'برای ایجنت خارجی، تأیید ارسال لازم است.',
     en: 'An external agent needs the send approved first.'
+  },
+  NATIVE_DATA_CONSENT_REQUIRED: {
+    fa: 'رضایت منابع داده ناقص یا قدیمی است؛ افشای فعلی را دوباره بررسی و تأیید کنید.',
+    en: 'Data-source consent is missing or out of date. Review the current disclosure and approve it again.'
   },
   PAYMENT_REQUIRED: {
     fa: 'این ایجنت پرداخت مستقیم می‌خواهد و در این نسخه پرداخت فعال نیست؛ چیزی از شما کم نشد.',
@@ -103,6 +109,7 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [consented, setConsented] = useState(false);
+  const [swapAction, setSwapAction] = useState(null);
   const [tick, setTick] = useState(0);
   const inputRef = useRef(null);
   const listRef = useRef(null);
@@ -122,6 +129,7 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
     setError(null);
     setConsented(false);
     setDraft('');
+    setSwapAction(null);
   }, [active?.id]);
 
   useEffect(() => {
@@ -130,11 +138,14 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
   }, [messages.length, busy]);
 
   const toExternal = active ? (active.native !== true && active.source !== 'native') : false;
+  const nativeDataSources = Array.isArray(active?.dataSources) ? active.dataSources : [];
+  const needsNativeConsent = Boolean(active && !toExternal && nativeDataSources.length > 0);
+  const requiresConsent = toExternal || needsNativeConsent;
 
   const run = useCallback(async (text) => {
     const trimmed = String(text || '').trim();
     if (!active || !trimmed || busy) return;
-    if (toExternal && !consented) {
+    if (requiresConsent && !consented) {
       setError(taskErrorCopy('CONSENT_REQUIRED', fa));
       return;
     }
@@ -147,6 +158,8 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
       taskText: trimmed,
       categories: ['task_text'],
       context: {},
+      nativeDataApproved: needsNativeConsent && consented,
+      nativeDataSources: needsNativeConsent ? nativeDataSources : null,
       idempotencyKey: newIdempotencyKey('chat')
     });
     if (!out.ok) {
@@ -177,7 +190,7 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
       setTick((n) => n + 1);
     }
     setBusy(false);
-  }, [active, busy, consented, fa, push, toExternal]);
+  }, [active, busy, consented, fa, needsNativeConsent, push, requiresConsent]);
 
   /* The main chat's suggestion row hands a prompt to this dock. */
   useEffect(() => subscribeAgentPrompt(({ prompt }) => { void run(prompt); }), [run]);
@@ -201,7 +214,9 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
           <strong>{name}</strong>
           <span className="agentchat-meta">
             {active.native || active.source === 'native'
-              ? (fa ? 'اجرا داخل FBT · بدون ارسال به سرویس خارجی' : 'Runs inside FBT · nothing sent to a third party')
+              ? (nativeDataSources.length
+                ? (fa ? 'اجرا داخل FBT · منابع دادهٔ عمومی پیش از اجرا نمایش داده می‌شوند' : 'Runs inside FBT · public data sources are disclosed before reads')
+                : (fa ? 'پیش‌نویس محلی در FBT · بدون پرس‌وجوی ارائه‌دهنده تا رضایت جداگانه' : 'Local draft in FBT · no provider query until separate approval'))
               : (fa ? `ارائه‌دهنده: ${active.providerName || active.providerId}` : `Provider: ${active.providerName || active.providerId}`)}
           </span>
         </div>
@@ -239,8 +254,18 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
                     {message.task.result ? (
                       <ResultView result={message.task.result} fa={fa} />
                     ) : (
-                      <p className="agentchat-muted">{fa ? 'در حال اجرا نزد ارائه‌دهنده…' : 'Running at the provider…'}</p>
+                      <p className="agentchat-muted">{fa ? 'در حال اجرا…' : 'Running…'}</p>
                     )}
+                    {message.task.result?.data?.chatAction?.type === 'cross_chain_swap' ? (
+                      <button
+                        type="button"
+                        className="agentchat-swap-open"
+                        onClick={() => setSwapAction(message.task.result.data.chatAction)}
+                        data-testid="agent-chat-open-swap"
+                      >
+                        {fa ? 'بازکردن پیش‌نویس در Bridge/Swap' : 'Open draft in Bridge/Swap'}
+                      </button>
+                    ) : null}
                     {message.task.errorCode ? (
                       <p className="agentchat-error">{message.task.safeErrorMessage || message.task.errorCode}</p>
                     ) : null}
@@ -303,48 +328,77 @@ export default function AgentChatDock({ fa = false, onOpenHub = null }) {
         <button
           type="submit"
           className="agentchat-send"
-          disabled={busy || !draft.trim() || (toExternal && !consented)}
+          disabled={busy || !draft.trim() || (requiresConsent && !consented)}
           data-testid="agent-chat-send"
         >
           {busy ? '…' : (fa ? 'ارسال' : 'Send')}
         </button>
       </form>
 
-      {toExternal ? (
+      {(requiresConsent || active.native || active.source === 'native') ? (
         <div className="agentchat-consent" data-testid="agent-chat-consent">
-          <label className="ah-approve" data-on={consented ? 'true' : 'false'}>
-            <input
-              className="ah-approve-input"
-              type="checkbox"
-              checked={consented}
-              onChange={(event) => setConsented(event.target.checked)}
-              data-testid="agent-chat-consent-approve"
-            />
-            <span className="ah-approve-box" aria-hidden="true">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-            </span>
-            <span className="ah-approve-copy">
-              <strong>{fa ? 'تأیید ارسال به ارائه‌دهنده' : 'Approve sending to the provider'}</strong>
-              <span>
-                {fa
-                  ? 'متن درخواست به ارائه‌دهندهٔ خارجی می‌رود و شرایط و حریم خصوصی او اعمال می‌شود.'
-                  : 'The request text goes to an external provider, under their terms and privacy policy.'}
+          {active.native || active.source === 'native' ? <NativeDataDisclosure agent={active} fa={fa} /> : null}
+          {requiresConsent ? (
+            <label className="ah-approve" data-on={consented ? 'true' : 'false'}>
+              <input
+                className="ah-approve-input"
+                type="checkbox"
+                checked={consented}
+                onChange={(event) => setConsented(event.target.checked)}
+                data-testid="agent-chat-consent-approve"
+              />
+              <span className="ah-approve-box" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </span>
-            </span>
-          </label>
-          {active.provider?.termsUrl || active.provider?.privacyUrl ? (
+              <span className="ah-approve-copy">
+                <strong>{needsNativeConsent
+                  ? (fa ? 'پرس‌وجوهای عمومی بالا را تأیید می‌کنم' : 'Approve the public-data queries listed above')
+                  : (fa ? 'تأیید ارسال درخواست به ارائه‌دهنده' : 'Approve sending this request to the provider')}</strong>
+                <span>{needsNativeConsent
+                  ? (fa
+                    ? 'ایجنت فقط پس از تأیید، فیلدهای عمومیِ نمایش‌داده‌شده را برای خواندن داده می‌فرستد.'
+                    : 'The agent sends the disclosed public query fields only after you approve.')
+                  : (fa
+                    ? 'متن پیش‌نمایش به ارائه‌دهندهٔ خارجی می‌رود و شرایط و حریم خصوصی او اعمال می‌شود.'
+                    : 'The previewed task text goes to the external provider, under their terms and privacy policy.')}</span>
+              </span>
+            </label>
+          ) : null}
+          {toExternal && (active.provider?.termsUrl || active.provider?.privacyUrl) ? (
             <nav className="agentchat-policy" aria-label={fa ? 'شرایط و حریم خصوصی' : 'Terms and privacy'}>
               {active.provider?.termsUrl ? <a href={internalHash(active.provider.termsUrl) || active.provider.termsUrl} {...(internalHash(active.provider.termsUrl) ? {} : { target: '_blank', rel: 'noopener noreferrer nofollow' })}>{fa ? 'شرایط' : 'terms'}</a> : null}
               {active.provider?.privacyUrl ? <a href={internalHash(active.provider.privacyUrl) || active.provider.privacyUrl} {...(internalHash(active.provider.privacyUrl) ? {} : { target: '_blank', rel: 'noopener noreferrer nofollow' })}>{fa ? 'حریم خصوصی' : 'privacy'}</a> : null}
             </nav>
           ) : null}
-          {draft.trim().length >= 4 && preview?.ok ? (
+          {toExternal && draft.trim().length >= 4 && preview?.ok ? (
             <details className="agentchat-preview" data-testid="agent-chat-preview">
               <summary>{fa ? 'دقیقاً این متن ارسال می‌شود' : 'Exactly this text is sent'}</summary>
               <pre className="ah-pre">{preview.text}</pre>
             </details>
           ) : null}
         </div>
+      ) : null}
+
+      {swapAction ? (
+        <section className="agentchat-swap-desk" data-testid="agent-chat-swap-desk">
+          <header>
+            <strong>{fa ? 'پیش‌نویس Bridge/Swap' : 'Bridge/Swap draft'}</strong>
+            <button type="button" className="agentchat-ghost" onClick={() => setSwapAction(null)}>
+              {fa ? 'بستن' : 'Close'}
+            </button>
+          </header>
+          <CrossChainDesk
+            key={`${swapAction.fromChain}-${swapAction.toChain}-${swapAction.fromToken}-${swapAction.toToken}-${swapAction.amount}`}
+            source="agent-chat"
+            initial={{
+              fromChain: swapAction.fromChain,
+              toChain: swapAction.toChain,
+              fromToken: swapAction.fromToken,
+              toToken: swapAction.toToken,
+              amount: swapAction.amount
+            }}
+          />
+        </section>
       ) : null}
 
       {error ? <p className="agentchat-error" role="alert" data-testid="agent-chat-error">{error}</p> : null}

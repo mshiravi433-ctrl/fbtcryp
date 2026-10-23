@@ -132,20 +132,27 @@ function TokenPicker({ chainId, value, onChange, label, balance = null, disabled
 export default function CrossChainDesk({ source = 'intent-os', initial = null, onExecuted = null }) {
   const { t } = useTranslation();
   const wallet = useWallet();
+  const [providerConsent, setProviderConsent] = useState(false);
 
-  /* ── provider health: no health, no rates ─────────────────────────────── */
+  /* ── provider health: no provider request before explicit consent ──────── */
   const [health, setHealth] = useState(null);
   const [chains, setChains] = useState([]);
   const [chainsState, setChainsState] = useState('loading');
 
   useEffect(() => {
+    if (!providerConsent) {
+      setHealth(null);
+      setChains([]);
+      setChainsState('idle');
+      return undefined;
+    }
     let alive = true;
     crossChainService.getHealth().then((h) => { if (alive) setHealth(h); });
     crossChainService.getChains()
       .then((list) => { if (alive) { setChains(list); setChainsState(list.length ? 'ready' : 'empty'); } })
       .catch(() => { if (alive) { setChains([]); setChainsState('unavailable'); } });
     return () => { alive = false; };
-  }, []);
+  }, [providerConsent]);
 
   /* ── form ─────────────────────────────────────────────────────────────── */
   const [fromChain, setFromChain] = useState(initial?.fromChain ?? 8453);
@@ -199,22 +206,24 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
   /* Default tokens: the chain's most liquid stable is a sane starting point,
      resolved from the REGISTRY rather than a hard-coded address table. */
   useEffect(() => {
+    if (!providerConsent) return undefined;
     let alive = true;
     setFromToken(null);
-    crossChainService.resolveToken(fromChain, 'USDC')
+    crossChainService.resolveToken(fromChain, initial?.fromToken || 'USDC')
       .then((token) => { if (alive) setFromToken(token); })
       .catch(() => { /* the picker still works; the user chooses */ });
     return () => { alive = false; };
-  }, [fromChain]);
+  }, [fromChain, providerConsent, initial?.fromToken]);
 
   useEffect(() => {
+    if (!providerConsent) return undefined;
     let alive = true;
     setToToken(null);
-    crossChainService.resolveToken(toChain, 'USDC')
+    crossChainService.resolveToken(toChain, initial?.toToken || 'USDC')
       .then((token) => { if (alive) setToToken(token); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [toChain]);
+  }, [toChain, providerConsent, initial?.toToken]);
 
   /* Real balance for the selected source token, read from a chain node. */
   useEffect(() => {
@@ -263,6 +272,13 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
 
   const runQuote = useCallback(async ({ silent = false } = {}) => {
     const mine = ++seq.current;
+    if (!providerConsent) {
+      setRoutes([]);
+      setQuote(null);
+      setQuoteError(null);
+      setQuoting(false);
+      return;
+    }
     if (!fromToken || !toToken || !baseAmount || baseAmount === '0') {
       setRoutes([]);
       setQuote(null);
@@ -327,7 +343,7 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
       if (seq.current === mine) setQuoting(false);
     }
   }, [baseAmount, destinationCheck.ok, destinationCheck.code, destinationRequired, effectiveDestination,
-      fromChain, fromToken, providerDown, selectedTool, senderAddress, toChain, toToken]);
+      fromChain, fromToken, providerConsent, providerDown, selectedTool, senderAddress, toChain, toToken]);
 
   /* Debounced re-quote on every input that changes the price. */
   useEffect(() => {
@@ -485,7 +501,7 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
       [{ id: fromChain, name: chainName(fromChain) }, { id: toChain, name: chainName(toChain) }];
 
   const canSubmit = Boolean(
-    quote?.executable && walletReady && !busy && !quoting
+    providerConsent && quote?.executable && walletReady && !busy && !quoting
     && destinationCheck.ok && !wrongNetwork && !isQuoteExpired(quote)
   );
 
@@ -505,6 +521,23 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
       )}
 
       <section className="ios-panel xcc-ticket">
+        <div className="xcc-data-consent" data-testid="cross-chain-provider-consent">
+          <label>
+            <input
+              type="checkbox"
+              checked={providerConsent}
+              onChange={(event) => setProviderConsent(event.target.checked)}
+              aria-label={t('crossChain.dataConsent.approve', { defaultValue: 'Approve sharing quote details with LI.FI' })}
+            />
+            <span>
+              <strong>{t('crossChain.dataConsent.title', { defaultValue: 'Before loading LI.FI data' })}</strong>
+              <span>{t('crossChain.dataConsent.body', {
+                defaultValue: 'After approval, FBT contacts LI.FI to load the chain/token registry and compare routes. Route and quote requests include the source and destination chains, token contract addresses, amount, and any public sender or destination addresses present. Registry lookups include the selected chain and optional search. No chat text, private key or recovery phrase is sent. Quotes are read-only; execution still needs separate wallet confirmation.'
+              })}</span>
+            </span>
+          </label>
+        </div>
+
         <div className="xcc-leg">
           <span className="xcc-leg-label">{t('crossChain.from', { defaultValue: 'From' })}</span>
           <div className="xcc-leg-row">
@@ -521,6 +554,7 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
               onChange={setFromToken}
               label={t('crossChain.token', { defaultValue: 'Token' })}
               balance={balance}
+              disabled={!providerConsent}
             />
           </div>
           <div className="xcc-amount-row">
@@ -559,6 +593,7 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
               value={toToken}
               onChange={setToToken}
               label={t('crossChain.token', { defaultValue: 'Token' })}
+              disabled={!providerConsent}
             />
           </div>
         </div>

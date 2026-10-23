@@ -329,6 +329,10 @@ export const USER_MESSAGES = Object.freeze({
   HUB_DISABLED: 'External agents are not enabled on this deployment.',
   PAID_INVOCATION_DISABLED: 'Paid agent invocation is not enabled. Nothing was charged.',
   CONSENT_REQUIRED: 'Choose what to share before starting the task.',
+  NATIVE_DATA_CONSENT_REQUIRED: 'Approve the named public-data queries before this FBT agent reads them.',
+  SOURCE_CREDENTIAL_UNAVAILABLE: 'The stored key for your agent could not be read safely. Nothing was sent without it; check storage and save the key again if needed.',
+  CREDENTIAL_STORE_REQUIRED: 'A durable store is required before FBT can save or use an agent key.',
+  CREDENTIAL_STORE_UNAVAILABLE: 'The durable credential store could not be reached. The task was not sent without the key.',
   IDEMPOTENCY_CONFLICT: 'That request key was already used with different content.',
   REQUEST_IN_PROGRESS: 'An identical request is already being processed.',
 

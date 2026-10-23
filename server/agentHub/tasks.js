@@ -255,6 +255,13 @@ export function createTaskBroker({
           inputHint: agent.inputHint || null,
           inputHintFa: agent.inputHintFa || null,
           dataSources: Array.isArray(agent.dataSources) ? agent.dataSources : [],
+          dataDisclosure: source === 'native' && Array.isArray(agent.dataDisclosure)
+            ? agent.dataDisclosure.slice(0, 8).map((row) => ({
+              source: String(row?.source || '').slice(0, 80),
+              en: String(row?.en || '').slice(0, 500),
+              fa: String(row?.fa || '').slice(0, 500)
+            }))
+            : [],
           native: source === 'native',
           accessModel: provider.accessModel,
           costSummary: provider.costSummary,
@@ -365,6 +372,13 @@ export function createTaskBroker({
         inputHint: agent.inputHint || null,
         inputHintFa: agent.inputHintFa || null,
         dataSources: Array.isArray(agent.dataSources) ? agent.dataSources : [],
+        dataDisclosure: source === 'native' && Array.isArray(agent.dataDisclosure)
+          ? agent.dataDisclosure.slice(0, 8).map((row) => ({
+            source: String(row?.source || '').slice(0, 80),
+            en: String(row?.en || '').slice(0, 500),
+            fa: String(row?.fa || '').slice(0, 500)
+          }))
+          : [],
         native: source === 'native',
         accessModel: provider.accessModel,
         costSummary: provider.costSummary,
@@ -411,6 +425,8 @@ export function createTaskBroker({
         providerId: task.consent.providerId,
         contextCategories: task.consent.contextCategories,
         approvedContextHash: task.consent.approvedContextHash,
+        nativeDataApproved: task.consent.nativeDataApproved === true,
+        nativeDataSources: Array.isArray(task.consent.nativeDataSources) ? task.consent.nativeDataSources : [],
         termsVersion: task.consent.termsVersion,
         privacyVersion: task.consent.privacyVersion,
         scope: task.consent.scope,
@@ -477,11 +493,19 @@ export function createTaskBroker({
 
     const needsAccount = provider.accessModel === 'FREE_ACCOUNT' || provider.accessModel === 'EXTERNAL_SUBSCRIPTION';
     let credential = null;
+    let userCredentialUsed = false;
     if (provider.userSupplied === true && sourceCredentials) {
-      /* Optional by design: many A2A agents are public. If the user stored a
-         key for this source, it is attached here — and only here. */
-      const got = await sourceCredentials.credentialFor({ owner, sourceId: provider.id }).catch(() => ({ ok: false }));
-      if (got.ok) credential = got.credential;
+      /* A key is optional for a public A2A agent, but a stored key must never
+         be silently dropped. Only the ordinary NOT_FOUND case means "run
+         without a key"; store, sealing or decryption failures fail closed. */
+      const got = await sourceCredentials.credentialFor({ owner, sourceId: provider.id })
+        .catch(() => ({ ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' }));
+      if (got.ok) {
+        credential = got.credential;
+        userCredentialUsed = true;
+      } else if (got.code !== 'CREDENTIAL_NOT_FOUND') {
+        return fail('SOURCE_CREDENTIAL_UNAVAILABLE', { reason: got.code || 'CREDENTIAL_STORE_UNAVAILABLE' });
+      }
     }
     if (needsAccount) {
       /* The user-facing reason first: "connect an account" is actionable, while
@@ -499,6 +523,18 @@ export function createTaskBroker({
 
     const consent = body.consent || {};
     if (consent.approved !== true) return fail('CONSENT_REQUIRED');
+    const nativeDataSources = provider.native === true && Array.isArray(agent.dataSources)
+      ? [...new Set(agent.dataSources.map((name) => String(name).slice(0, 80)))].slice(0, 8)
+      : [];
+    const consentedNativeDataSources = Array.isArray(consent.nativeDataSources)
+      ? [...new Set(consent.nativeDataSources.map((name) => String(name).slice(0, 80)))].slice(0, 8)
+      : [];
+    const sourceListMatches = nativeDataSources.length === consentedNativeDataSources.length
+      && nativeDataSources.every((source, index) => source === consentedNativeDataSources[index]);
+    const nativeDataApproved = nativeDataSources.length > 0
+      && consent.nativeDataApproved === true
+      && sourceListMatches;
+    if (nativeDataSources.length > 0 && !nativeDataApproved) return fail('NATIVE_DATA_CONSENT_REQUIRED');
     const built = buildConsentPayload({ taskText, categories: consent.categories, context: body.context || {} });
     if (!built.ok) return { ok: false, status: 400, code: built.code, field: built.field || null, detail: built.detail || null };
 
@@ -534,7 +570,16 @@ export function createTaskBroker({
       state: 'queued',
       approvedContextHash: built.hash,
       contextCategories: built.categories,
-      consent: consentRecord({ provider, categories: built.categories, hash: built.hash, termsVersion: consent.termsVersion, privacyVersion: consent.privacyVersion, at }),
+      consent: consentRecord({
+        provider,
+        categories: built.categories,
+        hash: built.hash,
+        termsVersion: consent.termsVersion,
+        privacyVersion: consent.privacyVersion,
+        nativeDataApproved,
+        nativeDataSources,
+        at
+      }),
       taskTitle: taskText.slice(0, 90),
       taskText,
       priceQuote: {
@@ -547,6 +592,9 @@ export function createTaskBroker({
         notes: 'This build does not charge on behalf of the provider.'
       },
       supportsCancellation: typeof adapter.cancelTask === 'function',
+      /* A boolean is enough to re-read the user's credential for follow-up
+         polls; the credential itself is never persisted in the task row. */
+      userCredentialUsed,
       createdAt: at,
       startedAt: null,
       completedAt: null,
@@ -673,6 +721,32 @@ export function createTaskBroker({
     return userSources.providerFor({ owner, providerId: task.providerId });
   }
 
+  async function credentialForTask(owner, provider, task) {
+    if (provider?.userSupplied === true) {
+      /* New tasks record whether a key was used at creation. For older task
+         rows without that flag, recover the owner's saved key if one exists;
+         an absent key remains optional for a public agent. Explicit false is
+         respected so a key added later is not silently attached to that task. */
+      if (task.userCredentialUsed === false) return { ok: true, credential: null };
+      if (!sourceCredentials && task.userCredentialUsed !== true) return { ok: true, credential: null };
+      const got = sourceCredentials
+        ? await sourceCredentials.credentialFor({ owner, sourceId: provider.id }).catch(() => ({ ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' }))
+        : { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
+      if (got.ok) return got;
+      if (task.userCredentialUsed !== true && got.code === 'CREDENTIAL_NOT_FOUND') {
+        return { ok: true, credential: null };
+      }
+      return { ok: false, code: 'SOURCE_CREDENTIAL_UNAVAILABLE', reason: got.code || 'CREDENTIAL_STORE_UNAVAILABLE' };
+    }
+
+    const needsAccount = provider?.accessModel === 'FREE_ACCOUNT' || provider?.accessModel === 'EXTERNAL_SUBSCRIPTION';
+    if (needsAccount) {
+      const got = await connections.credentialFor(owner, provider.id);
+      return got.ok ? got : { ok: false, code: 'AUTH_REQUIRED', reason: got.code || null };
+    }
+    return { ok: true, credential: null };
+  }
+
   async function syncTask(owner, task, { force = false } = {}) {
     if (!task.remoteTaskId) return task;
     if (isTerminal(task.state)) return task;
@@ -685,16 +759,19 @@ export function createTaskBroker({
       task.errorCode = 'PROVIDER_ADAPTER_NOT_IMPLEMENTED';
       return task;
     }
-    const hasConnection = provider.accessModel === 'FREE_ACCOUNT' || provider.accessModel === 'EXTERNAL_SUBSCRIPTION';
-    let credential = null;
-    if (hasConnection) {
-      const got = await connections.credentialFor(owner, provider.id);
-      if (got.ok) credential = got.credential;
-    } else if (provider.userSupplied === true && sourceCredentials) {
-      const got = await sourceCredentials.credentialFor({ owner, sourceId: provider.id }).catch(() => ({ ok: false }));
-      if (got.ok) credential = got.credential;
+    const credentialResult = await credentialForTask(owner, provider, task);
+    if (!credentialResult.ok) {
+      /* Never poll without a credential required by this task. Keep the row
+         recoverable so restoring the account/key allows a later sync. */
+      task.state = 'reconciling';
+      task.errorCode = credentialResult.code;
+      task.safeErrorMessage = userMessageFor(task.errorCode);
+      task.lastProviderSyncAt = now();
+      await store.putTask(owner, task);
+      await recordEvent(owner, task, 'sync_failed', { code: task.errorCode, reason: credentialResult.reason || null });
+      return task;
     }
-    const remote = await adapter.getTask(task.remoteTaskId, credential);
+    const remote = await adapter.getTask(task.remoteTaskId, credentialResult.credential);
     task.lastProviderSyncAt = now();
     if (!remote.ok) {
       if (remote.code === 'PROVIDER_TASK_NOT_FOUND') {
@@ -780,7 +857,17 @@ export function createTaskBroker({
       await recordEvent(owner, task, 'canceled_locally', {});
       return { ok: true, canceled: true, task: publicTask(task) };
     }
-    const remote = await adapter.cancelTask(task.remoteTaskId);
+    const credentialResult = await credentialForTask(owner, provider, task);
+    if (!credentialResult.ok) {
+      return {
+        ok: false,
+        status: credentialResult.code === 'AUTH_REQUIRED' ? 401 : 503,
+        code: credentialResult.code,
+        detail: userMessageFor(credentialResult.code),
+        task: publicTask(task)
+      };
+    }
+    const remote = await adapter.cancelTask(task.remoteTaskId, credentialResult.credential);
     task.cancelRequestedAt = now();
     task.lastProviderSyncAt = now();
     if (!remote.ok) {

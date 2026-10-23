@@ -213,7 +213,12 @@ export function toBaseUnits(amount, decimals) {
   if (!raw || !/^\d*\.?\d*$/.test(raw)) return null;
   const d = Number(decimals);
   if (!Number.isInteger(d) || d < 0 || d > 36) return null;
-  const [whole = '0', frac = ''] = raw.split('.');
+  const [wholeRaw = '0', frac = ''] = raw.split('.');
+  const whole = wholeRaw || '0';
+  /* Never silently truncate a user's amount. Extra trailing zeroes are exact
+     (1.230000 USDC is still 1.23), but a non-zero digit beyond the token's
+     precision changes what will be signed and must be rejected. */
+  if (frac.length > d && /[1-9]/.test(frac.slice(d))) return null;
   const padded = (frac + '0'.repeat(d)).slice(0, d);
   const joined = `${whole}${padded}`.replace(/^0+(?=\d)/, '');
   if (!/^\d+$/.test(joined)) return null;

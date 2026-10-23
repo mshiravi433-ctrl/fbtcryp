@@ -19,7 +19,10 @@
  * the CoinGecko key and its rate limit stay owned in one place.
  */
 
-const TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 10_000);
+const configuredTimeout = Number(process.env.UPSTREAM_TIMEOUT_MS || 10_000);
+const TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+  ? Math.min(configuredTimeout, 14_000)
+  : 10_000;
 
 let fetchImpl = (url, opts) => globalThis.fetch(url, opts);
 
@@ -29,8 +32,9 @@ export function __setFetchForTests(fn) {
 }
 
 function ctrlTimeout(ms = TIMEOUT_MS) {
+  const boundedMs = Math.max(250, Math.min(14_000, Number(ms) || TIMEOUT_MS));
   const c = new AbortController();
-  const t = setTimeout(() => c.abort(), ms);
+  const t = setTimeout(() => c.abort(), boundedMs);
   return { signal: c.signal, done: () => clearTimeout(t) };
 }
 
@@ -112,7 +116,7 @@ function shapePair(p) {
  * mutated string. EVM addresses are hex and insensitive, so they keep being
  * normalised to lowercase for dedupe. */
 const SOL_MINT = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-export async function dexPairsForTokens(addresses) {
+export async function dexPairsForTokens(addresses, { timeoutMs = 9_000 } = {}) {
   const addrs = (Array.isArray(addresses) ? addresses : [addresses])
     .map((a) => String(a || '').trim())
     .map((a) => (SOL_MINT.test(a) ? a : a.toLowerCase()))
@@ -120,7 +124,7 @@ export async function dexPairsForTokens(addresses) {
     .slice(0, 30);
   if (!addrs.length) return { dataStatus: 'unavailable', pairs: [] };
   try {
-    const body = await getJson(`${DEX_BASE}/latest/dex/tokens/${addrs.join(',')}`, { timeout: 9000 });
+    const body = await getJson(`${DEX_BASE}/latest/dex/tokens/${addrs.join(',')}`, { timeout: timeoutMs });
     const pairs = (Array.isArray(body?.pairs) ? body.pairs : []).map(shapePair).filter(Boolean);
     return { dataStatus: pairs.length ? 'live' : 'no-pairs', pairs };
   } catch {
@@ -147,9 +151,9 @@ export async function dexSearch(query) {
  * practice means they just started trading. We then enrich each with its real
  * pairs (liquidity/volume/holders-proxy) before it can qualify as "early".
  */
-export async function dexTokenProfiles() {
+export async function dexTokenProfiles({ timeoutMs = 9000 } = {}) {
   try {
-    const body = await getJson(`${DEX_BASE}/token-profiles/latest/v1`, { timeout: 9000 });
+    const body = await getJson(`${DEX_BASE}/token-profiles/latest/v1`, { timeout: timeoutMs });
     const rows = Array.isArray(body) ? body : [];
     return rows
       .map((r) => ({
@@ -166,9 +170,9 @@ export async function dexTokenProfiles() {
 }
 
 /** Active token boosts (social-signal of attention; never a buy signal). */
-export async function dexTokenBoosts() {
+export async function dexTokenBoosts({ timeoutMs = 9000 } = {}) {
   try {
-    const body = await getJson(`${DEX_BASE}/token-boosts/latest/v1`, { timeout: 9000 });
+    const body = await getJson(`${DEX_BASE}/token-boosts/latest/v1`, { timeout: timeoutMs });
     const rows = Array.isArray(body) ? body : [];
     return rows
       .map((r) => ({
@@ -204,20 +208,20 @@ function blockscoutBase(chainId) {
   return BLOCKSCOUT[Number(chainId)] || null;
 }
 
-async function bsGet(chainId, path) {
+async function bsGet(chainId, path, { timeout = TIMEOUT_MS } = {}) {
   const base = blockscoutBase(chainId);
   if (!base) {
     const err = new Error('NO_BLOCKSCOUT');
     err.code = 'NO_INDEXER';
     throw err;
   }
-  return getJson(`${base}${path}`);
+  return getJson(`${base}${path}`, { timeout });
 }
 
 /** Address counters: first-seen tx time, total tx count. */
-export async function bsAddressCounters(chainId, address) {
+export async function bsAddressCounters(chainId, address, { timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/addresses/${address}/counters`);
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/counters`, { timeout: timeoutMs });
     return {
       dataStatus: 'live',
       txCount: Number(j?.transactions_count) || 0,
@@ -336,9 +340,9 @@ function shapeParty(party) {
 /** Native + token balances for an address. Blockscout ships an
  *  `exchange_rate` per token where it has one — kept as `priceUsd`/`valueUsd`
  *  so a holding still prices when no DEX pair answers. */
-export async function bsBalances(chainId, address) {
+export async function bsBalances(chainId, address, { timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/addresses/${address}/token-balances`);
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/token-balances`, { timeout: timeoutMs });
     const tokens = (Array.isArray(j) ? j : [])
       .filter((b) => !b?.token?.type || b.token.type === 'ERC-20')
       .map((b) => {
@@ -370,9 +374,9 @@ export async function bsBalances(chainId, address) {
  * activity classification (buy/sell/transfer/CEX) and flow aggregation.
  * Zero-value transfers (address-poisoning spam) are dropped.
  */
-export async function bsTokenTransfers(chainId, address, { limit = 50 } = {}) {
+export async function bsTokenTransfers(chainId, address, { limit = 50, timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/addresses/${address}/token-transfers?type=ERC-20`);
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/token-transfers?type=ERC-20`, { timeout: timeoutMs });
     const items = Array.isArray(j?.items) ? j.items : [];
     const me = address.toLowerCase();
     const rows = items.map((it) => {
@@ -424,9 +428,9 @@ export async function bsTokenTransfers(chainId, address, { limit = 50 } = {}) {
 }
 
 /** Transactions for an address (used for native flows + tx-count/age). */
-export async function bsTransactions(chainId, address, { limit = 50 } = {}) {
+export async function bsTransactions(chainId, address, { limit = 50, timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/addresses/${address}/transactions`);
+    const j = await bsGet(chainId, `/api/v2/addresses/${address}/transactions`, { timeout: timeoutMs });
     const items = Array.isArray(j?.items) ? j.items : [];
     const me = address.toLowerCase();
     const rows = items.map((it) => {
@@ -480,9 +484,9 @@ const isWalletParty = (p) => !!p && (!p.is_contract || isDelegatedEoa(p));
 const isContractParty = (p) => !!p?.is_contract && !isDelegatedEoa(p);
 const DEX_CONTRACT_NAME = /settler|router|swap|poolmanager|v[234]pool|pair\b|aggregat|augustus|odos|kyber|1inch|gpv2settlement|lbpair/i;
 
-export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 250, limit = 12 } = {}) {
+export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 250, limit = 12, timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`);
+    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`, { timeout: timeoutMs });
     const items = Array.isArray(j?.items) ? j.items : [];
     const out = new Map();
     for (const it of items) {
@@ -526,9 +530,9 @@ export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 2
 }
 
 /** Token contract facts (total supply, holder count, explorer price). */
-export async function bsTokenInfo(chainId, tokenAddress) {
+export async function bsTokenInfo(chainId, tokenAddress, { timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}`);
+    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}`, { timeout: timeoutMs });
     const decimals = Number(j?.decimals);
     return {
       dataStatus: 'live',
@@ -546,12 +550,15 @@ export async function bsTokenInfo(chainId, tokenAddress) {
 
 /** Token holder list + total holder count for a contract. `share` is the
  *  holder's slice of total supply when the contract reports one. */
-export async function bsTokenHolders(chainId, tokenAddress, { limit = 20 } = {}) {
+export async function bsTokenHolders(chainId, tokenAddress, { limit = 20, timeoutMs = TIMEOUT_MS } = {}) {
   try {
-    const [j, info] = await Promise.all([
-      bsGet(chainId, `/api/v2/tokens/${tokenAddress}/holders`),
-      bsTokenInfo(chainId, tokenAddress).catch(() => ({ dataStatus: 'unavailable' }))
+    const [holdersSettled, infoSettled] = await Promise.allSettled([
+      bsGet(chainId, `/api/v2/tokens/${tokenAddress}/holders`, { timeout: timeoutMs }),
+      bsTokenInfo(chainId, tokenAddress, { timeoutMs })
     ]);
+    if (holdersSettled.status !== 'fulfilled') throw holdersSettled.reason;
+    const j = holdersSettled.value;
+    const info = infoSettled.status === 'fulfilled' ? infoSettled.value : { dataStatus: 'unavailable' };
     const items = Array.isArray(j?.items) ? j.items : [];
     const supply = info?.totalSupplyRaw ? Number(info.totalSupplyRaw) : null;
     const rows = items.slice(0, Math.max(1, limit)).map((h) => {
@@ -596,13 +603,17 @@ export async function bsTokenHolders(chainId, tokenAddress, { limit = 20 } = {})
 /* `solRpc` itself is declared below in the general Solana section — this
    block reuses it rather than re-declaring a second RPC client. */
 
-export async function solanaTokenHolders(mint) {
+export async function solanaTokenHolders(mint, { timeoutMs = 10_000 } = {}) {
   if (!SOL_MINT.test(String(mint || ''))) return { dataStatus: 'unavailable', rows: [], totalHolders: null };
   try {
-    const [supply, largest] = await Promise.all([
-      solRpc('getTokenSupply', [mint]),
-      solRpc('getTokenLargestAccounts', [mint])
+    const [supplySettled, largestSettled] = await Promise.allSettled([
+      solRpc('getTokenSupply', [mint], { timeoutMs }),
+      solRpc('getTokenLargestAccounts', [mint], { timeoutMs })
     ]);
+    if (supplySettled.status !== 'fulfilled') throw supplySettled.reason;
+    if (largestSettled.status !== 'fulfilled') throw largestSettled.reason;
+    const supply = supplySettled.value;
+    const largest = largestSettled.value;
     const total = Number(supply?.value?.uiAmount);
     const accounts = Array.isArray(largest?.value) ? largest.value : [];
     const rows = accounts
@@ -706,13 +717,13 @@ export function explorerConfigured(chainId) {
 }
 
 /** Etherscan v2 txlist (dense account history) when a key is present. */
-export async function explorerAccountTxns(chainId, address, { limit = 100 } = {}) {
+export async function explorerAccountTxns(chainId, address, { limit = 100, timeoutMs = 9_000 } = {}) {
   const exp = EXPLORERS[Number(chainId)];
   const key = exp && String(process.env[exp.keyEnv] || '').trim();
   if (!exp || !key) return { dataStatus: 'unconfigured', rows: [] };
   try {
     const url = `${exp.api}?module=account&action=txlist&address=${address}&sort=desc&offset=${Math.min(200, limit)}&apikey=${encodeURIComponent(key)}`;
-    const body = await getJson(url, { timeout: 9000 });
+    const body = await getJson(url, { timeout: timeoutMs });
     if (body?.status !== '1' || !Array.isArray(body.result)) return { dataStatus: 'unavailable', rows: [] };
     const rows = body.result.map((tx) => ({
       hash: String(tx.hash || '').toLowerCase(),
@@ -738,8 +749,8 @@ export async function explorerAccountTxns(chainId, address, { limit = 100 } = {}
 
 const SOL_RPC = String(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
 
-async function solRpc(method, params) {
-  const { signal, done } = ctrlTimeout(10_000);
+async function solRpc(method, params, { timeoutMs = 10_000 } = {}) {
+  const { signal, done } = ctrlTimeout(timeoutMs);
   try {
     const res = await fetchImpl(SOL_RPC, {
       method: 'POST',
@@ -757,12 +768,12 @@ async function solRpc(method, params) {
 }
 
 /** Recent signatures for a Solana address (activity + first-seen proxy). */
-export async function solSignatures(address, { limit = 50 } = {}) {
+export async function solSignatures(address, { limit = 50, timeoutMs = 10_000 } = {}) {
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) {
     return { dataStatus: 'bad-address', rows: [] };
   }
   try {
-    const sigs = await solRpc('getSignaturesForAddress', [address, { limit: Math.min(100, limit) }]);
+    const sigs = await solRpc('getSignaturesForAddress', [address, { limit: Math.min(100, limit) }], { timeoutMs });
     const rows = (Array.isArray(sigs) ? sigs : []).map((s) => ({
       signature: s.signature,
       slot: s.slot,
@@ -780,10 +791,10 @@ export async function solSignatures(address, { limit = 50 } = {}) {
 }
 
 /** SOL balance in lamports for an address. */
-export async function solBalance(address) {
+export async function solBalance(address, { timeoutMs = 10_000 } = {}) {
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) return { dataStatus: 'bad-address' };
   try {
-    const lamports = await solRpc('getBalance', [address]);
+    const lamports = await solRpc('getBalance', [address], { timeoutMs });
     return { dataStatus: 'live', lamports: Number(lamports?.value ?? 0), sol: Number(lamports?.value ?? 0) / 1e9 };
   } catch {
     return { dataStatus: 'unavailable' };
@@ -799,14 +810,14 @@ export async function solBalance(address) {
  * The RPC returns a token account per mint (a wallet can hold several), so
  * rows are summed by mint and zero balances are dropped.
  */
-export async function solTokenBalances(address, { limit = 40 } = {}) {
+export async function solTokenBalances(address, { limit = 40, timeoutMs = 10_000 } = {}) {
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) return { dataStatus: 'bad-address', tokens: [] };
   try {
     const res = await solRpc('getTokenAccountsByOwner', [
       address,
       { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
       { encoding: 'jsonParsed' }
-    ]);
+    ], { timeoutMs });
     const byMint = new Map();
     for (const acc of (Array.isArray(res?.value) ? res.value : [])) {
       const info = acc?.account?.data?.parsed?.info;

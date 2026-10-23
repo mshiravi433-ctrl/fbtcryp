@@ -30,6 +30,8 @@ import {
   readWatchlist, putWatchlist, deleteWatch, readAlerts, runAlertCycle, markAlertsRead
 } from './watchlist.js';
 
+const READ_DEADLINE_MS = 14_000;
+
 const compactUsd = (n) => {
   if (n == null) return null;
   const abs = Math.abs(n);
@@ -48,8 +50,10 @@ const compactUsd = (n) => {
  * `window` is the headline comparison window; we always compute 24h/7d/30d
  * flow windows and let the client switch without a refetch.
  */
-export async function getOverview({ window: winKey = '24h' } = {}) {
-  const { value } = await withCache(`sm:overview:${winKey}`, TTL.overview, () => buildOverview(winKey), { swr: true });
+export async function getOverview({ window: winKey = '24h', timeoutMs = READ_DEADLINE_MS } = {}) {
+  const readBudgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS));
+  const { value } = await withCache(`sm:overview:${winKey}:${readBudgetMs}`, TTL.overview,
+    () => buildOverview(winKey, { timeoutMs: readBudgetMs }), { swr: true });
   return value;
 }
 
@@ -61,7 +65,10 @@ function within(p, ms) {
   return Promise.race([p, gate]).finally(() => clearTimeout(timer));
 }
 
-async function buildOverview(winKey) {
+async function buildOverview(winKey, { timeoutMs = READ_DEADLINE_MS } = {}) {
+  const readBudgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || READ_DEADLINE_MS));
+  const overviewDeadlineAt = Date.now() + readBudgetMs;
+  const streamBudgetMs = Math.max(250, Math.floor(readBudgetMs / 2));
   const winMs = WINDOWS[winKey] || WINDOWS.H24;
   const now = Date.now();
   const cutoff = now - winMs;
@@ -69,7 +76,7 @@ async function buildOverview(winKey) {
 
   /* ONE stream read feeds every aggregate below (flows, whale board, fresh
      wallets all used to re-read and re-filter it independently). */
-  const stream = await labelledEvents({ minUsd: SCAN_FLOOR });
+  const stream = await labelledEvents({ minUsd: SCAN_FLOOR, timeoutMs: streamBudgetMs });
   const { events, partial, observedSince, sourceUp, scanPending, bufferSize } = stream;
   const whaleEvents = events.filter((e) => e.valueUsd != null && e.valueUsd >= FLOORS.whaleUsd);
   const inWin = whaleEvents.filter((e) => (e.timestamp || 0) >= cutoff);
@@ -164,12 +171,23 @@ async function buildOverview(winKey) {
     };
   }).sort((a, b) => (Math.abs(b.netUsd) - Math.abs(a.netUsd)) || (b.totalUsd - a.totalUsd)).slice(0, 10);
 
+  const remainingReadMs = Math.floor(overviewDeadlineAt - Date.now());
+  const sectionBudgetMs = remainingReadMs >= 250 ? remainingReadMs : 0;
   const [early, fresh, liquidity, whales, verified] = await Promise.all([
-    within(earlyTokens({ limit: 8 }).catch(() => null), 10_000),
-    within(freshWallets({ stream }).catch(() => null), 10_000),
-    within(liquidityEvents({ windowBlocks: 8 }).catch(() => null), 12_000),
-    within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), 12_000),
-    within(getVerifiedIntelligence({ window: winKey, now, includePrices: false, refresh: 'background' }).catch(() => null), 3_000)
+    sectionBudgetMs >= 250
+      ? within(earlyTokens({ limit: 8, timeoutMs: sectionBudgetMs }).catch(() => null), sectionBudgetMs)
+      : Promise.resolve(null),
+    sectionBudgetMs >= 250
+      ? within(freshWallets({ stream, timeoutMs: sectionBudgetMs }).catch(() => null), sectionBudgetMs)
+      : Promise.resolve(null),
+    sectionBudgetMs >= 250
+      ? within(liquidityEvents({ windowBlocks: 8, timeoutMs: sectionBudgetMs }).catch(() => null), sectionBudgetMs)
+      : Promise.resolve(null),
+    sectionBudgetMs >= 250
+      ? within(whaleBoard({ stream, windowMs: Math.max(winMs, WINDOWS.H24) }).catch(() => null), sectionBudgetMs)
+      : Promise.resolve(null),
+    within(getVerifiedIntelligence({ window: winKey, now, includePrices: false, refresh: 'background' }).catch(() => null),
+      Math.min(3_000, readBudgetMs))
   ]);
 
   /*
@@ -272,6 +290,8 @@ export async function getExchanges() {
 }
 
 /** Liquidity feed (cached a touch longer than overview). */
-export function getLiquidityEvents(opts) {
-  return withCache('sm:liquidity', TTL.liquidity, () => liquidityEvents(opts), { swr: true });
+export function getLiquidityEvents(opts = {}) {
+  const timeoutMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(opts.timeoutMs) || READ_DEADLINE_MS));
+  return withCache(`sm:liquidity:${timeoutMs}`, TTL.liquidity,
+    () => liquidityEvents({ ...opts, timeoutMs }), { swr: true });
 }

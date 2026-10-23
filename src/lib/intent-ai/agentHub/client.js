@@ -109,17 +109,18 @@ export const getAgent = (agentId) => call(`/agents/${encodeURIComponent(agentId)
 export const listTasks = (limit = 30) => call(`/tasks?limit=${Number(limit) || 30}`);
 export const getTask = (taskId) => call(`/tasks/${encodeURIComponent(taskId)}`);
 
-export const createTask = ({ agentId, taskText, categories, context, termsVersion = null, privacyVersion = null, idempotencyKey }) =>
-  call(`/agents/${encodeURIComponent(agentId)}/tasks`, {
+export const createTask = ({ agentId, taskText, categories, context, nativeDataApproved = false, nativeDataSources = null, termsVersion = null, privacyVersion = null, idempotencyKey }) => {
+  const consent = { approved: true, categories, nativeDataApproved: nativeDataApproved === true, termsVersion, privacyVersion };
+  if (Array.isArray(nativeDataSources)) {
+    consent.nativeDataSources = [...new Set(nativeDataSources.map((source) => String(source).trim().slice(0, 80)).filter(Boolean))].slice(0, 8);
+  }
+  return call(`/agents/${encodeURIComponent(agentId)}/tasks`, {
     method: 'POST',
     timeout: 45_000,
     headers: { 'idempotency-key': String(idempotencyKey || newIdempotencyKey()) },
-    body: {
-      taskText,
-      context: context || {},
-      consent: { approved: true, categories, termsVersion, privacyVersion }
-    }
+    body: { taskText, context: context || {}, consent }
   });
+};
 
 export const cancelTask = (taskId) => call(`/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST', body: {} });
 

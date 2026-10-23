@@ -40,38 +40,40 @@ function marketFromPairs(pairs) {
   };
 }
 
-async function lookupTokenMarket(address, chain = null) {
-  const res = await dexPairsForTokens([address]);
+async function lookupTokenMarket(address, chain = null, timeoutMs = 9_000) {
+  const res = await dexPairsForTokens([address], { timeoutMs });
   const pairs = chain ? (res.pairs || []).filter((p) => p.chain === chain) : (res.pairs || []);
   if (res.dataStatus !== 'live' || !pairs.length) return { dataStatus: res.dataStatus || 'unavailable' };
   return marketFromPairs(pairs) || { dataStatus: 'no-pairs' };
 }
 
-export async function tokenMarket(tokenRef, { chain = null } = {}) {
-  const address = String(tokenRef?.address || tokenRef || '').toLowerCase();
+export async function tokenMarket(tokenRef, { chain = null, timeoutMs = 9_000 } = {}) {
+  const rawAddress = String(tokenRef?.address || tokenRef || '').trim();
+  const address = chain === 'solana' ? rawAddress : rawAddress.toLowerCase();
   if (!address || !(EVM_ADDR.test(address) || (chain === 'solana' && SOL_MINT.test(address)))) return null;
-  const { value } = await withCache(pairKey(address, chain), TTL_PAIR, () => lookupTokenMarket(address, chain));
+  let value;
+  try {
+    ({ value } = await withCache(pairKey(address, chain), TTL_PAIR, async () => {
+      const market = await lookupTokenMarket(address, chain, timeoutMs);
+      if (market?.dataStatus === 'unavailable') throw new Error('TOKEN_MARKET_UNAVAILABLE');
+      return market;
+    }));
+  } catch { return null; }
   return value?.dataStatus === 'live' ? value : null;
 }
 
 /**
- * Price MANY tokens in ONE DexScreener round-trip.
- *
- * WHY THIS EXISTS — the wallet page used to call `tokenMarket()` once per
- * holding, serially. A wallet with 25 ERC-20s therefore cost 25 upstream calls
- * of up to 9s each, which is longer than the client's own 30s budget: the
- * screen reported «بارگیری هوش کیف‌پول ممکن نشد» while the data was fine.
- * DexScreener's `/latest/dex/tokens/` endpoint accepts a comma-separated list
- * (30 per call), so the whole holdings table is one request.
- *
- * A pair only counts for the token it is the BASE of — the same token looked
- * up as a quote token can legitimately price differently, so those addresses
- * fall back to their own single lookup rather than being given a borrowed price.
+ * Price a bounded token set inside one shared deadline. DexScreener accepts up
+ * to 30 addresses per request; quote-token fallbacks are parallel and capped
+ * rather than serially spending up to nine seconds on every holding.
  */
-export async function tokenMarkets(refs, { chain = null } = {}) {
+export async function tokenMarkets(refs, { chain = null, timeoutMs = 9_000, maxFallbacks = 6 } = {}) {
+  const budgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 9_000));
+  const deadlineAt = Date.now() + budgetMs;
   const addrs = [...new Set((refs || [])
-    .map((r) => String(r?.address || r || '').toLowerCase())
-    .filter((a) => EVM_ADDR.test(a) || (chain === 'solana' && SOL_MINT.test(a))))];
+    .map((r) => String(r?.address || r || '').trim())
+    .map((a) => (chain === 'solana' ? a : a.toLowerCase()))
+    .filter((a) => EVM_ADDR.test(a) || (chain === 'solana' && SOL_MINT.test(a))) )];
   const out = new Map();
   if (!addrs.length) return out;
 
@@ -85,12 +87,15 @@ export async function tokenMarkets(refs, { chain = null } = {}) {
     missing.push(a);
   }
 
+  const fallbackCandidates = [];
   for (let i = 0; i < missing.length; i += 30) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs < 250) break;
     const batch = missing.slice(i, i + 30);
     let res = { dataStatus: 'unavailable', pairs: [] };
     try {
-      res = await dexPairsForTokens(batch);
-    } catch { /* batch dead — the per-token fallback below still runs */ }
+      res = await dexPairsForTokens(batch, { timeoutMs: remainingMs });
+    } catch { /* no price from this batch; do not fan out more requests */ }
     const byBase = new Map();
     for (const p of res.pairs || []) {
       const base = p?.baseToken?.address;
@@ -104,33 +109,47 @@ export async function tokenMarkets(refs, { chain = null } = {}) {
       if (market) {
         out.set(a, market);
         setCached(pairKey(a, chain), market, TTL_PAIR);
-        continue;
+      } else if (res.dataStatus === 'live') {
+        /* Some registries only return a pair when the requested token is the
+           quote side. Retain that fallback, but never serialise one call per
+           holding or let it outlive this wallet read's deadline. */
+        fallbackCandidates.push(a);
       }
-      /* Not a base token in this batch: ask for it directly, once. */
-      // eslint-disable-next-line no-await-in-loop
-      const single = await lookupTokenMarket(a, chain).catch(() => ({ dataStatus: 'unavailable' }));
-      setCached(pairKey(a, chain), single, TTL_PAIR);
-      if (single?.dataStatus === 'live') out.set(a, single);
     }
+  }
+
+  const fallbackBudgetMs = deadlineAt - Date.now();
+  const fallbackLimit = Math.max(0, Math.min(12, Number(maxFallbacks) || 0, fallbackCandidates.length));
+  if (fallbackBudgetMs >= 250 && fallbackLimit) {
+    await Promise.all(fallbackCandidates.slice(0, fallbackLimit).map(async (address) => {
+      try {
+        const single = await lookupTokenMarket(address, chain, fallbackBudgetMs);
+        if (single?.dataStatus === 'live' || single?.dataStatus === 'no-pairs') {
+          setCached(pairKey(address, chain), single, TTL_PAIR);
+        }
+        if (single?.dataStatus === 'live') out.set(address, single);
+      } catch {
+        /* One unpriceable holding does not block the rest of the wallet. */
+      }
+    }));
   }
   return out;
 }
 
 /* ── Historical prices (CoinGecko, majors) ─────────────────────────────── */
 
-async function cgMarketChart(cgId, days) {
+async function cgMarketChart(cgId, days, timeoutMs = 9_000) {
   const key = String(process.env.COINGECKO_API_KEY || '').trim();
   const url = `https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
   const headers = key ? { 'x-cg-pro-api-key': key } : {};
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 9000);
+  const boundedTimeout = Math.max(250, Math.min(14_000, Number(timeoutMs) || 9_000));
+  const t = setTimeout(() => ctrl.abort(), boundedTimeout);
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers });
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`CoinGecko market chart ${res.status}`);
     const j = await res.json();
-    return Array.isArray(j?.prices) ? j.prices : null; // [[ts, price], ...]
-  } catch {
-    return null;
+    return Array.isArray(j?.prices) ? j.prices : []; // [[ts, price], ...]
   } finally {
     clearTimeout(t);
   }
@@ -140,9 +159,12 @@ async function cgMarketChart(cgId, days) {
  * Daily price series for a cg id, cached 30 min (history barely moves).
  * Returns a function priceAt(epochMs) → number|null (nearest daily point).
  */
-export async function historicalPriceFn(cgId, days = 90) {
+export async function historicalPriceFn(cgId, days = 90, { timeoutMs = 9_000 } = {}) {
   if (!cgId) return () => null;
-  const { value } = await withCache(`sm:hist:${cgId}:${days}`, 30 * 60_000, () => cgMarketChart(cgId, days));
+  let value;
+  try {
+    ({ value } = await withCache(`sm:hist:${cgId}:${days}`, 30 * 60_000, () => cgMarketChart(cgId, days, timeoutMs)));
+  } catch { return () => null; }
   if (!Array.isArray(value) || !value.length) return () => null;
   const series = value
     .map(([ts, p]) => ({ ts: Number(ts), p: Number(p) }))

@@ -31,7 +31,7 @@ const PROMPT_EVENT = 'fbt:agent-hub-prompt';
 const KEEP = [
   'id', 'providerId', 'providerName', 'source', 'name', 'nameFa', 'summary',
   'summaryFa', 'examples', 'examplesFa', 'category', 'native', 'status',
-  'accessModel', 'costSummary', 'requiresAccount', 'requiresPayment',
+  'dataSources', 'dataDisclosure', 'accessModel', 'costSummary', 'requiresAccount', 'requiresPayment',
   'paidInvocationEnabled'
 ];
 
@@ -53,7 +53,15 @@ function trimForStorage(agent) {
   for (const key of KEEP) {
     const value = agent?.[key];
     if (value === undefined || value === null) continue;
-    out[key] = Array.isArray(value) ? value.slice(0, 6).map((v) => String(v).slice(0, 240)) : value;
+    if (key === 'dataDisclosure' && Array.isArray(value)) {
+      out[key] = value.slice(0, 8).filter((row) => row && typeof row === 'object').map((row) => ({
+        source: String(row.source || '').slice(0, 80),
+        en: String(row.en || '').slice(0, 500),
+        fa: String(row.fa || '').slice(0, 500)
+      }));
+    } else {
+      out[key] = Array.isArray(value) ? value.slice(0, 8).map((v) => String(v).slice(0, 240)) : value;
+    }
   }
   const provider = agent?.provider && typeof agent.provider === 'object' ? agent.provider : null;
   if (provider) {

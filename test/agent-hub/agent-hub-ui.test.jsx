@@ -416,6 +416,7 @@ describe('first-party agents', () => {
     category: 'trading',
     capabilities: ['trend', 'momentum'],
     dataSources: ['CoinGecko'],
+    dataDisclosure: [{ source: 'CoinGecko', en: 'Only asset ID and range are sent.', fa: 'فقط شناسهٔ دارایی و بازه ارسال می‌شود.' }],
     status: 'LIVE',
     accessModel: 'FREE_PUBLIC',
     costSummary: 'Free — runs inside FBT, no account and no payment'
@@ -646,6 +647,8 @@ describe('Persian native agents, real links and the chat hand-off', () => {
     summaryFa: 'روند، مومنتوم و سطوح حمایت/مقاومت را از کندل‌های واقعی می‌خواند.',
     examples: ['Analyse ETH on the daily timeframe'],
     examplesFa: ['اتریوم را در تایم‌فریم روزانه تحلیل کن'],
+    dataSources: ['CoinGecko'],
+    dataDisclosure: [{ source: 'CoinGecko', en: 'Only the asset ID and requested period are sent.', fa: 'فقط شناسهٔ دارایی و بازهٔ درخواستی ارسال می‌شود.' }],
     status: 'LIVE',
     accessModel: 'FREE_PUBLIC',
     costSummary: 'Free — runs inside FBT, no account and no payment',
@@ -657,7 +660,7 @@ describe('Persian native agents, real links and the chat hand-off', () => {
       privacyUrl: 'https://fbtswap.ir/#/legal/privacy',
       supportUrl: 'https://fbtswap.ir/#/help',
       reviewedAt: '2026-10-22',
-      dataPolicy: { promptTraining: 'no — nothing is sent to a third party', dataRetention: 'this owner’s FBT task history only' },
+      dataPolicy: { promptTraining: 'full prompt is not sent; disclosed public query fields go to listed sources', dataRetention: 'this owner’s FBT task history only' },
       jurisdiction: { providerRestrictions: [] }
     }
   };
@@ -740,7 +743,8 @@ describe('Persian native agents, real links and the chat hand-off', () => {
   it('asks for one clear approval and never pretends an FBT-native run goes to a third party', async () => {
     await openFaDetail();
     expect(screen.getByTestId('agent-hub-consent-approve').checked).toBe(false);
-    expect(screen.getByTestId('agent-hub-detail').textContent).toContain('داخل خودِ FBT اجرا می‌شود');
+    expect(screen.getByTestId('agent-hub-detail').textContent).toContain('فقط پس از این تأیید خوانده می‌شوند');
+    expect(screen.getByTestId('agent-hub-detail').textContent).toContain('CoinGecko');
     expect(screen.getByTestId('agent-hub-detail').textContent).not.toContain('شرایط و حریم خصوصی او اعمال می‌شود');
     fireEvent.click(screen.getByTestId('agent-hub-consent-approve'));
     expect(screen.getByTestId('agent-hub-consent-approve').checked).toBe(true);
@@ -815,7 +819,7 @@ describe('the active agent inside the chat', () => {
     const dock = screen.getByTestId('agent-chat-dock');
     expect(dock.textContent).toContain('تحلیل‌گر معامله');
     /* It says WHERE it runs. A native agent is not a third party. */
-    expect(dock.textContent).toContain('اجرا داخل FBT');
+    expect(dock.textContent).toContain('پیش‌نویس محلی در FBT');
     /* The chips are this agent's examples, not generic intents. */
     expect(screen.getByTestId('agent-chat-chip-0').textContent).toBe('اتریوم را دیروز تحلیل کن');
 
@@ -824,9 +828,96 @@ describe('the active agent inside the chat', () => {
     await waitFor(() => expect(log.textContent).toContain('تصویر لحظه‌ای'));
     expect(log.textContent).toContain('اتریوم را دیروز تحلیل کن');
     expect(posted.taskText).toBe('اتریوم را دیروز تحلیل کن');
-    expect(posted.consent).toEqual({ approved: true, categories: ['task_text'], termsVersion: null, privacyVersion: null });
+    expect(posted.consent).toEqual({ approved: true, categories: ['task_text'], nativeDataApproved: false, termsVersion: null, privacyVersion: null });
     /* Rendered as text nodes: a markdown heading, not raw HTML. */
     expect(log.querySelector('h4').textContent).toContain('ETH');
+  });
+
+  it('requires approval before native agents read from disclosed public-data providers', async () => {
+    const publicSnapshot = {
+      ...SNAPSHOT,
+      dataSources: ['CoinGecko'],
+      dataDisclosure: [{ source: 'CoinGecko', en: 'Only the asset ID, currency and requested period are sent.', fa: 'فقط شناسه، ارز و بازهٔ درخواستی ارسال می‌شود.' }]
+    };
+    let posted = null;
+    routes['POST /ai/agent-hub/agents/fbt-native%3Aai-trading-analyst/tasks'] = (init) => {
+      posted = JSON.parse(init.body);
+      return respond({ ok: true, task: {
+        id: 'native-consented-task', state: 'completed', terminal: true, active: false,
+        agentName: 'AI Trading Analyst', providerName: 'FBT Native',
+        result: { text: 'Public-data result', citations: [], warnings: [] }
+      } });
+    };
+    try { window.localStorage.setItem('fbt.agentHub.active.v1', JSON.stringify(publicSnapshot)); } catch { /* ignore */ }
+
+    render(<AgentChatDock />);
+    const disclosure = screen.getByTestId('native-data-disclosure');
+    expect(disclosure.textContent).toContain('CoinGecko');
+    expect(disclosure.textContent).toContain('Only the asset ID');
+    const send = screen.getByTestId('agent-chat-send');
+    fireEvent.change(screen.getByTestId('agent-chat-input'), { target: { value: 'Analyse BTC trend' } });
+    expect(send.disabled).toBe(true);
+    expect(globalThis.fetch.mock.calls.some(([url, init]) => String(url).includes('/agents/') && String(init?.method || '').toUpperCase() === 'POST')).toBe(false);
+
+    fireEvent.click(screen.getByTestId('agent-chat-consent-approve'));
+    await waitFor(() => expect(screen.getByTestId('agent-chat-send').disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('agent-chat-send'));
+    await waitFor(() => expect(posted).not.toBeNull());
+    expect(posted.consent.nativeDataApproved).toBe(true);
+    expect(posted.consent.nativeDataSources).toEqual(['CoinGecko']);
+    expect(posted.consent.categories).toEqual(['task_text']);
+  });
+
+  it('opens a cross-chain draft from chat without contacting LI.FI until the separate approval', async () => {
+    const swapSnapshot = {
+      ...SNAPSHOT,
+      id: 'fbt-native:cross-chain-swap-assistant',
+      name: 'Cross-chain Swap Assistant',
+      nameFa: 'دستیار سواپ بین‌زنجیره‌ای',
+      examples: ['Swap 100 USDC from Arbitrum to Base'],
+      dataSources: [],
+      dataDisclosure: [{ source: 'Local intent only', en: 'No LI.FI call until Bridge/Swap consent.', fa: 'تا رضایت Bridge/Swap هیچ فراخوانی LI.FI انجام نمی‌شود.' }]
+    };
+    routes['POST /ai/agent-hub/agents/fbt-native%3Across-chain-swap-assistant/tasks'] = () => respond({
+      ok: true,
+      task: {
+        id: 'swap-intent-task', state: 'completed', terminal: true, active: false,
+        agentName: 'Cross-chain Swap Assistant', providerName: 'FBT Native',
+        result: {
+          text: 'Local swap draft. Nothing has been sent to LI.FI.',
+          citations: [], warnings: [],
+          data: { chatAction: {
+            type: 'cross_chain_swap', fromChain: 42161, toChain: 8453,
+            fromToken: 'USDC', toToken: 'USDC', amount: '100', assumedDestinationToken: true
+          } }
+        }
+      }
+    });
+    routes['GET /health/cross-chain'] = () => respond({ ok: true, components: [{ component: 'lifi', ok: true }] });
+    routes['GET /cross-chain/chains'] = () => respond({ chains: [{ id: 42161, name: 'Arbitrum' }, { id: 8453, name: 'Base' }] });
+    routes['GET /cross-chain/resolve-token'] = () => respond({ token: {
+      chainId: 8453, address: '0x1111111111111111111111111111111111111111',
+      symbol: 'USDC', name: 'USD Coin', decimals: 6, priceUSD: '1'
+    } });
+    routes['GET /cross-chain/routes'] = () => respond({ routes: [], requestId: 'empty-routes' });
+    try { window.localStorage.setItem('fbt.agentHub.active.v1', JSON.stringify(swapSnapshot)); } catch { /* ignore */ }
+
+    render(<AgentChatDock />);
+    fireEvent.change(screen.getByTestId('agent-chat-input'), { target: { value: 'Swap 100 USDC from Arbitrum to Base' } });
+    fireEvent.click(screen.getByTestId('agent-chat-send'));
+    fireEvent.click(await screen.findByTestId('agent-chat-open-swap'));
+    expect(await screen.findByTestId('agent-chat-swap-desk')).toBeTruthy();
+    expect(screen.getByTestId('cross-chain-provider-consent').textContent).toMatch(/route and quote requests include the source and destination chains/i);
+
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const providerReadsBeforeApproval = globalThis.fetch.mock.calls
+      .filter(([url]) => /\/(cross-chain|health\/cross-chain)/.test(String(url)));
+    expect(providerReadsBeforeApproval).toHaveLength(0);
+
+    fireEvent.click(screen.getByTestId('cross-chain-provider-consent').querySelector('input'));
+    await waitFor(() => {
+      expect(globalThis.fetch.mock.calls.some(([url]) => String(url).includes('/cross-chain/chains'))).toBe(true);
+    });
   });
 
   it('refuses to send to a real third party before the user approves the share', async () => {

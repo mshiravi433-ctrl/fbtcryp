@@ -11,6 +11,7 @@
  *   · the user pastes THEIR OWN key for THEIR OWN agent;
  *   · it is sealed with `AGENT_HUB_SECRET_KEY` (AES-256-GCM) at an owner-scoped
  *     storage key and never leaves the server unsealed;
+ *   · the key is accepted only when a durable store is configured;
  *   · only an in-flight task for that same source and owner can read it;
  *   · removing it deletes the sealed blob first and tombstones the row;
  *   · the header name and scheme are an ALLOWLIST, because a free-text header
@@ -21,8 +22,8 @@
  * provider reviewed. A source with a key is still `source: "user"` everywhere.
  */
 
-import { createHash } from 'node:crypto';
-import { storeGetFresh, storeSet } from '../store.js';
+import { createHash, randomUUID } from 'node:crypto';
+import { storeDurable, storeGetFresh, storeSet } from '../store.js';
 import { loadSealingKey, seal, unseal } from './seal.js';
 
 export const SOURCE_CREDENTIAL_SCHEMA = 'fbt.agent-hub.source-credential.v1';
@@ -38,8 +39,10 @@ export const CREDENTIAL_HEADERS = Object.freeze(['authorization', 'x-api-key', '
 export const CREDENTIAL_SCHEMES = Object.freeze(['bearer', 'token', 'key', 'raw']);
 
 const sha = (value) => createHash('sha256').update(String(value)).digest('hex');
-const secretKey = (owner, sourceId) => `agenthub:uscred:v1:${sha(owner).slice(0, 24)}:${String(sourceId).slice(0, 60)}`;
-const metaKey = (owner) => `agenthub:uscred-index:v1:${sha(owner).slice(0, 24)}`;
+const ownerPart = (owner) => sha(owner).slice(0, 24);
+const secretKey = (owner, sourceId, credentialId = null) =>
+  `agenthub:uscred:v1:${ownerPart(owner)}:${String(sourceId).slice(0, 60)}${credentialId ? `:${String(credentialId).slice(0, 48)}` : ''}`;
+const metaKey = (owner) => `agenthub:uscred-index:v1:${ownerPart(owner)}`;
 
 const str = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
@@ -56,14 +59,19 @@ export function createSourceCredentials({
   userSources,
   env = process.env,
   now = () => Date.now(),
-  log = () => {}
+  log = () => {},
+  storage = {}
 } = {}) {
   const sealingKey = loadSealingKey(env);
+  const durable = typeof storage.durable === 'function' ? storage.durable : storeDurable;
+  const getFresh = typeof storage.getFresh === 'function' ? storage.getFresh : storeGetFresh;
+  const set = typeof storage.set === 'function' ? storage.set : storeSet;
 
   function capability() {
     return {
       supported: true,
       sealingConfigured: Boolean(sealingKey),
+      durable: Boolean(durable()),
       headers: [...CREDENTIAL_HEADERS],
       schemes: [...CREDENTIAL_SCHEMES],
       ttlDays: Math.round(TTL_MS / 86_400_000)
@@ -90,23 +98,28 @@ export function createSourceCredentials({
   }
 
   async function readMeta(owner) {
-    const rows = await storeGetFresh(metaKey(owner), []);
+    const rows = await getFresh(metaKey(owner), []);
     return Array.isArray(rows) ? rows : [];
   }
 
   async function writeMeta(owner, rows) {
-    return storeSet(metaKey(owner), rows.slice(0, MAX_SOURCES), TTL_MS);
+    return set(metaKey(owner), rows.slice(0, MAX_SOURCES), TTL_MS);
   }
 
   async function list({ owner } = {}) {
-    const rows = await readMeta(owner);
-    return {
-      ok: true,
-      credentials: rows
-        .filter((row) => row && row.sourceId && row.status === 'ACTIVE')
-        .filter((row) => !row.expiresAt || row.expiresAt > now())
-        .map(publicEntry)
-    };
+    try {
+      const rows = await readMeta(owner);
+      return {
+        ok: true,
+        durable: Boolean(durable()),
+        credentials: rows
+          .filter((row) => row && row.sourceId && row.status === 'ACTIVE')
+          .filter((row) => !row.expiresAt || row.expiresAt > now())
+          .map(publicEntry)
+      };
+    } catch {
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE', durable: Boolean(durable()), credentials: [] };
+    }
   }
 
   async function save({ owner, sourceId, headerName = 'authorization', scheme = 'bearer', secret } = {}) {
@@ -127,40 +140,70 @@ export function createSourceCredentials({
     /* A recognizable "Bearer eyJ…" pasted into the field is normalised rather
        than double-prefixed — that would send "Bearer Bearer …". */
     const normalized = frame === 'raw' && /^Bearer\s+/i.test(value) ? value.replace(/^Bearer\s+/i, '') : value;
+    if (!durable()) return { ok: false, code: 'CREDENTIAL_STORE_REQUIRED' };
 
+    let rows;
+    try {
+      rows = await readMeta(owner);
+    } catch {
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
+    }
+    const previous = rows.find((row) => row?.sourceId === sourceId && row.status === 'ACTIVE') || null;
+    const credentialId = randomUUID().replace(/-/g, '');
     const sealed = seal(sealingKey, { headerName: header, scheme: frame, secret: normalized, at: now() });
-    await storeSet(secretKey(owner, sourceId), sealed, TTL_MS);
-
-    const rows = await readMeta(owner);
-    const row = {
-      schema: SOURCE_CREDENTIAL_SCHEMA,
-      sourceId,
-      headerName: header,
-      scheme: frame,
-      status: 'ACTIVE',
-      createdAt: rows.find((r) => r?.sourceId === sourceId)?.createdAt || now(),
-      updatedAt: now(),
-      expiresAt: now() + TTL_MS,
-      lastUsedAt: null
-    };
-    const next = [row, ...rows.filter((r) => r && r.sourceId !== sourceId)].slice(0, MAX_SOURCES);
-    await writeMeta(owner, next);
-    return { ok: true, connection: publicEntry(row) };
+    try {
+      await set(secretKey(owner, sourceId, credentialId), sealed, TTL_MS);
+      const row = {
+        schema: SOURCE_CREDENTIAL_SCHEMA,
+        sourceId,
+        credentialId,
+        headerName: header,
+        scheme: frame,
+        status: 'ACTIVE',
+        createdAt: previous?.createdAt || now(),
+        updatedAt: now(),
+        expiresAt: now() + TTL_MS,
+        lastUsedAt: null
+      };
+      const next = [row, ...rows.filter((r) => r && r.sourceId !== sourceId)].slice(0, MAX_SOURCES);
+      await writeMeta(owner, next);
+      /* The new metadata now points at the new blob. Old ciphertext can be
+         deleted best-effort without risking a still-active credential. */
+      if (previous) {
+        await set(secretKey(owner, sourceId, previous.credentialId || null), null, 60_000).catch(() => null);
+      }
+      return { ok: true, connection: publicEntry(row) };
+    } catch {
+      /* The index may still point at the previous key. The versioned blob means
+         a failed metadata write cannot replace or corrupt that active secret. */
+      await set(secretKey(owner, sourceId, credentialId), null, 60_000).catch(() => null);
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
+    }
   }
 
   async function remove({ owner, sourceId } = {}) {
-    const rows = await readMeta(owner);
+    let rows;
+    try {
+      rows = await readMeta(owner);
+    } catch {
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
+    }
     const existing = rows.find((r) => r?.sourceId === sourceId && r.status === 'ACTIVE');
+    if (!existing) return { ok: false, code: 'CREDENTIAL_NOT_FOUND' };
     /* Delete the sealed blob FIRST, for the same reason as an OAuth revoke:
        metadata without the secret is a revocation, the reverse is not. */
     try {
-      await storeSet(secretKey(owner, sourceId), null, 60_000);
+      await set(secretKey(owner, sourceId, existing.credentialId || null), null, 60_000);
     } catch {
       log('agenthub:source-credential-delete-failed');
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
     }
     const next = rows.map((r) => (r?.sourceId === sourceId ? { ...r, status: 'REVOKED', revokedAt: now() } : r));
-    await writeMeta(owner, next);
-    if (!existing) return { ok: false, code: 'CREDENTIAL_NOT_FOUND' };
+    try {
+      await writeMeta(owner, next);
+    } catch {
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
+    }
     return { ok: true, connection: { ...publicEntry(existing), status: 'REVOKED', revokedAt: now() } };
   }
 
@@ -170,14 +213,23 @@ export function createSourceCredentials({
    */
   async function credentialFor({ owner, sourceId } = {}) {
     if (!sealingKey) return { ok: false, code: 'AGENT_HUB_SECRET_KEY_REQUIRED' };
-    const rows = await readMeta(owner);
+    let rows;
+    try {
+      rows = await readMeta(owner);
+    } catch {
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
+    }
     const row = rows.find((r) => r?.sourceId === sourceId && r.status === 'ACTIVE' && (!r.expiresAt || r.expiresAt > now()));
     if (!row) return { ok: false, code: 'CREDENTIAL_NOT_FOUND' };
-    let sealed = null;
+    /* A legacy in-memory credential from before durable-only saves must never
+       be used for a remote task on a deployment without persistence. */
+    if (!durable()) return { ok: false, code: 'CREDENTIAL_STORE_REQUIRED' };
+
+    let sealed;
     try {
-      sealed = await storeGetFresh(secretKey(owner, sourceId), null);
+      sealed = await getFresh(secretKey(owner, sourceId, row.credentialId || null), null);
     } catch {
-      sealed = null;
+      return { ok: false, code: 'CREDENTIAL_STORE_UNAVAILABLE' };
     }
     if (typeof sealed !== 'string') return { ok: false, code: 'CREDENTIAL_NOT_FOUND' };
     try {

@@ -137,7 +137,10 @@ function summarizePnl(closed, unrealizedUsd) {
 
 /* ── EVM wallet ───────────────────────────────────────────────────────── */
 
-async function analyzeEvm(chainId, address, { windowMs } = {}) {
+async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {}) {
+  const readBudgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 12_000));
+  const deadlineAt = Date.now() + readBudgetMs;
+  const historyTimeoutMs = Math.max(250, Math.min(6_000, Math.floor(readBudgetMs / 2)));
   const cutoff = Date.now() - (windowMs || WINDOWS.D30);
 
   // 1. History. Prefer the keyed explorer (denser); Blockscout is keyless.
@@ -146,12 +149,12 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
   //    though balances and activity were perfectly readable).
   const [txSettled, bsTxSettled, transfersSettled, balancesSettled, countersSettled] = await Promise.allSettled([
     explorerConfigured(chainId)
-      ? explorerAccountTxns(chainId, address, { limit: 200 })
+      ? explorerAccountTxns(chainId, address, { limit: 200, timeoutMs: historyTimeoutMs })
       : Promise.resolve({ dataStatus: 'unconfigured', rows: [] }),
-    bsTransactions(chainId, address, { limit: 100 }),
-    bsTokenTransfers(chainId, address, { limit: 100 }),
-    bsBalances(chainId, address),
-    bsAddressCounters(chainId, address)
+    bsTransactions(chainId, address, { limit: 100, timeoutMs: historyTimeoutMs }),
+    bsTokenTransfers(chainId, address, { limit: 100, timeoutMs: historyTimeoutMs }),
+    bsBalances(chainId, address, { timeoutMs: historyTimeoutMs }),
+    bsAddressCounters(chainId, address, { timeoutMs: historyTimeoutMs })
   ]);
   const settled = (r, fallback) => (r.status === 'fulfilled' && r.value ? r.value : fallback);
   const txRes = settled(txSettled, { dataStatus: 'unavailable', rows: [] });
@@ -182,10 +185,17 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
   const tradedTokens = transfers.map((tr) => tr.token?.address).filter(Boolean);
   const pricedTokens = [...new Set([...heldTokens, ...tradedTokens])].slice(0, 60);
   let markets = new Map();
-  try {
-    markets = await tokenMarkets(pricedTokens, { chain: DEX_SLUGS[chainId] || null });
-  } catch {
-    markets = new Map(); // no prices: every value below degrades, nothing lies
+  const marketBudgetMs = deadlineAt - Date.now();
+  if (marketBudgetMs >= 250) {
+    try {
+      markets = await tokenMarkets(pricedTokens, {
+        chain: DEX_SLUGS[chainId] || null,
+        timeoutMs: marketBudgetMs,
+        maxFallbacks: 6
+      });
+    } catch {
+      markets = new Map(); // no prices: every value below degrades, nothing lies
+    }
   }
   const holdings = [];
   let portfolioUsd = 0;
@@ -275,11 +285,14 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
   // present price applied retrospectively. Only curated CoinGecko ids offer
   // a bounded daily history; everything else keeps exitTiming:null.
   const oldExits = audit.closed.filter((c) => Date.now() - c.at >= 7 * WINDOWS.H24);
-  if (oldExits.length >= 2) {
+  const historyBudgetMs = deadlineAt - Date.now();
+  if (oldExits.length >= 2 && historyBudgetMs >= 250) {
     const ids = [...new Set(oldExits.map((c) => priceMap.get(c.token)?.cgId).filter(Boolean))].slice(0, 12);
     const pricesAfter = new Map();
     await Promise.all(ids.map(async (id) => {
-      try { pricesAfter.set(id, await historicalPriceFn(id, 90)); }
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs < 250) return;
+      try { pricesAfter.set(id, await historicalPriceFn(id, 90, { timeoutMs: remainingMs })); }
       catch { /* a missing price is not a neutral exit */ }
     }));
     audit = analyzePerformance({
@@ -407,11 +420,14 @@ async function analyzeEvm(chainId, address, { windowMs } = {}) {
 
 /* ── Solana wallet ────────────────────────────────────────────────────── */
 
-async function analyzeSolana(address) {
+async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
+  const readBudgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 12_000));
+  const deadlineAt = Date.now() + readBudgetMs;
+  const historyTimeoutMs = Math.max(250, Math.min(6_000, Math.floor(readBudgetMs / 2)));
   const [sigsSettled, balSettled, splSettled] = await Promise.allSettled([
-    solSignatures(address, { limit: 100 }),
-    solBalance(address),
-    solTokenBalances(address)
+    solSignatures(address, { limit: 100, timeoutMs: historyTimeoutMs }),
+    solBalance(address, { timeoutMs: historyTimeoutMs }),
+    solTokenBalances(address, { timeoutMs: historyTimeoutMs })
   ]);
   const sigsRes = sigsSettled.status === 'fulfilled' ? sigsSettled.value : { dataStatus: 'unavailable', rows: [] };
   const balRes = balSettled.status === 'fulfilled' ? balSettled.value : { dataStatus: 'unavailable' };
@@ -423,20 +439,30 @@ async function analyzeSolana(address) {
   const isFresh = ageMs != null && ageMs < FRESH.maxAgeMs;
 
   let solPrice = null;
-  try {
-    const { fetchSimplePrices } = await import('../providers.js');
-    const prices = await fetchSimplePrices(['solana'], 'usd');
-    solPrice = prices?.solana?.usd ?? null;
-  } catch { /* leave null */ }
+  const priceBudgetMs = deadlineAt - Date.now();
+  if (priceBudgetMs >= 250) {
+    try {
+      const { fetchSimplePrices } = await import('../providers.js');
+      const prices = await fetchSimplePrices(['solana'], 'usd', { timeoutMs: priceBudgetMs });
+      solPrice = prices?.solana?.usd ?? null;
+    } catch { /* leave null */ }
+  }
 
   /* SPL positions priced from real Solana DEX pairs — one batched call.
      A mint with no pair simply has no USD value and says so; it is never
      dropped from the holdings list for that reason. */
   let splMarkets = new Map();
-  try {
-    splMarkets = await tokenMarkets(splTokens.map((t) => t.token), { chain: 'solana' });
-  } catch {
-    splMarkets = new Map();
+  const marketBudgetMs = deadlineAt - Date.now();
+  if (marketBudgetMs >= 250) {
+    try {
+      splMarkets = await tokenMarkets(splTokens.map((t) => t.token), {
+        chain: 'solana',
+        timeoutMs: marketBudgetMs,
+        maxFallbacks: 6
+      });
+    } catch {
+      splMarkets = new Map();
+    }
   }
 
   const solValue = balRes.sol != null && solPrice != null ? balRes.sol * solPrice : null;
@@ -545,10 +571,13 @@ export async function analyzeWallet(rawAddress, chainHint = null, opts = {}) {
     const e = new Error('BAD_ADDRESS'); e.code = 'BAD_ADDRESS'; throw e;
   }
   const chainId = chainHint && chainHint !== 'solana' ? Number(chainHint) : 1;
+  const timeoutMs = Math.max(250, Math.min(14_000, Number(opts.timeoutMs) || 12_000));
+  const windowMs = Math.max(1, Number(opts.windowMs) || WINDOWS.D30);
+  const readOpts = { ...opts, timeoutMs, windowMs };
 
-  const cacheKey = `sm:wallet:${isSol ? 'solana' : chainId}:${address.toLowerCase()}`;
+  const cacheKey = `sm:wallet:${isSol ? 'solana' : chainId}:${address.toLowerCase()}:${timeoutMs}:${windowMs}`;
   const { value } = await withCache(cacheKey, TTL.wallet, () =>
-    isSol ? analyzeSolana(address) : analyzeEvm(chainId, address, opts)
+    isSol ? analyzeSolana(address, readOpts) : analyzeEvm(chainId, address, readOpts)
   );
   return value;
 }

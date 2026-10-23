@@ -206,9 +206,24 @@ t('a first-party agent runs without any connection, consent still required',
     const noConsent = await createTask('fbt-native:ai-trading-analyst', 'ETH trend please', { extra: { consent: { approved: false, categories: ['task_text'] } } });
     return noConsent.status === 400 && noConsent.body.code === 'CONSENT_REQUIRED';
   })()));
+const missingNativeDataConsent = await createTask('fbt-native:yield-optimizer', 'best stablecoin yield on arbitrum', {
+  key: 'native-no-data-consent',
+  extra: { consent: { approved: true, categories: ['task_text'] }, context: {} }
+});
+t('a native task cannot query a public provider without explicit data consent',
+  missingNativeDataConsent.status === 400 && missingNativeDataConsent.body.code === 'NATIVE_DATA_CONSENT_REQUIRED', missingNativeDataConsent.body);
+const staleNativeDataConsent = await createTask('fbt-native:yield-optimizer', 'best stablecoin yield on arbitrum', {
+  key: 'native-stale-data-consent',
+  extra: { consent: { approved: true, categories: ['task_text'], nativeDataApproved: true, nativeDataSources: ['CoinGecko'] }, context: {} }
+});
+t('a native task refuses stale approval when the disclosed provider list differs',
+  staleNativeDataConsent.status === 400 && staleNativeDataConsent.body.code === 'NATIVE_DATA_CONSENT_REQUIRED', staleNativeDataConsent.body);
 /* End-to-end through the REAL server: no OAuth, no credential, no payment,
-   no remote host. This is the path the user asked to work. */
-const nativeRun = await createTask('fbt-native:yield-optimizer', 'best stablecoin yield on arbitrum', { key: 'native-run-0001' });
+   and only an approved public-data query. */
+const nativeRun = await createTask('fbt-native:yield-optimizer', 'best stablecoin yield on arbitrum', {
+  key: 'native-run-0001',
+  extra: { consent: { approved: true, categories: ['task_text'], nativeDataApproved: true, nativeDataSources: ['DefiLlama yields'] }, context: {} }
+});
 t('a first-party agent completes a task with no account and no payment',
   nativeRun.status === 200 && nativeRun.body.task?.state === 'completed'
   && nativeRun.body.task?.providerId === 'fbt-native'
@@ -221,6 +236,11 @@ t('the first-party result is readable afterwards and records its source',
   && nativeRead.body.events?.length >= 1, nativeRead.body.task && { state: nativeRead.body.task.state });
 t('a first-party result names its data source and never claims execution',
   /DefiLlama/i.test(nativeRead.body.task?.result?.text || '') && !/\b(sign|broadcast|private key)\b/i.test(nativeRead.body.task?.result?.text || ''));
+
+t('the task receipt records consent for the exact public source',
+  nativeRead.body.task?.consent?.nativeDataApproved === true
+  && nativeRead.body.task?.consent?.nativeDataSources?.includes('DefiLlama yields') === true,
+  nativeRead.body.task?.consent);
 
 const offHub = createAgentHub({ env: { AGENT_HUB_ENABLED: 'false' }, ownerFor: () => 'dev:probe' });
 const offCatalog = await offHub.broker.catalog({ owner: 'dev:probe' });
@@ -510,11 +530,11 @@ t('a header outside the allowlist is refused', keyBadHeader.status === 400 && ke
 const keyCrlf = await post(`${HUB}/sources/${sourceId}/credential`, { secret: 'abc\r\nX-Evil: 1' });
 t('a key containing a newline is refused', keyCrlf.status === 400 && keyCrlf.body.code === 'CREDENTIAL_SECRET_INVALID', keyCrlf.body);
 const keySaved = await post(`${HUB}/sources/${sourceId}/credential`, { secret: KEY_SECRET, headerName: 'authorization', scheme: 'bearer' });
-t('the owner can store a key for their own agent', keySaved.status === 200 && keySaved.body.connection?.status === 'ACTIVE' && keySaved.body.connection?.kind === 'api_key', keySaved.body);
-t('the key is never echoed back', !JSON.stringify(keySaved.body).includes(KEY_SECRET));
+t('a BYO key is refused when this deployment has no durable store', keySaved.status === 503 && keySaved.body.code === 'CREDENTIAL_STORE_REQUIRED', keySaved.body);
+t('a refused key is never echoed back', !JSON.stringify(keySaved.body).includes(KEY_SECRET));
 const keyListed = await call(`${HUB}/connections`);
 const keyRow = keyListed.body.connections.find((c) => c.kind === 'api_key');
-t('the stored key is listed as a connection without its value', keyListed.status === 200 && keyRow?.providerId === sourceId && !JSON.stringify(keyListed.body).includes(KEY_SECRET), keyRow);
+t('a BYO key is not listed as stored after a durability refusal', keyListed.status === 200 && !keyRow && !JSON.stringify(keyListed.body).includes(KEY_SECRET), keyRow);
 const keyOtherDevice = await post(`${HUB}/sources/${sourceId}/credential`, { secret: 'sk-other-device-000000' }, { device: DEVICE_B });
 t('another device cannot write a key onto someone else\'s source', keyOtherDevice.status === 404 && keyOtherDevice.body.code === 'SOURCE_NOT_FOUND', keyOtherDevice.body);
 const keyOtherDelete = await call(`${HUB}/sources/${sourceId}/credential`, { method: 'DELETE', device: DEVICE_B });
@@ -529,9 +549,8 @@ const userTask = await createTask(userAgentId, 'instant: user supplied agent');
 t('a task runs against the user-supplied agent', userTask.status === 200 && userTask.body.task.state === 'completed' && A.calls.send === sendBeforeUserTask + 1, { status: userTask.status, body: userTask.body.task?.state, code: userTask.body.code });
 t('the task records which source it came from', userTask.body.task?.providerId === sourceId);
 const keyDeleted = await call(`${HUB}/sources/${sourceId}/credential`, { method: 'DELETE' });
-t('the owner can delete the key', keyDeleted.status === 200 && keyDeleted.body.connection?.status === 'REVOKED', keyDeleted.body);
-t('a deleted key is gone from the connection list', (await call(`${HUB}/connections`)).body.connections.every((c) => c.kind !== 'api_key'));
-t('a task still runs on a public agent after its key is deleted', (await createTask(userAgentId, 'instant: no key needed')).status === 200);
+t('a key that was never durably stored cannot be reported as deleted', keyDeleted.status === 400 && keyDeleted.body.code === 'CREDENTIAL_NOT_FOUND', keyDeleted.body);
+t('a task still runs on a public agent when no BYO key is stored', (await createTask(userAgentId, 'instant: no key needed')).status === 200);
 
 /* Ownership: device B must not see, use or delete device A's source. */
 const bCatalog = await call(`${HUB}/catalog`, { device: DEVICE_B });

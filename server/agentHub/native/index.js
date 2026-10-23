@@ -6,12 +6,12 @@
  * That gate is correct and it used to leave the Agents page with nothing that
  * could actually run.
  *
- * Native agents close that gap without weakening it: they are FBT's OWN agents,
- * executed by this server against public data the app already serves. There is
- * nothing to review because there is no third party, nothing to authorize
- * because there is no external account, and nothing to bill because there is no
- * price. The label in the UI is `FBT native` and it can never be confused with a
- * reviewed third-party listing or with an agent the user added.
+ * Native agents close that gap without weakening it: their logic runs on this
+ * server, while some reads fetch public data from named third-party providers.
+ * Before those reads, the UI names each source and the query fields; the full
+ * prompt is not forwarded to a model provider. The label in the UI is `FBT
+ * native` and can never be confused with a reviewed third-party agent or one
+ * the user added.
  *
  * The shape is deliberately identical to a provider + adapter pair so the task
  * broker, consent composer, idempotency, kill switches, history and rendering
@@ -78,8 +78,8 @@ export function createNativeProvider({ env = process.env } = {}) {
       reviewedBy: 'FBT first party (code review + tests)',
       documentUrl: hashUrl(origin, '/legal/disclaimer'),
       jurisdiction: { operatorJurisdiction: null, targetRegions: [], providerRestrictions: [], accountEligibility: null },
-      promptTraining: 'no — no third party receives the prompt',
-      dataRetention: 'stored only in this owner’s FBT task history',
+      promptTraining: 'the task prompt is processed by FBT; listed public-data providers receive only the disclosed query fields after consent',
+      dataRetention: 'task history is scoped to this device identity; storage durability depends on deployment configuration',
       notes: 'Runs in-process against public market data; no execution authority.'
     }
   };
@@ -104,8 +104,8 @@ export function nativePublicView(provider, { now = () => Date.now() } = {}) {
     source: 'native',
     jurisdiction: { targetRegions: [], providerRestrictions: [], accountEligibility: null },
     dataPolicy: {
-      promptTraining: 'no — nothing is sent to a third party',
-      dataRetention: 'this owner’s FBT task history only'
+      promptTraining: 'the native logic runs inside FBT; before a public-data query, the named provider and query fields are disclosed and require consent',
+      dataRetention: 'device-scoped task history; persistence depends on the deployment store'
     },
     reviewedAt: NATIVE_FIRST_PARTY_SINCE,
     lastVerifiedAt: null,
@@ -140,6 +140,7 @@ export function createNativeAdapter({ env = process.env, now = () => Date.now(),
         inputHint: a.inputHint,
         inputHintFa: a.inputHintFa,
         dataSources: a.dataSources,
+        dataDisclosure: a.dataDisclosure,
         inputModes: ['text/plain'],
         outputModes: ['text/plain', 'text/markdown']
       }));
