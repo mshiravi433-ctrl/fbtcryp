@@ -913,7 +913,22 @@ function FarmCompareSheet({ pools, amount, open, onClose, t }) {
   );
 }
 
+const ALERT_UP_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 19V5" />
+    <path d="m6 11 6-6 6 6" />
+  </svg>
+);
+
+const ALERT_DOWN_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14" />
+    <path d="m6 13 6 6 6-6" />
+  </svg>
+);
+
 function FarmRateAlertControls({ id, config, poolApy, onChange, rateAvailable = false, t }) {
+  const [open, setOpen] = useState(false);
   const value = config?.threshold == null ? '' : String(config.threshold);
   const hasThreshold = value !== '' && Number.isFinite(Number(value));
   const enabled = Boolean(config?.enabled && hasThreshold && rateAvailable);
@@ -923,9 +938,25 @@ function FarmRateAlertControls({ id, config, poolApy, onChange, rateAvailable = 
   const isTargetReached = apy != null && hasThreshold && (
     direction === 'above' ? apy >= threshold : apy <= threshold
   );
+  const rawDiff = apy != null && hasThreshold ? Number((apy - threshold).toFixed(2)) : null;
+  const formattedMargin = rawDiff == null
+    ? '—'
+    : `${rawDiff > 0 ? '+' : ''}${Object.is(rawDiff, -0) ? 0 : rawDiff}%`;
+  const dirClass = direction === 'below' ? 'is-dir-below' : 'is-dir-above';
+
   return (
-    <div className={`farm-rate-alert-v2${enabled ? ' is-active' : ''}${isTargetReached ? ' is-reached' : hasThreshold ? ' is-missed' : ''}`} role="group" aria-label={t('farm.alerts.title')} data-testid={`farm-rate-alert-${id}`}>
-      <div className="farm-alert-v2-head">
+    <div
+      className={`farm-rate-alert-v2 ${dirClass}${open ? ' is-open' : ''}${enabled ? ' is-active' : ''}${isTargetReached ? ' is-reached' : hasThreshold ? ' is-missed' : ''}`}
+      role="group"
+      aria-label={t('farm.alerts.title')}
+      data-testid={`farm-rate-alert-${id}`}
+    >
+      <button
+        type="button"
+        className="farm-alert-v2-head"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+      >
         <span className="farm-alert-v2-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 8.2a6 6 0 0 1 12 0c0 6.2 2.4 8.3 2.4 8.3H3.6S6 14.4 6 8.2z"/>
@@ -935,6 +966,14 @@ function FarmRateAlertControls({ id, config, poolApy, onChange, rateAvailable = 
         </span>
         <span className="farm-alert-v2-title">{t('farm.alerts.title')}</span>
         {hasThreshold && (
+          <span className={`farm-alert-v2-summary ${dirClass} mono`} dir="ltr">
+            <span className="farm-alert-v2-dir-icon" aria-hidden="true">
+              {direction === 'below' ? ALERT_DOWN_ICON : ALERT_UP_ICON}
+            </span>
+            {value}%
+          </span>
+        )}
+        {hasThreshold && (
           <span className={`farm-alert-v2-status${isTargetReached ? ' is-hit' : ' is-miss'}`}>
             {isTargetReached ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
@@ -943,57 +982,77 @@ function FarmRateAlertControls({ id, config, poolApy, onChange, rateAvailable = 
             )}
           </span>
         )}
-      </div>
-      <div className="farm-alert-v2-body">
-        <label className="farm-alert-v2-field">
-          <span>{t('farm.alerts.threshold')}</span>
-          <input
-            className="farm-alert-v2-input mono"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            max="1000"
-            step="0.1"
-            value={value}
-            disabled={!rateAvailable}
-            dir="ltr"
-            aria-label={t('farm.alerts.threshold')}
-            onChange={(event) => onChange(id, { threshold: event.target.value === '' ? null : Number(event.target.value) })}
-          />
-        </label>
-        <label className="farm-alert-v2-field">
-          <span>{t('farm.alerts.direction')}</span>
-          <select
-            className="farm-alert-v2-select"
-            value={direction}
-            disabled={!rateAvailable}
-            aria-label={t('farm.alerts.direction')}
-            onChange={(event) => onChange(id, { direction: event.target.value })}
-          >
-            <option value="above">{t('farm.alerts.above')}</option>
-            <option value="below">{t('farm.alerts.below')}</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className={`farm-alert-v2-toggle${enabled ? ' is-enabled' : ''}`}
-          disabled={!hasThreshold || !rateAvailable}
-          aria-pressed={enabled}
-          onClick={() => onChange(id, { enabled: !enabled })}
-        >
-          <span className="farm-alert-v2-toggle-track" aria-hidden="true"><span /></span>
-          <span>{t(enabled ? 'farm.alerts.disable' : 'farm.alerts.enable')}</span>
-        </button>
-      </div>
-      {hasThreshold && (
-        <div className={`farm-alert-v2-margin${isTargetReached ? ' is-good' : ' is-bad'}`}>
-          <span className="farm-alert-v2-margin-label">{t('farm.alerts.margin')}</span>
-          <strong className="mono" dir="ltr">
-            {apy == null ? '—' : `${direction === 'above' ? apy - threshold : threshold - apy > 0 ? -(threshold - apy) : apy - threshold > 0 ? -(apy - threshold) : 0}`.replace(/^-0$/, '0')}%
-          </strong>
+        <span className="farm-alert-v2-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
+      </button>
+      {open && (
+        <div className="farm-alert-v2-panel">
+          <div className="farm-alert-v2-body">
+            <label className="farm-alert-v2-field">
+              <span>{t('farm.alerts.threshold')}</span>
+              <input
+                className="farm-alert-v2-input mono"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="1000"
+                step="0.1"
+                value={value}
+                disabled={!rateAvailable}
+                dir="ltr"
+                aria-label={t('farm.alerts.threshold')}
+                onChange={(event) => onChange(id, { threshold: event.target.value === '' ? null : Number(event.target.value) })}
+              />
+            </label>
+            <div className="farm-alert-v2-field">
+              <span>{t('farm.alerts.direction')}</span>
+              <div className="farm-alert-v2-dir-group" role="group" aria-label={t('farm.alerts.direction')}>
+                <button
+                  type="button"
+                  className={`farm-alert-v2-dir-btn is-above${direction === 'above' ? ' is-selected' : ''}`}
+                  aria-pressed={direction === 'above'}
+                  disabled={!rateAvailable}
+                  onClick={() => onChange(id, { direction: 'above' })}
+                >
+                  <span className="farm-alert-v2-dir-icon" aria-hidden="true">{ALERT_UP_ICON}</span>
+                  <span>{t('farm.alerts.above')}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`farm-alert-v2-dir-btn is-below${direction === 'below' ? ' is-selected' : ''}`}
+                  aria-pressed={direction === 'below'}
+                  disabled={!rateAvailable}
+                  onClick={() => onChange(id, { direction: 'below' })}
+                >
+                  <span className="farm-alert-v2-dir-icon" aria-hidden="true">{ALERT_DOWN_ICON}</span>
+                  <span>{t('farm.alerts.below')}</span>
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              className={`farm-alert-v2-toggle ${dirClass}${enabled ? ' is-enabled' : ''}`}
+              disabled={!hasThreshold || !rateAvailable}
+              aria-pressed={enabled}
+              onClick={() => onChange(id, { enabled: !enabled })}
+            >
+              <span className="farm-alert-v2-toggle-track" aria-hidden="true"><span /></span>
+              <span>{t(enabled ? 'farm.alerts.disable' : 'farm.alerts.enable')}</span>
+            </button>
+          </div>
+          {hasThreshold && (
+            <div className={`farm-alert-v2-margin ${dirClass}${isTargetReached ? ' is-good' : ' is-bad'}`}>
+              <span className="farm-alert-v2-margin-head">
+                <span className="farm-alert-v2-margin-icon" aria-hidden="true">
+                  {direction === 'below' ? ALERT_DOWN_ICON : ALERT_UP_ICON}
+                </span>
+                <span className="farm-alert-v2-margin-label">{t('farm.alerts.margin')}</span>
+              </span>
+              <strong className="mono" dir="ltr">{formattedMargin}</strong>
+            </div>
+          )}
+          {!rateAvailable && <p className="faint farm-alert-unavailable">{t('farm.alerts.apyUnavailable')}</p>}
         </div>
       )}
-      {!rateAvailable && <p className="faint farm-alert-unavailable">{t('farm.alerts.apyUnavailable')}</p>}
     </div>
   );
 }
@@ -1984,9 +2043,18 @@ export default function Farm() {
               <div className="farm-yield-center-body">
                 <p className="muted">{t('farm.scoreExplanation')}</p>
                 <div className="farm-yield-center-stats">
-                  <span><strong>{heroStats.avg == null ? '—' : `${heroStats.avg}%`}</strong> Live APY</span>
-                  <span><strong>{fmtCompact(heroStats.tvl)}</strong> TVL</span>
-                  <span><strong>{heroStats.count || '—'}</strong> Pools</span>
+                  <span className="farm-yield-center-stat">
+                    <strong className="mono" dir="ltr">{heroStats.avg == null ? '—' : `${heroStats.avg}%`}</strong>
+                    <span className="farm-yield-center-stat-label">{t('farm.estimatedApy')}</span>
+                  </span>
+                  <span className="farm-yield-center-stat">
+                    <strong className="mono" dir="ltr">{fmtCompact(heroStats.tvl)}</strong>
+                    <span className="farm-yield-center-stat-label">{t('farm.tvl')}</span>
+                  </span>
+                  <span className="farm-yield-center-stat">
+                    <strong className="mono" dir="ltr">{heroStats.count || '—'}</strong>
+                    <span className="farm-yield-center-stat-label">{t('farm.pools')}</span>
+                  </span>
                 </div>
               </div>
             )}

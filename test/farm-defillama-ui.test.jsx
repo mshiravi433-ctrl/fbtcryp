@@ -93,13 +93,61 @@ describe('Farm discovery UI', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: t('farm.tab.watchlist') }));
     await screen.findByTestId('farm-watchlist');
+    const alertBox = screen.getByTestId(`farm-rate-alert-${id}`);
+    const alertToggle = alertBox.querySelector('.farm-alert-v2-head');
+    expect(alertToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('spinbutton', { name: t('farm.alerts.threshold') })).toBeNull();
+
+    fireEvent.click(alertToggle);
+    expect(alertToggle.getAttribute('aria-expanded')).toBe('true');
     const threshold = screen.getByRole('spinbutton', { name: t('farm.alerts.threshold') });
     expect(threshold.disabled).toBe(false);
     fireEvent.change(threshold, { target: { value: '7.5' } });
+
+    const marginAbove = alertBox.querySelector('.farm-alert-v2-margin');
+    expect(marginAbove.classList.contains('is-dir-above')).toBe(true);
+    expect(marginAbove.textContent).toContain('-2.5%');
+
     const enable = screen.getByRole('button', { name: t('farm.alerts.enable') });
     expect(enable.disabled).toBe(false);
     fireEvent.click(enable);
     expect(useSettingsStore.getState().farmRateAlerts[id]).toEqual({ enabled: true, direction: 'above', threshold: 7.5 });
+
+    const belowBtn = alertBox.querySelector('.farm-alert-v2-dir-btn.is-below');
+    fireEvent.click(belowBtn);
+    expect(belowBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(useSettingsStore.getState().farmRateAlerts[id].direction).toBe('below');
+    expect(alertBox.classList.contains('is-dir-below')).toBe(true);
+    expect(alertBox.querySelector('.farm-alert-v2-margin').classList.contains('is-dir-below')).toBe(true);
+
+    fireEvent.click(alertToggle);
+    expect(alertToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(alertBox.querySelector('.farm-alert-v2-summary')?.textContent).toContain('7.5%');
+  });
+
+  it('renders three equal stat sub-boxes inside the FBT yield center disclosure', async () => {
+    language = 'fa';
+    const pools = [
+      pool,
+      { ...pool, id: '22222222-2222-4222-8222-222222222222', symbol: 'USDT', apy: 6.2, apyBase: 6.2 },
+      { ...pool, id: '33333333-3333-4333-8333-333333333333', symbol: 'DAI', apy: 4.8, apyBase: 4.8 }
+    ];
+    fetch.mockImplementation(async () => json(feed(pools)));
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector('.farm-yield-center-toggle')).toBeTruthy());
+    fireEvent.click(container.querySelector('.farm-yield-center-toggle'));
+    const stats = container.querySelectorAll('.farm-yield-center-stats .farm-yield-center-stat');
+    expect(stats).toHaveLength(3);
+    expect(stats[0].querySelector('.farm-yield-center-stat-label').textContent).toBe(fa.farm.estimatedApy);
+    expect(stats[1].querySelector('.farm-yield-center-stat-label').textContent).toBe(fa.farm.tvl);
+    expect(stats[2].querySelector('.farm-yield-center-stat-label').textContent).toBe(fa.farm.pools);
+
+    const hotCards = container.querySelectorAll('.farm-hot .farm-hot-card');
+    expect(hotCards).toHaveLength(3);
+
+    const customInput = container.querySelector('.farm-deposit-custom .farm-deposit-input');
+    expect(customInput.getAttribute('placeholder')).toBe('0.00');
+    expect(customInput.getAttribute('aria-label')).toBe(fa.farm.ifIDeposit);
   });
 
   it('never offers an APY alert for APR-only data', async () => {
@@ -112,6 +160,8 @@ describe('Farm discovery UI', () => {
     expect(container.querySelector('.farm-pool').textContent).toContain(t('farm.apr'));
     fireEvent.click(container.querySelector(`[data-testid="farm-watch-toggle-${id}"]`));
     fireEvent.click(screen.getByRole('tab', { name: t('farm.tab.watchlist') }));
+    const alertBox = await screen.findByTestId(`farm-rate-alert-${id}`);
+    fireEvent.click(alertBox.querySelector('.farm-alert-v2-head'));
     const threshold = await screen.findByRole('spinbutton', { name: t('farm.alerts.threshold') });
     expect(threshold.disabled).toBe(true);
     expect(screen.getByText(t('farm.alerts.apyUnavailable'))).toBeTruthy();
