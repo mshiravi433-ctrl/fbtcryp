@@ -136,6 +136,65 @@ export const SONIC_BASE = [
   ['WETH', 'Wrapped Ether', '0x50c42dEAcD8Fc9773493ED674b675bE577f2634b', 18]
 ];
 
+/** Mantle (5000). */
+export const MANTLE_BASE = [
+  ['WMNT', 'Wrapped Mantle', '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8', 18],
+  ['USDT', 'Tether USD', '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', 6],
+  ['USDC', 'USD Coin', '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', 6],
+  ['WETH', 'Wrapped Ether', '0xdEAddEaDdeadDEadDEADDEAddEADDEAddead1111', 18],
+  ['mETH', 'Mantle Staked Ether', '0xcDA86F23a25E8F39E28214641B20405df14E2333', 18]
+];
+
+/** Berachain (80094). */
+export const BERACHAIN_BASE = [
+  ['WBERA', 'Wrapped Bera', '0x6969696969696969696969696969696969696969', 18],
+  ['HONEY', 'Honey', '0x0E4aaF13513b4c12513fA98ef26189929B969894', 18],
+  ['WETH', 'Wrapped Ether', '0x68427fEbe9E2390a2a51A9A7A6d23190479155B0', 18],
+  ['USDC', 'USD Coin', '0xd6D83a77796Cd2742468305c4EB7eE57423e85cf', 6]
+];
+
+/** Unichain (130). */
+export const UNICHAIN_BASE = [
+  ['WETH', 'Wrapped Ether', '0x4200000000000000000000000000000000000006', 18],
+  ['USDC', 'USD Coin', '0x078D782b760474a361dDA0AF3839290b0EF57AD6', 6],
+  ['UNI', 'Uniswap Token', '0x8156111fc2e9A214945A83D900aAf12001556a31', 18]
+];
+
+/** Monad (143). */
+export const MONAD_BASE = [
+  ['WMON', 'Wrapped Monad', '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', 18],
+  ['USDC', 'USD Coin', '0xf817257fed379853cDe0fa4F97AB987181B1E5Ea', 6],
+  ['USDT', 'Tether USD', '0x88b8E2161DEDC77EF4ab7585569D2415a1C1055D', 6],
+  ['WETH', 'Wrapped Ether', '0xB5a30b0FDc5EA94A52fDc42e3E9760Cb8449Fb37', 18]
+];
+
+/** Scroll (534352). */
+export const SCROLL_BASE = [
+  ['WETH', 'Wrapped Ether', '0x5300000000000000000000000000000000000004', 18],
+  ['USDC', 'USD Coin', '0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4', 6],
+  ['USDT', 'Tether USD', '0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df', 6],
+  ['SCR', 'Scroll Token', '0xd29687c813D741E2F938F4aC377128810E217b1b', 18],
+  ['wstETH', 'Wrapped Staked Ether', '0xf610A9dfB7c89644979b4A0f27063E9e7d7Cda32', 18]
+];
+
+/** zkSync Era (324). */
+export const ZKSYNC_BASE = [
+  ['WETH', 'Wrapped Ether', '0x5AEa5775959fBC2557Cc8789bC1bf90A239D9a91', 18],
+  ['USDC', 'USD Coin', '0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4', 6],
+  ['USDT', 'Tether USD', '0x493257fD37EDB34451f62EDf8D2a0C418852bA4C', 6],
+  ['ZK', 'ZKsync', '0x5A7d6b2F92C77FAD6CCaBd7EE0624E64907Eaf3E', 18],
+  ['DAI', 'Dai Stablecoin', '0x4B9eb6c0b6ea15176BBF62841c6B2A8a398cb656', 18]
+];
+
+/** Robinhood Chain (4663). */
+export const HOOD_BASE = [
+  ['WETH', 'Wrapped Ether', '0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73', 18],
+  ['USDG', 'Global Dollar', '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', 6],
+  ['RGTI', 'Rigetti Computing • Robinhood Token', '0x284358abc07F9359f19f4b5b4aC91901Be2597Ba', 18],
+  ['JOBY', 'Joby Aviation, Inc. • Robinhood Token', '0xb334C5cE741B80B5B671F47F5C269Cb193fe8E24', 18],
+  ['SOFI', 'SoFi Technologies • Robinhood Token', '0x98E75885157C80992A8D41b696D8c9C6Fb30A926', 18]
+];
+
 const expand = (rows, coingeckoIds = {}) =>
   rows.map(([symbol, name, address, decimals]) => ({
     symbol,
@@ -157,5 +216,12 @@ export const BASE_TOKENS = {
   10: expand(OPTIMISM_BASE),
   43114: expand(AVALANCHE_BASE),
   59144: expand(LINEA_BASE),
-  146: expand(SONIC_BASE)
+  146: expand(SONIC_BASE),
+  5000: expand(MANTLE_BASE),
+  80094: expand(BERACHAIN_BASE),
+  130: expand(UNICHAIN_BASE),
+  143: expand(MONAD_BASE),
+  534352: expand(SCROLL_BASE),
+  324: expand(ZKSYNC_BASE),
+  4663: expand(HOOD_BASE)
 };

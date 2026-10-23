@@ -41,8 +41,26 @@
  */
 
 const KYBER_BASE = 'https://aggregator-api.kyberswap.com';
-const OO_BASE = 'https://open-api.openocean.finance/v4';
+const OO_ENTERPRISE_ROOT = 'https://open-api-enterprise.de1.exchange/v4';
+const OO_PUBLIC_ROOT = 'https://open-api.openocean.finance/v4';
+const OO_BASE = OO_PUBLIC_ROOT;
 const VELORA_BASE = 'https://api.velora.xyz';
+
+export const apiKey = () => process.env.OPENOCEAN_API_KEY || '';
+
+/**
+ * OpenOcean root ladder: tries operator override (if configured), then De1 enterprise root,
+ * then public root.
+ */
+export function ooRoots() {
+  const roots = [];
+  const override = String(process.env.OPENOCEAN_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (override) roots.push(override);
+  for (const root of [OO_ENTERPRISE_ROOT, OO_PUBLIC_ROOT]) {
+    if (!roots.includes(root)) roots.push(root);
+  }
+  return roots;
+}
 
 /** KyberSwap chain id -> network slug. Must mirror lib/aggregator.js. */
 const KYBER_SLUG = {
@@ -106,6 +124,23 @@ const OO_SLUG = {
   /* Robinhood Chain — OpenOcean's chain code for it IS the chain id. */
   4663: '4663'
 };
+
+/** Alternate slug candidates for chains that accept mainnet suffixes in some deployments. */
+const OO_SLUG_ALTERNATES = {
+  324: ['zksync', 'zksync-mainnet'],
+  534352: ['scroll', 'scroll-mainnet'],
+  5000: ['mantle', 'mantle-mainnet'],
+  143: ['monad', 'monad-mainnet'],
+  4663: ['4663', 'robinhood']
+};
+
+export function ooSlugCandidates(chainId) {
+  const cid = Number(chainId);
+  const alts = OO_SLUG_ALTERNATES[cid];
+  if (alts && alts.length) return alts;
+  const primary = ooSlug(cid);
+  return primary ? [primary] : [];
+}
 
 /** Chains Velora supports. Must mirror the SUPPORTED set in lib/velora.js. */
 const VELORA_CHAINS = new Set([1, 56, 137, 42161, 10, 8453, 43114]);
@@ -214,26 +249,97 @@ export async function proxyKyberBuild(body = {}) {
   });
 }
 
+/**
+ * Perform an OpenOcean upstream request across the root ladder.
+ * Tries the configured roots with API keys where available, handling Cloudflare
+ * challenges and auth errors gracefully.
+ */
+async function ooUpstreamCall(kind, params = {}, { method = 'GET', body = null } = {}) {
+  const chainId = params.chainId;
+  const slugs = ooSlugCandidates(chainId);
+  if (!slugs.length) return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
+
+  const q = new URLSearchParams(params);
+  q.delete('chainId');
+  const qs = q.toString();
+
+  const roots = ooRoots();
+  const key = apiKey();
+  let lastFailure = null;
+
+  for (const root of roots) {
+    for (const slug of slugs) {
+      const pathUrl = `${root}/${slug}/${kind}${qs ? '?' + qs : ''}`;
+      const urlObj = new URL(pathUrl);
+      const headers = { 'content-type': 'application/json', accept: 'application/json' };
+      if (key) {
+        headers['x-api-key'] = key;
+        urlObj.searchParams.set('apikey', key);
+      }
+
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+      try {
+        const res = await fetch(urlObj.toString(), {
+          method,
+          body: body ? JSON.stringify(body) : undefined,
+          signal: ctrl.signal,
+          headers
+        });
+        const text = await res.text();
+        let parsed = null;
+        try {
+          parsed = text ? JSON.parse(text) : null;
+        } catch {
+          parsed = { message: text.slice(0, 300) };
+        }
+
+        // OpenOcean standard success: code === 200 or res.ok with data
+        if (res.ok && parsed && (parsed.code === 200 || parsed.data || kind === 'decodeInputData')) {
+          clearTimeout(timer);
+          return { status: res.status, body: parsed };
+        }
+
+        const isAuthError =
+          (res.status === 401 || res.status === 403) &&
+          /api\s*key|unauthorized/i.test(String(parsed?.message || text));
+        const isCloudflare =
+          (res.status === 403 || res.status === 503) &&
+          /cloudflare|just a moment/i.test(text);
+
+        lastFailure = {
+          status: res.status === 400 ? 400 : 502,
+          body: parsed ?? { error: `UPSTREAM_HTTP_${res.status}`, detail: text.slice(0, 300) }
+        };
+
+        // If client passed bad parameters (400) and it's not a Cloudflare or auth rejection, return early
+        if (res.status === 400 && !isCloudflare && !isAuthError) {
+          clearTimeout(timer);
+          return lastFailure;
+        }
+      } catch (err) {
+        lastFailure = { status: 504, body: { error: 'UPSTREAM_UNREACHABLE', detail: err.message } };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  return lastFailure ?? { status: 502, body: { error: 'UPSTREAM_FAILED' } };
+}
+
 /** GET /v4/{slug}/quote — OpenOcean price quote. */
 export async function proxyOoQuote(params = {}) {
-  let url;
-  try {
-    url = ooUpstreamUrl('quote', params);
-  } catch {
-    return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
-  }
-  return upstream({ url });
+  const slug = ooSlug(params.chainId);
+  if (!slug) return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
+  return ooUpstreamCall('quote', params);
 }
 
 /** GET /v4/{slug}/swap — OpenOcean signable transaction body. */
 export async function proxyOoSwap(params = {}) {
-  let url;
-  try {
-    url = ooUpstreamUrl('swap', params);
-  } catch {
-    return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
-  }
-  return upstream({ url });
+  const slug = ooSlug(params.chainId);
+  if (!slug) return { status: 400, body: { error: 'CHAIN_UNSUPPORTED' } };
+  return ooUpstreamCall('swap', params);
 }
 
 /**
@@ -260,11 +366,7 @@ export async function proxyOoDecode(params = {}) {
   if (payload.data == null || payload.data === '') {
     return { status: 400, body: { error: 'MISSING_CALLDATA' } };
   }
-  return upstream({
-    url: `${OO_BASE}/${slug}/decodeInputData`,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  return ooUpstreamCall('decodeInputData', { chainId: params.chainId }, { method: 'POST', body: payload });
 }
 
 /** GET /prices — Velora's quote-only price comparison. */

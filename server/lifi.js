@@ -256,7 +256,7 @@ export function _resetLifiCache() {
 
 const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 const AMOUNT_RE = /^[0-9]+(\.[0-9]+)?$/;
-const SYMBOL_RE = /^[A-Za-z]{2,12}$/;
+const SYMBOL_RE = /^[A-Za-z0-9._₮$-]{1,24}$/;
 
 /** Chain ids this swap proxy is willing to forward. Same set the EVM swap
  *  screen supports (mirrors EVM_CHAIN_ORDER in src/lib/chains.js). */
@@ -513,7 +513,7 @@ export async function lifiSwapQuote(params = {}) {
   const fromChain = Number(params.fromChain);
   const toChain = Number(params.toChain);
   const fromAmount = String(params.fromAmount ?? '');
-  const fromAddress = String(params.fromAddress ?? '');
+  const fromAddress = String(params.fromAddress ?? '').trim() || '0x0000000000000000000000000000000000000000';
   const fromToken = String(params.fromToken ?? '');
   const toToken = String(params.toToken ?? '');
 
