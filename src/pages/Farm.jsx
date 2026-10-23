@@ -6,6 +6,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import '../styles/farm-venue.css';
 import '../styles/farm-modern.css';
 import '../styles/farm-actions-modern.css';
+// «GREENHOUSE CONSOLE» — the 2026-10-23 identity layer. Imported LAST on
+// purpose: it is written at the same specificity as farm-modern.css, so
+// source order is the whole override mechanism.
+import '../styles/farm-greenhouse.css';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
 import AdBanner from '../components/AdBanner';
@@ -99,6 +103,28 @@ function poolRate(pool) {
   return apr == null ? null : { value: apr, label: 'farm.apr', kind: 'apr' };
 }
 
+/**
+ * ONE TRUTH FOR THE CATEGORY CHIPS.
+ * The list used to own this logic inline, so a count badge bolted on top would
+ * have been a second copy of ten predicates — the classic way a chip says «12»
+ * and the list shows nine. The row filter and the chip counts both call this.
+ */
+function passesCategoryFilter(pool, id) {
+  if (id === 'all') return true;
+  const apy = finiteMetric(pool?.apy);
+  const tvl = finiteMetric(pool?.tvlUsd);
+  if (id === 'stable') return Boolean(pool?.stablecoin);
+  if (id === 'blueChip') return (tvl ?? 0) >= 500_000_000;
+  if (id === 'highYield') return (apy ?? -Infinity) >= 15;
+  if (id === 'realYield') { const share = realShare(pool); return share != null && share > 0; }
+  if (id === 'lowRisk') return pool?.risk === 'low';
+  if (id === 'lp') return pool?.type === 'lp';
+  if (id === 'staking') return pool?.type === 'staking';
+  if (id === 'autoCompound') return AUTOCOMPOUND_PROJECTS.includes(pool?.project);
+  if (id === 'vault') return VAULT_PROJECTS.includes(pool?.project);
+  return true;
+}
+
 const GLOBE_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="9" />
@@ -126,71 +152,128 @@ const TVL_ICON = (
 );
 const SORT_ICONS = { score: SCORE_ICON, apy: APY_ICON, tvlUsd: TVL_ICON };
 
-/* modern tab icons */
+/* ── ICON SET — drawn for this screen ─────────────────────────────────────
+   Every mark below is a 24×24 stroke icon at 1.7, built from the same three
+   primitives (round cap, round join, no fills) so the rail, the filter chips
+   and the metric cells read as one hand. The subjects are agricultural on
+   purpose: a pot with a sprout for «inside the app», a compass needle for
+   «recommended», layered liquid for «pools», a leaf for «real yield», a safe
+   dial for «vault». Generic finance glyphs are what every other app ships. */
 const TAB_ICONS = {
   inapp: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9.5L12 4l9 5.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-8z" />
-      <path d="M9 19.5V12h6v7.5" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3.6 13.2h16.8l-1.5 6.1A2.2 2.2 0 0 1 16.7 21H7.3a2.2 2.2 0 0 1-2.2-1.7z" />
+      <path d="M12 13.2V7.4" />
+      <path d="M12.1 9.2c0-2.7 2-4.7 4.7-4.7 0 2.7-2 4.7-4.7 4.7z" />
+      <path d="M11.9 10.6c0-2.1-1.7-3.8-3.8-3.8 0 2.1 1.7 3.8 3.8 3.8z" />
     </svg>
   ),
   recommended: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.8-5.3-2.9-5.3 2.9 1.1-5.8L3.5 9.7l5.9-.8z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M15.4 8.6 13.6 13.6 8.6 15.4l1.8-5z" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
     </svg>
   ),
   market: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 19v-6" /><path d="M12.5 19V8.5" /><path d="M17 19v-4" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 4.4v2.2M7 17.4v2.2M17 6.4v2.2M17 13.6v2.2" />
+      <rect x="4.7" y="6.6" width="4.6" height="6.8" rx="1.3" />
+      <rect x="14.7" y="8.6" width="4.6" height="5" rx="1.3" />
+      <path d="M3.4 20.4h17.2" opacity=".55" />
     </svg>
   ),
   strategies: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l2.8 5.6L21 10l-4.5 4.3L17.6 21 12 18.1 6.4 21l1.1-6.7L3 10l6.2-2.4z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="18.4" r="2.2" />
+      <circle cx="18" cy="5.6" r="2.2" />
+      <path d="M8.2 18.4h5.4a3.2 3.2 0 0 0 3.2-3.2V8.2" />
+      <path d="M6 16.2V9.4a3.2 3.2 0 0 1 3.2-3.2h6.4" opacity=".55" />
     </svg>
   ),
   pools: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="6.4" rx="7.4" ry="2.9" />
+      <path d="M4.6 6.4c0 1.6 3.3 2.9 7.4 2.9s7.4-1.3 7.4-2.9" opacity=".5" />
+      <path d="M4.6 11.4c0 1.6 3.3 2.9 7.4 2.9s7.4-1.3 7.4-2.9" />
+      <path d="M4.6 16.4c0 1.6 3.3 2.9 7.4 2.9s7.4-1.3 7.4-2.9" />
+      <path d="M4.6 6.4v10" opacity=".5" /><path d="M19.4 6.4v10" opacity=".5" />
     </svg>
   ),
   watchlist: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3.5 14.7 9l6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3L9.3 9z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.4 4.6a1.4 1.4 0 0 1 1.4-1.4h8.4a1.4 1.4 0 0 1 1.4 1.4v16.2L12 17l-5.6 3.8z" />
+      <path d="M12 8.4v4.2M9.9 10.5h4.2" opacity=".75" />
     </svg>
   )
 };
 
 const FILTER_ICONS = {
   all: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3.6" y="3.6" width="6.4" height="6.4" rx="1.8" />
+      <rect x="14" y="3.6" width="6.4" height="6.4" rx="1.8" opacity=".55" />
+      <rect x="3.6" y="14" width="6.4" height="6.4" rx="1.8" opacity=".55" />
+      <rect x="14" y="14" width="6.4" height="6.4" rx="1.8" />
+    </svg>
   ),
   stable: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M7.8 10.4h8.4M7.8 13.6h8.4" />
+    </svg>
   ),
   blueChip: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12l4 6-10 12L2 9z" /><path d="M11 3L8 9l4 12" /><path d="M13 3l3 6-4 12" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.2 3.4h7.6l4.6 5.6L12 20.6 3.6 9z" />
+      <path d="M3.6 9h16.8" opacity=".55" />
+      <path d="M9.4 3.4 8 9l4 11.6L16 9l-1.4-5.6" opacity=".55" />
+    </svg>
   ),
   highYield: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l5-5 4 4 7-7" /><path d="M15 9h5v5" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13.6 2.8 5.8 13.4h5l-1.2 7.8 8-10.8h-5.2z" />
+    </svg>
   ),
   realYield: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16" /><path d="M7 8h10" /><path d="M8 16h8" /><circle cx="12" cy="12" r="9" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.4 19.6c0-8 5-13.4 15.2-15.2C19.6 14.6 14.2 19.6 6.2 19.6z" />
+      <path d="M8.4 15.6 15 9" opacity=".6" />
+    </svg>
   ),
   lowRisk: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.2 20 6v6.2c0 4.2-3.2 7-8 8.6-4.8-1.6-8-4.4-8-8.6V6z" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.2 20 6v6.1c0 4.2-3.2 7-8 8.7-4.8-1.7-8-4.5-8-8.7V6z" />
+      <path d="m8.9 11.8 2.2 2.2 4-4.2" />
+    </svg>
   ),
   autoCompound: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4" /><path d="M21 3v6h-6" /><path d="M8 12a4 4 0 1 0 4-4" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.2 11.2A8.2 8.2 0 0 0 5.6 6.9" />
+      <path d="M3.8 12.8a8.2 8.2 0 0 0 14.6 4.3" />
+      <path d="M3.4 6.6v4.2h4.2M20.6 17.4v-4.2h-4.2" />
+    </svg>
   ),
   lp: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" /><path d="M16 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" /><path d="M11.5 10.5l1 1" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.6 3.6c2.6 3.1 4 5.4 4 7.2a4 4 0 0 1-8 0c0-1.8 1.4-4.1 4-7.2z" />
+      <path d="M15.4 11.4c2.1 2.6 3.2 4.4 3.2 5.9a3.2 3.2 0 0 1-6.4 0c0-1.5 1.1-3.3 3.2-5.9z" opacity=".6" />
+    </svg>
   ),
   staking: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l7 4v6c0 5-3.2 8.5-7 10-3.8-1.5-7-5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4.6" y="10.4" width="14.8" height="10.2" rx="2.4" />
+      <path d="M8.4 10.4V7.8a3.6 3.6 0 0 1 7.2 0v1" />
+      <path d="M12 14.6v2.4" />
+      <path d="M12 6.4c0-1.6 1.2-2.8 2.8-2.8 0 1.6-1.2 2.8-2.8 2.8z" opacity=".65" />
+    </svg>
   ),
   vault: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2" /><path d="M7 8V6a5 5 0 0 1 10 0v2" /><circle cx="12" cy="14" r="2" /></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3.4" y="4.4" width="17.2" height="15.2" rx="2.6" />
+      <circle cx="12" cy="12" r="3.6" />
+      <path d="M12 6.6v1.8M12 15.6v1.8M6.6 12h1.8M15.6 12h1.8" opacity=".6" />
+    </svg>
   )
 };
 
@@ -546,6 +629,10 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
     : Math.max(-100, grossApy - economics.fbtFeeApy);
   const rate = poolRate(pool);
   const iconKey = chainIconKey(pool.chain);
+  /* The same score the expanded badge prints, reused as a 2px meter under the
+     ticker. null (not 0) when the feed lacks the inputs, so the bar is absent
+     rather than showing an invented "0 quality". */
+  const score = finiteMetric(pool.score) ?? farmScore(pool);
 
   return (
     <motion.article className={`farm-pool ${selected ? 'farm-pool-selected' : ''} ${expanded ? 'is-open' : ''}`} variants={riseIn} id={`farm-pool-${pool.id}`}>
@@ -563,6 +650,11 @@ function PoolCard({ pool, amount, expanded, selected, onToggle, onShowDetails, o
           <span className="farm-pool-id">
             <span className="farm-pool-sym" dir="ltr">{pool.symbol}</span>
             <span className="farm-pool-meta">{projectLabel(pool.project, t)} · {chainLabel(pool.chain, t)}</span>
+            {score != null && (
+              <span className="farm-pool-meter" aria-hidden="true">
+                <i style={{ width: `${Math.max(4, Math.min(100, score))}%` }} />
+              </span>
+            )}
           </span>
           <span className="farm-apy-wrap">
             <span className="farm-apy mono" dir="ltr">{rate == null ? '—' : `${rate.value}%`}</span>
@@ -1435,18 +1527,7 @@ export default function Farm() {
   const filtered = useMemo(() => {
     let rows = opportunities;
     if (chain !== 'all') rows = rows.filter((p) => p.chain === chain);
-    if (filter === 'stable') rows = rows.filter((p) => p.stablecoin);
-    if (filter === 'blueChip') rows = rows.filter((p) => p.tvlUsd >= 500_000_000);
-    if (filter === 'highYield') rows = rows.filter((p) => p.apy >= 15);
-    if (filter === 'realYield') rows = rows.filter((p) => {
-      const share = realShare(p);
-      return share != null && share > 0;
-    });
-    if (filter === 'lowRisk') rows = rows.filter((p) => p.risk === 'low');
-    if (filter === 'lp') rows = rows.filter((p) => p.type === 'lp');
-    if (filter === 'staking') rows = rows.filter((p) => p.type === 'staking');
-    if (filter === 'autoCompound') rows = rows.filter((p) => AUTOCOMPOUND_PROJECTS.includes(p.project));
-    if (filter === 'vault') rows = rows.filter((p) => VAULT_PROJECTS.includes(p.project));
+    rows = rows.filter((p) => passesCategoryFilter(p, filter));
     const needle = q.trim().toLowerCase();
     if (needle) rows = rows.filter((p) => `${p.symbol} ${p.project} ${p.chain}`.toLowerCase().includes(needle));
     return [...rows].sort((a, b) => (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity));
@@ -1565,6 +1646,57 @@ export default function Farm() {
       liveVenues
     };
   }, [opportunities, venueOpportunities]);
+
+  /* ── the hero's instruments ───────────────────────────────────────────────
+     Three readings, all from the loaded feed and nothing else:
+       · syncedAt  — the feed's own timestamp, shown as local time;
+       · heroField — the five highest *real* rates, scaled against their own
+                     maximum so the plot is a comparison, not a promise;
+       · riskMix   — counts of the pool.risk values the feed actually sent.
+     Any block with nothing to say returns null and is not rendered. */
+  const syncedAt = useMemo(() => {
+    const at = Number(data?.at);
+    if (!Number.isFinite(at) || at <= 0) return null;
+    try {
+      return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return null;
+    }
+  }, [data]);
+
+  const heroField = useMemo(() => {
+    const rows = opportunities
+      .map((pool) => ({ pool, apy: finiteMetric(pool?.apy) }))
+      .filter((row) => row.apy != null && row.apy > 0)
+      .sort((a, b) => b.apy - a.apy)
+      .slice(0, 5);
+    if (rows.length < 3) return [];
+    const top = rows[0].apy;
+    return rows.map(({ pool, apy }) => ({
+      id: String(pool.id),
+      symbol: String(pool.symbol ?? '').split('-')[0].slice(0, 7) || '—',
+      apy: Number(apy.toFixed(2)),
+      pct: Math.max(14, Math.round((apy / top) * 100))
+    }));
+  }, [opportunities]);
+
+  const riskMix = useMemo(() => {
+    if (!opportunities.length) return null;
+    const mix = { low: 0, medium: 0, high: 0, unknown: 0 };
+    for (const pool of opportunities) {
+      const key = ['low', 'medium', 'high'].includes(pool?.risk) ? pool.risk : 'unknown';
+      mix[key] += 1;
+    }
+    return mix;
+  }, [opportunities]);
+
+  /* Chip counts follow the selected network, exactly like the list does. */
+  const filterCounts = useMemo(() => {
+    const scoped = chain === 'all' ? opportunities : opportunities.filter((pool) => pool.chain === chain);
+    const counts = {};
+    for (const id of FILTERS) counts[id] = scoped.filter((pool) => passesCategoryFilter(pool, id)).length;
+    return counts;
+  }, [opportunities, chain]);
 
   const selectTab = (id) => {
     haptic?.('select');
@@ -1714,13 +1846,19 @@ export default function Farm() {
     <>
     <PageTransition className={farmPageClass}>
       {isInitialLoading ? <FarmLoadingSkeleton kind="hero-venue" /> : <>
-      {/* ─── PREMIUM HERO — glass, mesh, orb, integrated refresh — no middle clutter */}
+      {/* ─── GREENHOUSE CONSOLE ──────────────────────────────────────────────
+          Four instruments, top to bottom: the status ribbon (live · synced),
+          the title block, the yield field, and the three stat cells with the
+          risk mix. The field and the mix are drawn from real feed rows only —
+          when the feed has nothing, both blocks are absent rather than drawn
+          empty with a decorative chart. */}
       <motion.section className="farm-hero-premium" variants={riseIn} initial="hidden" animate="show">
         <div className="farm-hero-bg" aria-hidden="true">
           <span className="farm-hero-orb a" />
           <span className="farm-hero-orb b" />
           <span className="farm-hero-orb c" />
           <span className="farm-hero-mesh" />
+          <span className="farm-hero-contour" />
           <span className="farm-hero-grid" />
           <span className="farm-hero-sheen" />
         </div>
@@ -1731,45 +1869,65 @@ export default function Farm() {
                 <span className="farm-live-dot" aria-hidden="true" />
                 {t('farm.protocolActive')} · {EXECUTION_LIVE ? t('farm.executionLive') : t('farm.readOnly')}
               </span>
-              <button
-                type="button"
-                className={`farm-hero-refresh-v2 ${refreshing ? 'is-loading' : ''}`}
-                onClick={refresh}
-                disabled={refreshing}
-                aria-label={error ? t('farm.retry') : t('farm.refresh')}
-                title={error ? t('farm.retry') : t('farm.refresh')}
-              >
-                <span className="farm-hero-refresh-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12a9 9 0 1 1-2.6-6.4"/>
-                    <path d="M21 3v6h-6"/>
-                  </svg>
-                </span>
-              </button>
+              <div className="farm-hero-tools">
+                {syncedAt && <span className="farm-hero-sync">{t('farm.heroSyncedAt', { time: syncedAt })}</span>}
+                <button
+                  type="button"
+                  className={`farm-hero-refresh-v2 ${refreshing ? 'is-loading' : ''}`}
+                  onClick={refresh}
+                  disabled={refreshing}
+                  aria-label={error ? t('farm.retry') : t('farm.refresh')}
+                  title={error ? t('farm.retry') : t('farm.refresh')}
+                >
+                  <span className="farm-hero-refresh-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12a9 9 0 1 1-2.6-6.4"/>
+                      <path d="M21 3v6h-6"/>
+                    </svg>
+                  </span>
+                </button>
+              </div>
             </div>
             <h1 className="farm-hero-title" data-text={t('farm.title')}>{t('farm.title')}</h1>
             <p className="farm-hero-sub">{t('farm.subtitle')}</p>
           </div>
           <div className="farm-hero-art">
-            <FarmOrbMark size={116} />
+            <FarmOrbMark size={118} />
           </div>
         </div>
+        {heroField.length > 0 && (
+          <div className="farm-hero-field">
+            <div className="farm-hero-field-head">
+              <span className="farm-hero-field-title">{t('farm.heroFieldTitle')}</span>
+              <span className="farm-hero-field-meta">{t('farm.heroFieldMeta', { count: heroField.length })}</span>
+            </div>
+            <div className="farm-hero-field-plot" role="img" aria-label={t('farm.heroFieldAria', { count: heroField.length })}>
+              {heroField.map((row) => (
+                <span className="farm-hero-field-col" key={row.id} style={{ '--bar': `${row.pct}%` }}>
+                  <span className="farm-hero-field-bar" aria-hidden="true"><i /></span>
+                  <span className="farm-hero-field-sym">{row.symbol}</span>
+                  <span className="farm-hero-field-val mono">{row.apy}%</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="farm-hero-stats">
-          <div className="farm-hero-stat" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
+          <div className="farm-hero-stat" style={{ '--a': '#00ff9d', '--b': '#d9ff63' }}>
             <span className="farm-hero-stat-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.8l8 4.4v9.6l-8 4.4-8-4.4V7.2z"/><path d="M4 7.2l8 4.4 8-4.4"/><path d="M12 11.6v9.6"/></svg>
             </span>
             <span className="farm-hero-stat-value mono">{heroStats.count || '—'}</span>
             <span className="farm-hero-stat-label">{t('farm.pools')}</span>
           </div>
-          <div className="farm-hero-stat" style={{ '--a': '#00ff9d', '--b': '#00e5ff' }}>
+          <div className="farm-hero-stat" style={{ '--a': '#d9ff63', '--b': '#00e5ff' }}>
             <span className="farm-hero-stat-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l5-5 4 4 7-7"/><path d="M15 9h5v5"/></svg>
             </span>
             <span className="farm-hero-stat-value mono">{heroStats.avg == null ? '—' : `${heroStats.avg}%`}</span>
             <span className="farm-hero-stat-label">{t('farm.estimatedApy')}</span>
           </div>
-          <div className="farm-hero-stat" style={{ '--a': '#ff2d95', '--b': '#ffb300' }}>
+          <div className="farm-hero-stat" style={{ '--a': '#00e5ff', '--b': '#7c4dff' }}>
             <span className="farm-hero-stat-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 7v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
             </span>
@@ -1777,6 +1935,23 @@ export default function Farm() {
             <span className="farm-hero-stat-label">{t('farm.tvl')}</span>
           </div>
         </div>
+        {riskMix && (
+          <div className="farm-hero-mix" role="group" aria-label={t('farm.heroRiskMix')}>
+            <span className="farm-hero-mix-title">{t('farm.heroRiskMix')}</span>
+            <span className="farm-hero-mix-bar" aria-hidden="true">
+              {riskMix.low > 0 && <i className="farm-hero-mix-seg is-low" style={{ flexGrow: riskMix.low }} />}
+              {riskMix.medium > 0 && <i className="farm-hero-mix-seg is-medium" style={{ flexGrow: riskMix.medium }} />}
+              {riskMix.high > 0 && <i className="farm-hero-mix-seg is-high" style={{ flexGrow: riskMix.high }} />}
+              {riskMix.unknown > 0 && <i className="farm-hero-mix-seg is-unknown" style={{ flexGrow: riskMix.unknown }} />}
+            </span>
+            <span className="farm-hero-mix-legend">
+              <span className="is-low"><b>{riskMix.low}</b>{t('farm.risk.low')}</span>
+              <span className="is-medium"><b>{riskMix.medium}</b>{t('farm.risk.medium')}</span>
+              <span className="is-high"><b>{riskMix.high}</b>{t('farm.risk.high')}</span>
+              {riskMix.unknown > 0 && <span className="is-unknown"><b>{riskMix.unknown}</b>{t('farm.risk.unknown')}</span>}
+            </span>
+          </div>
+        )}
         <p className="farm-hero-footnote faint" role="status">{refreshing ? t('farm.refreshing') : t('farm.feedRefreshNote')}</p>
       </motion.section>
 
@@ -1919,9 +2094,16 @@ export default function Farm() {
 
       <div className="farm-secondary-filters" role="group" aria-label={t('farm.filters')}>
         {FILTERS.map((id) => (
-          <button key={id} className={`tag ${filter === id ? 'active' : ''}`} onClick={() => setFilter(id)}>
+          <button
+            key={id}
+            type="button"
+            aria-pressed={filter === id}
+            className={`tag ${filter === id ? 'active' : ''}`}
+            onClick={() => setFilter(id)}
+          >
             <span aria-hidden="true">{FILTER_ICONS[id]}</span>
             {t(`farm.category.${id}`)}
+            <span className="farm-filter-count mono" dir="ltr" aria-hidden="true">{filterCounts[id] ?? 0}</span>
           </button>
         ))}
       </div>
