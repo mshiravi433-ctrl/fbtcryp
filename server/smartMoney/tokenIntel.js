@@ -25,6 +25,21 @@ import { TTL, WINDOWS } from './config.js';
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;
 const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const READ_DEADLINE_MS = 14_000;
+const MIN_UPSTREAM_TIMEOUT_MS = 250;
+
+function readBudget(timeoutMs = READ_DEADLINE_MS) {
+  const n = Number(timeoutMs);
+  return Math.max(MIN_UPSTREAM_TIMEOUT_MS, Math.min(READ_DEADLINE_MS,
+    Number.isFinite(n) && n > 0 ? n : READ_DEADLINE_MS));
+}
+
+function timeoutWithin(deadlineAt) {
+  const remainingMs = deadlineAt - Date.now();
+  const headroomMs = Math.min(100, Math.max(10, Math.floor(remainingMs * 0.1)));
+  const timeoutMs = Math.floor(remainingMs - headroomMs);
+  return Number.isFinite(timeoutMs) && timeoutMs >= MIN_UPSTREAM_TIMEOUT_MS ? timeoutMs : 0;
+}
 
 function windowMs(key) {
   return WINDOWS[key] || WINDOWS.H24;
@@ -56,7 +71,8 @@ function riskBand({ liquidityUsd, ageMs, topShare }) {
  * @param {string} tokenAddress token contract (EVM) or mint (Solana)
  * @param {number|'solana'} chainId
  */
-export async function analyzeToken(tokenAddress, chainId = 1) {
+export async function analyzeToken(tokenAddress, chainId = 1, { timeoutMs = READ_DEADLINE_MS } = {}) {
+  const readBudgetMs = readBudget(timeoutMs);
   const isSol = chainId === 'solana';
   const address = isSol ? String(tokenAddress || '').trim() : String(tokenAddress || '').toLowerCase();
   const valid = isSol ? SOL_ADDR.test(address) : EVM_ADDR.test(address);
@@ -64,19 +80,27 @@ export async function analyzeToken(tokenAddress, chainId = 1) {
     const e = new Error('BAD_ADDRESS'); e.code = 'BAD_ADDRESS'; throw e;
   }
 
-  const { value } = await withCache(`sm:token:${chainId}:${address}`, TTL.token, () =>
-    buildTokenIntel(address, chainId)
+  const { value } = await withCache(`sm:token:${chainId}:${address}:${readBudgetMs}`, TTL.token, () =>
+    buildTokenIntel(address, chainId, Date.now() + readBudgetMs)
   );
   return value;
 }
 
-async function buildTokenIntel(address, chainId) {
+async function buildTokenIntel(address, chainId, deadlineAt) {
   const isSol = chainId === 'solana';
   const [pairsRes, holdersRes] = await Promise.all([
-    dexPairsForTokens([address]),
-    isSol
-      ? solanaTokenHolders(address).catch(() => ({ dataStatus: 'unavailable', rows: [], totalHolders: null }))
-      : bsTokenHolders(chainId, address, { limit: 50 }).catch(() => ({ dataStatus: 'unavailable', rows: [], totalHolders: null }))
+    (async () => {
+      const timeoutMs = timeoutWithin(deadlineAt);
+      if (!timeoutMs) return { dataStatus: 'unavailable', pairs: [] };
+      return dexPairsForTokens([address], { timeoutMs });
+    })().catch(() => ({ dataStatus: 'unavailable', pairs: [] })),
+    (async () => {
+      const timeoutMs = timeoutWithin(deadlineAt);
+      if (!timeoutMs) return { dataStatus: 'unavailable', rows: [], totalHolders: null };
+      return isSol
+        ? solanaTokenHolders(address, { timeoutMs })
+        : bsTokenHolders(chainId, address, { limit: 50, timeoutMs });
+    })().catch(() => ({ dataStatus: 'unavailable', rows: [], totalHolders: null }))
   ]);
 
   const pairs = pairsRes.pairs || [];

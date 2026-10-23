@@ -968,8 +968,13 @@ export async function protocolDetail(slug, { timeout = HTTP.timeout } = {}) {
   const s = String(slug || '').trim();
   if (!/^[\w-]{1,64}$/.test(s)) throw new IntelError('BAD_SLUG', 'unknown protocol id');
   return cachedMeta(`llama:protocol:${s}`, CACHE.protocolDetail, async () => {
-    const raw = await httpJson(`${LLAMA}/protocol/${encodeURIComponent(s)}`, { timeout, healthKey: 'llama:protocol' });
-    const cat = await llamaProtocols().catch(() => null);
+    const boundedTimeout = Math.max(250, Number(timeout) || HTTP.timeout);
+    const deadlineAt = Date.now() + boundedTimeout;
+    const raw = await httpJson(`${LLAMA}/protocol/${encodeURIComponent(s)}`, { timeout: boundedTimeout, healthKey: 'llama:protocol' });
+    const catalogBudget = deadlineAt - Date.now();
+    const cat = catalogBudget >= 250
+      ? await llamaProtocols({ timeout: catalogBudget }).catch(() => null)
+      : null;
     const listRow = cat?.data?.protocols?.find((p) => p.slug === s) || null;
     const tvls = Array.isArray(raw?.tvl) ? raw.tvl : [];
     const last = tvls[tvls.length - 1];

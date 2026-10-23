@@ -43,6 +43,24 @@ import { FLOORS, TTL, WINDOWS, WINDOW_KEYS, EARLY_TOKEN, FRESH, DEX_SLUGS } from
 
 const HEX20 = /^0x[a-f0-9]{40}$/;
 const ZERO = '0x0000000000000000000000000000000000000000';
+const READ_DEADLINE_MS = 14_000;
+const MIN_UPSTREAM_TIMEOUT_MS = 250;
+
+function boundedReadBudget(timeoutMs = READ_DEADLINE_MS) {
+  const candidate = Number(timeoutMs);
+  return Math.max(MIN_UPSTREAM_TIMEOUT_MS, Math.min(READ_DEADLINE_MS,
+    Number.isFinite(candidate) && candidate > 0 ? candidate : READ_DEADLINE_MS));
+}
+
+function timeoutWithin(deadlineAt, capMs = READ_DEADLINE_MS) {
+  const remainingMs = Math.min(Number(deadlineAt) - Date.now(), READ_DEADLINE_MS);
+  const headroomMs = Math.min(100, Math.max(10, Math.floor(remainingMs * 0.1)));
+  const safeMs = remainingMs - headroomMs;
+  if (!Number.isFinite(safeMs) || safeMs < MIN_UPSTREAM_TIMEOUT_MS) {
+    throw new Error('SMART_MONEY_READ_DEADLINE_EXCEEDED');
+  }
+  return Math.floor(Math.min(safeMs, capMs));
+}
 
 /* One RPC scan serves every consumer: it runs at the LOWEST floor any caller
    uses and callers filter by their own `minUsd` afterwards. Scanning three
@@ -144,11 +162,13 @@ export function labelEvent(e) {
  * accumulation, «24h / 7d / 30d» were three names for the same three
  * minutes and exchange flow was whatever landed in that slice.
  */
-async function scanOnce() {
-  return withCache(`sm:scan:${SCAN_FLOOR}`, SCAN_TTL_MS, async () => {
-    const scan = await fetchWhales({ minUsd: SCAN_FLOOR, limit: 400 });
+async function scanOnce({ timeoutMs = READ_DEADLINE_MS } = {}) {
+  const readBudgetMs = boundedReadBudget(timeoutMs);
+  const deadlineAt = Date.now() + readBudgetMs;
+  return withCache(`sm:scan:${SCAN_FLOOR}:${readBudgetMs}`, SCAN_TTL_MS, async () => {
+    const scan = await fetchWhales({ minUsd: SCAN_FLOOR, limit: 400, timeoutMs: readBudgetMs });
     const buffer = await mergeEvents(scan.events || []);
-    await learnTags(buffer.events);
+    await learnTags(buffer.events, { deadlineAt });
     return {
       scanAt: Date.now(),
       partial: !!scan.partial,
@@ -162,7 +182,7 @@ async function scanOnce() {
 
 /** Explorer name-tags for the largest counterparties we have not labelled
  *  yet — one bulk request per chain, bounded, failure-tolerant. */
-async function learnTags(events) {
+async function learnTags(events, { deadlineAt = Date.now() + READ_DEADLINE_MS } = {}) {
   const perChain = new Map();
   for (const e of events) {
     if (e.valueUsd == null) continue;
@@ -179,7 +199,8 @@ async function learnTags(events) {
   await Promise.all([...perChain].map(async ([chainId, map]) => {
     const addrs = [...map].sort((a, b) => b[1] - a[1]).slice(0, TAGS_PER_CHAIN).map(([a]) => a);
     try {
-      const tags = await bsAddressTags(chainId, addrs, { timeout: TAG_LOOKUP_TIMEOUT_MS });
+      const timeout = timeoutWithin(deadlineAt, TAG_LOOKUP_TIMEOUT_MS);
+      const tags = await bsAddressTags(chainId, addrs, { timeout });
       if (tags.size) await rememberTags(chainId, tags);
     } catch { /* enrichment only */ }
   }));
@@ -189,7 +210,8 @@ async function learnTags(events) {
  *  observed buffer. The scan keeps running and lands in the buffer for the
  *  next request — a bounded wait is what keeps a cold instance under the
  *  client's 30s patience instead of painting «اتصال برقرار نیست». */
-const SCAN_WAIT_MS = Number(process.env.SM_SCAN_WAIT_MS || 14_000);
+const SCAN_WAIT_MS = Math.max(MIN_UPSTREAM_TIMEOUT_MS,
+  Math.min(READ_DEADLINE_MS, Number(process.env.SM_SCAN_WAIT_MS) || READ_DEADLINE_MS));
 
 function waitAtMost(promise, ms) {
   let timer;
@@ -197,12 +219,13 @@ function waitAtMost(promise, ms) {
   return Promise.race([promise.then((v) => ({ value: v })), gate]).finally(() => clearTimeout(timer));
 }
 
-export async function labelledEvents({ minUsd = FLOORS.whaleUsd, since = 0 } = {}) {
+export async function labelledEvents({ minUsd = FLOORS.whaleUsd, since = 0, timeoutMs = READ_DEADLINE_MS } = {}) {
+  const readBudgetMs = boundedReadBudget(timeoutMs);
   let scan = null;
   let sourceUp = true;
   let scanPending = false;
   try {
-    const raced = await waitAtMost(scanOnce(), SCAN_WAIT_MS);
+    const raced = await waitAtMost(scanOnce({ timeoutMs: readBudgetMs }), Math.min(SCAN_WAIT_MS, readBudgetMs));
     if (raced.timedOut) scanPending = true;
     else scan = raced.value?.value ?? null;
   } catch {
@@ -498,9 +521,12 @@ export async function tokenFlow(tokenAddress, chainId, windowKey = '24h') {
 function hexBig(h) { try { return BigInt(h || '0x0'); } catch { return 0n; } }
 function topicAddr(t) { return t && t.length >= 64 ? '0x' + t.slice(-40).toLowerCase() : null; }
 
-async function rpcCall(url, method, params) {
+async function rpcCall(url, method, params, { deadlineAt, timeoutMs = 8000 } = {}) {
+  const timeout = Number.isFinite(deadlineAt)
+    ? timeoutWithin(deadlineAt, Math.min(8000, Number(timeoutMs) || 8000))
+    : Math.max(MIN_UPSTREAM_TIMEOUT_MS, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || 8000));
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, {
       method: 'POST', signal: ctrl.signal,
@@ -526,12 +552,21 @@ async function rpcCall(url, method, params) {
  * its own deadline, logs are capped per chain, and each chain prices all its
  * pairs through ONE batched DexScreener request.
  */
-export async function liquidityEvents({ minUsd = FLOORS.liquidityEventUsd, windowBlocks = 20 } = {}) {
+export async function liquidityEvents({
+  minUsd = FLOORS.liquidityEventUsd,
+  windowBlocks = 20,
+  timeoutMs = READ_DEADLINE_MS
+} = {}) {
+  const deadlineAt = Date.now() + boundedReadBudget(timeoutMs);
   const perChain = await Promise.allSettled(
-    EVM_CHAIN_ORDER.map((chainId) => deadline(
-      scanChainLiquidity(chainId, { minUsd, windowBlocks }),
-      12_000
-    ))
+    EVM_CHAIN_ORDER.map((chainId) => {
+      const remainingMs = deadlineAt - Date.now();
+      if (remainingMs < MIN_UPSTREAM_TIMEOUT_MS) {
+        return Promise.reject(new Error('SMART_MONEY_READ_DEADLINE_EXCEEDED'));
+      }
+      const read = scanChainLiquidity(chainId, { minUsd, windowBlocks, deadlineAt });
+      return deadline(read, remainingMs);
+    })
   );
   const out = [];
   for (const r of perChain) {
@@ -555,7 +590,7 @@ function deadline(promise, ms) {
 
 const MAX_LIQUIDITY_LOGS_PER_CHAIN = 10;
 
-async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
+async function scanChainLiquidity(chainId, { minUsd, windowBlocks, deadlineAt }) {
   const cfg = EVM_CHAINS[chainId];
   const rpcs = cfg?.rpc?.length ? cfg.rpc : [];
   /*
@@ -568,8 +603,9 @@ async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
   let logs = null;
   let goodRpc = null;
   for (const rpc of rpcs) {
+    if (deadlineAt - Date.now() < MIN_UPSTREAM_TIMEOUT_MS) break;
     try {
-      const latestHex = await rpcCall(rpc, 'eth_blockNumber', []);
+      const latestHex = await rpcCall(rpc, 'eth_blockNumber', [], { deadlineAt });
       const latest = Number(BigInt(latestHex));
       const from = Math.max(0, latest - windowBlocks);
       let got = null;
@@ -578,13 +614,13 @@ async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
           fromBlock: '0x' + from.toString(16),
           toBlock: '0x' + latest.toString(16),
           topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
-        }]);
+        }], { deadlineAt });
       } catch {
         got = await rpcCall(rpc, 'eth_getLogs', [{
           fromBlock: '0x' + Math.max(0, latest - 4).toString(16),
           toBlock: '0x' + latest.toString(16),
           topics: [[PAIR_TOPICS.Mint, PAIR_TOPICS.Burn]]
-        }]);
+        }], { deadlineAt });
       }
       if (!Array.isArray(got)) got = [];
       logs = got;
@@ -592,7 +628,7 @@ async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
       break;
     } catch {
       logs = null;
-      goodRpc = null; // this endpoint unreachable — try the next one
+      goodRpc = null; // try the next endpoint only while time remains
     }
   }
   if (!goodRpc) return []; // every endpoint for this chain failed
@@ -605,9 +641,10 @@ async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
   const pairAddrs = [...new Set(capped.map((l) => String(l.address || '').toLowerCase()).filter(Boolean))];
   const pairTokens = new Map(); // pair → {token0, token1}
   await Promise.all(pairAddrs.map(async (pair) => {
+    if (deadlineAt - Date.now() < MIN_UPSTREAM_TIMEOUT_MS) return;
     const [token0, token1] = await Promise.all([
-      pairToken(goodRpc, pair, '0x0dfe1681'),
-      pairToken(goodRpc, pair, '0xd21220a7')
+      pairToken(goodRpc, pair, '0x0dfe1681', deadlineAt),
+      pairToken(goodRpc, pair, '0xd21220a7', deadlineAt)
     ]);
     if (token0 && token1) pairTokens.set(pair, { token0, token1 });
   }));
@@ -615,7 +652,12 @@ async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
   // ONE batched DexScreener request for every token this chain touched.
   const tokenSet = new Set();
   for (const { token0, token1 } of pairTokens.values()) { tokenSet.add(token0); tokenSet.add(token1); }
-  const pairRes = tokenSet.size ? await dexPairsForTokens([...tokenSet]) : { pairs: [] };
+  let pairRes = { pairs: [] };
+  if (tokenSet.size && deadlineAt - Date.now() >= MIN_UPSTREAM_TIMEOUT_MS) {
+    try {
+      pairRes = await dexPairsForTokens([...tokenSet], { timeoutMs: timeoutWithin(deadlineAt) });
+    } catch { /* liquidity events remain usable without price enrichment */ }
+  }
   const poolByAddress = new Map();
   for (const p of pairRes.pairs || []) {
     if (p.pairAddress) poolByAddress.set(p.pairAddress, p);
@@ -654,9 +696,9 @@ async function scanChainLiquidity(chainId, { minUsd, windowBlocks }) {
   return out;
 }
 
-async function pairToken(rpc, pair, selector) {
+async function pairToken(rpc, pair, selector, deadlineAt) {
   try {
-    const data = await rpcCall(rpc, 'eth_call', [{ to: pair, data: selector }, 'latest']);
+    const data = await rpcCall(rpc, 'eth_call', [{ to: pair, data: selector }, 'latest'], { deadlineAt });
     const addr = topicAddr(data);
     return addr && HEX20.test(addr) ? addr : null;
   } catch { return null; }
@@ -664,8 +706,10 @@ async function pairToken(rpc, pair, selector) {
 
 /* ════════════════════════ Early tokens ════════════════════════════════ */
 
-export async function earlyTokens({ limit = 12 } = {}) {
-  const { value } = await withCache('sm:early-tokens', TTL.earlyTokens, async () => {
+export async function earlyTokens({ limit = 12, timeoutMs = READ_DEADLINE_MS } = {}) {
+  const readBudgetMs = boundedReadBudget(timeoutMs);
+  const deadlineAt = Date.now() + readBudgetMs;
+  const { value } = await withCache(`sm:early-tokens:${readBudgetMs}:${limit}`, TTL.earlyTokens, async () => {
     /*
      * Two independent keyless seeds instead of one: the token-profiles feed
      * alone goes quiet for stretches, which used to blank the whole Early
@@ -674,8 +718,14 @@ export async function earlyTokens({ limit = 12 } = {}) {
      * so nothing unverified is ever shown.
      */
     const [profiles, boosts] = await Promise.all([
-      dexTokenProfiles(),
-      dexTokenBoosts().catch(() => [])
+      (async () => {
+        try { return await dexTokenProfiles({ timeoutMs: timeoutWithin(deadlineAt) }); }
+        catch { return []; }
+      })(),
+      (async () => {
+        try { return await dexTokenBoosts({ timeoutMs: timeoutWithin(deadlineAt) }); }
+        catch { return []; }
+      })()
     ]);
     const seen = new Set();
     const seeds = [];
@@ -706,8 +756,13 @@ export async function earlyTokens({ limit = 12 } = {}) {
     for (const [seedChain, rows] of byChain) {
       const addresses = rows.map((r) => r.tokenAddress).filter((a) => HEX20.test(a));
       if (!addresses.length) continue;
-      // DexScreener token endpoint accepts cross-chain addresses; request them.
-      const { pairs } = await dexPairsForTokens(addresses);
+      // DexScreener token endpoint accepts cross-chain addresses; request them
+      // only while this method's shared deadline still has budget.
+      if (deadlineAt - Date.now() < MIN_UPSTREAM_TIMEOUT_MS) break;
+      let pairs = [];
+      try {
+        ({ pairs = [] } = await dexPairsForTokens(addresses, { timeoutMs: timeoutWithin(deadlineAt) }));
+      } catch { break; }
       for (const p of pairs) {
         if (!p.baseToken?.address) continue;
         const chain = p.chain || seedChain;
@@ -1047,10 +1102,20 @@ function earlyRisk(p, ageHrs) {
 
 /* ════════════════════════ Fresh wallets ═══════════════════════════════ */
 
-export async function freshWallets({ minCapitalUsd = FRESH.minCapitalUsd, stream = null } = {}) {
-  const { value } = await withCache('sm:fresh-wallets', TTL.freshWallets, async () => {
+export async function freshWallets({
+  minCapitalUsd = FRESH.minCapitalUsd,
+  stream = null,
+  timeoutMs = READ_DEADLINE_MS
+} = {}) {
+  const readBudgetMs = boundedReadBudget(timeoutMs);
+  const deadlineAt = Date.now() + readBudgetMs;
+  const thresholdKey = Math.max(0, Math.round(Number(minCapitalUsd) || 0));
+  const { value } = await withCache(`sm:fresh-wallets:${readBudgetMs}:${thresholdKey}`, TTL.freshWallets, async () => {
     const since = Date.now() - WINDOWS.H24;
-    const source = stream || await labelledEvents({ minUsd: minCapitalUsd, since });
+    const remainingMs = deadlineAt - Date.now();
+    const source = stream || (remainingMs >= MIN_UPSTREAM_TIMEOUT_MS
+      ? await labelledEvents({ minUsd: minCapitalUsd, since, timeoutMs: remainingMs })
+      : { events: [], observedSince: null, size: 0, sourceUp: false });
     const events = source.events.filter((e) => e.valueUsd != null && e.valueUsd >= minCapitalUsd && (!e.timestamp || e.timestamp >= since));
     const candidates = new Map();
     for (const e of events) {
@@ -1079,7 +1144,14 @@ export async function freshWallets({ minCapitalUsd = FRESH.minCapitalUsd, stream
       .sort((a, b) => b.movedUsd - a.movedUsd)
       .slice(0, 16);
     const counterRows = await Promise.all(
-      toCheck.map((c) => bsAddressCounters(c.chainId, c.address).catch(() => ({ dataStatus: 'unavailable', txCount: null })))
+      toCheck.map(async (c) => {
+        try {
+          const timeoutMs = timeoutWithin(deadlineAt);
+          return await bsAddressCounters(c.chainId, c.address, { timeoutMs });
+        } catch {
+          return { dataStatus: 'unavailable', txCount: null };
+        }
+      })
     );
     const checked = [];
     let verified = 0;

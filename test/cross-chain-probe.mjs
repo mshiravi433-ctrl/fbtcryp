@@ -100,6 +100,10 @@ t('slippage and duration survive normalisation', quote.slippage === 0.005 && quo
 t('the quote is executable only because a transactionRequest exists', quote.executable === true);
 t('a route with no transactionRequest is NOT executable',
   core.normalizeLifiStep(lifiStep({ transactionRequest: undefined }), { now }).executable === false);
+t('amount conversion refuses non-zero precision beyond token decimals',
+  core.toBaseUnits('1.0000001', 6) === null);
+t('amount conversion accepts only exact trailing zeroes beyond token decimals',
+  core.toBaseUnits('1.2300000', 6) === '1230000');
 
 /* quote identity + expiry */
 const same = core.normalizeLifiStep(lifiStep(), { now: now + 5000 });
@@ -146,6 +150,12 @@ const routes = [
   routeFixture({ id: 'b', tool: 'across', toAmount: '30756000000000000', toAmountUSD: 98.4, gasCostUSD: 0.37, duration: 45, tags: ['RECOMMENDED'] }),
   routeFixture({ id: 'c', tool: 'gasguzzler', toAmount: '31200000000000000', toAmountUSD: 99.8, gasCostUSD: 4.2, duration: 120, tags: [] })
 ].map((r) => core.normalizeLifiRoute(r, { now }));
+
+t('a normalized route does not double-count one step’s bridge fee',
+  Math.abs(core.normalizeLifiRoute(routeFixture({
+    id: 'fee-once', tool: 'across', toAmount: '1000000', toAmountUSD: 1,
+    gasCostUSD: 0, duration: 45, feeUsd: 0.59, steps: 1
+  }), { now }).bridgeFeeUsd - 0.59) < 1e-9);
 
 const ranked = core.rankRoutes(routes);
 t('a route normalises without a transactionRequest (it is a comparison only)', routes[0].executable === false);
@@ -325,8 +335,8 @@ t('...with the provider\'s output, its fees and its duration',
   quoteRes.body.quote.toAmount === '30756000000000000' && quoteRes.body.quote.estimatedTime === 45);
 t('...carrying an expiry', Number(quoteRes.body.quote.expiresAt) > Date.now());
 t('...and is never cached (a cached rate is a stale rate)', /no-store/.test(quoteRes.headers.get('cache-control') || ''));
-t('the integrator id is attached server-side, never by the caller',
-  calls.some((u) => u.includes('/v1/quote') && u.includes('integrator=fbt-swap')));
+t('the canonical integrator id is attached server-side, never by the caller',
+  calls.some((u) => u.includes('/v1/quote') && u.includes('integrator=fbtswap')));
 
 const sameChain = await get(`/api/cross-chain/quote?fromChain=1&toChain=1&fromToken=${USDC_BASE.address}&toToken=${ETH_MAINNET.address}&fromAmount=100000000&fromAddress=${WALLET}`);
 t('a same-chain request is refused with a specific code', sameChain.status === 400 && sameChain.body.error === 'SAME_CHAIN');
@@ -481,6 +491,18 @@ t('the desk uses the shared service for quotes, routes and execution',
 t('the desk refuses to show a rate while the provider is down', /providerDown/.test(desk));
 t('the desk re-quotes when the wallet switches network', /wallet\.chainId/.test(desk) && /runQuote\(\{ silent: true \}\)/.test(desk));
 t('the desk asks for a Solana address when the destination is Solana', /isSolanaChain\(toChain\)/.test(desk));
+t('the desk makes no health, chain, token or quote read before separate LI.FI consent',
+  /if \(!providerConsent\)/.test(desk) && /crossChainService\.getHealth\(\)/.test(desk)
+  && /crossChainService\.getChains\(\)/.test(desk) && /providerConsent && quote\?\.executable/.test(desk));
+t('the quote consent discloses registry queries and exact route/quote fields before approval',
+  /data-testid="cross-chain-provider-consent"/.test(desk)
+  && /token contract addresses, amount/.test(desk)
+  && /No chat text, private key or recovery phrase is sent/.test(desk));
+const agentChat = read('src/components/AgentHub/AgentChatDock.jsx');
+t('the chat opens a local swap action in the shared desk only after a user click',
+  /chatAction\?\.type === 'cross_chain_swap'/.test(agentChat)
+  && /onClick=\{\(\) => setSwapAction\(message\.task\.result\.data\.chatAction\)\}/.test(agentChat)
+  && /<CrossChainDesk/.test(agentChat));
 
 t('the execution pipeline validates the allowance before signing', /allowance\(/.test(client) && /approve\(/.test(client));
 t('...approves the exact amount, never infinite', /approve\(spender, need, \{ chainId: Number\(fromChain\) \}\)/.test(client) && !/MaxUint256/.test(client));

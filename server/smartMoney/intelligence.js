@@ -58,6 +58,7 @@ const RETRY_AFTER_MS = 2 * 60_000;
 const LEASE_MS = 75_000;
 /** How long the very first reader waits for the first-ever index. */
 const FIRST_WAIT_MS = Math.max(3_000, Number(process.env.SM_INDEX_FIRST_WAIT_MS) || 19_000);
+const READ_DEADLINE_MS = 14_000;
 const DISCOVERY_MS = 7_000;
 const PER_WALLET_MS = 12_000;
 /** Chains the live discovery rotates through (Blockscout-indexed, has a USD quote). */
@@ -130,7 +131,8 @@ export function candidateWallets(events = [], limit = 4) {
  * stablecoin right now. Rotates chains per refresh slot so successive cycles
  * widen coverage instead of re-reading the same chain; each read is bounded
  * and one dead indexer costs only its own rows. */
-export async function discoverLiveTraders({ now = Date.now(), chains = 3, perChain = 8, source = bsRecentStableSwappers } = {}) {
+export async function discoverLiveTraders({ now = Date.now(), chains = 3, perChain = 8, source = bsRecentStableSwappers,
+  timeoutMs = DISCOVERY_MS } = {}) {
   if (!DISCOVERY_CHAINS.length) return [];
   const slot = Math.floor(now / REFRESH_AFTER_MS);
   // Ethereum anchors every cycle (deepest, most reliable indexer); the other
@@ -142,8 +144,16 @@ export async function discoverLiveTraders({ now = Date.now(), chains = 3, perCha
   // Up to two USD stablecoins per chain (e.g. USDC + USDT): a single token's
   // latest page is dominated by pool↔router hops, the second doubles yield.
   const reads = picked.flatMap((chain) => USD_QUOTES[chain].slice(0, 2).map((quote) => ({ chain, quote })));
-  const settled = await Promise.allSettled(reads.map(({ chain, quote }) =>
-    withTimeout(source(chain, quote, { limit: perChain }), DISCOVERY_MS, 'DISCOVERY_TIMEOUT')));
+  const readBudgetMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(timeoutMs) || DISCOVERY_MS));
+  const deadlineAt = Date.now() + readBudgetMs;
+  const settled = await Promise.allSettled(reads.map(({ chain, quote }) => {
+    const remainingMs = deadlineAt - Date.now();
+    const headroomMs = Math.min(100, Math.max(10, Math.floor(remainingMs * 0.1)));
+    const sourceTimeoutMs = Math.floor(Math.min(remainingMs - headroomMs, 14_000));
+    if (sourceTimeoutMs < 250) return Promise.reject(new Error('DISCOVERY_TIMEOUT'));
+    const request = Promise.resolve().then(() => source(chain, quote, { limit: perChain, timeoutMs: sourceTimeoutMs }));
+    return withTimeout(request, sourceTimeoutMs + headroomMs, 'DISCOVERY_TIMEOUT');
+  }));
   const out = new Map();
   for (const r of settled) {
     if (r.status !== 'fulfilled') continue;
@@ -232,8 +242,13 @@ export async function runIntelligenceCycle({ now = Date.now(), candidates = null
     || recordId(a.chain, a.address).localeCompare(recordId(b.chain, b.address)));
   const chosen = [...staleQualified, ...rest].slice(0, budget);
 
+  const walletTimeoutMs = Math.max(250, Math.min(READ_DEADLINE_MS, Number(perWalletMs) || PER_WALLET_MS));
   const results = await Promise.allSettled(chosen.map(async (row) => {
-    const w = await withTimeout(Promise.resolve().then(() => analyze(row.address, row.chain)), perWalletMs, 'WALLET_TIMEOUT');
+    const w = await withTimeout(
+      Promise.resolve().then(() => analyze(row.address, row.chain, { timeoutMs: walletTimeoutMs })),
+      walletTimeoutMs,
+      'WALLET_TIMEOUT'
+    );
     if (w.chain !== row.chain || String(w.address).toLowerCase() !== String(row.address).toLowerCase())
       throw new Error('MISMATCHED_WALLET');
     // An indexer outage is not a measurement: do not store an UNAVAILABLE
@@ -388,9 +403,17 @@ export async function getVerifiedIntelligence({ window = '24h', chain = null, to
     for (const row of out.earlyEntries) add(row.chain, row.token);
     for (const row of (out.observed?.flow || []).slice(0, 8)) add(row.chain, row.token);
     const markets = new Map();
+    const priceDeadlineAt = Date.now() + READ_DEADLINE_MS;
     await Promise.all([...byChain].map(async ([id, tokens]) => {
-      try { markets.set(id, await tokenMarkets([...tokens].slice(0, 12), { chain: DEX_SLUGS[id] })); }
-      catch { /* unpriced ≠ 0 */ }
+      const timeoutMs = Math.floor(priceDeadlineAt - Date.now() - 100);
+      if (timeoutMs < 250) return;
+      try {
+        markets.set(id, await tokenMarkets([...tokens].slice(0, 12), {
+          chain: DEX_SLUGS[id],
+          timeoutMs,
+          maxFallbacks: 6
+        }));
+      } catch { /* unpriced ≠ 0 */ }
     }));
     for (const row of out.earlyEntries) {
       const m = markets.get(row.chain)?.get(row.token);

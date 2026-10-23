@@ -37,13 +37,17 @@ field exists for).
 1. (Optional) `AGENT_HUB_PROVIDERS_JSON` = the reviewed record(s). Start with
    **one free, read-only agent**.
 3. `AGENT_HUB_OPS_TOKEN` (≥16 chars) — otherwise the ops routes 404 by design.
-4. `AGENT_HUB_SECRET_KEY` only if the provider uses OAuth (`connections.start`
-   refuses without it; free public agents do not need it).
-5. Durable storage: **Upstash is required for account-required or paid tasks**
-   (they refuse with `DURABLE_STORE_REQUIRED` otherwise) and for webhooks
-   (`WEBHOOK_REPLAY_PROTECTION_UNAVAILABLE` without it).
-6. `GET /provider-health?refresh=1` → every provider `LIVE`, `registryErrors: []`.
-7. `npm run test:agent-hub`.
+4. `AGENT_HUB_SECRET_KEY` is required for OAuth credentials and user-supplied
+   A2A keys. It must remain stable across deployments; rotating it makes sealed
+   values unreadable.
+5. Durable storage: **Upstash or Vercel Blob is required before a user's A2A
+   key can be stored or used** (`CREDENTIAL_STORE_REQUIRED` otherwise).
+   Account-required tasks also refuse without durable storage, and webhooks
+   require Upstash (`WEBHOOK_REPLAY_PROTECTION_UNAVAILABLE` without it).
+6. User-added sources and their keys are scoped to the app's device identity;
+   durable storage preserves them across server instances, not across devices.
+7. `GET /provider-health?refresh=1` → every provider `LIVE`, `registryErrors: []`.
+8. `npm run test:agent-hub`.
 
 ## 3. Adding a provider
 
@@ -104,6 +108,9 @@ from `AGENT_HUB_PROVIDERS`), then redeploy config.
 | Webhook 401 | `WEBHOOK_SIGNATURE_INVALID` / `..._STALE` | Wrong secret, wrong signed string (`timestamp + "." + rawBody`), or clock skew > 5 min. |
 | `AUTH_REQUIRED` after connecting | — | Connection expired/revoked, or `AGENT_HUB_SECRET_KEY` changed (sealed blobs become unreadable — expected; users reconnect). |
 | `DURABLE_STORE_REQUIRED` | — | Account-required task without Upstash/Blob. Configure storage or keep the agent free. |
+| `CREDENTIAL_STORE_REQUIRED` | — | A2A keys are never saved to process memory. Configure Upstash/Blob before storing or using a BYO key. |
+| `SOURCE_CREDENTIAL_UNAVAILABLE` | — | The stored key could not be read/decrypted. The task/poll was not sent without it; restore durable storage or re-save the key. |
+| `NATIVE_DATA_CONSENT_REQUIRED` | — | The native agent has disclosed third-party public-data sources. The task was refused before any read; the user must approve those queries in the Agents panel or chat. |
 | `429 RATE_LIMITED` | — | Per-owner create burst (`AGENT_HUB_CREATE_RATE`, default 8/min) or the `/api/ai` gateway budget. |
 
 ## 6. Incident: a provider returned harmful or wrong content

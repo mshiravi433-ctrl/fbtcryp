@@ -131,18 +131,23 @@ an OAuth connection needs a reviewed provider to exist. That gate is correct —
 it used to leave the Agents tab with nothing that could actually run. Native
 agents close the gap **without weakening the gate**:
 
-- they are FBT's *own* agents (`server/agentHub/native/`), executed in-process
-  against public data the app already serves (CoinGecko, DefiLlama yields,
-  DefiLlama protocols/hacks, GoPlus, LI.FI, the explorer and smart-money reads);
-- there is nothing to review because there is no third party, nothing to
-  authorise because there is no external account, and nothing to bill;
+- they are FBT's *own* agents (`server/agentHub/native/`), with the analysis
+  running in-process; some request public data from third-party sources such as
+  CoinGecko, DefiLlama, GoPlus, the explorer or smart-money feeds;
+- each native card and chat view discloses the source **and the query fields**.
+  A native task with third-party data fails closed unless the user approves
+  (`nativeDataApproved`); the task receipt records the approved source list.
+  FBT does not send the full prompt to a third-party model for these reads;
 - they are labelled `FBT native` (`approvalStatus: FBT_FIRST_PARTY`,
   `integrationType: NATIVE`, `accessModel: FREE_PUBLIC`) and are rendered from
   the server's catalogue only — a disabled agent disappears from the UI;
-- every agent names its **data sources** on the card, and every result says which
-  source answered, which was unavailable, and when it was read;
-- they cannot execute: no order, no swap, no signature, no transfer. The
-  swap-assistant reads a LI.FI *quote*; it never builds a transaction request;
+- each result says which source answered, which was unavailable, and when it
+  was read; the public-read budget is 14 seconds and backtests have a 25-second
+  outer budget (upstream requests are aborted at their provider-level timeout);
+- they cannot execute: no order, signature or transfer. The Cross-chain Swap
+  Assistant creates only a local chat draft. Opening Bridge/Swap triggers a
+  **separate** consent step before LI.FI receives route/quote inputs, and a
+  wallet confirmation is still required to execute;
 - kill switches, consent, idempotency, history and rendering are the same code
   paths as any external provider — this adds a source of agents, not a second
   runtime.
@@ -231,8 +236,10 @@ credential-free snapshot) and a one-slot prompt queue. `AgentChatDock` reads it:
   engine;
 - the dock runs the same `POST /api/ai/agent-hub/agents/:id/tasks` call as the
   panel — same consent composer, same idempotency key, same kill switches;
-- a first-party agent runs in-process, so its copy says so and no third-party
-  consent gate is shown. A real third-party agent shows the provider name, the
+- a first-party agent runs in-process. If it reads third-party public data, the
+  dock shows the source/query disclosure and requires `nativeDataApproved`; a
+  local-only swap draft has no provider call or quote until Bridge/Swap's
+  separate LI.FI consent. A real third-party agent shows its provider name,
   terms/privacy links, the exact bytes preview and an explicit approval switch;
 - the result is rendered with the same `ResultView` (text, not HTML) and polled
   by task id — a second task is never created for the same question.
@@ -257,8 +264,10 @@ cannot bypass consent, eligibility or an operator switch.
 - **Payment is a gate, not an ability.** `DIRECT_CRYPTO_PAYMENT` answers
   `PAYMENT_REQUIRED` and stops. There is no relayer, no custody, no marking a task
   paid.
-- **No execution authority.** Nothing in this feature feeds an order, a swap, a
-  signature or a policy limit.
+- **No agent execution authority.** Native and A2A task results cannot sign or
+  transfer. The cross-chain chat action only prefills the existing Bridge/Swap
+  desk; route lookup has a separate LI.FI data consent, and execution still
+  requires the existing wallet confirmation and safety checks.
 
 ## Tests
 

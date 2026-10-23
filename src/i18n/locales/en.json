@@ -12763,6 +12763,11 @@
     "indicativeNote": "Indicative rate — connect a wallet to get an executable quote for your address.",
     "from": "From",
     "to": "To",
+    "dataConsent": {
+      "approve": "Approve sharing quote details with LI.FI",
+      "title": "Before loading LI.FI data",
+      "body": "After approval, FBT contacts LI.FI to load the chain/token registry and compare routes. Route and quote requests include the source and destination chains, token contract addresses, amount, and any public sender or destination addresses present. Registry lookups include the selected chain and optional search. No chat text, private key or recovery phrase is sent. Quotes are read-only; execution still needs separate wallet confirmation."
+    },
     "token": "Token",
     "selectToken": "Select token",
     "searchToken": "Search symbol or paste contract",

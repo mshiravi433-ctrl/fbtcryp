@@ -393,9 +393,10 @@ export function extractVenueRows(rows, { updatedAt = new Date().toISOString() } 
   return { venues, missing };
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, { timeout = TIMEOUT_MS } = {}) {
+  const boundedTimeout = Math.max(250, Math.min(30_000, Number(timeout) || TIMEOUT_MS));
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), boundedTimeout);
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
@@ -543,8 +544,9 @@ export function isEligible(p) {
  * to present them in and it is the opposite of what every yield aggregator
  * does.
  */
-export async function fetchYields() {
-  const raw = await fetchJson(LLAMA_YIELDS);
+export async function fetchYields({ timeoutMs = TIMEOUT_MS } = {}) {
+  const timeout = Math.max(250, Math.min(30_000, Number(timeoutMs) || TIMEOUT_MS));
+  const raw = await fetchJson(LLAMA_YIELDS, { timeout });
   if (raw?.status !== 'success' || !Array.isArray(raw.data) || !raw.data.length) throw new Error('INVALID_YIELDS_RESPONSE');
   const rows = raw.data;
 

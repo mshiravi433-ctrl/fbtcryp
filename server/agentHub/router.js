@@ -173,7 +173,7 @@ export function createAgentHubRouter({ hub, ownerFor, env = process.env, log = (
 
   const credentialStatus = (code) => (
     code === 'SOURCE_NOT_FOUND' ? 404
-      : code === 'AGENT_HUB_SECRET_KEY_REQUIRED' ? 503
+      : code === 'AGENT_HUB_SECRET_KEY_REQUIRED' || code === 'CREDENTIAL_STORE_REQUIRED' || code === 'CREDENTIAL_STORE_UNAVAILABLE' ? 503
         : 400
   );
 

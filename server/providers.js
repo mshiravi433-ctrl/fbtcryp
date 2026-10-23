@@ -343,6 +343,34 @@ export async function fetchChart(id, days = 1, vs = 'usd') {
 }
 
 /**
+ * Convert a provider's real price observations into one close per UTC day.
+ * This is deliberately a close series, not synthetic OHLC: `market_chart`
+ * does not report a daily high or low. Backtests and indicators that consume
+ * closes can use it when CoinGecko's dedicated OHLC endpoint is unavailable.
+ */
+export function dailyCloseBarsFromChart(raw) {
+  const prices = Array.isArray(raw?.prices) ? raw.prices : [];
+  const sorted = prices
+    .map((row) => ({ t: Number(row?.[0]), p: Number(row?.[1]) }))
+    .filter((row) => Number.isFinite(row.t) && Number.isFinite(new Date(row.t).getTime()) && Number.isFinite(row.p) && row.p > 0)
+    .sort((a, b) => a.t - b.t);
+  const lastByDay = new Map();
+  for (const row of sorted) {
+    const day = new Date(row.t).toISOString().slice(0, 10);
+    lastByDay.set(day, row.p);
+  }
+  return [...lastByDay.entries()].map(([day, c]) => ({ t: Date.parse(`${day}T00:00:00.000Z`), c }));
+}
+
+/** A one-shot close-history fallback for consumers that need closes only. */
+export async function fetchDailyCloses(id, days = 365, vs = 'usd', { timeoutMs = 9_000 } = {}) {
+  const boundedDays = Math.max(1, Math.min(365, Number(days) || 365));
+  const url = cgUrl(`/coins/${encodeURIComponent(id)}/market_chart`, { vs_currency: vs, days: String(boundedDays) });
+  const raw = await req(url, { timeout: Math.max(250, Number(timeoutMs) || 9_000), retry: false });
+  return dailyCloseBarsFromChart(raw);
+}
+
+/**
  * OHLC CANDLES.
  *
  * ─── WHY THIS IS A SEPARATE CALL FROM fetchChart ────────────────────────────
@@ -364,8 +392,11 @@ export async function fetchChart(id, days = 1, vs = 'usd') {
  * stating because a caller asking for 90 days and expecting hourly bars would
  * get four-day-old-looking data and assume the feed was broken.
  */
-export async function fetchOhlc(id, days = 30, vs = 'usd') {
-  const raw = await cgReq(cgUrl(`/coins/${encodeURIComponent(id)}/ohlc`, { vs_currency: vs, days: String(days) }));
+export async function fetchOhlc(id, days = 30, vs = 'usd', { timeoutMs = TIMEOUT_MS, retry = true } = {}) {
+  const raw = await req(cgUrl(`/coins/${encodeURIComponent(id)}/ohlc`, { vs_currency: vs, days: String(days) }), {
+    timeout: Math.max(250, Number(timeoutMs) || TIMEOUT_MS),
+    retry: retry === true
+  });
   if (!Array.isArray(raw)) return [];
   return raw
     .map(([t, o, h, l, c]) => ({ t, o, h, l, c }))
@@ -377,9 +408,12 @@ export async function fetchOhlc(id, days = 30, vs = 'usd') {
     .filter((d) => [d.t, d.o, d.h, d.l, d.c].every(Number.isFinite) && d.h >= d.l);
 }
 
-export async function fetchSimplePrices(ids = [], vs = 'usd') {
+export async function fetchSimplePrices(ids = [], vs = 'usd', { timeoutMs = TIMEOUT_MS, retry = false } = {}) {
   if (!ids.length) return {};
-  return req(cgUrl('/simple/price', { ids: ids.join(','), vs_currencies: vs, include_24hr_change: 'true' }));
+  return req(cgUrl('/simple/price', { ids: ids.join(','), vs_currencies: vs, include_24hr_change: 'true' }), {
+    timeout: Math.max(250, Number(timeoutMs) || TIMEOUT_MS),
+    retry: retry === true
+  });
 }
 
 /** One batched seven-day history read for contract-resolved stock-token ids.
@@ -423,10 +457,19 @@ export async function fetchDexPools(network = 'bsc') {
  * sparkline. We try `/coins/markets?ids=` first for exactly that reason and
  * only fall back to the heavier detail endpoint for ids it does not cover.
  */
-export async function fetchCoinDetail(id, vs = 'usd') {
+export async function fetchCoinDetail(id, vs = 'usd', options = {}) {
+  const boundedTimeout = Math.max(250, Number(options.timeoutMs) || TIMEOUT_MS);
+  const noRetry = options.retry === false;
+  const deadlineAt = Date.now() + boundedTimeout;
+  const read = (url) => {
+    if (!noRetry) return cgReq(url);
+    const remaining = deadlineAt - Date.now();
+    if (remaining < 250) throw new Error('Coin detail read deadline exceeded');
+    return req(url, { timeout: remaining, retry: false });
+  };
   let coinGeckoError = null;
   try {
-    const rows = await cgReq(
+    const rows = await read(
       cgUrl('/coins/markets', {
         vs_currency: vs,
         ids: id,
@@ -444,7 +487,7 @@ export async function fetchCoinDetail(id, vs = 'usd') {
   }
 
   try {
-    const raw = await cgReq(
+    const raw = await read(
       cgUrl(`/coins/${encodeURIComponent(id)}`, {
         localization: 'false',
         tickers: 'false',
@@ -483,7 +526,7 @@ export async function fetchCoinDetail(id, vs = 'usd') {
     coinGeckoError = err;
   }
 
-  if (String(vs || 'usd').toLowerCase() !== 'usd') throw coinGeckoError;
+  if (String(vs || 'usd').toLowerCase() !== 'usd' || options.allowCoinLoreFallback === false) throw coinGeckoError;
 
   /* CoinLore cannot look up a slug directly. Scan the same 250 live rows
      the home page shows, not only its first 100. */
@@ -509,8 +552,11 @@ export async function fetchCoinDetail(id, vs = 'usd') {
 }
 
 /** Universe-wide coin search by name or ticker. */
-export async function fetchSearch(query) {
-  const raw = await cgReq(cgUrl('/search', { query }));
+export async function fetchSearch(query, { timeoutMs = TIMEOUT_MS, retry = true } = {}) {
+  const raw = await req(cgUrl('/search', { query }), {
+    timeout: Math.max(250, Number(timeoutMs) || TIMEOUT_MS),
+    retry: retry === true
+  });
   return (raw.coins || []).slice(0, 25).map((c) => ({
     id: c.id,
     symbol: (c.symbol || '').toUpperCase(),
