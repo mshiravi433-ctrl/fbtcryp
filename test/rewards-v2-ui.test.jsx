@@ -103,7 +103,8 @@ describe('Rewards hub surface', () => {
     expect(css).toMatch(/\.rwd-ring-wrap\s*>\s*svg\s*\{[^}]*transform:\s*rotate\(-90deg\)/);
     expect(css).not.toMatch(/\.rwd-ring-wrap\s+svg\s*\{/);
     expect(css).toMatch(/\.rwd-totem-float[\s\S]*?animation:\s*rwd-totem-float 8s/);
-    expect(css).toMatch(/\.rwd-totem-spark[\s\S]*?animation:\s*rwd-twinkle 6s/);
+    // the only thing that turns is the dashed orbit ring, not the animal
+    expect(css).toMatch(/\.rwd-totem-orbit[\s\S]*?animation:\s*rwd-orbit-spin 26s/);
     expect(css).not.toMatch(/\.rwd-totem-halo\s*\{[^}]*filter:\s*blur/);
   });
 });
