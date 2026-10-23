@@ -56,7 +56,7 @@ export const LIFI_TIMEOUT_MS = 15000;
  * existing Kyber + OpenOcean + Velora stack untouched — expanding this set
  * is a one-line change once a chain is live-probed with the fee echo.
  */
-const LIFI_SWAP_CHAINS = new Set([5000, 534352, 324, 143, 4663]);
+const LIFI_SWAP_CHAINS = new Set([56, 1, 137, 42161, 10, 8453, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663]);
 
 export const lifiSupports = (chainId) => LIFI_SWAP_CHAINS.has(Number(chainId));
 
@@ -325,6 +325,7 @@ async function lifiTokenRef(token, chainId) {
   if (token.native) {
     const sym = EVM_CHAINS[chainId]?.native?.symbol;
     if (sym) return sym;
+    return '0x0000000000000000000000000000000000000000';
   }
   if (isAddr(token.address)) {
     try {
