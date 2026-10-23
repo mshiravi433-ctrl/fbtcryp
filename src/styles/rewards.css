@@ -608,6 +608,22 @@
   overflow: visible;
   filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.34));
 }
+/* Transparent WebP: no baked-in white/checkerboard panel on either theme.
+   Contain the full figure so the crown, paws and tail never get clipped. */
+.rwd-totem-artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.38));
+}
+.rwd-totem-artwork-portrait {
+  border-radius: 50%;
+}
+.rwd-totem-locked .rwd-totem-artwork {
+  filter: grayscale(0.85) brightness(0.55) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.32));
+}
 .rwd-totem-spark {
   animation: rwd-twinkle 6s ease-in-out infinite;
   transform-box: fill-box;

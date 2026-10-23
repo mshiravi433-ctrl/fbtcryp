@@ -21,8 +21,8 @@ import { TIERS } from '../../lib/ranks';
  *     gradient body, a darker under-layer for occlusion, a rim light along
  *     the top-left edge and a specular highlight. That is what separates a
  *     "3D-looking" animal from a flat icon, and it costs nothing at runtime.
- *   · ONE SOURCE, EVERY SIZE — the same SVG renders at 38 px in an
- *     achievement row and at 160 px in the hero banner.
+ *   · Gold uses the supplied transparent lion artwork: a portrait for small
+ *     medals and an uncropped silhouette for cards. Other tiers keep their SVG.
  *
  * WHY HAND-BUILT SVG AND NOT three.js / Lottie
  *   · three.js is ~600 kB before the first model; this is a few kB of paths
@@ -416,6 +416,9 @@ export default function TierTotem({
   const animal = TIER_ANIMALS[meta.id] || 'turtle';
   const Animal = ANIMALS[animal];
   const c = palette(meta.color);
+  // Full silhouette for cards; a face/armour crop stays legible in tiny medals.
+  const goldArtwork = meta.id === 'gold';
+  const compactArtwork = size <= 70;
 
   const g = {
     body: `${rawId}-body`,
@@ -475,6 +478,17 @@ export default function TierTotem({
         )}
 
         <span className="rwd-totem-float">
+          {goldArtwork ? (
+            <img
+              className={`rwd-totem-artwork${compactArtwork ? ' rwd-totem-artwork-portrait' : ''}`}
+              src={`/images/rewards/gold-lion-${compactArtwork ? 'portrait' : 'full'}.webp`}
+              alt={label}
+              width={compactArtwork ? 384 : 494}
+              height={compactArtwork ? 384 : 960}
+              decoding="async"
+              draggable={false}
+            />
+          ) : (
           <svg viewBox="0 0 120 120" className="rwd-totem-svg" role="img" aria-label={label}>
             <defs>
               <radialGradient id={g.aura} cx="50%" cy="42%" r="58%">
@@ -502,6 +516,7 @@ export default function TierTotem({
             <circle className="rwd-totem-spark" cx="104" cy="90" r="1.2" fill={c.light} style={{ animationDelay: '-1.8s' }} />
             <circle className="rwd-totem-spark" cx="99" cy="20" r="1" fill={c.light} style={{ animationDelay: '-3.2s' }} />
           </svg>
+          )}
         </span>
       </span>
 
