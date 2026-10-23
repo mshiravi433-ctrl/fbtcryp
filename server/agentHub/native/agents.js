@@ -384,6 +384,7 @@ const aiTradingAnalyst = {
 const smartMoneyTracker = {
   slug: 'smart-money-tracker',
   name: 'Smart Money Tracker',
+  nameFa: 'ردیاب پول هوشمند',
   summary: 'Observed large-transfer flow, per-token accumulation and holder concentration — measured, not narrated.',
   summaryFa: 'جریان انتقال‌های بزرگ مشاهده‌شده، انباشت به تفکیک توکن و تمرکز هولدرها؛ اندازه‌گیری‌شده، نه روایت‌شده.',
   category: 'trading',
@@ -1350,17 +1351,27 @@ export async function runNativeAgent(slug, { text = '', context = null } = {}, d
   try {
     const out = await agent.run({ request, text, context, data, fa, at });
     if (!out || !out.text) return { ok: false, code: 'NATIVE_AGENT_EMPTY' };
+    /* The card name is localised in the UI, so the RESULT title must be too —
+       otherwise a Persian request came back headed "AI Trading Analyst" while
+       the card that opened it said «تحلیل‌گر معامله». Only the display title is
+       mapped; the agent identity (`agent.slug`) never changes. */
+    const rawTitle = out.title || agent.name;
+    const title = fa && agent.nameFa ? String(rawTitle).split(agent.name).join(agent.nameFa) : rawTitle;
+    const dataStatus = out.dataStatus || 'live';
     return {
       ok: true,
       agent,
-      title: out.title || agent.name,
+      title,
       text: out.text,
       citations: Array.isArray(out.citations) ? out.citations.filter((u) => /^https:\/\//i.test(String(u))).slice(0, 8) : [],
-      dataStatus: out.dataStatus || 'live',
+      dataStatus,
       data: {
         agent: agent.slug,
         lang: fa ? 'fa' : 'en',
-        dataStatus: out.dataStatus || 'live',
+        dataStatus,
+        /* `awaiting_input` is a completed run that needs a better question.
+           Saying so explicitly stops the UI from painting it as a failure. */
+        needsInput: dataStatus === 'awaiting_input',
         readAt: at,
         request: {
           symbol: request.symbol,

@@ -37,16 +37,29 @@ export function nativeEnabled(env = process.env) {
   return truthy(raw);
 }
 
+/**
+ * The app is a HashRouter. `/help` and `/legal/terms` are ROUTES INSIDE the
+ * single page, not files on the server, so linking to `https://fbtswap.ir/help`
+ * opened a 404 — the reported bug. A hash URL is the real address of the page
+ * (`/#/help`), works from a fresh tab, and works when the link is pasted into a
+ * chat. `websiteUrl` keeps the bare origin because that one genuinely exists.
+ */
+export function hashUrl(origin, path) {
+  const base = String(origin || '').replace(/\/+$/, '');
+  const route = `/${String(path || '/').replace(/^\/+/, '')}`;
+  return `${base}/#${route === '/' ? '/' : route}`;
+}
+
 export function createNativeProvider({ env = process.env } = {}) {
   const origin = String(env.PUBLIC_APP_ORIGIN || 'https://fbtswap.ir').replace(/\/+$/, '');
   return {
     id: NATIVE_PROVIDER_ID,
     name: 'FBT Native',
-    websiteUrl: origin,
-    documentationUrl: `${origin}/help`,
-    termsUrl: `${origin}/legal/terms`,
-    privacyUrl: `${origin}/legal/privacy`,
-    supportUrl: `${origin}/help`,
+    websiteUrl: `${origin}/`,
+    documentationUrl: hashUrl(origin, '/help'),
+    termsUrl: hashUrl(origin, '/legal/terms'),
+    privacyUrl: hashUrl(origin, '/legal/privacy'),
+    supportUrl: hashUrl(origin, '/help'),
     integrationType: 'NATIVE',
     accessModel: 'FREE_PUBLIC',
     approvalStatus: 'FBT_FIRST_PARTY',
@@ -63,7 +76,7 @@ export function createNativeProvider({ env = process.env } = {}) {
     approvalEvidence: {
       reviewedAt: NATIVE_FIRST_PARTY_SINCE,
       reviewedBy: 'FBT first party (code review + tests)',
-      documentUrl: `${origin}/legal/disclaimer`,
+      documentUrl: hashUrl(origin, '/legal/disclaimer'),
       jurisdiction: { operatorJurisdiction: null, targetRegions: [], providerRestrictions: [], accountEligibility: null },
       promptTraining: 'no — no third party receives the prompt',
       dataRetention: 'stored only in this owner’s FBT task history',

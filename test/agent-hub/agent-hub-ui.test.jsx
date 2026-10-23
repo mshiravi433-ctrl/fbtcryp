@@ -19,6 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AgentHubPanel from '../../src/components/AgentHub/AgentHubPanel.jsx';
+import AgentChatDock from '../../src/components/AgentHub/AgentChatDock.jsx';
 import { defaultAgentsView } from '../../src/lib/intent-ai/agentHub/availability.js';
 import { RECOMMENDED_EXTERNAL_AGENTS } from '../../src/lib/intent-ai/agentHub/recommendations.js';
 
@@ -618,4 +619,251 @@ describe('agents tab: which view opens first', () => {
   });
 
 });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE REPORTED BUGS, AS TESTS
+   ─────────────────────────────────────────────────────────────────────────
+   (۱) A Persian UI printed the ENGLISH name and summary for FBT's own agents,
+       in the list and in the run screen.
+   (۲) The provider links on that screen were `/help` and `/legal/terms`, which
+       the HashRouter app does not serve — every one of them was a 404.
+   (۳) The share block was a stack of native checkboxes that did not line up
+       with their text.
+   (۴) An activated agent had no presence in the chat at all.
+   ───────────────────────────────────────────────────────────────────────── */
+describe('Persian native agents, real links and the chat hand-off', () => {
+  const NATIVE_FA = {
+    ...AGENT,
+    id: 'fbt-native:ai-trading-analyst',
+    providerId: 'fbt-native',
+    providerName: 'FBT Native',
+    source: 'native',
+    native: true,
+    name: 'AI Trading Analyst',
+    nameFa: 'تحلیل‌گر معامله',
+    summary: 'Reads trend, momentum and levels from live candles.',
+    summaryFa: 'روند، مومنتوم و سطوح حمایت/مقاومت را از کندل‌های واقعی می‌خواند.',
+    examples: ['Analyse ETH on the daily timeframe'],
+    examplesFa: ['اتریوم را در تایم‌فریم روزانه تحلیل کن'],
+    status: 'LIVE',
+    accessModel: 'FREE_PUBLIC',
+    costSummary: 'Free — runs inside FBT, no account and no payment',
+    provider: {
+      source: 'native',
+      websiteUrl: 'https://fbtswap.ir/',
+      documentationUrl: 'https://fbtswap.ir/#/help',
+      termsUrl: 'https://fbtswap.ir/#/legal/terms',
+      privacyUrl: 'https://fbtswap.ir/#/legal/privacy',
+      supportUrl: 'https://fbtswap.ir/#/help',
+      reviewedAt: '2026-10-22',
+      dataPolicy: { promptTraining: 'no — nothing is sent to a third party', dataRetention: 'this owner’s FBT task history only' },
+      jurisdiction: { providerRestrictions: [] }
+    }
+  };
+  const CATALOG_FA = {
+    ok: true, enabled: true, status: 'LIVE', durable: false, paidInvocationEnabled: false,
+    agents: [NATIVE_FA],
+    providers: [{ id: 'fbt-native', name: 'FBT Native', source: 'native', accessModel: 'FREE_PUBLIC' }],
+    registryErrors: [],
+    sources: { cap: 8, added: 0 }
+  };
+
+  beforeEach(() => {
+    routes['GET /ai/agent-hub/catalog'] = () => respond(CATALOG_FA);
+    try { window.localStorage.clear(); } catch { /* ignore */ }
+  });
+
+  const openFaDetail = async () => {
+    render(<AgentHubPanel fa />);
+    fireEvent.click(await screen.findByTestId('agent-hub-tab-discover'));
+    fireEvent.click(await screen.findByTestId('agent-hub-open-fbt-native-ai-trading-analyst'));
+    return screen.findByTestId('agent-hub-detail');
+  };
+
+  it('names the agent in Persian and keeps English as the secondary line', async () => {
+    render(<AgentHubPanel fa />);
+    fireEvent.click(await screen.findByTestId('agent-hub-tab-discover'));
+    const card = await screen.findByTestId('agent-hub-card-fbt-native-ai-trading-analyst');
+    const name = card.querySelector('.ah-card-name');
+    expect(name.textContent).toBe('تحلیل‌گر معامله');
+    expect(card.textContent).toContain('روند، مومنتوم');
+    expect(card.textContent).not.toContain('Reads trend, momentum');
+    /* The English identity is still on the card, labelled as secondary. */
+    expect(card.querySelector('.ah-card-sub').textContent).toBe('AI Trading Analyst');
+  });
+
+  it('opens the run screen with the Persian name, summary and examples', async () => {
+    await openFaDetail();
+    const detail = screen.getByTestId('agent-hub-detail');
+    expect(detail.querySelector('h3').textContent).toBe('تحلیل‌گر معامله');
+    expect(detail.textContent).toContain('کندل‌های واقعی');
+    expect(detail.textContent).toContain('اتریوم را در تایم‌فریم روزانه تحلیل کن');
+  });
+
+  it('links to the hash routes the app actually serves, and keeps external links external', async () => {
+    await openFaDetail();
+    expect(screen.getByTestId('agent-hub-link-terms').getAttribute('href')).toBe('#/legal/terms');
+    expect(screen.getByTestId('agent-hub-link-privacy').getAttribute('href')).toBe('#/legal/privacy');
+    expect(screen.getByTestId('agent-hub-link-docs').getAttribute('href')).toBe('#/help');
+    expect(screen.getByTestId('agent-hub-link-support').getAttribute('href')).toBe('#/help');
+    /* Internal links navigate in place; they must not open a blank tab. */
+    expect(screen.getByTestId('agent-hub-link-terms').getAttribute('target')).toBeNull();
+    expect(screen.getByTestId('agent-hub-link-terms').getAttribute('data-internal')).toBe('true');
+    /* The site link is the app's own home route, so it stays in-app too. */
+    expect(screen.getByTestId('agent-hub-link-site').getAttribute('href')).toBe('#/');
+    expect(screen.getByTestId('agent-hub-link-site').getAttribute('target')).toBeNull();
+  });
+
+  it('renders the share choices as aligned switch rows, not loose checkboxes', async () => {
+    await openFaDetail();
+    const fieldset = screen.getByTestId('agent-hub-context');
+    expect(fieldset.tagName).toBe('FIELDSET');
+    const rows = fieldset.querySelectorAll('.ah-share');
+    expect(rows.length).toBe(4);
+    for (const row of rows) {
+      expect(row.querySelector('.ah-share-body')).toBeTruthy();
+      expect(row.querySelector('input.ah-share-input')).toBeTruthy();
+    }
+    /* The locked row cannot be turned off; the request text is always sent. */
+    const task = screen.getByTestId('agent-hub-context-task');
+    expect(task.checked).toBe(true);
+    expect(task.readOnly).toBe(true);
+    expect(fieldset.textContent).toContain('1 مورد');
+
+    fireEvent.click(screen.getByTestId('agent-hub-context-wallet'));
+    expect(await screen.findByTestId('agent-hub-wallet-value')).toBeTruthy();
+    expect(fieldset.textContent).toContain('2 مورد');
+    expect(fieldset.querySelector('.ah-share[data-on="true"] .ah-share-input').checked).toBe(true);
+  });
+
+  it('asks for one clear approval and never pretends an FBT-native run goes to a third party', async () => {
+    await openFaDetail();
+    expect(screen.getByTestId('agent-hub-consent-approve').checked).toBe(false);
+    expect(screen.getByTestId('agent-hub-detail').textContent).toContain('داخل خودِ FBT اجرا می‌شود');
+    expect(screen.getByTestId('agent-hub-detail').textContent).not.toContain('شرایط و حریم خصوصی او اعمال می‌شود');
+    fireEvent.click(screen.getByTestId('agent-hub-consent-approve'));
+    expect(screen.getByTestId('agent-hub-consent-approve').checked).toBe(true);
+  });
+
+  it('activates the agent for the chat with a small, credential-free snapshot', async () => {
+    const activated = [];
+    render(<AgentHubPanel fa onActivateInChat={(agent) => activated.push(agent.id)} />);
+    fireEvent.click(await screen.findByTestId('agent-hub-tab-discover'));
+    fireEvent.click(await screen.findByTestId('agent-hub-open-fbt-native-ai-trading-analyst'));
+    fireEvent.click(await screen.findByTestId('agent-hub-use-in-chat'));
+
+    expect(activated).toEqual(['fbt-native:ai-trading-analyst']);
+    const stored = JSON.parse(window.localStorage.getItem('fbt.agentHub.active.v1'));
+    expect(stored.id).toBe('fbt-native:ai-trading-analyst');
+    expect(stored.nameFa).toBe('تحلیل‌گر معامله');
+    expect(stored.examplesFa.length).toBeGreaterThan(0);
+    /* Nothing that could authenticate a provider call is stored. */
+    expect(JSON.stringify(stored)).not.toMatch(/secret|token|apiKey|credential/i);
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE ACTIVATED AGENT, IN THE CHAT
+   Once an agent is activated, the chat is the place it has to work: its own
+   example prompts, its own runner, and a result in the thread that is the
+   provider's text rendered as text. No second runtime, no invented answer.
+   ───────────────────────────────────────────────────────────────────────── */
+describe('the active agent inside the chat', () => {
+  const SNAPSHOT = {
+    activatedAt: Date.now(),
+    id: 'fbt-native:ai-trading-analyst',
+    providerId: 'fbt-native',
+    providerName: 'FBT Native',
+    source: 'native',
+    native: true,
+    name: 'AI Trading Analyst',
+    nameFa: 'تحلیل‌گر معامله',
+    status: 'LIVE',
+    accessModel: 'FREE_PUBLIC',
+    examples: ['Analyse ETH on the daily timeframe'],
+    examplesFa: ['اتریوم را دیروز تحلیل کن'],
+    provider: { websiteUrl: 'https://fbtswap.ir/', termsUrl: 'https://fbtswap.ir/#/legal/terms' }
+  };
+
+  beforeEach(() => {
+    try { window.localStorage.clear(); } catch { /* ignore */ }
+    routes['GET /ai/agent-hub/catalog'] = () => respond(CATALOG);
+  });
+
+  it('renders nothing when the user has not activated an agent', () => {
+    render(<AgentChatDock fa />);
+    expect(screen.queryByTestId('agent-chat-dock')).toBeNull();
+  });
+
+  it('shows the active agent, its own examples, and runs them without a second consent gate (in-process)', async () => {
+    let posted = null;
+    routes['POST /ai/agent-hub/agents/fbt-native%3Aai-trading-analyst/tasks'] = (init) => {
+      posted = JSON.parse(init.body);
+      return respond({
+        ok: true,
+        task: {
+          id: 'task_chat_1', state: 'completed', terminal: true, active: false,
+          agentName: 'تحلیل‌گر معامله', providerName: 'FBT Native',
+          result: { text: '# ETH · Ethereum\n\n## تصویر لحظه‌ای\n- قیمت: $2.5K', citations: [], warnings: [] }
+        }
+      });
+    };
+    try { window.localStorage.setItem('fbt.agentHub.active.v1', JSON.stringify(SNAPSHOT)); } catch { /* ignore */ }
+
+    render(<AgentChatDock fa />);
+    const dock = screen.getByTestId('agent-chat-dock');
+    expect(dock.textContent).toContain('تحلیل‌گر معامله');
+    /* It says WHERE it runs. A native agent is not a third party. */
+    expect(dock.textContent).toContain('اجرا داخل FBT');
+    /* The chips are this agent's examples, not generic intents. */
+    expect(screen.getByTestId('agent-chat-chip-0').textContent).toBe('اتریوم را دیروز تحلیل کن');
+
+    fireEvent.click(screen.getByTestId('agent-chat-chip-0'));
+    const log = await screen.findByTestId('agent-chat-log');
+    await waitFor(() => expect(log.textContent).toContain('تصویر لحظه‌ای'));
+    expect(log.textContent).toContain('اتریوم را دیروز تحلیل کن');
+    expect(posted.taskText).toBe('اتریوم را دیروز تحلیل کن');
+    expect(posted.consent).toEqual({ approved: true, categories: ['task_text'], termsVersion: null, privacyVersion: null });
+    /* Rendered as text nodes: a markdown heading, not raw HTML. */
+    expect(log.querySelector('h4').textContent).toContain('ETH');
+  });
+
+  it('refuses to send to a real third party before the user approves the share', async () => {
+    let called = false;
+    routes['POST /ai/agent-hub/agents/u-abc123%3Atoken-research/tasks'] = () => { called = true; return respond({ ok: false, code: 'NO_ROUTE' }, 404); };
+    try {
+      window.localStorage.setItem('fbt.agentHub.active.v1', JSON.stringify({
+        ...SNAPSHOT,
+        id: 'u-abc123:token-research',
+        providerId: 'u-abc123',
+        providerName: 'My agent',
+        source: 'user',
+        native: false,
+        nameFa: 'ایجنت من',
+        examplesFa: ['گردش ETH را بررسی کن']
+      }));
+    } catch { /* ignore */ }
+
+    render(<AgentChatDock fa />);
+    expect(screen.getByTestId('agent-chat-consent')).toBeTruthy();
+    const send = screen.getByTestId('agent-chat-send');
+    fireEvent.change(screen.getByTestId('agent-chat-input'), { target: { value: 'گردش ETH را بررسی کن' } });
+    expect(send.disabled).toBe(true);
+    fireEvent.click(send);
+    expect(called).toBe(false);
+
+    fireEvent.click(screen.getByTestId('agent-chat-consent-approve'));
+    await waitFor(() => expect(screen.getByTestId('agent-chat-send').disabled).toBe(false));
+    /* The exact bytes are available before the first send. */
+    expect(screen.getByTestId('agent-chat-preview').textContent).toContain('گردش ETH را بررسی کن');
+  });
+
+  it('leaves the chat when the user ends the session', async () => {
+    try { window.localStorage.setItem('fbt.agentHub.active.v1', JSON.stringify(SNAPSHOT)); } catch { /* ignore */ }
+    render(<AgentChatDock fa />);
+    fireEvent.click(screen.getByTestId('agent-chat-deactivate'));
+    await waitFor(() => expect(screen.queryByTestId('agent-chat-dock')).toBeNull());
+    expect(window.localStorage.getItem('fbt.agentHub.active.v1')).toBeNull();
+  });
 });

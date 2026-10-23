@@ -222,7 +222,9 @@ import NeuralAgentGraph from './intent-neural/NeuralAgentGraph';
    it costs nothing on first paint; the first-paint budget stays a ratchet
    (scripts/check-first-paint.mjs). */
 import AgentHubPanel from './AgentHub/AgentHubPanel.jsx';
+import AgentChatDock from './AgentHub/AgentChatDock.jsx';
 import { defaultAgentsView, useAgentHubAvailability } from '../lib/intent-ai/agentHub/availability.js';
+import { agentChatChips, requestAgentPrompt, useActiveAgent } from '../lib/intent-ai/agentHub/activeAgent.js';
 import ChatNeuralCore from './chat/NeuralCore.jsx';
 import { SPECULATION_ENABLED } from '../lib/features.js';
 
@@ -1054,6 +1056,9 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
    * monitors, history, panels) — nothing here introduces a second brain.
    */
   const [aiTab, setAiTab] = useState('chat');
+  /* The external agent the user activated, if any. The chat reads it to show
+     THAT agent's own example prompts and a dock where it can actually run. */
+  const hubActiveAgent = useActiveAgent();
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const composerInputRef = useRef(null);
@@ -3502,6 +3507,13 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   sendRef.current = sendMessage;
 
   const sendSuggested = useCallback((chip, event = null) => {
+    /* An agent chip is not an intent. It is a question for the activated
+       external agent, and it runs through the hub broker — same consent, same
+       kill switches, same attribution — inside the chat dock. */
+    if (typeof chip === 'object' && chip?.agentPrompt) {
+      requestAgentPrompt(chip.prompt);
+      return;
+    }
     if (busyRef.current) return;
     if (typeof chip === 'object' && chip?.route) {
       openBubbleRoute(chip.route);
@@ -3519,13 +3531,22 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
   const allChips = useMemo(() => {
     const seen = new Set();
     const out = [];
+    /* An activated agent's OWN examples come first: the point of activating it
+       is that the next suggestion should be about that agent, not about the
+       generic intent catalogue. They route to the dock, not to the intent
+       engine, so a tap cannot be re-interpreted as something else. */
+    for (const c of agentChatChips(hubActiveAgent, locale.startsWith('fa'))) {
+      if (!c || !c.id || seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push(c);
+    }
     for (const c of [...(suggestions || []), ...(predictedNext || [])]) {
       if (!c || !c.id || seen.has(c.id)) continue;
       seen.add(c.id);
       out.push(c);
     }
     return out.slice(0, 6);
-  }, [suggestions, predictedNext]);
+  }, [suggestions, predictedNext, hubActiveAgent, locale]);
 
   const drawerItems = useMemo(() => {
     const ctx = { currentPage, lastIntentType: messages[messages.length - 1]?.intentType, locale };
@@ -7721,6 +7742,8 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
           ) : null}
         </div>
 
+        <AgentChatDock fa={locale.startsWith('fa')} onOpenHub={() => setAiTab('agents')} />
+
         {allChips.length ? (
           <div className="iaos-suggestions">
             <div className="iaos-suggestions-title">✦ {t('intentAIOS.suggestions')}</div>
@@ -7914,7 +7937,7 @@ export default function IntentAIUnified({ defaultChainId = DEFAULT_CHAIN }) {
             </div>
 
             {agentsView === 'external' ? (
-              <AgentHubPanel fa={fa} />
+              <AgentHubPanel fa={fa} onActivateInChat={() => setAiTab('chat')} />
             ) : (
             <>
             {/* Neural orchestration graph: desktop only, same live agents. */}

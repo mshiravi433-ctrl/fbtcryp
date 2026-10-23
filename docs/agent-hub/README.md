@@ -23,6 +23,8 @@ FBT cut in this feature and no code here that can move money.
 | **First-party (native) agents** — analysis, DeFi, security | ✅ implemented, **ON by default** (`AGENT_HUB_NATIVE_AGENTS`) |
 | **User key** for a user-supplied agent | ✅ implemented (AES-256-GCM, owner-scoped, revocable) |
 | Recommended / Discover / Connected / Activity UI in `/intent` → Agents | ✅ implemented |
+| **The activated agent inside the chat** (own suggestions, own runner) | ✅ implemented (`AgentChatDock`) |
+| **Persian input for first-party agents** (coin/chain/protocol aliases, digits) | ✅ implemented |
 | Editorial recommendations with official product/pricing links | ✅ 38 cards in 12 categories; informational only, never executable or FBT-reviewed |
 | Direct on-chain payment (x402-style relay) | ⛔ **not implemented** — Phase 3 deferred |
 | User-supplied agent cards (bring your own agent) | ✅ implemented |
@@ -191,6 +193,52 @@ earth. `server/agentHub/userAgents.js` is the second, narrower path:
   when the key or the source is removed. Without `AGENT_HUB_SECRET_KEY` the
   server refuses to store one (`AGENT_HUB_SECRET_KEY_REQUIRED`) rather than
   keeping it in plaintext.
+
+## Persian first-party agents
+
+`server/agentHub/native/data.js` normalises the request BEFORE parsing it:
+
+- Persian (۰-۹) and Arabic-Indic (٠-٩) digits become ASCII, so «۱۰۰ USDC» is an
+  amount;
+- Arabic letter variants (ي، ك، ة) become their Persian forms;
+- a zero-width non-joiner becomes a space, so «بیت‌کوین» and «بیت کوین» match the
+  same alias.
+
+Three alias tables map Persian words to names the agents already used:
+`PERSIAN_COIN_ALIASES`, `PERSIAN_CHAIN_ALIASES`, `PERSIAN_PROTOCOL_ALIASES`.
+They contain no prices and cannot invent a coin: an unknown word still produces
+the honest «ورودی لازم است» result.
+
+`COIN_IDS` is a second, safety-net table (BTC → `bitcoin`, …). It is used only
+when the live CoinGecko search throws or returns nothing — the production failure
+that made every native agent look broken on a filtered network. The agent still
+reads live data afterwards and reports which source actually answered.
+
+Results are localised too: the run title uses `nameFa`, and the UI shows the
+Persian name first with the English name as a secondary line.
+
+**Links.** The app is a HashRouter. `https://fbtswap.ir/help` is a 404; the real
+address is `https://fbtswap.ir/#/help`. `hashUrl()` builds those, and the panel
+reduces any same-origin link to its hash so it navigates in place.
+
+## The active agent inside the chat
+
+`src/lib/intent-ai/agentHub/activeAgent.js` stores ONE active agent (a small,
+credential-free snapshot) and a one-slot prompt queue. `AgentChatDock` reads it:
+
+- the agent's own `examples` / `examplesFa` are prepended to the chat's
+  suggestion row, and tapping one routes to the dock instead of the intent
+  engine;
+- the dock runs the same `POST /api/ai/agent-hub/agents/:id/tasks` call as the
+  panel — same consent composer, same idempotency key, same kill switches;
+- a first-party agent runs in-process, so its copy says so and no third-party
+  consent gate is shown. A real third-party agent shows the provider name, the
+  terms/privacy links, the exact bytes preview and an explicit approval switch;
+- the result is rendered with the same `ResultView` (text, not HTML) and polled
+  by task id — a second task is never created for the same question.
+
+Activation is a UI fact only: `agent-hub-use-in-chat` in the detail view. It
+cannot bypass consent, eligibility or an operator switch.
 
 ## Invariants the code enforces
 

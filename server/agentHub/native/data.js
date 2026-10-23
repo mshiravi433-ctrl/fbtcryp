@@ -66,24 +66,142 @@ export const EVM_ADDRESS_RE = /\b0x[a-fA-F0-9]{40}\b/;
 export const SOLANA_ADDRESS_RE = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/;
 const EVM_ONLY_RE = /^0x[a-fA-F0-9]{40}$/;
 
+/* ───────────────────────── Persian input, same agents ─────────────────────
+ * Before this file grew the tables below, a Persian request reached the same
+ * eleven agents and died at the first step: `extractRequest('اتریوم را تحلیل
+ * کن')` found no symbol, so every agent answered «ورودی لازم است» — which a
+ * user reads as "the agent is broken / the provider connection is incomplete"
+ * even though the run had completed. The agents were fine; the reader was
+ * Latin-only.
+ *
+ * Three normalisations happen before any parsing, and none of them touches the
+ * text the user sees or the text that is sent:
+ *
+ *   ۱. Persian (۰-۹) and Arabic-Indic (٠-٩) digits become ASCII. «۱۰۰ USDC»
+ *      is an amount, not an unknown token.
+ *   ۲. Arabic letter variants (ي، ك، ة) become their Persian forms (ی، ک، ه),
+ *      because keyboards emit both for the same word.
+ *   ۳. A zero-width non-joiner becomes a space, so «بیت‌کوین» and «بیت کوین»
+ *      match the same alias. A second alias table covers the no-space spelling.
+ *
+ * Coin, chain and protocol aliases are DATA, not code branches: the agent logic
+ * is unchanged, and an alias can only ever resolve to a name the app already
+ * knew how to look up. An alias that is not in the table still produces the
+ * same honest «ورودی لازم است», never a guessed coin.
+ */
+
+/** Persian/Arabic → English names people actually type for major assets. */
+export const PERSIAN_COIN_ALIASES = Object.freeze({
+  'بیت کوین': 'BTC', 'بیتکوین': 'BTC', 'بیت‌کوین': 'BTC', 'بيتكوين': 'BTC',
+  'اتریوم': 'ETH', 'اتريوم': 'ETH', 'ای‌تی‌اچ': 'ETH', 'اتر': 'ETH',
+  'تتر': 'USDT', 'یو اس دی تی': 'USDT',
+  'یو اس دی کوین': 'USDC', 'یواسدی‌سی': 'USDC',
+  'سولانا': 'SOL', 'سول': 'SOL',
+  'بایننس کوین': 'BNB', 'بی ان بی': 'BNB',
+  'ریپل': 'XRP', 'کاردانو': 'ADA', 'دوج کوین': 'DOGE', 'دوجکوین': 'DOGE', 'دوج': 'DOGE',
+  'ترون': 'TRX', 'پالیگان': 'MATIC', 'پلیگان': 'MATIC', 'ماتیک': 'MATIC',
+  'آوالانچ': 'AVAX', 'اولانچ': 'AVAX',
+  'پولکادات': 'DOT', 'چین لینک': 'LINK', 'چین‌لینک': 'LINK',
+  'یونی سواپ': 'UNI', 'یونی‌سواپ': 'UNI', 'شیبا': 'SHIB', 'شیبا اینو': 'SHIB',
+  'لایت کوین': 'LTC', 'لایتکوین': 'LTC', 'بیت کوین کش': 'BCH',
+  'کازموس': 'ATOM', 'کاسما': 'ATOM', 'نیر': 'NEAR', 'نِیر': 'NEAR',
+  'اپتوس': 'APT', 'آپتوس': 'APT', 'سوی': 'SUI', 'آربیتروم': 'ARB',
+  'آپتیمیزم': 'OP', 'اپتیمیزم': 'OP', 'پپه': 'PEPE', 'تون': 'TON',
+  'دای': 'DAI', 'دای استیبل': 'DAI', 'لیدو': 'LDO', 'آوه': 'AAVE', 'آوی': 'AAVE',
+  'میکر': 'MKR', 'کرو': 'CRV', 'کروم': 'CRV', 'فایل کوین': 'FIL'
+});
+
+/** Persian spellings of the chains this app can already read. */
+export const PERSIAN_CHAIN_ALIASES = Object.freeze({
+  'اتریوم': 1, 'اتريوم': 1, 'شبکه اتریوم': 1,
+  'بی ان بی': 56, 'بایننس': 56, 'بی اس سی': 56,
+  'پالیگان': 137, 'پلیگان': 137, 'ماتیک': 137,
+  'آربیتروم': 42161, 'اربیتروم': 42161,
+  'آپتیمیزم': 10, 'اپتیمیزم': 10,
+  'بیس': 8453, 'بیز': 8453,
+  'آوالانچ': 43114, 'اولانچ': 43114,
+  'لاینیا': 59144, 'سونیک': 146, 'مانتل': 5000, 'براچین': 80094,
+  'یونی چین': 130, 'یونی‌چین': 130, 'موناد': 143, 'اسکرول': 534352,
+  'زیکی‌سینک': 324, 'سولانا': 'solana'
+});
+
+/** Persian names of protocols FBT already reviews, mapped to their slug stem. */
+export const PERSIAN_PROTOCOL_ALIASES = Object.freeze({
+  'آوه': 'aave', 'آوی': 'aave', 'کامپاند': 'compound', 'کامپاوند': 'compound',
+  'مورفو': 'morpho', 'ونوس': 'venus', 'اسپارک': 'spark', 'کروم': 'curve', 'کرو': 'curve',
+  'یونی سواپ': 'uniswap', 'یونی‌سواپ': 'uniswap', 'لیدو': 'lido', 'پندل': 'pendle',
+  'بیفی': 'beefy', 'میکر': 'maker', 'دای': 'maker', 'بلنسر': 'balancer',
+  'جی ام ایکس': 'gmx', 'هایپردلیکوید': 'hyperliquid', 'هایپرلیکوید': 'hyperliquid',
+  'استارگیت': 'stargate', 'آکالا': 'acala', 'کامینو': 'kamino'
+});
+
+const ARABIC_TO_PERSIAN = { 'ي': 'ی', 'ك': 'ک', 'ة': 'ه', 'ى': 'ی', 'ۀ': 'ه' };
+
+/**
+ * Normalise digits, Arabic letter variants and ZWNJ — for PARSING only.
+ * The original string is still what is stored, quoted back and sent.
+ */
+export function normalizeInputText(value = '') {
+  return String(value ?? '')
+    /* ۰-۹ (U+06F0..U+06F9) */
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0))
+    /* ٠-٩ (U+0660..U+0669) */
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u064A\u0643\u0629\u0649\u06C0]/g, (c) => ARABIC_TO_PERSIAN[c] || c)
+    /* A half-space is a word separator for matching, never for display. */
+    .replace(/[\u200C\u200D]/g, ' ')
+    .replace(/\s{2,}/g, ' ');
+}
+
+const PERSIAN_LETTER = '\\u0600-\\u06FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF';
+const aliasBoundary = (alias) => new RegExp(
+  `(^|[^A-Za-z0-9${PERSIAN_LETTER}])${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9${PERSIAN_LETTER}])`,
+  'i'
+);
+
+/** Every Persian alias found in the text, in the order it appears. */
+function persianAliases(text, table) {
+  const out = [];
+  const source = String(text || '');
+  for (const [alias, value] of Object.entries(table)) {
+    const re = aliasBoundary(alias);
+    const match = re.exec(source);
+    if (match) out.push({ alias, value, at: match.index + String(match[1] || '').length });
+  }
+  return out.sort((a, b) => a.at - b.at || b.alias.length - a.alias.length);
+}
+
 /** Chains GoPlus publishes a token-security report for (mirrors tokenRisk.js). */
 export const GOPLUS_CHAINS = new Set([1, 56, 137, 42161, 10, 8453, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663]);
 
 /** A quote pair has to name two different chains; same-chain is a swap, not a bridge. */
 const BRIDGE_CHAINS = new Set([1, 56, 137, 42161, 10, 8453, 43114, 59144, 146, 5000, 80094, 130, 143, 534352, 324, 4663, 'solana']);
 
+/**
+ * Chains named in the text, in the ORDER THEY APPEAR.
+ *
+ * Order is the contract, not a detail: the cross-chain agent treats the first
+ * chain as the source and the second as the destination. The old version sorted
+ * by alias length, which was correct by accident for half the sentences — for
+ * «۱۰۰ USDC از آربیتروم به بیس» a length sort still happens to work, but for
+ * «از بیس به آربیتروم» it silently inverted the route. Position cannot invert.
+ */
 export function chainFromText(text = '') {
-  const source = String(text || '').toLowerCase();
+  const source = normalizeInputText(text);
   const found = [];
   for (const [alias, id] of Object.entries(CHAINS)) {
-    /* Word-ish boundary: `op` must not match inside "optimism" twice, and `sol`
-       must not match "solution". Longest aliases are checked first below. */
-    const re = new RegExp(`(^|[^a-z0-9])${alias}($|[^a-z0-9])`, 'i');
-    if (re.test(source)) found.push({ alias, id });
+    /* Word-ish boundary: `op` must not match inside "optimism" twice, `sol`
+       must not match "solution", and a Latin alias must not match inside a
+       Persian word. */
+    const match = aliasBoundary(alias).exec(source);
+    if (match) found.push({ alias, id, at: match.index + String(match[1] || '').length });
   }
-  found.sort((a, b) => b.alias.length - a.alias.length);
+  for (const row of persianAliases(source, PERSIAN_CHAIN_ALIASES)) {
+    found.push({ alias: row.alias, id: row.value, at: row.at });
+  }
+  found.sort((a, b) => a.at - b.at || b.alias.length - a.alias.length);
   const unique = [];
-  for (const row of found) if (!unique.some((u) => u.id === row.id)) unique.push(row);
+  for (const row of found) if (!unique.some((u) => String(u.id) === String(row.id))) unique.push(row);
   return unique.map((u) => u.id);
 }
 
@@ -106,14 +224,24 @@ export function isSolanaAddress(value) {
  */
 export function extractRequest(text = '') {
   const source = String(text || '');
-  const evm = source.match(EVM_ADDRESS_RE)?.[0] || null;
-  const solanaRaw = evm ? null : source.match(SOLANA_ADDRESS_RE)?.[0] || null;
+  /* Parsing copy — digits/letters/ZWNJ normalised. `raw` and `text` stay the
+     user's own sentence: it is what the panel shows and what the task stores. */
+  const normalized = normalizeInputText(source);
+  const evm = normalized.match(EVM_ADDRESS_RE)?.[0] || null;
+  const solanaRaw = evm ? null : normalized.match(SOLANA_ADDRESS_RE)?.[0] || null;
   const solana = solanaRaw && isSolanaAddress(solanaRaw) ? solanaRaw : null;
-  const chains = chainFromText(source);
+  const chains = chainFromText(normalized);
 
-  const dollar = source.match(/\$([A-Za-z][A-Za-z0-9]{1,11})\b/)?.[1] || null;
-  const amountMatch = source.match(/(\d+(?:[.,]\d+)?)\s*([A-Za-z][A-Za-z0-9]{1,9})\b/);
-  const upper = [...source.matchAll(/\b([A-Z][A-Z0-9]{1,9})\b/g)].map((m) => m[1]);
+  /* Persian coin names first: «قیمت بیت کوین» has no $ sign, no amount and no
+     Latin uppercase word, so without this table it reached every agent as an
+     empty request. The alias maps to a symbol the resolver then checks against
+     the real search endpoint — an alias never asserts that a coin exists. */
+  const persianCoins = persianAliases(normalized, PERSIAN_COIN_ALIASES)
+    .map((row) => String(row.value).toUpperCase());
+
+  const dollar = normalized.match(/\$([A-Za-z][A-Za-z0-9]{1,11})\b/)?.[1] || null;
+  const amountMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*([A-Za-z][A-Za-z0-9]{1,9})\b/);
+  const upper = [...normalized.matchAll(/\b([A-Z][A-Z0-9]{1,9})\b/g)].map((m) => m[1]);
   const stop = new Set([
     'AI', 'FBT', 'USD', 'THE', 'AND', 'FOR', 'DEFI', 'APY', 'APR', 'TVL', 'DEX', 'CEX',
     'LP', 'NFT', 'A', 'I', 'ON', 'TO', 'FROM', 'SMA', 'DCA', 'RSI', 'MACD', 'UNKNOWN',
@@ -123,6 +251,7 @@ export function extractRequest(text = '') {
      only one of them is a coin. The resolver tries them in order against the
      real search endpoint instead of trusting the first capitalised word. */
   const candidates = [];
+  candidates.push(...persianCoins);
   if (dollar) candidates.push(dollar);
   if (amountMatch) candidates.push(amountMatch[2]);
   for (const word of upper) candidates.push(word);
@@ -139,7 +268,10 @@ export function extractRequest(text = '') {
     .slice(0, 6);
   const symbol = symbolCandidates[0] || null;
 
-  const protocol = source.match(/(?:protocol|پروتکل)\s+([A-Za-z][A-Za-z0-9 ._-]{1,30})/i)?.[1]?.trim() || null;
+  /* English «protocol X» and the Persian equivalents (`پروتکل آوه`, `آوه`). */
+  const protocolEn = normalized.match(/(?:protocol|پروتکل)\s+([A-Za-z][A-Za-z0-9 ._-]{1,30})/i)?.[1]?.trim() || null;
+  const protocolFa = persianAliases(normalized, PERSIAN_PROTOCOL_ALIASES)[0]?.value || null;
+  const protocol = protocolEn || protocolFa;
 
   const AMOUNT_STOP = new Set(['ON', 'IN', 'AT', 'TO', 'FROM', 'PER', 'FOR', 'AND', 'OF', 'WITH', 'BY', 'THE', 'A', 'AN']);
   const rawAmount = amountMatch ? Number(amountMatch[1].replace(',', '')) : null;
@@ -148,10 +280,11 @@ export function extractRequest(text = '') {
   const amount = amountUsable && Number.isFinite(rawAmount) && rawAmount > 0 ? rawAmount : null;
   const amountToken = amountUsable ? rawAmountToken : null;
 
-  const pair = source.match(/\b([A-Za-z0-9]{2,10})\s*(?:\/|-)\s*([A-Za-z0-9]{2,10})\b/);
+  const pair = normalized.match(/\b([A-Za-z0-9]{2,10})\s*(?:\/|-)\s*([A-Za-z0-9]{2,10})\b/);
   return {
     raw: source,
     text: source.trim(),
+    normalized,
     evmAddress: evm,
     solanaAddress: solana,
     address: evm || solana || null,
@@ -165,6 +298,35 @@ export function extractRequest(text = '') {
     pair: pair ? [pair[1].toUpperCase(), pair[2].toUpperCase()] : null
   };
 }
+
+/**
+ * The canonical CoinGecko id for symbols everybody means by that symbol.
+ *
+ * WHY THIS EXISTS: `fetchSearch` is one CoinGecko call with no backup. From a
+ * network where that host is slow or filtered, the search throws for every
+ * candidate, `resolveCoin` fails, and EVERY native agent answers «ورودی لازم
+ * است» — reported by users as "the native agents do not work / the provider
+ * connection looks broken". The agents were fine; resolution was.
+ *
+ * The table is only a NAME MAP: it says which id the symbol conventionally
+ * means. It never contains a price, and the agent still reads live data and
+ * reports which source actually answered. If the id is wrong, the read fails
+ * and the result says so — nothing is invented.
+ */
+export const COIN_IDS = Object.freeze({
+  BTC: 'bitcoin', ETH: 'ethereum', USDT: 'tether', USDC: 'usd-coin', DAI: 'dai',
+  BNB: 'binancecoin', SOL: 'solana', XRP: 'ripple', ADA: 'cardano', DOGE: 'dogecoin',
+  TRX: 'tron', TON: 'the-open-network', AVAX: 'avalanche-2', DOT: 'polkadot',
+  LINK: 'chainlink', MATIC: 'matic-network', POL: 'polygon-ecosystem-token',
+  UNI: 'uniswap', SHIB: 'shiba-inu', LTC: 'litecoin', BCH: 'bitcoin-cash',
+  ATOM: 'cosmos', NEAR: 'near', APT: 'aptos', SUI: 'sui', ARB: 'arbitrum',
+  OP: 'optimism', PEPE: 'pepe', AAVE: 'aave', MKR: 'maker', CRV: 'curve-dao-token',
+  LDO: 'lido-dao', FIL: 'filecoin', STETH: 'staked-ether', WBTC: 'wrapped-bitcoin',
+  HBAR: 'hedera-hashgraph', ICP: 'internet-computer', ETC: 'ethereum-classic',
+  XLM: 'stellar', ALGO: 'algorand', VET: 'vechain', INJ: 'injective-protocol',
+  TIA: 'celestia', SEI: 'sei-network', JUP: 'jupiter-exchange-solana',
+  RENDER: 'render-token', WIF: 'dogwifcoin', BONK: 'bonk'
+});
 
 /** Resolve the request's symbol/address to a CoinGecko coin, or report why not. */
 export async function resolveCoin(data, request) {
@@ -182,7 +344,21 @@ export async function resolveCoin(data, request) {
         : null;
       if (exact?.id) return { ok: true, query, coin: exact };
     } catch {
-      /* One failed search is not a resolution failure yet; try the next form. */
+      /* One failed search is not a resolution failure yet; the static map at
+         the end of this function is the fallback for a blocked search. */
+    }
+  }
+  /* Search failed or returned nothing: the conventional id for a major symbol
+     is still a real id, and the agent will prove it by reading live data. */
+  for (const query of [...new Set(candidates)].slice(0, 6)) {
+    const id = COIN_IDS[String(query).toUpperCase()];
+    if (id) {
+      return {
+        ok: true,
+        query,
+        resolvedWithoutSearch: true,
+        coin: { id, symbol: String(query).toUpperCase(), name: String(query).toUpperCase() }
+      };
     }
   }
   return { ok: false, code: 'COIN_NOT_RESOLVED', query: request.symbol || request.amountToken || null };
