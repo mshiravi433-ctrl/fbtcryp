@@ -78,7 +78,7 @@
     "test:business": "node test/business-locales-probe.mjs && vitest run test/business-console.test.jsx",
     "test:learn-hub": "node test/learn-hub-locales-probe.mjs && vitest run test/learn-hub.test.jsx",
     "test:buy-sell-wizard": "vite build --config test/vite.buysellwizard.mjs && node test/run-one-probe.mjs ./.out/buysellwizard/buy-sell-wizard-probe.js",
-    "test:shop-revenue": "node test/shop-revenue-probe.mjs && vitest run test/shop-howto-language.test.jsx test/shop-phase1-modern.test.jsx",
+    "test:shop-revenue": "node test/shop-revenue-probe.mjs && node test/shop-phase23-probe.mjs && node test/intent-ai/chat-navigation-probe.mjs && vitest run test/shop-howto-language.test.jsx test/shop-phase1-modern.test.jsx test/shop-phase23-lib.test.js test/shop-phase23-modern.test.jsx test/pay-phase2-invoice.test.jsx test/pay-gateway-modern.test.jsx",
     "test:exec-first-v2": "node test/intent-ai/execution-first-v2-probe.mjs",
     "test:memory-bridge": "node test/intent-ai/walrus-memory-bridge-probe.mjs",
     "test:memory-continuity": "node test/intent-ai/intent-memory-continuity-probe.mjs",

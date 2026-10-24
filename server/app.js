@@ -47,7 +47,10 @@ import { buildMarketPulse, buildSolanaRadar, explainSignal, localExplanation, sa
 import { yieldsApi } from './yieldsApi.js';
 import { fetchSolanaAssets } from './solanaAssets.js';
 import { fetchAvantisEquities } from './avantis.js';
-import { getShopCatalogue, getShopProducts, shopCountries } from './shop.js';
+import {
+  bumpShopInterest, getShopCatalogue, getShopProducts, shopCountries,
+  trendingFromCatalogue, validateOrderPrerequisites, WHITELABEL_ORDER_ERRORS, whitelabelStatus
+} from './shop.js';
 import { fetchPerpMarkets } from './perp.js';
 import { fetchSolanaIntel, fetchSolanaWhales, solscanConfigured, SOLANA_SIGNAL_MINTS } from './solanaIntel.js';
 import {
@@ -5530,6 +5533,77 @@ app.get('/api/shop/products', (req, res) =>
     { country: req.query.country, family: req.query.family, coin: req.query.coin, lang: req.query.lang },
     req
   )));
+
+/*
+ * ─── PHASE 2/3: WHITELABEL READINESS (GET /api/shop/readiness) ─────────────
+ * One tiny JSON answer: is the in-app whitelabel order path live on THIS
+ * server yet? The client asks once per shop visit and shows NOTHING until
+ * `configured` is true — no dead button, no half-form; the partner-link
+ * flow keeps selling in every state. `no-store` on purpose: the answer can
+ * change the moment an env var lands, and a CDN-cached "not configured"
+ * would hide a feature that is already live.
+ */
+app.get('/api/shop/readiness', (_req, res) => {
+  res.set('cache-control', 'no-store');
+  /*
+   * The fee is NOT repeated here on purpose: `FEE_BPS` lives in
+   * src/lib/feeBps.js for the clients and in the gateway split on the wire;
+   * a third copy in a status payload is a number that can drift while both
+   * real ones stay correct.
+   */
+  res.json({ whitelabel: whitelabelStatus(), at: Date.now() });
+});
+
+/*
+ * Pre-flight validator for a whitelabel order. Nobody in the shipped UI
+ * calls it while the account key is absent (there is nothing to validate
+ * against), so it exists for the moment the key lands AND as the testable
+ * surface of the email/fullname/limit rules. When unconfigured it answers
+ * 200 + { configured:false } rather than pretending to accept an order.
+ */
+app.post('/api/shop/whitelabel/precheck', (req, res) => {
+  const status = whitelabelStatus();
+  const check = validateOrderPrerequisites(req.body || {});
+  res.set('cache-control', 'no-store');
+  res.json({
+    configured: status.configured,
+    ok: check.ok,
+    errors: check.errors,
+    errorDocs: check.errors.length
+      ? check.errors.map((e) => WHITELABEL_ORDER_ERRORS[e] || 'UPSTREAM_ORDER_FAILED')
+      : []
+  });
+});
+
+/*
+ * ─── ANONYMOUS POPULARITY, THE RESTRICTED WAY (POST /api/shop/track) ────────
+ * The body carries a country and a brand id. No user, no wallet, no IP is
+ * read here, and nothing is stored beyond a capped in-memory counter that
+ * dies with the instance. 204 even for junk input — a tracking endpoint that
+ * errors invites probing; one that vanishes costs nothing.
+ */
+app.post('/api/shop/track', (req, res) => {
+  try { bumpShopInterest(req.body?.country, req.body?.brand); } catch { /* never fail a click */ }
+  res.set('cache-control', 'no-store');
+  res.status(204).end();
+});
+
+/*
+ * The regional trend rail: popularity + provider margin + stock, computed
+ * over the catalogue ALREADY cached for this country — zero extra upstream
+ * calls, one extra route. Five-minute public cache, like the catalogue.
+ */
+app.get('/api/shop/trending', (req, res) =>
+  shopRoute(res, shopTrendAnswer(req.query.country, req)));
+
+function shopTrendAnswer(rawCountry, req) {
+  const cc = String(rawCountry ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return Promise.resolve({ value: { rows: [], country: null, at: Date.now() } });
+  return trendingFromCatalogue(cc, null, req).then((value) => {
+    /* Hand it to shopRoute's cache-header wrapper through the same shape. */
+    return { value };
+  });
+}
 
 /**
  * PERPETUAL FUNDING RATES — the Perp screen's data.

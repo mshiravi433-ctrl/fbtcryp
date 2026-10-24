@@ -1195,3 +1195,378 @@
 @media (prefers-reduced-motion: reduce) {
   .shop-tile:hover, .shop-tile:active { transform: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PHASE 2/3 — GIFT ENVELOPE · LOYALTY CHIP · RECENT RAIL · REGIONAL HEAT ·
+   COUNTER MODE · WEB3 IDENTITY · HARDWARE SECURITY HUB
+   All of it lives in the lazy shop layer; none of it reaches first paint.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Gift envelope (share → recipient banner) ── */
+.shop-gift-envelope {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 14px 13px;
+  margin: 2px 0 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 143, 177, 0.34);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 94, 147, 0.22), transparent 55%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  box-shadow: var(--shop-shadow-card);
+  overflow: hidden;
+}
+.shop-gift-envelope::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: -34px;
+  top: -34px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 68%);
+  pointer-events: none;
+}
+.shop-gift-envelope[data-theme='birthday'] { border-color: rgba(255, 143, 177, 0.5); }
+.shop-gift-envelope[data-theme='gaming'] { border-color: rgba(124, 77, 255, 0.4); }
+.shop-gift-envelope[data-theme='gaming']::after { background: radial-gradient(circle, rgba(124, 77, 255, 0.24), transparent 68%); }
+.shop-gift-envelope[data-theme='congrats'] { border-color: rgba(0, 229, 168, 0.4); }
+.shop-gift-envelope[data-theme='congrats']::after { background: radial-gradient(circle, rgba(0, 229, 168, 0.2), transparent 68%); }
+.shop-gift-envelope[data-theme='gold'] { border-color: rgba(240, 185, 11, 0.44); }
+.shop-gift-envelope[data-theme='gold']::after { background: radial-gradient(circle, rgba(240, 185, 11, 0.22), transparent 68%); }
+.shop-gift-envelope-mark {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  font-size: 21px;
+  border-radius: 14px;
+  background: var(--shop-surface-2);
+  border: 1px solid var(--shop-border);
+}
+.shop-gift-envelope-copy { min-width: 0; display: grid; gap: 4px; }
+.shop-gift-envelope-copy strong { font-size: 14.5px; font-weight: 900; color: var(--text-1); }
+.shop-gift-envelope-copy p { margin: 0; font-size: 12.4px; line-height: 1.7; color: var(--text-2); }
+.shop-gift-envelope-ref { font-size: 11.8px; font-weight: 700; color: var(--shop-ink-mint); }
+:root[data-theme='light'] .shop-gift-envelope {
+  border-color: rgba(190, 24, 93, 0.28);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 94, 147, 0.1), transparent 55%),
+    #fff;
+}
+:root[data-theme='light'] .shop-gift-envelope[data-theme='gold'] { border-color: rgba(146, 105, 0, 0.3); }
+:root[data-theme='light'] .shop-gift-envelope-copy p { color: #3c4763; }
+
+/* ── Gift theme row inside the brand sheet ── */
+.shop-gift-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  margin-top: 9px;
+  border-radius: 14px;
+  border: 1px solid var(--shop-border);
+  background: var(--shop-surface-2);
+}
+.shop-gift-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-2);
+}
+.shop-gift-pills { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.shop-gift-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--shop-border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+.shop-gift-pill:hover { border-color: var(--shop-border-strong); }
+.shop-gift-pill:active { transform: scale(0.97); }
+.shop-gift-pill[data-on='true'] {
+  border-color: var(--shop-ink-accent);
+  background: color-mix(in srgb, var(--shop-ink-accent) 14%, transparent);
+  color: var(--text-1);
+}
+.shop-gift-send { border-color: rgba(255, 143, 177, 0.4) !important; }
+.shop-gift-send:hover { border-color: rgba(255, 143, 177, 0.7) !important; }
+
+/* ── Loyalty chip (rank, never a wallet) ── */
+.shop-loyalty-card { padding: 13px 14px 11px; gap: 0; }
+.shop-loyalty-eyebrow {
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.shop-loyalty-head { display: flex; align-items: center; gap: 10px; }
+.shop-loyalty-medal {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  border-radius: 13px;
+  border: 1.5px solid var(--shop-border-strong);
+  background: var(--shop-surface-2);
+}
+.shop-loyalty-title { flex: 1 1 auto; min-width: 0; }
+.shop-loyalty-name { font-size: 14.5px; font-weight: 900; color: var(--text-1); }
+.shop-loyalty-sub { font-size: 11.8px; color: var(--text-2); margin-top: 2px; }
+.shop-loyalty-btn { flex: 0 0 auto; font-size: 12px; padding: 7px 12px; }
+.shop-loyalty-progress {
+  position: relative;
+  height: 6px;
+  margin: 11px 0 9px;
+  border-radius: 999px;
+  background: var(--shop-surface-2);
+  overflow: hidden;
+}
+.shop-loyalty-progress-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--shop-ink-accent), var(--shop-ink-mint));
+  transition: width 0.3s ease;
+}
+.shop-loyalty-perks { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.shop-loyalty-perk {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.shop-loyalty-perk svg { color: var(--shop-ink-mint); flex: 0 0 auto; }
+.shop-loyalty-note { margin: 9px 0 0; font-size: 11px; line-height: 1.7; }
+:root[data-theme='light'] .shop-loyalty-progress { background: rgba(15, 23, 42, 0.08); }
+
+/* ── Recently viewed rail ── */
+.shop-recent-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--shop-border);
+  background: var(--shop-surface-2);
+}
+.shop-recent-label {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-3);
+}
+.shop-recent-pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+  padding: 2px;
+}
+.shop-recent-pills::-webkit-scrollbar { display: none; }
+.shop-recent-pill {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--shop-border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+.shop-recent-pill:hover { border-color: var(--shop-border-strong); color: var(--text-1); }
+.shop-recent-pill:active { transform: scale(0.96); }
+
+/* ── Regional heat on the flagship rail ── */
+.shop-cat-flame { color: #ff6b2c; flex: 0 0 auto; }
+.shop-cat-badge[data-hot='true'] {
+  color: #fff;
+  background: linear-gradient(120deg, #ff6b2c, #ff2d95);
+  border-color: transparent;
+}
+:root[data-theme='light'] .shop-cat-badge[data-hot='true'] { color: #fff; }
+
+/* ── Counter mode (in-store QR) ── */
+.shop-pay-counter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--shop-border-strong);
+  background:
+    radial-gradient(120% 160% at 100% 0%, rgba(0, 229, 255, 0.12), transparent 55%),
+    var(--shop-surface-1);
+  box-shadow: var(--shop-shadow-card);
+}
+.shop-pay-counter-copy { flex: 1 1 220px; min-width: 0; }
+.shop-pay-counter-copy strong { display: block; font-size: 14px; font-weight: 900; color: var(--text-1); }
+.shop-pay-counter-copy p { margin: 3px 0 0; font-size: 12px; line-height: 1.7; color: var(--text-2); }
+.shop-pay-counter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.shop-pay-ready {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--shop-ink-mint);
+  border: 1px dashed color-mix(in srgb, var(--shop-ink-mint) 45%, transparent);
+  background: color-mix(in srgb, var(--shop-ink-mint) 8%, transparent);
+}
+
+/* ── Web3 identity card ── */
+.shop-web3id { display: grid; gap: 11px; padding: 14px; }
+.shop-web3id-head { display: flex; gap: 11px; align-items: flex-start; }
+.shop-web3id-mark {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--shop-ink-accent);
+  border: 1px solid var(--shop-border-strong);
+  background: color-mix(in srgb, var(--shop-ink-accent) 10%, transparent);
+}
+.shop-web3id-title { font-size: 14.5px; font-weight: 900; color: var(--text-1); }
+.shop-web3id-sub { margin: 3px 0 0; font-size: 12px; line-height: 1.7; color: var(--text-2); }
+.shop-web3id-tabs { display: flex; gap: 6px; }
+.shop-web3id-tab {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--shop-border);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.shop-web3id-tab[data-on='true'] {
+  border-color: var(--shop-ink-accent);
+  background: color-mix(in srgb, var(--shop-ink-accent) 13%, transparent);
+  color: var(--text-1);
+}
+.shop-web3id-field {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 4px 6px 4px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--shop-border);
+  background: var(--shop-surface-2);
+}
+.shop-web3id-field:focus-within { border-color: var(--shop-border-strong); }
+.shop-web3id-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 7px 0;
+  outline: none;
+}
+.shop-web3id-suffix {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--shop-ink-accent);
+  background: color-mix(in srgb, var(--shop-ink-accent) 12%, transparent);
+}
+.shop-web3id-verdict { margin: 0; font-size: 12px; line-height: 1.7; color: var(--text-2); }
+.shop-web3id-verdict[data-tone='ok'] { color: var(--shop-ink-mint); font-weight: 700; }
+.shop-web3id-verdict[data-tone='warn'] { color: var(--shop-ink-amber); font-weight: 700; }
+.shop-web3id-verdict[data-tone='bad'] { color: #ff5d73; font-weight: 700; }
+:root[data-theme='light'] .shop-web3id-verdict[data-tone='bad'] { color: #c81e3c; }
+.shop-web3id-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.shop-web3id-open { flex: 1 1 auto; justify-content: center; }
+.shop-web3id-fund { flex: 1 1 auto; justify-content: center; }
+.shop-web3id-note { margin: 0; font-size: 11px; line-height: 1.75; }
+
+/* ── Hardware security hub (comparison + tamper checklist) ── */
+.hw-compare { display: grid; gap: 4px; }
+.hw-compare-row {
+  display: grid;
+  grid-template-columns: 0.9fr 1.05fr 1.05fr;
+  gap: 8px;
+  padding: 7px 4px;
+  border-top: 1px solid var(--shop-border);
+}
+.hw-compare-head { border-top: 0; padding-top: 2px; }
+.hw-compare-head span { font-size: 12.5px; font-weight: 900; color: var(--text-1); }
+.hw-compare-label { font-size: 11.5px; font-weight: 800; color: var(--text-3); }
+.hw-compare-cell { font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.hw-checklist { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; counter-reset: hwcheck; }
+.hw-checklist li {
+  position: relative;
+  padding-inline-start: 28px;
+  font-size: 12.4px;
+  line-height: 1.75;
+  color: var(--text-2);
+  counter-increment: hwcheck;
+}
+.hw-checklist li::before {
+  content: counter(hwcheck);
+  position: absolute;
+  inset-inline-start: 0;
+  top: 1px;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--shop-ink-accent) 16%, transparent);
+  color: var(--shop-ink-accent);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+@media (max-width: 420px) {
+  .shop-pay-counter-btn { width: 100%; justify-content: center; }
+  .shop-loyalty-btn { width: 100%; justify-content: center; margin-top: 2px; }
+  .hw-compare-row { grid-template-columns: 1fr; gap: 2px; }
+  .hw-compare-head span:first-child { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-gift-pill, .shop-recent-pill, .shop-web3id-tab, .shop-loyalty-progress-fill { transition: none; }
+  .shop-gift-pill:active, .shop-recent-pill:active { transform: none; }
+}

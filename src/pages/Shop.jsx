@@ -10,17 +10,25 @@ import Sheet from '../components/Sheet';
 import ShopCountrySheet from '../components/ShopCountrySheet';
 import ShopTile from '../components/ShopTile';
 import ShopPromo from '../components/ShopPromo';
+import ShopLoyaltyCard from '../components/ShopLoyaltyCard';
+import ShopWeb3IdCard from '../components/ShopWeb3IdCard';
 import ShareSheet from '../components/ShareSheet';
 import HardwareWalletCard from '../components/HardwareWalletCard';
 
 const PayGatewayPanel = lazy(() => import('../components/PayGatewayPanel'));
+/*
+ * The in-store counter (TapToPay) rides the PAY tab, where the merchant's
+ * whole payment story lives. Lazy like the gateway: it pulls QrScanner and
+ * the NFC helpers, none of which belong in the eager graph.
+ */
+const TapToPay = lazy(() => import('../components/TapToPay'));
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { useAppStore } from '../store/useAppStore';
 import { useShare } from '../hooks/useShare';
-import { siteShareUrl } from '../lib/referral';
-import { IconChevronLeft, IconSearch } from '../components/Icons';
+import { referredBy, siteShareUrl } from '../lib/referral';
+import { IconChevronLeft, IconQr, IconSearch } from '../components/Icons';
 import { TOKENS } from '../lib/chains';
 import { getBalances } from '../lib/swap';
 import { readPortfolioSnapshot } from '../lib/portfolioSnapshot';
@@ -30,10 +38,26 @@ import {
   fetchShopCatalogue,
   fetchShopCountries,
   fetchShopProducts,
+  fetchShopReadiness,
+  fetchShopTrending,
   getShopCountry,
   normalizeShopCoin,
+  reportShopInterest,
   setShopCountry
 } from '../lib/shop';
+import {
+  GIFT_THEMES,
+  buildGiftSharePath,
+  giftThemeFor,
+  orderRowsByTrending,
+  parseGiftArrival,
+  pushRecentView,
+  getRecentViews,
+  recallGiftTheme,
+  rememberGiftTheme,
+  resolveRecentViews,
+  trendingHasHeat
+} from '../lib/shopHub';
 import {
   brandSlug,
   brandUrl,
@@ -48,12 +72,15 @@ import {
   IconBed,
   IconCard,
   IconChart,
+  IconFlame,
   IconGamepad,
+  IconGift,
   IconGlobe,
   IconMoney,
   IconPay,
   IconPlane,
   IconPlay,
+  IconRecent,
   IconShare,
   IconSim,
   IconSpark,
@@ -92,6 +119,23 @@ import {
  *   4. `flights` — Verified destination routes + travel eSIM/card cross-sell
  *   5. `stays`   — Verified hotel cities + travel eSIM/card cross-sell
  *   6. `pay`     — FBT Pay non-custodial merchant invoice & QR gateway
+ *                  + the in-store counter (TapToPay) + whitelabel readiness
+ *
+ * PHASE 2/3 ADDS, ON TOP OF THE SAME SHELF:
+ *   · Gift envelope shares — a brand sheet shared as one of four themed
+ *     in-app gift links (`#/shop?c=..&b=..&gift=1&gt=..&ref=CODE`), read on
+ *     arrival without ever rewriting the URL on mount.
+ *   · A loyalty chip wired to the RANK system exactly as /rewards reads it —
+ *     tier, real perks, distance. Points are never spent here.
+ *   · A recently-viewed rail (this device's localStorage) and a regional
+ *     trend re-rank (anonymous server counter × provider margin × stock).
+ *   · Web3 `.eth` / `.sol` identity checks that validate shape and the
+ *     published .eth price ladder, route the coin purchase through /swap,
+ *     and never pretend to know chain state.
+ *   · Hardware-wallet security hub: mobile/desktop comparison and the
+ *     four-step seal checklist inside HardwareWalletCard.
+ *   · Swap & Pay on the customer landing (PayLanding) and the optional
+ *     invoice note on every gateway link (v:1-compatible, fee split intact).
  */
 
 const TABS = [
@@ -292,6 +336,26 @@ export default function Shop() {
   const linkedBrand = useMemo(() => brandSlug(searchParams.get('b')) || null, [searchParams]);
   const deepLinkDone = useRef(false);
 
+  /*
+   * GIFT ARRIVAL — `?gift=1&gt=<theme>` beside the usual `c`/`b` params.
+   *
+   * Read exactly like the other deep-link params: from the URL, once, into
+   * a memo. `setSearchParams` is NEVER called on mount — rewriting your own
+   * URL during the first render is how a share link ends up in the browser
+   * history twice, how Telegram's in-app view loops reload a "cleaned" hash,
+   * and how a React 18 strict-mode double effect turns one navigation into
+   * two. The banner simply exists while the params exist; back-space still
+   * leaves the shop the way it entered it.
+   *
+   * Attribution needs NO new mechanism: the app's boot already runs
+   * `captureReferral()` over the hash query, so the sender's `ref=CODE` in a
+   * gift link is recorded by the same first-touch, self-referral-refusing,
+   * 90-day-windowed path as a plain invite. This page only displays what
+   * that recorder decided — `referredBy()` — never a hopeful copy.
+   */
+  const giftArrival = useMemo(() => parseGiftArrival((k) => searchParams.get(k)), [searchParams]);
+  const [giftTheme, setGiftTheme] = useState(() => recallGiftTheme());
+
   const [share, shareSheet] = useShare();
   const ensureRefCode = useAppStore((s) => s.ensureRefCode);
   const refCode = useMemo(
@@ -322,6 +386,51 @@ export default function Shop() {
   const [evmBalances, setEvmBalances] = useState(null);
   const [solBalances, setSolBalances] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
+
+  /*
+   * PHASE 2/3 HUB STATE — all three are additive reads of the same cached
+   * data the page already fetches, and all three stay silent when the
+   * server has nothing: an empty trending list re-renders the old rail, a
+   * null readiness renders no card, and an empty recent list renders no bar.
+   */
+  const [recent, setRecent] = useState(() => getRecentViews());
+  const [trending, setTrending] = useState([]);
+  const [readiness, setReadiness] = useState(null);
+  const [counterOpen, setCounterOpen] = useState(false);
+
+  /* Opening a brand is both the shop's "view" (recently-viewed rail, this
+     device's localStorage only) and its anonymous popularity tick (country +
+     brand id over the wire, nothing else). See lib/shopHub and
+     server/shop.js for the two privacy properties that make that legal. */
+  const openedRef = useRef(null);
+  useEffect(() => {
+    const brand = openBrand;
+    if (!brand || !country) return;
+    if (openedRef.current === brand.id) return;
+    openedRef.current = brand.id;
+    setRecent(pushRecentView(brand));
+    void reportShopInterest(country, brand.id);
+  }, [openBrand, country]);
+
+  useEffect(() => {
+    if (!country) {
+      setTrending([]);
+      return undefined;
+    }
+    let alive = true;
+    fetchShopTrending(country)
+      .then((d) => { if (alive) setTrending(d?.rows ?? []); })
+      .catch(() => { if (alive) setTrending([]); });
+    return () => { alive = false; };
+  }, [country]);
+
+  useEffect(() => {
+    let alive = true;
+    fetchShopReadiness()
+      .then((d) => { if (alive) setReadiness(d); })
+      .catch(() => { /* absence is the correct render — see lib/shop.js */ });
+    return () => { alive = false; };
+  }, []);
 
   const open = useCallback(
     (url) => {
@@ -476,6 +585,36 @@ export default function Shop() {
     void share({ url, text: t('shop.shareText', { brand: openBrand.name }) });
   }, [openBrand, country, refCode, share, haptic, t]);
 
+  /*
+   * SEND AS GIFT — the same `siteShareUrl` mechanism as a normal share, with
+   * `&gift=1&gt=<theme>` added. There is deliberately NO new attribution
+   * path: the link's `ref=CODE` is read at boot by the existing
+   * `captureReferral()`, which keeps first-touch, refuses self-referral, and
+   * pays the referrer share for REFERRAL_WINDOW_DAYS (90) — that is the
+   * whole promise, and the copy says exactly that. What the gift params add
+   * is only WHICH CARD the recipient lands on and WHICH ENVELOPE paints the
+   * sheet — presentation over a mechanism that already exists.
+   */
+  const sendGift = useCallback(() => {
+    if (!openBrand || !country) return;
+    haptic?.('light');
+    const path = buildGiftSharePath(country, openBrand.family, giftTheme);
+    if (!path) return;
+    const url = siteShareUrl(path, refCode);
+    void share({
+      url,
+      text: t('shop.gift.shareText', {
+        brand: openBrand.name,
+        theme: t(`shop.gift.theme.${giftTheme}`)
+      })
+    });
+  }, [openBrand, country, giftTheme, refCode, share, haptic, t]);
+
+  const pickGiftTheme = useCallback((id) => {
+    haptic?.('select');
+    setGiftTheme(rememberGiftTheme(giftThemeFor(id)));
+  }, [haptic]);
+
   const handleTogglePin = useCallback((brand) => {
     if (!brand) return;
     haptic?.('light');
@@ -496,7 +635,29 @@ export default function Shop() {
   );
 
   const favoriteBrands = useMemo(() => pickFavoriteBrands(rows, favKeys), [rows, favKeys]);
-  const featuredBrands = useMemo(() => pickFeaturedBrands(allRows, 12), [allRows]);
+
+  /*
+   * THE TREND OPTIMISATION, IN ONE LINE — popularity + proven margin +
+   * stock, weighted server-side over the catalogue that is already cached
+   * (see `rankTrendingBrands` in server/shop.js); the client only RE-ORDERS
+   * the flagship rail it already had. An empty or cold answer returns the
+   * old order untouched, and `trendingHasHeat` keeps the flame badge from
+   * claiming heat the counter has not actually seen — a rail labelled
+   * "hottest in the region" on a server that heard zero clicks would be the
+   * lie this repo keeps engineering against, not the feature.
+   */
+  const featuredBrands = useMemo(() => {
+    const base = pickFeaturedBrands(allRows, 12);
+    return orderRowsByTrending(base, trending, { limit: 12 });
+  }, [allRows, trending]);
+  const trendingHot = useMemo(() => trendingHasHeat(trending), [trending]);
+
+  /* Recently viewed — joined onto the LIVE catalogue; brands the current
+     country no longer carries (or that went out of stock) drop out. */
+  const recentRows = useMemo(
+    () => resolveRecentViews(recent, allRows),
+    [recent, allRows]
+  );
 
   const categories = useMemo(() => {
     const cs = data?.categories ?? [];
@@ -638,6 +799,29 @@ export default function Shop() {
 
   const brandSheet = (
     <Sheet open={Boolean(openBrand)} onClose={() => setOpenBrand(null)} title={openBrand?.name ?? ''}>
+      {/*
+        THE GIFT ENVELOPE — what the recipient of a gift link sees on top of
+        the very card they were sent, themed by the sender's pick. It reports
+        only what is true at this moment: someone sent this card, the tab is
+        open on it, and IF `referredBy()` found the sender's code recorded at
+        boot, the referral line appears too. If the device already had
+        another referrer (first-touch wins) or the code was invalid, the line
+        is honestly absent — the gift still opens, the banner does not lie.
+      */}
+      {giftArrival && openBrand && (
+        <div className="shop-gift-envelope" data-theme={giftArrival.theme} role="note" data-testid="shop-gift-envelope">
+          <span className="shop-gift-envelope-mark" aria-hidden="true">
+            {(GIFT_THEMES.find((g) => g.id === giftArrival.theme) || GIFT_THEMES[3]).emoji}
+          </span>
+          <div className="shop-gift-envelope-copy">
+            <strong>{t('shop.gift.receivedTitle', { brand: openBrand.name })}</strong>
+            <p>{t('shop.gift.receivedBody')}</p>
+            {referredBy() ? (
+              <span className="shop-gift-envelope-ref">✓ {t('shop.gift.referralActive')}</span>
+            ) : null}
+          </div>
+        </div>
+      )}
       {openBrand && (
         <div className="shop-sheet-toolbar">
           <div className="shop-coin-switch" role="group" aria-label={t('shop.checkout.coinLabel')}>
@@ -673,6 +857,38 @@ export default function Shop() {
             <IconStar width={14} height={14} filled={openBrandPinned} />
             <span>{t(openBrandPinned ? 'shop.fav.pinned' : 'shop.fav.pinAction')}</span>
           </button>
+        </div>
+      )}
+
+      {/*
+        GIFT THEME PICKER — four envelopes, one persistent default. Picking
+        a theme here does not buy anything or open anything by itself; the
+        envelope only materialises when the sender taps «ارسال هدیه» below.
+        The chosen id rides the URL as `gt=<id>` and the receiver validates
+        it against the SAME table (giftThemeFor), so a hand-typed theme can
+        only ever land on the neutral gold.
+      */}
+      {openBrand && (
+        <div className="shop-gift-row" role="group" aria-label={t('shop.gift.pickTheme')}>
+          <span className="shop-gift-label">
+            <IconGift width={14} height={14} />
+            <span>{t('shop.gift.rowTitle')}</span>
+          </span>
+          <div className="shop-gift-pills">
+            {GIFT_THEMES.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                className="shop-gift-pill"
+                data-on={giftTheme === g.id ? 'true' : 'false'}
+                aria-pressed={giftTheme === g.id}
+                onClick={() => pickGiftTheme(g.id)}
+              >
+                <span aria-hidden="true">{g.emoji}</span>
+                <span>{t(`shop.gift.theme.${g.id}`)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -880,6 +1096,16 @@ export default function Shop() {
             <IconShare width={15} height={15} />
             {t('shop.share')}
           </button>
+          {/*
+            The gift share sits BESIDE the normal one, never replacing it —
+            both route through the same useShare → native sheet → in-app
+            fallback chain, so on a desktop with no navigator.share the gift
+            link lands in the fallback sheet exactly like every other share.
+          */}
+          <button type="button" className="btn btn-ghost shop-gift-send" onClick={sendGift}>
+            <IconGift width={15} height={15} />
+            {t('shop.gift.send')}
+          </button>
         </div>
       )}
     </Sheet>
@@ -929,6 +1155,8 @@ export default function Shop() {
             {t('shop.alt.earn')}
           </button>
         </div>
+
+        <ShopWeb3IdCard />
 
         <HardwareWalletCard />
 
@@ -1053,6 +1281,36 @@ export default function Shop() {
               </button>
             </div>
           </motion.section>
+
+          {/* Rank, honestly — tier, real perks, distance to the next tier. */}
+          {tab === 'cards' && <ShopLoyaltyCard />}
+
+          {/*
+            RECENTLY VIEWED — this device's short memory of the catalogue.
+            Chips rather than tiles: the job is one-tap return to something
+            you ALREADY chose, which a strip of names does in less height than
+            a grid of artwork does, and the grid keeps its room for discovery.
+          */}
+          {recentRows.length > 0 && (
+            <section className="shop-recent-bar" aria-label={t('shop.recent.title')} data-testid="shop-recent-bar">
+              <span className="shop-recent-label">
+                <IconRecent width={14} height={14} />
+                <span>{t('shop.recent.title')}</span>
+              </span>
+              <div className="shop-recent-pills">
+                {recentRows.slice(0, 8).map((b) => (
+                  <button
+                    key={`recent-${b.id}`}
+                    type="button"
+                    className="shop-recent-pill"
+                    onClick={() => { haptic?.('light'); setOpenBrand(b); }}
+                  >
+                    {b.name}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Pinned / Favorite Brands Bar (`localStorage`) */}
           {favoriteBrands.length > 0 && (
@@ -1248,13 +1506,19 @@ export default function Shop() {
             </div>
           ) : (
             <>
-              {/* Best-Sellers / Most Popular Brands Rail (shown when 2+ flagship brands exist in catalogue) */}
+              {/* Best-Sellers / Most Popular Brands Rail (shown when 2+ flagship brands exist in catalogue).
+                  When the anonymous regional counter has real heat, the SAME rail is
+                  re-ranked and re-labelled as «داغ‌ترین‌های این ریجن» — one rail, one
+                  mechanism, no second grid competing with the first. */}
               {tab === 'cards' && featuredBrands.length >= 2 && (
-                <section className="shop-featured-section" aria-label={t('shop.featured.title')}>
+                <section className="shop-featured-section" aria-label={t(trendingHot ? 'shop.trending.title' : 'shop.featured.title')}>
                   <div className="shop-cat-row shop-cat-row--tight">
                     <h2 className="shop-cat-title">
-                      {t('shop.featured.title')}
-                      <span className="shop-cat-badge">{t('shop.featured.badge')}</span>
+                      {trendingHot && <IconFlame width={15} height={15} className="shop-cat-flame" />}
+                      {t(trendingHot ? 'shop.trending.title' : 'shop.featured.title')}
+                      <span className="shop-cat-badge" data-hot={trendingHot ? 'true' : 'false'}>
+                        {t(trendingHot ? 'shop.trending.badge' : 'shop.featured.badge')}
+                      </span>
                     </h2>
                   </div>
                   <motion.div className="shop-rail" variants={stagger} initial="hidden" animate="show">
@@ -1505,6 +1769,51 @@ export default function Shop() {
               <span className="shop-trust-pill">⚡ {t('shop.pay.badgeMultiChain')}</span>
             </div>
           </motion.section>
+
+          {/*
+            ─── IN-PERSON: THE COUNTER MODE, ONE TAP AWAY ────────────────────
+            The invoice link answers "a customer is paying me REMOTELY". The
+            shop with a customer standing in front of it needs the other half:
+            a code on the counter and the payer's own camera. TapToPay is the
+            only component in the app whose QR decodability is pinned by a
+            rasterised real-decoder test, it already carries the EIP-681
+            amount logic and the arrival watcher, so the gateway's job here is
+            the DOOR, not a second invention of the same room.
+          */}
+          <div className="shop-pay-counter">
+            <div className="shop-pay-counter-copy">
+              <strong>{t('shop.pay.counterTitle')}</strong>
+              <p>{t('shop.pay.counterBody')}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary shop-pay-counter-btn"
+              onClick={() => { haptic?.('select'); setCounterOpen(true); }}
+            >
+              <IconQr width={16} height={16} />
+              <span>{t('shop.pay.counterCta')}</span>
+            </button>
+          </div>
+
+          <Suspense fallback={null}>
+            <Sheet open={counterOpen} onClose={() => setCounterOpen(false)} title={t('shop.pay.counterTitle')}>
+              <TapToPay />
+            </Sheet>
+          </Suspense>
+
+          {/*
+            WHITELABEL READINESS — renders ONLY when the server says the
+            in-app order path is actually configured. Until then this is
+            literally nothing on screen (not a disabled button, not a
+            "coming soon" strip): every sale goes through the partner link
+            with our id, which works TODAY. The moment the key is set, this
+            sentence appears with no redeploy, because the endpoint is the
+            switch.
+          */}
+          {readiness?.whitelabelConfigured === true && (
+            <p className="shop-pay-ready" data-testid="shop-whitelabel-ready">✓ {t('shop.pay.wlReady')}</p>
+          )}
+
           <div className="shop-pay-panel-host">
             <Suspense fallback={<div className="skel" style={{ height: 220, borderRadius: 20 }} />}>
               <PayGatewayPanel />
@@ -1516,6 +1825,8 @@ export default function Shop() {
       {brandSheet}
 
       <ShareSheet {...shareSheet} />
+
+      <ShopWeb3IdCard />
 
       <HardwareWalletCard />
 

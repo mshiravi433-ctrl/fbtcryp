@@ -542,3 +542,71 @@
     transition: none;
   }
 }
+
+/* ═════════════════ PHASE 2 — invoice note + Swap & Pay shortfall box ═══════ */
+
+.pay-link-note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--pay-accent, #00e5a8);
+  opacity: 0.9;
+}
+
+.pay-landing-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: 13px;
+  font-size: 12.5px;
+  border: 1px dashed color-mix(in srgb, var(--pay-accent, #00e5a8) 45%, transparent);
+  background: color-mix(in srgb, var(--pay-accent, #00e5a8) 8%, transparent);
+}
+.pay-landing-note-label {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.pay-landing-note-text { min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+
+.pay-landing-swap {
+  margin-top: 14px;
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  text-align: start;
+  border: 1px solid color-mix(in srgb, var(--pay-accent, #00e5a8) 55%, transparent);
+  background:
+    radial-gradient(130% 160% at 0% 0%, color-mix(in srgb, var(--pay-accent, #00e5a8) 16%, transparent), transparent 60%),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.5);
+}
+.pay-landing-swap-title {
+  font-size: 14.5px;
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+.pay-landing-swap-body {
+  margin: 0 0 11px;
+  font-size: 12.4px;
+  line-height: 1.75;
+  opacity: 0.86;
+}
+.pay-landing-swap-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.pay-landing-swap-fees {
+  margin: 9px 0 0;
+  font-size: 11.3px;
+  line-height: 1.7;
+  opacity: 0.72;
+}

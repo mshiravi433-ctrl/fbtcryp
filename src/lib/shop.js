@@ -58,6 +58,75 @@ async function get(path, { timeout = 14000 } = {}) {
   }
 }
 
+/**
+ * Fire-and-forget POST for the anonymous popularity counter.
+ *
+ * `keepalive` lets the request survive a tab closing the moment the shopper
+ * taps onward to the provider — which is exactly when the click happened.
+ * Nothing awaits it, nothing throws from it: a tracker that can fail loudly
+ * is a tracker users pay for with latency.
+ */
+function postBeacon(path, body) {
+  if (typeof fetch !== 'function') return Promise.resolve(false);
+  return fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    keepalive: true,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then((r) => Boolean(r && r.ok)).catch(() => false);
+}
+
+/**
+ * The regional "hottest right now" rail: popularity + provider margin +
+ * stock, computed server-side over the catalogue the shop already caches.
+ * Returns `rows: []` on any failure — the storefront must look fine, not
+ * apologetic, when the counter has nothing to say.
+ */
+export async function fetchShopTrending(country) {
+  const cc = String(country ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return { rows: [], live: false };
+  const d = await get(`/shop/trending?country=${cc}`);
+  return {
+    rows: Array.isArray(d?.rows)
+      ? d.rows
+        .filter((r) => r && typeof r.id === 'string')
+        .slice(0, 24)
+      : [],
+    live: Boolean(d)
+  };
+}
+
+/**
+ * Report ONE anonymous shop click. Only two fields ever leave the device:
+ * the country and the brand id. No wallet, no user, no timestamp the client
+ * controls, and the server caps the counter anyway.
+ */
+export function reportShopInterest(country, brandId) {
+  const cc = String(country ?? '').trim().toUpperCase();
+  const id = String(brandId ?? '').trim().slice(0, 64);
+  if (!/^[A-Z]{2}$/.test(cc) || !id) return Promise.resolve(false);
+  return postBeacon('/shop/track', { country: cc, brand: id });
+}
+
+/**
+ * Is the in-app whitelabel order path live on this server?
+ *
+ * A null answer (offline, older server, 404) must be indistinguishable from
+ * "not configured" in the UI — both mean "show the partner flow and nothing
+ * else". There is deliberately no error state to render: the absence of a
+ * card IS the correct rendering of an unavailable answer, because a
+ * "checkout not ready yet" notice would advertise a feature the reader can
+ * neither use nor imagine using.
+ */
+export async function fetchShopReadiness() {
+  const d = await get('/shop/readiness', { timeout: 8000 });
+  if (!d || typeof d !== 'object') return null;
+  return {
+    whitelabelConfigured: d?.whitelabel?.configured === true,
+    at: Number(d?.at) || Date.now()
+  };
+}
+
 /** Countries the provider serves. Used to answer "does this work for me". */
 export async function fetchShopCountries() {
   const d = await get('/shop/countries');

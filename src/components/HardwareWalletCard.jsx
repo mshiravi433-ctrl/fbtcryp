@@ -7,6 +7,28 @@ import { openUrl } from '../lib/browser';
 import { IconExternal, IconShield } from './Icons';
 
 /**
+ * PHASE 3 — THE SECURITY HUB, NOT JUST TWO BUTTONS.
+ *
+ * The card used to be a blurb and two links. Everything a buyer of one of
+ * these devices actually needs to decide — which model fits a PHONE vs a
+ * DESKTOP, how the connection works, whether the firmware is open, and above
+ * all HOW TO PROVE THE BOX WAS NEVER OPENED — was in their head or on a
+ * YouTube video. A comparison table and the four-step tamper checklist live
+ * here because this is the screen where the decision is made, and both are
+ * the strongest sales arguments the honest version has: the devices protect
+ * exactly the thing this app keeps promising.
+ *
+ * FACTS POLICY: one row per capability, stated the way the vendors state it.
+ * No invented benchmarks, no invented wireless support — where a model
+ * lineup differs (entry model USB-C only, premium models add Bluetooth), the
+ * row names the difference instead of averaging it. If a fact here ever
+ * changes upstream, the fix is ONE translation key.
+ */
+const COMPARE_ROWS = Object.freeze(['wire', 'mobile', 'suite', 'firmware']);
+
+const AUTHENTICITY_STEPS = Object.freeze(['s1', 's2', 's3', 's4']);
+
+/**
  * "KEEP YOUR KEYS SOMEWHERE THIS APP CANNOT REACH."
  * ---------------------------------------------------------------------------
  * ─── WHY A COMMERCIAL LINK BELONGS ON THE SECURITY SCREEN ───────────────────
@@ -104,6 +126,57 @@ export default function HardwareWalletCard() {
           );
         })}
       </div>
+
+      {/*
+        ─── THE COMPARISON TABLE (collapsed — it explains, no money moves) ──
+        Rows are capability ids; every cell is a translation key so no
+        sentence about a stranger's product is ever hardcoded. Vendors are
+        read from `hardwareVendors()` — the SAME list the buttons above use,
+        so a third vendor added to lib/hardware.js appears in the table
+        without this component being touched.
+      */}
+      <InfoBox title={t('hardware.compareTitle')} id="hw-compare" icon={<IconExternal width={14} height={14} />}>
+        <div className="hw-compare" role="table" aria-label={t('hardware.compareTitle')}>
+          <div className="hw-compare-row hw-compare-head" role="row">
+            <span role="columnheader" />
+            {vendors.map((v) => (
+              <span key={v.id} role="columnheader">{v.name}</span>
+            ))}
+          </div>
+          {COMPARE_ROWS.map((row) => (
+            <div key={row} className="hw-compare-row" role="row">
+              <span className="hw-compare-label" role="rowheader">{t(`hardware.compare.${row}`)}</span>
+              {vendors.map((v) => (
+                <span key={v.id} className="hw-compare-cell" role="cell">
+                  {t(`hardware.fact.${v.id}.${row}`)}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </InfoBox>
+
+      {/*
+        THE FOUR-STEP TAMPER CHECKLIST — the single most protective five
+        minutes in crypto custody, and the reason a box that arrives
+        re-shrink-wrapped with a printed seed phrase is not a discount, it is
+        a robbery that already happened. Numbered chips rather than bullets:
+        a shopper at a doorstep with a parcel in hand should be able to
+        count where they are.
+      */}
+      <InfoBox
+        title={t('hardware.checkTitle')}
+        tone="info"
+        id="hw-check"
+        icon={<IconShield width={14} height={14} />}
+      >
+        <ol className="hw-checklist">
+          {AUTHENTICITY_STEPS.map((k) => (
+            <li key={k}>{t(`hardware.check.${k}`)}</li>
+          ))}
+        </ol>
+        <p className="faint" style={{ fontSize: 11.5, marginTop: 8 }}>{t('hardware.checkFoot')}</p>
+      </InfoBox>
 
       {/*
         Collapsed, per the standing rule: this explains how a category of

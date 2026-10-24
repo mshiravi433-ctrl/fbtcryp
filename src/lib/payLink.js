@@ -84,7 +84,7 @@ export function encodePayPayload(input) {
   const lang = String(input.lang || 'en').slice(0, 8);
   const theme = PAY_THEMES[input.theme] ? input.theme : 'mint';
   const name = String(input.name || '').slice(0, 48);
-  return utf8ToB64Url(JSON.stringify({
+  const out = {
     v: 1,
     to,
     c: chainId,
@@ -93,7 +93,16 @@ export function encodePayPayload(input) {
     l: lang,
     th: theme,
     n: name
-  }));
+  };
+  /*
+   * The invoice note is OPTIONAL at the wire level, not just at the form
+   * level: an absent note writes no key at all, so a link minted today has
+   * the exact byte shape of a link minted before this feature whenever the
+   * merchant left the field empty.
+   */
+  const note = cleanPayNote(input.note);
+  if (note) out.m = note;
+  return utf8ToB64Url(JSON.stringify(out));
 }
 
 export function decodePayPayload(code) {
@@ -114,7 +123,9 @@ export function decodePayPayload(code) {
       amount,
       lang: String(json.l || 'en'),
       theme: PAY_THEMES[json.th] ? json.th : 'mint',
-      name: String(json.n || '')
+      name: String(json.n || ''),
+      /* `''` for every pre-feature link — the one honest default. */
+      note: cleanPayNote(json.m)
     };
   } catch {
     return null;
@@ -164,6 +175,33 @@ export function formatWei(wei, decimals) {
   const w = s.slice(0, s.length - dec);
   const f = s.slice(s.length - dec).replace(/0+$/, '');
   return `${neg ? '-' : ''}${w}${f ? `.${f}` : ''}`;
+}
+
+/**
+ * ─── THE OPTIONAL INVOICE NOTE (`m`) — PHASE 2 OF THE FBT PAY GATEWAY ──────
+ * A merchant who sends a link for "order #148" wants the number to travel
+ * with it: the payer sees it on the landing, matches it against their own
+ * order, and pays the right thing. Before this the only free text on a link
+ * was the merchant's NAME, so every cafe with four open orders sent links
+ * that looked identical.
+ *
+ * Version discipline: the payload STAYS `v: 1`. An optional field that older
+ * decoders ignore is not a format change, and minting a `v: 2` would split
+ * every compatibility test in the repo in half for a string that decodes to
+ * `''` when absent. A saved `v:1` link from before this feature decodes
+ * exactly as it did — with `note: ''` — and a link built today decodes the
+ * same way on any earlier build, the extra key simply unread.
+ *
+ * The sanitizer keeps the landing render-safe the way the rest of the payload
+ * is: no control or bidi characters, no tag brackets (React escapes them
+ * anyway — this stops the string being repurposed into a context where it
+ * is not), capped at 120 characters so a pasted essay cannot bloat a QR
+ * into something that stops scanning.
+ */
+const NOTE_STRIP = new RegExp('[<>\\[\\]\\\\\\u0000-\\u001F\\u200B-\\u200F\\u202A-\\u202E]', 'g');
+
+export function cleanPayNote(v) {
+  return String(v ?? '').replace(NOTE_STRIP, '').trim().slice(0, 120);
 }
 
 /**

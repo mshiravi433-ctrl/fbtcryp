@@ -7382,7 +7382,36 @@
     "disclosure": "If you buy through this link we receive {{rate}}% of the sale from {{vendor}}. It costs you nothing extra, and we would recommend a hardware wallet with or without it.",
     "cautionTitle": "Never buy one second-hand, and why that matters more than the brand",
     "caution": "Buy only from the manufacturer or an official reseller. A marketplace, second-hand or gifted device can be tampered with, and one that arrives with a recovery phrase already printed is a theft in progress — a real device makes you generate it yourself, offline, on first use.",
-    "notRequired": "None of this is required to use FBT Swap. Everything here works with the wallet you already have — this is for people holding an amount they would be genuinely sorry to lose."
+    "notRequired": "None of this is required to use FBT Swap. Everything here works with the wallet you already have — this is for people holding an amount they would be genuinely sorry to lose.",
+    "compareTitle": "Ledger vs Trezor — mobile & desktop",
+    "compare": {
+      "wire": "Ways to connect",
+      "mobile": "Phone support",
+      "suite": "Companion app",
+      "firmware": "Firmware model"
+    },
+    "fact": {
+      "ledger": {
+        "wire": "USB-C on all models; Bluetooth on Nano X, Flex and Stax",
+        "mobile": "Ledger Live for Android & iOS, over USB-C or Bluetooth",
+        "suite": "Ledger Live — desktop and mobile",
+        "firmware": "BOLOS on a secure element; apps are audited and signed"
+      },
+      "trezor": {
+        "wire": "USB-C on all models; Bluetooth on the Safe 5",
+        "mobile": "Trezor Suite web over USB-C (OTG) on Android & iOS",
+        "suite": "Trezor Suite — desktop and web",
+        "firmware": "Fully open-source firmware; Safe models add a secure element"
+      }
+    },
+    "checkTitle": "4 steps to prove the box was never opened",
+    "check": {
+      "s1": "Buy only from the vendor’s own store (or its listed resellers). Never second-hand, never a marketplace deal.",
+      "s2": "Inspect the factory seal at arrival. Torn blister, re-shrink-wrapped film, a loose box: refuse the parcel.",
+      "s3": "A genuine device boots as NEW and generates its seed on the screen in front of you. A pre-printed seed or an “already set up” welcome card means the device is compromised.",
+      "s4": "Verify the firmware and chip signature in the official app (Ledger Live / Trezor Suite) before you ever move funds."
+    },
+    "checkFoot": "These four checks cost nothing and are the whole reason a hardware wallet beats a phone alone. The moment one of them fails, the device is not yours yet."
   },
   "calm": {
     "title": "Calm music",
@@ -7894,7 +7923,11 @@
       "heroSub": "Built for online shops, freelancers, and creators: pick your chain, token, amount, and order memo to share a verifiable payment link or printable QR.",
       "badgeDirect": "Zero custody · Direct settlement",
       "badgeQr": "Branded QR & shareable link",
-      "badgeMultiChain": "Multi-chain USDT & USDC"
+      "badgeMultiChain": "Multi-chain USDT & USDC",
+      "counterTitle": "In-store counter (QR / NFC)",
+      "counterBody": "A customer in front of you? Show the counter code — they scan, pay from their own wallet, and the arrival watcher confirms it here. The money moves wallet-to-wallet and never passes through us.",
+      "counterCta": "Open the counter",
+      "wlReady": "Server-side order validation for the whitelabel path is live on this instance; the shop still sells through the attributed partner link."
     },
     "dest": {
       "city": {
@@ -7921,6 +7954,57 @@
         "netherlands": "Netherlands",
         "united_states": "United States",
         "canada": "Canada"
+      }
+    },
+    "gift": {
+      "rowTitle": "Gift this card",
+      "pickTheme": "Gift card theme",
+      "send": "Send as gift",
+      "shareText": "{{brand}} — a gift from me on FBT Swap ({{theme}})",
+      "theme": {
+        "birthday": "Birthday",
+        "gaming": "Gaming",
+        "congrats": "Congrats",
+        "gold": "Gold minimal"
+      },
+      "receivedTitle": "{{brand}} — sent to you as a gift",
+      "receivedBody": "Someone picked this card for you in the app. The purchase is theirs to pay; no name, no account, nothing is asked from you.",
+      "referralActive": "The sender’s invite was counted: they earn 1% of this app’s swap fee for 90 days, and your costs never change."
+    },
+    "loyalty": {
+      "title": "Your rank in the shop",
+      "cta": "Open rewards",
+      "note": "Points are a rank, not money: they are never spent, never withdrawn, and no gift code is ever issued for them.",
+      "noPerkYet": "Your tier is the door to the real venue discounts listed on the rewards screen."
+    },
+    "recent": {
+      "title": "Recently viewed"
+    },
+    "trending": {
+      "title": "Hottest in this region",
+      "badge": "live"
+    },
+    "web3id": {
+      "title": "Web3 domains & identity",
+      "sub": "Check a name’s shape and the published .eth price ladder right here. Registration happens on the official registry, and the coin for it comes from our own swap.",
+      "kinds": "Which name?",
+      "phEth": "yourname",
+      "phSol": "yourname",
+      "checkLabel": "Domain name to check",
+      "idle": "Type a label — lowercase letters, digits, hyphens inside.",
+      "availability": "Free-or-taken is answered by the on-chain registry, not by us.",
+      "registry": "Open the registry",
+      "buyEth": "Buy ETH in Swap",
+      "buySol": "Buy SOL in Swap",
+      "okSol": "{{name}} fits the .sol label rules.",
+      "noteEth": "The annual .eth fee depends on label length alone: $5 for 5+ characters, $160 for 4, $640 for 3 — paid in ETH on Ethereum mainnet, plus gas.",
+      "noteSol": ".sol/.sns names are registered on Solana through the SNS app; SOL covers both the name and the fee. Since 2026 the .sol and .sns extensions are run separately — the registry page tells you which applies.",
+      "err": {
+        "chars": "Only letters, digits and inside-hyphens are allowed.",
+        "hyphen": "Hyphens can’t open or close a label, and can’t repeat.",
+        "non_ascii": "This checker measures ASCII labels only; unicode names exist — the registry is their right address.",
+        "too_short": "3 characters minimum — 1–2 character labels are reserved.",
+        "too_long": ".sol labels stop at 32 characters."
       }
     }
   },
@@ -11301,7 +11385,15 @@
     "navigation": {
       "opening": "Opening {{page}}…",
       "open": "Open {{page}}",
-      "intentOS": "Intent OS"
+      "intentOS": "Intent OS",
+      "shopGift": "Gift card",
+      "shopVirtualCard": "Virtual card",
+      "shopTopUp": "Mobile top-up",
+      "shopEsim": "Travel eSIM",
+      "shopFlights": "Flights",
+      "shopStays": "Hotels",
+      "shopInvoice": "Merchant invoice",
+      "shop": "Shop"
     },
     "history": {
       "viewAll": "History",
@@ -16098,7 +16190,14 @@
       "openAmount": "Enter the amount to pay.",
       "trustHint": "Opens Trust Wallet. If Trust is already in this browser, it connects directly.",
       "brandSub": "Secure crypto payments",
-      "brandLink": "Go to the FBT Swap website"
+      "brandLink": "Go to the FBT Swap website",
+      "note": "Note",
+      "swapPay": {
+        "title": "Your assets are one swap away",
+        "body": "This wallet holds {{have}} {{token}} and the invoice needs {{need}} — a shortfall of {{short}}. Convert inside the app and come back to pay.",
+        "cta": "Swap & Pay — convert to {{token}}",
+        "fees": "Two fees, said out loud: {{fee}}% on the swap and {{fee}}% on this gateway. Nothing is added at payment time."
+      }
     },
     "theme": {
       "mint": "Mint",
@@ -16109,7 +16208,10 @@
       "night": "Night"
     },
     "gasNote": "Network fee is paid in {{gas}} — the merchant never holds it.",
-    "gasIn": "Gas in {{gas}}"
+    "gasIn": "Gas in {{gas}}",
+    "invoice": "Note / invoice no. (optional)",
+    "invoicePlaceholder": "e.g. Order #148",
+    "invoiceHint": "The text rides inside the link itself and shows on the payer’s landing — nothing is stored on a server."
   },
   "etf": {
     "title": "ETFs & Gold",
