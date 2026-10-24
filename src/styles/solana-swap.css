@@ -1,0 +1,823 @@
+/*
+ * SOLANA SWAP — quote-first trading ticket
+ * ---------------------------------------------------------------------------
+ * Scoped to `.solswap-root`; shared token, wallet, sheet and EVM surfaces are
+ * untouched. Color and type use the app theme tokens. No backdrop filters,
+ * animated blur or continuously painted glow: the page stays crisp in WebView.
+ */
+
+.solswap-root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.solswap-root .mono,
+.solswap-root .solswap-impact-card > strong,
+.solswap-root .solswap-slippage-card > strong,
+.solswap-root .solswap-route-output > strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.solswap-root h1,
+.solswap-root h2,
+.solswap-root h3,
+.solswap-root p { margin-top: 0; }
+
+.solswap-root button:focus-visible,
+.solswap-root input:focus-visible {
+  outline: 2px solid var(--rgb-1);
+  outline-offset: 3px;
+}
+
+/* ── hero / wallet ──────────────────────────────────────────────────────── */
+
+.solswap-hero {
+  padding: 18px;
+  border-radius: 24px;
+  border-color: color-mix(in srgb, var(--rgb-2) 25%, var(--line));
+  background:
+    radial-gradient(110% 110% at 100% 0%, color-mix(in srgb, var(--rgb-2) 19%, transparent), transparent 54%),
+    radial-gradient(90% 90% at 0% 100%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 55%),
+    var(--bg-panel);
+  box-shadow: 0 18px 42px -28px color-mix(in srgb, var(--rgb-2) 52%, transparent);
+}
+
+.solswap-hero-head,
+.solswap-brand,
+.solswap-wallet-row,
+.solswap-quote-head,
+.solswap-quote-heading,
+.solswap-comparison-head,
+.solswap-comparison-title,
+.solswap-route-left,
+.solswap-route-name {
+  display: flex;
+  align-items: center;
+}
+
+.solswap-hero-head {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.solswap-brand { gap: 13px; min-width: 0; }
+
+.solswap-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 42%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--rgb-2) 76%, var(--bg-panel-solid)), color-mix(in srgb, var(--rgb-1) 55%, var(--bg-panel-solid)));
+  color: #fff;
+  box-shadow: 0 10px 26px -16px color-mix(in srgb, var(--rgb-1) 75%, transparent);
+}
+
+.solswap-mark svg { display: block; }
+
+.solswap-heading { min-width: 0; }
+.solswap-kicker,
+.solswap-ticket-kicker {
+  display: block;
+  margin: 0 0 5px;
+  color: var(--rgb-1);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.solswap-heading h1 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: clamp(22px, 6.8vw, 30px);
+  font-weight: 850;
+  letter-spacing: -.035em;
+  line-height: 1.12;
+}
+
+.solswap-heading p {
+  max-width: 38ch;
+  margin: 7px 0 0;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.solswap-hero .sol-net-chip { flex: 0 0 auto; margin-top: 2px; }
+
+.solswap-wallet-row {
+  gap: 10px;
+  min-width: 0;
+  margin-top: 17px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-panel-solid) 67%, transparent);
+}
+
+.solswap-wallet-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+
+.solswap-wallet-icon.is-connected {
+  border-color: color-mix(in srgb, var(--up) 33%, var(--line));
+  background: color-mix(in srgb, var(--up) 10%, var(--bg-panel-solid));
+  color: var(--up);
+}
+
+.solswap-wallet-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.solswap-wallet-copy strong {
+  overflow: hidden;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.solswap-root .solswap-manage-wallet {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 44px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+}
+
+.solswap-balance-line {
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.solswap-balance-line .mono { color: var(--text-1); }
+
+/* ── swap ticket ────────────────────────────────────────────────────────── */
+
+.solswap-ticket {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 18px;
+  border-radius: 24px;
+  border-color: color-mix(in srgb, var(--rgb-1) 20%, var(--line));
+  background:
+    radial-gradient(100% 70% at 100% 0%, color-mix(in srgb, var(--rgb-1) 10%, transparent), transparent 55%),
+    var(--bg-panel);
+  box-shadow: 0 20px 48px -34px color-mix(in srgb, var(--rgb-1) 55%, transparent);
+}
+
+.solswap-ticket-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.solswap-ticket-head h2 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+}
+
+.solswap-ticket-head p {
+  max-width: 40ch;
+  margin: 5px 0 0;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.solswap-refresh,
+.solswap-flip {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.solswap-refresh {
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-panel-solid) 70%, transparent);
+}
+
+.solswap-refresh:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--rgb-1) 60%, var(--line));
+  color: var(--rgb-1);
+}
+
+.solswap-refresh:active:not(:disabled),
+.solswap-flip:active { transform: scale(.94); }
+
+.solswap-refresh:disabled { opacity: .45; cursor: not-allowed; }
+
+.solswap-ticket .sol-swap-box,
+.solswap-ticket .solswap-asset-box {
+  gap: 10px;
+  padding: 13px;
+  border-radius: 18px;
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--bg-panel-solid) 66%, transparent);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.solswap-ticket .solswap-from-box {
+  border-inline-start: 2px solid color-mix(in srgb, var(--rgb-2) 70%, transparent);
+}
+
+.solswap-ticket .solswap-to-box {
+  border-inline-start: 2px solid color-mix(in srgb, var(--rgb-4) 70%, transparent);
+  background: color-mix(in srgb, var(--rgb-4) 4%, var(--bg-panel-solid));
+}
+
+.solswap-ticket .sol-swap-box-head {
+  min-height: 18px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.solswap-ticket .sol-swap-box-body {
+  gap: 9px;
+  min-height: 56px;
+}
+
+.solswap-ticket .sol-chip {
+  flex: 1 1 58%;
+  max-width: 59%;
+  min-height: 56px;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--bg-raised) 78%, transparent);
+}
+
+.solswap-ticket .sol-chip:hover {
+  border-color: color-mix(in srgb, var(--rgb-1) 38%, var(--line));
+}
+
+.solswap-ticket .sol-swap-box input.swap-amount-input {
+  flex: 1 1 42%;
+  width: 42%;
+  max-width: 44%;
+  min-width: 72px;
+  min-height: 52px;
+  padding: 7px 2px;
+  color: var(--text-1);
+  font-size: clamp(17px, 5.6vw, 25px);
+  font-weight: 750;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.solswap-ticket .sol-swap-box input.swap-amount-input::placeholder { color: var(--text-3); }
+
+.solswap-ticket .solswap-estimate-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--rgb-4) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--rgb-4) 9%, transparent);
+  color: var(--up);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.solswap-ticket .sol-swap-box .solswap-estimated-output {
+  flex: 1 1 42%;
+  width: 42%;
+  max-width: 44%;
+  min-width: 72px;
+  min-height: 52px;
+  padding: 5px 1px;
+  color: var(--text-1);
+  font-size: clamp(14px, 4.4vw, 22px);
+  font-weight: 800;
+  letter-spacing: -.035em;
+  line-height: 1.25;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.solswap-ticket .sol-swap-box .solswap-estimated-output[aria-live='polite'] {
+  transition: color 140ms ease;
+}
+
+.solswap-ticket .sol-swap-box-foot {
+  min-height: 24px;
+  color: var(--text-3);
+}
+
+.solswap-ticket .solswap-max {
+  min-height: 30px;
+  min-width: 46px;
+  padding: 4px 10px;
+  border-radius: 9px;
+  font-size: 10.5px;
+}
+
+.solswap-flip-wrap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  margin-block: -3px;
+}
+
+.solswap-flip {
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--bg-panel-solid), var(--bg-panel-solid)) padding-box,
+    linear-gradient(145deg, var(--rgb-2), var(--rgb-1)) border-box;
+  color: var(--rgb-1);
+  box-shadow: 0 7px 20px -12px color-mix(in srgb, var(--rgb-1) 70%, transparent);
+}
+
+.solswap-flip:hover {
+  background:
+    linear-gradient(color-mix(in srgb, var(--rgb-1) 10%, var(--bg-panel-solid)), color-mix(in srgb, var(--rgb-1) 10%, var(--bg-panel-solid))) padding-box,
+    linear-gradient(145deg, var(--rgb-2), var(--rgb-1)) border-box;
+}
+
+.solswap-ticket .sol-quick { margin-top: 15px; }
+.solswap-ticket .sol-quick-head { margin-bottom: 8px; }
+
+/* ── quote intelligence ─────────────────────────────────────────────────── */
+
+.solswap-quote-details,
+.solswap-comparison {
+  min-width: 0;
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-raised) 75%, transparent), transparent 72%),
+    color-mix(in srgb, var(--bg-panel-solid) 82%, transparent);
+}
+
+.solswap-quote-head,
+.solswap-comparison-head {
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.solswap-quote-heading { gap: 10px; min-width: 0; }
+
+.solswap-quote-icon,
+.solswap-comparison-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 26%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--rgb-1) 9%, transparent);
+  color: var(--rgb-1);
+}
+
+.solswap-quote-heading h3,
+.solswap-comparison-title h3 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.solswap-quote-heading > div > span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.solswap-provider-pill,
+.solswap-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.solswap-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--up) 65%, transparent);
+}
+
+.solswap-risk-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.solswap-impact-card,
+.solswap-slippage-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 112px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--bg-raised) 68%, transparent);
+}
+
+.solswap-impact-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.solswap-impact-level {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font-size: 9px;
+}
+
+.solswap-impact-card > strong,
+.solswap-slippage-card > strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.05em;
+  line-height: 1;
+}
+
+.solswap-impact-card.is-low { border-color: color-mix(in srgb, var(--up) 30%, var(--line)); }
+.solswap-impact-card.is-low .solswap-impact-level { color: var(--up); }
+.solswap-impact-card.is-medium { border-color: color-mix(in srgb, var(--rgb-5) 38%, var(--line)); }
+.solswap-impact-card.is-medium .solswap-impact-level { color: var(--rgb-5); }
+.solswap-impact-card.is-high { border-color: color-mix(in srgb, var(--down) 48%, var(--line)); }
+.solswap-impact-card.is-high .solswap-impact-level { color: var(--down); }
+.solswap-impact-card.is-unknown .solswap-impact-level { color: var(--text-3); }
+
+.solswap-impact-track {
+  height: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-3) 25%, transparent);
+}
+
+.solswap-impact-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--up);
+  transition: width 180ms ease;
+}
+
+.solswap-impact-card.is-medium .solswap-impact-track > span { background: var(--rgb-5); }
+.solswap-impact-card.is-high .solswap-impact-track > span { background: var(--down); }
+.solswap-impact-card.is-unknown .solswap-impact-track > span { background: var(--text-3); }
+
+.solswap-slippage-mark { color: var(--rgb-1); }
+.solswap-card-caption {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.solswap-quote-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 12px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+
+.solswap-quote-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 1px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.solswap-quote-line:last-child { border-bottom: 0; }
+
+.solswap-quote-line > strong {
+  max-width: 67%;
+  color: var(--text-1);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.solswap-impact-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--down) 42%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+  color: var(--down);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.solswap-impact-warning svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* ── provider comparison ────────────────────────────────────────────────── */
+
+.solswap-comparison { padding: 14px; }
+.solswap-comparison-title { gap: 9px; min-width: 0; }
+.solswap-comparison-icon {
+  border-color: color-mix(in srgb, var(--rgb-2) 30%, transparent);
+  background: color-mix(in srgb, var(--rgb-2) 10%, transparent);
+  color: color-mix(in srgb, var(--rgb-2) 76%, var(--rgb-1));
+}
+
+.solswap-comparison-title > div { min-width: 0; }
+.solswap-comparison-title p {
+  margin: 3px 0 0;
+  color: var(--text-3);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.solswap-count-pill {
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 9.5px;
+}
+
+.solswap-route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.solswap-route-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-raised) 64%, transparent);
+}
+
+.solswap-route-row.is-selected {
+  border-color: color-mix(in srgb, var(--up) 39%, var(--line));
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--up) 8%, transparent), transparent 70%),
+    color-mix(in srgb, var(--bg-raised) 70%, transparent);
+}
+
+.solswap-route-left { gap: 9px; flex: 1 1 auto; min-width: 0; }
+.solswap-route-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 29px;
+  width: 29px;
+  height: 29px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.solswap-route-row.is-selected .solswap-route-index {
+  border-color: color-mix(in srgb, var(--up) 35%, transparent);
+  color: var(--up);
+}
+
+.solswap-route-copy { min-width: 0; }
+.solswap-route-name { flex-wrap: wrap; gap: 6px; }
+.solswap-route-name > strong { color: var(--text-1); font-size: 11px; font-weight: 800; }
+
+.solswap-best-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 19px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--up) 33%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--up) 9%, transparent);
+  color: var(--up);
+  font-size: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.solswap-route-meta {
+  display: block;
+  max-width: 34ch;
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 8.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.solswap-route-output {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 0;
+  text-align: end;
+}
+
+.solswap-route-output > strong {
+  max-width: 100%;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.solswap-route-output > strong small {
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.solswap-route-output > span {
+  max-width: 30ch;
+  color: var(--text-3);
+  font-size: 8px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.solswap-route-output > .solswap-route-best-caption { color: var(--up); }
+
+.solswap-comparison-note {
+  margin: 10px 1px 0;
+  color: var(--text-3);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+/* The existing safety text remains one collapsible information box; this
+   simply gives it a quieter, coordinated surface on the redesigned page. */
+.solswap-root .infobox {
+  border-radius: 19px;
+  border-color: color-mix(in srgb, var(--rgb-2) 18%, var(--line));
+}
+
+.solswap-root .solswap-import {
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-panel) 86%, var(--rgb-2) 4%);
+}
+
+.solswap-root .solswap-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  margin-top: 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 35%, transparent);
+  border-radius: 17px;
+  background: linear-gradient(110deg, var(--rgb-1), color-mix(in srgb, var(--rgb-2) 88%, var(--rgb-1)) 58%, var(--rgb-2));
+  box-shadow: 0 12px 28px -18px color-mix(in srgb, var(--rgb-1) 78%, transparent);
+  color: #08111d;
+  font-size: 14px;
+  font-weight: 850;
+  animation: none;
+  transition: transform 140ms ease, filter 160ms ease, opacity 160ms ease;
+}
+
+.solswap-root .solswap-cta:hover:not(:disabled) { filter: brightness(1.06); }
+.solswap-root .solswap-cta:active:not(:disabled) { transform: scale(.985); }
+.solswap-root .solswap-cta:disabled { opacity: .48; }
+.solswap-root .solswap-cta svg { flex: 0 0 auto; }
+[dir='rtl'] .solswap-root .solswap-cta svg { transform: scaleX(-1); }
+
+:root[data-theme='light'] .solswap-hero,
+:root[data-theme='light'] .solswap-ticket {
+  box-shadow: 0 10px 30px -22px rgba(34, 45, 80, .28);
+}
+
+:root[data-theme='light'] .solswap-wallet-row,
+:root[data-theme='light'] .solswap-ticket .sol-swap-box.sol-swap-box {
+  background-color: rgba(255, 255, 255, .72);
+}
+
+:root[data-theme='light'] .solswap-quote-details,
+:root[data-theme='light'] .solswap-comparison { background-color: rgba(255, 255, 255, .84); }
+
+:root[data-theme='light'] .solswap-mark { color: #fff; }
+
+@media (max-width: 390px) {
+  .solswap-hero,
+  .solswap-ticket { padding: 14px; }
+  .solswap-mark { flex-basis: 42px; width: 42px; height: 42px; border-radius: 14px; }
+  .solswap-hero-head { gap: 7px; }
+  .solswap-brand { gap: 9px; }
+  .solswap-hero .sol-net-chip { padding-inline: 7px; font-size: 9px; }
+  .solswap-wallet-row { gap: 7px; padding: 9px; }
+  .solswap-manage-wallet { padding-inline: 9px; font-size: 10px; }
+  .solswap-risk-metrics { grid-template-columns: minmax(0, 1fr) minmax(0, .9fr); }
+  .solswap-route-row { gap: 6px; padding: 8px; }
+  .solswap-route-index { flex-basis: 26px; width: 26px; height: 26px; }
+}
+
+@media (max-width: 340px) {
+  .solswap-heading h1 { font-size: 22px; }
+  .solswap-heading p { font-size: 10px; }
+  .solswap-hero .sol-net-chip { gap: 4px; padding-inline: 6px; font-size: 8px; }
+  .solswap-route-meta { font-size: 8px; }
+  .solswap-route-output > strong { font-size: 10px; }
+  .solswap-count-pill { max-width: 105px; white-space: normal; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solswap-refresh,
+  .solswap-flip,
+  .solswap-impact-track > span,
+  .solswap-root .solswap-cta { transition: none; }
+}
