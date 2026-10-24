@@ -182,11 +182,17 @@ export function orderRowsByTrending(rows, trending, { limit = 12 } = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return [];
   if (!Array.isArray(trending) || trending.length === 0) return rows;
   const scoreOf = new Map();
-  trending.forEach((t, i) => {
+  trending.forEach((t) => {
     if (!t || typeof t.id !== 'string') return;
     const n = Number(t.score);
-    scoreOf.set(t.id, Number.isFinite(n) ? n : (trending.length - i));
+    /* The server returns the whole in-stock catalogue, including zero-signal
+       rows. Treating those zeroes as a ranking used to alphabetise the rail
+       on a completely cold counter. Only a real positive signal may boost a
+       brand; all other rows keep their editorial order. */
+    if (Number.isFinite(n) && n > 0) scoreOf.set(t.id, n);
+    else if (!Number.isFinite(n) && Number(t.views) > 0) scoreOf.set(t.id, Number(t.views));
   });
+  if (scoreOf.size === 0) return rows;
   const ranked = [];
   const rest = [];
   for (const r of rows) {

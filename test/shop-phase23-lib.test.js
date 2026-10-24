@@ -148,6 +148,19 @@ describe('regional heat — a re-rank, never a rewrite', () => {
     expect(orderRowsByTrending([], [{ id: '1', score: 5 }])).toEqual([]);
   });
 
+  it('an all-zero answer does not alphabetise the formerly static rail', () => {
+    const editorial = [
+      { id: 'z-editorial', name: 'Zulu' },
+      { id: 'a-editorial', name: 'Alpha' },
+      { id: 'm-editorial', name: 'Middle' }
+    ];
+    expect(orderRowsByTrending(editorial, [
+      { id: 'a-editorial', score: 0, views: 0 },
+      { id: 'z-editorial', score: 0, views: 0 },
+      { id: 'm-editorial', score: 0, views: 0 }
+    ])).toBe(editorial);
+  });
+
   it('ranked ids float up by score; unranked keep their relative order behind them', () => {
     const out = orderRowsByTrending(rows, [
       { id: '3', score: 4.1 },

@@ -131,7 +131,7 @@ export default function ShopWeb3IdCard() {
         <button
           type="button"
           className="btn btn-primary shop-web3id-fund"
-          onClick={() => navigate(kind === 'eth' ? '/swap?to=ETH' : '/solana?toMint=So11111111111111111111111111111111111111112')}
+          onClick={() => navigate(kind === 'eth' ? '/swap?to=ETH&chain=1' : '/solana?toMint=So11111111111111111111111111111111111111112')}
         >
           <IconSwap width={15} height={15} />
           <span>{t(kind === 'eth' ? 'shop.web3id.buyEth' : 'shop.web3id.buySol')}</span>

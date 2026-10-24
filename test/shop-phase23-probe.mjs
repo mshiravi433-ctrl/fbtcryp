@@ -17,8 +17,10 @@ const check = (name, ok, extra = '') => {
 const shop = await import('../server/shop.js');
 const {
   WHITELABEL_KEY_ENV, whitelabelStatus, validateOrderPrerequisites,
-  mapUpstreamOrderError, bumpShopInterest, shopTrendSize, rankTrendingBrands
+  mapUpstreamOrderError, bumpShopInterest, shopTrendSize, rankTrendingBrands,
+  trendingFromCatalogue, userHeaders
 } = shop;
+const { setCached } = await import('../server/cache.js');
 
 try {
   /* ─────────────────────── whitelabel readiness ─────────────────────────── */
@@ -34,6 +36,8 @@ try {
   const on = whitelabelStatus();
   check('env key set → configured flips true with no blockers',
     on.configured === true && on.blockers.length === 0 && on.transport === 'https', JSON.stringify(on));
+  check('readiness describes pre-checks only, never an order-forwarding capability we do not have',
+    /pre-check/.test(on.whenReady) && !/forwarding are live/i.test(on.whenReady), on.whenReady);
   if (savedKey === undefined) delete process.env[WHITELABEL_KEY_ENV]; else process.env[WHITELABEL_KEY_ENV] = savedKey;
 
   /* ─────────────────────── order prerequisites ──────────────────────────── */
@@ -73,10 +77,25 @@ try {
   /* ─────────────────────── upstream error mapping ─────────────────────────── */
   check('the documented daily-limit prose maps to the named key',
     mapUpstreamOrderError(400, 'You have reached your daily spending limit.') === 'DAILY_SPENDING_LIMIT_EXCEEDED');
+  check('raw machine codes map exactly like their documented prose',
+    mapUpstreamOrderError(400, '{"code":"DAILY_SPENDING_LIMIT_EXCEEDED"}') === 'DAILY_SPENDING_LIMIT_EXCEEDED'
+    && mapUpstreamOrderError(400, 'FULLNAME_MISSING') === 'FULLNAME_MISSING');
   check('a 429 is the limit, whatever prose came with it',
     mapUpstreamOrderError(429, '') === 'DAILY_SPENDING_LIMIT_EXCEEDED');
+  check('every mapped reason is a documented table key',
+    ['daily limit exceeded', 'fullname_missing', 'other'].every((body) => (
+      Object.prototype.hasOwnProperty.call(shop.WHITELABEL_ORDER_ERRORS, mapUpstreamOrderError(400, body))
+    )));
   check('an unrecognised body never gets an invented reason',
     mapUpstreamOrderError(400, 'some provider essay') === 'UPSTREAM_ORDER_FAILED');
+
+  /* ─────────────────────── upstream client IP forwarding ────────────────── */
+  const forwarded = userHeaders({ headers: { 'x-forwarded-for': ' 203.0.113.8, 10.0.0.4, 10.0.0.5' } });
+  check('only the FIRST forwarded client is sent upstream, with no proxy-chain leak',
+    forwarded['X-Forwarded-For'] === '203.0.113.8', JSON.stringify(forwarded));
+  check('the forwarded value is bounded and the header is absent when no client IP exists',
+    userHeaders({ headers: { 'x-forwarded-for': `${'1'.repeat(500)}, 10.0.0.1` } })['X-Forwarded-For'].length === 128
+    && userHeaders({ headers: {} })['X-Forwarded-For'] === undefined);
 
   /* ─────────────────────── anonymous trending ─────────────────────────────── */
   check('junk country/brand ids are refused; a long brand id is capped, not rejected whole',
@@ -102,6 +121,14 @@ try {
   const cold = rankTrendingBrands(rows, { cc: 'TR', spreadOf: () => null });
   check('a different country sees its OWN counter — nothing cross-contaminates',
     cold[0].id !== 'b-steam' || cold.every((r) => r.views === 0), JSON.stringify(cold));
+
+  setCached('shop-prod-ZZ-ProbeMargin-USDT-fa', { bestSpreadPct: 9.25 }, 60_000);
+  const variantMargin = await trendingFromCatalogue('ZZ', [
+    { id: 'margin-probe', family: 'ProbeMargin', name: 'Margin Probe', country: 'ZZ' }
+  ]);
+  check('trending margins survive actual coin+locale product-cache variants',
+    variantMargin.rows[0]?.spreadPct === 9.25 && variantMargin.rows[0]?.score > 0,
+    JSON.stringify(variantMargin));
 
   /* ───────────────────────── route + wiring mounts ────────────────────────── */
   const app = readFileSync('server/app.js', 'utf8');
@@ -149,7 +176,9 @@ try {
     'pay.landing.swapPay.cta', 'pay.landing.swapPay.fees',
     'shop.gift.send', 'shop.gift.shareText', 'shop.gift.receivedTitle', 'shop.gift.receivedBody',
     'shop.gift.theme.birthday', 'shop.gift.theme.gaming', 'shop.gift.theme.congrats', 'shop.gift.theme.gold',
-    'shop.loyalty.title', 'shop.loyalty.note', 'shop.loyalty.cta',
+    'shop.gift.themeLabel', 'shop.hero.metricsLabel', 'shop.hero.availableBrands',
+    'shop.trustHub.title', 'shop.trustHub.subtitle', 'shop.pay.badgeSwapPay',
+    'shop.loyalty.title', 'shop.loyalty.points', 'shop.loyalty.note', 'shop.loyalty.cta',
     'shop.recent.title', 'shop.trending.title', 'shop.trending.badge',
     'shop.web3id.title', 'shop.web3id.err.chars', 'shop.web3id.err.hyphen',
     'shop.web3id.err.non_ascii', 'shop.web3id.err.too_short', 'shop.web3id.err.too_long',

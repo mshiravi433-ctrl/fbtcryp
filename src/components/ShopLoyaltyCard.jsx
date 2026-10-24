@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -25,7 +26,7 @@ import { perksFor } from '../lib/perks';
  * deducts nothing, and disappears gracefully if the store has no points.
  */
 export default function ShopLoyaltyCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { points: rawPoints } = usePoints();
   const points = Number.isFinite(Number(rawPoints)) ? Math.max(0, Number(rawPoints)) : 0;
@@ -36,6 +37,11 @@ export default function ShopLoyaltyCard() {
   const perks = perksFor(points);
   const activePerks = perks.filter((p) => p.available);
   const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
+  const locale = String(i18n?.resolvedLanguage || i18n?.language || 'en');
+  const formattedPoints = useMemo(() => {
+    try { return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(points); }
+    catch { return String(Math.round(points)); }
+  }, [locale, points]);
 
   return (
     <motion.section
@@ -46,7 +52,10 @@ export default function ShopLoyaltyCard() {
       aria-label={t('shop.loyalty.title')}
       data-testid="shop-loyalty-card"
     >
-      <div className="shop-loyalty-eyebrow">{t('shop.loyalty.title')}</div>
+      <div className="shop-loyalty-topline">
+        <div className="shop-loyalty-eyebrow">{t('shop.loyalty.title')}</div>
+        <span className="shop-loyalty-points">{t('shop.loyalty.points', { n: formattedPoints })}</span>
+      </div>
 
       <div className="shop-loyalty-head">
         <span className="shop-loyalty-medal" aria-hidden="true" style={{ borderColor: tier.color }}>

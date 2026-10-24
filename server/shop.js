@@ -49,7 +49,7 @@
  * rather than showing an Iranian user an empty screen that looks broken.
  */
 
-import { getCached, withCache } from './cache.js';
+import { getCached, memoryStore, withCache } from './cache.js';
 
 const API = 'https://api.cryptorefills.com';
 
@@ -121,7 +121,7 @@ async function getJson(url, extraHeaders = {}) {
 }
 
 /** Forwarded identity for one end user, or sane fallbacks. */
-function userHeaders(req) {
+export function userHeaders(req) {
   /*
    * `x-forwarded-for` can be a comma-separated chain when several proxies are
    * involved; the ORIGINAL client is the first entry. Taking the last would
@@ -131,7 +131,9 @@ function userHeaders(req) {
   const fwd = String(req?.headers?.['x-forwarded-for'] ?? '')
     .split(',')[0]
     .trim();
-  const ip = fwd || req?.socket?.remoteAddress || '';
+  /* Keep the first hop verbatim apart from surrounding whitespace, but bound
+     the header so a malformed proxy chain cannot create an oversized request. */
+  const ip = String(fwd || req?.socket?.remoteAddress || '').trim().slice(0, 128);
   const ua = String(req?.headers?.['user-agent'] ?? '').slice(0, 300);
   const out = {};
   if (ip) out['X-Forwarded-For'] = ip;
@@ -691,7 +693,8 @@ export const WHITELABEL_ORDER_ERRORS = Object.freeze({
   INVALID_COUNTRY: 'Country must be a two-letter ISO code.',
   INVALID_BRAND: 'The brand family of the ordered product is missing.',
   INVALID_AMOUNT: 'Amount must be a positive number.',
-  DAILY_SPENDING_LIMIT_EXCEEDED: 'The daily spending limit for this account tier was reached.'
+  DAILY_SPENDING_LIMIT_EXCEEDED: 'The daily spending limit for this account tier was reached.',
+  UPSTREAM_ORDER_FAILED: 'The upstream provider rejected the order.'
 });
 
 /** The whitelabel account key is server-side only — a real secret, unlike the public partner id. */
@@ -702,7 +705,7 @@ export function whitelabelStatus() {
     /* Delivery is only possible over https; recorded so ops cannot miss it. */
     transport: 'https',
     whenReady: key
-      ? 'Order validation and upstream forwarding are live.'
+      ? 'Whitelabel order pre-checks are ready for the configured account.'
       : `Set ${WHITELABEL_KEY_ENV} on the server to enable in-app order validation.`,
     blockers: key
       ? []
@@ -760,8 +763,12 @@ export function validateOrderPrerequisites(payload) {
  */
 export function mapUpstreamOrderError(status, bodyText) {
   const text = String(bodyText || '').toLowerCase();
-  if (/daily (spending )?limit/.test(text)) return 'DAILY_SPENDING_LIMIT_EXCEEDED';
-  if (/full\s*name|fullname/.test(text)) return 'FULLNAME_MISSING';
+  /* Providers have returned BOTH prose and stable machine codes across API
+     versions. Normalising separators handles DAILY_SPENDING_LIMIT_EXCEEDED,
+     fullname_missing and their hyphenated equivalents without fuzzy guesses. */
+  const normalized = text.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/daily (spending )?limit/.test(normalized)) return 'DAILY_SPENDING_LIMIT_EXCEEDED';
+  if (/full\s*name|fullname/.test(normalized)) return 'FULLNAME_MISSING';
   if (Number(status) === 429) return 'DAILY_SPENDING_LIMIT_EXCEEDED';
   return 'UPSTREAM_ORDER_FAILED';
 }
@@ -880,16 +887,30 @@ export function rankTrendingBrands(rows, { cc = '', now = Date.now(), spreadOf =
 export function trendingFromCatalogue(country, catalogueRows, req) {
   const cc = cleanCountry(country);
   if (!cc) return Promise.resolve({ rows: [], at: Date.now() });
-  const spreadOf = (family) => {
-    /* Best proven margin per brand, read from the products cache this very
-       process served. Missing entry (cold cache) is null, not zero. */
-    const fam = cleanText(family, 80);
-    if (!fam) return null;
-    const hit = getCached(`shop-prod-${cc}-${fam}-USDC-en`);
-    const v = hit?.value?.bestSpreadPct;
-    return Number.isFinite(v) ? v : null;
+  const run = (rows) => {
+    /* Product cache keys include coin AND locale; looking only at `-USDC-en`
+       made the margin vanish for a Persian USDT shopper. Build the variant
+       index in ONE cache pass per response (not one pass per brand), retaining
+       the newest proven value for each family. Missing values stay null. */
+    const marginByFamily = new Map();
+    const prefix = `shop-prod-${cc}-`;
+    for (const [key, rawHit] of memoryStore) {
+      if (!key.startsWith(prefix)) continue;
+      const tail = key.slice(prefix.length);
+      const parts = tail.split('-');
+      if (parts.length < 3) continue;
+      const family = parts.slice(0, -2).join('-');
+      if (!family) continue;
+      const hit = getCached(key) || rawHit;
+      const value = hit?.value?.bestSpreadPct;
+      if (!Number.isFinite(value)) continue;
+      const at = Number(hit?.at || rawHit?.at || hit?.value?.at || 0);
+      const previous = marginByFamily.get(family);
+      if (!previous || at >= previous.at) marginByFamily.set(family, { at, value });
+    }
+    const spreadOf = (family) => marginByFamily.get(cleanText(family, 80))?.value ?? null;
+    return { rows: rankTrendingBrands(rows, { cc, spreadOf }), country: cc, at: Date.now() };
   };
-  const run = (rows) => ({ rows: rankTrendingBrands(rows, { cc, spreadOf }), country: cc, at: Date.now() });
   if (Array.isArray(catalogueRows)) return Promise.resolve(run(catalogueRows));
   return getShopCatalogue(cc, req).then(({ value }) => run(value?.rows || []));
 }

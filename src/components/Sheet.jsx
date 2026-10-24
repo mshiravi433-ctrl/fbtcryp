@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useContext, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { lockBodyScroll } from '../lib/scrollLock';
 import { OverlayDepthContext } from './OverlayDepthContext';
 import { useStill } from './AnimatedIcon';
@@ -29,6 +30,7 @@ import { IconX } from './Icons';
  * element.)
  */
 export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center', className, testId }) {
+  const { t } = useTranslation();
   /*
    * prefers-reduced-motion (and the in-app reduce-motion setting): the dialog
    * appears/disappears instantly. A drop shadow that springs is a nicety; for
@@ -92,7 +94,7 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
               {title && (
                 <div className="sheet-title">
                   <h2 className="h2" style={{ margin: 0 }}>{title}</h2>
-                  <button className="sheet-close" onClick={onClose} aria-label="close" type="button" data-testid={testId ? `${testId}-close` : undefined}>
+                  <button className="sheet-close" onClick={onClose} aria-label={t('common.close')} type="button" data-testid={testId ? `${testId}-close` : undefined}>
                     <IconX width={15} height={15} />
                   </button>
                 </div>

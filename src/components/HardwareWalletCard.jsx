@@ -64,17 +64,17 @@ export default function HardwareWalletCard() {
   if (!vendors.length) return null;
 
   return (
-    <motion.section variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 4 }}>
+    <motion.section className="shop-hardware" variants={riseIn} initial="hidden" animate="show">
       <p className="section-label">
         <IconShield width={13} height={13} style={{ verticalAlign: -2, marginInlineEnd: 5 }} />
         {t('hardware.title')}
       </p>
 
-      <div className="card card-tight" style={{ marginTop: 8 }}>
-        <p className="prose-sm" style={{ margin: 0 }}>{t('hardware.intro')}</p>
+      <div className="card card-tight shop-hardware-intro">
+        <p className="prose-sm">{t('hardware.intro')}</p>
       </div>
 
-      <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+      <div className="stack shop-hardware-vendors">
         {vendors.map((v) => {
           /*
            * The disclosure is computed PER VENDOR, not once for the card.
@@ -93,7 +93,7 @@ export default function HardwareWalletCard() {
                 build for, and it is right to: a screenful of inline widths is
                 how this layout escaped the stylesheet once already.
               */
-              className="coin-row coin-row-btn"
+              className="coin-row coin-row-btn shop-hardware-vendor"
               onClick={() => openUrl(hardwareUrl(v))}
             >
               <div
@@ -148,7 +148,8 @@ export default function HardwareWalletCard() {
               <span className="hw-compare-label" role="rowheader">{t(`hardware.compare.${row}`)}</span>
               {vendors.map((v) => (
                 <span key={v.id} className="hw-compare-cell" role="cell">
-                  {t(`hardware.fact.${v.id}.${row}`)}
+                  <span className="hw-compare-vendor">{v.name}</span>
+                  <span>{t(`hardware.fact.${v.id}.${row}`)}</span>
                 </span>
               ))}
             </div>

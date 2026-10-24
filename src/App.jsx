@@ -381,7 +381,7 @@ function AppChrome() {
   }, [pathname]);
 
   return (
-    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
+    <div className={`app-shell${headerless ? ' app-shell--headerless' : ''}${wide ? ' app-shell--wide' : ''}${pathname === '/shop' ? ' app-shell--shop' : ''}${dockActive ? ' app-shell--dock-active' : ''}`}>
       {!headerless && <Header />}
       <PullToRefresh>
         <AnimatedRoutes />

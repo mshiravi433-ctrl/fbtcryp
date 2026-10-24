@@ -7920,14 +7920,15 @@
       "openCta": "Merchant Gateway (FBT Pay)",
       "kicker": "MERCHANT GATEWAY · FBT PAY",
       "heroTitle": "Accept crypto directly to your wallet with instant invoice links & QR",
-      "heroSub": "Built for online shops, freelancers, and creators: pick your chain, token, amount, and order memo to share a verifiable payment link or printable QR.",
+      "heroSub": "Choose the network, token, amount and invoice reference, then share a link or QR. If the customer lacks the requested token, Swap & Pay takes them to our internal swap first; settlement stays direct and non-custodial to your wallet.",
       "badgeDirect": "Zero custody · Direct settlement",
       "badgeQr": "Branded QR & shareable link",
       "badgeMultiChain": "Multi-chain USDT & USDC",
       "counterTitle": "In-store counter (QR / NFC)",
       "counterBody": "A customer in front of you? Show the counter code — they scan, pay from their own wallet, and the arrival watcher confirms it here. The money moves wallet-to-wallet and never passes through us.",
       "counterCta": "Open the counter",
-      "wlReady": "Server-side order validation for the whitelabel path is live on this instance; the shop still sells through the attributed partner link."
+      "wlReady": "Server-side order validation for the whitelabel path is live on this instance; the shop still sells through the attributed partner link.",
+      "badgeSwapPay": "Missing the token? Use Swap & Pay"
     },
     "dest": {
       "city": {
@@ -7960,22 +7961,24 @@
       "rowTitle": "Gift this card",
       "pickTheme": "Gift card theme",
       "send": "Send as gift",
-      "shareText": "{{brand}} — a gift from me on FBT Swap ({{theme}})",
+      "shareText": "{{brand}} — my gift idea for you on FBT Swap ({{theme}})",
       "theme": {
         "birthday": "Birthday",
         "gaming": "Gaming",
         "congrats": "Congrats",
         "gold": "Gold minimal"
       },
-      "receivedTitle": "{{brand}} — sent to you as a gift",
-      "receivedBody": "Someone picked this card for you in the app. The purchase is theirs to pay; no name, no account, nothing is asked from you.",
-      "referralActive": "The sender’s invite was counted: they earn 1% of this app’s swap fee for 90 days, and your costs never change."
+      "receivedTitle": "{{brand}} — a gift idea for you",
+      "receivedBody": "The sender picked this brand and theme as a gift idea. The link contains no paid order or gift code; it only opens the suggestion, and you choose whether to buy.",
+      "referralActive": "This sender’s invite was counted: they earn 1% of this app’s swap fee for 90 days, and your costs never change.",
+      "themeLabel": "{{theme}} theme"
     },
     "loyalty": {
       "title": "Your rank in the shop",
       "cta": "Open rewards",
       "note": "Points are a rank, not money: they are never spent, never withdrawn, and no gift code is ever issued for them.",
-      "noPerkYet": "Your tier is the door to the real venue discounts listed on the rewards screen."
+      "noPerkYet": "Your tier is the door to the real venue discounts listed on the rewards screen.",
+      "points": "{{n}} rank points"
     },
     "recent": {
       "title": "Recently viewed"
@@ -8006,6 +8009,17 @@
         "too_short": "3 characters minimum — 1–2 character labels are reserved.",
         "too_long": ".sol labels stop at 32 characters."
       }
+    },
+    "headerEyebrow": "FBT · WEB3 COMMERCE",
+    "trustHub": {
+      "title": "Web3 security & identity",
+      "subtitle": "Non-custodial domains and hardware wallets — two practical layers for buying and protecting your assets."
+    },
+    "hero": {
+      "metricsLabel": "Catalogue summary for this region",
+      "availableBrands": "brands in stock",
+      "categories": "active categories",
+      "region": "selected region"
     }
   },
   "fbt": {
@@ -16140,7 +16154,7 @@
   },
   "pay": {
     "title": "Payment gateway",
-    "subtitle": "Create a page your customers open, connect Trust Wallet, and pay you. A {{fee}}% fee is taken on every payment from that link.",
+    "subtitle": "Create an invoice link. The customer pays in your requested token, or converts another supported asset in the internal swap first. The gateway fee is {{fee}}%.",
     "section": {
       "wallet": "Your wallet",
       "look": "Look",

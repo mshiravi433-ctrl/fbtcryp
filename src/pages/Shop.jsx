@@ -28,7 +28,7 @@ import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { useAppStore } from '../store/useAppStore';
 import { useShare } from '../hooks/useShare';
 import { referredBy, siteShareUrl } from '../lib/referral';
-import { IconChevronLeft, IconQr, IconSearch } from '../components/Icons';
+import { IconChevronLeft, IconQr, IconSearch, IconShield } from '../components/Icons';
 import { TOKENS } from '../lib/chains';
 import { getBalances } from '../lib/swap';
 import { readPortfolioSnapshot } from '../lib/portfolioSnapshot';
@@ -221,6 +221,32 @@ function LimitsBox() {
   );
 }
 
+/**
+ * The non-custodial trust shelf stays in the same visual chapter on every
+ * shop tab. On wide screens the two cards use the available space; on phones
+ * they remain a calm, single-column flow instead of competing with checkout.
+ */
+function ShopTrustHub() {
+  const { t } = useTranslation();
+  return (
+    <section className="shop-trust-hub" aria-label={t('shop.trustHub.title')}>
+      <div className="shop-trust-hub-heading">
+        <span className="shop-trust-hub-icon" aria-hidden="true">
+          <IconShield width={17} height={17} />
+        </span>
+        <div>
+          <h2>{t('shop.trustHub.title')}</h2>
+          <p>{t('shop.trustHub.subtitle')}</p>
+        </div>
+      </div>
+      <div className="shop-trust-hub-grid">
+        <ShopWeb3IdCard />
+        <HardwareWalletCard />
+      </div>
+    </section>
+  );
+}
+
 function RegionQuickBar({ country, countries, onPickCountry, onOpenAll, t }) {
   const knownMap = useMemo(() => {
     const m = new Map();
@@ -334,7 +360,7 @@ export default function Shop() {
     return /^[A-Z]{2}$/.test(cc) ? cc : null;
   }, [searchParams]);
   const linkedBrand = useMemo(() => brandSlug(searchParams.get('b')) || null, [searchParams]);
-  const deepLinkDone = useRef(false);
+  const deepLinkDone = useRef('');
 
   /*
    * GIFT ARRIVAL — `?gift=1&gt=<theme>` beside the usual `c`/`b` params.
@@ -354,6 +380,15 @@ export default function Shop() {
    * that recorder decided — `referredBy()` — never a hopeful copy.
    */
   const giftArrival = useMemo(() => parseGiftArrival((k) => searchParams.get(k)), [searchParams]);
+  /* App boot records the hash through captureReferral(). Only call the
+     referral "active" for THIS envelope when the code that actually survived
+     first-touch/expiry/self-referral checks is the sender's code. A previously
+     stored, different referrer must never be attributed to this sender. */
+  const giftReferralActive = Boolean(
+    giftArrival
+    && searchParams.get('ref')
+    && referredBy() === searchParams.get('ref')
+  );
   const [giftTheme, setGiftTheme] = useState(() => recallGiftTheme());
 
   const [share, shareSheet] = useShare();
@@ -398,6 +433,23 @@ export default function Shop() {
   const [readiness, setReadiness] = useState(null);
   const [counterOpen, setCounterOpen] = useState(false);
 
+  /* Deep links also work when the router stays mounted (browser back/forward
+     or a second Intent AI navigation). Initial state alone only handled the
+     cold-load case. These effects key off the URL values, not the user's local
+     state, so manual tab/country changes are never forced back. */
+  useEffect(() => {
+    if (!linkedTab) return;
+    setTab(linkedTab);
+    setOpenCat(null);
+    setOpenBrand(null);
+  }, [linkedTab]);
+
+  useEffect(() => {
+    if (!linkedCountry) return;
+    setCountry((current) => (current === linkedCountry ? current : linkedCountry));
+    setShopCountry(linkedCountry);
+  }, [linkedCountry]);
+
   /* Opening a brand is both the shop's "view" (recently-viewed rail, this
      device's localStorage only) and its anonymous popularity tick (country +
      brand id over the wire, nothing else). See lib/shopHub and
@@ -406,8 +458,11 @@ export default function Shop() {
   useEffect(() => {
     const brand = openBrand;
     if (!brand || !country) return;
-    if (openedRef.current === brand.id) return;
-    openedRef.current = brand.id;
+    /* A brand can exist in several regional catalogues. Count the opening in
+       EACH selected region, while still collapsing a close/re-open in one. */
+    const viewKey = `${country}:${brand.id}`;
+    if (openedRef.current === viewKey) return;
+    openedRef.current = viewKey;
     setRecent(pushRecentView(brand));
     void reportShopInterest(country, brand.id);
   }, [openBrand, country]);
@@ -569,11 +624,15 @@ export default function Shop() {
   }, [openBrand, solConnected, solAddress]);
 
   useEffect(() => {
-    if (deepLinkDone.current || !linkedBrand || !data?.rows?.length) return;
-    deepLinkDone.current = true;
+    if (!linkedBrand || !country || !data?.rows?.length) return;
+    const linkKey = `${country}:${linkedBrand}`;
+    if (deepLinkDone.current === linkKey) return;
     const hit = data.rows.find((r) => brandSlug(r.family) === linkedBrand);
-    if (hit) setOpenBrand(hit);
-  }, [data, linkedBrand]);
+    if (hit) {
+      deepLinkDone.current = linkKey;
+      setOpenBrand(hit);
+    }
+  }, [data, linkedBrand, country]);
 
   const shareBrand = useCallback(() => {
     if (!openBrand || !country) return;
@@ -664,6 +723,19 @@ export default function Shop() {
     const first = PRIORITY.map((id) => cs.find((c) => c.id === id)).filter(Boolean);
     return [...first, ...cs.filter((c) => !PRIORITY.includes(c.id))];
   }, [data]);
+
+  const availableBrandCount = useMemo(
+    () => rows.filter((r) => !r.outOfStock).length,
+    [rows]
+  );
+  const visibleCategoryCount = useMemo(() => {
+    const ids = new Set();
+    for (const row of rows) {
+      if (row.category) ids.add(row.category);
+      for (const tag of (row.tags || [])) ids.add(tag);
+    }
+    return ids.size;
+  }, [rows]);
 
   const inCat = useCallback(
     (r, id) => r.category === id || (Array.isArray(r.tags) && r.tags.includes(id)),
@@ -759,10 +831,10 @@ export default function Shop() {
 
   const header = (
     <motion.div className="row-between shop-header" variants={riseIn} initial="hidden" animate="show">
-      <div className="row" style={{ gap: 10 }}>
+      <div className="shop-header-main">
         <button
           type="button"
-          className="icon-btn"
+          className="icon-btn shop-header-back"
           onClick={() => {
             if (openCat) setOpenCat(null);
             else navigate(-1);
@@ -771,11 +843,12 @@ export default function Shop() {
         >
           <IconChevronLeft width={18} height={18} />
         </button>
-        <div>
-          <h1 className="h1" style={{ fontSize: 19 }}>
+        <div className="shop-header-copy">
+          <span className="shop-header-eyebrow">{t('shop.headerEyebrow')}</span>
+          <h1 className="h1 shop-header-title">
             {openCat ? catLabel(t, openCat) : t('shop.title')}
           </h1>
-          <p className="prose-sm">
+          <p className="shop-header-subtitle">
             {openCat
               ? countryName
               : tab === 'pay'
@@ -814,9 +887,12 @@ export default function Shop() {
             {(GIFT_THEMES.find((g) => g.id === giftArrival.theme) || GIFT_THEMES[3]).emoji}
           </span>
           <div className="shop-gift-envelope-copy">
+            <span className="shop-gift-envelope-theme">
+              {t('shop.gift.themeLabel', { theme: t(`shop.gift.theme.${giftArrival.theme}`) })}
+            </span>
             <strong>{t('shop.gift.receivedTitle', { brand: openBrand.name })}</strong>
             <p>{t('shop.gift.receivedBody')}</p>
-            {referredBy() ? (
+            {giftReferralActive ? (
               <span className="shop-gift-envelope-ref">✓ {t('shop.gift.referralActive')}</span>
             ) : null}
           </div>
@@ -1156,9 +1232,7 @@ export default function Shop() {
           </button>
         </div>
 
-        <ShopWeb3IdCard />
-
-        <HardwareWalletCard />
+        <ShopTrustHub />
 
         <ShopCountrySheet
           open={pickerOpen}
@@ -1219,10 +1293,6 @@ export default function Shop() {
     <PageTransition className="shop-shell">
       {header}
 
-      {(tab === 'cards' || tab === 'money') && (
-        <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
-      )}
-
       <div className="shop-tabs" role="tablist" aria-label={t('shop.title')}>
         {TABS.map(({ id, Icon }) => (
           <button
@@ -1261,26 +1331,51 @@ export default function Shop() {
 
       {tab === 'cards' || tab === 'money' ? (
         <>
-          <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
-            <span className="shop-hero-kicker">{t('shop.heroKicker')}</span>
-            <div className="shop-hero-title">{t('shop.heroTitle', { country: displayCountryName })}</div>
-            <p className="shop-hero-sub">{t('shop.heroSub')}</p>
-            <div className="shop-trust-row">
-              <span className="shop-trust-pill">⚡ {t('shop.trust.fast')}</span>
-              <span className="shop-trust-pill">◈ {t('shop.trust.crypto')}</span>
-              <span className="shop-trust-pill">✉ {t('shop.trust.email')}</span>
+          <motion.section className="shop-hero shop-hero--catalogue" variants={riseIn} initial="hidden" animate="show">
+            <div className="shop-hero-content">
+              <span className="shop-hero-kicker">{t('shop.heroKicker')}</span>
+              <div className="shop-hero-title">{t('shop.heroTitle', { country: displayCountryName })}</div>
+              <p className="shop-hero-sub">{t('shop.heroSub')}</p>
+              <div className="shop-trust-row">
+                <span className="shop-trust-pill">⚡ {t('shop.trust.fast')}</span>
+                <span className="shop-trust-pill">◈ {t('shop.trust.crypto')}</span>
+                <span className="shop-trust-pill">✉ {t('shop.trust.email')}</span>
+              </div>
+              <div className="shop-quick">
+                <button type="button" onClick={() => open(countryUrl(country))}>
+                  <IconCard width={18} height={18} />
+                  {t('shop.quickAll')}
+                </button>
+                <button type="button" onClick={() => open(topUpUrl(country))}>
+                  <IconTopUp width={18} height={18} />
+                  {t('shop.quickTopUp')}
+                </button>
+              </div>
+              <div className="shop-hero-metrics" aria-label={t('shop.hero.metricsLabel')}>
+                <div className="shop-hero-metric">
+                  <strong>{availableBrandCount}</strong>
+                  <span>{t('shop.hero.availableBrands')}</span>
+                </div>
+                <div className="shop-hero-metric">
+                  <strong>{visibleCategoryCount}</strong>
+                  <span>{t('shop.hero.categories')}</span>
+                </div>
+                <div className="shop-hero-metric">
+                  <strong dir="ltr">{country}</strong>
+                  <span>{t('shop.hero.region')}</span>
+                </div>
+              </div>
             </div>
-            <div className="shop-quick">
-              <button type="button" onClick={() => open(countryUrl(country))}>
-                <IconCard width={18} height={18} />
-                {t('shop.quickAll')}
-              </button>
-              <button type="button" onClick={() => open(topUpUrl(country))}>
-                <IconTopUp width={18} height={18} />
-                {t('shop.quickTopUp')}
-              </button>
+            <div className="shop-hero-visual" aria-hidden="true">
+              <span className="shop-hero-orbit" />
+              <span className="shop-hero-float shop-hero-float--one"><IconGift width={25} height={25} /></span>
+              <span className="shop-hero-float shop-hero-float--two"><IconCard width={22} height={22} /></span>
+              <span className="shop-hero-float shop-hero-float--three"><IconSwap width={21} height={21} /></span>
+              <span className="shop-hero-visual-core"><IconSpark width={31} height={31} /></span>
             </div>
           </motion.section>
+
+          <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
 
           {/* Rank, honestly — tier, real perks, distance to the next tier. */}
           {tab === 'cards' && <ShopLoyaltyCard />}
@@ -1767,6 +1862,7 @@ export default function Shop() {
               <span className="shop-trust-pill">◈ {t('shop.pay.badgeDirect')}</span>
               <span className="shop-trust-pill">▣ {t('shop.pay.badgeQr')}</span>
               <span className="shop-trust-pill">⚡ {t('shop.pay.badgeMultiChain')}</span>
+              <span className="shop-trust-pill">⇄ {t('shop.pay.badgeSwapPay')}</span>
             </div>
           </motion.section>
 
@@ -1826,9 +1922,7 @@ export default function Shop() {
 
       <ShareSheet {...shareSheet} />
 
-      <ShopWeb3IdCard />
-
-      <HardwareWalletCard />
+      <ShopTrustHub />
 
       <ShopCountrySheet
         open={pickerOpen}
