@@ -4790,11 +4790,12 @@
     "pickCountryWhy": "بطاقات الهدايا مرتبطة ببلد. اختر البلد الذي ستستخدم فيه البطاقة لا مكان وجودك — البطاقة المشتراة لبلد خاطئ غالباً لا تُسترد.",
     "chooseOne": "اختر بلداً",
     "tab": {
-      "cards": "card",
+      "cards": "بطاقات الهدايا",
       "flights": "رحلات",
       "stays": "إقامة",
       "money": "PayPal وVisa",
-      "topup": "simcard"
+      "topup": "شريحة وشحن",
+      "pay": "بوابة الدفع"
     },
     "search": "ابحث في {{country}} — علامة، PayPal، ألعاب…",
     "all": "الكل",
@@ -4880,6 +4881,115 @@
     "alt": {
       "swap": "التبديل بدلاً من ذلك",
       "earn": "اربح من رصيدك"
+    },
+    "filterNoMatch": "لا توجد علامات مطابقة للفلاتر الحالية. جرّب ميزانية أو منطقة أخرى.",
+    "trust": {
+      "fast": "تسليم فوري",
+      "crypto": "أكثر من 15 شبكة وعملة",
+      "email": "يصل عبر البريد"
+    },
+    "quickRegion": {
+      "label": "منطقة سريعة:",
+      "allCountries": "جميع الدول",
+      "names": {
+        "US": "الولايات المتحدة",
+        "TR": "تركيا",
+        "AE": "الإمارات",
+        "GB": "المملكة المتحدة",
+        "DE": "ألمانيا"
+      }
+    },
+    "fav": {
+      "sectionTitle": "العلامات المثبتة",
+      "add": "تثبيت {{brand}}",
+      "remove": "إزالة تثبيت {{brand}}",
+      "pinAction": "تثبيت العلامة",
+      "pinned": "مثبتة"
+    },
+    "featured": {
+      "title": "العلامات الأكثر طلباً",
+      "badge": "الأكثر رواجاً"
+    },
+    "budget": {
+      "label": "الميزانية:",
+      "tier_all": "الكل",
+      "tier_10": "حتى 10$",
+      "tier_25": "حتى 25$",
+      "tier_50": "حتى 50$",
+      "tier_100": "حتى 100$",
+      "reset": "إعادة ضبط الفلاتر"
+    },
+    "useCase": {
+      "title": "التسوق حسب الاستخدام",
+      "subtitle": "اختر البطاقة الرقمية أو الافتراضية المتوافقة مع خدمتك بنقرة واحدة",
+      "clear": "عرض الكل",
+      "ai": {
+        "title": "الذكاء الاصطناعي",
+        "brands": "ChatGPT · Claude · Midjourney",
+        "guide": "استخدم بطاقات Visa / Mastercard الافتراضية (مثل Rewarble) للدفع المباشر على مواقع ChatGPT وClaude وMidjourney، أو بطاقات Apple وGoogle Play للاشتراك من داخل التطبيق."
+      },
+      "trading": {
+        "title": "أدوات التداول والخوادم",
+        "brands": "TradingView · VPS",
+        "guide": "تغطي بطاقات Visa / Mastercard المسبقة الدفع وشحن PayPal خطط TradingView والخوادم الافتراضية VPS، كما يعمل رصيد Apple وGoogle Play للاشتراك عبر الجوال."
+      },
+      "gaming": {
+        "title": "الألعاب والمنصات",
+        "brands": "Steam · PlayStation · Xbox",
+        "guide": "أكواد فورية لمتاجر Steam وPlayStation وXbox وRazer Gold. تأكد من مطابقة دولة المتجر لمنطقة حسابك."
+      },
+      "appstore": {
+        "title": "آبل ستور وجوجل بلاي",
+        "brands": "Apple · Google Play",
+        "guide": "اشحن رصيد Apple ID أو Google Play مباشرة للتطبيقات والتخزين السحابي والاشتراكات."
+      },
+      "streaming": {
+        "title": "البث والموسيقى",
+        "brands": "Spotify · YouTube · Netflix",
+        "guide": "استخدم بطاقات Spotify وNetflix الرسمية أو رصيد Apple / Google Play والبطاقات الافتراضية لخدمة YouTube Premium."
+      },
+      "virtualcard": {
+        "title": "بطاقات دفع افتراضية",
+        "brands": "Visa · Mastercard · PayPal",
+        "guide": "بطاقات Visa وMastercard مسبقة الدفع وقسائم المحافظ الإلكترونية (Rewarble وPayPal) للتسوق الدولي بالعملات المستقرة."
+      }
+    },
+    "checkout": {
+      "coinLabel": "التسعير بعملة:",
+      "payable": "المبلغ المستحق",
+      "margin": "الهامش مقابل القيمة الاسمية",
+      "marginLocal": "عملة محلية",
+      "walletStatus": "رصيد المحفظة",
+      "walletDisconnected": "المحفظة غير متصلة",
+      "balanceUnavailable": "رصيد {{coin}} غير متاح على الشبكة الحالية",
+      "balanceSufficient": "رصيد كافٍ ({{balance}} {{coin}})",
+      "balanceDeficit": "نقص {{deficit}} {{coin}} (المتاح: {{balance}})",
+      "swapDeficitCta": "تغطية نقص {{amount}} {{coin}} عبر التبديل الداخلي",
+      "swapQuickCta": "تبديل سريع إلى {{coin}} داخل التطبيق",
+      "swapHint": "تبديل لاوصائي داخل التطبيق على EVM وSolana (رسوم 0.70%)",
+      "swapOnSolana": "التبديل على سولانا ←",
+      "swapOnEvm": "التبديل على EVM ←"
+    },
+    "travelCross": {
+      "kicker": "مستلزمات السفر",
+      "title": "أضف شريحة بيانات eSIM دولية وبطاقة دفع لرحلتك",
+      "sub": "احصل على إنترنت تجوال فوري في أكثر من 180 دولة وبطاقة دفع افتراضية لنفقات السفر قبل المغادرة.",
+      "esimTitle": "شريحة بيانات السفر (eSIM)",
+      "esimBody": "تفعيل فوري برمز QR فور الوصول دون تبديل شريحتك الأساسية.",
+      "esimCta": "احصل على eSIM",
+      "cardTitle": "بطاقة دفع للسفر",
+      "cardBody": "مثالية لدفع المواصلات والمطاعم والحجوزات عبر الإنترنت بالعملات المستقرة.",
+      "cardCta": "عرض بطاقات الدفع"
+    },
+    "pay": {
+      "subtitle": "إنشاء روابط فواتير ورموز QR لاستلام العملات الرقمية للتجار والمستقلين",
+      "openCta": "بوابة الدفع (FBT Pay)",
+      "kicker": "بوابة التجار · FBT PAY",
+      "heroTitle": "استقبل مدفوعات الكريبتو مباشرة إلى محفظتك عبر رابط فاتورة ورمز QR",
+      "heroSub": "مصممة للمتاجر والمستقلين: اختر الشبكة والعملة والمبلغ ورقم الطلب لمشاركة رابط دفع أو رمز QR فوري دون وسيط.",
+      "badgeDirect": "تسوية مباشرة لمحفظتك",
+      "badgeQr": "رابط فاتورة ورمز QR",
+      "badgeMultiChain": "دعم متعدد الشبكات USDT / USDC"
     }
   },
   "fbt": {

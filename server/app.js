@@ -5527,7 +5527,7 @@ app.get('/api/shop/catalogue', (req, res) =>
  */
 app.get('/api/shop/products', (req, res) =>
   shopRoute(res, getShopProducts(
-    { country: req.query.country, family: req.query.family, lang: req.query.lang },
+    { country: req.query.country, family: req.query.family, coin: req.query.coin, lang: req.query.lang },
     req
   )));
 

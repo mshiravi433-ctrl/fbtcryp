@@ -1,17 +1,9 @@
 /**
  * SHOP ICONS.
  * ---------------------------------------------------------------------------
- * Asked for: «هر تب تصویر svg داشته باشد».
- *
- * ─── WHY THESE ARE DRAWN HERE AND NOT PULLED FROM A SET ─────────────────────
- * The app already has an icon set in components/Icons.jsx, but it has no card,
- * no plane, no bed and no SIM. Adding an icon font or a library for four
- * glyphs would ship kilobytes for something that is four paths.
- *
- * All of them are 24×24, stroke-based, `currentColor`, and use the same 1.7
- * stroke width as the existing set so they sit correctly beside it. No fills,
- * so they invert cleanly between the light and dark themes without a second
- * copy.
+ * All icons are 24×24, stroke-based, `currentColor`, and use the same 1.7
+ * stroke width as the app's icon set so they invert cleanly between dark and
+ * light themes without extra copies.
  */
 
 const base = (p) => ({
@@ -81,14 +73,96 @@ export const IconMoney = (p) => (
   </svg>
 );
 
-/** Share: three nodes joined by two spokes. Drawn here for the same reason as
- *  the rest — components/Icons.jsx has no share glyph, and one path is cheaper
- *  than a dependency. */
+/** Share: three nodes joined by two spokes. */
 export const IconShare = (p) => (
   <svg {...base(p)}>
     <circle cx="18" cy="5.2" r="2.7" />
     <circle cx="6" cy="12" r="2.7" />
     <circle cx="18" cy="18.8" r="2.7" />
     <path d="m8.4 10.8 7.2-4.2M8.4 13.2l7.2 4.2" />
+  </svg>
+);
+
+/** FBT Pay: merchant QR & crypto payment link terminal glyph. */
+export const IconPay = (p) => (
+  <svg {...base(p)}>
+    <rect x="3" y="3" width="7" height="7" rx="1.6" />
+    <rect x="14" y="3" width="7" height="7" rx="1.6" />
+    <rect x="3" y="14" width="7" height="7" rx="1.6" />
+    <path d="M14 14h3v3h-3z" />
+    <path d="M18 18h3v3h-3z" />
+    <path d="M18 14h3" />
+    <path d="M14 19.5h2" />
+  </svg>
+);
+
+/** Favorite / Pin star (`filled` uses `currentColor` so theme inversion holds). */
+export const IconStar = ({ filled, ...p } = {}) => (
+  <svg {...base(p)} fill={filled ? 'currentColor' : 'none'}>
+    <polygon points="12 2.8 14.9 8.7 21.4 9.6 16.7 14.2 17.8 20.7 12 17.6 6.2 20.7 7.3 14.2 2.6 9.6 9.1 8.7 12 2.8" />
+  </svg>
+);
+
+/** AI & Assistants use-case glyph. */
+export const IconSpark = (p) => (
+  <svg {...base(p)}>
+    <path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3Z" />
+    <path d="M19 3v3" />
+    <path d="M17.5 4.5h3" />
+  </svg>
+);
+
+/** Trading & Cloud tools use-case glyph. */
+export const IconChart = (p) => (
+  <svg {...base(p)}>
+    <rect x="2.5" y="4" width="19" height="16" rx="2.6" />
+    <path d="m6.5 14.5 3.4-3.4 2.6 2.4 4.8-5" />
+    <path d="M14.3 8.5h3v3" />
+  </svg>
+);
+
+/** Gaming & Console use-case glyph. */
+export const IconGamepad = (p) => (
+  <svg {...base(p)}>
+    <rect x="2.5" y="6.5" width="19" height="11" rx="4.5" />
+    <path d="M7.5 12h3" />
+    <path d="M9 10.5v3" />
+    <circle cx="15.2" cy="11" r="0.7" />
+    <circle cx="17.2" cy="13" r="0.7" />
+  </svg>
+);
+
+/** App Store & Google Play use-case glyph. */
+export const IconStore = (p) => (
+  <svg {...base(p)}>
+    <path d="M5 7.5h14l-1.1 12a2 2 0 0 1-2 1.8H8.1a2 2 0 0 1-2-1.8L5 7.5Z" />
+    <path d="M8.5 7.5V6a3.5 3.5 0 0 1 7 0v1.5" />
+    <polygon points="10.6 11.4 14.6 13.7 10.6 16 10.6 11.4" />
+  </svg>
+);
+
+/** Streaming & Music use-case glyph. */
+export const IconPlay = (p) => (
+  <svg {...base(p)}>
+    <rect x="2.5" y="4.5" width="19" height="15" rx="2.8" />
+    <polygon points="10 9 15.8 12 10 15 10 9" />
+  </svg>
+);
+
+/** Internal Swap CTA glyph. */
+export const IconSwap = (p) => (
+  <svg {...base(p)}>
+    <path d="M4 8.5h15l-3.2-3.2" />
+    <path d="M20 15.5H5l3.2 3.2" />
+  </svg>
+);
+
+/** Global Region & Travel eSIM glyph. */
+export const IconGlobe = (p) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a14 14 0 0 1 0 18" />
+    <path d="M12 3a14 14 0 0 0 0 18" />
   </svg>
 );

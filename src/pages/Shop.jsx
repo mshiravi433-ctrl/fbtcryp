@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 /* The shop is a lazy route; keep its visual layer out of the first paint. */
 import '../styles/shop-modern.css';
 import { motion } from 'framer-motion';
@@ -12,16 +12,26 @@ import ShopTile from '../components/ShopTile';
 import ShopPromo from '../components/ShopPromo';
 import ShareSheet from '../components/ShareSheet';
 import HardwareWalletCard from '../components/HardwareWalletCard';
+
+const PayGatewayPanel = lazy(() => import('../components/PayGatewayPanel'));
 import { useTelegram } from '../context/TelegramContext';
+import { useWallet } from '../context/WalletContext';
+import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { useAppStore } from '../store/useAppStore';
 import { useShare } from '../hooks/useShare';
 import { siteShareUrl } from '../lib/referral';
 import { IconChevronLeft, IconSearch } from '../components/Icons';
+import { TOKENS } from '../lib/chains';
+import { getBalances } from '../lib/swap';
+import { readPortfolioSnapshot } from '../lib/portfolioSnapshot';
+import { readSolanaPortfolio } from '../lib/solana/portfolio';
 import {
+  SHOP_PRICING_COINS,
   fetchShopCatalogue,
   fetchShopCountries,
   fetchShopProducts,
   getShopCountry,
+  normalizeShopCoin,
   setShopCountry
 } from '../lib/shop';
 import {
@@ -34,72 +44,78 @@ import {
   stayCityUrl,
   topUpUrl
 } from '../lib/shopLinks';
-import { IconBed, IconCard, IconMoney, IconPlane, IconShare, IconSim, IconTopUp } from '../components/ShopIcons';
+import {
+  IconBed,
+  IconCard,
+  IconChart,
+  IconGamepad,
+  IconGlobe,
+  IconMoney,
+  IconPay,
+  IconPlane,
+  IconPlay,
+  IconShare,
+  IconSim,
+  IconSpark,
+  IconStar,
+  IconStore,
+  IconSwap,
+  IconTopUp
+} from '../components/ShopIcons';
 import { openUrl } from '../lib/browser';
 import { FLIGHT_ROUTES, STAY_CITIES, flagOf } from '../lib/shopDestinations';
 import { LANGUAGES } from '../i18n/languages';
-/* The English source is the yardstick for "is this string translated?". It is
-   already in the entry bundle (it is i18next's fallback locale), so importing
-   it costs nothing and avoids reaching into i18next internals. */
 import en from '../i18n/locales/en.json';
 import { PROMO_IMAGES, PROMO_SLIDES } from '../lib/shopImages';
+import {
+  BUDGET_TIERS,
+  QUICK_REGIONS,
+  SHOP_USE_CASES,
+  brandFavoriteKey,
+  buildSwapShortfallPlan,
+  filterByBudget,
+  filterByUseCase,
+  getShopFavorites,
+  pickFavoriteBrands,
+  pickFeaturedBrands,
+  sortShopBrands,
+  toggleShopFavorite
+} from '../lib/shopCatalogTools';
 
 /**
- * SHOP — spend crypto on real things.
+ * SHOP — Luxury Crypto Commerce Hub (`/shop`)
  * ---------------------------------------------------------------------------
- * Second version. The first shipped as a list of 34px logos with 12px labels,
- * a native <select> holding 233 countries, and a flat row of category tags.
- * The owner's review was blunt and every point of it was right:
- *
- *
- * ─── THE FLIGHT FORM WAS THE WORST OF IT, AND HE DIAGNOSED IT EXACTLY ───────
- * You filled in origin, destination and dates here, and then landed on their
- * site and had to fill in the same thing again. I built that, and it deserved
- * the criticism.
- *
- * The cause is real: flights and stays are NOT in the REST API — their own
- * developer reference says "Not covered here: Flights, Stays" — and their date
- * pickers are React components that do not hydrate from query parameters, so
- * `?departure_date=` genuinely does nothing.
- *
- * DOES survive into their page is the PATH — verified live that
- * /en/flights/new_york-to-london opens with JFK and LHR already selected, and
- * /en/stays/ae/dubai opens on Dubai. So a tap lands somewhere already
- * narrowed, with nothing to retype.
+ * Six verticals under one glass storefront:
+ *   1. `cards`   — Gift cards + Use-Case Hub + budget chips + best-sellers + pins
+ *   2. `money`   — Prepaid Visa / Mastercard / PayPal vouchers
+ *   3. `topup`   — Mobile credit in 140+ countries + global travel eSIM
+ *   4. `flights` — Verified destination routes + travel eSIM/card cross-sell
+ *   5. `stays`   — Verified hotel cities + travel eSIM/card cross-sell
+ *   6. `pay`     — FBT Pay non-custodial merchant invoice & QR gateway
  */
 
-/*
- * Five tabs, each with an icon. `topup` and `esim` were buried — top-up was
- * reachable only if a country happened to list a telecom brand, and eSIM was
- * a single row at the bottom of Stays. Both are their own product on the
- * provider's site and both are things a crypto holder actually buys.
- */
 const TABS = [
   { id: 'cards', Icon: IconCard },
   { id: 'money', Icon: IconMoney },
   { id: 'topup', Icon: IconTopUp },
   { id: 'flights', Icon: IconPlane },
-  { id: 'stays', Icon: IconBed }
+  { id: 'stays', Icon: IconBed },
+  { id: 'pay', Icon: IconPay }
 ];
 
-/*
- * Category order. The API sorts by count, which buries the interesting ones —
- * `e-money` (PayPal, Visa, Payz top-ups) is the single most useful category
- * for someone holding crypto and no bank, and by raw count it sits near the
- * bottom.
- */
+const USE_CASE_ICONS = {
+  ai: IconSpark,
+  trading: IconChart,
+  gaming: IconGamepad,
+  appstore: IconStore,
+  streaming: IconPlay,
+  virtualcard: IconMoney
+};
+
 const PRIORITY = ['e-money', 'e-commerce', 'games', 'streaming', 'food', 'groceries', 'retail', 'entertainment'];
 
 /** How many brands a category shows before "see all". */
 const PREVIEW = 4;
-
-/*
- * Promo slides now live in lib/shopImages.js with their photographer credits.
- * The provider's own destination pictures are only 200px wide — there is no
- * larger variant, I checked — so on a full-width banner they were upscaled
- * roughly six times, which is what made them look washed out. These are
- * 1280px Iranian landmarks from Wikimedia instead.
- */
 
 function catLabel(t, id) {
   const key = `shop.cat.${id}`;
@@ -107,17 +123,10 @@ function catLabel(t, id) {
   return s === key ? String(id).replace(/[_-]/g, ' ') : s;
 }
 
-/**
- * The language a provider's note is written in, named the way the rest of the
- * app names languages — the endonym first (`English`, `العربية`), set in its
- * own direction so an RTL name renders correctly inside an LTR sentence.
- *
- * It exists so the English block can say WHY it is English. A Persian shopper
- * who is handed four lines of English with no explanation reads it as the app
- * being half-finished; the same four lines under «متن اصلی ارائهدهنده
- * (English)» read as what they are, the issuer's own wording kept verbatim
- * because the terms of a prepaid card are not something to paraphrase.
- */
+function destKey(raw) {
+  return String(raw ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
 function langLabel(code) {
   const meta = LANGUAGES.find((l) => l.code === code);
   if (!meta) return String(code ?? '').toUpperCase();
@@ -126,13 +135,35 @@ function langLabel(code) {
   );
 }
 
-/**
- * The restrictions, as a folded list rather than one long paragraph.
- *
- * collapsible. Five separate facts read far better than one block: the
- * country list, the region lock, refunds, delivery, and who actually takes
- * the money. Each is one line, which is the only way anybody reads them.
- */
+function snapshotStableBalances(address, chainId) {
+  if (!address) return null;
+  try {
+    const snap = readPortfolioSnapshot(address);
+    if (!snap || !Array.isArray(snap.rows)) return null;
+    const out = { USDC: 0, USDT: 0 };
+    let found = false;
+    for (const r of snap.rows) {
+      const sym = String(r?.symbol ?? '').toUpperCase();
+      if (sym !== 'USDC' && sym !== 'USDT') continue;
+      if (chainId && Number(r?.chainId) !== Number(chainId)) continue;
+      const n = Number(r?.balance);
+      if (Number.isFinite(n) && n >= 0) {
+        out[sym] += n;
+        found = true;
+      }
+    }
+    return found ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+function fmtAmount(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '0';
+  return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 function LimitsBox() {
   const { t } = useTranslation();
   return (
@@ -146,67 +177,152 @@ function LimitsBox() {
   );
 }
 
+function RegionQuickBar({ country, countries, onPickCountry, onOpenAll, t }) {
+  const knownMap = useMemo(() => {
+    const m = new Map();
+    for (const c of countries) m.set(c.code, c.name);
+    return m;
+  }, [countries]);
+
+  return (
+    <div className="shop-region-bar" role="group" aria-label={t('shop.quickRegion.label')}>
+      <span className="shop-region-bar-label">
+        <IconGlobe width={14} height={14} />
+        <span>{t('shop.quickRegion.label')}</span>
+      </span>
+      <div className="shop-region-pills">
+        {QUICK_REGIONS.map((cc) => {
+          const active = country === cc;
+          const localizedName = t(`shop.quickRegion.names.${cc}`, {
+            defaultValue: knownMap.get(cc) || cc
+          });
+          return (
+            <button
+              key={cc}
+              type="button"
+              className="shop-region-pill"
+              data-on={active ? 'true' : 'false'}
+              aria-pressed={active}
+              onClick={() => onPickCountry(cc)}
+            >
+              <span className="shop-region-flag" aria-hidden="true">{flagOf(cc)}</span>
+              <span className="shop-region-name">{localizedName}</span>
+              <span className="shop-region-code">{cc}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className="shop-region-pill shop-region-pill--all"
+          onClick={onOpenAll}
+        >
+          <span>{t('shop.quickRegion.allCountries')}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TravelCompanionCard({ t, open, onOpenCards }) {
+  return (
+    <section className="card shop-travel-cross" aria-label={t('shop.travelCross.title')}>
+      <div className="shop-travel-cross-head">
+        <span className="shop-hero-kicker">{t('shop.travelCross.kicker')}</span>
+        <div className="shop-travel-cross-title">{t('shop.travelCross.title')}</div>
+        <p className="shop-travel-cross-sub">{t('shop.travelCross.sub')}</p>
+      </div>
+      <div className="shop-travel-cross-grid">
+        <div className="shop-travel-cross-item">
+          <div className="shop-travel-cross-icon">
+            <IconSim width={18} height={18} />
+          </div>
+          <div className="shop-travel-cross-copy">
+            <div className="shop-travel-cross-name">{t('shop.travelCross.esimTitle')}</div>
+            <div className="shop-travel-cross-desc">{t('shop.travelCross.esimBody')}</div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary shop-travel-cross-btn"
+            onClick={() => open(esimUrl())}
+          >
+            {t('shop.travelCross.esimCta')}
+          </button>
+        </div>
+        <div className="shop-travel-cross-item">
+          <div className="shop-travel-cross-icon">
+            <IconMoney width={18} height={18} />
+          </div>
+          <div className="shop-travel-cross-copy">
+            <div className="shop-travel-cross-name">{t('shop.travelCross.cardTitle')}</div>
+            <div className="shop-travel-cross-desc">{t('shop.travelCross.cardBody')}</div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost shop-travel-cross-btn"
+            onClick={onOpenCards}
+          >
+            {t('shop.travelCross.cardCta')}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function Shop() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic, tg, user } = useTelegram();
+  const wallet = useWallet();
+  const solWallet = useSolanaWallet();
 
   /*
-   * ─── DEEP LINKS: `#/shop?c=TR&b=steam` ────────────────────────────────────
-   * Read, never written. The shop builds these links when somebody shares a
-   * card (see `shareBrand` below), and `captureReferral()` in App.jsx already
-   * reads `?ref=` out of the hash, so one link carries both the item and the
-   * person who sent it. Nothing here calls setSearchParams: a screen that
-   * rewrites its own URL on mount is how a back button starts doing nothing.
+   * Deep links (`#/shop?c=TR&b=steam` or `#/shop?tab=pay`) are read without
+   * rewriting the URL so browser back navigation stays predictable.
    */
   const [searchParams] = useSearchParams();
+  const linkedTab = useMemo(() => {
+    const q = String(searchParams.get('tab') ?? '').trim().toLowerCase();
+    return TABS.some((x) => x.id === q) ? q : null;
+  }, [searchParams]);
   const linkedCountry = useMemo(() => {
     const cc = String(searchParams.get('c') ?? '').trim().toUpperCase();
     return /^[A-Z]{2}$/.test(cc) ? cc : null;
   }, [searchParams]);
-  /* Normalised through the SAME `brandSlug()` that builds the link, so a
-     hand-typed `?b=Steam` and a shared `?b=steam` both resolve. */
   const linkedBrand = useMemo(() => brandSlug(searchParams.get('b')) || null, [searchParams]);
-  /* Applied once. Without this, closing the sheet would re-open it, because
-     the URL parameter never goes away. */
   const deepLinkDone = useRef(false);
 
   const [share, shareSheet] = useShare();
   const ensureRefCode = useAppStore((s) => s.ensureRefCode);
-  const refCode = useMemo(() => ensureRefCode(user?.id), [ensureRefCode, user?.id]);
+  const refCode = useMemo(
+    () => (typeof ensureRefCode === 'function' ? ensureRefCode(user?.id) : ''),
+    [ensureRefCode, user?.id]
+  );
 
-  const [tab, setTab] = useState('cards');
-  /* A shared link wins over the remembered country: the card it points at is
-     only redeemable in the country it was bought for, which is the whole
-     reason this screen asks in the first place. */
+  const [tab, setTab] = useState(() => linkedTab ?? 'cards');
   const [country, setCountry] = useState(() => linkedCountry ?? getShopCountry());
   const [countries, setCountries] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  /* null = the category overview; a string = that category's own page. */
   const [openCat, setOpenCat] = useState(null);
   const [query, setQuery] = useState('');
+  const [activeUseCase, setActiveUseCase] = useState(null);
+  const [budget, setBudget] = useState('all');
+  const [favKeys, setFavKeys] = useState(() => getShopFavorites());
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const [openBrand, setOpenBrand] = useState(null);
+  const [pricingCoin, setPricingCoin] = useState('USDC');
+  const [selectedDenomId, setSelectedDenomId] = useState(null);
   const [products, setProducts] = useState(null);
   const [productsLoading, setProductsLoading] = useState(false);
 
-  /*
-   * ─── OPEN INSIDE THE APP ────────────────────────────────────────────────
-   *
-   * `openUrl` was already in the codebase and this screen simply was not
-   * using it — every shop link went out through window.open and kicked the
-   * user into Chrome, losing the app. It opens an Android Custom Tab instead:
-   * the system browser rendering inside our task, so the back gesture returns
-   * here and the toolbar picks up our colour.
-   *
-   * Deliberately NOT an embedded WebView. See lib/browser.js — a window we
-   * draw ourselves means we choose what the URL bar says, and on a checkout
-   * page that is exactly the guarantee the user needs us not to control.
-   */
+  const [evmBalances, setEvmBalances] = useState(null);
+  const [solBalances, setSolBalances] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+
   const open = useCallback(
     (url) => {
       if (!url) return;
@@ -225,12 +341,6 @@ export default function Shop() {
     };
   }, []);
 
-  /* Ask on first visit rather than defaulting to a country that is probably
-     wrong — a card bought for the wrong one is usually unrefundable. */
-  useEffect(() => {
-    if (!country) setPickerOpen(true);
-  }, [country]);
-
   useEffect(() => {
     if (!country) return undefined;
     let alive = true;
@@ -244,12 +354,6 @@ export default function Shop() {
     };
   }, [country]);
 
-  /*
-   * The shopper's language goes WITH the request, because the provider writes
-   * the redemption note and the how-to themselves and localises them when they
-   * can. See the note on `contentLocale` in lib/shop.js for why the answer,
-   * not the request, is what the screen trusts.
-   */
   const uiLang = String(i18n?.resolvedLanguage || i18n?.language || 'en').toLowerCase().slice(0, 2);
 
   useEffect(() => {
@@ -257,24 +361,104 @@ export default function Shop() {
     let alive = true;
     setProducts(null);
     setProductsLoading(true);
-    fetchShopProducts(country, openBrand.family, { lang: uiLang })
+    const opts = pricingCoin === 'USDC'
+      ? { lang: uiLang }
+      : { lang: uiLang, coin: normalizeShopCoin(pricingCoin) };
+    fetchShopProducts(country, openBrand.family, opts)
       .then((d) => alive && setProducts(d))
       .finally(() => alive && setProductsLoading(false));
     return () => {
       alive = false;
     };
-  }, [openBrand, country, uiLang]);
+  }, [openBrand, country, uiLang, pricingCoin]);
 
-  /*
-   * Open the brand a shared link named, once the catalogue it belongs to has
-   * arrived. It cannot happen earlier: the sheet is driven by the row object,
-   * and the rows only exist after the fetch.
-   *
-   * A link whose brand is not in this country's catalogue — sent from a
-   * different country, or for a brand that was delisted — silently selects
-   * nothing rather than opening an empty sheet. The shopper still lands on the
-   * right shop, which is the part of the promise we can always keep.
-   */
+  useEffect(() => {
+    setSelectedDenomId(null);
+  }, [openBrand?.id]);
+
+  useEffect(() => {
+    const list = products?.rows;
+    if (!Array.isArray(list) || list.length === 0) return;
+    setSelectedDenomId((prev) => {
+      if (prev && list.some((p) => p.id === prev)) return prev;
+      const best = typeof products?.bestSpreadPct === 'number'
+        ? list.find((p) => p.spreadPct === products.bestSpreadPct)
+        : null;
+      return (best || list[0])?.id ?? null;
+    });
+  }, [products]);
+
+  /* Connected EVM / Solana stablecoin balance reader (non-custodial, zero RPC when disconnected). */
+  const evmConnected = Boolean(wallet?.isConnected && wallet?.address);
+  const evmAddress = wallet?.address || null;
+  const evmChainId = wallet?.chainId || null;
+  const solConnected = Boolean(solWallet?.address);
+  const solAddress = solWallet?.address || null;
+
+  useEffect(() => {
+    if (!evmConnected || !evmAddress) {
+      setEvmBalances(null);
+      return undefined;
+    }
+    const cached = snapshotStableBalances(evmAddress, evmChainId);
+    if (cached) setEvmBalances(cached);
+    if (!openBrand || typeof wallet?.getReadProvider !== 'function') return undefined;
+
+    const chainTokens = Array.isArray(TOKENS?.[evmChainId]) ? TOKENS[evmChainId] : [];
+    const stables = chainTokens.filter((tk) => tk.symbol === 'USDC' || tk.symbol === 'USDT');
+    if (stables.length === 0) return undefined;
+
+    let alive = true;
+    setBalanceLoading(true);
+    Promise.resolve()
+      .then(() => {
+        const provider = wallet.getReadProvider(evmChainId);
+        return getBalances(provider, evmAddress, stables);
+      })
+      .then((res) => {
+        if (!alive || !res) return;
+        const next = { USDC: 0, USDT: 0 };
+        for (const tk of stables) {
+          const n = Number(res[tk.symbol]);
+          if (Number.isFinite(n) && n >= 0) next[tk.symbol] = n;
+        }
+        setEvmBalances(next);
+      })
+      .catch(() => { /* keep snapshot or graceful null */ })
+      .finally(() => {
+        if (alive) setBalanceLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [openBrand, evmConnected, evmAddress, evmChainId, wallet]);
+
+  useEffect(() => {
+    if (!solConnected || !solAddress) {
+      setSolBalances(null);
+      return undefined;
+    }
+    if (!openBrand) return undefined;
+    let alive = true;
+    readSolanaPortfolio(solAddress)
+      .then((snap) => {
+        if (!alive || !Array.isArray(snap?.rows)) return;
+        const next = { USDC: 0, USDT: 0 };
+        for (const r of snap.rows) {
+          const sym = String(r?.symbol ?? '').toUpperCase();
+          if (sym === 'USDC' || sym === 'USDT') {
+            const n = Number(r?.balance);
+            if (Number.isFinite(n) && n >= 0) next[sym] += n;
+          }
+        }
+        setSolBalances(next);
+      })
+      .catch(() => { /* keep graceful null */ });
+    return () => {
+      alive = false;
+    };
+  }, [openBrand, solConnected, solAddress]);
+
   useEffect(() => {
     if (deepLinkDone.current || !linkedBrand || !data?.rows?.length) return;
     deepLinkDone.current = true;
@@ -282,25 +466,6 @@ export default function Shop() {
     if (hit) setOpenBrand(hit);
   }, [data, linkedBrand]);
 
-  /**
-   * Share one card as a link back into THIS app.
-   *
-   * ─── WHY THIS IS A REVENUE CHANGE AND NOT A CONVENIENCE ───────────────────
-   * Before this, every share of a shop item went out as a cryptorefills.com
-   * URL: the recipient landed on a third party's site, we earned at most one
-   * referral credit, and the app never saw them. Now the link opens our shop
-   * on that exact card, and carries the sender's referral code — the same code
-   * `captureReferral()` already honours, worth 1% of whatever that person swaps
-   * for the next 90 days (`src/lib/referral.js`).
-   *
-   * A gift card is the single most forwarded thing in this app. People send
-   * each other Steam and PlayStation cards without being asked to. That
-   * traffic used to leave and never come back.
-   *
-   * The result is deliberately not turned into a toast: `share` resolves
-   * `ok:false` when the sheet is dismissed, which is a decision and not an
-   * error, and reporting it as a failure is how an app starts nagging.
-   */
   const shareBrand = useCallback(() => {
     if (!openBrand || !country) return;
     haptic?.('light');
@@ -311,19 +476,27 @@ export default function Shop() {
     void share({ url, text: t('shop.shareText', { brand: openBrand.name }) });
   }, [openBrand, country, refCode, share, haptic, t]);
 
-  /*
-   * The `money` tab is the same catalogue narrowed to PayPal, Visa and Payz
-   * top-ups. It is a TAB rather than one category among thirty because for
-   * somebody holding crypto and no bank account it is the single most useful
-   * thing here, and buried in a rail it was invisible.
-   */
+  const handleTogglePin = useCallback((brand) => {
+    if (!brand) return;
+    haptic?.('light');
+    setFavKeys((prev) => toggleShopFavorite(brand, prev));
+  }, [haptic]);
+
+  const favSet = useMemo(() => new Set(favKeys), [favKeys]);
+
   const allRows = data?.rows ?? [];
   const rows = useMemo(
     () => (tab === 'money'
-      ? allRows.filter((r) => r.category === 'e-money' || r.tags.includes('e-money'))
-      : allRows),
-    [allRows, tab]
+      ? sortShopBrands(
+        allRows.filter((r) => r.category === 'e-money' || (Array.isArray(r.tags) && r.tags.includes('e-money'))),
+        favKeys
+      )
+      : sortShopBrands(allRows, favKeys)),
+    [allRows, tab, favKeys]
   );
+
+  const favoriteBrands = useMemo(() => pickFavoriteBrands(rows, favKeys), [rows, favKeys]);
+  const featuredBrands = useMemo(() => pickFeaturedBrands(allRows, 12), [allRows]);
 
   const categories = useMemo(() => {
     const cs = data?.categories ?? [];
@@ -332,22 +505,38 @@ export default function Shop() {
   }, [data]);
 
   const inCat = useCallback(
-    (r, id) => r.category === id || r.tags.includes(id),
+    (r, id) => r.category === id || (Array.isArray(r.tags) && r.tags.includes(id)),
     []
   );
 
-  /* Search matches name AND tags, so "paypal" finds the Rewarble cards and
-     "gaming" finds Steam even though neither word is in the other's name. */
-  const searched = useMemo(() => {
+  const hasActiveFilter = Boolean(query.trim() || (tab === 'cards' && activeUseCase) || budget !== 'all');
+
+  const filteredRows = useMemo(() => {
+    if (!hasActiveFilter) return null;
+    let base = tab === 'cards' && activeUseCase
+      ? filterByUseCase(rows, activeUseCase, favKeys)
+      : rows;
+    base = filterByBudget(base, budget);
     const q = query.trim().toLowerCase();
-    if (!q) return null;
-    return rows.filter((r) => `${r.name} ${r.category} ${r.tags.join(' ')}`.toLowerCase().includes(q));
-  }, [rows, query]);
+    if (q) {
+      base = base.filter((r) =>
+        `${r.name} ${r.category} ${(r.tags ?? []).join(' ')}`.toLowerCase().includes(q)
+      );
+    }
+    return base;
+  }, [hasActiveFilter, tab, activeUseCase, rows, favKeys, budget, query]);
 
   const catRows = useMemo(
-    () => (openCat ? rows.filter((r) => inCat(r, openCat)) : []),
-    [rows, openCat, inCat]
+    () => (openCat ? filterByBudget(rows.filter((r) => inCat(r, openCat)), budget) : []),
+    [rows, openCat, inCat, budget]
   );
+
+  const resetFilters = useCallback(() => {
+    haptic?.('light');
+    setQuery('');
+    setActiveUseCase(null);
+    setBudget('all');
+  }, [haptic]);
 
   const pickCountry = (cc) => {
     haptic?.('select');
@@ -359,53 +548,61 @@ export default function Shop() {
   };
 
   const countryName = countries.find((c) => c.code === country)?.name ?? country;
+  const displayCountryName = useMemo(() => {
+    if (country) {
+      const loc = t(`shop.quickRegion.names.${country}`, { defaultValue: '' });
+      if (loc) return loc;
+    }
+    return countryName;
+  }, [country, countryName, t]);
 
-  /*
-   * ─── THE PROSE IN THE SHEET, AND WHOSE LANGUAGE IT IS IN ──────────────────
-   * Reported: «حتی وقتی زبان مثلا فارسی باشد باز هم انگلیسی هست» — tapping a
-   * card showed «چطور استفاده کنم» in Persian over four lines of English.
-   *
-   * Two sources of prose arrive with a brand, and both are the provider's:
-   *   `note`  — the redemption traps (region lock, no refunds). Quoted, never
-   *             paraphrased: these are the issuer's terms about money.
-   *   `howTo` — the redemption steps.
-   *
-   * The server asks Cryptorefills for both in the shopper's language and hands
-   * back `contentLocale`, what it ACTUALLY got. When that is not the language
-   * on screen — Persian today, because they do not cover it — the sheet stops
-   * pretending: the steps are OUR OWN localised checklist of the same flow
-   * (choose, buy on their checkout, pay, redeem), and the provider's original
-   * wording is kept underneath, labelled with the language it is in.
-   *
-   * Nothing is machine-translated and nothing is dropped. The alternative —
-   * an English block under a Persian title — is what was reported; silently
-   * deleting the issuer's region-lock warning would be worse.
-   */
   const proseLocale = products?.contentLocale ?? null;
   const proseLocalized = Boolean(proseLocale && proseLocale === uiLang);
-
-  /*
-   * Do we actually HAVE those steps in the language on screen?
-   *
-   * Comparing the rendered string with the English source is the honest test:
-   * a locale that still carries the English sentence has not been translated,
-   * and printing it would just be the provider's English a second time — a
-   * longer sheet, same problem. English and the ten languages without their
-   * own steps therefore show the provider's wording alone, labelled.
-   */
   const ownStepsTranslated = t('shop.redeemSteps.s1') !== en?.shop?.redeemSteps?.s1;
-  /* `products` is still null on the frame between the tap and the response —
-     the sheet's prose blocks sit OUTSIDE the loading branch below, which is why
-     they are all written with `products?.`. */
   const showOwnSteps = Boolean(products) && !proseLocalized && ownStepsTranslated;
 
+  const selectedDenom = useMemo(() => {
+    const list = products?.rows;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    return list.find((p) => p.id === selectedDenomId) || list[0];
+  }, [products, selectedDenomId]);
+
+  const swapPlan = useMemo(
+    () => buildSwapShortfallPlan({
+      denom: selectedDenom,
+      pricingCoin,
+      evmConnected,
+      evmChainId,
+      evmBalances,
+      solConnected,
+      solBalances
+    }),
+    [selectedDenom, pricingCoin, evmConnected, evmChainId, evmBalances, solConnected, solBalances]
+  );
+
+  const openBrandPinned = openBrand ? favSet.has(brandFavoriteKey(openBrand)) : false;
+
+  const noteOriginHeader = !proseLocalized ? (
+    <p className="faint" style={{ fontSize: 11, margin: '0 0 5px' }}>
+      {t('shop.providerNote')}
+      {proseLocale && <> ({langLabel(proseLocale)})</>}
+    </p>
+  ) : null;
+
+  const howToOriginHeader = !proseLocalized ? (
+    <p className="faint" style={{ fontSize: 11, margin: showOwnSteps ? '12px 0 5px' : '0 0 5px' }}>
+      {t('shop.providerHowTo', { brand: openBrand?.name ?? '' })}
+      {proseLocale && <> ({langLabel(proseLocale)})</>}
+    </p>
+  ) : null;
+
   const header = (
-    <motion.div className="row-between" variants={riseIn} initial="hidden" animate="show">
+    <motion.div className="row-between shop-header" variants={riseIn} initial="hidden" animate="show">
       <div className="row" style={{ gap: 10 }}>
         <button
+          type="button"
           className="icon-btn"
           onClick={() => {
-            /* Inside a category, back means "back to the shop", not "leave". */
             if (openCat) setOpenCat(null);
             else navigate(-1);
           }}
@@ -417,12 +614,23 @@ export default function Shop() {
           <h1 className="h1" style={{ fontSize: 19 }}>
             {openCat ? catLabel(t, openCat) : t('shop.title')}
           </h1>
-          <p className="prose-sm">{openCat ? countryName : t('shop.subtitle')}</p>
+          <p className="prose-sm">
+            {openCat
+              ? countryName
+              : tab === 'pay'
+                ? t('shop.pay.subtitle')
+                : t('shop.subtitle')}
+          </p>
         </div>
       </div>
-      {country && (
-        <button className="chip" onClick={() => setPickerOpen(true)}>
+      {country ? (
+        <button type="button" className="chip shop-country-btn" onClick={() => setPickerOpen(true)}>
           <span aria-hidden="true">{flagOf(country)}</span> {country}
+        </button>
+      ) : (
+        <button type="button" className="chip shop-country-btn" onClick={() => setPickerOpen(true)}>
+          <IconGlobe width={15} height={15} />
+          <span>{t('shop.chooseOne')}</span>
         </button>
       )}
     </motion.div>
@@ -430,6 +638,44 @@ export default function Shop() {
 
   const brandSheet = (
     <Sheet open={Boolean(openBrand)} onClose={() => setOpenBrand(null)} title={openBrand?.name ?? ''}>
+      {openBrand && (
+        <div className="shop-sheet-toolbar">
+          <div className="shop-coin-switch" role="group" aria-label={t('shop.checkout.coinLabel')}>
+            <span className="shop-coin-switch-label">{t('shop.checkout.coinLabel')}</span>
+            <div className="shop-coin-pills">
+              {SHOP_PRICING_COINS.map((c) => {
+                const active = normalizeShopCoin(pricingCoin) === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    className="shop-coin-pill"
+                    data-on={active ? 'true' : 'false'}
+                    aria-pressed={active}
+                    onClick={() => {
+                      haptic?.('select');
+                      setPricingCoin(c);
+                    }}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="shop-sheet-pin"
+            data-pinned={openBrandPinned ? 'true' : 'false'}
+            aria-pressed={openBrandPinned}
+            onClick={() => handleTogglePin(openBrand)}
+          >
+            <IconStar width={14} height={14} filled={openBrandPinned} />
+            <span>{t(openBrandPinned ? 'shop.fav.pinned' : 'shop.fav.pinAction')}</span>
+          </button>
+        </div>
+      )}
+
       {productsLoading ? (
         <div className="stack" style={{ gap: 8 }}>
           {[0, 1, 2].map((i) => (
@@ -443,25 +689,27 @@ export default function Shop() {
           <p className="section-label">{t('shop.amounts')}</p>
           <div className="shop-denoms">
             {products.rows.map((p) => {
-              /*
-               * `spreadPct` is what the buyer pays OVER the card's face value —
-               * the provider's margin, already inside `coin_amount`. It was in
-               * our payload all along and we were not showing it, so the
-               * shopper discovered it on somebody else's checkout page.
-               *
-               * null means the server could not prove the two numbers were in
-               * the same currency, and it renders as NO line. A guess here
-               * would be a wrong price on a screen about money.
-               */
               const hasSpread = typeof p.spreadPct === 'number';
               const best =
                 hasSpread &&
                 typeof products.bestSpreadPct === 'number' &&
                 p.spreadPct === products.bestSpreadPct;
+              const isSelected = selectedDenom?.id === p.id;
               return (
-                <div key={p.id} className="shop-denom">
+                <button
+                  key={p.id}
+                  type="button"
+                  className="shop-denom"
+                  data-best={best ? 'true' : 'false'}
+                  data-selected={isSelected ? 'true' : 'false'}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    haptic?.('light');
+                    setSelectedDenomId(p.id);
+                  }}
+                >
                   <div className="shop-denom-face">{p.label}</div>
-                  <div className="shop-denom-coin">
+                  <div className="shop-denom-coin" dir="ltr">
                     {p.coinAmount ? `${p.coinAmount} ${p.coin}` : '—'}
                   </div>
                   {hasSpread && (
@@ -469,54 +717,118 @@ export default function Shop() {
                       {t('shop.spread', { pct: p.spreadPct })}
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
-          {/* One sentence, and only when there is a number to explain. */}
           {products.rows.some((p) => typeof p.spreadPct === 'number') && (
             <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, marginTop: 8 }}>
               {t('shop.spreadWhy')}
             </p>
           )}
+
+          {selectedDenom && (
+            <div className="shop-checkout-box">
+              <div className="shop-checkout-grid">
+                <div className="shop-checkout-row">
+                  <span className="shop-checkout-k">{t('shop.checkout.payable')}</span>
+                  <span className="shop-checkout-v" dir="ltr">
+                    {swapPlan.requiredAmount != null
+                      ? `${fmtAmount(swapPlan.requiredAmount)} ${swapPlan.coin}`
+                      : selectedDenom.label}
+                  </span>
+                </div>
+                {swapPlan.spreadPct !== null && (
+                  <div className="shop-checkout-row">
+                    <span className="shop-checkout-k">{t('shop.checkout.margin')}</span>
+                    <span className="shop-checkout-v" dir="ltr">
+                      {`${swapPlan.spreadPct >= 0 ? '+' : ''}${swapPlan.spreadPct}%`}
+                    </span>
+                  </div>
+                )}
+                <div className="shop-checkout-row">
+                  <span className="shop-checkout-k">{t('shop.checkout.walletStatus')}</span>
+                  <span
+                    className="shop-checkout-status"
+                    data-tone={
+                      !swapPlan.anyConnected
+                        ? 'neutral'
+                        : swapPlan.walletBalance === null
+                          ? 'neutral'
+                          : swapPlan.hasEnough
+                            ? 'ok'
+                            : 'warn'
+                    }
+                  >
+                    {!swapPlan.anyConnected
+                      ? t('shop.checkout.walletDisconnected')
+                      : balanceLoading && swapPlan.walletBalance === null
+                        ? t('common.loading')
+                        : swapPlan.walletBalance === null
+                          ? t('shop.checkout.balanceUnavailable', { coin: swapPlan.coin })
+                          : swapPlan.hasEnough
+                            ? t('shop.checkout.balanceSufficient', {
+                              balance: fmtAmount(swapPlan.walletBalance),
+                              coin: swapPlan.coin
+                            })
+                            : t('shop.checkout.balanceDeficit', {
+                              deficit: fmtAmount(swapPlan.deficitAmount),
+                              coin: swapPlan.coin,
+                              balance: fmtAmount(swapPlan.walletBalance)
+                            })}
+                  </span>
+                </div>
+              </div>
+
+              <div className="shop-swap-callout">
+                <button
+                  type="button"
+                  className="btn shop-swap-cta"
+                  onClick={() => {
+                    haptic?.('medium');
+                    setOpenBrand(null);
+                    navigate(swapPlan.primarySwapRoute);
+                  }}
+                >
+                  <IconSwap width={16} height={16} />
+                  <span>
+                    {swapPlan.anyConnected && !swapPlan.hasEnough && swapPlan.deficitAmount
+                      ? t('shop.checkout.swapDeficitCta', {
+                        amount: fmtAmount(swapPlan.deficitAmount),
+                        coin: swapPlan.coin
+                      })
+                      : t('shop.checkout.swapQuickCta', { coin: swapPlan.coin })}
+                  </span>
+                </button>
+                <div className="shop-swap-subrow">
+                  <span className="shop-swap-hint">{t('shop.checkout.swapHint')}</span>
+                  <button
+                    type="button"
+                    className="shop-swap-alt-link"
+                    onClick={() => {
+                      haptic?.('light');
+                      setOpenBrand(null);
+                      navigate(
+                        swapPlan.activeNetwork === 'solana'
+                          ? swapPlan.evmSwapRoute
+                          : swapPlan.solanaSwapRoute
+                      );
+                    }}
+                  >
+                    {swapPlan.activeNetwork === 'solana'
+                      ? t('shop.checkout.swapOnEvm')
+                      : t('shop.checkout.swapOnSolana')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
-      {/*
-        The issuer's own words, in two boxes.
-
-        `whiteSpace: 'pre-line'` is load-bearing: the server turns their HTML
-        into text with real line breaks, and without this React collapses them
-        and the redemption steps run into one paragraph. That was the shape of
-        the reported bug — the tags were visible AND the structure was lost.
-
-        Redemption steps are collapsed by default because they matter after
-        you buy; the warning note is not, because it changes whether you buy
-        at all.
-
-        Both boxes are now language-aware. When the provider answered in the
-        shopper's language their words are shown as they always were; when
-        they did not, the steps box opens with our OWN localised walk-through
-        and their wording sits under it with the language it is in spelled
-        out. See `proseLocale` above for why the request language is not
-        trusted and the answer is.
-      */}
       {products?.note && (
         <div style={{ marginTop: 12 }}>
-          {!proseLocalized && (
-            <p className="faint" style={{ fontSize: 11, margin: '0 0 5px' }}>
-              {t('shop.providerNote')}
-              {/* The language name only when we KNOW it: a bracket with nothing
-                  inside it would read as a rendering fault. */}
-              {proseLocale && <> ({langLabel(proseLocale)})</>}
-            </p>
-          )}
-          {/*
-            `dir="ltr"` on the provider's own English. In an RTL page the
-            bidi algorithm otherwise reorders the Latin punctuation and pulls
-            a trailing "(VPN)." to the wrong end of the sentence — a small
-            thing that makes a warning about losing money look like noise.
-          */}
+          {noteOriginHeader}
           <p
             className="notice"
             style={{ margin: 0, whiteSpace: 'pre-line' }}
@@ -531,13 +843,6 @@ export default function Shop() {
         <div style={{ marginTop: 10 }}>
           <InfoBox title={t('shop.howTo')} tone="info" id="shop-howto">
             {showOwnSteps && (
-              /*
-                Our own walk-through, in the shopper's language. Five steps, all
-                of them things the flow really does: the amount and the USDC
-                figure, the hand-off to Cryptorefills, paying from the
-                shopper's own wallet, the code by email, and where it is
-                redeemed. Nothing here is a translation of their text.
-              */
               <ol className="shop-steps">
                 {['s1', 's2', 's3', 's4', 's5'].map((k) => (
                   <li key={k}>
@@ -546,23 +851,17 @@ export default function Shop() {
                 ))}
               </ol>
             )}
-
-            {/* The issuer's own wording, always kept, labelled whenever it is
-                not in the language the shopper is reading. */}
-            {!proseLocalized && products?.howTo && (
-              <p className="faint" style={{ fontSize: 11, margin: showOwnSteps ? '12px 0 5px' : '0 0 5px' }}>
-                {t('shop.providerHowTo', { brand: openBrand?.name ?? '' })}
-                {proseLocale && <> ({langLabel(proseLocale)})</>}
-              </p>
-            )}
             {products?.howTo && (
-              <p
-                className={proseLocalized ? undefined : 'faint'}
-                style={{ whiteSpace: 'pre-line', fontSize: proseLocalized ? undefined : 12 }}
-                dir={proseLocalized ? undefined : 'ltr'}
-              >
-                {products.howTo}
-              </p>
+              <div>
+                {howToOriginHeader}
+                <p
+                  className={proseLocalized ? undefined : 'faint'}
+                  style={{ whiteSpace: 'pre-line', fontSize: proseLocalized ? undefined : 12 }}
+                  dir={proseLocalized ? undefined : 'ltr'}
+                >
+                  {products.howTo}
+                </p>
+              </div>
             )}
           </InfoBox>
         </div>
@@ -571,18 +870,13 @@ export default function Shop() {
       {openBrand && (
         <div className="shop-sheet-actions">
           <button
+            type="button"
             className="btn btn-primary"
             onClick={() => open(brandUrl(country, openBrand.family))}
           >
             {t('shop.buyAt', { brand: openBrand.name })}
           </button>
-          {/*
-            Shares a link back INTO the app, not the provider's URL — see
-            `shareBrand`. Sits beside Buy rather than under the limits box
-            because the moment to forward a card is the moment you are looking
-            at its price, not after you have read the small print.
-          */}
-          <button className="btn btn-ghost" onClick={shareBrand}>
+          <button type="button" className="btn btn-ghost" onClick={shareBrand}>
             <IconShare width={15} height={15} />
             {t('shop.share')}
           </button>
@@ -591,39 +885,47 @@ export default function Shop() {
     </Sheet>
   );
 
-  /* ── no country yet: the picker is the screen ───────────────────────────── */
-  if (!country) {
+  /* ── No country yet (unless the user opened the global FBT Pay gateway tab) ── */
+  if (!country && tab !== 'pay') {
     return (
-      <PageTransition>
+      <PageTransition className="shop-shell">
         {header}
-        <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
+        <motion.section className="card card-rgb shop-welcome-card" variants={riseIn} initial="hidden" animate="show">
           <div className="sheen" />
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('shop.pickCountry')}</div>
+          <div className="shop-welcome-title">{t('shop.pickCountry')}</div>
           <p className="prose-sm" style={{ margin: 0 }}>{t('shop.pickCountryWhy')}</p>
+
+          <RegionQuickBar
+            country={country}
+            countries={countries}
+            onPickCountry={pickCountry}
+            onOpenAll={() => setPickerOpen(true)}
+            t={t}
+          />
+
+          <div className="shop-welcome-actions">
+            <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
+              {t('shop.chooseOne')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                haptic?.('select');
+                setTab('pay');
+              }}
+            >
+              <IconPay width={16} height={16} />
+              <span>{t('shop.pay.openCta')}</span>
+            </button>
+          </div>
         </motion.section>
-        <button className="btn btn-primary" onClick={() => setPickerOpen(true)}>
-          {t('shop.chooseOne')}
-        </button>
 
-        {/*
-          ─── THE SCREEN A SHOPPER WHO CANNOT BE SERVED ACTUALLY SEES ────────
-          Iran, Syria, Cuba and North Korea are not in the provider's 233
-          countries — their restriction, enforced server-side by them, and
-          stated in `shop.limits.l1`. For a large share of this audience the
-          picker therefore never resolves, and this dead end is the whole
-          shop.
-
-          Two of the things on it are ours to give and both are real: the swap
-          and earn screens work in every country with no partner's permission,
-          and both generate the 0.70% fee. Sending somebody who cannot buy a
-          gift card to a screen where nothing works is a wasted visit; sending
-          them to the two that do is not.
-        */}
         <div className="shop-alt">
-          <button className="btn btn-ghost" onClick={() => navigate('/swap')}>
+          <button type="button" className="btn btn-ghost" onClick={() => navigate('/swap')}>
             {t('shop.alt.swap')}
           </button>
-          <button className="btn btn-ghost" onClick={() => navigate('/earn')}>
+          <button type="button" className="btn btn-ghost" onClick={() => navigate('/earn')}>
             {t('shop.alt.earn')}
           </button>
         </div>
@@ -642,17 +944,41 @@ export default function Shop() {
     );
   }
 
-  /* ── one category, full page ────────────────────────────────────────────── */
+  /* ── Single category full page ── */
   if (openCat) {
     return (
-      <PageTransition>
+      <PageTransition className="shop-shell">
         {header}
+        <div className="shop-budget-bar" role="group" aria-label={t('shop.budget.label')}>
+          <span className="shop-budget-label">{t('shop.budget.label')}</span>
+          <div className="shop-budget-pills">
+            {BUDGET_TIERS.map((tier) => (
+              <button
+                key={tier.id}
+                type="button"
+                className="shop-budget-pill"
+                data-on={budget === tier.id ? 'true' : 'false'}
+                aria-pressed={budget === tier.id}
+                onClick={() => { haptic?.('select'); setBudget(tier.id); }}
+              >
+                {t(`shop.budget.tier_${tier.id}`)}
+              </button>
+            ))}
+          </div>
+        </div>
         <p className="faint" style={{ fontSize: 11.5 }}>
           {t('shop.count', { n: catRows.length, country: countryName })}
         </p>
         <motion.div className="shop-grid" variants={stagger} initial="hidden" animate="show">
           {catRows.map((b) => (
-            <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
+            <ShopTile
+              key={b.id}
+              brand={b}
+              open={openBrand?.id === b.id}
+              pinned={favSet.has(brandFavoriteKey(b))}
+              onTogglePin={handleTogglePin}
+              onClick={() => setOpenBrand(b)}
+            />
           ))}
         </motion.div>
         {brandSheet}
@@ -662,13 +988,9 @@ export default function Shop() {
   }
 
   return (
-    <PageTransition>
+    <PageTransition className="shop-shell">
       {header}
 
-      {/* A modern storefront opens with merchandise, not navigation chrome.
-          The visual campaign sits above categories like current mobile retail
-          apps; the first useful product is visible before any explanatory
-          card. */}
       {(tab === 'cards' || tab === 'money') && (
         <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
       )}
@@ -677,9 +999,16 @@ export default function Shop() {
         {TABS.map(({ id, Icon }) => (
           <button
             key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
             className="shop-tab"
             data-on={tab === id}
             onClick={() => {
+              if (id !== 'pay' && !country) {
+                setPickerOpen(true);
+                return;
+              }
               haptic?.('select');
               setTab(id);
               setOpenBrand(null);
@@ -687,56 +1016,182 @@ export default function Shop() {
             }}
           >
             <Icon width={17} height={17} />
-            {t(`shop.tab.${id}`)}
+            <span>{t(`shop.tab.${id}`)}</span>
           </button>
         ))}
       </div>
 
+      {(tab === 'cards' || tab === 'money' || tab === 'topup') && (
+        <RegionQuickBar
+          country={country}
+          countries={countries}
+          onPickCountry={pickCountry}
+          onOpenAll={() => setPickerOpen(true)}
+          t={t}
+        />
+      )}
+
       {tab === 'cards' || tab === 'money' ? (
         <>
-          {/*
-            A storefront needs a front. The two shortcuts here are the things
-            that are NOT gift-card categories — the provider's full catalogue
-            for this country, and mobile top-up, which is a sibling section on
-            their site rather than a category inside gift cards.
-          */}
           <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
             <span className="shop-hero-kicker">{t('shop.heroKicker')}</span>
-            <div className="shop-hero-title">{t('shop.heroTitle', { country: countryName })}</div>
+            <div className="shop-hero-title">{t('shop.heroTitle', { country: displayCountryName })}</div>
             <p className="shop-hero-sub">{t('shop.heroSub')}</p>
             <div className="shop-trust-row">
-              <span>⚡ {t('shop.trust.fast')}</span>
-              <span>◈ {t('shop.trust.crypto')}</span>
-              <span>✉ {t('shop.trust.email')}</span>
+              <span className="shop-trust-pill">⚡ {t('shop.trust.fast')}</span>
+              <span className="shop-trust-pill">◈ {t('shop.trust.crypto')}</span>
+              <span className="shop-trust-pill">✉ {t('shop.trust.email')}</span>
             </div>
             <div className="shop-quick">
-              <button onClick={() => open(countryUrl(country))}>
+              <button type="button" onClick={() => open(countryUrl(country))}>
                 <IconCard width={18} height={18} />
                 {t('shop.quickAll')}
               </button>
-              <button onClick={() => open(topUpUrl(country))}>
+              <button type="button" onClick={() => open(topUpUrl(country))}>
                 <IconTopUp width={18} height={18} />
                 {t('shop.quickTopUp')}
               </button>
             </div>
           </motion.section>
 
-          <label className="shop-search">
-            <IconSearch width={18} height={18} />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('shop.search', { country: countryName })}
-            />
-            {query && (
-              <button type="button" onClick={() => setQuery('')} aria-label={t('shop.clear')}>×</button>
-            )}
-          </label>
+          {/* Pinned / Favorite Brands Bar (`localStorage`) */}
+          {favoriteBrands.length > 0 && (
+            <section className="shop-fav-section" aria-label={t('shop.fav.sectionTitle')}>
+              <div className="shop-cat-row shop-cat-row--tight">
+                <h2 className="shop-cat-title shop-cat-title--fav">
+                  <IconStar width={16} height={16} filled />
+                  <span>{t('shop.fav.sectionTitle')}</span>
+                  <span className="shop-cat-count">{favoriteBrands.length}</span>
+                </h2>
+              </div>
+              <motion.div className="shop-rail" variants={stagger} initial="hidden" animate="show">
+                {favoriteBrands.map((b) => (
+                  <ShopTile
+                    key={`fav-${b.id}`}
+                    brand={b}
+                    open={openBrand?.id === b.id}
+                    pinned
+                    onTogglePin={handleTogglePin}
+                    onClick={() => setOpenBrand(b)}
+                  />
+                ))}
+              </motion.div>
+            </section>
+          )}
+
+          {/* Use-Case Hub — 6 interactive cards for global AI, Trading, Gaming, Stores, Streaming & Virtual Cards */}
+          {tab === 'cards' && data?.live && rows.length > 0 && (
+            <section className="shop-usecase-hub" aria-label={t('shop.useCase.title')}>
+              <div className="shop-section-title-row">
+                <div>
+                  <h2 className="shop-section-heading">{t('shop.useCase.title')}</h2>
+                  <p className="shop-section-sub">{t('shop.useCase.subtitle')}</p>
+                </div>
+                {activeUseCase && (
+                  <button
+                    type="button"
+                    className="shop-more"
+                    onClick={() => { haptic?.('light'); setActiveUseCase(null); }}
+                  >
+                    {t('shop.useCase.clear')}
+                  </button>
+                )}
+              </div>
+              <div className="shop-usecase-grid">
+                {SHOP_USE_CASES.map((uc) => {
+                  const UcIcon = USE_CASE_ICONS[uc.id] || IconCard;
+                  const isOn = activeUseCase === uc.id;
+                  return (
+                    <button
+                      key={uc.id}
+                      type="button"
+                      className="shop-usecase-card"
+                      data-on={isOn ? 'true' : 'false'}
+                      aria-pressed={isOn}
+                      onClick={() => {
+                        haptic?.('select');
+                        setActiveUseCase((prev) => (prev === uc.id ? null : uc.id));
+                      }}
+                    >
+                      <span className="shop-usecase-icon">
+                        <UcIcon width={18} height={18} />
+                      </span>
+                      <span className="shop-usecase-copy">
+                        <span className="shop-usecase-name">{t(`shop.useCase.${uc.id}.title`)}</span>
+                        <span className="shop-usecase-tags">{t(`shop.useCase.${uc.id}.brands`)}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {activeUseCase && (
+                <div className="shop-usecase-guide">
+                  <div className="shop-usecase-guide-body">
+                    <strong>{t(`shop.useCase.${activeUseCase}.title`)}: </strong>
+                    <span>{t(`shop.useCase.${activeUseCase}.guide`)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="shop-usecase-guide-reset"
+                    onClick={() => { haptic?.('light'); setActiveUseCase(null); }}
+                  >
+                    {t('shop.useCase.clear')}
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Search + Quick Budget Chips */}
+          <div className="shop-filter-toolbar">
+            <label className="shop-search">
+              <IconSearch width={18} height={18} />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('shop.search', { country: displayCountryName })}
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} aria-label={t('shop.clear')}>×</button>
+              )}
+            </label>
+
+            <div className="shop-budget-bar" role="group" aria-label={t('shop.budget.label')}>
+              <span className="shop-budget-label">{t('shop.budget.label')}</span>
+              <div className="shop-budget-pills">
+                {BUDGET_TIERS.map((tier) => {
+                  const active = budget === tier.id;
+                  return (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      className="shop-budget-pill"
+                      data-on={active ? 'true' : 'false'}
+                      aria-pressed={active}
+                      onClick={() => {
+                        haptic?.('select');
+                        setBudget(tier.id);
+                      }}
+                    >
+                      {t(`shop.budget.tier_${tier.id}`)}
+                    </button>
+                  );
+                })}
+              </div>
+              {hasActiveFilter && (
+                <button
+                  type="button"
+                  className="shop-budget-reset"
+                  onClick={resetFilters}
+                >
+                  {t('shop.budget.reset')}
+                </button>
+              )}
+            </div>
+          </div>
 
           {loading && !data ? (
-            /* A skeleton shaped like the tile it becomes, so the page does
-               not jump when the catalogue lands. */
             <div className="stack" style={{ gap: 12 }}>
               {[0, 1, 2].map((i) => (
                 <div key={i} className="shop-sk">
@@ -748,18 +1203,33 @@ export default function Shop() {
             </div>
           ) : !data?.live ? (
             <p className="notice">{t('shop.unavailable')}</p>
-          ) : searched ? (
-            /* Searching flattens the categories — someone typing wants the
-               match, not a tour of the sections it might be in. */
-            !searched.length ? (
+          ) : filteredRows ? (
+            !filteredRows.length ? (
               <div className="empty">
                 <span className="empty-icon">🛍</span>
-                {t('shop.noMatch')}
+                <div>{query.trim() && !activeUseCase && budget === 'all' ? t('shop.noMatch') : t('shop.filterNoMatch')}</div>
+                {hasActiveFilter && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ marginTop: 10 }}
+                    onClick={resetFilters}
+                  >
+                    {t('shop.budget.reset')}
+                  </button>
+                )}
               </div>
             ) : (
               <motion.div className="shop-grid" variants={stagger} initial="hidden" animate="show">
-                {searched.map((b) => (
-                  <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
+                {filteredRows.map((b) => (
+                  <ShopTile
+                    key={b.id}
+                    brand={b}
+                    open={openBrand?.id === b.id}
+                    pinned={favSet.has(brandFavoriteKey(b))}
+                    onTogglePin={handleTogglePin}
+                    onClick={() => setOpenBrand(b)}
+                  />
                 ))}
               </motion.div>
             )
@@ -767,42 +1237,54 @@ export default function Shop() {
             <div className="empty">
               <span className="empty-icon">🛍</span>
               {t('shop.noneHere', { country: countryName })}
-              {/*
-                An empty catalogue is not the end of the visit. These two are
-                the parts of the app that need no partner and no country
-                support, and both are where our fee actually comes from.
-              */}
               <div className="shop-alt">
-                <button className="btn btn-ghost" onClick={() => navigate('/swap')}>
+                <button type="button" className="btn btn-ghost" onClick={() => navigate('/swap')}>
                   {t('shop.alt.swap')}
                 </button>
-                <button className="btn btn-ghost" onClick={() => navigate('/earn')}>
+                <button type="button" className="btn btn-ghost" onClick={() => navigate('/earn')}>
                   {t('shop.alt.earn')}
                 </button>
               </div>
             </div>
           ) : (
             <>
-              {/*
-                ─── CATEGORY PREVIEWS ───────────────────────────────────────
-              */}
+              {/* Best-Sellers / Most Popular Brands Rail (shown when 2+ flagship brands exist in catalogue) */}
+              {tab === 'cards' && featuredBrands.length >= 2 && (
+                <section className="shop-featured-section" aria-label={t('shop.featured.title')}>
+                  <div className="shop-cat-row shop-cat-row--tight">
+                    <h2 className="shop-cat-title">
+                      {t('shop.featured.title')}
+                      <span className="shop-cat-badge">{t('shop.featured.badge')}</span>
+                    </h2>
+                  </div>
+                  <motion.div className="shop-rail" variants={stagger} initial="hidden" animate="show">
+                    {featuredBrands.map((b) => (
+                      <ShopTile
+                        key={`feat-${b.id}`}
+                        brand={b}
+                        open={openBrand?.id === b.id}
+                        pinned={favSet.has(brandFavoriteKey(b))}
+                        onTogglePin={handleTogglePin}
+                        onClick={() => setOpenBrand(b)}
+                      />
+                    ))}
+                  </motion.div>
+                </section>
+              )}
+
+              {/* Category Previews */}
               {categories.map((c) => {
                 const list = rows.filter((r) => inCat(r, c.id));
                 if (!list.length) return null;
                 return (
                   <section key={c.id}>
-                    {/*
-                      grey uppercase labels that disappeared between the rails.
-                      Now 16px at full contrast with an accent bar, so the eye
-                      finds the section boundary while scrolling past.
-                    */}
                     <div className="shop-cat-row">
                       <h2 className="shop-cat-title">
                         {catLabel(t, c.id)}
                         <span className="shop-cat-count">{list.length}</span>
                       </h2>
                       {list.length > PREVIEW && (
-                        <button className="shop-more" onClick={() => setOpenCat(c.id)}>
+                        <button type="button" className="shop-more" onClick={() => setOpenCat(c.id)}>
                           {t('shop.seeAll', { n: list.length })} <span aria-hidden="true">›</span>
                         </button>
                       )}
@@ -813,6 +1295,8 @@ export default function Shop() {
                           key={b.id}
                           brand={b}
                           open={openBrand?.id === b.id}
+                          pinned={favSet.has(brandFavoriteKey(b))}
+                          onTogglePin={handleTogglePin}
                           onClick={() => setOpenBrand(b)}
                         />
                       ))}
@@ -825,29 +1309,21 @@ export default function Shop() {
         </>
       ) : tab === 'topup' ? (
         <>
-          {/*
-            Mobile top-up and eSIM. Both are separate products on the
-            provider's site, not gift-card categories, so neither could be
-            reached from the catalogue rails — top-up only appeared if a
-            country happened to list a telecom brand, and eSIM was one row at
-            the bottom of Stays.
-          */}
           <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
             <div className="shop-hero-title">{t('shop.topup.title')}</div>
             <p className="shop-hero-sub">{t('shop.topup.body')}</p>
             <div className="shop-quick">
-              <button onClick={() => open(topUpUrl(country))}>
+              <button type="button" onClick={() => open(topUpUrl(country))}>
                 <IconTopUp width={18} height={18} />
                 {t('shop.topup.go')}
               </button>
-              <button onClick={() => open(esimUrl())}>
+              <button type="button" onClick={() => open(esimUrl())}>
                 <IconSim width={18} height={18} />
                 {t('shop.esim.name')}
               </button>
             </div>
           </motion.section>
 
-          {/* Any telecom brands the country's own catalogue carries. */}
           {(() => {
             const tel = allRows.filter((r) => r.kind === 'mobile_recharge');
             if (!tel.length) return null;
@@ -859,9 +1335,16 @@ export default function Shop() {
                     <span className="shop-cat-count">{tel.length}</span>
                   </h2>
                 </div>
-                <motion.div className="stack" style={{ gap: 12 }} variants={stagger} initial="hidden" animate="show">
+                <motion.div className="shop-grid" variants={stagger} initial="hidden" animate="show">
                   {tel.map((b) => (
-                    <ShopTile key={b.id} brand={b} open={openBrand?.id === b.id} onClick={() => setOpenBrand(b)} />
+                    <ShopTile
+                      key={b.id}
+                      brand={b}
+                      open={openBrand?.id === b.id}
+                      pinned={favSet.has(brandFavoriteKey(b))}
+                      onTogglePin={handleTogglePin}
+                      onClick={() => setOpenBrand(b)}
+                    />
                   ))}
                 </motion.div>
               </section>
@@ -869,6 +1352,7 @@ export default function Shop() {
           })()}
 
           <motion.button
+            type="button"
             className="shop-promo shop-glow"
             variants={riseIn}
             initial="hidden"
@@ -893,15 +1377,19 @@ export default function Shop() {
             <p className="prose-sm" style={{ margin: 0 }}>{t('shop.flight.body')}</p>
           </motion.section>
 
+          <TravelCompanionCard
+            t={t}
+            open={open}
+            onOpenCards={() => {
+              haptic?.('select');
+              if (country) setTab('money');
+              else setPickerOpen(true);
+            }}
+          />
+
           <p className="section-label">{t('shop.flight.popular')}</p>
-          {/*
-            Two columns of photographs instead of a form. Each one lands on a
-            page where the route is already chosen — the thing the form failed
-            to do.
-          */}
           <motion.div
-            className="stack"
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}
+            className="shop-dest-grid"
             variants={stagger}
             initial="hidden"
             animate="show"
@@ -909,6 +1397,7 @@ export default function Shop() {
             {FLIGHT_ROUTES.map((r) => (
               <motion.button
                 key={r.id}
+                type="button"
                 className="shop-dest"
                 variants={riseIn}
                 onClick={() => open(flightUrl(r.slug))}
@@ -916,9 +1405,13 @@ export default function Shop() {
                 <img src={r.img} alt="" loading="lazy" />
                 <span className="shop-dest-veil" />
                 <span className="shop-dest-txt">
-                  <span className="shop-dest-city">{r.city}</span>
-                  <span className="shop-dest-country">{r.country}</span>
-                  <span className="shop-dest-route">
+                  <span className="shop-dest-city">
+                    {t(`shop.dest.city.${destKey(r.city)}`, { defaultValue: r.city })}
+                  </span>
+                  <span className="shop-dest-country">
+                    {t(`shop.dest.country.${destKey(r.country)}`, { defaultValue: r.country })}
+                  </span>
+                  <span className="shop-dest-route" dir="ltr">
                     {r.from} <span aria-hidden="true">→</span> {r.to}
                   </span>
                 </span>
@@ -926,11 +1419,11 @@ export default function Shop() {
             ))}
           </motion.div>
 
-          <button className="btn btn-ghost" onClick={() => open(flightUrl(null))}>
+          <button type="button" className="btn btn-ghost" onClick={() => open(flightUrl(null))}>
             {t('shop.flight.other')}
           </button>
         </>
-      ) : (
+      ) : tab === 'stays' ? (
         <>
           <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
             <div className="sheen" />
@@ -938,10 +1431,19 @@ export default function Shop() {
             <p className="prose-sm" style={{ margin: 0 }}>{t('shop.stay.body')}</p>
           </motion.section>
 
+          <TravelCompanionCard
+            t={t}
+            open={open}
+            onOpenCards={() => {
+              haptic?.('select');
+              if (country) setTab('money');
+              else setPickerOpen(true);
+            }}
+          />
+
           <p className="section-label">{t('shop.stay.popular')}</p>
           <motion.div
-            className="stack"
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}
+            className="shop-dest-grid"
             variants={stagger}
             initial="hidden"
             animate="show"
@@ -949,6 +1451,7 @@ export default function Shop() {
             {STAY_CITIES.map((c) => (
               <motion.button
                 key={c.id}
+                type="button"
                 className="shop-dest"
                 variants={riseIn}
                 onClick={() => open(stayCityUrl(c.cc, c.slug))}
@@ -956,18 +1459,23 @@ export default function Shop() {
                 <img src={c.img} alt="" loading="lazy" />
                 <span className="shop-dest-veil" />
                 <span className="shop-dest-txt">
-                  <span className="shop-dest-city">{c.city}</span>
-                  <span className="shop-dest-country">{c.country}</span>
+                  <span className="shop-dest-city">
+                    {t(`shop.dest.city.${destKey(c.city)}`, { defaultValue: c.city })}
+                  </span>
+                  <span className="shop-dest-country">
+                    {t(`shop.dest.country.${destKey(c.country)}`, { defaultValue: c.country })}
+                  </span>
                 </span>
               </motion.button>
             ))}
           </motion.div>
 
-          <button className="btn btn-ghost" onClick={() => open(stayCityUrl(null, null))}>
+          <button type="button" className="btn btn-ghost" onClick={() => open(stayCityUrl(null, null))}>
             {t('shop.stay.other')}
           </button>
 
           <motion.button
+            type="button"
             className="shop-promo shop-glow"
             variants={riseIn}
             initial="hidden"
@@ -984,30 +1492,31 @@ export default function Shop() {
             </span>
           </motion.button>
         </>
+      ) : (
+        /* ── TAB 6: FBT Pay Merchant Payment Gateway ── */
+        <div className="shop-pay-wrap">
+          <motion.section className="shop-hero shop-pay-hero" variants={riseIn} initial="hidden" animate="show">
+            <span className="shop-hero-kicker">{t('shop.pay.kicker')}</span>
+            <div className="shop-hero-title">{t('shop.pay.heroTitle')}</div>
+            <p className="shop-hero-sub">{t('shop.pay.heroSub')}</p>
+            <div className="shop-trust-row">
+              <span className="shop-trust-pill">◈ {t('shop.pay.badgeDirect')}</span>
+              <span className="shop-trust-pill">▣ {t('shop.pay.badgeQr')}</span>
+              <span className="shop-trust-pill">⚡ {t('shop.pay.badgeMultiChain')}</span>
+            </div>
+          </motion.section>
+          <div className="shop-pay-panel-host">
+            <Suspense fallback={<div className="skel" style={{ height: 220, borderRadius: 20 }} />}>
+              <PayGatewayPanel />
+            </Suspense>
+          </div>
+        </div>
       )}
 
       {brandSheet}
 
       <ShareSheet {...shareSheet} />
 
-      {/*
-        ─── WHY A HARDWARE WALLET SITS IN A GIFT-CARD SHOP ───────────────────
-        It is the only affiliate in the app (`src/lib/hardware.js` explains the
-        filter that removed the other twenty: anything settling through a bank
-        is closed to us, and anything that sends our swap customer to a rival
-        exchange is a loss dressed as a commission). Ledger pays 10% of net
-        sale in bitcoin; a hardware wallet is not a rival exchange, and the
-        person who buys one still swaps here — with more capital than before.
-
-        It was already built and already honest when unconfigured — the link is
-        the plain product URL until an affiliate id exists. It was simply
-        buried on one tab of the Wallet screen, where nobody is in a buying
-        mood. Here the reader is already spending.
-
-        Placed after the catalogue rather than in it: this is a
-        recommendation, not merchandise, and mixing it into the brand rails
-        would make it indistinguishable from the products we take a cut of.
-      */}
       <HardwareWalletCard />
 
       <ShopCountrySheet

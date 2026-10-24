@@ -384,4 +384,148 @@ for (const family of ['Steam', 'Amazon.com', 'Travel & Flights']) {
 /* A path with no query of its own still gets a well-formed separator. */
 assert.ok(siteShareUrl('/shop', 'FBT123ABC').includes('/#/shop?ref=FBT123ABC'));
 
+/* ─────────────── 4. Phase 1: USDC/USDT pricing + catalog tools ────────── */
+{
+  const srvShop = await import('../server/shop.js');
+  const clientShop = await import('../src/lib/shop.js');
+  const tools = await import('../src/lib/shopCatalogTools.js');
+
+  assert.deepEqual(srvShop.SHOP_PRICING_COINS, ['USDC', 'USDT']);
+  assert.equal(srvShop.normalizeShopCoin('usdt'), 'USDT');
+  assert.equal(srvShop.normalizeShopCoin('USDC'), 'USDC');
+  assert.equal(srvShop.normalizeShopCoin('SOL'), 'USDC', 'unsupported coins normalize safely to USDC');
+
+  /* Server cache key separates USDC from USDT quotes for the same brand */
+  const realFetch = globalThis.fetch;
+  const seenCoins = [];
+  globalThis.fetch = async (u) => {
+    const parsed = new URL(String(u));
+    const c = parsed.searchParams.get('coin');
+    seenCoins.push(c);
+    return {
+      ok: true,
+      json: async () => ([{
+        brand: 'Steam',
+        family: 'Steam',
+        products: [{
+          product_id: `d-${c}`,
+          localized_denomination: '$50',
+          denomination: '50',
+          denomination_currency: 'USD',
+          coin_amount: c === 'USDT' ? '53.95' : '53.86'
+        }]
+      }])
+    };
+  };
+  try {
+    const usdcQuote = await srvShop.getShopProducts({ country: 'US', family: 'Steam', coin: 'USDC', lang: 'en' });
+    const usdtQuote = await srvShop.getShopProducts({ country: 'US', family: 'Steam', coin: 'USDT', lang: 'en' });
+    assert.equal(usdcQuote.value.pricingCoin, 'USDC');
+    assert.equal(usdtQuote.value.pricingCoin, 'USDT');
+    assert.equal(usdcQuote.value.rows[0].coinAmount, 53.86);
+    assert.equal(usdtQuote.value.rows[0].coinAmount, 53.95);
+    assert.deepEqual(seenCoins, ['USDC', 'USDT']);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+
+  /* Client fetchShopProducts forwards coin=USDT when requested */
+  let clientUrl = '';
+  globalThis.fetch = async (u) => {
+    clientUrl = String(u);
+    return {
+      ok: true,
+      json: async () => ({ rows: [{ id: '1', label: '$50', coinAmount: 53.95, coin: 'USDT' }], pricingCoin: 'USDT' })
+    };
+  };
+  try {
+    const res = await clientShop.fetchShopProducts('TR', 'Steam', { lang: 'fa', coin: 'USDT' });
+    assert.ok(clientUrl.includes('coin=USDT'), 'USDT selection reaches /shop/products');
+    assert.equal(res.pricingCoin, 'USDT');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+
+  /* Quick regions, featured best-sellers, favorites, budget filter & Use-Case Hub */
+  assert.deepEqual(tools.QUICK_REGIONS, ['US', 'TR', 'AE', 'GB', 'DE']);
+
+  const mockRows = [
+    { id: '1', name: 'Local Bakery', family: 'Local Bakery', category: 'food', tags: [], min: '$30', outOfStock: false },
+    { id: '2', name: 'Steam', family: 'Steam', category: 'games', tags: ['games'], min: '$10', outOfStock: false },
+    { id: '3', name: 'Rewarble Visa', family: 'Rewarble', category: 'e-money', tags: ['e-money'], min: '$20', outOfStock: false },
+    { id: '4', name: 'Apple Gift Card', family: 'Apple', category: 'e-commerce', tags: [], min: '$15', outOfStock: false },
+    { id: '5', name: 'Spotify Premium', family: 'Spotify', category: 'streaming', tags: ['streaming'], min: '250 TRY', outOfStock: false },
+    { id: '6', name: 'Luxury Store', family: 'Luxury Store', category: 'retail', tags: [], min: '150 USD', outOfStock: false },
+    { id: '7', name: 'Xbox Live', family: 'Xbox', category: 'games', tags: ['games'], min: '50 AED', outOfStock: true }
+  ];
+
+  const featured = tools.pickFeaturedBrands(mockRows, 10);
+  assert.equal(featured[0].name, 'Steam', 'in-stock flagship ranks first');
+  assert.ok(featured.some((b) => b.family === 'Rewarble'));
+  assert.equal(featured[featured.length - 1].name, 'Xbox Live', 'out-of-stock flagship sorts last');
+
+  /* Favorites localStorage round-trip */
+  const memStore = (() => {
+    const m = new Map();
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      setItem: (k, v) => m.set(k, String(v))
+    };
+  })();
+  let favs = tools.toggleShopFavorite(mockRows[2], [], memStore);
+  assert.deepEqual(favs, ['rewarble']);
+  assert.deepEqual(tools.getShopFavorites(memStore), ['rewarble']);
+  assert.equal(tools.pickFavoriteBrands(mockRows, favs)[0].id, '3');
+  favs = tools.toggleShopFavorite(mockRows[2], favs, memStore);
+  assert.deepEqual(favs, []);
+
+  /* Budget filter across USD, TRY (~$7.35), and AED (~$13.6) */
+  const upTo10 = tools.filterByBudget(mockRows, '10').map((b) => b.name);
+  assert.deepEqual(upTo10, ['Steam', 'Spotify Premium']);
+  const upTo25 = tools.filterByBudget(mockRows, '25').map((b) => b.name);
+  assert.ok(upTo25.includes('Rewarble Visa') && upTo25.includes('Xbox Live') && !upTo25.includes('Local Bakery'));
+  const upTo100 = tools.filterByBudget(mockRows, '100').map((b) => b.name);
+  assert.ok(!upTo100.includes('Luxury Store'));
+
+  /* All 6 Use-Case Hub matchers */
+  assert.ok(tools.filterByUseCase(mockRows, 'ai').some((b) => b.family === 'Rewarble'));
+  assert.ok(tools.filterByUseCase(mockRows, 'trading').some((b) => b.family === 'Rewarble'));
+  assert.ok(tools.filterByUseCase(mockRows, 'gaming').some((b) => b.family === 'Steam'));
+  assert.ok(tools.filterByUseCase(mockRows, 'appstore').some((b) => b.family === 'Apple'));
+  assert.ok(tools.filterByUseCase(mockRows, 'streaming').some((b) => b.family === 'Spotify'));
+  assert.ok(tools.filterByUseCase(mockRows, 'virtualcard').some((b) => b.family === 'Rewarble'));
+
+  /* Smart shortfall & internal swap route planner */
+  const evmDeficitWithUsdt = tools.buildSwapShortfallPlan({
+    denom: { id: 'p1', label: '$50', coinAmount: 53.86, coin: 'USDC', spreadPct: 7.7 },
+    pricingCoin: 'USDC',
+    evmConnected: true,
+    evmChainId: 42161,
+    evmBalances: { USDC: 12.5, USDT: 80 }
+  });
+  assert.equal(evmDeficitWithUsdt.hasEnough, false);
+  assert.equal(evmDeficitWithUsdt.deficitAmount, 41.36);
+  assert.equal(evmDeficitWithUsdt.primarySwapRoute, '/swap?chain=42161&from=USDT&to=USDC&amount=41.36');
+
+  const evmVolatileOnly = tools.buildSwapShortfallPlan({
+    denom: { id: 'p1', label: '$50', coinAmount: 53.86, coin: 'USDC', spreadPct: 7.7 },
+    pricingCoin: 'USDC',
+    evmConnected: true,
+    evmChainId: 1,
+    evmBalances: { USDC: 0, USDT: 0 }
+  });
+  assert.equal(evmVolatileOnly.primarySwapRoute, '/swap?chain=1&to=USDC', 'never passes USD amount into volatile fromToken');
+
+  const solDeficit = tools.buildSwapShortfallPlan({
+    denom: { id: 'p1', label: '$25', coinAmount: 26.4, coin: 'USDT', spreadPct: 5.6 },
+    pricingCoin: 'USDT',
+    solConnected: true,
+    solBalances: { USDC: 50, USDT: 6.4 }
+  });
+  assert.equal(solDeficit.activeNetwork, 'solana');
+  assert.equal(solDeficit.deficitAmount, 20);
+  assert.ok(solDeficit.primarySwapRoute.startsWith('/solana?fromMint='));
+  assert.ok(solDeficit.primarySwapRoute.includes('amount=20'));
+}
+
 console.log('shop revenue probe passed');
