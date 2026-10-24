@@ -6426,6 +6426,12 @@ app.post('/api/solana/jupfee/swap', async (req, res) => {
  * The client uses it to stop asking routes that cannot pay (a 503 per keystroke
  * is a wasted round trip on the networks our users are on), and to name the
  * reason on screen when the free route ends up running.
+ *
+ * `de1.supported` is part of that answer and is measured, not configured: false
+ * means the route's own last request was answered with «This chain is no longer
+ * supported» (De¹ switched Solana off on 2026-10-24), and the client then skips
+ * it with the reason CHAIN_UNSUPPORTED instead of asking a dead route on every
+ * keystroke and reporting its silence as "no liquidity for this pair".
  */
 app.get('/api/solana/routes', async (req, res) => {
   const q = req.query ?? {};

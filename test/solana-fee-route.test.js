@@ -51,7 +51,13 @@ import {
   refreshJupFeeCoverage
 } from '../server/solanaJupFee.js';
 
-import { verifySolanaFeeEcho } from '../server/solanaLifi.js';
+import {
+  _resetSolanaSupport,
+  oceanQuote,
+  oceanStatus,
+  solanaSupported
+} from '../server/solanaOcean.js';
+import { lifiSolanaSwapQuote, verifySolanaFeeEcho } from '../server/solanaLifi.js';
 import { jupiterEchoedFeeBps } from '../src/lib/solana.js';
 
 const SOL = 'So11111111111111111111111111111111111111112';
@@ -172,11 +178,35 @@ describe('solana route order — which route runs, and which one pays', () => {
   it('asks all three paid routes when nothing is known about them', () => {
     /* UNKNOWN is not "unconfigured": refusing to ask because we could not
        confirm is how a working paid route gets skipped. */
-    expect(solanaQuoteProviders({})).toEqual(['openocean', 'jupfee']);
+    expect(solanaQuoteProviders({})).toEqual(['openocean', 'lifi', 'jupfee']);
     expect(solanaQuoteProviders({ address: WALLET })).toEqual(['openocean', 'lifi', 'jupfee']);
-    /* LI.FI cannot price without a wallet address — its quote carries the
-       transaction — so it is the only one that waits for a connection. */
-    expect(solanaQuoteProviders({ address: null, routes: {} })).not.toContain('lifi');
+    /* LI.FI no longer waits for a connection: the SERVER prices against our own
+       fee wallet and drops the transaction when the caller has no account, so a
+       fee-paying route can price the very first keystroke. */
+    expect(solanaQuoteProviders({ address: null, routes: {} })).toContain('lifi');
+  });
+
+  it('skips De¹ when upstream says the chain is switched off — the 2026-10-24 report', () => {
+    /* `{"code":200,"data":{"message":"This chain is no longer supported"}}`
+       is what De¹ answers for every Solana pair now; the server reports it as
+       `supported: false` and the race stops spending a round trip on it. */
+    const routes = {
+      de1: { keyConfigured: false, feeReady: true, supported: false },
+      lifi: { feeReady: true },
+      jupfee: { configured: false }
+    };
+    expect(solanaQuoteProviders({ address: WALLET, routes })).toEqual(['lifi']);
+    expect(solanaSkippedReasons({ address: WALLET, routes })).toEqual({
+      openocean: 'CHAIN_UNSUPPORTED',
+      jupfee: 'FEE_ACCOUNT_NOT_CONFIGURED'
+    });
+    /* A STALE or unknown verdict is still asked: a chain that was switched off
+       can be switched back on, and a cached "off" that outlives the fact is the
+       mirror image of the bug this file prevents. */
+    expect(solanaQuoteProviders({ routes: { de1: { feeReady: true, supported: null } } }))
+      .toContain('openocean');
+    expect(solanaSkippedReasons({ routes: { de1: { feeReady: true, supported: null } } }).openocean)
+      .toBeUndefined();
   });
 
   it('stops asking routes our own server says cannot pay', () => {
@@ -207,9 +237,13 @@ describe('solana route order — which route runs, and which one pays', () => {
     expect(solanaSkippedReasons({ address: WALLET, routes: noFee })).toEqual({ openocean: 'FEE_NOT_CONFIGURED' });
   });
 
-  it('names the wallet, not the configuration, when LI.FI is skipped for want of one', () => {
+  it('no longer blames the wallet for LI.FI — it can price without one', () => {
+    /* `NEEDS_WALLET` was true while LI.FI could only be asked AFTER a
+       connection, and it is exactly why the first price on the screen came from
+       a route that earns nothing. Pricing is now server-side, so the only
+       reason to skip LI.FI is a fee we cannot collect. */
     expect(solanaSkippedReasons({ address: null, routes: { lifi: { feeReady: true } } }))
-      .toEqual({ lifi: 'NEEDS_WALLET' });
+      .toEqual({});
     expect(solanaSkippedReasons({ address: WALLET, routes: { lifi: { feeReady: false } } }))
       .toEqual({ lifi: 'FEE_NOT_CONFIGURED' });
   });
@@ -661,5 +695,168 @@ describe('derived fee accounts — server/solanaJupFee.js on-chain discovery', (
     expect(app).toMatch(/refreshJupFeeCoverage\(req\.query/);
     expect(app).toMatch(/refreshJupFeeCoverage\(req\.body/);
     expect(app).toMatch(/jupfee:\s*await jupFeeStatusAsync\(pair\)/);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+describe('De¹ Solana is switched off upstream — 2026-10-24', () => {
+  const OFF_CHAIN = { code: 200, data: { message: 'This chain is no longer supported' } };
+
+  const stubOcean = (body, status = 200) => {
+    const fn = vi.fn(async () => new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' }
+    }));
+    vi.stubGlobal('fetch', fn);
+    return fn;
+  };
+
+  it('reads `{"code":200,"data":{"message":"This chain is no longer supported"}}` as a REFUSAL', async () => {
+    /* THE REPORTED BUG. HTTP 200 + `code: 200` used to be accepted as success,
+       so the screen got a body with no inAmount/outAmount — an unreadable
+       \"quote\" the client could only turn into NO_ROUTE, on every Solana pair,
+       for every user, while the free Jupiter route quietly took over. */
+    stubOcean(OFF_CHAIN);
+    const r = await oceanQuote({ inputMint: SOL, outputMint: USDC, amount: '10000000' });
+    expect(r.ok).toBe(false);
+    expect(r.body.error).toBe('CHAIN_UNSUPPORTED');
+    expect(r.body.detail).toMatch(/no longer supported/i);
+    /* Unknown is asked; a proven verdict is remembered for the client. */
+    expect(solanaSupported()).toBe(false);
+    expect(oceanStatus().supported).toBe(false);
+  });
+
+  it('stops the root ladder on that verdict instead of retrying every host', async () => {
+    const fn = stubOcean(OFF_CHAIN);
+    await oceanQuote({ inputMint: SOL, outputMint: USDC, amount: '10000000' });
+    /* Every root would answer the same sentence; asking them all is latency the
+       user pays for an answer we already have. */
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call a bodiless 200 a price either', async () => {
+    stubOcean({ code: 200, data: {} });
+    const r = await oceanQuote({ inputMint: SOL, outputMint: USDC, amount: '10000000' });
+    expect(r.ok).toBe(false);
+    expect(r.body.error).toBe('UPSTREAM_FAILED');
+  });
+
+  it('treats a real quote as proof the chain is ON again', async () => {
+    stubOcean({
+      code: 200,
+      data: { inAmount: '10000000', outAmount: '1000237', minOutAmount: '995236', price_impact: '0.01%' }
+    });
+    const r = await oceanQuote({ inputMint: SOL, outputMint: USDC, amount: '10000000' });
+    expect(r.ok).toBe(true);
+    expect(r.body.outAmount).toBe('1000237');
+    expect(solanaSupported()).toBe(true);
+    expect(oceanStatus().supported).toBe(true);
+  });
+
+  it('forgets the verdict, because a chain that was off can come back on', () => {
+    _resetSolanaSupport();
+    expect(solanaSupported()).toBeNull();
+    expect(oceanStatus().supported).toBeNull();
+    expect(oceanStatus().supportedReason).toBeNull();
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+describe('LI.FI prices WITHOUT a wallet — so the first price is a paid one', () => {
+  const lifiBody = (overrides = {}) => ({
+    tool: 'okx',
+    estimate: {
+      fromAmount: '10000000',
+      toAmount: '1000237',
+      toAmountMin: '995236',
+      feeCosts: [
+        { name: 'LIFI Fixed Fee', amount: '25000', percentage: '0.0025' },
+        {
+          name: 'Distributions',
+          percentage: '0.0070',
+          amount: '70000',
+          feeSplit: {
+            recipients: [
+              { name: FEE_ACCOUNT, fee: '70000', type: 'DISTRIBUTION', walletAddress: FEE_ACCOUNT }
+            ]
+          }
+        }
+      ]
+    },
+    transactionRequest: { data: 'TElGSVNZVFJVQ1RJT04=' },
+    ...overrides
+  });
+
+  const stubLifi = (body) => {
+    const fn = vi.fn(async () => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    }));
+    vi.stubGlobal('fetch', fn);
+    return fn;
+  };
+
+  const sent = (fn, i = 0) => new URL(String(fn.mock.calls[i][0]));
+  const params = { inputMint: SOL, outputMint: USDC, amount: '10000000', slippageBps: 50 };
+
+  it('prices against OUR fee wallet and sends no transaction to the browser', async () => {
+    process.env.SOLANA_FEE_RECIPIENT = FEE_ACCOUNT;
+    const fn = stubLifi(lifiBody());
+    const r = await lifiSolanaSwapQuote(params);
+
+    expect(r.ok).toBe(true);
+    expect(r.body.priceOnly).toBe(true);
+    /* Nothing signable crosses the wire on a keystroke. */
+    expect(r.body.transaction).toBeNull();
+    expect(JSON.stringify(r.body)).not.toContain('TElGSVNZVFJVQ1RJT04=');
+
+    const url = sent(fn);
+    expect(url.searchParams.get('fromAddress')).toBe(FEE_ACCOUNT);
+    expect(url.searchParams.get('distributionFees[0][receiver]')).toBe(FEE_ACCOUNT);
+    expect(url.searchParams.get('distributionFees[0][percentage]')).toBe('0.007');
+
+    /* …and it is still a FEE-PAYING price: 70 bps plus LI.FI's own 25 bps. */
+    expect(r.body.feeBps).toBe(70);
+    expect(r.body.totalFeeBps).toBe(95);
+    expect(r.body.feeApplied).toBe(true);
+    expect(r.body.outAmount).toBe('1000237');
+  });
+
+  it('builds for the USER when an account is supplied', async () => {
+    process.env.SOLANA_FEE_RECIPIENT = FEE_ACCOUNT;
+    const fn = stubLifi(lifiBody());
+    const r = await lifiSolanaSwapQuote({ ...params, account: WALLET });
+
+    expect(r.ok).toBe(true);
+    expect(r.body.priceOnly).toBe(false);
+    expect(r.body.transaction).toBe('TElGSVNZVFJVQ1RJT04=');
+    expect(r.body.versioned).toBe(true);
+    expect(sent(fn).searchParams.get('fromAddress')).toBe(WALLET);
+  });
+
+  it('refuses a price-only route that stops paying us', async () => {
+    process.env.SOLANA_FEE_RECIPIENT = FEE_ACCOUNT;
+    const body = lifiBody();
+    body.estimate.feeCosts = [body.estimate.feeCosts[0]]; // no Distributions
+    stubLifi(body);
+    const r = await lifiSolanaSwapQuote(params);
+    expect(r.ok).toBe(false);
+    expect(r.body.error).toBe('FEE_NOT_APPLIED');
+    /* A fee-less price is not a paid price: our revenue never becomes optional. */
+  });
+
+  it('still refuses to price at all with no fee configured', async () => {
+    process.env.SOLANA_FEE_RECIPIENT = 'not-base58';
+    const fn = stubLifi(lifiBody());
+    const r = await lifiSolanaSwapQuote(params);
+    expect(r.ok).toBe(false);
+    expect(r.body.error).toBe('SOLANA_FEE_NOT_CONFIGURED');
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('is wired into the route order, so the screen asks it before any wallet exists', () => {
+    const page = readFileSync(new URL('../src/pages/SolanaSwap.jsx', import.meta.url), 'utf8');
+    expect(page).toMatch(/solanaQuoteProviders\(\{ address, routes \}\)/);
+    expect(solanaQuoteProviders({ address: null })).toContain('lifi');
   });
 });

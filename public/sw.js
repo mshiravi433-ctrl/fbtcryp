@@ -243,8 +243,14 @@
  * `includedSteps[].action.integratorFees`). A device holding the v25 shell
  * keeps the old JS — and the old gate — no matter what the server does, so the
  * zkSync/Scroll «مشکلی پیش آمده» would survive the deploy on every installed
- * PWA and APK. Renaming the cache evicts that shell. */
-const SHELL = 'fbt-shell-v26';
+ * PWA and APK. Renaming the cache evicts that shell.
+ *
+ * v26 -> v27 (2026-10-24): the Solana quote ladder changed shape — LI.FI is now
+ * asked BEFORE a wallet is connected and De¹ is skipped once the server says its
+ * Solana chain is off. A device holding the v26 shell keeps the old ladder and
+ * would keep pricing through the free Jupiter route, which is the very report
+ * this deploy answers. */
+const SHELL = 'fbt-shell-v27';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

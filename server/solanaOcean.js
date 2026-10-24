@@ -244,11 +244,78 @@ export function feeBps() {
 export const bpsToPercent = (bps) => Number(bps) / 100;
 
 /**
+ * ─── AND WHY "HTTP 200" IS NOT "WE HAVE A PRICE" ───────────────────────────
+ * 2026-10-24: every Solana quote from De¹ answered
+ *
+ *   { "code": 200, "data": { "message": "This chain is no longer supported" } }
+ *
+ * with HTTP 200 and `code: 200`. The old check (`res.ok && body.code === 200`)
+ * therefore called that a SUCCESS and handed the screen a body with no
+ * `inAmount`/`outAmount` — which the client could only read as "no route",
+ * i.e. the paid De¹ route looked like it had no liquidity on Solana while it
+ * was in fact switched off upstream. That is the report this file now answers:
+ * «در سواپ سولانا فقط با ژوپیتر می‌رود که کارمزد نمی‌گیریم».
+ *
+ * A body that says the CHAIN is unsupported is authoritative for every root
+ * and every caller, so it stops the ladder (like BAD_AMOUNT) and is recorded as
+ * route-level state (`solanaSupported()`) so the client stops spending a round
+ * trip per keystroke on a route that cannot answer. The state expires after
+ * `DE1_SUPPORT_TTL_MS` (10 min): a chain that was switched off can be switched
+ * back on, and a permanent verdict cached forever would outlive the fact.
+ */
+
+/** How long a "chain no longer supported" answer is believed. */
+const SUPPORT_TTL_MS = Number(process.env.DE1_SUPPORT_TTL_MS || 10 * 60 * 1000);
+
+/**
+ * What the last real request said about Solana on De¹.
+ *
+ * `null` means "never asked" — and unknown is ASKED, never skipped: refusing to
+ * try because we could not confirm is how a working route gets deleted.
+ */
+let supportState = { supported: null, reason: null, checkedAt: 0 };
+
+/** Record what the last upstream answer proved. */
+export function markSolanaSupport(supported, reason = null) {
+  supportState = { supported, reason, checkedAt: Date.now() };
+}
+
+/** True/false when the last answer is still fresh, `null` when unknown. */
+export function solanaSupported() {
+  if (!supportState.checkedAt || Date.now() - supportState.checkedAt >= SUPPORT_TTL_MS) return null;
+  return supportState.supported;
+}
+
+/** Test seam: forget what upstream said about Solana. */
+export function _resetSolanaSupport() {
+  supportState = { supported: null, reason: null, checkedAt: 0 };
+}
+
+/**
+ * Is this body the "chain switched off" answer?
+ *
+ * Deliberately narrow. It requires a 200 envelope with NO pricing fields and a
+ * message that talks about the chain not being supported — a body that merely
+ * contains the word "supported" next to a real quote must never be swallowed.
+ */
+function unsupportedChainMessage(body) {
+  const data = body?.data;
+  if (!data || typeof data !== 'object') return null;
+  if (data.inAmount != null || data.outAmount != null) return null;
+  const message = typeof data.message === 'string' ? data.message : '';
+  if (!message) return null;
+  return /no longer supported|not supported|unsupported|chain .* (disabled|removed)/i.test(message)
+    ? message
+    : null;
+}
+
+/**
  * One attempt against one root. Classifies, never throws.
  *
- * `kind` is 'ok', 'bad-amount' (authoritative — stop the ladder), or
- * 'failure' (worth another root). `auth` marks the one failure class where
- * dropping the key can change the answer.
+ * `kind` is 'ok', 'bad-amount' (authoritative — stop the ladder),
+ * 'unsupported' (authoritative — the chain is off upstream) or 'failure'
+ * (worth another root). `auth` marks the one failure class where dropping the
+ * key can change the answer.
  */
 async function ooAttempt(root, path, { useKey, timeoutMs }) {
   const ctrl = new AbortController();
@@ -278,9 +345,18 @@ async function ooAttempt(root, path, { useKey, timeoutMs }) {
     }
     /*
      * OpenOcean answers HTTP 200 with its own `code` field, so res.ok alone is
-     * not success. A `code` of 200 with `data.code` of 0 is the good case.
+     * not success. A `code` of 200 with a real `data` object is the good case;
+     * a `code` of 200 whose `data` is a sentence about the chain is NOT.
      */
-    if (!res.ok || !body || body.code !== 200) {
+    const offChain = unsupportedChainMessage(body);
+    if (offChain) {
+      return {
+        kind: 'unsupported',
+        auth: false,
+        result: { ok: false, status: 400, body: { error: 'CHAIN_UNSUPPORTED', detail: offChain } }
+      };
+    }
+    if (!res.ok || !body || body.code !== 200 || !body.data) {
       const detail = body?.error || body?.message || null;
       const isBadAmount =
         res.status === 400 ||
@@ -332,7 +408,20 @@ async function ooFetch(path) {
       useKey: Boolean(key),
       timeoutMs: i === 0 ? TIMEOUT : retryTimeout
     });
-    if (r.kind !== 'failure') return r.result;
+    /*
+     * A chain that upstream has switched off is the same answer on every root,
+     * so it stops the ladder and becomes route state — see `solanaSupported`.
+     * Without this the client would keep asking a dead route on every keystroke
+     * and would report its silence as "no liquidity for this pair".
+     */
+    if (r.kind === 'unsupported') {
+      markSolanaSupport(false, r.result?.body?.detail || null);
+      return r.result;
+    }
+    if (r.kind !== 'failure') {
+      markSolanaSupport(true);
+      return r.result;
+    }
     if (r.auth) authRefusal = true;
     if (!firstFailure) firstFailure = r.result;
   }
@@ -347,7 +436,14 @@ async function ooFetch(path) {
    */
   if (key && authRefusal) {
     const r = await ooAttempt(OO_PUBLIC_ROOT, path, { useKey: false, timeoutMs: retryTimeout });
-    if (r.kind !== 'failure') return r.result;
+    if (r.kind === 'unsupported') {
+      markSolanaSupport(false, r.result?.body?.detail || null);
+      return r.result;
+    }
+    if (r.kind !== 'failure') {
+      markSolanaSupport(true);
+      return r.result;
+    }
   }
 
   /* With no key configured the ladder above already tried every root
@@ -450,6 +546,16 @@ export async function oceanQuote(query) {
 
   const r = await ooFetch(`/quote?${params}`);
   if (!r.ok) return r;
+
+  /*
+   * A 200 envelope with no price in it is not a quote. De¹ has answered both
+   * `{code:200,data:{}}` and the "chain no longer supported" sentence with
+   * HTTP 200, and passing either through as `ok` gave the client a body it
+   * could only read as "no liquidity for this pair".
+   */
+  if (r.body?.inAmount == null || r.body?.outAmount == null) {
+    return { ok: false, status: 502, body: { error: 'UPSTREAM_FAILED', detail: 'NO_PRICE' } };
+  }
 
   return {
     ok: true,
@@ -573,6 +679,23 @@ export function oceanStatus() {
      * `keyConfigured` is for.
      */
     solanaKeyRequired: false,
+    /*
+     * ─── IS THE CHAIN ACTUALLY SERVED? ────────────────────────────────────
+     * `feeReady` answers "is our fee plumbing configured", which was true the
+     * whole time De¹ was answering
+     * `{"code":200,"data":{"message":"This chain is no longer supported"}}`
+     * for Solana (2026-10-24). Two different truths, so two different fields:
+     *
+     *   supported: true      last real request priced a Solana pair
+     *              false     upstream says the chain is off (fresh answer)
+     *              null      never asked — UNKNOWN, and unknown is asked
+     *
+     * The client skips this route only on `supported === false`. It is set by
+     * the quote/swap path itself, so it costs no extra request, and it expires
+     * after DE1_SUPPORT_TTL_MS so a chain that comes back is picked up again.
+     */
+    supported: solanaSupported(),
+    supportedReason: solanaSupported() === false ? (supportState.reason || 'CHAIN_UNSUPPORTED') : null,
     feeReady: feeReady(),
     feeBps: feeBps(),
     feeReceiver: feeReceiver() || null,

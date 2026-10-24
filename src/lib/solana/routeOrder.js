@@ -8,14 +8,18 @@
  * There are four ways to move tokens on Solana from this screen, and they are
  * NOT interchangeable:
  *
- *   openocean  De¹/OpenOcean v4   — pays us 70 bps (80% net). Needs an
- *                                   OPENOCEAN_API_KEY on the enterprise
- *                                   gateway; without one every call is
- *                                   rejected. Signs + WE broadcast.
+ *   openocean  De¹/OpenOcean v4   — pays us 70 bps (80% net). Keyless on the
+ *                                   public root, keyed on the enterprise one.
+ *                                   Since 2026-10-24 its Solana chain answers
+ *                                   «This chain is no longer supported», so it
+ *                                   is asked, reported and skipped — never
+ *                                   silently trusted. Signs + WE broadcast.
  *   lifi       LI.FI (SVM)        — pays our wallet per request through
- *                                   `distributionFees`, no key. Needs a wallet
- *                                   address even to price. Signs + WE
- *                                   broadcast.
+ *                                   `distributionFees`, no key, and (since
+ *                                   2026-10-24) prices even without a wallet:
+ *                                   the server quotes against our own fee
+ *                                   wallet and drops the transaction. Signs +
+ *                                   WE broadcast.
  *   jupfee     Jupiter Swap API   — pays us `platformFeeBps` into a fee token
  *              (Metis, /swap/v1)    account we own. No key, no referral
  *                                   program. Signs + WE broadcast.
@@ -141,9 +145,34 @@ export function solanaQuoteProviders({ address = null, routes = null } = {}) {
    * Reachability is NOT checked here — a 503 guess per keystroke was the
    * original sin; a fast failure inside the race costs nothing.
    */
-  if (de1?.feeReady !== false) out.push('openocean');
-  /* LI.FI: needs a wallet even to price, and a configured receiver to pay us. */
-  if (address && lifi?.feeReady !== false) out.push('lifi');
+  /*
+   * ─── AND WHY IT IS ALSO SKIPPED WHEN THE CHAIN IS SWITCHED OFF ───────────
+   * `supported === false` is not a guess about a key or a host: it is what the
+   * route's own last request answered —
+   *
+   *   {"code":200,"data":{"message":"This chain is no longer supported"}}
+   *
+   * (measured 2026-10-24 on De¹'s public root, for every Solana pair, with the
+   * fee parameters attached). The server now classifies that answer and
+   * reports it in GET /api/solana/routes as `supported: false`; asking anyway
+   * would spend one round trip per keystroke on a route that cannot answer.
+   *
+   * `null` (never asked, or a stale verdict) is still ASKED — a chain that was
+   * switched off can be switched back on, and a cached "off" that outlives the
+   * fact is the mirror image of the bug this file exists to prevent.
+   */
+  if (de1?.feeReady !== false && de1?.supported !== false) out.push('openocean');
+  /*
+   * LI.FI: asked ALWAYS, with or without a wallet.
+   *
+   * It used to require `address` because LI.FI will not quote without a
+   * `fromAddress`. The server now prices against our own fee wallet when the
+   * caller has no account and DROPS the transaction it built for it
+   * (server/solanaLifi.js), so the first price on the screen can come from a
+   * fee-paying route instead of waiting for a connection — and, with De¹'s
+   * Solana chain off, LI.FI is the only paid route that can price at all.
+   */
+  if (lifi?.feeReady !== false) out.push('lifi');
   /* Jupiter with our fee: only exists once a fee token account is configured,
      and only for pairs that account's mint is part of. */
   if (jupfee?.configured !== false) out.push('jupfee');
@@ -171,8 +200,12 @@ export function solanaSkippedReasons({ address = null, routes = null } = {}) {
 
   const out = {};
   if (de1?.feeReady === false) out.openocean = 'FEE_NOT_CONFIGURED';
-  if (!address) out.lifi = 'NEEDS_WALLET';
-  else if (lifi?.feeReady === false) out.lifi = 'FEE_NOT_CONFIGURED';
+  else if (de1?.supported === false) out.openocean = 'CHAIN_UNSUPPORTED';
+  /* LI.FI no longer needs a wallet to PRICE (`NEEDS_WALLET` is gone for the
+     quote phase — it still needs one to BUILD, which the build ladder enforces
+     by passing the account). The only remaining reason to skip it is a fee
+     receiver/rate we do not have. */
+  if (lifi?.feeReady === false) out.lifi = 'FEE_NOT_CONFIGURED';
   if (jupfee?.configured === false) out.jupfee = 'FEE_ACCOUNT_NOT_CONFIGURED';
   return out;
 }

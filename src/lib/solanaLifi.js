@@ -29,29 +29,44 @@ import { apiBase } from './apiBase';
 import { isSolanaAddress, solanaApiFetch } from './solanaOcean';
 
 /**
- * Price AND build in one call: LI.FI returns the unsigned versioned
- * transaction alongside the estimate, so the same request that the user sees
- * priced is the one they sign (after a refresh at swap time).
+ * Price AND (with a wallet) build in one call: LI.FI returns the unsigned
+ * versioned transaction alongside the estimate, so the same request that the
+ * user sees priced is the one they sign (after a refresh at swap time).
+ *
+ * ─── `account` IS OPTIONAL, AND THAT IS THE POINT ──────────────────────────
+ * LI.FI cannot quote without a `fromAddress`, so this route used to be asked
+ * only after a wallet was connected — which meant the first price on the screen
+ * always came from a route that could not price. With De¹'s Solana chain
+ * switched off upstream (2026-10-24) that first price was the FREE Jupiter one,
+ * i.e. exactly the report.
+ *
+ * Without an account the SERVER prices against our own fee wallet and drops the
+ * transaction it built, returning `priceOnly: true`. The user gets the
+ * fee-paying route's number before they connect anything and nothing signable
+ * ever reaches the browser; the moment an account is present this is the
+ * ordinary price+build call.
  *
  * @param {object} p
  * @param {string} p.inputMint
  * @param {string} p.outputMint
  * @param {string} p.amount     integer base units, as a string
- * @param {string} p.account    the user's Solana address (required by LI.FI)
+ * @param {string} [p.account]  the user's Solana address — omitted for a price
  * @param {number} [p.slippageBps]
  */
 export async function getLifiSolanaQuote({ inputMint, outputMint, amount, account, slippageBps }) {
-  if (!isSolanaAddress(account)) throw new Error('BAD_TAKER');
   if (!amount || !/^\d+$/.test(String(amount)) || String(amount) === '0') {
     throw new Error('BAD_AMOUNT');
   }
+  /* An account that was supplied must still be well-formed: a typo'd address
+     must fail here, not as an opaque upstream refusal at signing time. */
+  if (account != null && account !== '' && !isSolanaAddress(account)) throw new Error('BAD_TAKER');
 
   const params = new URLSearchParams({
     inputMint: String(inputMint),
     outputMint: String(outputMint),
-    amount: String(amount),
-    account
+    amount: String(amount)
   });
+  if (isSolanaAddress(account)) params.set('account', account);
   if (Number.isFinite(slippageBps)) params.set('slippageBps', String(Math.round(slippageBps)));
 
   return solanaApiFetch(`${apiBase()}/solana/lifi/quote?${params}`);
