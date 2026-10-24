@@ -50,22 +50,26 @@ export const PROMO_IMAGES = {
   isfahanBridge: {
     src: `${WM}/c/c2/Si-o-se-Pol.jpg/1280px-Si-o-se-Pol.jpg`,
     credit: 'Reza Haji-pour',
-    licence: 'CC BY 3.0'
+    licence: 'CC BY 3.0',
+    position: 'center 54%'
   },
   isfahanMosque: {
     src: `${WM}/6/65/Isfahan_Lotfollah_mosque_ceiling_symmetric.jpg/1280px-Isfahan_Lotfollah_mosque_ceiling_symmetric.jpg`,
     credit: 'Phillip Maiwald',
-    licence: 'CC BY-SA 3.0'
+    licence: 'CC BY-SA 3.0',
+    position: 'center 48%'
   },
   persepolis: {
     src: `${WM}/7/7b/%D9%BE%D8%A7%D9%86%D9%88%D8%B1%D8%A7%D9%85%D8%A7_%D8%B1%D9%88%D8%B2_%D8%AA%D8%AE%D8%AA_%D8%AC%D9%85%D8%B4%DB%8C%D8%AF.jpg/1280px-%D9%BE%D8%A7%D9%86%D9%88%D8%B1%D8%A7%D9%85%D8%A7_%D8%B1%D9%88%D8%B2_%D8%AA%D8%AE%D8%AA_%D8%AC%D9%85%D8%B4%DB%8C%D8%AF.jpg`,
     credit: 'Hamidhassas',
-    licence: 'CC BY-SA 4.0'
+    licence: 'CC BY-SA 4.0',
+    position: 'center 52%'
   },
   naqsheJahan: {
     src: `${WM}/0/06/Naghsh-e_Jahan_Square.jpg/1280px-Naghsh-e_Jahan_Square.jpg`,
     credit: 'Reza Sobhani',
-    licence: 'CC BY-SA 4.0'
+    licence: 'CC BY-SA 4.0',
+    position: 'center 48%'
   },
   tehran: {
     src: `${WM}/d/de/Si-o-se_Pol%2C_Isfahan%2C_Ir%C3%A1n%2C_2016-09-19%2C_DD_04-06_HDR.jpg/1280px-Si-o-se_Pol%2C_Isfahan%2C_Ir%C3%A1n%2C_2016-09-19%2C_DD_04-06_HDR.jpg`,
@@ -81,8 +85,40 @@ export const PROMO_IMAGES = {
  * so the banner is navigation rather than decoration.
  */
 export const PROMO_SLIDES = [
-  { id: 'p-fly', img: PROMO_IMAGES.isfahanBridge, title: 'shop.promo.flights', go: 'flights' },
-  { id: 'p-stay', img: PROMO_IMAGES.naqsheJahan, title: 'shop.promo.stays', go: 'stays' },
-  { id: 'p-card', img: PROMO_IMAGES.isfahanMosque, title: 'shop.promo.cards', go: 'cards' },
-  { id: 'p-esim', img: PROMO_IMAGES.persepolis, title: 'shop.promo.esim', go: 'topup' }
+  {
+    id: 'p-fly',
+    img: PROMO_IMAGES.isfahanBridge,
+    title: 'shop.promo.flights',
+    subtitle: 'shop.promo.flightsSub',
+    location: 'shop.promo.locations.bridge',
+    go: 'flights',
+    accent: 'amber'
+  },
+  {
+    id: 'p-stay',
+    img: PROMO_IMAGES.naqsheJahan,
+    title: 'shop.promo.stays',
+    subtitle: 'shop.promo.staysSub',
+    location: 'shop.promo.locations.naqsheJahan',
+    go: 'stays',
+    accent: 'cyan'
+  },
+  {
+    id: 'p-card',
+    img: PROMO_IMAGES.isfahanMosque,
+    title: 'shop.promo.cards',
+    subtitle: 'shop.promo.cardsSub',
+    location: 'shop.promo.locations.lotfollah',
+    go: 'cards',
+    accent: 'violet'
+  },
+  {
+    id: 'p-esim',
+    img: PROMO_IMAGES.persepolis,
+    title: 'shop.promo.esim',
+    subtitle: 'shop.promo.esimSub',
+    location: 'shop.promo.locations.persepolis',
+    go: 'topup',
+    accent: 'mint'
+  }
 ];

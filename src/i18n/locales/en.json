@@ -7784,7 +7784,22 @@
       "stays": "Hotels worldwide, booked in crypto",
       "cards": "Gift cards for 200+ brands",
       "esim": "Data in 180+ countries, no SIM",
-      "explore": "Explore now"
+      "flightsSub": "Start your next journey with a crypto payment.",
+      "staysSub": "Handpicked stays, ready to book with stablecoins.",
+      "cardsSub": "Your favourite brands, delivered digitally in minutes.",
+      "esimSub": "Stay connected wherever you go — no physical SIM needed.",
+      "explore": "Explore now",
+      "ariaLabel": "Featured shop offers",
+      "slideNavigation": "Choose a slide",
+      "goToSlide": "Go to slide {{number}}",
+      "previous": "Previous slide",
+      "next": "Next slide",
+      "locations": {
+        "bridge": "Si-o-se-pol · Isfahan",
+        "naqsheJahan": "Naqsh-e Jahan Square · Isfahan",
+        "lotfollah": "Sheikh Lotfollah Mosque · Isfahan",
+        "persepolis": "Persepolis · Fars"
+      }
     },
     "howTo": "How to redeem",
     "providerNote": "The provider's own wording",
