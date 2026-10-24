@@ -66,10 +66,49 @@ try {
   check('empty input is not a navigation', parseNavigationCommand('').ok === false);
   check('a swap request is not a navigation', parseNavigationCommand('سواپ 100 USDC به ETH').ok === false);
 
+  /* ---------------- commerce intents (shop phase 2/3) ---------------- */
+  const gift = parseNavigationCommand('buy a gift card');
+  check('"buy a gift card" opens the gift-card tab — buy-verb IS the intent here',
+    gift.ok === true && gift.target === 'shop-gift' && gift.route === '/shop?tab=cards' && gift.commerce === true,
+    JSON.stringify(gift));
+  check('«کارت هدیه گیفت» style Persian gift phrasing navigates too',
+    parseNavigationCommand('گیفت کارت استیم').ok === true);
+  check('«کارت اعتباری» is the virtual-card tab, not the shop root',
+    parseNavigationCommand('کارت اعتباری بخرم').ok === true
+    && parseNavigationCommand('کارت اعتباری بخرم').target === 'shop-virtualcard');
+  check('«شارژ موبایل» lands on top-up', parseNavigationCommand('شارژ موبایل').target === 'shop-topup');
+  check('«esim مسافرتی» lands on the eSIM shelf (topup tab)',
+    parseNavigationCommand('esim مسافرتی').target === 'shop-esim');
+  check('«بلیط پرواز» lands on flights, «رزرو هتل» on stays',
+    parseNavigationCommand('بلیط پرواز').target === 'shop-flights'
+    && parseNavigationCommand('هتل استانبول').target === 'shop-stays');
+  check('«ساخت فاکتور فروشنده» lands on the pay tab',
+    parseNavigationCommand('ساخت فاکتور').target === 'shop-invoice');
+  check('the bare shop word lands on the storefront root',
+    parseNavigationCommand('برو به فروشگاه').route === '/shop');
+
+  /* the guard rails around the new doors */
+  const giftQ = parseNavigationCommand('چطور گیفت کارت بخرم');
+  check('a HOW-TO question about gift cards is answered, never navigated',
+    giftQ.ok === false && giftQ.reason === 'question', JSON.stringify(giftQ));
+  check('"what is a gift card" is never navigated either',
+    parseNavigationCommand('what is a gift card').ok === false);
+  check('a how-to about hotels is answered, not navigated (the ? is NOT a marker — polite requests navigate)',
+    parseNavigationCommand('چطور هتل ارزان پیدا کنم').ok === false
+    && parseNavigationCommand('میشه رزرو هتل رو باز کنم؟').ok === true);
+  const trade = parseNavigationCommand('swap 50 USDT to BNB on intent os');
+  check('a swap that mentions Intent OS still refuses to navigate (the old block is intact)',
+    trade.ok === false && trade.reason === 'financial', JSON.stringify(trade));
+
   /* ---------------- the route table ---------------- */
   const targets = navigationTargets();
   check('the navigation table exposes the Intent OS route',
     targets.length >= 1 && targets.some((t) => t.id === 'intent-os' && t.route === '/intent'));
+  check('the navigation table carries every shop destination, each flagged commerce',
+    ['shop-gift', 'shop-virtualcard', 'shop-topup', 'shop-esim', 'shop-flights', 'shop-stays', 'shop-invoice', 'shop-home']
+      .every((id) => targets.some((t) => t.id === id && t.commerce === true && String(t.route).startsWith('/shop'))));
+  check('Intent OS itself is NOT flagged commerce — its financial block stays armed',
+    targets.some((t) => t.id === 'intent-os' && !t.commerce));
 
   /* ---------------- panel wiring (source-level, as the other phase
      probes verify wiring) ---------------- */
@@ -84,6 +123,8 @@ try {
     /data-testid="chat-navigation-link"/.test(panel));
   check('the quick-action rail carries an Intent OS chip',
     /'intentOS'/.test(panel));
+  check('the quick-action rail carries the GIFT-CHIP that triggers the shop nav',
+    /chat-navigation-chip-gift/.test(panel) && /intentAI\.navigation\.shopGift/.test(panel));
 
   const fa = readFileSync('src/i18n/locales/fa.json', 'utf8');
   const en = readFileSync('src/i18n/locales/en.json', 'utf8');

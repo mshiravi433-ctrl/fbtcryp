@@ -2896,6 +2896,25 @@ function MessageContent({ msg, onDraftReady, onQuickReply, onOpenGate }) {
             >
               {t('intentAI.navigation.intentOS', { defaultValue: 'Intent OS' })}
             </button>
+            {/*
+              Phase 2/3 — a commerce chip, next to the page chip. It rides the
+              SAME navigation command (the chip text is matched by
+              chatNavigation before the parser ever sees it), so one click
+              lands the user on the shop's gift-card tab. It is deliberately
+              phrased as a purchase noun («گیفت کارت» / "Gift card"), not a
+              sentence: the navigation layer is a command surface, and a chip
+              that opens a chat paragraph is a chip that re-parses on every
+              locale edit.
+            */}
+            <button
+              key={'shopGift'}
+              type="button"
+              className="ia-chip"
+              data-testid="chat-navigation-chip-gift"
+              onClick={() => onQuickReply?.(t('intentAI.navigation.shopGift', { defaultValue: 'Gift card' }))}
+            >
+              {t('intentAI.navigation.shopGift', { defaultValue: 'Gift card' })}
+            </button>
           </div>
         </div>
       );

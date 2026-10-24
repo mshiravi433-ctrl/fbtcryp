@@ -166,3 +166,30 @@ export const IconGlobe = (p) => (
     <path d="M12 3a14 14 0 0 0 0 18" />
   </svg>
 );
+
+/** Gift envelope: a present with a bow — the Phase 3 share-as-gift mark. */
+export const IconGift = (p) => (
+  <svg {...base(p)}>
+    <rect x="3.2" y="9.4" width="17.6" height="11.2" rx="2.2" />
+    <path d="M3.2 13.4h17.6" />
+    <path d="M12 9.4v11.2" />
+    <path d="M12 9.4c-2.9 0-5-1.3-5-3 0-1.3 1-2.2 2.2-2.2 1.8 0 2.4 2.1 2.8 5.2Z" />
+    <path d="M12 9.4c2.9 0 5-1.3 5-3 0-1.3-1-2.2-2.2-2.2-1.8 0-2.4 2.1-2.8 5.2Z" />
+  </svg>
+);
+
+/** Flame: the regional "hottest right now" rail badge. */
+export const IconFlame = (p) => (
+  <svg {...base(p)}>
+    <path d="M12 3.2c3.1 3.1 5.6 5.4 5.6 9a5.6 5.6 0 0 1-11.2 0c0-1.6.7-2.9 1.7-4.2.6 1 1.4 1.6 2.3 1.8-.3-2.2.2-4.4 1.6-6.6Z" />
+  </svg>
+);
+
+/** History / recently viewed: a clock with a counter-clockwise arrow. */
+export const IconRecent = (p) => (
+  <svg {...base(p)}>
+    <path d="M3.6 12a8.4 8.4 0 1 0 2.5-6" />
+    <path d="M3.4 3.6v3.6h3.6" />
+    <path d="M12 7.6V12l3 1.8" />
+  </svg>
+);

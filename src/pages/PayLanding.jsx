@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { setLanguage } from '../i18n';
 import { useWallet, shortAddress } from '../context/WalletContext';
@@ -9,7 +9,7 @@ import {
   decodePayPayload, PAY_THEMES, isTrustWallet,
   parseAmountWei, sendPayTransfers, formatWei, splitPayWei
 } from '../lib/payLink';
-import { IconCheck } from '../components/Icons';
+import { IconCheck, IconSwap } from '../components/Icons';
 import AssetIcon from '../components/AssetIcon';
 import { publicAppUrl } from '../lib/nativeShell';
 import '../styles/pay-gateway.css';
@@ -78,6 +78,7 @@ function BrandLink({ t }) {
 export default function PayLanding() {
   const { code } = useParams();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const wallet = useWallet();
   const payload = useMemo(() => decodePayPayload(code), [code]);
   const theme = PAY_THEMES[payload?.theme] || PAY_THEMES.mint;
@@ -89,6 +90,74 @@ export default function PayLanding() {
   const [err, setErr] = useState('');
   const [done, setDone] = useState(null);
 
+  /*
+   * ─── THE BALANCE READ, AND THE SHORTFALL IT MAKES ACTIONABLE ────────────
+   * Phase 2 of the gateway: before this, a payer whose wallet held ETH or
+   * USDC — but not the USDT the merchant asked for — got one dead end:
+   * "Not enough USDT". They then had to find the swap screen themselves,
+   * remember the network, and come back. The balance is now read once per
+   * wallet/token/network (not per keystroke: the REQUIRED amount changes as
+   * they type, the HELD amount does not), and a shortfall renders a
+   * pre-filled route into our own internal swap.
+   *
+   * The read is strictly optional. `getReadProvider` is a function only the
+   * real WalletContext provides, and where it is missing — a mocked
+   * context, a headless render — no box appears, no error appears, the
+   * page behaves exactly as it did. A payment page must not fail because
+   * OUR balance probe failed; the wallet's own simulation remains the
+   * authority that rejects an underfunded signature.
+   */
+  const [held, setHeld] = useState(null);
+  /*
+   * The wallet OBJECT must not join the dependency array: a context value
+   * that is recomputed on any state change (prices tick, mode flips) would
+   * re-run the read, whose setState re-renders the page, which re-runs the
+   * read if the identity moved again — the exact setState-in-effect loop this
+   * repo has been bitten by before. The LATEST wallet lives in a ref; the
+   * dependencies are primitives that actually change the answer: which chain,
+   * which token, which address, connected or not.
+   */
+  const walletRef = useRef(null);
+  walletRef.current = wallet;
+  useEffect(() => {
+    setHeld(null);
+    const w = walletRef.current;
+    if (!payload || !token || !w?.isConnected || !w?.address) return undefined;
+    if (typeof w.getReadProvider !== 'function') return undefined;
+    let alive = true;
+    Promise.resolve()
+      .then(async () => {
+        const provider = await w.getReadProvider(payload.chainId);
+        if (!provider) return null;
+        return getTokenBalance(provider, token, w.address);
+      })
+      .then((b) => { if (alive && b?.raw != null) setHeld(b); })
+      .catch(() => { /* stay silent — the box simply does not show */ });
+    return () => { alive = false; };
+  }, [payload?.chainId, token?.symbol, wallet?.isConnected, wallet?.address]);
+
+  const wei = token ? parseAmountWei(amount, token.decimals) : null;
+  const split = wei ? splitPayWei(wei) : null;
+  const shortBy = held?.raw != null && wei != null && BigInt(held.raw) < wei
+    ? { raw: BigInt(wei) - BigInt(held.raw) }
+    : null;
+
+  /*
+   * Swap & Pay: hand the payer to /swap with the merchant's network and
+   * token pre-selected. Deliberately NOT pre-filled with an amount: the
+   * `amount=` query on /swap sizes the INPUT token, and we only know the
+   * shortfall in the OUTPUT token. A wrong-direction prefill is worse than
+   * no prefill — the same rule `shopCatalogTools` follows for its shortfall
+   * planner.
+   */
+  const goSwapAndPay = () => {
+    if (!payload) return;
+    const params = new URLSearchParams();
+    params.set('chain', String(payload.chainId));
+    if (token) params.set('to', token.symbol);
+    navigate(`/swap?${params.toString()}`);
+  };
+
   useEffect(() => {
     if (payload?.lang) setLanguage(payload.lang);
   }, [payload?.lang]);
@@ -96,9 +165,6 @@ export default function PayLanding() {
   useEffect(() => {
     setAmount(payload?.amount || '');
   }, [payload?.amount]);
-
-  const wei = token ? parseAmountWei(amount, token.decimals) : null;
-  const split = wei ? splitPayWei(wei) : null;
 
   const connect = async () => {
     setErr('');
@@ -270,18 +336,69 @@ export default function PayLanding() {
               )}
             </div>
 
+            {/*
+              THE MERCHANT'S NOTE (invoice number, order ref) — Phase 2. It
+              travels inside the link itself, so it cannot desync: what the
+              merchant typed when the link was minted is what the payer reads
+              before signing. `dir="auto"` because order refs mix scripts —
+              «فاکتور ۱۴۸» and "Order-148" share this line.
+            */}
+            {payload.note && (
+              <div className="pay-landing-note" dir="auto" data-testid="pay-landing-note">
+                <span className="pay-landing-note-label">{t('pay.landing.note')}</span>
+                <span className="pay-landing-note-text">{payload.note}</span>
+              </div>
+            )}
+
             <p className="pay-landing-fee">{t('pay.landing.fee')}</p>
 
             {wallet.isConnected ? (
-              <button
-                type="button"
-                className="pay-landing-btn"
-                disabled={busy || !wei}
-                onClick={pay}
-              >
-                {busy ? t('pay.landing.paying') : t('pay.landing.pay')}
-                {split && token ? ` · ${formatWei(wei, token.decimals)} ${token.symbol}` : ''}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="pay-landing-btn"
+                  disabled={busy || !wei}
+                  onClick={pay}
+                >
+                  {busy ? t('pay.landing.paying') : t('pay.landing.pay')}
+                  {split && token ? ` · ${formatWei(wei, token.decimals)} ${token.symbol}` : ''}
+                </button>
+
+                {/*
+                  ─── SWAP & PAY — THE SHORTFALL IS A ROUTE, NOT A DEAD END ──
+                  The payer is connected and simply holds the wrong asset:
+                  very often they HAVE the money, in ETH or USDC, on the
+                  right network. Sending them to a public exchange to buy
+                  USDT costs them a KYC, a withdrawal, and this invoice.
+                  Sending them to our own /swap costs them one signature.
+                  The route pre-selects the merchant's network and token;
+                  the fee sentence is explicit about both legs (swap fee +
+                  gateway fee) because an informed double fee is honest and
+                  a discovered one is not.
+                */}
+                {shortBy && token && (
+                  <div className="pay-landing-swap" data-testid="pay-swap-pay-box">
+                    <div className="pay-landing-swap-title">{t('pay.landing.swapPay.title')}</div>
+                    <p className="pay-landing-swap-body">
+                      {t('pay.landing.swapPay.body', {
+                        token: token.symbol,
+                        have: formatWei(held.raw, token.decimals),
+                        need: formatWei(wei, token.decimals),
+                        short: formatWei(shortBy.raw, token.decimals)
+                      })}
+                    </p>
+                    <button
+                      type="button"
+                      className="pay-landing-btn pay-landing-swap-btn"
+                      onClick={goSwapAndPay}
+                    >
+                      <IconSwap width={16} height={16} />
+                      <span>{t('pay.landing.swapPay.cta', { token: token.symbol })}</span>
+                    </button>
+                    <p className="pay-landing-swap-fees">{t('pay.landing.swapPay.fees')}</p>
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <button

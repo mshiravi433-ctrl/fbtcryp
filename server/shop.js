@@ -49,7 +49,7 @@
  * rather than showing an Iranian user an empty screen that looks broken.
  */
 
-import { withCache } from './cache.js';
+import { getCached, withCache } from './cache.js';
 
 const API = 'https://api.cryptorefills.com';
 
@@ -652,4 +652,244 @@ export function getShopProducts(args, req) {
     10 * 60_000,
     () => fetchShopProducts({ ...args, coin: safeCoin }, req)
   );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * PHASE 2/3 — WHITELABEL ORDER READINESS + ANONYMOUS TRENDING
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * ─── THE WHITELABEL PATH, AND WHY IT IS INFRASTRUCTURE FIRST ────────────────
+ * Cryptorefills' whitelabel tier is the difference between "we send the buyer
+ * to their site with a ?ref" and "the buyer never leaves our UI": orders are
+ * created through our server, delivered to the buyer's email, and the
+ * commission accrues to us by account rather than by link. Their docs are
+ * explicit that order creation additionally requires the END USER's IP and
+ * user-agent forwarded (fraud checks), a delivery email, and — for the
+ * spending-cap tier — a full name on account.
+ *
+ * We have not been granted the whitelabel account. So, per this repo's
+ * standing rule against features wired to nothing:
+ *
+ *   · the VALIDATION is real and shipped today (email shape, full-name
+ *     presence, amount sanity, country format) — it is pure and unit-tested;
+ *   · the ERROR TRANSLATION for the two documented upstream failures
+ *     (DAILY_SPENDING_LIMIT_EXCEEDED, FULLNAME_MISSING) is real;
+ *   · the X-Forwarded-For handling keeps the FIRST client entry — the exact
+ *     rule `userHeaders` already pins for the browse path;
+ *   · the UI shows NOTHING until `whitelabelStatus().configured` is true.
+ *     No dead button, no half-form. The partner-link flow (brandUrl with
+ *     CR_PARTNER) is the live, earning path in every state; the moment the
+ *     key lands on the server, /api/shop/readiness flips and the UI can
+ *     acknowledge it without a redeploy.
+ */
+export const WHITELABEL_KEY_ENV = 'CRYPTOREFILLS_WHITELABEL_API_KEY';
+
+export const WHITELABEL_ORDER_ERRORS = Object.freeze({
+  INVALID_EMAIL: 'The delivery email is missing or malformed.',
+  FULLNAME_MISSING: 'Whitelabel account orders require the buyer\u2019s full name.',
+  INVALID_COUNTRY: 'Country must be a two-letter ISO code.',
+  INVALID_BRAND: 'The brand family of the ordered product is missing.',
+  INVALID_AMOUNT: 'Amount must be a positive number.',
+  DAILY_SPENDING_LIMIT_EXCEEDED: 'The daily spending limit for this account tier was reached.'
+});
+
+/** The whitelabel account key is server-side only — a real secret, unlike the public partner id. */
+export function whitelabelStatus() {
+  const key = String(process.env[WHITELABEL_KEY_ENV] || '').trim();
+  return {
+    configured: Boolean(key),
+    /* Delivery is only possible over https; recorded so ops cannot miss it. */
+    transport: 'https',
+    whenReady: key
+      ? 'Order validation and upstream forwarding are live.'
+      : `Set ${WHITELABEL_KEY_ENV} on the server to enable in-app order validation.`,
+    blockers: key
+      ? []
+      : [`ENV:${WHITELABEL_KEY_ENV}`]
+  };
+}
+
+/** A shape-checked email, not an RFC essay. Plus-addressing is allowed; spaces are not. */
+const EMAIL_RX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+/**
+ * Validate what a whitelabel order request MUST carry before any upstream
+ * call is attempted. Pure, synchronous, unit-tested; the caller has already
+ * rate-limited and authenticated at the route layer.
+ *
+ * Returns `{ ok, errors[], value }` — errors are KEYS from
+ * WHITELABEL_ORDER_ERRORS, never prose, so the client localises them and a
+ * test can pin each independently.
+ */
+export function validateOrderPrerequisites(payload) {
+  const p = payload && typeof payload === 'object' ? payload : {};
+  const errors = [];
+
+  const email = String(p.email ?? '').trim().toLowerCase();
+  if (!email || email.length > 254 || !EMAIL_RX.test(email)) errors.push('INVALID_EMAIL');
+
+  const fullname = String(p.fullname ?? '').replace(/[\u0000-\u001F\u200B-\u200F]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!fullname) errors.push('FULLNAME_MISSING');
+
+  const country = String(p.country ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country)) errors.push('INVALID_COUNTRY');
+
+  const amount = Number(p.amount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 2500) errors.push('INVALID_AMOUNT');
+
+  const family = cleanText(p.family, 80);
+  if (!family) errors.push('INVALID_BRAND');
+
+  if (errors.length) return { ok: false, errors, value: null };
+  return {
+    ok: true,
+    errors: [],
+    value: { email, fullname, country, amount, family }
+  };
+}
+
+/**
+ * Translate an upstream 4xx into OUR error keys.
+ *
+ * The two documented whitelabel failures arrive as prose from their API,
+ * with codes that vary by endpoint version. We match the documented phrases
+ * case-insensitively and fall back to `UPSTREAM_ORDER_FAILED` — inventing a
+ * precise-looking reason from an unrecognised body is how a support ticket
+ * starts a war.
+ */
+export function mapUpstreamOrderError(status, bodyText) {
+  const text = String(bodyText || '').toLowerCase();
+  if (/daily (spending )?limit/.test(text)) return 'DAILY_SPENDING_LIMIT_EXCEEDED';
+  if (/full\s*name|fullname/.test(text)) return 'FULLNAME_MISSING';
+  if (Number(status) === 429) return 'DAILY_SPENDING_LIMIT_EXCEEDED';
+  return 'UPSTREAM_ORDER_FAILED';
+}
+
+/* ─────────────────────────── anonymous trending ──────────────────────────
+ *
+ * A popularity counter, deliberately the weakest possible kind: in-memory
+ * per process, keyed by COUNTRY + BRAND ID, counting to a cap. No user id, no
+ * wallet, no IP, no cookie — the POST body carries only which shop tile was
+ * opened, which is as personal as a click on a public menu. It resets when the
+ * serverless instance recycles; that is a FEATURE for privacy (nothing is
+ * retained) and an accepted cost for a rail whose purpose is "what is hot
+ * THIS HOUR in THIS region".
+ *
+ * Ranking is NOT raw clicks. Per the brief, the rail optimises the shop's
+ * real economics:
+ *
+ *   score = 3·ln(1 + views·decay)          ← genuine regional demand
+ *         + spreadPct·0.35                  ← provider margin (bestSpreadPct,
+ *                                             same number the checkout shows)
+ *         − (out of stock ? ∞ : 0)          ← hard filter, not a demotion:
+ *                                             promoting a card you cannot buy
+ *                                             is a broken tile wearing a flame.
+ *
+ * `views·decay` halves every ~7 days so a brand that spiked last month stops
+ * crowding out one that is hot now, without a cron or a store.
+ */
+const TREND_TTL_MS = 14 * 24 * 3600_000; // entries older than two weeks are dropped
+const TREND_HALF_LIFE_MS = 7 * 24 * 3600_000;
+const TREND_MAX_KEYS = 4096;
+const TREND_MAX_PER_KEY = 50_000;
+const trendCounters = new Map();
+
+/**
+ * Record ONE view. `at` is refreshed so long-lived demand does not decay away
+ * while it is still being clicked; the counter itself is capped so a hostile
+ * client cannot grow the table or the numbers without bound.
+ */
+export function bumpShopInterest(country, brandId) {
+  const cc = cleanCountry(country);
+  const id = cleanText(brandId, 64);
+  if (!cc || !id) return false;
+  const key = `${cc}:${id}`;
+  const hit = trendCounters.get(key);
+  const now = Date.now();
+  if (!hit) {
+    if (trendCounters.size >= TREND_MAX_KEYS) {
+      /* Drop the oldest entry rather than refuse new ones. */
+      let oldestKey = null;
+      let oldestAt = Infinity;
+      for (const [k, v] of trendCounters) {
+        if (v.at < oldestAt) { oldestAt = v.at; oldestKey = k; }
+      }
+      if (oldestKey) trendCounters.delete(oldestKey);
+    }
+    trendCounters.set(key, { n: 1, at: now, startedAt: now });
+  } else {
+    hit.n = Math.min(TREND_MAX_PER_KEY, hit.n + 1);
+    hit.at = now;
+  }
+  return true;
+}
+
+/** Exposed for tests and for the readiness route's diagnostics. */
+export function shopTrendSize() {
+  return trendCounters.size;
+}
+
+/** 0.5 every half-life, with the entry's age from its last click. */
+function decayOf(hit, now) {
+  const age = Math.max(0, now - hit.at) + (now - hit.startedAt) / 2;
+  return 0.5 ** (age / TREND_HALF_LIFE_MS / 2);
+}
+
+/**
+ * Rank the cached catalogue for one country.
+ *
+ * `spreadOf(family)` lets the caller supply each brand's best margin from the
+ * products cache; when the cache is cold it returns null and the brand still
+ * ranks on popularity alone — the spread term is a BOOST, never a gate we
+ * invent numbers to satisfy.
+ */
+export function rankTrendingBrands(rows, { cc = '', now = Date.now(), spreadOf = () => null } = {}) {
+  const scored = [];
+  for (const r of rows) {
+    if (!r || r.outOfStock) continue;
+    /* The counter key is the COUNTRY OF THE REQUEST, not a field on the row:
+       a catalogue entry whose `country_code` is missing still belongs to the
+       country whose endpoint returned it, and a rail that silently ignores
+       half the clicks would rank nothing. */
+    const hit = trendCounters.get(`${cc || r.country || ''}:${r.id}`);
+    let dec = 0;
+    if (hit && now - hit.at <= TREND_TTL_MS) dec = hit.n * decayOf(hit, now);
+    const spread = spreadOf(r.family);
+    const spreadTerm = Number.isFinite(spread) ? spread * 0.35 : 0;
+    const score = 3 * Math.log(1 + dec) + spreadTerm;
+    scored.push({
+      id: r.id,
+      family: r.family,
+      name: r.name,
+      views: hit ? hit.n : 0,
+      spreadPct: Number.isFinite(spread) ? spread : null,
+      score: Math.round(score * 1000) / 1000
+    });
+  }
+  scored.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
+  return scored;
+}
+
+/**
+ * The trending answer for one country, built from the SAME cached catalogue
+ * the shop already pays Cryptorefills for — zero extra upstream calls.
+ * Returns null when the catalogue is not cached yet; the route then warms it
+ * through `getShopCatalogue` like any other country-scoped call.
+ */
+export function trendingFromCatalogue(country, catalogueRows, req) {
+  const cc = cleanCountry(country);
+  if (!cc) return Promise.resolve({ rows: [], at: Date.now() });
+  const spreadOf = (family) => {
+    /* Best proven margin per brand, read from the products cache this very
+       process served. Missing entry (cold cache) is null, not zero. */
+    const fam = cleanText(family, 80);
+    if (!fam) return null;
+    const hit = getCached(`shop-prod-${cc}-${fam}-USDC-en`);
+    const v = hit?.value?.bestSpreadPct;
+    return Number.isFinite(v) ? v : null;
+  };
+  const run = (rows) => ({ rows: rankTrendingBrands(rows, { cc, spreadOf }), country: cc, at: Date.now() });
+  if (Array.isArray(catalogueRows)) return Promise.resolve(run(catalogueRows));
+  return getShopCatalogue(cc, req).then(({ value }) => run(value?.rows || []));
 }

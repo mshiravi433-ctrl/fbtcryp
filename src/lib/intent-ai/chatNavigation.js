@@ -49,6 +49,81 @@ const NAVIGATION_TARGETS = Object.freeze([
       /* Persian spelling: "اینتنت او اس" / "اینتنت اواس" / "اینتنت os" */
       || /اینتنت[\s\u200c\-_.]*(os|او\s?اس)/i.test(text)
     )
+  },
+  /*
+   * ─── PHASE 2/3 — COMMERCE INTENTS ROUTE TO THE SHOP, NOT TO THE SWAP ─────
+   * «تشخیص نیت خرید گیفت‌کارت، کارت مجازی، شارژ موبایل، eSIM، پرواز/هتل و
+   * ساخت فاکتور فروشنده» — somebody who says "buy a gift card" is not
+   * describing a token trade, and the trading pipeline has nothing for them.
+   * These targets answer with the one thing that actually completes the job:
+   * the shop tab that sells it, pre-filtered.
+   *
+   * The `commerce` flag is what makes this safe to add: for a COMMERCE
+   * target, a buy verb in the sentence is the intent itself, so the
+   * "trade-shaped sentence" block does not apply — "خرید گیفت کارت steam"
+   * must navigate. For every non-commerce target the old rule is untouched,
+   * which is what keeps «swap usdt to bnb on intent os» a trade and never a
+   * navigation. Questions are still answered, not navigated, for all.
+   *
+   * Availability is never claimed here: routing to a shop tab shows a real
+   * catalogue the shopper then browses; nothing in this table pretends to
+   * know a price, a fare or a stock level.
+   */
+  {
+    id: 'shop-gift',
+    route: '/shop?tab=cards',
+    labelKey: 'intentAI.navigation.shopGift',
+    commerce: true,
+    match: (text) => /گیفت\s*‌?\s*کارت|گیفتکارت|gift\s*cards?|استیم|steam\s*card|پلی\s*استیشن|psn\s*کار|PlayStation\s*گیف/i.test(text)
+  },
+  {
+    id: 'shop-virtualcard',
+    route: '/shop?tab=money',
+    labelKey: 'intentAI.navigation.shopVirtualCard',
+    commerce: true,
+    match: (text) => /کارت\s*(?:اعتباری|افتراضی|مجازی|و\s*یزا)|virtual\s*card|prepaid\s*(?:visa|mastercard)|پی\s*‌?\s*پال|paypal|مستر\s*کارد|mastercard/i.test(text)
+  },
+  {
+    id: 'shop-topup',
+    route: '/shop?tab=topup',
+    labelKey: 'intentAI.navigation.shopTopUp',
+    commerce: true,
+    match: (text) => /شارژ\s*(?:موبایل|خط|سیم|اینترنت|مسافرتی)?|اعتبار\s*(?:موبایل|شارژ)|mobile\s*(?:top\s*-?\s*up|recharge|credit)|top\s*-?\s*up/i.test(text)
+  },
+  {
+    id: 'shop-esim',
+    route: '/shop?tab=topup',
+    labelKey: 'intentAI.navigation.shopEsim',
+    commerce: true,
+    match: (text) => /e[\s-]?sim|سیم\s*کارت\s*(?:سفر|اینترنت|ملل)?|esim/i.test(text)
+  },
+  {
+    id: 'shop-flights',
+    route: '/shop?tab=flights',
+    labelKey: 'intentAI.navigation.shopFlights',
+    commerce: true,
+    match: (text) => /بلیط\s*هواپیما|بلیت\s*هواپیما|پرواز|flight|air\s*ticket/i.test(text)
+  },
+  {
+    id: 'shop-stays',
+    route: '/shop?tab=stays',
+    labelKey: 'intentAI.navigation.shopStays',
+    commerce: true,
+    match: (text) => /هتل|اقامت\s*(?:هتل|فندق)?|hotel|room\s*booking|booking/i.test(text)
+  },
+  {
+    id: 'shop-invoice',
+    route: '/shop?tab=pay',
+    labelKey: 'intentAI.navigation.shopInvoice',
+    commerce: true,
+    match: (text) => /فاکتور\s*(?:فروشنده|فروشنده|کسب)?|لینک\s*(?:دریافت|پرداخت)|ساخت\s*فاکتور|merchant\s*invoice|payment\s*(?:link|invoice)|invoice/i.test(text)
+  },
+  {
+    id: 'shop-home',
+    route: '/shop',
+    labelKey: 'intentAI.navigation.shop',
+    commerce: true,
+    match: (text) => /فروشگاه|خرید\s*گیفت|shop\b|store\s*cards?/i.test(text)
   }
 ]);
 
@@ -69,19 +144,30 @@ export function parseNavigationCommand(rawText = '') {
   /* A question about the page is answered, not navigated. */
   if (QUESTION_MARKERS.test(text)) return { ok: false, reason: 'question' };
 
-  /* A financial instruction that mentions the page stays a financial
-     instruction — the pipeline, not a route change, owns it. */
-  if (FINANCIAL_ACTION.test(text)) return { ok: false, reason: 'financial' };
+  /*
+   * A financial instruction that mentions the page stays a financial
+   * instruction — the pipeline, not a route change, owns it.
+   *
+   * The exception is COMMERCE targets (the shop tabs): for them the buy verb
+   * IS the request («خرید گیفت کارت»), there is no swap-shaped pipeline that
+   * could honour it, and the tab it would route to is where the purchase
+   * actually begins. Non-commerce targets keep the block untouched, so a
+   * trade that merely mentions Intent OS never turns into a navigation.
+   */
+  if (!named.commerce && FINANCIAL_ACTION.test(text)) return { ok: false, reason: 'financial' };
 
   return {
     ok: true,
     target: named.id,
     route: named.route,
-    labelKey: named.labelKey
+    labelKey: named.labelKey,
+    ...(named.commerce ? { commerce: true } : {})
   };
 }
 
 /** The single source of the routes this layer may navigate to. */
 export function navigationTargets() {
-  return NAVIGATION_TARGETS.map(({ id, route, labelKey }) => ({ id, route, labelKey }));
+  return NAVIGATION_TARGETS.map(({ id, route, labelKey, commerce }) => ({
+    id, route, labelKey, ...(commerce ? { commerce: true } : {})
+  }));
 }

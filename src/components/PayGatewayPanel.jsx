@@ -33,6 +33,7 @@ export default function PayGatewayPanel() {
   const [token, setToken] = useState(tokens[0]?.symbol || 'USDT');
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
+  const [note, setNote] = useState('');
   const [links, setLinks] = useState(() => loadSavedPayLinks());
   const [copied, setCopied] = useState('');
   const [formErr, setFormErr] = useState('');
@@ -96,7 +97,8 @@ export default function PayGatewayPanel() {
         amount: amount.replace(/\.$/, ''),
         lang,
         theme,
-        name
+        name,
+        note
       });
       const entry = {
         id: `${Date.now().toString(36)}-${code.slice(0, 8)}`,
@@ -109,7 +111,8 @@ export default function PayGatewayPanel() {
         amount,
         lang,
         theme,
-        name
+        name,
+        note
       };
       haptic?.('success');
       setLinks(savePayLink(entry));
@@ -256,6 +259,28 @@ export default function PayGatewayPanel() {
           />
         </label>
         <p className="faint" style={{ fontSize: 12, marginTop: 6 }}>{t('pay.amountHint')}</p>
+        {/*
+          ─── THE INVOICE NOTE — PHASE 2 ─────────────────────────────────────
+          A merchant with four open orders and one USDT address used to send
+          four links that looked identical to the payer. This field is what
+          tells order #148 from order #149 on the landing page — and it rides
+          inside the link itself (no server lookup, nothing to lose when the
+          merchant clears the list), exactly like every other payload field.
+          Optional, capped at 120 characters by the same sanitizer the
+          decoder re-runs, so a link saved before this feature and a link
+          typed with an essay in this box both behave.
+        */}
+        <label className="pay-field">
+          <span>{t('pay.invoice')}</span>
+          <input
+            type="text"
+            value={note}
+            maxLength={120}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t('pay.invoicePlaceholder')}
+          />
+        </label>
+        <p className="faint" style={{ fontSize: 12, marginTop: 6 }}>{t('pay.invoiceHint')}</p>
         <label className="pay-field">
           <span>{t('pay.name')}</span>
           <input
@@ -330,6 +355,9 @@ function SavedLink({ row, copied, onCopy, onShare, onPreview, onRemove, t }) {
             {row.amount ? ` ${row.amount}` : ` · ${t('pay.amountOpen')}`}
           </strong>
           <span>{chain?.name}</span>
+          {row.note && (
+            <span className="pay-link-note">{row.note}</span>
+          )}
         </div>
       </div>
       <div className="pay-link-url mono">{row.url}</div>

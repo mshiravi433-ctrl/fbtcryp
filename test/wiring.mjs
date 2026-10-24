@@ -15591,5 +15591,148 @@ export default function run() {
       && /createConversationState\(\{\s*sessionId: convStateRef\.current\?\.sessionId/.test(intentCode));
   }
 
+
+  /* ---- 119. SHOP PHASE 2/3 — gift envelope, loyalty, heat, counter, web3 id ---- */
+  {
+    const code = (src) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const shop = code(read('src/pages/Shop.jsx'));
+    const hub = code(read('src/lib/shopHub.js'));
+    const loyalty = code(read('src/components/ShopLoyaltyCard.jsx'));
+    const web3 = code(read('src/components/ShopWeb3IdCard.jsx'));
+    const hw = code(read('src/components/HardwareWalletCard.jsx'));
+    const payPanel = code(read('src/components/PayGatewayPanel.jsx'));
+    const payLand = code(read('src/pages/PayLanding.jsx'));
+    const payWire = code(read('src/lib/payLink.js'));
+    const nav = code(read('src/lib/intent-ai/chatNavigation.js'));
+    const serverShop = code(read('server/shop.js'));
+    const appSrc = code(read('server/app.js'));
+    const shopCss = read('src/styles/shop-modern.css');
+    const payCss = read('src/styles/pay-gateway.css');
+    const en = JSON.parse(read('src/i18n/locales/en.json'));
+    const fa = JSON.parse(read('src/i18n/locales/fa.json'));
+
+    /* the pieces are MOUNTED, not just written — the bug class this file exists for */
+    t('the storefront mounts the loyalty chip, the recent rail, the gift envelope and the id card',
+      /<ShopLoyaltyCard\s*\/>/.test(shop) && /shop-recent-bar/.test(shop)
+      && /shop-gift-envelope/.test(shop) && /<ShopWeb3IdCard\s*\/>/.test(shop));
+    t('the gift banner NEVER rewrites the URL on mount (the setSearchParams trap)',
+      !/setSearchParams/.test(shop));
+    t('gift links are built and read through the single hub module',
+      /buildGiftSharePath/.test(shop) && /parseGiftArrival/.test(shop) && /from '..\/lib\/shopHub'/.test(shop)
+      && /pushRecentView/.test(shop) && /resolveRecentViews/.test(shop));
+    t('TapToPay stays behind the lazy boundary — the shop must not drag it to first paint',
+      /import\('\.\.\/components\/TapToPay'\)/.test(shop) && !/^import TapToPay/m.test(shop));
+    t('the counter door only answers when opened, and the id card never uses window.open',
+      /counterOpen/.test(shop) && !/window\.open/.test(shop) && !/window\.open/.test(web3));
+
+    /* payLink v1 discipline: the note is additive, sanitised BOTH ends, no format bump */
+    t('the pay payload STAYS v:1 and carries the note only as the optional m key',
+      /out\.m = note/.test(payWire) && /json\.m/.test(payWire) && !/v:\s*2/.test(payWire));
+    t('the note is sanitised on write AND on read — a hand-made link cannot smuggle markup',
+      (payWire.match(/cleanPayNote\(/g) ?? []).length >= 3);
+    t('the fee split function was not touched by the feature',
+      /splitPayWei\(wei, bps = FEE_BPS\)/.test(payWire));
+    t('the gateway offers the invoice field; the landing shows the note; both share the swap box',
+      /t\('pay\.invoice'\)/.test(payPanel) && /pay-landing-note/.test(payLand)
+      && /pay-swap-pay-box/.test(payLand) && /\/swap\?/.test(payLand));
+    t('the landing never prefills a swap AMOUNT from the invoice (input-side query would lie)',
+      !/amount=/.test(payLand));
+    t('the balance read keys its effect off PRIMITIVES, never the wallet object (no setState loop)',
+      /wallet\?\.isConnected, wallet\?\.address\]\);/.test(payLand)
+      && !/wallet\?\.address, wallet\]/.test(payLand) && /walletRef/.test(payLand));
+
+    /* server contract: routes mounted, privacy kept, cold-cache behaviour */
+    t('readiness, precheck, track and trending are mounted as their own routes',
+      /app\.get\('\/api\/shop\/readiness'/.test(appSrc)
+      && /app\.post\('\/api\/shop\/whitelabel\/precheck'/.test(appSrc)
+      && /app\.post\('\/api\/shop\/track'/.test(appSrc)
+      && /app\.get\('\/api\/shop\/trending'/.test(appSrc));
+    t('the secret is read server-side only — no VITE_ twin anywhere',
+      /CRYPTOREFILLS_WHITELABEL_API_KEY/.test(serverShop)
+      && !/VITE_CRYPTOREFILLS_WHITELABEL_API_KEY/.test(shop + hub + serverShop));
+    t('trending counts nothing personal: the track route reads only the body',
+      !/req\.ip|user-agent|x-forwarded-for/.test(
+        appSrc.slice(appSrc.indexOf(`app.post('/api/shop/track'`), appSrc.indexOf(`app.get('/api/shop/trending'`))));
+
+    t('the whitelabel note in the UI is gated on the server flag — no dead buttons before a key exists',
+      /whitelabelConfigured\s*===\s*true/.test(shop));
+
+    /* intent navigation: new doors, old walls */
+    t('the commerce targets exist and are flagged as commerce',
+      (nav.match(/commerce: true/g) ?? []).length >= 8);
+    t('Intent OS itself keeps the financial block (the commerce flag is per-target, never global)',
+      !/commerce/.test(nav.slice(nav.indexOf("id: 'intent-os'"), nav.indexOf("id: 'shop-gift'"))));
+    t('questions still never navigate, commerce included',
+      /QUESTION_MARKERS\.test\(text\)/.test(nav));
+
+    /* honesty rails of the id card: format-only, registry-only links, real price ladder */
+    t('the id card prices .eth ONLY by the published length ladder',
+      /ensYearlyUsd/.test(hub) && /usd: 640/.test(hub) && /usd: 160/.test(hub) && /usd: 5\b/.test(hub));
+    t('it refuses reserved 1–2 char labels instead of pricing them',
+      /reason: 'too_short'/.test(hub));
+    t('it NEVER claims availability — only the registry page decides',
+      /shop\.web3id\.availability/.test(web3) && !/isAvailable|checkAvailability/.test(web3));
+    t('the two registries are the official apps, over https, opened through openUrl',
+      /https:\/\/app\.ens\.domains\//.test(hub) && /https:\/\/sns\.id\//.test(hub) && /openUrl/.test(web3));
+    t('buying the coin routes INSIDE the app — /swap for ETH, /solana for SOL',
+      /\/swap\?to=ETH/.test(web3) && /\/solana\?/.test(web3));
+
+    /* every new class has a REAL rule, light theme included (generic css checks skip shop-*) */
+    const usedClasses = [
+      'shop-gift-envelope', 'shop-gift-envelope-mark', 'shop-gift-envelope-copy', 'shop-gift-envelope-ref',
+      'shop-gift-row', 'shop-gift-label', 'shop-gift-pills', 'shop-gift-pill', 'shop-gift-send',
+      'shop-recent-bar', 'shop-recent-label', 'shop-recent-pills', 'shop-recent-pill',
+      'shop-cat-flame', 'shop-loyalty-eyebrow', 'shop-loyalty-card', 'shop-loyalty-head', 'shop-loyalty-medal',
+      'shop-loyalty-title', 'shop-loyalty-name', 'shop-loyalty-sub', 'shop-loyalty-btn',
+      'shop-loyalty-progress', 'shop-loyalty-progress-fill', 'shop-loyalty-perks', 'shop-loyalty-perk', 'shop-loyalty-note',
+      'shop-pay-counter', 'shop-pay-counter-copy', 'shop-pay-counter-btn', 'shop-pay-ready',
+      'shop-web3id', 'shop-web3id-head', 'shop-web3id-mark', 'shop-web3id-title', 'shop-web3id-sub',
+      'shop-web3id-tabs', 'shop-web3id-tab', 'shop-web3id-field', 'shop-web3id-suffix', 'shop-web3id-verdict',
+      'shop-web3id-actions', 'shop-web3id-open', 'shop-web3id-fund', 'shop-web3id-note',
+      'hw-compare', 'hw-compare-row', 'hw-compare-head', 'hw-compare-label', 'hw-compare-cell', 'hw-checklist'
+    ];
+    const missingShop = usedClasses.filter((c) => !shopCss.includes('.' + c));
+    t('every shop/hub class the components paint has a real declared rule in shop-modern.css',
+      missingShop.length === 0, missingShop.join(','));
+    const payClasses = ['pay-landing-note', 'pay-landing-note-label', 'pay-landing-note-text',
+      'pay-landing-swap', 'pay-landing-swap-title', 'pay-landing-swap-body', 'pay-landing-swap-btn',
+      'pay-landing-swap-fees', 'pay-link-note'];
+    const missingPay = payClasses.filter((c) => !payCss.includes('.' + c));
+    t('every new pay class has a real rule in pay-gateway.css', missingPay.length === 0, missingPay.join(','));
+    t('the light theme gets explicit rules for the gift envelope and the id-card reject tone',
+      /data-theme='light'\] \.shop-gift-envelope \{/.test(shopCss)
+      && /data-theme='light'\] \.shop-web3id-verdict\[data-tone='bad'\]/.test(shopCss));
+    t('a phone gets a stacked comparison and full-width counter button — written, not inherited',
+      /@media \(max-width: 420px\)[\s\S]*?\.hw-compare-row \{ grid-template-columns: 1fr;/.test(shopCss)
+      && /@media \(max-width: 420px\)[\s\S]*?\.shop-pay-counter-btn \{ width: 100%/.test(shopCss));
+    t('motion is off for the new controls too',
+      /prefers-reduced-motion[\s\S]*?\.shop-gift-pill/.test(shopCss));
+
+    /* copy: every key the new components reference exists in BOTH locales */
+    const referenced = (src) => [...src.matchAll(/t\('([a-z0-9]+\.[A-Za-z0-9_.]+)'/g)].map((m) => m[1])
+      .filter((k) => /^(shop|pay|hardware|intentAI)\./.test(k));
+    const getAt = (o, k) => k.split('.').reduce((x, s) => (x == null ? undefined : x[s]), o);
+    for (const [label, src] of [['shop', shop], ['loyalty', loyalty], ['web3', web3], ['hw', hw], ['panel', payPanel], ['landing', payLand]]) {
+      const keys = [...new Set(referenced(src))].filter((k) => !k.endsWith('*'));
+      const missEn = keys.filter((k) => typeof getAt(en, k) !== 'string' || !getAt(en, k).trim());
+      const missFa = keys.filter((k) => typeof getAt(fa, k) !== 'string' || !getAt(fa, k).trim());
+      t(`${label}: every t() key it paints exists in en and fa (${keys.length} checked)`,
+        missEn.length === 0 && missFa.length === 0, [...missEn, ...missFa].join(','));
+    }
+    t('the id card builds error copy from the hub reasons — and every reason HAS a key',
+      ['chars', 'hyphen', 'non_ascii', 'too_short'].every((r) => typeof getAt(en.shop.web3id.err, r) === 'string'
+        && typeof getAt(fa.shop.web3id.err, r) === 'string')
+      && /shop\.web3id\.err\./.test(web3));
+    t('the hardware hub keeps the affiliate honesty line AND gained compare/check sections',
+      /hardwareUrl/.test(hw) && /hw-compare/.test(hw) && /hw-check/.test(hw));
+    t('the gift themes in the hub are the four the CSS and i18n know',
+      ['birthday', 'gaming', 'congrats', 'gold'].every((id) =>
+        new RegExp(`data-theme='${id}'`).test(shopCss)
+        && typeof getAt(en.shop.gift.theme, id) === 'string' && typeof getAt(fa.shop.gift.theme, id) === 'string'
+        && hub.includes(`'${id}'`)));
+  }
   return rows;
 }
