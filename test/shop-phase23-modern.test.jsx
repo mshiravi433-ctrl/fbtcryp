@@ -144,12 +144,8 @@ vi.mock('framer-motion', () => {
 
 import Shop from '../src/pages/Shop.jsx';
 import {
-  GIFT_THEMES,
-  buildGiftSharePath,
-  giftThemeFor,
   getRecentViews,
   orderRowsByTrending,
-  parseGiftArrival,
   pushRecentView,
   resolveRecentViews,
   trendingHasHeat
@@ -188,26 +184,6 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('pure hub logic — the rules the paint depends on', () => {
-  it('builds only well-formed gift paths and ignores junk', () => {
-    expect(buildGiftSharePath('us', 'Steam', 'birthday'))
-      .toBe('/shop?c=US&b=steam&gift=1&gt=birthday');
-    expect(buildGiftSharePath('U', 'Steam', 'gold')).toBe('');
-    expect(buildGiftSharePath('US', '  ', 'gold')).toBe('');
-  });
-
-  it('defaults an unknown theme to gold, never renders a junk class', () => {
-    expect(giftThemeFor('birthday')).toBe('birthday');
-    expect(giftThemeFor('../etc/passwd')).toBe('gold');
-    expect(GIFT_THEMES.map((g) => g.id)).toEqual(['birthday', 'gaming', 'congrats', 'gold']);
-  });
-
-  it('reads a gift arrival ONLY with gift=1 and never from a plain share', () => {
-    const g = new Map([['gift', '1'], ['gt', 'gaming']]);
-    expect(parseGiftArrival((k) => g.get(k))).toEqual({ theme: 'gaming' });
-    const plain = new Map([['c', 'US'], ['b', 'steam']]);
-    expect(parseGiftArrival((k) => plain.get(k))).toBeNull();
-  });
-
   it('recent views: unshift, de-dupe, cap, and resolve against the LIVE catalogue only', () => {
     const mem = new Map();
     const storage = {
@@ -276,80 +252,32 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
     expect(mockReportInterest).toHaveBeenCalledTimes(2);
   });
 
-  it('shows the loyalty chip with the REAL rank wording and links to /rewards', async () => {
+  it('folds the Web3 security drawer into the PAY tab, closed until asked', async () => {
     renderShop('/shop');
-    await screen.findByTestId('shop-loyalty-card');
-    /* visible title, and the SAME tierFor the rewards screen uses:
-       2600 points → gold. Persian labels, zero English. */
-    const card = screen.getByTestId('shop-loyalty-card');
-    expect(card.textContent).toContain(fa.shop.loyalty.title);
-    expect(card.textContent).toContain(fa.rank.tier.gold);
-    expect(card.textContent).toContain('امتیاز رتبه');
-    const link = screen.getByRole('button', { name: fa.shop.loyalty.cta });
-    fireEvent.click(link);
-    await waitFor(() => {
-      expect(screen.getByTestId('route-probe').textContent).toBe('/rewards');
-    });
-    /* the honesty line is on the card itself, not behind a collapse */
-    expect(card.textContent).toContain(fa.shop.loyalty.note);
-  });
-
-  it('offers the four gift themes and shares an in-app gift link with the referral code', async () => {
-    renderShop('/shop');
-    const steam = (await screen.findAllByText('Steam'))[0];
-    fireEvent.click(steam.closest('button'));
-
-    for (const g of GIFT_THEMES) {
-      expect(screen.getByText(fa.shop.gift.theme[g.id])).toBeTruthy();
-    }
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(fa.shop.gift.theme.congrats) }));
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(fa.shop.gift.send) }));
-
-    await waitFor(() => expect(mockShare).toHaveBeenCalled());
-    const { url, text } = mockShare.mock.calls[0][0];
-    expect(url).toContain('#/shop?c=US&b=steam&gift=1&gt=congrats');
-    expect(url).toContain('ref=FBTREF99');
-    expect(text).toContain(fa.shop.gift.theme.congrats);
-    /* the chosen theme persists for the next gift, on this device only */
-    expect(localStorage.getItem('fbt.shop.gift.theme.v1')).toBe('congrats');
-  });
-
-  it('a gift arrival paints the envelope banner and rewrites no URL (no setSearchParams on mount)', async () => {
-    let replaced = 0;
-    const realReplace = window.history.replaceState.bind(window.history);
-    window.history.replaceState = (...args) => { replaced += 1; return realReplace(...args); };
-
-    renderShop('/shop?c=US&b=apple&gift=1&gt=birthday');
-    await waitFor(() => {
-      const banner = document.querySelector('.shop-gift-envelope');
-      expect(banner).toBeTruthy();
-      expect(banner.getAttribute('data-theme')).toBe('birthday');
-    });
-    /* the sender is recorded as a referrer by the app-boot captureReferral;
-       this page only READS it — and the banner admits that honestly. */
-    expect(document.body.textContent).toContain(fa.shop.gift.receivedBody.slice(0, 14));
-
-    /* the URL a history-obsessed implementation would "clean" stays intact */
-    expect(replaced).toBe(0);
-    window.history.replaceState = realReplace;
-  });
-
-  it('attributes a gift only when the persisted referrer is THIS link sender', async () => {
-    localStorage.setItem('fbt-referred-by', 'OTHER99');
-    localStorage.setItem('fbt-referred-at', String(Date.now()));
-    renderShop('/shop?c=US&b=apple&gift=1&gt=gold&ref=SENDER99');
-    await waitFor(() => expect(document.querySelector('.shop-gift-envelope')).toBeTruthy());
-    expect(document.body.textContent).not.toContain(fa.shop.gift.referralActive);
-    expect(document.querySelector('.shop-gift-envelope-theme')?.textContent).toContain(fa.shop.gift.theme.gold);
+    /* the catalogue tabs must NOT carry the security drawer any more */
+    await screen.findByText(fa.shop.featured.title);
+    expect(document.querySelector('.shop-trust-hub')).toBeNull();
 
     cleanup();
-    localStorage.setItem('fbt-referred-by', 'SENDER99');
-    renderShop('/shop?c=US&b=apple&gift=1&gt=gold&ref=SENDER99');
-    await waitFor(() => expect(document.body.textContent).toContain(fa.shop.gift.referralActive));
+    renderShop('/shop?tab=pay');
+    const summary = await screen.findByRole('button', { name: new RegExp(fa.shop.trustHub.title) });
+    const hub = summary.closest('.shop-trust-hub');
+    expect(hub.getAttribute('data-open')).toBe('false');
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+    expect(document.querySelector('#shop-trust-hub-body')).toBeNull();
+
+    fireEvent.click(summary);
+    await waitFor(() => expect(hub.getAttribute('data-open')).toBe('true'));
+    expect(summary.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('#shop-trust-hub-body')).toBeTruthy();
+    /* both tools really mount inside the drawer */
+    expect(screen.getByText(fa.shop.web3id.title)).toBeTruthy();
+    expect(screen.getByText(fa.hardware.title)).toBeTruthy();
   });
 
   it('keeps every hardware vendor name attached to its stacked comparison facts', async () => {
-    renderShop('/shop');
+    renderShop('/shop?tab=pay');
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(fa.shop.trustHub.title) }));
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(fa.hardware.compareTitle) }));
     const labels = [...document.querySelectorAll('.hw-compare-vendor')].map((el) => el.textContent);
     expect(labels.length).toBeGreaterThanOrEqual(8);
@@ -412,7 +340,8 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
   });
 
   it('the Web3 identity card checks shape, prices .eth by the published ladder, and routes the coin to our swap', async () => {
-    renderShop('/shop');
+    renderShop('/shop?tab=pay');
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(fa.shop.trustHub.title) }));
     await screen.findByText(fa.shop.web3id.title);
     const input = screen.getByLabelText(fa.shop.web3id.checkLabel);
 
@@ -434,7 +363,8 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
   });
 
   it('the .sol tab refuses a 40-char label with the length rule, not a fake verdict', async () => {
-    renderShop('/shop');
+    renderShop('/shop?tab=pay');
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(fa.shop.trustHub.title) }));
     await screen.findByText(fa.shop.web3id.title);
     fireEvent.click(screen.getByRole('button', { name: '.sol' }));
     const input = screen.getByLabelText(fa.shop.web3id.checkLabel);

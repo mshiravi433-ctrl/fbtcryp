@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 /* The shop is a lazy route; keep its visual layer out of the first paint. */
 import '../styles/shop-modern.css';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
@@ -10,10 +10,10 @@ import Sheet from '../components/Sheet';
 import ShopCountrySheet from '../components/ShopCountrySheet';
 import ShopTile from '../components/ShopTile';
 import ShopPromo from '../components/ShopPromo';
-import ShopLoyaltyCard from '../components/ShopLoyaltyCard';
 import ShopWeb3IdCard from '../components/ShopWeb3IdCard';
 import ShareSheet from '../components/ShareSheet';
 import HardwareWalletCard from '../components/HardwareWalletCard';
+import { useStill } from '../components/AnimatedIcon';
 
 const PayGatewayPanel = lazy(() => import('../components/PayGatewayPanel'));
 /*
@@ -27,8 +27,8 @@ import { useWallet } from '../context/WalletContext';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
 import { useAppStore } from '../store/useAppStore';
 import { useShare } from '../hooks/useShare';
-import { referredBy, siteShareUrl } from '../lib/referral';
-import { IconChevronLeft, IconQr, IconSearch, IconShield } from '../components/Icons';
+import { siteShareUrl } from '../lib/referral';
+import { IconChevronLeft, IconQr, IconSearch } from '../components/Icons';
 import { TOKENS } from '../lib/chains';
 import { getBalances } from '../lib/swap';
 import { readPortfolioSnapshot } from '../lib/portfolioSnapshot';
@@ -46,15 +46,9 @@ import {
   setShopCountry
 } from '../lib/shop';
 import {
-  GIFT_THEMES,
-  buildGiftSharePath,
-  giftThemeFor,
   orderRowsByTrending,
-  parseGiftArrival,
   pushRecentView,
   getRecentViews,
-  recallGiftTheme,
-  rememberGiftTheme,
   resolveRecentViews,
   trendingHasHeat
 } from '../lib/shopHub';
@@ -69,19 +63,23 @@ import {
   topUpUrl
 } from '../lib/shopLinks';
 import {
+  IconArrowUpRight,
   IconBed,
+  IconBolt,
   IconCard,
   IconChart,
+  IconChevronDown,
   IconFlame,
   IconGamepad,
-  IconGift,
   IconGlobe,
+  IconMail,
   IconMoney,
   IconPay,
   IconPlane,
   IconPlay,
   IconRecent,
   IconShare,
+  IconShieldCheck,
   IconSim,
   IconSpark,
   IconStar,
@@ -121,21 +119,26 @@ import {
  *   6. `pay`     — FBT Pay non-custodial merchant invoice & QR gateway
  *                  + the in-store counter (TapToPay) + whitelabel readiness
  *
- * PHASE 2/3 ADDS, ON TOP OF THE SAME SHELF:
- *   · Gift envelope shares — a brand sheet shared as one of four themed
- *     in-app gift links (`#/shop?c=..&b=..&gift=1&gt=..&ref=CODE`), read on
- *     arrival without ever rewriting the URL on mount.
- *   · A loyalty chip wired to the RANK system exactly as /rewards reads it —
- *     tier, real perks, distance. Points are never spent here.
+ * THE MODERN SHELF, ON TOP OF THE ORIGINAL SIX VERTICALS:
+ *   · A single-line tab rail (`cards` → `pay`) that scrolls sideways instead
+ *     of stacking into a two-row block: every destination stays one thumb
+ *     away on a phone and one row on a desktop.
  *   · A recently-viewed rail (this device's localStorage) and a regional
  *     trend re-rank (anonymous server counter × provider margin × stock).
- *   · Web3 `.eth` / `.sol` identity checks that validate shape and the
- *     published .eth price ladder, route the coin purchase through /swap,
- *     and never pretend to know chain state.
- *   · Hardware-wallet security hub: mobile/desktop comparison and the
- *     four-step seal checklist inside HardwareWalletCard.
+ *   · Web3 security & identity — `.eth` / `.sol` shape checks with the
+ *     published .eth price ladder, plus the hardware-wallet comparison and
+ *     seal checklist — folded into ONE collapsible panel that lives only on
+ *     the payment-gateway tab, where a merchant is actually settling money.
  *   · Swap & Pay on the customer landing (PayLanding) and the optional
  *     invoice note on every gateway link (v:1-compatible, fee split intact).
+ *
+ * DELIBERATELY ABSENT:
+ *   · There is no "send this card as a gift" link and no gift-theme picker.
+ *     A share link is not a paid voucher; pretending otherwise cheapened
+ *     the shelf, so the only share left is the honest "here is the card"
+ *     referral link.
+ *   · There is no rank/loyalty chip in the shop. Rank lives on /rewards;
+ *     the storefront sells things.
  */
 
 const TABS = [
@@ -222,27 +225,73 @@ function LimitsBox() {
 }
 
 /**
- * The non-custodial trust shelf stays in the same visual chapter on every
- * shop tab. On wide screens the two cards use the available space; on phones
- * they remain a calm, single-column flow instead of competing with checkout.
+ * WEB3 SECURITY & IDENTITY — ONE FOLDED PANEL, ONLY ON THE PAY TAB.
+ * ---------------------------------------------------------------------------
+ * The owner's brief was precise: «امنیت و هویت وب۳ … در باکس بازشونده و فقط
+ * در تب درگاه پرداخت باشد». Two consequences, both intentional:
+ *
+ *   1. The panel is CLOSED by default. It is a drawer of serious tools
+ *      (registries, hardware wallets, a tamper checklist) sitting under a
+ *      merchant's settlement screen, not a wall of prose above the catalogue.
+ *   2. It renders on `pay` and nowhere else. On the card/payment tabs the
+ *      customer is buying a voucher; here they are wiring money to their own
+ *      wallet, which is exactly where key custody becomes the question.
+ *
+ * The summary row stays a real <button> with aria-expanded / aria-controls so
+ * the fold works with a keyboard and a screen reader, and the body is a
+ * motion.div whose height animates — instantly when `useStill()` says this
+ * device asked for less motion.
  */
 function ShopTrustHub() {
   const { t } = useTranslation();
+  const still = useStill();
+  const [open, setOpen] = useState(false);
+
   return (
-    <section className="shop-trust-hub" aria-label={t('shop.trustHub.title')}>
-      <div className="shop-trust-hub-heading">
+    <section
+      className="shop-trust-hub"
+      data-open={open ? 'true' : 'false'}
+      data-testid="shop-trust-hub"
+      aria-label={t('shop.trustHub.title')}
+    >
+      <button
+        type="button"
+        className="shop-trust-hub-heading"
+        aria-expanded={open}
+        aria-controls="shop-trust-hub-body"
+        onClick={() => setOpen((v) => !v)}
+      >
         <span className="shop-trust-hub-icon" aria-hidden="true">
-          <IconShield width={17} height={17} />
+          <IconShieldCheck width={20} height={20} />
         </span>
-        <div>
-          <h2>{t('shop.trustHub.title')}</h2>
-          <p>{t('shop.trustHub.subtitle')}</p>
-        </div>
-      </div>
-      <div className="shop-trust-hub-grid">
-        <ShopWeb3IdCard />
-        <HardwareWalletCard />
-      </div>
+        <span className="shop-trust-hub-copy">
+          <span className="shop-trust-hub-title">{t('shop.trustHub.title')}</span>
+          <span className="shop-trust-hub-sub">{t('shop.trustHub.subtitle')}</span>
+        </span>
+        <span className="shop-trust-hub-badge">{t('shop.trustHub.badge')}</span>
+        <span className="shop-trust-hub-chevron" aria-hidden="true">
+          <IconChevronDown width={16} height={16} />
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="trust-hub-body"
+            id="shop-trust-hub-body"
+            className="shop-trust-hub-body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: still ? 0 : 0.34, ease: [0.22, 0.61, 0.36, 1] }}
+          >
+            <div className="shop-trust-hub-grid">
+              <ShopWeb3IdCard />
+              <HardwareWalletCard />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
@@ -272,6 +321,7 @@ function RegionQuickBar({ country, countries, onPickCountry, onOpenAll, t }) {
               type="button"
               className="shop-region-pill"
               data-on={active ? 'true' : 'false'}
+              data-cc={cc}
               aria-pressed={active}
               onClick={() => onPickCountry(cc)}
             >
@@ -286,6 +336,7 @@ function RegionQuickBar({ country, countries, onPickCountry, onOpenAll, t }) {
           className="shop-region-pill shop-region-pill--all"
           onClick={onOpenAll}
         >
+          <IconGlobe width={13} height={13} />
           <span>{t('shop.quickRegion.allCountries')}</span>
         </button>
       </div>
@@ -293,47 +344,81 @@ function RegionQuickBar({ country, countries, onPickCountry, onOpenAll, t }) {
   );
 }
 
+/**
+ * THE TRAVEL COMPANION — a bento of two real things a traveller needs BEFORE
+ * the flight: data on arrival, and a card the taxi will accept.
+ *
+ * The old box was a heading and two grey rows with full-width buttons. This
+ * one is built as a poster: an aurora wash, a dashed flight path in SVG, an
+ * accent orb per offer, small factual tags instead of another paragraph, and
+ * a CTA that looks like a door rather than a form submit. No dates, no
+ * search fields — the flights/stays tabs still hand those to the provider.
+ */
 function TravelCompanionCard({ t, open, onOpenCards }) {
   return (
-    <section className="card shop-travel-cross" aria-label={t('shop.travelCross.title')}>
+    <section className="shop-travel-cross" aria-label={t('shop.travelCross.title')}>
+      <svg
+        className="shop-travel-cross-path"
+        viewBox="0 0 460 170"
+        fill="none"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M14 148C96 104 154 126 214 82S344 22 448 48" strokeDasharray="3 9" />
+        <circle cx="214" cy="82" r="3.5" />
+        <circle cx="448" cy="48" r="3.5" />
+      </svg>
+
       <div className="shop-travel-cross-head">
-        <span className="shop-hero-kicker">{t('shop.travelCross.kicker')}</span>
-        <div className="shop-travel-cross-title">{t('shop.travelCross.title')}</div>
+        <span className="shop-travel-cross-kicker">
+          <IconPlane width={13} height={13} />
+          <span>{t('shop.travelCross.kicker')}</span>
+        </span>
+        <h2 className="shop-travel-cross-title">{t('shop.travelCross.title')}</h2>
         <p className="shop-travel-cross-sub">{t('shop.travelCross.sub')}</p>
       </div>
+
       <div className="shop-travel-cross-grid">
-        <div className="shop-travel-cross-item">
-          <div className="shop-travel-cross-icon">
-            <IconSim width={18} height={18} />
-          </div>
+        <article className="shop-travel-cross-item" data-accent="cyan">
+          <span className="shop-travel-cross-icon" aria-hidden="true">
+            <IconSim width={20} height={20} />
+          </span>
           <div className="shop-travel-cross-copy">
             <div className="shop-travel-cross-name">{t('shop.travelCross.esimTitle')}</div>
             <div className="shop-travel-cross-desc">{t('shop.travelCross.esimBody')}</div>
+            <div className="shop-travel-cross-tags">
+              <span className="shop-travel-cross-tag">{t('shop.travelCross.esimTag')}</span>
+              <span className="shop-travel-cross-tag">{t('shop.travelCross.instant')}</span>
+            </div>
           </div>
           <button
             type="button"
-            className="btn btn-primary shop-travel-cross-btn"
+            className="shop-travel-cross-btn"
+            data-tone="primary"
             onClick={() => open(esimUrl())}
           >
-            {t('shop.travelCross.esimCta')}
+            <span>{t('shop.travelCross.esimCta')}</span>
+            <IconArrowUpRight width={15} height={15} />
           </button>
-        </div>
-        <div className="shop-travel-cross-item">
-          <div className="shop-travel-cross-icon">
-            <IconMoney width={18} height={18} />
-          </div>
+        </article>
+
+        <article className="shop-travel-cross-item" data-accent="violet">
+          <span className="shop-travel-cross-icon" aria-hidden="true">
+            <IconMoney width={20} height={20} />
+          </span>
           <div className="shop-travel-cross-copy">
             <div className="shop-travel-cross-name">{t('shop.travelCross.cardTitle')}</div>
             <div className="shop-travel-cross-desc">{t('shop.travelCross.cardBody')}</div>
+            <div className="shop-travel-cross-tags">
+              <span className="shop-travel-cross-tag">{t('shop.travelCross.cardTag')}</span>
+              <span className="shop-travel-cross-tag">{t('shop.travelCross.secure')}</span>
+            </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-ghost shop-travel-cross-btn"
-            onClick={onOpenCards}
-          >
-            {t('shop.travelCross.cardCta')}
+          <button type="button" className="shop-travel-cross-btn" data-tone="quiet" onClick={onOpenCards}>
+            <span>{t('shop.travelCross.cardCta')}</span>
+            <IconArrowUpRight width={15} height={15} />
           </button>
-        </div>
+        </article>
       </div>
     </section>
   );
@@ -361,35 +446,6 @@ export default function Shop() {
   }, [searchParams]);
   const linkedBrand = useMemo(() => brandSlug(searchParams.get('b')) || null, [searchParams]);
   const deepLinkDone = useRef('');
-
-  /*
-   * GIFT ARRIVAL — `?gift=1&gt=<theme>` beside the usual `c`/`b` params.
-   *
-   * Read exactly like the other deep-link params: from the URL, once, into
-   * a memo. `setSearchParams` is NEVER called on mount — rewriting your own
-   * URL during the first render is how a share link ends up in the browser
-   * history twice, how Telegram's in-app view loops reload a "cleaned" hash,
-   * and how a React 18 strict-mode double effect turns one navigation into
-   * two. The banner simply exists while the params exist; back-space still
-   * leaves the shop the way it entered it.
-   *
-   * Attribution needs NO new mechanism: the app's boot already runs
-   * `captureReferral()` over the hash query, so the sender's `ref=CODE` in a
-   * gift link is recorded by the same first-touch, self-referral-refusing,
-   * 90-day-windowed path as a plain invite. This page only displays what
-   * that recorder decided — `referredBy()` — never a hopeful copy.
-   */
-  const giftArrival = useMemo(() => parseGiftArrival((k) => searchParams.get(k)), [searchParams]);
-  /* App boot records the hash through captureReferral(). Only call the
-     referral "active" for THIS envelope when the code that actually survived
-     first-touch/expiry/self-referral checks is the sender's code. A previously
-     stored, different referrer must never be attributed to this sender. */
-  const giftReferralActive = Boolean(
-    giftArrival
-    && searchParams.get('ref')
-    && referredBy() === searchParams.get('ref')
-  );
-  const [giftTheme, setGiftTheme] = useState(() => recallGiftTheme());
 
   const [share, shareSheet] = useShare();
   const ensureRefCode = useAppStore((s) => s.ensureRefCode);
@@ -644,36 +700,6 @@ export default function Shop() {
     void share({ url, text: t('shop.shareText', { brand: openBrand.name }) });
   }, [openBrand, country, refCode, share, haptic, t]);
 
-  /*
-   * SEND AS GIFT — the same `siteShareUrl` mechanism as a normal share, with
-   * `&gift=1&gt=<theme>` added. There is deliberately NO new attribution
-   * path: the link's `ref=CODE` is read at boot by the existing
-   * `captureReferral()`, which keeps first-touch, refuses self-referral, and
-   * pays the referrer share for REFERRAL_WINDOW_DAYS (90) — that is the
-   * whole promise, and the copy says exactly that. What the gift params add
-   * is only WHICH CARD the recipient lands on and WHICH ENVELOPE paints the
-   * sheet — presentation over a mechanism that already exists.
-   */
-  const sendGift = useCallback(() => {
-    if (!openBrand || !country) return;
-    haptic?.('light');
-    const path = buildGiftSharePath(country, openBrand.family, giftTheme);
-    if (!path) return;
-    const url = siteShareUrl(path, refCode);
-    void share({
-      url,
-      text: t('shop.gift.shareText', {
-        brand: openBrand.name,
-        theme: t(`shop.gift.theme.${giftTheme}`)
-      })
-    });
-  }, [openBrand, country, giftTheme, refCode, share, haptic, t]);
-
-  const pickGiftTheme = useCallback((id) => {
-    haptic?.('select');
-    setGiftTheme(rememberGiftTheme(giftThemeFor(id)));
-  }, [haptic]);
-
   const handleTogglePin = useCallback((brand) => {
     if (!brand) return;
     haptic?.('light');
@@ -844,7 +870,10 @@ export default function Shop() {
           <IconChevronLeft width={18} height={18} />
         </button>
         <div className="shop-header-copy">
-          <span className="shop-header-eyebrow">{t('shop.headerEyebrow')}</span>
+          <span className="shop-header-eyebrow">
+            <IconStore width={12} height={12} />
+            <span>{t('shop.headerEyebrow')}</span>
+          </span>
           <h1 className="h1 shop-header-title">
             {openCat ? catLabel(t, openCat) : t('shop.title')}
           </h1>
@@ -857,47 +886,30 @@ export default function Shop() {
           </p>
         </div>
       </div>
-      {country ? (
-        <button type="button" className="chip shop-country-btn" onClick={() => setPickerOpen(true)}>
-          <span aria-hidden="true">{flagOf(country)}</span> {country}
-        </button>
-      ) : (
-        <button type="button" className="chip shop-country-btn" onClick={() => setPickerOpen(true)}>
-          <IconGlobe width={15} height={15} />
-          <span>{t('shop.chooseOne')}</span>
-        </button>
-      )}
+      <button
+        type="button"
+        className="chip shop-country-btn"
+        data-empty={country ? 'false' : 'true'}
+        onClick={() => setPickerOpen(true)}
+      >
+        {country ? (
+          <>
+            <span className="shop-country-flag" aria-hidden="true">{flagOf(country)}</span>
+            <span className="shop-country-code" dir="ltr">{country}</span>
+          </>
+        ) : (
+          <>
+            <IconGlobe width={15} height={15} />
+            <span>{t('shop.chooseOne')}</span>
+          </>
+        )}
+        <IconChevronDown width={13} height={13} className="shop-country-chevron" />
+      </button>
     </motion.div>
   );
 
   const brandSheet = (
     <Sheet open={Boolean(openBrand)} onClose={() => setOpenBrand(null)} title={openBrand?.name ?? ''}>
-      {/*
-        THE GIFT ENVELOPE — what the recipient of a gift link sees on top of
-        the very card they were sent, themed by the sender's pick. It reports
-        only what is true at this moment: someone sent this card, the tab is
-        open on it, and IF `referredBy()` found the sender's code recorded at
-        boot, the referral line appears too. If the device already had
-        another referrer (first-touch wins) or the code was invalid, the line
-        is honestly absent — the gift still opens, the banner does not lie.
-      */}
-      {giftArrival && openBrand && (
-        <div className="shop-gift-envelope" data-theme={giftArrival.theme} role="note" data-testid="shop-gift-envelope">
-          <span className="shop-gift-envelope-mark" aria-hidden="true">
-            {(GIFT_THEMES.find((g) => g.id === giftArrival.theme) || GIFT_THEMES[3]).emoji}
-          </span>
-          <div className="shop-gift-envelope-copy">
-            <span className="shop-gift-envelope-theme">
-              {t('shop.gift.themeLabel', { theme: t(`shop.gift.theme.${giftArrival.theme}`) })}
-            </span>
-            <strong>{t('shop.gift.receivedTitle', { brand: openBrand.name })}</strong>
-            <p>{t('shop.gift.receivedBody')}</p>
-            {giftReferralActive ? (
-              <span className="shop-gift-envelope-ref">✓ {t('shop.gift.referralActive')}</span>
-            ) : null}
-          </div>
-        </div>
-      )}
       {openBrand && (
         <div className="shop-sheet-toolbar">
           <div className="shop-coin-switch" role="group" aria-label={t('shop.checkout.coinLabel')}>
@@ -933,38 +945,6 @@ export default function Shop() {
             <IconStar width={14} height={14} filled={openBrandPinned} />
             <span>{t(openBrandPinned ? 'shop.fav.pinned' : 'shop.fav.pinAction')}</span>
           </button>
-        </div>
-      )}
-
-      {/*
-        GIFT THEME PICKER — four envelopes, one persistent default. Picking
-        a theme here does not buy anything or open anything by itself; the
-        envelope only materialises when the sender taps «ارسال هدیه» below.
-        The chosen id rides the URL as `gt=<id>` and the receiver validates
-        it against the SAME table (giftThemeFor), so a hand-typed theme can
-        only ever land on the neutral gold.
-      */}
-      {openBrand && (
-        <div className="shop-gift-row" role="group" aria-label={t('shop.gift.pickTheme')}>
-          <span className="shop-gift-label">
-            <IconGift width={14} height={14} />
-            <span>{t('shop.gift.rowTitle')}</span>
-          </span>
-          <div className="shop-gift-pills">
-            {GIFT_THEMES.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                className="shop-gift-pill"
-                data-on={giftTheme === g.id ? 'true' : 'false'}
-                aria-pressed={giftTheme === g.id}
-                onClick={() => pickGiftTheme(g.id)}
-              >
-                <span aria-hidden="true">{g.emoji}</span>
-                <span>{t(`shop.gift.theme.${g.id}`)}</span>
-              </button>
-            ))}
-          </div>
         </div>
       )}
 
@@ -1172,16 +1152,6 @@ export default function Shop() {
             <IconShare width={15} height={15} />
             {t('shop.share')}
           </button>
-          {/*
-            The gift share sits BESIDE the normal one, never replacing it —
-            both route through the same useShare → native sheet → in-app
-            fallback chain, so on a desktop with no navigator.share the gift
-            link lands in the fallback sheet exactly like every other share.
-          */}
-          <button type="button" className="btn btn-ghost shop-gift-send" onClick={sendGift}>
-            <IconGift width={15} height={15} />
-            {t('shop.gift.send')}
-          </button>
         </div>
       )}
     </Sheet>
@@ -1192,10 +1162,12 @@ export default function Shop() {
     return (
       <PageTransition className="shop-shell">
         {header}
-        <motion.section className="card card-rgb shop-welcome-card" variants={riseIn} initial="hidden" animate="show">
-          <div className="sheen" />
-          <div className="shop-welcome-title">{t('shop.pickCountry')}</div>
-          <p className="prose-sm" style={{ margin: 0 }}>{t('shop.pickCountryWhy')}</p>
+        <motion.section className="shop-welcome-card" variants={riseIn} initial="hidden" animate="show">
+          <span className="shop-welcome-orb" aria-hidden="true">
+            <IconGlobe width={26} height={26} />
+          </span>
+          <h2 className="shop-welcome-title">{t('shop.pickCountry')}</h2>
+          <p className="shop-welcome-why">{t('shop.pickCountryWhy')}</p>
 
           <RegionQuickBar
             country={country}
@@ -1207,7 +1179,8 @@ export default function Shop() {
 
           <div className="shop-welcome-actions">
             <button type="button" className="btn btn-primary" onClick={() => setPickerOpen(true)}>
-              {t('shop.chooseOne')}
+              <IconGlobe width={16} height={16} />
+              <span>{t('shop.chooseOne')}</span>
             </button>
             <button
               type="button"
@@ -1231,8 +1204,6 @@ export default function Shop() {
             {t('shop.alt.earn')}
           </button>
         </div>
-
-        <ShopTrustHub />
 
         <ShopCountrySheet
           open={pickerOpen}
@@ -1301,7 +1272,9 @@ export default function Shop() {
             role="tab"
             aria-selected={tab === id}
             className="shop-tab"
-            data-on={tab === id}
+            data-on={tab === id ? 'true' : 'false'}
+            data-tab={id}
+            aria-label={t(`shop.tab.${id}`)}
             onClick={() => {
               if (id !== 'pay' && !country) {
                 setPickerOpen(true);
@@ -1313,8 +1286,8 @@ export default function Shop() {
               setOpenCat(null);
             }}
           >
-            <Icon width={17} height={17} />
-            <span>{t(`shop.tab.${id}`)}</span>
+            <span className="shop-tab-icon" aria-hidden="true"><Icon width={16} height={16} /></span>
+            <span className="shop-tab-label">{t(`shop.tab.${id}`)}</span>
           </button>
         ))}
       </div>
@@ -1332,35 +1305,56 @@ export default function Shop() {
       {tab === 'cards' || tab === 'money' ? (
         <>
           <motion.section className="shop-hero shop-hero--catalogue" variants={riseIn} initial="hidden" animate="show">
+            <span className="shop-hero-aurora" aria-hidden="true" />
             <div className="shop-hero-content">
-              <span className="shop-hero-kicker">{t('shop.heroKicker')}</span>
-              <div className="shop-hero-title">{t('shop.heroTitle', { country: displayCountryName })}</div>
+              <span className="shop-hero-kicker">
+                <IconSpark width={12} height={12} />
+                <span>{t('shop.heroKicker')}</span>
+              </span>
+              <h2 className="shop-hero-title">{t('shop.heroTitle', { country: displayCountryName })}</h2>
               <p className="shop-hero-sub">{t('shop.heroSub')}</p>
+
               <div className="shop-trust-row">
-                <span className="shop-trust-pill">⚡ {t('shop.trust.fast')}</span>
-                <span className="shop-trust-pill">◈ {t('shop.trust.crypto')}</span>
-                <span className="shop-trust-pill">✉ {t('shop.trust.email')}</span>
+                <span className="shop-trust-pill" data-tone="cyan">
+                  <IconBolt width={13} height={13} />
+                  <span>{t('shop.trust.fast')}</span>
+                </span>
+                <span className="shop-trust-pill" data-tone="violet">
+                  <IconShieldCheck width={13} height={13} />
+                  <span>{t('shop.trust.crypto')}</span>
+                </span>
+                <span className="shop-trust-pill" data-tone="mint">
+                  <IconMail width={13} height={13} />
+                  <span>{t('shop.trust.email')}</span>
+                </span>
               </div>
+
               <div className="shop-quick">
                 <button type="button" onClick={() => open(countryUrl(country))}>
-                  <IconCard width={18} height={18} />
-                  {t('shop.quickAll')}
+                  <IconCard width={17} height={17} />
+                  <span>{t('shop.quickAll')}</span>
+                  <IconArrowUpRight width={14} height={14} className="shop-quick-arrow" />
                 </button>
                 <button type="button" onClick={() => open(topUpUrl(country))}>
-                  <IconTopUp width={18} height={18} />
-                  {t('shop.quickTopUp')}
+                  <IconTopUp width={17} height={17} />
+                  <span>{t('shop.quickTopUp')}</span>
+                  <IconArrowUpRight width={14} height={14} className="shop-quick-arrow" />
                 </button>
               </div>
+
               <div className="shop-hero-metrics" aria-label={t('shop.hero.metricsLabel')}>
-                <div className="shop-hero-metric">
+                <div className="shop-hero-metric" data-tone="cyan">
+                  <span className="shop-hero-metric-icon" aria-hidden="true"><IconStore width={14} height={14} /></span>
                   <strong>{availableBrandCount}</strong>
                   <span>{t('shop.hero.availableBrands')}</span>
                 </div>
-                <div className="shop-hero-metric">
+                <div className="shop-hero-metric" data-tone="violet">
+                  <span className="shop-hero-metric-icon" aria-hidden="true"><IconChart width={14} height={14} /></span>
                   <strong>{visibleCategoryCount}</strong>
                   <span>{t('shop.hero.categories')}</span>
                 </div>
-                <div className="shop-hero-metric">
+                <div className="shop-hero-metric" data-tone="mint">
+                  <span className="shop-hero-metric-icon" aria-hidden="true"><IconGlobe width={14} height={14} /></span>
                   <strong dir="ltr">{country}</strong>
                   <span>{t('shop.hero.region')}</span>
                 </div>
@@ -1368,17 +1362,15 @@ export default function Shop() {
             </div>
             <div className="shop-hero-visual" aria-hidden="true">
               <span className="shop-hero-orbit" />
-              <span className="shop-hero-float shop-hero-float--one"><IconGift width={25} height={25} /></span>
-              <span className="shop-hero-float shop-hero-float--two"><IconCard width={22} height={22} /></span>
-              <span className="shop-hero-float shop-hero-float--three"><IconSwap width={21} height={21} /></span>
-              <span className="shop-hero-visual-core"><IconSpark width={31} height={31} /></span>
+              <span className="shop-hero-orbit shop-hero-orbit--inner" />
+              <span className="shop-hero-float shop-hero-float--one"><IconStar width={21} height={21} /></span>
+              <span className="shop-hero-float shop-hero-float--two"><IconCard width={21} height={21} /></span>
+              <span className="shop-hero-float shop-hero-float--three"><IconSwap width={20} height={20} /></span>
+              <span className="shop-hero-visual-core"><IconSpark width={30} height={30} /></span>
             </div>
           </motion.section>
 
           <ShopPromo slides={PROMO_SLIDES} onSlide={(sl) => setTab(sl.go)} />
-
-          {/* Rank, honestly — tier, real perks, distance to the next tier. */}
-          {tab === 'cards' && <ShopLoyaltyCard />}
 
           {/*
             RECENTLY VIEWED — this device's short memory of the catalogue.
@@ -1436,7 +1428,10 @@ export default function Shop() {
           {tab === 'cards' && data?.live && rows.length > 0 && (
             <section className="shop-usecase-hub" aria-label={t('shop.useCase.title')}>
               <div className="shop-section-title-row">
-                <div>
+                <span className="shop-section-mark" aria-hidden="true">
+                  <IconSpark width={17} height={17} />
+                </span>
+                <div className="shop-section-title-copy">
                   <h2 className="shop-section-heading">{t('shop.useCase.title')}</h2>
                   <p className="shop-section-sub">{t('shop.useCase.subtitle')}</p>
                 </div>
@@ -1472,6 +1467,9 @@ export default function Shop() {
                       <span className="shop-usecase-copy">
                         <span className="shop-usecase-name">{t(`shop.useCase.${uc.id}.title`)}</span>
                         <span className="shop-usecase-tags">{t(`shop.useCase.${uc.id}.brands`)}</span>
+                      </span>
+                      <span className="shop-usecase-arrow" aria-hidden="true">
+                        <IconArrowUpRight width={13} height={13} />
                       </span>
                     </button>
                   );
@@ -1559,7 +1557,7 @@ export default function Shop() {
           ) : filteredRows ? (
             !filteredRows.length ? (
               <div className="empty">
-                <span className="empty-icon">🛍</span>
+                <span className="empty-icon shop-empty-icon" aria-hidden="true"><IconStore width={24} height={24} /></span>
                 <div>{query.trim() && !activeUseCase && budget === 'all' ? t('shop.noMatch') : t('shop.filterNoMatch')}</div>
                 {hasActiveFilter && (
                   <button
@@ -1588,7 +1586,7 @@ export default function Shop() {
             )
           ) : !rows.length ? (
             <div className="empty">
-              <span className="empty-icon">🛍</span>
+              <span className="empty-icon shop-empty-icon" aria-hidden="true"><IconStore width={24} height={24} /></span>
               {t('shop.noneHere', { country: countryName })}
               <div className="shop-alt">
                 <button type="button" className="btn btn-ghost" onClick={() => navigate('/swap')}>
@@ -1668,18 +1666,27 @@ export default function Shop() {
         </>
       ) : tab === 'topup' ? (
         <>
-          <motion.section className="shop-hero" variants={riseIn} initial="hidden" animate="show">
-            <div className="shop-hero-title">{t('shop.topup.title')}</div>
-            <p className="shop-hero-sub">{t('shop.topup.body')}</p>
-            <div className="shop-quick">
-              <button type="button" onClick={() => open(topUpUrl(country))}>
-                <IconTopUp width={18} height={18} />
-                {t('shop.topup.go')}
-              </button>
-              <button type="button" onClick={() => open(esimUrl())}>
-                <IconSim width={18} height={18} />
-                {t('shop.esim.name')}
-              </button>
+          <motion.section className="shop-hero shop-hero--aurora" variants={riseIn} initial="hidden" animate="show">
+            <span className="shop-hero-aurora" aria-hidden="true" />
+            <div className="shop-hero-content">
+              <span className="shop-hero-kicker">
+                <IconTopUp width={12} height={12} />
+                <span>{t('shop.tab.topup')}</span>
+              </span>
+              <h2 className="shop-hero-title">{t('shop.topup.title')}</h2>
+              <p className="shop-hero-sub">{t('shop.topup.body')}</p>
+              <div className="shop-quick">
+                <button type="button" onClick={() => open(topUpUrl(country))}>
+                  <IconTopUp width={17} height={17} />
+                  <span>{t('shop.topup.go')}</span>
+                  <IconArrowUpRight width={14} height={14} className="shop-quick-arrow" />
+                </button>
+                <button type="button" onClick={() => open(esimUrl())}>
+                  <IconSim width={17} height={17} />
+                  <span>{t('shop.esim.name')}</span>
+                  <IconArrowUpRight width={14} height={14} className="shop-quick-arrow" />
+                </button>
+              </div>
             </div>
           </motion.section>
 
@@ -1730,10 +1737,12 @@ export default function Shop() {
         </>
       ) : tab === 'flights' ? (
         <>
-          <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
-            <div className="sheen" />
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('shop.flight.title')}</div>
-            <p className="prose-sm" style={{ margin: 0 }}>{t('shop.flight.body')}</p>
+          <motion.section className="shop-info-ribbon" variants={riseIn} initial="hidden" animate="show">
+            <span className="shop-info-ribbon-icon" aria-hidden="true"><IconPlane width={18} height={18} /></span>
+            <div>
+              <h2 className="shop-info-ribbon-title">{t('shop.flight.title')}</h2>
+              <p className="shop-info-ribbon-body">{t('shop.flight.body')}</p>
+            </div>
           </motion.section>
 
           <TravelCompanionCard
@@ -1784,10 +1793,12 @@ export default function Shop() {
         </>
       ) : tab === 'stays' ? (
         <>
-          <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
-            <div className="sheen" />
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{t('shop.stay.title')}</div>
-            <p className="prose-sm" style={{ margin: 0 }}>{t('shop.stay.body')}</p>
+          <motion.section className="shop-info-ribbon" variants={riseIn} initial="hidden" animate="show">
+            <span className="shop-info-ribbon-icon" aria-hidden="true"><IconBed width={18} height={18} /></span>
+            <div>
+              <h2 className="shop-info-ribbon-title">{t('shop.stay.title')}</h2>
+              <p className="shop-info-ribbon-body">{t('shop.stay.body')}</p>
+            </div>
           </motion.section>
 
           <TravelCompanionCard
@@ -1855,14 +1866,31 @@ export default function Shop() {
         /* ── TAB 6: FBT Pay Merchant Payment Gateway ── */
         <div className="shop-pay-wrap">
           <motion.section className="shop-hero shop-pay-hero" variants={riseIn} initial="hidden" animate="show">
-            <span className="shop-hero-kicker">{t('shop.pay.kicker')}</span>
-            <div className="shop-hero-title">{t('shop.pay.heroTitle')}</div>
+            <span className="shop-hero-aurora" aria-hidden="true" />
+            <span className="shop-pay-scan" aria-hidden="true" />
+            <span className="shop-hero-kicker">
+              <IconPay width={12} height={12} />
+              <span>{t('shop.pay.kicker')}</span>
+            </span>
+            <h2 className="shop-hero-title">{t('shop.pay.heroTitle')}</h2>
             <p className="shop-hero-sub">{t('shop.pay.heroSub')}</p>
             <div className="shop-trust-row">
-              <span className="shop-trust-pill">◈ {t('shop.pay.badgeDirect')}</span>
-              <span className="shop-trust-pill">▣ {t('shop.pay.badgeQr')}</span>
-              <span className="shop-trust-pill">⚡ {t('shop.pay.badgeMultiChain')}</span>
-              <span className="shop-trust-pill">⇄ {t('shop.pay.badgeSwapPay')}</span>
+              <span className="shop-trust-pill" data-tone="cyan">
+                <IconShieldCheck width={13} height={13} />
+                <span>{t('shop.pay.badgeDirect')}</span>
+              </span>
+              <span className="shop-trust-pill" data-tone="violet">
+                <IconQr width={13} height={13} />
+                <span>{t('shop.pay.badgeQr')}</span>
+              </span>
+              <span className="shop-trust-pill" data-tone="amber">
+                <IconBolt width={13} height={13} />
+                <span>{t('shop.pay.badgeMultiChain')}</span>
+              </span>
+              <span className="shop-trust-pill" data-tone="mint">
+                <IconSwap width={13} height={13} />
+                <span>{t('shop.pay.badgeSwapPay')}</span>
+              </span>
             </div>
           </motion.section>
 
@@ -1907,7 +1935,10 @@ export default function Shop() {
             switch.
           */}
           {readiness?.whitelabelConfigured === true && (
-            <p className="shop-pay-ready" data-testid="shop-whitelabel-ready">✓ {t('shop.pay.wlReady')}</p>
+            <p className="shop-pay-ready" data-testid="shop-whitelabel-ready">
+                <IconShieldCheck width={14} height={14} aria-hidden="true" />
+                <span>{t('shop.pay.wlReady')}</span>
+              </p>
           )}
 
           <div className="shop-pay-panel-host">
@@ -1915,14 +1946,20 @@ export default function Shop() {
               <PayGatewayPanel />
             </Suspense>
           </div>
+
+          {/*
+            ─── THE ONLY PLACE THE WEB3 SECURITY DRAWER LIVES ────────────────
+            It is folded shut until asked for, and it exists on `pay` alone:
+            this is the tab where the merchant hands the app a wallet address,
+            which is the moment key custody stops being an abstraction.
+          */}
+          <ShopTrustHub />
         </div>
       )}
 
       {brandSheet}
 
       <ShareSheet {...shareSheet} />
-
-      <ShopTrustHub />
 
       <ShopCountrySheet
         open={pickerOpen}

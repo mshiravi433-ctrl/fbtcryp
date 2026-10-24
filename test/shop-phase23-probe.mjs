@@ -159,8 +159,18 @@ try {
     /readiness\.whitelabelConfigured\s*===\s*true/.test(shopSrc) || /whitelabelConfigured\s*===\s*true/.test(shopSrc));
   check('TapToPay stays behind the lazy chunk (Shop must not drag it to first paint)',
     !/import TapToPay from/.test(shopSrc) && /import\('\.\.\/components\/TapToPay'\)|import\("\.\.\/components\/TapToPay"\)/.test(shopSrc));
-  check('the gift arrival never rewrites the URL (no setSearchParams on mount)',
-    !/setSearchParams\([^)]*\{\s*replace:\s*true[^}]*\}[^)]*\)/.test(shopSrc));
+  check('the shop never rewrites its own URL on mount (no setSearchParams at all)',
+    !/setSearchParams/.test(shopSrc));
+  check('the gift layer is fully gone from the page — no envelope, no theme picker, no send-as-gift',
+    !/gift=1|shop-gift|IconGift|buildGiftSharePath|parseGiftArrival|GIFT_THEMES/i.test(shopSrc));
+  check('the rank card is gone from the storefront (rank lives on /rewards)',
+    !/ShopLoyaltyCard|shop\.loyalty/.test(shopSrc));
+  check('the Web3 security drawer renders on the pay tab and nowhere else',
+    (shopSrc.match(/<ShopTrustHub \/>/g) ?? []).length === 1
+    && /tab === 'pay'/.test(shopSrc)
+    && shopSrc.indexOf('<ShopTrustHub />') > shopSrc.indexOf("tab === 'pay'"));
+  check('the drawer is a real fold: aria-expanded + aria-controls + closed by default',
+    /aria-expanded=\{open\}/.test(shopSrc) && /aria-controls="shop-trust-hub-body"/.test(shopSrc));
 
   /* ─────────────────────────── env documentation ─────────────────────────── */
   const envExample = readFileSync('.env.example', 'utf8');
@@ -174,11 +184,7 @@ try {
     'pay.invoice', 'pay.invoicePlaceholder', 'pay.invoiceHint',
     'pay.landing.note', 'pay.landing.swapPay.title', 'pay.landing.swapPay.body',
     'pay.landing.swapPay.cta', 'pay.landing.swapPay.fees',
-    'shop.gift.send', 'shop.gift.shareText', 'shop.gift.receivedTitle', 'shop.gift.receivedBody',
-    'shop.gift.theme.birthday', 'shop.gift.theme.gaming', 'shop.gift.theme.congrats', 'shop.gift.theme.gold',
-    'shop.gift.themeLabel', 'shop.hero.metricsLabel', 'shop.hero.availableBrands',
     'shop.trustHub.title', 'shop.trustHub.subtitle', 'shop.pay.badgeSwapPay',
-    'shop.loyalty.title', 'shop.loyalty.points', 'shop.loyalty.note', 'shop.loyalty.cta',
     'shop.recent.title', 'shop.trending.title', 'shop.trending.badge',
     'shop.web3id.title', 'shop.web3id.err.chars', 'shop.web3id.err.hyphen',
     'shop.web3id.err.non_ascii', 'shop.web3id.err.too_short', 'shop.web3id.err.too_long',
@@ -192,6 +198,10 @@ try {
       typeof getAt(en, p) === 'string' && getAt(en, p).trim() && typeof getAt(fa, p) === 'string' && getAt(fa, p).trim(),
       `en=${JSON.stringify(getAt(en, p))} fa=${JSON.stringify(getAt(fa, p))}`);
   }
+  check('the removed gift and rank copy is deleted from BOTH locales, not just unmounted',
+    ['shop.gift', 'shop.loyalty'].every((k) =>
+      !(k.split('.').reduce((x, s) => (x == null ? undefined : x[s]), en))
+      && !(k.split('.').reduce((x, s) => (x == null ? undefined : x[s]), fa))));
   check('the fee sentence carries BOTH placeholders (swap fee + gateway fee)',
     (getAt(en, 'pay.landing.swapPay.fees').match(/\{\{fee\}\}/g) || []).length === 2);
   check('the landing body carries have/need/short/token',

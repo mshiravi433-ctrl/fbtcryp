@@ -15592,7 +15592,7 @@ export default function run() {
   }
 
 
-  /* ---- 119. SHOP PHASE 2/3 — gift envelope, loyalty, heat, counter, web3 id ---- */
+  /* ---- 119. SHOP — one shelf, one rail, no gifting, no rank ---- */
   {
     const code = (src) => src
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -15600,7 +15600,7 @@ export default function run() {
       .replace(/^\s*\/\/.*$/gm, '');
     const shop = code(read('src/pages/Shop.jsx'));
     const hub = code(read('src/lib/shopHub.js'));
-    const loyalty = code(read('src/components/ShopLoyaltyCard.jsx'));
+    const tile = code(read('src/components/ShopTile.jsx'));
     const web3 = code(read('src/components/ShopWeb3IdCard.jsx'));
     const hw = code(read('src/components/HardwareWalletCard.jsx'));
     const payPanel = code(read('src/components/PayGatewayPanel.jsx'));
@@ -15614,15 +15614,55 @@ export default function run() {
     const en = JSON.parse(read('src/i18n/locales/en.json'));
     const fa = JSON.parse(read('src/i18n/locales/fa.json'));
 
-    /* the pieces are MOUNTED, not just written — the bug class this file exists for */
-    t('the storefront mounts the loyalty chip, the recent rail, the gift envelope and the id card',
-      /<ShopLoyaltyCard\s*\/>/.test(shop) && /shop-recent-bar/.test(shop)
-      && /shop-gift-envelope/.test(shop) && /<ShopWeb3IdCard\s*\/>/.test(shop));
-    t('the gift banner NEVER rewrites the URL on mount (the setSearchParams trap)',
-      !/setSearchParams/.test(shop));
-    t('gift links are built and read through the single hub module',
-      /buildGiftSharePath/.test(shop) && /parseGiftArrival/.test(shop) && /from '..\/lib\/shopHub'/.test(shop)
-      && /pushRecentView/.test(shop) && /resolveRecentViews/.test(shop));
+    /* ── the two REMOVALS: gifting and the rank card ───────────────────────── */
+    t('the gift layer is gone from the page, the hub and both locales — not flag-hidden',
+      !/gift/i.test(shop) && !/gift/i.test(hub)
+      && !en.shop.gift && !fa.shop.gift
+      && !/GIFT_THEMES|buildGiftSharePath|parseGiftArrival|giftThemeFor/.test(hub));
+    t('the rank card is deleted from disk, so no route can re-mount it',
+      !existsSync('src/components/ShopLoyaltyCard.jsx')
+      && !/ShopLoyaltyCard|shop-loyalty/.test(shop)
+      && !en.shop.loyalty && !fa.shop.loyalty);
+
+    /* ── the security drawer: one mount, pay tab only, folded by default ───── */
+    t('the Web3 security drawer is mounted exactly once, and only inside the pay branch',
+      (shop.match(/<ShopTrustHub\s*\/>/g) ?? []).length === 1
+      && /\btab === 'pay'/.test(shop)
+      && shop.indexOf('<ShopTrustHub />') > shop.indexOf("tab === 'pay'"));
+    t('the drawer starts closed and is a real aria fold, not a painted panel',
+      /useState\(false\)/.test(shop)
+      && /aria-expanded=\{open\}/.test(shop)
+      && /aria-controls="shop-trust-hub-body"/.test(shop)
+      && /data-open=\{open \? 'true' : 'false'\}/.test(shop));
+    t('the id card and the hardware hub live ONLY inside the drawer body',
+      (shop.match(/<ShopWeb3IdCard\s*\/>/g) ?? []).length === 1
+      && (shop.match(/<HardwareWalletCard\s*\/>/g) ?? []).length === 1
+      && /<ShopWeb3IdCard\s*\/>\s*<HardwareWalletCard\s*\/>/.test(shop));
+    t('the fold animates and obeys the device motion preference',
+      /AnimatePresence/.test(shop) && /still \? 0 : 0\.34/.test(shop) && /useStill\(\)/.test(shop));
+
+    /* ── one tab rail: the card door and the pay door side by side ─────────── */
+    t('the six tabs share ONE rail, cards first and pay last, none demoted',
+      /const TABS = \[[\s\S]*?\{ id: 'cards'[\s\S]*?\{ id: 'pay'[\s\S]*?\];/.test(shop)
+      && (shop.match(/className="shop-tabs"/g) ?? []).length === 1
+      && /data-tab=\{id\}/.test(shop) && /aria-label=\{t\(`shop\.tab\.\$\{id\}`\)\}/.test(shop));
+
+    /* ── the shelf itself ──────────────────────────────────────────────────── */
+    t('the shelf renders the poster tile, and the pin is a SIBLING button that stops propagation',
+      /<ShopTile/.test(shop) && /className="shop-tile-wrap"/.test(tile)
+      && /e\.stopPropagation\(\)/.test(tile) && /aria-pressed=\{Boolean\(pinned\)\}/.test(tile));
+    t('a missing logo falls back to the monogram instead of a grey hole',
+      /onError=\{\(\) => setBroken\(true\)\}/.test(tile) && /shop-shot-fb/.test(tile)
+      && /shop-shot-mark/.test(tile));
+    t('the storefront paints no emoji glyph — every icon is a stroke SVG component',
+      !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(shop));
+    t('the page never rewrites its own URL on mount', !/setSearchParams/.test(shop));
+
+    /* ── the hub kept its arithmetic, lost its gift helpers ────────────────── */
+    t('the hub still owns recent views, the trend re-rank and the .eth ladder',
+      /pushRecentView/.test(shop) && /resolveRecentViews/.test(shop)
+      && /export function orderRowsByTrending/.test(hub) && /export function trendingHasHeat/.test(hub)
+      && /ensYearlyUsd/.test(hub));
     t('TapToPay stays behind the lazy boundary — the shop must not drag it to first paint',
       /import\('\.\.\/components\/TapToPay'\)/.test(shop) && !/^import TapToPay/m.test(shop));
     t('the counter door only answers when opened, and the id card never uses window.open',
@@ -15656,7 +15696,6 @@ export default function run() {
     t('trending counts nothing personal: the track route reads only the body',
       !/req\.ip|user-agent|x-forwarded-for/.test(
         appSrc.slice(appSrc.indexOf(`app.post('/api/shop/track'`), appSrc.indexOf(`app.get('/api/shop/trending'`))));
-
     t('the whitelabel note in the UI is gated on the server flag — no dead buttons before a key exists',
       /whitelabelConfigured\s*===\s*true/.test(shop));
 
@@ -15682,25 +15721,53 @@ export default function run() {
 
     /* every new class has a REAL rule, light theme included (generic css checks skip shop-*) */
     const usedClasses = [
-      'shop-gift-envelope', 'shop-gift-envelope-mark', 'shop-gift-envelope-copy', 'shop-gift-envelope-ref',
-      'shop-gift-row', 'shop-gift-label', 'shop-gift-pills', 'shop-gift-pill', 'shop-gift-send',
-      'shop-recent-bar', 'shop-recent-label', 'shop-recent-pills', 'shop-recent-pill',
-      'shop-cat-flame', 'shop-loyalty-eyebrow', 'shop-loyalty-card', 'shop-loyalty-head', 'shop-loyalty-medal',
-      'shop-loyalty-title', 'shop-loyalty-name', 'shop-loyalty-sub', 'shop-loyalty-btn',
-      'shop-loyalty-progress', 'shop-loyalty-progress-fill', 'shop-loyalty-perks', 'shop-loyalty-perk', 'shop-loyalty-note',
+      'shop-shell', 'shop-header-main', 'shop-header-back', 'shop-header-copy',
+      'shop-header-eyebrow', 'shop-header-title', 'shop-header-subtitle', 'shop-country-btn',
+      'shop-country-flag', 'shop-country-code', 'shop-country-chevron', 'shop-tabs', 'shop-tab',
+      'shop-tab-icon', 'shop-tab-label', 'shop-region-bar', 'shop-region-pills',
+      'shop-region-pill', 'shop-region-pill--all', 'shop-hero', 'shop-hero--catalogue',
+      'shop-hero--aurora', 'shop-hero-aurora', 'shop-hero-content', 'shop-hero-kicker',
+      'shop-hero-title', 'shop-hero-sub', 'shop-hero-visual', 'shop-hero-orbit',
+      'shop-hero-visual-core', 'shop-hero-float', 'shop-hero-metrics', 'shop-hero-metric',
+      'shop-hero-metric-icon', 'shop-trust-pill', 'shop-quick', 'shop-quick-arrow', 'shop-promo',
+      'shop-promo-kicker', 'shop-promo-title', 'shop-promo-cta', 'shop-promo-dots',
+      'shop-promo-credit', 'shop-section-title-row', 'shop-section-mark',
+      'shop-section-title-copy', 'shop-usecase-hub', 'shop-usecase-grid', 'shop-usecase-card',
+      'shop-usecase-icon', 'shop-usecase-copy', 'shop-usecase-name', 'shop-usecase-tags',
+      'shop-usecase-arrow', 'shop-usecase-guide', 'shop-usecase-guide-body',
+      'shop-usecase-guide-reset', 'shop-search', 'shop-budget-bar', 'shop-budget-label',
+      'shop-budget-pills', 'shop-budget-pill', 'shop-budget-reset', 'shop-grid', 'shop-rail',
+      'shop-tile-wrap', 'shop-tile', 'shop-shot', 'shop-shot-mark', 'shop-shot-fb',
+      'shop-digital-badge', 'shop-pin-btn', 'shop-tile-body', 'shop-tile-copy', 'shop-tile-name',
+      'shop-tile-sub', 'shop-tile-go', 'shop-tile-stock', 'shop-tile-shine', 'shop-fav-section',
+      'shop-featured-section', 'shop-recent-bar', 'shop-recent-label', 'shop-recent-pills',
+      'shop-recent-pill', 'shop-sheet-toolbar', 'shop-coin-switch', 'shop-coin-switch-label',
+      'shop-coin-pills', 'shop-coin-pill', 'shop-sheet-pin', 'shop-denoms', 'shop-denom',
+      'shop-denom-face', 'shop-denom-coin', 'shop-denom-spread', 'shop-checkout-box',
+      'shop-checkout-grid', 'shop-checkout-row', 'shop-checkout-k', 'shop-checkout-v',
+      'shop-swap-callout', 'shop-swap-cta', 'shop-swap-subrow', 'shop-swap-hint',
+      'shop-swap-alt-link', 'shop-dest-grid', 'shop-dest', 'shop-dest-veil', 'shop-dest-txt',
+      'shop-dest-city', 'shop-dest-country', 'shop-dest-route', 'shop-travel-cross',
+      'shop-travel-cross-path', 'shop-travel-cross-head', 'shop-travel-cross-kicker',
+      'shop-travel-cross-title', 'shop-travel-cross-sub', 'shop-travel-cross-grid',
+      'shop-travel-cross-item', 'shop-travel-cross-icon', 'shop-travel-cross-copy',
+      'shop-travel-cross-name', 'shop-travel-cross-desc', 'shop-travel-cross-tags',
+      'shop-travel-cross-tag', 'shop-travel-cross-btn', 'shop-info-ribbon',
+      'shop-info-ribbon-icon', 'shop-info-ribbon-title', 'shop-info-ribbon-body',
+      'shop-pay-wrap', 'shop-pay-hero', 'shop-pay-scan', 'shop-pay-panel-host',
       'shop-pay-counter', 'shop-pay-counter-copy', 'shop-pay-counter-btn', 'shop-pay-ready',
-      'shop-web3id', 'shop-web3id-head', 'shop-web3id-mark', 'shop-web3id-title', 'shop-web3id-sub',
-      'shop-web3id-tabs', 'shop-web3id-tab', 'shop-web3id-field', 'shop-web3id-suffix', 'shop-web3id-verdict',
-      'shop-web3id-actions', 'shop-web3id-open', 'shop-web3id-fund', 'shop-web3id-note',
-      'shop-header-main', 'shop-header-back', 'shop-header-copy', 'shop-header-eyebrow',
-      'shop-header-title', 'shop-header-subtitle', 'shop-hero--catalogue', 'shop-hero-content',
-      'shop-hero-metrics', 'shop-hero-metric', 'shop-hero-visual', 'shop-hero-orbit',
-      'shop-hero-visual-core', 'shop-hero-float', 'shop-gift-envelope-theme',
-      'shop-loyalty-topline', 'shop-loyalty-points', 'shop-trust-hub', 'shop-trust-hub-heading',
-      'shop-trust-hub-icon', 'shop-trust-hub-grid', 'shop-hardware', 'shop-hardware-intro',
-      'shop-hardware-vendors', 'shop-hardware-vendor',
-      'hw-compare', 'hw-compare-row', 'hw-compare-head', 'hw-compare-label', 'hw-compare-cell',
-      'hw-compare-vendor', 'hw-checklist'
+      'shop-trust-hub', 'shop-trust-hub-heading', 'shop-trust-hub-icon', 'shop-trust-hub-copy',
+      'shop-trust-hub-title', 'shop-trust-hub-sub', 'shop-trust-hub-badge',
+      'shop-trust-hub-chevron', 'shop-trust-hub-body', 'shop-trust-hub-grid', 'shop-web3id',
+      'shop-web3id-head', 'shop-web3id-mark', 'shop-web3id-title', 'shop-web3id-sub',
+      'shop-web3id-tabs', 'shop-web3id-tab', 'shop-web3id-field', 'shop-web3id-suffix',
+      'shop-web3id-verdict', 'shop-web3id-actions', 'shop-web3id-open', 'shop-web3id-fund',
+      'shop-web3id-note', 'shop-hardware', 'shop-hardware-intro', 'shop-hardware-vendors',
+      'shop-hardware-vendor', 'shop-welcome-card', 'shop-welcome-orb', 'shop-welcome-title',
+      'shop-welcome-why', 'shop-welcome-actions', 'shop-sk', 'shop-sk-shot', 'shop-sk-line',
+      'shop-empty-icon', 'shop-cat-row', 'shop-cat-title', 'shop-cat-count', 'shop-cat-badge',
+      'shop-cat-flame', 'hw-compare', 'hw-compare-row', 'hw-compare-head', 'hw-compare-label',
+      'hw-compare-cell', 'hw-compare-vendor', 'hw-checklist'
     ];
     const missingShop = usedClasses.filter((c) => {
       const escaped = c.replace(/-/g, '\\-');
@@ -15713,27 +15780,30 @@ export default function run() {
       'pay-landing-swap-fees', 'pay-link-note'];
     const missingPay = payClasses.filter((c) => !payCss.includes('.' + c));
     t('every new pay class has a real rule in pay-gateway.css', missingPay.length === 0, missingPay.join(','));
-    t('the light theme gets explicit rules for the gift envelope and the id-card reject tone',
-      /data-theme='light'\] \.shop-gift-envelope \{/.test(shopCss)
+    t('the light theme gets explicit rules for the glass hero, the trust drawer and the swap CTA',
+      /data-theme='light'\][\s\S]{0,120}\.shop-hero--catalogue/.test(shopCss)
+      && /data-theme='light'\][\s\S]{0,120}\.shop-hero--aurora/.test(shopCss)
+      && /data-theme='light'\] \.shop-trust-hub \{/.test(shopCss)
+      && /data-theme='light'\] \.shop-swap-cta \{/.test(shopCss)
       && /data-theme='light'\] \.shop-web3id-verdict\[data-tone='bad'\]/.test(shopCss));
-    t('the 2026 hero and trust hub have explicit light surfaces and a scoped wide shell',
-      /data-theme='light'\] \.shop-hero--catalogue/.test(shopCss)
-      && /data-theme='light'\] \.shop-trust-hub/.test(shopCss)
-      && /\.app-shell\.app-shell--shop/.test(shopCss)
-      && /app-shell--shop/.test(read('src/App.jsx')));
+    t('the 2026 storefront scopes its own wide shell instead of widening every page',
+      /\.app-shell\.app-shell--shop/.test(shopCss) && /app-shell--shop/.test(read('src/App.jsx')));
     t('stacked hardware facts repeat their vendor label instead of becoming anonymous cells',
       /hw-compare-vendor/.test(hw) && /@media \(max-width: 560px\)[\s\S]*?\.hw-compare-vendor/.test(shopCss));
     t('a phone gets a stacked comparison and full-width counter button — written, not inherited',
       /@media \(max-width: 420px\)[\s\S]*?\.hw-compare-row \{ grid-template-columns: 1fr;/.test(shopCss)
       && /@media \(max-width: 420px\)[\s\S]*?\.shop-pay-counter-btn \{ width: 100%/.test(shopCss));
-    t('motion is off for the new controls too',
-      /prefers-reduced-motion[\s\S]*?\.shop-gift-pill/.test(shopCss));
+    t('motion is off for the new controls too — the sheen and the aurora both stop',
+      /prefers-reduced-motion[\s\S]*?\.shop-tile-shine/.test(shopCss)
+      && /prefers-reduced-motion[\s\S]*?\.shop-hero-aurora/.test(shopCss));
+    t('the aurora never traps the compositor — every decorative loop is transform/opacity only',
+      !/@keyframes shopAuroraDrift \{[^}]*width:/.test(shopCss));
 
     /* copy: every key the new components reference exists in BOTH locales */
     const referenced = (src) => [...src.matchAll(/t\('([a-z0-9]+\.[A-Za-z0-9_.]+)'/g)].map((m) => m[1])
       .filter((k) => /^(shop|pay|hardware|intentAI)\./.test(k));
     const getAt = (o, k) => k.split('.').reduce((x, s) => (x == null ? undefined : x[s]), o);
-    for (const [label, src] of [['shop', shop], ['loyalty', loyalty], ['web3', web3], ['hw', hw], ['panel', payPanel], ['landing', payLand]]) {
+    for (const [label, src] of [['shop', shop], ['tile', tile], ['web3', web3], ['hw', hw], ['panel', payPanel], ['landing', payLand]]) {
       const keys = [...new Set(referenced(src))].filter((k) => !k.endsWith('*'));
       const missEn = keys.filter((k) => typeof getAt(en, k) !== 'string' || !getAt(en, k).trim());
       const missFa = keys.filter((k) => typeof getAt(fa, k) !== 'string' || !getAt(fa, k).trim());
@@ -15744,13 +15814,14 @@ export default function run() {
       ['chars', 'hyphen', 'non_ascii', 'too_short'].every((r) => typeof getAt(en.shop.web3id.err, r) === 'string'
         && typeof getAt(fa.shop.web3id.err, r) === 'string')
       && /shop\.web3id\.err\./.test(web3));
-    t('the hardware hub keeps the affiliate honesty line AND gained compare/check sections',
-      /hardwareUrl/.test(hw) && /hw-compare/.test(hw) && /hw-check/.test(hw));
-    t('the gift themes in the hub are the four the CSS and i18n know',
-      ['birthday', 'gaming', 'congrats', 'gold'].every((id) =>
-        new RegExp(`data-theme='${id}'`).test(shopCss)
-        && typeof getAt(en.shop.gift.theme, id) === 'string' && typeof getAt(fa.shop.gift.theme, id) === 'string'
-        && hub.includes(`'${id}'`)));
+    t('the hardware hub keeps the affiliate honesty line AND keeps compare/check sections',
+      /hardwareUrl/.test(hw) && /hw-compare/.test(hw) && /hw-checklist/.test(hw));
+    t('the redrawn copy shipped in BOTH locales: travel cross-sell tags and the drawer badge',
+      ['instant', 'esimTag', 'cardTag', 'secure'].every((k) =>
+        typeof getAt(en.shop.travelCross, k) === 'string' && getAt(en.shop.travelCross, k).trim()
+        && typeof getAt(fa.shop.travelCross, k) === 'string' && getAt(fa.shop.travelCross, k).trim())
+      && typeof getAt(en.shop.trustHub, 'badge') === 'string'
+      && typeof getAt(fa.shop.trustHub, 'badge') === 'string');
   }
   return rows;
 }

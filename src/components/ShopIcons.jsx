@@ -167,14 +167,41 @@ export const IconGlobe = (p) => (
   </svg>
 );
 
-/** Gift envelope: a present with a bow — the Phase 3 share-as-gift mark. */
-export const IconGift = (p) => (
+/** Bolt: instant delivery — the hero trust row's first mark. */
+export const IconBolt = (p) => (
   <svg {...base(p)}>
-    <rect x="3.2" y="9.4" width="17.6" height="11.2" rx="2.2" />
-    <path d="M3.2 13.4h17.6" />
-    <path d="M12 9.4v11.2" />
-    <path d="M12 9.4c-2.9 0-5-1.3-5-3 0-1.3 1-2.2 2.2-2.2 1.8 0 2.4 2.1 2.8 5.2Z" />
-    <path d="M12 9.4c2.9 0 5-1.3 5-3 0-1.3-1-2.2-2.2-2.2-1.8 0-2.4 2.1-2.8 5.2Z" />
+    <path d="M13.4 2.6 4.9 13.3a.5.5 0 0 0 .39.82h5.06l-.75 7.28a.5.5 0 0 0 .88.4l8.5-10.7a.5.5 0 0 0-.39-.82h-5.06l.75-7.28a.5.5 0 0 0-.88-.4Z" />
+  </svg>
+);
+
+/** Mail: delivery by email in the hero trust row. */
+export const IconMail = (p) => (
+  <svg {...base(p)}>
+    <rect x="2.8" y="4.8" width="18.4" height="14.4" rx="3" />
+    <path d="m3.6 7.2 7.5 5.3a1.6 1.6 0 0 0 1.8 0l7.5-5.3" />
+  </svg>
+);
+
+/** Shield with a tick: non-custodial security, the trust-hub mark. */
+export const IconShieldCheck = (p) => (
+  <svg {...base(p)}>
+    <path d="M12 2.9 4.8 5.6v6.1c0 4.3 2.9 7.6 7.2 9.4 4.3-1.8 7.2-5.1 7.2-9.4V5.6L12 2.9Z" />
+    <path d="m8.8 11.8 2.3 2.3 4.1-4.6" />
+  </svg>
+);
+
+/** Chevron: the open/close affordance on the collapsible trust hub. */
+export const IconChevronDown = (p) => (
+  <svg {...base(p)}>
+    <path d="m5.6 9 6.4 6.4L18.4 9" />
+  </svg>
+);
+
+/** Arrow leaving a box: the outbound CTA mark on cross-sell cards. */
+export const IconArrowUpRight = (p) => (
+  <svg {...base(p)}>
+    <path d="M7.2 16.8 16.8 7.2" />
+    <path d="M9.4 7.2h7.4v7.4" />
   </svg>
 );
 

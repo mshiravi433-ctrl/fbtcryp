@@ -7905,6 +7905,10 @@
       "swapOnEvm": "Swap on EVM →"
     },
     "travelCross": {
+      "instant": "Instant activation",
+      "esimTag": "180+ countries",
+      "cardTag": "Visa · Mastercard",
+      "secure": "Non-custodial",
       "kicker": "Travel essentials",
       "title": "Pair your trip with global eSIM data & a travel payment card",
       "sub": "Before departure, grab instant QR mobile data for 180+ countries and a prepaid card for airport, ride, and hotel expenses.",
@@ -7957,29 +7961,6 @@
         "canada": "Canada"
       }
     },
-    "gift": {
-      "rowTitle": "Gift this card",
-      "pickTheme": "Gift card theme",
-      "send": "Send as gift",
-      "shareText": "{{brand}} — my gift idea for you on FBT Swap ({{theme}})",
-      "theme": {
-        "birthday": "Birthday",
-        "gaming": "Gaming",
-        "congrats": "Congrats",
-        "gold": "Gold minimal"
-      },
-      "receivedTitle": "{{brand}} — a gift idea for you",
-      "receivedBody": "The sender picked this brand and theme as a gift idea. The link contains no paid order or gift code; it only opens the suggestion, and you choose whether to buy.",
-      "referralActive": "This sender’s invite was counted: they earn 1% of this app’s swap fee for 90 days, and your costs never change.",
-      "themeLabel": "{{theme}} theme"
-    },
-    "loyalty": {
-      "title": "Your rank in the shop",
-      "cta": "Open rewards",
-      "note": "Points are a rank, not money: they are never spent, never withdrawn, and no gift code is ever issued for them.",
-      "noPerkYet": "Your tier is the door to the real venue discounts listed on the rewards screen.",
-      "points": "{{n}} rank points"
-    },
     "recent": {
       "title": "Recently viewed"
     },
@@ -8012,6 +7993,7 @@
     },
     "headerEyebrow": "FBT · WEB3 COMMERCE",
     "trustHub": {
+      "badge": "Expandable",
       "title": "Web3 security & identity",
       "subtitle": "Non-custodial domains and hardware wallets — two practical layers for buying and protecting your assets."
     },
