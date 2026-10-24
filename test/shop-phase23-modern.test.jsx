@@ -259,6 +259,23 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
     expect(pills.some((p) => p.textContent === 'Steam')).toBe(true);
   });
 
+  it('counts a brand once per country, but again when the regional catalogue changes', async () => {
+    renderShop('/shop');
+    fireEvent.click((await screen.findAllByText('Steam'))[0].closest('button'));
+    await waitFor(() => expect(mockReportInterest).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: fa.common.close }));
+    fireEvent.click((await screen.findAllByText('Steam'))[0].closest('button'));
+    await waitFor(() => expect(screen.getByRole('button', { name: fa.common.close })));
+    expect(mockReportInterest).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: fa.common.close }));
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(fa.shop.quickRegion.names.TR) }));
+    await waitFor(() => expect(storedCountry).toBe('TR'));
+    fireEvent.click((await screen.findAllByText('Steam'))[0].closest('button'));
+    await waitFor(() => expect(mockReportInterest).toHaveBeenCalledWith('TR', 'b-steam'));
+    expect(mockReportInterest).toHaveBeenCalledTimes(2);
+  });
+
   it('shows the loyalty chip with the REAL rank wording and links to /rewards', async () => {
     renderShop('/shop');
     await screen.findByTestId('shop-loyalty-card');
@@ -267,6 +284,7 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
     const card = screen.getByTestId('shop-loyalty-card');
     expect(card.textContent).toContain(fa.shop.loyalty.title);
     expect(card.textContent).toContain(fa.rank.tier.gold);
+    expect(card.textContent).toContain('امتیاز رتبه');
     const link = screen.getByRole('button', { name: fa.shop.loyalty.cta });
     fireEvent.click(link);
     await waitFor(() => {
@@ -314,6 +332,29 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
     /* the URL a history-obsessed implementation would "clean" stays intact */
     expect(replaced).toBe(0);
     window.history.replaceState = realReplace;
+  });
+
+  it('attributes a gift only when the persisted referrer is THIS link sender', async () => {
+    localStorage.setItem('fbt-referred-by', 'OTHER99');
+    localStorage.setItem('fbt-referred-at', String(Date.now()));
+    renderShop('/shop?c=US&b=apple&gift=1&gt=gold&ref=SENDER99');
+    await waitFor(() => expect(document.querySelector('.shop-gift-envelope')).toBeTruthy());
+    expect(document.body.textContent).not.toContain(fa.shop.gift.referralActive);
+    expect(document.querySelector('.shop-gift-envelope-theme')?.textContent).toContain(fa.shop.gift.theme.gold);
+
+    cleanup();
+    localStorage.setItem('fbt-referred-by', 'SENDER99');
+    renderShop('/shop?c=US&b=apple&gift=1&gt=gold&ref=SENDER99');
+    await waitFor(() => expect(document.body.textContent).toContain(fa.shop.gift.referralActive));
+  });
+
+  it('keeps every hardware vendor name attached to its stacked comparison facts', async () => {
+    renderShop('/shop');
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(fa.hardware.compareTitle) }));
+    const labels = [...document.querySelectorAll('.hw-compare-vendor')].map((el) => el.textContent);
+    expect(labels.length).toBeGreaterThanOrEqual(8);
+    expect(labels).toContain('Ledger');
+    expect(labels).toContain('Trezor');
   });
 
   it('hottest-in-region label appears only when the counter has real heat', async () => {
@@ -388,7 +429,7 @@ describe('Shop screen — Phase 2/3 surfaces', () => {
     fireEvent.change(input, { target: { value: 'ali' } });
     fireEvent.click(screen.getByRole('button', { name: new RegExp(fa.shop.web3id.buyEth) }));
     await waitFor(() => {
-      expect(screen.getByTestId('route-probe').textContent).toBe('/swap?to=ETH');
+      expect(screen.getByTestId('route-probe').textContent).toBe('/swap?to=ETH&chain=1');
     });
   });
 

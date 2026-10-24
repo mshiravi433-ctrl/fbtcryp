@@ -74,7 +74,7 @@ const NAVIGATION_TARGETS = Object.freeze([
     route: '/shop?tab=cards',
     labelKey: 'intentAI.navigation.shopGift',
     commerce: true,
-    match: (text) => /گیفت\s*‌?\s*کارت|گیفتکارت|gift\s*cards?|استیم|steam\s*card|پلی\s*استیشن|psn\s*کار|PlayStation\s*گیف/i.test(text)
+    match: (text) => /گیفت\s*‌?\s*کارت|گیفتکارت|کارت\s*‌?\s*هدیه|gift\s*cards?|استیم|steam(?:\s*card)?|پلی\s*استیشن|psn(?:\s*card|\s*کارت)?|PlayStation\s*گیف/i.test(text)
   },
   {
     id: 'shop-virtualcard',
@@ -84,18 +84,18 @@ const NAVIGATION_TARGETS = Object.freeze([
     match: (text) => /کارت\s*(?:اعتباری|افتراضی|مجازی|و\s*یزا)|virtual\s*card|prepaid\s*(?:visa|mastercard)|پی\s*‌?\s*پال|paypal|مستر\s*کارد|mastercard/i.test(text)
   },
   {
-    id: 'shop-topup',
-    route: '/shop?tab=topup',
-    labelKey: 'intentAI.navigation.shopTopUp',
-    commerce: true,
-    match: (text) => /شارژ\s*(?:موبایل|خط|سیم|اینترنت|مسافرتی)?|اعتبار\s*(?:موبایل|شارژ)|mobile\s*(?:top\s*-?\s*up|recharge|credit)|top\s*-?\s*up/i.test(text)
-  },
-  {
     id: 'shop-esim',
     route: '/shop?tab=topup',
     labelKey: 'intentAI.navigation.shopEsim',
     commerce: true,
-    match: (text) => /e[\s-]?sim|سیم\s*کارت\s*(?:سفر|اینترنت|ملل)?|esim/i.test(text)
+    match: (text) => /e[\s-]?sim|ای[\s\u200c-]?سیم|سیم\s*کارت\s*(?:سفر|اینترنت|ملل)|اینترنت\s*(?:مسافرتی|سفر)/i.test(text)
+  },
+  {
+    id: 'shop-topup',
+    route: '/shop?tab=topup',
+    labelKey: 'intentAI.navigation.shopTopUp',
+    commerce: true,
+    match: (text) => /شارژ\s*(?:موبایل|تلفن(?:\s*همراه)?|سیم\s*کارت|خط(?:\s*همراه)?|همراه\s*اول|ایرانسل|رایتل|اینترنت)|اعتبار\s*(?:موبایل|تلفن|سیم\s*کارت|شارژ)|(?:mobile|phone|sim)\s*(?:top\s*-?\s*up|recharge|credit)|top\s*-?\s*up\s*(?:my\s*)?(?:mobile|phone|sim)|recharge\s*(?:my\s*)?(?:mobile|phone|sim)/i.test(text)
   },
   {
     id: 'shop-flights',
@@ -116,7 +116,7 @@ const NAVIGATION_TARGETS = Object.freeze([
     route: '/shop?tab=pay',
     labelKey: 'intentAI.navigation.shopInvoice',
     commerce: true,
-    match: (text) => /فاکتور\s*(?:فروشنده|فروشنده|کسب)?|لینک\s*(?:دریافت|پرداخت)|ساخت\s*فاکتور|merchant\s*invoice|payment\s*(?:link|invoice)|invoice/i.test(text)
+    match: (text) => /فاکتور\s*(?:فروشنده|کسب)?|صورت\s*‌?\s*حساب|لینک\s*(?:دریافت|پرداخت)|ساخت\s*فاکتور|merchant\s*invoice|payment\s*(?:link|invoice)|invoice/i.test(text)
   },
   {
     id: 'shop-home',
@@ -125,6 +125,13 @@ const NAVIGATION_TARGETS = Object.freeze([
     commerce: true,
     match: (text) => /فروشگاه|خرید\s*گیفت|shop\b|store\s*cards?/i.test(text)
   }
+]);
+
+/* A named brand is more useful than a generic shelf. Keep this table tiny and
+   explicit: only slugs whose provider family is stable may be deep-linked;
+   every other gift request still lands on the fully browsable cards tab. */
+const GIFT_BRAND_DEEP_LINKS = Object.freeze([
+  { slug: 'steam', match: /(?:\bsteam\b|استیم)/i }
 ]);
 
 /**
@@ -156,10 +163,15 @@ export function parseNavigationCommand(rawText = '') {
    */
   if (!named.commerce && FINANCIAL_ACTION.test(text)) return { ok: false, reason: 'financial' };
 
+  const giftBrand = named.id === 'shop-gift'
+    ? GIFT_BRAND_DEEP_LINKS.find((brand) => brand.match.test(text))
+    : null;
+  const route = giftBrand ? `${named.route}&b=${giftBrand.slug}` : named.route;
+
   return {
     ok: true,
     target: named.id,
-    route: named.route,
+    route,
     labelKey: named.labelKey,
     ...(named.commerce ? { commerce: true } : {})
   };

@@ -610,3 +610,48 @@
   line-height: 1.7;
   opacity: 0.72;
 }
+
+/* Payment landing: a focused payment card on desktop, not a viewport-wide
+   strip. The merchant accent still owns every surface and both fee paths. */
+.pay-landing-modern > .pay-landing-brand {
+  width: min(100%, 480px);
+  margin-inline: auto;
+  margin-bottom: 20px;
+}
+
+.pay-landing-modern .pay-landing-card {
+  width: min(100%, 480px);
+  margin-inline: auto;
+}
+
+.pay-landing-modern :where(button, a, input):focus-visible {
+  outline: 3px solid var(--pay-accent);
+  outline-offset: 3px;
+}
+
+.pay-landing-swap {
+  border-radius: 18px;
+}
+
+.pay-landing-swap-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pay-link-note {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 720px) {
+  .pay-landing {
+    padding: 40px 24px 72px;
+  }
+
+  .pay-landing-modern .pay-landing-card {
+    padding: 28px 26px 24px;
+    border-radius: 26px;
+  }
+}

@@ -71,19 +71,29 @@ try {
   check('"buy a gift card" opens the gift-card tab — buy-verb IS the intent here',
     gift.ok === true && gift.target === 'shop-gift' && gift.route === '/shop?tab=cards' && gift.commerce === true,
     JSON.stringify(gift));
-  check('«کارت هدیه گیفت» style Persian gift phrasing navigates too',
-    parseNavigationCommand('گیفت کارت استیم').ok === true);
+  check('«کارت هدیه» and «گیفت کارت» are both natural Persian gift requests',
+    parseNavigationCommand('کارت هدیه می‌خوام').target === 'shop-gift'
+    && parseNavigationCommand('گیفت کارت استیم').ok === true);
+  check('a named Steam gift goes one click deeper, to that brand sheet',
+    parseNavigationCommand('Steam gift card').route === '/shop?tab=cards&b=steam'
+    && parseNavigationCommand('کارت هدیه استیم').route === '/shop?tab=cards&b=steam');
   check('«کارت اعتباری» is the virtual-card tab, not the shop root',
     parseNavigationCommand('کارت اعتباری بخرم').ok === true
     && parseNavigationCommand('کارت اعتباری بخرم').target === 'shop-virtualcard');
   check('«شارژ موبایل» lands on top-up', parseNavigationCommand('شارژ موبایل').target === 'shop-topup');
-  check('«esim مسافرتی» lands on the eSIM shelf (topup tab)',
-    parseNavigationCommand('esim مسافرتی').target === 'shop-esim');
+  check('«esim مسافرتی» and «سیم‌کارت سفر» land on eSIM, not generic top-up',
+    parseNavigationCommand('esim مسافرتی').target === 'shop-esim'
+    && parseNavigationCommand('سیم کارت سفر').target === 'shop-esim'
+    && parseNavigationCommand('ای‌سیم').target === 'shop-esim');
+  check('generic wallet credit / physical SIM chat is not kidnapped by the top-up matcher',
+    parseNavigationCommand('top up my wallet').ok === false
+    && parseNavigationCommand('سیم کارت معمولی').ok === false);
   check('«بلیط پرواز» lands on flights, «رزرو هتل» on stays',
     parseNavigationCommand('بلیط پرواز').target === 'shop-flights'
     && parseNavigationCommand('هتل استانبول').target === 'shop-stays');
-  check('«ساخت فاکتور فروشنده» lands on the pay tab',
-    parseNavigationCommand('ساخت فاکتور').target === 'shop-invoice');
+  check('«فاکتور» and «صورتحساب» land on the merchant pay tab',
+    parseNavigationCommand('ساخت فاکتور').target === 'shop-invoice'
+    && parseNavigationCommand('صورتحساب برای مشتری').target === 'shop-invoice');
   check('the bare shop word lands on the storefront root',
     parseNavigationCommand('برو به فروشگاه').route === '/shop');
 

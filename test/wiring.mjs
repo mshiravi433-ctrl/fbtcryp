@@ -15692,9 +15692,20 @@ export default function run() {
       'shop-web3id', 'shop-web3id-head', 'shop-web3id-mark', 'shop-web3id-title', 'shop-web3id-sub',
       'shop-web3id-tabs', 'shop-web3id-tab', 'shop-web3id-field', 'shop-web3id-suffix', 'shop-web3id-verdict',
       'shop-web3id-actions', 'shop-web3id-open', 'shop-web3id-fund', 'shop-web3id-note',
-      'hw-compare', 'hw-compare-row', 'hw-compare-head', 'hw-compare-label', 'hw-compare-cell', 'hw-checklist'
+      'shop-header-main', 'shop-header-back', 'shop-header-copy', 'shop-header-eyebrow',
+      'shop-header-title', 'shop-header-subtitle', 'shop-hero--catalogue', 'shop-hero-content',
+      'shop-hero-metrics', 'shop-hero-metric', 'shop-hero-visual', 'shop-hero-orbit',
+      'shop-hero-visual-core', 'shop-hero-float', 'shop-gift-envelope-theme',
+      'shop-loyalty-topline', 'shop-loyalty-points', 'shop-trust-hub', 'shop-trust-hub-heading',
+      'shop-trust-hub-icon', 'shop-trust-hub-grid', 'shop-hardware', 'shop-hardware-intro',
+      'shop-hardware-vendors', 'shop-hardware-vendor',
+      'hw-compare', 'hw-compare-row', 'hw-compare-head', 'hw-compare-label', 'hw-compare-cell',
+      'hw-compare-vendor', 'hw-checklist'
     ];
-    const missingShop = usedClasses.filter((c) => !shopCss.includes('.' + c));
+    const missingShop = usedClasses.filter((c) => {
+      const escaped = c.replace(/-/g, '\\-');
+      return !new RegExp(`\\.${escaped}(?![\\w-])[^{:]*\\{`).test(shopCss);
+    });
     t('every shop/hub class the components paint has a real declared rule in shop-modern.css',
       missingShop.length === 0, missingShop.join(','));
     const payClasses = ['pay-landing-note', 'pay-landing-note-label', 'pay-landing-note-text',
@@ -15705,6 +15716,13 @@ export default function run() {
     t('the light theme gets explicit rules for the gift envelope and the id-card reject tone',
       /data-theme='light'\] \.shop-gift-envelope \{/.test(shopCss)
       && /data-theme='light'\] \.shop-web3id-verdict\[data-tone='bad'\]/.test(shopCss));
+    t('the 2026 hero and trust hub have explicit light surfaces and a scoped wide shell',
+      /data-theme='light'\] \.shop-hero--catalogue/.test(shopCss)
+      && /data-theme='light'\] \.shop-trust-hub/.test(shopCss)
+      && /\.app-shell\.app-shell--shop/.test(shopCss)
+      && /app-shell--shop/.test(read('src/App.jsx')));
+    t('stacked hardware facts repeat their vendor label instead of becoming anonymous cells',
+      /hw-compare-vendor/.test(hw) && /@media \(max-width: 560px\)[\s\S]*?\.hw-compare-vendor/.test(shopCss));
     t('a phone gets a stacked comparison and full-width counter button — written, not inherited',
       /@media \(max-width: 420px\)[\s\S]*?\.hw-compare-row \{ grid-template-columns: 1fr;/.test(shopCss)
       && /@media \(max-width: 420px\)[\s\S]*?\.shop-pay-counter-btn \{ width: 100%/.test(shopCss));
