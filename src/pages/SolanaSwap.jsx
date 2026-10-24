@@ -52,6 +52,14 @@ import SolanaTokenChip from '../components/SolanaTokenChip';
 import TokenIcon from '../lib/tokenIcon';
 import { warmDeeplinkRequest } from '../lib/solana/deeplink.js';
 import { POINT_VALUES } from '../lib/ranks';
+import {
+  compareSolanaQuotes,
+  formatSolanaAmount,
+  formatSolanaPercent,
+  solanaMinimumReceivedRaw,
+  solanaPriceImpactPercent
+} from '../lib/solana/swapPresentation.js';
+import '../styles/solana-swap.css';
 
 /**
  * SOLANA SWAP
@@ -93,7 +101,7 @@ const DEBOUNCE_MS = 450;
  *        twice and produce a visible double-fade on every tab change.
  */
 export default function SolanaSwap({ embedded = false }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { haptic } = useTelegram();
   useHideBalances();
 
@@ -330,6 +338,10 @@ export default function SolanaSwap({ embedded = false }) {
   }, []);
 
   const [order, setOrder] = useState(null);
+  /* Successful quotes collected in the same bounded race that selects the
+     displayed route. The page never makes extra requests just to decorate the
+     comparison panel. */
+  const [quoteComparisons, setQuoteComparisons] = useState([]);
   const [quoting, setQuoting] = useState(false);
   const [quoteErr, setQuoteErr] = useState(null);
   /* Bumped by the retry button under a failed quote; re-arms the quoting
@@ -670,6 +682,7 @@ export default function SolanaSwap({ embedded = false }) {
 
   useEffect(() => {
     setOrder(null);
+    setQuoteComparisons([]);
     setQuoteErr(null);
     setResult(null);
     setTxErr(null);
@@ -739,6 +752,7 @@ export default function SolanaSwap({ embedded = false }) {
       try {
         let q = null;
         let err = null;
+        const candidates = [];
 
         /*
          * ─── THE FEE-EARNING ROUTES ARE ASKED *IN PARALLEL* ──────────────────
@@ -826,6 +840,7 @@ export default function SolanaSwap({ embedded = false }) {
         };
         const consider = (v) => {
           firstSuccessAt = firstSuccessAt || Date.now();
+          candidates.push(v);
           if (!q) {
             q = v;
             return;
@@ -891,6 +906,7 @@ export default function SolanaSwap({ embedded = false }) {
               feeBps: jupiterEchoedFeeBps(jo),
               provider: 'jupiter'
             };
+            candidates.push(q);
           } catch (e2) {
             err = e2;
           }
@@ -917,6 +933,10 @@ export default function SolanaSwap({ embedded = false }) {
           setOrder(null);
         } else {
           setOrder(q);
+          /* Snapshot only quotes resolved inside the same bounded comparison
+             window used to choose the selected route. Late responses do not
+             silently change the displayed quote or comparison after review. */
+          setQuoteComparisons(candidates.slice());
         }
       } finally {
         /*
@@ -1343,6 +1363,46 @@ export default function SolanaSwap({ embedded = false }) {
   const outAmount = order?.outAmount
     ? fromBaseUnits(order.outAmount, toToken.decimals)
     : null;
+  const minimumOutRaw = order
+    ? solanaMinimumReceivedRaw({
+      outAmount: order.outAmount,
+      minOutAmount: order.minOutAmount,
+      slippageBps
+    })
+    : null;
+  const minimumOut = minimumOutRaw != null
+    ? fromBaseUnits(minimumOutRaw, toToken.decimals)
+    : null;
+  const priceImpactPct = order
+    ? solanaPriceImpactPercent(order.priceImpact, order.provider)
+    : null;
+  const comparisonRows = useMemo(
+    () => compareSolanaQuotes(quoteComparisons, order?.provider),
+    [quoteComparisons, order?.provider]
+  );
+  const locale = i18n.resolvedLanguage || i18n.language || 'en';
+  const formatTokenAmount = (value, token = toToken) => formatSolanaAmount(
+    value,
+    locale,
+    Number.isInteger(token?.decimals) ? token.decimals : 9
+  );
+  const formatPercent = (value) => `${formatSolanaPercent(value, locale)}${t('solana.percentSuffix')}`;
+  const inputRawForRate = order?.inAmount ?? toBaseUnits(amount, fromToken.decimals);
+  const inputForRate = inputRawForRate != null
+    ? Number(fromBaseUnits(inputRawForRate, fromToken.decimals))
+    : NaN;
+  const outputForRate = outAmount != null ? Number(outAmount) : NaN;
+  const exchangeRate = Number.isFinite(inputForRate) && inputForRate > 0
+    && Number.isFinite(outputForRate)
+    ? outputForRate / inputForRate
+    : null;
+  const impactBand = priceImpactPct == null
+    ? 'unknown'
+    : priceImpactPct > 5 ? 'high' : priceImpactPct > 1 ? 'medium' : 'low';
+  const quotedFeeBps = order
+    ? Number(order.totalFeeBps ?? order.feeBps ?? 0)
+    : null;
+  const hasPlatformFee = Number.isFinite(quotedFeeBps) && quotedFeeBps > 0;
 
   /*
    * Why the paid routes did not price this pair, as one line.
@@ -1384,38 +1444,53 @@ export default function SolanaSwap({ embedded = false }) {
 
   return (
     <PageTransition embedded={embedded}>
+      <div className="solswap-root" data-testid="solana-swap-page">
       {/* ---------------------------- wallet state --------------------------
           The swap only quotes and executes. Connecting/disconnecting and the
           three wallet methods live on the Wallet page's Solana tab. */}
-      <motion.section className="card card-rgb" variants={riseIn} initial="hidden" animate="show">
-        <div className="sheen" />
-        <div className="row-between">
-          <div>
-            <div className="faint">{t('solana.title')}</div>
-            <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>
-              {address ? shortAddress(address) : t('solana.notConnected')}
+      <motion.section className="card solswap-hero" variants={riseIn} initial="hidden" animate="show">
+        <div className="solswap-hero-head">
+          <div className="solswap-brand">
+            <span className="solswap-mark" aria-hidden="true">
+              <svg width="30" height="26" viewBox="0 0 28 24" fill="none">
+                <path d="M6.2 3.5h17.1l-3.1 3.1H3.1l3.1-3.1Z" fill="currentColor" />
+                <path d="M4.7 10.45h17.1l-3.1 3.1H1.6l3.1-3.1Z" fill="currentColor" />
+                <path d="M6.2 17.4h17.1l-3.1 3.1H3.1l3.1-3.1Z" fill="currentColor" />
+              </svg>
+            </span>
+            <div className="solswap-heading">
+              <span className="solswap-kicker">{t('solana.heroKicker')}</span>
+              <h1>{t('solana.swapTitle')}</h1>
+              <p>{t('solana.swapSubtitle')}</p>
             </div>
           </div>
-          <div className="row" style={{ gap: 7 }}>
-            {/* Which network this screen is reading — the setting made visible
-                where it has its effect, not only where it is stored. */}
-            <span className={`sol-net-chip${devnet ? ' is-devnet' : ''}`} title={cluster}>
-              <span className="sol-net-dot" aria-hidden="true" />
-              {devnet ? 'Devnet' : 'Mainnet'}
-            </span>
-            {/* Nothing connected: ask the wallet for approval RIGHT HERE — the
-                deeplink request is the only route that produces a confirmation
-                screen on a phone, and sending the user to another page first
-                was half of the reported problem. Once connected, the button
-                goes back to being a link to the wallet page. */}
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => (address ? navigate('/wallet?tab=solana') : setSolSheetOpen(true))}
-              data-testid="solana-swap-connect"
-            >
-              {address ? t('solana.manageWallet') : t('wallet.connect')}
-            </button>
+          <span className={`sol-net-chip${devnet ? ' is-devnet' : ''}`} title={cluster}>
+            <span className="sol-net-dot" aria-hidden="true" />
+            {devnet ? 'Devnet' : 'Mainnet'}
+          </span>
+        </div>
+
+        <div className="solswap-wallet-row">
+          <span className={`solswap-wallet-icon${address ? ' is-connected' : ''}`} aria-hidden="true">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a2 2 0 0 1 2 2v1.5" />
+              <rect x="3" y="8" width="18" height="12" rx="2.5" />
+              <path d="M16 13h5M16.5 13a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0Z" />
+            </svg>
+          </span>
+          <div className="solswap-wallet-copy">
+            <span>{t('solana.title')}</span>
+            <strong>{address ? shortAddress(address) : t('solana.notConnected')}</strong>
           </div>
+          {/* The deeplink request is the only route that produces a confirmation
+              screen on a phone. Once connected, this returns to wallet settings. */}
+          <button
+            className="btn btn-ghost btn-sm solswap-manage-wallet"
+            onClick={() => (address ? navigate('/wallet?tab=solana') : setSolSheetOpen(true))}
+            data-testid="solana-swap-connect"
+          >
+            {address ? t('solana.manageWallet') : t('wallet.connect')}
+          </button>
         </div>
 
         {devnet && (
@@ -1443,7 +1518,7 @@ export default function SolanaSwap({ embedded = false }) {
         )}
 
         {address ? (
-          <div className="row-between" style={{ marginTop: 9 }}>
+          <div className="row-between solswap-balance-line" style={{ marginTop: 9 }}>
             <span className="faint">
               {/*
                 «—», never a number, when the read failed. Showing 0 for a
@@ -1531,12 +1606,32 @@ export default function SolanaSwap({ embedded = false }) {
       </motion.section>
 
       {/* ----------------------------- ticket ---------------------------- */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
-        <div className="sol-swap-box">
+      <motion.section className="card solswap-ticket" variants={riseIn} initial="hidden" animate="show">
+        <div className="solswap-ticket-head">
+          <div>
+            <span className="solswap-ticket-kicker">{t('solana.ticketKicker')}</span>
+            <h2>{t('solana.ticketTitle')}</h2>
+            <p>{t('solana.ticketSubtitle')}</p>
+          </div>
+          <button
+            type="button"
+            className="solswap-refresh"
+            aria-label={t('common.refresh')}
+            title={t('common.refresh')}
+            onClick={() => { haptic?.('select'); setQuoteNonce((n) => n + 1); }}
+            disabled={quoting || !amount}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 7v5h-5" /><path d="M4.8 9a8 8 0 0 1 13.4-2L20 12M4 17v-5h5" /><path d="M19.2 15a8 8 0 0 1-13.4 2L4 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="sol-swap-box solswap-asset-box solswap-from-box">
           <div className="sol-swap-box-head">
-            <span className="faint" style={{ fontSize: 11.5 }}>{t('swap.from')}</span>
+            <span className="faint" style={{ fontSize: 11.5 }}>{t('solana.fromLabel')}</span>
             <span className="faint" style={{ fontSize: 11.5 }}>
-              {t('swap.balance')}: {balanceLoading ? '…' : (sourceBalance ?? '—')} {fromToken.symbol}
+              {t('solana.balanceLabel')}: {balanceLoading ? '…' : (sourceBalance ?? '—')} {fromToken.symbol}
             </span>
           </div>
           <div className="sol-swap-box-body">
@@ -1552,22 +1647,29 @@ export default function SolanaSwap({ embedded = false }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
               placeholder="0.0"
+              aria-label={t('solana.fromLabel')}
+              autoComplete="off"
             />
           </div>
           <div className="sol-swap-box-foot">
             {sourceBalance != null && Number(sourceBalance) > 0 ? (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAmount(sourceBalance)}>{t('swap.max')}</button>
+              <button type="button" className="btn btn-ghost btn-sm solswap-max" onClick={() => setAmount(sourceBalance)}>{t('solana.maxLabel')}</button>
             ) : <span />}
           </div>
         </div>
 
-        <div className="row" style={{ justifyContent: 'center', margin: '10px 0' }}>
-          <button className="icon-btn" onClick={flip} aria-label={t('swap.flip')}>⇅</button>
+        <div className="solswap-flip-wrap">
+          <button className="solswap-flip" type="button" onClick={flip} aria-label={t('solana.flipLabel')} title={t('solana.flipLabel')}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 4v15m0 0-3-3m3 3 3-3M17 20V5m0 0-3 3m3-3 3 3" />
+            </svg>
+          </button>
         </div>
 
-        <div className="sol-swap-box">
+        <div className="sol-swap-box solswap-asset-box solswap-to-box">
           <div className="sol-swap-box-head">
-            <span className="faint" style={{ fontSize: 11.5 }}>{t('swap.to')}</span>
+            <span className="faint" style={{ fontSize: 11.5 }}>{t('solana.toLabel')}</span>
+            <span className="solswap-estimate-tag">{t('solana.estimatedLabel')}</span>
           </div>
           <div className="sol-swap-box-body">
             <SolanaTokenChip
@@ -1575,8 +1677,14 @@ export default function SolanaSwap({ embedded = false }) {
               onClick={() => { haptic?.('select'); setPickerSide('to'); }}
               testId="solana-token-to"
             />
-            <span className="mono sol-swap-out">
-              {quoting ? t('swap.quoting') : (outAmount ?? '—')}
+            <span
+              className="mono sol-swap-out solswap-estimated-output"
+              dir="ltr"
+              aria-live="polite"
+              aria-label={`${t('solana.toLabel')}: ${t('solana.estimatedLabel')}`}
+              data-testid="solana-estimated-output"
+            >
+              {quoting ? t('swap.quoting') : (outAmount != null ? formatTokenAmount(outAmount) : '—')}
             </span>
           </div>
         </div>
@@ -1639,40 +1747,154 @@ export default function SolanaSwap({ embedded = false }) {
         )}
 
         {order && (
-          <div className="stack" style={{ gap: 6, marginTop: 12 }}>
-            <div className="row-between">
-              <span className="faint">{t('solana.router')}</span>
-              {/*
-                The provider that actually priced the number on screen, not
-                the one we prefer. Since the OpenOcean → Jupiter fallback,
-                hard-coding "OpenOcean" here would have told the user their
-                quote came from a route that was just rejected.
-
-                It is also re-set when the BUILD falls back to another route
-                (see `rerouted` in swap()), so this label and the fee below can
-                never describe a transaction the user is not about to sign.
-              */}
-              <span className="mono" style={{ fontSize: 12 }} title={routeReason || undefined}>
+          <section className="solswap-quote-details" data-testid="solana-quote-summary" aria-label={t('solana.quoteDetails')}>
+            <div className="solswap-quote-head">
+              <div className="solswap-quote-heading">
+                <span className="solswap-quote-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 17.5 8.5 12l4 3.5L21 6" /><path d="M16 6h5v5" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>{t('solana.quoteDetails')}</h3>
+                  <span>{t('solana.quoteReady')}</span>
+                </div>
+              </div>
+              <span className="solswap-provider-pill" title={routeReason || undefined}>
+                <span className="solswap-status-dot" aria-hidden="true" />
                 {solanaRouteLabel(order.provider)}
               </span>
             </div>
-            <div className="row-between">
-              <span className="faint">{t('swap.networkFee')}</span>
-              <span className="mono" style={{ fontSize: 12 }}>
-                {/*
-                  The TOTAL the user pays, when the quote knows it: a LI.FI
-                  Solana route charges our 70 bps AND LI.FI's own fixed 25 bps,
-                  and the server reads both out of the feeCosts array it
-                  verified. Showing only our share would understate the price
-                  of the swap on screen — the dangerous direction to be wrong
-                  in, because it is discovered after signing.
-                */}
-                {order.totalFeeBps != null
-                  ? `${order.totalFeeBps / 100}%`
-                  : order.feeBps != null ? `${order.feeBps / 100}%` : '—'}
-              </span>
+
+            <div className="solswap-risk-metrics">
+              <div className={`solswap-impact-card is-${impactBand}`} data-testid="solana-price-impact">
+                <div className="solswap-impact-topline">
+                  <span>{t('solana.priceImpactLabel')}</span>
+                  <span className="solswap-impact-level">{t(`solana.impact.${impactBand}`)}</span>
+                </div>
+                <strong className="mono" dir="ltr">
+                  {priceImpactPct == null ? '—' : formatPercent(priceImpactPct)}
+                </strong>
+                <div className="solswap-impact-track" aria-hidden="true">
+                  <span style={{ width: `${priceImpactPct == null ? 0 : Math.min(100, Math.max(0, priceImpactPct * 10))}%` }} />
+                </div>
+              </div>
+              <div className="solswap-slippage-card">
+                <div className="solswap-impact-topline">
+                  <span>{t('solana.slippageLabel')}</span>
+                  <span className="solswap-slippage-mark" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 7h10M4 17h16M14 4l3 3-3 3M10 14l-3 3 3 3" />
+                    </svg>
+                  </span>
+                </div>
+                <strong className="mono" dir="ltr">{formatPercent(slippageBps / 100)}</strong>
+                <span className="solswap-card-caption">{t('solana.slippageCaption')}</span>
+              </div>
             </div>
-          </div>
+
+            <div className="solswap-quote-lines">
+              <div className="solswap-quote-line">
+                <span>{t('solana.exchangeRateLabel')}</span>
+                <strong className="mono" dir="ltr">
+                  {exchangeRate != null
+                    ? `1 ${fromToken.symbol} ≈ ${new Intl.NumberFormat(locale, { maximumFractionDigits: 12 }).format(exchangeRate)} ${toToken.symbol}`
+                    : '—'}
+                </strong>
+              </div>
+              <div className="solswap-quote-line" data-testid="solana-min-received">
+                <span>{t('solana.minimumReceivedLabel')}</span>
+                <strong className="mono" dir="ltr">
+                  {minimumOut != null ? `${formatTokenAmount(minimumOut)} ${toToken.symbol}` : '—'}
+                </strong>
+              </div>
+              <div className="solswap-quote-line">
+                <span>{t('solana.platformFeeLabel')}</span>
+                <strong className="mono" dir="ltr">
+                  {hasPlatformFee ? formatPercent(quotedFeeBps / 100) : t('solana.noPlatformFee')}
+                </strong>
+              </div>
+              <div className="solswap-quote-line">
+                <span>{t('solana.networkFeeLabel')}</span>
+                <strong>{t('solana.networkFeeAtSign')}</strong>
+              </div>
+            </div>
+
+            {impactBand === 'high' ? (
+              <div className="solswap-impact-warning" role="status">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3 2.8 19a1.5 1.5 0 0 0 1.3 2.2h15.8a1.5 1.5 0 0 0 1.3-2.2L12 3Z" /><path d="M12 9v4m0 3h.01" />
+                </svg>
+                <span>{t('solana.highImpactWarning')}</span>
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {comparisonRows.length > 0 && (
+          <section className="solswap-comparison" data-testid="solana-route-comparison" aria-label={t('solana.routeComparison')}>
+            <div className="solswap-comparison-head">
+              <div className="solswap-comparison-title">
+                <span className="solswap-comparison-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19V5m0 14h16M8 15l3-4 3 2 5-7" /><circle cx="19" cy="6" r="1" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>{t('solana.routeComparison')}</h3>
+                  <p>{t('solana.comparisonSubtitle')}</p>
+                </div>
+              </div>
+              <span className="solswap-count-pill">{t('swap.comparedN', { n: comparisonRows.length })}</span>
+            </div>
+
+            <div className="solswap-route-list">
+              {comparisonRows.map((row, index) => {
+                const candidate = row.quote;
+                const candidateOutput = fromBaseUnits(candidate.outAmount, toToken.decimals);
+                const candidateFeeBps = Number(candidate.totalFeeBps ?? candidate.feeBps ?? 0);
+                const candidateImpact = solanaPriceImpactPercent(candidate.priceImpact, candidate.provider);
+                const outputDifference = row.differenceRaw !== '0'
+                  ? fromBaseUnits(row.differenceRaw, toToken.decimals)
+                  : null;
+                return (
+                  <article className={`solswap-route-row${row.isSelected ? ' is-selected' : ''}`} key={`${candidate.provider}-${index}`}>
+                    <div className="solswap-route-left">
+                      <span className="solswap-route-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                      <div className="solswap-route-copy">
+                        <div className="solswap-route-name">
+                          <strong>{solanaRouteLabel(candidate.provider)}</strong>
+                          {row.isSelected ? <span className="solswap-best-pill">{t('solana.bestRoute')}</span> : null}
+                        </div>
+                        <span className="solswap-route-meta">
+                          {candidateFeeBps > 0
+                            ? `${t('solana.platformFeeLabel')} ${formatPercent(candidateFeeBps / 100)}`
+                            : t('solana.noPlatformFee')}
+                          {candidateImpact != null ? ` · ${t('solana.priceImpactLabel')} ${formatPercent(candidateImpact)}` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="solswap-route-output">
+                      <strong className="mono" dir="ltr">
+                        {formatTokenAmount(candidateOutput)} <small>{toToken.symbol}</small>
+                      </strong>
+                      {outputDifference != null ? (
+                        <span>{t('solana.comparisonDelta', {
+                          amount: formatTokenAmount(outputDifference),
+                          symbol: toToken.symbol
+                        })}</span>
+                      ) : row.isHighestOutput ? (
+                        <span className="solswap-route-best-caption">{t('solana.bestRoute')}</span>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            <p className="solswap-comparison-note">
+              {comparisonRows.length > 1 ? t('solana.comparisonNote') : t('solana.comparisonSingle')}
+            </p>
+          </section>
         )}
 
         {/*
@@ -1685,12 +1907,15 @@ export default function SolanaSwap({ embedded = false }) {
           button permanently: a working integration with a dead button.
         */}
         <button
-          className="btn btn-primary"
-          style={{ marginTop: 14 }}
+          className="btn btn-primary solswap-cta"
           disabled={devnet || !address || !order?.outAmount || busy}
           onClick={swap}
+          data-testid="solana-swap-cta"
         >
-          {busy ? t('swap.dontClose') : devnet ? t('solana.devnetSwapCta') : t('nav.swap')}
+          <span>{busy ? t('swap.dontClose') : devnet ? t('solana.devnetSwapCta') : t('solana.swapCta', { from: fromToken.symbol, to: toToken.symbol })}</span>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14m-6-6 6 6-6 6" />
+          </svg>
         </button>
 
         {txErr && (
@@ -1774,7 +1999,7 @@ export default function SolanaSwap({ embedded = false }) {
           paste-a-mint that resolves as you type). This card stays for the one
           flow it does better: pasting an address copied from somewhere else,
           without opening a sheet first. Same importMint, same chain reads. */}
-      <motion.section className="card" variants={riseIn} initial="hidden" animate="show">
+      <motion.section className="card solswap-import" variants={riseIn} initial="hidden" animate="show">
         <p className="section-label" style={{ marginBottom: 8 }}>{t('solana.importTitle')}</p>
         <p className="muted" style={{ fontSize: 12.3, marginBottom: 10 }}>{t('solana.importBody')}</p>
         <div className="row" style={{ gap: 8 }}>
@@ -1881,6 +2106,7 @@ export default function SolanaSwap({ embedded = false }) {
           Documented in docs/SOLANA-STEPS-FA.md as the way to verify setup.
         */}
       </InfoBox>
+      </div>
     </PageTransition>
   );
 }
