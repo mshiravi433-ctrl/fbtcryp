@@ -112,7 +112,7 @@ function lifiTokenRef(mint) {
  * built from input the quote rejected is how a user signs something they were
  * never shown.
  */
-function validate({ inputMint, outputMint, amount, account }) {
+function validate({ inputMint, outputMint, amount }) {
   const from = String(inputMint || '');
   const to = String(outputMint || '');
   const fromRef = lifiTokenRef(from);
@@ -121,7 +121,6 @@ function validate({ inputMint, outputMint, amount, account }) {
   if (!okRef(fromRef) || !okRef(toRef)) return { error: 'BAD_MINT' };
   if (from === to) return { error: 'SAME_TOKEN' };
   if (!AMOUNT_RE.test(String(amount || '')) || String(amount) === '0') return { error: 'BAD_AMOUNT' };
-  if (!BASE58.test(String(account || ''))) return { error: 'BAD_TAKER' };
   return null;
 }
 
@@ -213,7 +212,7 @@ export async function lifiSolanaSwapQuote(query = {}) {
   const amount = String(query?.amount || '');
   const account = String(query?.account || '');
 
-  const bad = validate({ inputMint, outputMint, amount, account });
+  const bad = validate({ inputMint, outputMint, amount });
   if (bad) return { ok: false, status: 400, body: bad };
 
   const receiver = solanaFeeReceiver();
@@ -227,15 +226,38 @@ export async function lifiSolanaSwapQuote(query = {}) {
     return { ok: false, status: 503, body: { error: 'SOLANA_FEE_NOT_CONFIGURED' } };
   }
 
+  /*
+   * ─── A FEE ROUTE MUST BE ABLE TO PRICE WITHOUT A WALLET ──────────────────
+   * LI.FI needs a `fromAddress` even to quote, so this route used to be
+   * skipped until the user connected — which meant the FIRST price on the
+   * screen never came from a fee-paying route at all. That was survivable
+   * while De¹ could price; since 2026-10-24 De¹ answers "This chain is no
+   * longer supported" for Solana, so the screen priced every swap through the
+   * free Jupiter route and only switched after a connection. Exactly the
+   * report: «اول باید از مسیرهای کارمزددار بره».
+   *
+   * When no account is supplied, the quote is priced against OUR OWN fee
+   * wallet and the transaction LI.FI builds for it is DROPPED here — nothing
+   * signable ever travels to a browser that has not committed to a swap, and
+   * the price the user sees is still the fee-paying route's price (the fee is
+   * taken from the input amount, so the identity of the taker only changes
+   * the bytes, not the number).
+   *
+   * The moment an account IS supplied, this is the ordinary build call: price
+   * plus the unsigned transaction, gated by the same fee echo.
+   */
+  const priceOnly = !BASE58.test(account);
+  const signer = priceOnly ? receiver : account;
+
   const base = {
     fromChain: String(SOLANA_CHAIN_ID),
     toChain: String(SOLANA_CHAIN_ID),
     fromToken: lifiTokenRef(inputMint),
     toToken: lifiTokenRef(outputMint),
     fromAmount: amount,
-    fromAddress: account,
+    fromAddress: signer,
     /* Same-chain swap: the user receives at their own address. */
-    toAddress: account,
+    toAddress: signer,
     slippage: String(slippageFraction(query?.slippageBps))
   };
 
@@ -256,6 +278,18 @@ export async function lifiSolanaSwapQuote(query = {}) {
   const candidates = integratorCandidates();
   let body = null;
   let lastRefusal = null;
+  /*
+   * ─── THE ECHO THE WINNING ID PROVED ──────────────────────────────────────
+   * This used to be `const echo` INSIDE the loop and then read after it, to
+   * compute `totalBps` — a ReferenceError on every successful quote, i.e. the
+   * LI.FI route answered 500 to a request it had already priced and verified.
+   * From the screen that is indistinguishable from "LI.FI cannot route this
+   * pair", so it silently fell through to the next route and, in the end, to
+   * the free Jupiter one. Reported as «فقط با ژوپیتر می‌رود که کارمزد
+   * نمی‌گیریم» (2026-10-24). No test had ever called this function, only the
+   * gate it contains; now both are covered.
+   */
+  let winningEcho = null;
   for (const id of candidates) {
     const params = new URLSearchParams({ ...base, integrator: id });
     /* Indexed keys, exactly as the docs require on GET:
@@ -287,6 +321,7 @@ export async function lifiSolanaSwapQuote(query = {}) {
     }
 
     rememberIntegrator(id);
+    winningEcho = echo;
     body = res.body;
     break;
   }
@@ -296,7 +331,7 @@ export async function lifiSolanaSwapQuote(query = {}) {
   }
 
   const tx = body?.transactionRequest?.data;
-  if (typeof tx !== 'string' || !tx) {
+  if (!priceOnly && (typeof tx !== 'string' || !tx)) {
     return { ok: false, status: 502, body: { error: 'NO_TRANSACTION' } };
   }
 
@@ -314,14 +349,22 @@ export async function lifiSolanaSwapQuote(query = {}) {
    * screen can disclose the same figure the feeCosts array will show on the
    * receipt.
    */
-  const totalBps = fromWei > 0n ? Number(((echo.paid + lifiFee) * 10000n) / fromWei) : bps;
+  const paid = winningEcho?.paid ?? 0n;
+  const totalBps = fromWei > 0n ? Number(((paid + lifiFee) * 10000n) / fromWei) : bps;
 
   return {
     ok: true,
     status: 200,
     body: {
       provider: 'lifi',
-      transaction: tx,
+      /*
+       * Nothing signable on a price-only answer — the transaction LI.FI built
+       * for our own pricing wallet is never forwarded. `priceOnly` tells the
+       * client this quote was never meant to be signed (it re-asks with the
+       * user's account at swap time, as it does for every route).
+       */
+      priceOnly,
+      transaction: priceOnly ? null : tx,
       // LI.FI returns a serialized (versioned) Solana transaction; the client
       // passes this straight to signAndSendSolana, which detects the envelope
       // itself and only uses the flag for MWA.
@@ -375,6 +418,13 @@ export function lifiSolanaStatus() {
     feeReady: solanaFeeReady(),
     feeBps: solanaFeeBps(),
     feeReceiver: solanaFeeReceiver() || null,
+    /*
+     * True since 2026-10-24: a quote without `account` is priced against our
+     * own fee wallet and the transaction built for it is dropped, so this route
+     * can price BEFORE a wallet exists — which is what makes a fee-paying route
+     * the first price on the screen instead of the free fallback.
+     */
+    priceWithoutWallet: true,
     /* LI.FI pays the receiver named in the request, so there is no provider
        cut on our share — unlike the De¹ route's documented 20%. */
     providerCutPercent: 0
