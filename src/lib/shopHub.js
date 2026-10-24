@@ -1,6 +1,6 @@
 /**
- * SHOP HUB — Phase 2/3 storefront logic (gift envelopes, recent views,
- * regional trending, Web3 identity checks).
+ * SHOP HUB — storefront logic (recent views, regional trending, Web3
+ * identity checks).
  * ---------------------------------------------------------------------------
  * Everything here is pure or storage-guarded and framework-free, the same
  * discipline `shopCatalogTools.js` keeps: the UI in Shop.jsx decides what to
@@ -9,14 +9,12 @@
  *
  * The rules this file exists to enforce:
  *
- *   · A gift link is an IN-APP deep link (`#/shop?c=..&b=..&gift=1&gt=..`
- *     + the sender's referral code) — never a provider URL. The share stays
- *     inside the app so the recipient lands on the card, and the sender's
- *     attribution runs through the ONE referral mechanism that already
- *     exists (`captureReferral`, 1% of our swap fee for 90 days). No new
- *     promise is minted here, so none can break.
- *   · Nothing about the recipient is stored. Recent views and gift-theme
- *     choice live in this device's localStorage, like the shop's favorites.
+ *   · A shared card is a plain IN-APP deep link (`#/shop?c=..&b=..`)
+ *     carrying the sharer's referral code. There is deliberately no
+ *     "gift" state here: a link is not a purchased voucher, and the shop
+ *     never dresses it up as one.
+ *   · Recent views live in this device's localStorage, like the shop's
+ *     favorites. Nothing about the visitor is sent anywhere.
  *   · Trending is a RE-RANK, never a replacement: brands the server has
  *     opinions about go up; brands it has not heard of keep their place.
  *     A cold or missing trending answer must produce the exact old rail.
@@ -26,72 +24,6 @@
  *     the only honest answer. Buying the gas/registration coin routes to
  *     our own swap, exactly like every other conversion in the shop.
  */
-
-import { brandSlug } from './shopLinks.js';
-
-/* ───────────────────────────── gift envelope ────────────────────────────── */
-
-/** The four card themes, in tile order. Keys are i18n suffixes, never prose. */
-export const GIFT_THEMES = Object.freeze([
-  { id: 'birthday', emoji: '🎂' },
-  { id: 'gaming', emoji: '🎮' },
-  { id: 'congrats', emoji: '🎉' },
-  { id: 'gold', emoji: '✦' }
-]);
-
-export const GIFT_THEME_KEY = 'fbt.shop.gift.theme.v1';
-
-/** A theme id we are willing to paint, or the neutral gold default. */
-export function giftThemeFor(raw) {
-  const id = String(raw ?? '').trim().toLowerCase();
-  return GIFT_THEMES.some((g) => g.id === id) ? id : 'gold';
-}
-
-/** Persist the sender's last theme so repeat gifters do not re-pick. */
-export function rememberGiftTheme(id, storage = globalThis?.localStorage) {
-  const safe = GIFT_THEMES.some((g) => g.id === id) ? id : 'gold';
-  try { storage?.setItem?.(GIFT_THEME_KEY, safe); } catch { /* private mode */ }
-  return safe;
-}
-
-export function recallGiftTheme(storage = globalThis?.localStorage) {
-  try {
-    return giftThemeFor(storage?.getItem?.(GIFT_THEME_KEY));
-  } catch {
-    return 'gold';
-  }
-}
-
-/**
- * The in-app path a gift share carries.
- *
- * `siteShareUrl` (lib/referral) appends the sender's `ref` — this builds the
- * route half only. Country and brand go through the SAME validators the
- * inbound deep-link reader uses, so a malformed country or a brand with a
- * space can never produce a link that opens a broken sheet.
- */
-export function buildGiftSharePath(country, family, theme) {
-  const cc = String(country ?? '').trim().toUpperCase();
-  const slug = brandSlug(family);
-  if (!/^[A-Z]{2}$/.test(cc) || !slug) return '';
-  return `/shop?c=${encodeURIComponent(cc)}&b=${encodeURIComponent(slug)}&gift=1&gt=${giftThemeFor(theme)}`;
-}
-
-/**
- * Read the gift params OUT of an inbound link (already parsed by
- * `useSearchParams` in the page). Returns null unless this really is a gift
- * arrival — a plain share (`?c=..&b=..`) must not show a banner the sender
- * never intended.
- */
-export function parseGiftArrival(get) {
-  try {
-    const isGift = String(get?.('gift') ?? '') === '1';
-    if (!isGift) return null;
-    return { theme: giftThemeFor(get?.('gt')) };
-  } catch {
-    return null;
-  }
-}
 
 /* ─────────────────────────── recently viewed ────────────────────────────── */
 

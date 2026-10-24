@@ -9,22 +9,17 @@
  * throws must not take the click down with it, and the .eth ladder must
  * refuse 1–2 character labels instead of pricing reserved names.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import * as shopHub from '../src/lib/shopHub.js';
 import {
   ENS_APP_URL,
-  GIFT_THEMES,
   SHOP_RECENT_KEY,
   SNS_APP_URL,
-  buildGiftSharePath,
   ensYearlyUsd,
   getRecentViews,
-  giftThemeFor,
   normalizeIdLabel,
   orderRowsByTrending,
-  parseGiftArrival,
   pushRecentView,
-  recallGiftTheme,
-  rememberGiftTheme,
   resolveRecentViews,
   solLabelOk,
   trendingHasHeat
@@ -40,44 +35,14 @@ const memStorage = () => {
   };
 };
 
-describe('gift themes and the in-app gift link', () => {
-  it('paints exactly the four published themes, gold first-class as the default', () => {
-    expect(GIFT_THEMES.map((g) => g.id)).toEqual(['birthday', 'gaming', 'congrats', 'gold']);
-    expect(giftThemeFor('GAMING ')).toBe('gaming');
-    expect(giftThemeFor('../../etc/passwd')).toBe('gold');
-    expect(giftThemeFor(undefined)).toBe('gold');
-  });
-
-  it('remembers only ids it will render, and survives storage that throws', () => {
-    const s = memStorage();
-    expect(rememberGiftTheme('congrats', s)).toBe('congrats');
-    expect(s.map.get('fbt.shop.gift.theme.v1')).toBe('congrats');
-    expect(rememberGiftTheme('🥳', s)).toBe('gold');
-    expect(recallGiftTheme(s)).toBe('gold');
-    expect(recallGiftTheme(memStorage())).toBe('gold'); /* empty storage → default */
-
-    const hostile = { getItem: () => { throw new Error('SecurityError'); }, setItem: () => { throw new Error('Quota'); } };
-    expect(recallGiftTheme(hostile)).toBe('gold');
-    expect(() => rememberGiftTheme('gold', hostile)).not.toThrow();
-  });
-
-  it('builds only links the app itself can open — junk inputs yield the empty string', () => {
-    expect(buildGiftSharePath('us', 'Steam', 'birthday')).toBe('/shop?c=US&b=steam&gift=1&gt=birthday');
-    expect(buildGiftSharePath('US', 'Google Play', 'gold')).toBe('/shop?c=US&b=google_play&gift=1&gt=gold');
-    expect(buildGiftSharePath('USA', 'Steam', 'gold')).toBe('');
-    expect(buildGiftSharePath('US', '   ', 'gold')).toBe('');
-    expect(buildGiftSharePath('', '', '')).toBe('');
-  });
-
-  it('reads an arrival ONLY when gift=1 — a plain share gets no banner', () => {
-    const make = (o) => (k) => o[k] ?? null;
-    expect(parseGiftArrival(make({ gift: '1', gt: 'birthday' }))).toEqual({ theme: 'birthday' });
-    expect(parseGiftArrival(make({ gift: '1' }))).toEqual({ theme: 'gold' });
-    expect(parseGiftArrival(make({ gift: '0', gt: 'birthday' }))).toBeNull();
-    expect(parseGiftArrival(make({}))).toBeNull();
-    expect(parseGiftArrival(null)).toBeNull();
-    /* a getter that THROWS (no URLSearchParams, exotic router) still must not surface */
-    expect(parseGiftArrival(() => { throw new Error('boom'); })).toBeNull();
+describe('the gift layer is gone — a share link is not a voucher', () => {
+  it('exports no gift helpers at all, so no screen can resurrect the feature', () => {
+    for (const name of [
+      'GIFT_THEMES', 'GIFT_THEME_KEY', 'buildGiftSharePath', 'giftThemeFor',
+      'parseGiftArrival', 'recallGiftTheme', 'rememberGiftTheme'
+    ]) {
+      expect(shopHub[name]).toBeUndefined();
+    }
   });
 });
 

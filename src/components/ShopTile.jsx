@@ -1,18 +1,27 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { IconStar } from './ShopIcons';
+import { IconArrowUpRight, IconStar } from './ShopIcons';
 
 /**
- * ONE BRAND, AS A LUXURY DIGITAL CARD WITH REAL ARTWORK.
+ * ONE BRAND, AS A POSTER — the shelf's smallest unit of desire.
  * ---------------------------------------------------------------------------
- * The brand's validated `bg` colour frames the 16:9 / 4:3 stage so transparent
- * PNG logos (like white-on-transparent Steam) always remain legible across
- * both dark and light themes.
+ * Three layers do the work, and none of them is a new image request:
  *
- * When `onTogglePin` is passed, the favorite star sits as a sibling `<button>`
- * inside `.shop-tile-wrap` so HTML5 button nesting rules hold and tapping the
- * star never triggers `onClick` on `.shop-tile`.
+ *   1. The brand's own `bg` colour is the stage. Transparent PNG logos (the
+ *      white-on-transparent Steam wordmark, for instance) stay legible on
+ *      both themes because the stage is their colour, not ours.
+ *   2. A faint monogram of the brand's initials sits BEHIND the logo like a
+ *      watermark on a printed card. When a logo file is missing the monogram
+ *      simply becomes the artwork, so a 404 never leaves a grey hole.
+ *   3. A one-pixel sheen sweeps across the stage on hover — pure CSS, opacity
+ *      and transform only, switched off under `prefers-reduced-motion` (see
+ *      `.shop-tile-shine` in shop-modern.css). It costs the compositor
+ *      nothing when idle and never runs while the card is off-screen.
+ *
+ * When `onTogglePin` is passed, the favourite star sits as a sibling
+ * `<button>` inside `.shop-tile-wrap` so HTML5 button nesting rules hold and
+ * tapping the star never triggers `onClick` on `.shop-tile`.
  */
 export default function ShopTile({
   brand,
@@ -24,6 +33,7 @@ export default function ShopTile({
   const { t } = useTranslation();
   const [broken, setBroken] = useState(false);
   const showImg = brand.logo && !broken;
+  const monogram = brand.name.slice(0, 2).toUpperCase();
 
   return (
     <div className="shop-tile-wrap" data-pinned={pinned ? 'true' : 'false'}>
@@ -42,15 +52,20 @@ export default function ShopTile({
             background: brand.bg || 'var(--bg-raised)'
           }}
         >
-          <span className="shop-digital-badge">{t('shop.digital')}</span>
+          <span className="shop-shot-mark" aria-hidden="true">{monogram}</span>
+          <span className="shop-digital-badge">
+            <i aria-hidden="true" />
+            {t('shop.digital')}
+          </span>
           {showImg ? (
             <img src={brand.logo} alt="" loading="lazy" onError={() => setBroken(true)} />
           ) : (
-            <span className="shop-shot-fb">{brand.name.slice(0, 2).toUpperCase()}</span>
+            <span className="shop-shot-fb">{monogram}</span>
           )}
+          <span className="shop-tile-shine" aria-hidden="true" />
         </div>
         <div className="shop-tile-body">
-          <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="shop-tile-copy">
             <div className="shop-tile-name">{brand.name}</div>
             {brand.min && brand.max ? (
               <div className="shop-tile-sub" dir="ltr">
@@ -63,11 +78,13 @@ export default function ShopTile({
             ) : null}
           </div>
           {brand.outOfStock ? (
-            <span className="pill pill-down" style={{ fontSize: 10, flexShrink: 0 }}>
+            <span className="pill pill-down shop-tile-stock" style={{ fontSize: 10, flexShrink: 0 }}>
               {t('shop.outOfStock')}
             </span>
           ) : (
-            <span className="shop-tile-go" aria-hidden="true">›</span>
+            <span className="shop-tile-go" aria-hidden="true">
+              <IconArrowUpRight width={13} height={13} />
+            </span>
           )}
         </div>
       </motion.button>
