@@ -87,18 +87,32 @@ export async function fetchShopCatalogue(country) {
  * field a client can trust here: assuming the request language was honoured
  * prints English under a Persian heading, which is the reported bug.
  */
-export async function fetchShopProducts(country, family, { lang } = {}) {
+/** Allowed stablecoins for storefront denomination pricing. */
+export const SHOP_PRICING_COINS = Object.freeze(['USDC', 'USDT']);
+
+/** Normalize a pricing coin choice to USDC or USDT. */
+export function normalizeShopCoin(coin) {
+  const s = String(coin ?? '').trim().toUpperCase();
+  return s === 'USDT' ? 'USDT' : 'USDC';
+}
+
+export async function fetchShopProducts(country, family, { lang, coin } = {}) {
   const cc = String(country ?? '').trim().toUpperCase();
   const fam = String(family ?? '').trim();
   if (!/^[A-Z]{2}$/.test(cc) || !fam) return { rows: [], live: false };
   /* `fa-IR`, `fa_IR` and `fa` are all Persian. i18next hands us whichever of
      those its resolution produced, and the API wants the bare language. */
   const lc = twoLetter(lang);
-  const d = await get(`/shop/products?country=${cc}&family=${encodeURIComponent(fam)}${lc ? `&lang=${lc}` : ''}`);
+  const hasCoin = coin !== undefined && coin !== null && String(coin).trim() !== '';
+  const safeCoin = hasCoin ? normalizeShopCoin(coin) : null;
+  const d = await get(
+    `/shop/products?country=${cc}&family=${encodeURIComponent(fam)}${safeCoin ? `&coin=${safeCoin}` : ''}${lc ? `&lang=${lc}` : ''}`
+  );
   return {
     rows: Array.isArray(d?.rows) ? d.rows : [],
     brand: d?.brand ?? null,
     logo: d?.logo ?? null,
+    pricingCoin: d?.pricingCoin ? normalizeShopCoin(d.pricingCoin) : (safeCoin || 'USDC'),
     note: d?.note ?? null,
     howTo: d?.howTo ?? null,
     /* Their own `locale`, never the one we asked for. */

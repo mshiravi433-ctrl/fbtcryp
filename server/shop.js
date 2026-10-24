@@ -501,6 +501,15 @@ function hasRichContent(first) {
  * `lang` is the shopper's UI language. It decides the language of the note and
  * the redemption steps; the prices are unaffected.
  */
+/** Allowed stablecoins for storefront denomination pricing. */
+export const SHOP_PRICING_COINS = Object.freeze(['USDC', 'USDT']);
+
+/** Normalize a user-selected pricing coin to an allowed USD stablecoin. */
+export function normalizeShopCoin(coin) {
+  const s = String(coin ?? '').trim().toUpperCase();
+  return s === 'USDT' ? 'USDT' : 'USDC';
+}
+
 export async function fetchShopProducts({ country, family, coin = 'USDC', lang }, req) {
   const cc = cleanCountry(country);
   const fam = cleanText(family, 80);
@@ -605,6 +614,7 @@ export async function fetchShopProducts({ country, family, coin = 'USDC', lang }
     brand: cleanText(first.brand || first.family, 80),
     logo: cleanLogo(first.logo_url),
     outOfStock: first.is_out_of_stock === true,
+    pricingCoin: safeCoin,
     bestSpreadPct,
     /*
      * `note` carries the redemption traps — Steam's is "region-locked, VPN
@@ -632,8 +642,14 @@ export function getShopProducts(args, req) {
   const cc = cleanCountry(args?.country);
   const fam = cleanText(args?.family, 80);
   if (!cc || !fam) return Promise.resolve({ value: { rows: [], at: Date.now() } });
-  /* The language is part of the key: one cache entry shared across languages
-     would hand an Arabic shopper the English note, or vice versa. */
+  /* Both the pricing stablecoin and the language are part of the cache key:
+     sharing one entry would hand a USDT-quoting shopper USDC numbers, or an
+     Arabic shopper the English note. */
+  const safeCoin = normalizeShopCoin(args?.coin);
   const locale = providerLocale(args?.lang);
-  return withCache(`shop-prod-${cc}-${fam}-${locale}`, 10 * 60_000, () => fetchShopProducts(args, req));
+  return withCache(
+    `shop-prod-${cc}-${fam}-${safeCoin}-${locale}`,
+    10 * 60_000,
+    () => fetchShopProducts({ ...args, coin: safeCoin }, req)
+  );
 }

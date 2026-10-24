@@ -12114,7 +12114,7 @@ export default function run() {
      * eSIM was a single row at the foot of Stays.
      */
     const icons = read('src/components/ShopIcons.jsx');
-    t('the shop has five tabs', (page.match(/\{ id: '[a-z]+', Icon: Icon[A-Za-z]+ \}/g) ?? []).length === 5);
+    t('the shop has six tabs (including FBT Pay)', (page.match(/\{ id: '[a-z]+', Icon: Icon[A-Za-z]+ \}/g) ?? []).length === 6);
     t('card and SIM card are separate, simply labelled shop tabs',
       en.shop?.tab?.cards === 'card' && en.shop?.tab?.topup === 'simcard');
     t('...each carrying an icon component', /<Icon width=/.test(page));
@@ -12300,6 +12300,26 @@ export default function run() {
       t(`${lang} has a headline for every slide`,
         Boolean(P?.flights && P?.stays && P?.cards && P?.esim));
     }
+
+    /* Phase 1 Shop upgrade invariants */
+    const shopPage = code(read('src/pages/Shop.jsx'));
+    const shopTools = code(read('src/lib/shopCatalogTools.js'));
+    const shopServer = code(read('server/shop.js'));
+    const appRoutes = code(read('server/app.js'));
+    t('shop Phase 1 exposes Quick Region Bar, Use-Case Hub, Budget chips, Favorites and FBT Pay',
+      /RegionQuickBar/.test(shopPage) &&
+      /SHOP_USE_CASES/.test(shopPage) &&
+      /BUDGET_TIERS/.test(shopPage) &&
+      /toggleShopFavorite/.test(shopPage) &&
+      /<PayGatewayPanel\s*\/>/.test(shopPage));
+    t('shop Phase 1 supports USDC/USDT pricing on server, API route and purchase sheet',
+      /SHOP_PRICING_COINS/.test(shopServer) &&
+      /req\.query\.coin/.test(appRoutes) &&
+      /SHOP_PRICING_COINS/.test(shopPage));
+    t('shop Phase 1 connects shortfall conversion to internal /swap and /solana routes',
+      /buildSwapShortfallPlan/.test(shopPage) &&
+      /\/swap\?/.test(shopTools) &&
+      /\/solana\?/.test(shopTools));
   }
 
   /* ---- 101. FBT, and the CDN cache that was making the site slow -------- */

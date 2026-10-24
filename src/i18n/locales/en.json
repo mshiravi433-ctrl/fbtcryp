@@ -7686,7 +7686,8 @@
       "flights": "Flights",
       "stays": "Stays",
       "money": "PayPal & Visa",
-      "topup": "simcard"
+      "topup": "simcard",
+      "pay": "FBT Pay"
     },
     "search": "Search {{country}} — brand, PayPal, gaming…",
     "all": "All",
@@ -7777,9 +7778,9 @@
     },
     "heroKicker": "EVERYDAY CRYPTO COMMERCE",
     "trust": {
-      "fast": "Fast delivery",
-      "crypto": "Pay with crypto",
-      "email": "Delivered by email"
+      "fast": "Instant delivery",
+      "crypto": "15+ chains & coins",
+      "email": "Sent by email"
     },
     "digital": "DIGITAL",
     "clear": "Clear search",
@@ -7790,6 +7791,137 @@
     "alt": {
       "swap": "Swap instead",
       "earn": "Earn on your balance"
+    },
+    "filterNoMatch": "No brands match the active filters. Try another budget tier or region.",
+    "quickRegion": {
+      "label": "Quick region",
+      "allCountries": "All countries",
+      "names": {
+        "US": "United States",
+        "TR": "Turkey",
+        "AE": "UAE",
+        "GB": "United Kingdom",
+        "DE": "Germany"
+      }
+    },
+    "fav": {
+      "sectionTitle": "Pinned brands",
+      "add": "Pin {{brand}}",
+      "remove": "Unpin {{brand}}",
+      "pinAction": "Pin brand",
+      "pinned": "Pinned"
+    },
+    "featured": {
+      "title": "Most popular brands",
+      "badge": "Top picks"
+    },
+    "budget": {
+      "label": "Budget:",
+      "tier_all": "All",
+      "tier_10": "Up to $10",
+      "tier_25": "Up to $25",
+      "tier_50": "Up to $50",
+      "tier_100": "Up to $100",
+      "reset": "Reset filters"
+    },
+    "useCase": {
+      "title": "Shop by use case",
+      "subtitle": "Find the right gift card or virtual card for global services in one tap",
+      "clear": "Show all",
+      "ai": {
+        "title": "AI & Assistants",
+        "brands": "ChatGPT · Claude · Midjourney",
+        "guide": "Use prepaid Visa / Mastercard cards (such as Rewarble) for direct web billing on ChatGPT, Claude & Midjourney, or redeem Apple / Google Play cards to subscribe inside the mobile apps."
+      },
+      "trading": {
+        "title": "Trading & VPS",
+        "brands": "TradingView · Cloud & VPS",
+        "guide": "Prepaid Visa / Mastercard and PayPal top-ups (such as Rewarble) cover TradingView plans, VPS hosting, and cloud tools; Apple & Google Play balances also work for TradingView mobile billing."
+      },
+      "gaming": {
+        "title": "Gaming & Console",
+        "brands": "Steam · PlayStation · Xbox",
+        "guide": "Instant digital wallet codes for Steam, PlayStation, Xbox, Nintendo, and Razer Gold. Match the store region above to your gaming account country."
+      },
+      "appstore": {
+        "title": "Apple ID & Google Play",
+        "brands": "Apple · Google Play",
+        "guide": "Top up your Apple ID (App Store & iCloud+) or Google Play balance directly for apps, cloud storage, and in-app subscriptions in the matching region."
+      },
+      "streaming": {
+        "title": "Streaming & Music",
+        "brands": "Spotify · YouTube · Netflix",
+        "guide": "Redeem official Spotify, Netflix, and Twitch gift cards directly, or use Apple / Google Play and virtual payment cards for YouTube Premium and streaming plans."
+      },
+      "virtualcard": {
+        "title": "Virtual Payment Cards",
+        "brands": "Visa · Mastercard · PayPal",
+        "guide": "Open-loop prepaid Visa & Mastercard cards and e-wallet vouchers (Rewarble, PayPal, and more) for international online checkouts funded with stablecoins."
+      }
+    },
+    "checkout": {
+      "coinLabel": "Price in:",
+      "payable": "Payable amount",
+      "margin": "Margin vs face value",
+      "marginLocal": "Local currency denomination",
+      "walletStatus": "Wallet balance",
+      "walletDisconnected": "Wallet not connected",
+      "balanceUnavailable": "{{coin}} balance unavailable on active network",
+      "balanceSufficient": "Ready ({{balance}} {{coin}} available)",
+      "balanceDeficit": "Short by {{deficit}} {{coin}} (have {{balance}})",
+      "swapDeficitCta": "Top up {{amount}} {{coin}} via internal Swap",
+      "swapQuickCta": "Quick swap into {{coin}} inside the app",
+      "swapHint": "Non-custodial in-app swap on EVM & Solana (0.70% routing fee)",
+      "swapOnSolana": "Swap on Solana →",
+      "swapOnEvm": "Swap on EVM →"
+    },
+    "travelCross": {
+      "kicker": "Travel essentials",
+      "title": "Pair your trip with global eSIM data & a travel payment card",
+      "sub": "Before departure, grab instant QR mobile data for 180+ countries and a prepaid card for airport, ride, and hotel expenses.",
+      "esimTitle": "Global Travel eSIM",
+      "esimBody": "Instant QR activation upon landing — keep your primary SIM active.",
+      "esimCta": "Get travel eSIM",
+      "cardTitle": "Prepaid Travel Card",
+      "cardBody": "Use prepaid Visa / Mastercard vouchers for rides, dining, and online bookings.",
+      "cardCta": "Browse payment cards"
+    },
+    "pay": {
+      "subtitle": "Create non-custodial crypto invoice links & QR codes for merchants",
+      "openCta": "Merchant Gateway (FBT Pay)",
+      "kicker": "MERCHANT GATEWAY · FBT PAY",
+      "heroTitle": "Accept crypto directly to your wallet with instant invoice links & QR",
+      "heroSub": "Built for online shops, freelancers, and creators: pick your chain, token, amount, and order memo to share a verifiable payment link or printable QR.",
+      "badgeDirect": "Zero custody · Direct settlement",
+      "badgeQr": "Branded QR & shareable link",
+      "badgeMultiChain": "Multi-chain USDT & USDC"
+    },
+    "dest": {
+      "city": {
+        "london": "London",
+        "dubai": "Dubai",
+        "tokyo": "Tokyo",
+        "paris": "Paris",
+        "rome": "Rome",
+        "amsterdam": "Amsterdam",
+        "miami": "Miami",
+        "las_vegas": "Las Vegas",
+        "los_angeles": "Los Angeles",
+        "toronto": "Toronto",
+        "san_francisco": "San Francisco",
+        "new_york": "New York",
+        "washington_d_c": "Washington D.C."
+      },
+      "country": {
+        "united_kingdom": "United Kingdom",
+        "united_arab_emirates": "United Arab Emirates",
+        "japan": "Japan",
+        "france": "France",
+        "italy": "Italy",
+        "netherlands": "Netherlands",
+        "united_states": "United States",
+        "canada": "Canada"
+      }
     }
   },
   "fbt": {

@@ -1076,7 +1076,8 @@
   "shop": {
     "tab": {
       "cards": "card",
-      "topup": "simcard"
+      "topup": "simcard",
+      "pay": "FBT Pay"
     },
     "share": "Bagikan",
     "shareText": "Explore {{name}} on FBT Farm. Current reported rate: {{rate}}.",
@@ -3162,7 +3163,7 @@
     "shareText": "Explore {{name}} on FBT Farm. Current reported APY: {{apy}}.",
     "shareCopied": "Pool link copied",
     "shareFailed": "Could not copy the pool link"
-},
+  },
   "aiGlobal": {
     "title": "Intelijensi global",
     "hint": "The Intent OS global brain: smart money, whales, macro, stocks, forex, commodities and the proactive briefing"
