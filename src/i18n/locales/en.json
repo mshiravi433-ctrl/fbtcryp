@@ -13034,6 +13034,14 @@
       "instructionChecked": "Exact instruction + balance-delta match",
       "balanceOnly": "Net balance-delta decode only"
     },
+    "phase5": {
+      "fifoReconciled": "Shadow-FIFO balance reconciliation passed: {{matched}}/{{total}} mints · {{closed}} closed trade(s)",
+      "fifoBlocked": "Shadow-FIFO balance reconciliation is not complete: {{n}} blocker(s) · {{unmatched}} unmatched exit(s)",
+      "replayCoverage": "Real-transaction replay: {{passed}}/{{fixtures}} fixtures passed · instruction coverage {{checked}}/{{total}} programs · balance-delta coverage {{balance}}/{{total}}",
+      "promotionEnabled": "Verified Solana promotion is enabled for this sample.",
+      "promotionSwitchOff": "Verified-promotion evidence is complete, but the separate promotion switch is off.",
+      "promotionBlocked": "Verified promotion remains closed; {{n}} blocker(s) remain, so Solana score/P&L/consensus stay off."
+    },
     "observedNote": "Based on {{n}} large transfers observed over the last {{hours}}h. Not a full chain history.",
     "observedNoteNew": "Observation just started — windows fill in as the scanner keeps running.",
     "noLabelledFlow": "No transfer touched a labelled exchange in this window yet — nothing is counted as flow until one does.",

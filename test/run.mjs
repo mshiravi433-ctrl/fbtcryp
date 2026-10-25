@@ -2260,6 +2260,23 @@ console.log('\n▸ probing Smart Money phase 4 (native promotion, Solana shadow 
   report('Smart Money phase 4', [['native promotion is unified and revalidatable; Solana can be shadow-ready without voting', ok]]);
 }
 
+/* Phase 5 (2026-10-25): licensed real-mainnet Solana transaction replay,
+ * raw-unit shadow-FIFO/current-balance reconciliation, and a default-off
+ * verified-promotion gate that stays closed on partial 1/12 coverage. */
+console.log('\n▸ probing Smart Money phase 5 (Solana real replay, shadow FIFO, promotion gate)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase5-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 5', [['real Solana replay is pinned, shadow FIFO reconciles exactly, and partial replay cannot promote', ok]]);
+}
+
 /*
  * QR CAMERA LIFECYCLE.
  *

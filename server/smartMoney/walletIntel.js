@@ -35,8 +35,14 @@ import {
   solTransactions
 } from './dataSources.js';
 import { tokenMarkets, historicalPriceFn, historicalHourlyPriceFn } from './pricing.js';
-import { analyzePerformance, reconstructNativeQuoteSwaps } from './performance.js';
+import { analyzePerformance, analyzeSwapLedger, reconstructNativeQuoteSwaps } from './performance.js';
 import { assessSolanaSwapLedger, reconstructSolanaSwaps } from './solanaSwaps.js';
+import {
+  assessSolanaVerifiedPromotion,
+  getExecutedSolanaReplayCorpus,
+  promoteSolanaSwaps,
+  reconcileSolanaShadowFifo
+} from './solanaReplay.js';
 import {
   calculateReputation,
   calculateWalletRisk,
@@ -513,11 +519,13 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
   const [sigsSettled, balSettled, splSettled] = await Promise.allSettled([
     solSignatures(address, { limit: 300, pageLimit: 100, maxPages: 3, timeoutMs: historyTimeoutMs }),
     solBalance(address, { timeoutMs: historyTimeoutMs }),
-    solTokenBalances(address, { timeoutMs: historyTimeoutMs })
+    solTokenBalances(address, { limit: 500, timeoutMs: historyTimeoutMs })
   ]);
   const sigsRes = sigsSettled.status === 'fulfilled' ? sigsSettled.value : { dataStatus: 'unavailable', rows: [] };
   const balRes = balSettled.status === 'fulfilled' ? balSettled.value : { dataStatus: 'unavailable' };
-  const splRes = splSettled.status === 'fulfilled' ? splSettled.value : { dataStatus: 'unavailable', tokens: [] };
+  const splRes = splSettled.status === 'fulfilled' ? splSettled.value : {
+    dataStatus: 'unavailable', tokens: [], accounts: 0, mintCount: 0, truncated: false, complete: false
+  };
   const sigRows = sigsRes.rows || [];
   const splTokens = splRes.tokens || [];
   const firstSeen = sigsRes.oldestAt;
@@ -602,6 +610,8 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
       token: t.token,
       symbol: market?.symbol || t.symbol || t.token.slice(0, 4),
       amount: t.amount,
+      amountRaw: t.amountRaw || null,
+      decimals: t.decimals ?? null,
       valueUsd: valueUsd != null ? Math.round(valueUsd) : null,
       priceUsd: usd,
       liquidityUsd: market?.liquidityUsd ?? null
@@ -631,38 +641,106 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
     longTermHolding: (ageMs || 0) > WINDOWS.D30
   });
 
-  // The shadow gate measures whether this sample is finally shaped like a
-  // ledger; it does not turn it into one for users. Even a shadow-ready
-  // sample keeps score/P&L/qualification empty until real transactions from
-  // each supported DEX have been replayed through the decoder as fixtures.
+  // Phase 5 keeps the questions separate:
+  //   1) is the sampled ledger complete and instruction-corroborated?
+  //   2) does a raw-unit shadow FIFO explain the wallet's current SPL mints?
+  //   3) has the decoder's real-transaction replay corpus covered every
+  //      supported program, and has an operator turned the reversible switch
+  //      on?
+  // Only three yeses may produce verified Solana rows. Today's committed
+  // corpus is honestly partial (Jupiter v6 corroborated; Raydium AMM v4
+  // balance-only; ten programs still missing), so production remains
+  // observed/shadow-only even for an otherwise perfect wallet sample.
   const solanaLedger = assessSolanaSwapLedger({
     swaps: observedSwaps,
     signatureCoverage: sigsRes,
     transactionCoverage: solTxRes
   });
-  const smart = {
+  const solanaReconciliation = reconcileSolanaShadowFifo({
+    swaps: observedSwaps,
+    balances: splTokens,
+    balanceCoverage: splRes,
+    signatureCoverage: sigsRes,
+    transactionCoverage: solTxRes,
+    ledgerAssessment: solanaLedger
+  });
+  let solanaReplay = null;
+  try { solanaReplay = getExecutedSolanaReplayCorpus(); } catch { solanaReplay = null; }
+  const solanaPromotion = assessSolanaVerifiedPromotion({
+    swaps: observedSwaps,
+    ledgerAssessment: solanaLedger,
+    reconciliation: solanaReconciliation,
+    replayCorpus: solanaReplay,
+    env: process.env
+  });
+  const verifiedSwaps = promoteSolanaSwaps({
+    swaps: observedSwaps,
+    assessment: solanaPromotion,
+    reconciliation: solanaReconciliation
+  });
+  const observedOnlySwaps = solanaPromotion.promoted ? [] : observedSwaps;
+  const solanaPrices = new Map([...splMarkets.entries()].map(([token, market]) => [token, {
+    usd: market?.priceUsd ?? null,
+    liquidity: market?.liquidityUsd ?? null,
+    symbol: market?.symbol || null,
+    pairCreatedAt: market?.pairCreatedAt ?? null
+  }]));
+  const solanaAudit = verifiedSwaps.length ? analyzeSwapLedger({
+    swaps: verifiedSwaps,
+    prices: solanaPrices,
+    balances: splTokens,
+    historyLive: sigsRes.dataStatus === 'live' && solTxRes.dataStatus === 'live',
+    historyTruncated: !(solanaLedger.signatureHistoryComplete && solanaLedger.transactionDetailsComplete),
+    quoteSummary: 'canonical Solana USDC/USDT quote amount ≈ $1',
+    sampleExtra: {
+      solanaReplayStatus: solanaPromotion.replayStatus,
+      solanaBalanceReconciliation: solanaReconciliation.status,
+      solanaPromotionStatus: solanaPromotion.status
+    },
+    pnlNote: 'Verified Solana sample after complete history/detail coverage, instruction corroboration, full real-transaction replay and exact current-balance FIFO reconciliation. SOL fees, stablecoin depegs and taxes excluded.'
+  }) : null;
+  const performance = solanaAudit?.performance || null;
+  const pnl = solanaAudit
+    ? summarizePnl(solanaAudit.closed, solanaAudit.pnl?.unrealizedUsd ?? null)
+    : summarizePnl([], null);
+  const smart = solanaAudit?.smartMoney || {
     score: null, coverage: 0, factors: {}, status: 'UNAVAILABLE', qualified: false,
     sample: {
       swaps: 0, closedTrades: 0, observedOnlySwaps: observedSwaps.length,
       instructionCorroboratedSwaps: solanaLedger.corroboratedSwaps,
       signatureHistoryComplete: solanaLedger.signatureHistoryComplete,
       transactionDetailsComplete: solanaLedger.transactionDetailsComplete,
-      solanaShadowEligible: solanaLedger.shadowEligible
+      solanaShadowEligible: solanaLedger.shadowEligible,
+      solanaShadowFifoReconciled: solanaReconciliation.reconciled,
+      solanaPromotionEvidenceEligible: solanaPromotion.evidenceEligible,
+      solanaPromotionSwitchEnabled: solanaPromotion.switchEnabled,
+      solanaReplayCorroboratedPrograms: solanaPromotion.corroboratedPrograms,
+      solanaReplaySupportedPrograms: solanaPromotion.supportedPrograms
     },
-    note: solanaLedger.shadowEligible
-      ? 'This Solana sample passes the phase-4 shadow-ledger gate (complete paginated signatures, complete transaction details and instruction-level reconciliation), but remains unscored until real-transaction replay fixtures validate promotion.'
-      : 'Decoded Solana swaps are observed-only evidence; no behavioural score is assigned until signature pagination, transaction-detail coverage and instruction-level reconciliation are all complete, followed by real-transaction replay validation.'
+    note: solanaReconciliation.reconciled
+      ? 'This Solana ledger is complete, instruction-corroborated and its raw FIFO inventory exactly reconciles with current SPL balances, but it remains unscored until the real-transaction replay corpus covers every supported program and the separate promotion switch is enabled.'
+      : 'Decoded Solana swaps are observed/shadow-only evidence; no behavioural score is assigned until complete coverage, instruction corroboration, exact current-balance FIFO reconciliation, full real-transaction replay coverage and the separate promotion switch all pass.'
   };
   const reputation = calculateReputation({
-    historicalPerformance: null,
-    tradingConsistency: sigRows.length > 20 ? 0.4 : null,
-    holdingDuration: ageMs ? Math.min(1, ageMs / (365 * WINDOWS.H24)) : null
+    historicalPerformance: solanaAudit ? smart.factors?.profitability ?? null : null,
+    tradingConsistency: solanaAudit ? smart.factors?.consistency ?? null : (sigRows.length > 20 ? 0.4 : null),
+    realizedPnl: solanaAudit ? smart.factors?.profitability ?? null : null,
+    winRate: solanaAudit ? smart.factors?.winRate ?? null : null,
+    holdingDuration: ageMs ? Math.min(1, ageMs / (365 * WINDOWS.H24)) : null,
+    tokenSelection: solanaAudit ? smart.factors?.earlyEntryAccuracy ?? null : null
   });
 
   const tags = classifyWallet({
     portfolioUsd,
+    realizedPnlUsd: solanaAudit ? pnl.realizedUsd : null,
+    winRate: solanaAudit ? pnl.winRate : null,
+    trades: solanaAudit ? performance.closedTrades : 0,
     volume30dUsd: 0,
-    medianHoldingDays: ageMs ? Math.round(ageMs / WINDOWS.H24) : null
+    medianHoldingDays: ageMs ? Math.round(ageMs / WINDOWS.H24) : null,
+    verifiedScore: solanaAudit ? smart.score : null,
+    verifiedCoverage: solanaAudit ? smart.coverage : 0,
+    verifiedQualified: solanaAudit ? smart.qualified === true : false,
+    verifiedClosedTrades: solanaAudit ? performance.closedTrades : 0
   });
 
   return {
@@ -678,14 +756,21 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
     portfolioUsd: portfolioUsd ? Math.round(portfolioUsd) : null,
     holdings,
     activity,
-    pnl: summarizePnl([], null),
-    performance: null,
-    verifiedSwaps: [],
-    observedSwaps: observedSwaps.slice(-60),
+    pnl,
+    performance,
+    verifiedSwaps: verifiedSwaps.slice(-60),
+    observedSwaps: observedOnlySwaps.slice(-60),
     swapEvidence: {
-      verified: { count: 0, classification: 'unavailable', evidence: null },
+      verified: {
+        count: verifiedSwaps.length,
+        classification: verifiedSwaps.length ? 'verified' : 'unavailable',
+        evidence: verifiedSwaps.length ? 'decoded-solana-token-balance-deltas' : null,
+        promotion: solanaPromotion,
+        balanceReconciliation: solanaReconciliation,
+        replayCorpus: solanaReplay?.corpus || null
+      },
       observedOnly: {
-        count: observedSwaps.length, classification: 'observed-only',
+        count: observedOnlySwaps.length, classification: 'observed-only',
         evidence: 'decoded-solana-token-balance-deltas',
         sampledSignatures: successfulSigs.length,
         signatureRowsScanned: sigsRes.scanned ?? sigRows.length,
@@ -704,12 +789,25 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
         shadowLedger: solanaLedger,
         shadowEligible: solanaLedger.shadowEligible,
         shadowBlockers: solanaLedger.blockers,
-        admittedToScore: false, admittedToConsensus: false,
-        basis: solanaLedger.shadowEligible
-          ? 'Complete paginated signature scan and transaction-detail read; every decoded paired swap reconciles parsed SPL transfer fills exactly with wallet-owned token-balance deltas. Shadow-ready only — real-transaction replay validation is still required before verified admission.'
-          : 'Successful known-DEX transactions only; exactly two opposite wallet-owned mint deltas, one canonical USDC/USDT leg. Rows marked instruction-corroborated also reconcile parsed SPL transfer fills exactly; all rows remain observed-only while any coverage or corroboration gate is open.'
+        tokenBalanceMintCount: splRes.mintCount ?? splTokens.length,
+        tokenBalanceAccounts: splRes.accounts ?? 0,
+        tokenBalancesComplete: splRes.complete === true,
+        tokenBalancesTruncated: splRes.truncated === true,
+        tokenBalancePrograms: splRes.tokenPrograms || [],
+        shadowFifo: solanaReconciliation,
+        shadowFifoReconciled: solanaReconciliation.reconciled,
+        shadowFifoBlockers: solanaReconciliation.blockers,
+        promotion: solanaPromotion,
+        replayCorpus: solanaReplay?.corpus || null,
+        admittedToScore: solanaPromotion.promoted, admittedToConsensus: solanaPromotion.promoted,
+        basis: solanaPromotion.promoted
+          ? 'Verified admission passed: complete history/details, exact parsed-SPL corroboration, raw FIFO inventory reconciled with an untruncated legacy-SPL + Token-2022 balance read, an executed replay corpus covering every supported program, and the separate promotion switch enabled.'
+          : solanaReconciliation.reconciled
+            ? 'Complete, corroborated and exactly balance-reconciled shadow ledger. It still has no verified score/P&L/qualification/consensus while the executed real-transaction replay corpus is partial or the separate promotion switch is off.'
+            : 'Successful known-DEX transactions only; exactly two opposite wallet-owned mint deltas and one canonical USDC/USDT leg. Instruction-corroborated rows additionally reconcile parsed SPL fills exactly, but every row remains observed/shadow-only while any coverage, corroboration, FIFO/balance, replay or promotion-switch gate is open.'
       }
     },
+    closedTrades: solanaAudit?.closed || [],
     smartMoney: smart,
     reputation,
     risk,
@@ -719,6 +817,10 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
       balances: balRes.dataStatus || 'unavailable',
       tokenBalances: splRes.dataStatus || 'unavailable',
       pricing: splMarkets.size || solPrice != null ? 'live' : 'unavailable',
+      // `sources` is the UI's live/offline ledger; keep the detailed replay
+      // execution status in swapEvidence instead of letting "passed" be
+      // rendered as an offline upstream.
+      replayCorpus: solanaReplay?.corpus?.executionStatus === 'passed' ? 'live' : 'unavailable',
       ...(successfulSigs.length ? { decodedTransactions: solTxRes.dataStatus || 'unavailable' } : {})
     }
   };

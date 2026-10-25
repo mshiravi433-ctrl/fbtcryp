@@ -898,30 +898,82 @@ export async function solBalance(address, { timeoutMs = 10_000 } = {}) {
  * rows are summed by mint and zero balances are dropped.
  */
 export async function solTokenBalances(address, { limit = 40, timeoutMs = 10_000 } = {}) {
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) return { dataStatus: 'bad-address', tokens: [] };
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) {
+    return { dataStatus: 'bad-address', tokens: [], accounts: 0, mintCount: 0, truncated: false, complete: false };
+  }
+  const tokenPrograms = [
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB'
+  ];
   try {
-    const res = await solRpc('getTokenAccountsByOwner', [
+    // Token-2022 balances are invisible to the legacy program filter. A
+    // reconciliation that silently omitted that whole token family would
+    // call an incomplete balance read "independent" when it is not.
+    const responses = await Promise.all(tokenPrograms.map((programId) => solRpc('getTokenAccountsByOwner', [
       address,
-      { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+      { programId },
       { encoding: 'jsonParsed' }
-    ], { timeoutMs });
+    ], { timeoutMs })));
     const byMint = new Map();
-    for (const acc of (Array.isArray(res?.value) ? res.value : [])) {
-      const info = acc?.account?.data?.parsed?.info;
-      const mint = info?.mint;
-      const ui = Number(info?.tokenAmount?.uiAmount);
-      if (!mint || !Number.isFinite(ui) || ui <= 0) continue;
-      const prev = byMint.get(mint) || { mint, amount: 0, decimals: Number(info?.tokenAmount?.decimals) || 0 };
-      prev.amount += ui;
-      byMint.set(mint, prev);
+    let accounts = 0;
+    let invalidAccounts = 0;
+    for (const res of responses) {
+      if (!Array.isArray(res?.value)) invalidAccounts++;
+      const rows = Array.isArray(res?.value) ? res.value : [];
+      accounts += rows.length;
+      for (const acc of rows) {
+        const info = acc?.account?.data?.parsed?.info;
+        const mint = String(info?.mint || '');
+        const tokenAmount = info?.tokenAmount || {};
+        const decimals = Number(tokenAmount.decimals);
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)
+          || !/^\d+$/.test(String(tokenAmount.amount || ''))
+          || !Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
+          invalidAccounts++;
+          continue;
+        }
+        let raw;
+        try { raw = BigInt(String(tokenAmount.amount)); } catch {
+          invalidAccounts++;
+          continue;
+        }
+        if (raw <= 0n) continue;
+        const prev = byMint.get(mint);
+        if (prev && prev.decimals !== decimals) {
+          invalidAccounts++;
+          continue;
+        }
+        const amountRaw = (prev?.amountRaw || 0n) + raw;
+        byMint.set(mint, {
+          mint,
+          amountRaw,
+          amount: Number(amountRaw) / (10 ** decimals),
+          decimals
+        });
+      }
     }
-    const tokens = [...byMint.values()]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, limit)
-      .map((t) => ({ token: t.mint, amount: t.amount, decimals: t.decimals, symbol: null, name: null }));
-    return { dataStatus: 'live', tokens, accounts: Array.isArray(res?.value) ? res.value.length : 0 };
+    const boundedLimit = Math.max(1, Math.min(500, Number(limit) || 40));
+    const sorted = [...byMint.values()].sort((a, b) => b.amount - a.amount || a.mint.localeCompare(b.mint));
+    const tokens = sorted
+      .slice(0, boundedLimit)
+      .map((t) => ({
+        token: t.mint,
+        amount: t.amount,
+        amountRaw: t.amountRaw.toString(),
+        decimals: t.decimals,
+        symbol: null,
+        name: null
+      }));
+    return {
+      dataStatus: 'live', tokens, accounts, invalidAccounts, mintCount: byMint.size,
+      truncated: byMint.size > tokens.length,
+      // A malformed token account may be display noise, but it is fatal to an
+      // exact reconciliation claim: the omitted balance is unmeasured, not 0.
+      complete: invalidAccounts === 0 && byMint.size <= tokens.length,
+      tokenPrograms
+    };
   } catch {
-    return { dataStatus: 'unavailable', tokens: [] };
+    return { dataStatus: 'unavailable', tokens: [], accounts: 0, invalidAccounts: 0, mintCount: 0, truncated: false, complete: false };
   }
 }
 

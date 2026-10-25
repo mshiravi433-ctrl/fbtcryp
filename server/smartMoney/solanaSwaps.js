@@ -25,6 +25,8 @@ const SPL_TOKEN_PROGRAMS = new Map([
   ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'spl-token'],
   ['TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB', 'spl-token-2022']
 ]);
+export const SOLANA_WSOL_MINT = WSOL_MINT;
+
 export const SOLANA_BALANCE_ONLY_DECODE = 'token-balance-deltas';
 export const SOLANA_INSTRUCTION_CORROBORATED_DECODE = 'instruction-corroborated-token-balance-deltas';
 
@@ -280,7 +282,11 @@ export function decodeSolanaSwap(tx, wallet, { symbols = null, now = Date.now() 
   const quote = deltas.find((d) => SOLANA_USD_QUOTES[d.mint]);
   if (!quote || quote.decimals !== SOLANA_USD_QUOTES[quote.mint].decimals) return null;
   const target = deltas.find((d) => d.mint !== quote.mint);
-  if (!target || target.mint === WSOL_MINT) return null;
+  // A USDC↔USDT balance pair is a quote-to-quote move, not exposure to a
+  // target asset. Admitting whichever stable happened to be encountered
+  // second as the "token" would fabricate a tradable position out of the
+  // quote inventory itself, so both canonical stables are excluded here.
+  if (!target || target.mint === WSOL_MINT || SOLANA_USD_QUOTES[target.mint]) return null;
 
   const buy = quote.amount < 0 && target.amount > 0;
   const sell = quote.amount > 0 && target.amount < 0;
@@ -295,11 +301,18 @@ export function decodeSolanaSwap(tx, wallet, { symbols = null, now = Date.now() 
     chain: 'solana', wallet: owner, hash: signature, signature, timestamp,
     token: target.mint, symbol: symbolFor(symbols, target.mint),
     side: buy ? 'BUY' : 'SELL', amount: targetAmount,
+    // Raw integer legs are retained alongside the UI amounts: phase-5 FIFO
+    // reconciliation must compare mint quantities without asking a binary
+    // float to remember a 9-decimal balance exactly.
+    amountRaw: (target.deltaRaw < 0n ? -target.deltaRaw : target.deltaRaw).toString(),
+    tokenDecimals: target.decimals,
     // The quote leg itself is the USD amount at the stablecoin's assumed peg;
     // SOL network/priority fees are not token-balance deltas and stay excluded.
     valueUsd: quoteAmount, executionPriceUsd: quoteAmount / targetAmount,
     quoteToken: quote.mint, quoteKind: 'allowlisted-usd-stablecoin',
     quoteSymbol: SOLANA_USD_QUOTES[quote.mint].symbol, quoteAmount,
+    quoteAmountRaw: (quote.deltaRaw < 0n ? -quote.deltaRaw : quote.deltaRaw).toString(),
+    quoteDecimals: quote.decimals,
     dexProgram: dex.programId, dex: dex.name,
     decodeMethod: corroboration.corroborated
       ? SOLANA_INSTRUCTION_CORROBORATED_DECODE : SOLANA_BALANCE_ONLY_DECODE,
@@ -328,20 +341,49 @@ export function reconstructSolanaSwaps({ address, transactions = [], symbols = n
   return swaps.sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id));
 }
 
+function rawAmountMatches(amount, amountRaw, decimals) {
+  if (!/^\d+$/.test(String(amountRaw || ''))
+    || !Number.isInteger(decimals) || decimals < 0 || decimals > 18) return false;
+  let raw;
+  try { raw = BigInt(String(amountRaw)); } catch { return false; }
+  if (raw <= 0n) return false;
+  const expected = Number(raw) / (10 ** decimals);
+  return Number.isFinite(expected)
+    && Math.abs(Number(amount) - expected) <= Math.max(1e-12, expected * 1e-12);
+}
+
 /** A decoded Solana row whose balance proof also passed instruction-level
  * fill reconciliation. This is a provenance check, not verified admission. */
 export function isInstructionCorroboratedSolanaSwap(swap) {
-  return !!swap
-    && swap.chain === 'solana'
-    && swap.evidence === 'decoded-solana-token-balance-deltas'
-    && swap.decodeMethod === SOLANA_INSTRUCTION_CORROBORATED_DECODE
-    && swap.instructionCorroborated === true
-    && Number.isInteger(swap.instructionFillCount) && swap.instructionFillCount >= 2
-    && ['BUY', 'SELL'].includes(swap.side)
-    && Number.isFinite(Number(swap.amount)) && Number(swap.amount) > 0
-    && Number.isFinite(Number(swap.valueUsd)) && Number(swap.valueUsd) > 0
-    && Number.isFinite(Number(swap.timestamp)) && Number(swap.timestamp) > 0
-    && !!SOLANA_DEX_PROGRAMS[swap.dexProgram];
+  if (!swap || swap.chain !== 'solana'
+    || swap.evidence !== 'decoded-solana-token-balance-deltas'
+    || swap.decodeMethod !== SOLANA_INSTRUCTION_CORROBORATED_DECODE
+    || swap.instructionCorroborated !== true
+    || !Number.isInteger(swap.instructionFillCount) || swap.instructionFillCount < 2
+    || !Number.isInteger(swap.instructionTransfers?.target) || swap.instructionTransfers.target < 1
+    || !Number.isInteger(swap.instructionTransfers?.quote) || swap.instructionTransfers.quote < 1
+    || swap.instructionTransfers.target + swap.instructionTransfers.quote !== swap.instructionFillCount
+    || !['BUY', 'SELL'].includes(swap.side)
+    || !SOL_ADDR.test(String(swap.token || ''))
+    || swap.token === WSOL_MINT || !!SOLANA_USD_QUOTES[swap.token]
+    || !SOLANA_USD_QUOTES[swap.quoteToken]
+    || swap.quoteKind !== 'allowlisted-usd-stablecoin'
+    || !Number.isFinite(Number(swap.amount)) || Number(swap.amount) <= 0
+    || !Number.isFinite(Number(swap.quoteAmount)) || Number(swap.quoteAmount) <= 0
+    || !Number.isFinite(Number(swap.valueUsd)) || Number(swap.valueUsd) <= 0
+    || Math.abs(Number(swap.valueUsd) - Number(swap.quoteAmount)) > Math.max(1e-9, Number(swap.quoteAmount) * 1e-12)
+    || !Number.isFinite(Number(swap.timestamp)) || Number(swap.timestamp) <= 0
+    || !SOLANA_DEX_PROGRAMS[swap.dexProgram]) return false;
+
+  // Rows minted before the phase-5 raw fields remain shape-checkable, but a
+  // row that *claims* raw amounts has to agree with them. Promotion adds a
+  // stricter replay-derived check before any verified labels are emitted.
+  const hasTargetRaw = swap.amountRaw != null || swap.tokenDecimals != null;
+  const hasQuoteRaw = swap.quoteAmountRaw != null || swap.quoteDecimals != null;
+  if (hasTargetRaw && !rawAmountMatches(swap.amount, swap.amountRaw, swap.tokenDecimals)) return false;
+  if (hasQuoteRaw && (!rawAmountMatches(swap.quoteAmount, swap.quoteAmountRaw, swap.quoteDecimals)
+    || swap.quoteDecimals !== SOLANA_USD_QUOTES[swap.quoteToken].decimals)) return false;
+  return true;
 }
 
 /**

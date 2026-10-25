@@ -113,6 +113,9 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
   const observedEvidence = data?.swapEvidence?.observedOnly || null;
   const nativeSample = data?.smartMoney?.sample || {};
   const solanaShadow = observedEvidence?.shadowLedger || null;
+  const solanaFifo = observedEvidence?.shadowFifo || data?.swapEvidence?.verified?.balanceReconciliation || null;
+  const solanaReplay = observedEvidence?.replayCorpus || data?.swapEvidence?.verified?.replayCorpus || null;
+  const solanaPromotion = observedEvidence?.promotion || data?.swapEvidence?.verified?.promotion || null;
   const fmtAmount = (value) => {
     const n = Number(value);
     return Number.isFinite(n)
@@ -396,6 +399,42 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                                 n: observedEvidence.shadowBlockers?.length ?? solanaShadow?.blockers?.length ?? 0
                               })}
                           </div>
+                          {solanaFifo && (
+                            <div>
+                              {solanaFifo.reconciled
+                                ? t('sm.phase5.fifoReconciled', {
+                                  matched: solanaFifo.matchedMints ?? 0,
+                                  total: solanaFifo.checkedMints ?? 0,
+                                  closed: solanaFifo.closedTrades ?? 0
+                                })
+                                : t('sm.phase5.fifoBlocked', {
+                                  n: solanaFifo.blockers?.length ?? observedEvidence.shadowFifoBlockers?.length ?? 0,
+                                  unmatched: solanaFifo.unmatchedExits ?? 0
+                                })}
+                            </div>
+                          )}
+                          {solanaReplay && (
+                            <div>
+                              {t('sm.phase5.replayCoverage', {
+                                passed: solanaReplay.passedFixtures ?? 0,
+                                fixtures: solanaReplay.fixtureCount ?? 0,
+                                checked: solanaReplay.corroboratedPrograms ?? 0,
+                                balance: solanaReplay.balanceReplayPrograms ?? 0,
+                                total: solanaReplay.supportedPrograms ?? 0
+                              })}
+                            </div>
+                          )}
+                          {solanaPromotion && (
+                            <div>
+                              {solanaPromotion.promoted
+                                ? t('sm.phase5.promotionEnabled')
+                                : solanaPromotion.evidenceEligible
+                                  ? t('sm.phase5.promotionSwitchOff')
+                                  : t('sm.phase5.promotionBlocked', {
+                                    n: solanaPromotion.blockers?.length ?? 0
+                                  })}
+                            </div>
+                          )}
                         </>
                       ) : t('sm.phase3.sample', {
                         decoded: observedEvidence.decodedTransactions ?? 0,

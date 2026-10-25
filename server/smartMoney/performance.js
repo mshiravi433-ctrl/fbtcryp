@@ -12,6 +12,8 @@
 import { EVM_CHAINS } from '../chainsLite.js';
 import { SMART_MONEY_SCORE, WINDOWS } from './config.js';
 import { routerFor } from './registry.js';
+import { isInstructionCorroboratedSolanaSwap } from './solanaSwaps.js';
+import { SOLANA_CORROBORATED_REPLAY_PROGRAMS } from './solanaReplayManifest.js';
 
 const EVM = /^0x[a-f0-9]{40}$/;
 const HASH = /^0x[a-f0-9]{64}$/;
@@ -193,10 +195,21 @@ export function isVerifiedPairedSwap(swap) {
       && isPricedNativeQuoteSwap(swap);
   }
   if (swap.evidence === 'decoded-solana-token-balance-deltas') {
+    // Phase 5: labels alone are no longer enough. A persisted Solana row must
+    // still satisfy the full corroborated-shape predicate, carry exact raw
+    // amounts for both legs, belong to a program with pinned real-transaction
+    // replay coverage, and retain proof that its wallet-level FIFO inventory
+    // reconciled with current SPL balances at promotion time.
     return swap.classification === 'verified'
       && swap.admission === 'verified-score-and-consensus'
-      && swap.decodeMethod === 'instruction-corroborated-token-balance-deltas'
-      && swap.instructionCorroborated === true;
+      && isInstructionCorroboratedSolanaSwap(swap)
+      && /^\d+$/.test(String(swap.amountRaw || '')) && BigInt(String(swap.amountRaw)) > 0n
+      && /^\d+$/.test(String(swap.quoteAmountRaw || '')) && BigInt(String(swap.quoteAmountRaw)) > 0n
+      && SOLANA_CORROBORATED_REPLAY_PROGRAMS.includes(swap.dexProgram)
+      && swap.replayValidation?.version === 'solana-real-transaction-replay-v1'
+      && swap.replayValidation?.executionStatus === 'passed'
+      && swap.balanceReconciliation?.status === 'reconciled-shadow-fifo'
+      && swap.balanceReconciliation?.reconciled === true;
   }
   return false;
 }
