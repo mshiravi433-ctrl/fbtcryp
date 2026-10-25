@@ -95,7 +95,8 @@ const PER_WALLET_MS = 12_000;
 /** Chains the live discovery rotates through (Blockscout-indexed, has a USD quote). */
 const DISCOVERY_CHAINS = [1, 42161, 8453, 10, 137, 56].filter((c) => BLOCKSCOUT[c] && USD_QUOTES[c]?.length);
 
-const recordId = (chain, address) => `${chain}:${String(address || '').toLowerCase()}`;
+const normalizedAddress = (chain, address) => chain === 'solana' ? String(address || '') : String(address || '').toLowerCase();
+const recordId = (chain, address) => `${chain}:${normalizedAddress(chain, address)}`;
 const safeArray = (v) => Array.isArray(v) ? v : [];
 
 function timeout(ms, label = 'TIMEOUT') {
@@ -199,7 +200,7 @@ export async function discoverLiveTraders({ now = Date.now(), chains = 3, perCha
 function profileFor(wallet, registry = null, now = Date.now(), discovery = null) {
   const sm = wallet.smartMoney || {};
   return {
-    chain: wallet.chain, address: String(wallet.address).toLowerCase(),
+    chain: wallet.chain, address: normalizedAddress(wallet.chain, wallet.address),
     label: registry?.label || null, kind: registry?.kind || null,
     sourceUrl: registry?.sourceUrl || null, provenance: registry?.provenance || null,
     score: sm.score ?? null, coverage: sm.coverage ?? 0, measuredCoverage: sm.measuredCoverage ?? null,
@@ -225,7 +226,7 @@ async function recordCycle(lastCycle) {
 export async function runIntelligenceCycle({ now = Date.now(), candidates = null, analyze = analyzeWallet,
   maxWallets = 6, stream = null, discover = discoverLiveTraders, perWalletMs = PER_WALLET_MS, reason = 'cron' } = {}) {
   const registry = await readWalletRegistry();
-  const registered = registry.filter((r) => r.chain !== 'solana'); // no decoded Solana swap ledger yet
+  const registered = registry; // Solana profiles may enter only through the same verified-wallet analysis gate.
   let discovered = candidates;
   let discoveryStats = null;
   if (discovered == null) {
@@ -280,7 +281,7 @@ export async function runIntelligenceCycle({ now = Date.now(), candidates = null
       walletTimeoutMs,
       'WALLET_TIMEOUT'
     );
-    if (w.chain !== row.chain || String(w.address).toLowerCase() !== String(row.address).toLowerCase())
+    if (w.chain !== row.chain || normalizedAddress(row.chain, w.address) !== normalizedAddress(row.chain, row.address))
       throw new Error('MISMATCHED_WALLET');
     // An indexer outage is not a measurement: do not store an UNAVAILABLE
     // profile (it would also push the wallet to the back of the rotation).
@@ -290,7 +291,8 @@ export async function runIntelligenceCycle({ now = Date.now(), candidates = null
     // The public wallet response carries audited closed trades separately.
     const exits = new Map(safeArray(w.closedTrades).map((c) => [c.hash, c]));
     const swaps = safeArray(w.verifiedSwaps).filter((s) => isVerifiedPairedSwap(s)
-      && s.chain === row.chain && s.wallet === profile.address && s.timestamp <= now && s.timestamp >= now - INDEX_AGE)
+      && s.chain === row.chain && normalizedAddress(row.chain, s.wallet) === profile.address
+      && s.timestamp <= now && s.timestamp >= now - INDEX_AGE)
       .map((s) => ({ ...s,
         pairCreatedAt: Number.isFinite(s.pairCreatedAt) ? s.pairCreatedAt : null,
         realizedRoiPct: exits.get(s.hash)?.roiPct ?? closed.get(s.hash)?.roiPct ?? null }));

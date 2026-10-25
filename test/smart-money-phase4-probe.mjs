@@ -302,7 +302,7 @@ const BONK = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
 const SOL_USDC = Object.keys(SOLANA_USD_QUOTES).find((m) => SOLANA_USD_QUOTES[m].symbol === 'USDC');
 const JUPITER = Object.keys(SOLANA_DEX_PROGRAMS).find((p) => SOLANA_DEX_PROGRAMS[p] === 'Jupiter v6');
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB';
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const sigFor = (i) => {
   let x = i;

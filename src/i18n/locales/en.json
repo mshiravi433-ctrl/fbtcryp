@@ -13035,6 +13035,8 @@
       "balanceOnly": "Net balance-delta decode only"
     },
     "phase5": {
+      "promotionTitle": "Solana verified-admission status",
+      "promotionBasis": "Only replay-validated, instruction-corroborated swaps with complete history and exact SPL-balance reconciliation can contribute to the verified score, P&L or consensus. The production switch remains independently gated.",
       "fifoReconciled": "Shadow-FIFO balance reconciliation passed: {{matched}}/{{total}} mints · {{closed}} closed trade(s)",
       "fifoBlocked": "Shadow-FIFO balance reconciliation is not complete: {{n}} blocker(s) · {{unmatched}} unmatched exit(s)",
       "replayCoverage": "Real-transaction replay: {{passed}}/{{fixtures}} fixtures passed · instruction coverage {{checked}}/{{total}} programs · balance-delta coverage {{balance}}/{{total}}",

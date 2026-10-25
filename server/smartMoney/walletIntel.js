@@ -842,7 +842,8 @@ export async function analyzeWallet(rawAddress, chainHint = null, opts = {}) {
   const windowMs = Math.max(1, Number(opts.windowMs) || WINDOWS.D30);
   const readOpts = { ...opts, timeoutMs, windowMs };
 
-  const cacheKey = `sm:wallet:${isSol ? 'solana' : chainId}:${address.toLowerCase()}:${timeoutMs}:${windowMs}`;
+  const cacheAddress = isSol ? address : address.toLowerCase();
+  const cacheKey = `sm:wallet:${isSol ? 'solana' : chainId}:${cacheAddress}:${timeoutMs}:${windowMs}`;
   const { value } = await withCache(cacheKey, TTL.wallet, () =>
     isSol ? analyzeSolana(address, readOpts) : analyzeEvm(chainId, address, readOpts)
   );

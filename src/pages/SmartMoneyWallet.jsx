@@ -230,6 +230,31 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                   <small>{t('sm.engine.identityNotScore')}</small>
                 </div>}
               </section>
+              {(data.chainKind === 'solana' || data.chain === 'solana') && solanaPromotion && (
+                <section className={`sm-section smi-solana-promotion ${solanaPromotion.promoted ? 'is-promoted' : 'is-blocked'}`}
+                  data-testid="sm-solana-promotion" aria-live="polite">
+                  <div className="smi-observed-head">
+                    <h3>{t('sm.phase5.promotionTitle')}</h3>
+                    <span className="smi-observed-badge">
+                      {solanaPromotion.promoted
+                        ? t('sm.phase5.promotionEnabled')
+                        : solanaPromotion.evidenceEligible
+                          ? t('sm.phase5.promotionSwitchOff')
+                          : t('sm.phase5.promotionBlocked', { n: solanaPromotion.blockers?.length ?? 0 })}
+                    </span>
+                  </div>
+                  <p className="smi-observed-note">{t('sm.phase5.promotionBasis')}</p>
+                  {solanaReplay && <small className="smi-promotion-coverage">
+                    {t('sm.phase5.replayCoverage', {
+                      passed: solanaReplay.passedFixtures ?? 0,
+                      fixtures: solanaReplay.fixtureCount ?? 0,
+                      checked: solanaReplay.corroboratedPrograms ?? 0,
+                      balance: solanaReplay.balanceReplayPrograms ?? 0,
+                      total: solanaReplay.supportedPrograms ?? 0
+                    })}
+                  </small>}
+                </section>
+              )}
               {data.tags?.length > 0 && (
                 <div className="sm-tags">
                   {data.tags.map((tag) => (

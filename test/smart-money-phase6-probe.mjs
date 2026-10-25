@@ -40,8 +40,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const results = [];
 const check = (name, fn) => { try { fn(); results.push('✓ '+name); } catch (e) { results.push('✗ '+name + ' — ' + e.message); } };
 
-check('phase 6 fixtures present (10 total, 6 base64 new)', () => {
-  assert.equal(SOLANA_REPLAY_FIXTURES.length, 10);
+check('phase 6+ fixtures present (11 total, 6 base64 phase-6 additions)', () => {
+  assert.equal(SOLANA_REPLAY_FIXTURES.length, 11);
   const base64 = SOLANA_REPLAY_FIXTURES.filter(f => f.encoding === 'base64');
   assert.equal(base64.length, 6);
   const ids = new Set(base64.map(f => f.id));
@@ -79,36 +79,34 @@ check('wire parser rejects truncated wire (fail-closed)', () => {
   assert.equal(normalizeSolanaWireTransaction(payload), null, 'truncated must fail');
 });
 
-check('wire parser rejects unknown-version byte (fail-closed)', () => {
+check('wire parser rejects an unknown versioned-message byte (fail-closed)', () => {
   const fixture = SOLANA_REPLAY_FIXTURES.find(f => f.id === 'raydium-amm-v4-titan2');
   const payload = JSON.parse(readFileSync(path.join(ROOT, fixture.file), 'utf8'));
   const wire = Buffer.from(payload.transaction[0], 'base64');
-  const wire = Buffer.from(payload.transaction[0], 'base64');
-  // Corrupt version indicator after signatures (force unknown)
-  wire[wire.length - 5] = 0xFF;
-  assert.equal(normalizeSolanaWireTransaction(payload), null, 'truncated must fail');
-});
-
-check('wire parser rejects unknown-version byte (fail-closed)', () => {
-  const fixture = SOLANA_REPLAY_FIXTURES.find(f => f.id === 'raydium-amm-v4-titan2');
-  const payload = JSON.parse(readFileSync(path.join(ROOT, fixture.file), 'utf8'));
-  const wire = Buffer.from(payload.transaction[0], 'base64');
-  // Change first byte of message to 0xFF (unknown version)
-  wire[wire.length - 1] = 0xFF; // corrupt near end; simpler: just corrupt a byte in message
+  let offset = 0;
+  let signatures = 0;
+  do {
+    const byte = wire[offset++];
+    signatures |= (byte & 0x7f) << ((offset - 1) * 7);
+    if (!(byte & 0x80)) break;
+  } while (offset < wire.length);
+  const messageOffset = offset + signatures * 64;
+  assert.equal(wire[messageOffset], 0x80, 'fixture should carry a v0 message');
+  wire[messageOffset] = 0x81;
   payload.transaction[0] = wire.toString('base64');
-  assert.equal(normalizeSolanaWireTransaction(payload), null, 'corrupt wire must fail');
+  assert.equal(normalizeSolanaWireTransaction(payload), null, 'unknown message version must fail');
 });
 
-check('full replay passes for all 10 fixtures', () => {
+check('full replay passes for all 11 fixtures', () => {
   const replay = runSolanaReplayFixtures({ rootDir: ROOT });
   assert.equal(replay.passed, true, 'replay not passed');
-  assert.equal(replay.corpus.passedFixtures, 10, 'not all fixtures passed');
+  assert.equal(replay.corpus.passedFixtures, 11, 'not all fixtures passed');
   assert.equal(replay.corpus.failedFixtures, 0, 'failures present');
 });
 
-check('corpus assessment reports 6 corroborated / 7 balance / 0 missing', () => {
+check('corpus assessment reports 7 corroborated / 7 balance / 5 missing', () => {
   const assessment = assessSolanaReplayCorpus();
-  assert.equal(assessment.corroboratedPrograms, 6, 'corroborated programs should be 6');
+  assert.equal(assessment.corroboratedPrograms, 7, 'corroborated programs should be 7');
   assert.ok(assessment.balanceReplayPrograms >= 7, 'balance programs >=7');
   assert.ok(assessment.complete === false, 'corpus still partial (expected before phase 7)');
 });

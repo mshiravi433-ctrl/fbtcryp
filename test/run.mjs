@@ -2290,7 +2290,23 @@ console.log('\n▸ probing Smart Money phase 6 (wire base64 fixtures, parser reg
     console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
   }
   report('Smart Money phase 6', [['wire base64 fixtures replay, parser reconstructs signatures, and verified promotion stays blocked', ok6]]);
+}
 
+/* Phases 7–8: Solana flows remain behind the replay admission gate while the
+ * verified consensus/index preserves base58 case and hourly native prices
+ * stitch long ranges only when every bounded chunk is present. */
+console.log('\n▸ probing Smart Money phases 7–8 (chain-aware consensus, hourly chunks)…');
+{
+  let ok78 = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase7-8-probe.mjs'], {
+      stdio: 'inherit', env: { ...process.env, SM_SOLANA_VERIFIED_PROMOTION: '0' }
+    });
+    ok78 = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phases 7–8', [['chain-aware verified admission + complete hourly chunk pricing', ok78]]);
 }
 
 /*
