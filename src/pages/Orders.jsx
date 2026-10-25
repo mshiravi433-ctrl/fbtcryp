@@ -1,7 +1,8 @@
+import { findExecutableOrder, orderSwapParams } from '../lib/orderHandoff.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import Sheet from '../components/Sheet';
 import { useWallet } from '../context/WalletContext';
@@ -134,6 +135,8 @@ export default function Orders() {
   useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const executedLink = useRef(null);
   const wallet = useWallet();
   const { haptic } = useTelegram();
   const notify = useAppStore((s) => s.notify);
@@ -508,14 +511,20 @@ export default function Orders() {
     }).catch(() => {});
     // A hand-off to swap is not a receipt. DCA progress advances only when verified evidence is recorded.
     if (order.type !== 'dca') setOrders(updateOrder(order.id, advanceOrder(order, fillFromReadyQuote(order))));
-    const params = new URLSearchParams({
-      from: order.fromToken.symbol,
-      to: order.toToken.symbol,
-      amount: order.amountIn,
-      chain: String(order.chainId)
-    });
+    const params = orderSwapParams(order, TOKENS[order.chainId] ?? []);
     navigate(`/swap?${params.toString()}`);
   };
+
+  useEffect(() => {
+    const id = searchParams.get('execute');
+    const order = findExecutableOrder(orders, id);
+    if (!order || executedLink.current === id) return;
+    executedLink.current = id;
+    const next = new URLSearchParams(searchParams);
+    next.delete('execute');
+    setSearchParams(next, { replace: true });
+    execute(order);
+  }, [orders, searchParams, setSearchParams, execute]);
 
   const signDca = (order) => {
     // This is intentionally an explicit second action, never an automatic activation.

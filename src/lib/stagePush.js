@@ -60,7 +60,10 @@ export async function dispatchStageAlert({
   showLocalNotification(st, {
     body: `${base}→${quote}${quoteBody}`,
     tag: `fbt-${kind}-${st}-${id}`,
-    vibrate: VIBRATE[st]
+    vibrate: VIBRATE[st],
+    data: { url: kind === 'intent' ? '/#/intent' : st === 'ready' && id != null && String(id).trim() && String(id) !== 'x'
+      ? `/#/orders?execute=${encodeURIComponent(String(id))}` : '/#/orders' },
+    ...(st === 'ready' ? { actions: [{ action: 'execute', title: document.documentElement.lang === 'fa' ? '⚡ سواپ و امضا' : '⚡ Swap & Sign' }] } : {})
   });
   return false;
 }

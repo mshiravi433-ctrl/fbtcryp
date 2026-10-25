@@ -739,6 +739,7 @@
     "launchAddedToSwap": "Token added to FBT Swap"
   },
   "swap": {
+    "orderReadyHint": "Your order reached its target price — amount and tokens are ready. Once the quote loads, tap Swap & Sign.",
     "title": "Swap",
     "subtitle": "Real on-chain swaps via {{dex}}",
     "confidentialUnavailable": "Confidential swap unavailable",
