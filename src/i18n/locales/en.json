@@ -12756,7 +12756,9 @@
       "windows": {
         "30m": "30 min",
         "24h": "24 hours",
-        "7d": "7 days"
+        "7d": "7 days",
+        "1h": "1 hour",
+        "4h": "4 hours"
       },
       "consensus": "INDEPENDENT CONSENSUS",
       "where": "Where capital actually moved",
@@ -12859,7 +12861,7 @@
       "receiptsNote": "Each receipt opens the transaction on the block explorer. USD value is the stablecoin leg (≈ $1); fees and depegs are not included.",
       "underEvaluation": "Wallets under evaluation",
       "candidatesNote": "Live-discovered wallets swapping against stablecoins, measured from their own history. A score needs ≥5 closed trades over ≥2 days; qualification also needs positive realised P&L and ≥55% win rate.",
-      "winRate": "win",
+      "winRate": "Win rate",
       "receiptsShort": "swaps",
       "qualifiedShort": "qualified",
       "buyShort": "BUY",
@@ -12871,7 +12873,27 @@
         "UNAVAILABLE": "no history"
       },
       "realized": "Realised P&L",
-      "networkCount": "{{n}} networks"
+      "networkCount": "{{n}} networks",
+      "breadthTitle": "Smart-money breadth",
+      "breadthNote": "A tally of this verified sample in the selected window — not a whole-market index and not a price forecast.",
+      "momentum": "Flow momentum",
+      "prevNet": "Previous-window net",
+      "delta": "Change vs previous",
+      "flowInWindow": "Flow across the window",
+      "trend": {
+        "STRENGTHENING": "Strengthening",
+        "WEAKENING": "Weakening",
+        "REVERSING": "Reversing",
+        "STEADY": "Steady",
+        "NEW": "New"
+      },
+      "searchTokens": "Search symbol or contract…",
+      "filterBySignal": "Filter by signal",
+      "filterAll": "All",
+      "sortBy": "Sort",
+      "sortNet": "Net flow",
+      "sortWallets": "Independent groups",
+      "noMatch": "No token matches this search/filter. Loosen the filter."
     },
     "title": "Smart Money",
     "windowAria": "Time window",

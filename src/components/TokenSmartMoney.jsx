@@ -5,6 +5,7 @@ import { fetchToken, fmtUsd, shortAddr } from '../lib/smartMoneyClient';
 import { verifiedToken } from '../lib/smartMoneyEvidence';
 import { EVM_CHAINS } from '../lib/chains';
 import { FlowBar } from '../pages/SmartMoney';
+import { TrendChip, FlowSpark } from './smartMoneyVisuals';
 import SegIndicator from './SegIndicator';
 import '../styles/smart-money-intelligence.css';
 
@@ -211,7 +212,15 @@ export default function TokenSmartMoney({ chainId = 1, address, embedded = true,
             <strong>{t('sm.engine.tokenVerified')}</strong>
             {verifiedRow ? <><span className={verifiedRow.signal === 'ACCUMULATION' ? 'sm-up' : 'sm-down'}>
               {t(`sm.engine.signal.${verifiedRow.signal}`)} · {verifiedRow.confidence}/100 · {verifiedRow.netFlowUsd > 0 ? '+' : '−'}{fmtUsd(Math.abs(verifiedRow.netFlowUsd))}
-            </span><small>{t('sm.engine.verifiedGroups', { n: verifiedRow.independentVotes, swaps: verifiedRow.swaps })}</small></>
+            </span><small>{t('sm.engine.verifiedGroups', { n: verifiedRow.independentVotes, swaps: verifiedRow.swaps })}</small>
+            {/* Trend vs the previous equal window + the window's flow shape
+                (upgrade 2026-10-25) — same verified row, same receipts. */}
+            {(verifiedRow.momentum || verifiedRow.flowBuckets) && (
+              <span className="smi-row-meta" data-testid="sm-token-momentum">
+                <FlowSpark buckets={verifiedRow.flowBuckets} />
+                <TrendChip row={verifiedRow} />
+              </span>
+            )}</>
               : <p>{t('sm.engine.tokenInsufficient')}</p>}
             {/*
               Three escalating answers instead of one bare «insufficient»:

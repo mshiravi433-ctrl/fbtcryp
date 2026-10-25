@@ -2192,6 +2192,23 @@ console.log('\n▸ probing Verified Intelligence live index…');
   report('Verified Intelligence live index', [['real-wallet qualification, live discovery, observed layer, self-healing read', ok]]);
 }
 
+/* Upgrade 2026-10-25: the fabricated seed must stay gone and momentum /
+ * breadth must stay derived from the same verified receipts — trend words
+ * only when the previous window was provably sampled. */
+console.log('\n▸ probing Smart Money upgrade (no-seed, momentum, breadth)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-upgrade-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money upgrade', [['empty index stays honest, momentum/breadth from verified swaps only', ok]]);
+}
+
 /*
  * QR CAMERA LIFECYCLE.
  *
