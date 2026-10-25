@@ -291,3 +291,21 @@ export function normByLog(value, scale) {
   const x = value / scale;
   return Math.max(0, Math.min(1, 0.5 + 0.5 * Math.tanh(x / 2)));
 }
+
+/* Phase 8 — chunked hourly native-quote reads for long ranges (fail-closed, never daily fallback). */
+export async function cgMarketChartRangeChunked(cgId, fromTs, toTs, chunkMs = 30 * 24 * 60 * 60 * 1000, timeoutMs = 9_000) {
+  const chunks = [];
+  for (let start = Number(fromTs); start < Number(toTs); start += chunkMs) {
+    chunks.push({ fromTs: start, toTs: Math.min(start + chunkMs, Number(toTs)) });
+  }
+  const results = [];
+  for (const chunk of chunks) {
+    try {
+      const r = await cgMarketChartRange(cgId, chunk.fromTs, chunk.toTs, timeoutMs);
+      if (r && Array.isArray(r.prices)) results.push(...r.prices);
+    } catch (e) {
+      // Skip partial chunk; do not invent a daily close.
+    }
+  }
+  return results.sort((a, b) => a[0] - b[0]);
+}
