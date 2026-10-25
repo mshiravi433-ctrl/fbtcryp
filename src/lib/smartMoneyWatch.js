@@ -48,7 +48,7 @@ export function trackWallet({ chain, address, label = null, target = 'wallet', t
     label,
     target,
     types: types || (target === 'token'
-      ? ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL']
+      ? ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'MOMENTUM_REVERSAL']
       : ['LARGE_BUY', 'LARGE_SELL', 'EXCHANGE_DEPOSIT', 'EXCHANGE_WITHDRAWAL', 'LIQUIDITY_MOVEMENT', 'ACCUMULATION', 'DISTRIBUTION']),
     condition,
     createdAt: existing >= 0 ? rows[existing].createdAt : Date.now()

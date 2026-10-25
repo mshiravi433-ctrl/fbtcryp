@@ -12756,7 +12756,9 @@
       "windows": {
         "30m": "30 min",
         "24h": "24 hours",
-        "7d": "7 days"
+        "7d": "7 days",
+        "1h": "1 hour",
+        "4h": "4 hours"
       },
       "consensus": "INDEPENDENT CONSENSUS",
       "where": "Where capital actually moved",
@@ -12859,7 +12861,7 @@
       "receiptsNote": "Each receipt opens the transaction on the block explorer. USD value is the stablecoin leg (≈ $1); fees and depegs are not included.",
       "underEvaluation": "Wallets under evaluation",
       "candidatesNote": "Live-discovered wallets swapping against stablecoins, measured from their own history. A score needs ≥5 closed trades over ≥2 days; qualification also needs positive realised P&L and ≥55% win rate.",
-      "winRate": "win",
+      "winRate": "Win rate",
       "receiptsShort": "swaps",
       "qualifiedShort": "qualified",
       "buyShort": "BUY",
@@ -12871,7 +12873,27 @@
         "UNAVAILABLE": "no history"
       },
       "realized": "Realised P&L",
-      "networkCount": "{{n}} networks"
+      "networkCount": "{{n}} networks",
+      "breadthTitle": "Smart-money breadth",
+      "breadthNote": "A tally of this verified sample in the selected window — not a whole-market index and not a price forecast.",
+      "momentum": "Flow momentum",
+      "prevNet": "Previous-window net",
+      "delta": "Change vs previous",
+      "flowInWindow": "Flow across the window",
+      "trend": {
+        "STRENGTHENING": "Strengthening",
+        "WEAKENING": "Weakening",
+        "REVERSING": "Reversing",
+        "STEADY": "Steady",
+        "NEW": "New"
+      },
+      "searchTokens": "Search symbol or contract…",
+      "filterBySignal": "Filter by signal",
+      "filterAll": "All",
+      "sortBy": "Sort",
+      "sortNet": "Net flow",
+      "sortWallets": "Independent groups",
+      "noMatch": "No token matches this search/filter. Loosen the filter."
     },
     "title": "Smart Money",
     "windowAria": "Time window",
@@ -12990,6 +13012,36 @@
     "rateLimited": "Too many requests right now — wait a moment and try again.",
     "errorWalletDetail": "The wallet endpoint rejected this request.",
     "streamStale": "Live scan is running slowly — showing the transfers observed so far. Refreshes automatically.",
+    "phase3": {
+      "title": "Observed swaps",
+      "noVote": "No score or consensus vote",
+      "nativeNote": "These rows are exact wrapped-native/target transfer pairs and are observations only for now; they do not enter the score, verified P&L or consensus. A USD value appears only from an hourly-or-finer price close to the transaction time.",
+      "solanaNote": "These rows were decoded from this wallet's token-balance changes inside successful known-DEX transactions. Signature-page, transaction-detail and instruction-match coverage is stated explicitly below; until every gate passes they do not enter the score, verified P&L or consensus.",
+      "quote": "Quote leg",
+      "unpriced": "No provable hourly price is available; no USD value is invented.",
+      "pricedAt": "Native price near the transaction: {{price}}",
+      "dex": "DEX program: {{name}}",
+      "sample": "{{decoded}} of {{attempted}} sampled recent transactions were read."
+    },
+    "phase4": {
+      "nativeIncluded": "Hourly-priced native-quote swaps in verified P&L: {{n}}",
+      "nativeBlocked": "Native-quote candidates still observed-only: {{n}} ({{unpriced}} unpriced)",
+      "solanaCoverage": "{{signatures}} signatures across {{pages}} page(s) · details {{fetched}}/{{attempted}} · instruction-checked swaps {{checked}}/{{swaps}}",
+      "signatureComplete": "End of signature history proven",
+      "signatureIncomplete": "Signature history is not yet proven complete",
+      "shadowReady": "Shadow-ledger gate passed; still no verified score until real-transaction replay validation.",
+      "shadowBlocked": "Shadow-ledger gate is not complete; {{n}} blocker(s) remain.",
+      "instructionChecked": "Exact instruction + balance-delta match",
+      "balanceOnly": "Net balance-delta decode only"
+    },
+    "phase5": {
+      "fifoReconciled": "Shadow-FIFO balance reconciliation passed: {{matched}}/{{total}} mints · {{closed}} closed trade(s)",
+      "fifoBlocked": "Shadow-FIFO balance reconciliation is not complete: {{n}} blocker(s) · {{unmatched}} unmatched exit(s)",
+      "replayCoverage": "Real-transaction replay: {{passed}}/{{fixtures}} fixtures passed · instruction coverage {{checked}}/{{total}} programs · balance-delta coverage {{balance}}/{{total}}",
+      "promotionEnabled": "Verified Solana promotion is enabled for this sample.",
+      "promotionSwitchOff": "Verified-promotion evidence is complete, but the separate promotion switch is off.",
+      "promotionBlocked": "Verified promotion remains closed; {{n}} blocker(s) remain, so Solana score/P&L/consensus stay off."
+    },
     "observedNote": "Based on {{n}} large transfers observed over the last {{hours}}h. Not a full chain history.",
     "observedNoteNew": "Observation just started — windows fill in as the scanner keeps running.",
     "noLabelledFlow": "No transfer touched a labelled exchange in this window yet — nothing is counted as flow until one does.",

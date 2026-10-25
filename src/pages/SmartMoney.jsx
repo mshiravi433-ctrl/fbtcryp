@@ -884,7 +884,7 @@ function AlertsTab({ navigate, t }) {
           style={a.chain && a.address ? { cursor: 'pointer' } : undefined}
           onClick={() => a.chain && a.address && navigate(`/smart-money/${a.target === 'token' || a.evidence?.classification === 'verified-paired-swaps' || a.watchId?.endsWith(':token') ? 'token' : 'wallet'}/${a.chain}/${a.address}`)}
         >
-          <div className="ico">🐋</div>
+          <div className="ico">{a.type === 'MOMENTUM_REVERSAL' ? '⇄' : a.type?.startsWith('CONSENSUS') ? '◈' : '🐋'}</div>
           <div className="body">
             <div className="t">{a.title}</div>
             <div className="m">{a.message}</div>

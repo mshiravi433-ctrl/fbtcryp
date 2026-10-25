@@ -55,9 +55,14 @@ export function narrateIntelligence(intel, { message = '', lang = 'fa' } = {}) {
   const lines = active.slice(0, 5).map((r) => {
     const label = `${r.symbol} (${r.chain}:${r.token.slice(0, 8)}…)`;
     const net = `$${Math.abs(Math.round(r.netFlowUsd)).toLocaleString('en-US')}`;
+    /* Momentum vs the previous equal window — cited only when the index
+       proved it was sampling then (buildConsensus leaves it null otherwise),
+       so the narration never invents a trend from an unobserved past. */
+    const trendFa = { STRENGTHENING: 'نسبت به بازهٔ قبلی در حال تقویت', WEAKENING: 'نسبت به بازهٔ قبلی در حال تضعیف', REVERSING: 'نسبت به بازهٔ قبلی چرخش جهت', STEADY: 'هم‌اندازهٔ بازهٔ قبلی', NEW: 'تازه در این بازه' }[r.momentum?.trend];
+    const trendEn = { STRENGTHENING: 'strengthening vs the previous window', WEAKENING: 'weakening vs the previous window', REVERSING: 'direction reversed vs the previous window', STEADY: 'about the same size as the previous window', NEW: 'new in this window' }[r.momentum?.trend];
     return fa
-      ? `${label}: ${r.signal === 'ACCUMULATION' ? 'انباشت' : 'توزیع'}؛ ${r.buyers} خریدار، ${r.sellers} فروشنده، ${r.independentVotes} گروه مستقل؛ خالص ${r.netFlowUsd >= 0 ? '+' : '−'}${net}؛ قدرت شواهد ${r.confidence}/۱۰۰.`
-      : `${label}: ${r.signal.toLowerCase()}; ${r.buyers} buyer(s), ${r.sellers} seller(s), ${r.independentVotes} independent group(s); net ${r.netFlowUsd >= 0 ? '+' : '-'}${net}; evidence ${r.confidence}/100.`;
+      ? `${label}: ${r.signal === 'ACCUMULATION' ? 'انباشت' : 'توزیع'}؛ ${r.buyers} خریدار، ${r.sellers} فروشنده، ${r.independentVotes} گروه مستقل؛ خالص ${r.netFlowUsd >= 0 ? '+' : '−'}${net}؛ قدرت شواهد ${r.confidence}/۱۰۰${trendFa ? `؛ ${trendFa}` : ''}.`
+      : `${label}: ${r.signal.toLowerCase()}; ${r.buyers} buyer(s), ${r.sellers} seller(s), ${r.independentVotes} independent group(s); net ${r.netFlowUsd >= 0 ? '+' : '-'}${net}; evidence ${r.confidence}/100${trendEn ? `; ${trendEn}` : ''}.`;
   });
   return {
     text: `${fa ? 'از معاملات جفت‌شدهٔ تأییدشده در بازهٔ مشاهده‌شده:' : 'From verified paired swaps in the observed window:'}\n${lines.join('\n')}\n${basis} ${cadence}`,

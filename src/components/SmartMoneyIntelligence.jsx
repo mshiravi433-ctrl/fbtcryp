@@ -8,7 +8,18 @@ import TokenIcon from '../lib/tokenIcon';
 import ModernSelect from './ModernSelect';
 import { pollWhileVisible } from '../lib/visibilityPoll';
 
-const WINDOWS = ['30m', '24h', '7d'];
+/* 1h/4h joined the rail (upgrade 2026-10-25): buildConsensus already accepts
+   every WINDOW_KEYS entry, so these windows cost no new server work — the
+   30m→24h jump was simply too coarse to see intraday rotation. 30d is
+   deliberately absent: the verified index retains 7 days, so a «30d»
+   consensus would silently be a 7-day sample wearing a 30-day label. */
+const WINDOWS = ['30m', '1h', '4h', '24h', '7d'];
+
+/* FlowSpark / TrendChip live in ./smartMoneyVisuals.jsx (dependency-light) so
+   the per-token card can use them without importing this whole workspace. */
+export { FlowSpark, TrendChip } from './smartMoneyVisuals';
+import { FlowSpark, TrendChip } from './smartMoneyVisuals';
+
 const badge = (signal) => signal === 'ACCUMULATION' ? 'up' : signal === 'DISTRIBUTION' ? 'down' : 'idle';
 const chainName = (id) => CHAIN_OPTIONS.find((c) => String(c.id) === String(id))?.short || String(id);
 const EXPLORERS = {
@@ -68,36 +79,46 @@ export function VerifiedWallets() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
+  const [walletSort, setWalletSort] = useState('score');
   /*
    * «هوش تایید شده برای کیف پول واجد شرایط داده ندارد» — the board used to
    * fetch ONCE. An empty answer on a fresh server is usually a mid-index
    * pass, not a finished verdict, so the reader inherited a static empty board
-   * forever. It now re-asks every 30s while it has nothing to show (and stops
-   * the moment a wallet qualifies), and while empty it prints WHAT the engine
-   * has seen so far — analysed wallets and on-chain receipts — instead of a
-   * one-line shrug.
+   * forever. It now re-asks every 30s while it has nothing to show, and while
+   * empty it prints WHAT the engine has seen so far — analysed wallets and
+   * on-chain receipts — instead of a one-line shrug.
+   *
+   * Upgrade 2026-10-25: polling used to STOP the moment a wallet qualified,
+   * so a board left open froze at its first answer while the index kept
+   * qualifying wallets behind it. A populated board now keeps refreshing,
+   * just at a calmer 120s cadence.
    */
   useEffect(() => {
     let alive = true;
     const ctrl = new AbortController();
-    const emptyRef = { current: true };
-    const run = () =>
-      fetchVerifiedWallets(ctrl.signal)
+    const stateRef = { empty: true, lastFetchAt: 0 };
+    const run = () => {
+      stateRef.lastFetchAt = Date.now();
+      return fetchVerifiedWallets(ctrl.signal)
         .then((d) => {
           if (!alive) return;
           setData(d);
-          emptyRef.current = !(d?.wallets?.length > 0);
+          stateRef.empty = !(d?.wallets?.length > 0);
         })
         .catch(() => {
           if (alive && !ctrl.signal.aborted) setError(true);
         });
+    };
     setError(false);
     run();
     /* Same rule as everywhere else, through one helper: no reads from a hidden
-       tab, one immediate run when it comes back (lib/visibilityPoll.js). */
+       tab, one immediate run when it comes back (lib/visibilityPoll.js).
+       That immediate run goes through `run` directly so a stale board is
+       fresh the moment the tab is seen again. */
     const stopPoll = pollWhileVisible(() => {
       if (ctrl.signal.aborted) return;
-      if (emptyRef.current) run();
+      const due = stateRef.empty ? 30_000 : 120_000;
+      if (Date.now() - stateRef.lastFetchAt >= due - 1_000) run();
     }, 30_000);
     return () => {
       alive = false;
@@ -105,6 +126,17 @@ export function VerifiedWallets() {
       stopPoll();
     };
   }, []);
+
+  const sortedWallets = useMemo(() => {
+    const rows = [...(data?.wallets || [])];
+    const by = {
+      score: (a, b) => (b.score ?? -1) - (a.score ?? -1),
+      winRate: (a, b) => (b.winRate ?? -1) - (a.winRate ?? -1),
+      realized: (a, b) => (b.realizedUsd ?? -Infinity) - (a.realizedUsd ?? -Infinity),
+      closes: (a, b) => (b.closedTrades ?? 0) - (a.closedTrades ?? 0)
+    }[walletSort] || (() => 0);
+    return rows.sort(by);
+  }, [data, walletSort]);
 
   return (
     <section className="sm-section smi-board" aria-label={t('sm.engine.verifiedBoard')}>
@@ -115,6 +147,17 @@ export function VerifiedWallets() {
         </div>
         {data?.wallets?.length > 0 && (
           <span className="smi-count">{data.wallets.length} {t('sm.engine.wallets')}</span>
+        )}
+        {data?.wallets?.length > 1 && (
+          <label className="smi-sort">
+            {t('sm.engine.sortBy')}
+            <select value={walletSort} onChange={(e) => setWalletSort(e.target.value)} aria-label={t('sm.engine.sortBy')} data-testid="sm-wallet-sort">
+              <option value="score">{t('sm.engine.score')}</option>
+              <option value="winRate">{t('sm.engine.winRate')}</option>
+              <option value="realized">{t('sm.engine.realized')}</option>
+              <option value="closes">{t('sm.engine.closes')}</option>
+            </select>
+          </label>
         )}
       </div>
 
@@ -150,7 +193,7 @@ export function VerifiedWallets() {
       )}
 
       <div className="smi-wallet-grid">
-        {(data?.wallets || []).slice(0, 15).map((w, i) => {
+        {sortedWallets.slice(0, 15).map((w, i) => {
           const expUrl = walletExplorerUrl(w.chain, w.address);
           return (
             <div key={`${w.chain}:${w.address}`} className="smi-wallet-card">
@@ -418,15 +461,26 @@ function TokenGraph({ data, tokenRow }) {
 function FollowRule({ row, onIntent }) {
   const { t } = useTranslation();
   const [minimum, setMinimum] = useState(3);
+  const [confidence, setConfidence] = useState(75);
   const [following, setFollowing] = useState(() => getTracked().some((w) => w.target === 'token' && w.chain === row.chain && w.address === row.token));
   const follow = () => {
+    /* Reversal thresholds scale to THIS token's observed flow (upgrade
+       2026-10-25). They were hardcoded at +$5M → −$3M: on a token whose
+       whole qualified window is $200k the reversal leg could never arm, so
+       the «follow» the user saved was born half-dead. Derived from the
+       row's own |net| (floored so dust cannot arm it, capped at the old
+       institutional size), and the evidence-strength bar is now the user's
+       choice instead of a buried 75. */
+    const base = Math.abs(row.netFlowUsd || 0);
+    const fromUsd = Math.min(5_000_000, Math.max(25_000, Math.round(base * 0.8)));
+    const toUsd = -Math.min(3_000_000, Math.max(25_000, Math.round(base * 0.5)));
     trackWallet({
       chain: row.chain,
       address: row.token,
       target: 'token',
       label: row.symbol,
-      types: ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL'],
-      condition: { minWallets: minimum, confidence: 75, fromUsd: 5_000_000, toUsd: -3_000_000 }
+      types: ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'MOMENTUM_REVERSAL'],
+      condition: { minWallets: minimum, confidence, fromUsd, toUsd }
     });
     setFollowing(true);
   };
@@ -441,6 +495,12 @@ function FollowRule({ row, onIntent }) {
         {t('sm.engine.minWallets')}
         <select value={minimum} onChange={(e) => setMinimum(Number(e.target.value))} aria-label={t('sm.engine.minWallets')}>
           {[3, 4, 5, 6, 7, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <label>
+        {t('sm.engine.confidence')}
+        <select value={confidence} onChange={(e) => setConfidence(Number(e.target.value))} aria-label={t('sm.engine.confidence')} data-testid="sm-follow-confidence">
+          {[60, 70, 75, 80, 85, 90].map((n) => <option key={n} value={n}>{n}/100</option>)}
         </select>
       </label>
       <div className="smi-follow-buttons">
@@ -543,6 +603,12 @@ export default function SmartMoneyIntelligence() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  /* Board controls (upgrade 2026-10-25): the consensus list was take-it-or-
+     leave-it server order. Search / signal filter / sort now run client-side
+     over the rows already fetched — no extra requests, no new data claims. */
+  const [query, setQuery] = useState('');
+  const [signalFilter, setSignalFilter] = useState('all');
+  const [sortKey, setSortKey] = useState('confidence');
 
   const load = useCallback((signal) => {
     setBusy(true);
@@ -572,15 +638,37 @@ export default function SmartMoneyIntelligence() {
     return () => { stopPoll(); ctrl.abort(); };
   }, [load, building]);
 
-  const rows = useMemo(() => (data?.consensus || []).filter((r) => chain === 'all' || String(r.chain) === chain), [data, chain]);
+  const chainRows = useMemo(() => (data?.consensus || []).filter((r) => chain === 'all' || String(r.chain) === chain), [data, chain]);
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = chainRows.filter((r) =>
+      (signalFilter === 'all' || r.signal === signalFilter)
+      && (!q || String(r.symbol || '').toLowerCase().includes(q) || String(r.token || '').toLowerCase().includes(q)));
+    const by = {
+      confidence: (a, b) => (b.confidence ?? -1) - (a.confidence ?? -1) || Math.abs(b.netFlowUsd) - Math.abs(a.netFlowUsd),
+      net: (a, b) => Math.abs(b.netFlowUsd) - Math.abs(a.netFlowUsd),
+      wallets: (a, b) => (b.independentVotes ?? 0) - (a.independentVotes ?? 0) || Math.abs(b.netFlowUsd) - Math.abs(a.netFlowUsd),
+      momentum: (a, b) => Math.abs(b.momentum?.deltaUsd ?? -1) - Math.abs(a.momentum?.deltaUsd ?? -1)
+    }[sortKey] || (() => 0);
+    return [...filtered].sort(by);
+  }, [chainRows, query, signalFilter, sortKey]);
   const flow = useMemo(() => (data?.observed?.flow || []).filter((r) => chain === 'all' || String(r.chain) === chain), [data, chain]);
-  const receipts = useMemo(() => (data?.observed?.recentSwaps || []).filter((r) => chain === 'all' || String(r.chain) === chain).slice(0, 15), [data, chain]);
+  /* Receipts scoped to the SELECTED window (upgrade 2026-10-25): the server
+     has always sent `observed.windowSwaps`, but the feed read `recentSwaps`
+     — the newest fills of ANY age — so under a 30m window the «ledger» could
+     show trades from yesterday. An old server payload without windowSwaps
+     still falls back instead of breaking. */
+  const receipts = useMemo(() => (Array.isArray(data?.observed?.windowSwaps) ? data.observed.windowSwaps : (data?.observed?.recentSwaps || [])).filter((r) => chain === 'all' || String(r.chain) === chain).slice(0, 15), [data, chain]);
   const candidates = useMemo(() => (data?.observed?.candidates || []).filter((r) => chain === 'all' || String(r.chain) === chain).slice(0, 10), [data, chain]);
   const earlyEntries = useMemo(() => (data?.earlyEntries || []).filter((e) => chain === 'all' || String(e.chain) === chain), [data, chain]);
   const note = refreshNote(t, data);
   const chosen = rows.find((r) => `${r.chain}:${r.token}` === selected) || rows[0] || null;
   const status = data?.indexedAt ? timeAgo(data.indexedAt) : t('sm.engine.notIndexed');
-  const active = rows.filter((r) => r.confidence != null).length;
+  const active = chainRows.filter((r) => r.confidence != null).length;
+  /* Server breadth tallies ALL chains; next to a single-chain filtered list
+     those totals would describe tokens the reader cannot see. It renders
+     only unscoped — the list itself stays the scoped truth. */
+  const breadth = chain === 'all' && data?.breadth && data.breadth.tokensObserved > 0 ? data.breadth : null;
   const monitor = (row) => navigate(`/intent?smMonitor=${row.signal === 'DISTRIBUTION' ? 'sell' : 'buyers'}&smChain=${row.chain}&smToken=${encodeURIComponent(row.token)}&smSymbol=${encodeURIComponent(row.symbol || 'TOKEN')}`);
 
   return (
@@ -679,6 +767,29 @@ export default function SmartMoneyIntelligence() {
 
       {data && (
         <>
+          {/* 01b / پهنای بازار پول هوشمند — شمارش نمونهٔ تأییدشده، نه شاخص بازار */}
+          {breadth && (
+            <section className="smi-breadth" data-testid="sm-breadth" aria-label={t('sm.engine.breadthTitle')}>
+              <div className="smi-breadth-head">
+                <span className="smi-eyebrow">{t('sm.engine.breadthTitle')}</span>
+                <strong className={breadth.netUsd >= 0 ? 'sm-up' : 'sm-down'}>
+                  {breadth.netUsd >= 0 ? '+' : '−'}{fmtUsd(Math.abs(breadth.netUsd))}
+                </strong>
+              </div>
+              <div className="smi-breadth-bar" aria-hidden="true">
+                <i className="buy" style={{ width: `${breadth.buyUsd + breadth.sellUsd ? Math.round((breadth.buyUsd / (breadth.buyUsd + breadth.sellUsd)) * 100) : 0}%` }} />
+                <i className="sell" />
+              </div>
+              <div className="smi-breadth-stats">
+                <span><b className="sm-up">{breadth.accumulation}</b> {t('sm.engine.signal.ACCUMULATION')}</span>
+                <span><b className="sm-down">{breadth.distribution}</b> {t('sm.engine.signal.DISTRIBUTION')}</span>
+                <span><b>{breadth.qualifiedWalletsActive}</b> {t('sm.engine.wallets')}</span>
+                <span><b>{breadth.swaps}</b> {t('sm.engine.receiptsShort')}</span>
+              </div>
+              <p className="smi-footnote">{t('sm.engine.breadthNote')}</p>
+            </section>
+          )}
+
           {/* 02 / سرمایه واقعاً کجا جابه‌جا شد؟ */}
           <section className="smi-section">
             <div className="smi-head">
@@ -687,14 +798,58 @@ export default function SmartMoneyIntelligence() {
                 <h3>{t('sm.engine.where')}</h3>
               </div>
               <span className="smi-count">
-                {rows.length} {t('sm.engine.observed')} · {active} {t('sm.engine.active')}
+                {chainRows.length} {t('sm.engine.observed')} · {active} {t('sm.engine.active')}
               </span>
             </div>
 
-            {!rows.length && (
+            {chainRows.length > 0 && (
+              <div className="smi-board-controls">
+                <input
+                  className="smi-search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t('sm.engine.searchTokens')}
+                  aria-label={t('sm.engine.searchTokens')}
+                  data-testid="sm-consensus-search"
+                />
+                <div className="smi-board-row">
+                  <div className="smi-signal-filter" role="group" aria-label={t('sm.engine.filterBySignal')}>
+                    {['all', 'ACCUMULATION', 'DISTRIBUTION', 'INSUFFICIENT_EVIDENCE'].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className={signalFilter === s ? 'active' : ''}
+                        aria-pressed={signalFilter === s}
+                        onClick={() => setSignalFilter(s)}
+                      >
+                        {s === 'all' ? t('sm.engine.filterAll')
+                          : s === 'INSUFFICIENT_EVIDENCE' ? t('sm.engine.insufficient')
+                            : t(`sm.engine.signal.${s}`)}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="smi-sort">
+                    {t('sm.engine.sortBy')}
+                    <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} aria-label={t('sm.engine.sortBy')} data-testid="sm-consensus-sort">
+                      <option value="confidence">{t('sm.engine.confidence')}</option>
+                      <option value="net">{t('sm.engine.sortNet')}</option>
+                      <option value="wallets">{t('sm.engine.sortWallets')}</option>
+                      <option value="momentum">{t('sm.engine.momentum')}</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {!chainRows.length && (
               <div className="smi-empty">
                 <strong>{t('sm.engine.emptyTitle')}</strong>
                 <p>{flow.length ? t('sm.engine.emptyBodySample') : t('sm.engine.emptyBody')}</p>
+              </div>
+            )}
+            {chainRows.length > 0 && !rows.length && (
+              <div className="smi-empty" data-testid="sm-consensus-nomatch">
+                <p>{t('sm.engine.noMatch')}</p>
               </div>
             )}
 
@@ -724,6 +879,10 @@ export default function SmartMoneyIntelligence() {
                     </span>
                     <span className="smi-votes">
                       {r.buyers} {t('sm.engine.buy')} · {r.sellers} {t('sm.engine.sell')} · {r.independentVotes} {t('sm.engine.groups')}
+                    </span>
+                    <span className="smi-row-meta">
+                      <FlowSpark buckets={r.flowBuckets} />
+                      <TrendChip row={r} />
                     </span>
                   </span>
                   <span className="smi-token-result">
@@ -772,6 +931,32 @@ export default function SmartMoneyIntelligence() {
                   <strong>{chosen.confidence == null ? '—' : `${chosen.confidence}/100`}</strong>
                 </div>
               </div>
+              {chosen.momentum && (
+                <div className="smi-detail-metrics smi-momentum-metrics" data-testid="sm-momentum-detail">
+                  <div>
+                    <small>{t('sm.engine.momentum')}</small>
+                    <strong><TrendChip row={chosen} /></strong>
+                  </div>
+                  <div>
+                    <small>{t('sm.engine.prevNet')}</small>
+                    <strong className={chosen.momentum.prevNetFlowUsd == null ? '' : chosen.momentum.prevNetFlowUsd >= 0 ? 'sm-up' : 'sm-down'}>
+                      {chosen.momentum.prevNetFlowUsd == null ? '—'
+                        : `${chosen.momentum.prevNetFlowUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(chosen.momentum.prevNetFlowUsd))}`}
+                    </strong>
+                  </div>
+                  <div>
+                    <small>{t('sm.engine.delta')}</small>
+                    <strong className={chosen.momentum.deltaUsd == null ? '' : chosen.momentum.deltaUsd >= 0 ? 'sm-up' : 'sm-down'}>
+                      {chosen.momentum.deltaUsd == null ? '—'
+                        : `${chosen.momentum.deltaUsd >= 0 ? '+' : '−'}${fmtUsd(Math.abs(chosen.momentum.deltaUsd))}`}
+                    </strong>
+                  </div>
+                  <div>
+                    <small>{t('sm.engine.flowInWindow')}</small>
+                    <FlowSpark buckets={chosen.flowBuckets} width={110} height={30} />
+                  </div>
+                </div>
+              )}
               <TokenGraph data={data} tokenRow={chosen} />
               <FollowRule key={`${chosen.chain}:${chosen.token}`} row={chosen} onIntent={monitor} />
             </section>

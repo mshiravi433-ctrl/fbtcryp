@@ -767,27 +767,114 @@ async function solRpc(method, params, { timeoutMs = 10_000 } = {}) {
   }
 }
 
-/** Recent signatures for a Solana address (activity + first-seen proxy). */
-export async function solSignatures(address, { limit = 50, timeoutMs = 10_000 } = {}) {
+export const SOL_SIGNATURE_PAGE_LIMIT = 100;
+export const SOL_SIGNATURE_MAX_ROWS = 300;
+
+/**
+ * Signature history for a Solana address, newest first, with explicit
+ * backwards pagination.
+ *
+ * `getSignaturesForAddress` returns one newest→oldest page; passing the last
+ * signature of that page as `before` is the only cursor to older activity.
+ * Phase 3 read one page and therefore could never say whether any older fill
+ * existed. This reader can now make that distinction: `complete:true` is
+ * returned only when the RPC itself returns a short page (the address has no
+ * older signatures in the scanned direction). Hitting the row/page/deadline
+ * caps on a full page is `complete:false`, never disguised as a full ledger.
+ *
+ * `limit` bounds raw signatures scanned before the optional failed-row
+ * filter, so completeness talks about signature history rather than about
+ * the shorter successful-only subset handed to transaction fetching.
+ */
+export async function solSignatures(address, {
+  limit = 50,
+  pageLimit = SOL_SIGNATURE_PAGE_LIMIT,
+  maxPages = 1,
+  includeFailed = true,
+  timeoutMs = 10_000
+} = {}) {
+  const base = {
+    rows: [], oldestAt: null, oldestScannedAt: null, complete: false,
+    hasMore: false, pagesFetched: 0, scanned: 0
+  };
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) {
-    return { dataStatus: 'bad-address', rows: [] };
+    return { dataStatus: 'bad-address', ...base };
   }
-  try {
-    const sigs = await solRpc('getSignaturesForAddress', [address, { limit: Math.min(100, limit) }], { timeoutMs });
-    const rows = (Array.isArray(sigs) ? sigs : []).map((s) => ({
-      signature: s.signature,
-      slot: s.slot,
-      timestamp: s.blockTime ? s.blockTime * 1000 : null,
-      err: s.err || null
-    }));
-    return {
-      dataStatus: 'live',
-      rows,
-      oldestAt: rows.length ? Math.min(...rows.map((r) => r.timestamp || Date.now())) : null
-    };
-  } catch {
-    return { dataStatus: 'unavailable', rows: [] };
+
+  const target = Math.max(1, Math.min(SOL_SIGNATURE_MAX_ROWS, Number(limit) || 50));
+  const boundedPageLimit = Math.max(1, Math.min(SOL_SIGNATURE_PAGE_LIMIT, Number(pageLimit) || SOL_SIGNATURE_PAGE_LIMIT));
+  const boundedMaxPages = Math.max(1, Math.min(10, Number(maxPages) || 1));
+  const budgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 10_000));
+  const deadlineAt = Date.now() + budgetMs;
+  const bySignature = new Map();
+  let before = null;
+  let pagesFetched = 0;
+  let complete = false;
+  let pageFailed = false;
+
+  while (pagesFetched < boundedMaxPages && bySignature.size < target) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs < 250) break;
+    const requested = Math.min(boundedPageLimit, target - bySignature.size);
+    let page;
+    try {
+      page = await solRpc('getSignaturesForAddress', [
+        address,
+        { limit: requested, ...(before ? { before } : {}) }
+      ], { timeoutMs: remainingMs });
+    } catch {
+      pageFailed = true;
+      break;
+    }
+    if (!Array.isArray(page)) {
+      pageFailed = true;
+      break;
+    }
+    pagesFetched++;
+
+    let lastSignature = null;
+    for (const raw of page) {
+      const signature = String(raw?.signature || '');
+      if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(signature)) continue;
+      lastSignature = signature;
+      if (!bySignature.has(signature)) {
+        bySignature.set(signature, {
+          signature,
+          slot: raw.slot ?? null,
+          timestamp: raw.blockTime ? raw.blockTime * 1000 : null,
+          err: raw.err || null
+        });
+      }
+    }
+
+    // A short page is the RPC's own end-of-history proof. A full page only
+    // proves that the next cursor *might* have older rows behind it.
+    if (page.length < requested) {
+      complete = true;
+      break;
+    }
+    if (!lastSignature || lastSignature === before) break;
+    before = lastSignature;
   }
+
+  const scannedRows = [...bySignature.values()];
+  const rows = includeFailed ? scannedRows : scannedRows.filter((row) => !row.err);
+  const oldestAt = rows.length
+    ? Math.min(...rows.map((r) => r.timestamp || Date.now())) : null;
+  const oldestScannedAt = scannedRows.length
+    ? Math.min(...scannedRows.map((r) => r.timestamp || Date.now())) : null;
+  return {
+    dataStatus: pageFailed ? (pagesFetched ? 'partial' : 'unavailable') : 'live',
+    rows,
+    oldestAt,
+    oldestScannedAt,
+    complete: complete && !pageFailed,
+    hasMore: !(complete && !pageFailed),
+    pagesFetched,
+    scanned: scannedRows.length,
+    pageLimit: boundedPageLimit,
+    limit: target
+  };
 }
 
 /** SOL balance in lamports for an address. */
@@ -811,31 +898,142 @@ export async function solBalance(address, { timeoutMs = 10_000 } = {}) {
  * rows are summed by mint and zero balances are dropped.
  */
 export async function solTokenBalances(address, { limit = 40, timeoutMs = 10_000 } = {}) {
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) return { dataStatus: 'bad-address', tokens: [] };
-  try {
-    const res = await solRpc('getTokenAccountsByOwner', [
-      address,
-      { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
-      { encoding: 'jsonParsed' }
-    ], { timeoutMs });
-    const byMint = new Map();
-    for (const acc of (Array.isArray(res?.value) ? res.value : [])) {
-      const info = acc?.account?.data?.parsed?.info;
-      const mint = info?.mint;
-      const ui = Number(info?.tokenAmount?.uiAmount);
-      if (!mint || !Number.isFinite(ui) || ui <= 0) continue;
-      const prev = byMint.get(mint) || { mint, amount: 0, decimals: Number(info?.tokenAmount?.decimals) || 0 };
-      prev.amount += ui;
-      byMint.set(mint, prev);
-    }
-    const tokens = [...byMint.values()]
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, limit)
-      .map((t) => ({ token: t.mint, amount: t.amount, decimals: t.decimals, symbol: null, name: null }));
-    return { dataStatus: 'live', tokens, accounts: Array.isArray(res?.value) ? res.value.length : 0 };
-  } catch {
-    return { dataStatus: 'unavailable', tokens: [] };
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(address || ''))) {
+    return { dataStatus: 'bad-address', tokens: [], accounts: 0, mintCount: 0, truncated: false, complete: false };
   }
+  const tokenPrograms = [
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB'
+  ];
+  try {
+    // Token-2022 balances are invisible to the legacy program filter. A
+    // reconciliation that silently omitted that whole token family would
+    // call an incomplete balance read "independent" when it is not.
+    const responses = await Promise.all(tokenPrograms.map((programId) => solRpc('getTokenAccountsByOwner', [
+      address,
+      { programId },
+      { encoding: 'jsonParsed' }
+    ], { timeoutMs })));
+    const byMint = new Map();
+    let accounts = 0;
+    let invalidAccounts = 0;
+    for (const res of responses) {
+      if (!Array.isArray(res?.value)) invalidAccounts++;
+      const rows = Array.isArray(res?.value) ? res.value : [];
+      accounts += rows.length;
+      for (const acc of rows) {
+        const info = acc?.account?.data?.parsed?.info;
+        const mint = String(info?.mint || '');
+        const tokenAmount = info?.tokenAmount || {};
+        const decimals = Number(tokenAmount.decimals);
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)
+          || !/^\d+$/.test(String(tokenAmount.amount || ''))
+          || !Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
+          invalidAccounts++;
+          continue;
+        }
+        let raw;
+        try { raw = BigInt(String(tokenAmount.amount)); } catch {
+          invalidAccounts++;
+          continue;
+        }
+        if (raw <= 0n) continue;
+        const prev = byMint.get(mint);
+        if (prev && prev.decimals !== decimals) {
+          invalidAccounts++;
+          continue;
+        }
+        const amountRaw = (prev?.amountRaw || 0n) + raw;
+        byMint.set(mint, {
+          mint,
+          amountRaw,
+          amount: Number(amountRaw) / (10 ** decimals),
+          decimals
+        });
+      }
+    }
+    const boundedLimit = Math.max(1, Math.min(500, Number(limit) || 40));
+    const sorted = [...byMint.values()].sort((a, b) => b.amount - a.amount || a.mint.localeCompare(b.mint));
+    const tokens = sorted
+      .slice(0, boundedLimit)
+      .map((t) => ({
+        token: t.mint,
+        amount: t.amount,
+        amountRaw: t.amountRaw.toString(),
+        decimals: t.decimals,
+        symbol: null,
+        name: null
+      }));
+    return {
+      dataStatus: 'live', tokens, accounts, invalidAccounts, mintCount: byMint.size,
+      truncated: byMint.size > tokens.length,
+      // A malformed token account may be display noise, but it is fatal to an
+      // exact reconciliation claim: the omitted balance is unmeasured, not 0.
+      complete: invalidAccounts === 0 && byMint.size <= tokens.length,
+      tokenPrograms
+    };
+  } catch {
+    return { dataStatus: 'unavailable', tokens: [], accounts: 0, invalidAccounts: 0, mintCount: 0, truncated: false, complete: false };
+  }
+}
+
+/**
+ * Full parsed transactions for a bounded set of Solana signatures.
+ * The decoder needs both `meta.preTokenBalances`/`postTokenBalances` and,
+ * from phase 4, parsed SPL-token transfer instructions; a signature list
+ * alone can prove neither. Requests are deduplicated, capped at the same
+ * 300-signature scan bound and read with limited concurrency under one
+ * wall-clock budget. A partial read is labelled partial with exact counts —
+ * never presented as a
+ * complete wallet ledger.
+ */
+export async function solTransactions(signatures, { limit = 25, timeoutMs = 6_000, concurrency = 5 } = {}) {
+  const requestedSigs = [...new Set((Array.isArray(signatures) ? signatures : [])
+    .map((s) => String(typeof s === 'string' ? s : s?.signature || ''))
+    .filter((s) => /^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(s)))]
+    .slice(0, Math.max(1, Math.min(SOL_SIGNATURE_MAX_ROWS, Number(limit) || 25)));
+  const base = { rows: [], requested: requestedSigs.length, attempted: 0, fetched: 0, failed: 0,
+    unattempted: requestedSigs.length, complete: false, coverage: 0 };
+  if (!requestedSigs.length) return { dataStatus: 'unavailable', ...base };
+
+  const budgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 6_000));
+  const deadlineAt = Date.now() + budgetMs;
+  const batchSize = Math.max(1, Math.min(8, Number(concurrency) || 5));
+  const rows = [];
+  let attempted = 0;
+  let failed = 0;
+
+  for (let i = 0; i < requestedSigs.length; i += batchSize) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs < 250) break;
+    const batch = requestedSigs.slice(i, i + batchSize);
+    attempted += batch.length;
+    const settled = await Promise.allSettled(batch.map((signature) => solRpc('getTransaction', [
+      signature,
+      { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 }
+    ], { timeoutMs: remainingMs })));
+    settled.forEach((result, idx) => {
+      const tx = result.status === 'fulfilled' ? result.value : null;
+      if (!tx || typeof tx !== 'object') { failed++; return; }
+      rows.push({
+        signature: batch[idx],
+        slot: tx.slot ?? null,
+        blockTime: tx.blockTime ?? null,
+        version: tx.version ?? null,
+        transaction: tx.transaction || null,
+        meta: tx.meta || null
+      });
+    });
+  }
+
+  const unattempted = requestedSigs.length - attempted;
+  const complete = rows.length === requestedSigs.length && failed === 0 && unattempted === 0;
+  const dataStatus = complete ? 'live' : rows.length ? 'partial' : 'unavailable';
+  return {
+    dataStatus, rows, requested: requestedSigs.length, attempted, fetched: rows.length,
+    failed, unattempted, complete,
+    coverage: requestedSigs.length ? rows.length / requestedSigs.length : 0
+  };
 }
 
 /* ═══════════════════════════ search routing ═════════════════════════════ */

@@ -2192,6 +2192,91 @@ console.log('\n▸ probing Verified Intelligence live index…');
   report('Verified Intelligence live index', [['real-wallet qualification, live discovery, observed layer, self-healing read', ok]]);
 }
 
+/* Upgrade 2026-10-25: the fabricated seed must stay gone and momentum /
+ * breadth must stay derived from the same verified receipts — trend words
+ * only when the previous window was provably sampled. */
+console.log('\n▸ probing Smart Money upgrade (no-seed, momentum, breadth)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-upgrade-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money upgrade', [['empty index stays honest, momentum/breadth from verified swaps only', ok]]);
+}
+
+/* Phase 2 (2026-10-25): momentum-transition alerts, de-duplicated capital
+ * efficiency, qualified-first index retention. */
+console.log('\n▸ probing Smart Money phase 2 (alerts, score factor, retention)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase2-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 2', [['MOMENTUM_REVERSAL fires on transition only, efficiency anchored at 30d, qualified retained under cap', ok]]);
+}
+
+/* Phase 3 (2026-10-25): native-quote EVM observations priced only from an
+ * hourly-or-finer point near the transaction, plus Solana swaps decoded
+ * from wallet-owned token-balance deltas. The phase-3 observations
+ * themselves do not vote; explicit phase-4 promotion is probed separately. */
+console.log('\n▸ probing Smart Money phase 3 (native quote, Solana decoder, no-vote boundary)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase3-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 3', [['native/Solana observations are decoded honestly and do not vote without explicit promotion', ok]]);
+}
+
+/* Phase 4 (2026-10-25): all-or-nothing promotion of hourly-priced native
+ * quotes into the unified verified FIFO ledger, persisted-row revalidation,
+ * Solana cursor pagination and instruction-corroborated shadow readiness. */
+console.log('\n▸ probing Smart Money phase 4 (native promotion, Solana shadow gate)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase4-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 4', [['native promotion is unified and revalidatable; Solana can be shadow-ready without voting', ok]]);
+}
+
+/* Phase 5 (2026-10-25): licensed real-mainnet Solana transaction replay,
+ * raw-unit shadow-FIFO/current-balance reconciliation, and a default-off
+ * verified-promotion gate that stays closed on partial 1/12 coverage. */
+console.log('\n▸ probing Smart Money phase 5 (Solana real replay, shadow FIFO, promotion gate)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase5-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 5', [['real Solana replay is pinned, shadow FIFO reconciles exactly, and partial replay cannot promote', ok]]);
+}
+
 /*
  * QR CAMERA LIFECYCLE.
  *

@@ -40,10 +40,15 @@ function toWhaleEvents(overview) {
     });
   }
   // CEX flow rows as labelled events so the adapter's exchange math engages.
+  // Two fixes over the old rows: the label is the honest generic «exchange»
+  // (this is an aggregate over the whole CEX registry, never Binance alone),
+  // and it travels in the adapter's real shape — `from.label`/`to.label`;
+  // the previous top-level `fromLabel`/`toLabel` fields were silently
+  // dropped by the adapter's eventRow, so the label never engaged at all.
   const f = overview?.flows?.windows?.['24h'];
   if (f) {
-    rows.push({ kind: 'inflow', valueUsd: f.inflowUsd || 0, token: { symbol: 'CEX' }, fromLabel: 'binance', toLabel: 'binance', timestamp: overview?.at });
-    rows.push({ kind: 'outflow', valueUsd: f.outflowUsd || 0, token: { symbol: 'CEX' }, fromLabel: 'binance', toLabel: 'binance', timestamp: overview?.at });
+    rows.push({ kind: 'inflow', valueUsd: f.inflowUsd || 0, token: { symbol: 'CEX' }, from: { label: 'wallet' }, to: { label: 'exchange' }, timestamp: overview?.at });
+    rows.push({ kind: 'outflow', valueUsd: f.outflowUsd || 0, token: { symbol: 'CEX' }, from: { label: 'exchange' }, to: { label: 'wallet' }, timestamp: overview?.at });
   }
   return rows;
 }

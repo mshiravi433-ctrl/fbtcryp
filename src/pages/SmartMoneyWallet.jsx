@@ -8,6 +8,7 @@ import {
   fetchWallet, fmtUsd, shortAddr, timeAgo, CHAIN_OPTIONS
 } from '../lib/smartMoneyClient';
 import { isTracked, trackWallet, untrackWallet } from '../lib/smartMoneyWatch';
+import { explorerTx } from '../lib/chains';
 import { useTelegram } from '../context/TelegramContext';
 import { openUrl } from '../lib/browser';
 import '../styles/smart-money-intelligence.css';
@@ -38,7 +39,7 @@ function ScoreRing({ value, color = '#7c7dff', label }) {
 const RISK_COLORS = { LOW: '#2ee6a8', MEDIUM: '#ffc24b', HIGH: '#ff5c7a' };
 
 export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, addressProp }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
   const params = useParams();
@@ -104,6 +105,28 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
   const holdingsList = data?.holdings || [];
   const holdingsPriced = holdingsList.some((h) => h.valueUsd != null);
   const unverifiedTokens = holdingsList.filter((h) => h.symbol === '???').length;
+  // Phase 3 rows arrive oldest-first from the server, like verified swaps.
+  // The wallet page shows the latest observations first, but keeps them in a
+  // separate, visibly non-voting section below rather than blending sides or
+  // values into verified P&L/activity.
+  const observedSwaps = [...(data?.observedSwaps || [])].reverse().slice(0, 20);
+  const observedEvidence = data?.swapEvidence?.observedOnly || null;
+  const nativeSample = data?.smartMoney?.sample || {};
+  const solanaShadow = observedEvidence?.shadowLedger || null;
+  const solanaFifo = observedEvidence?.shadowFifo || data?.swapEvidence?.verified?.balanceReconciliation || null;
+  const solanaReplay = observedEvidence?.replayCorpus || data?.swapEvidence?.verified?.replayCorpus || null;
+  const solanaPromotion = observedEvidence?.promotion || data?.swapEvidence?.verified?.promotion || null;
+  const fmtAmount = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n)
+      ? new Intl.NumberFormat(i18n.language || undefined, { maximumSignificantDigits: 6 }).format(n)
+      : '—';
+  };
+  const observedProofUrl = (hashValue) => {
+    if (!hashValue) return null;
+    if (data?.chainKind === 'solana' || data?.chain === 'solana') return `https://solscan.io/tx/${encodeURIComponent(hashValue)}`;
+    try { return explorerTx(Number(data?.chain), hashValue); } catch { return null; }
+  };
 
   return (
     <PageTransition>
@@ -189,6 +212,18 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                   <span>{t('sm.engine.coverageShort')}: <b>{Math.round(data.smartMoney.coverage * 100)}%</b></span>
                   <span>{t('sm.engine.closes')}: <b>{data.smartMoney.sample?.closedTrades ?? pnl?.closedTrades ?? '—'}</b></span>
                 </div>}
+                {nativeSample.nativeQuoteCandidates > 0 && (
+                  <div className="smi-wallet-factors">
+                    <span className={nativeSample.nativeQuotePromoted ? 'smi-native-promoted' : 'smi-native-blocked'}>
+                      {nativeSample.nativeQuotePromoted
+                        ? t('sm.phase4.nativeIncluded', { n: nativeSample.nativeQuoteSwaps ?? 0 })
+                        : t('sm.phase4.nativeBlocked', {
+                          n: nativeSample.nativeQuoteCandidates,
+                          unpriced: nativeSample.nativeQuoteUnpricedCandidates ?? 0
+                        })}
+                    </span>
+                  </div>
+                )}
                 {data.identity && <div className="smi-wallet-label">
                   <span>{t('sm.engine.sourcedIdentity')}: <b>{data.identity.label} · {data.identity.kind}</b></span>
                   {data.identity.sourceUrl && <button type="button" onClick={() => openUrl(data.identity.sourceUrl)}>{t('sm.engine.source')} ↗</button>}
@@ -324,6 +359,126 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                       {t('sm.unverifiedTokens', { n: unverifiedTokens })}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Phase 3 observed swaps. Real paired effects, deliberately
+                  separate from verified P&L and consensus until their samples
+                  are complete enough to score. */}
+              {observedSwaps.length > 0 && (
+                <div className="sm-section smi-observed-swaps">
+                  <div className="smi-observed-head">
+                    <h3>{t('sm.phase3.title')}</h3>
+                    <span className="smi-observed-badge">{t('sm.phase3.noVote')}</span>
+                  </div>
+                  <p className="smi-observed-note">
+                    {t(data.chainKind === 'solana' || data.chain === 'solana' ? 'sm.phase3.solanaNote' : 'sm.phase3.nativeNote')}
+                  </p>
+                  {observedEvidence?.sampledSignatures > 0 && (
+                    <div className="smi-observed-sample">
+                      {observedEvidence.signatureRowsScanned != null ? (
+                        <>
+                          <div>
+                            {t('sm.phase4.solanaCoverage', {
+                              signatures: observedEvidence.signatureRowsScanned,
+                              pages: observedEvidence.signaturePages ?? 0,
+                              fetched: observedEvidence.decodedTransactions ?? 0,
+                              attempted: observedEvidence.requestedTransactions ?? observedEvidence.attemptedTransactions ?? observedEvidence.sampledSignatures,
+                              checked: observedEvidence.instructionCorroboratedSwaps ?? solanaShadow?.corroboratedSwaps ?? 0,
+                              swaps: observedEvidence.count ?? observedSwaps.length
+                            })}
+                          </div>
+                          <div>
+                            {t(observedEvidence.signatureHistoryComplete
+                              ? 'sm.phase4.signatureComplete'
+                              : 'sm.phase4.signatureIncomplete')}
+                            {' · '}
+                            {observedEvidence.shadowEligible || solanaShadow?.shadowEligible
+                              ? t('sm.phase4.shadowReady')
+                              : t('sm.phase4.shadowBlocked', {
+                                n: observedEvidence.shadowBlockers?.length ?? solanaShadow?.blockers?.length ?? 0
+                              })}
+                          </div>
+                          {solanaFifo && (
+                            <div>
+                              {solanaFifo.reconciled
+                                ? t('sm.phase5.fifoReconciled', {
+                                  matched: solanaFifo.matchedMints ?? 0,
+                                  total: solanaFifo.checkedMints ?? 0,
+                                  closed: solanaFifo.closedTrades ?? 0
+                                })
+                                : t('sm.phase5.fifoBlocked', {
+                                  n: solanaFifo.blockers?.length ?? observedEvidence.shadowFifoBlockers?.length ?? 0,
+                                  unmatched: solanaFifo.unmatchedExits ?? 0
+                                })}
+                            </div>
+                          )}
+                          {solanaReplay && (
+                            <div>
+                              {t('sm.phase5.replayCoverage', {
+                                passed: solanaReplay.passedFixtures ?? 0,
+                                fixtures: solanaReplay.fixtureCount ?? 0,
+                                checked: solanaReplay.corroboratedPrograms ?? 0,
+                                balance: solanaReplay.balanceReplayPrograms ?? 0,
+                                total: solanaReplay.supportedPrograms ?? 0
+                              })}
+                            </div>
+                          )}
+                          {solanaPromotion && (
+                            <div>
+                              {solanaPromotion.promoted
+                                ? t('sm.phase5.promotionEnabled')
+                                : solanaPromotion.evidenceEligible
+                                  ? t('sm.phase5.promotionSwitchOff')
+                                  : t('sm.phase5.promotionBlocked', {
+                                    n: solanaPromotion.blockers?.length ?? 0
+                                  })}
+                            </div>
+                          )}
+                        </>
+                      ) : t('sm.phase3.sample', {
+                        decoded: observedEvidence.decodedTransactions ?? 0,
+                        attempted: observedEvidence.attemptedTransactions ?? observedEvidence.sampledSignatures
+                      })}
+                    </div>
+                  )}
+                  <div className="smi-observed-list">
+                    {observedSwaps.map((s) => {
+                      const proof = observedProofUrl(s.hash);
+                      const tokenLabel = s.symbol && s.symbol !== '???'
+                        ? s.symbol
+                        : shortAddr(s.token, data.chainKind === 'solana' || data.chain === 'solana' ? 'solana' : 'evm');
+                      return (
+                        <div key={s.id || `${s.hash}:${s.token}`} className="smi-observed-row">
+                          <span className={`smi-side ${s.side === 'BUY' ? 'up' : 'down'}`}>
+                            {s.side === 'BUY' ? t('sm.buying') : t('sm.selling')}
+                          </span>
+                          <div className="smi-observed-main">
+                            <strong>{tokenLabel} <b>{fmtAmount(s.amount)}</b></strong>
+                            <small>
+                              {t('sm.phase3.quote')}: {fmtAmount(s.quoteAmount)} {s.quoteSymbol || ''}
+                              {s.valueUsd != null ? ` · ${fmtUsd(s.valueUsd)}` : ` · ${t('sm.unknown')}`}
+                              {s.timestamp ? ` · ${timeAgo(s.timestamp)}` : ''}
+                            </small>
+                            <small>
+                              {s.dex
+                                ? `${t('sm.phase3.dex', { name: s.dex })} · ${t(s.instructionCorroborated
+                                  ? 'sm.phase4.instructionChecked'
+                                  : 'sm.phase4.balanceOnly')}`
+                                : s.quotePriceUsd != null
+                                  ? t('sm.phase3.pricedAt', { price: `$${fmtAmount(s.quotePriceUsd)}` })
+                                  : t('sm.phase3.unpriced')}
+                            </small>
+                          </div>
+                          {proof && (
+                            <button type="button" className="smi-observed-proof" onClick={() => openUrl(proof)}>
+                              {t('sm.engine.proof')} ↗
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

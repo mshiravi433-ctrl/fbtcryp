@@ -77,7 +77,7 @@ export async function putWatchlist(identity, rows, lang = 'en') {
       address: normalAddress,
       label: String(r.label || '').slice(0, 64) || null,
       types: cleanTypes(r.types ?? (target === 'token'
-        ? ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL'] : null)),
+        ? ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'MOMENTUM_REVERSAL'] : null)),
       condition: r.condition && typeof r.condition === 'object'
         ? { signal: String(r.condition.signal || 'ACCUMULATION').toUpperCase() === 'DISTRIBUTION' ? 'DISTRIBUTION' : 'ACCUMULATION',
           confidence: Math.max(50, Math.min(99, Number(r.condition.confidence) || 75)),
@@ -90,6 +90,13 @@ export async function putWatchlist(identity, rows, lang = 'en') {
       lastSeenEventId: old?.lastSeenEventId || null,
       lastConsensusAt: old?.lastConsensusAt || null,
       lastConsensusNetUsd: old?.lastConsensusNetUsd ?? null,
+      /* Momentum-transition memory (phase 2): the last PROVEN 24h trend for
+         this token, so MOMENTUM_REVERSAL fires on the transition into
+         REVERSING — not on every cycle that merely re-observes it. Preserved
+         across re-syncs like the consensus cursor above; a client-supplied
+         value is never trusted. */
+      lastMomentumTrend: old?.lastMomentumTrend || null,
+      lastMomentumAt: old?.lastMomentumAt || null,
       createdAt: old?.createdAt || Date.now()
     });
   }
@@ -166,12 +173,17 @@ function compactUsd(n) {
  * Pure evaluator: returns {checked, fired, delivered}. Delivery failures are
  * reported, never silenced into a false success.
  */
-export async function runAlertCycle(deliver, { now = Date.now(), events: injectedEvents = null, intelligence: injectedIntel = null } = {}) {
+export async function runAlertCycle(deliver, { now = Date.now(), events: injectedEvents = null, intelligence: injectedIntel = null, intelligence24h: injectedIntel24 = null } = {}) {
   const watches = await readWatchlist();
   if (!watches.length) return { checked: 0, fired: 0, delivered: 0 };
   const since = now - 24 * 3600_000;
-  const verifiedTypes = new Set(['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'ACCUMULATION', 'DISTRIBUTION']);
+  const verifiedTypes = new Set(['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'ACCUMULATION', 'DISTRIBUTION', 'MOMENTUM_REVERSAL']);
   const needsVerified = watches.some((w) => w.target === 'token' && w.types?.some((t) => verifiedTypes.has(t)));
+  /* Momentum is judged on the 24h window against the prior 24h — the 30m
+     snapshot's "previous 30 minutes" is mostly microstructure noise, and
+     this cycle's real cadence (twice-daily cron) cannot honour 30m trend
+     flips anyway; it would only ever report them late and half-seen. */
+  const needsMomentum = watches.some((w) => w.target === 'token' && w.types?.includes('MOMENTUM_REVERSAL'));
   const needsLegacy = watches.some((w) => w.types?.some((t) => !verifiedTypes.has(t)));
   // Tests may inject receipts; production reads the existing shared scanner.
   const recent = needsLegacy ? (injectedEvents ?? (await labelledEvents({ since })).events)
@@ -180,6 +192,11 @@ export async function runAlertCycle(deliver, { now = Date.now(), events: injecte
   if (needsVerified && !intel) {
     try { intel = await getVerifiedIntelligence({ window: '30m', now, refresh: 'never' }); }
     catch { intel = { dataStatus: 'unavailable', consensus: [] }; }
+  }
+  let intel24 = injectedIntel24;
+  if (needsMomentum && !intel24) {
+    try { intel24 = await getVerifiedIntelligence({ window: '24h', now, refresh: 'never' }); }
+    catch { intel24 = { dataStatus: 'unavailable', consensus: [] }; }
   }
   const existing = await storeGet(ALERT_KEY, []);
   const alertLog = Array.isArray(existing) ? existing : [];
@@ -271,6 +288,40 @@ export async function runAlertCycle(deliver, { now = Date.now(), events: injecte
         patch.lastConsensusNetUsd = fact.netFlowUsd;
       }
     }
+    /* ── Momentum reversal (phase 2) ───────────────────────────────────────
+     * Fires on the TRANSITION into REVERSING on the 24h verified sample:
+     * the qualified net flow points the other way than in the prior 24h.
+     * Same honesty rules as the consensus block: the fact must clear the
+     * shared verified gate (verifiedToken — fresh index, ≥3 independent
+     * votes, evidence ≥75, net agreeing with the signal), the row must be a
+     * real signal whose side clears the watch's own minWallets/confidence,
+     * and a null momentum (previous window not provably sampled) is UNKNOWN
+     * — it neither fires nor moves the stored trend. */
+    if (watch.target === 'token' && needsMomentum && watch.types?.includes('MOMENTUM_REVERSAL') && watch.chain !== 'solana') {
+      const fact24 = verifiedToken(intel24, watch.chain, watch.address, { now, window: '24h' });
+      const trend = fact24?.momentum?.trend || null;
+      if (fact24 && trend) {
+        const minimum = watch.condition?.minWallets || 3;
+        const confidence = watch.condition?.confidence || 75;
+        const sideVotes = fact24.signal === 'ACCUMULATION' ? fact24.independentBuyers
+          : fact24.signal === 'DISTRIBUTION' ? fact24.independentSellers : 0;
+        const strong = sideVotes >= minimum && fact24.confidence != null && fact24.confidence >= confidence;
+        if (trend === 'REVERSING' && strong && watch.lastMomentumTrend !== 'REVERSING') {
+          const m = fact24.momentum;
+          await emit(watch, { type: 'MOMENTUM_REVERSAL', title: 'Verified momentum reversal',
+            body: `${fact24.symbol} qualified flow reversed direction: prior 24h net $${Math.round(m.prevNetFlowUsd ?? 0).toLocaleString('en-US')} → now $${Math.round(fact24.netFlowUsd).toLocaleString('en-US')} (${fact24.signal === 'ACCUMULATION' ? 'buying' : 'selling'} consensus, evidence ${fact24.confidence}/100).` },
+          `momentum:${fact24.lastAt}:${Math.round(m.prevNetFlowUsd ?? 0)}`,
+          { classification: 'verified-paired-swaps', chain: watch.chain, token: watch.address,
+            window: '24h', trend, priorNetFlowUsd: m.prevNetFlowUsd, deltaUsd: m.deltaUsd,
+            netFlowUsd: fact24.netFlowUsd, confidence: fact24.confidence,
+            independentBuyers: fact24.independentBuyers, independentSellers: fact24.independentSellers,
+            sampledSwaps: fact24.swaps, indexedAt: intel24.indexedAt,
+            note: 'Direction change of sampled qualified flow versus the previous equal window — observed evidence, not a price forecast.' });
+        }
+        patch.lastMomentumTrend = trend;
+        patch.lastMomentumAt = fact24.lastAt;
+      }
+    }
     if (Object.keys(patch).length) updates.set(`${watch.identity}:${watch.id}`, patch);
   }
 
@@ -278,7 +329,8 @@ export async function runAlertCycle(deliver, { now = Date.now(), events: injecte
   await writeWatchlist(nextWatches);
   await storeSet(ALERT_KEY, alertLog.sort((a, b) => b.at - a.at).slice(0, 500));
   return { checked: watches.length, fired, delivered,
-    verifiedStatus: needsVerified ? (intel?.dataStatus || 'unavailable') : 'not-requested' };
+    verifiedStatus: needsVerified ? (intel?.dataStatus || 'unavailable') : 'not-requested',
+    momentumStatus: needsMomentum ? (intel24?.dataStatus || 'unavailable') : 'not-requested' };
 }
 
 /** Mark alerts read for an identity. */

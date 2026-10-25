@@ -7,6 +7,7 @@
 import { EVM_CHAINS } from '../chainsLite.js';
 import { isNonWallet } from './moneyFlow.js';
 import { WINDOWS, WINDOW_KEYS } from './config.js';
+import { isVerifiedPairedSwap } from './performance.js';
 
 /* A measured track record (≥5 paired closes over ≥2 days) does not expire
  * in 36 hours. The old 36h cap, combined with a twice-daily cron that could
@@ -78,8 +79,12 @@ export function explainConsensus(row, lang = 'en') {
       : 'Consensus needs at least 3 independent, performance-qualified wallets with paired on-chain swaps.';
   }
   const buy = row.signal === 'ACCUMULATION';
-  if (lang === 'fa') return `در ${row.window} گذشته، ${buy ? row.buyers : row.sellers} کیف‌پول با سابقهٔ معاملاتی قابل‌سنجش ${buy ? 'خرید' : 'فروش'} تأییدشدهٔ ${row.symbol || row.token.slice(0, 8)} داشته‌اند؛ ${row.independentVotes} گروه مستقل مشاهده شد. قدرت شواهد ${row.confidence} از ۱۰۰ است، نه احتمال رشد قیمت.`;
-  return `Over ${row.window}, ${buy ? row.buyers : row.sellers} performance-qualified wallets had paired on-chain ${buy ? 'buys' : 'sells'} of ${row.symbol || row.token.slice(0, 8)} across ${row.independentVotes} independently observed groups. Evidence strength ${row.confidence}/100 is not a price forecast.`;
+  /* Trend vs the previous equal window, stated only when the index proved it
+     was sampling then (momentum is null otherwise — no trend words then). */
+  const trendFa = { STRENGTHENING: 'نسبت به بازهٔ هم‌طولِ قبلی، خالص جریان تقویت شده است', WEAKENING: 'نسبت به بازهٔ هم‌طولِ قبلی، خالص جریان تضعیف شده است', REVERSING: 'خالص جریان نسبت به بازهٔ قبلی جهت عوض کرده است', STEADY: 'خالص جریان نسبت به بازهٔ قبلی تقریباً هم‌اندازه مانده است', NEW: 'در بازهٔ قبلی برای این توکن معاملهٔ جفت‌شده‌ای در نمونه نبود' }[row.momentum?.trend];
+  const trendEn = { STRENGTHENING: 'Net flow is strengthening versus the previous equal window', WEAKENING: 'Net flow is weakening versus the previous equal window', REVERSING: 'Net flow changed direction versus the previous window', STEADY: 'Net flow is about the same size as the previous window', NEW: 'No paired swaps for this token were sampled in the previous window' }[row.momentum?.trend];
+  if (lang === 'fa') return `در ${row.window} گذشته، ${buy ? row.buyers : row.sellers} کیف‌پول با سابقهٔ معاملاتی قابل‌سنجش ${buy ? 'خرید' : 'فروش'} تأییدشدهٔ ${row.symbol || row.token.slice(0, 8)} داشته‌اند؛ ${row.independentVotes} گروه مستقل مشاهده شد. قدرت شواهد ${row.confidence} از ۱۰۰ است، نه احتمال رشد قیمت.${trendFa ? ` ${trendFa}.` : ''}`;
+  return `Over ${row.window}, ${buy ? row.buyers : row.sellers} performance-qualified wallets had paired on-chain ${buy ? 'buys' : 'sells'} of ${row.symbol || row.token.slice(0, 8)} across ${row.independentVotes} independently observed groups. Evidence strength ${row.confidence}/100 is not a price forecast.${trendEn ? ` ${trendEn}.` : ''}`;
 }
 
 export function buildConsensus({ profiles = [], swaps = [], events = [], window = '24h', chain = null, token = null,
@@ -98,7 +103,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   const byWallet = new Map(validProfiles.map((p) => [ident(p.chain, p.address), p]));
   const clusters = fundingClusters(validProfiles, events);
   const eligible = (Array.isArray(swaps) ? swaps : []).filter((s) =>
-    s?.evidence === 'paired-explorer-transfers' && validToken(s.token)
+    isVerifiedPairedSwap(s) && validToken(s.token)
     && byWallet.has(ident(s.chain, s.wallet)) && ['BUY', 'SELL'].includes(s.side)
     && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
     && Number.isFinite(s.valueUsd) && s.valueUsd > 0
@@ -106,6 +111,61 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
     && (selectedChain == null || s.chain === selectedChain)
     && (!selectedToken || s.token === selectedToken));
   const windowRows = eligible.filter((s) => s.timestamp >= cutoff);
+  /* ─── MOMENTUM (upgrade 2026-10-25) ─────────────────────────────────────
+   * Consensus used to be a single-window snapshot: «accumulation» with no way
+   * to tell whether the flow is strengthening, fading or flipping. Each row
+   * now also carries the PREVIOUS window of the same length, computed from
+   * the same eligible (qualified, paired) swaps — never from a new source.
+   *
+   * Honesty gate: a previous window is only comparable when the index proves
+   * it was already sampling then — i.e. some eligible swap predates the
+   * current window. With no such swap the past is UNKNOWN (not "zero"), so
+   * `momentum` is null for every row. For a 7d window the index retains only
+   * 7 days, so this gate correctly stays closed on 7d. */
+  const prevCutoff = now - 2 * WINDOW_KEYS[win];
+  const prevSampled = eligible.some((s) => s.timestamp < cutoff);
+  const prevByToken = new Map();
+  if (prevSampled) {
+    for (const s of eligible) {
+      if (s.timestamp < prevCutoff || s.timestamp >= cutoff) continue;
+      const id = ident(s.chain, s.token);
+      const r = prevByToken.get(id) || { buyUsd: 0, sellUsd: 0, swaps: 0, buyers: new Set(), sellers: new Set() };
+      r[s.side === 'BUY' ? 'buyUsd' : 'sellUsd'] += s.valueUsd;
+      r.swaps++;
+      (s.side === 'BUY' ? r.buyers : r.sellers).add(ident(s.chain, s.wallet));
+      prevByToken.set(id, r);
+    }
+  }
+  const momentumFor = (tokenId, net) => {
+    if (!prevSampled) return null;
+    const prev = prevByToken.get(tokenId);
+    if (!prev) return { trend: 'NEW', prevNetFlowUsd: null, prevBuyers: 0, prevSellers: 0, prevSwaps: 0,
+      deltaUsd: null, changePct: null, basis: 'previous-window-sampled-no-paired-swaps-for-token' };
+    const prevNet = prev.buyUsd - prev.sellUsd;
+    const flipped = prevNet !== 0 && net !== 0 && Math.sign(prevNet) !== Math.sign(net);
+    const ratio = prevNet !== 0 ? Math.abs(net) / Math.abs(prevNet) : null;
+    const trend = flipped ? 'REVERSING'
+      : prevNet === 0 ? 'NEW'
+        : ratio >= 1.25 ? 'STRENGTHENING'
+          : ratio <= 0.8 ? 'WEAKENING' : 'STEADY';
+    return { trend, prevNetFlowUsd: money(prevNet), prevBuyers: prev.buyers.size,
+      prevSellers: prev.sellers.size, prevSwaps: prev.swaps, deltaUsd: money(net - prevNet),
+      changePct: ratio == null ? null : Math.round((ratio - 1) * 1000) / 10,
+      basis: 'qualified-paired-swaps-previous-window' };
+  };
+  /* Per-bucket signed net for a sparkline: 12 equal slices of the window.
+   * Buckets sum to the row's netFlowUsd (modulo rounding) — a view of the
+   * same observed swaps, not a second measurement. */
+  const BUCKETS = 12;
+  const bucketMs = WINDOW_KEYS[win] / BUCKETS;
+  const bucketsFor = (rowsForToken) => {
+    const out = Array(BUCKETS).fill(0);
+    for (const s of rowsForToken) {
+      const idx = clamp(Math.floor((s.timestamp - cutoff) / bucketMs), 0, BUCKETS - 1);
+      out[idx] += s.side === 'BUY' ? s.valueUsd : -s.valueUsd;
+    }
+    return out.map(money);
+  };
   const tokens = new Map();
   const graphWallets = new Map();
   const graphEdges = [];
@@ -132,15 +192,19 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
     graphWallets.set(walletId, { id: walletId, type: 'wallet', chain: s.chain, address: s.wallet, label: p.label || null,
       identityKind: p.kind || null, score: p.score, coverage: p.coverage, cluster: clusters.component(walletId) });
     const key = `${walletId}:${tokenId}`;
-    const edge = edgesByPair.get(key) || { from: walletId, to: tokenId, buyUsd: 0, sellUsd: 0, swaps: 0, hashes: [], evidence: 'paired-explorer-transfers' };
+    const edge = edgesByPair.get(key) || { from: walletId, to: tokenId, buyUsd: 0, sellUsd: 0, swaps: 0, hashes: [], evidences: [], evidence: s.evidence };
     edge[s.side === 'BUY' ? 'buyUsd' : 'sellUsd'] += s.valueUsd;
     edge.swaps++;
+    if (!edge.evidences.includes(s.evidence)) edge.evidences.push(s.evidence);
+    edge.evidence = edge.evidences.length > 1
+      ? 'paired-stable-and-native-explorer-transfers' : edge.evidences[0];
     if (edge.hashes.length < 3 && !edge.hashes.includes(s.hash)) edge.hashes.push(s.hash);
     edgesByPair.set(key, edge);
     const r = tokens.get(tokenId) || { chain: s.chain, token: s.token, symbol: s.symbol || '???',
-      buyUsd: 0, sellUsd: 0, swaps: 0, wallets: new Map(), lastAt: 0 };
+      buyUsd: 0, sellUsd: 0, swaps: 0, wallets: new Map(), lastAt: 0, rows: [] };
     r.lastAt = Math.max(r.lastAt, s.timestamp);
     r.swaps++;
+    r.rows.push(s);
     r[s.side === 'BUY' ? 'buyUsd' : 'sellUsd'] += s.valueUsd;
     const w = r.wallets.get(walletId) || { buyUsd: 0, sellUsd: 0, firstAt: s.timestamp, score: p.score, coverage: p.coverage };
     w[s.side === 'BUY' ? 'buyUsd' : 'sellUsd'] += s.valueUsd;
@@ -157,7 +221,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   }
   for (const edge of edgesByPair.values()) graphEdges.push({ ...edge,
     buyUsd: money(edge.buyUsd), sellUsd: money(edge.sellUsd) });
-  const consensus = [...tokens.values()].map((r) => {
+  const allConsensusRows = [...tokens.values()].map((r) => {
     const directions = new Map();
     let buyers = 0; let sellers = 0; let mixed = 0;
     for (const [walletId, w] of r.wallets) {
@@ -192,11 +256,39 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
       independentVotes: directions.size, wallets: r.wallets.size, swaps: r.swaps,
       capitalEnteringUsd: money(r.buyUsd), capitalExitingUsd: money(r.sellUsd), netFlowUsd: money(net),
       lastAt: r.lastAt,
+      /* Direction of travel vs the previous equal window (null = the index
+         cannot prove it was sampling then) + the window sliced for display. */
+      momentum: momentumFor(ident(r.chain, r.token), net),
+      flowBuckets: bucketsFor(r.rows),
       confidenceBasis: 'Convergence of sampled paired swaps, independent funding groups, score coverage and recency; NOT probability of profit.'
     };
     row.explanation = explainConsensus(row, 'en');
     return row;
-  }).sort((a, b) => (b.confidence ?? -1) - (a.confidence ?? -1) || Math.abs(b.netFlowUsd) - Math.abs(a.netFlowUsd)).slice(0, LIMIT);
+  }).sort((a, b) => (b.confidence ?? -1) - (a.confidence ?? -1) || Math.abs(b.netFlowUsd) - Math.abs(a.netFlowUsd));
+  /* ─── BREADTH (upgrade 2026-10-25) ──────────────────────────────────────
+   * The cross-token picture the rows never summed up: how many tokens carry
+   * a buying vs a selling consensus right now, and the total qualified flow
+   * behind the board. Counted over EVERY token with qualified swaps in the
+   * window (before the display slice), from the same verified rows — the
+   * descriptive tally of the sample, not a market index or a sentiment
+   * forecast. Scoped when a chain/token filter was asked for. */
+  const breadth = {
+    window: win,
+    scoped: Boolean(selectedChain != null || selectedToken),
+    tokensObserved: allConsensusRows.length,
+    accumulation: allConsensusRows.filter((r) => r.signal === 'ACCUMULATION').length,
+    distribution: allConsensusRows.filter((r) => r.signal === 'DISTRIBUTION').length,
+    insufficient: allConsensusRows.filter((r) => r.signal === 'INSUFFICIENT_EVIDENCE').length,
+    buyUsd: money(windowRows.filter((s) => s.side === 'BUY').reduce((t, s) => t + s.valueUsd, 0)),
+    sellUsd: money(windowRows.filter((s) => s.side === 'SELL').reduce((t, s) => t + s.valueUsd, 0)),
+    qualifiedWalletsActive: graphWallets.size,
+    swaps: windowRows.length,
+    momentumSampled: prevSampled,
+    basis: 'qualified-paired-swaps',
+    note: 'Tally of the sampled verified rows in this window. Counts describe the sample, not the whole market; not a price forecast.'
+  };
+  breadth.netUsd = money(breadth.buyUsd - breadth.sellUsd);
+  const consensus = allConsensusRows.slice(0, LIMIT);
 
   const earlyEntries = [...early.entries()].map(([id, entries]) => {
     const [chainId, tokenAddr] = id.split(':');
@@ -233,15 +325,15 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
       analyzedWallets: observed.analyzedWallets, observedSwaps: observed.observedSwaps,
       observedSwapsInWindow: observed.swapsInWindow,
       completeness: 'sampled-indexer-pages',
-      note: 'Only paired EVM token/allowlisted stablecoin swaps from qualified wallets. No native or Solana decoding yet. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
-    consensus, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
+      note: 'Only paired EVM swaps from qualified wallets: allowlisted-stablecoin fills, plus wrapped-native fills promoted only when every sampled native candidate for that wallet had an hourly-or-finer price within one hour. Solana rows remain observed-only. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
+    consensus, breadth, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
     observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, windowSwaps: observed.windowSwaps, candidates: observed.candidates,
-      note: 'Paired stablecoin swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
+      note: 'Paired stablecoin swaps and phase-4-promoted hourly-priced native swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
     graph: { nodes, edges: graphEdges.filter((e) => allowedNodes.has(e.from) && allowedNodes.has(e.to)).slice(0, 100),
       fundingLinks: clusters.links.slice(0, 20), note: 'A shared funding address is correlation only, never proof of shared ownership.' },
     behaviours: behaviours.sort((a, b) => b.at - a.at).slice(0, 40),
     risk: { signalsAreTrades: true, priceForecast: false, identityVerifiedBySourceLinkOnly: true,
-      note: 'No recommendation or guaranteed return. Stablecoin quote approximates USD; fees, depegs, unobserved swaps and incomplete indexer history can change P&L.' }
+      note: 'No recommendation or guaranteed return. Stablecoin quotes approximate USD at the peg; promoted native quotes use the nearest accepted hourly-or-finer price within one hour, not an execution-time tick. Fees, depegs, unobserved swaps and incomplete indexer history can change P&L.' }
   };
 }
 
@@ -263,7 +355,7 @@ export function observedLayer({ profiles = [], swaps = [], byWallet = new Map(),
       && (selectedChain == null || p.chain === selectedChain));
   const analysed = new Map(fresh.map((p) => [ident(p.chain, p.address), p]));
   const real = (Array.isArray(swaps) ? swaps : []).filter((s) =>
-    s?.evidence === 'paired-explorer-transfers' && validToken(s.token) && ['BUY', 'SELL'].includes(s.side)
+    isVerifiedPairedSwap(s) && validToken(s.token) && ['BUY', 'SELL'].includes(s.side)
     && analysed.has(ident(s.chain, s.wallet))
     && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
     && Number.isFinite(s.valueUsd) && s.valueUsd > 0
