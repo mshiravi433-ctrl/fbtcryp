@@ -17,6 +17,7 @@ import {
 } from '../lib/bridge';
 import {
   compareRoutes,
+  dlnSupportsChain,
   fixFeeNative,
   fixedFeeBurden,
   getDlnQuote,
@@ -461,7 +462,23 @@ export default function Bridge() {
      * comparison row simply does not appear. Awaiting both together, or
      * letting this throw, would turn an optional upgrade into a new way for
      * the whole screen to fail.
+     *
+     * Since 2026-10-25 the chain list is wider than deBridge's own coverage
+     * (it serves eight of the fifteen — see DLN_CHAIN_IDS in lib/dln.js).
+     * For a pair it cannot serve the question is never asked: the server
+     * would only answer UNSUPPORTED_CHAIN, and recording that as a provider
+     * failure would make a healthy deBridge look broken in our own health
+     * metrics. A leftover `provider: 'dln'` selection from a previous pair
+     * falls back to LI.FI here too, so the CTA can never sit disabled behind
+     * a comparison box that is never going to render.
      */
+    if (!dlnSupportsChain(fromChain) || !dlnSupportsChain(toChain)) {
+      if (seq.current === mine) {
+        setDln(null);
+        setProvider('lifi');
+      }
+      return;
+    }
     try {
       const d = await getDlnQuote({
         srcChainId: fromChain,
@@ -910,7 +927,16 @@ export default function Bridge() {
             />
             <div className="brg-token-pick">
               <ModernSelect
-                value={tokenSymbol}
+                /* The trigger must name the token that will actually move.
+                   `fromToken` already falls back to the chain's first
+                   stablecoin when the remembered symbol does not exist
+                   there (Base, Sonic, Berachain, Unichain and Monad have no
+                   USDT), so the picker is bound to `fromToken` rather than
+                   to the raw `tokenSymbol` — with the raw symbol the trigger
+                   rendered the placeholder text "USDT" while USDC was what
+                   would be sent. Display only: quoting and execution read
+                   `fromToken` exactly as before. */
+                value={fromToken?.symbol ?? tokenSymbol}
                 onChange={(v) => { setTokenSymbol(v); setQuote(null); }}
                 options={fromTokens.map((tk) => ({
                   value: tk.symbol,
@@ -922,7 +948,7 @@ export default function Bridge() {
                   chain: fromChain,
                 }))}
                 title={t('bridge.from')}
-                placeholder={tokenSymbol || 'USDT'}
+                placeholder={fromToken?.symbol || tokenSymbol || 'USDT'}
                 compact
                 testId="bridge-from-token"
               />

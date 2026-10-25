@@ -14143,8 +14143,8 @@ export default function run() {
       panel.includes('srcToken?.native') && panel.includes('feeUsd = fee * solUsd'));
     t('...never hard-codes the fee recipient address in the client',
       !panel.includes('B6gysn5JGQQnJmyzjj6ZJiNECjDYYyJ5LrXvr61BFLv4'));
-    t('...offers only chains with a verified token table (no empty Linea dropdown)',
-      panel.includes('const DLN_DST_CHAINS = BRIDGE_CHAINS.map') && !panel.includes('DLN_EXTRA_CHAINS'));
+    t('...offers only DLN-served chains with a verified token table',
+      panel.includes('BRIDGE_CHAINS') && panel.includes('.filter((c) => dlnSupportsChain(c.id))') && !panel.includes('DLN_EXTRA_CHAINS'));
     t('...renders copy through i18n keys, not literals',
       panel.includes("t('bridge.solana.whatTitle')") && panel.includes("t('bridge.solana.recipientRequired')"));
     /* The connect button must land on a tab that actually exists. */

@@ -50,8 +50,35 @@ import { apiBase } from './apiBase.js';
  */
 const API_BASE = apiBase();
 
-/** Chains DLN reaches that our LI.FI list does not include. */
-export const DLN_EXTRA_CHAINS = [{ id: 59144, name: 'Linea', symbol: 'ETH' }];
+/**
+ * EVM chains deBridge DLN actually serves — the client mirror of
+ * `DLN_EVM_CHAINS` in server/dln.js, which stays the enforcing allow-list.
+ *
+ * Read from deBridge's live `/supported-chains-info` on 2026-10-25. The
+ * bridge's chain list (lib/bridge.js) is wider than this on purpose: LI.FI
+ * is the engine, DLN only the optional second opinion. Sonic, Mantle,
+ * Berachain, Unichain, Scroll and zkSync Era are NOT in deBridge's list, and
+ * Monad appears there only under deBridge's INTERNAL id (100000030) while
+ * our server passes real chain ids through — so Monad stays out until an id
+ * mapping exists server-side. Asking DLN about a chain it does not serve
+ * would only mint a pointless 4xx (and a false failure in the server's
+ * provider-health record), so callers check here first.
+ */
+export const DLN_CHAIN_IDS = Object.freeze([1, 10, 56, 137, 8453, 42161, 43114, 59144]);
+
+/** True when DLN can quote this EVM chain at all (Solana origin aside). */
+export const dlnSupportsChain = (chainId) => DLN_CHAIN_IDS.includes(Number(chainId));
+
+/**
+ * Chains DLN reaches that our LI.FI list does not include.
+ *
+ * Empty since 2026-10-25: this held Linea while the bridge screen listed
+ * seven chains, but Linea is a first-class BRIDGE_CHAINS entry now (with a
+ * verified token table), so there is nothing "extra" left. The export stays
+ * so importers keep working; it is a set that happens to be empty, not a
+ * removed feature.
+ */
+export const DLN_EXTRA_CHAINS = [];
 
 /**
  * SOLANA ORIGIN (deBridge internal chain id, not a real chain id — 7565164).
