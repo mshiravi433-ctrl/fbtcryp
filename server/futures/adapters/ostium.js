@@ -44,6 +44,9 @@ const MANAGE_ABI = [
   'function topUpCollateral(uint16 pairIndex,uint8 index,uint256 topUpAmount)',
   'function removeCollateral(uint16 pairIndex,uint8 index,uint256 removeAmount)'
 ];
+/* Verified against the ABI inside @ostium/builder-sdk 0.12.0. A resting limit
+   or stop order is cancelled by its pair index and its on-chain uint8 slot. */
+const CANCEL_ABI = ['function cancelOpenLimitOrder(uint16 pairIndex,uint8 index)'];
 const ERC20_ABI = [
   'function approve(address spender,uint256 amount)',
   'function balanceOf(address owner) view returns (uint256)',
@@ -51,6 +54,7 @@ const ERC20_ABI = [
 ];
 const openIface = new Interface(OPEN_TRADE_ABI);
 const manageIface = new Interface(MANAGE_ABI);
+const cancelIface = new Interface(CANCEL_ABI);
 const erc20Iface = new Interface(ERC20_ABI);
 
 export const ORDER_TYPE = Object.freeze({ market: 0, limit: 1, stop: 2 });
@@ -355,9 +359,33 @@ export function buildOpenTrade({ trader, pairId, buy, price, collateralUsd, leve
     },
     { builder: getAddress(builder), builderFee: feeBpsToContractUnits(builderFeeBps) },
     type,
-    Math.round(Number(slippageBps))
+    /*
+     * Zero for every non-market order type, exactly as the browser encoder and
+     * @ostium/builder-sdk 0.12.0 both do: since February 2026 Ostium reverts an
+     * openTrade whose limit or stop order carries a non-zero slippage. The two
+     * encoders are pinned to each other by test/futures-engine-probe.mjs, so
+     * this line and the one in src/lib/ostium.js change together or not at all.
+     */
+    type === ORDER_TYPE.market ? Math.round(Number(slippageBps)) : 0
   ]);
   return { to: OSTIUM_TRADING, data, value: '0x0', chainId: OSTIUM_CHAIN_ID };
+}
+
+/**
+ * Cancel a resting limit/stop order: `cancelOpenLimitOrder(uint16,uint8)`.
+ * `index` is the on-chain limit slot from the subgraph row's id, not the global
+ * order counter. Mirrors src/lib/ostium.js buildCancelLimitOrder.
+ */
+export function buildCancelLimitOrder({ pairId, index }) {
+  const pair = Number(pairId);
+  const idx = Number(index);
+  if (!Number.isInteger(pair) || pair < 0 || pair > 65535) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'pairId' });
+  if (!Number.isInteger(idx) || idx < 0 || idx > 255) throw Object.assign(new Error('INVALID_INPUT'), { code: 'INVALID_INPUT', detail: 'index' });
+  return {
+    to: OSTIUM_TRADING,
+    data: cancelIface.encodeFunctionData('cancelOpenLimitOrder', [pair, idx]),
+    value: '0x0', chainId: OSTIUM_CHAIN_ID
+  };
 }
 
 export function buildCloseTrade({ pairId, index, closePercent = 100, price, slippageBps = 25 }) {

@@ -87,6 +87,12 @@ import './futures-engine-probe.mjs';
    the dydx.trade shape, the signature (hence the dYdX account) is unchanged,
    and every failure is named instead of «could not coalesce error». */
 import './dydx-onboarding-probe.mjs';
+/* Auto-orders that rest on a venue («سفارش خودکار روی ونووهای پرپتوال»): the
+   dYdX argument tuples are checked against the PINNED SDK's own helpers,
+   because a resting limit order used to throw 'timeInForce must be set if
+   orderType is LIMIT' before anything was signed, and a stateful cancel used
+   to throw over a goodTilBlock of undefined instead of 0. */
+import './perp-venue-contract-probe.mjs';
 /* Isolate the virtual clock from the other probes in this process. */
 execFileSync(process.execPath, ['--test', 'test/dydx-wallet-return.test.mjs'], {
   stdio: 'inherit', cwd: new URL('..', import.meta.url).pathname

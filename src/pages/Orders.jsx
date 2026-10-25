@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import lazyRetry from '../lib/lazyRetry';
+
+/*
+ * ─── THE PERP VENUE SECTION LOADS AS ITS OWN CHUNK ───────────────────────────
+ * It pulls in two venue modules (dYdX and Ostium) that the rest of this page
+ * has no use for, and the first-paint budget is a measured ratchet rather than
+ * a guideline. Loaded through lazyRetry like every other non-essential surface,
+ * so a failed fetch retries instead of poisoning the module map for the
+ * lifetime of the document.
+ */
+const PerpAutoOrders = lazyRetry(() => import('../components/orders/PerpAutoOrders.jsx'));
 import Sheet from '../components/Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
@@ -172,7 +183,10 @@ export default function Orders() {
   // Subscribe so the figures re-render the moment the switch moves;
   // the masking itself lives in the formatters.
   useHideBalances();
-  const { t } = useTranslation();
+  /* `i18n` as well as `t`: the perp venue section keeps its copy in a module
+     (src/lib/perpAutoCopy.js) rather than in the twelve locale files, so it
+     needs the active language rather than a translated string. */
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const wallet = useWallet();
@@ -816,6 +830,22 @@ export default function Orders() {
         swaps live on their own screen, and this page stays focused on
         price-watched auto orders.
       */}
+
+      {/*
+        ─── AUTO-ORDERS THAT A VENUE EXECUTES ───────────────────────────────
+        Placed between the order-type rail and the user's own list, because it
+        is a third way for an auto-order to happen and not a footnote to the
+        other two: everything above either watches a price and asks for a
+        signature, or hands a swap to a solver network. What lives here is
+        placed ON a perpetual venue the app already has a signed, non-custodial
+        path to, and the venue fills it while the app is closed.
+
+        Suspense fallback is null on purpose — this is a section, not a screen,
+        and a spinner where a list will be would move the page under a thumb.
+      */}
+      <Suspense fallback={null}>
+        <PerpAutoOrders lang={i18n?.language} />
+      </Suspense>
 
       {/*
         What is currently scheduled. Only shown once something exists, so an
