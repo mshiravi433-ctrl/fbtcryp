@@ -250,7 +250,7 @@
  * Solana chain is off. A device holding the v26 shell keeps the old ladder and
  * would keep pricing through the free Jupiter route, which is the very report
  * this deploy answers. */
-const SHELL = 'fbt-shell-v27';
+const SHELL = 'fbt-shell-v28';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────
@@ -382,6 +382,7 @@ self.addEventListener('push', (event) => {
     dir: payload.dir || dirFor(lang),
     data: { url: payload.url || '/', stage: payload.stage || '', color: payload.color || '' },
     vibrate,
+    ...(payload.stage === 'ready' ? { actions: [{ action: 'execute', title: payload.lang === 'fa' ? '⚡ سواپ و امضا' : '⚡ Swap & Sign' }] } : {}),
     requireInteraction: payload.stage === 'ready'
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -396,15 +397,16 @@ self.addEventListener('notificationclick', (event) => {
    * deep link the notification promised. Absolute http(s) URLs (the native
    * app's public origin) pass through untouched; app paths get the hash.
    */
-  const target = /^https?:\/\//.test(raw) || raw.startsWith('#')
-    ? raw
-    : `${self.location.origin}/#${raw.startsWith('/') ? raw : `/${raw}`}`;
+  const target = new URL(
+    /^https?:\/\//.test(raw) || raw.startsWith('/#') ? raw
+      : raw.startsWith('#') ? `/${raw}` : `/#${raw.startsWith('/') ? raw : `/${raw}`}`,
+    self.location.origin
+  ).href;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const client of list) {
         if ('focus' in client) {
-          client.navigate?.(target);
-          return client.focus();
+          return Promise.resolve(client.navigate?.(target)).then(() => client.focus());
         }
       }
       return self.clients.openWindow(target);

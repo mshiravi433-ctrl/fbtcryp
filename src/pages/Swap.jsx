@@ -296,6 +296,8 @@ export default function Swap() {
     if (tk) setToToken(tk);
     if (amt && Number(amt) > 0) setAmount(String(amt));
 
+    // Let the address importer consume the same snapshot before removing chain/symbols.
+    if (searchParams.get('fromAddress') || searchParams.get('toAddress')) return;
     const next = new URLSearchParams(searchParams);
     for (const key of ['from', 'to', 'amount', 'chain']) next.delete(key);
     setSearchParams(next, { replace: true });
@@ -368,13 +370,13 @@ export default function Swap() {
          toAddress handoff → from = the curated stable (unless it IS the
          wanted token); fromAddress handoff → to = the curated ?to= symbol,
          the coin the link is about. */
-      if (toWant) {
+      if (toWant && !fromWant && !searchParams.get('fromOrder')) {
         const list = TOKENS[chainId] ?? [];
         const stable =
           list.find((x) => x.symbol === 'USDT') ?? list.find((x) => x.symbol === 'USDC');
         if (stable && stable.address?.toLowerCase() !== toWant.toLowerCase()) setFromToken(stable);
       }
-      if (fromWant) {
+      if (fromWant && !toWant) {
         const toTok = (TOKENS[chainId] ?? []).find((x) => x.symbol === searchParams.get('to'));
         if (toTok && toTok.address?.toLowerCase() !== fromWant.toLowerCase()) setToToken(toTok);
       }
@@ -384,6 +386,7 @@ export default function Swap() {
       next.delete('fromAddress');
       next.delete('chain');
       next.delete('side');
+      for (const key of ['from', 'to', 'amount']) next.delete(key);
       setSearchParams(next, { replace: true });
     })();
 
@@ -1646,6 +1649,11 @@ export default function Swap() {
         </motion.button>
       </motion.div>
 
+      {searchParams.get('fromOrder') && (
+        <div role="status" className="muted" style={{ padding: '12px 16px', margin: '12px 0', border: '1px solid currentColor', borderRadius: 12, background: 'transparent' }}>
+          {t('swap.orderReadyHint', { defaultValue: 'سفارش شما به قیمت هدف رسید — مقدار و توکن‌ها آماده است؛ پس از بارگذاری نرخ، فقط دکمهٔ سواپ و امضا را بزنید.' })}
+        </div>
+      )}
       <div className="segmented">
         {['evm', 'solana'].map((k) => (
           <button

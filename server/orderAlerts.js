@@ -135,7 +135,9 @@ export function buildStageAlert({
     .replace('{quote}', String(quote).slice(0, 16) || '—')
     .replace('{rate}', String(rate || '—').slice(0, 24))
     .slice(0, 140);
-  const url = family === 'intent' ? style.urlIntent : style.urlOrder;
+  const url = family === 'order' && st === 'ready' && id != null && String(id).trim() && String(id) !== 'x'
+    ? `/#/orders?execute=${encodeURIComponent(String(id))}`
+    : family === 'intent' ? style.urlIntent : style.urlOrder;
   return {
     title,
     body,

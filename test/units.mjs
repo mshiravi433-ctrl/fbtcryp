@@ -1,3 +1,4 @@
+import { findExecutableOrder, orderSwapParams } from '../src/lib/orderHandoff.js';
 import { activateDca } from '../src/lib/dcaExecution.js';
 import { syncWatches } from '../src/lib/orders.js';
 /**
@@ -542,6 +543,16 @@ import { Interface, Wallet, hexlify, randomBytes } from 'ethers';
 export default async function run() {
   const rows = [];
   const t = (name, ok) => rows.push([name, Boolean(ok)]);
+  {
+    const address = '0x1234567890123456789012345678901234567890';
+    const order = { id: 'ready/1', status: 'active', chainId: 1, amountIn: '3', fromToken: { symbol: 'CUSTOM', address }, toToken: { symbol: 'ETH' } };
+    t('execute deep link selects an active saved order', findExecutableOrder([order], order.id) === order);
+    t('execute deep link rejects paused or missing orders', !findExecutableOrder([{ ...order, status: 'paused' }], order.id) && !findExecutableOrder([], order.id));
+    const params = orderSwapParams(order);
+    t('order swap carries imported address and source order', params.get('fromAddress') === address && params.get('fromOrder') === order.id);
+    t('curated order tokens do not need address import', !orderSwapParams(order, [{ address }]).has('fromAddress'));
+  }
+
 
   /* ---------------- calendar daily rewards + repeatable swaps -------- */
   {

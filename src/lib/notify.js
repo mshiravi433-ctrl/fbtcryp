@@ -300,9 +300,21 @@ export async function requestNotificationPermission() {
   }
 }
 
+let nativeLocalActionListener = null;
+async function ensureNativeLocalActions(LocalNotifications) {
+  if (!nativeLocalActionListener) {
+    nativeLocalActionListener = LocalNotifications.addListener('localNotificationActionPerformed', ({ notification }) => {
+      const route = safeNativeRoute(notification?.extra?.url);
+      if (route) window.location.hash = route;
+    }).catch((error) => { nativeLocalActionListener = null; throw error; });
+  }
+  await nativeLocalActionListener;
+}
+
 async function presentNativeShade(title, options = {}) {
   try {
     const { LocalNotifications } = await import('@capacitor/local-notifications');
+    await ensureNativeLocalActions(LocalNotifications);
     let perm = await LocalNotifications.checkPermissions();
     if (perm.display === 'prompt' || perm.display === 'prompt-with-rationale') {
       perm = await LocalNotifications.requestPermissions();
@@ -372,7 +384,7 @@ export function showLocalNotification(title, options = {}) {
         title: String(title || ''),
         body: options?.body ? String(options.body) : null,
         kind: 'info',
-        link: typeof options?.data?.url === 'string' && options.data.url.startsWith('/') ? options.data.url : null
+        link: safeNativeRoute(options?.data?.url) || (typeof options?.data?.url === 'string' && options.data.url.startsWith('/') && !options.data.url.startsWith('//') ? options.data.url : null)
       });
     }).catch(() => {});
   } catch { /* inbox mirror is best-effort */ }
@@ -690,8 +702,8 @@ function safeNativeRoute(value) {
   try {
     const parsed = new URL(value, 'https://fbtswap.app');
     if (parsed.origin !== 'https://fbtswap.app') return null;
-    const path = parsed.hash.startsWith('#/') ? parsed.hash.slice(1).split('?')[0] : parsed.pathname;
-    return NATIVE_ROUTES.has(path) ? value : null;
+    const route = parsed.hash.startsWith('#/') ? parsed.hash.slice(1) : parsed.pathname + parsed.search;
+    return NATIVE_ROUTES.has(route.split('?')[0]) ? route : null;
   } catch {
     return null;
   }
@@ -721,6 +733,8 @@ async function sendNativeToken(token) {
 export async function initNativePushListeners() {
   if (!isNativeApp() || nativePushListenersReady) return null;
   try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    await ensureNativeLocalActions(LocalNotifications);
     nativePushPlugin = nativePushPlugin || (await import('@capacitor/push-notifications')).PushNotifications;
     nativeRegistrationListener = await nativePushPlugin.addListener('registration', ({ value }) => {
       nativeTokenWaiters.splice(0).forEach(({ resolve }) => resolve(value));
@@ -731,7 +745,7 @@ export async function initNativePushListeners() {
     });
     nativeActionListener = await nativePushPlugin.addListener('pushNotificationActionPerformed', ({ notification }) => {
       const route = safeNativeRoute(notification?.data?.url);
-      if (route) window.location.hash = route.slice(1);
+      if (route) window.location.hash = route;
     });
     await nativePushPlugin.addListener('pushNotificationReceived', (notification) => {
       presentNativeShade(notification?.title || 'FBT Swap', {
