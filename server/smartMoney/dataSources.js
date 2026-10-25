@@ -838,6 +838,58 @@ export async function solTokenBalances(address, { limit = 40, timeoutMs = 10_000
   }
 }
 
+/**
+ * Full parsed transactions for a bounded set of recent Solana signatures.
+ * Phase 3 needs `meta.preTokenBalances`/`postTokenBalances`; a signature list
+ * alone can never prove what token amounts changed. Requests are deduplicated,
+ * capped and read with limited concurrency under one wall-clock budget. A
+ * partial read is labelled partial with exact counts — never presented as a
+ * complete wallet ledger.
+ */
+export async function solTransactions(signatures, { limit = 25, timeoutMs = 6_000, concurrency = 5 } = {}) {
+  const requestedSigs = [...new Set((Array.isArray(signatures) ? signatures : [])
+    .map((s) => String(typeof s === 'string' ? s : s?.signature || ''))
+    .filter((s) => /^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(s)))]
+    .slice(0, Math.max(1, Math.min(50, Number(limit) || 25)));
+  const base = { rows: [], requested: requestedSigs.length, attempted: 0, fetched: 0, failed: 0, unattempted: requestedSigs.length };
+  if (!requestedSigs.length) return { dataStatus: 'unavailable', ...base };
+
+  const budgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 6_000));
+  const deadlineAt = Date.now() + budgetMs;
+  const batchSize = Math.max(1, Math.min(8, Number(concurrency) || 5));
+  const rows = [];
+  let attempted = 0;
+  let failed = 0;
+
+  for (let i = 0; i < requestedSigs.length; i += batchSize) {
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs < 250) break;
+    const batch = requestedSigs.slice(i, i + batchSize);
+    attempted += batch.length;
+    const settled = await Promise.allSettled(batch.map((signature) => solRpc('getTransaction', [
+      signature,
+      { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 }
+    ], { timeoutMs: remainingMs })));
+    settled.forEach((result, idx) => {
+      const tx = result.status === 'fulfilled' ? result.value : null;
+      if (!tx || typeof tx !== 'object') { failed++; return; }
+      rows.push({
+        signature: batch[idx],
+        slot: tx.slot ?? null,
+        blockTime: tx.blockTime ?? null,
+        version: tx.version ?? null,
+        transaction: tx.transaction || null,
+        meta: tx.meta || null
+      });
+    });
+  }
+
+  const unattempted = requestedSigs.length - attempted;
+  const dataStatus = rows.length && failed === 0 && unattempted === 0 ? 'live'
+    : rows.length ? 'partial' : 'unavailable';
+  return { dataStatus, rows, requested: requestedSigs.length, attempted, fetched: rows.length, failed, unattempted };
+}
+
 /* ═══════════════════════════ search routing ═════════════════════════════ */
 
 const EVM_ADDR = /^0x[a-fA-F0-9]{40}$/;

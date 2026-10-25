@@ -2225,6 +2225,24 @@ console.log('\n▸ probing Smart Money phase 2 (alerts, score factor, retention)
   report('Smart Money phase 2', [['MOMENTUM_REVERSAL fires on transition only, efficiency anchored at 30d, qualified retained under cap', ok]]);
 }
 
+/* Phase 3 (2026-10-25): native-quote EVM observations priced only from an
+ * hourly-or-finer point near the transaction, plus Solana swaps decoded
+ * from wallet-owned token-balance deltas. Both stay observed-only and are
+ * proved unable to alter score, P&L, qualification or consensus. */
+console.log('\n▸ probing Smart Money phase 3 (native quote, Solana decoder, no-vote boundary)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase3-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 3', [['native/Solana observed swaps are decoded honestly and never vote', ok]]);
+}
+
 /*
  * QR CAMERA LIFECYCLE.
  *

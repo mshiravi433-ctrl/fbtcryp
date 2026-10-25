@@ -20,7 +20,7 @@
  */
 
 import { withCache } from '../cache.js';
-import { TOKENS } from '../chainsLite.js';
+import { EVM_CHAINS, TOKENS } from '../chainsLite.js';
 import { exchangeFor, routerFor } from './registry.js';
 import {
   bsBalances,
@@ -31,10 +31,12 @@ import {
   explorerConfigured,
   solSignatures,
   solBalance,
-  solTokenBalances
+  solTokenBalances,
+  solTransactions
 } from './dataSources.js';
-import { tokenMarkets, historicalPriceFn } from './pricing.js';
-import { analyzePerformance } from './performance.js';
+import { tokenMarkets, historicalPriceFn, historicalHourlyPriceFn } from './pricing.js';
+import { analyzePerformance, reconstructNativeQuoteSwaps } from './performance.js';
+import { reconstructSolanaSwaps } from './solanaSwaps.js';
 import {
   calculateReputation,
   calculateWalletRisk,
@@ -274,9 +276,10 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
   // its historic execution price. Only paired token↔USD-quote legs with a
   // real tx hash, direction and method contribute to the ledger. A partial
   // indexer page cannot invent cost basis for sells predating our oldest buy.
+  const performanceTransactions = bsTxRes.dataStatus === 'live' ? bsTxRes.rows : nativeTxRows;
   const auditInput = {
     chain: chainId, address, transfers,
-    transactions: bsTxRes.dataStatus === 'live' ? bsTxRes.rows : nativeTxRows,
+    transactions: performanceTransactions,
     prices: priceMap, balances, historyLive: transfersRes.dataStatus === 'live',
     historyTruncated: !!transfersRes.hasMore
   };
@@ -301,6 +304,40 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
     });
   }
   const { pnl, smartMoney: smart, performance } = audit;
+
+  /* Phase 3 observed layer: wrapped-native quote pairs are reconstructed
+   * from the same loaded transfer page, but they are not passed back into
+   * `analyzePerformance`. A trustworthy USD value needs the native coin's
+   * hourly-or-finer price at the transaction minute; if that point cannot be
+   * proved, the row keeps its real WETH/WBNB amount and a null USD value. */
+  let nativeObservedSwaps = reconstructNativeQuoteSwaps({
+    chain: chainId, address, transfers, transactions: performanceTransactions
+  });
+  let nativeQuotePricing = null;
+  if (nativeObservedSwaps.length) {
+    nativeQuotePricing = 'unavailable';
+    const nativeBudgetMs = deadlineAt - Date.now();
+    const nativeCgId = EVM_CHAINS[chainId]?.native?.coingeckoId || null;
+    if (nativeBudgetMs >= 250 && nativeCgId) {
+      try {
+        const times = nativeObservedSwaps.map((s) => s.timestamp);
+        const priceAt = await historicalHourlyPriceFn(nativeCgId, {
+          fromTs: Math.min(...times) - 2 * 3_600_000,
+          toTs: Math.max(...times) + 2 * 3_600_000,
+          timeoutMs: nativeBudgetMs
+        });
+        nativeObservedSwaps = reconstructNativeQuoteSwaps({
+          chain: chainId, address, transfers, transactions: performanceTransactions, priceAt
+        });
+        const priced = nativeObservedSwaps.filter((s) => s.valueUsd != null).length;
+        nativeQuotePricing = priced === nativeObservedSwaps.length ? 'live' : priced ? 'partial' : 'unavailable';
+      } catch {
+        /* The paired native amounts are still observed; only USD stays null. */
+      }
+    }
+  }
+  const nativePricedCount = nativeObservedSwaps.filter((s) => s.valueUsd != null).length;
+
   const heldDays = audit.positions
     .filter((p) => p.amount > 0 && p.token)
     .map((p) => {
@@ -401,6 +438,19 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
     pnl,
     performance,
     verifiedSwaps: audit.swaps.slice(-60).map((s) => ({ ...s, pairCreatedAt: priceMap.get(s.token)?.pairCreatedAt ?? null })),
+    /* Observed-only rows are deliberately a separate field. Indexing and
+       consensus consume verifiedSwaps + the stable-quote evidence string, so
+       a native-quote row cannot become a vote by being present here. */
+    observedSwaps: nativeObservedSwaps.slice(-60),
+    swapEvidence: {
+      verified: { count: audit.swaps.length, classification: 'verified', evidence: 'paired-explorer-transfers' },
+      observedOnly: {
+        count: nativeObservedSwaps.length, priced: nativePricedCount,
+        classification: 'observed-only', evidence: 'paired-native-quote-explorer-transfers',
+        admittedToScore: false, admittedToConsensus: false,
+        basis: 'Exact wrapped-native/target transfer pair; USD only from an hourly-or-finer native price within one hour of the transaction.'
+      }
+    },
     closedTrades: audit.closed,
     smartMoney: smart,
     reputation,
@@ -413,7 +463,10 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
       nativeTxs: txRes.dataStatus === 'unconfigured' ? (bsTxRes.dataStatus || 'unavailable') : (txRes.dataStatus || 'unavailable'),
       balances: balancesRes.dataStatus || 'unavailable',
       pricing: priceMap.size ? 'live' : 'unavailable',
-      counters: countersRes.dataStatus || 'unavailable'
+      counters: countersRes.dataStatus || 'unavailable',
+      // Only report this optional source when a native pair actually needed
+      // it; otherwise the wallet page would call a never-needed source offline.
+      ...(nativeObservedSwaps.length ? { nativeQuotePricing: nativeQuotePricing || 'unavailable' } : {})
     }
   };
 }
@@ -438,6 +491,27 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
   const ageMs = firstSeen ? Date.now() - firstSeen : null;
   const isFresh = ageMs != null && ageMs < FRESH.maxAgeMs;
 
+  /* Phase 3 observed layer: fetch a bounded set of recent successful
+   * transactions and decode only wallet-owned pre/post token-balance deltas.
+   * This can prove individual paired effects, but the sample is neither the
+   * wallet's complete history nor fed into the score/P&L below. */
+  const successfulSigs = sigRows.filter((s) => s?.signature && !s.err).slice(0, 25);
+  let solTxRes = { dataStatus: 'unavailable', rows: [], requested: successfulSigs.length,
+    attempted: 0, fetched: 0, failed: 0, unattempted: successfulSigs.length };
+  let observedSwaps = [];
+  const txBudgetMs = Math.min(Math.max(0, deadlineAt - Date.now()), 3_500);
+  if (sigsRes.dataStatus === 'live' && successfulSigs.length && txBudgetMs >= 250) {
+    try {
+      solTxRes = await solTransactions(successfulSigs, {
+        limit: 25, timeoutMs: txBudgetMs, concurrency: 5
+      });
+      observedSwaps = reconstructSolanaSwaps({ address, transactions: solTxRes.rows || [] });
+    } catch {
+      solTxRes = { ...solTxRes, dataStatus: 'unavailable', rows: [] };
+      observedSwaps = [];
+    }
+  }
+
   let solPrice = null;
   const priceBudgetMs = deadlineAt - Date.now();
   if (priceBudgetMs >= 250) {
@@ -455,7 +529,11 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
   const marketBudgetMs = deadlineAt - Date.now();
   if (marketBudgetMs >= 250) {
     try {
-      splMarkets = await tokenMarkets(splTokens.map((t) => t.token), {
+      const marketRefs = [...new Set([
+        ...splTokens.map((t) => t.token),
+        ...observedSwaps.map((s) => s.token)
+      ])].slice(0, 60);
+      splMarkets = await tokenMarkets(marketRefs, {
         chain: 'solana',
         timeoutMs: marketBudgetMs,
         maxFallbacks: 6
@@ -464,6 +542,13 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
       splMarkets = new Map();
     }
   }
+
+  // Current markets may label a decoded mint, never reprice its historical
+  // stable-quote execution. Only the display symbol is enriched here.
+  observedSwaps = observedSwaps.map((s) => ({
+    ...s,
+    symbol: splMarkets.get(s.token)?.symbol || s.symbol || '???'
+  }));
 
   const solValue = balRes.sol != null && solPrice != null ? balRes.sol * solPrice : null;
   const holdings = [];
@@ -510,13 +595,14 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
     longTermHolding: (ageMs || 0) > WINDOWS.D30
   });
 
-  // Solana signatures and balances do not contain decoded USD-quoted swaps.
-  // Until a Solana swap decoder exists, *no* profitability or Smart Money
-  // qualification can be deduced from age, capital, holdings or tx count.
+  // Individual Solana balance-delta swaps are now decoded above, but only
+  // from a bounded recent sample and with each transaction netted into one
+  // effect. That is not a complete FIFO ledger, so *no* profitability or
+  // Smart Money qualification is deduced from them yet.
   const smart = {
     score: null, coverage: 0, factors: {}, status: 'UNAVAILABLE', qualified: false,
-    sample: { swaps: 0, closedTrades: 0 },
-    note: 'Decoded Solana swaps and executed quote prices are not available; no behavioural score is assigned.'
+    sample: { swaps: 0, closedTrades: 0, observedOnlySwaps: observedSwaps.length },
+    note: 'Decoded Solana swaps are observed-only sampled evidence; no behavioural score is assigned until a complete ordered ledger can be proven.'
   };
   const reputation = calculateReputation({
     historicalPerformance: null,
@@ -546,6 +632,20 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
     pnl: summarizePnl([], null),
     performance: null,
     verifiedSwaps: [],
+    observedSwaps: observedSwaps.slice(-60),
+    swapEvidence: {
+      verified: { count: 0, classification: 'unavailable', evidence: null },
+      observedOnly: {
+        count: observedSwaps.length, classification: 'observed-only',
+        evidence: 'decoded-solana-token-balance-deltas',
+        sampledSignatures: successfulSigs.length,
+        decodedTransactions: solTxRes.fetched || 0,
+        attemptedTransactions: solTxRes.attempted || 0,
+        failedTransactions: solTxRes.failed || 0,
+        admittedToScore: false, admittedToConsensus: false,
+        basis: 'Successful known-DEX transactions only; exactly two opposite wallet-owned mint deltas, one canonical USDC/USDT leg. Recent sample is incomplete and each transaction is netted.'
+      }
+    },
     smartMoney: smart,
     reputation,
     risk,
@@ -554,7 +654,8 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
       history: sigsRes.dataStatus || 'unavailable',
       balances: balRes.dataStatus || 'unavailable',
       tokenBalances: splRes.dataStatus || 'unavailable',
-      pricing: splMarkets.size || solPrice != null ? 'live' : 'unavailable'
+      pricing: splMarkets.size || solPrice != null ? 'live' : 'unavailable',
+      ...(successfulSigs.length ? { decodedTransactions: solTxRes.dataStatus || 'unavailable' } : {})
     }
   };
 }

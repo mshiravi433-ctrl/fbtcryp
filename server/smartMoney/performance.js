@@ -8,6 +8,7 @@
  * Native-asset swaps, Solana signatures, unknown quotes and incomplete pages
  * are NOT converted into fictional P&L. Never infer institution from volume.
  */
+import { EVM_CHAINS } from '../chainsLite.js';
 import { SMART_MONEY_SCORE, WINDOWS } from './config.js';
 import { routerFor } from './registry.js';
 
@@ -30,17 +31,16 @@ export const USD_QUOTES = Object.freeze({
   43114: ['0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e', '0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7']
 });
 
-/** Reconstruct matched token/quote swaps from a *single wallet's* transfers.
- * A failed tx, unknown method, ambiguous multi-asset bundle, missing quote or
- * invalid timestamp is excluded rather than interpreted as a trade. */
-export function reconstructSwaps({ chain, address, transfers = [], transactions = [], now = Date.now() } = {}) {
-  const me = String(address || '').toLowerCase();
-  const quotes = new Set(USD_QUOTES[Number(chain)] || []);
-  if (!EVM.test(me) || !quotes.size) return [];
-  const txByHash = new Map((Array.isArray(transactions) ? transactions : [])
+function transactionMap(transactions) {
+  return new Map((Array.isArray(transactions) ? transactions : [])
     .filter((tx) => HASH.test(String(tx.hash || '').toLowerCase()))
     .map((tx) => [String(tx.hash).toLowerCase(), tx]));
+}
+
+function groupWalletLegs({ address, transfers = [], now = Date.now() } = {}) {
+  const me = String(address || '').toLowerCase();
   const grouped = new Map();
+  if (!EVM.test(me)) return grouped;
   for (const tr of (Array.isArray(transfers) ? transfers : []).slice(0, 250)) {
     const hash = String(tr.hash || '').toLowerCase();
     const token = String(tr.token?.address || '').toLowerCase();
@@ -54,15 +54,33 @@ export function reconstructSwaps({ chain, address, transfers = [], transactions 
     if (!grouped.has(hash)) grouped.set(hash, []);
     grouped.get(hash).push({ ...tr, token: { ...tr.token, address: token } });
   }
+  return grouped;
+}
+
+function provenSwapMethod({ chain, hash, legs, txByHash }) {
+  const tx = txByHash.get(hash);
+  if (tx?.success === false) return null;
+  const provenDex = (tx?.to && routerFor(chain, tx.to))
+    || legs.some((leg) => routerFor(chain, leg.counterparty) || leg.counterpartyKind === 'dex');
+  const method = [tx?.method, ...legs.map((leg) => leg.method)].join(' ').toLowerCase();
+  if (!provenDex && !/swap|unoswap|exactinput|exactoutput/i.test(method)) return null;
+  return method;
+}
+
+/** Reconstruct matched token/quote swaps from a *single wallet's* transfers.
+ * A failed tx, unknown method, ambiguous multi-asset bundle, missing quote or
+ * invalid timestamp is excluded rather than interpreted as a trade. */
+export function reconstructSwaps({ chain, address, transfers = [], transactions = [], now = Date.now() } = {}) {
+  const me = String(address || '').toLowerCase();
+  const quotes = new Set(USD_QUOTES[Number(chain)] || []);
+  if (!EVM.test(me) || !quotes.size) return [];
+  const txByHash = transactionMap(transactions);
+  const grouped = groupWalletLegs({ address: me, transfers, now });
 
   const swaps = [];
   for (const [hash, legs] of grouped) {
-    const tx = txByHash.get(hash);
-    if (tx?.success === false) continue;
-    const provenDex = (tx?.to && routerFor(chain, tx.to))
-      || legs.some((leg) => routerFor(chain, leg.counterparty) || leg.counterpartyKind === 'dex');
-    const method = [tx?.method, ...legs.map((leg) => leg.method)].join(' ').toLowerCase();
-    if (!provenDex && !/swap|unoswap|exactinput|exactoutput/i.test(method)) continue;
+    const method = provenSwapMethod({ chain, hash, legs, txByHash });
+    if (method == null) continue;
     const inLegs = legs.filter((l) => l.direction === 'in');
     const outLegs = legs.filter((l) => l.direction === 'out');
     const quoteIn = inLegs.filter((l) => quotes.has(l.token.address));
@@ -86,6 +104,101 @@ export function reconstructSwaps({ chain, address, transfers = [], transactions 
       valueUsd: Number(quote.amount), executionPriceUsd: Number(quote.amount) / Number(target.amount),
       quoteToken: quote.token.address, evidence: 'paired-explorer-transfers',
       // Label is evidence provenance, not a claim that the address belongs to a DEX.
+      method: method.slice(0, 80)
+    });
+  }
+  return swaps.sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id));
+}
+
+const MAX_NATIVE_PRICE_DISTANCE_MS = 3_600_000;
+const ACCEPTED_NATIVE_PRICE_GRANULARITIES = new Set([
+  '1h', 'hour', 'hourly', '5m', '5min', '5-minute', 'minute', 'minutely', 'intraday'
+]);
+
+function nativePricePoint(priceAt, timestamp) {
+  if (typeof priceAt !== 'function') return null;
+  let raw;
+  try { raw = priceAt(timestamp); } catch { return null; }
+  // A bare number carries no time provenance. In particular, the existing
+  // daily historical lookup must never acquire hourly authority by accident.
+  if (!raw || typeof raw !== 'object') return null;
+  const usd = Number(raw.usd ?? raw.priceUsd ?? raw.price);
+  const at = Number(raw.at ?? raw.ts ?? raw.timestamp);
+  const granularity = String(raw.granularity || '').toLowerCase();
+  if (!finitePositive(usd) || !Number.isFinite(at) || at <= 0) return null;
+  if (Math.abs(at - timestamp) > MAX_NATIVE_PRICE_DISTANCE_MS) return null;
+  if (!ACCEPTED_NATIVE_PRICE_GRANULARITIES.has(granularity)) return null;
+  return {
+    usd,
+    at,
+    granularity,
+    source: String(raw.source || 'timestamped-intraday-price').slice(0, 80)
+  };
+}
+
+/**
+ * Phase 3 — wrapped-native quote pairs as OBSERVED-ONLY evidence.
+ *
+ * The transfer pairing is deliberately as strict as the verified ledger:
+ * one successful/proven DEX transaction, exactly two wallet legs, opposite
+ * directions, one canonical wrapped-native contract from chainsLite and one
+ * non-stable target. What remains weaker is valuation and sample meaning:
+ * the wrapped-native amount needs an external price at transaction time, and
+ * these rows are not yet a second verified P&L ledger. They therefore carry a
+ * different evidence string and classification, and are never returned by
+ * `reconstructSwaps`/`analyzePerformance`.
+ *
+ * `priceAt` must return `{usd, at, granularity, source}` from an hourly-or-
+ * finer series, with the point within one hour of the swap. Without that
+ * proof the real native amount is still observable, but USD fields stay null.
+ */
+export function reconstructNativeQuoteSwaps({ chain, address, transfers = [], transactions = [], priceAt = null, now = Date.now() } = {}) {
+  const chainId = Number(chain);
+  const me = String(address || '').toLowerCase();
+  const chainMeta = EVM_CHAINS[chainId];
+  const wrapped = String(chainMeta?.wrapped || '').toLowerCase();
+  const stables = new Set(USD_QUOTES[chainId] || []);
+  if (!EVM.test(me) || !EVM.test(wrapped) || !stables.size) return [];
+  const txByHash = transactionMap(transactions);
+  const grouped = groupWalletLegs({ address: me, transfers, now });
+  const swaps = [];
+
+  for (const [hash, legs] of grouped) {
+    if (legs.length !== 2) continue;
+    const method = provenSwapMethod({ chain: chainId, hash, legs, txByHash });
+    if (method == null) continue;
+    const nativeLegs = legs.filter((l) => l.token.address === wrapped);
+    const targets = legs.filter((l) => l.token.address !== wrapped && !stables.has(l.token.address));
+    if (nativeLegs.length !== 1 || targets.length !== 1) continue;
+    const quote = nativeLegs[0];
+    const target = targets[0];
+    const buy = quote.direction === 'out' && target.direction === 'in';
+    const sell = quote.direction === 'in' && target.direction === 'out';
+    if (!buy && !sell) continue;
+    if (Math.abs(target.timestamp - quote.timestamp) > 120_000) continue;
+
+    const quoteAmount = Number(quote.amount);
+    const targetAmount = Number(target.amount);
+    const price = nativePricePoint(priceAt, target.timestamp);
+    const valueUsd = price ? quoteAmount * price.usd : null;
+    swaps.push({
+      id: `${chainId}:${me}:${hash}:${target.token.address}:native-quote`,
+      chain: chainId, wallet: me, hash, timestamp: target.timestamp,
+      token: target.token.address, symbol: String(target.token.symbol || '').slice(0, 24) || '???',
+      side: buy ? 'BUY' : 'SELL', amount: targetAmount,
+      valueUsd: valueUsd == null ? null : round(valueUsd),
+      executionPriceUsd: valueUsd == null ? null : valueUsd / targetAmount,
+      quoteToken: wrapped,
+      quoteKind: 'wrapped-native',
+      quoteSymbol: String(quote.token.symbol || chainMeta?.native?.symbol || 'NATIVE').slice(0, 24),
+      quoteAmount,
+      quotePriceUsd: price?.usd ?? null,
+      quotePriceAt: price?.at ?? null,
+      quotePriceGranularity: price?.granularity ?? null,
+      quotePriceSource: price?.source ?? null,
+      evidence: 'paired-native-quote-explorer-transfers',
+      classification: 'observed-only',
+      admission: 'excluded-from-verified-score-and-consensus',
       method: method.slice(0, 80)
     });
   }

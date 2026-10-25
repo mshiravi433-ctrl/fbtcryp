@@ -185,6 +185,106 @@ export async function historicalPriceFn(cgId, days = 90, { timeoutMs = 9_000 } =
   };
 }
 
+/* ── Timestamped intraday prices for native-quote EVM swaps (phase 3) ─────
+ * A daily close can be many percent away from the price at the minute a
+ * WETH/WBNB quote leg moved. Native-quote rows may therefore only use a
+ * timestamped intraday point: the median spacing of the whole returned
+ * series must be hourly-or-finer (75 minutes allows timestamp jitter), and
+ * the nearest actual point for an individual swap must be within one hour.
+ * We inspect the spacing CoinGecko returned instead of trusting an
+ * `interval` label or plan tier. */
+
+export const MAX_NATIVE_QUOTE_PRICE_DISTANCE_MS = 3_600_000;
+const MAX_NATIVE_QUOTE_SERIES_GAP_MS = 75 * 60_000;
+
+function normalizePriceSeries(seriesInput) {
+  return (Array.isArray(seriesInput) ? seriesInput : [])
+    .map((row) => Array.isArray(row)
+      ? { ts: Number(row[0]), p: Number(row[1]) }
+      : { ts: Number(row?.ts ?? row?.timestamp ?? row?.at), p: Number(row?.p ?? row?.usd ?? row?.priceUsd ?? row?.price) })
+    .filter((r) => Number.isFinite(r.ts) && r.ts > 0 && Number.isFinite(r.p) && r.p > 0)
+    .sort((a, b) => a.ts - b.ts)
+    .filter((r, i, rows) => i === 0 || r.ts !== rows[i - 1].ts);
+}
+
+/** Pure lookup used by the range endpoint below and directly by probes. */
+export function intradayPriceLookup(seriesInput, {
+  maxGapMs = MAX_NATIVE_QUOTE_SERIES_GAP_MS,
+  maxDistanceMs = MAX_NATIVE_QUOTE_PRICE_DISTANCE_MS,
+  source = 'timestamped-intraday-series'
+} = {}) {
+  const series = normalizePriceSeries(seriesInput);
+  if (series.length < 2) return () => null;
+  const gaps = [];
+  for (let i = 1; i < series.length; i++) gaps.push(series[i].ts - series[i - 1].ts);
+  gaps.sort((a, b) => a - b);
+  const medianGap = gaps[Math.floor(gaps.length / 2)] || Infinity;
+  if (!Number.isFinite(medianGap) || medianGap > maxGapMs) return () => null;
+  const granularity = medianGap <= 10 * 60_000 ? '5m' : 'hourly';
+  return (ts) => {
+    const target = Number(ts);
+    if (!Number.isFinite(target) || target <= 0) return null;
+    let lo = 0;
+    let hi = series.length;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (series[mid].ts < target) lo = mid + 1; else hi = mid;
+    }
+    const candidates = [series[lo - 1], series[lo]].filter(Boolean);
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => Math.abs(a.ts - target) - Math.abs(b.ts - target));
+    const best = candidates[0];
+    const distanceMs = Math.abs(best.ts - target);
+    if (distanceMs > maxDistanceMs) return null;
+    return { usd: best.p, at: best.ts, granularity, source, distanceMs };
+  };
+}
+
+async function cgMarketChartRange(cgId, fromTs, toTs, timeoutMs = 9_000) {
+  const key = String(process.env.COINGECKO_API_KEY || '').trim();
+  const from = Math.floor(Number(fromTs) / 1000);
+  const to = Math.ceil(Number(toTs) / 1000);
+  // No explicit interval: auto-granularity is hourly (or finer) for ranges up
+  // to 90 days, while an explicitly gated interval can fail by plan. The
+  // returned spacing is still verified by intradayPriceLookup above.
+  const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(cgId)}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`;
+  const headers = key ? { 'x-cg-pro-api-key': key } : {};
+  const ctrl = new AbortController();
+  const boundedTimeout = Math.max(250, Math.min(14_000, Number(timeoutMs) || 9_000));
+  const t = setTimeout(() => ctrl.abort(), boundedTimeout);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers });
+    if (!res.ok) throw new Error(`CoinGecko market chart range ${res.status}`);
+    const j = await res.json();
+    return Array.isArray(j?.prices) ? j.prices : [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Hourly-or-finer historical price lookup. Returns rich provenance or null;
+ * deliberately never degrades to the daily historicalPriceFn above. */
+export async function historicalHourlyPriceFn(cgId, { fromTs, toTs, timeoutMs = 9_000 } = {}) {
+  const from = Number(fromTs);
+  const to = Number(toTs);
+  if (!cgId || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) return () => null;
+  // Above this range CoinGecko's auto-granularity becomes daily. Chunking
+  // years of hourly points inside one wallet read would be slow and is not
+  // needed for the explorer page this feature values; fail unpriced instead.
+  if (to - from > 90 * 86_400_000) return () => null;
+  const hour = 3_600_000;
+  const cacheFrom = Math.floor(from / hour);
+  const cacheTo = Math.ceil(to / hour);
+  let value;
+  try {
+    // Fetch the rounded bounds named by the cache key; otherwise a later
+    // request could inherit a narrower series that happens to share the key.
+    ({ value } = await withCache(`sm:hist-range:${cgId}:${cacheFrom}:${cacheTo}`, 30 * 60_000,
+      () => cgMarketChartRange(cgId, cacheFrom * hour, cacheTo * hour, timeoutMs)));
+  } catch { return () => null; }
+  return intradayPriceLookup(value, { source: 'coingecko-market-chart-range' });
+}
+
 /** Sigmoid-ish normaliser used to map a USD P&L into a 0..1 factor. */
 export function normByLog(value, scale) {
   if (!Number.isFinite(value) || !Number.isFinite(scale) || scale <= 0) return null;

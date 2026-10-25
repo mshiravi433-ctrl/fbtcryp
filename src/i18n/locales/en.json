@@ -13012,6 +13012,17 @@
     "rateLimited": "Too many requests right now — wait a moment and try again.",
     "errorWalletDetail": "The wallet endpoint rejected this request.",
     "streamStale": "Live scan is running slowly — showing the transfers observed so far. Refreshes automatically.",
+    "phase3": {
+      "title": "Observed swaps",
+      "noVote": "No score or consensus vote",
+      "nativeNote": "These rows are exact wrapped-native/target transfer pairs and are observations only for now; they do not enter the score, verified P&L or consensus. A USD value appears only from an hourly-or-finer price close to the transaction time.",
+      "solanaNote": "These rows were decoded from this wallet's net token-balance changes inside successful known-DEX transactions. The recent sample is incomplete, so they do not enter the score, verified P&L or consensus.",
+      "quote": "Quote leg",
+      "unpriced": "No provable hourly price is available; no USD value is invented.",
+      "pricedAt": "Native price near the transaction: {{price}}",
+      "dex": "DEX program: {{name}}",
+      "sample": "{{decoded}} of {{attempted}} sampled recent transactions were read."
+    },
     "observedNote": "Based on {{n}} large transfers observed over the last {{hours}}h. Not a full chain history.",
     "observedNoteNew": "Observation just started — windows fill in as the scanner keeps running.",
     "noLabelledFlow": "No transfer touched a labelled exchange in this window yet — nothing is counted as flow until one does.",
