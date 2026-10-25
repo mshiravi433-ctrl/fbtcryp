@@ -116,6 +116,14 @@ import { readSolanaBalances, readSolanaTokenInfo } from './solanaChainReads.js';
 import { searchSolanaTokens, searchSolanaTokensByMints, solanaSentimentDetail, solanaTokenUniverse } from './solanaTokenMeta.js';
 import { relaySolanaRpc, relayStatus } from './solanaRpcRelay.js';
 import { oceanQuote, oceanStatus, oceanSwap } from './solanaOcean.js';
+import { relayCowCreate, relayCowStatus, relayCowCancel } from './cowOrders.js';
+import {
+  cancelSolanaLimitOrder,
+  createSolanaLimitOrder,
+  listSolanaLimitOrders,
+  solanaLimitConfigured,
+  submitSolanaTrigger
+} from './solanaLimitOrders.js';
 import { lifiSolanaStatus, lifiSolanaSwapQuote } from './solanaLifi.js';
 import { jupFeeQuote, jupFeeStatus, jupFeeStatusAsync, jupFeeSwapQuote, refreshJupFeeCoverage } from './solanaJupFee.js';
 import { p2pCountries, p2pCurrencies, p2pOffers, p2pPaymentMethods, p2pStatus } from './hodlhodl.js';
@@ -6411,6 +6419,59 @@ app.post('/api/solana/jupfee/swap', async (req, res) => {
 });
 
 /*
+ * ─── AUTOMATIC EXECUTION: THE KEEPER ROUTES (PHASE 2) ─────────────────────
+ * Every route here relays or reads. None of them signs, and none of them
+ * holds a key: the order is signed by the user's own wallet in the browser,
+ * the server checks that signature, and only then forwards it.
+ *
+ *   EVM    POST   /api/orders/cow/create   relay a signed CoW order
+ *          GET    /api/orders/cow/:chainId/:uid   its state (open/fulfilled/…)
+ *          DELETE /api/orders/cow/cancel  relay a signed cancellation
+ *   Solana POST   /api/solana/orders/create   the unsigned open-order tx
+ *          POST   /api/solana/orders/submit   broadcast a wallet-signed tx
+ *          POST   /api/solana/orders/cancel   the unsigned cancel tx
+ *          GET    /api/solana/orders/open?wallet=   the wallet's active orders
+ */
+app.post('/api/orders/cow/create', async (req, res) => {
+  const r = await relayCowCreate(req.body ?? {});
+  return res.status(r.status).json(r.body);
+});
+
+app.get('/api/orders/cow/:chainId/:uid', async (req, res) => {
+  const r = await relayCowStatus(req.params.chainId, req.params.uid);
+  return res.status(r.status).json(r.body);
+});
+
+app.delete('/api/orders/cow/cancel', async (req, res) => {
+  const r = await relayCowCancel(req.body ?? {});
+  return res.status(r.status).json(r.body);
+});
+
+app.post('/api/solana/orders/create', async (req, res) => {
+  if (!solanaLimitConfigured()) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  const r = await createSolanaLimitOrder(req.body ?? {});
+  return res.status(r.status).json(r.body);
+});
+
+app.post('/api/solana/orders/submit', async (req, res) => {
+  if (!solanaLimitConfigured()) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  const r = await submitSolanaTrigger(req.body ?? {});
+  return res.status(r.status).json(r.body);
+});
+
+app.post('/api/solana/orders/cancel', async (req, res) => {
+  if (!solanaLimitConfigured()) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  const r = await cancelSolanaLimitOrder(req.body ?? {});
+  return res.status(r.status).json(r.body);
+});
+
+app.get('/api/solana/orders/open', async (req, res) => {
+  if (!solanaLimitConfigured()) return res.status(503).json({ error: 'NOT_CONFIGURED' });
+  const r = await listSolanaLimitOrders(String(req.query.wallet || ''), String(req.query.status || 'active'));
+  return res.status(r.status).json(r.body);
+});
+
+/*
  * GET /api/solana/routes — one call that answers "which Solana route can pay
  * us right now, and why not the others".
  *
@@ -7255,7 +7316,8 @@ async function sendWatchAlert(endpoint, lang, payload) {
        deep link and the urgency all differ, and a notification that says «به
        هدف رسید» for a plan whose run merely came due is a false statement
        about a price. */
-    scheduled: payload.scheduled === true
+    scheduled: payload.scheduled === true,
+    filled: payload.filled === true
   });
   return deliverStagePush(endpoint, message);
 }

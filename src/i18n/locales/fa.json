@@ -690,6 +690,7 @@
     "copied": "در کلیپ‌بورد کپی شد",
     "copyFailed": "کپی نشد — آدرس را دستی انتخاب کن",
     "orderCreated": "سفارش ساخته شد",
+    "orders.keeper.cancelFailed": "لغو سفارش خودکار انجام نشد؛ سفارش همچنان باز است.",
     "orderErr.BAD_TYPE": "نوع سفارش نامعتبر",
     "orderErr.BAD_CHAIN": "یک شبکه انتخاب کن",
     "orderErr.BAD_TOKENS": "هر دو توکن را انتخاب کن",

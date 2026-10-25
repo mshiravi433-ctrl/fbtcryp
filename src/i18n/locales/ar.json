@@ -501,6 +501,7 @@
     "copied": "تم النسخ",
     "copyFailed": "تعذّر النسخ — حدد العنوان يدوياً",
     "orderCreated": "تم إنشاء الأمر",
+    "orders.keeper.cancelFailed": "تعذّر إلغاء الأمر التلقائي؛ ما زال مفتوحاً.",
     "orderErr.BAD_TYPE": "نوع غير معروف",
     "orderErr.BAD_CHAIN": "اختر شبكة",
     "orderErr.BAD_TOKENS": "اختر الرمزين",

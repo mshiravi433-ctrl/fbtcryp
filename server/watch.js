@@ -30,6 +30,9 @@
 
 import { storeGet, storeSet } from './store.js';
 import { fetchSimplePrices } from './providers.js';
+import { checkCowFill } from './cowOrders.js';
+import { checkSolanaFill } from './solanaLimitOrders.js';
+import { cowSupports, isCowUid } from '../src/lib/cowOrders.js';
 
 const WATCH_KEY = 'orders:watch:v1';
 
@@ -125,6 +128,49 @@ function parseIdentity(endpoint) {
   return null;
 }
 
+/**
+ * A KEEPER row: an order the network executes on its own (CoW solvers or the
+ * Jupiter keeper), watched only for its fill. It carries no price and no
+ * target — the server does not evaluate it against a rate at all, so it needs
+ * no CoinGecko id and an upstream price outage cannot touch it.
+ *
+ * Returns null for a row that does not name a real order, so a malformed
+ * keeper cannot be stored and polled forever.
+ */
+const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function cleanKeeper(it) {
+  const base = {
+    id: it.id,
+    type: 'limit',
+    fromSym: it.fromSym,
+    toSym: it.toSym,
+    fromId: null,
+    toId: null,
+    priceOf: 'from',
+    lastNotifiedAt: 0
+  };
+  if (it.cowUid !== undefined) {
+    if (!isCowUid(it.cowUid) || !cowSupports(it.cowChainId)) return null;
+    return { ...base, keeper: 'cow', cowUid: it.cowUid, cowChainId: Number(it.cowChainId) };
+  }
+  if (it.jupOrderKey !== undefined) {
+    if (!B58.test(String(it.jupOrderKey)) || !B58.test(String(it.jupMaker))) return null;
+    return { ...base, keeper: 'jup', jupOrderKey: it.jupOrderKey, jupMaker: it.jupMaker };
+  }
+  return null;
+}
+
+/** Ask the right upstream whether a keeper order has filled. */
+async function keeperState(w, checkers) {
+  try {
+    if (w.keeper === 'cow') return await checkers.cow(w.cowChainId, w.cowUid);
+    if (w.keeper === 'jup') return await checkers.sol(w.jupMaker, w.jupOrderKey);
+  } catch {
+    /* fall through: an unreadable order is unknown, never filled */
+  }
+  return 'unknown';
+}
+
 export async function putWatches(endpoint, items, lang = 'fa') {
   if (!parseIdentity(endpoint)) throw new Error('BAD_ENDPOINT');
   if (!Array.isArray(items)) throw new Error('BAD_ITEMS');
@@ -132,6 +178,15 @@ export async function putWatches(endpoint, items, lang = 'fa') {
   const clean = [];
   for (const it of items.slice(0, MAX_PER_ENDPOINT)) {
     if (!isId(it?.id) || !isSym(it?.fromSym) || !isSym(it?.toSym)) continue;
+
+    /* Keeper rows are recognised by the order they name, not by a price: the
+       CoinGecko requirement below is for PRICE-watched rows and must not drop
+       an order the network is already executing. */
+    if (it?.cowUid !== undefined || it?.jupOrderKey !== undefined) {
+      const keeper = cleanKeeper(it);
+      if (keeper) clean.push(keeper);
+      continue;
+    }
 
     /*
      * CoinGecko ids are required for the PRICE-triggered types and optional for
@@ -324,7 +379,8 @@ export function evaluateWatch(w, rate, now = Date.now()) {
  *        Injected so this module stays testable without a push provider — the
  *        part that decides whether to alert is the part worth testing.
  */
-export async function runWatchCycle(send, now = Date.now()) {
+export async function runWatchCycle(send, now = Date.now(), deps = {}) {
+  const checkers = { cow: deps.checkCow || checkCowFill, sol: deps.checkSol || checkSolanaFill };
   const all = await readWatches();
   if (!all.length) return { checked: 0, triggered: 0, sent: 0 };
 
@@ -336,7 +392,7 @@ export async function runWatchCycle(send, now = Date.now()) {
    * Scheduled rows are excluded from the lookup entirely — they need no rate,
    * and including their ids would cost a request for data nothing reads.
    */
-  const priceRows = live.filter((w) => !SCHEDULED_TYPES.has(w.type ?? 'limit'));
+  const priceRows = live.filter((w) => !SCHEDULED_TYPES.has(w.type ?? 'limit') && !w.keeper);
   const ids = [...new Set(priceRows.flatMap((w) => [w.fromId, w.toId]).filter(isCgId))];
   let prices = {};
   let pricesOk = true;
@@ -359,6 +415,45 @@ export async function runWatchCycle(send, now = Date.now()) {
   const updated = [];
 
   for (const w of live) {
+    /*
+     * ─── A KEEPER FILL IS THE ONE «CLOSED» ALERT THE SERVER SENDS ───────────
+     * The order is executed by the network, not by this server, so the only
+     * truthful thing to say is that the upstream reports it filled. The row is
+     * dropped on a successful send — the order is done and there is nothing
+     * left to watch. A failed send keeps the row, so the next cycle retries.
+     * Cancelled and expired orders are dropped silently: the user did that, or
+     * the time ran out, and a notification would be noise.
+     */
+    if (w.keeper) {
+      const state = await keeperState(w, checkers);
+      if (state === 'fulfilled') {
+        triggered += 1;
+        let ok = false;
+        try {
+          ok = await send(w.endpoint, w.lang, {
+            stage: 'closed',
+            filled: true,
+            kind: 'order',
+            base: w.fromSym,
+            quote: w.toSym,
+            rate: null,
+            type: 'limit',
+            scheduled: false,
+            side: null,
+            id: w.id
+          });
+        } catch {
+          ok = false;
+        }
+        if (ok) sent += 1;
+        if (!ok) updated.push(w);
+        continue;
+      }
+      if (state === 'cancelled' || state === 'expired') continue;
+      updated.push(w);
+      continue;
+    }
+
     const scheduled = SCHEDULED_TYPES.has(w.type ?? 'limit');
 
     let rate = null;

@@ -86,6 +86,19 @@ const COPY = {
  * notification that only reports a state leaves the person who tapped it one
  * screen away from an answer.
  */
+/*
+ * A KEEPER FILL — the network executed the limit order, and we are only
+ * reporting it. The copy says what happened and nothing more: no profit claim,
+ * no amount, and no «you sold» wording that could be read as a fee or a
+ * guarantee. Filled at the minimum the user set, which is the only thing the
+ * server can truthfully say.
+ */
+const FILLED_COPY = {
+  fa: { title: 'سفارش حد پر شد', body: 'سفارش حد شما با موفقیت در قیمت هدف پر شد.' },
+  en: { title: 'Limit order filled', body: 'Your limit order was filled at the target price.' },
+  ar: { title: 'تم تنفيذ أمر الحد', body: 'تم تنفيذ أمر الحد الخاص بك بنجاح عند السعر المستهدف.' }
+};
+
 const SCHEDULE_COPY = {
   fa: { title: 'زمان سواپ رسید', body: 'نوبت بعدی برنامهٔ {base}→{quote} رسید. اپ را باز کن و سواپ را امضا کن.' },
   en: { title: 'Time to swap', body: 'The next step of your {base}→{quote} plan is due. Open the app and sign the swap.' },
@@ -109,7 +122,8 @@ export function buildStageAlert({
   quote = '',
   rate = '',
   id = 'x',
-  scheduled = false
+  scheduled = false,
+  filled = false
 } = {}) {
   const st = STAGES.includes(stage) ? stage : 'ready';
   const family = kind === 'intent' ? 'intent' : 'order';
@@ -125,9 +139,14 @@ export function buildStageAlert({
   const scheduleLine = scheduled && st === 'ready'
     ? (SCHEDULE_COPY[String(lang).split('-')[0]] || SCHEDULE_COPY.en)
     : null;
+  /* A keeper fill is a «closed» stage with its own sentence: the generic
+     «position closed» line would tell the user nothing they can act on. */
+  const fillLine = filled && st === 'closed' && family === 'order'
+    ? (FILLED_COPY[String(lang).split('-')[0]] || FILLED_COPY.en)
+    : null;
   const source = scheduleLine
     ? { title: scheduleLine.title, body: scheduleLine.body }
-    : line;
+    : fillLine ?? line;
 
   const title = String(source.title).slice(0, 48);
   const body = String(source.body)
@@ -148,6 +167,7 @@ export function buildStageAlert({
     title,
     body,
     scheduled: Boolean(scheduled),
+    filled: Boolean(fillLine),
     url,
     tag: `fbt-${family}-${st}-${String(id).slice(0, 40)}`,
     stage: st,

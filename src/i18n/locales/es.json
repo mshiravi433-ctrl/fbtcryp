@@ -1,4 +1,5 @@
 {
+  "orders.keeper.cancelFailed": "No se pudo cancelar la orden automática; sigue abierta.",
   "nav": {
     "market": "Mercado",
     "trade": "Operar",

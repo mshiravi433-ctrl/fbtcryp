@@ -1,4 +1,5 @@
 {
+  "orders.keeper.cancelFailed": "خودکار آرڈر منسوخ نہیں ہو سکا؛ یہ اب بھی کھلا ہے۔",
   "nav": {
     "market": "مارکیٹ",
     "trade": "ٹریڈ",
