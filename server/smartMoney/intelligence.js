@@ -41,7 +41,7 @@ import { labelEvent, isNonWallet } from './moneyFlow.js';
 import { readEvents } from './eventStore.js';
 import { tokenMarkets } from './pricing.js';
 import { bsRecentStableSwappers, BLOCKSCOUT } from './dataSources.js';
-import { USD_QUOTES } from './performance.js';
+import { USD_QUOTES, isVerifiedPairedSwap } from './performance.js';
 import { DEX_SLUGS, WINDOWS } from './config.js';
 import { buildConsensus } from './consensus.js';
 
@@ -289,7 +289,7 @@ export async function runIntelligenceCycle({ now = Date.now(), candidates = null
     const closed = new Map(safeArray(w.performance?.closed).map((c) => [c.hash, c]));
     // The public wallet response carries audited closed trades separately.
     const exits = new Map(safeArray(w.closedTrades).map((c) => [c.hash, c]));
-    const swaps = safeArray(w.verifiedSwaps).filter((s) => s.evidence === 'paired-explorer-transfers'
+    const swaps = safeArray(w.verifiedSwaps).filter((s) => isVerifiedPairedSwap(s)
       && s.chain === row.chain && s.wallet === profile.address && s.timestamp <= now && s.timestamp >= now - INDEX_AGE)
       .map((s) => ({ ...s,
         pairCreatedAt: Number.isFinite(s.pairCreatedAt) ? s.pairCreatedAt : null,
@@ -311,7 +311,7 @@ export async function runIntelligenceCycle({ now = Date.now(), candidates = null
   const prev = await readVerifiedIndex({ fresh: true });
   const profiles = new Map(prev.profiles.filter((p) => p.updatedAt > now - INDEX_AGE)
     .map((p) => [recordId(p.chain, p.address), p]));
-  const swaps = new Map(prev.swaps.filter((s) => s.timestamp > now - INDEX_AGE)
+  const swaps = new Map(prev.swaps.filter((s) => isVerifiedPairedSwap(s) && s.timestamp > now - INDEX_AGE)
     .map((s) => [s.id, s]));
   for (const r of successful) {
     profiles.set(recordId(r.profile.chain, r.profile.address), r.profile);

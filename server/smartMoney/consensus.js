@@ -7,6 +7,7 @@
 import { EVM_CHAINS } from '../chainsLite.js';
 import { isNonWallet } from './moneyFlow.js';
 import { WINDOWS, WINDOW_KEYS } from './config.js';
+import { isVerifiedPairedSwap } from './performance.js';
 
 /* A measured track record (≥5 paired closes over ≥2 days) does not expire
  * in 36 hours. The old 36h cap, combined with a twice-daily cron that could
@@ -102,7 +103,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   const byWallet = new Map(validProfiles.map((p) => [ident(p.chain, p.address), p]));
   const clusters = fundingClusters(validProfiles, events);
   const eligible = (Array.isArray(swaps) ? swaps : []).filter((s) =>
-    s?.evidence === 'paired-explorer-transfers' && validToken(s.token)
+    isVerifiedPairedSwap(s) && validToken(s.token)
     && byWallet.has(ident(s.chain, s.wallet)) && ['BUY', 'SELL'].includes(s.side)
     && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
     && Number.isFinite(s.valueUsd) && s.valueUsd > 0
@@ -191,9 +192,12 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
     graphWallets.set(walletId, { id: walletId, type: 'wallet', chain: s.chain, address: s.wallet, label: p.label || null,
       identityKind: p.kind || null, score: p.score, coverage: p.coverage, cluster: clusters.component(walletId) });
     const key = `${walletId}:${tokenId}`;
-    const edge = edgesByPair.get(key) || { from: walletId, to: tokenId, buyUsd: 0, sellUsd: 0, swaps: 0, hashes: [], evidence: 'paired-explorer-transfers' };
+    const edge = edgesByPair.get(key) || { from: walletId, to: tokenId, buyUsd: 0, sellUsd: 0, swaps: 0, hashes: [], evidences: [], evidence: s.evidence };
     edge[s.side === 'BUY' ? 'buyUsd' : 'sellUsd'] += s.valueUsd;
     edge.swaps++;
+    if (!edge.evidences.includes(s.evidence)) edge.evidences.push(s.evidence);
+    edge.evidence = edge.evidences.length > 1
+      ? 'paired-stable-and-native-explorer-transfers' : edge.evidences[0];
     if (edge.hashes.length < 3 && !edge.hashes.includes(s.hash)) edge.hashes.push(s.hash);
     edgesByPair.set(key, edge);
     const r = tokens.get(tokenId) || { chain: s.chain, token: s.token, symbol: s.symbol || '???',
@@ -321,15 +325,15 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
       analyzedWallets: observed.analyzedWallets, observedSwaps: observed.observedSwaps,
       observedSwapsInWindow: observed.swapsInWindow,
       completeness: 'sampled-indexer-pages',
-      note: 'Only paired EVM token/allowlisted stablecoin swaps from qualified wallets. No native or Solana decoding yet. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
+      note: 'Only paired EVM swaps from qualified wallets: allowlisted-stablecoin fills, plus wrapped-native fills promoted only when every sampled native candidate for that wallet had an hourly-or-finer price within one hour. Solana rows remain observed-only. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
     consensus, breadth, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
     observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, windowSwaps: observed.windowSwaps, candidates: observed.candidates,
-      note: 'Paired stablecoin swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
+      note: 'Paired stablecoin swaps and phase-4-promoted hourly-priced native swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
     graph: { nodes, edges: graphEdges.filter((e) => allowedNodes.has(e.from) && allowedNodes.has(e.to)).slice(0, 100),
       fundingLinks: clusters.links.slice(0, 20), note: 'A shared funding address is correlation only, never proof of shared ownership.' },
     behaviours: behaviours.sort((a, b) => b.at - a.at).slice(0, 40),
     risk: { signalsAreTrades: true, priceForecast: false, identityVerifiedBySourceLinkOnly: true,
-      note: 'No recommendation or guaranteed return. Stablecoin quote approximates USD; fees, depegs, unobserved swaps and incomplete indexer history can change P&L.' }
+      note: 'No recommendation or guaranteed return. Stablecoin quotes approximate USD at the peg; promoted native quotes use the nearest accepted hourly-or-finer price within one hour, not an execution-time tick. Fees, depegs, unobserved swaps and incomplete indexer history can change P&L.' }
   };
 }
 
@@ -351,7 +355,7 @@ export function observedLayer({ profiles = [], swaps = [], byWallet = new Map(),
       && (selectedChain == null || p.chain === selectedChain));
   const analysed = new Map(fresh.map((p) => [ident(p.chain, p.address), p]));
   const real = (Array.isArray(swaps) ? swaps : []).filter((s) =>
-    s?.evidence === 'paired-explorer-transfers' && validToken(s.token) && ['BUY', 'SELL'].includes(s.side)
+    isVerifiedPairedSwap(s) && validToken(s.token) && ['BUY', 'SELL'].includes(s.side)
     && analysed.has(ident(s.chain, s.wallet))
     && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
     && Number.isFinite(s.valueUsd) && s.valueUsd > 0

@@ -36,7 +36,7 @@ import {
 } from './dataSources.js';
 import { tokenMarkets, historicalPriceFn, historicalHourlyPriceFn } from './pricing.js';
 import { analyzePerformance, reconstructNativeQuoteSwaps } from './performance.js';
-import { reconstructSolanaSwaps } from './solanaSwaps.js';
+import { assessSolanaSwapLedger, reconstructSolanaSwaps } from './solanaSwaps.js';
 import {
   calculateReputation,
   calculateWalletRisk,
@@ -277,11 +277,42 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
   // real tx hash, direction and method contribute to the ledger. A partial
   // indexer page cannot invent cost basis for sells predating our oldest buy.
   const performanceTransactions = bsTxRes.dataStatus === 'live' ? bsTxRes.rows : nativeTxRows;
+
+  /* Phase 4 promotion input: detect wrapped-native candidates BEFORE the
+   * performance audit and fetch one bounded hourly price series for their
+   * sampled time range. `analyzePerformance` remains the admission judge —
+   * it promotes either every candidate in this page or none of them. Doing
+   * the fetch afterwards (the phase-3 order) could only ever produce rows
+   * that were already excluded from the score that had just been computed. */
+  const nativeCandidatesSeen = reconstructNativeQuoteSwaps({
+    chain: chainId, address, transfers, transactions: performanceTransactions
+  });
+  let nativePriceAt = null;
+  let nativeQuotePricing = null;
+  if (nativeCandidatesSeen.length) {
+    nativeQuotePricing = 'unavailable';
+    const nativeBudgetMs = deadlineAt - Date.now();
+    const nativeCgId = EVM_CHAINS[chainId]?.native?.coingeckoId || null;
+    if (nativeBudgetMs >= 250 && nativeCgId) {
+      try {
+        const times = nativeCandidatesSeen.map((s) => s.timestamp);
+        nativePriceAt = await historicalHourlyPriceFn(nativeCgId, {
+          fromTs: Math.min(...times) - 2 * 3_600_000,
+          toTs: Math.max(...times) + 2 * 3_600_000,
+          timeoutMs: nativeBudgetMs
+        });
+      } catch {
+        nativePriceAt = null;
+      }
+    }
+  }
+
   const auditInput = {
     chain: chainId, address, transfers,
     transactions: performanceTransactions,
     prices: priceMap, balances, historyLive: transfersRes.dataStatus === 'live',
-    historyTruncated: !!transfersRes.hasMore
+    historyTruncated: !!transfersRes.hasMore,
+    nativePriceAt
   };
   let audit = analyzePerformance(auditInput);
   // Exit timing needs an independently observed *later* price, never the
@@ -305,38 +336,24 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
   }
   const { pnl, smartMoney: smart, performance } = audit;
 
-  /* Phase 3 observed layer: wrapped-native quote pairs are reconstructed
-   * from the same loaded transfer page, but they are not passed back into
-   * `analyzePerformance`. A trustworthy USD value needs the native coin's
-   * hourly-or-finer price at the transaction minute; if that point cannot be
-   * proved, the row keeps its real WETH/WBNB amount and a null USD value. */
-  let nativeObservedSwaps = reconstructNativeQuoteSwaps({
-    chain: chainId, address, transfers, transactions: performanceTransactions
-  });
-  let nativeQuotePricing = null;
-  if (nativeObservedSwaps.length) {
-    nativeQuotePricing = 'unavailable';
-    const nativeBudgetMs = deadlineAt - Date.now();
-    const nativeCgId = EVM_CHAINS[chainId]?.native?.coingeckoId || null;
-    if (nativeBudgetMs >= 250 && nativeCgId) {
-      try {
-        const times = nativeObservedSwaps.map((s) => s.timestamp);
-        const priceAt = await historicalHourlyPriceFn(nativeCgId, {
-          fromTs: Math.min(...times) - 2 * 3_600_000,
-          toTs: Math.max(...times) + 2 * 3_600_000,
-          timeoutMs: nativeBudgetMs
-        });
-        nativeObservedSwaps = reconstructNativeQuoteSwaps({
-          chain: chainId, address, transfers, transactions: performanceTransactions, priceAt
-        });
-        const priced = nativeObservedSwaps.filter((s) => s.valueUsd != null).length;
-        nativeQuotePricing = priced === nativeObservedSwaps.length ? 'live' : priced ? 'partial' : 'unavailable';
-      } catch {
-        /* The paired native amounts are still observed; only USD stays null. */
-      }
-    }
+  /* The audit has already made the all-or-nothing promotion decision. If it
+   * passed, `audit.nativeCandidates` is empty because those fills are inside
+   * `audit.swaps`; exposing them again here would double-count one receipt
+   * as both verified and observed. If it failed, every candidate stays in
+   * this separate layer, including individually priced rows whose sibling
+   * candidate blocked unified FIFO admission. */
+  const nativeObservedSwaps = audit.nativeCandidates || [];
+  const nativePromotion = audit.nativePromotion || {
+    status: 'no-native-candidates', promoted: false, candidates: 0,
+    pricedCandidates: 0, unpricedCandidates: 0,
+    gate: 'all-sampled-native-candidates-hourly-priced'
+  };
+  const nativePricedCount = nativePromotion.pricedCandidates || 0;
+  if (nativePromotion.candidates > 0) {
+    nativeQuotePricing = nativePricedCount === nativePromotion.candidates ? 'live'
+      : nativePricedCount > 0 ? 'partial' : 'unavailable';
   }
-  const nativePricedCount = nativeObservedSwaps.filter((s) => s.valueUsd != null).length;
+  const verifiedEvidenceKinds = [...new Set(audit.swaps.map((s) => s.evidence).filter(Boolean))];
 
   const heldDays = audit.positions
     .filter((p) => p.amount > 0 && p.token)
@@ -438,17 +455,33 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
     pnl,
     performance,
     verifiedSwaps: audit.swaps.slice(-60).map((s) => ({ ...s, pairCreatedAt: priceMap.get(s.token)?.pairCreatedAt ?? null })),
-    /* Observed-only rows are deliberately a separate field. Indexing and
-       consensus consume verifiedSwaps + the stable-quote evidence string, so
-       a native-quote row cannot become a vote by being present here. */
+    /* Unpromoted native candidates remain a separate field. Promoted ones
+       are not duplicated here: they are already the native-evidence rows in
+       verifiedSwaps, and downstream consumers revalidate their hourly price
+       provenance before counting them. */
     observedSwaps: nativeObservedSwaps.slice(-60),
     swapEvidence: {
-      verified: { count: audit.swaps.length, classification: 'verified', evidence: 'paired-explorer-transfers' },
+      verified: {
+        count: audit.swaps.length, classification: 'verified',
+        evidence: verifiedEvidenceKinds[0] || 'paired-explorer-transfers',
+        evidences: verifiedEvidenceKinds,
+        stableQuoteSwaps: smart.sample?.stableQuoteSwaps ?? audit.swaps.length,
+        nativeQuoteSwaps: smart.sample?.nativeQuoteSwaps ?? 0,
+        nativePromotion
+      },
       observedOnly: {
-        count: nativeObservedSwaps.length, priced: nativePricedCount,
+        count: nativeObservedSwaps.length,
+        priced: nativeObservedSwaps.filter((s) => s.valueUsd != null).length,
+        candidates: nativePromotion.candidates,
+        pricedCandidates: nativePricedCount,
+        unpricedCandidates: nativePromotion.unpricedCandidates,
+        promotionStatus: nativePromotion.status,
+        promotionGate: nativePromotion.gate,
         classification: 'observed-only', evidence: 'paired-native-quote-explorer-transfers',
         admittedToScore: false, admittedToConsensus: false,
-        basis: 'Exact wrapped-native/target transfer pair; USD only from an hourly-or-finer native price within one hour of the transaction.'
+        basis: nativePromotion.promoted
+          ? 'Every sampled wrapped-native candidate was valued from an hourly-or-finer price within one hour and promoted into the unified verified FIFO ledger; no native rows remain in this observed-only field.'
+          : 'Exact wrapped-native/target transfer pair; USD only from an hourly-or-finer native price within one hour. Unified verified admission is all-or-nothing, so one unpriced candidate keeps every native row observed-only.'
       }
     },
     closedTrades: audit.closed,
@@ -466,7 +499,7 @@ async function analyzeEvm(chainId, address, { windowMs, timeoutMs = 12_000 } = {
       counters: countersRes.dataStatus || 'unavailable',
       // Only report this optional source when a native pair actually needed
       // it; otherwise the wallet page would call a never-needed source offline.
-      ...(nativeObservedSwaps.length ? { nativeQuotePricing: nativeQuotePricing || 'unavailable' } : {})
+      ...(nativePromotion.candidates ? { nativeQuotePricing: nativeQuotePricing || 'unavailable' } : {})
     }
   };
 }
@@ -478,7 +511,7 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
   const deadlineAt = Date.now() + readBudgetMs;
   const historyTimeoutMs = Math.max(250, Math.min(6_000, Math.floor(readBudgetMs / 2)));
   const [sigsSettled, balSettled, splSettled] = await Promise.allSettled([
-    solSignatures(address, { limit: 100, timeoutMs: historyTimeoutMs }),
+    solSignatures(address, { limit: 300, pageLimit: 100, maxPages: 3, timeoutMs: historyTimeoutMs }),
     solBalance(address, { timeoutMs: historyTimeoutMs }),
     solTokenBalances(address, { timeoutMs: historyTimeoutMs })
   ]);
@@ -491,19 +524,22 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
   const ageMs = firstSeen ? Date.now() - firstSeen : null;
   const isFresh = ageMs != null && ageMs < FRESH.maxAgeMs;
 
-  /* Phase 3 observed layer: fetch a bounded set of recent successful
-   * transactions and decode only wallet-owned pre/post token-balance deltas.
-   * This can prove individual paired effects, but the sample is neither the
-   * wallet's complete history nor fed into the score/P&L below. */
-  const successfulSigs = sigRows.filter((s) => s?.signature && !s.err).slice(0, 25);
+  /* Phase 4 observed/shadow layer: request details for every successful
+   * signature in the paginated scan (≤300), then decode balance deltas and
+   * reconcile them against parsed SPL transfer fills. The assessment below
+   * can call this sample shadow-ready only when BOTH reads prove themselves
+   * complete; a deadline-truncated detail fetch stays partial no matter how
+   * many plausible swaps it happened to decode first. */
+  const successfulSigs = sigRows.filter((s) => s?.signature && !s.err);
   let solTxRes = { dataStatus: 'unavailable', rows: [], requested: successfulSigs.length,
-    attempted: 0, fetched: 0, failed: 0, unattempted: successfulSigs.length };
+    attempted: 0, fetched: 0, failed: 0, unattempted: successfulSigs.length,
+    complete: false, coverage: 0 };
   let observedSwaps = [];
-  const txBudgetMs = Math.min(Math.max(0, deadlineAt - Date.now()), 3_500);
-  if (sigsRes.dataStatus === 'live' && successfulSigs.length && txBudgetMs >= 250) {
+  const txBudgetMs = Math.min(Math.max(0, deadlineAt - Date.now() - 500), 6_000);
+  if (['live', 'partial'].includes(sigsRes.dataStatus) && successfulSigs.length && txBudgetMs >= 250) {
     try {
       solTxRes = await solTransactions(successfulSigs, {
-        limit: 25, timeoutMs: txBudgetMs, concurrency: 5
+        limit: 300, timeoutMs: txBudgetMs, concurrency: 8
       });
       observedSwaps = reconstructSolanaSwaps({ address, transactions: solTxRes.rows || [] });
     } catch {
@@ -595,14 +631,27 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
     longTermHolding: (ageMs || 0) > WINDOWS.D30
   });
 
-  // Individual Solana balance-delta swaps are now decoded above, but only
-  // from a bounded recent sample and with each transaction netted into one
-  // effect. That is not a complete FIFO ledger, so *no* profitability or
-  // Smart Money qualification is deduced from them yet.
+  // The shadow gate measures whether this sample is finally shaped like a
+  // ledger; it does not turn it into one for users. Even a shadow-ready
+  // sample keeps score/P&L/qualification empty until real transactions from
+  // each supported DEX have been replayed through the decoder as fixtures.
+  const solanaLedger = assessSolanaSwapLedger({
+    swaps: observedSwaps,
+    signatureCoverage: sigsRes,
+    transactionCoverage: solTxRes
+  });
   const smart = {
     score: null, coverage: 0, factors: {}, status: 'UNAVAILABLE', qualified: false,
-    sample: { swaps: 0, closedTrades: 0, observedOnlySwaps: observedSwaps.length },
-    note: 'Decoded Solana swaps are observed-only sampled evidence; no behavioural score is assigned until a complete ordered ledger can be proven.'
+    sample: {
+      swaps: 0, closedTrades: 0, observedOnlySwaps: observedSwaps.length,
+      instructionCorroboratedSwaps: solanaLedger.corroboratedSwaps,
+      signatureHistoryComplete: solanaLedger.signatureHistoryComplete,
+      transactionDetailsComplete: solanaLedger.transactionDetailsComplete,
+      solanaShadowEligible: solanaLedger.shadowEligible
+    },
+    note: solanaLedger.shadowEligible
+      ? 'This Solana sample passes the phase-4 shadow-ledger gate (complete paginated signatures, complete transaction details and instruction-level reconciliation), but remains unscored until real-transaction replay fixtures validate promotion.'
+      : 'Decoded Solana swaps are observed-only evidence; no behavioural score is assigned until signature pagination, transaction-detail coverage and instruction-level reconciliation are all complete, followed by real-transaction replay validation.'
   };
   const reputation = calculateReputation({
     historicalPerformance: null,
@@ -639,11 +688,26 @@ async function analyzeSolana(address, { timeoutMs = 12_000 } = {}) {
         count: observedSwaps.length, classification: 'observed-only',
         evidence: 'decoded-solana-token-balance-deltas',
         sampledSignatures: successfulSigs.length,
+        signatureRowsScanned: sigsRes.scanned ?? sigRows.length,
+        signaturePages: sigsRes.pagesFetched ?? 0,
+        signatureHistoryComplete: sigsRes.complete === true,
+        signatureHistoryHasMore: sigsRes.hasMore ?? sigsRes.complete !== true,
+        requestedTransactions: solTxRes.requested || 0,
         decodedTransactions: solTxRes.fetched || 0,
         attemptedTransactions: solTxRes.attempted || 0,
         failedTransactions: solTxRes.failed || 0,
+        unattemptedTransactions: solTxRes.unattempted || 0,
+        transactionDetailsComplete: solTxRes.complete === true,
+        transactionCoverage: solTxRes.coverage ?? 0,
+        instructionCorroboratedSwaps: solanaLedger.corroboratedSwaps,
+        balanceOnlySwaps: solanaLedger.balanceOnlySwaps,
+        shadowLedger: solanaLedger,
+        shadowEligible: solanaLedger.shadowEligible,
+        shadowBlockers: solanaLedger.blockers,
         admittedToScore: false, admittedToConsensus: false,
-        basis: 'Successful known-DEX transactions only; exactly two opposite wallet-owned mint deltas, one canonical USDC/USDT leg. Recent sample is incomplete and each transaction is netted.'
+        basis: solanaLedger.shadowEligible
+          ? 'Complete paginated signature scan and transaction-detail read; every decoded paired swap reconciles parsed SPL transfer fills exactly with wallet-owned token-balance deltas. Shadow-ready only — real-transaction replay validation is still required before verified admission.'
+          : 'Successful known-DEX transactions only; exactly two opposite wallet-owned mint deltas, one canonical USDC/USDT leg. Rows marked instruction-corroborated also reconcile parsed SPL transfer fills exactly; all rows remain observed-only while any coverage or corroboration gate is open.'
       }
     },
     smartMoney: smart,

@@ -2227,8 +2227,8 @@ console.log('\n▸ probing Smart Money phase 2 (alerts, score factor, retention)
 
 /* Phase 3 (2026-10-25): native-quote EVM observations priced only from an
  * hourly-or-finer point near the transaction, plus Solana swaps decoded
- * from wallet-owned token-balance deltas. Both stay observed-only and are
- * proved unable to alter score, P&L, qualification or consensus. */
+ * from wallet-owned token-balance deltas. The phase-3 observations
+ * themselves do not vote; explicit phase-4 promotion is probed separately. */
 console.log('\n▸ probing Smart Money phase 3 (native quote, Solana decoder, no-vote boundary)…');
 {
   let ok = false;
@@ -2240,7 +2240,24 @@ console.log('\n▸ probing Smart Money phase 3 (native quote, Solana decoder, no
   } catch (err) {
     console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
   }
-  report('Smart Money phase 3', [['native/Solana observed swaps are decoded honestly and never vote', ok]]);
+  report('Smart Money phase 3', [['native/Solana observations are decoded honestly and do not vote without explicit promotion', ok]]);
+}
+
+/* Phase 4 (2026-10-25): all-or-nothing promotion of hourly-priced native
+ * quotes into the unified verified FIFO ledger, persisted-row revalidation,
+ * Solana cursor pagination and instruction-corroborated shadow readiness. */
+console.log('\n▸ probing Smart Money phase 4 (native promotion, Solana shadow gate)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase4-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 4', [['native promotion is unified and revalidatable; Solana can be shadow-ready without voting', ok]]);
 }
 
 /*

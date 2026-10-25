@@ -111,6 +111,8 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
   // values into verified P&L/activity.
   const observedSwaps = [...(data?.observedSwaps || [])].reverse().slice(0, 20);
   const observedEvidence = data?.swapEvidence?.observedOnly || null;
+  const nativeSample = data?.smartMoney?.sample || {};
+  const solanaShadow = observedEvidence?.shadowLedger || null;
   const fmtAmount = (value) => {
     const n = Number(value);
     return Number.isFinite(n)
@@ -207,6 +209,18 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                   <span>{t('sm.engine.coverageShort')}: <b>{Math.round(data.smartMoney.coverage * 100)}%</b></span>
                   <span>{t('sm.engine.closes')}: <b>{data.smartMoney.sample?.closedTrades ?? pnl?.closedTrades ?? '—'}</b></span>
                 </div>}
+                {nativeSample.nativeQuoteCandidates > 0 && (
+                  <div className="smi-wallet-factors">
+                    <span className={nativeSample.nativeQuotePromoted ? 'smi-native-promoted' : 'smi-native-blocked'}>
+                      {nativeSample.nativeQuotePromoted
+                        ? t('sm.phase4.nativeIncluded', { n: nativeSample.nativeQuoteSwaps ?? 0 })
+                        : t('sm.phase4.nativeBlocked', {
+                          n: nativeSample.nativeQuoteCandidates,
+                          unpriced: nativeSample.nativeQuoteUnpricedCandidates ?? 0
+                        })}
+                    </span>
+                  </div>
+                )}
                 {data.identity && <div className="smi-wallet-label">
                   <span>{t('sm.engine.sourcedIdentity')}: <b>{data.identity.label} · {data.identity.kind}</b></span>
                   {data.identity.sourceUrl && <button type="button" onClick={() => openUrl(data.identity.sourceUrl)}>{t('sm.engine.source')} ↗</button>}
@@ -359,7 +373,31 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                   </p>
                   {observedEvidence?.sampledSignatures > 0 && (
                     <div className="smi-observed-sample">
-                      {t('sm.phase3.sample', {
+                      {observedEvidence.signatureRowsScanned != null ? (
+                        <>
+                          <div>
+                            {t('sm.phase4.solanaCoverage', {
+                              signatures: observedEvidence.signatureRowsScanned,
+                              pages: observedEvidence.signaturePages ?? 0,
+                              fetched: observedEvidence.decodedTransactions ?? 0,
+                              attempted: observedEvidence.requestedTransactions ?? observedEvidence.attemptedTransactions ?? observedEvidence.sampledSignatures,
+                              checked: observedEvidence.instructionCorroboratedSwaps ?? solanaShadow?.corroboratedSwaps ?? 0,
+                              swaps: observedEvidence.count ?? observedSwaps.length
+                            })}
+                          </div>
+                          <div>
+                            {t(observedEvidence.signatureHistoryComplete
+                              ? 'sm.phase4.signatureComplete'
+                              : 'sm.phase4.signatureIncomplete')}
+                            {' · '}
+                            {observedEvidence.shadowEligible || solanaShadow?.shadowEligible
+                              ? t('sm.phase4.shadowReady')
+                              : t('sm.phase4.shadowBlocked', {
+                                n: observedEvidence.shadowBlockers?.length ?? solanaShadow?.blockers?.length ?? 0
+                              })}
+                          </div>
+                        </>
+                      ) : t('sm.phase3.sample', {
                         decoded: observedEvidence.decodedTransactions ?? 0,
                         attempted: observedEvidence.attemptedTransactions ?? observedEvidence.sampledSignatures
                       })}
@@ -385,7 +423,9 @@ export default function SmartMoneyWallet({ embedded = false, onBack, chainProp, 
                             </small>
                             <small>
                               {s.dex
-                                ? t('sm.phase3.dex', { name: s.dex })
+                                ? `${t('sm.phase3.dex', { name: s.dex })} · ${t(s.instructionCorroborated
+                                  ? 'sm.phase4.instructionChecked'
+                                  : 'sm.phase4.balanceOnly')}`
                                 : s.quotePriceUsd != null
                                   ? t('sm.phase3.pricedAt', { price: `$${fmtAmount(s.quotePriceUsd)}` })
                                   : t('sm.phase3.unpriced')}

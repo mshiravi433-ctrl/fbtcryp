@@ -34,6 +34,7 @@
     "test:smart-money-upgrade": "node test/smart-money-upgrade-probe.mjs",
     "test:smart-money-phase2": "node test/smart-money-phase2-probe.mjs",
     "test:smart-money-phase3": "node test/smart-money-phase3-probe.mjs",
+    "test:smart-money-phase4": "node test/smart-money-phase4-probe.mjs",
     "notify:verify": "node scripts/notify-verify.mjs",
     "preview": "vite preview",
     "start": "node server/index.js",

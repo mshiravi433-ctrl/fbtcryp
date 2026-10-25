@@ -2,11 +2,12 @@
  * Verified wallet performance, independent of the whale-transfer feed.
  *
  * A transfer TO a router is not a sale; a transfer FROM one is not a buy.
- * Only an explorer-confirmed transaction with BOTH sides of an ERC-20 ↔
- * allowlisted USD-stablecoin swap is admitted. USD here is the observed quote
- * amount (approximate $1 peg; gas, fees, depegs and taxes are not measured).
- * Native-asset swaps, Solana signatures, unknown quotes and incomplete pages
- * are NOT converted into fictional P&L. Never infer institution from volume.
+ * Only an explorer-confirmed transaction with BOTH sides of an ERC-20 swap is
+ * admitted. Stablecoin USD is the observed quote amount (approximate $1 peg;
+ * gas, fees, depegs and taxes are not measured). Wrapped-native swaps join
+ * the same ledger only under the phase-4 all-candidates-hourly-priced gate.
+ * Solana signatures, unknown quotes and incomplete pages are NOT converted
+ * into fictional P&L here. Never infer institution from volume.
  */
 import { EVM_CHAINS } from '../chainsLite.js';
 import { SMART_MONEY_SCORE, WINDOWS } from './config.js';
@@ -102,7 +103,10 @@ export function reconstructSwaps({ chain, address, transfers = [], transactions 
       token: target.token.address, symbol: String(target.token.symbol || '').slice(0, 24) || '???',
       side: buy ? 'BUY' : 'SELL', amount: Number(target.amount),
       valueUsd: Number(quote.amount), executionPriceUsd: Number(quote.amount) / Number(target.amount),
-      quoteToken: quote.token.address, evidence: 'paired-explorer-transfers',
+      quoteToken: quote.token.address, quoteKind: 'allowlisted-usd-stablecoin',
+      quoteSymbol: String(quote.token.symbol || 'USD').slice(0, 24), quoteAmount: Number(quote.amount),
+      evidence: 'paired-explorer-transfers', classification: 'verified',
+      admission: 'verified-score-and-consensus',
       // Label is evidence provenance, not a claim that the address belongs to a DEX.
       method: method.slice(0, 80)
     });
@@ -134,6 +138,67 @@ function nativePricePoint(priceAt, timestamp) {
     granularity,
     source: String(raw.source || 'timestamped-intraday-price').slice(0, 80)
   };
+}
+
+export const NATIVE_PRICE_GRANULARITIES = Object.freeze([...ACCEPTED_NATIVE_PRICE_GRANULARITIES]);
+
+/**
+ * A native-quote row is only *priced* when its stored provenance can be
+ * revalidated without trusting the row's own labels: accepted intraday
+ * granularity, a point no more than one hour from the fill, and a USD value
+ * that still reconciles with quoteAmount × quotePriceUsd (allowing only the
+ * two-decimal rounding applied at reconstruction). Index rows are persisted
+ * JSON, so consumers must be able to reject a stale or tampered replay.
+ */
+export function isPricedNativeQuoteSwap(swap) {
+  if (!swap || swap.evidence !== 'paired-native-quote-explorer-transfers') return false;
+  const timestamp = Number(swap.timestamp);
+  const quoteAmount = Number(swap.quoteAmount);
+  const quotePriceUsd = Number(swap.quotePriceUsd);
+  const quotePriceAt = Number(swap.quotePriceAt);
+  const valueUsd = Number(swap.valueUsd);
+  const executionPriceUsd = Number(swap.executionPriceUsd);
+  const amount = Number(swap.amount);
+  if (!Number.isFinite(timestamp) || timestamp <= 0
+    || !finitePositive(quoteAmount) || !finitePositive(quotePriceUsd) || !finitePositive(amount)
+    || !Number.isFinite(quotePriceAt) || Math.abs(quotePriceAt - timestamp) > MAX_NATIVE_PRICE_DISTANCE_MS
+    || !ACCEPTED_NATIVE_PRICE_GRANULARITIES.has(String(swap.quotePriceGranularity || '').toLowerCase())
+    || !finitePositive(valueUsd) || !finitePositive(executionPriceUsd)) return false;
+  const expectedUsd = quoteAmount * quotePriceUsd;
+  const roundingTolerance = Math.max(0.011, expectedUsd * 1e-9);
+  return Math.abs(valueUsd - expectedUsd) <= roundingTolerance
+    && Math.abs(executionPriceUsd * amount - expectedUsd) <= roundingTolerance;
+}
+
+/**
+ * The single admission predicate for persisted verified swap rows.
+ *
+ * Legacy stablecoin rows predate classification fields and remain admissible
+ * on their original evidence string. Native rows require BOTH the phase-4
+ * promotion labels and revalidatable hourly pricing; a priced phase-3
+ * observation therefore still cannot vote. The Solana branch is intentionally
+ * present but dormant in production: no producer sets those labels yet, so
+ * merely decoding a Solana balance delta can never satisfy it.
+ */
+export function isVerifiedPairedSwap(swap) {
+  if (!swap || !['BUY', 'SELL'].includes(swap.side)
+    || !finitePositive(swap.amount) || !finitePositive(swap.valueUsd)
+    || !Number.isFinite(Number(swap.timestamp)) || Number(swap.timestamp) <= 0) return false;
+  if (swap.evidence === 'paired-explorer-transfers') {
+    return swap.classification == null || swap.classification === 'verified';
+  }
+  if (swap.evidence === 'paired-native-quote-explorer-transfers') {
+    return swap.classification === 'verified'
+      && swap.admission === 'verified-score-and-consensus'
+      && isPricedNativeQuoteSwap(swap);
+  }
+  if (swap.evidence === 'decoded-solana-token-balance-deltas') {
+    return swap.classification === 'verified'
+      && swap.admission === 'verified-score-and-consensus'
+      && swap.decodeMethod === 'instruction-corroborated-token-balance-deltas'
+      && swap.instructionCorroborated === true;
+  }
+  return false;
 }
 
 /**
@@ -205,22 +270,72 @@ export function reconstructNativeQuoteSwaps({ chain, address, transfers = [], tr
   return swaps.sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id));
 }
 
-/** FIFO over ONLY observed buys; incoming deposits and pre-window cost basis
- * never become zero-cost positions. Closed results are a *sample*, not a
- * wallet's lifetime P&L. `prices` and `balances` are current on-chain reads. */
-export function analyzePerformance({ chain, address, transfers = [], transactions = [], prices = new Map(), balances = [],
-  historyLive = false, historyTruncated = false, postExitPriceAt = null, now = Date.now() } = {}) {
-  const swaps = reconstructSwaps({ chain, address, transfers, transactions, now });
+const tokenKey = (token) => {
+  const value = String(token || '');
+  // EVM addresses are case-insensitive; Solana mints are not. Lowercasing a
+  // mint here would silently merge different assets in the shared FIFO core.
+  return /^0x[a-f0-9]{40}$/i.test(value) ? value.toLowerCase() : value;
+};
+const priceEntries = (prices) => prices instanceof Map ? prices.entries()
+  : prices && typeof prices === 'object' ? Object.entries(prices) : [];
+const marketPriceUsd = (market) => Number(market?.usd ?? market?.priceUsd ?? market?.price);
+
+/**
+ * Shared FIFO/scoring core over swaps the caller has already admitted.
+ *
+ * This function deliberately does NOT decide evidentiary admission: EVM
+ * stable/native promotion happens in `analyzePerformance`, while a future
+ * Solana admission must happen before its rows reach here. It does fail
+ * closed on malformed or duplicated rows — running FIFO over a convenient
+ * subset would manufacture cost basis and exits that were never observed.
+ * Closed results remain a sample, never lifetime wallet P&L.
+ */
+export function analyzeSwapLedger({ swaps: inputSwaps = [], prices = new Map(), balances = [],
+  historyLive = false, historyTruncated = false, postExitPriceAt = null, now = Date.now(),
+  quoteSummary = 'allowlisted USD stablecoin ≈ $1', sampleExtra = {},
+  pnlNote = 'Sample of paired swaps in the loaded history page. Gas, tax and quote-asset depegs excluded; incomplete history is not lifetime P&L.' } = {}) {
+  const seenSwapIds = new Set();
+  let invalidSwaps = 0;
+  const normalizedSwaps = [];
+  for (const raw of (Array.isArray(inputSwaps) ? inputSwaps : [])) {
+    const token = String(raw?.token || '');
+    const amount = Number(raw?.amount);
+    const valueUsd = Number(raw?.valueUsd);
+    const timestamp = Number(raw?.timestamp);
+    const executionPriceUsd = Number(raw?.executionPriceUsd ?? (finitePositive(amount) && finitePositive(valueUsd)
+      ? valueUsd / amount : NaN));
+    const identity = String(raw?.id || `${raw?.chain}:${raw?.wallet}:${raw?.hash}:${token}:${raw?.side}:${timestamp}`);
+    if (!token || !['BUY', 'SELL'].includes(raw?.side) || !finitePositive(amount)
+      || !finitePositive(valueUsd) || !finitePositive(executionPriceUsd)
+      || !Number.isFinite(timestamp) || timestamp <= 0 || timestamp > now + 60_000
+      || seenSwapIds.has(identity)) {
+      invalidSwaps++;
+      continue;
+    }
+    seenSwapIds.add(identity);
+    normalizedSwaps.push({ ...raw, token, amount, valueUsd, timestamp, executionPriceUsd });
+  }
+  const swaps = invalidSwaps ? [] : normalizedSwaps
+    .sort((a, b) => a.timestamp - b.timestamp || String(a.id || '').localeCompare(String(b.id || '')));
   const lots = new Map();
   const closed = [];
   let unmatchedExits = 0;
-  const priceOf = (token) => prices instanceof Map ? prices.get(token) : prices?.[token];
-  const balanceOf = new Map((Array.isArray(balances) ? balances : []).map((b) => [String(b.token || '').toLowerCase(), Number(b.amount)]));
+  const priceByToken = new Map([...priceEntries(prices)].map(([token, market]) => [tokenKey(token), market]));
+  const priceOf = (token) => priceByToken.get(tokenKey(token));
+  const balanceOf = new Map();
+  for (const balance of (Array.isArray(balances) ? balances : [])) {
+    const key = tokenKey(balance?.token);
+    const amount = Number(balance?.amount);
+    if (!key || !Number.isFinite(amount)) continue;
+    balanceOf.set(key, (balanceOf.get(key) || 0) + amount);
+  }
   for (const swap of swaps) {
-    const queue = lots.get(swap.token) || [];
+    const key = tokenKey(swap.token);
+    const queue = lots.get(key) || [];
     if (swap.side === 'BUY') {
-      const createdAt = priceOf(swap.token)?.pairCreatedAt;
-      queue.push({ qty: swap.amount, cost: swap.valueUsd, at: swap.timestamp, symbol: swap.symbol,
+      const createdAt = Number(priceOf(swap.token)?.pairCreatedAt);
+      queue.push({ token: swap.token, qty: swap.amount, cost: swap.valueUsd, at: swap.timestamp,
+        symbol: swap.symbol, evidence: swap.evidence || null,
         early: Number.isFinite(createdAt) && createdAt > 0 && swap.timestamp >= createdAt
           && swap.timestamp - createdAt <= 7 * DAY });
     } else {
@@ -229,12 +344,14 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
       let costUsd = 0;
       let holdingDays = 0;
       let earlyCost = 0;
+      const entryEvidence = new Set();
       while (remain > 1e-9 && queue.length) {
         const lot = queue[0];
         const take = Math.min(remain, lot.qty);
         const cost = lot.cost * (take / lot.qty);
         costUsd += cost;
         if (lot.early) earlyCost += cost;
+        if (lot.evidence) entryEvidence.add(lot.evidence);
         holdingDays += take * (swap.timestamp - lot.at) / DAY;
         matched += take;
         remain -= take;
@@ -248,15 +365,18 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
         const pnlUsd = proceedsUsd - costUsd;
         let exitTiming = null;
         if (typeof postExitPriceAt === 'function' && now - swap.timestamp >= 7 * DAY) {
-          const after = postExitPriceAt(swap.token, swap.timestamp + 7 * DAY);
-          if (finitePositive(after)) exitTiming = clamp(0.5 + (swap.executionPriceUsd - after) / swap.executionPriceUsd);
+          try {
+            const after = postExitPriceAt(swap.token, swap.timestamp + 7 * DAY);
+            if (finitePositive(after)) exitTiming = clamp(0.5 + (swap.executionPriceUsd - after) / swap.executionPriceUsd);
+          } catch { /* an optional timing lookup cannot invalidate the fill */ }
         }
         closed.push({ token: swap.token, symbol: swap.symbol, at: swap.timestamp, hash: swap.hash,
           qty: matched, costUsd, proceedsUsd, pnlUsd, roiPct: (pnlUsd / costUsd) * 100,
-          holdingDays: holdingDays / matched, early: earlyCost > 0, exitTiming });
+          holdingDays: holdingDays / matched, early: earlyCost > 0, exitTiming,
+          entryEvidence: [...entryEvidence], exitEvidence: swap.evidence || null });
       }
     }
-    lots.set(swap.token, queue);
+    lots.set(key, queue);
   }
 
   const realized = closed.reduce((sum, c) => sum + c.pnlUsd, 0);
@@ -267,14 +387,15 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
   const positions = [];
   let unrealized = 0;
   let valued = 0;
-  for (const [token, queue] of lots) {
+  for (const [key, queue] of lots) {
     const qty = queue.reduce((s, l) => s + l.qty, 0);
     const costUsd = queue.reduce((s, l) => s + l.cost, 0);
     if (!(qty > 1e-9)) continue;
-    const px = priceOf(token)?.usd;
+    const token = queue[0].token || key;
+    const px = marketPriceUsd(priceOf(token));
     // Without a current balance, the observed cost basis might have left the
-    // wallet in a later transfer omitted by the limited explorer page.
-    const balance = balanceOf.get(token);
+    // wallet in a later transfer omitted by the limited history page.
+    const balance = balanceOf.get(key);
     const verifiable = finitePositive(px) && Number.isFinite(balance) && balance + Math.max(qty * 1e-6, 1e-8) >= qty;
     const gain = verifiable ? qty * px - costUsd : null;
     if (gain != null) { unrealized += gain; valued++; }
@@ -283,7 +404,7 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
   }
   const pnl = {
     dataStatus: closed.length ? 'partial' : swaps.length ? 'partial' : 'unavailable',
-    reason: !historyLive ? 'NO_HISTORY' : !swaps.length ? 'NO_CONFIRMED_SWAPS' : !closed.length ? 'NO_CLOSED_TRADES' : 'SAMPLED_HISTORY',
+    reason: invalidSwaps ? 'INVALID_LEDGER_ROWS' : !historyLive ? 'NO_HISTORY' : !swaps.length ? 'NO_CONFIRMED_SWAPS' : !closed.length ? 'NO_CLOSED_TRADES' : 'SAMPLED_HISTORY',
     realizedUsd: closed.length ? round(realized) : null,
     unrealizedUsd: valued ? round(unrealized) : null,
     totalUsd: closed.length ? round(realized + (valued ? unrealized : 0)) : (valued ? round(unrealized) : null),
@@ -291,7 +412,7 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
     best: closed.length ? closed.reduce((a, c) => a.pnlUsd >= c.pnlUsd ? a : c) : null,
     worst: closed.length ? closed.reduce((a, c) => a.pnlUsd <= c.pnlUsd ? a : c) : null,
     roiPct: roi == null ? null : round(roi, 1),
-    note: 'Sample of paired ERC-20/stablecoin swaps in the loaded explorer page. Gas, tax and stablecoin depegs excluded; incomplete history is not lifetime P&L.'
+    note: pnlNote
   };
 
   const ret = closed.map((c) => c.roiPct / 100);
@@ -362,15 +483,16 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
     ? Math.round(100 * covered.reduce((sum, [key]) => sum + factors[key] * weights[key], 0) / measuredCoverage) : null;
   const smartMoney = {
     score, coverage: round(coverage), factors,
-    status: !historyLive ? 'UNAVAILABLE' : sufficient ? 'SCORED' : 'INSUFFICIENT_EVIDENCE',
+    status: !historyLive || invalidSwaps ? 'UNAVAILABLE' : sufficient ? 'SCORED' : 'INSUFFICIENT_EVIDENCE',
     qualified: score != null && score >= 70 && realized > 0 && winRate >= 55 && coreMeasured,
     measuredCoverage: round(measuredCoverage),
     weights, sample: { swaps: swaps.length, closedTrades: closed.length, matchedExits: closed.length,
-      unmatchedExits, observedDays: round(sampleDays, 1), historyTruncated, quote: 'allowlisted USD stablecoin ≈ $1' },
+      unmatchedExits, observedDays: round(sampleDays, 1), historyTruncated, quote: quoteSummary,
+      invalidSwaps, ...(sampleExtra && typeof sampleExtra === 'object' ? sampleExtra : {}) },
     note: 'Behavioural evidence score, not a probability of profit. No score without ≥5 paired closed swaps over ≥2 days; paginated history lowers coverage and unmatched cost basis is excluded.'
   };
   return {
-    swaps, positions, closed: closed.slice(-40).map((c) => ({ ...c, pnlUsd: round(c.pnlUsd),
+    swaps, invalidSwaps, positions, closed: closed.slice(-40).map((c) => ({ ...c, pnlUsd: round(c.pnlUsd),
       roiPct: round(c.roiPct, 1), holdingDays: round(c.holdingDays, 1) })),
     pnl, smartMoney,
     performance: {
@@ -389,5 +511,79 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
       averageEntry: positions.map((p) => ({ token: p.token, priceUsd: p.averageEntryUsd })),
       evidence: smartMoney.sample
     }
+  };
+}
+
+/**
+ * EVM verified performance (phase 4 unified quote ledger).
+ *
+ * Stablecoin-quoted fills remain the original verified stream. Wrapped-
+ * native candidates join that SAME FIFO queue only when every candidate in
+ * the sampled transfer page has revalidatable hourly-or-finer USD pricing.
+ * Promoting just the priced subset would be worse than excluding them all:
+ * a priced native sell could close a stable buy while its unpriced native
+ * buy vanished, or vice versa, silently reassigning cost basis. The gate is
+ * therefore all-or-nothing per wallet sample. When it fails, the candidates
+ * are returned separately as `nativeCandidates` for the observed layer and
+ * the verified result is exactly the stable-only ledger.
+ */
+export function analyzePerformance({ chain, address, transfers = [], transactions = [], prices = new Map(), balances = [],
+  historyLive = false, historyTruncated = false, postExitPriceAt = null, nativePriceAt = null,
+  now = Date.now() } = {}) {
+  const stableSwaps = reconstructSwaps({ chain, address, transfers, transactions, now });
+  const nativeCandidatesRaw = reconstructNativeQuoteSwaps({
+    chain, address, transfers, transactions, priceAt: nativePriceAt, now
+  });
+  const pricedNativeCandidates = nativeCandidatesRaw.filter(isPricedNativeQuoteSwap);
+  const nativePromoted = nativeCandidatesRaw.length > 0
+    && pricedNativeCandidates.length === nativeCandidatesRaw.length;
+  const promotedNativeSwaps = nativePromoted
+    ? pricedNativeCandidates.map((swap) => ({
+      ...swap,
+      classification: 'verified',
+      admission: 'verified-score-and-consensus'
+    }))
+    : [];
+  const nativePromotion = {
+    status: !nativeCandidatesRaw.length ? 'no-native-candidates'
+      : nativePromoted ? 'promoted-unified-ledger'
+        : typeof nativePriceAt !== 'function' ? 'blocked-no-hourly-price-source'
+          : 'blocked-unpriced-native-candidate',
+    promoted: nativePromoted,
+    candidates: nativeCandidatesRaw.length,
+    pricedCandidates: pricedNativeCandidates.length,
+    unpricedCandidates: nativeCandidatesRaw.length - pricedNativeCandidates.length,
+    gate: 'all-sampled-native-candidates-hourly-priced'
+  };
+  const audit = analyzeSwapLedger({
+    swaps: [...stableSwaps, ...promotedNativeSwaps],
+    prices,
+    balances,
+    historyLive,
+    historyTruncated,
+    postExitPriceAt,
+    now,
+    quoteSummary: nativePromoted
+      ? 'allowlisted USD stablecoin ≈ $1 + hourly-priced wrapped native'
+      : 'allowlisted USD stablecoin ≈ $1',
+    sampleExtra: {
+      stableQuoteSwaps: stableSwaps.length,
+      nativeQuoteSwaps: promotedNativeSwaps.length,
+      nativeQuoteCandidates: nativeCandidatesRaw.length,
+      nativeQuotePricedCandidates: pricedNativeCandidates.length,
+      nativeQuoteUnpricedCandidates: nativeCandidatesRaw.length - pricedNativeCandidates.length,
+      nativeQuotePromoted: nativePromoted
+    },
+    pnlNote: nativePromoted
+      ? 'Sample of paired stablecoin- and hourly-priced wrapped-native-quoted swaps in the loaded explorer page. Stable USD uses the quote amount at an assumed $1 peg; native USD uses the nearest accepted hourly-or-finer price point within one hour. Gas, tax and depegs excluded; incomplete history is not lifetime P&L.'
+      : 'Sample of paired ERC-20/stablecoin swaps in the loaded explorer page. Gas, tax and stablecoin depegs excluded; incomplete history is not lifetime P&L.'
+  });
+  return {
+    ...audit,
+    nativePromotion,
+    // Only unpromoted candidates belong in the observed layer. Once promoted,
+    // these exact rows are already in `audit.swaps`; returning them twice
+    // would invite a UI or indexer to double-count the same fill.
+    nativeCandidates: nativePromoted ? [] : nativeCandidatesRaw
   };
 }

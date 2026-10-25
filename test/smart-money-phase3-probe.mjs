@@ -9,11 +9,13 @@
  *   2. Solana swaps are decoded from the wallet's own pre/post token-balance
  *      deltas in successful known-DEX transactions, with exact BigInt raw
  *      deltas and fail-closed rejection of ambiguous transactions.
- *   3. Neither new ledger can leak into score, P&L, qualification or
- *      consensus: the old verified filter still admits only stable-quoted
- *      `paired-explorer-transfers`.
- *   4. `analyzeWallet` wires both observed layers into its response while the
- *      verified fields stay empty/unscored when only phase-3 rows exist.
+ *   3. A phase-3 *observation* still cannot leak into score, P&L,
+ *      qualification or consensus merely because it is priced; phase 4 must
+ *      explicitly relabel it after the unified-ledger gate, and Solana rows
+ *      remain outside verified admission.
+ *   4. `analyzeWallet` wires both layers into its response; a fully priced
+ *      native fixture now demonstrates the phase-4 promotion, while one
+ *      unclosed buy still cannot produce a score.
  *
  * Run: node test/smart-money-phase3-probe.mjs
  */
@@ -314,7 +316,7 @@ await checkAsync('solTransactions caps/dedupes and reports partial reads honestl
 });
 
 /* ── 5. Wallet API wiring (real module, stubbed network boundary) ─────── */
-await checkAsync('EVM wallet response carries priced native observation while verified stays empty', async () => {
+await checkAsync('EVM wallet response promotes a fully hourly-priced native sample (phase-4 supersession)', async () => {
   const wallet = `0x${'7'.repeat(40)}`;
   const pool = `0x${'8'.repeat(40)}`;
   const txHash = hash(777);
@@ -345,13 +347,19 @@ await checkAsync('EVM wallet response carries priced native observation while ve
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ prices: series }) });
   try {
     const out = await analyzeWallet(wallet, 1, { timeoutMs: 6_000 });
-    assert.equal(out.verifiedSwaps.length, 0);
-    assert.equal(out.observedSwaps.length, 1);
-    assert.equal(out.observedSwaps[0].valueUsd, 6_000);
+    // Phase 4 supersedes the original phase-3 outcome for this fixture: the
+    // sole sampled native candidate is hourly priced, so the all-or-nothing
+    // gate promotes it. It still cannot score from one unclosed buy.
+    assert.equal(out.verifiedSwaps.length, 1);
+    assert.equal(out.observedSwaps.length, 0);
+    assert.equal(out.verifiedSwaps[0].valueUsd, 6_000);
+    assert.equal(out.verifiedSwaps[0].classification, 'verified');
+    assert.equal(out.swapEvidence.verified.nativePromotion.promoted, true);
     assert.equal(out.swapEvidence.observedOnly.admittedToConsensus, false);
     assert.equal(out.smartMoney.score, null);
     assert.equal(out.smartMoney.qualified, false);
-    assert.equal(out.pnl.reason, 'NO_CONFIRMED_SWAPS');
+    assert.equal(out.smartMoney.sample.nativeQuotePromoted, true);
+    assert.equal(out.pnl.reason, 'NO_CLOSED_TRADES');
     assert.equal(out.sources.nativeQuotePricing, 'live');
   } finally {
     __setFetchForTests(null);
