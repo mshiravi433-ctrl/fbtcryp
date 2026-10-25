@@ -2268,13 +2268,29 @@ console.log('\n▸ probing Smart Money phase 5 (Solana real replay, shadow FIFO,
   let ok = false;
   try {
     execFileSync(process.execPath, ['test/smart-money-phase5-probe.mjs'], {
-      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+      stdio: 'inherit', env: { ...process.env, SM_SOLANA_VERIFIED_PROMOTION: '0' }
     });
     ok = true;
   } catch (err) {
     console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
   }
   report('Smart Money phase 5', [['real Solana replay is pinned, shadow FIFO reconciles exactly, and partial replay cannot promote', ok]]);
+}
+
+/* Phase 6 — wire-format base64 coroutine + parser + promotion still blocked */
+console.log('\n▸ probing Smart Money phase 6 (wire base64 fixtures, parser regression, promotion gate)…');
+{
+  let ok6 = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase6-probe.mjs'], {
+      stdio: 'inherit', env: { ...process.env, SM_SOLANA_VERIFIED_PROMOTION: '0' }
+    });
+    ok6 = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 6', [['wire base64 fixtures replay, parser reconstructs signatures, and verified promotion stays blocked', ok6]]);
+
 }
 
 /*

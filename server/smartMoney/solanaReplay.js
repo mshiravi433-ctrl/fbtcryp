@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { base58Encode, base58Decode } from '../../src/lib/launch/solana/launchlab.js';
 import {
   SOLANA_BALANCE_ONLY_DECODE,
   SOLANA_DEX_PROGRAMS,
@@ -40,6 +41,11 @@ export function normalizeSolanaTransactionPayload(payload, depth = 0) {
     return payload.length === 1 ? normalizeSolanaTransactionPayload(payload[0], depth + 1) : null;
   }
   if (typeof payload !== 'object') return null;
+  // Wire-format base64 envelopes from solana-tx-parser fixtures
+  if (payload.transaction && Array.isArray(payload.transaction)
+      && payload.transaction.length === 2 && payload.transaction[1] === 'base64') {
+    return normalizeSolanaWireTransaction(payload);
+  }
   if (payload.transaction && payload.meta) return payload;
   if (payload.result != null) return normalizeSolanaTransactionPayload(payload.result, depth + 1);
   return null;
@@ -482,4 +488,228 @@ export function promoteSolanaSwaps({ swaps = [], assessment = null, reconciliati
       reconciled: reconciliation?.reconciled === true
     }
   }));
+}
+
+function readShortvec(buf, pos) {
+  let val = 0, shift = 0, i = 0;
+  while (true) {
+    if (pos + i >= buf.length) return null;
+    const b = buf[pos + i];
+    val |= (b & 0x7f) << shift;
+    i++;
+    if ((b & 0x80) === 0) break;
+    shift += 7;
+    if (i > 10) return null;
+  }
+  return { val, next: pos + i };
+}
+
+const SPL_PROGS = new Set([
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBxCqJhAKWj'
+]);
+
+function parseSplData(dataBase58) {
+  try {
+    const data = Buffer.from(base58Decode(dataBase58));
+    if (!data || data.length === 0) return null;
+    const tag = data[0];
+    if (tag === 3 && data.length >= 9) {
+      const amount = data.readBigUInt64LE(1);
+      return { tag, amount: amount.toString(), decimals: null };
+    }
+    if (tag === 12 && data.length >= 10) {
+      const amount = data.readBigUInt64LE(1);
+      return { tag, amount: amount.toString(), decimals: Number(data[9]) };
+    }
+  } catch (e) {}
+  return null;
+}
+
+function buildParsedInstruction(ix, keys) {
+  if (!SPL_PROGS.has(ix.programId)) return null;
+  const parsedData = parseSplData(ix.data);
+  if (!parsedData) return null;
+  const accounts = (ix.accounts || []).map(idx => keys[idx] || null).filter(Boolean);
+  if (parsedData.tag === 3) {
+    return {
+      type: 'transfer',
+      info: {
+        source: accounts[0] || '',
+        destination: accounts[1] || '',
+        authority: accounts[2] || '',
+        tokenAmount: {
+          amount: parsedData.amount,
+          decimals: parsedData.decimals,
+          uiAmountString: null,
+          uiAmount: null
+        }
+      }
+    };
+  }
+  if (parsedData.tag === 12) {
+    return {
+      type: 'transferChecked',
+      info: {
+        source: accounts[0] || '',
+        mint: accounts[1] || '',
+        destination: accounts[2] || '',
+        authority: accounts[3] || '',
+        tokenAmount: {
+          amount: parsedData.amount,
+          decimals: parsedData.decimals,
+          uiAmountString: null,
+          uiAmount: null
+        }
+      }
+    };
+  }
+  return null;
+}
+
+export function normalizeSolanaWireTransaction(payload) {
+  if (!payload || typeof payload !== 'object') { return null; }
+  const txArr = payload.transaction;
+  if (!Array.isArray(txArr) || txArr.length !== 2 || txArr[1] !== 'base64') { return null; }
+  let wire;
+  try { wire = Buffer.from(txArr[0], 'base64'); } catch (e) { return null; }
+  if (!wire || wire.length === 0) { return null; }
+
+  let offset = 0;
+  const sigRes = readShortvec(wire, offset);
+  if (!sigRes) { return null; }
+  const sigCount = sigRes.val;
+  offset = sigRes.next;
+  if (offset + sigCount * 64 > wire.length) { return null; }
+  const signatures = [];
+  for (let i = 0; i < sigCount; i++) {
+    signatures.push(base58Encode(wire.subarray(offset, offset + 64)));
+    offset += 64;
+  }
+
+  let version = null;
+  let msgOff = offset;
+  if (wire[msgOff] & 0x80) { version = 0; msgOff += 1; }
+
+  if (msgOff + 3 > wire.length) { return null; }
+  msgOff += 3;
+
+  const keyRes = readShortvec(wire, msgOff);
+  if (!keyRes) { return null; }
+  const keyCount = keyRes.val;
+  msgOff = keyRes.next;
+  if (msgOff + keyCount * 32 > wire.length) { return null; }
+  const staticKeys = [];
+  for (let i = 0; i < keyCount; i++) {
+    staticKeys.push(base58Encode(wire.subarray(msgOff, msgOff + 32)));
+    msgOff += 32;
+  }
+
+  if (msgOff + 32 > wire.length) { return null; }
+  const recentBlockhash = base58Encode(wire.subarray(msgOff, msgOff + 32));
+  msgOff += 32;
+
+  const ixRes = readShortvec(wire, msgOff);
+  if (!ixRes) { return null; }
+  const ixCount = ixRes.val;
+  msgOff = ixRes.next;
+
+  const instructions = [];
+  for (let i = 0; i < ixCount; i++) {
+    if (msgOff >= wire.length) { return null; }
+    const programIdIndex = wire[msgOff++];
+    const accRes = readShortvec(wire, msgOff);
+    if (!accRes) { return null; }
+    const accCount = accRes.val;
+    msgOff = accRes.next;
+    const accounts = [];
+    for (let j = 0; j < accCount; j++) {
+      if (msgOff >= wire.length) { return null; }
+      accounts.push(wire[msgOff++]);
+    }
+    const dataRes = readShortvec(wire, msgOff);
+    if (!dataRes) { return null; }
+    const dataLen = dataRes.val;
+    msgOff = dataRes.next;
+    if (msgOff + dataLen > wire.length) { return null; }
+    const dataBase58 = base58Encode(wire.subarray(msgOff, msgOff + dataLen));
+    msgOff += dataLen;
+    instructions.push({ programIdIndex, accounts, data: dataBase58 });
+  }
+
+  if (version === 0) {
+    const lookupRes = readShortvec(wire, msgOff);
+    if (lookupRes && lookupRes.val > 0) {
+      msgOff = lookupRes.next;
+      for (let i = 0; i < lookupRes.val; i++) {
+        const wRes = readShortvec(wire, msgOff);
+        if (!wRes) { msgOff = wire.length; break; }
+        msgOff = wRes.next + wRes.val;
+        const rRes = readShortvec(wire, msgOff);
+        if (!rRes) { msgOff = wire.length; break; }
+        msgOff = rRes.next + rRes.val;
+      }
+    } else {
+      msgOff = wire.length;
+    }
+  }
+
+  if (msgOff !== wire.length) { return null; }
+
+  // Build full key list
+  const meta = payload.meta || {};
+  const loaded = meta.loadedAddresses || {};
+  const writableLoaded = Array.isArray(loaded.writable) ? loaded.writable.map(k => String(typeof k === 'string' ? k : (k?.pubkey || k?.toString?.() || ''))).filter(Boolean) : [];
+  const readonlyLoaded = Array.isArray(loaded.readonly) ? loaded.readonly.map(k => String(typeof k === 'string' ? k : (k?.pubkey || k?.toString?.() || ''))).filter(Boolean) : [];
+  const allKeys = [...staticKeys, ...writableLoaded, ...readonlyLoaded];
+
+  // Build message instructions with resolved keys and parsed SPL
+  const messageInstructions = instructions.map(ix => {
+    const keys = allKeys;
+    const programId = (Number.isInteger(ix.programIdIndex) && keys[ix.programIdIndex]) ? keys[ix.programIdIndex] : null;
+    const accKeys = ix.accounts.map(idx => (Number.isInteger(idx) && keys[idx]) ? keys[idx] : null).filter(Boolean);
+    const parsed = buildParsedInstruction({ programId, accounts: ix.accounts, data: ix.data }, allKeys);
+    const result = {
+      programIdIndex: ix.programIdIndex,
+      accounts: ix.accounts,
+      data: ix.data,
+      stackHeight: 1,
+      programId
+    };
+    if (parsed) result.parsed = parsed;
+    return result;
+  });
+
+  // Process meta innerInstructions similarly
+  const metaCopy = JSON.parse(JSON.stringify(meta));
+  if (Array.isArray(metaCopy.innerInstructions)) {
+    for (const group of metaCopy.innerInstructions) {
+      if (Array.isArray(group.instructions)) {
+        for (const ix of group.instructions) {
+          const parsed = buildParsedInstruction({ programId: (typeof ix.programId === 'string' ? ix.programId : (Number.isInteger(ix.programIdIndex) ? allKeys[ix.programIdIndex] : null)), accounts: (Array.isArray(ix.accounts) ? ix.accounts.map(idx => (Number.isInteger(idx) ? allKeys[idx] : null)).filter(Boolean) : []), data: ix.data || '' }, allKeys);
+          if (parsed) ix.parsed = parsed;
+          // Ensure programId resolved if index given
+          if (typeof ix.programId !== 'string' && Number.isInteger(ix.programIdIndex)) {
+            ix.programId = (allKeys[ix.programIdIndex]) || ix.programId;
+          }
+        }
+      }
+    }
+  }
+
+  // Build transaction object compatible with replay
+  const transaction = {
+    signatures,
+    message: {
+      accountKeys: allKeys,
+      recentBlockhash,
+      instructions: messageInstructions,
+      addressTableLookups: version === 0 ? [] : undefined
+    }
+  };
+
+  return {
+    transaction,
+    meta: metaCopy
+  };
 }
