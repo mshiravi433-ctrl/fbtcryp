@@ -929,7 +929,7 @@ export async function solTokenBalances(address, { limit = 40, timeoutMs = 10_000
   }
   const tokenPrograms = [
     'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-    'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB'
+    'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
   ];
   try {
     // Token-2022 balances are invisible to the legacy program filter. A

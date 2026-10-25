@@ -70,10 +70,10 @@ const replayRun = runSolanaReplayFixtures({ rootDir: ROOT });
 const replayById = Object.fromEntries(replayRun.results.map((row) => [row.id, row]));
 
 check('replay manifest pins provenance, licence, commit and payload identity for every fixture', () => {
-  assert.equal(SOLANA_REPLAY_FIXTURES.length, 4);
-  assert.equal(new Set(SOLANA_REPLAY_FIXTURES.map((f) => f.id)).size, 4);
-  assert.equal(new Set(SOLANA_REPLAY_FIXTURES.map((f) => f.file)).size, 4);
-  assert.equal(new Set(SOLANA_REPLAY_FIXTURES.map((f) => f.signature)).size, 4);
+  assert.equal(SOLANA_REPLAY_FIXTURES.length, 11);
+  assert.equal(new Set(SOLANA_REPLAY_FIXTURES.map((f) => f.id)).size, 11);
+  assert.equal(new Set(SOLANA_REPLAY_FIXTURES.map((f) => f.file)).size, 11);
+  assert.equal(new Set(SOLANA_REPLAY_FIXTURES.map((f) => f.signature)).size, 11);
   for (const fixture of SOLANA_REPLAY_FIXTURES) {
     assert.match(fixture.sha256, /^[a-f0-9]{64}$/);
     assert.match(fixture.source.commit, /^[a-f0-9]{40}$/);
@@ -85,16 +85,16 @@ check('replay manifest pins provenance, licence, commit and payload identity for
   }
 });
 
-check('committed real-transaction payloads replay to every pinned decode (4/4)', () => {
+check('committed real-transaction payloads replay to every pinned decode (11/11)', () => {
   assert.equal(replayRun.passed, true);
   assert.equal(replayRun.corpus.executed, true);
   assert.equal(replayRun.corpus.executionStatus, 'passed');
-  assert.equal(replayRun.corpus.passedFixtures, 4);
+  assert.equal(replayRun.corpus.passedFixtures, 11);
   assert.equal(replayRun.corpus.failedFixtures, 0);
   assert.deepEqual(replayRun.results.filter((r) => !r.passed), []);
 });
 
-check('Jupiter v6 replay is instruction-corroborated, Raydium AMM v4 is honestly balance-only', () => {
+check('Jupiter v6 and raw SPL Raydium AMM v4 replay are instruction-corroborated', () => {
   const pyusd = replayById['jupiter-v6-pyusd-usdc-2dyb2hr9'];
   const jup = replayById['jupiter-v6-jup-usdc-5fbwfqrm'];
   const raydium = replayById['raydium-amm-v4-usdc-3p36wgra'];
@@ -103,9 +103,23 @@ check('Jupiter v6 replay is instruction-corroborated, Raydium AMM v4 is honestly
     assert.equal(isInstructionCorroboratedSolanaSwap(row.actual), true);
     assert.equal(row.actual.classification, 'observed-only');
   }
-  assert.equal(raydium.actual.decodeMethod, 'token-balance-deltas');
-  assert.equal(raydium.actual.instructionCorroborated, false);
-  assert.equal(isInstructionCorroboratedSolanaSwap(raydium.actual), false);
+  assert.equal(raydium.actual.decodeMethod, 'instruction-corroborated-token-balance-deltas');
+  assert.equal(raydium.actual.instructionCorroborated, true);
+  assert.deepEqual(raydium.actual.instructionTransfers, { target: 1, quote: 2 });
+  assert.equal(isInstructionCorroboratedSolanaSwap(raydium.actual), true);
+});
+
+check('raw SPL and Token-2022 transfer instructions corroborate the real Raydium CLMM replay', () => {
+  const clmm = replayById['raydium-clmm-graphite-mainnet'];
+  assert.ok(clmm, 'Raydium CLMM fixture is missing from replay results');
+  assert.equal(clmm.passed, true);
+  assert.equal(clmm.actual.side, 'SELL');
+  assert.equal(clmm.actual.amountRaw, '42552909');
+  assert.equal(clmm.actual.quoteAmountRaw, '332216856');
+  assert.equal(clmm.actual.instructionCorroborated, true);
+  assert.equal(clmm.actual.instructionFillCount, 2);
+  assert.deepEqual(clmm.actual.instructionTransfers, { target: 1, quote: 1 });
+  assert.equal(isInstructionCorroboratedSolanaSwap(clmm.actual), true);
 });
 
 check('canonical stable-to-stable real payload is rejected instead of becoming target exposure', () => {
@@ -137,22 +151,36 @@ check('a changed payload hash fails closed even when its decoded shape still loo
   assert.ok(result.mismatches.includes('payload-sha256-mismatch'));
 });
 
-check('replay coverage reports 1/12 corroborated and 2/12 balance-replayed, never complete', () => {
+check('replay coverage reports 7/12 corroborated and 7/12 balance-replayed, never complete', () => {
   const declared = assessSolanaReplayCorpus();
   assert.equal(declared.executed, false);
   assert.equal(declared.executionStatus, 'not-executed');
   assert.equal(declared.complete, false);
   assert.equal(declared.supportedPrograms, 12);
-  assert.equal(declared.corroboratedPrograms, 1);
-  assert.equal(declared.balanceReplayPrograms, 2);
-  assert.equal(declared.missingCorroboratedPrograms.length, 11);
-  assert.deepEqual(SOLANA_CORROBORATED_REPLAY_PROGRAMS, ['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']);
-  assert.deepEqual(SOLANA_BALANCE_REPLAY_PROGRAMS, [
+  assert.equal(declared.corroboratedPrograms, 7);
+  assert.equal(declared.balanceReplayPrograms, 7);
+  assert.equal(declared.missingCorroboratedPrograms.length, 5);
+  assert.deepEqual([...SOLANA_CORROBORATED_REPLAY_PROGRAMS].sort(), [
     'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
-    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'
-  ]);
-  assert.equal(coverageForSolanaProgram('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8').status, 'balance-delta-replay-only');
-  assert.equal(coverageForSolanaProgram('pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA').status, 'missing-replay-fixture');
+    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+    '5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h',
+    'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+    'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+    'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
+    'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
+  ].sort());
+  assert.deepEqual([...SOLANA_BALANCE_REPLAY_PROGRAMS].sort(), [
+    'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
+    '5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h',
+    'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK',
+    'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo',
+    'Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB',
+    'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA'
+  ].sort());
+  assert.equal(coverageForSolanaProgram('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8').status, 'instruction-corroborated-replay');
+  assert.equal(coverageForSolanaProgram('CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK').status, 'instruction-corroborated-replay');
+  assert.equal(coverageForSolanaProgram('JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB').status, 'missing-replay-fixture');
 });
 
 /* Synthetic decoded-shape rows below test only the quantity gate. They are
@@ -305,12 +333,12 @@ check('a hypothetical complete executed corpus is evidence-ready off, and verifi
   assert.equal(isVerifiedPairedSwap(tamperedRaw), false);
   const noFifoProof = { ...promoted[0], balanceReconciliation: null };
   assert.equal(isVerifiedPairedSwap(noFifoProof), false);
-  const balanceOnlyProgram = {
+  const unreplayedProgram = {
     ...promoted[0],
-    dexProgram: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
-    dex: 'Raydium AMM v4'
+    dexProgram: 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C',
+    dex: 'Raydium CPMM'
   };
-  assert.equal(isVerifiedPairedSwap(balanceOnlyProgram), false);
+  assert.equal(isVerifiedPairedSwap(unreplayedProgram), false);
 });
 
 await checkAsync('SPL balance read covers Token-2022, sums raw units and reports truncation or malformed accounts', async () => {
@@ -325,7 +353,7 @@ await checkAsync('SPL balance read covers Token-2022, sums raw units and reports
     calls.push(body);
     assert.equal(body.method, 'getTokenAccountsByOwner');
     const programId = body.params[1].programId;
-    const value = programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB'
+    const value = programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
       ? [account('JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN', '1234567', 6)]
       : [
           account(TARGET, '60000000000', 5),
@@ -392,7 +420,7 @@ await checkAsync('wallet integration exposes phase-5 diagnostics while keeping S
     assert.equal(observed.shadowFifo.unmatchedExits, 1);
     assert.equal(observed.shadowFifoReconciled, false);
     assert.equal(observed.replayCorpus.executionStatus, 'passed');
-    assert.equal(observed.replayCorpus.corroboratedPrograms, 1);
+    assert.equal(observed.replayCorpus.corroboratedPrograms, 7);
     assert.equal(observed.replayCorpus.supportedPrograms, 12);
     assert.equal(observed.promotion.promoted, false);
     assert.ok(observed.promotion.blockers.includes('replay-corpus-incomplete'));

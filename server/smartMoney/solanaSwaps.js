@@ -18,12 +18,14 @@
  * feeds score, P&L, qualification or consensus.
  */
 
+import { base58Decode } from '../../src/lib/launch/solana/launchlab.js';
+
 const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOL_SIG = /^[1-9A-HJ-NP-Za-km-z]{80,90}$/;
 const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 const SPL_TOKEN_PROGRAMS = new Map([
   ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'spl-token'],
-  ['TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEB', 'spl-token-2022']
+  ['TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', 'spl-token-2022']
 ]);
 export const SOLANA_WSOL_MINT = WSOL_MINT;
 
@@ -166,6 +168,26 @@ function instructionProgramId(ix, keys) {
   return null;
 }
 
+function rawSplTransfer(ix, keys) {
+  const programId = instructionProgramId(ix, keys);
+  if (!SPL_TOKEN_PROGRAMS.has(programId) || typeof ix?.data !== 'string') return null;
+  let data;
+  try { data = Buffer.from(base58Decode(ix.data)); } catch { return null; }
+  if (!data.length) return null;
+  const accounts = (Array.isArray(ix.accounts) ? ix.accounts : []).map((key) =>
+    Number.isInteger(key) ? keys[key] || '' : String(typeof key === 'string' ? key : key?.pubkey || '')
+  );
+  if (data[0] === 3 && data.length === 9) {
+    return { source: accounts[0] || '', destination: accounts[1] || '', mint: '',
+      rawAmount: data.readBigUInt64LE(1).toString(), decimals: null, authority: accounts[2] || '' };
+  }
+  if (data[0] === 12 && data.length === 10) {
+    return { source: accounts[0] || '', mint: accounts[1] || '', destination: accounts[2] || '',
+      rawAmount: data.readBigUInt64LE(1).toString(), decimals: Number(data[9]), authority: accounts[3] || '' };
+  }
+  return null;
+}
+
 function collectParsedTokenTransfers(instructions, keys, out) {
   for (const ix of Array.isArray(instructions) ? instructions : []) {
     const programId = instructionProgramId(ix, keys);
@@ -184,6 +206,9 @@ function collectParsedTokenTransfers(instructions, keys, out) {
         decimals: tokenAmount.decimals == null ? null : Number(tokenAmount.decimals),
         authority: String(info.authority || info.multisigAuthority || '')
       });
+    } else if (isTokenProgram) {
+      const transfer = rawSplTransfer(ix, keys);
+      if (transfer) out.push(transfer);
     }
     if (Array.isArray(ix?.instructions)) collectParsedTokenTransfers(ix.instructions, keys, out);
   }
@@ -194,8 +219,8 @@ function collectParsedTokenTransfers(instructions, keys, out) {
  *
  * Balance deltas alone net a whole transaction: a swap, a fee rebate and an
  * unrelated same-mint transfer can collapse into one plausible pair. The
- * parsed `transfer`/`transferChecked` instructions are the transaction's own
- * fill list, so phase 4 requires their wallet-boundary sum, mint-by-mint and
+ * decoded `transfer`/`transferChecked` instructions (parsed or raw) are the
+ * transaction's own fill list, so phase 4 requires their wallet-boundary sum, mint-by-mint and
  * in raw BigInt units, to equal the balance delta EXACTLY for both legs, with
  * no third wallet mint moving at instruction level. Anything less stays a
  * balance-only observation — useful evidence, weaker provenance.

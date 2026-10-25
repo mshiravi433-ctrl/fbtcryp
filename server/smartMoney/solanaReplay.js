@@ -506,7 +506,7 @@ function readShortvec(buf, pos) {
 
 const SPL_PROGS = new Set([
   'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBxCqJhAKWj'
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 ]);
 
 function parseSplData(dataBase58) {
@@ -589,7 +589,11 @@ export function normalizeSolanaWireTransaction(payload) {
 
   let version = null;
   let msgOff = offset;
-  if (wire[msgOff] & 0x80) { version = 0; msgOff += 1; }
+  if (wire[msgOff] & 0x80) {
+    version = wire[msgOff] & 0x7f;
+    if (version !== 0) return null; // Only version-0 address-table messages are supported.
+    msgOff += 1;
+  }
 
   if (msgOff + 3 > wire.length) { return null; }
   msgOff += 3;
@@ -642,6 +646,10 @@ export function normalizeSolanaWireTransaction(payload) {
     if (lookupRes && lookupRes.val > 0) {
       msgOff = lookupRes.next;
       for (let i = 0; i < lookupRes.val; i++) {
+        // Each address-table lookup starts with its 32-byte account key,
+        // followed by shortvec lists of writable and readonly indexes.
+        if (msgOff + 32 > wire.length) return null;
+        msgOff += 32;
         const wRes = readShortvec(wire, msgOff);
         if (!wRes) { msgOff = wire.length; break; }
         msgOff = wRes.next + wRes.val;
@@ -686,7 +694,7 @@ export function normalizeSolanaWireTransaction(payload) {
     for (const group of metaCopy.innerInstructions) {
       if (Array.isArray(group.instructions)) {
         for (const ix of group.instructions) {
-          const parsed = buildParsedInstruction({ programId: (typeof ix.programId === 'string' ? ix.programId : (Number.isInteger(ix.programIdIndex) ? allKeys[ix.programIdIndex] : null)), accounts: (Array.isArray(ix.accounts) ? ix.accounts.map(idx => (Number.isInteger(idx) ? allKeys[idx] : null)).filter(Boolean) : []), data: ix.data || '' }, allKeys);
+          const parsed = buildParsedInstruction({ programId: (typeof ix.programId === 'string' ? ix.programId : (Number.isInteger(ix.programIdIndex) ? allKeys[ix.programIdIndex] : null)), accounts: Array.isArray(ix.accounts) ? ix.accounts : [], data: ix.data || '' }, allKeys);
           if (parsed) ix.parsed = parsed;
           // Ensure programId resolved if index given
           if (typeof ix.programId !== 'string' && Number.isInteger(ix.programIdIndex)) {
@@ -701,7 +709,11 @@ export function normalizeSolanaWireTransaction(payload) {
   const transaction = {
     signatures,
     message: {
-      accountKeys: allKeys,
+      // Keep static keys here: Solana accountIndex references resolve as
+      // static keys + loaded writable + loaded readonly. accountKeyStrings()
+      // appends meta.loadedAddresses, so embedding them here would duplicate
+      // the lookup-table keys and misattribute token-account owners.
+      accountKeys: staticKeys,
       recentBlockhash,
       instructions: messageInstructions,
       addressTableLookups: version === 0 ? [] : undefined
@@ -709,6 +721,8 @@ export function normalizeSolanaWireTransaction(payload) {
   };
 
   return {
+    slot: payload.slot ?? null,
+    blockTime: payload.blockTime ?? payload.timestampSeconds ?? null,
     transaction,
     meta: metaCopy
   };

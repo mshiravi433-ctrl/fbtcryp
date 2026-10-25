@@ -4,7 +4,6 @@
  * Large transfers and CEX withdrawals are deliberately excluded from votes.
  * No HOLD vote: silence in a sampled window is not proof of holding a token.
  */
-import { EVM_CHAINS } from '../chainsLite.js';
 import { isNonWallet } from './moneyFlow.js';
 import { WINDOWS, WINDOW_KEYS } from './config.js';
 import { isVerifiedPairedSwap } from './performance.js';
@@ -19,8 +18,24 @@ const MAX_PROFILE_AGE = 7 * WINDOWS.H24;
 const RECENT_SWAPS = 30;
 const LIMIT = 24;
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
-const ident = (chain, address) => `${chain}:${String(address || '').toLowerCase()}`;
-const validToken = (a) => /^0x[a-f0-9]{40}$/.test(String(a || '').toLowerCase());
+const EVM_TOKEN = /^0x[a-f0-9]{40}$/i;
+const SOL_TOKEN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const ident = (chain, address) => `${chain}:${chain === 'solana' ? String(address || '') : String(address || '').toLowerCase()}`;
+const validTokenForChain = (chain, address) => chain === 'solana'
+  ? SOL_TOKEN.test(String(address || ''))
+  : EVM_TOKEN.test(String(address || ''));
+const normalizeChain = (chain) => {
+  if (chain == null || chain === '') return null;
+  if (String(chain).toLowerCase() === 'solana') return 'solana';
+  const numeric = Number(chain);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+};
+const normalizeToken = (token, chain) => {
+  const value = String(token || '').trim();
+  if (chain === 'solana') return SOL_TOKEN.test(value) ? value : null;
+  if (EVM_TOKEN.test(value)) return value.toLowerCase();
+  return chain == null && SOL_TOKEN.test(value) ? value : null;
+};
 const n = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
 const money = (v) => Math.round(v * 100) / 100;
 
@@ -91,8 +106,8 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   now = Date.now(), indexedAt = null, durable = false } = {}) {
   const win = WINDOW_KEYS[window] ? window : '24h';
   const cutoff = now - WINDOW_KEYS[win];
-  const selectedChain = chain == null || chain === '' ? null : Number(chain);
-  const selectedToken = validToken(token) ? String(token).toLowerCase() : null;
+  const selectedChain = normalizeChain(chain);
+  const selectedToken = normalizeToken(token, selectedChain);
   const validProfiles = (Array.isArray(profiles) ? profiles : [])
     .filter((p) => p?.qualified === true && Number.isFinite(p.score) && p.score >= 70
       // 0.6 = the five core factors measured (0.70) on a paginated explorer
@@ -103,7 +118,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
   const byWallet = new Map(validProfiles.map((p) => [ident(p.chain, p.address), p]));
   const clusters = fundingClusters(validProfiles, events);
   const eligible = (Array.isArray(swaps) ? swaps : []).filter((s) =>
-    isVerifiedPairedSwap(s) && validToken(s.token)
+    isVerifiedPairedSwap(s) && validTokenForChain(s.chain, s.token)
     && byWallet.has(ident(s.chain, s.wallet)) && ['BUY', 'SELL'].includes(s.side)
     && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
     && Number.isFinite(s.valueUsd) && s.valueUsd > 0
@@ -296,7 +311,7 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
     const totalValue = entries.reduce((sum, s) => sum + s.valueUsd, 0);
     const totalQty = entries.reduce((sum, s) => sum + s.amount, 0);
     const success = [...wallets].map((id) => byWallet.get(id)?.winRate).filter(Number.isFinite);
-    return { chain: Number(chainId), token: tokenAddr, symbol: entries[0].symbol,
+    return { chain: normalizeChain(chainId), token: tokenAddr, symbol: entries[0].symbol,
       tokenLogo: TOKEN_LOGOS[tokenAddr] || null, icon: TOKEN_LOGOS[tokenAddr] || null,
       wallets: wallets.size, averageEntryUsd: totalQty > 0 ? totalValue / totalQty : null,
       currentPriceUsd: null, changePct: null, liquidityUsd: null,
@@ -325,10 +340,10 @@ export function buildConsensus({ profiles = [], swaps = [], events = [], window 
       analyzedWallets: observed.analyzedWallets, observedSwaps: observed.observedSwaps,
       observedSwapsInWindow: observed.swapsInWindow,
       completeness: 'sampled-indexer-pages',
-      note: 'Only paired EVM swaps from qualified wallets: allowlisted-stablecoin fills, plus wrapped-native fills promoted only when every sampled native candidate for that wallet had an hourly-or-finer price within one hour. Solana rows remain observed-only. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
+      note: 'Only verified paired swaps from performance-qualified wallets: allowlisted stablecoin fills, promoted hourly-priced native-quote fills and Solana fills that pass the full replay, corroboration and balance-reconciliation gates. Cron/indexer coverage is sampled, not a real-time or full-chain view.' },
     consensus, breadth, leaderboard: validProfiles.sort((a, b) => b.score - a.score).slice(0, 20), earlyEntries,
     observed: { flow: observed.flow, recentSwaps: observed.recentSwaps, windowSwaps: observed.windowSwaps, candidates: observed.candidates,
-      note: 'Paired stablecoin swaps and phase-4-promoted hourly-priced native swaps reconstructed from each analysed wallet\'s own explorer history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only qualified wallets vote above.' },
+      note: 'Paired stablecoin swaps, phase-4-promoted hourly-priced native swaps and observed Solana swaps reconstructed from each analysed wallet\'s own chain history, qualified or not. Observed flow is NOT consensus and NOT a recommendation; only fully verified, qualified wallets vote above.' },
     graph: { nodes, edges: graphEdges.filter((e) => allowedNodes.has(e.from) && allowedNodes.has(e.to)).slice(0, 100),
       fundingLinks: clusters.links.slice(0, 20), note: 'A shared funding address is correlation only, never proof of shared ownership.' },
     behaviours: behaviours.sort((a, b) => b.at - a.at).slice(0, 40),
@@ -355,7 +370,7 @@ export function observedLayer({ profiles = [], swaps = [], byWallet = new Map(),
       && (selectedChain == null || p.chain === selectedChain));
   const analysed = new Map(fresh.map((p) => [ident(p.chain, p.address), p]));
   const real = (Array.isArray(swaps) ? swaps : []).filter((s) =>
-    isVerifiedPairedSwap(s) && validToken(s.token) && ['BUY', 'SELL'].includes(s.side)
+    isVerifiedPairedSwap(s) && validTokenForChain(s.chain, s.token) && ['BUY', 'SELL'].includes(s.side)
     && analysed.has(ident(s.chain, s.wallet))
     && Number.isFinite(s.timestamp) && s.timestamp > 0 && s.timestamp <= now
     && Number.isFinite(s.valueUsd) && s.valueUsd > 0

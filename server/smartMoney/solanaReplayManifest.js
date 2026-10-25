@@ -8,7 +8,7 @@
  * no source, commit or licence would ask us to trust exactly the thing replay
  * is supposed to remove.
  *
- * The four committed payloads validate the replay mechanism and Jupiter v6.
+ * The committed payloads validate the replay mechanism and several real DEX routes.
  * They do not validate all twelve supported programs: that distinction is
  * preserved by `coverageForSolanaProgram` and by the admission gate.
  */
@@ -101,7 +101,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     dexProgram: '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
     dex: 'Raydium AMM v4',
     encoding: 'json',
-    corroborated: false,
+    corroborated: true,
     source: {
       repository: '0xjeffro/tx-parser',
       commit: '475b1ebff79a2f41ec966919fdefa01f11f6c5d7',
@@ -109,7 +109,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
       license: 'MPL-2.0',
       url: 'https://github.com/0xjeffro/tx-parser/blob/475b1ebff79a2f41ec966919fdefa01f11f6c5d7/solana/data/OKXDEX_commissionSplProxySwap.json'
     },
-    normalization: 'One-element array unwrapped to the direct raw-json getTransaction result; parsed SPL instructions are absent, so this is balance-delta replay only.',
+    normalization: 'One-element array unwrapped to the direct raw-json getTransaction result; raw SPL transfer instructions are decoded and reconciled against wallet-owned token-balance deltas.',
     expected: {
       side: 'BUY',
       token: 'DKu9kykSfbN5LBfFXtNNDPaX35o4Fv6vJ9FKk7pZpump',
@@ -123,8 +123,8 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
       quoteDecimals: 6,
       valueUsd: 250,
       timestamp: 1731789673000,
-      instructionFillCount: 0,
-      instructionTransfers: { target: 0, quote: 0 }
+      instructionFillCount: 3,
+      instructionTransfers: { target: 1, quote: 2 }
     }
   },
   {
@@ -180,7 +180,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "quoteDecimals": 6,
     "valueUsd": 115.239349,
     "timestamp": 1777314530000,
-    "instructionFillCount": 1,
+    "instructionFillCount": 2,
     "instructionTransfers": {
       "target": 1,
       "quote": 1
@@ -218,7 +218,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "quoteDecimals": 6,
     "valueUsd": 16.723744,
     "timestamp": 1777370994000,
-    "instructionFillCount": 1,
+    "instructionFillCount": 2,
     "instructionTransfers": {
       "target": 1,
       "quote": 1
@@ -234,7 +234,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
   "dexProgram": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
   "dex": "Raydium CLMM",
   "encoding": "base64",
-  "corroborated": false,
+  "corroborated": true,
   "source": {
     "repository": "jowency-me/solana-tx-parser",
     "commit": "71ba8bd960b2a7c74a5f9cec69f2ed597dedc1ca",
@@ -242,7 +242,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "license": "MIT",
     "url": "https://github.com/jowency-me/solana-tx-parser/blob/71ba8bd960b2a7c74a5f9cec69f2ed597dedc1ca/testdata/transactions/swap_raydium_route_1.json"
   },
-  "normalization": "Wire-format base64 envelope via normalizeSolanaWireTransaction (balance-delta replay only).",
+  "normalization": "Wire-format base64 envelope via normalizeSolanaWireTransaction; raw SPL transfer instructions are decoded and reconciled against wallet-owned token-balance deltas.",
   "expected": {
     "side": "SELL",
     "token": "XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1",
@@ -256,10 +256,10 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "quoteDecimals": 6,
     "valueUsd": 30.098851,
     "timestamp": 1777380323000,
-    "instructionFillCount": 0,
+    "instructionFillCount": 2,
     "instructionTransfers": {
-      "target": 0,
-      "quote": 0
+      "target": 1,
+      "quote": 1
     }
   }
 },
@@ -294,7 +294,7 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "quoteDecimals": 6,
     "valueUsd": 120.063156,
     "timestamp": 1777314530000,
-    "instructionFillCount": 1,
+    "instructionFillCount": 2,
     "instructionTransfers": {
       "target": 1,
       "quote": 1
@@ -325,14 +325,14 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "amount": 0.174361,
     "amountRaw": "174361",
     "tokenDecimals": 6,
-    "quoteToken": "TTU7rVYfhCG7pZqGVZ1E9x8nDq9x5XkMvLjz4wKw3H3V",
-    "quoteSymbol": "USDT",
+  "quoteToken": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+  "quoteSymbol": "USDT",
     "quoteAmount": 0.002869,
     "quoteAmountRaw": "2869",
     "quoteDecimals": 6,
     "valueUsd": 0.002869,
     "timestamp": 1777380355000,
-    "instructionFillCount": 1,
+    "instructionFillCount": 2,
     "instructionTransfers": {
       "target": 1,
       "quote": 1
@@ -370,7 +370,45 @@ export const SOLANA_REPLAY_FIXTURES = FREEZE([
     "quoteDecimals": 6,
     "valueUsd": 49.5,
     "timestamp": 1777315297000,
-    "instructionFillCount": 1,
+    "instructionFillCount": 2,
+    "instructionTransfers": {
+      "target": 1,
+      "quote": 1
+    }
+  }
+},
+{
+  "id": "raydium-clmm-graphite-mainnet",
+  "file": "test/fixtures/solana-replay/raydium-clmm-graphite.json",
+  "sha256": "8826cf7facffee02a23404b9b0be485ab84633de87d4b66e6c723a9c9a4997fe",
+  "signature": "32CRDqR4Up49gPyg67VmqxAuJEYCtP7nYmRQUfjLbVgjs2e2YUev3StVDjPgsu72W7NRkfFJTk8iy5xUhPiT32yk",
+  "wallet": "MfDuWeqSHEqTFVYZ7LoexgAK9dxk7cy4DFJWjWMGVWa",
+  "dexProgram": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+  "dex": "Raydium CLMM",
+  "encoding": "json",
+  "corroborated": true,
+  "source": {
+    "repository": "Stan-lee13/graphite",
+    "commit": "c087bfb502f5a5c13c12755c719faf54f6c4eec6",
+    "path": "graphite-core/tests/fixtures/real_mainnet_clmm.json",
+    "license": "MIT",
+    "url": "https://github.com/Stan-lee13/graphite/blob/c087bfb502f5a5c13c12755c719faf54f6c4eec6/graphite-core/tests/fixtures/real_mainnet_clmm.json"
+  },
+  "normalization": "Direct mainnet getTransaction JSON; raw Token-2022 and SPL transfer instructions are decoded and reconciled against wallet-owned token-balance deltas.",
+  "expected": {
+    "side": "SELL",
+    "token": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "amount": 0.42552909,
+    "amountRaw": "42552909",
+    "tokenDecimals": 8,
+    "quoteToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "quoteSymbol": "USDC",
+    "quoteAmount": 332.216856,
+    "quoteAmountRaw": "332216856",
+    "quoteDecimals": 6,
+    "valueUsd": 332.216856,
+    "timestamp": 1786726240000,
+    "instructionFillCount": 2,
     "instructionTransfers": {
       "target": 1,
       "quote": 1

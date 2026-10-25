@@ -268,21 +268,27 @@ export async function historicalHourlyPriceFn(cgId, { fromTs, toTs, timeoutMs = 
   const from = Number(fromTs);
   const to = Number(toTs);
   if (!cgId || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) return () => null;
-  // Above this range CoinGecko's auto-granularity becomes daily. Chunking
-  // years of hourly points inside one wallet read would be slow and is not
-  // needed for the explorer page this feature values; fail unpriced instead.
-  if (to - from > 90 * 86_400_000) return () => null;
+  // CoinGecko switches to daily data for long ranges. Keep the hourly
+  // contract by fetching bounded <=60d chunks, with a hard one-year ceiling.
+  // Longer histories stay explicitly unpriced rather than silently degrading.
+  const maxHourlyRangeMs = 360 * 86_400_000;
+  if (to - from > maxHourlyRangeMs) return () => null;
   const hour = 3_600_000;
   const cacheFrom = Math.floor(from / hour);
   const cacheTo = Math.ceil(to / hour);
+  const rangeFrom = cacheFrom * hour;
+  const rangeTo = cacheTo * hour;
+  const chunked = rangeTo - rangeFrom > 90 * 86_400_000;
   let value;
   try {
-    // Fetch the rounded bounds named by the cache key; otherwise a later
-    // request could inherit a narrower series that happens to share the key.
     ({ value } = await withCache(`sm:hist-range:${cgId}:${cacheFrom}:${cacheTo}`, 30 * 60_000,
-      () => cgMarketChartRange(cgId, cacheFrom * hour, cacheTo * hour, timeoutMs)));
+      () => chunked
+        ? cgMarketChartRangeChunked(cgId, rangeFrom, rangeTo, 60 * 86_400_000, timeoutMs)
+        : cgMarketChartRange(cgId, rangeFrom, rangeTo, timeoutMs)));
   } catch { return () => null; }
-  return intradayPriceLookup(value, { source: 'coingecko-market-chart-range' });
+  return intradayPriceLookup(value, {
+    source: chunked ? 'coingecko-market-chart-range-chunked-hourly' : 'coingecko-market-chart-range'
+  });
 }
 
 /** Sigmoid-ish normaliser used to map a USD P&L into a 0..1 factor. */
@@ -293,19 +299,38 @@ export function normByLog(value, scale) {
 }
 
 /* Phase 8 — chunked hourly native-quote reads for long ranges (fail-closed, never daily fallback). */
-export async function cgMarketChartRangeChunked(cgId, fromTs, toTs, chunkMs = 30 * 24 * 60 * 60 * 1000, timeoutMs = 9_000) {
+export async function cgMarketChartRangeChunked(cgId, fromTs, toTs, chunkMs = 60 * 24 * 60 * 60 * 1000, timeoutMs = 9_000) {
+  const from = Number(fromTs);
+  const to = Number(toTs);
+  const maxChunkMs = 89 * 24 * 60 * 60 * 1000;
+  const chunkSize = Math.min(maxChunkMs, Math.max(60 * 60_000, Number(chunkMs) || 0));
+  const budgetMs = Math.max(250, Math.min(14_000, Number(timeoutMs) || 9_000));
+  if (!cgId || !Number.isFinite(from) || !Number.isFinite(to) || to <= from
+    || to - from > 360 * 24 * 60 * 60 * 1000) return [];
+
   const chunks = [];
-  for (let start = Number(fromTs); start < Number(toTs); start += chunkMs) {
-    chunks.push({ fromTs: start, toTs: Math.min(start + chunkMs, Number(toTs)) });
+  for (let start = from; start < to; start += chunkSize) {
+    chunks.push({ fromTs: start, toTs: Math.min(start + chunkSize, to) });
   }
-  const results = [];
-  for (const chunk of chunks) {
+  if (!chunks.length || chunks.length > 12) return [];
+
+  const deadlineAt = Date.now() + budgetMs;
+  const settled = await Promise.all(chunks.map(async (chunk) => {
+    const remainingMs = Math.floor(deadlineAt - Date.now());
+    if (remainingMs < 250) return null;
     try {
-      const r = await cgMarketChartRange(cgId, chunk.fromTs, chunk.toTs, timeoutMs);
-      if (r && Array.isArray(r.prices)) results.push(...r.prices);
-    } catch (e) {
-      // Skip partial chunk; do not invent a daily close.
-    }
+      const prices = await cgMarketChartRange(cgId, chunk.fromTs, chunk.toTs, remainingMs);
+      return Array.isArray(prices) && prices.length ? prices : null;
+    } catch { return null; }
+  }));
+  // All chunks are required. Returning a stitched fragment could make a
+  // wallet's sampled candidates appear hourly-priced while a missing interval
+  // remains unobserved; fail closed instead.
+  if (settled.some((prices) => !prices)) return [];
+  const byTimestamp = new Map();
+  for (const row of settled.flat()) {
+    if (!Array.isArray(row) || !Number.isFinite(Number(row[0])) || !Number.isFinite(Number(row[1]))) return [];
+    byTimestamp.set(Number(row[0]), [Number(row[0]), Number(row[1])]);
   }
-  return results.sort((a, b) => a[0] - b[0]);
+  return [...byTimestamp.values()].sort((a, b) => a[0] - b[0]);
 }
