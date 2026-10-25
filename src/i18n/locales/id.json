@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Jaringan saat ini"
+    "currentNetwork": "Jaringan saat ini",
+    "orderReadyBanner": "Pesanan Anda mencapai harga target — jumlah dan token sudah siap. Setelah kuotasi dimuat, cukup ketuk Tukar & Tanda Tangani."
   },
   "signals": {
     "title": "Sinyal",

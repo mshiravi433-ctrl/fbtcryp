@@ -372,7 +372,9 @@ export function showLocalNotification(title, options = {}) {
         title: String(title || ''),
         body: options?.body ? String(options.body) : null,
         kind: 'info',
-        link: typeof options?.data?.url === 'string' && options.data.url.startsWith('/') ? options.data.url : null
+        link: typeof options?.data?.url === 'string'
+          ? (safeNativeRoute(options.data.url) || (options.data.url.startsWith('/') ? options.data.url : null))
+          : null
       });
     }).catch(() => {});
   } catch { /* inbox mirror is best-effort */ }
@@ -690,8 +692,14 @@ function safeNativeRoute(value) {
   try {
     const parsed = new URL(value, 'https://fbtswap.app');
     if (parsed.origin !== 'https://fbtswap.app') return null;
-    const path = parsed.hash.startsWith('#/') ? parsed.hash.slice(1).split('?')[0] : parsed.pathname;
-    return NATIVE_ROUTES.has(path) ? value : null;
+    // HashRouter routes carry their own pathname and query inside `hash`.
+    // Keep the query intact: `/orders?execute=…` is an action, not decoration.
+    const hashRoute = parsed.hash.startsWith('#/') ? parsed.hash.slice(1) : null;
+    const path = hashRoute ? hashRoute.split('?')[0] : parsed.pathname;
+    if (!NATIVE_ROUTES.has(path)) return null;
+    return hashRoute
+      ? `/#${hashRoute}`
+      : `/#${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;
   }

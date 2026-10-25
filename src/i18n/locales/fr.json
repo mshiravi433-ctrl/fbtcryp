@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Réseau actuel"
+    "currentNetwork": "Réseau actuel",
+    "orderReadyBanner": "Votre ordre a atteint son prix cible : le montant et les jetons sont prêts. Une fois le cours chargé, appuyez simplement sur Échanger et signer."
   },
   "signals": {
     "title": "Signaux",

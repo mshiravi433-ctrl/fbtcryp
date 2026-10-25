@@ -342,7 +342,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "موجودہ نیٹ ورک"
+    "currentNetwork": "موجودہ نیٹ ورک",
+    "orderReadyBanner": "آپ کا آرڈر ہدف قیمت تک پہنچ گیا ہے — رقم اور ٹوکن تیار ہیں؛ ریٹ لوڈ ہونے کے بعد بس سویپ اور دستخط کریں پر ٹیپ کریں۔"
   },
   "signals": {
     "title": "سگنلز",

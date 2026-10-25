@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Red actual"
+    "currentNetwork": "Red actual",
+    "orderReadyBanner": "Tu orden alcanzó el precio objetivo: la cantidad y los tokens están listos. Cuando cargue la cotización, solo pulsa Intercambiar y firmar."
   },
   "signals": {
     "title": "Señales",

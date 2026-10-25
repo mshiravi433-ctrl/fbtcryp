@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "वर्तमान नेटवर्क"
+    "currentNetwork": "वर्तमान नेटवर्क",
+    "orderReadyBanner": "आपका ऑर्डर लक्ष्य कीमत पर पहुँच गया है — राशि और टोकन तैयार हैं। भाव लोड होने के बाद, बस स्वैप और साइन करें दबाएँ।"
   },
   "signals": {
     "title": "सिग्नल",

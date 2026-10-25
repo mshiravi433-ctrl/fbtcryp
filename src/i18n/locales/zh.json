@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "当前网络"
+    "currentNetwork": "当前网络",
+    "orderReadyBanner": "您的订单已达到目标价格，金额和代币均已准备就绪；报价加载后，只需点击“兑换并签名”。"
   },
   "signals": {
     "title": "技术信号",

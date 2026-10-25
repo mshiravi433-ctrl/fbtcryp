@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Mevcut ağ"
+    "currentNetwork": "Mevcut ağ",
+    "orderReadyBanner": "Emriniz hedef fiyata ulaştı — tutar ve tokenlar hazır. Fiyat yüklendikten sonra Takas et ve imzala düğmesine dokunun."
   },
   "signals": {
     "title": "Sinyaller",

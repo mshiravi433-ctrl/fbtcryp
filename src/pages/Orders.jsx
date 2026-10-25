@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import Sheet from '../components/Sheet';
 import { useWallet } from '../context/WalletContext';
@@ -56,6 +56,7 @@ import {
   updateOrder
 } from '../lib/orders';
 import { dispatchStageAlert } from '../lib/stagePush';
+import { buildOrderSwapParams, findActiveOrderById } from '../lib/orderHandoff';
 import { getQuote } from '../lib/swap';
 import OrderStats from '../components/OrderStats';
 import { activateDca, confirmDcaCancel, createDcaRevision, dcaDisplayStatus, loadDcaReceipts, requestDcaCancel } from '../lib/dcaExecution';
@@ -134,12 +135,15 @@ export default function Orders() {
   useHideBalances();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const wallet = useWallet();
   const { haptic } = useTelegram();
   const notify = useAppStore((s) => s.notify);
   const { map: prices } = usePriceMap(100);
 
   const [orders, setOrders] = useState([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const autoExecuteHandled = useRef(false);
   const [sheet, setSheet] = useState(null); // 'limit' | 'dca' | null
   /*
    * THE GUIDE SHEET, CLOSED BY DEFAULT.
@@ -159,6 +163,7 @@ export default function Orders() {
     const fresh = expireStale(loadOrders());
     saveOrders(fresh);
     setOrders(fresh);
+    setOrdersLoaded(true);
   }, []);
 
   const chain = EVM_CHAINS[wallet.chainId] ?? EVM_CHAINS[56];
@@ -508,14 +513,20 @@ export default function Orders() {
     }).catch(() => {});
     // A hand-off to swap is not a receipt. DCA progress advances only when verified evidence is recorded.
     if (order.type !== 'dca') setOrders(updateOrder(order.id, advanceOrder(order, fillFromReadyQuote(order))));
-    const params = new URLSearchParams({
-      from: order.fromToken.symbol,
-      to: order.toToken.symbol,
-      amount: order.amountIn,
-      chain: String(order.chainId)
-    });
+    const params = buildOrderSwapParams(order, TOKENS);
     navigate(`/swap?${params.toString()}`);
   };
+
+  useEffect(() => {
+    const orderId = searchParams.get('execute');
+    if (!ordersLoaded || !orderId || autoExecuteHandled.current) return;
+    autoExecuteHandled.current = true;
+    const next = new URLSearchParams(searchParams);
+    next.delete('execute');
+    setSearchParams(next, { replace: true });
+    const order = findActiveOrderById(orders, orderId);
+    if (order) execute(order);
+  }, [ordersLoaded, orders, searchParams, setSearchParams]);
 
   const signDca = (order) => {
     // This is intentionally an explicit second action, never an automatic activation.
