@@ -1,4 +1,6 @@
 import { activateDca } from '../src/lib/dcaExecution.js';
+import { buildOrderSwapParams, findActiveOrderById } from '../src/lib/orderHandoff.js';
+import { buildStageAlert } from '../server/orderAlerts.js';
 import { syncWatches } from '../src/lib/orders.js';
 /**
  * Pure-logic unit tests. No DOM, no bundler — these modules are deliberately
@@ -542,6 +544,44 @@ import { Interface, Wallet, hexlify, randomBytes } from 'ethers';
 export default async function run() {
   const rows = [];
   const t = (name, ok) => rows.push([name, Boolean(ok)]);
+
+  /* Notification handoff: the route identifies an active local order, and
+     imported tokens travel by verified EVM address rather than ticker alone. */
+  {
+    const active = { id: 'order / 42', status: 'active' };
+    t('an execute deep-link resolves only an active matching order',
+      findActiveOrderById([active, { id: 'paused', status: 'paused' }], active.id) === active &&
+      findActiveOrderById([{ id: active.id, status: 'paused' }], active.id) === null);
+    t('the execute sentinel and missing identifiers never resolve an order',
+      findActiveOrderById([active], 'x') === null && findActiveOrderById([active], '') === null);
+
+    const importedFrom = '0x1111111111111111111111111111111111111111';
+    const importedTo = '0x2222222222222222222222222222222222222222';
+    const curated = '0x3333333333333333333333333333333333333333';
+    const order = {
+      ...active,
+      chainId: 56,
+      amountIn: '1.25',
+      fromToken: { symbol: 'IMPA', address: importedFrom },
+      toToken: { symbol: 'USDT', address: curated }
+    };
+    const params = buildOrderSwapParams(order, { 56: [{ address: curated.toLowerCase() }] });
+    t('the order handoff carries execute provenance and only non-curated token addresses',
+      params.get('from') === 'IMPA' && params.get('to') === 'USDT' &&
+      params.get('amount') === '1.25' && params.get('chain') === '56' &&
+      params.get('fromAddress') === importedFrom && !params.has('toAddress') &&
+      params.get('fromOrder') === active.id);
+    const invalid = buildOrderSwapParams({ ...order, fromToken: { symbol: 'BAD', address: '0x123' } }, {});
+    t('invalid imported token addresses are not handed to the swap screen', !invalid.has('fromAddress'));
+
+    const readyAlert = buildStageAlert({ stage: 'ready', kind: 'order', id: 'a/b ?' });
+    t('a ready order alert URL-encodes its id for one-tap execution',
+      readyAlert.url === '/#/orders?execute=a%2Fb%20%3F');
+    t('non-ready and placeholder order alerts keep the ordinary orders route',
+      buildStageAlert({ stage: 'pending', id: 'order-1' }).url === '/#/orders' &&
+      buildStageAlert({ stage: 'ready', id: 'x' }).url === '/#/orders' &&
+      buildStageAlert({ stage: 'ready', id: '' }).url === '/#/orders');
+  }
 
   /* ---------------- calendar daily rewards + repeatable swaps -------- */
   {

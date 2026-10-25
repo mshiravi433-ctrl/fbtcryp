@@ -659,7 +659,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "الشبكة الحالية"
+    "currentNetwork": "الشبكة الحالية",
+    "orderReadyBanner": "وصل طلبك إلى السعر المستهدف — الكمية والرموز جاهزة؛ بعد تحميل السعر، اضغط فقط على «مبادلة وتوقيع»."
   },
   "onboarding": {
     "skip": "تخطي",

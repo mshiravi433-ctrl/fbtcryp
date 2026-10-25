@@ -899,7 +899,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Current network"
+    "currentNetwork": "Current network",
+    "orderReadyBanner": "Your order reached its target — the amount and tokens are ready. Once the quote loads, just tap Swap & Sign."
   },
   "onboarding": {
     "skip": "Skip",

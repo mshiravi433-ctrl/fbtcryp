@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Rede atual"
+    "currentNetwork": "Rede atual",
+    "orderReadyBanner": "Sua ordem atingiu o preço-alvo — o valor e os tokens estão prontos. Depois que a cotação carregar, toque em Trocar e assinar."
   },
   "signals": {
     "title": "Sinais",

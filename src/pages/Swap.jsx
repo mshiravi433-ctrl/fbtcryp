@@ -1736,6 +1736,12 @@ export default function Swap() {
         ))}
       </div>
 
+      {searchParams.get('fromOrder') && (
+        <div className="notice" role="status" style={{ marginBlock: '0 12px', maxWidth: 'none' }}>
+          {t('swap.orderReadyBanner')}
+        </div>
+      )}
+
       {/* ─── TICKET: no motion.section, no backdrop-filter animation on native ─── */}
       <section className={`swap-ticket ${isNative ? 'swap-ticket-native' : ''}`}>
         <div className="lab-aurora" aria-hidden="true" />

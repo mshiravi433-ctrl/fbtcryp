@@ -339,7 +339,8 @@
       "cancelled": "Cancelled",
       "failed": "Failed"
     },
-    "currentNetwork": "Текущая сеть"
+    "currentNetwork": "Текущая сеть",
+    "orderReadyBanner": "Ордер достиг целевой цены — сумма и токены готовы. После загрузки котировки просто нажмите «Обменять и подписать»."
   },
   "signals": {
     "title": "Сигналы",

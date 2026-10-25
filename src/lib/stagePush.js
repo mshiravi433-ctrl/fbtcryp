@@ -57,9 +57,19 @@ export async function dispatchStageAlert({
     }
   }
 
+  const orderId = id == null ? '' : String(id);
+  const readyOrderId = kind !== 'intent' && st === 'ready' && orderId.trim() !== '' && orderId !== 'x'
+    ? orderId
+    : null;
+  const url = kind === 'intent'
+    ? st === 'ready' ? '/#/swap' : '/#/intent'
+    : readyOrderId !== null
+      ? `/#/orders?execute=${encodeURIComponent(readyOrderId)}`
+      : '/#/orders';
   showLocalNotification(st, {
     body: `${base}→${quote}${quoteBody}`,
     tag: `fbt-${kind}-${st}-${id}`,
+    data: { url },
     vibrate: VIBRATE[st]
   });
   return false;
