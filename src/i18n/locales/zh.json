@@ -1,4 +1,5 @@
 {
+  "orders.keeper.cancelFailed": "无法取消自动订单，它仍处于开放状态。",
   "nav": {
     "market": "市场",
     "trade": "交易",

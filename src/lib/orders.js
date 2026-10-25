@@ -268,6 +268,68 @@ function makeId() {
 }
 
 /** Build a stored order. Returns { order } or { error }. */
+/**
+ * The on-chain reference for a keeper order, shaped and bounded. Only the
+ * identifiers the server polls are kept; a signature or a transaction body is
+ * never stored, because nothing reads it after placement.
+ */
+export function sanitizeKeeper(k) {
+  const provider = k?.provider === 'jupiter' ? 'jupiter' : k?.provider === 'cow' ? 'cow' : null;
+  if (!provider) return null;
+  const base = {
+    provider,
+    chainId: Number.isInteger(Number(k.chainId)) ? Number(k.chainId) : null,
+    placedAt: Number(k.placedAt) > 0 ? Number(k.placedAt) : Date.now(),
+    state: 'open'
+  };
+  if (provider === 'cow') {
+    return { ...base, uid: String(k.uid || ''), explorerUrl: typeof k.explorerUrl === 'string' ? k.explorerUrl : null };
+  }
+  return {
+    ...base,
+    orderKey: String(k.orderKey || ''),
+    maker: String(k.maker || ''),
+    explorerUrl: typeof k.explorerUrl === 'string' ? k.explorerUrl : null
+  };
+}
+
+/**
+ * What a keeper order reports to the watcher. Its CoW UID or Jupiter order key
+ * is the handle the server checks, and the pair symbols name the fill.
+ */
+function keeperWatchItem(o) {
+  const k = o.keeper || {};
+  const base = {
+    id: o.id,
+    type: 'limit',
+    fromSym: o.fromToken.symbol,
+    toSym: o.toToken.symbol,
+    fromId: null,
+    toId: null,
+    priceOf: 'from'
+  };
+  if (k.provider === 'cow' && k.uid) return { ...base, cowUid: k.uid, cowChainId: k.chainId };
+  if (k.provider === 'jupiter' && k.orderKey) return { ...base, jupOrderKey: k.orderKey, jupMaker: k.maker };
+  return null;
+}
+
+/**
+ * Apply the network's answer to a keeper order. Pure: returns the next order.
+ * «filled» moves the order to `filled`, which is the status the app already
+ * uses for a completed order. The on-chain state is recorded either way so the
+ * card can say what happened.
+ */
+export function applyKeeperState(order, state, now = Date.now()) {
+  if (!order?.keeper) return order;
+  if (state === 'fulfilled') {
+    return { ...order, status: 'filled', filledAt: now, keeper: { ...order.keeper, state: 'fulfilled' } };
+  }
+  if (state === 'cancelled' || state === 'expired') {
+    return { ...order, status: state === 'cancelled' ? 'cancelled' : 'expired', keeper: { ...order.keeper, state } };
+  }
+  return order;
+}
+
 export function createOrder(input, now = Date.now()) {
   const err = validateOrder(input);
   if (err) return { error: err };
@@ -329,7 +391,15 @@ export function createOrder(input, now = Date.now()) {
          */
         ...(Number.isFinite(Number(input.maxFeeBps)) && Number(input.maxFeeBps) >= 0
           ? { maxFeeBps: Number(input.maxFeeBps) }
-          : {})
+          : {}),
+        /*
+         * EXECUTION MODE. A keeper order was placed on-chain by the user's own
+         * signature (CoW or Jupiter Trigger) and is filled by the network, not
+         * by this app. `execMode` is what the list and the notifications read;
+         * `keeper` is the reference we poll. Absent means the classic watch-
+         * and-confirm order, which is exactly what every existing row is.
+         */
+        ...(input.keeper ? { execMode: 'keeper', keeper: sanitizeKeeper(input.keeper) } : {})
       }
     };
   }
@@ -1281,8 +1351,12 @@ export async function syncWatches(orders) {
        * unattended.
        */
       .filter((o) => SCHEDULED_TYPES.has(o.type)
+        || Boolean(o.keeper)
         || (o.fromToken?.coingeckoId && o.toToken?.coingeckoId))
       .map((o) => {
+        /* A keeper order is watched for its fill only, so it is named by its
+           on-chain reference instead of a price. */
+        if (o.keeper) return keeperWatchItem(o);
         const base = {
           id: o.id,
           type: o.type,

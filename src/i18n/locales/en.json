@@ -690,6 +690,7 @@
     "copied": "Copied to clipboard",
     "copyFailed": "Could not copy — select the address manually",
     "orderCreated": "Order created",
+    "orders.keeper.cancelFailed": "The automatic order could not be cancelled; it is still open.",
     "orderErr.BAD_TYPE": "Unknown order type",
     "orderErr.BAD_CHAIN": "Pick a network",
     "orderErr.BAD_TOKENS": "Pick both tokens",

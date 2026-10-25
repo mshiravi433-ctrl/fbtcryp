@@ -1,4 +1,5 @@
 {
+  "orders.keeper.cancelFailed": "L'ordre automatique n'a pas pu être annulé ; il reste ouvert.",
   "nav": {
     "market": "Marché",
     "trade": "Trader",

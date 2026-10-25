@@ -30,7 +30,7 @@ let causalPromise = null;
    even a remount while it is in flight — simply waits on the same promise. */
 function fetchCausalGraph() {
   if (!causalPromise) {
-    causalPromise = fetch(`${apiBase()}/deep/macro-graph?asset=BTC`, { headers: { accept: 'application/json' } })
+    causalPromise = fetch(`${apiBase()}/ai/deep/macro-graph?asset=BTC`, { headers: { accept: 'application/json' } })
       .then((r) => r.json())
       .then((body) => {
         if (body?.ok && body?.graph?.nodes?.length) { causalCache.state = 'done'; causalCache.body = body; }

@@ -540,6 +540,7 @@ import {
   verifyMerkleRootAnchorClaim
 } from '../server/intentRootAnchors.js';
 import { Interface, Wallet, hexlify, randomBytes } from 'ethers';
+import runKeeperOrders from './keeper-orders-units.mjs';
 
 export default async function run() {
   const rows = [];
@@ -10141,6 +10142,8 @@ export default async function run() {
         new Set(ids).size === ids.length && rows.length === 250 + 20);
     }
   }
+
+  rows.push(...(await runKeeperOrders()));
 
   return rows;
 }

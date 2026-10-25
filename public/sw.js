@@ -249,8 +249,14 @@
  * asked BEFORE a wallet is connected and De¹ is skipped once the server says its
  * Solana chain is off. A device holding the v26 shell keeps the old ladder and
  * would keep pricing through the free Jupiter route, which is the very report
- * this deploy answers. */
-const SHELL = 'fbt-shell-v28';
+ * this deploy answers.
+ *
+ * v28 -> v29 (2026-10-25): automatic limit orders. The Orders sheet now has two
+ * execution modes, signs CoW EIP-712 orders and Jupiter Trigger transactions in
+ * the browser, and the order cards link to explorers. A device holding the v28
+ * shell keeps the old sheet, which would create watch-only orders for a user
+ * who chose on-chain execution. Renaming the cache evicts that shell. */
+const SHELL = 'fbt-shell-v29';
 
 /*
  * ─── PHASE 94: cachePolicyFor, PUBLIC PAGES ONLY ────────────────────────────

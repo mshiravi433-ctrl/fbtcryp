@@ -9,6 +9,11 @@ import { useTelegram } from '../context/TelegramContext';
 import { useAppStore } from '../store/useAppStore';
 import { usePriceMap } from '../hooks/useMarket';
 import { EVM_CHAINS, EVM_CHAIN_ORDER, FEE_BPS, TOKENS } from '../lib/chains';
+import { COW_WRAPPED_NATIVE, cancelCowKeeperOrder, cowSupports, fetchCowKeeperState, placeCowKeeperOrder } from '../lib/cowOrders';
+import { cancelSolanaKeeperOrder, createSolanaKeeperOrder, fetchOpenSolanaKeeperOrders } from '../lib/solanaOrders';
+import { keeperCopyFor } from '../lib/keeperCopy';
+import { SOLANA_BASE_TOKENS, getSolanaUniverseSync, loadSolanaUniverse } from '../lib/solanaUniverse';
+import { findAsset } from '../lib/solanaAssets';
 import { findToken, getTokensSync, loadTokens, tokenKey } from '../lib/tokenLists';
 import { isOrderable, resolveCoinIds, withCoinId } from '../lib/coinId';
 import ModernSelect from '../components/ModernSelect';
@@ -32,6 +37,7 @@ import {
   TWAP_MIN_WINDOW_MIN,
   WATCHED_TYPES,
   addOrder,
+  applyKeeperState,
   advanceOrder,
   computeMinAmountOut,
   createOrder,
@@ -92,6 +98,39 @@ import '../styles/orders-hero.css';
  * and a second copy of the row shape is a second place for the marks, the
  * counts and the short tags to drift apart.
  */
+/*
+ * Solana has no EVM chain id. A keeper order still needs an integer id to pass
+ * order validation, and 101 is the id the Solana mainnet is registered under in
+ * the cross-chain registries. It never collides with an EVM network.
+ */
+const SOLANA_CHAIN_ID = 101;
+const isNativeTok = (tk) => Boolean(tk?.native) || !tk?.address;
+
+/** The on-chain state of a keeper order, in the sheet's language. */
+function keeperStateText(state, kc) {
+  return ({ open: kc.stateOpen, fulfilled: kc.stateFilled, cancelled: kc.stateCancelled, expired: kc.stateExpired, not_open: kc.stateNotOpen })[state] ?? null;
+}
+
+/** The Solana token list in the shape the sheet already uses for EVM tokens. */
+function solanaTokenList() {
+  const rows = getSolanaUniverseSync();
+  const list = Array.isArray(rows) && rows.length ? rows : SOLANA_BASE_TOKENS;
+  return list
+    .map((tk) => {
+      const mint = tk.mint ?? tk.address;
+      return {
+        ...tk,
+        address: mint,
+        chainId: 'solana',
+        native: false,
+        decimalsVerified: true,
+        decimals: Number(tk.decimals),
+        coingeckoId: findAsset(mint)?.coingeckoId ?? null
+      };
+    })
+    .filter((tk) => tk.address && Number.isInteger(tk.decimals) && tk.decimals >= 0);
+}
+
 const chainOptionsFrom = (counts, t) =>
   EVM_CHAIN_ORDER
     .map((id) => {
@@ -407,7 +446,7 @@ export default function Orders() {
   }, [prices]);
 
   const ready = useMemo(
-    () => orders.filter((o) => o.status === 'active' && evaluateOrder(o, rateFor(o)).ready),
+    () => orders.filter((o) => o.status === 'active' && !o.keeper && evaluateOrder(o, rateFor(o)).ready),
     [orders, rateFor]
   );
   const active = useMemo(
@@ -466,6 +505,43 @@ export default function Orders() {
     [ready, active, rateFor]
   );
 
+  /*
+   * KEEPER STATUS — asked of the network, never assumed. A CoW order is read by
+   * UID. A Jupiter order is looked for in the wallet's open list; one that has
+   * left the list is reported as «no longer open», not as filled, because the
+   * list cannot say which. Orders placed in the last two minutes are not
+   * judged yet: the network may not have indexed them.
+   */
+  useEffect(() => {
+    if (!ordersLoaded) return undefined;
+    let alive = true;
+    const cow = orders.filter((o) => o.status === 'active' && o.keeper?.provider === 'cow' && o.keeper.state === 'open');
+    for (const o of cow) {
+      fetchCowKeeperState(o.keeper.chainId, o.keeper.uid).then((r) => {
+        if (!alive || !r.ok || r.state === 'unknown' || r.state === 'open') return;
+        const next = applyKeeperState(o, r.state);
+        setOrders(updateOrder(o.id, { status: next.status, keeper: next.keeper, filledAt: next.filledAt }));
+      });
+    }
+    const sol = orders.filter((o) => o.status === 'active' && o.keeper?.provider === 'jupiter' && o.keeper.state === 'open'
+      && Date.now() - (o.keeper.placedAt || 0) > 120000);
+    const maker = sol[0]?.keeper?.maker;
+    if (maker) {
+      fetchOpenSolanaKeeperOrders(maker).then((r) => {
+        if (!alive || !r.ok) return;
+        const live = new Set(r.orders.map((x) => x.orderKey));
+        for (const o of sol) {
+          if (o.keeper.maker === maker && !live.has(o.keeper.orderKey)) {
+            setOrders(updateOrder(o.id, { keeper: { ...o.keeper, state: 'not_open' } }));
+          }
+        }
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [ordersLoaded]);
+
   const submit = (input) => {
     const { order, error } = createOrder(input);
     if (error) {
@@ -481,7 +557,7 @@ export default function Orders() {
     setOrders(res.orders);
     setSheet(null);
     notify('orderCreated', 'success');
-    dispatchStageAlert({
+    if (!order.keeper) dispatchStageAlert({
       stage: 'pending',
       kind: 'order',
       base: order.fromToken.symbol,
@@ -596,7 +672,7 @@ export default function Orders() {
     notify('orders.revisionReview', 'success', { changes: revision.diff.map((d) => d.key).join(', ') });
   };
 
-  const cancel = (id) => {
+  const cancelLocal = (id) => {
     haptic?.('light');
     const gone = orders.find((o) => o.id === id);
     if (gone) {
@@ -610,6 +686,32 @@ export default function Orders() {
       }).catch(() => {});
     }
     setOrders(removeOrder(id));
+  };
+
+  /*
+   * A keeper order is live on-chain, so cancelling it means signing a
+   * cancellation. The local row is removed only after the order book accepts it;
+   * a refused signature keeps the order visible, still open.
+   */
+  const cancel = async (id) => {
+    const gone = orders.find((o) => o.id === id);
+    if (gone?.keeper && gone.keeper.state === 'open') {
+      let res;
+      if (gone.keeper.provider === 'cow') {
+        const signer = wallet.getSigner?.();
+        res = signer
+          ? await cancelCowKeeperOrder({ signer, owner: wallet.address, chainId: gone.keeper.chainId, uid: gone.keeper.uid })
+          : { ok: false, error: 'WALLET_REQUIRED' };
+      } else {
+        const { solanaAddress } = await import('../lib/solanaWallet');
+        res = await cancelSolanaKeeperOrder({ wallet: solanaAddress(), orderKey: gone.keeper.orderKey });
+      }
+      if (!res.ok) {
+        notify('orders.keeper.cancelFailed', 'error');
+        return;
+      }
+    }
+    cancelLocal(id);
   };
 
   /*
@@ -856,6 +958,8 @@ export default function Orders() {
  * row has a single seam to read.
  */
 function OrderRow({ o, isReady, t, rateFor, usdMap, actions }) {
+  const { i18n } = useTranslation();
+  const kc = keeperCopyFor(i18n?.language);
   const notional = orderNotionalUsd(o, usdMap);
   const executionStatus = o.type === 'dca' ? dcaDisplayStatus(o, loadDcaReceipts()) : o.status;
   const raw = rateFor(o);
@@ -875,6 +979,17 @@ function OrderRow({ o, isReady, t, rateFor, usdMap, actions }) {
     >
       <div className="ord-head">
         <span className={`ord-kind ord-${o.type}`}>{t(`orders.type.${o.type}`)}</span>
+        {o.type === 'limit' && (o.execMode === 'keeper'
+          ? <span className="ord-badge is-keeper">{kc.badgeKeeper}</span>
+          : <span className="ord-badge is-watch">{kc.badgeWatch}</span>)}
+        {o.type === 'limit' && o.keeper && keeperStateText(o.keeper.state, kc) && (
+          <span className="ord-status">{keeperStateText(o.keeper.state, kc)}</span>
+        )}
+        {o.type === 'limit' && o.keeper?.explorerUrl && (
+          <a className="ord-link" href={o.keeper.explorerUrl} target="_blank" rel="noopener noreferrer">
+            {o.keeper.provider === 'jupiter' ? kc.viewOnSolscan : kc.viewOnExplorer}
+          </a>
+        )}
         {/*
           WHICH NETWORK. Orders can be created on any supported chain, so a row
           that does not name its network is ambiguous the moment somebody has
@@ -1170,7 +1285,8 @@ function DcaRevisionSheet({ draft, onChange, onSave, onClose, chainOptions }) {
 }
 
 function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, prices }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const wallet = useWallet();
 
   /*
    * ─── THE NETWORK IS A CHOICE HERE, NOT AN INHERITANCE ───────────────────
@@ -1206,7 +1322,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
 
   /* The chain's hand-verified entries: the instant first paint, and always
      present in the merged universe below. */
-  const curated = useMemo(() => TOKENS[chainId] ?? [], [chainId]);
+  const curated = useMemo(() => (chainId === 'solana' ? solanaTokenList() : TOKENS[chainId] ?? []), [chainId]);
 
   /*
    * ─── THE TOKEN UNIVERSE, THE SAME ONE THE SWAP SCREEN TRADES ────────────
@@ -1222,6 +1338,15 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
 
   useEffect(() => {
     let alive = true;
+    if (chainId === 'solana') {
+      setUniverse(solanaTokenList());
+      loadSolanaUniverse(() => {
+        if (alive) setUniverse(solanaTokenList());
+      }).catch(() => {});
+      return () => {
+        alive = false;
+      };
+    }
     setUniverse(getTokensSync(chainId));
     loadTokens(chainId)
       .then((list) => {
@@ -1302,6 +1427,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
   }, [chainId]);
 
   useEffect(() => {
+    if (chainId === 'solana') return;
     const want = [rawFrom, rawTo].filter((tk) => {
       const k = addrKey(tk);
       return k && !tk.coingeckoId && !asked.has(k);
@@ -1482,7 +1608,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
   const tokenOptions = useMemo(
     () => universe.map((tk) => {
       const state = priceStateOf(tk);
-      const off = state === 'none';
+      const off = chainId !== 'solana' && state === 'none';
       const isNative = tk.native || !tk.address;
       return {
         value: tokenKey(tk),
@@ -1531,6 +1657,110 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
   const canCreate = fromState === 'ok' && toState === 'ok';
   const priceState = fromState === 'ok' ? toState : fromState;
 
+  /*
+   * ─── TWO EXECUTION MODES FOR A LIMIT ORDER ─────────────────────────────
+   * keeper — the order is signed on-chain and the network fills it (CoW
+   *          solvers on EVM, Jupiter Trigger on Solana). The app does not
+   *          need to be open, and no price feed is needed.
+   * watch  — the server watches the price, notifies, and the user confirms
+   *          each swap with one tap. Nothing is sent before that confirmation.
+   * Solana is keeper-only: the watch path is priced by CoinGecko ids, which
+   * Solana tokens do not reliably have.
+   */
+  const kc = keeperCopyFor(i18n?.language);
+  const isSolanaNet = chainId === 'solana';
+  const [execMode, setExecMode] = useState('keeper');
+  const [keeperBusy, setKeeperBusy] = useState('');
+  const [keeperErr, setKeeperErr] = useState(null);
+  const mode = isSolanaNet ? 'keeper' : execMode;
+  const keeperAvailable = kind === 'limit'
+    && (isSolanaNet
+      ? Boolean(fromToken?.address && toToken?.address)
+      : cowSupports(chainId) && Boolean(fromToken && toToken));
+  const fromNative = isNativeTok(fromToken);
+  const keeperTokensOk = Boolean(fromToken && toToken) && fromSym !== toSym;
+  const canCreateKeeper = keeperAvailable && keeperTokensOk && Number(amount) > 0 && Number(target) > 0 && !keeperBusy;
+  const effectiveKeeper = kind === 'limit' && mode === 'keeper';
+  const chainOptionsWithSolana = useMemo(
+    () => [...chainOptions, { value: 'solana', label: 'Solana', sublabel: 'SPL · Jupiter Trigger', symbol: 'SOL' }],
+    [chainOptions]
+  );
+
+  /*
+   * PLACING A KEEPER ORDER. Every step that touches money is in the lib, and
+   * each one fails closed: a wrong network, a refused signature or a relay
+   * error stops the flow with a code, and nothing is recorded as placed.
+   * Only a relayed, signed order becomes a local order row.
+   */
+  const placeKeeper = async () => {
+    setKeeperErr(null);
+    setKeeperBusy(fromNative && !isSolanaNet ? kc.stageWrap : kc.stageApprove);
+    try {
+      let keeper;
+      if (isSolanaNet) {
+        const { solanaAddress } = await import('../lib/solanaWallet');
+        const maker = solanaAddress();
+        if (!maker) throw new Error('WALLET_REQUIRED');
+        setKeeperBusy(kc.stageSign);
+        const res = await createSolanaKeeperOrder({
+          wallet: maker,
+          inputMint: fromToken.address,
+          outputMint: toToken.address,
+          inputDecimals: fromToken.decimals,
+          outputDecimals: toToken.decimals,
+          amountIn: amount,
+          minOut: target,
+          expiredAt: Math.floor((Date.now() + LIMIT_EXPIRY_OPTIONS[expiryKey]) / 1000)
+        });
+        if (!res.ok) throw new Error(res.error);
+        keeper = { provider: 'jupiter', orderKey: res.orderKey, maker, chainId: SOLANA_CHAIN_ID, explorerUrl: res.explorerUrl };
+      } else {
+        if (!wallet.address) throw new Error('WALLET_REQUIRED');
+        if (wallet.chainId && Number(wallet.chainId) !== Number(chainId)) {
+          try {
+            await wallet.switchChain?.(chainId);
+          } catch {
+            throw new Error('WRONG_NETWORK');
+          }
+        }
+        const signer = wallet.getSigner?.();
+        if (!signer) throw new Error('WALLET_REQUIRED');
+        setKeeperBusy(kc.stageSign);
+        const res = await placeCowKeeperOrder({
+          signer,
+          owner: wallet.address,
+          chainId,
+          fromToken,
+          toToken,
+          amountIn: amount,
+          minOut: target,
+          expiryMs: LIMIT_EXPIRY_OPTIONS[expiryKey],
+          wrapNative: fromNative
+        });
+        if (!res.ok) throw new Error(res.error);
+        keeper = { provider: 'cow', chainId, uid: res.uid, explorerUrl: res.explorerUrl };
+      }
+      onSubmit({
+        type: 'limit',
+        chainId: isSolanaNet ? SOLANA_CHAIN_ID : chainId,
+        fromToken,
+        toToken,
+        amountIn: amount,
+        targetRate: target,
+        direction: 'above',
+        priceOf: 'from',
+        expiryKey,
+        maxFeeBps: maxFeeBps ? Number(maxFeeBps) : undefined,
+        keeper
+      });
+    } catch (err) {
+      const code = String(err?.message || '');
+      setKeeperErr(kc.err[code] ? code : 'GENERIC');
+    } finally {
+      setKeeperBusy('');
+    }
+  };
+
   if (!kind) return null;
 
   return (
@@ -1547,8 +1777,8 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
           <span className="faint">{t('orders.network')}</span>
           <ModernSelect
             value={String(chainId)}
-            onChange={(v) => setChainId(Number(v))}
-            options={chainOptions}
+            onChange={(v) => setChainId(v === 'solana' ? 'solana' : Number(v))}
+            options={kind === 'limit' ? chainOptionsWithSolana : chainOptions}
             title={t('orders.network')}
             placeholder={t('orders.network')}
             ariaLabel={t('orders.network')}
@@ -1611,6 +1841,40 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
                  onChange={(e) => setAmount(e.target.value)} placeholder="0.0" />
         </label>
 
+        {kind === 'limit' && (
+          <div className="ord-mode" role="group" aria-label={kc.mode1Title}>
+            <div className="segmented">
+              <button
+                type="button"
+                className={mode === 'keeper' ? 'active' : ''}
+                disabled={!keeperAvailable}
+                aria-pressed={mode === 'keeper'}
+                onClick={() => setExecMode('keeper')}
+                style={{ isolation: 'isolate', minHeight: 44 }}
+              >
+                {mode === 'keeper' && <SegIndicator id="ord-mode-keeper" />}
+                {kc.mode1Title}
+              </button>
+              <button
+                type="button"
+                className={mode === 'watch' ? 'active' : ''}
+                disabled={isSolanaNet}
+                aria-pressed={mode === 'watch'}
+                onClick={() => setExecMode('watch')}
+                style={{ isolation: 'isolate', minHeight: 44 }}
+              >
+                {mode === 'watch' && <SegIndicator id="ord-mode-watch" />}
+                {kc.mode2Title}
+              </button>
+            </div>
+            <p className="faint" style={{ lineHeight: 1.7 }}>
+              {mode === 'keeper' ? (isSolanaNet ? kc.solanaNote : kc.mode1Body) : kc.mode2Body}
+            </p>
+            {mode === 'keeper' && !isSolanaNet && <p className="faint" style={{ lineHeight: 1.7 }}>{kc.mode1Note}</p>}
+            {mode === 'keeper' && !keeperAvailable && <p className="ord-warn">{kc.modeUnavailable}</p>}
+          </div>
+        )}
+
         {/*
           ─── AUTOPILOT, ABOVE THE MANUAL FIELDS ────────────────────────────
           Placed here on purpose: after the tokens and the amount (which it
@@ -1621,7 +1885,7 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
           Only on the price-triggered forms. A DCA plan is a schedule, not a
           price decision, so there is nothing here for Autopilot to measure.
         */}
-        {kind !== 'dca' && kind !== 'twap' && (
+        {kind !== 'dca' && kind !== 'twap' && !effectiveKeeper && (
           <AutopilotPanel
             series={(watchedSeries ?? []).map((d) => d.p)}
             fromToken={fromToken}
@@ -1632,7 +1896,58 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
           />
         )}
 
-        {kind === 'limit' ? (
+        {effectiveKeeper ? (
+          <>
+            <label className="ord-field">
+              <span className="faint">{kc.minRateLabel}</span>
+              <input type="number" inputMode="decimal" value={target}
+                     onChange={(e) => setTarget(e.target.value)} placeholder="0.0" />
+            </label>
+
+            {liveRate != null && (
+              <p className="faint">
+                {t('orders.currentRate')} 1 {fromSym} = <span className="mono">{fmtQty(liveRate)}</span> {toSym}
+              </p>
+            )}
+
+            <label className="ord-field">
+              <span className="faint">{t('orders.level1.expiryLabel')}</span>
+              <div className="segmented" style={{ marginTop: 4 }}>
+                {Object.keys(LIMIT_EXPIRY_OPTIONS).map((key) => (
+                  <button
+                    key={key}
+                    className={expiryKey === key ? 'active' : ''}
+                    onClick={() => setExpiryKey(key)}
+                    aria-pressed={expiryKey === key}
+                    style={{ isolation: 'isolate', minHeight: 44 }}
+                  >
+                    {expiryKey === key && <SegIndicator id={`ord-kexpiry-${key}`} />}
+                    {t(`orders.level1.expiry_${key}`)}
+                  </button>
+                ))}
+              </div>
+            </label>
+
+            {Number(target) > 0 && Number(amount) > 0 && (
+              <div className="card" style={{ padding: '10px 12px', marginTop: 4 }}>
+                <span className="faint" style={{ fontSize: 12 }}>{t('orders.level1.estimatedOutput')}</span>
+                <p className="mono" style={{ margin: '4px 0 0', fontSize: 14 }}>
+                  {`≥ ${fmtQty(Number(amount) * Number(target))} ${toSym}`}
+                </p>
+              </div>
+            )}
+
+            {fromNative && !isSolanaNet && (
+              <div className="card" style={{ padding: '10px 12px', marginTop: 4, borderColor: '#FFB300' }}>
+                <p className="ord-warn" style={{ margin: 0 }}>{kc.nativeWarn}</p>
+              </div>
+            )}
+
+            <p className="faint" style={{ lineHeight: 1.7 }}>
+              {t('orders.willSwap', { from: fromSym, to: toSym })}
+            </p>
+          </>
+        ) : kind === 'limit' ? (
           <>
             {/*
               WHICH TOKEN AM I WATCHING?
@@ -2082,9 +2397,9 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
 
         <button
           className="btn btn-primary"
-          disabled={!canCreate}
+          disabled={effectiveKeeper ? !canCreateKeeper : !canCreate}
           onClick={() =>
-            onSubmit({
+            effectiveKeeper ? placeKeeper() : onSubmit({
               type: kind,
               chainId,
               fromToken,
@@ -2115,8 +2430,10 @@ function OrderSheet({ kind, onClose, onSubmit, onSwitchKind, walletChainId, pric
             })
           }
         >
-          {t('orders.create')}
+          {effectiveKeeper ? (fromNative && !isSolanaNet ? kc.wrapAndPlace : kc.placeKeeper) : t('orders.create')}
         </button>
+        {keeperBusy && <p className="faint" role="status">{keeperBusy}</p>}
+        {keeperErr && <p className="ord-warn" role="alert">{kc.err[keeperErr] || kc.errGeneric}</p>}
       </div>
     </Sheet>
   );

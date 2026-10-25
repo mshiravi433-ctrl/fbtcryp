@@ -1,4 +1,5 @@
 {
+  "orders.keeper.cancelFailed": "Order otomatis tidak dapat dibatalkan; order masih terbuka.",
   "nav": {
     "market": "Pasar",
     "trade": "Dagang",

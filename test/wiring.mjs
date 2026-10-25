@@ -946,7 +946,7 @@ export default function run() {
      * endpoint as missing, which is how a false alarm teaches people to ignore
      * a real one.
      */
-    const declared = [...serverSrc.matchAll(/app\.(get|post|all)\(\s*'\/api\/([^']*)'/g)].map(
+    const declared = [...serverSrc.matchAll(/app\.(get|post|all|delete)\(\s*'\/api\/([^']*)'/g)].map(
       ([, method, p]) => ({
         method,
         re: new RegExp(`^${p.replace(/:[a-zA-Z]+/g, '[^/]+').replace(/\//g, '\\/')}$`)
