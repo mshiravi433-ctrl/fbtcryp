@@ -484,6 +484,32 @@ const isWalletParty = (p) => !!p && (!p.is_contract || isDelegatedEoa(p));
 const isContractParty = (p) => !!p?.is_contract && !isDelegatedEoa(p);
 const DEX_CONTRACT_NAME = /settler|router|swap|poolmanager|v[234]pool|pair\b|aggregat|augustus|odos|kyber|1inch|gpv2settlement|lbpair/i;
 
+
+export async function bsRecentStableSwappersByUnitPrice(chainId, tokenAddress, { pricePerUnit = 1, minUsd = 250, limit = 12, timeoutMs = TIMEOUT_MS } = {}) {
+  // Phase 8 variant: explicit per-unit price, not comparing raw amount to minUsd.
+  try {
+    const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`, { timeout: timeoutMs });
+    const items = Array.isArray(j?.items) ? j.items : [];
+    const out = new Map();
+    for (const it of items) {
+      const decimalsRaw = Number(it?.total?.decimals ?? it?.token?.decimals);
+      const decimals = Number.isFinite(decimalsRaw) ? decimalsRaw : 6;
+      const rawAmount = Number(it?.total?.value ?? 0);
+      const amount = rawAmount / (10 ** decimals);
+      const usdValue = amount * pricePerUnit;
+      if (!Number.isFinite(amount) || !Number.isFinite(usdValue) || usdValue < minUsd) continue;
+      const from = shapeParty(it?.from);
+      const to = shapeParty(it?.to);
+      if (from?.address && to?.address) {
+        out.set(from.address, { ...from, usdValue, amountRaw: rawAmount, decimals });
+      }
+    }
+    return Array.from(out.values()).slice(0, limit);
+  } catch (e) {
+    return [];
+  }
+}
+
 export async function bsRecentStableSwappers(chainId, tokenAddress, { minUsd = 250, limit = 12, timeoutMs = TIMEOUT_MS } = {}) {
   try {
     const j = await bsGet(chainId, `/api/v2/tokens/${tokenAddress}/transfers`, { timeout: timeoutMs });

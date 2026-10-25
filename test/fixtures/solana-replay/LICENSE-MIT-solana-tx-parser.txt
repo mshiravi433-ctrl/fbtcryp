@@ -1,0 +1,5 @@
+MIT License
+
+Copyright (c) MT Social DAO (jowency-me/solana-tx-parser)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy

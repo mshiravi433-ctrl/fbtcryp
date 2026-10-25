@@ -22,3 +22,8 @@ Included licence texts:
 - `LICENSE-MIT-madlabs-tech.txt` — Copyright (c) 2026 madlabs-tech.
 - `LICENSE-MIT-stake-tax.txt` — Copyright (c) 2021, stake.tax.
 - `LICENSE-MPL-2.0.txt` — Mozilla Public License 2.0 text from tx-parser.
+
+--- Phase 6 attribution ---
+Source: jowency-me/solana-tx-parser (MIT, commit 71ba8bd960b2a7c74a5f9cec69f2ed597dedc1ca)
+Files: testdata/transactions/swap_titan_2.json, swap_raydium_amm_1.json, swap_raydium_route_1.json, swap_titan_1.json, swap_stabble_1.json, swap_exa6gyh_2.json
+Normalization: wire-format base64 via normalizeSolanaWireTransaction in solanaReplay.js
