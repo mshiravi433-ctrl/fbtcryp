@@ -40,6 +40,36 @@ const API_BASE = apiBase();
  * A subset of the swap screen's list on purpose: these are the ones with real
  * bridge liquidity in both directions. Offering a route that exists on paper
  * but has no relayer is how a user gets a spinner and no explanation.
+ *
+ * ─── THE 2026-10-25 EXPANSION («شبکه‌های جامانده») ──────────────────────────
+ * The swap screen grew to sixteen EVM networks while this list stayed at
+ * seven, so funds could be bought on Linea, Sonic, Mantle, Berachain,
+ * Unichain, Monad, Scroll and zkSync Era but never bridged out of them. The
+ * server was never the blocker: `WALLET_SUPPORTED_CHAIN_IDS` in
+ * server/crossChain.js already carries all sixteen, so every chain below
+ * quotes and executes through the exact path the first seven use.
+ *
+ * Each added chain passed the same two tests before joining the list:
+ *   1. LI.FI serves the chain (it is the quoting/execution engine here), and
+ *   2. LI.FI's own token registry (`/v1/token`) returns OUR pinned
+ *      stablecoin address for that chain as a verified token — checked live
+ *      on 2026-10-25, exact address match for every entry in BRIDGE_TOKENS
+ *      below. A chain LI.FI knows but whose canonical stablecoin differs
+ *      from our pin would have failed here and stayed off the list.
+ *
+ * Deliberately still absent:
+ *   · Robinhood Chain (4663). LI.FI and deBridge both serve it, but its only
+ *     verified stablecoin is USDG — there is no canonical USDT/USDC, and
+ *     lib/chains.js documents a dozen fake "USDC" clones on that chain. This
+ *     tab is a USDT/USDC surface; adding a chain whose dollar is a third
+ *     symbol needs its own token handling, not a row in this table.
+ *   · Robinhood testnet (46630). Testnets never appear on a screen that
+ *     moves real value.
+ *
+ * NOT every chain here has the second (deBridge DLN) route: deBridge's live
+ * supported-chains list covers only the first seven plus Linea. That set
+ * lives in lib/dln.js (`DLN_CHAIN_IDS`) and the comparison simply never
+ * renders for the rest — LI.FI remains the route, exactly as designed.
  */
 export const BRIDGE_CHAINS = [
   { id: 56, name: 'BNB Chain', symbol: 'BNB' },
@@ -48,7 +78,18 @@ export const BRIDGE_CHAINS = [
   { id: 8453, name: 'Base', symbol: 'ETH' },
   { id: 137, name: 'Polygon', symbol: 'POL' },
   { id: 10, name: 'Optimism', symbol: 'ETH' },
-  { id: 43114, name: 'Avalanche', symbol: 'AVAX' }
+  { id: 43114, name: 'Avalanche', symbol: 'AVAX' },
+  /* Added 2026-10-25 — see the verification note above. Order follows
+     EVM_CHAIN_ORDER in lib/chains.js so the picker reads like everywhere
+     else in the app; the original seven keep their places. */
+  { id: 59144, name: 'Linea', symbol: 'ETH' },
+  { id: 146, name: 'Sonic', symbol: 'S' },
+  { id: 5000, name: 'Mantle', symbol: 'MNT' },
+  { id: 80094, name: 'Berachain', symbol: 'BERA' },
+  { id: 130, name: 'Unichain', symbol: 'ETH' },
+  { id: 143, name: 'Monad', symbol: 'MON' },
+  { id: 534352, name: 'Scroll', symbol: 'ETH' },
+  { id: 324, name: 'zkSync Era', symbol: 'ETH' }
 ];
 
 /**
@@ -93,6 +134,47 @@ export const BRIDGE_TOKENS = {
   43114: [
     { symbol: 'USDT', address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6 },
     { symbol: 'USDC', address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', decimals: 6 }
+  ],
+  /*
+   * ─── THE 2026-10-25 CHAINS ────────────────────────────────────────────────
+   * Same rule as the original seven: every address is copied from the swap
+   * screen's already-exercised pins in lib/chains.js `TOKENS`, never from a
+   * list — and on 2026-10-25 each one was read back from LI.FI's own token
+   * registry (`GET /v1/token?chain=…&token=…`), which returned the identical
+   * address with verificationStatus "verified" for all twelve. Chains appear
+   * with USDT only where lib/chains.js has a verified USDT pin; Sonic,
+   * Berachain, Unichain and Monad are USDC-only here for the same reason
+   * Base is. (Berachain's entry is the Stargate-bridged USDC that LI.FI
+   * lists as `USDC.e`; lib/chains.js already presents that contract as the
+   * chain's USDC, and routing is by address, not by symbol.)
+   */
+  59144: [
+    { symbol: 'USDT', address: '0xA219439258ca9da29E9Cc4cE5596924745e12B93', decimals: 6 },
+    { symbol: 'USDC', address: '0x176211869cA2b568f2A7D4EE941E073a821EE1ff', decimals: 6 }
+  ],
+  146: [
+    { symbol: 'USDC', address: '0x29219dd400f2Bf60E5a23d13Be72B486D4038894', decimals: 6 }
+  ],
+  5000: [
+    { symbol: 'USDT', address: '0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE', decimals: 6 },
+    { symbol: 'USDC', address: '0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9', decimals: 6 }
+  ],
+  80094: [
+    { symbol: 'USDC', address: '0x549943e04f40284185054145c6E4e9568C1D3241', decimals: 6 }
+  ],
+  130: [
+    { symbol: 'USDC', address: '0x078D782b760474a361dDA0AF3839290b0EF57AD6', decimals: 6 }
+  ],
+  143: [
+    { symbol: 'USDC', address: '0x754704Bc059F8c67012feD69BC8a327a5aafb603', decimals: 6 }
+  ],
+  534352: [
+    { symbol: 'USDT', address: '0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df', decimals: 6 },
+    { symbol: 'USDC', address: '0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4', decimals: 6 }
+  ],
+  324: [
+    { symbol: 'USDT', address: '0x493257fD37EDB34451f62EDf8D2a0C418852bA4C', decimals: 6 },
+    { symbol: 'USDC', address: '0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4', decimals: 6 }
   ]
 };
 

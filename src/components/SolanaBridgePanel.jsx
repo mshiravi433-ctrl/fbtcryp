@@ -8,7 +8,7 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import { fmtUsd } from '../lib/format';
 import { toBaseUnits, tokensFor, BRIDGE_CHAINS } from '../lib/bridge';
 import {
-  DLN_SOLANA, dlnHexToBase64, fixFeeNative,
+  DLN_SOLANA, dlnHexToBase64, dlnSupportsChain, fixFeeNative,
   getDlnQuote, getDlnTx
 } from '../lib/dln';
 import { solanaAddress, signAndSendSolana, getSolanaBalance } from '../lib/solanaWallet';
@@ -40,13 +40,19 @@ import AssetIcon from './AssetIcon';
  */
 
 /*
- * Destinations are exactly the chains `tokensFor()` knows, because the
- * destination token must be a canonical address we can verify. Linea is in
- * `DLN_EXTRA_CHAINS` for the EVM comparison, but this panel has no token
- * table for it yet, so offering it would produce a dest-token dropdown that
- * is empty at runtime. `symbol` rides along for the picker's network mark.
+ * Destinations are the chains that pass BOTH tests this panel depends on:
+ * `tokensFor()` knows a canonical destination token for them, AND deBridge
+ * actually serves them (`dlnSupportsChain`) — this panel quotes through DLN
+ * alone, so a destination deBridge does not serve could be selected and
+ * never completed. Since the bridge chain list outgrew deBridge's coverage
+ * (2026-10-25) the two sets are no longer the same list; Linea passes both
+ * now and joins the destinations, while Sonic/Mantle/Berachain/Unichain/
+ * Monad/Scroll/zkSync Era stay EVM-tab-only until deBridge serves them.
+ * `symbol` rides along for the picker's network mark.
  */
-const DLN_DST_CHAINS = BRIDGE_CHAINS.map((c) => ({ id: c.id, name: c.name, symbol: c.symbol }));
+const DLN_DST_CHAINS = BRIDGE_CHAINS
+  .filter((c) => dlnSupportsChain(c.id))
+  .map((c) => ({ id: c.id, name: c.name, symbol: c.symbol }));
 
 /*
  * ─── ONE ERROR NAME, AND IT MUST BE ONE THE SCREEN CAN TRANSLATE ─────────
