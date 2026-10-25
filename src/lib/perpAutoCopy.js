@@ -23,13 +23,31 @@ const FA = {
   sectionBody:
     'این سفارش‌ها روی خودِ ونوو (dYdX یا Ostium) ثبت می‌شوند و همان‌جا اجرا می‌شوند؛ حتی وقتی برنامه بسته است. کلید خصوصی شما از کیف پول خارج نمی‌شود، دارایی شما نزد ما امانت نیست و هیچ سفارشی بدون امضای شما ارسال نمی‌شود.',
   openSheet: 'سفارش روی ونوو پرپتوال',
+  cardSub: 'اجرا روی خودِ ونوو',
+  heroChip1: 'اجرا روی خودِ ونوو',
+  heroChip2: 'حتی وقتی برنامه بسته است',
+  heroChip3: 'فقط با امضای شما',
   venueLabel: 'ونوو',
+  venueSubDydx: 'زنجیرهٔ dYdX · لیمیت، تریگر، حد سود/ضرر',
+  venueSubOstium: 'Arbitrum One · لیمیت، استاپ، حد سود/ضرر پروتکل',
   kindLabel: 'نوع سفارش',
   kinds: {
     'entry-limit': 'حد خرید/فروش (Limit) — باز شدن پوزیشن',
     'entry-stop': 'استاپ ورود (Stop) — باز شدن پوزیشن',
     'take-profit': 'حد سود (Take Profit) — بستن پوزیشن',
     'stop-loss': 'حد ضرر (Stop Loss) — بستن پوزیشن'
+  },
+  kindShort: {
+    'entry-limit': 'لیمیت',
+    'entry-stop': 'استاپ ورود',
+    'take-profit': 'حد سود',
+    'stop-loss': 'حد ضرر'
+  },
+  kindSub: {
+    'entry-limit': 'باز شدن پوزیشن',
+    'entry-stop': 'باز شدن پوزیشن',
+    'take-profit': 'بستن پوزیشن',
+    'stop-loss': 'بستن پوزیشن'
   },
   kindHelp: {
     dydxLimit:
@@ -42,9 +60,13 @@ const FA = {
       'سفارش استاپ وقتی قیمت از عدد تریگر عبور کرد به‌صورت مارکت اجرا می‌شود. حد سود و حد ضرر در همان یک امضا ثبت و توسط پروتکل اعمال می‌شوند.'
     },
   marketLabel: 'بازار',
+  marketsUnread: 'فهرست بازارها از ونوو خوانده نشد؛ بدون قیمت زنده سفارشی ثبت نمی‌شود.',
   sideLabel: 'جهت',
   sideBuy: 'خرید (Long)',
   sideSell: 'فروش (Short)',
+  sideLong: 'لانگ',
+  sideShort: 'شورت',
+  detailsLabel: 'جزئیات سفارش',
   sizeLabel: 'اندازهٔ سفارش',
   sizeHint: 'واحد پایهٔ بازار (مثلاً ۰٫۰۰۱ برای BTC-USD)',
   priceLabel: 'قیمت',
@@ -61,6 +83,7 @@ const FA = {
     '28d': '۲۸ روز',
     '90d': '۹۰ روز'
   },
+  expiryHint: 'تا پایان این مدت، سفارش روی خودِ ونوو منتظر قیمت می‌ماند.',
   slippageNote:
     'برای سفارش لیمیت و استاپ در Ostium مقدار اسلیپیج باید صفر باشد؛ این یک قاعدهٔ خودِ پروتکل است و مقدار غیرصفر باعث برگشت تراکنش می‌شود. به همین دلیل این فرم فیلد اسلیپیج ندارد.',
   reviewTitle: 'مرور سفارش',
@@ -86,6 +109,12 @@ const FA = {
   roundedNote: 'قیمت و اندازه به پلهٔ معاملاتی بازار گرد شدند؛ عددی که می‌بینید همان چیزی است که امضا می‌شود.',
   cancelCostNote:
     'لغو این سفارش کارمزد ثبت را برنمی‌گرداند: Ostium هنگام ثبت سفارش لیمیت/استاپ کارمزد اوراکل را از وجه تضمین کسر می‌کند.',
+  warnTitle: 'هشدار',
+  warnSub: 'ریسک، فرایند اجرا و نکته‌های قبل از امضا',
+  howTitle: 'فرایند انجام کار',
+  howStep1: 'عددها را شما تعیین می‌کنید و سفارش فقط با امضای کیف پول شما ساخته می‌شود.',
+  howStep2: 'سفارش روی خودِ ونوو (dYdX یا Ostium) ثبت می‌شود، نه روی سرور ما.',
+  howStep3: 'وقتی قیمت به عدد شما برسد، ونوو آن را اجرا می‌کند؛ حتی اگر برنامه بسته باشد.',
   riskTitle: 'قبل از امضا بدانید',
   riskBody:
     'معاملهٔ اهرم‌دار می‌تواند بخشی یا تمام وجه تضمین شما را از بین ببرد. هیچ سودی تضمین نمی‌شود و هیچ سیگنال یا پیشنهاد خرید و فروشی در این فرم وجود ندارد. عددی که وارد می‌کنید تصمیم خود شماست و اجرا بر عهدهٔ ونوو است.',
@@ -93,6 +122,12 @@ const FA = {
     'ما هیچ کلیدی از شما نگه نمی‌داریم و به دارایی شما دسترسی نداریم. سفارش با امضای شما روی ونوو ثبت می‌شود و فقط همان ونوو می‌تواند آن را اجرا یا لغو کند.',
   place: 'امضا و ثبت سفارش روی ونوو',
   placing: 'در حال امضا و ثبت…',
+  backLabel: 'بازگشت',
+  placedTitle: 'سفارش روی ونوو ثبت شد',
+  placedBody:
+    'سفارش شما روی خودِ ونوو قرار گرفت و همان‌جا منتظر قیمت می‌ماند. وضعیت آن را از فهرست سفارش‌های همین پنجره یا در خودِ ونوو می‌بینید.',
+  placedNew: 'سفارش جدید',
+  placedClose: 'بستن',
   stageConnectDydx: 'اتصال به dYdX (یک امضای کیف پول)…',
   stageSwitchChain: 'تغییر شبکهٔ کیف پول به Arbitrum One…',
   stageApprove: 'تأیید مجوز USDC برای مقدار دقیق سفارش…',
@@ -104,6 +139,7 @@ const FA = {
   approveFirst: 'ابتدا مجوز USDC را برای مقدار دقیق این سفارش تأیید کنید.',
   viewOnExplorer: 'مشاهده در مرورگر بلاک‌چین',
   listTitle: 'سفارش‌های ثبت‌شده روی ونوو',
+  listDone: 'سفارش‌های پایان‌یافته',
   listEmpty: 'هنوز سفارش پرپتوالی ثبت نکرده‌اید.',
   stateOpen: 'باز — روی ونوو منتظر قیمت',
   stateFilled: 'پر شد',
@@ -156,13 +192,31 @@ const EN = {
   sectionBody:
     'These orders are placed on the venue itself (dYdX or Ostium) and execute there, even while the app is closed. Your private key never leaves your wallet, we never hold your funds, and nothing is sent without your signature.',
   openSheet: 'Order on a perp venue',
+  cardSub: 'Executes on the venue',
+  heroChip1: 'Executes on the venue',
+  heroChip2: 'Even while the app is closed',
+  heroChip3: 'Only with your signature',
   venueLabel: 'Venue',
+  venueSubDydx: 'dYdX Chain · limit, trigger, TP/SL',
+  venueSubOstium: 'Arbitrum One · limit, stop, protocol TP/SL',
   kindLabel: 'Order type',
   kinds: {
     'entry-limit': 'Limit — open a position',
     'entry-stop': 'Stop entry — open a position',
     'take-profit': 'Take profit — close a position',
     'stop-loss': 'Stop loss — close a position'
+  },
+  kindShort: {
+    'entry-limit': 'Limit',
+    'entry-stop': 'Stop entry',
+    'take-profit': 'Take profit',
+    'stop-loss': 'Stop loss'
+  },
+  kindSub: {
+    'entry-limit': 'Open a position',
+    'entry-stop': 'Open a position',
+    'take-profit': 'Close a position',
+    'stop-loss': 'Close a position'
   },
   kindHelp: {
     dydxLimit:
@@ -175,9 +229,13 @@ const EN = {
       'The stop order executes as a market order once the price crosses your trigger. Take profit and stop loss are set in the same signature and enforced by the protocol.'
   },
   marketLabel: 'Market',
+  marketsUnread: 'The market list could not be read from the venue. Nothing is placed without a live price.',
   sideLabel: 'Side',
   sideBuy: 'Buy (long)',
   sideSell: 'Sell (short)',
+  sideLong: 'Long',
+  sideShort: 'Short',
+  detailsLabel: 'Order details',
   sizeLabel: 'Order size',
   sizeHint: 'In the market\'s base unit (for example 0.001 for BTC-USD)',
   priceLabel: 'Price',
@@ -194,6 +252,7 @@ const EN = {
     '28d': '28 days',
     '90d': '90 days'
   },
+  expiryHint: 'The order rests on the venue itself until this lifetime ends.',
   slippageNote:
     'For Ostium limit and stop orders the slippage value must be zero. That is a protocol rule: a non-zero value makes the transaction revert, which is why this form has no slippage field.',
   reviewTitle: 'Review order',
@@ -219,6 +278,12 @@ const EN = {
   roundedNote: 'Price and size were rounded to the market\'s step. What you see is what gets signed.',
   cancelCostNote:
     'Cancelling does not refund the placement fee: Ostium deducts the oracle fee from your collateral when a limit or stop order is placed.',
+  warnTitle: 'Warning',
+  warnSub: 'Risk, how execution works, and what to know before signing',
+  howTitle: 'How it works',
+  howStep1: 'You set every number, and the order is only created with your wallet signature.',
+  howStep2: 'The order is registered on the venue itself (dYdX or Ostium), not on our server.',
+  howStep3: 'When the price reaches your level, the venue executes it — even if the app is closed.',
   riskTitle: 'Before you sign',
   riskBody:
     'Leveraged trading can lose part or all of your collateral. No profit is guaranteed and nothing in this form is a signal or a recommendation to buy or sell. The numbers are yours, and execution belongs to the venue.',
@@ -226,6 +291,12 @@ const EN = {
     'We hold no key and have no access to your funds. The order is placed on the venue with your signature, and only that venue can execute or cancel it.',
   place: 'Sign and place on the venue',
   placing: 'Signing and placing…',
+  backLabel: 'Back',
+  placedTitle: 'Order placed on the venue',
+  placedBody:
+    'Your order now rests on the venue itself, waiting for your price. You can track it in the order list in this window or on the venue.',
+  placedNew: 'New order',
+  placedClose: 'Close',
   stageConnectDydx: 'Connecting to dYdX (one wallet signature)…',
   stageSwitchChain: 'Switching your wallet to Arbitrum One…',
   stageApprove: 'Approving USDC for the exact order amount…',
@@ -237,6 +308,7 @@ const EN = {
   approveFirst: 'Approve USDC for the exact amount of this order first.',
   viewOnExplorer: 'View on explorer',
   listTitle: 'Orders placed on venues',
+  listDone: 'Finished orders',
   listEmpty: 'You have not placed a perp auto order yet.',
   stateOpen: 'Open — resting on the venue',
   stateFilled: 'Filled',

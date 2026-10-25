@@ -818,6 +818,27 @@ export default function Orders() {
             </motion.button>
           );
         })}
+
+        {/*
+          ─── THE EIGHTH CARD: AN ORDER A PERP VENUE EXECUTES ─────────────────
+          Requested («یک باکس شبیه بقیه باکس‌های سفارش خودکار با نام سفارش روی
+          ونوو پرپتوال درست کن و از صفحه ببر … فقط مثل بقیه داخل باکس باشد که به
+          صورت پاپ اپ باز شود»): this card is not one of the seven price-watched
+          types above and does not open this page's sheet — PerpAutoOrders
+          renders the card itself (same `.ord-new-card` geometry, its own hue,
+          the same live-count badge) plus the popup that now carries the whole
+          venue surface: the «سفارش خودکار روی ونووهای پرپتوال» heading and
+          paragraph, the dYdX/Ostium form, the «هشدار» fold and the list of
+          orders already resting on a venue. The standing inline section that
+          used to sit under this rail is gone; nothing it showed was dropped,
+          it all moved behind this card.
+
+          Suspense fallback stays null — the card appears when its chunk does,
+          and a spinner in the rail would shift the other seven under a thumb.
+        */}
+        <Suspense fallback={null}>
+          <PerpAutoOrders lang={i18n?.language} />
+        </Suspense>
       </div>
 
       {/*
@@ -830,22 +851,6 @@ export default function Orders() {
         swaps live on their own screen, and this page stays focused on
         price-watched auto orders.
       */}
-
-      {/*
-        ─── AUTO-ORDERS THAT A VENUE EXECUTES ───────────────────────────────
-        Placed between the order-type rail and the user's own list, because it
-        is a third way for an auto-order to happen and not a footnote to the
-        other two: everything above either watches a price and asks for a
-        signature, or hands a swap to a solver network. What lives here is
-        placed ON a perpetual venue the app already has a signed, non-custodial
-        path to, and the venue fills it while the app is closed.
-
-        Suspense fallback is null on purpose — this is a section, not a screen,
-        and a spinner where a list will be would move the page under a thumb.
-      */}
-      <Suspense fallback={null}>
-        <PerpAutoOrders lang={i18n?.language} />
-      </Suspense>
 
       {/*
         What is currently scheduled. Only shown once something exists, so an

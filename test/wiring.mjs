@@ -15924,6 +15924,43 @@ export default function run() {
     t('the fee preview reports our share and refuses a total it cannot complete',
       /totalFeeUsd: venueFee == null \? null/.test(planner)
       && /ourFeePctOfCollateral/.test(planner));
+
+    /* ── 2026-10-25: the venue surface is a rail card + popup, not a page
+       section («یک باکس شبیه بقیه باکس‌های سفارش خودکار … که به صورت پاپ اپ باز
+       شود»). What is pinned is the shape the request named: the card sits
+       INSIDE the type rail, the popup carries the section's own title, the
+       markets wear logos, and the process + warnings live in one «هشدار»
+       fold — so a future tidy-up cannot quietly put the standing section
+       back or strip the warnings into a footnote. */
+    t('the venue entry is the eighth rail card, mounted inside the type rail',
+      panel.includes('ord-new-card ord-new-perp')
+      && panel.includes('data-testid="perp-open-sheet"')
+      && panel.includes('ord-new-count')
+      && panel.includes('{c.openSheet}')
+      && page.indexOf('className="ord-rail"') > -1
+      && page.indexOf('className="ord-rail"') < page.indexOf('<PerpAutoOrders ')
+      && page.indexOf('<PerpAutoOrders ') < page.indexOf('ord-pipeline'));
+
+    t('the popup carries the section title, the logos and the modern controls',
+      panel.includes('title={c.sectionTitle}')
+      && panel.includes('data-testid="perp-auto-popup"')
+      && panel.includes('symbol: base')
+      && panel.includes('base: String(p.from')
+      && panel.includes('pao-market-live')
+      && panel.includes('pao-venue')
+      && panel.includes('pao-kind')
+      && panel.includes('pao-side-btn')
+      && panel.includes('perp-expiry-${k}')
+      && panel.includes('perp-auto-orders.css'));
+
+    t('the process and the warnings share one «هشدار» fold, and placing ends on an answer',
+      panel.includes('CollapsibleCard')
+      && panel.includes('id="perp-warn-fold"')
+      && panel.includes('title={c.warnTitle}')
+      && /warnTitle: 'هشدار'/.test(copy) && /warnTitle: 'Warning'/.test(copy)
+      && panel.includes('c.howStep1')
+      && panel.includes('data-testid="perp-placed"')
+      && panel.includes('setPlaced(record)'));
   }
   return rows;
 }

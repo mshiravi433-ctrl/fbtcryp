@@ -1,0 +1,992 @@
+/**
+ * PERP VENUE AUTO-ORDERS — the rail card's popup.
+ * ===========================================================================
+ *
+ * Requested: «در سفارش خودکار یک باکس شبیه بقیه باکس‌های سفارش خودکار با نام
+ * سفارش روی ونوو پرپتوال درست کن … فقط مثل بقیه داخل باکس باشد که به صورت پاپ
+ * اپ باز شود، بازار دارای لوگو باشد، دکمه لانگ و شورت مدرن شود، تب dYdX و
+ * Ostium مدرن، نوع سفارش مدرن‌تر، تب بازشوندهٔ هشدار، اعتبار سفارش مدرن‌تر،
+ * کل باکس پاپ‌اپ از آیکون و تب و دکمه‌ها خیلی مدرن‌تر و بی‌نظیرتر شود.»
+ *
+ * Loaded by components/orders/PerpAutoOrders.jsx only, so it rides in the
+ * same lazy chunk as the venue modules and never touches first paint.
+ *
+ * MOTION / PERF BUDGET (same rules as orders-modern.css): static gradients,
+ * `color-mix` tints off one hue per control, transitions on transform /
+ * opacity / border-color only. No backdrop-filter, no glow loops, no blur —
+ * the one animation is the busy spinner on the place button, which exists
+ * to say "your wallet is working" and stops with it.
+ */
+
+/* ── the rail card itself ────────────────────────────────────────────────────
+   Twin of the other seven `.ord-new-card`s, with one difference a thumb can
+   actually name: its accent is a two-venue gradient (dYdX violet into the
+   signal green) instead of a single flat hue, because the card opens TWO
+   venues, not one order type. The same gradient tops the popup, so card and
+   popup read as one object. */
+
+.ord-new-card.ord-new-perp::before {
+  background: linear-gradient(90deg, transparent, var(--rgb-2), var(--rgb-7), transparent);
+}
+
+.ord-new-card.ord-new-perp .ord-new-glyph {
+  background: linear-gradient(140deg, var(--rgb-2), color-mix(in srgb, var(--rgb-2) 42%, var(--rgb-7)));
+}
+
+/* ── the sheet itself ────────────────────────────────────────────────────── */
+
+.sheet.pao-sheet {
+  position: relative;
+  max-width: 600px;
+}
+
+/* A 2px venue-gradient hairline across the top — the same device the rail
+   cards use, so the popup reads as "the thing that card opened". */
+.sheet.pao-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--rgb-2), var(--rgb-7), transparent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.pao {
+  --pao-hue: var(--rgb-2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── hero: what this is, in one card ─────────────────────────────────────── */
+
+.pao-hero {
+  border-radius: 18px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in srgb, var(--rgb-2) 22%, var(--line));
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--rgb-2) 13%, transparent), transparent 55%),
+    linear-gradient(320deg, color-mix(in srgb, var(--rgb-7) 9%, transparent), transparent 50%),
+    var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pao-hero-top {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.pao-hero-glyph {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(140deg, var(--rgb-2), color-mix(in srgb, var(--rgb-2) 45%, var(--rgb-7)));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.pao-hero-body {
+  margin: 0;
+  font-size: 12.3px;
+  line-height: 1.85;
+  color: var(--text-2);
+}
+
+.pao-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pao-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 10.8px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--rgb-7) 78%, var(--text-1));
+  background: color-mix(in srgb, var(--rgb-7) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-7) 26%, transparent);
+}
+
+/* ── panel labels ────────────────────────────────────────────────────────── */
+
+.pao-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--text-2);
+  margin: 2px 2px 0;
+}
+
+.pao-label svg { color: color-mix(in srgb, var(--pao-hue) 75%, var(--text-1)); }
+
+.pao-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── venue tabs: two boards, each saying what it IS ─────────────────────── */
+
+.pao-venues {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pao-venue {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  min-height: 62px;
+  border-radius: 16px;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+
+.pao-venue:active { transform: scale(0.982); }
+
+.pao-venue.is-on {
+  border-color: color-mix(in srgb, var(--pao-hue) 55%, transparent);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--pao-hue) 14%, transparent), transparent 60%),
+    var(--bg-panel);
+}
+
+.pao-venue-mark {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-solid);
+}
+
+.pao-venue-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.pao-venue-name { font-size: 13.5px; font-weight: 900; line-height: 1.35; color: var(--text-1); }
+
+.pao-venue-sub {
+  font-size: 10.6px;
+  line-height: 1.55;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pao-venue-check {
+  position: absolute;
+  top: 7px;
+  inset-inline-end: 7px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(140deg, var(--pao-hue), color-mix(in srgb, var(--pao-hue) 60%, #000));
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.pao-venue.is-on .pao-venue-check { opacity: 1; transform: scale(1); }
+
+/* ── order-kind cards ────────────────────────────────────────────────────── */
+
+.pao-kinds {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.pao-kind {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  min-height: 54px;
+  border-radius: 15px;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+
+.pao-kind:active { transform: scale(0.982); }
+
+.pao-kind.is-on {
+  border-color: color-mix(in srgb, var(--rgb-1) 50%, transparent);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--rgb-1) 12%, transparent), transparent 62%),
+    var(--bg-panel);
+}
+
+.pao-kind-ico {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--rgb-1) 80%, var(--text-1));
+  background: color-mix(in srgb, var(--rgb-1) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 24%, transparent);
+}
+
+.pao-kind.is-tp .pao-kind-ico {
+  color: color-mix(in srgb, var(--up) 85%, var(--text-1));
+  background: color-mix(in srgb, var(--up) 12%, transparent);
+  border-color: color-mix(in srgb, var(--up) 26%, transparent);
+}
+
+.pao-kind.is-sl .pao-kind-ico {
+  color: color-mix(in srgb, var(--down) 85%, var(--text-1));
+  background: color-mix(in srgb, var(--down) 12%, transparent);
+  border-color: color-mix(in srgb, var(--down) 26%, transparent);
+}
+
+.pao-kind-copy { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+
+.pao-kind-name { font-size: 12.8px; font-weight: 850; line-height: 1.35; color: var(--text-1); }
+
+.pao-kind-sub { font-size: 10.4px; line-height: 1.5; color: var(--text-3); }
+
+.pao-kind-dot {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rgb-1);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.pao-kind.is-on .pao-kind-dot { opacity: 1; transform: scale(1); }
+
+.pao-help {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 13px;
+  font-size: 11.6px;
+  line-height: 1.8;
+  color: var(--text-2);
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 20%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 7%, transparent);
+}
+
+.pao-help svg { flex: 0 0 auto; margin-top: 2px; color: color-mix(in srgb, var(--rgb-1) 82%, var(--text-1)); }
+
+/* ── the chosen market, wearing its logo and its live price ─────────────── */
+
+.pao-market-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--rgb-1) 8%, transparent), transparent 55%),
+    var(--bg-panel);
+}
+
+.pao-market-live-logo {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-solid);
+  display: grid;
+  place-items: center;
+}
+
+.pao-market-live-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0; }
+
+.pao-market-live-name { font-size: 13px; font-weight: 900; line-height: 1.35; color: var(--text-1); }
+
+.pao-market-live-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.4px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.pao-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+}
+
+.pao-live-dot.is-off { background: var(--rgb-5); }
+
+.pao-market-live-price { text-align: end; display: flex; flex-direction: column; gap: 1px; }
+
+.pao-market-live-price .mono { font-size: 13px; font-weight: 800; color: var(--text-1); }
+
+.pao-chg { font-size: 10.6px; font-weight: 800; }
+.pao-chg.is-up { color: var(--ink-mint, var(--up)); }
+.pao-chg.is-down { color: var(--down); }
+
+/* ── long / short ────────────────────────────────────────────────────────── */
+
+.pao-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pao-side-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 9px 10px;
+  border-radius: 16px;
+  cursor: pointer;
+  color: inherit;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.pao-side-btn:active { transform: scale(0.98); }
+
+.pao-side-arrow {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.pao-side-btn.is-long .pao-side-arrow {
+  color: color-mix(in srgb, var(--up) 88%, var(--text-1));
+  background: color-mix(in srgb, var(--up) 14%, transparent);
+}
+
+.pao-side-btn.is-short .pao-side-arrow {
+  color: color-mix(in srgb, var(--down) 88%, var(--text-1));
+  background: color-mix(in srgb, var(--down) 14%, transparent);
+}
+
+.pao-side-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+
+.pao-side-name { font-size: 14px; font-weight: 900; line-height: 1.3; }
+
+.pao-side-latin {
+  font-size: 9.6px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  opacity: 0.75;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.pao-side-btn.is-long.is-on {
+  color: #04140c;
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--up), color-mix(in srgb, var(--up) 62%, #0a7a4a));
+}
+
+.pao-side-btn.is-short.is-on {
+  color: #1d0510;
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--down), color-mix(in srgb, var(--down) 60%, #8f1230));
+}
+
+.pao-side-btn.is-on .pao-side-arrow {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.pao-side-btn:not(.is-on).is-long { border-color: color-mix(in srgb, var(--up) 30%, var(--line)); }
+.pao-side-btn:not(.is-on).is-short { border-color: color-mix(in srgb, var(--down) 30%, var(--line)); }
+
+/* ── the numbers panel ───────────────────────────────────────────────────── */
+
+.pao-panel {
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.pao-panel .ord-field input {
+  min-height: 46px;
+  border-radius: 13px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pao-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.pao-price-now {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.8px;
+  font-weight: 750;
+  line-height: 1.6;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text-3) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-3) 22%, transparent);
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.pao-price-now:active { transform: scale(0.97); }
+
+.pao-notional {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 13px;
+  font-size: 12px;
+  border: 1px dashed color-mix(in srgb, var(--pao-hue) 32%, var(--line));
+  background: color-mix(in srgb, var(--pao-hue) 6%, transparent);
+}
+
+.pao-notional .faint { font-size: 11px; }
+.pao-notional .mono { font-size: 13.5px; font-weight: 850; color: var(--text-1); }
+
+/* ── expiry: the segmented control, given room to breathe ───────────────── */
+
+.pao .segmented.pao-seg { border-radius: 15px; }
+.pao .segmented.pao-seg button { min-height: 46px; font-weight: 800; border-radius: 12px; }
+
+.pao-expiry-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-3);
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.pao-expiry-hint svg { flex: 0 0 auto; margin-top: 2px; }
+
+/* ── blocking reasons, said once and said clearly ───────────────────────── */
+
+.pao-alerts { display: flex; flex-direction: column; gap: 7px; }
+
+.pao-alert {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 13px;
+  font-size: 11.8px;
+  line-height: 1.75;
+}
+
+.pao-alert svg { flex: 0 0 auto; margin-top: 2px; }
+
+.pao-alert.is-warn {
+  color: var(--text-2);
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 36%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 9%, transparent);
+}
+
+.pao-alert.is-warn svg { color: var(--rgb-5); }
+
+.pao-alert.is-error {
+  color: var(--text-2);
+  border: 1px solid color-mix(in srgb, var(--down) 38%, transparent);
+  background: color-mix(in srgb, var(--down) 9%, transparent);
+}
+
+.pao-alert.is-error svg { color: var(--down); }
+
+.pao-alert.is-info {
+  color: var(--text-2);
+  border: 1px solid color-mix(in srgb, var(--rgb-1) 30%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 8%, transparent);
+}
+
+.pao-alert.is-info svg { color: color-mix(in srgb, var(--rgb-1) 82%, var(--text-1)); }
+
+.pao-alert-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── the «هشدار» fold: CollapsibleCard, re-inked amber ──────────────────── */
+
+.fold.pao-warn-fold { margin-top: 0; }
+
+.fold.pao-warn-fold .fold-ico {
+  background: linear-gradient(140deg, var(--rgb-5), color-mix(in srgb, var(--rgb-5) 55%, #7a3d00));
+}
+
+.fold.pao-warn-fold.is-open {
+  border-color: color-mix(in srgb, var(--rgb-5) 34%, var(--line));
+  background:
+    linear-gradient(168deg, color-mix(in srgb, var(--rgb-5) 7%, transparent), transparent 46%),
+    var(--bg-panel);
+}
+
+.fold.pao-warn-fold .fold-badge {
+  color: color-mix(in srgb, var(--rgb-5) 82%, var(--text-1));
+  background: color-mix(in srgb, var(--rgb-5) 14%, transparent);
+  border-color: color-mix(in srgb, var(--rgb-5) 30%, transparent);
+}
+
+.fold.pao-warn-fold.is-open .fold-chev { color: color-mix(in srgb, var(--rgb-5) 82%, var(--text-1)); }
+
+.pao-warn-body { display: flex; flex-direction: column; gap: 12px; }
+
+.pao-warn-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--text-1);
+}
+
+.pao-warn-h svg { color: var(--rgb-5); }
+
+.pao-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pao-step { display: flex; gap: 9px; align-items: flex-start; }
+
+.pao-step-n {
+  flex: 0 0 21px;
+  width: 21px;
+  height: 21px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 900;
+  color: #1d1200;
+  background: linear-gradient(140deg, var(--rgb-5), color-mix(in srgb, var(--rgb-5) 65%, #b45309));
+}
+
+.pao-step p { margin: 0; font-size: 11.8px; line-height: 1.8; color: var(--text-2); }
+
+.pao-warn-list { display: flex; flex-direction: column; gap: 8px; }
+
+.pao-warn-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 11.8px;
+  line-height: 1.8;
+  color: var(--text-2);
+}
+
+.pao-warn-item svg { flex: 0 0 auto; margin-top: 2px; color: var(--rgb-5); }
+
+/* ── the action buttons ──────────────────────────────────────────────────── */
+
+.pao-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 54px;
+  padding: 12px 16px;
+  border-radius: 17px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 900;
+  line-height: 1.35;
+  background: linear-gradient(140deg, var(--rgb-2), color-mix(in srgb, var(--rgb-2) 55%, var(--rgb-1)));
+  transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
+}
+
+.pao-cta:active { transform: scale(0.985); }
+
+.pao-cta:disabled {
+  cursor: not-allowed;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-3) 16%, transparent);
+  border-color: var(--line);
+}
+
+.pao-cta-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 11.3px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--rgb-5) 78%, var(--text-2));
+}
+
+.pao-place.is-long {
+  color: #04140c;
+  background: linear-gradient(145deg, var(--up), color-mix(in srgb, var(--up) 60%, #0a7a4a));
+}
+
+.pao-place.is-short {
+  color: #1d0510;
+  background: linear-gradient(145deg, var(--down), color-mix(in srgb, var(--down) 58%, #8f1230));
+}
+
+.pao-place:disabled {
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-3) 16%, transparent);
+}
+
+.pao-spin {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: currentColor;
+  animation: pao-spin 0.8s linear infinite;
+}
+
+@keyframes pao-spin { to { transform: rotate(360deg); } }
+
+.pao-back {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pao-back:active { transform: scale(0.985); }
+
+/* ── review receipt ──────────────────────────────────────────────────────── */
+
+.pao-review {
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--pao-hue) 26%, var(--line));
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--pao-hue) 8%, transparent), transparent 45%),
+    var(--bg-panel);
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pao-review-head { display: flex; align-items: center; gap: 10px; }
+
+.pao-side-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.8px;
+  font-weight: 900;
+  line-height: 1.5;
+}
+
+.pao-side-chip.is-long {
+  color: color-mix(in srgb, var(--up) 82%, var(--text-1));
+  background: color-mix(in srgb, var(--up) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--up) 30%, transparent);
+}
+
+.pao-side-chip.is-short {
+  color: color-mix(in srgb, var(--down) 82%, var(--text-1));
+  background: color-mix(in srgb, var(--down) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--down) 30%, transparent);
+}
+
+.pao-rrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.4px;
+  padding: 4px 0;
+}
+
+.pao-rrow + .pao-rrow { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+
+.pao-rrow-k { color: var(--text-3); }
+.pao-rrow-v { font-weight: 750; color: var(--text-1); text-align: end; }
+
+.pao-review-risk {
+  border-radius: 14px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--rgb-5) 30%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 8%, transparent);
+}
+
+.pao-review-risk p { margin: 0; font-size: 11.4px; line-height: 1.8; color: var(--text-2); }
+.pao-review-risk p + p { margin-top: 5px; }
+
+.pao-review-risk-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 12.2px;
+  font-weight: 900;
+  color: var(--text-1);
+}
+
+.pao-review-risk-title svg { color: var(--rgb-5); }
+
+/* ── placed: the answer, not a disappearing popup ───────────────────────── */
+
+.pao-done {
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--up) 32%, var(--line));
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--up) 11%, transparent), transparent 55%),
+    var(--bg-panel);
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.pao-done-check {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #04140c;
+  background: linear-gradient(145deg, var(--up), color-mix(in srgb, var(--up) 60%, #0a7a4a));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pao-done-title { margin: 0; font-size: 15px; font-weight: 950; color: var(--text-1); }
+
+.pao-done-body { margin: 0; font-size: 12px; line-height: 1.85; color: var(--text-2); }
+
+.pao-done-row { display: flex; gap: 8px; width: 100%; margin-top: 6px; }
+
+.pao-done-row .pao-back { flex: 1; }
+.pao-done-row .pao-cta { flex: 1.2; min-height: 44px; font-size: 13px; border-radius: 14px; }
+
+/* ── orders already resting on a venue ──────────────────────────────────── */
+
+.pao-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pao-divider::before,
+.pao-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.pao-order {
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pao-order-top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+
+.pao-order-logo {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-panel-solid);
+  display: grid;
+  place-items: center;
+}
+
+.pao-order-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+
+.pao-order-market { font-size: 13px; font-weight: 900; color: var(--text-1); line-height: 1.35; }
+
+.pao-order-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.6px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.pao-state {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.6px;
+  font-weight: 850;
+  line-height: 1.55;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text-3) 10%, transparent);
+}
+
+.pao-state.is-open {
+  color: color-mix(in srgb, var(--rgb-1) 80%, var(--text-1));
+  border-color: color-mix(in srgb, var(--rgb-1) 34%, transparent);
+  background: color-mix(in srgb, var(--rgb-1) 11%, transparent);
+}
+
+.pao-state.is-filled {
+  color: color-mix(in srgb, var(--up) 82%, var(--text-1));
+  border-color: color-mix(in srgb, var(--up) 32%, transparent);
+  background: color-mix(in srgb, var(--up) 11%, transparent);
+}
+
+.pao-state.is-unknown {
+  color: color-mix(in srgb, var(--rgb-5) 84%, var(--text-1));
+  border-color: color-mix(in srgb, var(--rgb-5) 34%, transparent);
+  background: color-mix(in srgb, var(--rgb-5) 11%, transparent);
+  white-space: normal;
+  text-align: center;
+}
+
+.pao-order-nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  font-size: 11.6px;
+  color: var(--text-2);
+}
+
+.pao-order-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+
+.pao-empty {
+  border-radius: 16px;
+  border: 1px dashed color-mix(in srgb, var(--text-3) 40%, var(--line));
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-3);
+}
+
+.pao-empty p { margin: 0; font-size: 12px; line-height: 1.8; }
+
+/* The finished-orders fold reuses the same shell as «هشدار». */
+.fold.pao-done-fold { margin-top: 0; }
+
+/* ── light theme: re-inked explicitly, nothing inherited from dark ──────── */
+
+:root[data-theme='light'] .pao-hero,
+:root[data-theme='light'] .pao-venue,
+:root[data-theme='light'] .pao-kind,
+:root[data-theme='light'] .pao-panel,
+:root[data-theme='light'] .pao-review,
+:root[data-theme='light'] .pao-order,
+:root[data-theme='light'] .pao-market-live,
+:root[data-theme='light'] .pao-done {
+  background-color: #fff;
+}
+
+:root[data-theme='light'] .pao-venue-mark,
+:root[data-theme='light'] .pao-market-live-logo,
+:root[data-theme='light'] .pao-order-logo {
+  background: #fff;
+}
+
+:root[data-theme='light'] .pao-side-btn.is-long.is-on { color: #fff; }
+:root[data-theme='light'] .pao-side-btn.is-short.is-on { color: #fff; }
+:root[data-theme='light'] .pao-place.is-long,
+:root[data-theme='light'] .pao-place.is-short,
+:root[data-theme='light'] .pao-done-check { color: #fff; }
+
+/* ── reduced motion: state changes still read, nothing glides ───────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .pao-venue,
+  .pao-kind,
+  .pao-side-btn,
+  .pao-cta,
+  .pao-venue-check,
+  .pao-kind-dot,
+  .pao-price-now { transition: none; }
+
+  .pao-spin { animation-duration: 1.6s; }
+}

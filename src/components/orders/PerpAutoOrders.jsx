@@ -4,8 +4,21 @@ import { useNavigate } from 'react-router-dom';
 import Sheet from '../Sheet';
 import SegIndicator from '../SegIndicator';
 import ModernSelect from '../ModernSelect';
-import InfoBox from '../InfoBox';
-import { IconExternal, IconShield, IconTrend } from '../Icons';
+import AssetIcon from '../AssetIcon';
+import CollapsibleCard from '../CollapsibleCard';
+import {
+  IconActivity,
+  IconAlertTriangle,
+  IconArrowUpRight,
+  IconCheck,
+  IconClock,
+  IconExternal,
+  IconFingerprint,
+  IconInfo,
+  IconRefresh,
+  IconShield,
+  IconTrend
+} from '../Icons';
 import { useWallet } from '../../context/WalletContext';
 import { useTelegram } from '../../context/TelegramContext';
 import { perpAutoCopyFor } from '../../lib/perpAutoCopy';
@@ -44,16 +57,17 @@ import {
 } from '../../lib/ostium';
 import { SPECULATION_ENABLED } from '../../lib/features';
 import { fmtPrice } from '../../lib/format';
+import '../../styles/perp-auto-orders.css';
 
 /*
  * ─── AUTO-ORDERS THAT A VENUE EXECUTES ───────────────────────────────────────
  *
  * Everything else on «سفارش خودکار» either watches a price and asks the user
- * to sign, or hands a swap to a solver network. This section is the third
- * thing: an order that is placed ON a perpetual venue the app already has a
- * signed, non-custodial path to, and that the venue fills by itself — while
- * the app is closed, with no server of ours in the path, and with our builder
- * fee inside the signed order.
+ * to sign, or hands a swap to a solver network. This is the third thing: an
+ * order that is placed ON a perpetual venue the app already has a signed,
+ * non-custodial path to, and that the venue fills by itself — while the app
+ * is closed, with no server of ours in the path, and with our builder fee
+ * inside the signed order.
  *
  *   · dYdX Chain — LONG_TERM limit orders and CONDITIONAL trigger orders,
  *                  signed with a key derived in memory from the user's own
@@ -64,6 +78,18 @@ import { fmtPrice } from '../../lib/format';
  * The rules that decide whether an order may be placed live in
  * src/lib/perpOrders.js (pure, unit-tested). This file only renders them, asks
  * for one signature, and reads the venue's own answer back.
+ *
+ * ─── WHERE IT LIVES ON THE PAGE (2026-10-25) ─────────────────────────────────
+ * Requested: «در سفارش خودکار یک باکس شبیه بقیه باکس‌های سفارش خودکار با نام
+ * سفارش روی ونوو پرپتوال درست کن و از صفحه ببر … فقط مثل بقیه داخل باکس باشد
+ * که به صورت پاپ اپ باز شود». So the standing section that used to sit inline
+ * on the page is GONE: this component now renders ONE rail card
+ * (`.ord-new-card`, twin of Limit / DCA / TWAP …) and the whole surface —
+ * the section title and its paragraph, the order form, the «هشدار» fold and
+ * the list of orders already resting on a venue — lives inside the popup
+ * that card opens. Nothing was dropped to make room: a user with a live
+ * venue order sees its count on the card itself, and cancel / state-read
+ * moved into the popup alongside the form that created them.
  *
  * ─── WHAT IS DELIBERATELY NOT HERE ───────────────────────────────────────────
  *   · no timer, no interval and no effect that can send an order. The only path
@@ -81,6 +107,44 @@ const EXPIRY_SECONDS = Object.freeze({ '1d': 86_400, '7d': 604_800, '28d': 2_419
 const fmtUsd = (n) => (Number.isFinite(Number(n)) ? `$${Number(n).toFixed(2)}` : '—');
 const fmtNum = (n, digits = 6) => (Number.isFinite(Number(n)) ? Number(Number(n).toPrecision(digits)).toString() : '—');
 
+/* The base asset of a venue market label — «BTC-USD» and «BTC/USD» both give
+ * BTC. This is what the logo is keyed by: venue-curated lists only, the same
+ * rule AssetIcon documents for itself. */
+const baseOf = (label) => String(label || '').split(/[-/]/)[0].trim().toUpperCase();
+
+/* One glyph per order kind, so the kind cards say what they ARE before their
+ * label is read: a resting level, a trigger crossing, an exit up, an exit
+ * guarded. */
+const KIND_ICON = Object.freeze({
+  [PERP_KIND.ENTRY_LIMIT]: IconTrend,
+  [PERP_KIND.ENTRY_STOP]: IconActivity,
+  [PERP_KIND.TAKE_PROFIT]: IconArrowUpRight,
+  [PERP_KIND.STOP_LOSS]: IconShield
+});
+
+/**
+ * The venue's face. dYdX has vendored token artwork; Ostium has no token, so
+ * it gets a drawn mark in the same 36px tile rather than a borrowed logo from
+ * a CDN this app's users may not reach.
+ */
+function VenueMark({ venue }) {
+  if (venue === PERP_VENUE.DYDX) return <AssetIcon symbol="DYDX" size={36} />;
+  return (
+    <svg viewBox="0 0 36 36" width="36" height="36" aria-hidden="true">
+      <defs>
+        <linearGradient id="pao-ostium-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1b1437" />
+          <stop offset="1" stopColor="#0a0c14" />
+        </linearGradient>
+      </defs>
+      <rect width="36" height="36" fill="url(#pao-ostium-g)" />
+      <circle cx="18" cy="18" r="8.5" fill="none" stroke="#c9a7ff" strokeWidth="2.6" />
+      <circle cx="18" cy="18" r="3" fill="#c9a7ff" />
+      <circle cx="26.5" cy="9.5" r="1.7" fill="#7ef0c9" />
+    </svg>
+  );
+}
+
 /** One row in the venue list. Module-level: a component re-created on every
  *  render is a component React has never seen, and this page re-renders on
  *  every state read. */
@@ -91,44 +155,45 @@ function PerpOrderRow({ o, c, lang, onCancel, cancelling, stale }) {
       : o.venueState === PERP_STATE.EXPIRED ? 'stateExpired'
         : o.venueState === PERP_STATE.OPEN ? 'stateOpen'
           : 'stateUnknown';
-  const sideLabel = o.venue === PERP_VENUE.DYDX
-    ? (o.side === 'buy' ? c.sideBuy : c.sideSell)
-    : (o.side === 'long' ? c.sideBuy : c.sideSell);
+  const isLong = o.venue === PERP_VENUE.DYDX ? o.side === 'buy' : o.side === 'long';
+  const sideLabel = isLong ? c.sideBuy : c.sideSell;
+  const stateCls = o.venueState === PERP_STATE.FILLED ? 'is-filled'
+    : o.venueState === PERP_STATE.OPEN ? 'is-open'
+      : o.venueState === PERP_STATE.UNKNOWN ? 'is-unknown'
+        : '';
   return (
-    <motion.div className="card" layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-      style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }} data-testid={`perp-order-${o.id}`}>
-      <div className="row-between" style={{ gap: 8 }}>
-        <div className="row" style={{ gap: 7, minWidth: 0 }}>
-          {/* The venue badge reuses the execution-mode badge the limit orders
-              already wear: same shape, same colour language, and no new CSS
-              for a reader of this page to learn. */}
-          <span className="ord-badge is-keeper">{o.venue === PERP_VENUE.DYDX ? 'dYdX' : 'Ostium'}</span>
-          <strong style={{ fontSize: 13.5 }}>{o.market}</strong>
-          <span className="faint" style={{ fontSize: 12 }}>{sideLabel}</span>
+    <motion.div className="pao-order" layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+      data-testid={`perp-order-${o.id}`}>
+      <div className="pao-order-top">
+        <span className="pao-order-logo"><AssetIcon symbol={baseOf(o.market)} size={34} /></span>
+        <div className="pao-order-id">
+          <span className="pao-order-market">{o.market}</span>
+          <span className="pao-order-meta">
+            <span>{o.venue === PERP_VENUE.DYDX ? 'dYdX' : 'Ostium'}</span>
+            <span aria-hidden="true">·</span>
+            <span>{c.kinds[o.kind] || o.kind}</span>
+          </span>
         </div>
-        <span className={o.venueState === PERP_STATE.FILLED ? 'ord-status-ready'
-          : o.venueState === PERP_STATE.OPEN ? 'ord-status-quote-below'
-            : o.venueState === PERP_STATE.UNKNOWN ? 'ord-status-unavailable'
-              : 'ord-badge is-watch'}
-        style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>
-          {c[stateKey]}
-        </span>
+        <span className={`pao-side-chip ${isLong ? 'is-long' : 'is-short'}`}>{sideLabel}</span>
       </div>
 
-      <div className="row" style={{ gap: 12, flexWrap: 'wrap', fontSize: 12 }}>
-        <span className="faint">{c.kinds[o.kind] || o.kind}</span>
-        {o.size != null && <span className="mono">{c.reviewSize}: {fmtNum(o.size)}</span>}
-        {o.collateralUsd != null && <span className="mono">{c.reviewCollateral}: {fmtUsd(o.collateralUsd)}</span>}
-        {o.leverage != null && <span className="mono">{c.reviewLeverage}: {fmtNum(o.leverage, 3)}×</span>}
-        {o.triggerPrice != null && <span className="mono">{c.reviewTrigger}: {fmtPrice(o.triggerPrice)}</span>}
-        {o.price != null && <span className="mono">{c.reviewPrice}: {fmtPrice(o.price)}</span>}
+      <div className="pao-order-nums">
+        {o.size != null && <span>{c.reviewSize}: <b className="mono">{fmtNum(o.size)}</b></span>}
+        {o.collateralUsd != null && <span>{c.reviewCollateral}: <b className="mono">{fmtUsd(o.collateralUsd)}</b></span>}
+        {o.leverage != null && <span>{c.reviewLeverage}: <b className="mono">{fmtNum(o.leverage, 3)}×</b></span>}
+        {o.triggerPrice != null && <span>{c.reviewTrigger}: <b className="mono">{fmtPrice(o.triggerPrice)}</b></span>}
+        {o.price != null && <span>{c.reviewPrice}: <b className="mono">{fmtPrice(o.price)}</b></span>}
       </div>
+
+      <span className={`pao-state ${stateCls}`}>{c[stateKey]}</span>
 
       {stale && o.status === 'active' && (
-        <p className="ord-warn" style={{ margin: 0, fontSize: 11.5 }}>{c.stateUnknown}</p>
+        <p className="pao-alert is-warn" style={{ fontSize: 11.3 }}>
+          <IconAlertTriangle width={14} height={14} />{c.stateUnknown}
+        </p>
       )}
 
-      <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+      <div className="pao-order-actions">
         {o.txHash && (
           <a className="row" style={{ gap: 4, fontSize: 11.5, color: 'inherit' }}
             href={o.venue === PERP_VENUE.DYDX
@@ -150,9 +215,13 @@ function PerpOrderRow({ o, c, lang, onCancel, cancelling, stale }) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * The sheet: venue → kind → market → numbers → review → one signature
+ * The popup: hero → venue → kind → market (with its logo) → side → numbers →
+ * lifetime → «هشدار» → review → one signature → the orders already resting.
+ * It carries the list as well as the form because the card that opens it is
+ * now the only door: an order you cannot see or cancel any more would be a
+ * worse product than the inline section this replaced.
  * ──────────────────────────────────────────────────────────────────────────── */
-function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
+function PerpVenuePopup({ open, onClose, lang, onPlaced, book }) {
   const c = perpAutoCopyFor(lang);
   const isFa = /^fa\b/i.test(String(lang || 'fa'));
   const navigate = useNavigate();
@@ -177,6 +246,11 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
   const [allowance, setAllowance] = useState(null);
+  /* The answer after a successful placement. The old sheet simply closed,
+     so the user's only proof was a row appearing further down the page;
+     «دکمه انجام را درست کن» starts with the button's end state saying what
+     it did. */
+  const [placed, setPlaced] = useState(null);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -207,15 +281,35 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
     return () => { alive = false; };
   }, [open, isDydx]);
 
+  /* Every market row wears its logo («بازار دارای لوگو باشد»): `symbol` for a
+     dYdX base asset, `base`+`quote` for an Ostium pair — the two artwork
+     paths ModernSelect already documents. Price and the 24h move go into the
+     row's meta column, where the picker colours them, instead of being
+     concatenated into the sublabel as text. */
   const marketOptions = useMemo(() => (isDydx
     ? dydxMarkets.list
       .filter((m) => String(m.status || '').toUpperCase() === 'ACTIVE')
-      .map((m) => ({ value: m.ticker, label: m.ticker, sublabel: `${fmtPrice(m.oraclePrice)} · 24h ${(Number(m.priceChange24H) || 0).toFixed(1)}%` }))
+      .map((m) => {
+        const base = baseOf(m.ticker);
+        return {
+          value: m.ticker,
+          label: m.ticker,
+          symbol: base,
+          sublabel: `${base} / USD`,
+          meta: fmtPrice(m.oraclePrice),
+          change: Number(m.priceChange24H) || 0
+        };
+      })
     : ostiumPairs.list
       .map((p) => ({
         value: String(p.pairId),
         label: `${String(p.from || '').toUpperCase()}/${String(p.to || '').toUpperCase()}`,
-        sublabel: `${p.isMarketOpen === false ? (isFa ? 'بسته' : 'closed') : fmtPrice(p.mid)} · ${(p.group?.name || p.category || '').toString().slice(0, 18)}`,
+        base: String(p.from || '').toUpperCase(),
+        quote: String(p.to || 'USD').toUpperCase(),
+        sublabel: p.isMarketOpen === false
+          ? (isFa ? 'بسته' : 'closed')
+          : (p.group?.name || p.category || '').toString().slice(0, 18),
+        meta: p.isMarketOpen === false ? null : fmtPrice(p.mid),
         disabled: p.isMarketOpen === false
       }))
   ), [isDydx, dydxMarkets.list, ostiumPairs.list, isFa]);
@@ -227,6 +321,7 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
 
   const feedLive = isDydx ? dydxMarkets.live : ostiumPairs.live;
   const currentPrice = isDydx ? Number(market?.oraclePrice) : Number(market?.mid);
+  const change24h = isDydx && market ? Number(market.priceChange24H) || 0 : null;
 
   /*
    * ── A dYdX EXIT IS SIZED BY THE POSITION IT CLOSES ─────────────────────────
@@ -330,6 +425,27 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
 
   const errText = error ? (c.err[error] || error) : null;
 
+  const isLongSide = side === 'buy' || side === 'long';
+
+  /* A display-only notional, from the same numbers the planner will check.
+     It never feeds the request — the planner recomputes and the review shows
+     ITS figure — it only lets the user see the size of what they are typing
+     before they reach the review. */
+  const notionalPreview = isDydx
+    ? (Number(size) > 0 && Number(price) > 0 ? Number(size) * Number(price) : null)
+    : (Number(collateral) > 0 && Number(leverage) > 0 ? Number(collateral) * Number(leverage) : null);
+
+  /* Closing is also a reset of the transient ends of the flow: reopening the
+     popup onto yesterday's success panel or a stale review would be a lie
+     about what is about to be signed. The typed numbers stay — they are the
+     user's, and the plan re-validates them on every render. */
+  const close = () => {
+    setPlaced(null);
+    setReviewing(false);
+    setError(null);
+    onClose();
+  };
+
   /* ── ONE signature. Nothing schedules this. ───────────────────────────── */
   const place = async () => {
     if (!canReview || busy) return;
@@ -393,7 +509,10 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
       onPlaced(record);
       haptic?.('success');
       setReviewing(false);
-      onClose();
+      /* The popup stays open on its success panel: the order list below has
+         just gained the row, and closing over the user's thumb to prove a
+         placement is how a placement gets doubted and placed twice. */
+      setPlaced(record);
     } catch (e) {
       const msg = String(e?.shortMessage || e?.reason || e?.message || '');
       const code = /rejected|denied|user rejected/i.test(msg) ? 'REJECTED'
@@ -408,221 +527,493 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
 
   if (!open) return null;
 
-  const kindOptions = (caps?.kinds || []).map((k) => ({ value: k, label: c.kinds[k] || k }));
   const helpKey = isDydx
     ? (kind === PERP_KIND.ENTRY_LIMIT ? 'dydxLimit' : 'dydxTrigger')
     : (kind === PERP_KIND.ENTRY_LIMIT ? 'ostiumLimit' : 'ostiumStop');
 
+  /* The warnings that are always true, in the order a reader meets them:
+     the risk, the custody line, then whatever THIS venue adds. Ostium's two
+     protocol facts (slippage must be zero; a cancel does not refund the
+     placement fee) used to be a loose paragraph and a review-only footnote;
+     inside «هشدار» they are read before the numbers are even finished. */
+  const warnItems = [
+    c.riskBody,
+    c.nonCustodyBody,
+    ...(!isDydx ? [c.slippageNote, c.cancelCostNote] : [])
+  ];
+
   return (
-    <Sheet open onClose={onClose} title={c.openSheet}>
-      <div className="stack" style={{ gap: 11 }}>
-        <p className="muted" style={{ lineHeight: 1.8, fontSize: 12.5, margin: 0 }}>{c.sectionBody}</p>
-
-        {/* ── VENUE ─────────────────────────────────────────────────────── */}
-        <div className="ord-mode" role="group" aria-label={c.venueLabel}>
-          <div className="segmented">
-            {PERP_VENUES.map((v) => (
-              <button key={v.id} type="button" className={venue === v.id ? 'active' : ''}
-                aria-pressed={venue === v.id} onClick={() => pickVenue(v.id)}
-                style={{ isolation: 'isolate', minHeight: 44 }} data-testid={`perp-venue-${v.id}`}>
-                {venue === v.id && <SegIndicator id={`perp-venue-${v.id}`} />}
-                {v.label}
+    <Sheet open onClose={close} title={c.sectionTitle} size="lg" className="pao-sheet" testId="perp-auto-sheet">
+      <div className="pao" data-testid="perp-auto-popup">
+        {placed ? (
+          /* ── PLACED: the button's end state, said out loud ─────────────── */
+          <motion.div className="pao-done" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} data-testid="perp-placed">
+            <span className="pao-done-check"><IconCheck width={26} height={26} /></span>
+            <p className="pao-done-title">{c.placedTitle}</p>
+            <p className="pao-done-body">{c.placedBody}</p>
+            <div className="pao-done-row">
+              <button type="button" className="pao-cta" onClick={() => { setPlaced(null); setError(null); }} data-testid="perp-placed-new">
+                {c.placedNew}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── KIND ──────────────────────────────────────────────────────── */}
-        <label className="ord-field">
-          <span className="faint">{c.kindLabel}</span>
-          <ModernSelect value={kind} onChange={(v) => { setKind(v); setError(null); setReviewing(false); }}
-            options={kindOptions} title={c.kindLabel} placeholder={c.kindLabel} ariaLabel={c.kindLabel}
-            testId="perp-kind-select" />
-        </label>
-        <p className="faint" style={{ lineHeight: 1.75, fontSize: 12, margin: 0 }}>{c.kindHelp[helpKey]}</p>
-
-        {/* ── MARKET ────────────────────────────────────────────────────── */}
-        <label className="ord-field">
-          <span className="faint">{c.marketLabel}</span>
-          <ModernSelect value={marketId} onChange={(v) => { setMarketId(v); setError(null); setReviewing(false); }}
-            options={marketOptions} title={c.marketLabel} placeholder={c.marketLabel} ariaLabel={c.marketLabel}
-            testId="perp-market-select" searchable />
-        </label>
-        {!feedLive && (
-          <p className="ord-warn" style={{ margin: 0 }}>{isFa ? 'فهرست بازارها از ونوو خوانده نشد؛ بدون قیمت زنده سفارشی ثبت نمی‌شود.' : 'The market list could not be read from the venue. Nothing is placed without a live price.'}</p>
-        )}
-
-        {/* ── AN EXIT IS SIZED BY THE POSITION IT CLOSES ────────────────── */}
-        {isExit && (
-          <InfoBox tone="warn" title={c.riskTitle}>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.75 }}>
-              {chosenPosition
-                ? (isFa
-                  ? `این سفارش فقط پوزیشن ${chosenPosition.market} (${chosenPosition.side === 'LONG' ? 'لانگ' : 'شورت'}) را می‌بندد؛ reduce-only توسط خودِ dYdX اعمال می‌شود.`
-                  : `This order can only reduce your ${chosenPosition.market} position (${chosenPosition.side}); dYdX enforces reduce-only.`)
-                : (isFa
-                  ? 'برای این بازار پوزیشن بازی پیدا نشد. حد سود و حد ضرر فقط روی پوزیشن باز ثبت می‌شود.'
-                  : 'No open position found on this market. Take profit and stop loss can only be placed against an open position.')}
-            </p>
-          </InfoBox>
-        )}
-
-        {/* ── SIDE ──────────────────────────────────────────────────────── */}
-        {!isExit && (
-          <div className="ord-mode" role="group" aria-label={c.sideLabel}>
-            <div className="segmented">
-              {(isDydx ? [['buy', c.sideBuy], ['sell', c.sideSell]] : [['long', c.sideBuy], ['short', c.sideSell]]).map(([v, label]) => (
-                <button key={v} type="button" className={side === v ? 'active' : ''} aria-pressed={side === v}
-                  onClick={() => { setSide(v); setReviewing(false); }} style={{ isolation: 'isolate', minHeight: 44 }}
-                  data-testid={`perp-side-${v}`}>
-                  {side === v && <SegIndicator id={`perp-side-${v}`} />}
-                  {label}
-                </button>
-              ))}
+              <button type="button" className="pao-back" onClick={close}>
+                {c.placedClose}
+              </button>
             </div>
-          </div>
-        )}
-
-        {/* ── NUMBERS ───────────────────────────────────────────────────── */}
-        {isDydx ? (
-          <label className="ord-field">
-            <span className="faint">{c.sizeLabel}</span>
-            <input type="number" inputMode="decimal" value={size} onChange={(e) => { setSize(e.target.value); setReviewing(false); }}
-              placeholder="0.001" data-testid="perp-size" />
-            <span className="faint" style={{ fontSize: 11 }}>{c.sizeHint}</span>
-          </label>
+          </motion.div>
         ) : (
-          <div className="row" style={{ gap: 8 }}>
-            <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
-              <span className="faint">{c.collateralLabel}</span>
-              <input type="number" inputMode="decimal" value={collateral} onChange={(e) => { setCollateral(e.target.value); setReviewing(false); }}
-                placeholder="50" data-testid="perp-collateral" />
-            </label>
-            <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
-              <span className="faint">{c.leverageLabel}</span>
-              <input type="number" inputMode="decimal" value={leverage} onChange={(e) => { setLeverage(e.target.value); setReviewing(false); }}
-                placeholder="5" data-testid="perp-leverage" />
-            </label>
-          </div>
-        )}
+          <>
+            {/* ── HERO: the section's own paragraph, now inside its box ─── */}
+            <div className="pao-hero">
+              <div className="pao-hero-top">
+                <span className="pao-hero-glyph"><IconActivity width={21} height={21} /></span>
+                <p className="pao-hero-body">{c.sectionBody}</p>
+              </div>
+              <div className="pao-hero-chips">
+                <span className="pao-chip"><IconCheck width={12} height={12} />{c.heroChip1}</span>
+                <span className="pao-chip"><IconClock width={12} height={12} />{c.heroChip2}</span>
+                <span className="pao-chip"><IconFingerprint width={12} height={12} />{c.heroChip3}</span>
+              </div>
+            </div>
 
-        <label className="ord-field">
-          <span className="faint">{kind === PERP_KIND.ENTRY_LIMIT ? c.priceLabel : c.triggerLabel}</span>
-          <input type="number" inputMode="decimal" value={price} onChange={(e) => { setPrice(e.target.value); setReviewing(false); }}
-            placeholder={Number.isFinite(currentPrice) && currentPrice > 0 ? String(currentPrice) : '0.00'} data-testid="perp-price" />
-          {Number.isFinite(currentPrice) && currentPrice > 0 && (
-            <span className="faint" style={{ fontSize: 11 }}>{c.currentPriceLabel}: {fmtPrice(currentPrice)}</span>
-          )}
-        </label>
+            {/* ── VENUE TABS ──────────────────────────────────────────────── */}
+            <div>
+              <p className="pao-label" id="pao-venue-label"><IconTrend width={14} height={14} />{c.venueLabel}</p>
+              <div className="pao-venues" role="radiogroup" aria-labelledby="pao-venue-label" style={{ marginTop: 7 }}>
+                {PERP_VENUES.map((v) => (
+                  <button key={v.id} type="button" role="radio" aria-checked={venue === v.id}
+                    className={`pao-venue ${venue === v.id ? 'is-on' : ''}`}
+                    onClick={() => { haptic?.('select'); pickVenue(v.id); }}
+                    data-testid={`perp-venue-${v.id}`}>
+                    <span className="pao-venue-mark"><VenueMark venue={v.id} /></span>
+                    <span className="pao-venue-copy">
+                      <span className="pao-venue-name">{v.label}</span>
+                      <span className="pao-venue-sub">{v.id === PERP_VENUE.DYDX ? c.venueSubDydx : c.venueSubOstium}</span>
+                    </span>
+                    <span className="pao-venue-check" aria-hidden="true"><IconCheck width={11} height={11} /></span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {!isDydx && (
-          <div className="row" style={{ gap: 8 }}>
-            <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
-              <span className="faint">{c.tpLabel}</span>
-              <input type="number" inputMode="decimal" value={takeProfit} onChange={(e) => { setTakeProfit(e.target.value); setReviewing(false); }} placeholder="—" />
-            </label>
-            <label className="ord-field" style={{ flex: 1, minWidth: 0 }}>
-              <span className="faint">{c.slLabel}</span>
-              <input type="number" inputMode="decimal" value={stopLoss} onChange={(e) => { setStopLoss(e.target.value); setReviewing(false); }} placeholder="—" />
-            </label>
-          </div>
-        )}
+            {/* ── KIND CARDS ──────────────────────────────────────────────── */}
+            <div>
+              <p className="pao-label" id="pao-kind-label"><IconActivity width={14} height={14} />{c.kindLabel}</p>
+              <div className="pao-kinds" role="radiogroup" aria-labelledby="pao-kind-label" style={{ marginTop: 7 }} data-testid="perp-kind-select">
+                {(caps?.kinds || []).map((k) => {
+                  const KindIcon = KIND_ICON[k] || IconTrend;
+                  const tone = k === PERP_KIND.TAKE_PROFIT ? 'is-tp' : k === PERP_KIND.STOP_LOSS ? 'is-sl' : '';
+                  return (
+                    <button key={k} type="button" role="radio" aria-checked={kind === k} title={c.kinds[k] || k}
+                      className={`pao-kind ${tone} ${kind === k ? 'is-on' : ''}`}
+                      onClick={() => { haptic?.('select'); setKind(k); setError(null); setReviewing(false); }}
+                      data-testid={`perp-kind-${k}`}>
+                      <span className="pao-kind-ico"><KindIcon width={17} height={17} /></span>
+                      <span className="pao-kind-copy">
+                        <span className="pao-kind-name">{c.kindShort[k] || c.kinds[k] || k}</span>
+                        <span className="pao-kind-sub">{c.kindSub[k] || ''}</span>
+                      </span>
+                      <span className="pao-kind-dot" aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="pao-help" style={{ marginTop: 8 }}>
+                <IconInfo width={15} height={15} />
+                <span>{c.kindHelp[helpKey]}</span>
+              </p>
+            </div>
 
-        {isDydx && (
-          <label className="ord-field">
-            <span className="faint">{c.expiryLabel}</span>
-            <ModernSelect value={expiryKey} onChange={setExpiryKey}
-              options={Object.keys(EXPIRY_SECONDS).map((k) => ({ value: k, label: c.expiryOptions[k] || k }))}
-              title={c.expiryLabel} placeholder={c.expiryLabel} ariaLabel={c.expiryLabel} testId="perp-expiry-select" />
-          </label>
-        )}
+            {/* ── MARKET, WITH ITS LOGO ───────────────────────────────────── */}
+            <div>
+              <label className="ord-field">
+                <span className="faint">{c.marketLabel}</span>
+                <ModernSelect value={marketId} onChange={(v) => { setMarketId(v); setError(null); setReviewing(false); }}
+                  options={marketOptions} title={c.marketLabel} placeholder={c.marketLabel} ariaLabel={c.marketLabel}
+                  testId="perp-market-select" searchable />
+              </label>
 
-        {!isDydx && <p className="faint" style={{ lineHeight: 1.75, fontSize: 11.5, margin: 0 }}>{c.slippageNote}</p>}
+              {market && (
+                <div className="pao-market-live" style={{ marginTop: 8 }}>
+                  <span className="pao-market-live-logo">
+                    {isDydx
+                      ? <AssetIcon symbol={baseOf(market.ticker)} size={38} />
+                      : <AssetIcon base={String(market.from || '').toUpperCase()} quote={String(market.to || 'USD').toUpperCase()} size={38} />}
+                  </span>
+                  <div className="pao-market-live-copy">
+                    <span className="pao-market-live-name">
+                      {isDydx ? market.ticker : `${String(market.from || '').toUpperCase()}/${String(market.to || '').toUpperCase()}`}
+                    </span>
+                    <span className="pao-market-live-sub">
+                      <span className={`pao-live-dot ${feedLive ? '' : 'is-off'}`} aria-hidden="true" />
+                      {c.currentPriceLabel}
+                    </span>
+                  </div>
+                  <div className="pao-market-live-price">
+                    <span className="mono">{Number.isFinite(currentPrice) && currentPrice > 0 ? fmtPrice(currentPrice) : '—'}</span>
+                    {change24h != null && (
+                      <span className={`pao-chg ${change24h >= 0 ? 'is-up' : 'is-down'}`}>
+                        {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
-        {/* ── WHY IT CANNOT BE PLACED, SAID BEFORE THE BUTTON ───────────── */}
-        {!plan.ok && market && (
-          <p className="ord-warn" style={{ margin: 0 }}>{c.err[plan.error] || plan.error}</p>
-        )}
-        {isDydx && !dydxAddress && (
-          <InfoBox tone="info">
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.75 }}>
-              {c.connectDydxFirst}{' '}
-              <button type="button" onClick={() => { onClose(); navigate('/perp?tab=dydx'); }}
-                style={{ background: 'none', border: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
-                dYdX →
-              </button>
-            </p>
-          </InfoBox>
-        )}
-        {!isDydx && !wallet.address && (
-          <p className="ord-warn" style={{ margin: 0 }}>{c.connectWalletFirst}</p>
-        )}
-        {!isDydx && wallet.address && wallet.chainId !== OSTIUM_CHAIN_ID && (
-          <p className="ord-warn" style={{ margin: 0 }}>{c.switchNetwork}</p>
-        )}
-        {needsApproval && <p className="ord-warn" style={{ margin: 0 }}>{c.approveFirst}</p>}
+              {!feedLive && (
+                <p className="pao-alert is-warn" style={{ marginTop: 8 }}>
+                  <IconAlertTriangle width={15} height={15} /><span>{c.marketsUnread}</span>
+                </p>
+              )}
 
-        {/* ── REVIEW ────────────────────────────────────────────────────── */}
-        {plan.ok && !reviewing && (
-          <button type="button" className="btn" disabled={!canReview} onClick={() => { haptic?.('select'); setReviewing(true); }}
-            style={{ minHeight: 44 }} data-testid="perp-review">
-            {c.reviewTitle}
-          </button>
-        )}
+              {/* ── AN EXIT IS SIZED BY THE POSITION IT CLOSES ──────────── */}
+              {isExit && (
+                <p className="pao-alert is-warn" style={{ marginTop: 8 }}>
+                  <IconShield width={15} height={15} />
+                  <span>
+                    {chosenPosition
+                      ? (isFa
+                        ? `این سفارش فقط پوزیشن ${chosenPosition.market} (${chosenPosition.side === 'LONG' ? 'لانگ' : 'شورت'}) را می‌بندد؛ reduce-only توسط خودِ dYdX اعمال می‌شود.`
+                        : `This order can only reduce your ${chosenPosition.market} position (${chosenPosition.side}); dYdX enforces reduce-only.`)
+                      : (isFa
+                        ? 'برای این بازار پوزیشن بازی پیدا نشد. حد سود و حد ضرر فقط روی پوزیشن باز ثبت می‌شود.'
+                        : 'No open position found on this market. Take profit and stop loss can only be placed against an open position.')}
+                  </span>
+                </p>
+              )}
+            </div>
 
-        {plan.ok && reviewing && (
-          <div className="card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            <p className="section-label" style={{ margin: 0 }}>{c.reviewTitle}</p>
-            <Row k={c.reviewVenue} v={caps.label} />
-            <Row k={c.reviewKind} v={c.kinds[kind] || kind} />
-            <Row k={c.reviewMarket} v={isDydx ? plan.request.ticker : plan.request.pairLabel} />
-            <Row k={c.reviewSide} v={side === 'buy' || side === 'long' ? c.sideBuy : c.sideSell} />
-            {isDydx && <Row k={c.reviewSize} v={`${fmtNum(plan.request.size)} ${String(plan.request.ticker).split('-')[0]}`} mono />}
-            {isDydx && <Row k={c.reviewPrice} v={fmtPrice(plan.request.price)} mono />}
-            {plan.request.triggerPrice != null && <Row k={c.reviewTrigger} v={fmtPrice(plan.request.triggerPrice)} mono />}
-            {!isDydx && <Row k={c.reviewCollateral} v={fmtUsd(plan.request.collateralUsd)} mono />}
-            {!isDydx && <Row k={c.reviewLeverage} v={`${fmtNum(plan.request.leverage, 3)}×`} mono />}
-            {!isDydx && <Row k={c.reviewNotional} v={fmtUsd(plan.request.notionalUsd)} mono />}
-            {!isDydx && plan.request.takeProfit !== '0' && <Row k={c.reviewTp} v={fmtPrice(Number(plan.request.takeProfit))} mono />}
-            {!isDydx && plan.request.stopLoss !== '0' && <Row k={c.reviewSl} v={fmtPrice(Number(plan.request.stopLoss))} mono />}
-            {isDydx && <Row k={c.reviewExpiry} v={c.expiryOptions[expiryKey] || expiryKey} />}
-
-            {fee && (
-              <>
-                <Row k={c.reviewFeeOurs} v={`${fmtUsd(fee.ourFeeUsd)} · ${fmtNum(fee.ourBps, 4)} bps`} mono />
-                {fee.venueFeeUsd != null && <Row k={c.reviewFeeVenue} v={fmtUsd(fee.venueFeeUsd)} mono />}
-                {fee.oracleFeeUsd > 0 && <Row k={c.reviewFeeOracle} v={fmtUsd(fee.oracleFeeUsd)} mono />}
-                {fee.totalFeeUsd != null && <Row k={c.reviewFeeTotal} v={fmtUsd(fee.totalFeeUsd)} mono />}
-                {fee.totalFeeUsd == null && <p className="faint" style={{ margin: 0, fontSize: 11.5 }}>{c.reviewFeeUnknown}</p>}
-                {fee.ourFeePctOfCollateral != null && fee.ourFeePctOfCollateral > 0.005 && (
-                  <p className="faint" style={{ margin: 0, fontSize: 11.5 }}>
-                    {c.feePctOfCollateral.replace('{{pct}}', fee.ourFeePctOfCollateral.toFixed(2))}
-                  </p>
-                )}
-              </>
+            {/* ── LONG / SHORT ────────────────────────────────────────────── */}
+            {!isExit && (
+              <div>
+                <p className="pao-label" id="pao-side-label">
+                  {isLongSide
+                    ? <IconArrowUpRight width={14} height={14} />
+                    : <IconArrowUpRight width={14} height={14} style={{ transform: 'rotate(90deg)' }} />}
+                  {c.sideLabel}
+                </p>
+                <div className="pao-side" role="radiogroup" aria-labelledby="pao-side-label" style={{ marginTop: 7 }}>
+                  {(isDydx
+                    ? [['buy', c.sideLong, 'LONG', true], ['sell', c.sideShort, 'SHORT', false]]
+                    : [['long', c.sideLong, 'LONG', true], ['short', c.sideShort, 'SHORT', false]]
+                  ).map(([v, label, latin, up]) => (
+                    <button key={v} type="button" role="radio" aria-checked={side === v}
+                      className={`pao-side-btn ${up ? 'is-long' : 'is-short'} ${side === v ? 'is-on' : ''}`}
+                      onClick={() => { haptic?.('select'); setSide(v); setReviewing(false); }}
+                      data-testid={`perp-side-${v}`}>
+                      <span className="pao-side-arrow">
+                        <IconArrowUpRight width={16} height={16} style={up ? undefined : { transform: 'rotate(90deg)' }} />
+                      </span>
+                      <span className="pao-side-copy">
+                        <span className="pao-side-name">{label}</span>
+                        <span className="pao-side-latin">{latin}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
-            <p className="faint" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.7 }}>{c.roundedNote}</p>
-            {!isDydx && <p className="faint" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.7 }}>{c.cancelCostNote}</p>}
+            {/* ── NUMBERS ─────────────────────────────────────────────────── */}
+            <div className="pao-panel">
+              <p className="pao-label" style={{ margin: 0 }}><IconTrend width={14} height={14} />{c.detailsLabel}</p>
 
-            <div className="card" style={{ padding: 10, background: 'color-mix(in srgb, var(--warn, #b45309) 8%, transparent)' }}>
-              <p className="row" style={{ gap: 6, margin: '0 0 5px', fontSize: 12.5, fontWeight: 700 }}>
-                <IconShield width={14} height={14} />{c.riskTitle}
-              </p>
-              <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.75 }}>{c.riskBody}</p>
-              <p style={{ margin: '5px 0 0', fontSize: 11.5, lineHeight: 1.75 }}>{c.nonCustodyBody}</p>
+              {isDydx ? (
+                <label className="ord-field">
+                  <span className="faint">{c.sizeLabel}</span>
+                  <input type="number" inputMode="decimal" value={size} onChange={(e) => { setSize(e.target.value); setReviewing(false); }}
+                    placeholder="0.001" data-testid="perp-size" />
+                  <span className="faint" style={{ fontSize: 11 }}>{c.sizeHint}</span>
+                </label>
+              ) : (
+                <div className="pao-grid2">
+                  <label className="ord-field">
+                    <span className="faint">{c.collateralLabel}</span>
+                    <input type="number" inputMode="decimal" value={collateral} onChange={(e) => { setCollateral(e.target.value); setReviewing(false); }}
+                      placeholder="50" data-testid="perp-collateral" />
+                  </label>
+                  <label className="ord-field">
+                    <span className="faint">{c.leverageLabel}</span>
+                    <input type="number" inputMode="decimal" value={leverage} onChange={(e) => { setLeverage(e.target.value); setReviewing(false); }}
+                      placeholder="5" data-testid="perp-leverage" />
+                  </label>
+                </div>
+              )}
+
+              <label className="ord-field">
+                <span className="faint">{kind === PERP_KIND.ENTRY_LIMIT ? c.priceLabel : c.triggerLabel}</span>
+                <input type="number" inputMode="decimal" value={price} onChange={(e) => { setPrice(e.target.value); setReviewing(false); }}
+                  placeholder={Number.isFinite(currentPrice) && currentPrice > 0 ? String(currentPrice) : '0.00'} data-testid="perp-price" />
+                {Number.isFinite(currentPrice) && currentPrice > 0 && (
+                  /* The live price as a tappable chip: the most-typed number in
+                     this form is "near the market", and copying six digits by
+                     hand is how a fat finger becomes an order. */
+                  <button type="button" className="pao-price-now"
+                    onClick={() => { setPrice(String(currentPrice)); setReviewing(false); }}
+                    data-testid="perp-price-now">
+                    {c.currentPriceLabel}: <span className="mono">{fmtPrice(currentPrice)}</span>
+                  </button>
+                )}
+              </label>
+
+              {!isDydx && (
+                <div className="pao-grid2">
+                  <label className="ord-field">
+                    <span className="faint">{c.tpLabel}</span>
+                    <input type="number" inputMode="decimal" value={takeProfit} onChange={(e) => { setTakeProfit(e.target.value); setReviewing(false); }} placeholder="—" />
+                  </label>
+                  <label className="ord-field">
+                    <span className="faint">{c.slLabel}</span>
+                    <input type="number" inputMode="decimal" value={stopLoss} onChange={(e) => { setStopLoss(e.target.value); setReviewing(false); }} placeholder="—" />
+                  </label>
+                </div>
+              )}
+
+              {notionalPreview != null && (
+                <div className="pao-notional">
+                  <span className="faint">{c.reviewNotional}</span>
+                  <span className="mono">{fmtUsd(notionalPreview)}</span>
+                </div>
+              )}
             </div>
 
-            {errText && <p className="ord-warn" style={{ margin: 0 }}>{errText}</p>}
+            {/* ── LIFETIME (dYdX only — Ostium resting orders have none) ── */}
+            {isDydx && (
+              <div>
+                <p className="pao-label" id="pao-expiry-label"><IconClock width={14} height={14} />{c.expiryLabel}</p>
+                <div className="segmented pao-seg" role="radiogroup" aria-labelledby="pao-expiry-label" style={{ marginTop: 7 }} data-testid="perp-expiry-select">
+                  {Object.keys(EXPIRY_SECONDS).map((k) => (
+                    <button key={k} type="button" role="radio" aria-checked={expiryKey === k}
+                      className={expiryKey === k ? 'active' : ''} aria-pressed={expiryKey === k}
+                      onClick={() => { haptic?.('select'); setExpiryKey(k); setReviewing(false); }}
+                      style={{ isolation: 'isolate' }} data-testid={`perp-expiry-${k}`}>
+                      {expiryKey === k && <SegIndicator id={`perp-expiry-${k}`} />}
+                      {c.expiryOptions[k] || k}
+                    </button>
+                  ))}
+                </div>
+                <p className="pao-expiry-hint" style={{ marginTop: 7 }}>
+                  <IconInfo width={13} height={13} /><span>{c.expiryHint}</span>
+                </p>
+              </div>
+            )}
 
-            <button type="button" className="btn" disabled={!canReview || Boolean(busy)} onClick={place}
-              style={{ minHeight: 46 }} data-testid="perp-place">
-              <IconTrend width={16} height={16} style={{ marginRight: 6, verticalAlign: '-3px' }} />
-              {busy || c.place}
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setReviewing(false)} style={{ minHeight: 40 }}>
-              {isFa ? 'بازگشت' : 'Back'}
-            </button>
+            {/* ── «هشدار»: the process and the warnings, in one fold ─────── */}
+            <CollapsibleCard
+              id="perp-warn-fold"
+              className="pao-warn-fold"
+              title={c.warnTitle}
+              subtitle={c.warnSub}
+              icon={<IconAlertTriangle width={18} height={18} />}
+              badge={warnItems.length}
+              defaultOpen
+            >
+              <div className="pao-warn-body">
+                <div>
+                  <p className="pao-warn-h"><IconActivity width={14} height={14} />{c.howTitle}</p>
+                  <ol className="pao-steps" style={{ marginTop: 9 }}>
+                    {[c.howStep1, c.howStep2, c.howStep3].map((s, i) => (
+                      <li key={i} className="pao-step">
+                        <span className="pao-step-n">{i + 1}</span>
+                        <p>{s}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <div>
+                  <p className="pao-warn-h"><IconShield width={14} height={14} />{c.riskTitle}</p>
+                  <div className="pao-warn-list" style={{ marginTop: 8 }}>
+                    {warnItems.map((s, i) => (
+                      <p key={i} className="pao-warn-item">
+                        <IconAlertTriangle width={14} height={14} /><span>{s}</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CollapsibleCard>
+
+            {/* ── WHY IT CANNOT BE PLACED, SAID BEFORE THE BUTTON ───────── */}
+            {((!plan.ok && market) || (isDydx && !dydxAddress) || (!isDydx && !wallet.address)
+              || (!isDydx && wallet.address && wallet.chainId !== OSTIUM_CHAIN_ID) || needsApproval) && (
+              <div className="pao-alerts" data-testid="perp-alerts">
+                {!plan.ok && market && (
+                  <p className="pao-alert is-error">
+                    <IconAlertTriangle width={15} height={15} /><span>{c.err[plan.error] || plan.error}</span>
+                  </p>
+                )}
+                {isDydx && !dydxAddress && (
+                  <p className="pao-alert is-info">
+                    <IconInfo width={15} height={15} />
+                    <span>
+                      {c.connectDydxFirst}{' '}
+                      <button type="button" className="pao-alert-link" onClick={() => { close(); navigate('/perp?tab=dydx'); }}>
+                        dYdX →
+                      </button>
+                    </span>
+                  </p>
+                )}
+                {!isDydx && !wallet.address && (
+                  <p className="pao-alert is-warn">
+                    <IconAlertTriangle width={15} height={15} /><span>{c.connectWalletFirst}</span>
+                  </p>
+                )}
+                {!isDydx && wallet.address && wallet.chainId !== OSTIUM_CHAIN_ID && (
+                  <p className="pao-alert is-warn">
+                    <IconAlertTriangle width={15} height={15} /><span>{c.switchNetwork}</span>
+                  </p>
+                )}
+                {needsApproval && (
+                  <p className="pao-alert is-info">
+                    <IconInfo width={15} height={15} /><span>{c.approveFirst}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ── REVIEW, THEN ONE SIGNATURE ──────────────────────────────── */}
+            {plan.ok && !reviewing && (
+              <div>
+                <button type="button" className="pao-cta" disabled={!canReview}
+                  onClick={() => { haptic?.('select'); setReviewing(true); }} data-testid="perp-review">
+                  <IconCheck width={18} height={18} />
+                  {c.reviewTitle}
+                </button>
+                {!canReview && !market && <p className="pao-cta-hint" style={{ marginTop: 7 }}>{c.err.NO_MARKET}</p>}
+              </div>
+            )}
+
+            {plan.ok && reviewing && (
+              <motion.div className="pao-review" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} data-testid="perp-review-card">
+                <div className="pao-review-head">
+                  <span className="pao-market-live-logo" style={{ width: 34, height: 34, borderRadius: 11 }}>
+                    {isDydx
+                      ? <AssetIcon symbol={baseOf(plan.request.ticker)} size={34} />
+                      : <AssetIcon symbol={baseOf(plan.request.pairLabel)} size={34} />}
+                  </span>
+                  <div className="pao-market-live-copy">
+                    <span className="pao-market-live-name">{isDydx ? plan.request.ticker : plan.request.pairLabel}</span>
+                    <span className="pao-market-live-sub">{caps.label} · {c.kindShort[kind] || kind}</span>
+                  </div>
+                  <span className={`pao-side-chip ${isLongSide ? 'is-long' : 'is-short'}`}>
+                    {isLongSide ? c.sideLong : c.sideShort}
+                  </span>
+                </div>
+
+                <div>
+                  <Row k={c.reviewVenue} v={caps.label} />
+                  <Row k={c.reviewKind} v={c.kinds[kind] || kind} />
+                  <Row k={c.reviewMarket} v={isDydx ? plan.request.ticker : plan.request.pairLabel} />
+                  <Row k={c.reviewSide} v={isLongSide ? c.sideBuy : c.sideSell} />
+                  {isDydx && <Row k={c.reviewSize} v={`${fmtNum(plan.request.size)} ${String(plan.request.ticker).split('-')[0]}`} mono />}
+                  {isDydx && <Row k={c.reviewPrice} v={fmtPrice(plan.request.price)} mono />}
+                  {plan.request.triggerPrice != null && <Row k={c.reviewTrigger} v={fmtPrice(plan.request.triggerPrice)} mono />}
+                  {!isDydx && <Row k={c.reviewCollateral} v={fmtUsd(plan.request.collateralUsd)} mono />}
+                  {!isDydx && <Row k={c.reviewLeverage} v={`${fmtNum(plan.request.leverage, 3)}×`} mono />}
+                  {!isDydx && <Row k={c.reviewNotional} v={fmtUsd(plan.request.notionalUsd)} mono />}
+                  {!isDydx && plan.request.takeProfit !== '0' && <Row k={c.reviewTp} v={fmtPrice(Number(plan.request.takeProfit))} mono />}
+                  {!isDydx && plan.request.stopLoss !== '0' && <Row k={c.reviewSl} v={fmtPrice(Number(plan.request.stopLoss))} mono />}
+                  {isDydx && <Row k={c.reviewExpiry} v={c.expiryOptions[expiryKey] || expiryKey} />}
+                </div>
+
+                {fee && (
+                  <div>
+                    <Row k={c.reviewFeeOurs} v={`${fmtUsd(fee.ourFeeUsd)} · ${fmtNum(fee.ourBps, 4)} bps`} mono />
+                    {fee.venueFeeUsd != null && <Row k={c.reviewFeeVenue} v={fmtUsd(fee.venueFeeUsd)} mono />}
+                    {fee.oracleFeeUsd > 0 && <Row k={c.reviewFeeOracle} v={fmtUsd(fee.oracleFeeUsd)} mono />}
+                    {fee.totalFeeUsd != null && <Row k={c.reviewFeeTotal} v={fmtUsd(fee.totalFeeUsd)} mono />}
+                    {fee.totalFeeUsd == null && <p className="faint" style={{ margin: 0, fontSize: 11.5 }}>{c.reviewFeeUnknown}</p>}
+                    {fee.ourFeePctOfCollateral != null && fee.ourFeePctOfCollateral > 0.005 && (
+                      <p className="faint" style={{ margin: 0, fontSize: 11.5 }}>
+                        {c.feePctOfCollateral.replace('{{pct}}', fee.ourFeePctOfCollateral.toFixed(2))}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <p className="faint" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.7 }}>{c.roundedNote}</p>
+
+                <div className="pao-review-risk">
+                  <p className="pao-review-risk-title">
+                    <IconShield width={15} height={15} />{c.riskTitle}
+                  </p>
+                  <p>{c.riskBody}</p>
+                  <p>{c.nonCustodyBody}</p>
+                </div>
+
+                {errText && (
+                  <p className="pao-alert is-error" data-testid="perp-error">
+                    <IconAlertTriangle width={15} height={15} /><span>{errText}</span>
+                  </p>
+                )}
+
+                <button type="button" className={`pao-cta pao-place ${isLongSide ? 'is-long' : 'is-short'}`}
+                  disabled={!canReview || Boolean(busy)} onClick={place} data-testid="perp-place">
+                  {busy
+                    ? <><span className="pao-spin" aria-hidden="true" />{busy}</>
+                    : <><IconFingerprint width={19} height={19} />{c.place}</>}
+                </button>
+                <button type="button" className="pao-back" disabled={Boolean(busy)} onClick={() => setReviewing(false)}>
+                  {c.backLabel}
+                </button>
+              </motion.div>
+            )}
+          </>
+        )}
+
+        {/* ── ORDERS ALREADY RESTING ON A VENUE ─────────────────────────── */}
+        <div className="pao-divider"><span>{c.listTitle}</span></div>
+
+        {book.notice && (
+          <p className="pao-alert is-warn">
+            <IconAlertTriangle width={15} height={15} /><span>{book.notice}</span>
+          </p>
+        )}
+
+        {book.live.length > 0 && (
+          <>
+            <div className="pao-label-row">
+              <span className="faint" style={{ fontSize: 11.5 }}>{c.listTitle} · {book.live.length}</span>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={book.reading} onClick={book.onRefresh}
+                style={{ minHeight: 34, fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 5 }} data-testid="perp-refresh">
+                <IconRefresh width={13} height={13} />
+                {book.reading ? '…' : c.refreshState}
+              </button>
+            </div>
+            {!book.readLive && (
+              <p className="pao-alert is-warn" style={{ fontSize: 11.5 }}>
+                <IconAlertTriangle width={14} height={14} /><span>{c.feedDown}</span>
+              </p>
+            )}
+            <div className="stack" style={{ gap: 8 }}>
+              <AnimatePresence>
+                {book.live.map((o) => (
+                  <PerpOrderRow key={o.id} o={o} c={c} lang={lang} onCancel={book.onCancel} cancelling={book.cancelling} stale={!book.readLive} />
+                ))}
+              </AnimatePresence>
+            </div>
+          </>
+        )}
+
+        {book.done.length > 0 && (
+          <CollapsibleCard
+            id="perp-done-fold"
+            className="pao-done-fold"
+            title={c.listDone}
+            icon={<IconCheck width={17} height={17} />}
+            badge={book.done.length}
+          >
+            <div className="stack" style={{ gap: 8 }}>
+              {book.done.slice(0, 10).map((o) => (
+                <PerpOrderRow key={o.id} o={o} c={c} lang={lang} onCancel={book.onCancel} cancelling={book.cancelling} stale={false} />
+              ))}
+            </div>
+          </CollapsibleCard>
+        )}
+
+        {book.total === 0 && (
+          <div className="pao-empty">
+            <IconActivity width={20} height={20} />
+            <p>{c.listEmpty}</p>
           </div>
         )}
       </div>
@@ -632,15 +1023,18 @@ function PerpAutoOrderSheet({ open, onClose, lang, onPlaced }) {
 
 function Row({ k, v, mono }) {
   return (
-    <div className="row-between" style={{ gap: 10, fontSize: 12.5 }}>
-      <span className="faint">{k}</span>
-      <span className={mono ? 'mono' : undefined} style={{ fontWeight: 600, textAlign: 'left' }}>{v}</span>
+    <div className="pao-rrow">
+      <span className="pao-rrow-k">{k}</span>
+      <span className={`pao-rrow-v ${mono ? 'mono' : ''}`}>{v}</span>
     </div>
   );
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * The section mounted on «سفارش خودکار»
+ * What «سفارش خودکار» mounts: ONE rail card, twin of the other order types,
+ * and the popup behind it. The card carries the live-order count the rail
+ * already uses as its status strip, so moving the section into the popup
+ * does not hide a resting order from the page.
  * ──────────────────────────────────────────────────────────────────────────── */
 export default function PerpAutoOrders({ lang }) {
   const c = perpAutoCopyFor(lang);
@@ -808,66 +1202,48 @@ export default function PerpAutoOrders({ lang }) {
   };
 
   /* Perpetuals are speculation: in a build where the flag is off the routes,
-     the pages and this section are all absent, not hidden. */
+     the pages and this card are all absent, not hidden. */
   if (!SPECULATION_ENABLED) return null;
 
   const live = perpOrdersLive(orders);
   const done = perpOrdersDone(orders);
 
   return (
-    <motion.section variants={{ show: { transition: { staggerChildren: 0.04 } } }} initial="hidden" animate="show"
-      style={{ marginTop: 4 }} data-testid="perp-auto-section">
-      <div className="row-between" style={{ marginBottom: 8, gap: 10 }}>
-        <p className="section-label" style={{ margin: 0 }}>{c.sectionTitle}</p>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { haptic?.('select'); setSheetOpen(true); }}
-          data-testid="perp-open-sheet" style={{ minHeight: 38 }}>
-          {c.openSheet}
-        </button>
-      </div>
+    <>
+      {/* The eighth card in the order-type rail. Same geometry, same count
+          badge, its own hue — rgb-7 was the one rail accent no other type
+          had claimed. */}
+      <motion.button
+        type="button"
+        className="ord-new-card ord-new-perp"
+        style={{ '--hue': 'var(--rgb-7)' }}
+        whileTap={{ scale: 0.97 }}
+        onClick={() => { haptic?.('select'); setSheetOpen(true); }}
+        data-testid="perp-open-sheet"
+      >
+        {live.length > 0 && <span className="ord-new-count">{live.length}</span>}
+        <span className="ord-new-glyph"><IconActivity width={22} height={22} /></span>
+        <span className="ord-new-label">{c.openSheet}</span>
+        <span className="ord-new-sub">{c.cardSub}</span>
+      </motion.button>
 
-      <p className="muted" style={{ fontSize: 12, lineHeight: 1.8, margin: '0 0 10px' }}>{c.sectionBody}</p>
-
-      {notice && <p className="ord-warn" style={{ marginBottom: 8 }}>{notice}</p>}
-
-      {live.length > 0 && (
-        <>
-          <div className="row-between" style={{ marginBottom: 6, gap: 8 }}>
-            <span className="faint" style={{ fontSize: 11.5 }}>{c.listTitle} · {live.length}</span>
-            <button type="button" className="btn btn-ghost btn-sm" disabled={reading} onClick={readStates}
-              style={{ minHeight: 34, fontSize: 11.5 }} data-testid="perp-refresh">
-              {reading ? '…' : c.refreshState}
-            </button>
-          </div>
-          {!readLive && <p className="ord-warn" style={{ marginBottom: 8, fontSize: 11.5 }}>{c.feedDown}</p>}
-          <div className="stack" style={{ gap: 8 }}>
-            <AnimatePresence>
-              {live.map((o) => (
-                <PerpOrderRow key={o.id} o={o} c={c} lang={lang} onCancel={cancel} cancelling={cancelling} stale={!readLive} />
-              ))}
-            </AnimatePresence>
-          </div>
-        </>
-      )}
-
-      {done.length > 0 && (
-        <details style={{ marginTop: 10 }}>
-          <summary className="faint" style={{ fontSize: 11.5, cursor: 'pointer' }}>{c.listTitle} · {done.length}</summary>
-          <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-            {done.slice(0, 10).map((o) => (
-              <PerpOrderRow key={o.id} o={o} c={c} lang={lang} onCancel={cancel} cancelling={cancelling} stale={false} />
-            ))}
-          </div>
-        </details>
-      )}
-
-      {orders.length === 0 && (
-        <div className="card" style={{ padding: 12 }}>
-          <p className="muted" style={{ fontSize: 12, lineHeight: 1.8, margin: 0 }}>{c.listEmpty}</p>
-        </div>
-      )}
-
-      <PerpAutoOrderSheet open={sheetOpen} onClose={() => setSheetOpen(false)} lang={lang}
-        onPlaced={(record) => persist(addPerpOrder(orders, record))} />
-    </motion.section>
+      <PerpVenuePopup
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        lang={lang}
+        onPlaced={(record) => persist(addPerpOrder(orders, record))}
+        book={{
+          live,
+          done,
+          total: orders.length,
+          cancelling,
+          readLive,
+          reading,
+          notice,
+          onRefresh: readStates,
+          onCancel: cancel
+        }}
+      />
+    </>
   );
 }
