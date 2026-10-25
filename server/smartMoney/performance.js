@@ -192,13 +192,28 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
   }
   const earlyClosed = closed.filter((c) => c.early);
   const timed = closed.map((c) => c.exitTiming).filter((v) => v != null);
+  const avgHoldingDays = closed.length
+    ? closed.reduce((s, c) => s + c.holdingDays, 0) / closed.length : null;
   const factors = {
     profitability: closed.length ? clamp(0.5 + Math.tanh((roi / 100) * 2) / 2) : null,
     winRate: closed.length ? wins / closed.length : null,
     earlyEntryAccuracy: earlyClosed.length >= 2 ? earlyClosed.filter((c) => c.pnlUsd > 0).length / earlyClosed.length : null,
     exitTiming: timed.length >= 2 ? timed.reduce((s, v) => s + v, 0) / timed.length : null,
     consistency: ret.length >= 5 ? clamp(1 - stdev) : null,
-    capitalEfficiency: closed.length ? clamp(0.5 + Math.tanh(realized / Math.max(invested, 1)) / 2) : null,
+    /* CAPITAL EFFICIENCY, DE-DUPLICATED (phase 2, 2026-10-25).
+     * The old factor was `tanh(realized/invested)` — tanh(ROI) — i.e. the
+     * profitability factor `tanh(2·ROI)` wearing a second hat, so 0.35 of the
+     * score's weight voted twice on one signal and a wallet that took 180
+     * days to make +20% scored the same "efficiency" as one that made it in
+     * a day. Efficiency is return PER UNIT TIME capital was deployed:
+     * ROI scaled to a 30-day deployment. The 30-day hold is the anchor — at
+     * exactly 30 days average holding the value is IDENTICAL to the old
+     * factor, so existing scores drift only where holding time genuinely
+     * differs. Sub-day holds are floored to 1 day: fees and slippage are
+     * unmeasured here, and a per-minute rate would crown churn. */
+    capitalEfficiency: closed.length && avgHoldingDays != null
+      ? clamp(0.5 + Math.tanh((realized / Math.max(invested, 1)) * (30 / Math.max(avgHoldingDays, 1))) / 2)
+      : null,
     riskAdjustedPerformance: ret.length >= 5 ? clamp(0.5 + Math.tanh(mean / Math.max(stdev, 0.05)) / 2) : null
   };
   const weights = SMART_MONEY_SCORE.verifiedWeights;
@@ -248,7 +263,7 @@ export function analyzePerformance({ chain, address, transfers = [], transaction
     performance: {
       realizedPnlUsd: pnl.realizedUsd, unrealizedPnlUsd: pnl.unrealizedUsd,
       roiPct: pnl.roiPct, winRate: pnl.winRate,
-      averageHoldingDays: closed.length ? round(closed.reduce((s, c) => s + c.holdingDays, 0) / closed.length, 1) : null,
+      averageHoldingDays: avgHoldingDays == null ? null : round(avgHoldingDays, 1),
       trades: swaps.length, closedTrades: closed.length,
       tradeFrequencyPerDay: swaps.length > 1 ? round(swaps.length / Math.max(1, (swaps.at(-1).timestamp - swaps[0].timestamp) / DAY)) : null,
       sharpeLike: ret.length >= 5 ? round(mean / Math.max(stdev, 0.05)) : null,

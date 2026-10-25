@@ -47,8 +47,39 @@ import { buildConsensus } from './consensus.js';
 
 const KEY = 'smart-money:verified-index:v1';
 const LEASE_KEY = 'smart-money:verified-index:lease:v1';
-const MAX_PROFILES = 160;
-const MAX_SWAPS = 1200;
+/* Index size (phase 2, 2026-10-25): raised from 160 profiles / 1200 swaps.
+ * A swap row is ~300 bytes of JSON, so 4000 rows ≈ 1.2 MB in the blob —
+ * comfortably inside store limits, and 7 days of the sampled qualified flow
+ * no longer evicts its own first days (which also starved `momentum`'s
+ * previous window). Still hard caps, env-tunable within sane bounds. */
+const MAX_PROFILES = Math.max(40, Math.min(1000, Number(process.env.SM_INDEX_MAX_PROFILES) || 320));
+const MAX_SWAPS = Math.max(300, Math.min(12000, Number(process.env.SM_INDEX_MAX_SWAPS) || 4000));
+
+/**
+ * Retention when a cap binds (pure; exported for probes).
+ *
+ * The old rule — newest-first slice — could evict a QUALIFIED wallet (one of
+ * the few addresses allowed to vote) in favour of a freshly-analysed
+ * wallet with no measured track record, silently shrinking the voting set
+ * exactly as discovery widened. Qualified profiles are retained first
+ * (newest measurement first), then the rest by recency; swaps of retained
+ * qualified wallets are likewise kept before other observed swaps. Age
+ * filtering stays the caller's job — this only decides who survives a cap.
+ */
+export function pruneVerifiedIndex({ profiles = [], swaps = [], maxProfiles = MAX_PROFILES, maxSwaps = MAX_SWAPS } = {}) {
+  const byRecency = (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0);
+  const keptProfiles = [
+    ...profiles.filter((p) => p.qualified).sort(byRecency),
+    ...profiles.filter((p) => !p.qualified).sort(byRecency)
+  ].slice(0, maxProfiles);
+  const qualifiedKept = new Set(keptProfiles.filter((p) => p.qualified).map((p) => recordId(p.chain, p.address)));
+  const byTime = (a, b) => (b.timestamp || 0) - (a.timestamp || 0);
+  const keptSwaps = [
+    ...swaps.filter((s) => qualifiedKept.has(recordId(s.chain, s.wallet))).sort(byTime),
+    ...swaps.filter((s) => !qualifiedKept.has(recordId(s.chain, s.wallet))).sort(byTime)
+  ].slice(0, maxSwaps).sort(byTime);
+  return { profiles: keptProfiles, swaps: keptSwaps };
+}
 const INDEX_AGE = 7 * WINDOWS.H24;
 /** A reader older than this triggers a background refresh. */
 export const REFRESH_AFTER_MS = Math.max(60_000, Number(process.env.SM_INDEX_REFRESH_MS) || 15 * 60_000);
@@ -289,10 +320,11 @@ export async function runIntelligenceCycle({ now = Date.now(), candidates = null
   const out = { checked: chosen.length, qualified: successful.filter((r) => r.profile.qualified).length,
     indexedSwaps: successful.reduce((sum, r) => sum + r.swaps.length, 0),
     errors: chosen.length - successful.length, status: 'sampled', durable: storeDurable(), discovery: discoveryStats };
+  const pruned = pruneVerifiedIndex({ profiles: [...profiles.values()], swaps: [...swaps.values()] });
   await storeSet(KEY, {
     indexedAt: now,
-    profiles: [...profiles.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_PROFILES),
-    swaps: [...swaps.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_SWAPS),
+    profiles: pruned.profiles,
+    swaps: pruned.swaps,
     lastCycle: { at: now, reason, ...out }
   }, 8 * WINDOWS.H24);
   return out;

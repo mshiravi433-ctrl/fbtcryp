@@ -479,7 +479,7 @@ function FollowRule({ row, onIntent }) {
       address: row.token,
       target: 'token',
       label: row.symbol,
-      types: ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL'],
+      types: ['CONSENSUS_BUY', 'CONSENSUS_SELL', 'NETFLOW_REVERSAL', 'MOMENTUM_REVERSAL'],
       condition: { minWallets: minimum, confidence, fromUsd, toUsd }
     });
     setFollowing(true);

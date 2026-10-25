@@ -220,7 +220,13 @@ export const ALERTS = {
     'DISTRIBUTION',
     'CONSENSUS_BUY',
     'CONSENSUS_SELL',
-    'NETFLOW_REVERSAL'
+    'NETFLOW_REVERSAL',
+    /* Phase 2 (2026-10-25): verified net flow changed DIRECTION versus the
+       previous equal window (consensus `momentum.trend === 'REVERSING'`).
+       Distinct from NETFLOW_REVERSAL, which compares two 30m samples the
+       watch itself observed against user USD thresholds; this one is the
+       24h-vs-prior-24h trend transition of the qualified sample. */
+    'MOMENTUM_REVERSAL'
   ])
 };
 

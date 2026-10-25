@@ -2209,6 +2209,22 @@ console.log('\n▸ probing Smart Money upgrade (no-seed, momentum, breadth)…')
   report('Smart Money upgrade', [['empty index stays honest, momentum/breadth from verified swaps only', ok]]);
 }
 
+/* Phase 2 (2026-10-25): momentum-transition alerts, de-duplicated capital
+ * efficiency, qualified-first index retention. */
+console.log('\n▸ probing Smart Money phase 2 (alerts, score factor, retention)…');
+{
+  let ok = false;
+  try {
+    execFileSync(process.execPath, ['test/smart-money-phase2-probe.mjs'], {
+      stdio: 'pipe', cwd: new URL('..', import.meta.url).pathname
+    });
+    ok = true;
+  } catch (err) {
+    console.log(String(err?.stderr || err?.stdout || err).slice(-1500));
+  }
+  report('Smart Money phase 2', [['MOMENTUM_REVERSAL fires on transition only, efficiency anchored at 30d, qualified retained under cap', ok]]);
+}
+
 /*
  * QR CAMERA LIFECYCLE.
  *
