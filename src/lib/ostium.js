@@ -340,6 +340,25 @@ export async function buildOpenTrade({
 
   const iface = new Interface(OPEN_TRADE_ABI);
 
+  /*
+   * ─── SLIPPAGE IS ZERO FOR EVERY NON-MARKET ORDER, OR THE TRADE REVERTS ────
+   * Ostium changed this in February 2026 and it is a hard protocol rule, not a
+   * preference: for a limit or a stop order the `slippageP` argument of
+   * `openTrade` must be 0, and a non-zero value reverts the transaction. The
+   * vendor SDK does the same thing (`slippageP = type === market ?
+   * resolveSlippage(slippage) : 0n` in @ostium/builder-sdk 0.12.0).
+   *
+   * This encoder accepted `orderType: 'limit' | 'stop'` from the day it was
+   * written and forwarded `slippageBps` (default 25) for all three types, so
+   * the first resting order anyone built here would have been signed by the
+   * user and then reverted on chain — a paid failure with no order to show for
+   * it. The value is now derived from the order type and cannot be overridden
+   * by a caller; `src/lib/perpOrders.js` plans the same rule so the preview and
+   * the signed bytes agree.
+   */
+  const isMarketOrder = type === ORDER_TYPE.market;
+  const slippageP = isMarketOrder ? Math.round(Number(slippageBps)) : 0;
+
   const data = iface.encodeFunctionData('openTrade', [
     {
       /* USDC is 6 decimals; prices and TP/SL are 18. Mixing these up is the
@@ -359,9 +378,35 @@ export async function buildOpenTrade({
     },
     { builder: getAddress(builder), builderFee: feeBpsToContractUnits(ostiumFeeBps(bps)) },
     type,
-    Math.round(Number(slippageBps))
+    slippageP
   ]);
 
+  return { to: OSTIUM_TRADING, data, chainId: OSTIUM_CHAIN_ID, orderType, slippageP };
+}
+
+/**
+ * Cancel a resting limit or stop order.
+ *
+ * `cancelOpenLimitOrder(uint16 pairIndex, uint8 orderIndex)` — verified against
+ * the ABI inside @ostium/builder-sdk 0.12.0, which is also where the argument
+ * order comes from. `orderIndex` is the on-chain limit SLOT (a uint8), which is
+ * the trailing segment of the subgraph row's id (`<trader>_<pairIndex>_<index>`),
+ * NOT the subgraph's global order counter: that counter overflows a uint8 and
+ * would cancel somebody else's slot or revert.
+ *
+ * Without this the venue could hold an order the app cannot take back, which is
+ * why no resting-order surface ships without its cancel.
+ */
+export async function buildCancelLimitOrder({ pairId, index }) {
+  const { Interface } = await loadEthers();
+  const pair = Number(pairId);
+  const idx = Number(index);
+  if (!Number.isInteger(pair) || pair < 0 || pair > 65535) throw new Error('INVALID_PAIR');
+  /* uint8: a slot outside 0..255 is not a slot, and sending it would cancel
+     nothing while still costing gas. */
+  if (!Number.isInteger(idx) || idx < 0 || idx > 255) throw new Error('INVALID_INDEX');
+  const iface = new Interface(['function cancelOpenLimitOrder(uint16 pairIndex,uint8 index)']);
+  const data = iface.encodeFunctionData('cancelOpenLimitOrder', [pair, idx]);
   return { to: OSTIUM_TRADING, data, chainId: OSTIUM_CHAIN_ID };
 }
 
@@ -617,6 +662,77 @@ export async function getOstiumPositions({ trader, markets = [], timeout = 12000
     };
   } catch {
     return { positions: [], live: false };
+  }
+}
+
+/*
+ * ─── RESTING ORDERS: THE `limits` ENTITY ─────────────────────────────────────
+ * An Ostium limit or stop order is not a position and not a transaction in a
+ * mempool — it is a row in the subgraph's `limits` entity that the venue's own
+ * keeper network watches. This is the read that makes a resting order visible
+ * after the app is closed and reopened, and it is the only honest source for
+ * the state of one: we did not place it on a server of ours, so we cannot
+ * answer from memory.
+ *
+ * The query and the field list were taken from @ostium/builder-sdk 0.12.0
+ * (`LIMIT_FIELDS` / `GetTraderActiveLimitsQuery`) rather than written from the
+ * entity name, and the same release is where the `idx` rule comes from:
+ *
+ *   · `id` is `<trader>_<pairIndex>_<index>`, and the TRAILING segment is the
+ *     on-chain uint8 limit slot that `cancelOpenLimitOrder` needs;
+ *   · `orderId` is a global counter that overflows a uint8, so passing it to a
+ *     cancel would revert or, worse, name somebody else's slot.
+ *
+ * A cancelled limit leaves no row behind at all, so absence from this read is
+ * not proof of a cancel — the caller says «خوانده نشد» rather than inventing a
+ * state, and `perpOrders.js` maps only what a row actually says.
+ */
+const OPEN_ORDERS_QUERY = `query FbtOstiumOpenOrders($trader: String!) {
+  limits(where: { isActive: true, trader: $trader }, first: 100, orderBy: updatedAt, orderDirection: desc) {
+    id uniqueId orderId trader
+    pair { id from to group { id name } }
+    isBuy limitType isActive executionStarted
+    collateral notional tradeNotional leverage
+    openPrice takeProfitPrice stopLossPrice
+    block initiatedAt updatedAt
+  }
+}`;
+
+/** Live resting limit/stop orders for one trader. Never throws. */
+export async function getOstiumOpenOrders({ trader, timeout = 12000 } = {}) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(trader || ''))) return { orders: [], live: false, reason: 'BAD_ADDRESS' };
+  try {
+    const graph = await ostiumGraph(OPEN_ORDERS_QUERY, { trader: String(trader).toLowerCase() }, timeout);
+    if (!Array.isArray(graph?.limits)) throw new Error('BAD_SHAPE');
+    return {
+      live: true,
+      orders: graph.limits.map((row) => {
+        const slot = Number.parseInt(String(row.id || '').split('_').pop() || '0', 10);
+        return {
+          id: row.id,
+          pairId: String(row.pair?.id),
+          /* The uint8 on-chain slot, which is what a cancel needs. Null when
+             the id is not shaped the way the SDK documents, because guessing a
+             slot is how an order gets cancelled on the wrong pair. */
+          index: Number.isInteger(slot) && slot >= 0 && slot <= 255 ? slot : null,
+          name: `${String(row.pair?.from || '').toUpperCase()}/${String(row.pair?.to || '').toUpperCase()}`,
+          buy: Boolean(row.isBuy),
+          side: row.isBuy ? 'long' : 'short',
+          orderType: String(row.limitType || '').toUpperCase() === 'STOP' ? 'stop' : 'limit',
+          isActive: row.isActive === true,
+          executionStarted: row.executionStarted === true,
+          price: scaled(row.openPrice, 18),
+          collateral: scaled(row.collateral, 6),
+          leverage: Number(row.leverage || 0) / 100,
+          notional: scaled(row.notional, 6),
+          takeProfit: scaled(row.takeProfitPrice, 18),
+          stopLoss: scaled(row.stopLossPrice, 18),
+          updatedAt: Number(row.updatedAt || 0) * 1000
+        };
+      })
+    };
+  } catch {
+    return { orders: [], live: false, reason: 'SUBGRAPH_UNAVAILABLE' };
   }
 }
 

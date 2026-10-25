@@ -58,10 +58,20 @@ test('only production web pipeline sources rollout; Android overrides all three'
   assert.equal(pkg.dependencies['@dydxprotocol/v4-client-js'], '3.4.0');
 });
 
+/*
+ * The thresholds used to be written down a second time here (1699/1700/1701),
+ * and when scripts/check-first-paint.mjs raised the budget 1700 → 1750 on
+ * 2026-10-22 nobody came back — so this suite went red and stayed red, which
+ * is worse than not having it: a red test hides the next real regression.
+ * Read the budget out of the script instead, so the fixture cannot drift.
+ */
+const BUDGET_KB = Number(/budgetKB:\s*(\d+)/.exec(read('scripts/check-first-paint.mjs'))[1]);
+assert.ok(Number.isFinite(BUDGET_KB) && BUDGET_KB > 0, 'the first-paint budget is readable from the guard');
+
 for (const [name, bytes, passes] of [
-  ['below budget', 1699 * 1024, true],
-  ['exactly at budget', 1700 * 1024, false],
-  ['over budget', 1701 * 1024, false],
+  ['below budget', (BUDGET_KB - 1) * 1024, true],
+  ['exactly at budget', BUDGET_KB * 1024, false],
+  ['over budget', (BUDGET_KB + 1) * 1024, false],
   ['missing asset', null, false]
 ]) {
   test(`first-paint byte guard: ${name}`, () => {

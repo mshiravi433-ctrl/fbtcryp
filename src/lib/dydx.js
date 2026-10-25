@@ -540,30 +540,47 @@ export function disconnectDydx() {
 
 export const dydxSessionAddress = () => session?.address || null;
 
-/** Market/IOC order with our builder address and fee inside the signed order. */
-export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, reduceOnly = false, orderType = 'market', limitPrice: userPrice = null }) {
-  if (!session) throw new Error('NOT_CONNECTED');
-  if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
-  const qty = Number(size);
-  if (!Number.isFinite(qty) || qty <= 0) throw new Error('BAD_SIZE');
-  const buy = side === 'buy';
-  const sdkTmp = await loadClient();
-  let limitPrice;
-  let orderTypeEnum;
-  let execution;
-  if (orderType === 'limit' && userPrice != null && String(userPrice).trim() !== '') {
-    const lp = Number(userPrice);
-    if (!Number.isFinite(lp) || lp <= 0) throw new Error('BAD_PRICE');
-    limitPrice = lp;
-    orderTypeEnum = sdkTmp.OrderType.LIMIT;
-    execution = sdkTmp.OrderExecution.GTC;
-  } else {
-    const slip = Number(slippagePct);
-    if (!Number.isFinite(slip) || slip <= 0 || slip > 10) throw new Error('BAD_SLIPPAGE');
-    limitPrice = market.oraclePrice * (1 + (buy ? 1 : -1) * slip / 100);
-    orderTypeEnum = sdkTmp.OrderType.MARKET;
-    execution = sdkTmp.OrderExecution.IOC;
-  }
+/**
+ * Lifetime asked for a resting (LONG_TERM) limit order: 28 days, the same
+ * window the conditional TP/SL orders already use. dYdX measures a stateful
+ * order's life in absolute seconds from the block it lands in, so this is the
+ * number that becomes `goodTilTimeInSeconds`.
+ */
+export const DYDX_LIMIT_GOOD_TIL_SECONDS = 28 * 24 * 60 * 60;
+
+/*
+ * ─── THE ONE PLACE THE 22 POSITIONAL ARGUMENTS ARE WRITTEN DOWN ───────────────
+ * `CompositeClient.placeOrder` takes twenty-two positional parameters. Three
+ * call sites used to spell them out, and one of them spelled argument 8 wrong
+ * in a way that only shows up at runtime:
+ *
+ *   «سفارش لیمیت dYdX → nothing happens»
+ *
+ * `placeDydxOrder({ orderType: 'limit' })` passed `undefined` for
+ * `timeInForce`, and the pinned SDK's own flag helper refuses that combination
+ * before any signature is requested:
+ *
+ *   calculateOrderFlags(OrderType.LIMIT, undefined)
+ *     → throws 'timeInForce must be set if orderType is LIMIT'
+ *
+ * MARKET orders were unaffected — `calculateOrderFlags(MARKET, undefined)`
+ * returns SHORT_TERM without looking at the time-in-force — which is exactly
+ * why the screen worked in testing and every limit order on it failed.
+ *
+ * A resting limit also needs two more arguments that a market order does not:
+ *   · LIMIT + GTT computes to OrderFlags.LONG_TERM, and `placeOrderMessage`
+ *     throws 'goodTilTimeInSeconds must be set for LONG_TERM or CONDITIONAL
+ *     order' unless argument 9 is present;
+ *   · `calculateTimeInForce(LIMIT, GTT, …, postOnly)` throws 'postOnly must be
+ *     set if order type is LIMIT and timeInForce is GTT' unless argument 11 is
+ *     a boolean, so `false` is passed explicitly rather than left undefined.
+ *
+ * All three verified against the pinned 3.4.0 build in
+ * test/perp-auto-orders-units.mjs, which calls the SDK's own helpers with the
+ * tuples this function produces.
+ */
+async function sendDydxOrder({ market, type, side, price, size, triggerPrice = null, reduceOnly = false, timeInForce = null, goodTilTimeInSeconds = null, execution = null, postOnly = null, memo = 'FBT Swap builder order' }) {
+  const sdk = await loadClient();
   const clientId = crypto.getRandomValues(new Uint32Array(1))[0];
   let client;
   try {
@@ -571,42 +588,168 @@ export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, re
   } catch {
     throw new Error('VALIDATOR_UNREACHABLE');
   }
+  /* The session can be dropped by a disconnect in another tab while the user
+     was reading the review screen. */
   if (!session) throw new Error('NOT_CONNECTED');
-  const { sdk, subaccount } = session;
+
+  const orderType = sdk.OrderType[type];
+  if (!orderType) throw new Error('BAD_ORDER_TYPE');
+  const orderSide = side === 'sell' ? sdk.OrderSide.SELL : sdk.OrderSide.BUY;
 
   const result = await client.placeOrder(
-    subaccount,
-    market.ticker,
-    orderTypeEnum,
-    buy ? sdk.OrderSide.BUY : sdk.OrderSide.SELL,
-    limitPrice,
-    qty,
-    clientId,
-    undefined,
-    undefined,
-    execution,
-    false,
-    Boolean(reduceOnly),
-    undefined,
-    market.raw,
-    undefined,
-    undefined,
-    'FBT Swap builder order',
-    undefined,
-    undefined,
-    { builderAddress: DYDX_BUILDER_ADDRESS, feePpm: DYDX_BUILDER_FEE_PPM }
+    session.subaccount,      //  1 subaccount
+    market.ticker,           //  2 marketId
+    orderType,               //  3 type
+    orderSide,               //  4 side
+    price,                   //  5 price (limit price, or the worst price a triggered order may pay)
+    size,                    //  6 size in base units
+    clientId,                //  7 clientId
+    timeInForce == null ? undefined : sdk.OrderTimeInForce[timeInForce], // 8 — MUST be set for LIMIT
+    goodTilTimeInSeconds,    //  9 — MUST be set for LONG_TERM and CONDITIONAL
+    execution == null ? undefined : sdk.OrderExecution[execution],       // 10
+    postOnly,                // 11 — MUST be a boolean for LIMIT + GTT
+    Boolean(reduceOnly),     // 12
+    triggerPrice,            // 13 — conditional orders only
+    market.raw,              // 14 marketInfo (skips an indexer round-trip)
+    undefined,               // 15 currentHeight (only SHORT_TERM needs it, and the SDK fetches it)
+    undefined,               // 16 goodTilBlock (SHORT_TERM only)
+    memo,                    // 17
+    undefined,               // 18 broadcastMode
+    undefined,               // 19 twapParameters
+    { builderAddress: DYDX_BUILDER_ADDRESS, feePpm: DYDX_BUILDER_FEE_PPM } // 20
   );
 
   const hash = result?.hash;
   return {
     hash: typeof hash === 'string' ? hash : hash?.toString?.() || null,
+    clientId,
     /* Echoed so a caller can say «دستور بستن ثبت شد» instead of «سفارش ثبت
        شد» — the two are the same request and opposite news. */
     reduceOnly: Boolean(reduceOnly),
-    clientId,
+    /* What a cancel has to reproduce: the flags follow from the order type and
+       the time-in-force, and the expiry is the one that was signed. */
+    orderFlags: orderFlagsFor(type, timeInForce),
+    goodTilTimeInSeconds: goodTilTimeInSeconds == null ? null : Number(goodTilTimeInSeconds),
     builderAddress: DYDX_BUILDER_ADDRESS,
     feePpm: DYDX_BUILDER_FEE_PPM
   };
+}
+
+/**
+ * OrderFlags for a type/time-in-force pair, as the SDK computes it.
+ *
+ * Duplicated as a plain string map rather than read from the SDK because this
+ * runs before the client is loaded (a stored order has to say how to cancel
+ * itself) and because the mapping is a protocol constant, not a preference:
+ * MARKET → SHORT_TERM, LIMIT + GTT → LONG_TERM, LIMIT + IOC/FOK → SHORT_TERM,
+ * every trigger type → CONDITIONAL.
+ */
+export function orderFlagsFor(type, timeInForce = null) {
+  const t = String(type || '').toUpperCase();
+  if (t === 'STOP_MARKET' || t === 'STOP_LIMIT' || t === 'TAKE_PROFIT_MARKET' || t === 'TAKE_PROFIT' || t === 'TAKE_PROFIT_LIMIT') {
+    return 'CONDITIONAL';
+  }
+  if (t === 'LIMIT') return String(timeInForce || '').toUpperCase() === 'GTT' ? 'LONG_TERM' : 'SHORT_TERM';
+  return 'SHORT_TERM';
+}
+
+/** Market/IOC order with our builder address and fee inside the signed order. */
+export async function placeDydxOrder({ market, side, size, slippagePct = 0.5, reduceOnly = false, orderType = 'market', limitPrice: userPrice = null, goodTilSeconds = DYDX_LIMIT_GOOD_TIL_SECONDS }) {
+  if (!session) throw new Error('NOT_CONNECTED');
+  if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
+  const qty = Number(size);
+  if (!Number.isFinite(qty) || qty <= 0) throw new Error('BAD_SIZE');
+  const buy = side === 'buy';
+
+  if (orderType === 'limit' && userPrice != null && String(userPrice).trim() !== '') {
+    const lp = Number(userPrice);
+    if (!Number.isFinite(lp) || lp <= 0) throw new Error('BAD_PRICE');
+    const seconds = Math.round(Number(goodTilSeconds));
+    if (!Number.isFinite(seconds) || seconds < 60) throw new Error('BAD_EXPIRY');
+    /*
+     * A resting limit: LIMIT + GTT + an absolute lifetime + postOnly=false.
+     * See sendDydxOrder for why each of those four is mandatory and what the
+     * SDK throws when one is missing.
+     */
+    return sendDydxOrder({
+      market,
+      type: 'LIMIT',
+      side: buy ? 'buy' : 'sell',
+      price: lp,
+      size: qty,
+      reduceOnly,
+      timeInForce: 'GTT',
+      goodTilTimeInSeconds: seconds,
+      execution: 'DEFAULT',
+      postOnly: false,
+      memo: 'FBT Swap builder limit order'
+    });
+  }
+
+  const slip = Number(slippagePct);
+  if (!Number.isFinite(slip) || slip <= 0 || slip > 10) throw new Error('BAD_SLIPPAGE');
+  return sendDydxOrder({
+    market,
+    type: 'MARKET',
+    side: buy ? 'buy' : 'sell',
+    price: market.oraclePrice * (1 + (buy ? 1 : -1) * slip / 100),
+    size: qty,
+    reduceOnly,
+    /* A market order is SHORT_TERM: no time-in-force, no lifetime, and the SDK
+       computes goodTilBlock from the current height. IOC is the execution the
+       screen has always used. */
+    execution: 'IOC',
+    postOnly: false
+  });
+}
+
+/**
+ * Place one PLANNED auto-order — the request produced by `planDydxOrder`
+ * (src/lib/perpOrders.js).
+ *
+ * The plan is re-checked here rather than trusted, because the object crosses a
+ * render boundary and a malformed one must not reach the chain: a caller that
+ * hands over something the planner would have refused gets the same refusal.
+ * The planner owns the price/size/trigger arithmetic; this function owns the
+ * signature, and nothing else calls it.
+ */
+export async function placeDydxAutoOrder({ market, request }) {
+  if (!session) throw new Error('NOT_CONNECTED');
+  if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
+  const r = request || {};
+  if (r.venue !== 'dydx') throw new Error('BAD_REQUEST');
+  if (market.ticker !== r.ticker) throw new Error('BAD_MARKET');
+
+  const qty = Number(r.size);
+  const price = Number(r.price);
+  if (!Number.isFinite(qty) || qty <= 0) throw new Error('BAD_SIZE');
+  if (!Number.isFinite(price) || price <= 0) throw new Error('BAD_PRICE');
+
+  const seconds = Math.round(Number(r.goodTilTimeInSeconds));
+  if (!Number.isFinite(seconds) || seconds < 60) throw new Error('BAD_EXPIRY');
+
+  const isLimit = r.orderType === 'LIMIT';
+  const trigger = Number(r.triggerPrice);
+  if (!isLimit && (!Number.isFinite(trigger) || trigger <= 0)) throw new Error('BAD_PRICE');
+
+  return sendDydxOrder({
+    market,
+    type: r.orderType,
+    side: r.side,
+    price,
+    size: qty,
+    triggerPrice: isLimit ? null : trigger,
+    reduceOnly: Boolean(r.reduceOnly),
+    /* The two shapes the venue accepts for an order that has to survive this
+       tab being closed, and nothing else. */
+    timeInForce: isLimit ? 'GTT' : null,
+    goodTilTimeInSeconds: seconds,
+    execution: isLimit ? 'DEFAULT' : 'IOC',
+    /* A boolean, never undefined: LIMIT + GTT throws without one, and a
+       trigger order ignores it. */
+    postOnly: false,
+    memo: isLimit ? 'FBT Swap auto limit order' : 'FBT Swap auto trigger order'
+  });
 }
 
 /*
@@ -630,63 +773,68 @@ export async function placeDydxConditionalOrder({ market, leg }) {
   const orderType = sdk.OrderType[leg.sdkType];
   if (!orderType) throw new Error('BAD_LEG');
   const isSell = leg.side === 'SELL';
-  const clientId = crypto.getRandomValues(new Uint32Array(1))[0];
-  let client;
-  try {
-    client = await ensureDydxClient();
-  } catch {
-    throw new Error('VALIDATOR_UNREACHABLE');
-  }
-  if (!session) throw new Error('NOT_CONNECTED');
-  const { subaccount } = session;
-  const result = await client.placeOrder(
-    subaccount,
-    market.ticker,
-    orderType,
-    isSell ? sdk.OrderSide.SELL : sdk.OrderSide.BUY,
-    limit,
-    qty,
-    clientId,
-    undefined,
-    TPSL_GOOD_TIL_SECONDS,
-    sdk.OrderExecution.IOC,
-    false,
-    true,
-    trigger,
-    market.raw,
-    undefined,
-    undefined,
-    'FBT Swap TP/SL order',
-    undefined,
-    undefined,
-    { builderAddress: DYDX_BUILDER_ADDRESS, feePpm: DYDX_BUILDER_FEE_PPM }
-  );
-  const hash = result?.hash;
-  return {
-    hash: typeof hash === 'string' ? hash : hash?.toString?.() || null,
-    clientId,
-    kind: leg.kind,
-    reduceOnly: true,
+  /* Same conditional tuple the auto-order path uses: no time-in-force (the
+     flags come from the trigger type), IOC execution — the SDK refuses DEFAULT
+     and POST_ONLY for the two market-trigger types — and a mandatory lifetime. */
+  const sent = await sendDydxOrder({
+    market,
+    type: leg.sdkType,
+    side: isSell ? 'sell' : 'buy',
+    price: limit,
+    size: qty,
     triggerPrice: trigger,
-    builderAddress: DYDX_BUILDER_ADDRESS,
-    feePpm: DYDX_BUILDER_FEE_PPM
+    reduceOnly: true,
+    timeInForce: null,
+    goodTilTimeInSeconds: TPSL_GOOD_TIL_SECONDS,
+    execution: 'IOC',
+    postOnly: false,
+    memo: 'FBT Swap TP/SL order'
+  });
+  return {
+    ...sent,
+    kind: leg.kind,
+    triggerPrice: trigger
   };
 }
 
 /**
- * Cancel one untriggered conditional order, signed by the session. The expiry
- * is taken from the order itself so the cancel targets the same stateful order
- * the indexer reported, instead of a freshly computed lifetime.
+ * Cancel one STATEFUL dYdX order — a resting LONG_TERM limit or an
+ * untriggered CONDITIONAL trigger — signed by the session.
+ *
+ * ─── WHY `orderFlags` IS AN ARGUMENT AND NOT A CONSTANT ───────────────────────
+ * A cancel has to name the order it cancels by the same coordinates the order
+ * was placed with, and the SDK refuses a mismatch in both directions
+ * (`CompositeClient.cancelOrder`, pinned 3.4.0):
+ *
+ *   · LONG_TERM / CONDITIONAL — `goodTilTimeInSeconds` must be non-zero AND
+ *     `goodTilBlock` must be EXACTLY 0. Passing `undefined` for the block,
+ *     which is what this function used to do, throws
+ *     'goodTilBlock should be zero since LONG_TERM or CONDITIONAL orders use
+ *     goodTilTimeInSeconds instead of goodTilBlock.' So a cancel of a TP/SL
+ *     order could never have worked, and the button that offered it was a
+ *     button that always failed.
+ *   · SHORT_TERM — the mirror image: a non-zero `goodTilBlock` and no lifetime.
+ *
+ * The expiry is taken from the order the indexer reported rather than computed
+ * fresh, so the cancel targets the same stateful order instead of a lifetime
+ * that no longer matches.
  */
-export async function cancelDydxConditionalOrder({ market, clientId, goodTilBlockTime = null }) {
+export async function cancelDydxOrder({ market, clientId, orderFlags = 'CONDITIONAL', goodTilBlockTime = null, goodTilSeconds = null }) {
   if (!session) throw new Error('NOT_CONNECTED');
   if (!market?.ticker || !market?.raw) throw new Error('BAD_MARKET');
   const id = Number(clientId);
   if (!Number.isInteger(id) || id < 0) throw new Error('BAD_CLIENT_ID');
+
+  const flags = String(orderFlags || 'CONDITIONAL').toUpperCase();
+  if (flags !== 'CONDITIONAL' && flags !== 'LONG_TERM' && flags !== 'SHORT_TERM') {
+    throw new Error('BAD_ORDER_FLAGS');
+  }
+
   const expiryMs = Date.parse(String(goodTilBlockTime || ''));
   const seconds = Number.isFinite(expiryMs)
     ? Math.max(1, Math.round((expiryMs - Date.now()) / 1000))
-    : TPSL_GOOD_TIL_SECONDS;
+    : Math.max(1, Math.round(Number(goodTilSeconds) || TPSL_GOOD_TIL_SECONDS));
+
   const sdk = await loadClient();
   let client;
   try {
@@ -695,14 +843,30 @@ export async function cancelDydxConditionalOrder({ market, clientId, goodTilBloc
     throw new Error('VALIDATOR_UNREACHABLE');
   }
   if (!session) throw new Error('NOT_CONNECTED');
+
+  const stateful = flags !== 'SHORT_TERM';
   const result = await client.cancelOrder(
     session.subaccount,
     id,
-    sdk.OrderFlags.CONDITIONAL,
+    sdk.OrderFlags[flags],
     market.ticker,
-    undefined,
-    seconds
+    /* Exactly 0 for a stateful order, exactly non-zero for a short-term one.
+       Neither may be `undefined` — see the header. */
+    stateful ? 0 : undefined,
+    stateful ? seconds : 0
   );
   const hash = result?.hash;
-  return { hash: typeof hash === 'string' ? hash : hash?.toString?.() || null, clientId: id };
+  return { hash: typeof hash === 'string' ? hash : hash?.toString?.() || null, clientId: id, orderFlags: flags };
+}
+
+/**
+ * Cancel one untriggered conditional order.
+ *
+ * Kept as its own name because the TP/SL card calls it and because the caller
+ * should not have to know that a trigger order is CONDITIONAL-flagged; it is
+ * now a one-line specialisation of `cancelDydxOrder`, which is where the
+ * goodTil rules live.
+ */
+export async function cancelDydxConditionalOrder({ market, clientId, goodTilBlockTime = null }) {
+  return cancelDydxOrder({ market, clientId, orderFlags: 'CONDITIONAL', goodTilBlockTime });
 }

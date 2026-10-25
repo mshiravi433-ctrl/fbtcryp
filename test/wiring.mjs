@@ -15823,5 +15823,107 @@ export default function run() {
       && typeof getAt(en.shop.trustHub, 'badge') === 'string'
       && typeof getAt(fa.shop.trustHub, 'badge') === 'string');
   }
+
+  /* ---- 106. Auto-orders that a PERPETUAL VENUE executes (Phase 0) --------- */
+  /*
+   * «سفارش خودکار» could watch a price or hand a swap to a solver, but on the
+   * two venues where this app already earns a builder fee it could do neither:
+   * the dYdX limit path threw before it ever asked for a signature, and an
+   * Ostium limit or stop order was encoded with a slippage the protocol has
+   * reverted since February 2026. Both were "built" and neither could execute,
+   * which is the exact shape this audit exists to catch.
+   *
+   * What is pinned here is the WIRING, not the arithmetic — the planner's
+   * numbers are asserted in test/perp-auto-orders-units.mjs and the vendor's
+   * own acceptance of our dYdX tuples in test/perp-venue-contract-probe.mjs.
+   */
+  {
+    const page = read('src/pages/Orders.jsx');
+    const panel = read('src/components/orders/PerpAutoOrders.jsx');
+    const planner = read('src/lib/perpOrders.js');
+    const copy = read('src/lib/perpAutoCopy.js');
+    const dydxLib = read('src/lib/dydx.js');
+    const ostiumLib = read('src/lib/ostium.js');
+    const ostiumServer = read('server/futures/adapters/ostium.js');
+
+    t('the auto-orders page mounts the venue section, lazily',
+      /const PerpAutoOrders = lazyRetry\(\(\) => import\('\.\.\/components\/orders\/PerpAutoOrders\.jsx'\)\)/.test(page)
+      && /<Suspense fallback=\{null\}>\s*<PerpAutoOrders lang=\{i18n\?\.language\} \/>/.test(page));
+
+    t('the venue section is mounted exactly once, behind a lazy import',
+      (page.match(/<PerpAutoOrders /g) || []).length === 1
+      && (page.match(/const PerpAutoOrders = lazyRetry/g) || []).length === 1);
+
+    /* Purity: the planner decides what may be signed, so it must not be able to
+       reach the network, a wallet or a timer. It MAY keep records — that is its
+       whole other job — but only through the two guarded storage functions, and
+       it must not hold mutable module state that a second call could trip over. */
+    t('the planner reaches neither the network nor a timer, and keeps no module state',
+      !/fetch\(|setInterval|setTimeout|XMLHttpRequest/.test(planner)
+      && (planner.match(/localStorage\./g) || []).length === 2
+      && !/^let |^var /m.test(planner));
+
+    /* Custody: the venue holds the trigger, so a server-side watch would be a
+       second source of truth AND the beginning of an executor. */
+    t('perp auto-orders are never mirrored to our server watch',
+      !/putWatches|syncWatches|pingWatchTick|\/api\/orders/.test(panel)
+      && !/keeperWatchItem/.test(planner));
+
+    t('the only path to a venue order is the review button — no timer can sign',
+      !/setInterval/.test(panel)
+      && (panel.match(/placeDydxAutoOrder\(/g) || []).length === 1
+      && (panel.match(/buildOpenTrade\(/g) || []).length === 1
+      && (panel.match(/buildCancelLimitOrder\(/g) || []).length === 2);
+
+    t('the section is absent from a build where speculation is off',
+      /SPECULATION_ENABLED/.test(panel) && /if \(!SPECULATION_ENABLED\) return null;/.test(panel));
+
+    /* The two protocol rules whose absence was the bug. */
+    t('a dYdX resting limit is sent as LIMIT + GTT with a lifetime and a boolean postOnly',
+      /timeInForce: isLimit \? 'GTT' : null/.test(dydxLib)
+      && /goodTilTimeInSeconds: seconds/.test(dydxLib)
+      && (dydxLib.match(/postOnly: false\b/g) || []).length >= 4
+      && !/postOnly: undefined|postOnly: isLimit/.test(dydxLib));
+    t('a stateful dYdX cancel sends goodTilBlock as exactly zero',
+      /stateful \? 0 : undefined/.test(dydxLib) && /stateful \? seconds : 0/.test(dydxLib));
+    t('Ostium forces slippageP to zero for every non-market order, in BOTH encoders',
+      /const slippageP = isMarketOrder \? Math\.round\(Number\(slippageBps\)\) : 0;/.test(ostiumLib)
+      && /type === ORDER_TYPE\.market \? Math\.round\(Number\(slippageBps\)\) : 0/.test(ostiumServer));
+    t('a resting Ostium order can be taken back: cancelOpenLimitOrder exists on both sides',
+      /cancelOpenLimitOrder\(uint16 pairIndex,uint8 index\)/.test(ostiumLib)
+      && /cancelOpenLimitOrder\(uint16 pairIndex,uint8 index\)/.test(ostiumServer)
+      && /export async function getOstiumOpenOrders/.test(ostiumLib));
+
+    /* The on-chain slot a cancel needs is the trailing segment of the subgraph
+       id, not the global order counter that overflows a uint8. */
+    t('open Ostium orders are read with the uint8 slot, and a bad shape is refused',
+      /split\('_'\)\.pop\(\)/.test(ostiumLib) && /slot >= 0 && slot <= 255/.test(ostiumLib));
+
+    /* Copy: in-module, both languages, and never a promise of profit. */
+    t('the venue copy lives in one module in Persian and English, not in twelve locale files',
+      /const FA = \{/.test(copy) && /const EN = \{/.test(copy)
+      && /export function perpAutoCopyFor/.test(copy)
+      && !/t\('perp/.test(panel));
+    /* The rule is about what a USER can read, so the audit strips comments
+       first: this file's own header has to be allowed to name the phrases it
+       forbids, or the check would fail for documenting itself. */
+    const shown = copy.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    t('no venue string promises a guaranteed profit, in either language',
+      !/سود تضمینی|درآمد قطعی|ربات پرسود|تضمین سود/.test(shown)
+      && !/guaranteed (profit|return)|sure profit|risk[- ]free/i.test(shown));
+    t('the venue copy states the loss, the signature and what we earn',
+      /از بین ببرد/.test(copy) && /lose part or all/i.test(copy)
+      && /سهم پلتفرم/.test(copy) && /Platform share/i.test(copy));
+    t('a state the venue would not answer is reported as unread, never as open',
+      /stateUnknown/.test(copy) && /feedDown/.test(copy) && /PERP_STATE\.UNKNOWN/.test(panel));
+
+    /* Revenue: the builder fee still rides inside every order we send. */
+    t('every dYdX order carries our builder code, written down once',
+      (dydxLib.match(/\{ builderAddress: DYDX_BUILDER_ADDRESS, feePpm: DYDX_BUILDER_FEE_PPM \}/g) || []).length === 1
+      && (dydxLib.match(/client\.placeOrder\(/g) || []).length === 1);
+    t('the fee preview reports our share and refuses a total it cannot complete',
+      /totalFeeUsd: venueFee == null \? null/.test(planner)
+      && /ourFeePctOfCollateral/.test(planner));
+  }
   return rows;
 }
