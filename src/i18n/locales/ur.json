@@ -652,7 +652,8 @@
       "leader": "24گ کرپٹو لیڈر",
       "laggard": "24گ کرپٹو کم ترین",
       "company": "24گ کمپنی ٹوکن",
-      "event": "مارکیٹ ایونٹ"
+      "event": "مارکیٹ ایونٹ",
+      "volume": "۲۴ گھنٹے میں سب سے زیادہ حجم"
     },
     "marketUnavailable": "لائیو مارکیٹ ڈیٹا دستیاب نہیں ہے",
     "volumeLeader": "24h volume leader",
@@ -3691,7 +3692,7 @@
   },
   "stories": {
     "railTitle": "استوری‌های هوشمند اپلیکیشن",
-    "railBadge": "۱ دقیقه · تعاملی",
+    "railBadge": "FBT خدمات پر ایک نظر",
     "controls": {
       "music": "موسیقی",
       "musicOn": "پخش فعال",

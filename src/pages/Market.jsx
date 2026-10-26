@@ -352,6 +352,29 @@ export default function Market() {
   const breadth = useMemo(() => marketBreadth(universe), [universe]);
 
   /*
+   * ─── «میانگین تغییر» — THE ONE TILE THAT ALWAYS READ 0.00% ──────────────
+   * Reported: «میانگین تغییر همیشه صفر نشون میده». It did, and the reason was
+   * not the formatting: `global.avgChange` was hard-coded to 0 on the
+   * CoinGecko path (that payload is a market-cap aggregate and carries no
+   * per-asset average), and `Number(x) || 0` in the client then published the
+   * missing value as a measurement of exactly zero.
+   *
+   * Two real sources now, in order of authority:
+   *   1. the server's derived average over its cached markets page
+   *      (server/providers.js — same rows, same number, no extra request);
+   *   2. the average over the rows THIS screen is holding, which is what
+   *      «نبض بازار» below already reports.
+   * With neither available the tile prints «—»: an unread average is not 0%.
+   */
+  const liveAvgChange = useMemo(() => {
+    const feedValue = Number.isFinite(Number(global?.avgChange)) && global?.avgChange != null
+      ? Number(global.avgChange)
+      : null;
+    if (feedValue != null) return feedValue;
+    return breadth.counted ? breadth.avgChange : null;
+  }, [global?.avgChange, breadth]);
+
+  /*
    * ─── HOW OLD IS THIS NUMBER? ────────────────────────────────────────────
    * `updatedAt` only changes when a poll SUCCEEDS, so the gap between it and
    * the clock is the feed's real age — not "time since the page opened". The
@@ -651,8 +674,8 @@ export default function Market() {
           />
           <StatTile
             label={t('market.avgChange')}
-            value={fmtPct(global?.avgChange ?? 0, 2)}
-            tone={(global?.avgChange ?? 0) >= 0 ? 'up' : 'down'}
+            value={liveAvgChange == null ? '—' : fmtPct(liveAvgChange, 2)}
+            tone={liveAvgChange == null ? 'cyan' : liveAvgChange >= 0 ? 'up' : 'down'}
             icon={<IconActivity width={14} height={14} />}
           />
         </motion.div>
@@ -791,7 +814,8 @@ export default function Market() {
       {/* ---------- Instagram-style 1-minute App Stories below Bitcoin card ---------- */}
       <MarketStories coins={coins} global={global} />
 
-      <div className="market-signal-promo"><AdBanner slot="signals" /></div>
+      {/* `premium` = the cinematic treatment for this slot only; see AdBanner. */}
+      <div className="market-signal-promo"><AdBanner slot="signals" premium /></div>
 
       {/* ---------- trending ---------- */}
       {trending?.length > 0 && (
@@ -799,7 +823,7 @@ export default function Market() {
           <span className="market-trending-aurora" aria-hidden="true" />
           <p className="section-label market-trending-head">
             <span className="market-trending-flame" aria-hidden="true">
-              <FlameIcon size={15} />
+              <FlameIcon size={24} />
             </span>
             <span className="market-trending-title">{t('market.trending')}</span>
             <span className="market-trending-badge mono">HOT</span>
@@ -1196,12 +1220,15 @@ export default function Market() {
               </div>
             )}
 
-            <motion.div
-              className="stack market-coin-grid"
-              variants={stagger}
-              initial="hidden"
-              animate="show"
-            >
+            {/*
+              NO STAGGERED ENTRANCE ON A 60-ROW LIST.
+              The container used to hand each row a 0.04s delay, so a freshly
+              loaded page kept its lower rows invisible for seconds — read as
+              "the page is black until you scroll back up". Rows now animate
+              themselves (see CoinRow), which keeps the list honest at any
+              length: what has mounted is visible.
+            */}
+            <motion.div className="stack market-coin-grid">
               {visibleList.map((c, i) => {
                 /*
                   ─── ONE TAP, TWO ANSWERS ─────────────────────────────────

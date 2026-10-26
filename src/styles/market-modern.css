@@ -5939,3 +5939,551 @@
   .market-global-card.market-glass-surface { border-radius: 32px; }
   .market-hero-card.market-glass-surface { border-radius: 32px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   14 · MARKET — THIRD PASS (2026-10-26)
+   --------------------------------------------------------------------------
+   Ten observations from the live screen, answered in CSS where the problem was
+   a rule and in components where it was structure. Every block names the
+   report it closes. Budgets are inherited, not re-invented: motion stays on
+   transform/opacity, everything here has a light-theme counterpart, and the
+   `data-lite` half of each rule switches frost and ambient motion off.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 14.1 · THE MARKET RAIL (باکس بالایی) ─────────────────────────────────
+   «داخل باکس قرار دادی کشیده شود بدون چراغ چشمک زن سبز و انگار ریلی هست»
+
+   The element itself is rebuilt in components/Ticker.jsx and index.css. What
+   is left to do HERE is undo the old theme rules that assumed every item was
+   its own bordered pill — without this override, `:root[data-theme='light']
+   .ticker-item` re-paints a white box around every coin and the box-in-a-box
+   look comes straight back in light mode. */
+:root[data-theme='light'] .ticker {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: linear-gradient(180deg, #ffffff, #f4f7fc);
+  box-shadow: inset 0 1px 0 #ffffff, 0 12px 26px -24px rgba(20, 45, 80, 0.55);
+}
+
+:root[data-theme='light'] .ticker-item,
+:root[data-theme='light'] .ticker-promo {
+  border: 0;
+  background: none;
+}
+
+:root[data-theme='light'] .ticker-item:hover,
+:root[data-theme='light'] .ticker-promo:hover { background: rgba(0, 150, 190, 0.08); }
+
+:root[data-theme='light'] .ticker-track > * + *::before { background: rgba(16, 24, 48, 0.1); }
+:root[data-theme='light'] .ticker-sym { color: #101d33; }
+:root[data-theme='light'] .ticker-price { color: #4c6180; }
+:root[data-theme='light'] .ticker-live-text { color: #2f6f8c; }
+:root[data-theme='light'] .ticker-promo-title { color: #101d33; }
+:root[data-theme='light'] .ticker-mark {
+  background: linear-gradient(90deg, rgba(0, 168, 200, 0.1), transparent);
+}
+:root[data-theme='light'] .ticker-mark-bar { background: linear-gradient(180deg, #00a8c8, #6a4ae8); }
+
+/* ── 14.2 · THE BITCOIN BOX: LOGO THAT FILLS ITS TILE ────────────────────
+   «اندازه لوگو بیت کوین کوچیکه و هم اندازه باکس نیست»
+
+   The halo was 52px and the coin inside it was a 34px `.coin-logo` — the
+   list-row default — so two thirds of the tile was padding and the mark read
+   as a sticker on a plate rather than as the asset the card is about. The
+   logo is now laid out against the tile itself (padding instead of a fixed
+   size), so it scales with the box and cannot drift out of step with it. */
+.market-hero-logo-halo {
+  width: 58px;
+  height: 58px;
+  padding: 4px;
+  border-radius: 20px;
+}
+
+.market-hero-logo-halo > .coin-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  border-color: rgba(255, 255, 255, 0.16);
+  background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.14), transparent 62%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.market-hero-logo-halo > .coin-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+:root[data-theme='light'] .market-hero-logo-halo > .coin-logo {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@media (max-width: 430px) {
+  .market-hero-logo-halo { width: 54px; height: 54px; border-radius: 18px; }
+  .market-hero-logo-halo > .coin-logo { border-radius: 14px; }
+}
+
+/* ── 14.3 · «داغ‌ترین‌ها» — a flame that is the size of its tile ──────────
+   «ایکون داغ آتشش اندازه درست داشته باشد و انیمیشنی»
+
+   The glyph was 15px inside a 32px tile: a small orange smudge. It is now
+   26px inside a 38px tile with a breathing halo behind it, so the tile reads
+   as a live flame rather than an icon with a lot of padding. Both the drawn
+   flame (FlameIcon layers) and the halo animate transform/opacity only, and
+   both stop under reduced motion and on the packaged WebView. */
+.market-trending-flame {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 13px;
+  overflow: visible;
+}
+
+.market-trending-flame::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 18px;
+  background: radial-gradient(circle, rgba(255, 140, 40, 0.45), transparent 68%);
+  animation: mk-flame-aura 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.market-trending-flame .flame-svg {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  filter: drop-shadow(0 3px 10px rgba(255, 118, 26, 0.6));
+}
+
+@keyframes mk-flame-aura {
+  0%, 100% { opacity: 0.5; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* ── 14.4 · «سیگنال هوشمند» — the premium banner ─────────────────────────
+   «بنر سیگنال هوشمند را مدرن‌ترش کن»
+
+   Same banner component, same slot, same copy — the structure is retuned
+   where it is cheap. Kept deliberately scoped to `.market-signal-promo` so
+   the eight other screens that mount AdBanner are untouched: a banner that
+   shouts on every screen is wallpaper.
+
+   Layers, back to front: a rotating conic radar, a technical grid, a vertical
+   scan sweep (the "instrument" cue), the artwork with a radar blip, then copy
+   and CTA. Only transform/opacity animate. */
+.market-signal-promo .ad-banner.ad-banner--premium {
+  position: relative;
+  min-height: 104px;
+  padding: 17px 16px !important;
+  border-radius: 24px !important;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--ad-a) 44%, rgba(255, 255, 255, 0.14));
+  background:
+    radial-gradient(90% 150% at 100% 0%, color-mix(in srgb, var(--ad-a) 26%, transparent), transparent 62%),
+    radial-gradient(80% 140% at 0% 110%, color-mix(in srgb, var(--ad-b) 18%, transparent), transparent 62%),
+    linear-gradient(126deg, rgba(20, 12, 42, 0.94), rgba(9, 13, 28, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 26px 56px -32px var(--ad-a);
+}
+
+.market-signal-promo .ad-banner--premium::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -120%;
+  bottom: -120%;
+  inset-inline-end: -16%;
+  width: 58%;
+  border-radius: 50%;
+  opacity: 0.6;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--ad-a) 60%, transparent) 70deg,
+    transparent 150deg,
+    color-mix(in srgb, var(--ad-b) 55%, transparent) 240deg,
+    transparent 330deg
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  animation: mk-spin 20s linear infinite;
+}
+
+.market-signal-promo .ad-banner--premium::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(130% 140% at 100% 0%, #000 6%, transparent 68%);
+  mask-image: radial-gradient(130% 140% at 100% 0%, #000 6%, transparent 68%);
+}
+
+/* The scan: one soft band travelling down the panel. Reads as "this is being
+   measured", which is the whole claim of a signals product. */
+.market-signal-promo .ad-scan {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 42%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--ad-a) 26%, transparent) 52%,
+    transparent 100%
+  );
+  animation: mk-scan-y 5.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes mk-scan-y {
+  0% { transform: translate3d(0, -130%, 0); }
+  60%, 100% { transform: translate3d(0, 260%, 0); }
+}
+
+/* Everything except the two absolutely-positioned overlays: `> *` alone would
+   have pulled the scan band and the shine sweep back into normal flow. */
+.market-signal-promo .ad-banner--premium > *:not(.ad-scan):not(.ad-shine) {
+  position: relative;
+  z-index: 1;
+}
+
+.market-signal-promo .ad-banner--premium .ad-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.market-signal-promo .ad-banner--premium .ad-art {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  border-radius: 19px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.2), transparent 58%),
+    linear-gradient(145deg, color-mix(in srgb, var(--ad-a) 26%, transparent), color-mix(in srgb, var(--ad-b) 16%, transparent));
+  border: 1px solid color-mix(in srgb, var(--ad-a) 40%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 14px 30px -14px var(--ad-a);
+}
+
+.market-signal-promo .ad-banner--premium .ad-art svg {
+  width: 44px;
+  height: 44px;
+}
+
+/* Radar blip: a single dot leaving the centre of the art. */
+.market-signal-promo .ad-art-blip {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px;
+  border-radius: 50%;
+  background: var(--ad-a);
+  box-shadow: 0 0 12px var(--ad-a);
+  animation: mk-blip 3.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes mk-blip {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.4); }
+  14% { opacity: 1; }
+  70% { opacity: 0.85; }
+  100% { opacity: 0; transform: translate3d(15px, -14px, 0) scale(0.25); }
+}
+
+.market-signal-promo .ad-banner--premium .ad-copy { display: block; }
+
+.market-signal-promo .ad-banner--premium .ad-title {
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.012em;
+  color: var(--text-1);
+}
+
+.market-signal-promo .ad-banner--premium .ad-copy-sub {
+  margin-top: 3px !important;
+  font-size: 11.5px !important;
+  line-height: 1.7;
+  color: var(--text-3) !important;
+}
+
+.market-signal-promo .ad-banner--premium .ad-cta {
+  padding: 9px 15px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 900;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ad-a), var(--ad-b));
+  border: 0;
+  box-shadow: 0 12px 26px -12px var(--ad-a), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.market-signal-promo .ad-banner--premium:hover .ad-cta { transform: translateX(-2px); }
+[dir='rtl'] .market-signal-promo .ad-banner--premium:hover .ad-cta { transform: translateX(2px); }
+
+:root[data-theme='light'] .market-signal-promo .ad-banner.ad-banner--premium {
+  background:
+    radial-gradient(90% 150% at 100% 0%, color-mix(in srgb, var(--ad-a) 12%, transparent), transparent 62%),
+    linear-gradient(126deg, #ffffff, #f3f7fd);
+  box-shadow: inset 0 1px 0 #ffffff, 0 18px 40px -28px rgba(20, 45, 80, 0.4);
+}
+
+:root[data-theme='light'] .market-signal-promo .ad-banner--premium .ad-title { color: #0d1a30; }
+:root[data-theme='light'] .market-signal-promo .ad-banner--premium .ad-copy-sub { color: #5a6b86 !important; }
+:root[data-theme='light'] .market-signal-promo .ad-banner--premium .ad-cta { color: #fff; }
+
+/* The rail badge now carries a sentence instead of a spec sheet, so it has to
+   be able to give way to the section title on a narrow phone. */
+.market-stories-badge {
+  max-width: 58%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 14.5 · «نبض بازار» — a real instrument, not a progress bar ───────────
+   «نبض بازار را باکسش خیلی مدرن تر کن»
+
+   Same numbers, same honesty rules (counts, not a score; the note names how
+   many coins were counted). What changes is that the card now reads as one
+   panel: a lit header, the average as a tone-coloured pill, a bar with depth,
+   and legend entries as chips instead of loose text. */
+.market-breadth {
+  position: relative;
+  overflow: hidden;
+  padding: 15px 16px 13px;
+  border-radius: 20px;
+  gap: 9px;
+  border: 1px solid rgba(140, 175, 220, 0.16);
+  background:
+    radial-gradient(120% 170% at 100% 0%, rgba(56, 225, 255, 0.11), transparent 56%),
+    radial-gradient(90% 140% at 0% 120%, rgba(255, 80, 140, 0.09), transparent 60%),
+    linear-gradient(152deg, rgba(255, 255, 255, 0.062), rgba(255, 255, 255, 0.012) 62%),
+    rgba(9, 13, 26, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 18px 40px -32px rgba(2, 6, 18, 0.95);
+}
+
+/* A single specular hairline, the same device the glass cards use. */
+.market-breadth::before {
+  content: '';
+  position: absolute;
+  inset-inline: 12%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(160, 225, 255, 0.55), transparent);
+  pointer-events: none;
+}
+
+.market-breadth > * { position: relative; z-index: 1; }
+
+.market-breadth-head { align-items: center; gap: 10px; }
+
+.market-breadth-mark {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  border-radius: 9px;
+  color: var(--mk-cyan);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.2), transparent 58%),
+    linear-gradient(145deg, rgba(56, 225, 255, 0.24), rgba(139, 123, 255, 0.12));
+  border: 1px solid rgba(56, 225, 255, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 8px 18px -10px rgba(56, 225, 255, 0.8);
+}
+
+.market-breadth-title {
+  font-size: 12.5px;
+  font-weight: 900;
+  letter-spacing: -0.008em;
+  color: var(--text-1);
+}
+
+.market-breadth-avg {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.market-breadth-avg[data-tone='up'] {
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 13%, transparent);
+  border-color: color-mix(in srgb, var(--up) 30%, transparent);
+}
+
+.market-breadth-avg[data-tone='down'] {
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 13%, transparent);
+  border-color: color-mix(in srgb, var(--down) 30%, transparent);
+}
+
+.market-breadth-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.market-breadth-seg.is-up { background: linear-gradient(90deg, rgba(47, 230, 168, 0.35), var(--mk-emerald)); }
+.market-breadth-seg.is-down { background: linear-gradient(90deg, var(--mk-rose), rgba(255, 122, 184, 0.35)); }
+
+.market-breadth-legend { gap: 6px 7px; margin-top: 1px; }
+
+.market-breadth-item {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.market-breadth-item i { box-shadow: 0 0 8px color-mix(in srgb, var(--tone) 70%, transparent); }
+
+.market-breadth-item[data-tone='unknown'] {
+  border-color: transparent;
+  background: transparent;
+}
+
+.market-breadth-note { font-size: 10px; color: var(--text-3); }
+
+:root[data-theme='light'] .market-breadth {
+  border-color: rgba(16, 24, 48, 0.1);
+  background:
+    radial-gradient(120% 170% at 100% 0%, rgba(0, 168, 200, 0.09), transparent 56%),
+    linear-gradient(152deg, #ffffff, rgba(243, 247, 253, 0.94));
+  box-shadow: inset 0 1px 0 #ffffff, 0 14px 32px -28px rgba(20, 45, 80, 0.45);
+}
+
+:root[data-theme='light'] .market-breadth::before { background: linear-gradient(90deg, transparent, rgba(0, 150, 190, 0.35), transparent); }
+:root[data-theme='light'] .market-breadth-mark { color: #00728f; background: linear-gradient(145deg, rgba(0, 168, 200, 0.16), rgba(106, 74, 232, 0.1)); border-color: rgba(0, 168, 200, 0.28); }
+:root[data-theme='light'] .market-breadth-title { color: #0d1a30; }
+:root[data-theme='light'] .market-breadth-avg { background: rgba(16, 24, 48, 0.05); border-color: rgba(16, 24, 48, 0.1); }
+:root[data-theme='light'] .market-breadth-item { background: rgba(16, 24, 48, 0.04); border-color: rgba(16, 24, 48, 0.08); }
+:root[data-theme='light'] .market-breadth-bar { background: rgba(16, 24, 48, 0.08); border-color: rgba(16, 24, 48, 0.08); box-shadow: none; }
+
+/* ── 14.6 · TOKEN ROW: the chart can never enter the name ────────────────
+   «در باکس توکن گاهی نمودار میره داخل اسم توکن اندازش را درست کن»
+
+   The SVG was 58px wide in a 52px column with `overflow: visible`, and its
+   stroke carried a drop-shadow that paints outside the box. Both escapes are
+   closed here: the column clips, the SVG is block-level, and the name keeps
+   the remaining width with its ellipsis intact. */
+.market-coin-row .coin-row-spark {
+  width: 52px;
+  flex: 0 0 52px;
+  overflow: hidden;
+  align-items: center;
+  opacity: 0.88;
+}
+
+.market-coin-row .coin-row-spark svg {
+  display: block;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+
+.market-coin-row .coin-row-open { min-width: 0; }
+.market-coin-row .coin-meta { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 380px) {
+  .market-coin-row .coin-row-spark { display: none; }
+}
+
+/* ── 14.7 · SCROLLING WAS BLACK / BROKEN — paint budget ──────────────────
+   «وقتی اسکرول می‌کنی پایین یا بالا تا زمانی صفحه سیاهه و لود نمی‌شه یا بهم
+   ریخته می‌شه»
+
+   Three separate causes, all fixed here:
+
+   1. `content-visibility: auto` on every row. It was added to skip layout for
+      off-screen rows, but combined with `contain-intrinsic-size: auto 58px`
+      against rows that are taller than 58px it made the scroll height shift as
+      rows entered the viewport — the "بهم ریخته" jump — and Chromium will not
+      paint descendants that use backdrop-filter inside a skipped subtree,
+      which shows up as blank boxes mid-list. The rows now lay out normally; the
+      list renders 60 at a time, which was always the real budget.
+   2. A `backdrop-filter` of 18-28px on every large card, on top of an animated
+      background. On a mid-range phone that is several full-width blurred
+      samples per frame while scrolling. Radii are cut roughly in half: the
+      glass still reads as glass, at a fraction of the per-frame cost.
+   3. Sixty blurred drop-shadows for the row sparklines (see Sparkline `glow`),
+      now off — the path is still drawn and animated, it just isn't rasterised
+      through a blur filter sixty times. */
+.market-coin-grid > .market-coin-row {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
+.market-glass-surface,
+.market-cmd,
+.market-stories-section,
+.market-trending,
+.market-breadth {
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+}
+
+.market-signal-promo .ad-banner {
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+}
+
+/* The packaged app / installed PWA / low-memory device: no frost at all. Opaque
+   gradients in the same palette are indistinguishable at a glance and cost
+   nothing to scroll. */
+:root[data-lite='true'] .market-glass-surface,
+:root[data-lite='true'] .market-cmd,
+:root[data-lite='true'] .market-stories-section,
+:root[data-lite='true'] .market-trending,
+:root[data-lite='true'] .market-breadth,
+:root[data-lite='true'] .market-signal-promo .ad-banner,
+:root[data-lite='true'] .ticker {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-lite='true'] .market-glass-surface,
+:root[data-lite='true'] .market-stories-section,
+:root[data-lite='true'] .market-trending,
+:root[data-lite='true'] .market-breadth { background-color: rgba(9, 13, 26, 0.94); }
+
+:root[data-lite='true'] .market-stories-section,
+:root[data-lite='true'] .market-trending,
+:root[data-lite='true'] .market-breadth { background-color: rgba(10, 14, 27, 0.94); }
+
+/* ── 14.8 · MOTION / LITE GUARDS FOR EVERYTHING ADDED ABOVE ─────────────── */
+:root[data-lite='true'] .market-trending-flame::before,
+:root[data-lite='true'] .market-signal-promo .ad-scan,
+:root[data-lite='true'] .market-signal-promo .ad-art-blip,
+:root[data-lite='true'] .market-signal-promo .ad-banner--premium::before {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-trending-flame::before,
+  .market-signal-promo .ad-scan,
+  .market-signal-promo .ad-art-blip,
+  .market-signal-promo .ad-banner--premium::before { animation: none !important; }
+  .market-breadth-seg { transition: none !important; }
+}

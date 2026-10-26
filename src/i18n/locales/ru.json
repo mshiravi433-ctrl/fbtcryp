@@ -649,7 +649,8 @@
       "leader": "Лидер крипто 24 ч",
       "laggard": "Аутсайдер крипто 24 ч",
       "company": "Токен компании 24 ч",
-      "event": "Событие рынка"
+      "event": "Событие рынка",
+      "volume": "Лидер по объёму за 24 ч"
     },
     "marketUnavailable": "Рыночные данные в реальном времени недоступны",
     "volumeLeader": "24h volume leader",
@@ -3699,7 +3700,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "Краткий обзор сервисов FBT",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",

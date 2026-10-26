@@ -649,7 +649,8 @@
       "leader": "24s kripto lideri",
       "laggard": "24s kripto gerileyeni",
       "company": "24s şirket tokeni",
-      "event": "Piyasa olayı"
+      "event": "Piyasa olayı",
+      "volume": "24 saatte en yüksek hacim"
     },
     "marketUnavailable": "Canlı piyasa verisi kullanılamıyor",
     "volumeLeader": "24h volume leader",
@@ -3695,7 +3696,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "FBT hizmetlerine hızlı bakış",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",

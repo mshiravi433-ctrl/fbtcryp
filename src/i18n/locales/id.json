@@ -649,7 +649,8 @@
       "leader": "Pemimpin kripto 24j",
       "laggard": "Kripto terendah 24j",
       "company": "Token perusahaan 24j",
-      "event": "Peristiwa pasar"
+      "event": "Peristiwa pasar",
+      "volume": "Volume 24 jam tertinggi"
     },
     "marketUnavailable": "Data pasar live tidak tersedia",
     "volumeLeader": "24h volume leader",
@@ -3695,7 +3696,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "Sekilas layanan FBT",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",

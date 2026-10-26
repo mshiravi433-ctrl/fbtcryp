@@ -8644,7 +8644,8 @@
       "leader": "24h crypto leader",
       "laggard": "24h crypto laggard",
       "company": "24h company token",
-      "event": "Market event"
+      "event": "Market event",
+      "volume": "Top asset by 24h volume"
     },
     "marketUnavailable": "Live market data unavailable",
     "marketCapSource": "Live market cap of top assets",
@@ -16544,7 +16545,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Cinematic · Interactive",
+    "railBadge": "A quick look at FBT services",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",

@@ -649,7 +649,8 @@
       "leader": "24घं क्रिप्टो लीडर",
       "laggard": "24घं क्रिप्टो लैगार्ड",
       "company": "24घं कंपनी टोकन",
-      "event": "मार्केट इवेंट"
+      "event": "मार्केट इवेंट",
+      "volume": "24 घंटे में सर्वाधिक वॉल्यूम"
     },
     "marketUnavailable": "लाइव बाज़ार डेटा उपलब्ध नहीं है",
     "volumeLeader": "24h volume leader",
@@ -3697,7 +3698,7 @@
   },
   "stories": {
     "railTitle": "App Interactive Stories",
-    "railBadge": "1 min · Live & Audio",
+    "railBadge": "FBT सेवाओं पर एक नज़र",
     "controls": {
       "music": "Music",
       "musicOn": "Playing",
