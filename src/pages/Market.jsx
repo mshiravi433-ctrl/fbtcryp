@@ -3,7 +3,16 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import { IconChart, IconRefresh, IconSearch, IconStar, IconTrend, IconX } from '../components/Icons';
+import {
+  IconActivity,
+  IconChart,
+  IconGlobe,
+  IconRefresh,
+  IconSearch,
+  IconStar,
+  IconX
+} from '../components/Icons';
+import FlameIcon from '../components/FlameIcon';
 import AdBanner from '../components/AdBanner';
 import Ticker from '../components/Ticker';
 import CoinRow from '../components/CoinRow';
@@ -58,13 +67,16 @@ const MARKET_PAGE_SIZE = 500;
  */
 const SECTORS = Object.keys(MARKET_CATEGORIES);
 
-function StatTile({ label, value, sub, tone }) {
+function StatTile({ label, value, sub, tone, icon }) {
   return (
-    <motion.div className="card card-tight market-stat-tile" variants={riseIn}>
-      <div className="faint" style={{ marginBottom: 4 }}>{label}</div>
-      <div className="stat-mini" style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+    <motion.div className="card card-tight market-stat-tile" variants={riseIn} data-tone={tone ?? 'cyan'}>
+      <div className="market-stat-tile-top">
+        <span className="market-stat-tile-ico" aria-hidden="true">{icon}</span>
+        <div className="faint market-stat-tile-label">{label}</div>
+      </div>
+      <div className="stat-mini market-stat-tile-val" style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       {sub != null && (
-        <div className={`mono ${tone === 'up' ? 'up' : tone === 'down' ? 'down' : ''}`} style={{ fontSize: 10.5, marginTop: 2 }}>
+        <div className={`mono market-stat-tile-sub ${tone === 'up' ? 'up' : tone === 'down' ? 'down' : ''}`}>
           {sub}
         </div>
       )}
@@ -509,6 +521,7 @@ export default function Market() {
           <span className="market-glass-aurora" aria-hidden="true">
             <i className="market-glass-bloom market-glass-bloom--a" />
             <i className="market-glass-bloom market-glass-bloom--b" />
+            <i className="market-glass-conic market-glass-conic--global" />
             <i className="market-glass-grid" />
             <i className="market-glass-sheen" />
           </span>
@@ -519,7 +532,12 @@ export default function Market() {
                 <span className="market-live-dot" aria-hidden="true" />
                 <span>{t('market.livePrices')}</span>
               </div>
-              <div className="market-global-label">{t('market.totalMcap')}</div>
+              <div className="market-global-label-row">
+                <span className="market-global-mark" aria-hidden="true">
+                  <IconGlobe width={15} height={15} />
+                </span>
+                <div className="market-global-label">{t('market.totalMcap')}</div>
+              </div>
               <div className="market-global-value-wrap">
                 <div className="stat-value market-global-value">
                   <AnimatedNumber value={global?.mcap ?? 0} format={(v) => fmtCompact(v)} flash={false} />
@@ -619,12 +637,23 @@ export default function Market() {
         </motion.section>
 
         <motion.div className="grid-3 market-stat-grid" variants={stagger} initial="hidden" animate="show">
-          <StatTile label={t('market.coins')} value={fmtNum(global?.coins ?? 0)} />
-          <StatTile label={t('market.markets')} value={fmtNum(global?.markets ?? 0)} />
+          <StatTile
+            label={t('market.coins')}
+            value={fmtNum(global?.coins ?? 0)}
+            tone="cyan"
+            icon={<IconGlobe width={14} height={14} />}
+          />
+          <StatTile
+            label={t('market.markets')}
+            value={fmtNum(global?.markets ?? 0)}
+            tone="violet"
+            icon={<IconChart width={14} height={14} />}
+          />
           <StatTile
             label={t('market.avgChange')}
             value={fmtPct(global?.avgChange ?? 0, 2)}
             tone={(global?.avgChange ?? 0) >= 0 ? 'up' : 'down'}
+            icon={<IconActivity width={14} height={14} />}
           />
         </motion.div>
 
@@ -663,6 +692,7 @@ export default function Market() {
             <span className="market-glass-aurora market-glass-aurora--hero" aria-hidden="true">
               <i className="market-glass-bloom market-glass-bloom--a" />
               <i className="market-glass-bloom market-glass-bloom--b" />
+              <i className="market-glass-conic market-glass-conic--hero" />
               <i className="market-glass-grid" />
               <i className="market-glass-sheen" />
             </span>
@@ -670,6 +700,8 @@ export default function Market() {
             <div className="market-hero-top">
               <div className="market-hero-identity">
                 <div className="market-hero-logo-halo">
+                  <span className="market-hero-orbit" aria-hidden="true" />
+                  <span className="market-hero-orbit market-hero-orbit--rev" aria-hidden="true" />
                   <CoinLogo coin={hero} />
                   <span className="market-hero-rank-badge mono">#{hero.rank || 1}</span>
                 </div>
@@ -764,26 +796,31 @@ export default function Market() {
       {/* ---------- trending ---------- */}
       {trending?.length > 0 && (
         <section className="market-trending">
-          <p className="section-label">
-            <IconTrend width={14} height={14} aria-hidden="true" />
-            {t('market.trending')}
+          <span className="market-trending-aurora" aria-hidden="true" />
+          <p className="section-label market-trending-head">
+            <span className="market-trending-flame" aria-hidden="true">
+              <FlameIcon size={15} />
+            </span>
+            <span className="market-trending-title">{t('market.trending')}</span>
+            <span className="market-trending-badge mono">HOT</span>
           </p>
-          <div className="tag-scroll" style={{ marginTop: 8 }}>
-            {trending.map((c) => (
+          <div className="tag-scroll market-trending-rail">
+            {trending.map((c, i) => (
               <motion.button
                 key={c.id}
                 className="tag market-trending-chip"
                 whileTap={{ scale: 0.94 }}
                 onClick={() => navigate(`/coin/${c.id}`)}
               >
-                <CoinLogo
-                  coin={c}
-                  size="thumb"
-                  px={14}
-                  className="coin-chip"
-                  style={{ marginInlineEnd: 5, verticalAlign: -2 }}
-                />
-                {c.symbol}
+                <span className="market-trending-rank mono">{i + 1}</span>
+                <span className="market-trending-logo">
+                  <CoinLogo coin={c} size="thumb" px={28} />
+                </span>
+                <span className="market-trending-txt">
+                  <b>{c.symbol}</b>
+                  <small>{c.name}</small>
+                </span>
+                <span className="market-trending-go" aria-hidden="true" />
               </motion.button>
             ))}
           </div>
@@ -803,7 +840,7 @@ export default function Market() {
            jobs: find (search), order (views + sort) and narrow (sectors,
            deliberately its own row because tapping one issues a request).
 
-        2. THE CONTROLS FLOAT. Search and sort remain anchored to the list
+        2. THE CONTROLS NEVER FLOAT. Search and sort stay anchored to the list
            header in normal document flow, never overlapping or obscuring rows.
 
         3. NOTHING SAID HOW THE MARKET WAS DOING. Six numbers about right now
@@ -872,10 +909,14 @@ export default function Market() {
           </div>
         </div>
 
-        {/* ---------- the command bar: find · order ---------- */}
+        {/* ---------- the command bar: find · order ----------
+            Anchored in normal document flow: this block never becomes a
+            floating overlay, so it can never cover a token row. */}
         <div className="market-cmd">
           <div className="market-search">
-            <IconSearch className="market-search-icon" width={16} height={16} aria-hidden="true" />
+            <span className="market-search-ico" aria-hidden="true">
+              <IconSearch className="market-search-icon" width={15} height={15} />
+            </span>
             <input
               id="market-coin-search"
               className="market-search-input"
@@ -895,7 +936,7 @@ export default function Market() {
                 onClick={() => setQuery('')}
                 aria-label={t('market.clearSearch')}
               >
-                <IconX width={14} height={14} aria-hidden="true" />
+                <IconX width={13} height={13} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -955,6 +996,10 @@ export default function Market() {
                     if (next != null) { event.preventDefault(); options[next]?.focus(); }
                   }}
                 >
+                  <span className="market-sort-popover-caret" aria-hidden="true" />
+                  <div className="market-sort-popover-head mono">
+                    {t('market.sortTitle', { defaultValue: t('market.sortAria') })}
+                  </div>
                   {MARKET_SORTS.map((key) => (
                     <button
                       type="button"
@@ -964,7 +1009,8 @@ export default function Market() {
                       key={key}
                       onClick={() => { chooseSort(key); setSortOpen(false); }}
                     >
-                      <span>{t(`market.sort.${key}`)}</span>
+                      <span className="market-sort-option-dot" aria-hidden="true" />
+                      <span className="market-sort-option-label">{t(`market.sort.${key}`)}</span>
                       {sortKey === key && <span className="market-sort-check" aria-hidden="true">✓</span>}
                     </button>
                   ))}
@@ -992,7 +1038,12 @@ export default function Market() {
           data-testid="market-breadth"
         >
           <div className="market-breadth-head">
-            <span className="market-breadth-title">{t('market.breadthTitle')}</span>
+            <span className="market-breadth-title-wrap">
+              <span className="market-breadth-mark" aria-hidden="true">
+                <IconActivity width={13} height={13} />
+              </span>
+              <span className="market-breadth-title">{t('market.breadthTitle')}</span>
+            </span>
             <span
               className="market-breadth-avg mono"
               data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
@@ -1061,8 +1112,10 @@ export default function Market() {
                   setSector(sector === sec ? null : sec);
                 }}
               >
-                <SectorGlyph sector={sec} />
-                {t(`market.sector.${sec}`)}
+                <span className="market-sector-ico" aria-hidden="true">
+                  <SectorGlyph sector={sec} />
+                </span>
+                <span className="market-sector-txt">{t(`market.sector.${sec}`)}</span>
               </button>
             ))}
           </div>

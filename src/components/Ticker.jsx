@@ -138,11 +138,17 @@ export default function Ticker({ coins = [] }) {
 
   return (
     <div className="ticker" aria-label={t('market.livePrices', { defaultValue: 'قیمت‌های زنده بازار' })} dir="ltr">
-      <div className="ticker-track">
-        {sequence.map((item, i) => renderItem(item, `t1-${i}`))}
-      </div>
-      <div className="ticker-track" aria-hidden="true">
-        {sequence.map((item, i) => renderItem(item, `t2-${i}`))}
+      <span className="ticker-live-badge">
+        <span className="ticker-live-dot" aria-hidden="true" />
+        <span className="ticker-live-text mono">LIVE</span>
+      </span>
+      <div className="ticker-viewport">
+        <div className="ticker-track">
+          {sequence.map((item, i) => renderItem(item, `t1-${i}`))}
+        </div>
+        <div className="ticker-track" aria-hidden="true">
+          {sequence.map((item, i) => renderItem(item, `t2-${i}`))}
+        </div>
       </div>
     </div>
   );

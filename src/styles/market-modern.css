@@ -4246,8 +4246,7 @@
   .market-compare,
   .market-view,
   .market-dir,
-  .market-sector,
-  .coin-row-star {
+  .market-sector {
     transition: none !important;
   }
   .market-fresh i,
@@ -4328,3 +4327,1615 @@
 :root[data-theme='light'] .market-hero-card.market-glass-surface::after { opacity:.24; }
 @media (max-width:380px) { .market-coin-row .coin-right { min-width:78px; } .market-coin-row .coin-row-open { gap:7px; } .market-coin-row .coin-price { font-size:11px; } }
 @media (prefers-reduced-motion:reduce) { .market-hero-card.market-glass-surface::after { animation:none; } .market-sort-popover { animation:none; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13 · MARKET 2026 PREMIUM OVERHAUL
+   --------------------------------------------------------------------------
+   The screen a trader sees first, rebuilt around one idea: every surface is
+   frosted glass with light moving INSIDE it, never a sticker dropped on top.
+   Rules inherited from section 1 still hold: one accent per surface, motion
+   on transform/opacity only, glass is disabled on native WebViews, and every
+   surface has an explicit light-theme counterpart below.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 13.0 · shared keyframes (compositor-only) ──────────────────────────── */
+@keyframes mk-spin { to { transform: rotate(360deg); } }
+@keyframes mk-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes mk-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes mk-sheen-x {
+  0% { transform: translateX(-120%); }
+  60%, 100% { transform: translateX(220%); }
+}
+@keyframes mk-ring-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.34); }
+  70% { box-shadow: 0 0 0 7px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+@keyframes mk-pop-v2 {
+  from { opacity: 0; transform: translateY(-6px) scale(0.965); filter: blur(6px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* ── 13.1 · rotating conic light inside the glass cards ─────────────────── */
+.market-glass-conic {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+  opacity: 0.5;
+  filter: blur(10px);
+  animation: mk-spin 24s linear infinite;
+}
+
+.market-glass-conic--global {
+  width: 62%;
+  aspect-ratio: 1;
+  top: -30%;
+  inset-inline-end: -14%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(56, 225, 255, 0.34) 70deg,
+    transparent 150deg,
+    rgba(139, 123, 255, 0.3) 235deg,
+    transparent 320deg
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+}
+
+.market-glass-conic--hero {
+  width: 70%;
+  aspect-ratio: 1;
+  top: -34%;
+  inset-inline-start: -18%;
+  opacity: 0.42;
+  animation-duration: 30s;
+  animation-direction: reverse;
+  background: conic-gradient(
+    from 40deg,
+    transparent 0deg,
+    rgba(247, 169, 60, 0.4) 80deg,
+    transparent 160deg,
+    rgba(255, 122, 69, 0.32) 250deg,
+    transparent 330deg
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+}
+
+/* ── 13.2 · TOTAL MARKET CAP — the flagship surface ─────────────────────── */
+.market-global-card.market-glass-surface {
+  border-radius: 30px;
+  padding: 22px 19px 18px;
+  border-color: rgba(126, 196, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32),
+    0 30px 70px -38px rgba(14, 160, 220, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.market-global-kicker {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.market-global-label-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 4px;
+}
+
+.market-global-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 11px;
+  color: var(--mk-cyan);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.2), transparent 60%),
+    linear-gradient(145deg, rgba(56, 225, 255, 0.24), rgba(139, 123, 255, 0.12));
+  border: 1px solid rgba(56, 225, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 8px 20px -10px rgba(56, 225, 255, 0.8);
+}
+
+.market-global-label { margin-bottom: 0; }
+
+.market-global-value {
+  background-image: linear-gradient(102deg, #ffffff 4%, #cdf4ff 30%, #bdaeff 58%, #ffffff 88%);
+  background-size: 220% 100%;
+  animation: mk-shimmer 7s ease-in-out infinite;
+}
+
+.market-metric-pod {
+  border-radius: 17px;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s ease;
+}
+
+.market-metric-pod:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tone) 38%, transparent);
+}
+
+.market-metric-pod::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(90% 120% at 50% 0%, color-mix(in srgb, var(--tone) 12%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.market-dominance-bar {
+  height: 10px;
+  position: relative;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.market-dominance-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.34) 50%, transparent 78%);
+  transform: translateX(-120%);
+  animation: mk-sheen-x 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.market-trend-glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* ── 13.3 · stat tiles (coins / markets / average change) ───────────────── */
+.market-stat-tile {
+  border-radius: 22px;
+  padding: 14px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.22s ease;
+}
+
+.market-stat-tile::before {
+  content: '';
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  top: -64px;
+  inset-inline-end: -42px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tile-tone, rgba(56, 225, 255, 0.22)), transparent 68%);
+  pointer-events: none;
+}
+
+.market-stat-tile[data-tone='cyan'] { --tile-tone: rgba(56, 225, 255, 0.24); --tile-ico: var(--mk-cyan); }
+.market-stat-tile[data-tone='violet'] { --tile-tone: rgba(139, 123, 255, 0.24); --tile-ico: var(--mk-violet); }
+.market-stat-tile[data-tone='up'] { --tile-tone: rgba(47, 230, 168, 0.22); --tile-ico: var(--mk-emerald); }
+.market-stat-tile[data-tone='down'] { --tile-tone: rgba(255, 77, 109, 0.22); --tile-ico: var(--down, #ff4d6d); }
+
+.market-stat-tile:hover { transform: translateY(-3px); }
+
+.market-stat-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.market-stat-tile-ico {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 10px;
+  color: var(--tile-ico, var(--mk-cyan));
+  background: color-mix(in srgb, var(--tile-ico, var(--mk-cyan)) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tile-ico, var(--mk-cyan)) 28%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.market-stat-tile-label { margin: 0; font-size: 10.5px; }
+.market-stat-tile-val { font-size: 19px; font-weight: 900; letter-spacing: -0.02em; }
+.market-stat-tile-sub { font-size: 10.5px; margin-top: 3px; font-weight: 800; }
+
+/* ── 13.4 · BITCOIN HERO — gold glass, orbiting coin, living price ──────── */
+.market-hero-card.market-glass-surface {
+  border-radius: 30px;
+  padding: 22px 19px 17px;
+  border-color: rgba(247, 169, 60, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 226, 178, 0.26),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32),
+    0 30px 68px -32px rgba(247, 147, 26, 0.48);
+}
+
+.market-hero-logo-halo {
+  width: 56px;
+  height: 56px;
+  border-radius: 19px;
+  isolation: isolate;
+  animation: mk-float 5.6s ease-in-out infinite;
+}
+
+.market-hero-logo-halo > *:not(.market-hero-orbit) {
+  position: relative;
+  z-index: 2;
+}
+
+/* Two counter-rotating orbits make the coin feel like a small system. */
+.market-hero-orbit {
+  position: absolute;
+  z-index: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.market-hero-orbit:first-of-type {
+  inset: -7px;
+  border: 1px dashed rgba(247, 169, 60, 0.55);
+  animation: mk-spin 13s linear infinite;
+}
+
+.market-hero-orbit--rev {
+  inset: -12px;
+  border: 1px solid rgba(255, 209, 102, 0.22);
+  animation: mk-spin 9s linear infinite reverse;
+}
+
+.market-hero-orbit--rev::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 50%;
+  width: 5px;
+  height: 5px;
+  margin-inline-start: -2.5px;
+  border-radius: 50%;
+  background: var(--mk-gold);
+  box-shadow: 0 0 10px rgba(247, 169, 60, 0.95);
+}
+
+.market-hero-title {
+  font-size: 18px;
+  background: linear-gradient(96deg, #ffffff 20%, #ffe3b3 78%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.market-hero-pair-pill {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.market-hero-price {
+  background: linear-gradient(96deg, #fff 10%, #ffe0ae 60%, #ffc36d 95%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 18px rgba(247, 169, 60, 0.32));
+  animation: mk-shimmer 6.5s ease-in-out infinite;
+}
+
+.market-hero-range {
+  position: relative;
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.market-hero-range-marker {
+  animation: mk-ring-pulse 2.6s ease-in-out infinite;
+}
+
+.market-hero-mini-pod {
+  border-radius: 15px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.market-hero-mini-pod:hover {
+  transform: translateY(-2px);
+  border-color: rgba(247, 169, 60, 0.3);
+}
+
+.market-hero-chart-well {
+  position: relative;
+  border-radius: 18px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(165deg, rgba(4, 8, 18, 0.58), rgba(4, 8, 18, 0.28));
+  background-size: 34px 22px, 34px 22px, auto;
+  border-color: rgba(247, 169, 60, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.market-hero-explore {
+  border-radius: 16px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.market-hero-explore:hover {
+  border-color: rgba(247, 169, 60, 0.4);
+  background: linear-gradient(100deg, rgba(247, 169, 60, 0.1), rgba(255, 255, 255, 0.02));
+}
+
+.market-hero-explore-arrow {
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), background 0.24s ease;
+}
+
+.market-hero-explore:hover .market-hero-explore-arrow {
+  transform: scale(1.08);
+  background: rgba(247, 169, 60, 0.26);
+}
+
+[dir='rtl'] .market-hero-explore:hover .market-hero-explore-arrow { transform: scale(1.08); }
+
+/* ── 13.5 · STORIES RAIL — deeper glass, brighter rings ─────────────────── */
+.market-stories-section {
+  border-radius: 28px;
+  margin: 24px 0 26px;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 26px 54px -34px rgba(2, 6, 18, 0.95);
+}
+
+.market-stories-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 11px;
+  color: var(--mk-rose);
+  background: linear-gradient(145deg, rgba(255, 122, 184, 0.22), rgba(255, 184, 77, 0.12));
+  border: 1px solid rgba(255, 122, 184, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 20px -10px rgba(255, 122, 184, 0.8);
+}
+
+.market-stories-badge {
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.market-story-ring {
+  border-radius: 24px;
+  padding: 2.5px;
+  box-shadow:
+    0 14px 28px -14px color-mix(in srgb, var(--story-accent, #38e1ff) 90%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.market-story-avatar-inner {
+  border-radius: 21.5px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.16), transparent 56%),
+    linear-gradient(150deg, #18233f, #070c18 74%);
+}
+
+.market-story-chip {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ── 13.6 · SMART SIGNAL PROMO — cinematic AI banner ────────────────────── */
+.market-signal-promo {
+  position: relative;
+  margin: 20px 0 22px;
+}
+
+.market-signal-promo .ad-banner {
+  position: relative;
+  min-height: 96px;
+  border-radius: 26px !important;
+  padding: 18px 18px !important;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--ad-a) 42%, rgba(255, 255, 255, 0.14));
+  background:
+    radial-gradient(92% 160% at 100% 0%, color-mix(in srgb, var(--ad-a) 22%, transparent), transparent 62%),
+    radial-gradient(70% 130% at 0% 100%, color-mix(in srgb, var(--ad-b) 16%, transparent), transparent 60%),
+    linear-gradient(125deg, rgba(18, 12, 38, 0.92), rgba(10, 14, 30, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 24px 52px -30px var(--ad-a),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(22px) saturate(170%);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+}
+
+/* Rotating conic light — the AI "radar" behind the artwork. */
+.market-signal-promo .ad-banner::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: -130%;
+  bottom: -130%;
+  inset-inline-end: -18%;
+  width: 62%;
+  border-radius: 50%;
+  opacity: 0.55;
+  filter: blur(14px);
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--ad-a) 55%, transparent) 70deg,
+    transparent 150deg,
+    color-mix(in srgb, var(--ad-b) 50%, transparent) 240deg,
+    transparent 330deg
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  animation: mk-spin 17s linear infinite;
+}
+
+/* Faint technical grid so the panel reads as an instrument, not an advert. */
+.market-signal-promo .ad-banner::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 30px 30px;
+  -webkit-mask-image: radial-gradient(120% 130% at 100% 0%, #000 8%, transparent 66%);
+  mask-image: radial-gradient(120% 130% at 100% 0%, #000 8%, transparent 66%);
+}
+
+.market-signal-promo .ad-banner > * { position: relative; z-index: 1; }
+
+.market-signal-promo .ad-art {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.18), transparent 58%),
+    linear-gradient(145deg, color-mix(in srgb, var(--ad-a) 22%, transparent), color-mix(in srgb, var(--ad-b) 14%, transparent));
+  border: 1px solid color-mix(in srgb, var(--ad-a) 36%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 12px 26px -12px var(--ad-a);
+}
+
+/* Radar rings around the animated glyph. */
+.market-signal-promo .ad-art::before,
+.market-signal-promo .ad-art::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ad-a) 45%, transparent);
+  pointer-events: none;
+}
+
+.market-signal-promo .ad-art::before { inset: -7px; animation: mk-spin 11s linear infinite; border-style: dashed; }
+.market-signal-promo .ad-art::after { inset: -12px; opacity: 0.5; animation: mk-spin 16s linear infinite reverse; }
+
+.market-signal-promo .ad-cta {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 900;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ad-a), var(--ad-b));
+  border: 0;
+  box-shadow: 0 10px 24px -10px var(--ad-a), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.market-signal-promo .ad-shine {
+  z-index: 2;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.14) 50%, transparent 62%);
+}
+
+/* ── 13.7 · TRENDING (داغ‌ترین‌ها) — premium hot rail ───────────────────── */
+.market-trending {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  margin: 20px 0 22px;
+  padding: 17px 15px 15px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 150, 80, 0.16);
+  background:
+    radial-gradient(96% 150% at 0% 0%, rgba(255, 145, 70, 0.13), transparent 56%),
+    radial-gradient(80% 140% at 100% 120%, rgba(255, 77, 109, 0.1), transparent 58%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.014) 60%, rgba(12, 10, 22, 0.55)),
+    rgba(10, 12, 24, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 24px 50px -34px rgba(2, 6, 18, 0.95);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.market-trending-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 90% at 88% -20%, rgba(255, 184, 77, 0.16), transparent 70%);
+}
+
+.market-trending > * { position: relative; z-index: 1; }
+
+.market-trending-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 13px;
+}
+
+.market-trending-flame {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.22), transparent 58%),
+    linear-gradient(145deg, #ff8b22, #e23a0e);
+  border: 1px solid rgba(255, 150, 80, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 10px 22px -10px rgba(255, 109, 0, 0.9);
+}
+
+.market-trending-title {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+}
+
+.market-trending-badge {
+  margin-inline-start: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #1a0a02;
+  background: linear-gradient(135deg, #ffd166, #ff8b22);
+  box-shadow: 0 6px 16px -8px rgba(255, 139, 34, 0.95);
+}
+
+.market-trending-rail {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 3px 2px 5px;
+  margin-top: 0 !important;
+  mask-image: linear-gradient(90deg, #000 94%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 94%, transparent 100%);
+}
+
+.market-trending-rail::-webkit-scrollbar { display: none; }
+
+.market-trending-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  min-height: 58px;
+  padding: 8px 13px 8px 9px;
+  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.066), rgba(255, 255, 255, 0.016)),
+    rgba(9, 13, 26, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+  scroll-snap-align: start;
+}
+
+.market-trending-chip:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 150, 80, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 14px 28px -14px rgba(255, 109, 0, 0.65);
+}
+
+.market-trending-rank {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--mk-amber);
+  width: 17px;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.market-trending-logo {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 12px;
+  padding: 2px;
+  background: linear-gradient(145deg, rgba(255, 184, 77, 0.45), rgba(255, 77, 109, 0.28));
+  box-shadow: 0 8px 18px -10px rgba(255, 139, 34, 0.8);
+}
+
+.market-trending-logo :where(img, svg, span) {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+}
+
+.market-trending-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: start;
+  min-width: 64px;
+  max-width: 108px;
+}
+
+.market-trending-txt b {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: var(--text-1);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.market-trending-txt small {
+  font-size: 9.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market-trending-go {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  background: rgba(255, 184, 77, 0.14);
+  border: 1px solid rgba(255, 184, 77, 0.3);
+  opacity: 0.85;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.market-trending-go::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  inset-inline-start: 6.5px;
+  width: 5px;
+  height: 5px;
+  border-top: 1.6px solid var(--mk-amber);
+  border-inline-end: 1.6px solid var(--mk-amber);
+  transform: rotate(45deg);
+}
+
+[dir='rtl'] .market-trending-go::after {
+  inset-inline-start: auto;
+  inset-inline-end: 6.5px;
+  transform: rotate(135deg);
+}
+
+.market-trending-chip:hover .market-trending-go {
+  transform: scale(1.12);
+  background: rgba(255, 184, 77, 0.24);
+}
+
+/* ── 13.8 · MARKET PULSE (نبض بازار) — the breadth strip ────────────────── */
+.market-breadth {
+  position: relative;
+  overflow: hidden;
+  padding: 16px 16px 13px;
+  border-radius: 20px;
+  border: 1px solid rgba(123, 158, 206, 0.2);
+  background:
+    radial-gradient(120% 160% at 100% 0%, rgba(56, 225, 255, 0.1), transparent 56%),
+    radial-gradient(90% 140% at 0% 120%, rgba(47, 230, 168, 0.08), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.014) 60%),
+    rgba(9, 13, 26, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+
+.market-breadth-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.market-breadth-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 10px;
+  color: var(--mk-emerald);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.18), transparent 58%),
+    linear-gradient(145deg, rgba(47, 230, 168, 0.22), rgba(56, 225, 255, 0.12));
+  border: 1px solid rgba(47, 230, 168, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 18px -10px rgba(47, 230, 168, 0.8);
+}
+
+.market-breadth-mark svg {
+  animation: mk-pulse 2.6s ease-in-out infinite;
+}
+
+.market-breadth-title {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+}
+
+.market-breadth-avg {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 900;
+  border: 1px solid transparent;
+}
+
+.market-breadth-avg[data-tone='up'] {
+  color: var(--up, #00ff9d);
+  background: color-mix(in srgb, var(--up, #00ff9d) 12%, transparent);
+  border-color: color-mix(in srgb, var(--up, #00ff9d) 30%, transparent);
+}
+
+.market-breadth-avg[data-tone='down'] {
+  color: var(--down, #ff3b6b);
+  background: color-mix(in srgb, var(--down, #ff3b6b) 12%, transparent);
+  border-color: color-mix(in srgb, var(--down, #ff3b6b) 30%, transparent);
+}
+
+.market-breadth-bar {
+  position: relative;
+  height: 11px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.market-breadth-seg {
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.market-breadth-seg.is-up {
+  background: linear-gradient(90deg, #0bdc8a, #2fe6a8);
+  box-shadow: 0 0 12px rgba(47, 230, 168, 0.5);
+}
+
+.market-breadth-seg.is-flat {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.13));
+}
+
+.market-breadth-seg.is-down {
+  background: linear-gradient(90deg, #ff5d80, #ff3b6b);
+  box-shadow: 0 0 12px rgba(255, 59, 107, 0.45);
+}
+
+.market-breadth-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 18%, rgba(255, 255, 255, 0.38) 50%, transparent 80%);
+  transform: translateX(-120%);
+  animation: mk-sheen-x 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.market-breadth-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.market-breadth-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.market-breadth-item i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone, rgba(255, 255, 255, 0.4));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tone, rgba(255, 255, 255, 0.4)) 65%, transparent);
+}
+
+.market-breadth-item[data-tone='up'] { --tone: var(--up, #00ff9d); }
+.market-breadth-item[data-tone='down'] { --tone: var(--down, #ff3b6b); }
+.market-breadth-item[data-tone='flat'] { --tone: rgba(255, 255, 255, 0.45); }
+.market-breadth-item[data-tone='unknown'] { --tone: rgba(255, 255, 255, 0.25); }
+
+.market-breadth-note {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  line-height: 1.7;
+}
+
+/* ── 13.9 · SECTORS (دسته‌ها) — glass tiles with SVG marks ──────────────── */
+.market-sectors-rail {
+  gap: 8px;
+  padding: 3px 2px 4px;
+  mask-image: linear-gradient(90deg, #000 94%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 94%, transparent 100%);
+}
+
+.market-sector {
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 14px 6px 8px;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.016)),
+    rgba(9, 13, 26, 0.66);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.market-sector:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tone, var(--mk-cyan)) 38%, transparent);
+}
+
+.market-sector-ico {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 11px;
+  color: var(--tone, var(--mk-cyan));
+  background: color-mix(in srgb, var(--tone, var(--mk-cyan)) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--mk-cyan)) 28%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.market-sector-ico .market-sector-icon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+}
+
+.market-sector-txt {
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.market-sector[data-active='true'] {
+  color: var(--text-1);
+  border-color: color-mix(in srgb, var(--tone, var(--mk-cyan)) 52%, transparent);
+  background:
+    linear-gradient(150deg,
+      color-mix(in srgb, var(--tone, var(--mk-cyan)) 20%, transparent),
+      color-mix(in srgb, var(--tone, var(--mk-cyan)) 7%, transparent)),
+    rgba(9, 13, 26, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 24px -12px color-mix(in srgb, var(--tone, var(--mk-cyan)) 80%, transparent);
+}
+
+.market-sector[data-active='true'] .market-sector-ico {
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--tone, var(--mk-cyan)) 42%, transparent),
+    color-mix(in srgb, var(--tone, var(--mk-cyan)) 18%, transparent));
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--tone, var(--mk-cyan)) 90%, transparent);
+}
+
+/* ── 13.10 · COMMAND BAR — anchored glass, never a floating overlay ─────── */
+.market-cmd {
+  position: relative;
+  z-index: 3;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(140, 180, 235, 0.16);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.022) 55%, rgba(6, 10, 20, 0.78)),
+    rgba(9, 14, 28, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 22px 46px -32px rgba(2, 6, 18, 0.98);
+  backdrop-filter: blur(30px) saturate(185%);
+  -webkit-backdrop-filter: blur(30px) saturate(185%);
+}
+
+.market-search {
+  height: 42px;
+  min-height: 42px;
+  gap: 9px;
+  padding: 0 10px 0 8px;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02)),
+    rgba(4, 8, 18, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.market-search:focus-within {
+  border-color: rgba(56, 225, 255, 0.6);
+  background:
+    linear-gradient(150deg, rgba(56, 225, 255, 0.08), rgba(139, 123, 255, 0.04)),
+    rgba(6, 12, 24, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 3px rgba(56, 225, 255, 0.14),
+    0 0 26px -8px rgba(56, 225, 255, 0.55);
+}
+
+.market-search-ico {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 11px;
+  color: var(--mk-cyan);
+  background: rgba(56, 225, 255, 0.1);
+  border: 1px solid rgba(56, 225, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.market-search:focus-within .market-search-ico {
+  background: linear-gradient(145deg, rgba(56, 225, 255, 0.28), rgba(139, 123, 255, 0.2));
+  box-shadow: 0 6px 16px -8px rgba(56, 225, 255, 0.9);
+}
+
+.market-search-icon { color: inherit; }
+
+.market-search-input { font-size: 13px; font-weight: 600; }
+.market-search-input::placeholder { color: var(--text-3); font-weight: 500; }
+
+.market-search-clear {
+  width: 27px;
+  height: 27px;
+  min-width: 27px;
+  min-height: 27px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.market-search-clear:active { transform: scale(0.88); }
+
+/* View chips */
+.market-view {
+  min-height: 34px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: transform 0.16s ease, color 0.16s ease, background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.market-view:active { transform: scale(0.95); }
+
+.market-view[data-active='true'] {
+  color: #04131a;
+  background: linear-gradient(135deg, var(--mk-cyan), var(--mk-emerald));
+  border-color: transparent;
+  box-shadow: 0 8px 20px -10px rgba(56, 225, 255, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Sort trigger — compact glass, anchored in flow */
+.market-sort-trigger {
+  height: 36px;
+  min-width: 92px;
+  max-width: 122px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.028)),
+    rgba(10, 15, 28, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.market-sort-trigger:hover {
+  border-color: rgba(56, 225, 255, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 20px -12px rgba(56, 225, 255, 0.7);
+}
+
+.market-sort-trigger[aria-expanded='true'] {
+  border-color: rgba(56, 225, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(56, 225, 255, 0.12);
+}
+
+/* ── 13.11 · SORT POPOVER — compact, ultra-modern glass menu ────────────── */
+.market-sort-popover {
+  z-index: 60;
+  top: calc(100% + 10px);
+  width: min(204px, calc(100vw - 56px));
+  padding: 7px;
+  border-radius: 19px;
+  border: 1px solid rgba(168, 191, 226, 0.24);
+  background:
+    linear-gradient(160deg, rgba(30, 42, 68, 0.97), rgba(9, 14, 28, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 26px 60px -18px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(56, 225, 255, 0.05);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  animation: mk-pop-v2 0.22s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+/* Caret pointing at the trigger */
+.market-sort-popover-caret {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: 26px;
+  width: 11px;
+  height: 11px;
+  transform: rotate(45deg);
+  border-radius: 3px;
+  background: rgba(30, 42, 68, 0.98);
+  border-inline-start: 1px solid rgba(168, 191, 226, 0.24);
+  border-block-start: 1px solid rgba(168, 191, 226, 0.24);
+}
+
+.market-sort-popover-head {
+  padding: 5px 10px 7px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.market-sort-option {
+  position: relative;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.market-sort-option-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.market-sort-option-label { flex: 1; min-width: 0; }
+
+.market-sort-option:hover,
+.market-sort-option[aria-selected='true'] {
+  color: var(--text-1);
+  background: linear-gradient(135deg, rgba(56, 225, 255, 0.15), rgba(139, 123, 255, 0.1));
+}
+
+.market-sort-option[aria-selected='true'] .market-sort-option-dot {
+  background: var(--mk-cyan);
+  box-shadow: 0 0 10px rgba(56, 225, 255, 0.9);
+}
+
+.market-sort-check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  color: #04131a;
+  background: linear-gradient(135deg, var(--mk-cyan), var(--mk-emerald));
+  box-shadow: 0 4px 12px -4px rgba(56, 225, 255, 0.9);
+}
+
+.market-dir {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(10, 15, 28, 0.6);
+}
+
+/* ── 13.12 · TOKEN ROWS — glass rows, zero overlap (no star in the row) ─── */
+.market-coin-row .coin-row {
+  border-radius: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.012)),
+    rgba(9, 13, 26, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.market-coin-row .coin-row:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 225, 255, 0.32);
+  background:
+    linear-gradient(150deg, rgba(56, 225, 255, 0.07), rgba(139, 123, 255, 0.035)),
+    rgba(10, 15, 29, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 30px -18px rgba(56, 225, 255, 0.6);
+}
+
+.market-coin-row .coin-row:active { transform: scale(0.992); }
+
+/* Fixed-width columns guarantee the sparkline and the price can never collide,
+   whatever the name length or screen width. Bookmarking lives on CoinDetail. */
+.market-coin-row .coin-row-spark {
+  width: 54px;
+  flex: 0 0 54px;
+  justify-content: center;
+  opacity: 0.92;
+}
+
+.market-coin-row .coin-meta { min-width: 0; flex: 1 1 auto; }
+.market-coin-row .coin-right { min-width: 94px; flex: 0 0 auto; }
+
+.market-coin-row .coin-row-rank {
+  width: 18px;
+  flex: 0 0 18px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.market-coin-row .coin-price { letter-spacing: -0.01em; }
+
+.market-coin-row > .market-swap-btn {
+  border-radius: 13px;
+  min-height: 38px;
+  padding-inline: 15px;
+  box-shadow: 0 8px 20px -10px rgba(0, 229, 255, 0.8);
+}
+
+/* Header controls get the same glass treatment */
+.market-refresh,
+.market-compare {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(10, 15, 28, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.market-refresh:hover:not(:disabled),
+.market-compare:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 225, 255, 0.36);
+}
+
+.market-count {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.market-show-more {
+  border-radius: 16px;
+  min-height: 46px;
+  font-size: 12px;
+  background:
+    linear-gradient(135deg, rgba(56, 225, 255, 0.16), rgba(139, 123, 255, 0.16)),
+    rgba(10, 15, 28, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.market-show-more:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px -16px rgba(56, 225, 255, 0.8);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13.13 · LIGHT THEME — every new surface re-graded for white glass
+   ══════════════════════════════════════════════════════════════════════════ */
+:root[data-theme='light'] .market-global-card.market-glass-surface {
+  border-color: rgba(0, 128, 160, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 26px 60px -38px rgba(10, 60, 90, 0.45);
+}
+
+:root[data-theme='light'] .market-global-mark {
+  color: #007a94;
+  background: linear-gradient(145deg, rgba(0, 168, 200, 0.16), rgba(120, 98, 220, 0.1));
+  border-color: rgba(0, 128, 160, 0.26);
+}
+
+:root[data-theme='light'] .market-global-value {
+  background-image: linear-gradient(102deg, #0d1a30 6%, #0a6a86 42%, #5b46c8 78%, #0d1a30 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: none;
+}
+
+:root[data-theme='light'] .market-stat-tile {
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.96), rgba(241, 246, 252, 0.92));
+  border-color: rgba(16, 24, 48, 0.1);
+  box-shadow: 0 14px 30px -24px rgba(20, 45, 80, 0.4);
+}
+
+:root[data-theme='light'] .market-hero-card.market-glass-surface {
+  border-color: rgba(214, 132, 26, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 26px 58px -36px rgba(180, 110, 20, 0.4);
+}
+
+:root[data-theme='light'] .market-hero-title {
+  background: linear-gradient(96deg, #1a1305 20%, #9a6210 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+:root[data-theme='light'] .market-hero-price {
+  background: linear-gradient(96deg, #14100a 10%, #a8650f 65%, #c27a1c 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: none;
+}
+
+:root[data-theme='light'] .market-hero-chart-well {
+  background:
+    linear-gradient(rgba(16, 24, 48, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 24, 48, 0.05) 1px, transparent 1px),
+    linear-gradient(165deg, rgba(240, 245, 252, 0.9), rgba(255, 255, 255, 0.7));
+  background-size: 34px 22px, 34px 22px, auto;
+}
+
+:root[data-theme='light'] .market-stories-section {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.97), rgba(244, 248, 253, 0.92));
+  box-shadow: 0 22px 46px -34px rgba(20, 45, 80, 0.4);
+}
+
+:root[data-theme='light'] .market-stories-mark {
+  color: #c2266b;
+  background: linear-gradient(145deg, rgba(255, 122, 184, 0.16), rgba(255, 184, 107, 0.12));
+  border-color: rgba(194, 38, 107, 0.24);
+}
+
+:root[data-theme='light'] .market-signal-promo .ad-banner {
+  background:
+    radial-gradient(92% 160% at 100% 0%, color-mix(in srgb, var(--ad-ink, var(--ad-a)) 13%, transparent), transparent 62%),
+    linear-gradient(125deg, rgba(255, 255, 255, 0.98), rgba(243, 246, 253, 0.94));
+  border-color: color-mix(in srgb, var(--ad-ink, var(--ad-a)) 30%, rgba(16, 24, 48, 0.1));
+  box-shadow: 0 22px 46px -34px rgba(20, 45, 80, 0.45);
+}
+
+:root[data-theme='light'] .market-signal-promo .ad-art {
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.6), transparent 58%),
+    linear-gradient(145deg, color-mix(in srgb, var(--ad-ink, var(--ad-a)) 14%, transparent), color-mix(in srgb, var(--ad-ink-b, var(--ad-b)) 10%, transparent));
+  border-color: color-mix(in srgb, var(--ad-ink, var(--ad-a)) 26%, transparent);
+}
+
+:root[data-theme='light'] .market-signal-promo .ad-cta {
+  color: #fff;
+}
+
+:root[data-theme='light'] .market-trending {
+  border-color: rgba(16, 24, 48, 0.1);
+  background:
+    radial-gradient(96% 150% at 0% 0%, rgba(255, 145, 70, 0.1), transparent 56%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.97), rgba(244, 248, 253, 0.92));
+  box-shadow: 0 22px 46px -34px rgba(20, 45, 80, 0.4);
+}
+
+:root[data-theme='light'] .market-trending-chip {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(150deg, #ffffff, rgba(240, 245, 252, 0.9));
+  box-shadow: 0 8px 20px -18px rgba(20, 45, 80, 0.5);
+}
+
+:root[data-theme='light'] .market-trending-title { color: #0d1a30; }
+:root[data-theme='light'] .market-trending-txt b { color: #13213a; }
+:root[data-theme='light'] .market-trending-txt small { color: #64748b; }
+:root[data-theme='light'] .market-trending-rank { color: #b45f06; }
+:root[data-theme='light'] .market-trending-go { background: rgba(255, 139, 34, 0.1); border-color: rgba(255, 139, 34, 0.3); }
+
+:root[data-theme='light'] .market-breadth {
+  border-color: rgba(16, 24, 48, 0.1);
+  background:
+    radial-gradient(120% 160% at 100% 0%, rgba(0, 168, 200, 0.08), transparent 56%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.97), rgba(243, 247, 253, 0.92));
+  box-shadow: 0 16px 36px -30px rgba(20, 45, 80, 0.4);
+}
+
+:root[data-theme='light'] .market-breadth-mark {
+  color: #04805c;
+  background: linear-gradient(145deg, rgba(0, 178, 106, 0.15), rgba(0, 168, 200, 0.1));
+  border-color: rgba(4, 128, 92, 0.26);
+}
+
+:root[data-theme='light'] .market-breadth-title { color: #0d1a30; }
+:root[data-theme='light'] .market-breadth-item { background: rgba(16, 24, 48, 0.04); border-color: rgba(16, 24, 48, 0.09); color: #3d4f70; }
+:root[data-theme='light'] .market-breadth-bar { border-color: rgba(16, 24, 48, 0.12); box-shadow: inset 0 1px 3px rgba(16, 24, 48, 0.12); }
+
+:root[data-theme='light'] .market-sector {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(150deg, #ffffff, rgba(240, 245, 252, 0.88));
+  box-shadow: 0 8px 20px -18px rgba(20, 45, 80, 0.5);
+}
+
+:root[data-theme='light'] .market-sector-ico {
+  background: color-mix(in srgb, var(--tone, #008aa8) 10%, transparent);
+  border-color: color-mix(in srgb, var(--tone, #008aa8) 24%, transparent);
+}
+
+:root[data-theme='light'] .market-sector[data-active='true'] {
+  color: #0d1a30;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--tone, #008aa8) 16%, transparent), color-mix(in srgb, var(--tone, #008aa8) 6%, transparent)), #fff;
+}
+
+:root[data-theme='light'] .market-cmd {
+  border-color: rgba(16, 24, 48, 0.12);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.99), rgba(244, 248, 253, 0.94));
+  box-shadow: 0 20px 44px -34px rgba(20, 45, 80, 0.5);
+}
+
+:root[data-theme='light'] .market-search {
+  border-color: rgba(16, 24, 48, 0.12);
+  background: linear-gradient(150deg, rgba(16, 24, 48, 0.045), rgba(16, 24, 48, 0.015)), #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+:root[data-theme='light'] .market-search:focus-within {
+  border-color: rgba(0, 150, 190, 0.55);
+  background: linear-gradient(150deg, rgba(0, 168, 200, 0.06), rgba(120, 98, 220, 0.03)), #fff;
+}
+
+:root[data-theme='light'] .market-search-ico {
+  color: #007a94;
+  background: rgba(0, 168, 200, 0.1);
+  border-color: rgba(0, 128, 160, 0.22);
+}
+
+:root[data-theme='light'] .market-sort-trigger,
+:root[data-theme='light'] .market-dir,
+:root[data-theme='light'] .market-refresh,
+:root[data-theme='light'] .market-compare {
+  border-color: rgba(16, 24, 48, 0.12);
+  background: linear-gradient(145deg, #ffffff, rgba(238, 244, 251, 0.9));
+  box-shadow: 0 8px 20px -18px rgba(20, 45, 80, 0.5);
+}
+
+:root[data-theme='light'] .market-sort-popover {
+  border-color: rgba(16, 24, 48, 0.12);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.99), rgba(242, 247, 254, 0.98));
+  box-shadow: 0 26px 58px -20px rgba(20, 45, 80, 0.35);
+}
+
+:root[data-theme='light'] .market-sort-popover-caret {
+  background: rgba(255, 255, 255, 0.99);
+  border-color: rgba(16, 24, 48, 0.12);
+}
+
+:root[data-theme='light'] .market-sort-option:hover,
+:root[data-theme='light'] .market-sort-option[aria-selected='true'] {
+  color: #0d1a30;
+  background: linear-gradient(135deg, rgba(0, 168, 200, 0.12), rgba(120, 98, 220, 0.08));
+}
+
+:root[data-theme='light'] .market-coin-row .coin-row {
+  border-color: rgba(16, 24, 48, 0.09);
+  background: linear-gradient(150deg, #ffffff, rgba(242, 247, 253, 0.85));
+  box-shadow: 0 8px 22px -20px rgba(20, 45, 80, 0.55);
+}
+
+:root[data-theme='light'] .market-coin-row .coin-row:hover {
+  border-color: rgba(0, 150, 190, 0.35);
+  background: linear-gradient(150deg, rgba(0, 168, 200, 0.05), rgba(120, 98, 220, 0.03)), #fff;
+}
+
+:root[data-theme='light'] .market-show-more {
+  color: #0d1a30;
+  background: linear-gradient(135deg, rgba(0, 180, 216, 0.14), rgba(120, 98, 220, 0.12));
+}
+
+/* Ticker light theme */
+:root[data-theme='light'] .ticker {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.98), rgba(240, 245, 252, 0.92));
+  box-shadow: 0 16px 34px -26px rgba(20, 45, 80, 0.5);
+}
+
+:root[data-theme='light'] .ticker-item {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: linear-gradient(150deg, #ffffff, rgba(240, 245, 252, 0.85));
+}
+
+:root[data-theme='light'] .ticker-item:hover { border-color: rgba(0, 150, 190, 0.35); background: rgba(0, 168, 200, 0.07); }
+:root[data-theme='light'] .ticker-sym { color: #13213a; }
+:root[data-theme='light'] .ticker-promo {
+  background: linear-gradient(115deg, rgba(0, 168, 200, 0.1), rgba(124, 77, 255, 0.1)), #fff;
+  border-color: rgba(0, 140, 175, 0.26);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13.14 · NATIVE WEBVIEW — glass off, ambient motion off (rasterisation budget)
+   ══════════════════════════════════════════════════════════════════════════ */
+:root[data-native='true'] .ticker,
+:root[data-lite='true'] .ticker,
+:root[data-native='true'] .market-cmd,
+:root[data-lite='true'] .market-cmd,
+:root[data-native='true'] .market-breadth,
+:root[data-lite='true'] .market-breadth,
+:root[data-native='true'] .market-trending,
+:root[data-lite='true'] .market-trending,
+:root[data-native='true'] .market-sort-popover,
+:root[data-lite='true'] .market-sort-popover,
+:root[data-native='true'] .market-signal-promo .ad-banner,
+:root[data-lite='true'] .market-signal-promo .ad-banner,
+:root[data-native='true'] .market-global-kicker,
+:root[data-lite='true'] .market-global-kicker,
+:root[data-native='true'] .market-hero-pair-pill,
+:root[data-lite='true'] .market-hero-pair-pill,
+:root[data-native='true'] .market-hero-range,
+:root[data-lite='true'] .market-hero-range,
+:root[data-native='true'] .market-trend-glass,
+:root[data-lite='true'] .market-trend-glass,
+:root[data-native='true'] .market-stories-badge,
+:root[data-lite='true'] .market-stories-badge,
+:root[data-native='true'] .market-story-chip,
+:root[data-lite='true'] .market-story-chip,
+:root[data-native='true'] .market-count,
+:root[data-lite='true'] .market-count {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-native='true'] .ticker,
+:root[data-lite='true'] .ticker { background: rgba(9, 13, 26, 0.97); }
+:root[data-native='true'] .market-breadth,
+:root[data-lite='true'] .market-breadth,
+:root[data-native='true'] .market-trending,
+:root[data-lite='true'] .market-trending,
+:root[data-native='true'] .market-signal-promo .ad-banner,
+:root[data-lite='true'] .market-signal-promo .ad-banner {
+  background: rgba(11, 16, 30, 0.97);
+}
+
+:root[data-native='true'] .market-glass-conic,
+:root[data-lite='true'] .market-glass-conic,
+:root[data-native='true'] .market-hero-orbit,
+:root[data-lite='true'] .market-hero-orbit {
+  display: none !important;
+}
+
+:root[data-native='true'] .market-signal-promo .ad-banner::before,
+:root[data-lite='true'] .market-signal-promo .ad-banner::before,
+:root[data-native='true'] .market-signal-promo .ad-art::before,
+:root[data-lite='true'] .market-signal-promo .ad-art::before,
+:root[data-native='true'] .market-signal-promo .ad-art::after,
+:root[data-lite='true'] .market-signal-promo .ad-art::after,
+:root[data-native='true'] .market-dominance-bar::after,
+:root[data-lite='true'] .market-dominance-bar::after,
+:root[data-native='true'] .market-breadth-bar::after,
+:root[data-lite='true'] .market-breadth-bar::after,
+:root[data-native='true'] .market-hero-logo-halo,
+:root[data-lite='true'] .market-hero-logo-halo,
+:root[data-native='true'] .market-global-value,
+:root[data-lite='true'] .market-global-value,
+:root[data-native='true'] .market-hero-price,
+:root[data-lite='true'] .market-hero-price,
+:root[data-native='true'] .market-breadth-mark svg,
+:root[data-lite='true'] .market-breadth-mark svg,
+:root[data-native='true'] .market-hero-range-marker,
+:root[data-lite='true'] .market-hero-range-marker,
+:root[data-native='true'] .ticker-live-dot,
+:root[data-lite='true'] .ticker-live-dot {
+  animation: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13.15 · REDUCED MOTION — every new ambient animation stops
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .market-glass-conic,
+  .market-hero-orbit,
+  .market-hero-logo-halo,
+  .market-global-value,
+  .market-hero-price,
+  .market-dominance-bar::after,
+  .market-breadth-bar::after,
+  .market-breadth-mark svg,
+  .market-hero-range-marker,
+  .market-signal-promo .ad-banner::before,
+  .market-signal-promo .ad-art::before,
+  .market-signal-promo .ad-art::after,
+  .ticker-live-dot,
+  .market-stat-tile,
+  .market-metric-pod,
+  .market-hero-mini-pod {
+    animation: none !important;
+  }
+  .market-sort-popover { animation: none !important; }
+  .market-coin-row .coin-row,
+  .market-trending-chip,
+  .market-sector,
+  .market-view,
+  .market-show-more {
+    transition: none !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13.16 · RESPONSIVE TIGHTENING
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 430px) {
+  .market-sort-popover { width: min(196px, calc(100vw - 40px)); }
+  .market-sort-popover-caret { inset-inline-end: 20px; }
+  .market-trending-txt { min-width: 56px; max-width: 86px; }
+  .market-global-card.market-glass-surface { padding: 19px 16px 16px; border-radius: 26px; }
+  .market-hero-card.market-glass-surface { padding: 19px 16px 15px; border-radius: 26px; }
+  .market-hero-orbit--rev { inset: -10px; }
+  .ticker-live-text { display: none; }
+  .ticker-live-badge { padding: 0 8px; }
+  .market-stat-tile { padding: 12px 11px; }
+  .market-stat-tile-val { font-size: 17px; }
+  .market-sector-txt { font-size: 10.5px; }
+}
+
+@media (max-width: 380px) {
+  .market-coin-row .coin-right { min-width: 80px; }
+  .market-coin-row .coin-row-spark { width: 46px; flex-basis: 46px; }
+  .market-coin-row .coin-row-open { gap: 7px; }
+  .market-coin-row .coin-price { font-size: 11px; }
+  .market-trending-chip { padding-inline: 10px; gap: 7px; }
+  .market-trending-logo { width: 32px; height: 32px; flex-basis: 32px; }
+  .market-search { height: 40px; min-height: 40px; }
+}
+
+@media (min-width: 900px) {
+  .market-cmd { border-radius: 24px; padding: 12px; }
+  .market-sort-popover { width: 220px; }
+  .market-global-card.market-glass-surface { border-radius: 32px; }
+  .market-hero-card.market-glass-surface { border-radius: 32px; }
+}
