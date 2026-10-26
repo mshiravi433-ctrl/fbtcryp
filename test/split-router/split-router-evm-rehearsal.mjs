@@ -244,15 +244,75 @@ const cfgWith = (index, value) => BASE_CFG.map((v, i) => (i === index ? value : 
   t('guard: exactly 100 bps (the cap) deploys', (await capped.feeBps()) === 100n);
 }
 {
-  /* a router deployed WITHOUT lido must refuse the Lido path */
-  const noLido = await deploy('FBTSplitRouter', guardWallet, [cfgWith(10, '0x0000000000000000000000000000000000000000')]);
+  /* a router deployed WITHOUT lido (Base shape) must refuse the Lido path */
+  const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+  const ZERO_B32 = '0x' + '00'.repeat(32);
+  const noLido = await deploy('FBTSplitRouter', guardWallet, [cfgWith(10, ZERO_ADDR)]);
   if (process.env.SPLIT_ROUTER_DEBUG) {
     console.log('    [debug] main router:', router.target, '| lido():', await router.lido());
     console.log('    [debug] MockLido  :', lido.target);
     console.log('    [debug] noLido    :', noLido.target, '| lido():', await noLido.lido());
   }
-  await expectRevert('guard: a chain without that protocol reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+  await expectRevert('guard (Base shape): a chain without Lido reverts stakeLido with ZERO_TARGET', /ZERO_TARGET/, async () => {
     await noLido.connect(user).stakeLido.staticCall({ value: 1n });
+  });
+
+  /* Arbitrum One (42161) production deploy shape: Aave v3 USDC only; Comet, Morpho, Lido all zero */
+  const arbRouter = await deploy('FBTSplitRouter', guardWallet, [[
+    usdc.target, aave.target, ZERO_ADDR, ZERO_ADDR,
+    ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, 0n, ZERO_B32,
+    ZERO_ADDR, ADDR.payout, FEE_BPS
+  ]]);
+  t('arbitrum-shape deploy: asset + aavePool pinned, comet/morpho/lido zero',
+    (await arbRouter.asset()) === usdc.target
+    && (await arbRouter.aavePool()) === aave.target
+    && (await arbRouter.comet()) === ZERO_ADDR
+    && (await arbRouter.morpho()) === ZERO_ADDR
+    && (await arbRouter.lido()) === ZERO_ADDR);
+  const aaveBeforeArb = await aave.aTokenBalanceOf(ADDR.user);
+  const payoutBeforeArb = await usdc.balanceOf(ADDR.payout);
+  await usdcUser.approve(arbRouter.target, AMOUNT);
+  await arbRouter.connect(user).supplyAave(AMOUNT);
+  t('arbitrum-shape supplyAave: credits net to depositor, fee to payout, zero router custody',
+    (await aave.aTokenBalanceOf(ADDR.user)) - aaveBeforeArb === NET
+    && (await usdc.balanceOf(ADDR.payout)) - payoutBeforeArb === FEE
+    && (await usdc.balanceOf(arbRouter.target)) === 0n);
+  await expectRevert('guard (Arbitrum shape): supplyCompound reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+    await arbRouter.connect(user).supplyCompound.staticCall(AMOUNT);
+  });
+  await expectRevert('guard (Arbitrum shape): supplyMorpho reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+    await arbRouter.connect(user).supplyMorpho.staticCall(AMOUNT);
+  });
+  await expectRevert('guard (Arbitrum shape): stakeLido reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+    await arbRouter.connect(user).stakeLido.staticCall({ value: 1n });
+  });
+
+  /* Ethereum (1) production deploy shape: Lido native ETH only; asset and all ERC20 targets zero */
+  const ethRouter = await deploy('FBTSplitRouter', guardWallet, [[
+    ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR,
+    ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, 0n, ZERO_B32,
+    lido.target, ADDR.payout, FEE_BPS
+  ]]);
+  t('ethereum-shape deploy: asset zero, lido pinned, feeBps matches',
+    (await ethRouter.asset()) === ZERO_ADDR
+    && (await ethRouter.lido()) === lido.target
+    && (await ethRouter.feeBps()) === FEE_BPS);
+  const stBeforeEth = await lido.balanceOf(ADDR.user);
+  const payEthBefore2 = await provider.getBalance(ADDR.payout);
+  await ethRouter.connect(user).stakeLido({ value: 10n ** 18n });
+  t('ethereum-shape stakeLido: credits net stETH to depositor, ETH fee to payout, zero router custody',
+    (await lido.balanceOf(ADDR.user)) - stBeforeEth === ethNet
+    && (await provider.getBalance(ADDR.payout)) - payEthBefore2 === ethFee
+    && (await provider.getBalance(ethRouter.target)) === 0n
+    && (await lido.balanceOf(ethRouter.target)) === 0n);
+  await expectRevert('guard (Ethereum shape): supplyAave reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+    await ethRouter.connect(user).supplyAave.staticCall(AMOUNT);
+  });
+  await expectRevert('guard (Ethereum shape): supplyCompound reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+    await ethRouter.connect(user).supplyCompound.staticCall(AMOUNT);
+  });
+  await expectRevert('guard (Ethereum shape): supplyMorpho reverts with ZERO_TARGET', /ZERO_TARGET/, async () => {
+    await ethRouter.connect(user).supplyMorpho.staticCall(AMOUNT);
   });
 }
 await expectRevert('guard: zero amount reverts', /ZERO_AMOUNT/, async () => {
@@ -269,7 +329,29 @@ await expectRevert('guard: fee above 1% cannot deploy', /FEE_TOO_HIGH/, async ()
   await routerFactory.deploy(cfgWith(12, 101n));
 });
 await expectRevert('guard: a wrong Morpho market id cannot deploy', /MORPHO_MARKET_ID_MISMATCH/, async () => {
-  await routerFactory.deploy(cfgWith(9, '0x' + 'ab'.repeat(32)));
+  const tx = await routerFactory.getDeployTransaction(cfgWith(9, '0x' + 'ab'.repeat(32)));
+  await provider.call({ from: ADDR.deployer, data: tx.data });
+});
+await expectRevert('guard: zero feeRecipient cannot deploy', /ZERO_FEE_RECIPIENT/, async () => {
+  const tx = await routerFactory.getDeployTransaction(cfgWith(11, '0x0000000000000000000000000000000000000000'));
+  await provider.call({ from: ADDR.deployer, data: tx.data });
+});
+await expectRevert('guard: router with no protocol target cannot deploy', /NO_TARGET/, async () => {
+  const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+  const tx = await routerFactory.getDeployTransaction([
+    usdc.target, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR,
+    ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, 0n, '0x' + '00'.repeat(32),
+    ZERO_ADDR, ADDR.payout, FEE_BPS
+  ]);
+  await provider.call({ from: ADDR.deployer, data: tx.data });
+});
+await expectRevert('guard: Morpho loanToken != asset cannot deploy', /MORPHO_LOAN_TOKEN_MISMATCH/, async () => {
+  const tx = await routerFactory.getDeployTransaction(cfgWith(4, '0x0000000000000000000000000000000000000009'));
+  await provider.call({ from: ADDR.deployer, data: tx.data });
+});
+await expectRevert('guard: incomplete Morpho MarketParams cannot deploy', /MORPHO_MARKET_INCOMPLETE/, async () => {
+  const tx = await routerFactory.getDeployTransaction(cfgWith(6, '0x0000000000000000000000000000000000000000'));
+  await provider.call({ from: ADDR.deployer, data: tx.data });
 });
 {
   /* plain ETH transfers must bounce: no receive() exists (eth_call of a bare

@@ -623,8 +623,11 @@ export async function getYields(options = {}) {
   return data;
 }
 
+const LLAMA_HISTORY_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const KAMINO_HISTORY_ID_RE = /^kamino-[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
 export async function getYieldHistory(id, options = {}) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) throw new Error('INVALID_POOL_ID');
+  if (!LLAMA_HISTORY_UUID_RE.test(id || '') && !KAMINO_HISTORY_ID_RE.test(id || '')) throw new Error('INVALID_POOL_ID');
   const { range = '30d', ...fetchOptions } = options ?? {};
   if (!YIELD_HISTORY_RANGES.includes(range)) throw new Error('INVALID_HISTORY_RANGE');
   const data = await fetchYieldData(`${API_BASE}/yields/${encodeURIComponent(id)}/history?range=${encodeURIComponent(range)}`, { timeout: 65_000, ...fetchOptions });

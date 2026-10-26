@@ -6,6 +6,7 @@ import {
   formatFarmRollout,
   inspectFarmRollout
 } from '../scripts/farm-rollout-policy.mjs';
+import { runStaticCanaryPreflight } from '../scripts/verify-aave-base-canary-ready.mjs';
 
 const ADDRESS = '0x1111111111111111111111111111111111111111';
 const AAVE_BASE_CANARY = Object.freeze({
@@ -183,5 +184,64 @@ describe('staged Farm production rollout gate', () => {
       mode: 'limited-canary',
       public: []
     });
+  });
+
+  it('does not count missing RPC URLs as strict SplitRouter fork evidence', () => {
+    const env = { ...process.env };
+    delete env.BASE_RPC_URL;
+    delete env.ARBITRUM_RPC_URL;
+    delete env.ETH_RPC_URL;
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./split-router/split-router-fork-rehearsal.mjs', import.meta.url)),
+      '--strict'
+    ], { env, encoding: 'utf8' });
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain('explicit RPC URLs provided (--strict)');
+  });
+});
+
+describe('Aave v3 Base canary preflight verifier', () => {
+  it('passes static preflight in clean capital-off env and reports canary wallet pending', () => {
+    const res = runStaticCanaryPreflight({});
+    expect(res.ok).toBe(true);
+    expect(res.hasRealCanaryWallet).toBe(false);
+    expect(res.canaryWallet).toBeNull();
+    expect(res.pins).toEqual({
+      chainId: 8453,
+      pool: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
+      addressesProvider: '0xe20fCBdBfFC4Dd138cE8b2E6FBb6CB49777ad64D',
+      aUsdc: '0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB',
+      usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    });
+  });
+
+  it('accepts a valid public canary wallet address without touching live flags', () => {
+    const res = runStaticCanaryPreflight({
+      CANARY_WALLET: '0xaf5ce154cefd22da5bd1d0a54479e81963a224d6'
+    });
+    expect(res.ok).toBe(true);
+    expect(res.hasRealCanaryWallet).toBe(true);
+    expect(res.canaryWallet).toBe('0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6');
+  });
+
+  it('fails closed if any private key or 64-hex secret is placed in env', () => {
+    const byName = runStaticCanaryPreflight({
+      PRIVATE_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+    });
+    expect(byName.ok).toBe(false);
+    expect(byName.checks.find((c) => c.name.startsWith('secret hygiene'))?.ok).toBe(false);
+
+    const byShape = runStaticCanaryPreflight({
+      VITE_AAVE_BASE_SUPPLY_ALLOWLIST: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+    });
+    expect(byShape.ok).toBe(false);
+  });
+
+  it('fails closed if VITE_FBT_SPLIT_ROUTER_BASE is set while splitRouterArtifact.audited is false', () => {
+    const res = runStaticCanaryPreflight({
+      VITE_FBT_SPLIT_ROUTER_BASE: '0x1111111111111111111111111111111111111111'
+    });
+    expect(res.ok).toBe(false);
+    expect(res.checks.find((c) => c.name.startsWith('SplitRouter Base'))?.ok).toBe(false);
   });
 });

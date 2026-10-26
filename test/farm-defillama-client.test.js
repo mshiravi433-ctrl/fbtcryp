@@ -38,11 +38,16 @@ describe('DefiLlama client and metrics', () => {
     await expect(getYieldHistory(id, { range: '365d' })).rejects.toThrow('INVALID_HISTORY_RANGE');
     expect(spy).not.toHaveBeenCalled();
   });
-  it('validates history identity and refuses unsafe IDs locally', async () => {
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ pool: 'different', points: [] }));
+  it('validates history identity and refuses unsafe IDs locally while accepting Kamino reserve IDs', async () => {
+    const kaminoId = 'kamino-d4A2prbA2whesmvHaL88BH6Ewn5N4bTSU2Ze8P6Bc4Q';
+    const spy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response({ pool: 'different', points: [] }))
+      .mockResolvedValueOnce(response({ pool: kaminoId, range: '30d', points: [{ timestamp: Date.now(), apy: 5.2, tvlUsd: 19_148_222 }], at: Date.now(), freshness: 'FRESH', source: 'kamino' }));
     await expect(getYieldHistory('../pools')).rejects.toThrow('INVALID_POOL_ID');
+    await expect(getYieldHistory('kamino-0OIlInvalid')).rejects.toThrow('INVALID_POOL_ID');
     expect(spy).not.toHaveBeenCalled();
     await expect(getYieldHistory(id)).rejects.toThrow('BAD_SHAPE');
+    await expect(getYieldHistory(kaminoId)).resolves.toMatchObject({ pool: kaminoId, source: 'kamino' });
   });
   it('propagates stale state to pool cards and the protocol status', () => {
     const at = Date.now();

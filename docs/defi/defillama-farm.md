@@ -6,9 +6,24 @@ DefiLlama منبع دادهٔ عمومی و بدون کلید API است، نه 
 
 ## مسیر داده
 
-- `GET /api/yields`: دریافت از `https://yields.llama.fi/pools`؛ همان فیلترهای پروتکل و شبکه، حداقل TVL پنج میلیون دلار، APY بین ۰٫۵ تا ۶۰ درصد و فیلتر outlier/emissions حفظ شده‌اند.
+- `GET /api/yields`: دریافت از `https://yields.llama.fi/pools` به‌همراه خواندن مستقیم و رایگان از بازار اصلی Kamino روی سولانا (`https://api.kamino.finance/kamino-market/7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF/reserves/metrics?env=mainnet-beta`)؛ رزروهایی که از قبل توسط آداپتور `kamino-lend` در DefiLlama برای همان mint منتشر شده باشند deduplicate می‌شوند و همهٔ ردیف‌های هر دو سورس از همان فیلترهای واحد پروتکل و شبکه، حداقل نقدینگی قابل‌برداشت (TVL) پنج میلیون دلار، APY بین ۰٫۵ تا ۶۰ درصد و فیلتر outlier/emissions (سقف ۷۰٪ پاداش) عبور می‌کنند.
 - حداکثر ۵۰۰ ردیف رتبه‌بندی‌شده، بدون شناسهٔ تکراری، به مرورگر می‌رسد. `considered` تعداد ورودی، `passed` تعداد قبول‌شده و `truncated` محدودشدن خروجی را نشان می‌دهند. تب استخرها در هر مرحله ۲۴ کارت نمایش می‌دهد.
-- `GET /api/yields/:id/history`: UUID معتبر و عضویت در فهرست فیلترشده بررسی می‌شود؛ سپس `/chart/:id` از میزبان ثابت DefiLlama فراخوانی می‌شود. این مسیر پراکسی URL دلخواه نیست.
+- `GET /api/yields/:id/history`: شناسهٔ معتبر (UUID در DefiLlama یا `kamino-<reservePubkey>` با بررسی base58) و عضویت در فهرست فیلترشده بررسی می‌شود؛ سپس برای UUIDها `/chart/:id` از میزبان ثابت DefiLlama و برای ردیف‌های مستقیم Kamino مسیر روزانهٔ `/reserves/:reserve/metrics/history?env=mainnet-beta&frequency=day` فراخوانی می‌شود. این مسیر پراکسی URL دلخواه نیست.
+
+### حسابرسی سورس‌ها و Allow-List در ۲۰۲۶-۱۰-۲۶
+
+تمامی اسلاگ‌های `ALLOWED_PROJECTS` در `server/yields.js` در برابر مخزن `DefiLlama/yield-server` (`src/adaptors/*`) و پاسخ واقعی `yields.llama.fi/pools` و `api.kamino.finance` حسابرسی شدند:
+
+- **سورس‌ها و اسلاگ‌های اضافه‌شده با شواهد واقعی API:**
+  - روی سولانا: `kamino-lend` و `kamino-liquidity` در DefiLlama به‌علاوهٔ سورس مستقیم رایگان `api.kamino.finance` (جایگزین اسلاگ مردهٔ `'kamino'`؛ نمونهٔ زنده ۲۰۲۶-۱۰-۲۶: رزرو `SOL` با `$19.17m` نقدینگی آزاد و `5.22%` APY، رزرو `USDC` با `$11.75m` نقدینگی آزاد و `4.42%` APY)، `jupiter-lend` (`USDC` Earn با `$493.75m` TVL و `4.96%` APY)، `save` (با فیلتر `!isFullyBorrowed` برای حذف رزروهای بدبدهی)، `binance-staked-sol` (`BNSOL` با `$1.061b` TVL و `4.51%` APY)، `drift-staked-sol` (`DSOL` با `$279.88m` TVL و `4.87%` APY)، `raydium-amm` (جایگزین `'raydium'`) و `orca-dex` (جایگزین `'orca'`).
+  - چندزنجیره‌ای و Avalanche: `spark-savings` (جایگزین اسلاگ مردهٔ `'spark'`؛ نمونهٔ زنده: `USDT` اتریوم `$647.95m` @ `3.75%` و `USDS` آربیتروم `$364.26m` @ `3.80%`)، `benqi-lending` و `benqi-staked-avax` (جایگزین `'benqi'`؛ نمونهٔ زنده: `SAVAX` با `$209.81m` @ `3.39%`).
+- **موارد ردشده و مستندشده (هم‌سنگ درس `meteora`/`ajna-v2`):**
+  - `meteora` (خطای `ReferenceError` روی متغیر تعریف‌نشدهٔ `p` و لینک کپی‌شده از `raydium.io`).
+  - `ajna-v2` (قرار دادن نماد وثیقه در `symbol` به‌جای توکن وام‌داده‌شده).
+  - `stargate` و `stargate-v1` (اسلاگ اول وجود ندارد؛ `stargate-v1` فقط `apyReward` بدون `apyBase` منتشر می‌کند، نام زنجیره را `'Binance'` می‌گذارد و استخرهای V1 پس از مهاجرت به V2 روی `0.00%` APY و زیر `$300k` هستند؛ V2 آداپتور ندارد).
+  - `pendle` و `pendle-v2` (ترکیب توکن‌های سررسیددار `PT` و استخرهای منقضی‌شونده بدون هشدار تاریخ سررسید در رابط).
+  - `gmx` / `gmx-evm` / `gmx-v1-perps` / `gmx-solana` (پاسخ خالی در `poolsEnriched` نمونهٔ V2 و ماهیت طرف‌مقابلِ PnL معامله‌گران در خزانه‌های GM/GLP).
+  - `eigenlayer` (نبود آداپتور بازده در `yield-server`)، `seamless-v2` (توکن‌های اهرمی `LeverageToken` به‌جای وام‌دهی اسپات) و `radiant-v2` (قرار گرفتن آدرس قرارداد در فیلد `url` و توقف بازارها پس از اکسپلویت اکتبر ۲۰۲۴).
 - تاریخچه حداکثر ۳۶۵ مشاهدهٔ روزانه دارد؛ برای هر روز جدیدترین مشاهده نگه داشته و نتیجه برحسب زمان مرتب می‌شود. نمودار بازه‌های ۳۰، ۹۰ و ۳۶۵ روز و معیارهای APY/TVL دارد. روزهای بدون داده جعل نمی‌شوند.
 - `DefiLlamaYieldAdapter` بدون ورودی اولیه داده را از API برنامه دریافت می‌کند؛ متدهای getPool، getAPY، getAPR، getTVL و getHistory به دادهٔ واقعی وصل هستند. execute/prepare همچنان UNAVAILABLE هستند.
 

@@ -1,14 +1,20 @@
 # Farm canary rollout — current status report
 
-_Status as of 2026-09-09. This report records exactly which protocol paths are
-**canary-limited and evidence-backed** and which must stay **OFF**. It is an
-operational status document, not a claim that public capital is on._
+_Status updated 2026-10-26 (originally recorded 2026-09-09). This report records
+which protocol paths have committed fork-evidence anchors, how the uncapped
+`scripts/farm-rollout-policy.mjs` gate governs them, and the exact readiness state
+for the live Aave v3 Base canary (awaiting **owner permission + canary wallet**;
+no unauthorized mainnet canary has been executed)._
 
-> **Rule that governs every line below:** public capital is only enabled once a
-> protocol has (a) a clean `--strict` fork-probe PASS recorded in
-> `farm-fork-evidence/<id>.json`, (b) a non-empty operator allowlist, and (c) a
-> successful canary. Until then the gate is `capital-off`. Withdraw/exit/revoke is
-> gated **only** by `hasPosition`, never by the supply flag, allowlist, or caps.
+> **Rule that governs every line below:** a protocol path may open only with
+> (a) verified `--strict` fork-probe PASS evidence (`farm-fork-evidence/<id>.json`
+> and up-to-date CI probe verification — see `docs/defi/farm-execution-readiness-fa.md`
+> for the 2026-10-26 strict audit), (b) a non-empty public operator allowlist, and
+> (c) for `public-open`, `FARM_CANARY_CONFIRMED=true` after a verified on-chain
+> round-trip canary. Default local builds (`npm run build`) are `capital-off`.
+> Artificial client-side `VITE_*_MAX_*` caps were removed (`uncapped`); only
+> protocol on-chain caps and wallet balances apply. Withdraw/exit/revoke is gated
+> **only** by `hasPosition`, never by supply flags or allowlists.
 
 ---
 
@@ -37,13 +43,13 @@ records; no record exists for any path now.**
 
 ## 2. Protocol status table
 
-| Network | Asset | Protocol | Op | Flag | Allowlist | Caps (per tx / total) | Fork evidence | Status |
+| Network | Asset | Protocol | Op | Flag | Allowlist | Cap model | Committed Sep-2026 anchor | 2026-10-26 strict audit (`farm-execution-readiness-fa.md`) |
 |---|---|---|---|---|---|---|---|---|
-| Base | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **36/36 PASS** (`aave-base.json`) | ✅ canary-ready |
-| Arbitrum One | native USDC (aUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | 1000 / 10000 | **37/37 PASS** (`aave-arbitrum.json`) | ✅ canary-ready |
-| Base | native USDC (cUSDCv3) | Compound v3 | supply | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **46/46 PASS** (`compound-base.json`) | ✅ canary-ready |
-| Ethereum | stETH↔wstETH | Lido | stake/wrap | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | 1 ETH / 10 ETH | **31/31 PASS** (`lido.json`) | ✅ canary-ready |
-| Base | native USDC / cbBTC | Morpho Blue | supply | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | 1000 / 10000 | **34/34 PASS** (`morpho-base.json`) | ✅ canary-ready |
+| Base | native USDC (aBasUSDC) | Aave v3 | supply | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | uncapped (5 USDC canary rec.) | `36/36` (`aave-base.json`) + `50/50` CI job `102268394490` | ✅ Stage-1 canary preflight ready (`npm run check:aave-base-canary`); awaiting owner permission + canary wallet |
+| Arbitrum One | native USDC (aArbUSDCn) | Aave v3 | supply | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | uncapped | `37/37` (`aave-arbitrum.json`) | ⚠️ Needs fresh GitHub Actions `--strict` run against expanded probe (`0/1` local sandbox — no `anvil`) |
+| Base | native USDC (cUSDCv3) | Compound v3 | supply | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | uncapped | `46/46` (`compound-base.json`) | ⚠️ Needs fresh GitHub Actions `--strict` run against expanded probe (`0/1` local sandbox — no `anvil`) |
+| Ethereum | stETH↔wstETH | Lido | stake/wrap | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | uncapped | `31/31` (`lido.json`) | ⚠️ Needs fresh GitHub Actions `--strict` run against expanded probe (`0/1` local sandbox — no `anvil`) |
+| Base | native USDC / cbBTC | Morpho Blue | supply | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | uncapped | `34/34` (`morpho-base.json`) | ⚠️ Needs fresh GitHub Actions `--strict` run against expanded probe (`0/1` local sandbox — no `anvil`) |
 
 Capital-off (the default, no money-in flag) is always allowed.
 
@@ -66,14 +72,24 @@ canary-ready protocols (only the fee wallet above).
 
 ## 4. Canary build examples (verified locally against the gate)
 
+**Stage-1 Aave v3 Base limited canary (recommended first live step — see `ci/farm-aave-base-canary.env.example`):**
+```
+FARM_STRICT_FORK_EVIDENCE=true \
+FARM_CANARY_CONFIRMED=false \
+FARM_ROLLOUT_PROTOCOLS=aave-base \
+VITE_ENABLE_AAVE_BASE_SUPPLY=true \
+VITE_AAVE_BASE_SUPPLY_ALLOWLIST=0xYOUR_PUBLIC_CANARY_WALLET
+```
+→ `mode: limited-canary`, `ok: true` (`uncapped`; recommended live canary denomination: 5 USDC + 0.001 ETH gas on Base). Verify beforehand with `CANARY_WALLET=0x... npm run check:aave-base-canary`.
+
 **Compound v3 Base (canary):**
 ```
 FARM_STRICT_FORK_EVIDENCE=true \
 FARM_ROLLOUT_PROTOCOLS=compound-base \
 VITE_ENABLE_COMPOUND_BASE_SUPPLY=true \
-VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
+VITE_ENABLE_COMPOUND_BASE_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
 ```
-caps default 1000/10000 USDC → `limited-canary`, `ok: true`. Capital-off build passes too.
+(Note: variable name is `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST`.) → `limited-canary`, `ok: true`, `uncapped`. Capital-off build passes too.
 
 **Aave v3 Base + Arbitrum (canary):**
 ```
@@ -85,21 +101,18 @@ VITE_ENABLE_AAVE_ARBITRUM_SUPPLY=true \
 VITE_AAVE_ARB_SUPPLY_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
 ```
 
-**Lido (canary) — only after a PASS:**
+**Lido (canary):**
 ```
 FARM_STRICT_FORK_EVIDENCE=true \
 FARM_ROLLOUT_PROTOCOLS=lido \
 VITE_ENABLE_LIDO_STAKE=true \
 VITE_LIDO_STAKE_ALLOWLIST=0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6
 ```
-caps proposed 1 ETH/tx, 10 ETH total. **Do not enable until**
-`farm-fork-evidence/lido.json` with `result: "PASS"` exists.
+→ `limited-canary`, `ok: true`, `uncapped`.
 
 **Public-open (post-canary) mode — OFF by default:**
 
-Public capital is still OFF. The four USDC protocols and Lido are **canary-ready**,
-not open. After a protocol's canary has been confirmed on-chain, the operator may
-widen it to ANY connected wallet by adding a per-protocol public flag:
+After a protocol's live canary has been confirmed on-chain (supply + receipt + full withdraw + tx hashes recorded), the operator may widen it to ANY connected wallet by adding a per-protocol public flag:
 
 | Protocol | public flag |
 |---|---|
@@ -113,9 +126,9 @@ The rollout gate permits this **only** when the build ALSO sets
 `FARM_CANARY_CONFIRMED=true`; setting a public flag without it fails the build
 closed. The operator canary allowlist stays non-empty even in public mode (the
 fee-recipient wallet above), so the gate never fails open. Public mode opens
-SUPPLY/STAKE to everyone — still subject to the same per-tx/total caps
-(1000/10000 USDC, 1 ETH/tx and 10 ETH total for Lido) — while
-WITHDRAW/UNWRAP/REQUESTWITHDRAW/CLAIM remain gated by `hasPosition` only.
+SUPPLY/STAKE to everyone (`uncapped` in client code — governed by protocol on-chain
+supply caps and wallet balances) while WITHDRAW/UNWRAP/REQUESTWITHDRAW/CLAIM
+remain gated by `hasPosition` only.
 
 ```
 FARM_ROLLOUT_PROTOCOLS=aave-base,aave-arbitrum,compound-base,lido,morpho-base \
