@@ -57,16 +57,8 @@ import FuturesMarketChart from '../components/FuturesMarketChart';
 const ONCHAIN_VENUES = ['drift'];
 const ONCHAIN_EXECUTION = ['CLIENT_BUILDS_TX', 'ONCHAIN_UNSIGNED_TX'];
 const CATEGORY_ORDER = ['Crypto'];
-const friendlyCategory = (raw) => {
-  const v = String(raw || '').toLowerCase();
-  if (v.includes('crypto')) return 'Crypto';
-  if (v.includes('forex') || v === 'fx') return 'Forex';
-  if (v.includes('commodit') || v.includes('metal')) return 'Commodities';
-  if (v.includes('indic')) return 'Indices';
-  if (v.includes('stock') || v.includes('equit')) return 'Stocks';
-  if (v.includes('etf')) return 'ETFs';
-  return 'Other';
-};
+const friendlyCategory = (raw) =>
+  String(raw || '').toLowerCase().includes('crypto') ? 'Crypto' : 'Other';
 const LEVERAGE_PRESETS = [2, 5, 10, 20, 50];
 
 const errCode = (e) => mapFuturesError(e).code;

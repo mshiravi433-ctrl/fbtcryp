@@ -75,7 +75,7 @@
 - `FUTURES_HISTORY_ENABLED`
 - `SPOT_DEPTH_ENABLED`
 
-پرچم‌های موجود (`*_ENABLED`، `*_PUBLIC`، `*_ALLOWLIST`) تغییر نکرده‌اند. اسکریپت `android:sync` هر سه را صریحاً `false` می‌کند و یک آزمون این را نگه می‌دارد.
+پرچم‌های موجود (`*_ENABLED`، `*_PUBLIC`، `*_ALLOWLIST`) تغییر نکرده‌اند. اسکریپت `android:sync` هر سه را صریحاً `false` می‌کند و یک آزمون این را نگه می‌دارد. این متن وضعیت اولیهٔ آن rollout را ثبت می‌کند: از ۲۰۲۶-۱۰-۲۶، `VITE_ENABLE_FUTURES_HISTORY` فقط در build وب production از `ci/web-season.env.sh` روشن است؛ مقدار پیش‌فرض کد، preview/dev و Android همچنان خاموش‌اند. TP/SL در همهٔ محیط‌ها تا تکمیل شواهد testnet خاموش می‌ماند. گزارش پیگیری: [2026-10-26-futures-history-and-onchain-category-fa.md](2026-10-26-futures-history-and-onchain-category-fa.md).
 
 ---
 
@@ -143,9 +143,10 @@
 
 ---
 
-## ۱۰. کارهای بعدی پیش از فعال‌سازی
+## ۱۰. کارهای بعدی و وضعیت rollout (به‌روزرسانی ۲۰۲۶-۱۰-۲۶)
 
-- تست روی testnet: ثبت، لغو و انقضای سفارش شرطی.
+- **TP/SL dYdX همچنان خاموش:** ثبت/انقضا/لغو سفارش شرطی و رفتار LIMIT+IOC باید روی testnet با SDK 3.4.0 سنجیده شوند. این محیط به endpointهای testnet دسترسی نداشت و credential testnet هم فراهم نبود؛ جزئیات و گام دستی در [یادداشت پیگیری](2026-10-26-futures-history-and-onchain-category-fa.md) است. `VITE_ENABLE_DYDX_TPSL` را روشن نکنید تا شواهد هر دو رفتار ثبت شود.
+- **تاریخچه فقط در وب production فعال:** کد `FuturesHistory` فقط‌خواندنی است؛ ورودی‌های dYdX از پروکسی هم‌مبدأ می‌آیند، PnL محقق‌شده «—» می‌ماند و Ostium/Velocity unavailable هستند. build وب production از `ci/web-season.env.sh` فلگ را دریافت می‌کند؛ Android همچنان صریحاً false است.
 - سنجیدنِ نرخ‌محدودیتِ تجمیع‌کننده‌ها و تنظیمِ TTL/هم‌زمانی بر اساسِ آن.
 - ترجمهٔ `dydx.tpsl.*` و `futures.history.*` به ده زبانِ باقی‌مانده.
-- بازبینی امنیتی پیش از روشن‌کردنِ هر پرچم.
+- بازبینی امنیتی TP/SL پیش از روشن‌کردنِ فلگ آن.

@@ -470,7 +470,8 @@ export async function run(container) {
     await act(async () => { click(strip[1]); });
     await act(async () => { await sleep(500); });
     t('the dYdX tab still mounts', /dYdX/.test(container.textContent));
-    t('the on-chain deep link remains selected while its tab query is present', tabs()[2]?.getAttribute('aria-selected') === 'true');
+    t('switching to dYdX selects its tab and updates the deep-link query',
+      tabs()[1]?.getAttribute('aria-selected') === 'true' && /[?&]tab=dydx(?:&|$)/.test(String(window.location.hash)));
     await mountAt('#/perp');
     await act(async () => { await sleep(700); });
     t('the Perpetual pair list renders on the default route', !!q('[data-testid="perp-row-BTC"]') && !q('.perp-liq'));

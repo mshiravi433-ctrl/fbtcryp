@@ -58,6 +58,15 @@ test('only production web pipeline sources rollout; Android overrides all three'
   assert.equal(pkg.dependencies['@dydxprotocol/v4-client-js'], '3.4.0');
 });
 
+test('history is mounted in the real Perp rail only behind both web rollout and speculation flags', () => {
+  const perp = read('src/pages/Perp.jsx');
+  assert.match(perp, /import \{ FUTURES_HISTORY_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED \} from '\.\.\/lib\/features';/);
+  assert.match(perp, /SPECULATION_ENABLED && FUTURES_HISTORY_ENABLED[\s\S]*import\('\.\.\/components\/futures\/FuturesHistory'\)/);
+  assert.match(perp, /FUTURES_HISTORY_ENABLED \? \['history'\] : \[\]/);
+  assert.match(perp, /perpTab === 'history' && FUTURES_HISTORY_ENABLED/);
+  assert.match(perp, /onOpenDydx=\{\(\) => selectTab\('dydx'\)\}/);
+});
+
 /*
  * The thresholds used to be written down a second time here (1699/1700/1701),
  * and when scripts/check-first-paint.mjs raised the budget 1700 → 1750 on
