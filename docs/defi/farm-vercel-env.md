@@ -1,174 +1,64 @@
-# Farm canary — Vercel Environment Variables (all five protocols)
+# Farm canary & rollout — Vercel Environment Variables
 
-_This is the operator checklist for enabling the staged Farm canary in Vercel.
-It covers **Aave v3 Base (native USDC)**, **Aave v3 Arbitrum (native USDC)**,
-**Compound v3 Base (native USDC)**, **Lido Ethereum (stETH/wstETH)** and
-**Morpho Blue Base (USDC/cbBTC)** in a single build. Every protocol has a strict-fork
-PASS recorded under `farm-fork-evidence/`._
+_Operator reference for configuring staged Farm canary or public-open builds in Vercel (`2026-10-26`). Aligned 1:1 with `scripts/farm-rollout-policy.mjs` (uncapped contract — artificial `VITE_*_MAX_*` env vars were removed after fork verification; only protocol on-chain supply caps and wallet balances apply)._
 
-## ✅ You no longer have to paste these into Vercel
+## ✅ Shared rollout config vs Stage-1 Aave Base limited canary
 
-Since the public-open rollout, **`ci/farm-rollout.env.sh` carries every value below
-and `npm run build:full` sources it** — and `build:full` is exactly what
-`vercel.json` runs (`buildCommand`). So a normal deploy is public-open for all five
-protocols with no dashboard step, and the APK builds read the same file
-(`ci/build-both.sh`), which is the point: one copy, no drift.
+- **Full 5-protocol build (`ci/farm-rollout.env.sh`):** Sourced by `npm run build:full` (`vercel.json` → `buildCommand`) and `ci/build-both.sh`. Uses `${VAR:-default}` parameter expansion so any variable explicitly set in Vercel Dashboard overrides the file default.
+- **Stage-1 Aave-Base-only limited canary (`ci/farm-aave-base-canary.env.example`):** Ready-to-use sample configuration that enables **only `aave-base`** in `limited-canary` mode (`FARM_CANARY_CONFIRMED=false`, `VITE_AAVE_BASE_SUPPLY_PUBLIC=false`, all other four protocols `false`, SplitRouter `OFF`) so only "owner permission + canary wallet" are needed before running a live 5 USDC round-trip canary.
+- **Preflight check (zero spend, zero keys):**
+  ```bash
+  CANARY_WALLET=0xYourPublicCanaryWallet npm run check:aave-base-canary
+  ```
 
-That manual step was the gap. This page existed, the values were correct, and the
-website was still `capital-off` for every visitor because nothing pasted them into
-the dashboard — «در فارم هنوز نمیاد برای همه». Keeping them in the repo means the
-next deploy cannot forget them.
-
-The tables below are still accurate, and still what to read when you need to know
-which value does what. Use them to **override** a single value in the dashboard
-(they win: the file uses `${VAR:-default}`, so an env var Vercel injects is kept),
-or to close everything again without a code change:
-
-| To do this | Set in Vercel |
+| Operational goal in Vercel | Variables to set in Vercel Dashboard |
 |---|---|
-| Close the money path completely | `FARM_CAPITAL=off` |
-| Drop back to the canary wallet only | `VITE_AAVE_BASE_SUPPLY_PUBLIC=false` (and the other four `*_PUBLIC`) |
-| Narrow the rollout to one protocol | `FARM_ROLLOUT_PROTOCOLS=aave-base` **and** the other four `VITE_ENABLE_*` = `false` — the gate rejects a mismatch rather than guessing |
+| **Kill switch — close all Farm money-in immediately** | `FARM_CAPITAL=off` |
+| **Stage-1 limited canary (Aave Base only, 1 wallet)** | Copy values from `ci/farm-aave-base-canary.env.example` with owner's `0x…` canary wallet in `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` |
+| **Drop all 5 protocols back to allowlist-only canary** | `FARM_CANARY_CONFIRMED=false` and all five `VITE_*_PUBLIC=false` |
 
-Anything half-set fails the build closed (`scripts/farm-rollout-policy.mjs`,
-re-asserted by `vite.config.js`), so an override typo produces a red deploy, not a
-half-open Farm.
+Anything half-set fails the build closed (`scripts/farm-rollout-policy.mjs`, re-asserted by `vite.config.js`), so an override typo produces a red deploy, never a half-open Farm.
 
 ---
-
 
 ## ⚠️ Two rules that govern every value
 
-1. **No private key / secret for Farm.** Farm supply/stake is read from public
-   contracts + RPC. None of the variables below are secrets. **Never** prefix a
-   private key, mnemonic, or writable token with `VITE_` — that compiles into the
-   browser bundle and is public.
-2. Every `VITE_*` below is compiled into the app at build time (public). That is
-   fine here because they are addresses / booleans / caps, not credentials.
+1. **Zero private keys / secrets.** Farm supply/stake reads from public contracts + RPC and signs strictly inside the user's connected wallet UI. **Never** put a private key, seed phrase, mnemonic, or writable token in Vercel, CI, or `.env` (`npm run check:aave-base-canary` fails closed if any secret-shaped variable is present).
+2. Every `VITE_*` variable is compiled into the browser bundle at build time (public booleans and public `0x…` allowlist addresses only).
 
 ---
 
-## Gate (required) — do NOT omit
+## Stage-1 Aave Base Limited Canary Override (Recommended First Live Step)
 
 | Name | Value |
 |---|---|
-| `FARM_ROLLOUT_PROTOCOLS` | `aave-base,aave-arbitrum,compound-base,lido,morpho-base` |
+| `FARM_ROLLOUT_PROTOCOLS` | `aave-base` |
 | `FARM_STRICT_FORK_EVIDENCE` | `true` |
-
-`vite.config.js` runs `assertFarmRollout(process.env)`. Without these the build
-**fails closed** (or stays `capital-off` and shows no Farm UI).
-
----
-
-## Aave v3 Base — native USDC
-
-| Name | Value |
-|---|---|
+| `FARM_CANARY_CONFIRMED` | `false` |
 | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `true` |
-| `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_AAVE_BASE_SUPPLY_MAX_USDC_PER_TX` | `1000` |
-| `VITE_AAVE_BASE_SUPPLY_MAX_USDC_TOTAL` | `10000` |
+| `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | `0xREPLACE_WITH_OWNER_PUBLIC_CANARY_WALLET` |
+| `VITE_AAVE_BASE_SUPPLY_PUBLIC` | `false` |
+| `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `false` |
+| `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `false` |
+| `VITE_ENABLE_LIDO_STAKE` | `false` |
+| `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `false` |
 
-## Aave v3 Arbitrum — native USDC
-
-| Name | Value |
-|---|---|
-| `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `true` |
-| `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_AAVE_ARB_SUPPLY_MAX_USDC_PER_TX` | `1000` |
-| `VITE_AAVE_ARB_SUPPLY_MAX_USDC_TOTAL` | `10000` |
-
-## Compound v3 Base — native USDC
-
-| Name | Value |
-|---|---|
-| `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `true` |
-| `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_PER_TX` | `1000` |
-| `VITE_COMPOUND_BASE_SUPPLY_MAX_USDC_TOTAL` | `10000` |
-
-## Lido Ethereum — stETH/wstETH
-
-| Name | Value |
-|---|---|
-| `VITE_ENABLE_LIDO_STAKE` | `true` |
-| `VITE_LIDO_STAKE_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_LIDO_STAKE_MAX_ETH_PER_TX` | `1` |
-| `VITE_LIDO_STAKE_MAX_ETH_TOTAL` | `10` |
-
-## Morpho Blue Base — USDC/cbBTC
-
-| Name | Value |
-|---|---|
-| `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `true` |
-| `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` |
-| `VITE_MORPHO_BASE_SUPPLY_MAX_USDC_PER_TX` | `1000` |
-| `VITE_MORPHO_BASE_SUPPLY_MAX_USDC_TOTAL` | `10000` |
+Gate output for this profile:
+```text
+Farm rollout gate passed: limited canary for aave-base (1 canary wallet, uncapped).
+```
 
 ---
 
-## Where to put them in Vercel
+## All Five Protocol Variables Reference
 
-- **Settings → Environment Variables → add** each pair above.
-- **Scope:** set them for **Production**. If you also test `Preview`/`Development`,
-  add them there too (otherwise the preview build stays `capital-off`).
-- **Save**, then **Deployments → ⋯ → Redeploy** so the build picks them up.
+| Protocol (`id`) | Enable Flag | Allowlist Variable (public `0x…`, comma-separated) | Public Override Flag (requires `FARM_CANARY_CONFIRMED=true`) |
+|---|---|---|---|
+| Aave v3 Base (`aave-base`) | `VITE_ENABLE_AAVE_BASE_SUPPLY` | `VITE_AAVE_BASE_SUPPLY_ALLOWLIST` | `VITE_AAVE_BASE_SUPPLY_PUBLIC` |
+| Compound v3 Base (`compound-base`) | `VITE_ENABLE_COMPOUND_BASE_SUPPLY` | `VITE_COMPOUND_BASE_SUPPLY_ALLOWLIST` | `VITE_COMPOUND_BASE_SUPPLY_PUBLIC` |
+| Aave v3 Arbitrum (`aave-arbitrum`) | `VITE_ENABLE_AAVE_ARBITRUM_SUPPLY` | `VITE_AAVE_ARB_SUPPLY_ALLOWLIST` | `VITE_AAVE_ARB_SUPPLY_PUBLIC` |
+| Lido Ethereum (`lido`) | `VITE_ENABLE_LIDO_STAKE` | `VITE_LIDO_STAKE_ALLOWLIST` | `VITE_LIDO_STAKE_PUBLIC` |
+| Morpho Blue Base (`morpho-base`) | `VITE_ENABLE_MORPHO_BASE_SUPPLY` | `VITE_MORPHO_BASE_SUPPLY_ALLOWLIST` | `VITE_MORPHO_BASE_SUPPLY_PUBLIC` |
 
-## Public-open (post-canary) — OPTIONAL, OFF by default
-
-The values above open the money-in UI **only to the allowlist wallet**. After a
-protocol's canary has succeeded on-chain, you may widen it to ANY connected wallet
-by adding that protocol's public flag **plus** `FARM_CANARY_CONFIRMED=true`.
-
-| Name | Value (only for the public-open transition) |
-|---|---|
-| `FARM_CANARY_CONFIRMED` | `true` |
-| `VITE_AAVE_BASE_SUPPLY_PUBLIC` | `true` |
-| `VITE_AAVE_ARB_SUPPLY_PUBLIC` | `true` |
-| `VITE_COMPOUND_BASE_SUPPLY_PUBLIC` | `true` |
-| `VITE_LIDO_STAKE_PUBLIC` | `true` |
-| `VITE_MORPHO_BASE_SUPPLY_PUBLIC` | `true` |
-
-**Rules that never change:**
-
-- A public flag **without** `FARM_CANARY_CONFIRMED=true` fails the build **closed**.
-- The allowlist stays non-empty (the fee-recipient wallet above) even in public mode,
-  so the gate never fails open.
-- Public mode opens **SUPPLY/STAKE** to everyone, still capped (1000/10000 USDC and
-  1 ETH/tx / 10 ETH total for Lido). **WITHDRAW/UNWRAP/REQUESTWITHDRAW/CLAIM** stay
-  gated by `hasPosition` only, never by the flag/allowlist/caps/public override.
-- **Do not set these until the canary has been confirmed.** Until then, leave them
-  unset so the deployment stays `limited-canary`.
-
-## Verified gate behaviour
-
-Running `assertFarmRollout` with the above env returns:
-
-```
-ok: true          mode: limited-canary
-enabled: [aave-base, compound-base, aave-arbitrum, lido, morpho-base]
-  aave-base      -> allowlist 1 | caps 1000/10000
-  compound-base  -> allowlist 1 | caps 1000/10000
-  aave-arbitrum  -> allowlist 1 | caps 1000/10000
-  lido           -> allowlist 1 | caps 1/10
-  morpho-base    -> allowlist 1 | caps 1000/10000
-errors: []
-```
-
-## Allowlist semantics
-
-The single fee-recipient `0xaf5CE154cEfd22Da5BD1D0a54479E81963A224d6` is the only
-wallet that sees the money-in UI. Any other connected wallet sees the position but
-the supply/stake path stays closed (withdraw/exit/revoke is gated only by
-`hasPosition`, never by allowlist/caps/flag). To add more operator wallets, join with
-commas: `0xabc...,0xdef...`.
-
-When you later widen to every wallet (public-open above), the allowlist still has to
-be present and non-empty; it is no longer the only wallet allowed in, but it stays on
-record as the canary wallet so the gate never fails open.
-
-## Evidence-backed
-
-Every protocol listed above has a strict-fork PASS under `farm-fork-evidence/`:
-Aave Base 36/36, Aave Arbitrum 37/37, Compound Base 46/46, Lido 31/31, Morpho 34/34.
-No path is enabled without its anchor, and the gate never fails open.
+### Exit & Withdrawal Invariant
+**WITHDRAW / UNWRAP / REQUESTWITHDRAW / CLAIM / REVOKE** are gated **only** by `hasPosition` on-chain — never by `VITE_ENABLE_*`, allowlists, or `*_PUBLIC` flags. Turning `FARM_CAPITAL=off` closes new deposits immediately while keeping every existing position 100% withdrawable.

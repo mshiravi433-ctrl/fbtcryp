@@ -30,6 +30,40 @@
 
 const LLAMA_YIELDS = 'https://yields.llama.fi/pools';
 
+/*
+ * Direct free Kamino Solana upstream (verified live 2026-10-26 against
+ * https://api.kamino.finance — public JSON, no API key, no cost).
+ *
+ * Main Market (`7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF`, SOL/BTC Market
+ * on Solana mainnet-beta) exposes per-reserve supply/borrow USD and supply APY
+ * on `/reserves/metrics` plus daily history on `/reserves/:reserve/metrics/history`.
+ * Every mapped Kamino reserve passes through the EXACT same `isEligible()`
+ * safety gates as DefiLlama rows ($5m withdrawable TVL floor, 0.5%–60% APY
+ * band, 70% emission ceiling) and deduplicates against `kamino-lend` rows
+ * already emitted by DefiLlama for the same Main Market mint.
+ */
+export const KAMINO_MAIN_MARKET = '7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF';
+export const KAMINO_RESERVES_URL = `https://api.kamino.finance/kamino-market/${KAMINO_MAIN_MARKET}/reserves/metrics?env=mainnet-beta`;
+const kaminoReserveHistoryUrl = (reserve) =>
+  `https://api.kamino.finance/kamino-market/${KAMINO_MAIN_MARKET}/reserves/${encodeURIComponent(reserve)}/metrics/history?env=mainnet-beta&frequency=day`;
+const SOLANA_BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const LLAMA_POOL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const KAMINO_POOL_ID_RE = /^kamino-([1-9A-HJ-NP-Za-km-z]{32,44})$/;
+
+/*
+ * Mint-verified Solana USD stablecoins used when mapping direct Kamino
+ * `/reserves/metrics` rows (which report `liquidityTokenMint` rather than a
+ * boolean `stablecoin` flag). Never classify stablecoins by symbol substring.
+ */
+const KAMINO_USD_STABLE_MINTS = new Set([
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC (Circle)
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT (Tether)
+  '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo', // PYUSD (PayPal USD)
+  '2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH', // USDG (Global Dollar)
+  'USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA',  // USDS (Sky Dollar)
+  '9zNQRsGLjNKwCUU5Gq5LR8beUCPzQMVMqKAi3SSZh54u', // FDUSD (First Digital USD)
+]);
+
 const configuredTimeout = Number(process.env.UPSTREAM_TIMEOUT_MS);
 const TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? Math.min(configuredTimeout, 30_000) : 12_000;
 
@@ -67,8 +101,19 @@ const ALLOWED_PROJECTS = new Set([
   'compound-v3',
   'morpho-blue',
   'venus-core-pool',
-  'spark',
   'sparklend',
+  /*
+   * ─── spark-savings — added 2026-10-26, replacing dead 'spark' slug ───────
+   * Slug verified against github.com/DefiLlama/yield-server
+   *   src/adaptors/spark-savings/index.ts (`project: 'spark-savings'`, chains
+   *   ethereum, avax, base, arbitrum, robinhood).
+   * Live feed 2026-10-26 (yields.llama.fi/pools):
+   *   - Ethereum USDT (`a5d67f7e-5b51-4a9d-969d-caf051a7f5a4`): $647.95m @ 3.75% apyBase
+   *   - Arbitrum USDS (`9d499222-a01a-45bb-bbc9-f01c7923693b`): $364.26m @ 3.80% apyBase
+   *   - Ethereum USDC (`c5c74dd1-995c-4445-9d84-3e710bad7d52`): $295.29m @ 3.80% apyBase
+   * Pinned in test/wiring.mjs SLUG_EVIDENCE.
+   */
+  'spark-savings',
   // liquid staking — the least complex thing in DeFi and the easiest to explain
   'lido',
   'rocket-pool',
@@ -101,97 +146,99 @@ const ALLOWED_PROJECTS = new Set([
   'balancer-v2',
   'aerodrome-slipstream',
   /*
-   * ─── CONSIDERED AND REJECTED, 2026-08-24 (do not add without re-checking) ─
+   * ─── CONSIDERED AND REJECTED (do not add without re-checking) ────────────
    *
    * 'meteora' — the adapter is broken, and has never worked. Its ONLY commit
    * (2025-01-23, "rename resolv") left `p.pool_token_mints` and `apyReward`
    * referencing undefined variables, so `apy()` throws a ReferenceError on
    * every run and the server can have stored no `project: 'meteora'` pool
-   * since. Verified against master on 2026-08-24; `meteora-dlmm` and `ajna`
-   * are not present in the repo at all. A slug with no data behind it would
-   * only look like we list Meteora when we do not.
+   * since. Re-verified against master on 2026-10-26 (still broken, plus URLs
+   * copied from raydium.io); `meteora-dlmm` and `ajna` are not present in the
+   * repo at all. A slug with no data behind it would only look like we list
+   * Meteora when we do not.
    *
-   * 'ajna-v2' — two independent problems, either one enough to stay out:
+   * 'ajna-v2' — two independent problems, either one enough to stay out
+   * (re-verified on master 2026-10-26):
    *   1. WRONG LABEL ON THE WRONG ASSET. The adapter puts the COLLATERAL
    *      token in `symbol` (e.g. "WBTC") while the token a depositor
    *      actually lends is the quote in `mintedCoin`/`borrowToken`, and
    *      `underlyingTokens` lists the collateral only. Our riskBand() would
    *      then render a USDC-lending pool as "WBTC · low" — the exact
-   *      mislabel this app exists to refuse. Adding it would require
-   *      first teaching normalizePool to prefer `mintedCoin`.
-   *   2. NOTHING PASSES THE FLOOR. The whole protocol holds under ~$1M
-   *      (DefiLlama: 4 pools tracked, average APY 0.93%, 2026-08-24), so
-   *      every pool dies at MIN_TVL = $10m. A slug that renders zero rows
-   *      is dead weight today and a trap for problem 1 the day TVL grows.
-   * If Ajna outgrows the floor, add the slug AND the mintedCoin label fix
-   * together, with fresh evidence in test/wiring.mjs.
+   *      mislabel this app exists to refuse.
+   *   2. NOTHING PASSES THE FLOOR. Every tracked pool sits well below MIN_TVL.
+   *
+   * ─── 2026-10-26 AUDIT: DEAD SLUGS REMOVED & BROKEN ADAPTERS REJECTED ─────
+   * Full audit of all 40 prior slugs against DefiLlama/yield-server master
+   * (`src/adaptors/*`) and live `yields.llama.fi/pools` + `poolsEnriched`:
+   *
+   *   • Dead non-existent slugs removed (matched 0 pools because no adapter
+   *     folder exists under these names):
+   *       'kamino'     → replaced by 'kamino-lend' + 'kamino-liquidity' + direct api.kamino.finance
+   *       'raydium'    → replaced by 'raydium-amm'
+   *       'orca'       → replaced by 'orca-dex'
+   *       'spark'      → replaced by 'spark-savings' ('sparklend' already present)
+   *       'benqi'      → replaced by 'benqi-lending' + 'benqi-staked-avax'
+   *       'stargate'   → removed; 'stargate-v1' also REJECTED (see below)
+   *       'pendle'     → removed; 'pendle-v2' also REJECTED (see below)
+   *       'gmx'        → removed; 'gmx-evm' / 'gmx-v1-perps' / 'gmx-solana' REJECTED (see below)
+   *       'eigenlayer' → removed (no native restaking yield adapter in yield-server;
+   *                      liquid restaking is already represented by 'ether.fi-stake')
+   *
+   *   • 'stargate-v1' — REJECTED: `src/adaptors/stargate-v1/index.js` sets
+   *     `apyReward` only (`apyBase` undefined -> 100% emission share > 70%
+   *     ceiling), uses `'Binance'` chain name instead of `'BSC'`, and live V1
+   *     pools sit at 0.00% APY / <$300k TVL after V2 migration (`stargate-v2`
+   *     has no yield-server adapter).
+   *   • 'pendle-v2' — REJECTED: `src/adaptors/pendle-v2/index.js` mixes
+   *     fixed-maturity Principal Tokens (`poolMeta: '(PT) ...'`) and expiring
+   *     SY/PT LPs whose principal matures on a calendar date; unsafe to mix
+   *     into a perpetual/spot yield board without maturity-date UX guards.
+   *   • 'gmx-evm' / 'gmx-v1-perps' / 'gmx-solana' — REJECTED: `poolsEnriched`
+   *     for GMX V2 (`99fbac4c-b8ab-4abb-b83e-6b280a17b93c`) returned `data: []`
+   *     on 2026-10-26, and GM/GLP vaults carry directional trader-PnL
+   *     counterparty exposure rather than passive lending or spot swap fees.
+   *   • 'seamless-v2' — REJECTED: `src/adaptors/seamless-v2/index.js` tracks
+   *     leveraged collateral/debt `LeverageToken` loops (`LeverageManager`),
+   *     not passive spot lending.
+   *   • 'radiant-v2' — REJECTED: `src/adaptors/radiant-v2/index.js` writes a
+   *     raw contract address into `url` and markets remain deprecated post-Oct
+   *     2024 exploit.
    */
   // stablecoin yield with a real, explainable source
   'sky-lending',
   'ethena-usde',
   'maple',
-  /*
-   * ─── SECOND WAVE — added 2026-09-06, same filters, no exceptions ─────────
-   * Users asked for more investable pools («استخرهای بیشتر برای سرمایه‌گذاری»).
-   * Every slug below clears the SAME rules as the first wave (TVL floor, APY
-   * band, 70% emission ceiling, outlier flag, app chains) — the allow-list is
-   * only the first gate, never a free pass. Each protocol is large, audited
-   * and multi-year old; none of them is a safety guarantee and the UI never
-   * says otherwise.
-   *
-   * A slug that matches nothing in the live feed renders nothing — a wrong
-   * guess here is an empty contribution, never a wrong row. Re-verify against
-   * DefiLlama/yield-server adapter folder names on the next upstream check
-   * (same procedure as the uniswap-v4 evidence in test/wiring.mjs).
-   */
   // battle-tested lending + second-generation money markets
   'aave-v2',
-  'benqi',
+  'benqi-lending',
+  'benqi-staked-avax',
   // auto-compounding vaults — these make the Farm "vault" filter real
   'yearn-finance',
   'convex-finance',
   'beefy',
-  // bridge + yield-trading liquidity with deep, old pools
-  'stargate',
-  'pendle',
-  // Solana liquid staking the Farm staking section joins onto
+  // Solana liquid staking & lending — verified against DefiLlama/yield-server + live feed 2026-10-26:
+  //   • kamino-lend        src/adaptors/kamino-lend/index.js        (SOL 525b2dab...: $19.17m avail @ 5.22% apyBase)
+  //   • kamino-liquidity   src/adaptors/kamino-liquidity/index.js   (automated CLMM vaults on Solana; apyBase from 24h vault fees)
+  //   • jupiter-lend       src/adaptors/jupiter-lend/index.js       (USDC Earn d783c8df...: $493.75m @ 4.96% apyBase; PYUSD $251.29m @ 3.92%)
+  //   • save               src/adaptors/save/index.js               (Solana lending; adapter filters !isFullyBorrowed bad-debt reserves)
+  //   • binance-staked-sol src/adaptors/binance-staked-sol/index.js (BNSOL 9e709e57...: $1.061b @ 4.51% apyBase)
+  //   • drift-staked-sol   src/adaptors/drift-staked-sol/index.js   (DSOL 296651fc...: $279.88m @ 4.87% apyBase)
+  //   • raydium-amm        src/adaptors/raydium-amm/index.js        (Solana AMM/CLMM; symbol A-B, apyBase from 24h swap fees)
+  //   • orca-dex           src/adaptors/orca-dex/index.ts           (Solana Whirlpools; PYUSD-USDC 99203560...: $16.45m TVL)
   'jupiter-staked-sol',
-  /*
-   * ─── SOLANA LSTs — added 2026-09-11, evidence recorded ────────────────────
-   * «توکن‌های جدید هم اضافه کن» — and these three are the deepest Solana
-   * stake pools we were not yet able to quote a live rate for. Each slug was
-   * read off the adapter itself, because the adapter FOLDER NAME is the slug
-   * and its `project:` literal is what our join matches on:
-   *
-   *   src/adaptors/blazestake/index.js            project: 'blazestake'          symbol 'bSOL'
-   *   src/adaptors/sanctum-infinity/index.js      project: 'sanctum-infinity'    symbol 'INF'
-   *   src/adaptors/helius-staked-sol/index.js     project: 'helius-staked-sol'   symbol 'HSOL'
-   *
-   * (master, read 2026-09-11 — all three use `getSanctumLstApy` + total supply
-   * × price, so `apyBase` is real and `apyReward` is absent: the emissions
-   * ceiling cannot fire on them.) They are Solana-only, which is why they are
-   * not in test/wiring.mjs's SLUG_EVIDENCE table — that table's rule is "at
-   * least three APP chains", and a single-chain Solana adapter can never
-   * satisfy it. The evidence lives here instead, in the same shape.
-   *
-   * A wrong slug upstream is an EMPTY contribution, never a wrong row: the LST
-   * list joins on project AND symbol (lib/solanaAssetsClient.js), so a drift
-   * makes one row show no rate and nothing else. That is the failure mode this
-   * list is allowed to have; the one it is not allowed to have is a plausible
-   * rate for the wrong token.
-   */
   'blazestake',
   'sanctum-infinity',
   'helius-staked-sol',
-  // Solana lending + AMMs with multi-year track records
-  'kamino',
-  'raydium',
-  'orca',
-  // long-running AMMs / liquidity venues
+  'binance-staked-sol',
+  'drift-staked-sol',
+  'kamino-lend',
+  'kamino-liquidity',
+  'jupiter-lend',
+  'save',
+  'raydium-amm',
+  'orca-dex',
+  // long-running AMMs / stablecoin-adjacent yield with explainable sources
   'sushiswap',
-  'gmx',
-  // restaking + stablecoin-adjacent yield with explainable sources
-  'eigenlayer',
   'frax'
 ]);
 
@@ -492,8 +539,97 @@ export function normalizePool(p) {
      * forwarding someone else's forecast would be laundering a claim we
      * cannot stand behind.
      */
-    url: `https://defillama.com/yields/pool/${p.pool}`
+    url: p.source === 'kamino' && typeof p.url === 'string' && p.url.startsWith('https://kamino.com/')
+      ? p.url
+      : `https://defillama.com/yields/pool/${p.pool}`,
+    ...(p.source === 'kamino' ? { source: 'kamino' } : {})
   };
+}
+
+/**
+ * Map one raw Kamino Main Market `/reserves/metrics` entry into the raw pool
+ * candidate shape consumed by `isEligible()` and `normalizePool()`.
+ *
+ * Verified against live `https://api.kamino.finance/kamino-market/7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF/reserves/metrics?env=mainnet-beta`
+ * on 2026-10-26:
+ *   - `supplyApy` is a decimal ratio string (e.g. `"0.05213878863574353"` -> `5.213878863574353%`)
+ *   - `totalSupplyUsd` and `totalBorrowUsd` are USD strings; withdrawable
+ *     liquidity is `totalSupplyUsd - totalBorrowUsd` (matching DefiLlama's
+ *     conservative lending TVL rule so 100%-utilized illiquid reserves get
+ *     `tvlUsd = 0` and fail `MIN_TVL`).
+ *   - LP-collateral wrapper reserves (`kSOLJITOSOLOrca`, `kSOLMSOLRaydium`,
+ *     `kUXDUSDCOrca`) and corrupted rows (`totalBorrowUsd > totalSupplyUsd * 1.001`)
+ *     are rejected upfront with `null`.
+ */
+export function mapKaminoReserveToPool(rawReserve, { market = KAMINO_MAIN_MARKET } = {}) {
+  if (!rawReserve || typeof rawReserve !== 'object') return null;
+  const reserve = typeof rawReserve.reserve === 'string' ? rawReserve.reserve.trim() : '';
+  const mint = typeof rawReserve.liquidityTokenMint === 'string' ? rawReserve.liquidityTokenMint.trim() : '';
+  const symbol = typeof rawReserve.liquidityToken === 'string' ? rawReserve.liquidityToken.trim() : '';
+  if (!SOLANA_BASE58_RE.test(reserve) || !SOLANA_BASE58_RE.test(mint)) return null;
+  if (!symbol || symbol.length > 60) return null;
+  // Exclude Kamino kToken LP-collateral wrapper reserves (not passive spot lending).
+  if (/^k[A-Z0-9]+(Orca|Raydium)$/i.test(symbol)) return null;
+
+  const supplyRatio = metric(rawReserve.supplyApy);
+  const totalSupplyUsd = metric(rawReserve.totalSupplyUsd);
+  const totalBorrowUsd = metric(rawReserve.totalBorrowUsd);
+  if (supplyRatio == null || supplyRatio < 0) return null;
+  if (totalSupplyUsd == null || totalSupplyUsd < 0 || totalBorrowUsd == null || totalBorrowUsd < 0) return null;
+  // Guard against corrupted upstream snapshots or unrecovered bad-debt insolvency.
+  if (totalBorrowUsd > totalSupplyUsd * 1.001) return null;
+
+  const availableUsd = Math.max(0, totalSupplyUsd - totalBorrowUsd);
+  const apyPct = supplyRatio * 100;
+
+  return {
+    pool: `kamino-${reserve}`,
+    chain: 'Solana',
+    project: 'kamino-lend',
+    symbol: symbol.toUpperCase(),
+    poolMeta: 'SOL/BTC Market',
+    tvlUsd: availableUsd,
+    apy: apyPct,
+    apyBase: apyPct,
+    apyReward: null,
+    apyMean30d: null,
+    apyPct7D: null,
+    volumeUsd1d: null,
+    volumeUsd7d: null,
+    stablecoin: KAMINO_USD_STABLE_MINTS.has(mint),
+    ilRisk: 'no',
+    exposure: 'single',
+    outlier: false,
+    underlyingTokens: [mint],
+    rewardTokens: null,
+    source: 'kamino',
+    url: `https://kamino.com/borrow/reserve/${market}/${reserve}`
+  };
+}
+
+/**
+ * Fetch and map Kamino Main Market reserves directly from Kamino's free API.
+ * Never throws into `fetchYields()` unless `strict: true` is passed by a caller:
+ * an auxiliary upstream blip must never take down the primary Farm feed.
+ */
+export async function fetchKaminoMainMarketPools({ timeoutMs = 5_000, strict = false } = {}) {
+  const timeout = Math.max(250, Math.min(15_000, Number(timeoutMs) || 5_000));
+  try {
+    const raw = await fetchJson(KAMINO_RESERVES_URL, { timeout });
+    if (!Array.isArray(raw)) {
+      if (strict) throw new Error('INVALID_KAMINO_RESERVES_RESPONSE');
+      return [];
+    }
+    const out = [];
+    for (const entry of raw) {
+      const mapped = mapKaminoReserveToPool(entry);
+      if (mapped) out.push(mapped);
+    }
+    return out;
+  } catch (err) {
+    if (strict) throw err;
+    return [];
+  }
 }
 
 /**
@@ -545,13 +681,35 @@ export function isEligible(p) {
  * does.
  */
 export async function fetchYields({ timeoutMs = TIMEOUT_MS } = {}) {
+  const startedAt = Date.now();
   const timeout = Math.max(250, Math.min(30_000, Number(timeoutMs) || TIMEOUT_MS));
   const raw = await fetchJson(LLAMA_YIELDS, { timeout });
   if (raw?.status !== 'success' || !Array.isArray(raw.data) || !raw.data.length) throw new Error('INVALID_YIELDS_RESPONSE');
   const rows = raw.data;
 
+  // Supplement with direct Kamino Main Market reserves not already emitted by
+  // DefiLlama's `kamino-lend` adapter for the same Main Market mint.
+  const remainingMs = timeout - (Date.now() - startedAt);
+  const kaminoCandidates = remainingMs >= 250
+    ? await fetchKaminoMainMarketPools({ timeoutMs: Math.min(5_000, remainingMs) })
+    : [];
+
+  const llamaKaminoMainMints = new Set();
+  for (const r of rows) {
+    if (
+      r?.project === 'kamino-lend' &&
+      (r.poolMeta === 'SOL/BTC Market' || r.poolMeta === 'Main Market' || r.poolMeta == null) &&
+      Array.isArray(r.underlyingTokens) &&
+      typeof r.underlyingTokens[0] === 'string'
+    ) {
+      llamaKaminoMainMints.add(r.underlyingTokens[0]);
+    }
+  }
+  const dedupedKamino = kaminoCandidates.filter((k) => !llamaKaminoMainMints.has(k.underlyingTokens?.[0]));
+  const combinedRows = dedupedKamino.length ? [...rows, ...dedupedKamino] : rows;
+
   const seen = new Set();
-  const eligible = rows.filter((p) => {
+  const eligible = combinedRows.filter((p) => {
     if (!isEligible(p) || seen.has(p.pool)) return false;
     seen.add(p.pool);
     return true;
@@ -569,7 +727,7 @@ export async function fetchYields({ timeoutMs = TIMEOUT_MS } = {}) {
   const ranked = eligible
     .sort((a, b) => score(b) - score(a))
     .slice(0, 500)
-    .map((pool) => ({ ...pool, source: 'defillama', updatedAt, freshness: 'FRESH' }));
+    .map((pool) => ({ ...pool, source: pool.source || 'defillama', updatedAt, freshness: 'FRESH' }));
 
   /*
    * The five execution venues, resolved against the SAME raw feed in the same
@@ -587,17 +745,18 @@ export async function fetchYields({ timeoutMs = TIMEOUT_MS } = {}) {
      * single line does more to explain what this screen is than any amount of
      * body copy: it makes the filtering visible instead of implicit.
      */
-    considered: rows.length,
+    considered: combinedRows.length,
     passed: eligible.length,
     at: Date.now(),
-    source: 'defillama',
+    source: ranked.some((p) => p.source === 'kamino') ? 'protocolDirect' : 'defillama',
     freshness: 'FRESH',
     truncated: eligible.length > ranked.length
   };
 }
 
 
-export const isYieldPoolId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+export const isYieldPoolId = (id) =>
+  typeof id === 'string' && (LLAMA_POOL_UUID_RE.test(id) || KAMINO_POOL_ID_RE.test(id));
 
 const YIELD_HISTORY_RANGE_DAYS = Object.freeze({ '7d': 7, '30d': 30, '90d': 90 });
 export const isYieldHistoryRange = (range) => Object.hasOwn(YIELD_HISTORY_RANGE_DAYS, range);
@@ -606,6 +765,45 @@ export const isYieldHistoryRange = (range) => Object.hasOwn(YIELD_HISTORY_RANGE_
 export async function fetchYieldHistory(id, range = '30d') {
   if (!isYieldPoolId(id)) throw new Error('INVALID_POOL_ID');
   if (!isYieldHistoryRange(range)) throw new Error('INVALID_HISTORY_RANGE');
+
+  const kaminoMatch = KAMINO_POOL_ID_RE.exec(id);
+  if (kaminoMatch) {
+    const reserve = kaminoMatch[1];
+    const raw = await fetchJson(kaminoReserveHistoryUrl(reserve));
+    if (!Array.isArray(raw?.history)) throw new Error('INVALID_YIELD_HISTORY');
+    const now = Date.now();
+    const byDay = new Map();
+    for (const row of raw.history) {
+      if (!row || typeof row.timestamp !== 'string') continue;
+      const at = Date.parse(row.timestamp);
+      if (!Number.isFinite(at) || at > now + 60_000) continue;
+      const m = row.metrics ?? {};
+      const supplyRatio = metric(m.supplyInterestAPY);
+      const apy = supplyRatio != null ? Math.round(supplyRatio * 100 * 10) / 10 : null;
+      const availDirect = metric(m.actualAvailableLiquidityUsd);
+      const depUsd = metric(m.depositTvl);
+      const borUsd = metric(m.borrowTvl);
+      const tvlUsd = availDirect != null
+        ? availDirect
+        : (depUsd != null && borUsd != null ? Math.max(0, depUsd - borUsd) : null);
+      if (apy == null && tvlUsd == null) continue;
+      const day = new Date(at).toISOString().slice(0, 10);
+      if (byDay.has(day) && byDay.get(day).timestamp > at) continue;
+      byDay.set(day, {
+        timestamp: at,
+        apy,
+        tvlUsd: tvlUsd != null && tvlUsd >= 0 ? Math.round(tvlUsd) : null,
+        apyBase: apy,
+        apyReward: null
+      });
+    }
+    const cutoff = now - YIELD_HISTORY_RANGE_DAYS[range] * 86_400_000;
+    const points = [...byDay.values()]
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .filter((row) => row.timestamp >= cutoff);
+    return { pool: id, range, points, at: now, source: 'kamino', freshness: 'FRESH' };
+  }
+
   const raw = await fetchJson(`https://yields.llama.fi/chart/${id}`);
   if (raw?.status !== 'success' || !Array.isArray(raw.data)) throw new Error('INVALID_YIELD_HISTORY');
   const now = Date.now();

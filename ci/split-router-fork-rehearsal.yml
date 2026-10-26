@@ -1,0 +1,94 @@
+# ============================================================================
+# FBT SPLIT ROUTER · 3-CHAIN MAINNET FORK REHEARSAL (MANUAL PRE-AUDIT GATE)
+#
+# ONE-TIME SETUP (placed in .github/workflows/ by the repository owner, just
+# like ci/*-fork-probe.yml — GitHub App agent tokens do not carry `workflows`
+# permission):
+#
+#   1. Open github.com/mshiravi433-ctrl/fbtcryp
+#   2. Add file  .github/workflows/split-router-fork-rehearsal.yml
+#   3. Actions tab → "SplitRouter 3-chain fork rehearsal" → Run workflow.
+#
+# WHAT IT DOES:
+#   · Installs Foundry nightly (includes Foundry PR #16514 required to fork
+#     Arbitrum Nitro chain 42161 cleanly without `invalid transaction type`).
+#   · Runs `npm run test:split-router` (fresh solc 0.8.24 compile + ABI selector
+#     pin + local EVM behaviour rehearsal + Vitest client-seam suite).
+#   · Runs `npm run test:split-router-fork -- --strict` against live forks of:
+#       1) Base (8453): Aave v3 + Compound III + Morpho Blue cbBTC/USDC
+#       2) Arbitrum One (42161): Aave v3 native USDC (USDCn)
+#       3) Ethereum (1): Lido stETH
+#   · Uploads `split-router-fork-rehearsal.log` + machine-readable JSON report
+#     `test/split-router/split-router-fork-rehearsal-report.json` as artifacts
+#     for the external auditor package.
+#
+# ZERO COST / ZERO RISK: forks mainnet state locally inside the ephemeral
+# GitHub runner; zero mainnet transactions, zero keys, zero real funds.
+# ============================================================================
+name: SplitRouter 3-chain fork rehearsal
+on:
+  workflow_dispatch:
+    inputs:
+      base_rpc_url:
+        description: 'Base (8453) mainnet RPC URL'
+        required: false
+        default: 'https://mainnet.base.org'
+      arbitrum_rpc_url:
+        description: 'Arbitrum One (42161) mainnet RPC URL'
+        required: false
+        default: 'https://arb1.arbitrum.io/rpc'
+      eth_rpc_url:
+        description: 'Ethereum (1) mainnet RPC URL'
+        required: false
+        default: 'https://ethereum-rpc.publicnode.com'
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Foundry nightly (Anvil + Arbitrum Nitro #16514 support)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Lockfile platform guard (before npm ci)
+        run: node ci/lock-platform-guard.mjs
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run local SplitRouter compile + ABI + EVM + client-seam suite
+        run: npm run test:split-router
+
+      - name: Run strict 3-chain SplitRouter mainnet fork rehearsal
+        id: fork
+        env:
+          BASE_RPC_URL: ${{ inputs.base_rpc_url }}
+          ARBITRUM_RPC_URL: ${{ inputs.arbitrum_rpc_url }}
+          ETH_RPC_URL: ${{ inputs.eth_rpc_url }}
+        run: |
+          set -o pipefail
+          npm run test:split-router-fork -- --strict 2>&1 | tee /tmp/split-router-fork-rehearsal.log
+          echo "rehearsal_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Summarise
+        if: always()
+        run: |
+          echo "### SplitRouter 3-chain fork rehearsal exit: ${{ steps.fork.outputs.rehearsal_exit }}" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 60 /tmp/split-router-fork-rehearsal.log >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload rehearsal log & JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: split-router-fork-rehearsal
+          path: |
+            /tmp/split-router-fork-rehearsal.log
+            test/split-router/split-router-fork-rehearsal-report.json
+          if-no-files-found: warn

@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
-import { fetchYields, fetchYieldHistory, isEligible, normalizePool } from '../server/yields.js';
+import {
+  KAMINO_MAIN_MARKET,
+  KAMINO_RESERVES_URL,
+  fetchKaminoMainMarketPools,
+  fetchYields,
+  fetchYieldHistory,
+  isEligible,
+  isYieldPoolId,
+  mapKaminoReserveToPool,
+  normalizePool
+} from '../server/yields.js';
 import { createYieldsApi } from '../server/yieldsApi.js';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -87,7 +97,189 @@ describe('DefiLlama upstream contract', () => {
   it('rejects path injection before any upstream request', async () => {
     const spy = vi.spyOn(globalThis, 'fetch');
     await expect(fetchYieldHistory('../../pools')).rejects.toThrow('INVALID_POOL_ID');
+    await expect(fetchYieldHistory('kamino-0OIlInvalidBase58')).rejects.toThrow('INVALID_POOL_ID');
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('Kamino Solana free source & audited allow-list', () => {
+  // Real metrics snapshot captured from api.kamino.finance/kamino-market/7u3HeHx.../reserves/metrics on 2026-10-26
+  const kaminoUsdcRaw = {
+    reserve: 'D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59',
+    liquidityToken: 'USDC',
+    liquidityTokenMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    maxLtv: '0.8',
+    borrowApy: '0.0595172415205758',
+    supplyApy: '0.044231808908655745',
+    totalSupply: '131417885.41741740282',
+    totalBorrow: '119665886.920939317455694670326672712779',
+    totalBorrowUsd: '119645135.6594883573686546783138913644639',
+    totalSupplyUsd: '131395096.24190716847'
+  };
+  const kaminoSolRaw = {
+    reserve: 'd4A2prbA2whesmvHaL88BH6Ewn5N4bTSU2Ze8P6Bc4Q',
+    liquidityToken: 'SOL',
+    liquidityTokenMint: 'So11111111111111111111111111111111111111112',
+    maxLtv: '0.65',
+    borrowApy: '0.06711580098878329',
+    supplyApy: '0.05213878863574353',
+    totalSupplyUsd: '241212047.84546952897',
+    totalBorrowUsd: '222063825.55046910332'
+  };
+
+  it('maps real Kamino Main Market reserves with withdrawable TVL, percentage APY, and mint-verified stablecoin flag', () => {
+    const usdc = mapKaminoReserveToPool(kaminoUsdcRaw);
+    expect(usdc).toMatchObject({
+      pool: 'kamino-D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59',
+      chain: 'Solana',
+      project: 'kamino-lend',
+      symbol: 'USDC',
+      poolMeta: 'SOL/BTC Market',
+      stablecoin: true,
+      exposure: 'single',
+      ilRisk: 'no',
+      apyReward: null,
+      source: 'kamino',
+      url: `https://kamino.com/borrow/reserve/${KAMINO_MAIN_MARKET}/D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59`
+    });
+    expect(usdc.tvlUsd).toBeCloseTo(11_749_960.58, 1);
+    expect(usdc.apy).toBeCloseTo(4.42318, 4);
+    expect(isEligible(usdc)).toBe(true);
+    expect(normalizePool(usdc)).toMatchObject({
+      id: 'kamino-D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59',
+      apy: 4.4,
+      apyBase: 4.4,
+      apyReward: null,
+      stablecoin: true,
+      source: 'kamino',
+      url: `https://kamino.com/borrow/reserve/${KAMINO_MAIN_MARKET}/D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59`
+    });
+
+    const sol = mapKaminoReserveToPool(kaminoSolRaw);
+    expect(sol.stablecoin).toBe(false);
+    expect(sol.tvlUsd).toBeCloseTo(19_148_222.30, 1);
+    expect(sol.apy).toBeCloseTo(5.21388, 4);
+    expect(isEligible(sol)).toBe(true);
+  });
+
+  it('never classifies spoofed stablecoin symbols without a verified mint, and drops illiquid/wrapper/corrupted reserves', () => {
+    const spoofedUsdc = mapKaminoReserveToPool({
+      ...kaminoUsdcRaw,
+      liquidityToken: 'USDC',
+      liquidityTokenMint: 'So11111111111111111111111111111111111111112'
+    });
+    expect(spoofedUsdc.stablecoin).toBe(false);
+
+    // 100%-utilized illiquid reserve (AWnKJ9... on Main Market) gets tvlUsd = 0 and fails MIN_TVL
+    const fullyBorrowed = mapKaminoReserveToPool({
+      ...kaminoUsdcRaw,
+      reserve: 'AWnKJ9dsiHcoDCThxE5E93ikDTAXkApoNwrKM2tp9KFJ',
+      totalSupplyUsd: '104.552461',
+      totalBorrowUsd: '104.552461',
+      supplyApy: '0.110396'
+    });
+    expect(fullyBorrowed.tvlUsd).toBe(0);
+    expect(isEligible(fullyBorrowed)).toBe(false);
+
+    // kToken LP-collateral wrappers, invalid base58, negative APY, and insolvent borrow > supply are rejected
+    expect(mapKaminoReserveToPool({ ...kaminoSolRaw, liquidityToken: 'kSOLJITOSOLOrca' })).toBeNull();
+    expect(mapKaminoReserveToPool({ ...kaminoSolRaw, liquidityToken: 'kSOLMSOLRaydium' })).toBeNull();
+    expect(mapKaminoReserveToPool({ ...kaminoSolRaw, reserve: 'bad' })).toBeNull();
+    expect(mapKaminoReserveToPool({ ...kaminoSolRaw, supplyApy: '-0.02' })).toBeNull();
+    expect(mapKaminoReserveToPool({ ...kaminoSolRaw, totalBorrowUsd: '300000000', totalSupplyUsd: '240000000' })).toBeNull();
+  });
+
+  it.each([
+    'kamino-lend', 'kamino-liquidity', 'jupiter-lend', 'save',
+    'raydium-amm', 'orca-dex', 'spark-savings', 'benqi-lending',
+    'benqi-staked-avax', 'binance-staked-sol', 'drift-staked-sol'
+  ])('accepts verified protocol slug %s when safety floors pass', (project) => {
+    const chain = project.startsWith('benqi') ? 'Avalanche' : project === 'spark-savings' ? 'Ethereum' : 'Solana';
+    expect(isEligible({ ...good, project, chain, tvlUsd: 15_000_000, apy: 4.8, apyBase: 4.8 })).toBe(true);
+  });
+
+  it.each([
+    'meteora', 'ajna-v2',
+    'kamino', 'raydium', 'orca', 'spark', 'benqi',
+    'stargate', 'stargate-v1', 'pendle', 'pendle-v2',
+    'gmx', 'gmx-evm', 'gmx-v1-perps', 'eigenlayer',
+    'seamless-v2', 'radiant-v2'
+  ])('rejects dead or unsafe/broken slug %s in isEligible()', (project) => {
+    expect(isEligible({ ...good, project, chain: 'Solana', tvlUsd: 50_000_000, apy: 5, apyBase: 5 })).toBe(false);
+    expect(isEligible({ ...good, project, chain: 'Ethereum', tvlUsd: 50_000_000, apy: 5, apyBase: 5 })).toBe(false);
+  });
+
+  it('deduplicates Kamino Main Market reserves already in DefiLlama while adding missing eligible Kamino reserves', async () => {
+    const llamaSolRow = {
+      pool: '525b2dab-ea6a-4cbc-a07f-84ce561d1f83',
+      project: 'kamino-lend',
+      chain: 'Solana',
+      symbol: 'SOL',
+      poolMeta: 'SOL/BTC Market',
+      underlyingTokens: ['So11111111111111111111111111111111111111112'],
+      tvlUsd: 19_170_978,
+      apy: 5.21637,
+      apyBase: 5.21637,
+      apyReward: null,
+      apyMean30d: 4.80551,
+      stablecoin: false,
+      ilRisk: 'no',
+      exposure: 'single',
+      outlier: false
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url) === KAMINO_RESERVES_URL) return response([kaminoSolRaw, kaminoUsdcRaw]);
+      return response({ status: 'success', data: [llamaSolRow] });
+    });
+
+    const data = await fetchYields();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(data.pools).toHaveLength(2);
+    // SOL comes once (from DefiLlama with UUID + apyMean30d), USDC comes from direct Kamino API
+    const solPools = data.pools.filter((p) => p.symbol === 'SOL');
+    const usdcPools = data.pools.filter((p) => p.symbol === 'USDC');
+    expect(solPools).toHaveLength(1);
+    expect(solPools[0]).toMatchObject({ id: '525b2dab-ea6a-4cbc-a07f-84ce561d1f83', source: 'defillama', apyMean30d: 4.8 });
+    expect(usdcPools).toHaveLength(1);
+    expect(usdcPools[0]).toMatchObject({
+      id: 'kamino-D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59',
+      source: 'kamino',
+      project: 'kamino-lend',
+      chain: 'Solana'
+    });
+    expect(data.source).toBe('protocolDirect');
+  });
+
+  it('survives a Kamino direct-API outage without failing fetchYields()', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url) === KAMINO_RESERVES_URL) return new Response('Service Unavailable', { status: 503 });
+      return response({ status: 'success', data: [good] });
+    });
+    const data = await fetchYields();
+    expect(data.pools).toHaveLength(1);
+    expect(data.pools[0].id).toBe(id);
+    expect(data.source).toBe('defillama');
+    await expect(fetchKaminoMainMarketPools({ strict: true })).rejects.toThrow('503');
+  });
+
+  it('serves 7d/30d/90d history for direct Kamino reserve pool IDs', async () => {
+    const kaminoPoolId = 'kamino-d4A2prbA2whesmvHaL88BH6Ewn5N4bTSU2Ze8P6Bc4Q';
+    expect(isYieldPoolId(kaminoPoolId)).toBe(true);
+    const now = Date.now();
+    const dayIso = (daysAgo) => new Date(now - daysAgo * 86_400_000 + 60_000).toISOString();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({
+      reserve: 'd4A2prbA2whesmvHaL88BH6Ewn5N4bTSU2Ze8P6Bc4Q',
+      history: [
+        { timestamp: dayIso(40), metrics: { supplyInterestAPY: 0.041, actualAvailableLiquidityUsd: '15000000' } },
+        { timestamp: dayIso(5), metrics: { supplyInterestAPY: 0.048, actualAvailableLiquidityUsd: '18500000.4' } },
+        { timestamp: dayIso(1), metrics: { supplyInterestAPY: 0.0521, depositTvl: '241212047.8', borrowTvl: '222063825.5' } }
+      ]
+    }));
+    const hist = await fetchYieldHistory(kaminoPoolId, '30d');
+    expect(hist).toMatchObject({ pool: kaminoPoolId, range: '30d', source: 'kamino', freshness: 'FRESH' });
+    expect(hist.points).toHaveLength(2);
+    expect(hist.points[0]).toMatchObject({ apy: 4.8, apyBase: 4.8, apyReward: null, tvlUsd: 18_500_000 });
+    expect(hist.points[1]).toMatchObject({ apy: 5.2, apyBase: 5.2, apyReward: null, tvlUsd: 19_148_222 });
   });
 });
 

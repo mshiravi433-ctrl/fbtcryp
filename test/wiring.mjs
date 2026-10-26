@@ -9044,6 +9044,14 @@ export default function run() {
         chains: ['ethereum', 'base', 'arbitrum', 'polygon', 'unichain', 'bsc', 'avax', 'optimism'],
         liveCheck: '2026-08-24 yields.llama.fi/pools: ETH-WBTC 15.2m @5.86%, ETH-USDC (Arbitrum) 18.2m @10.25%, ETH-AZTEC 15.4m @1.08%, SYRUPUSDC-USDC 13.3m @1.45% — several clear MIN_TVL, the page is not empty',
         shape: 'symbol TOKEN0-TOKEN1 (get-pair works); apyBase only, apyReward null, so the emissions ceiling cannot fire'
+      },
+      'spark-savings': {
+        verified: '2026-10-26',
+        adapter: 'github.com/DefiLlama/yield-server src/adaptors/spark-savings/index.ts',
+        emits: "project: 'spark-savings'",
+        chains: ['ethereum', 'avax', 'base', 'arbitrum'],
+        liveCheck: '2026-10-26 yields.llama.fi/pools: USDT (Ethereum a5d67f7e...) $647.95m @3.75%, USDS (Arbitrum 9d499222...) $364.26m @3.80%, USDC (Ethereum c5c74dd1...) $295.29m @3.80%',
+        shape: 'single-asset savings vaults; apyBase only, apyReward null'
       }
     };
 
@@ -9096,6 +9104,14 @@ export default function run() {
       !inAllowList('meteora'));
     t('ajna-v2 is NOT in the allow-list (mislabel on wrong asset + sub-floor TVL — see evidence)',
       !inAllowList('ajna-v2'));
+    t('dead non-existent slugs and rejected adapters stay out of ALLOWED_PROJECTS',
+      ['kamino', 'raydium', 'orca', 'spark', 'benqi', 'stargate', 'stargate-v1', 'pendle', 'pendle-v2', 'gmx', 'gmx-evm', 'gmx-v1-perps', 'eigenlayer', 'seamless-v2', 'radiant-v2']
+        .every((slug) => !inAllowList(slug)));
+    t('verified Kamino and Solana free pool sources are present in server/yields.js',
+      ['kamino-lend', 'kamino-liquidity', 'jupiter-lend', 'save', 'raydium-amm', 'orca-dex', 'binance-staked-sol', 'drift-staked-sol']
+        .every((slug) => inAllowList(slug))
+      && /api\.kamino\.finance\/kamino-market\//.test(serverSrc)
+      && /mapKaminoReserveToPool/.test(serverSrc));
   }
 
   /* ---- 80. the real coin crash, header scale, selects, rwa reachability - */

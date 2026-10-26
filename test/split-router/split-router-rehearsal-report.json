@@ -1,12 +1,12 @@
 {
   "schema": "fbt.split-router.rehearsal.v1",
-  "when": "2026-09-10T02:38:23.700Z",
+  "when": "2026-10-26T09:14:23.683Z",
   "chain": "local ganache (in-process EVM)",
   "counterparties": "mocks from contracts/rehearsal/SplitRouterMocks.sol — NOT the real protocols",
   "contractUnderTest": "the REAL compiled artifact src/lib/splitRouterArtifact.json (production bytecode)",
   "feeBps": 30,
-  "passed": 28,
-  "total": 28,
+  "passed": 42,
+  "total": 42,
   "rows": [
     {
       "name": "deploys with the pinned config",
@@ -114,7 +114,57 @@
       "detail": ""
     },
     {
-      "name": "guard: a chain without that protocol reverts with ZERO_TARGET",
+      "name": "guard (Base shape): a chain without Lido reverts stakeLido with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "arbitrum-shape deploy: asset + aavePool pinned, comet/morpho/lido zero",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "arbitrum-shape supplyAave: credits net to depositor, fee to payout, zero router custody",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "guard (Arbitrum shape): supplyCompound reverts with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "guard (Arbitrum shape): supplyMorpho reverts with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "guard (Arbitrum shape): stakeLido reverts with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "ethereum-shape deploy: asset zero, lido pinned, feeBps matches",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "ethereum-shape stakeLido: credits net stETH to depositor, ETH fee to payout, zero router custody",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "guard (Ethereum shape): supplyAave reverts with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "guard (Ethereum shape): supplyCompound reverts with ZERO_TARGET",
+      "ok": true,
+      "detail": "execution reverted: \"ZERO_TARGET\""
+    },
+    {
+      "name": "guard (Ethereum shape): supplyMorpho reverts with ZERO_TARGET",
       "ok": true,
       "detail": "execution reverted: \"ZERO_TARGET\""
     },
@@ -141,7 +191,27 @@
     {
       "name": "guard: a wrong Morpho market id cannot deploy",
       "ok": true,
-      "detail": "MORPHO_MARKET_ID_MISMATCH"
+      "detail": "VM Exception while processing transaction: revert MORPHO_MARKET_ID_MISMATCH"
+    },
+    {
+      "name": "guard: zero feeRecipient cannot deploy",
+      "ok": true,
+      "detail": "VM Exception while processing transaction: revert ZERO_FEE_RECIPIENT"
+    },
+    {
+      "name": "guard: router with no protocol target cannot deploy",
+      "ok": true,
+      "detail": "VM Exception while processing transaction: revert NO_TARGET"
+    },
+    {
+      "name": "guard: Morpho loanToken != asset cannot deploy",
+      "ok": true,
+      "detail": "VM Exception while processing transaction: revert MORPHO_LOAN_TOKEN_MISMATCH"
+    },
+    {
+      "name": "guard: incomplete Morpho MarketParams cannot deploy",
+      "ok": true,
+      "detail": "VM Exception while processing transaction: revert MORPHO_MARKET_INCOMPLETE"
     },
     {
       "name": "guard: plain ETH transfers bounce (no receive)",

@@ -8,7 +8,9 @@ import { farmScore, getYields, getYieldHistory, investRoute, pairTokens, rateIsU
  * contains slugs from the server allow-list, so a filter chip can never
  * promise a vault the feed cannot deliver.
  */
-export const VAULT_PROJECTS = Object.freeze(['yearn-finance', 'convex-finance', 'beefy']);
+export const VAULT_PROJECTS = Object.freeze([
+  'yearn-finance', 'convex-finance', 'beefy', 'kamino-liquidity', 'spark-savings'
+]);
 
 /**
  * Which feed projects compound by themselves, for the Farm "auto compound"
@@ -19,7 +21,10 @@ export const VAULT_PROJECTS = Object.freeze(['yearn-finance', 'convex-finance', 
  */
 export const AUTOCOMPOUND_PROJECTS = Object.freeze([
   'lido', 'rocket-pool', 'binance-staked-eth', 'ether.fi-stake',
-  'jito-liquid-staking', 'marinade-liquid-staking', 'jupiter-staked-sol'
+  'jito-liquid-staking', 'marinade-liquid-staking', 'jupiter-staked-sol',
+  'blazestake', 'sanctum-infinity', 'helius-staked-sol',
+  'binance-staked-sol', 'drift-staked-sol', 'benqi-staked-avax',
+  'spark-savings', 'kamino-liquidity'
 ]);
 
 export const FARM_EXECUTION_STATES = Object.freeze([
@@ -81,21 +86,45 @@ export function chainIconKey(name) {
  */
 export const PROJECT_DISPLAY_NAMES = Object.freeze({
   'aave-v3': 'Aave v3',
+  'aave-v2': 'Aave v2',
   'compound-v3': 'Compound III',
   'morpho-blue': 'Morpho Blue',
+  'sparklend': 'SparkLend',
+  'spark-savings': 'Spark Savings',
+  'sky-lending': 'Sky Savings',
+  'venus-core-pool': 'Venus',
+  'kamino-lend': 'Kamino Lend',
+  'kamino-liquidity': 'Kamino Liquidity',
+  'jupiter-lend': 'Jupiter Lend',
+  save: 'Save',
   lido: 'Lido',
   'rocket-pool': 'Rocket Pool',
   'uniswap-v3': 'Uniswap v3',
+  'uniswap-v4': 'Uniswap v4',
   'curve-dex': 'Curve',
   'pancakeswap-amm': 'PancakeSwap',
+  'pancakeswap-amm-v3': 'PancakeSwap v3',
   'yearn-finance': 'Yearn',
   'convex-finance': 'Convex',
   beefy: 'Beefy',
   'jito-liquid-staking': 'Jito',
   'marinade-liquid-staking': 'Marinade',
-  'jupiter-staked-sol': 'Jupiter',
+  'jupiter-staked-sol': 'Jupiter Staked SOL',
+  'binance-staked-sol': 'Binance BNSOL',
+  'drift-staked-sol': 'Drift Staked SOL',
+  'sanctum-infinity': 'Sanctum Infinity',
+  blazestake: 'BlazeStake',
+  'helius-staked-sol': 'Helius Staked SOL',
   'binance-staked-eth': 'Binance stETH',
   'ether.fi-stake': 'Ether.fi',
+  'benqi-staked-avax': 'Benqi sAVAX',
+  'raydium-amm': 'Raydium',
+  'orca-dex': 'Orca',
+  'ethena-usde': 'Ethena',
+  maple: 'Maple',
+  frax: 'Frax',
+  sushiswap: 'SushiSwap',
+  'aerodrome-slipstream': 'Aerodrome',
   gmx: 'GMX',
   pendle: 'Pendle',
   'balancer-v2': 'Balancer',

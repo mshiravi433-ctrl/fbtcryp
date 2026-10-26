@@ -63,24 +63,49 @@ USDC/ETH کاربر ──┬── کارمزد (feeBps) ──→ کیف پر�
    ```bash
    npm run test:split-router
    ```
-   = کامپایل با solc + پروب سطح ABI (۱۰ assertion، از جمله «صفر-admin») + ریهرسال EVM محلی با ganache (۲۸ assertion روی همان bytecode تولیدی: تقسیم دقیق کارمزد، موجودی صفرِ روتر در پایان هر مسیر، گاردها با دلیل revert واقعی).
-2. **ریهرسال fork (mainnet-state، با anvil):**
+   = کامپایل با `solc 0.8.24` + پروب سطح ABI (`10/10` assertion، از جمله «صفر-admin» و پین selectorها) + ریهرسال EVM محلی با ganache (`42/42` assertion روی همان bytecode تولیدی، شامل هر سه شکل استقرار واقعیِ Base، Arbitrum فقط-Aave و Ethereum فقط-Lido، تقسیم دقیق کارمزد، موجودی صفرِ روتر در پایان هر مسیر، `ZERO_TARGET` روی توابع غایب هر شبکه، و همهٔ ۷ گارد constructor) + ۲۶ تست واحد و یکپارچگی کلاینت (`test/split-router-defi.test.js`).
+2. **ریهرسال fork سه‌شبکه‌ای (mainnet-state، با anvil — دروازهٔ پیش از ممیزی):**
    ```bash
-   curl -L https://foundry.paradigm.xyz | bash && foundryup
-   BASE_RPC_URL=… ETH_RPC_URL=… node test/split-router/split-router-fork-rehearsal.mjs --strict
+   curl -L https://foundry.paradigm.xyz | bash && foundryup --install nightly
+   BASE_RPC_URL=https://mainnet.base.org \
+   ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc \
+   ETH_RPC_URL=https://ethereum-rpc.publicnode.com \
+     npm run test:split-router-fork -- --strict
    ```
-   همان آرتیفکت، روی fork واقعی Base و اتریوم، با Aave/Comet/Morpho/Lido واقعی و USDC واقعی بین حساب‌های fork. بدون anvil self-skip می‌کند؛ در حالت strict نبودش fail است.
-3. **ممیزی امنیتی مستقل.** فایل `audited: false` آرتیفکت را فقط دستی و بعد از گزارش ممیزی واقعی عوض کنید. تا آن موقع هیچ آدرسی در env نگذارید.
+   همان آرتیفکت تولیدی، روی fork واقعی **هر سه شبکهٔ مقصد** (Base `8453` با Aave/Comet/Morpho واقعی، Arbitrum One `42161` با Aave native-USDC واقعی، و Ethereum `1` با Lido واقعی) به همراه تطبیق آن‌چین `PoolAddressesProvider.getPool()` و `UNDERLYING_ASSET_ADDRESS()` پیش از استقرار. در حالت `--strict` هر سه متغیر `BASE_RPC_URL`، `ARBITRUM_RPC_URL` و `ETH_RPC_URL` باید صراحتاً ست باشند و نبود `anvil` یا رد شدن هر گارد معادل **FAIL** قطعی (`exit 1`) است. قالب آمادهٔ اجرای یک‌کلیکی روی GitHub Actions در `ci/split-router-fork-rehearsal.yml` (با `foundry-toolchain` نسخهٔ `nightly` جهت پشتیبانی از Arbitrum Nitro `#16514`) قرار داده شده است.
+3. **ممیزی امنیتی مستقل (مرز هزینه‌دار — متوقف در همین نقطه بدون مجوز و بودجه).** فیلد `audited: false` آرتیفکت را فقط دستی و بعد از گزارش ممیزی واقعی عوض کنید. تا آن موقع هیچ آدرسی در env نگذارید.
 4. **استقرار هر شبکه** با Config بالا (از حساب payout/دپلوی، نه از کلید کاربران). آدرس قرارداد را در این جدول ثبت و در explorer وریفای کنید.
 5. **فعال‌سازی در اپ:** فقط `VITE_FBT_SPLIT_ROUTER_BASE` / `_ARBITRUM` / `_ETHEREUM` را ست کنید. پنل‌ها **وصل شده‌اند**: هر ۵ پنل (Aave Base/Arb، Compound، Morpho، Lido) پلن واریز را از `routeSupplyPlan` عبور می‌دهند، قبل از امضا سطر «کارمزد واریز: X از Y (Z٪) … برداشت همیشه بدون کارمزد است» را نشان می‌دهند، و receipt را دو-لایه (رویداد `Routed` + رویداد خودِ پروتکل با مبلغ خالص به نام مالک) اثبات می‌کنند. برداشت/خروج/claim هیچ‌وقت از روتر نمی‌گذرند.
 6. **در صورت مشکل:** env را خالی کنید. مسیر واریز همان لحظه به واریز مستقیم امروز برمی‌گردد؛ برداشت‌ها از اول هم مستقیم بودند. کارمزد از خود قرارداد برداشت می‌شود چون feeRecipient است و سهمش را در همان تراکنش‌ها گرفته.
 
+## بستهٔ فریز تا مرز ممیزی و گزارش اجرای `--strict` (`2026-10-26`)
+
+### ۱. مشخصات فریز آرتیفکت جهت تحویل به ممیز خارجی
+- **فایل منبع:** `contracts/FBTSplitRouter.sol` — هش SHA-256: `12c54c3802770ba7a41f8e881d262c2cd04b100364993a813088b8b312b5c9b8`
+- **آرتیفکت کامپایل‌شده:** `src/lib/splitRouterArtifact.json` — هش SHA-256: `80cf4d53e3cd1046c55b7e1dccbcdb1327447bee59a3452b92fe9243239354a7`
+- **کامپایلر و بهینه‌ساز:** `solc 0.8.24` (`optimizer.enabled = true`, `runs = 200`)، طول deployed bytecode برابر `7166` بایت (زیر سقف EIP-170 یعنی `24576` بایت)، وضعیت `audited: false` دست‌نخورده.
+- **وضعیت متغیرهای محیطی:** `VITE_FBT_SPLIT_ROUTER_BASE`، `VITE_FBT_SPLIT_ROUTER_ARBITRUM` و `VITE_FBT_SPLIT_ROUTER_ETHEREUM` همگی **خالی (`OFF`)** هستند.
+
+### ۲. نتیجهٔ اجرای تست‌ها و ریهرسال `--strict` در تاریخ `2026-10-26`
+
+| لایهٔ آزمون | فرمان اجراشده | نتیجه | جزئیات و شواهد |
+| :--- | :--- | :--- | :--- |
+| کامپایل + پروب ABI | `node scripts/compile-split-router.mjs && node test/split-router/split-router-contract-probe.mjs` | **PASS (`10/10`)** | اثبات صفر-admin، نبود `receive()`، سقف کامپایل‌شدهٔ `MAX_FEE_BPS = 100` و تطابق selectorهای چهار پروتکل. |
+| ریهرسال رفتاری EVM محلی (Ganache) | `node test/split-router/split-router-evm-rehearsal.mjs` | **PASS (`42/42`)** | پوشش هر سه شکل استقرار واقعی (`Base` چهارمسیره بدون Lido، `Arbitrum` فقط-Aave، `Ethereum` فقط-Lido بدون `asset`)، اثبات موجودی صفر روتر، `ZERO_TARGET` روی مسیرهای غایب، و هر ۷ گارد constructor (`ZERO_ASSET`, `ZERO_FEE_RECIPIENT`, `FEE_TOO_HIGH`, `NO_TARGET`, `MORPHO_LOAN_TOKEN_MISMATCH`, `MORPHO_MARKET_INCOMPLETE`, `MORPHO_MARKET_ID_MISMATCH`). گزارش: `test/split-router/split-router-rehearsal-report.json`. |
+| یکپارچگی کلاینت و پنل‌ها | `npx vitest run test/split-router-defi.test.js` | **PASS (`26/26`)** | بازنویسی پلن برای هر ۵ آداپتور، ۳ حالت allowance، افشای کارمزد پیش از امضا، و اثبات receipt دولایه. |
+| ریهرسال fork سه‌شبکه‌ای (`--strict`) در سندباکس محلی | `BASE_RPC_URL=https://mainnet.base.org ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc ETH_RPC_URL=https://ethereum-rpc.publicnode.com npm run test:split-router-fork -- --strict` | **FAIL (`0/1` — `EXIT=1`)** | با قانون سخت‌گیرانهٔ `SKIP = FAIL`: باینری `anvil` روی `PATH` سندباکس نصب نیست و egress خروجی سندباکس به `release-assets.githubusercontent.com` و اندپوینت‌های JSON-RPC عمومی مسدود است (`curl` exit `35`). بدون RPC صریح نیز اسکریپت با `missing BASE_RPC_URL, ARBITRUM_RPC_URL, ETH_RPC_URL` (`EXIT=1`) بسته می‌شود. هیچ گزارش جعلی `split-router-fork-rehearsal-report.json` ساخته نشد. |
+
+### ۳. تنها گام رایگان پیش از تحویل به ممیز (برای مالک مخزن روی GitHub Actions)
+1. فایل آمادهٔ `ci/split-router-fork-rehearsal.yml` را یک بار دستی در `.github/workflows/split-router-fork-rehearsal.yml` قرار دهید.
+2. از تب **Actions → SplitRouter 3-chain fork rehearsal → Run workflow** اجرا را بزنید تا روی رانر رایگان GitHub با `foundry-toolchain@nightly` هر سه fork (Base + Arbitrum + Ethereum) با `--strict` اجرا و آرتیفکت `split-router-fork-rehearsal-report.json` تولید شود.
+3. از آن نقطه به بعد کار دقیقاً روی **مرز هزینه‌دار (ممیزی خارجی قرارداد + گاز استقرار روی ۳ شبکه)** قرار دارد و بدون مجوز صریح مالک ادامه داده نمی‌شود.
+
 ## وضعیت فعلی (صادقانه)
 
-- قرارداد **نوشته و کامپایل شده**، ریهرسال رفتاری آن روی EVM محلی **PASS کامل** است (۲۸/۲۸)، پروب ABI سبز است، تست‌های واحد کلاینت (۲۶) سبزند.
-- **پنل‌ها وصل شده‌اند** (تست receipt دو-لایه در هر ۴ آداپتور + تست‌های routeSupplyPlan برای هر سه حالت allowance). تا وقتی env خالی است، همه‌چیز همان واریز مستقیم امروز است — fail-open با همان مرجعِ پلن.
-- ریهرسال fork **اجرا نشده** (نیازمند anvil + RPC خارجی است) — اسکریپت آماده است و در CI/دستی باید قبل از هر استقرار با `--strict` سبز شود.
-- **ممیزی نشده.** تا ممیزی + استقرار، هیچ env ای ست نیست و رفتار اپ بایت‌به‌بایت همان امروز است.
+- قرارداد **نوشته و کامپایل شده**، ریهرسال رفتاری آن روی EVM محلی برای هر سه شکل استقرار شبکه **PASS کامل** است (`42/42`)، پروب ABI سبز است (`10/10`)، و تست‌های واحد/یکپارچگی کلاینت سبزند (`26/26`).
+- **پنل‌ها وصل شده‌اند** (تست receipt دو-لایه در هر ۴ آداپتور + تست‌های `routeSupplyPlan` برای هر سه حالت allowance). تا وقتی env خالی است، همه‌چیز همان واریز مستقیم امروز است — fail-open با همان مرجعِ پلن.
+- اسکریپت ریهرسال fork سه‌شبکه‌ای (`test/split-router/split-router-fork-rehearsal.mjs`) و ورک‌فلوی CI آن (`ci/split-router-fork-rehearsal.yml`) برای هر سه شبکهٔ Base، Arbitrum و Ethereum تکمیل شده‌اند؛ اجرای محلی `--strict` در سندباکس فعلی به دلیل نبود `anvil` و محدودیت egress شبکه طبق قانون `SKIP = FAIL` برابر **FAIL (`0/1`)** ثبت شد و باید پیش از ممیزی روی رانر GitHub Actions سبز شود.
+- **ممیزی نشده (`audited: false`).** تا ممیزی مستقل + استقرار، هیچ env ای ست نیست و رفتار اپ بایت‌به‌بایت همان امروز است.
 - هیچ‌کدام از آداپتورها، پنل‌ها یا gateهای موجود تغییر نکرده‌اند.
 
 ## چیزهایی که عمداً وجود ندارند
