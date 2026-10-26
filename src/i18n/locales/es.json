@@ -308,7 +308,7 @@
     "feedDownHelp": "La última petición de precios no llegó al servidor. No se muestra nada de memoria para que un precio viejo no ocupe el lugar de uno vivo.",
     "retry": "Reintentar",
     "emptyFavorites": "Aún no has marcado monedas",
-    "emptyFavoritesHelp": "Toca la estrella junto a cualquier moneda para añadirla aquí y activar su alerta de precio.",
+    "emptyFavoritesHelp": "Abre la página de una moneda y toca su estrella para añadirla aquí; allí también puedes gestionar alertas.",
     "showAll": "Ver todas las monedas",
     "refresh": "Actualizar precios"
   },

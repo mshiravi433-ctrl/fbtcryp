@@ -308,7 +308,7 @@
     "feedDownHelp": "Permintaan harga terakhir tidak sampai ke server. Tidak ada angka yang diambil dari memori, agar harga lama tidak menggantikan harga hidup.",
     "retry": "Coba lagi",
     "emptyFavorites": "Belum ada koin favorit",
-    "emptyFavoritesHelp": "Ketuk bintang di samping koin mana pun untuk menambahkannya di sini dan menyalakan peringatan harganya.",
+    "emptyFavoritesHelp": "Buka halaman koin lalu ketuk bintangnya untuk menambahkannya di sini; peringatan harga juga dikelola dari sana.",
     "showAll": "Tampilkan semua koin",
     "refresh": "Segarkan harga"
   },

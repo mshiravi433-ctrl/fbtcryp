@@ -308,7 +308,7 @@
     "feedDownHelp": "最后一次价格请求未到达服务器。此处不显示任何缓存数字，以免过期价格占据实时价格的位置。",
     "retry": "重试",
     "emptyFavorites": "还没有自选代币",
-    "emptyFavoritesHelp": "点击任意代币旁的星标，即可加入自选并开启价格提醒。",
+    "emptyFavoritesHelp": "打开代币详情页并点击星标即可添加到此处；价格提醒也可在该页面管理。",
     "showAll": "显示全部代币",
     "refresh": "刷新价格"
   },

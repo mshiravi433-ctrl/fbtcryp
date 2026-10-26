@@ -1112,10 +1112,11 @@ select option {
   flex-shrink: 0;
   padding-right: 20px;
   will-change: transform;
-  animation: ticker-run 40s linear infinite;
+  animation: ticker-run 64s linear infinite;
   direction: ltr !important;
 }
 .ticker:hover .ticker-track { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .ticker-track { animation-duration: 120s; } }
 
 @keyframes ticker-run {
   from { transform: translate3d(0, 0, 0); }

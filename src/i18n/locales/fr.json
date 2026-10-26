@@ -308,7 +308,7 @@
     "feedDownHelp": "La dernière requête de prix n’a pas atteint le serveur. Rien n’est affiché depuis la mémoire, pour qu’un prix ancien ne prenne pas la place d’un prix vivant.",
     "retry": "Réessayer",
     "emptyFavorites": "Aucune crypto en favori",
-    "emptyFavoritesHelp": "Touchez l’étoile à côté d’une crypto pour l’ajouter ici et activer son alerte de prix.",
+    "emptyFavoritesHelp": "Ouvrez la page d’une crypto et touchez son étoile pour l’ajouter ici ; les alertes se gèrent aussi depuis cette page.",
     "showAll": "Afficher toutes les cryptos",
     "refresh": "Actualiser les prix"
   },

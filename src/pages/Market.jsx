@@ -72,11 +72,23 @@ function StatTile({ label, value, sub, tone }) {
   );
 }
 
+const SECTOR_GLYPHS = {
+  gold: <><circle cx="12" cy="12" r="8" /><path d="m8 14 4-6 4 6H8Z" /><path d="M9 16h6" /></>,
+  meme: <><path d="M4.5 13.5c0-4.5 3.2-8 7.5-8s7.5 3.5 7.5 8c0 3.4-3.2 5.5-7.5 5.5s-7.5-2.1-7.5-5.5Z" /><path d="M8.5 12h.01M15.5 12h.01M9 15c1.8 1.2 4.2 1.2 6 0" /></>,
+  rwa: <><path d="M4 20h16M6 20V9l6-4 6 4v11" /><path d="M9 12h6M9 15h6" /></>,
+  ai: <><path d="M9 7V5m6 2V5M8 8h8a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3v-5a3 3 0 0 1 3-3Z" /><path d="M9 12h.01M15 12h.01M9 16h6M2 12h3m14 0h3" /></>,
+  gaming: <><path d="M7 8h10a4 4 0 0 1 3.8 5.2l-1 3.2a2 2 0 0 1-3.3.8L14 14h-4l-2.5 3.2a2 2 0 0 1-3.3-.8l-1-3.2A4 4 0 0 1 7 8Z" /><path d="M8 10v4m-2-2h4m7-1h.01m2 2h.01" /></>,
+  solana: <><path d="M5 7h14l-2 3H3l2-3Zm0 7h14l-2 3H3l2-3Zm2-3h14l-2 3H5l2-3Z" /></>
+};
+
+function SectorGlyph({ sector }) {
+  return <svg className="market-sector-icon" viewBox="0 0 24 24" aria-hidden="true">{SECTOR_GLYPHS[sector]}</svg>;
+}
+
 export default function Market() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const favorites = useAppStore((s) => s.favorites);
-  const toggleFavorite = useAppStore((s) => s.toggleFavorite);
   const vs = vsOf(useSettingsStore((s) => s.currency));
 
   const { data: global } = useGlobalStats();
@@ -341,20 +353,27 @@ export default function Market() {
   }, []);
   const fresh = freshness(updatedAt, now);
 
-  /*
-   * ─── FAVOURITES FROM THE LIST ───────────────────────────────────────────
-   * The star is not new data — `useAppStore` has held `favorites` and
-   * `toggleFavorite` all along, and the Favourites chip above lists them. The
-   * only way to ADD one, though, was to open a coin's own page: a filter whose
-   * contents could not be created from the screen that showed the filter. The
-   * star also matters beyond the chip — lib/priceAlerts.js only watches coins
-   * in this list.
-   */
-  const star = useCallback((coin) => toggleFavorite(coin.id), [toggleFavorite]);
-  const starLabel = useCallback(
-    (coin) => t(favorites.includes(coin.id) ? 'market.starRemove' : 'market.starAdd', { symbol: coin.symbol }),
-    [favorites, t]
-  );
+  // Sorting menu is an in-flow popover; it never changes the page's layout position.
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortWrapRef = useRef(null);
+  useEffect(() => {
+    if (!sortOpen) return undefined;
+    const onPointerDown = (event) => {
+      if (!sortWrapRef.current?.contains(event.target)) setSortOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setSortOpen(false);
+        sortWrapRef.current?.querySelector('.market-sort-trigger')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [sortOpen]);
 
   /*
    * ─── THE FIGURE UNDER THE NAME FOLLOWS THE SORT ─────────────────────────
@@ -740,7 +759,7 @@ export default function Market() {
       {/* ---------- Instagram-style 1-minute App Stories below Bitcoin card ---------- */}
       <MarketStories coins={coins} global={global} />
 
-      <AdBanner slot="signals" />
+      <div className="market-signal-promo"><AdBanner slot="signals" /></div>
 
       {/* ---------- trending ---------- */}
       {trending?.length > 0 && (
@@ -784,10 +803,8 @@ export default function Market() {
            jobs: find (search), order (views + sort) and narrow (sectors,
            deliberately its own row because tapping one issues a request).
 
-        2. THE CONTROLS SCROLLED AWAY. On a 500-row list the search box left
-           the screen after the first flick and the only way back was to
-           scroll the page up. The bar is `position: sticky` under the header,
-           so find/order stay one thumb away for the whole list.
+        2. THE CONTROLS FLOAT. Search and sort remain anchored to the list
+           header in normal document flow, never overlapping or obscuring rows.
 
         3. NOTHING SAID HOW THE MARKET WAS DOING. Six numbers about right now
            and no answer to "is the page mostly green or mostly red". The
@@ -899,18 +916,60 @@ export default function Market() {
               ))}
             </div>
 
-            <div className="market-sort-wrap">
-              <select
-                className="market-sort-select"
-                value={sortKey}
-                onChange={(e) => chooseSort(e.target.value)}
+            <div className="market-sort-wrap" ref={sortWrapRef}>
+              <button
+                type="button"
+                className="market-sort-trigger"
                 aria-label={t('market.sortAria')}
+                aria-haspopup="menu"
+                aria-expanded={sortOpen}
+                aria-controls="market-sort-options"
+                onClick={() => setSortOpen((open) => !open)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    setSortOpen(true);
+                    requestAnimationFrame(() => sortWrapRef.current?.querySelector('.market-sort-option')?.focus());
+                  }
+                }}
                 data-testid="market-sort"
               >
-                {MARKET_SORTS.map((key) => (
-                  <option key={key} value={key}>{t(`market.sort.${key}`)}</option>
-                ))}
-              </select>
+                <span className="market-sort-trigger-kicker">{t('market.sortAria')}</span>
+                <span className="market-sort-trigger-value">{t(`market.sort.${sortKey}`)}</span>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+              </button>
+              {sortOpen && (
+                <div
+                  className="market-sort-popover"
+                  id="market-sort-options"
+                  role="menu"
+                  aria-label={t('market.sortAria')}
+                  onKeyDown={(event) => {
+                    const options = [...event.currentTarget.querySelectorAll('.market-sort-option')];
+                    const index = options.indexOf(document.activeElement);
+                    let next = null;
+                    if (event.key === 'ArrowDown') next = (index + 1) % options.length;
+                    else if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+                    else if (event.key === 'Home') next = 0;
+                    else if (event.key === 'End') next = options.length - 1;
+                    if (next != null) { event.preventDefault(); options[next]?.focus(); }
+                  }}
+                >
+                  {MARKET_SORTS.map((key) => (
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={sortKey === key}
+                      className="market-sort-option"
+                      key={key}
+                      onClick={() => { chooseSort(key); setSortOpen(false); }}
+                    >
+                      <span>{t(`market.sort.${key}`)}</span>
+                      {sortKey === key && <span className="market-sort-check" aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
                 type="button"
                 className="market-dir"
@@ -1002,7 +1061,7 @@ export default function Market() {
                   setSector(sector === sec ? null : sec);
                 }}
               >
-                <i aria-hidden="true" />
+                <SectorGlyph sector={sec} />
                 {t(`market.sector.${sec}`)}
               </button>
             ))}
@@ -1112,9 +1171,6 @@ export default function Market() {
                       rank={c.rank || i + 1}
                       metric={rowMetric(c)}
                       onClick={() => navigate(`/coin/${c.id}`)}
-                      starred={favorites.includes(c.id)}
-                      onStar={star}
-                      starLabel={starLabel(c)}
                     />
                     {swapUrl && (
                       <button
@@ -1188,9 +1244,6 @@ export default function Market() {
                           coin={c}
                           rank={c.rank || undefined}
                           onClick={() => navigate(`/coin/${c.id}`)}
-                          starred={favorites.includes(c.id)}
-                          onStar={star}
-                          starLabel={starLabel(c)}
                         />
                         {swapUrl && (
                           <button
