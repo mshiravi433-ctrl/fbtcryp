@@ -446,7 +446,16 @@ export function createWcSession({
    */
   async function connect({ force = false } = {}) {
     if (busy) return { ok: false, code: 'WC_BUSY' };
-    if (provider) return { ok: false, code: 'WC_BUSY' };
+    /* A previous cold-start restore can settle at the transport layer while
+       the React/ethers adapter times out. Reuse that still-live session on an
+       explicit retry instead of returning WC_BUSY forever (which presented as
+       a reconnect spinner that never completed). */
+    if (provider?.session && provider.accounts?.[0]) {
+      const chainId = honestChain(provider);
+      syncChain(provider, chainId);
+      return { ok: true, provider, address: provider.accounts[0], chainId, restored: true };
+    }
+    if (provider) await release({ purge: false });
     busy = true;
     const startedAt = Date.now();
     let instance = null;
@@ -694,7 +703,16 @@ export function createWcSession({
    * button is the real path and a resume must never stall behind a relay probe.
    */
   async function restore() {
-    if (busy || provider) return { ok: false, code: 'WC_BUSY' };
+    if (busy) return { ok: false, code: 'WC_BUSY' };
+    /* Adapter setup may time out after the SDK has successfully restored the
+       session. Reuse it on the next rung; re-running init while holding the
+       live provider either returns WC_BUSY forever or creates a second client. */
+    if (provider?.session && provider.accounts?.[0]) {
+      const chainId = honestChain(provider);
+      syncChain(provider, chainId);
+      return { ok: true, provider, address: provider.accounts[0], chainId, restored: true };
+    }
+    if (provider) await release({ purge: false });
     if (!hasStoredSession()) return { ok: false, code: 'WC_NO_SESSION' };
     busy = true;
     let instance = null;

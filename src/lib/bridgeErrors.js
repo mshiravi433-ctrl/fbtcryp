@@ -94,6 +94,29 @@ const BRIDGE_CODES = new Set([
 const CODE_RE = /^[A-Z][A-Z0-9_]{2,40}$/;
 
 /**
+ * Normalize wallet/RPC failures at the bridge boundary. WalletConnect and
+ * ethers wrap the same rejection differently (`4001`, `ACTION_REJECTED`, or
+ * a nested provider error); leaving any one shape untranslated made a rejected
+ * signature look like an indefinitely pending transfer.
+ */
+export function bridgeExecutionCode(error) {
+  const codes = [error?.code, error?.error?.code, error?.info?.error?.code]
+    .map((value) => String(value ?? '').toUpperCase());
+  const messages = [error?.shortMessage, error?.message, error?.reason, error?.error?.message]
+    .filter(Boolean).join(' ');
+  if (codes.includes('4001') || codes.includes('ACTION_REJECTED')
+      || /user rejected|user denied|rejected by user|request rejected/i.test(messages)) return 'USER_REJECTED';
+  if (codes.some((code) => /^WALLET_[A-Z_]+$/.test(code))) return codes.find((code) => /^WALLET_[A-Z_]+$/.test(code));
+  if (codes.includes('USER_REJECTED') || codes.includes('INSUFFICIENT_BALANCE') || codes.includes('INSUFFICIENT_GAS')) {
+    return codes.find((code) => ['USER_REJECTED', 'INSUFFICIENT_BALANCE', 'INSUFFICIENT_GAS'].includes(code));
+  }
+  if (/insufficient funds|insufficient balance|exceeds the balance/i.test(messages)) {
+    return /gas|fee|funds for gas/i.test(messages) ? 'INSUFFICIENT_GAS' : 'INSUFFICIENT_BALANCE';
+  }
+  return null;
+}
+
+/**
  * Everything a bridge tab needs to render one error honestly.
  *
  * @param {string} code   machine code (or upstream prose) that was thrown

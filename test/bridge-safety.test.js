@@ -133,4 +133,15 @@ describe('real shared execution pipeline with mocked wallet/RPC', () => {
     await execute(route, { wallet });
     expect(mocks.approve.mock.calls.map((c) => c[1])).toEqual([0n, 10n ** 18n]);
   });
+  it.each([
+    [{ code: 4001, message: 'User rejected the request' }, 'USER_REJECTED'],
+    [{ code: 'ACTION_REJECTED', shortMessage: 'user rejected action' }, 'USER_REJECTED'],
+    [{ code: -32000, message: 'insufficient funds for gas * price + value' }, 'INSUFFICIENT_GAS'],
+    [{ code: -32000, message: 'insufficient balance for transfer' }, 'INSUFFICIENT_BALANCE']
+  ])('settles wallet failure %j as %s instead of leaving a transfer pending', async (failure, expected) => {
+    signer.sendTransaction.mockRejectedValue(Object.assign(new Error(failure.message || failure.shortMessage), failure));
+    const result = await execute(route, { wallet });
+    expect(result).toMatchObject({ ok: false, code: expected });
+    expect(fetcher).not.toHaveBeenCalledWith(expect.stringContaining('/history'), expect.anything());
+  });
 });
