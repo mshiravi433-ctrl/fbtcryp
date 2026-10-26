@@ -167,6 +167,7 @@ export default function Discover({ embedded = false }) {
   const { haptic } = useTelegram();
   const [cat, setCat] = useState('all');
   const [q, setQ] = useState('');
+  const [selected, setSelected] = useState(null);
 
   /*
    * ─── LIVE TRENDING ────────────────────────────────────────────────────────
@@ -302,7 +303,7 @@ export default function Discover({ embedded = false }) {
                   className="disc-card"
                   variants={riseIn}
                   whileTap={{ scale: 0.975 }}
-                  onClick={() => go(item)}
+                  onClick={() => { haptic?.('light'); setSelected(item); }}
                   style={{ '--disc-hue': item.hue, background: 'rgba(255,255,255,0.06)', border: 'none', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
                 >
                   <SiteLogo item={item} name={name} />
@@ -329,6 +330,20 @@ export default function Discover({ embedded = false }) {
             {t('discover.noMatch', { q: q.trim() })}
           </p>
         </motion.div>
+      )}
+
+      {selected && (
+        <div role="presentation" onClick={() => setSelected(null)} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(4,8,20,.58)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <motion.section role="dialog" aria-modal="true" aria-label={t(`discover.site.${selected.id}`)} onClick={(e) => e.stopPropagation()}
+            initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+            style={{ width: 'min(100%, 560px)', padding: '22px 20px calc(24px + env(safe-area-inset-bottom))', borderRadius: '24px 24px 0 0', background: 'var(--surface-1, #151a28)', border: '1px solid rgba(255,255,255,.12)', boxShadow: '0 -18px 60px rgba(0,0,0,.35)' }}>
+            <div style={{ width: 38, height: 4, borderRadius: 9, background: 'rgba(255,255,255,.28)', margin: '0 auto 18px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><SiteLogo item={selected} name={t(`discover.site.${selected.id}`)} /><div><strong style={{ display: 'block', fontSize: 16 }}>{t(`discover.site.${selected.id}`)}</strong><span className="disc-host mono">{host(selected.url)}</span></div></div>
+            <p className="muted" style={{ lineHeight: 1.7, margin: '14px 0 18px' }}>{t('discover.safety')}</p>
+            <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { const item = selected; setSelected(null); go(item); }}><IconExternal width={15} height={15} />{t('discover.openLink', { defaultValue: 'باز کردن لینک' })}</button>
+            <button type="button" className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} onClick={() => setSelected(null)}>{t('common.close')}</button>
+          </motion.section>
+        </div>
       )}
 
       <InfoBox title={t('discover.safetyTitle')} tone="warn" id="discover-safety">
