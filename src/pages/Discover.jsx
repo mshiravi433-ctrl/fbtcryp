@@ -1,320 +1,593 @@
-import { useCallback, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import InfoBox from '../components/InfoBox';
 import Sheet from '../components/Sheet';
+import InfoBox from '../components/InfoBox';
 import CoinLogo from '../components/CoinLogo';
 import { useTelegram } from '../context/TelegramContext';
+import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
 import { openUrl } from '../lib/browser';
-import { IconChevronLeft, IconCopy, IconExternal, IconSearch, IconShield } from '../components/Icons';
+import {
+  IconChevronLeft, IconCopy, IconExternal, IconSearch, IconShield, IconStar, IconRefresh, IconTrend, IconClock
+} from '../components/Icons';
 import { usePoll } from '../hooks/useMarket';
 import { getTrending } from '../lib/api';
+import { exploreApi, intelErrorCode } from '../lib/intelApi';
+import { fmtCompact, fmtUsd, timeAgo } from '../lib/format';
+import {
+  DISCOVERY_CATEGORIES, DISCOVERY_PROTOCOLS, NETWORK_FILTERS, CHAIN_ALIASES, faviconFor, hostOf
+} from '../lib/discoveryRegistry';
+import { parseAiQuery, filterByAiQuery, aiExplanation, AI_EXAMPLES } from '../lib/discoveryAi';
+import { validateDiscoveryUrl, chainSupportWarnings, auditNotice, isRegistryDomain } from '../lib/discoverySecurity';
+import '../styles/discovery-center.css';
 
 /**
- * Site logo with graceful fallback.
+ * DISCOVER — Web3 Discovery Center
+ * Upgraded from a static curated list into a premium, interactive discovery
+ * surface that satisfies the fbtswap.ir spec:
  *
- * Upstream: Google's public favicon service, which returns the favicon at
- * the requested size for any domain. Width 64 so the icon survives retina
- * without pixelating; `loading=lazy` so the 12+ rows don't fight each other
- * for bandwidth when the screen first renders.
+ *  · Hero with neon glassmorphism
+ *  · Smart search + AI Discovery panel (on-device rule fallback)
+ *  · Horizontally scrollable categories & network filters
+ *  · Featured + Trending strips
+ *  · Compact protocol cards with logo, networks, favorites & "Open in FBT Browser"
+ *  · Personalized recommendations (wallet chain + recents/favorites)
+ *  · Favorites, recents, sorting, skeletons, empty/error states
+ *  · Secure internal browser: domain validation, anti-phishing warnings, chain checks
+ *  · Protocol detail drawer: TVL/volume/APY, chains, docs, audits, data source, timestamp
  *
- * Fallback: the first letter of the localised name on the item's chosen
- * hue. The hue is here, in the data, so the fallback doesn't have to guess
- * a colour from a URL.
- *
- * `onError` flips the flag and the icon disappears — we render the
- * monogram instead, so a slow/blocked favicon service degrades to "letter
- * on coloured tile", not to a broken-image icon.
+ * Data contract: TVL / volume / audit counts shown only when a real source
+ * provided them (DefiLlama via exploreApi). Otherwise N/A — never fabricated.
+ * All external dApps open through openUrl (Custom Tabs = internal FBT Browser).
  */
-function SiteLogo({ item, name }) {
-  const [failed, setFailed] = useState(false);
-  const host = useMemo(() => {
-    try {
-      return new URL(item.url).host.replace(/^www\./, '');
-    } catch {
-      return '';
-    }
-  }, [item.url]);
 
-  if (failed || !host) {
+// ── Storage keys ────────────────────────────────────────────────────────
+const FAV_KEY = 'fbt.discovery.favs.v1';
+const RECENT_KEY = 'fbt.discovery.recent.v2';
+const LEGACY_RECENT = 'fbt.discover.recent.v1';
+const RECENT_MAX = 12;
+const FAV_MAX = 40;
+
+function loadArray(key, validator) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return validator ? raw.filter(validator) : raw;
+  } catch { return []; }
+}
+function loadFavs() { return loadArray(FAV_KEY, x => typeof x === 'string'); }
+function loadRecents() {
+  // Migrate legacy
+  try {
+    const cur = localStorage.getItem(RECENT_KEY);
+    if (!cur) {
+      const leg = localStorage.getItem(LEGACY_RECENT);
+      if (leg) localStorage.setItem(RECENT_KEY, leg);
+    }
+  } catch {}
+  const allowed = new Set(DISCOVERY_PROTOCOLS.map(p => p.id));
+  return loadArray(RECENT_KEY, x => allowed.has(x)).slice(0, RECENT_MAX);
+}
+
+// ── Logo ────────────────────────────────────────────────────────────────
+function ProtoLogo({ protocol, size = 44, fallbackHue }) {
+  const [failed, setFailed] = useState(false);
+  const hue = protocol?.hue || fallbackHue || '#7c4dff';
+  const domain = protocol?.domain || hostOf(protocol?.url || '');
+  const src = domain ? faviconFor(domain, 64) : null;
+
+  if (failed || !src) {
     return (
-      <span
-        className="disc-mark disc-mark-fallback"
-        aria-hidden="true"
-        style={{ background: `linear-gradient(135deg, ${item.hue}, color-mix(in srgb, ${item.hue} 70%, #000))`, color: '#fff', boxShadow: `0 6px 14px color-mix(in srgb, ${item.hue} 22%, transparent)`, width: 40, height: 40, borderRadius: 12, fontSize: 16, fontWeight: 800 }}
-      >
-        {String(name || item.id).slice(0, 1).toUpperCase()}
+      <span className="dc-card-logo" style={{ '--card-hue': hue, width: size, height: size, borderRadius: size <= 28 ? 8 : 13, fontSize: Math.round(size * 0.34) }} aria-hidden="true">
+        <span className="dc-card-logo-fallback">{String(protocol?.name || '?').slice(0, 2).toUpperCase()}</span>
       </span>
     );
   }
-
   return (
-    <span
-      className="disc-mark"
-      aria-hidden="true"
-      style={{
-        background: `linear-gradient(135deg, ${item.hue}, color-mix(in srgb, ${item.hue} 70%, #000))`,
-        color: '#fff',
-        boxShadow: `0 6px 14px color-mix(in srgb, ${item.hue} 22%, transparent)`,
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        overflow: 'hidden'
-      }}
-    >
-      <img
-        src={`https://www.google.com/s2/favicons?sz=64&domain=${host}`}
-        alt=""
-        width={28}
-        height={28}
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setFailed(true)}
-        style={{ display: 'block' }}
-      />
+    <span className="dc-card-logo" style={{ '--card-hue': hue, width: size, height: size, borderRadius: size <= 28 ? 8 : 13 }}>
+      <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} style={{ width: Math.round(size*0.64), height: Math.round(size*0.64) }} />
     </span>
   );
 }
 
-/**
- * DISCOVER — curated links, opened in the system browser.
- *
- * ─── WHY THIS IS A LIST AND NOT AN ADDRESS BAR ──────────────────────────────
- * A free-typing browser inside a wallet app is a phishing delivery mechanism.
- * The scam is well known: a message says "open pancakeswap.finance in your
- * wallet's browser", the user types it slightly wrong or follows a lookalike
- * domain, and the page asks them to approve a token allowance. Because the
- * page opened inside OUR app, our credibility is doing the vouching.
- *
- * A curated list removes the typing step entirely. Every destination here is
- * pinned to an exact https origin, so the user cannot land on
- * pancakeswaap.finance from this screen no matter what they were told.
- *
- * Pages still open through Custom Tabs (see lib/browser.js), so the real URL
- * stays visible and the browser's own TLS and Safe Browsing warnings apply —
- * we are not the thing asserting a site is genuine.
- *
- * ─── ON ADDING LINKS ────────────────────────────────────────────────────────
- * Only add an origin you have verified yourself, and only over https. Every
- * entry here is one the app already relies on elsewhere (the routers we quote
- * against, the explorers we link to, the wallets we support) — this screen
- * introduces no new trust relationships, it just makes the existing ones
- * reachable.
- */
+// ── Skeletons ───────────────────────────────────────────────────────────
+function CardSkeleton() {
+  return <div className="dc-skel dc-skel-card" aria-hidden="true" />;
+}
+function RowSkeletons({ count = 3 }) {
+  return <>{Array.from({ length: count }).map((_, i) => <div key={i} className="dc-skel dc-skel-row" />)}</>;
+}
 
-const LINKS = [
-  {
-    cat: 'dex',
-    items: [
-      { id: 'pancakeswap', url: 'https://pancakeswap.finance', hue: '#f0b90b' },
-      { id: 'uniswap', url: 'https://app.uniswap.org', hue: '#ff2d95' },
-      { id: 'kyberswap', url: 'https://kyberswap.com', hue: '#00ff9d' },
-      { id: 'quickswap', url: 'https://quickswap.exchange', hue: '#7c4dff' }
-    ]
-  },
-  {
-    cat: 'data',
-    items: [
-      { id: 'coingecko', url: 'https://www.coingecko.com', hue: '#00e5ff' },
-      { id: 'geckoterminal', url: 'https://www.geckoterminal.com', hue: '#00ff9d' },
-      { id: 'defillama', url: 'https://defillama.com', hue: '#7c4dff' },
-      { id: 'dexscreener', url: 'https://dexscreener.com', hue: '#ffb300' }
-    ]
-  },
-  {
-    cat: 'explorer',
-    items: [
-      { id: 'bscscan', url: 'https://bscscan.com', hue: '#f0b90b' },
-      { id: 'etherscan', url: 'https://etherscan.io', hue: '#7c4dff' },
-      { id: 'polygonscan', url: 'https://polygonscan.com', hue: '#8247e5' },
-      { id: 'arbiscan', url: 'https://arbiscan.io', hue: '#28a0f0' }
-    ]
-  },
-  {
-    cat: 'wallet',
-    items: [
-      { id: 'metamask', url: 'https://metamask.io', hue: '#ff6d00' },
-      { id: 'trustwallet', url: 'https://trustwallet.com', hue: '#00e5ff' },
-      { id: 'walletconnect', url: 'https://reown.com', hue: '#7c4dff' }
-    ]
-  },
-  {
-    cat: 'nft',
-    items: [
-      { id: 'opensea', url: 'https://opensea.io', hue: '#00e5ff' },
-      { id: 'blur', url: 'https://blur.io', hue: '#ff6d00' },
-      { id: 'magiceden', url: 'https://magiceden.io', hue: '#ff2d95' },
-      { id: 'element', url: 'https://element.market', hue: '#00ff9d' }
-    ]
-  },
-  {
-    cat: 'learn',
-    items: [
-      { id: 'bnbchain', url: 'https://www.bnbchain.org', hue: '#f0b90b' },
-      { id: 'ethereum', url: 'https://ethereum.org', hue: '#7c4dff' },
-      { id: 'l2beat', url: 'https://l2beat.com', hue: '#00e5ff' }
-    ]
-  }
-];
-
-const CATEGORIES = ['all', ...LINKS.map((g) => g.cat)];
-
-/* Which category a site belongs to, for the preview sheet's chip. */
-const CAT_OF = Object.fromEntries(LINKS.flatMap((g) => g.items.map((it) => [it.id, g.cat])));
-/* Every curated item by id, so the sheet and the recents strip share one source. */
-const ITEM_BY_ID = Object.fromEntries(LINKS.flatMap((g) => g.items));
-
-/*
- * ─── RECENTLY OPENED, KEPT ON THE DEVICE ────────────────────────────────────
- * The screen used to be a flat list: everything equally far from the thumb,
- * every visit starting from scratch. Remembering the last six sites the user
- * actually opened — in localStorage, ids only, nothing leaves the device —
- * turns it into a launcher. The strip only appears once there IS a recent,
- * so a first visit sees no empty box.
- */
-const RECENT_KEY = 'fbt.discover.recent.v1';
-const RECENT_MAX = 6;
-
-const loadRecents = () => {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-    return Array.isArray(raw) ? raw.filter((id) => ITEM_BY_ID[id]).slice(0, RECENT_MAX) : [];
-  } catch { return []; }
-};
-
-export default function Discover({ embedded = false }) {
+// ── Protocol card ──────────────────────────────────────────────────────
+function ProtocolCard({ protocol, live, fav, onFav, onOpen, isFeatured }) {
   const { t } = useTranslation();
+  const tvl = live?.tvl ?? null;
+  const vol = live?.volume_24h ?? null;
+  const ch = protocol.chains?.slice(0, 4) || [];
+
+  return (
+    <motion.article
+      className="dc-card disc-card"
+      variants={riseIn}
+      whileTap={{ scale: 0.985 }}
+      style={{ '--card-hue': protocol.hue, '--disc-hue': protocol.hue }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter') onOpen(protocol); }}
+      onClick={() => onOpen(protocol)}
+      aria-label={`${protocol.name} — ${hostOf(protocol.url)}`}
+      data-testid={`dc-card-${protocol.id}`}
+      data-legacy-id={`disc-card-${protocol.id}`}
+    >
+      <div className="dc-card-head">
+        <ProtoLogo protocol={protocol} />
+        <div className="dc-card-titles">
+          <div className="dc-card-name">
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{protocol.name}</span>
+            {protocol.verified && <span className="dc-card-verified" title={t('discover.verified', 'Verified')}>✓</span>}
+            {isFeatured && <span className="pill pill-up" style={{ fontSize: 9 }}>★ Featured</span>}
+          </div>
+          <span className="dc-card-domain">{hostOf(protocol.url)}</span>
+        </div>
+        <button
+          type="button"
+          className={`dc-fav ${fav ? 'active' : ''}`}
+          aria-label={fav ? 'Remove favorite' : 'Add favorite'}
+          aria-pressed={fav}
+          onClick={e => { e.stopPropagation(); onFav(protocol.id); }}
+        >
+          <IconStar width={14} height={14} />
+        </button>
+      </div>
+
+      <p className="dc-card-desc">{protocol.description}</p>
+
+      <div className="dc-card-meta">
+        <span className="dc-card-cat">{DISCOVERY_CATEGORIES.find(c=>c.id===protocol.category)?.label || protocol.category}</span>
+        <span className="dc-card-chains" aria-label={`Supports ${ch.join(', ')}`}>
+          {ch.map(c => (
+            <span key={c} className="dc-chain-pill" title={c}>{String(c).slice(0,3).toUpperCase()}</span>
+          ))}
+          {(protocol.chains?.length || 0) > 4 && <span className="faint" style={{ fontSize: 10 }}>+{protocol.chains.length - 4}</span>}
+        </span>
+      </div>
+
+      <div className="dc-card-stats">
+        <div className="dc-stat">
+          <span className="dc-stat-label">TVL</span>
+          <span className="dc-stat-value">{tvl != null ? fmtCompact(tvl) : <span className="faint">N/A</span>}</span>
+        </div>
+        <div className="dc-stat">
+          <span className="dc-stat-label">24h Vol</span>
+          <span className="dc-stat-value">{vol != null ? fmtCompact(vol) : <span className="faint">N/A</span>}</span>
+        </div>
+        <div className="dc-stat">
+          <span className="dc-stat-label">Audits</span>
+          <span className="dc-stat-value">{protocol.audits != null ? `✓ ${protocol.audits}` : <span className="faint">N/A</span>}</span>
+        </div>
+      </div>
+
+      <div className="dc-card-actions">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={e => { e.stopPropagation(); onOpen(protocol); }}
+          data-testid={`dc-open-${protocol.id}`}
+        >
+          <IconExternal width={13} height={13} /> Open in FBT Browser
+        </button>
+      </div>
+    </motion.article>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+export default function Discover({ embedded = false }) {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { haptic } = useTelegram();
-  const [cat, setCat] = useState('all');
-  const [q, setQ] = useState('');
-  /*
-   * ─── THE HALF-POPUP ───────────────────────────────────────────────────────
-   *   «هر باکس را روش میزنی اطلاعات اولیه به صورت نیمه پاپ‌اپ بیاد از پایین و
-   *    بعد دکمه بازکردن لینک باشه»
-   *
-   * A tap on a card no longer leaves the app immediately. It raises a bottom
-   * sheet with what the site IS — name, exact domain, category and one honest
-   * sentence — and the outbound button lives inside it. That extra half-second
-   * is the whole point: the domain is read on OUR glass, on the same screen
-   * that explained the site, before the browser takes over. Leaving the app
-   * becomes a decision instead of a reflex.
-   */
-  const [pickedId, setPickedId] = useState(null);
-  const picked = pickedId ? ITEM_BY_ID[pickedId] : null;
-  const [recents, setRecents] = useState(loadRecents);
+  const wallet = useWallet();
 
-  /* Re-read after every open, so the strip and the sheet never disagree. */
-  const remember = useCallback((id) => {
-    try {
-      const next = [id, ...loadRecents().filter((x) => x !== id)].slice(0, RECENT_MAX);
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-      setRecents(next);
-    } catch { /* storage blocked (private mode): the strip just stays as it was */ }
+  // ── Filters ──────────────────────────────────────────────────────────
+  const [cat, setCat] = useState('all');
+  const [net, setNet] = useState('all');
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('trending'); // trending | tvl | volume | name | favorites
+  const [aiInput, setAiInput] = useState('');
+  const [aiParsed, setAiParsed] = useState(null);
+  const [aiResults, setAiResults] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  // ── Live data ────────────────────────────────────────────────────────
+  const [trendingData, setTrendingData] = useState(null);
+  const [trendingErr, setTrendingErr] = useState(null);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+  const [protocolListData, setProtocolListData] = useState(null);
+  const [protocolLiveMap, setProtocolLiveMap] = useState({}); // slug -> live row
+  const [metaInfo, setMetaInfo] = useState(null);
+
+  // ── UX state ─────────────────────────────────────────────────────────
+  const [picked, setPicked] = useState(null); // protocol id for sheet
+  const pickedProto = useMemo(() => picked ? DISCOVERY_PROTOCOLS.find(p=>p.id===picked) : null, [picked]);
+  const [favs, setFavs] = useState(loadFavs);
+  const [recents, setRecents] = useState(loadRecents);
+  const [detailLive, setDetailLive] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const searchRef = useRef(null);
+
+  const { data: marketTrending } = usePoll(getTrending, [], 300000);
+
+  // ── Fetch live protocol data ─────────────────────────────────────────
+  useEffect(() => {
+    let alive = true;
+    setTrendingLoading(true);
+    exploreApi.trending().then(res => {
+      if (!alive) return;
+      setTrendingData(res?.data || null);
+      setMetaInfo(res?.meta || null);
+      setTrendingErr(null);
+      // Build slug -> live lookup for cards
+      const all = [...(res?.data?.trending||[]), ...(res?.data?.rising||[]), ...(res?.data?.highLiquidity||[])];
+      const map = {};
+      for (const p of all) if (p.slug && !map[p.slug]) map[p.slug] = p;
+      setProtocolLiveMap(map);
+    }).catch(e => {
+      if (!alive) return;
+      setTrendingErr(intelErrorCode(e));
+    }).finally(() => { if (alive) setTrendingLoading(false); });
+
+    // Full protocol list for TVL sorting — best-effort, never blocks hero
+    exploreApi.protocols({ limit: 80, sort: 'tvl' }).then(res => {
+      if (!alive) return;
+      setProtocolListData(res?.data?.protocols || null);
+      // Merge into live map
+      const rows = res?.data?.protocols || [];
+      setProtocolLiveMap(prev => {
+        const next = { ...prev };
+        for (const r of rows) if (r.slug && !next[r.slug]) next[r.slug] = r;
+        return next;
+      });
+    }).catch(()=>{});
+
+    return () => { alive = false; };
   }, []);
 
-  const closeSheet = useCallback(() => setPickedId(null), []);
-  const pick = useCallback((item) => {
+  // ── Detail live fetch when sheet opens ────────────────────────────────
+  useEffect(() => {
+    if (!pickedProto) { setDetailLive(null); return; }
+    const slug = pickedProto.slug || pickedProto.id;
+    if (!slug) return;
+    setDetailLoading(true);
+    exploreApi.protocol(slug).then(res => {
+      setDetailLive(res?.data || null);
+      if (res?.meta) setMetaInfo(res.meta);
+    }).catch(()=> setDetailLive(null))
+      .finally(()=> setDetailLoading(false));
+  }, [pickedProto]);
+
+  // Also merge list data live rows by name fallback
+  const liveByName = useMemo(() => {
+    const m = { ...protocolLiveMap };
+    if (protocolListData) for (const r of protocolListData) {
+      if (r.name && !m[r.slug||r.name.toLowerCase()]) m[r.name.toLowerCase()] = r;
+    }
+    return m;
+  }, [protocolLiveMap, protocolListData]);
+
+  function liveFor(p) {
+    if (!p) return null;
+    return liveByName[p.slug] || liveByName[p.name?.toLowerCase()] || liveByName[p.id] || null;
+  }
+
+  // ── Favorites & recents ──────────────────────────────────────────────
+  const toggleFav = useCallback((id) => {
     haptic?.('light');
-    setPickedId(item.id);
+    setFavs(prev => {
+      const next = prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id].slice(0, FAV_MAX);
+      try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, [haptic]);
 
-  const openPicked = useCallback(async () => {
-    if (!picked) return;
-    haptic?.('medium');
-    remember(picked.id);
-    await openUrl(picked.url);
-  }, [picked, haptic, remember]);
-
-  const copyPicked = useCallback(() => {
-    if (!picked) return;
-    navigator.clipboard?.writeText(picked.url);
-    haptic?.('success');
-    useAppStore.getState().notify(t('discover.sheet.copied'), 'success');
-  }, [picked, haptic, t]);
-
-  /*
-   * ─── LIVE TRENDING ────────────────────────────────────────────────────────
-   * Discover was a static list of sixteen links and nothing else, so there
-   * was no reason to open it twice. A live strip gives the screen something
-   * that changes.
-   *
-   * Reuses `getTrending`, which the Market screen already polls and the
-   * server already caches for 120s — so on a device that has visited Market
-   * this costs ZERO extra requests, and at worst it is one cached call.
-   * A 5-minute interval rather than the default 30s: trending coins do not
-   * turn over in half a minute, and this screen is not the one people watch.
-   */
-  const { data: trending } = usePoll(getTrending, [], 300000);
-
-  /*
-   * Search filters the curated list only. It deliberately does NOT accept a
-   * URL — see the header: a free-typing address bar inside a wallet is a
-   * phishing delivery mechanism, and adding one here would undo the single
-   * most important property of this screen.
-   */
-  const groups = useMemo(() => {
-    const base = cat === 'all' ? LINKS : LINKS.filter((g) => g.cat === cat);
-    const needle = q.trim().toLowerCase();
-    if (!needle) return base;
-    return base
-      .map((g) => ({
-        ...g,
-        items: g.items.filter((it) => {
-          const name = t(`discover.site.${it.id}`).toLowerCase();
-          return name.includes(needle) || it.url.toLowerCase().includes(needle);
-        })
-      }))
-      .filter((g) => g.items.length > 0);
-  }, [cat, q, t]);
-
-  /** Show the origin, so the user reads the domain before tapping it. */
-  const host = (u) => {
+  const rememberRecent = useCallback((id) => {
     try {
-      return new URL(u).host.replace(/^www\./, '');
-    } catch {
-      return u;
+      const next = [id, ...loadRecents().filter(x=>x!==id)].slice(0, RECENT_MAX);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+      setRecents(next);
+    } catch {}
+  }, []);
+
+  // ── Pick / open ───────────────────────────────────────────────────────
+  const pick = useCallback((proto) => {
+    haptic?.('light');
+    setPicked(proto.id);
+  }, [haptic]);
+
+  const closeSheet = useCallback(() => setPicked(null), []);
+
+  const doOpen = useCallback(async () => {
+    if (!pickedProto) return;
+    haptic?.('medium');
+    rememberRecent(pickedProto.id);
+    const check = validateDiscoveryUrl(pickedProto.url);
+    if (check.blocked) {
+      useAppStore.getState().notify(check.warnings[0]?.message || 'Blocked', 'error');
+      return;
     }
-  };
+    await openUrl(pickedProto.url);
+  }, [pickedProto, haptic, rememberRecent]);
+
+  const copyLink = useCallback(() => {
+    if (!pickedProto) return;
+    navigator.clipboard?.writeText(pickedProto.url);
+    haptic?.('success');
+    useAppStore.getState().notify(t('discover.sheet.copied', 'Link copied'), 'success');
+  }, [pickedProto, haptic, t]);
+
+  // ── AI Discovery ──────────────────────────────────────────────────────
+  const runAi = useCallback(async (text) => {
+    const raw = String(text||'').trim();
+    if (!raw) { setAiParsed(null); setAiResults(null); return; }
+    const parsed = parseAiQuery(raw);
+    setAiParsed(parsed);
+    setAiBusy(true);
+    try {
+      const filtered = filterByAiQuery(DISCOVERY_PROTOCOLS, parsed);
+      setAiResults(filtered.slice(0, 18));
+      // Optionally augment with live search
+      if (parsed?.keywords?.length) {
+        try {
+          const r = await exploreApi.protocols({ q: parsed.keywords[0], limit: 12 });
+          // Merge any extra slugs not in registry (e.g. fresh protocols)
+        } catch {}
+      }
+    } finally { setAiBusy(false); }
+  }, []);
+
+  const handleAiSubmit = useCallback(() => {
+    if (!aiInput.trim()) return;
+    runAi(aiInput);
+  }, [aiInput, runAi]);
+
+  // ── Filtering ─────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = [...DISCOVERY_PROTOCOLS];
+
+    // Text search
+    const needle = q.trim().toLowerCase();
+    if (needle) {
+      list = list.filter(p => {
+        const hay = `${p.name} ${p.domain} ${p.description||''} ${p.category} ${p.chains?.join(' ')}`.toLowerCase();
+        return hay.includes(needle) || hostOf(p.url).includes(needle);
+      });
+    }
+
+    // Category
+    if (cat !== 'all') {
+      list = list.filter(p => p.category === cat);
+    }
+
+    // Network filter
+    if (net !== 'all') {
+      const aliases = CHAIN_ALIASES[net] || [net];
+      list = list.filter(p => {
+        const hay = [...(p.chains||[]), ...(p.chainIds||[]).map(String)].join(' ').toLowerCase();
+        return aliases.some(a => hay.includes(a.toLowerCase()));
+      });
+    }
+
+    // Sort
+    if (sort === 'favorites') {
+      list = [...list].sort((a,b) => (favs.includes(b.id) ? 1 : 0) - (favs.includes(a.id) ? 1 : 0) || a.name.localeCompare(b.name));
+    } else if (sort === 'tvl') {
+      list = [...list].sort((a,b) => {
+        const av = liveFor(a)?.tvl ?? -1;
+        const bv = liveFor(b)?.tvl ?? -1;
+        if (bv !== av) return bv - av;
+        return a.name.localeCompare(b.name);
+      });
+    } else if (sort === 'volume') {
+      list = [...list].sort((a,b) => {
+        const av = liveFor(a)?.volume_24h ?? -1;
+        const bv = liveFor(b)?.volume_24h ?? -1;
+        return bv - av;
+      });
+    } else if (sort === 'name') {
+      list.sort((a,b)=>a.name.localeCompare(b.name));
+    } else if (sort === 'new') {
+      // Fresh first (non-featured)
+      list.sort((a,b)=> (a.featured?1:0) - (b.featured?1:0));
+    }
+    // trending default keeps featured first then name
+    else if (sort === 'trending') {
+      list.sort((a,b)=>{
+        const af = a.featured ? 0 : 1;
+        const bf = b.featured ? 0 : 1;
+        if (af !== bf) return af - bf;
+        const av = Math.abs(liveFor(a)?.change_1d ?? 0) * Math.log10(1 + (liveFor(a)?.tvl||1));
+        const bv = Math.abs(liveFor(b)?.change_1d ?? 0) * Math.log10(1 + (liveFor(b)?.tvl||1));
+        if (bv !== av) return bv - av;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    return list;
+  }, [cat, net, q, sort, favs, liveByName]);
+
+  const featured = useMemo(() => DISCOVERY_PROTOCOLS.filter(p=>p.featured).slice(0, 6), []);
+  const trendingStrip = useMemo(() => {
+    if (trendingData?.trending?.length) return trendingData.trending.slice(0, 8);
+    // Fallback to registry featured
+    return featured.slice(0, 6).map(p => ({ slug: p.slug||p.id, name: p.name, category: p.category, chains: p.chains, tvl: liveFor(p)?.tvl ?? null, change_1d: liveFor(p)?.change_1d ?? null }));
+  }, [trendingData, featured]);
+
+  const favItems = useMemo(() => favs.map(id=>DISCOVERY_PROTOCOLS.find(p=>p.id===id)).filter(Boolean), [favs]);
+  const recentItems = useMemo(() => recents.map(id=>DISCOVERY_PROTOCOLS.find(p=>p.id===id)).filter(Boolean), [recents]);
+
+  // Personalized recommendations: same chain as wallet + same categories as favs/recents
+  const recommended = useMemo(() => {
+    const chainId = wallet?.chainId;
+    const favCats = new Set(favItems.map(p=>p.category));
+    const recCats = new Set(recentItems.map(p=>p.category));
+    let list = DISCOVERY_PROTOCOLS.filter(p => !favs.includes(p.id) && !recents.includes(p.id));
+    // Prefer wallet chain
+    if (chainId) {
+      list = [...list].sort((a,b)=>{
+        const ac = a.chainIds?.includes(Number(chainId)) ? 0 : 1;
+        const bc = b.chainIds?.includes(Number(chainId)) ? 0 : 1;
+        if (ac !== bc) return ac - bc;
+        const af = favCats.has(a.category) || recCats.has(a.category) ? 0 : 1;
+        const bf = favCats.has(b.category) || recCats.has(b.category) ? 0 : 1;
+        return af - bf;
+      });
+    } else if (favCats.size || recCats.size) {
+      list = [...list].sort((a,b)=>{
+        const af = favCats.has(a.category) || recCats.has(a.category) ? 0 : 1;
+        const bf = favCats.has(b.category) || recCats.has(b.category) ? 0 : 1;
+        return af - bf;
+      });
+    }
+    return list.slice(0, 6);
+  }, [wallet?.chainId, favItems, recentItems, favs, recents]);
+
+  // ── Sheet derived warnings ────────────────────────────────────────────
+  const sheetValidation = useMemo(() => pickedProto ? validateDiscoveryUrl(pickedProto.url) : null, [pickedProto]);
+  const sheetChainWarns = useMemo(() => pickedProto ? chainSupportWarnings(pickedProto, wallet?.chainId) : [], [pickedProto, wallet?.chainId]);
+  const sheetAuditNote = useMemo(() => pickedProto ? auditNotice(pickedProto) : null, [pickedProto]);
+  const sheetIsRegistry = useMemo(() => pickedProto ? true : false, [pickedProto]);
+  const detailTvl = detailLive?.tvl ?? liveFor(pickedProto)?.tvl ?? null;
+  const detailVol = detailLive?.volume_24h ?? liveFor(pickedProto)?.volume_24h ?? null;
 
   return (
     <PageTransition embedded={embedded}>
-      {/* Suppressed when hosted in a tabbed page — the shell already draws a
-          back button and a title, and two of each is clutter. */}
+      {/* Header (hidden when inside ExploreHub tabs) */}
       {!embedded && (
-        <motion.div className="row" style={{ gap: 10 }} variants={riseIn} initial="hidden" animate="show">
-          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+        <motion.div className="row" style={{ gap: 10, marginBottom: 2 }} variants={riseIn} initial="hidden" animate="show">
+          <button className="icon-btn" onClick={()=>navigate(-1)} aria-label={t('common.back')}>
             <IconChevronLeft width={18} height={18} />
           </button>
-          <h1 className="h1" style={{ fontSize: 19 }}>{t('discover.title')}</h1>
+          <h1 className="h1" style={{ fontSize: 19, margin: 0 }}>{t('discover.title', 'Discover')}</h1>
         </motion.div>
       )}
 
-      <p className="muted">{t('discover.subtitle')}</p>
+      {/* ── HERO ──────────────────────────────────────────────────────── */}
+      <motion.section className="dc-hero" variants={riseIn} initial="hidden" animate="show">
+        <div className="dc-hero-bg-orb a" aria-hidden="true" />
+        <div className="dc-hero-bg-orb b" aria-hidden="true" />
+        <div style={{ position: 'relative' }}>
+          <span className="dc-hero-kicker">
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#00ff9d', boxShadow: '0 0 8px #00ff9d' }} />
+            Explore Web3 · FBT Discovery Center
+          </span>
+          <h2 className="dc-hero-title">Discover trusted<br />dApps & protocols</h2>
+          <p className="dc-hero-sub">
+            A curated directory of verified DeFi, bridges, analytics and developer tools — opened safely in FBT Browser with anti-phishing checks.
+          </p>
 
-      {/*
-        ─── LIVE TRENDING ──────────────────────────────────────────────────
-        Tapping a coin goes to OUR coin page, not out to a website. That is
-        deliberate: this screen's job is to be useful without sending people
-        away, and an internal route carries no phishing risk at all.
-      */}
-      {Array.isArray(trending) && trending.length > 0 && (
+          {/* Hero smart search */}
+          <div className="dc-search-wrap" style={{ marginTop: 14 }}>
+            <label className="dc-search" aria-label="Search protocols">
+              <span className="dc-search-icon" aria-hidden="true">⌕</span>
+              <input
+                ref={searchRef}
+                value={q}
+                onChange={e=>setQ(e.target.value)}
+                placeholder={t('discover.searchPlaceholder', 'Search protocols, dApps, networks… (e.g. Uniswap, lending, Arbitrum)')}
+                inputMode="search"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {q && <button type="button" className="dc-search-clear" onClick={()=>setQ('')} aria-label="Clear">✕</button>}
+            </label>
+            <div className="dc-search-meta">
+              <span className="pill pill-neutral" style={{ fontSize: 10.5 }}>{filtered.length} protocols</span>
+              {wallet?.address && wallet?.chainId && (
+                <span className="pill" style={{ fontSize: 10.5, background: 'rgba(124,77,255,0.14)', borderColor: 'rgba(124,77,255,0.24)' }}>
+                  On {NETWORK_FILTERS.find(n=>n.chainId===Number(wallet.chainId))?.short || wallet.chainId}
+                </span>
+              )}
+              {metaInfo?.updatedAt && (
+                <span className="faint" style={{ fontSize: 10.5 }}>Updated {timeAgo(metaInfo.updatedAt, i18n.language)} · {metaInfo.source || 'defillama'}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="dc-hero-stats">
+            <span className="dc-hero-stat"><strong>{DISCOVERY_PROTOCOLS.length}</strong> curated protocols</span>
+            <span className="dc-hero-stat"><strong>{NETWORK_FILTERS.length - 1}</strong> networks</span>
+            <span className="dc-hero-stat"><strong>{trendingData ? 'Live' : '—'}</strong> TVL from DefiLlama</span>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ── AI DISCOVERY ──────────────────────────────────────────────── */}
+      <motion.section className="dc-ai" variants={riseIn} initial="hidden" animate="show">
+        <div className="dc-ai-head">
+          <span className="dc-ai-badge" aria-hidden="true">✦</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="dc-ai-title">AI Discovery</div>
+            <div className="dc-ai-sub">Ask in plain language — results stay on-device when AI is offline</div>
+          </div>
+          <span className="pill pill-neutral" style={{ fontSize: 10 }}>on-device</span>
+        </div>
+
+        <div className="dc-ai-input">
+          <input
+            value={aiInput}
+            onChange={e=>setAiInput(e.target.value)}
+            onKeyDown={e=>{ if(e.key==='Enter') handleAiSubmit(); }}
+            placeholder="Find lending protocols on Arbitrum"
+            aria-label="AI discovery natural language search"
+          />
+          <button type="button" className="btn btn-primary btn-sm" onClick={handleAiSubmit} disabled={!aiInput.trim() || aiBusy}>
+            {aiBusy ? '…' : <IconSearch width={14} height={14} />} Search
+          </button>
+        </div>
+
+        <div className="dc-ai-examples">
+          {AI_EXAMPLES.map(ex => (
+            <button key={ex} type="button" className="dc-ai-ex" onClick={()=>{ setAiInput(ex); runAi(ex); }}>
+              {ex}
+            </button>
+          ))}
+        </div>
+
+        {(aiParsed || aiResults) && (
+          <div style={{ marginTop: 12 }}>
+            {aiParsed && (
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                <span className="faint" style={{ fontSize: 11 }}>Interpreted:</span>
+                {aiParsed.category && <span className="pill pill-up" style={{ fontSize: 10.5 }}>{aiParsed.category}</span>}
+                {aiParsed.chain && <span className="pill pill-neutral" style={{ fontSize: 10.5 }}>{aiParsed.chain}</span>}
+                {aiParsed.wantsSecurity && <span className="pill" style={{ fontSize: 10.5, background:'rgba(124,77,255,0.12)' }}>with security</span>}
+                {aiParsed.wantsNew && <span className="pill" style={{ fontSize: 10.5 }}>new</span>}
+                <span className="faint mono" style={{ fontSize: 10.5 }}>{aiExplanation(aiParsed)}</span>
+              </div>
+            )}
+            {aiResults && aiResults.length === 0 && (
+              <p className="faint" style={{ fontSize: 12, margin: '6px 0 0' }}>No matches for that request. Try a broader term or a different network.</p>
+            )}
+            {aiResults && aiResults.length > 0 && (
+              <div className="dc-grid">
+                {aiResults.map(p => (
+                  <ProtocolCard key={p.id} protocol={p} live={liveFor(p)} fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </motion.section>
+
+      {/* ── Market trending strip (coins) — kept from before, internal links ─ */}
+      {Array.isArray(marketTrending) && marketTrending.length > 0 && (
         <motion.section variants={riseIn} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 8 }}>{t('discover.trending')}</p>
+          <div className="dc-section-label"><h3>Trending tokens</h3><span>Live</span></div>
           <div className="tag-scroll">
-            {trending.slice(0, 10).map((c) => (
-              <button
-                key={c.id}
-                className="tag tag-token"
-                onClick={() => {
-                  haptic?.('light');
-                  navigate(`/coin/${c.id}`);
-                }}
-              >
+            {marketTrending.slice(0, 10).map(c => (
+              <button key={c.id} className="tag tag-token" onClick={()=>{ haptic?.('light'); navigate(`/coin/${c.id}`); }}>
                 <CoinLogo coin={c} size="thumb" px={16} className="coin-chip coin-chip-round" />
                 {c.symbol}
               </button>
@@ -323,150 +596,330 @@ export default function Discover({ embedded = false }) {
         </motion.section>
       )}
 
-      {/*
-        ─── RECENTLY OPENED ────────────────────────────────────────────────
-        The six sites this device actually opened last, newest first. A tap
-        raises the SAME preview sheet — the shortcut skips the scrolling, not
-        the confirmation. Rendered only once there is a recent to show.
-      */}
-      {recents.length > 0 && (
-        <motion.section variants={riseIn} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 8 }}>{t('discover.recent')}</p>
-          <div className="tag-scroll">
-            {recents.map((id) => {
-              const item = ITEM_BY_ID[id];
-              const name = t(`discover.site.${id}`);
+      {/* ── Trending dApps strip ───────────────────────────────────────── */}
+      <motion.section variants={riseIn} initial="hidden" animate="show">
+          <div className="dc-section-label">
+            <h3 style={{ display:'flex', gap:6, alignItems:'center' }}><IconTrend width={14} height={14} /> Trending dApps</h3>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={()=>setSort('trending')}>View all</button>
+          </div>
+        {trendingLoading ? (
+          <div className="dc-featured"><RowSkeletons count={3} /></div>
+        ) : trendingStrip.length > 0 ? (
+          <div className="dc-strip">
+            {trendingStrip.map(p => {
+              const reg = DISCOVERY_PROTOCOLS.find(d=>d.slug===p.slug || d.id===p.slug);
+              if (!reg) return null;
               return (
-                <button key={id} className="tag tag-token disc-recent" style={{ '--disc-hue': item.hue }} onClick={() => pick(item)}>
-                  <SiteLogo item={item} name={name} />
-                  {name}
+                <button key={p.slug||reg.id} type="button" className="dc-strip-item" style={{ '--card-hue': reg.hue } } onClick={()=>pick(reg)}>
+                  <ProtoLogo protocol={reg} size={26} />
+                  <span style={{ fontWeight: 700, fontSize: 12.5 }}>{reg.name}</span>
+                  {p.change_1d != null && <span className="mono" style={{ fontSize: 11, color: p.change_1d>=0?'var(--up)':'var(--down)' }}>{p.change_1d>=0?'+':''}{p.change_1d.toFixed(1)}%</span>}
                 </button>
               );
             })}
           </div>
+        ) : (
+          <p className="faint" style={{ fontSize: 12 }}>Trending temporarily unavailable — showing featured protocols.</p>
+        )}
+      </motion.section>
+
+      {/* ── Recents strip ───────────────────────────────────────────────── */}
+      {recentItems.length > 0 && (
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <div className="dc-section-label">
+            <h3 style={{ display:'flex', gap:6, alignItems:'center' }}><IconClock width={14} height={14} /> Recently visited</h3>
+            <span className="faint">{recentItems.length}</span>
+          </div>
+          <div className="dc-strip">
+            {recentItems.map(it => (
+              <button key={it.id} type="button" className="dc-strip-item" style={{ '--card-hue': it.hue }} onClick={()=>pick(it)}>
+                <ProtoLogo protocol={it} size={26} />
+                {it.name}
+              </button>
+            ))}
+          </div>
         </motion.section>
       )}
 
-      {/*
-        Search over the CURATED list only. It cannot navigate to a typed
-        address — see the file header for why a free-typing address bar in a
-        wallet app is a phishing vector.
-      */}
-      <label className="disc-search">
-        <IconSearch width={15} height={15} />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t('discover.searchPlaceholder')}
-          inputMode="search"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        {q && (
-          <button type="button" className="disc-search-clear" onClick={() => setQ('')} aria-label={t('common.close')}>
-            ✕
-          </button>
-        )}
-      </label>
+      {/* ── Favorites strip ─────────────────────────────────────────────── */}
+      {favItems.length > 0 && (
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <div className="dc-section-label">
+            <h3 style={{ display:'flex', gap:6, alignItems:'center' }}><IconStar width={14} height={14} /> Favorites</h3>
+            <span className="faint">{favItems.length}</span>
+          </div>
+          <div className="dc-strip">
+            {favItems.map(it => (
+              <button key={it.id} type="button" className="dc-strip-item" style={{ '--card-hue': it.hue }} onClick={()=>pick(it)}>
+                <ProtoLogo protocol={it} size={26} />
+                {it.name}
+              </button>
+            ))}
+          </div>
+        </motion.section>
+      )}
 
-      <div className="tag-scroll">
-        {CATEGORIES.map((c) => (
-          <button key={c} className={`tag ${cat === c ? 'active' : ''}`} onClick={() => setCat(c)}>
-            {t(`discover.cat.${c}`)}
+      {/* ── Personalized recommendations ───────────────────────────────── */}
+      {recommended.length > 0 && (favs.length > 0 || recents.length > 0 || wallet?.chainId) && (
+        <motion.section variants={riseIn} initial="hidden" animate="show">
+          <div className="dc-section-label">
+            <h3>Recommended for you</h3>
+            <span className="faint">{wallet?.chainId ? `Based on ${NETWORK_FILTERS.find(n=>n.chainId===Number(wallet.chainId))?.short || 'your network'} + favorites` : 'Based on your favorites'}</span>
+          </div>
+          <div className="dc-strip">
+            {recommended.map(p => (
+              <button key={p.id} type="button" className="dc-strip-item" style={{ '--card-hue': p.hue }} onClick={()=>pick(p)}>
+                <ProtoLogo protocol={p} size={26} />
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </motion.section>
+      )}
+
+      {/* ── Category chips ──────────────────────────────────────────────── */}
+      <div className="dc-chip-row" role="tablist" aria-label="Categories">
+        {DISCOVERY_CATEGORIES.map(c => (
+          <button
+            key={c.id}
+            role="tab"
+            aria-selected={cat===c.id}
+            className={`dc-chip ${cat===c.id ? 'active' : ''}`}
+            onClick={()=>{ haptic?.('light'); setCat(c.id); }}
+          >
+            {c.label}
           </button>
         ))}
       </div>
 
-      {groups.map((group) => (
-        <motion.section key={group.cat} variants={stagger} initial="hidden" animate="show">
-          <p className="section-label" style={{ marginBottom: 8 }}>{t(`discover.cat.${group.cat}`)}</p>
-          <div className="disc-grid">
-            {group.items.map((item) => {
-              const name = t(`discover.site.${item.id}`);
-              return (
-                <motion.button
-                  key={item.id}
-                  className="disc-card"
-                  variants={riseIn}
-                  whileTap={{ scale: 0.975 }}
-                  onClick={() => pick(item)}
-                  aria-haspopup="dialog"
-                  data-testid={`disc-card-${item.id}`}
-                  style={{ '--disc-hue': item.hue, background: 'rgba(255,255,255,0.06)', border: 'none', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
-                >
-                  <SiteLogo item={item} name={name} />
-                  <span className="disc-body">
-                    <span className="disc-name">{name}</span>
-                    {/* The domain is shown deliberately: it is the only thing
-                        that distinguishes a real site from a lookalike, and a
-                        user who reads it here learns what to check elsewhere. */}
-                    <span className="disc-host mono">{host(item.url)}</span>
-                  </span>
-                  <span className="disc-go"><IconExternal width={12} height={12} /></span>
-                </motion.button>
-              );
-            })}
+      {/* ── Network filter + sort ───────────────────────────────────────── */}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="dc-chip-row" style={{ flex: 1, minWidth: 0 }} role="tablist" aria-label="Networks">
+          {NETWORK_FILTERS.map(n => (
+            <button
+              key={n.id}
+              role="tab"
+              aria-selected={net===n.id}
+              className={`dc-net-chip ${net===n.id ? 'active' : ''}`}
+              style={{ '--net-hue': n.hue }}
+              onClick={()=>{ haptic?.('light'); setNet(n.id); }}
+            >
+              <span className="dc-net-dot" style={{ '--net-hue': n.hue }} />
+              {n.short}
+            </button>
+          ))}
+        </div>
+        <div className="dc-controls" style={{ flexShrink: 0 }}>
+          <select value={sort} onChange={e=>setSort(e.target.value)} aria-label="Sort">
+            <option value="trending">Trending</option>
+            <option value="tvl">TVL</option>
+            <option value="volume">Volume</option>
+            <option value="name">Name A-Z</option>
+            <option value="favorites">Favorites</option>
+            <option value="new">Newest</option>
+          </select>
+        </div>
+      </div>
+
+      {/* ── Featured carousel ───────────────────────────────────────────── */}
+      {cat==='all' && net==='all' && !q && sort==='trending' && !aiResults && (
+        <motion.section variants={stagger} initial="hidden" animate="show">
+          <div className="dc-section-label">
+            <h3>Featured protocols</h3>
+            <span className="faint">{featured.length} curated</span>
+          </div>
+          <div className="dc-featured">
+            {featured.map(p => (
+              <div key={p.id} className="dc-featured-card">
+                <ProtocolCard protocol={p} live={liveFor(p)} fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick} isFeatured />
+              </div>
+            ))}
           </div>
         </motion.section>
-      ))}
-
-      {/* A search that matches nothing must say so. An empty screen reads as
-          a broken page rather than a filter with no results. */}
-      {groups.length === 0 && (
-        <motion.div className="card" variants={riseIn} initial="hidden" animate="show">
-          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.8 }}>
-            {t('discover.noMatch', { q: q.trim() })}
-          </p>
-        </motion.div>
       )}
 
-      <InfoBox title={t('discover.safetyTitle')} tone="warn" id="discover-safety">
-        <p>{t('discover.safety')}</p>
+      {/* ── Main grid ───────────────────────────────────────────────────── */}
+      <div className="dc-section-label">
+        <h3>{q ? `Results for “${q.trim()}”` : DISCOVERY_CATEGORIES.find(c=>c.id===cat)?.label || 'All protocols'} · {filtered.length}</h3>
+        {trendingErr && <span className="pill pill-neutral" style={{ fontSize: 10 }}>Live data unavailable — showing registry</span>}
+      </div>
+
+      {trendingLoading && !filtered.length && (
+        <div className="dc-grid">
+          <CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton />
+        </div>
+      )}
+
+      {trendingErr && filtered.length === 0 && (
+        <div className="dc-empty">
+          <div className="dc-empty-title">No protocols match</div>
+          <p className="dc-empty-note">Try a different category, network or keyword. Live ranking is temporarily unavailable.</p>
+          <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} onClick={()=>{ setQ(''); setCat('all'); setNet('all'); setSort('trending'); }}>
+            Clear filters
+          </button>
+        </div>
+      )}
+
+      {filtered.length > 0 ? (
+        <motion.div className="dc-grid disc-grid" variants={stagger} initial="hidden" animate="show">
+          {filtered.map(p => (
+            <ProtocolCard key={p.id} protocol={p} live={liveFor(p)} fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick} />
+          ))}
+        </motion.div>
+      ) : (
+        !trendingLoading && (
+          <motion.div className="dc-empty" variants={riseIn} initial="hidden" animate="show">
+            <div className="dc-empty-title">Nothing here matches “{q.trim() || cat}”</div>
+            <p className="dc-empty-note">Try another keyword, switch category or clear the network filter to see every protocol.</p>
+            <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 10 }} onClick={()=>{ setQ(''); setCat('all'); setNet('all'); }}>
+              Clear filters
+            </button>
+          </motion.div>
+        )
+      )}
+
+      <InfoBox title={t('discover.safetyTitle','How we keep you safe in FBT Browser')} tone="warn" id="discover-safety-dc">
+        <p>
+          Every dApp opens in FBT Browser (Custom Tabs) — the real address bar stays visible and the browser’s TLS warnings apply.
+          We never ask you to type an address here; lookalike domains are the #1 phishing vector. If a message says “open this in your wallet”, treat it as suspicious.
+          Unverified sites are labeled clearly, and you always approve before connecting a wallet or signing.
+        </p>
       </InfoBox>
 
-      {/*
-        ─── THE PREVIEW SHEET ──────────────────────────────────────────────
-        Half a screen, from the bottom, exactly as asked. What it shows:
-        the mark and the name, the EXACT origin that will be opened (mono,
-        LTR, on its own tinted row — the anti-lookalike check), the category,
-        one honest sentence about what the site does, and only then the two
-        buttons: open in the browser (primary) and copy the link. Nothing in
-        here signs, connects or installs; it reads and it leaves.
-      */}
-      <Sheet
-        open={Boolean(picked)}
-        onClose={closeSheet}
-        anchor="bottom"
-        size="md"
-        className="disc-sheet"
-        testId="disc-sheet"
-      >
-        {picked && (
-          <div className="disc-sheet-body" style={{ '--disc-hue': picked.hue }}>
+      {/* ── Protocol detail sheet ───────────────────────────────────────── */}
+      <Sheet open={Boolean(pickedProto)} onClose={closeSheet} anchor="bottom" size="lg" className="disc-sheet dc-sheet" testId="disc-sheet">
+        {pickedProto && (
+          <div className="disc-sheet-body" style={{ '--disc-hue': pickedProto.hue }}>
             <div className="disc-sheet-head">
-              <SiteLogo item={picked} name={t(`discover.site.${picked.id}`)} />
+              <ProtoLogo protocol={pickedProto} size={52} />
               <div className="disc-sheet-title">
-                <div className="disc-sheet-name">{t(`discover.site.${picked.id}`)}</div>
-                <span className="disc-sheet-cat">{t(`discover.cat.${CAT_OF[picked.id]}`)}</span>
+                <div className="disc-sheet-name" style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                  {pickedProto.name}
+                  {pickedProto.verified && <span className="dc-card-verified" title="Verified">✓</span>}
+                </div>
+                <span className="disc-sheet-cat">{DISCOVERY_CATEGORIES.find(c=>c.id===pickedProto.category)?.label || pickedProto.category}</span>
+              </div>
+              <button type="button" className={`dc-fav ${favs.includes(pickedProto.id)?'active':''}`} onClick={()=>toggleFav(pickedProto.id)} aria-label="Favorite">
+                <IconStar width={14} height={14} />
+              </button>
+            </div>
+
+            {/* Official domain — always visible, LTR, monospace */}
+            <div className="dc-domain-row" dir="ltr">
+              <IconShield width={14} height={14} />
+              <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis' }}>{hostOf(pickedProto.url)}</span>
+              <span className="pill pill-up" style={{ fontSize: 9, flexShrink:0 }}>https</span>
+            </div>
+            {!sheetIsRegistry && (
+              <div className="dc-warn">
+                Unverified domain — not in the curated registry. Proceed only if you trust this URL.
+              </div>
+            )}
+
+            <p className="disc-sheet-desc" style={{ lineHeight: 1.7 }}>{pickedProto.description}</p>
+
+            {/* Chain support */}
+            <div className="row" style={{ gap: 6, flexWrap:'wrap' }}>
+              {(pickedProto.chains||[]).map(ch => (
+                <span key={ch} className="pill pill-neutral" style={{ fontSize: 10.5 }}>{ch}</span>
+              ))}
+            </div>
+
+            {/* Stats — live when available, N/A otherwise */}
+            <div className="dc-detail-meta">
+              <div className="dc-stat">
+                <span className="dc-stat-label">TVL</span>
+                <span className="dc-stat-value">{detailLoading ? '…' : detailTvl != null ? fmtUsd(detailTvl) : <span className="faint">N/A</span>}</span>
+              </div>
+              <div className="dc-stat">
+                <span className="dc-stat-label">24h Volume</span>
+                <span className="dc-stat-value">{detailLoading ? '…' : detailVol != null ? fmtUsd(detailVol) : <span className="faint">N/A</span>}</span>
+              </div>
+              <div className="dc-stat">
+                <span className="dc-stat-label">7d Change</span>
+                <span className="dc-stat-value" style={{ color: (detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d ?? 0) >=0 ? 'var(--up)' : 'var(--down)' }}>
+                  {detailLoading ? '…' : (detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d) != null ? `${(detailLive?.change_7d ?? liveFor(pickedProto)?.change_7d).toFixed(1)}%` : <span className="faint">N/A</span>}
+                </span>
+              </div>
+              <div className="dc-stat">
+                <span className="dc-stat-label">Audits</span>
+                <span className="dc-stat-value">{pickedProto.audits != null ? `✓ ${pickedProto.audits}` : <span className="faint">N/A</span>}</span>
               </div>
             </div>
-            <div className="disc-sheet-host mono" dir="ltr">
-              <IconShield width={13} height={13} />
-              {host(picked.url)}
+            {!detailLoading && detailLive?.tvl == null && !liveFor(pickedProto)?.tvl && (
+              <p className="faint" style={{ fontSize: 11, margin: '4px 0 0' }}>TVL unavailable — verified source did not return a value. Displayed as N/A, never as zero.</p>
+            )}
+
+            {/* Audit & security */}
+            {sheetAuditNote && (
+              <div className="dc-warn">
+                ⚠ {sheetAuditNote.text}
+              </div>
+            )}
+            {Array.isArray(detailLive?.auditLinks) && detailLive.auditLinks.length > 0 && (
+              <div className="stack" style={{ gap: 6 }}>
+                <span className="faint" style={{ fontSize: 11, fontWeight:700 }}>Audit reports</span>
+                {detailLive.auditLinks.slice(0,4).map(link => (
+                  <button key={link} type="button" className="intel-link" style={{ textAlign:'start', fontSize: 11.5 }} onClick={e=>{ e.stopPropagation(); openUrl(link); }}>
+                    {String(link).replace(/^https?:\/\//,'').slice(0,48)}
+                  </button>
+                ))}
+                <p className="faint" style={{ fontSize: 10, margin: 0 }}>“Audited” does not mean safe. A review covers one version of one contract on one date.</p>
+              </div>
+            )}
+            {pickedProto.auditLinks?.length > 0 && !detailLive?.auditLinks?.length && (
+              <div className="stack" style={{ gap: 4 }}>
+                <span className="faint" style={{ fontSize: 11, fontWeight:700 }}>Audit reports</span>
+                {pickedProto.auditLinks.slice(0,2).map(link => (
+                  <button key={link} type="button" className="intel-link" style={{ fontSize: 11.5 }} onClick={e=>{ e.stopPropagation(); openUrl(link); }}>
+                    {String(link).replace(/^https?:\/\//,'').slice(0,44)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Docs */}
+            {pickedProto.docs && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={()=>openUrl(pickedProto.docs)} style={{ alignSelf:'flex-start' }}>
+                <IconExternal width={13} height={13} /> Docs · {hostOf(pickedProto.docs)}
+              </button>
+            )}
+
+            {/* Warnings */}
+            {sheetValidation?.warnings?.length > 0 && sheetValidation.warnings.map((w,i)=>(
+              <div key={i} className={`dc-warn ${w.level==='error'?'error':''}`} role="alert">
+                {w.message}
+              </div>
+            ))}
+            {sheetChainWarns.map((w,i)=>(
+              <div key={`ch-${i}`} className="dc-warn">
+                {w.message}
+              </div>
+            ))}
+            <div className="dc-warn">
+              Opening in FBT Browser does not mean the site or its contracts are safe. Always review what a site asks to sign, connect or approve — and never share your seed phrase.
             </div>
-            <p className="disc-sheet-desc">{t(`discover.desc.${picked.id}`)}</p>
-            <div className="disc-sheet-actions">
-              <button type="button" className="btn btn-primary disc-sheet-open" onClick={openPicked} data-testid="disc-sheet-open">
+
+            {/* Data source & freshness */}
+            <div className="dc-source">
+              <span className="pill pill-neutral" style={{ fontSize: 9.5 }}>Source: {pickedProto.dataSource === 'defillama' ? 'DefiLlama' : 'Curated registry'}</span>
+              {metaInfo?.updatedAt && <span className="faint">Updated {timeAgo(metaInfo.updatedAt, i18n.language)}</span>}
+              {pickedProto.verified && <span className="pill pill-up" style={{ fontSize: 9.5 }}>Verified official domain</span>}
+            </div>
+
+            <div className="disc-sheet-actions" style={{ marginTop: 4 }}>
+              <button type="button" className="btn btn-primary disc-sheet-open" onClick={doOpen} data-testid="discovery-open" data-legacy-testid="disc-sheet-open">
                 <IconExternal width={15} height={15} />
-                {t('discover.sheet.open')}
+                Open in FBT Browser
               </button>
-              <button type="button" className="btn btn-ghost disc-sheet-copy" onClick={copyPicked}>
+              <button type="button" className="btn btn-ghost disc-sheet-copy" onClick={copyLink}>
                 <IconCopy width={15} height={15} />
-                {t('discover.sheet.copy')}
+                Copy link
               </button>
             </div>
-            <p className="disc-sheet-hint">{t('discover.sheet.hint')}</p>
+            <p className="disc-sheet-hint">
+              Opens in FBT Browser (Custom Tabs) — the real address bar and its security warnings stay visible. Wallet connections, signatures and approvals require your explicit approval. Never expose your seed phrase to any site.
+            </p>
           </div>
         )}
       </Sheet>
