@@ -66,6 +66,33 @@ assert.equal(verifiedSignals(sell.snapshot, { now }).netFlowUsd, -3_600_000);
 assert.equal(verifiedToken(sell.snapshot, 1, TOKEN, { now })?.confidence, 80);
 assert.equal(verifiedToken(sell.snapshot, 56, TOKEN, { now }), null);
 assert.equal(verifiedToken(sell.snapshot, 1, `0x${'2'.repeat(40)}`, { now }), null);
+/* Chain-aware gate (2026-10-26): Solana compares as exact strings, EVM as
+ * numbers. Promotion itself stays OFF (replay coverage 7/12) — the server
+ * emits no Solana consensus rows today; these asserts pin the client gate
+ * so promotion day does not silently discard them on format. The same
+ * eligibility thresholds apply to a Solana row as to any EVM row. */
+const SOL_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC mint shape: base58, 44 chars
+const solSnapshot = { ...sell.snapshot,
+  consensus: [{ ...sell.snapshot.consensus[0], chain: 'solana', token: SOL_MINT }] };
+assert.equal(verifiedToken(solSnapshot, 'solana', SOL_MINT, { now })?.confidence, 80,
+  'solana match: the same evidence row must verify for its mint');
+assert.equal(verifiedToken(solSnapshot, 'solana', 'So11111111111111111111111111111111111111112', { now }), null,
+  'solana mismatch: a different mint must not verify');
+assert.equal(verifiedToken(solSnapshot, 1, SOL_MINT, { now }), null,
+  'an EVM query must never match a Solana row');
+assert.equal(verifiedToken(sell.snapshot, 'solana', TOKEN, { now }), null,
+  'a Solana query must never match an EVM row');
+assert.equal(verifiedToken(solSnapshot, 'solana', SOL_MINT.toLowerCase(), { now }), null,
+  'base58 is case-sensitive: a lowercased mint is a different (non-)mint');
+assert.equal(verifiedToken({ ...solSnapshot,
+  consensus: [{ ...solSnapshot.consensus[0], token: TOKEN }] }, 'solana', TOKEN, { now }), null,
+  'a Solana row carrying an 0x token is malformed and must fail closed');
+assert.equal(verifiedToken({ ...solSnapshot,
+  consensus: [{ ...solSnapshot.consensus[0], confidence: 40 }] }, 'solana', SOL_MINT, { now }), null,
+  'eligibility thresholds are chain-blind: weak Solana evidence stays rejected');
+assert.equal(verifiedSignals(solSnapshot, { now }).rows.length, 1);
+assert.equal(verifiedToken(sell.snapshot, '1', TOKEN, { now })?.confidence, 80,
+  'EVM unchanged: a numeric-string chain still matches numerically');
 assert.equal(buy.snapshot.consensus[0].signal, 'ACCUMULATION');
 assert.equal(buy.snapshot.consensus[0].independentBuyers, 3);
 assert.ok(sell.snapshot.graph.edges.every((e) => e.evidence === 'paired-explorer-transfers' && e.hashes.length));

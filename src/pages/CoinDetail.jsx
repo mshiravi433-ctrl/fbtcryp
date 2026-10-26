@@ -22,12 +22,21 @@ import SegIndicator from '../components/SegIndicator';
 import HistoryPanel from '../components/HistoryPanel';
 import { coinKey, invalidate, lastFetchFailed } from '../lib/api';
 import TokenRiskCard from '../components/TokenRiskCard';
-import TokenSmartMoney from '../components/TokenSmartMoney';
 import '../styles/smart-money.css';
 import '../styles/coin-detail-tabs.css';
 import lazyRetry from '../lib/lazyRetry';
 
 const LazyCompare = lazyRetry(() => import('./Compare'));
+/*
+ * The smart-money card joins Compare behind lazyRetry (2026-10-26): it used
+ * to be a STATIC import of this page, so every coin view fetched the card —
+ * plus the smart-money API client and the evidence gate — even though the
+ * card only renders inside one of four tabs most visitors never open. The
+ * card module itself also no longer imports a page (../pages/SmartMoney);
+ * a component must not depend on a route. Same retry semantics as every
+ * other route chunk: one cache-busting retry, then the honest boundary.
+ */
+const LazyTokenSmartMoney = lazyRetry(() => import('../components/TokenSmartMoney'));
 const DETAIL_TABS = ['trade', 'history', 'compare', 'smartMoney'];
 
 /**
@@ -677,15 +686,20 @@ export default function CoinDetail() {
         {detailTab === 'smartMoney' && (
           <div className="coin-smart-money-tab">
             {realSwap?.kind !== 'thor' && (realSwap?.token?.address || resolvedRoute?.address) ? (
-              <TokenSmartMoney
-                chainId={
-                  realSwap?.token?.address
-                    ? realSwap.chainId === 'solana' ? 'solana' : Number(realSwap.chainId) || 1
-                    : resolvedRoute?.kind === 'solana' ? 'solana' : Number(resolvedRoute?.chainId) || 1
-                }
-                address={realSwap?.token?.address || resolvedRoute?.address}
-                collapsible={false}
-              />
+              /* Fallback is card-height (head + identity + window rail ≈ the
+                 card's own first paint) so the tab does not jump when the
+                 chunk lands — the same reserve the Compare tab makes. */
+              <Suspense fallback={<div className="card" data-testid="sm-token-lazy-fallback" style={{ minHeight: 220, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}>
+                <LazyTokenSmartMoney
+                  chainId={
+                    realSwap?.token?.address
+                      ? realSwap.chainId === 'solana' ? 'solana' : Number(realSwap.chainId) || 1
+                      : resolvedRoute?.kind === 'solana' ? 'solana' : Number(resolvedRoute?.chainId) || 1
+                  }
+                  address={realSwap?.token?.address || resolvedRoute?.address}
+                  collapsible={false}
+                />
+              </Suspense>
             ) : !venueChecked ? (
               <div className="card" style={{ minHeight: 160, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>
             ) : (

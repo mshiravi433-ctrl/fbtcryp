@@ -108,9 +108,16 @@ describe('coin detail tabs', () => {
     expect(container.querySelectorAll('main.page')).toHaveLength(1);
   });
 
-  it('opens smart-money content and keeps its panel non-collapsible', () => {
+  it('opens smart-money content and keeps its panel non-collapsible', async () => {
     const { container } = mount();
+    /* The card is lazy (lazyRetry, like Compare): nothing of it exists on
+       the trade tab, and opening the tab first paints the card-height
+       Suspense fallback, then the card itself. */
+    expect(screen.queryByTestId('smart-money-card')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'coin.detailTabs.smartMoney' }));
+    expect(container.querySelector('[data-testid="sm-token-lazy-fallback"]')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('smart-money-card')).toBeTruthy());
+    expect(container.querySelector('[data-testid="sm-token-lazy-fallback"]')).toBeNull();
     expect(screen.getByTestId('smart-money-card').getAttribute('data-collapsible')).toBe('false');
     expect(container.querySelector('[data-testid="swap-dock"]')).toBeTruthy();
   });

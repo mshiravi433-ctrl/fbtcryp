@@ -175,6 +175,19 @@
 .smi-token-verdict { display: grid; gap: 6px; border: 1px solid rgba(65,193,145,.36); background: rgba(48,174,137,.09); border-radius: 12px; padding: 12px 13px; margin-bottom: 12px; }
 .smi-token-verdict strong { font-size: 12px; }.smi-token-verdict span { font-weight: 850; font-size: 13px; }
 .smi-token-verdict small, .smi-token-verdict p { font-size: 10px; opacity: .7; margin: 0; line-height: 1.5; }
+/* Token-card receipts (2026-10-26): the paired-swap receipts the token route
+ * already sent, rendered in the .smi-feed language above. Only the wrapper
+ * is new — the row itself reuses .smi-feed-row/.smi-side/.smi-proof so a
+ * receipt reads identically on the intelligence tab and on the token page. */
+.sm-token-receipts { display: grid; gap: 2px; margin-top: 6px; }
+.sm-token-receipts-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sm-token-receipts-head > span:first-child { font-size: 11px; font-weight: 800; }
+/* .smi-token-verdict span (850/13px) outranks the feed's own chip sizes —
+ * pin them back so a receipt row is sized like the tab's, not the verdict's. */
+.sm-token-receipts-head .smi-signal { font-size: 9px; font-weight: 700; }
+.sm-token-receipts .smi-side { font-size: 9px; }
+.sm-token-receipts .smi-feed-main { cursor: default; }
+.sm-token-receipts .smi-footnote { margin-top: 6px; font-size: 9.5px; }
 /* Observed layer (2026-09-28): real paired-swap receipts, the flow of every
  * analysed wallet and the wallets still under evaluation. Styled a notch
  * quieter than consensus so a sample never reads as a signal. */
