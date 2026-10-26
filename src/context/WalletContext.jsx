@@ -34,6 +34,7 @@ import {
   walletLeaseRemainingMinutes,
   walletRestoreDelay,
   walletRestorePlan,
+  withTimeout,
   wcEvent,
   wcEventDetail,
   wcMetadata,
@@ -873,7 +874,14 @@ export function WalletProvider({ children }) {
             })
           : eip;
         const provider = new BrowserProvider(guarded, 'any');
-        const signer = await provider.getSigner();
+        /* WalletConnect can leave an RPC request unresolved after a WebView
+           resume even while its session still exists. Bound adapter setup so
+           the restore ladder can retry instead of spinning indefinitely. */
+        const signer = await withTimeout(
+          provider.getSigner(),
+          nextMode === 'wc' ? 12_000 : 20_000,
+          nextMode === 'wc' ? 'WC_ATTACH_TIMEOUT' : 'WALLET_ATTACH_TIMEOUT'
+        );
         let addrFromSigner = null;
         try {
           addrFromSigner = await signer.getAddress();

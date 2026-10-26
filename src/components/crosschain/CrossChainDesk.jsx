@@ -4,7 +4,7 @@ import { useWallet } from '../../context/WalletContext';
 import { fmtUsd } from '../../lib/format';
 import { notifyTrade } from '../../lib/notify';
 import { requestSoftRefresh } from '../../lib/refresh';
-import { bridgeErrorText } from '../../lib/bridgeErrors';
+import { bridgeErrorText, bridgeExecutionCode } from '../../lib/bridgeErrors';
 import {
   crossChainService,
   fromBaseUnits,
@@ -413,18 +413,27 @@ export default function CrossChainDesk({ source = 'intent-os', initial = null, o
     setChangedQuote(null);
     setExecStep('confirm');
 
-    const result = await crossChainService.execute(quote, {
-      wallet,
-      destination: effectiveDestination,
-      source,
-      onStep: (step) => setExecStep(step),
-      confirmQuoteChange: async (fresh) => {
-        /* The rate moved between display and signature. Stop, show the new
-           number, and wait for a second, explicit yes. */
-        setChangedQuote(fresh);
-        return new Promise((resolve) => { acceptChangeRef.current = resolve; });
-      }
-    });
+    let result;
+    try {
+      result = await crossChainService.execute(quote, {
+        wallet,
+        destination: effectiveDestination,
+        source,
+        onStep: (step) => setExecStep(step),
+        confirmQuoteChange: async (fresh) => {
+          /* The rate moved between display and signature. Stop, show the new
+             number, and wait for a second, explicit yes. */
+          setChangedQuote(fresh);
+          return new Promise((resolve) => { acceptChangeRef.current = resolve; });
+        }
+      });
+    } catch (error) {
+      result = {
+        ok: false,
+        code: bridgeExecutionCode(error) || 'BROADCAST_FAILED',
+        detail: String(error?.shortMessage || error?.message || error).slice(0, 220)
+      };
+    }
 
     setBusy(false);
     setExecStep(null);

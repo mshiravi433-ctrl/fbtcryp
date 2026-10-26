@@ -1865,6 +1865,12 @@ export default async function run() {
       (ctx.match(/attachExternal\(\{/g) || []).length === 2 && !/nextMode === 'email'/.test(ctx));
     t('a failed attach says so instead of degrading into a proxy signer',
       /wc_attach_failed/.test(ctx) && !/_isFallback/.test(ctx));
+    t('a stalled WalletConnect account lookup is bounded so refresh cannot spin forever',
+      /withTimeout\(\s*provider\.getSigner\(\)/.test(ctx) && /WC_ATTACH_TIMEOUT/.test(ctx));
+    const sessionSource = readFileSync('src/lib/wc/session.js', 'utf8');
+    t('a transport-restored session is reused after adapter timeout instead of returning WC_BUSY forever',
+      /if \(provider\?\.session && provider\.accounts\?\.\[0\]\)/.test(sessionSource)
+        && (sessionSource.match(/return \{ ok: true, provider, address: provider\.accounts\[0\], chainId, restored: true \}/g) || []).length >= 2);
 
     t('no component reaches past the stack into a deleted module',
       !/lib\/(wcWallets|wcDeepLink|wcStorage|wcTimeout|wcTrace|wcRelayProbe|wcChain|wcAppKitPatch|emailSocialWallet|emailConnection|walletHealth)|lib\/wc\/embedded/.test(ctx + sheet + panel));

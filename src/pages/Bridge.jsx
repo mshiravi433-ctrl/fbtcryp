@@ -8,7 +8,7 @@ import PageTransition, { riseIn } from '../components/PageTransition';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { fmtUsd } from '../lib/format';
-import { bridgeErrorFromException, bridgeErrorText } from '../lib/bridgeErrors';
+import { bridgeErrorFromException, bridgeErrorText, bridgeExecutionCode } from '../lib/bridgeErrors';
 import {
   BRIDGE_CHAINS,
   fromBaseUnits,
@@ -661,19 +661,30 @@ export default function Bridge() {
      * destination → build → the USER's wallet signs → broadcast → write the
      * ledger row → track the source, the bridge and the destination.
      */
-    const result = await crossChainService.execute(quote, {
-      wallet,
-      destination: toAddress.trim() && toAddressValid ? toAddress.trim() : '',
-      slippage: Number(slippage) / 100,
-      source: 'bridge',
-      confirmSigning,
-      onStep: (step) => { if (alive()) setExecStep(step); },
-      /* The rate moved between display and signature: stop, show the new
-         number and require a second, explicit yes. */
-      confirmQuoteChange: async (fresh) => new Promise((resolve) => {
-        setChangedQuote({ quote: fresh, resolve });
-      })
-    });
+    let result;
+    try {
+      result = await crossChainService.execute(quote, {
+        wallet,
+        destination: toAddress.trim() && toAddressValid ? toAddress.trim() : '',
+        slippage: Number(slippage) / 100,
+        source: 'bridge',
+        confirmSigning,
+        onStep: (step) => { if (alive()) setExecStep(step); },
+        /* The rate moved between display and signature: stop, show the new
+           number and require a second, explicit yes. */
+        confirmQuoteChange: async (fresh) => new Promise((resolve) => {
+          setChangedQuote({ quote: fresh, resolve });
+        })
+      });
+    } catch (error) {
+      /* No unexpected provider/requote exception may strand the bridge in
+         «in progress». Resolve it to an explicit rejected/failed result. */
+      result = {
+        ok: false,
+        code: bridgeExecutionCode(error) || 'BROADCAST_FAILED',
+        detail: String(error?.shortMessage || error?.message || error).slice(0, 220)
+      };
+    }
 
     /* The user already cancelled this attempt: whatever it became is not
        this screen's business any more. */
