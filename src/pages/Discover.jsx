@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import PageTransition, { riseIn } from '../components/PageTransition';
 import Sheet from '../components/Sheet';
 import InfoBox from '../components/InfoBox';
+import AssetIcon from '../components/AssetIcon';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet } from '../context/WalletContext';
 import { useAppStore } from '../store/useAppStore';
@@ -16,35 +17,14 @@ import {
 import { exploreApi, intelErrorCode } from '../lib/intelApi';
 import { fmtCompact, fmtUsd, timeAgo } from '../lib/format';
 import {
-  DISCOVERY_CATEGORIES, DISCOVERY_PROTOCOLS, NETWORK_FILTERS, CHAIN_ALIASES, faviconFor, hostOf
+  DISCOVERY_CATEGORIES, DISCOVERY_PROTOCOLS, NETWORK_FILTERS, CHAIN_ALIASES, hostOf
 } from '../lib/discoveryRegistry';
+import { discoveryProtocolSvg } from '../lib/discoveryLogos';
 import { parseAiQuery, aiExamplesFor } from '../lib/discoveryAi';
 import { buildSuggestions, rankProtocols, smartSummary } from '../lib/discoverySearch';
 import { descriptionFor, chainLabel } from '../lib/discoveryLocalized';
 import { validateDiscoveryUrl, chainSupportWarnings, auditNotice, isRegistryDomain } from '../lib/discoverySecurity';
 import '../styles/discovery-center.css';
-
-/**
- * DISCOVER — Explore › کشف
- * ===========================================================================
- * Redesigned as ONE calm surface instead of nine stacked strips.
- *
- *  · Every visible string goes through i18n (fa + en complete). The old screen
- *    hardcoded English, so a Persian user met "Open in FBT Browser" and an
- *    English hero. The button now says «باز کردن در مرورگر» — only «مرورگر»,
- *    never a branded browser name.
- *  · One omnibox, not two search inputs. It ranks the registry, suggests
- *    protocols / categories / networks, understands Persian intent
- *    («وامدهی روی آربیتروم») and remembers recent queries. Full keyboard nav.
- *  · Favorites, recents and trending share one compact "quick access" card.
- *    The results grid is paginated, so the first screen is not 60 cards long.
- *  · Cards are information-dense but quiet; the detail sheet is a modern
- *    bottom sheet with a sticky action bar and one collapsible security block.
- *
- * Data honesty: TVL/volume/change come only from DefiLlama via exploreApi.
- * No source → «ناموجود» / N/A, never zero. Every dApp still opens through
- * openUrl (system Custom Tabs), with the same anti-phishing checks.
- */
 
 // ── Storage ─────────────────────────────────────────────────────────────
 const FAV_KEY = 'fbt.discovery.favs.v1';
@@ -54,6 +34,39 @@ const LEGACY_RECENT = 'fbt.discover.recent.v1';
 const RECENT_MAX = 12;
 const FAV_MAX = 40;
 const PAGE_SIZE = 12;
+
+const SORT_IDS = ['trending', 'tvl', 'volume', 'name', 'favorites', 'new'];
+
+/** Map filter ids & human chain names to `AssetIcon` `NETWORK_SVG` keys. */
+const CHAIN_TO_ASSET_KEY = Object.freeze({
+  eth: 1,
+  ethereum: 1,
+  bsc: 56,
+  'bnb smart chain': 56,
+  'bnb chain': 56,
+  arbitrum: 42161,
+  'arbitrum one': 42161,
+  base: 8453,
+  polygon: 137,
+  optimism: 10,
+  avalanche: 43114,
+  sonic: 146,
+  linea: 59144,
+  solana: 'solana',
+  bitcoin: 'bitcoin'
+});
+
+function resolveChainAssetKey(chainOrFilter) {
+  if (chainOrFilter == null || chainOrFilter === 'all') return null;
+  if (typeof chainOrFilter === 'object') {
+    if (chainOrFilter.id === 'all') return null;
+    if (chainOrFilter.chainId != null) return chainOrFilter.chainId;
+    return CHAIN_TO_ASSET_KEY[String(chainOrFilter.id || '').toLowerCase()] || null;
+  }
+  if (typeof chainOrFilter === 'number') return chainOrFilter;
+  const k = String(chainOrFilter).trim().toLowerCase();
+  return CHAIN_TO_ASSET_KEY[k] || k;
+}
 
 function loadArray(key, validator) {
   try {
@@ -85,36 +98,187 @@ function rememberQuery(raw) {
   } catch { return loadQueries(); }
 }
 
-// ── Small primitives ────────────────────────────────────────────────────
-function ProtoLogo({ protocol, size = 42 }) {
-  const [failed, setFailed] = useState(false);
-  const hue = protocol?.hue || '#7c4dff';
-  const domain = protocol?.domain || hostOf(protocol?.url || '');
-  const src = domain ? faviconFor(domain, 64) : null;
-  const box = {
-    '--dcx-hue': hue, width: size, height: size,
-    borderRadius: Math.round(size * 0.3), fontSize: Math.round(size * 0.3)
-  };
-  if (failed || !src) {
+/** Crisp category vector glyphs (no <title> tag so tab textContent stays pure). */
+function CategoryIcon({ id }) {
+  switch (id) {
+    case 'all':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="2.2" y="2.2" width="5.6" height="5.6" rx="1.7" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="10.2" y="2.2" width="5.6" height="5.6" rx="1.7" stroke="currentColor" strokeWidth="1.6" />
+          <rect x="2.2" y="10.2" width="5.6" height="5.6" rx="1.7" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="13" cy="13" r="2.8" fill="currentColor" fillOpacity="0.24" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      );
+    case 'defi':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 2.1 14.8 5.4v6.6L9 15.3 3.2 12V5.4L9 2.1Z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round" />
+          <circle cx="9" cy="8.7" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M9 2.1v4.5M14.8 12l-3.9-2.2M3.2 12l3.9-2.2" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+        </svg>
+      );
+    case 'dex':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M3 6.2h11.5L11.7 3.4M15 11.8H3.5l2.8 2.8" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'lending':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 2.3 15.6 5.6v1.5H2.4V5.6L9 2.3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M4.5 7.2v5.6M9 7.2v5.6M13.5 7.2v5.6M2.4 15.2h13.2" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" />
+        </svg>
+      );
+    case 'yield':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M2.6 13.2 7 8.8l3 2.8 5.4-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M11.6 5.6h3.8v3.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'bridges':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M2.2 13.2c1.8-4.5 4.4-6.8 6.8-6.8s5 2.3 6.8 6.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="M1.8 13.2h14.4M5.6 9v4.2M9 6.6v6.6M12.4 9v4.2" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+        </svg>
+      );
+    case 'analytics':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M3.5 14.5V9.8M7.2 14.5V5.6M10.8 14.5V8.2M14.5 14.5V3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+    case 'rwa':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="6.4" stroke="currentColor" strokeWidth="1.55" />
+          <ellipse cx="9" cy="9" rx="2.9" ry="6.4" stroke="currentColor" strokeWidth="1.35" />
+          <path d="M2.8 9h12.4" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+        </svg>
+      );
+    case 'nft':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M5.4 3.2h7.2l3.1 3.8L9 15.2 2.3 7l3.1-3.8Z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round" />
+          <path d="M2.5 7h13M9 15V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      );
+    case 'dev':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M6.2 5.5 2.6 9l3.6 3.5M11.8 5.5 15.4 9l-3.6 3.5M10.2 3.8 7.8 14.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return <IconSparkle width={14} height={14} />;
+  }
+}
+
+/** Crisp sort-mode vector glyphs for the custom Sort trigger & popover. */
+function SortIcon({ id }) {
+  switch (id) {
+    case 'trending':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9.8 2.2c.3 2.4-.9 3.8-2.1 5-.9.9-1.5 2-1.5 3.3A4.1 4.1 0 0 0 10.3 14.6a4.2 4.2 0 0 0 3.7-4.3c0-2-1-3.8-2.3-5.1-.3 1.2-1 1.9-1.8 2.3.3-1.6.4-3.3-.1-5.3Z" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'tvl':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 2.5 15.5 6 9 9.5 2.5 6 9 2.5Z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round" />
+          <path d="m2.5 9.6 6.5 3.4 6.5-3.4M2.5 12.8 9 16.2l6.5-3.4" stroke="currentColor" strokeWidth="1.55" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'volume':
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M2.2 10.5h3l2-5.5 3.2 8.5 2.2-5h3.2" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'favorites':
+      return <IconStar width={14} height={14} />;
+    case 'new':
+      return <IconSparkle width={14} height={14} />;
+    case 'name':
+    default:
+      return (
+        <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M4.5 4v10M4.5 14l-2.2-2.3M4.5 14l2.2-2.3M10 5.2h5.2M10 9h4M10 12.8h2.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+  }
+}
+
+/** Network emblem using offline vendored `AssetIcon` chain SVGs + multi-chain globe for `all`. */
+function ChainMark({ chain, size = 20 }) {
+  const assetKey = resolveChainAssetKey(chain);
+  if (assetKey == null) {
     return (
-      <span className="dcx-logo" style={box} aria-hidden="true">
-        <span className="dcx-logo-fallback">{String(protocol?.name || '?').slice(0, 2).toUpperCase()}</span>
+      <span className="dcx-all-net-ico" style={{ width: size, height: size }} aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.6" />
+          <ellipse cx="10" cy="10" rx="3.4" ry="7.5" stroke="currentColor" strokeWidth="1.35" />
+          <path d="M2.8 10h14.4M4.2 6.5h11.6M4.2 13.5h11.6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+        </svg>
       </span>
     );
   }
-  return (
-    <span className="dcx-logo" style={box} aria-hidden="true">
-      <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
-    </span>
-  );
+  return <AssetIcon chain={assetKey} size={size} className="dcx-chain-asset-ico" />;
 }
 
-function SectionHead({ title, right }) {
+/**
+ * Full-bleed protocol logo:
+ * Renders a crisp, zero-latency vendored vector brand mark immediately at
+ * frame 0 for all 53 protocols (`discoveryProtocolSvg`), filling 100% of the
+ * rounded-square container, and layers a verified HTTPS DefiLlama logo if available.
+ */
+function ProtoLogo({ protocol, liveLogo, size = 44 }) {
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const [liveLoaded, setLiveLoaded] = useState(false);
+  const [liveFailed, setLiveFailed] = useState(false);
+
+  const remoteSrc = useMemo(() => {
+    const s = typeof liveLogo === 'string' ? liveLogo.trim() : '';
+    return s.startsWith('https://') ? s : '';
+  }, [liveLogo]);
+
+  useEffect(() => {
+    setLiveLoaded(false);
+    setLiveFailed(false);
+  }, [protocol?.id, remoteSrc]);
+
+  const svg = useMemo(() => discoveryProtocolSvg(protocol?.id, uid), [protocol?.id, uid]);
+  const hue = protocol?.hue || '#22d3ee';
+  const box = {
+    '--dcx-logo-size': `${size}px`,
+    '--dcx-hue': hue,
+    borderRadius: Math.round(size * 0.3)
+  };
+
   return (
-    <div className="dcx-section-head">
-      <h3>{title}</h3>
-      {right && <div className="dcx-section-right">{right}</div>}
-    </div>
+    <span className="dcx-logo" style={box} aria-hidden="true">
+      {svg ? (
+        <span className="dcx-logo-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : (
+        <span className="dcx-logo-fallback">{String(protocol?.name || '?').slice(0, 2).toUpperCase()}</span>
+      )}
+      {remoteSrc && !liveFailed && (
+        <img
+          src={remoteSrc}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          className={liveLoaded ? 'dcx-logo-img is-loaded' : 'dcx-logo-img'}
+          onLoad={() => setLiveLoaded(true)}
+          onError={() => setLiveFailed(true)}
+        />
+      )}
+    </span>
   );
 }
 
@@ -135,17 +299,16 @@ function warnText(w, t) {
 
 // ── Protocol card ───────────────────────────────────────────────────────
 function ProtocolCard({ protocol, live, lang, fav, onFav, onOpen, isFeatured, t, catLabel }) {
-  const chains = protocol.chains?.slice(0, 3) || [];
+  const chains = protocol.chains?.slice(0, 4) || [];
+  const extraChains = Math.max(0, (protocol.chains?.length || 0) - chains.length);
+
   return (
-    <motion.article
+    <article
       className="dcx-card"
-      variants={riseIn}
-      whileTap={{ scale: 0.99 }}
-      style={{ '--dcx-hue': protocol.hue }}
+      style={{ '--dcx-card-accent': protocol.hue || '#22d3ee' }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        // Do not steal Enter/Space from the nested favorite button.
         if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(protocol); }
       }}
@@ -154,47 +317,67 @@ function ProtocolCard({ protocol, live, lang, fav, onFav, onOpen, isFeatured, t,
       data-testid={`dc-card-${protocol.id}`}
       data-legacy-id={`disc-card-${protocol.id}`}
     >
-      <div className="dcx-card-top">
-        <ProtoLogo protocol={protocol} />
-        <div className="dcx-card-id">
-          <div className="dcx-card-name">
-            <span dir="ltr">{protocol.name}</span>
-            {protocol.verified && <span className="dcx-verified" title={t('discover.ui.card.verified')} aria-label={t('discover.ui.card.verified')}><IconCheck width={9} height={9} /></span>}
+      <div className="dcx-card-head">
+        <ProtoLogo protocol={protocol} liveLogo={live?.logo} size={46} />
+        <div className="dcx-card-title-wrap">
+          <div className="dcx-card-title-row">
+            <h4 className="dcx-card-title" dir="ltr">{protocol.name}</h4>
+            {protocol.verified && (
+              <span className="dcx-verified" title={t('discover.ui.card.verified')} aria-label={t('discover.ui.card.verified')}>
+                <IconCheck width={10} height={10} />
+              </span>
+            )}
           </div>
           <span className="dcx-card-domain" dir="ltr">{hostOf(protocol.url)}</span>
         </div>
         <button
           type="button"
-          className={`dcx-fav ${fav ? 'active' : ''}`}
+          className={`dcx-fav ${fav ? 'is-on' : ''}`}
           aria-label={fav ? t('discover.ui.card.unfavorite') : t('discover.ui.card.favorite')}
           aria-pressed={fav}
           onClick={(e) => { e.stopPropagation(); onFav(protocol.id); }}
-        ><IconStar width={14} height={14} /></button>
+        >
+          <IconStar width={14} height={14} />
+        </button>
       </div>
 
       <p className="dcx-card-desc">{descriptionFor(protocol, lang)}</p>
 
       <div className="dcx-card-tags">
-        {isFeatured && <span className="dcx-tag dcx-tag-featured">✦ {t('discover.ui.card.featured')}</span>}
-        <span className="dcx-tag">{catLabel(protocol.category)}</span>
+        <div className="dcx-card-badges">
+          <span className="dcx-badge" data-cat={protocol.category}>
+            <CategoryIcon id={protocol.category} />
+            {catLabel(protocol.category)}
+          </span>
+          {isFeatured && (
+            <span className="dcx-badge is-soft">✦ {t('discover.ui.card.featured')}</span>
+          )}
+        </div>
         <span className="dcx-chains" dir="ltr">
-          {chains.map((c) => <span key={c} className="dcx-chain" title={chainLabel(c, lang)}>{String(c).slice(0, 3).toUpperCase()}</span>)}
-          {(protocol.chains?.length || 0) > 3 && <span className="dcx-chain more">+{protocol.chains.length - 3}</span>}
+          {chains.map((c) => (
+            <span key={c} className="dcx-chain-ico-pill" title={chainLabel(c, lang)}>
+              <ChainMark chain={c} size={16} />
+            </span>
+          ))}
+          {extraChains > 0 && <span className="dcx-chain-more">+{extraChains}</span>}
         </span>
       </div>
 
       <div className="dcx-card-foot">
-        <span className="dcx-card-tvl">
-          <span>{t('discover.ui.card.tvl')}</span>
-          {live?.tvl != null
-            ? <strong dir="ltr">{fmtCompact(live.tvl)}</strong>
-            : <span className="dcx-faint" dir="ltr">{t('discover.ui.card.na')}</span>}
-        </span>
+        <div className="dcx-card-metric">
+          <span className="dcx-metric-lbl">{t('discover.ui.card.tvl')}</span>
+          {live?.tvl != null ? (
+            <span className="dcx-metric-val" dir="ltr">{fmtCompact(live.tvl)}</span>
+          ) : (
+            <span className="dcx-metric-val is-na" dir="ltr">{t('discover.ui.card.na')}</span>
+          )}
+        </div>
         <span className="dcx-card-go" aria-hidden="true">
-          {t('discover.ui.card.details')}<IconChevronRight width={13} height={13} />
+          {t('discover.ui.card.details')}
+          <IconChevronRight width={13} height={13} />
         </span>
       </div>
-    </motion.article>
+    </article>
   );
 }
 
@@ -205,7 +388,8 @@ export default function Discover({ embedded = false }) {
   const { haptic } = useTelegram();
   const wallet = useWallet();
   const lang = i18n.language?.slice(0, 2) || 'en';
-  const isFa = lang === 'fa';
+  const netMenuId = useId();
+  const sortMenuId = useId();
 
   // ── Filters & search ──────────────────────────────────────────────────
   const [cat, setCat] = useState('all');
@@ -214,10 +398,12 @@ export default function Discover({ embedded = false }) {
   const [q, setQ] = useState('');
   const [queries, setQueries] = useState(loadQueries);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null); // 'network' | 'sort' | null
   const [highlight, setHighlight] = useState(-1);
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [quickTab, setQuickTab] = useState('trending');
   const searchWrapRef = useRef(null);
+  const filterBarRef = useRef(null);
   const inputRef = useRef(null);
   const resultsRef = useRef(null);
 
@@ -247,16 +433,33 @@ export default function Discover({ embedded = false }) {
   );
   const netLabel = useCallback((id) => {
     if (id === 'all') return t('discover.ui.filters.allNetworks');
-    return NETWORK_FILTERS.find((n) => n.id === id)?.short || id;
-  }, [t]);
+    const entry = NETWORK_FILTERS.find((n) => n.id === id);
+    if (!entry) return id;
+    return chainLabel(entry.label, lang) || entry.short || id;
+  }, [t, lang]);
   const sortLabel = useCallback((id) => {
     if (id === 'security') return t('discover.ui.smart.security');
-    if (id === 'new') return t('discover.ui.smart.new');
+    if (id === 'new') return t('discover.ui.sort.new');
     if (id === 'compare') return t('discover.ui.smart.compare');
     return t(`discover.ui.sort.${id}`, id);
   }, [t]);
   const ui = useCallback((path, fallback, opts) => t(`discover.ui.${path}`, { defaultValue: fallback, ...(opts || {}) }), [t]);
   const examples = useMemo(() => aiExamplesFor(lang), [lang]);
+
+  const chainCounts = useMemo(() => {
+    const counts = new Map();
+    counts.set('all', DISCOVERY_PROTOCOLS.length);
+    for (const nf of NETWORK_FILTERS) {
+      if (nf.id === 'all') continue;
+      const aliases = CHAIN_ALIASES[nf.id] || [nf.id];
+      const c = DISCOVERY_PROTOCOLS.filter((p) => {
+        const hay = [...(p.chains || []), ...(p.chainIds || []).map(String)].join(' ').toLowerCase();
+        return aliases.some((a) => hay.includes(a.toLowerCase()));
+      }).length;
+      counts.set(nf.id, c);
+    }
+    return counts;
+  }, []);
 
   // ── Fetch live protocol data (best-effort, never blocks the UI) ────────
   useEffect(() => {
@@ -333,6 +536,7 @@ export default function Discover({ embedded = false }) {
   const pick = useCallback((proto) => {
     haptic?.('light');
     setSuggestOpen(false);
+    setOpenDropdown(null);
     setPicked(proto.id);
   }, [haptic]);
   const closeSheet = useCallback(() => setPicked(null), []);
@@ -382,8 +586,7 @@ export default function Discover({ embedded = false }) {
     haptic?.('success');
     setCat(parsed?.category && parsed.category !== 'all' ? parsed.category : 'all');
     setNet(parsed?.chain || 'all');
-    const allowed = ['trending', 'tvl', 'volume', 'name', 'favorites', 'new'];
-    setSort(allowed.includes(parsed?.sort) ? parsed.sort : 'trending');
+    setSort(SORT_IDS.includes(parsed?.sort) ? parsed.sort : 'trending');
     setQ('');
     setQueries(rememberQuery(raw));
     setSuggestOpen(false);
@@ -420,13 +623,13 @@ export default function Discover({ embedded = false }) {
     }
     for (const c of s.categories) {
       items.push({
-        id: `cat:${c.id}`, type: 'category', label: catLabel(c.id), sub: ui('search.categories', 'Categories'),
+        id: `cat:${c.id}`, catId: c.id, type: 'category', label: catLabel(c.id), sub: ui('search.categories', 'Categories'),
         onSelect: () => { setCat(c.id); setQ(''); setSuggestOpen(false); setVisible(PAGE_SIZE); scrollToResults(); }
       });
     }
     for (const n of s.networks) {
       items.push({
-        id: `net:${n.id}`, type: 'network', label: n.short, sub: ui('search.networks', 'Networks'),
+        id: `net:${n.id}`, netObj: n, type: 'network', label: netLabel(n.id), sub: ui('search.networks', 'Networks'),
         onSelect: () => { setNet(n.id); setQ(''); setSuggestOpen(false); setVisible(PAGE_SIZE); scrollToResults(); }
       });
     }
@@ -439,13 +642,21 @@ export default function Discover({ embedded = false }) {
 
   useEffect(() => { setHighlight(-1); }, [q]);
   useEffect(() => {
-    if (!suggestOpen) return undefined;
+    if (!suggestOpen && !openDropdown) return undefined;
     const onDown = (e) => {
-      if (!searchWrapRef.current?.contains(e.target)) setSuggestOpen(false);
+      if (suggestOpen && !searchWrapRef.current?.contains(e.target)) setSuggestOpen(false);
+      if (openDropdown && !filterBarRef.current?.contains(e.target)) setOpenDropdown(null);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape' && openDropdown) setOpenDropdown(null);
     };
     document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [suggestOpen]);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [suggestOpen, openDropdown]);
 
   const onSearchKeyDown = useCallback((e) => {
     if (e.key === 'Escape') { setSuggestOpen(false); inputRef.current?.blur(); return; }
@@ -470,7 +681,7 @@ export default function Discover({ embedded = false }) {
 
   const clearAll = useCallback(() => {
     setQ(''); setCat('all'); setNet('all'); setSort('trending');
-    setVisible(PAGE_SIZE); setSuggestOpen(false);
+    setVisible(PAGE_SIZE); setSuggestOpen(false); setOpenDropdown(null);
   }, []);
 
   // ── Filtering ─────────────────────────────────────────────────────────
@@ -487,7 +698,6 @@ export default function Discover({ embedded = false }) {
       });
     }
 
-    // A relevance-ranked search keeps its order until the user picks a sort.
     if (needle && sort === 'trending') return list;
 
     const byLive = (key) => (a, b) => {
@@ -510,6 +720,10 @@ export default function Discover({ embedded = false }) {
 
   const shown = useMemo(() => filtered.slice(0, visible), [filtered, visible]);
   const activeFilters = cat !== 'all' || net !== 'all' || q.trim() || sort !== 'trending';
+  const activeNetObj = useMemo(
+    () => NETWORK_FILTERS.find((n) => n.id === net) || NETWORK_FILTERS[0],
+    [net]
+  );
 
   // ── Quick access ──────────────────────────────────────────────────────
   const featured = useMemo(() => DISCOVERY_PROTOCOLS.filter((p) => p.featured).slice(0, 6), []);
@@ -544,41 +758,50 @@ export default function Discover({ embedded = false }) {
 
   return (
     <PageTransition embedded={embedded}>
-      {!embedded && (
-        <div className="row" style={{ gap: 10, marginBottom: 2 }}>
-          <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
-            <IconChevronLeft width={18} height={18} />
-          </button>
-          <h1 className="h1" style={{ fontSize: 19, margin: 0 }}>{t('discover.title', 'Discover')}</h1>
-        </div>
-      )}
+      <div className="dcx">
+        {!embedded && (
+          <div className="row" style={{ gap: 10, marginBottom: 2 }}>
+            <button className="icon-btn" onClick={() => navigate(-1)} aria-label={t('common.back')}>
+              <IconChevronLeft width={18} height={18} />
+            </button>
+            <h1 className="h1" style={{ fontSize: 19, margin: 0 }}>{t('discover.title', 'Discover')}</h1>
+          </div>
+        )}
 
-      {/* ── HERO + OMNIBOX ─────────────────────────────────────────────── */}
-      <motion.section className="dcx-hero" variants={riseIn} initial="hidden" animate="show">
-        {/* Decorative layers live in their own clipped box: the hero itself
-            must NOT clip, or the search suggestions popover gets cut off. */}
-        <div className="dcx-hero-decor" aria-hidden="true">
-          <div className="dcx-hero-aurora" />
-          <div className="dcx-hero-grid" />
-        </div>
-        <div className="dcx-hero-inner">
-          <div className="dcx-hero-top">
-            <span className="dcx-kicker"><IconGlobe width={12} height={12} /> {t('discover.ui.hero.kicker')}</span>
-            <span className={`dcx-live ${trendingLoading || trendingErr ? 'offline' : ''}`}>
-              <i aria-hidden="true" /> {trendingLoading
+        {/* ── MODERNIZED HERO + OMNIBOX ──────────────────────────────────── */}
+        <motion.section className="dcx-hero" variants={riseIn} initial="hidden" animate="show">
+          <span className="dcx-hero-aurora" aria-hidden="true">
+            <i className="dcx-hero-orb dcx-hero-orb--a" />
+            <i className="dcx-hero-orb dcx-hero-orb--b" />
+            <i className="dcx-hero-grid" />
+          </span>
+
+          <div className="dcx-hero-bar">
+            <span className="dcx-kicker">
+              <span className="dcx-kicker-gem" aria-hidden="true">
+                <IconSparkle width={11} height={11} />
+              </span>
+              {t('discover.ui.hero.kicker')}
+            </span>
+            <span className={`dcx-live ${trendingLoading || trendingErr ? '' : 'is-on'}`}>
+              <span className="dcx-live-dot" aria-hidden="true" />
+              {trendingLoading
                 ? t('discover.ui.hero.loading')
                 : trendingErr ? t('discover.ui.hero.offline') : t('discover.ui.hero.live')}
             </span>
           </div>
 
           <h2 className="dcx-hero-title">
-            {t('discover.ui.hero.title')}<span>{t('discover.ui.hero.titleAccent')}</span>
+            {t('discover.ui.hero.title')}{' '}
+            <span>{t('discover.ui.hero.titleAccent')}</span>
           </h2>
           <p className="dcx-hero-sub">{t('discover.ui.hero.subtitle')}</p>
 
           <div className="dcx-search-wrap" ref={searchWrapRef}>
-            <div className={`dcx-search ${suggestOpen ? 'focused' : ''}`}>
-              <IconSearch className="dcx-search-icon" width={17} height={17} aria-hidden="true" />
+            <div className={`dcx-search ${suggestOpen ? 'is-focused' : ''}`}>
+              <span className="dcx-search-ico" aria-hidden="true">
+                <IconSearch width={16} height={16} />
+              </span>
               <input
                 ref={inputRef}
                 value={q}
@@ -597,8 +820,13 @@ export default function Discover({ embedded = false }) {
                 dir="auto"
               />
               {q && (
-                <button type="button" className="dcx-search-clear" onClick={() => { setQ(''); inputRef.current?.focus(); }} aria-label={t('discover.ui.search.clear')}>
-                  <IconX width={14} height={14} />
+                <button
+                  type="button"
+                  className="dcx-search-clear"
+                  onClick={() => { setQ(''); inputRef.current?.focus(); }}
+                  aria-label={t('discover.ui.search.clear')}
+                >
+                  <IconX width={13} height={13} />
                 </button>
               )}
             </div>
@@ -626,20 +854,20 @@ export default function Discover({ embedded = false }) {
                       type="button"
                       role="option"
                       aria-selected={highlight === i}
-                      className={`dcx-suggest-item ${highlight === i ? 'active' : ''} ${item.type === 'smart' ? 'smart' : ''}`}
+                      className={`dcx-suggest-item ${highlight === i ? 'is-active' : ''} ${item.type === 'smart' ? 'is-smart' : ''}`}
                       onMouseEnter={() => setHighlight(i)}
                       onClick={() => item.onSelect()}
                     >
-                      <span className="dcx-suggest-icon" aria-hidden="true">
-                        {item.type === 'protocol' ? <ProtoLogo protocol={item.protocol} size={26} />
-                          : item.type === 'smart' ? <IconSparkle width={14} height={14} />
-                            : item.type === 'category' ? <IconGlobe width={14} height={14} />
-                              : item.type === 'network' ? <IconTrend width={14} height={14} />
+                      <span className="dcx-suggest-ico-slot" aria-hidden="true">
+                        {item.type === 'protocol' ? <ProtoLogo protocol={item.protocol} liveLogo={liveFor(item.protocol)?.logo} size={30} />
+                          : item.type === 'smart' ? <IconSparkle width={15} height={15} />
+                            : item.type === 'category' ? <CategoryIcon id={item.catId} />
+                              : item.type === 'network' ? <ChainMark chain={item.netObj} size={20} />
                                 : item.type === 'recent' || item.type === 'example' ? <IconClock width={14} height={14} />
                                   : <IconSearch width={14} height={14} />}
                       </span>
-                      <span className="dcx-suggest-text">
-                        <span className="dcx-suggest-label" dir={item.type === 'protocol' ? 'ltr' : 'auto'}>{item.label}</span>
+                      <span className="dcx-suggest-body">
+                        <span className="dcx-suggest-title" dir={item.type === 'protocol' ? 'ltr' : 'auto'}>{item.label}</span>
                         {item.sub && <span className="dcx-suggest-sub">{item.sub}</span>}
                       </span>
                       <IconChevronRight className="dcx-suggest-arrow" width={13} height={13} aria-hidden="true" />
@@ -652,267 +880,523 @@ export default function Discover({ embedded = false }) {
           </div>
 
           <div className="dcx-hero-stats">
-            <span><strong dir="ltr">{DISCOVERY_PROTOCOLS.length}</strong> {t('discover.ui.hero.statProtocols')}</span>
-            <span><strong dir="ltr">{NETWORK_FILTERS.length - 1}</strong> {t('discover.ui.hero.statNetworks')}</span>
-            <span className="dcx-stat-source">{t('discover.ui.hero.statSource')}</span>
-          </div>
-        </div>
-      </motion.section>
-
-      {/* ── QUICK ACCESS (trending / favorites / recents in ONE card) ───── */}
-      {(trendingStrip.length > 0 || favItems.length > 0 || recentItems.length > 0) && (
-        <motion.section className="dcx-quick" variants={riseIn} initial="hidden" animate="show">
-          <SectionHead
-            title={t('discover.ui.quick.title')}
-            right={<span className="dcx-ondevice"><IconSparkle width={11} height={11} /> {t('discover.ui.smart.onDevice')}</span>}
-          />
-          <div className="dcx-segmented" role="tablist" aria-label={t('discover.ui.quick.title')}>
-            {[
-              { id: 'trending', label: t('discover.ui.quick.trending'), Icon: IconTrend, count: trendingStrip.length },
-              { id: 'favorites', label: t('discover.ui.quick.favorites'), Icon: IconStar, count: favItems.length },
-              { id: 'recent', label: t('discover.ui.quick.recent'), Icon: IconClock, count: recentItems.length }
-            ].map(({ id, label, Icon, count }) => (
-              <button key={id} type="button" role="tab" aria-selected={quickTab === id}
-                className={quickTab === id ? 'active' : ''}
-                onClick={() => { haptic?.('light'); setQuickTab(id); }}>
-                <Icon width={13} height={13} aria-hidden="true" /> {label}
-                {count > 0 && <span className="dcx-seg-count">{count}</span>}
-              </button>
-            ))}
-          </div>
-          {quickItems.length > 0 ? (
-            <div className="dcx-quick-row">
-              {quickItems.map(({ protocol, change }) => (
-                <button key={`${quickTab}-${protocol.id}`} type="button" className="dcx-quick-item"
-                  style={{ '--dcx-hue': protocol.hue }} onClick={() => pick(protocol)}>
-                  <ProtoLogo protocol={protocol} size={28} />
-                  <span dir="ltr">{protocol.name}</span>
-                  {change != null && <span className="dcx-change" dir="ltr" style={{ color: change >= 0 ? 'var(--up)' : 'var(--down)' }}>
-                    {change >= 0 ? '+' : ''}{Number(change).toFixed(1)}%
-                  </span>}
-                </button>
-              ))}
+            <div className="dcx-stat-pod">
+              <span className="dcx-stat-ico is-emerald" aria-hidden="true">
+                <IconShield width={13} height={13} />
+              </span>
+              <span className="dcx-stat-txt">
+                <strong dir="ltr">{DISCOVERY_PROTOCOLS.length}</strong> {t('discover.ui.hero.statProtocols')}
+              </span>
             </div>
-          ) : <p className="dcx-quick-empty">{quickEmpty}</p>}
+            <div className="dcx-stat-pod">
+              <span className="dcx-stat-ico is-cyan" aria-hidden="true">
+                <IconGlobe width={13} height={13} />
+              </span>
+              <span className="dcx-stat-txt">
+                <strong dir="ltr">{NETWORK_FILTERS.length - 1}</strong> {t('discover.ui.hero.statNetworks')}
+              </span>
+            </div>
+            <div className="dcx-stat-pod">
+              <span className="dcx-stat-ico is-violet" aria-hidden="true">
+                <IconSparkle width={13} height={13} />
+              </span>
+              <span className="dcx-stat-txt">{t('discover.ui.hero.statSource')}</span>
+            </div>
+          </div>
         </motion.section>
-      )}
 
-      {/* ── FILTER TOOLBAR ──────────────────────────────────────────────── */}
-      <div className="dcx-toolbar" ref={resultsRef}>
-        <div className="dcx-chips" role="tablist" aria-label={t('discover.ui.filters.category')}>
-          {DISCOVERY_CATEGORIES.map((c) => (
-            <button key={c.id} type="button" role="tab" aria-selected={cat === c.id}
-              className={`dcx-chip ${cat === c.id ? 'active' : ''}`}
-              onClick={() => { haptic?.('light'); setCat(c.id); setVisible(PAGE_SIZE); }}>
-              {catLabel(c.id)}
-            </button>
-          ))}
-        </div>
-        <div className="dcx-toolbar-row">
-          <label className="dcx-select">
-            <IconGlobe width={14} height={14} aria-hidden="true" />
-            <select value={net} onChange={(e) => { setNet(e.target.value); setVisible(PAGE_SIZE); }} aria-label={t('discover.ui.filters.network')}>
-              {NETWORK_FILTERS.map((n) => <option key={n.id} value={n.id}>{n.id === 'all' ? t('discover.ui.filters.allNetworks') : n.short}</option>)}
-            </select>
-            <IconChevronRight width={12} height={12} aria-hidden="true" />
-          </label>
-          <label className="dcx-select">
-            <IconTrend width={14} height={14} aria-hidden="true" />
-            <select value={sort} onChange={(e) => { setSort(e.target.value); setVisible(PAGE_SIZE); }} aria-label={t('discover.ui.filters.sort')}>
-              {['trending', 'tvl', 'volume', 'name', 'favorites', 'new'].map((id) => (
-                <option key={id} value={id}>{sortLabel(id)}</option>
-              ))}
-            </select>
-            <IconChevronRight width={12} height={12} aria-hidden="true" />
-          </label>
-          {activeFilters && (
-            <button type="button" className="dcx-reset" onClick={clearAll}>
-              <IconX width={12} height={12} /> {t('discover.ui.filters.reset')}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── RESULTS ─────────────────────────────────────────────────────── */}
-      <SectionHead
-        title={q.trim() ? t('discover.ui.filters.resultsFor', { q: q.trim() }) : t('discover.ui.filters.results')}
-        right={<>
-          <span className="dcx-count" dir="ltr">{t('discover.ui.filters.count', { count: filtered.length })}</span>
-          {trendingErr && <span className="dcx-live-bad">{t('discover.ui.filters.liveOffShort')}</span>}
-        </>}
-      />
-
-      {trendingLoading && !shown.length && (
-        <div className="dcx-grid">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="dcx-skel" />)}</div>
-      )}
-
-      {filtered.length > 0 ? (
-        <>
-          <motion.div className="dcx-grid" variants={stagger} initial="hidden" animate="show">
-            {shown.map((p) => (
-              <ProtocolCard key={p.id} protocol={p} live={liveFor(p)} lang={lang}
-                fav={favs.includes(p.id)} onFav={toggleFav} onOpen={pick}
-                isFeatured={Boolean(p.featured)} t={t} catLabel={catLabel} />
-            ))}
-          </motion.div>
-          {visible < filtered.length && (
-            <button type="button" className="dcx-more" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
-              {t('discover.ui.filters.showMore', { count: filtered.length - visible })}
-              <IconChevronRight width={14} height={14} />
-            </button>
-          )}
-          {visible >= filtered.length && filtered.length > PAGE_SIZE && (
-            <p className="dcx-all-shown">{t('discover.ui.filters.showAll')}</p>
-          )}
-        </>
-      ) : !trendingLoading && (
-        <div className="dcx-empty">
-          <span className="dcx-empty-icon"><IconSearch width={20} height={20} /></span>
-          <h3>{t('discover.ui.empty.title')}</h3>
-          <p>{t('discover.ui.empty.body', { q: q.trim() || catLabel(cat) })}</p>
-          <button type="button" className="dcx-more" onClick={clearAll}>{t('discover.ui.empty.action')}</button>
-        </div>
-      )}
-
-      <div className="dcx-safety-box" id="discover-safety-dc">
-        <InfoBox
-          title={t('discover.ui.safety.title')}
-          tone="warn"
-          id="discover-safety-dc"
-          icon={<IconShield width={14} height={14} />}
-        >
-          <p>{t('discover.ui.safety.body')}</p>
-        </InfoBox>
-      </div>
-
-      {/* ── MODERN DETAIL SHEET ────────────────────────────────────────── */}
-      <Sheet open={Boolean(pickedProto)} onClose={closeSheet} anchor="bottom" size="lg" className="dcx-sheet disc-sheet" testId="disc-sheet">
-        {pickedProto && (
-          <div className="dcx-sheet-body" style={{ '--dcx-hue': pickedProto.hue }}>
-            <header className="dcx-sheet-hero">
-              <div className="dcx-sheet-glow" aria-hidden="true" />
-              <button type="button" className="dcx-sheet-close" onClick={closeSheet} aria-label={t('discover.ui.sheet.close')}>
-                <IconX width={15} height={15} />
-              </button>
-              <div className="dcx-sheet-head">
-                <ProtoLogo protocol={pickedProto} size={56} />
-                <div className="dcx-sheet-id">
-                  <div className="dcx-sheet-name" dir="ltr">{pickedProto.name}</div>
-                  <div className="dcx-sheet-tags">
-                    {pickedProto.verified && <span className="dcx-sheet-pill good"><IconCheck width={10} height={10} /> {t('discover.ui.sheet.verifiedDomain')}</span>}
-                    <span className="dcx-sheet-pill">{catLabel(pickedProto.category)}</span>
-                  </div>
-                </div>
-                <button type="button" className={`dcx-fav ${favs.includes(pickedProto.id) ? 'active' : ''}`}
-                  aria-label={favs.includes(pickedProto.id) ? t('discover.ui.card.unfavorite') : t('discover.ui.card.favorite')}
-                  aria-pressed={favs.includes(pickedProto.id)}
-                  onClick={() => toggleFav(pickedProto.id)}>
-                  <IconStar width={15} height={15} />
-                </button>
-              </div>
-              <div className="dcx-domain" dir="ltr">
-                <IconShield width={14} height={14} aria-hidden="true" />
-                <span className="dcx-domain-label">{t('discover.ui.sheet.officialDomain')}</span>
-                <span className="dcx-domain-host">{hostOf(pickedProto.url)}</span>
-                <span className="dcx-https">https</span>
-              </div>
-            </header>
-
-            <div className="dcx-sheet-content">
-              <p className="dcx-sheet-desc">{descriptionFor(pickedProto, lang)}</p>
-
-              <div className="dcx-metrics">
+        {/* ── QUICK ACCESS (trending / favorites / recents in ONE card) ───── */}
+        {(trendingStrip.length > 0 || favItems.length > 0 || recentItems.length > 0) && (
+          <motion.section className="dcx-quick" variants={riseIn} initial="hidden" animate="show">
+            <div className="dcx-quick-head">
+              <span className="dcx-quick-title">
+                <span className="dcx-quick-flame" aria-hidden="true">
+                  <IconTrend width={13} height={13} />
+                </span>
+                {t('discover.ui.quick.title')}
+              </span>
+              <div className="dcx-quick-tabs" role="tablist" aria-label={t('discover.ui.quick.title')}>
                 {[
-                  { label: t('discover.ui.sheet.tvl'), value: detailTvl != null ? fmtUsd(detailTvl) : null },
-                  { label: t('discover.ui.sheet.volume'), value: detailVol != null ? fmtUsd(detailVol) : null },
-                  { label: t('discover.ui.sheet.change7d'), value: detailChange7d != null ? `${detailChange7d >= 0 ? '+' : ''}${Number(detailChange7d).toFixed(1)}%` : null, color: detailChange7d != null ? (detailChange7d >= 0 ? 'var(--up)' : 'var(--down)') : undefined },
-                  { label: t('discover.ui.sheet.audits'), value: pickedProto.audits != null ? String(pickedProto.audits) : null }
-                ].map((m) => (
-                  <div className="dcx-metric" key={m.label}>
-                    <span className="dcx-metric-label">{m.label}</span>
-                    <span className="dcx-metric-value" dir="ltr" style={m.color ? { color: m.color } : undefined}>
-                      {detailLoading ? '…' : (m.value ?? <span className="dcx-faint">{t('discover.ui.sheet.na')}</span>)}
-                    </span>
-                  </div>
+                  { id: 'trending', label: t('discover.ui.quick.trending'), count: trendingStrip.length },
+                  { id: 'favorites', label: t('discover.ui.quick.favorites'), count: favItems.length },
+                  { id: 'recent', label: t('discover.ui.quick.recent'), count: recentItems.length }
+                ].map(({ id, label, count }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={quickTab === id}
+                    className={quickTab === id ? 'is-active' : ''}
+                    onClick={() => { haptic?.('light'); setQuickTab(id); }}
+                  >
+                    {label}
+                    {count > 0 && <span className="dcx-tab-count" aria-hidden="true">{count}</span>}
+                  </button>
                 ))}
               </div>
-              {!detailLoading && detailTvl == null && (
-                <p className="dcx-note">{t('discover.ui.sheet.tvlUnavailable')}</p>
-              )}
+            </div>
+            {quickItems.length > 0 ? (
+              <div className="dcx-quick-rail">
+                {quickItems.map(({ protocol, change }) => (
+                  <button
+                    key={`${quickTab}-${protocol.id}`}
+                    type="button"
+                    className="dcx-quick-pill"
+                    onClick={() => pick(protocol)}
+                  >
+                    <ProtoLogo protocol={protocol} liveLogo={liveFor(protocol)?.logo} size={30} />
+                    <span className="dcx-quick-meta">
+                      <span className="dcx-quick-name" dir="ltr">{protocol.name}</span>
+                      <span className="dcx-quick-cat">{catLabel(protocol.category)}</span>
+                    </span>
+                    {change != null && (
+                      <span className={`dcx-quick-chg ${change >= 0 ? 'is-up' : 'is-down'}`} dir="ltr">
+                        {change >= 0 ? '+' : ''}{Number(change).toFixed(1)}%
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : <p className="dcx-quick-empty">{quickEmpty}</p>}
+          </motion.section>
+        )}
 
-              <section className="dcx-sheet-block">
-                <h4>{t('discover.ui.sheet.networks')}</h4>
-                <div className="dcx-chain-list">
-                  {(pickedProto.chains || []).map((ch) => (
-                    <span key={ch} className="dcx-chain-chip">{chainLabel(ch, lang)}</span>
+        {/* ── NON-FLOATING FILTER TOOLBAR (Category Icons + Single-Line Popovers) ── */}
+        <div className="dcx-toolbar" ref={resultsRef}>
+          <div className="dcx-chips" role="tablist" aria-label={t('discover.ui.filters.category')}>
+            {DISCOVERY_CATEGORIES.map((c) => {
+              const active = cat === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  data-cat={c.id}
+                  className={`dcx-chip ${active ? 'is-active' : ''}`}
+                  onClick={() => { haptic?.('light'); setCat(c.id); setVisible(PAGE_SIZE); }}
+                >
+                  <span className="dcx-chip-ico" aria-hidden="true">
+                    <CategoryIcon id={c.id} />
+                  </span>
+                  <span className="dcx-chip-label">{catLabel(c.id)}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="dcx-filter-bar" ref={filterBarRef}>
+            {/* 1. Network Dropdown ("همهٔ شبکه‌ها") */}
+            <div className="dcx-dd-wrap">
+              <button
+                type="button"
+                className={`dcx-dd-trigger ${openDropdown === 'network' ? 'is-open' : ''} ${net !== 'all' ? 'is-filtered' : ''}`}
+                aria-label={t('discover.ui.filters.network')}
+                aria-haspopup="listbox"
+                aria-expanded={openDropdown === 'network'}
+                aria-controls={netMenuId}
+                onClick={() => setOpenDropdown((cur) => (cur === 'network' ? null : 'network'))}
+              >
+                <span className="dcx-dd-lead">
+                  <ChainMark chain={activeNetObj} size={22} />
+                  <span className="dcx-dd-text">
+                    <span className="dcx-dd-kicker">{t('discover.ui.filters.network')}</span>
+                    <span className="dcx-dd-val">{netLabel(net)}</span>
+                  </span>
+                </span>
+                <svg className="dcx-dd-caret" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {openDropdown === 'network' && (
+                <div
+                  id={netMenuId}
+                  role="listbox"
+                  aria-label={t('discover.ui.filters.network')}
+                  className="dcx-popover dcx-popover--start"
+                >
+                  <div className="dcx-popover-head">{t('discover.ui.search.networks')}</div>
+                  <div className="dcx-popover-list">
+                    {NETWORK_FILTERS.map((nf) => {
+                      const selectedNet = net === nf.id;
+                      const count = chainCounts.get(nf.id) ?? 0;
+                      return (
+                        <button
+                          key={nf.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selectedNet}
+                          className={`dcx-popover-opt ${selectedNet ? 'is-selected' : ''}`}
+                          onClick={() => {
+                            haptic?.('light');
+                            setNet(nf.id);
+                            setVisible(PAGE_SIZE);
+                            setOpenDropdown(null);
+                          }}
+                        >
+                          <ChainMark chain={nf} size={24} />
+                          <span className="dcx-popover-opt-main">
+                            <span className="dcx-popover-opt-label">{netLabel(nf.id)}</span>
+                            {nf.id !== 'all' && nf.short && (
+                              <span className="dcx-popover-opt-code" aria-hidden="true">{nf.short}</span>
+                            )}
+                          </span>
+                          <span className="dcx-popover-opt-count" aria-hidden="true">{count}</span>
+                          <span className="dcx-popover-check" aria-hidden="true">
+                            {selectedNet && <IconCheck width={13} height={13} />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Sort Dropdown ("داغ‌ترین") */}
+            <div className="dcx-dd-wrap">
+              <button
+                type="button"
+                className={`dcx-dd-trigger ${openDropdown === 'sort' ? 'is-open' : ''}`}
+                aria-label={t('discover.ui.filters.sort')}
+                aria-haspopup="listbox"
+                aria-expanded={openDropdown === 'sort'}
+                aria-controls={sortMenuId}
+                onClick={() => setOpenDropdown((cur) => (cur === 'sort' ? null : 'sort'))}
+              >
+                <span className="dcx-dd-lead">
+                  <span className="dcx-sort-badge" data-sort={sort} aria-hidden="true">
+                    <SortIcon id={sort} />
+                  </span>
+                  <span className="dcx-dd-text">
+                    <span className="dcx-dd-kicker">{t('discover.ui.filters.sort')}</span>
+                    <span className="dcx-dd-val">{sortLabel(sort)}</span>
+                  </span>
+                </span>
+                <svg className="dcx-dd-caret" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {openDropdown === 'sort' && (
+                <div
+                  id={sortMenuId}
+                  role="listbox"
+                  aria-label={t('discover.ui.filters.sort')}
+                  className="dcx-popover dcx-popover--end"
+                >
+                  <div className="dcx-popover-head">{t('discover.ui.filters.sort')}</div>
+                  <div className="dcx-popover-list">
+                    {SORT_IDS.map((id) => {
+                      const selectedSort = sort === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          role="option"
+                          aria-selected={selectedSort}
+                          className={`dcx-popover-opt ${selectedSort ? 'is-selected' : ''}`}
+                          onClick={() => {
+                            haptic?.('light');
+                            setSort(id);
+                            setVisible(PAGE_SIZE);
+                            setOpenDropdown(null);
+                          }}
+                        >
+                          <span className="dcx-sort-badge" data-sort={id} aria-hidden="true">
+                            <SortIcon id={id} />
+                          </span>
+                          <span className="dcx-popover-opt-main">
+                            <span className="dcx-popover-opt-label">{sortLabel(id)}</span>
+                          </span>
+                          <span className="dcx-popover-check" aria-hidden="true">
+                            {selectedSort && <IconCheck width={13} height={13} />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── RESULTS HEADER ──────────────────────────────────────────────── */}
+        <div className="dcx-section-head">
+          <div className="dcx-section-title">
+            <h3>{q.trim() ? t('discover.ui.filters.resultsFor', { q: q.trim() }) : t('discover.ui.filters.results')}</h3>
+            <span className="dcx-count">{t('discover.ui.filters.count', { count: filtered.length })}</span>
+          </div>
+          <div className="dcx-section-actions">
+            {activeFilters && (
+              <button type="button" className="dcx-reset" onClick={clearAll}>
+                <IconX width={11} height={11} />
+                {t('discover.ui.filters.reset')}
+              </button>
+            )}
+            {trendingErr && <span className="dcx-count">{t('discover.ui.filters.liveOffShort')}</span>}
+          </div>
+        </div>
+
+        {/* ── PROTOCOL GRID ───────────────────────────────────────────────── */}
+        {filtered.length > 0 ? (
+          <>
+            <div className="dcx-grid">
+              {shown.map((p) => (
+                <ProtocolCard
+                  key={p.id}
+                  protocol={p}
+                  live={liveFor(p)}
+                  lang={lang}
+                  fav={favs.includes(p.id)}
+                  onFav={toggleFav}
+                  onOpen={pick}
+                  isFeatured={Boolean(p.featured)}
+                  t={t}
+                  catLabel={catLabel}
+                />
+              ))}
+            </div>
+            {visible < filtered.length && (
+              <button type="button" className="dcx-more" onClick={() => setVisible((v) => v + PAGE_SIZE)}>
+                {t('discover.ui.filters.showMore', { count: filtered.length - visible })}
+              </button>
+            )}
+            {visible >= filtered.length && filtered.length > PAGE_SIZE && (
+              <p className="dcx-all-shown">{t('discover.ui.filters.showAll')}</p>
+            )}
+          </>
+        ) : !trendingLoading && (
+          <div className="dcx-empty">
+            <span className="dcx-empty-ico" aria-hidden="true"><IconSearch width={20} height={20} /></span>
+            <h4>{t('discover.ui.empty.title')}</h4>
+            <p>{t('discover.ui.empty.body', { q: q.trim() || catLabel(cat) })}</p>
+            <button type="button" className="dcx-more" onClick={clearAll}>{t('discover.ui.empty.action')}</button>
+          </div>
+        )}
+
+        <div className="dcx-safety-box" id="discover-safety-dc">
+          <InfoBox
+            title={t('discover.ui.safety.title')}
+            tone="warn"
+            id="discover-safety-dc"
+            icon={<IconShield width={14} height={14} />}
+          >
+            <p>{t('discover.ui.safety.body')}</p>
+          </InfoBox>
+        </div>
+
+        {/* ── MODERN DETAIL SHEET (No X button, compact Star, rich aurora surface) ── */}
+        <Sheet
+          open={Boolean(pickedProto)}
+          onClose={closeSheet}
+          anchor="bottom"
+          size="lg"
+          className="dcx-sheet disc-sheet"
+          testId="disc-sheet"
+        >
+          {pickedProto && (
+            <div className="dcx-sheet-inner" style={{ '--dcx-sheet-accent': pickedProto.hue || '#22d3ee' }}>
+              <span className="dcx-sheet-ambient" aria-hidden="true">
+                <i className="dcx-sheet-bloom dcx-sheet-bloom--a" />
+                <i className="dcx-sheet-bloom dcx-sheet-bloom--b" />
+                <i className="dcx-sheet-mesh" />
+              </span>
+
+              {/* Hero header — X button intentionally removed; compact properly-proportioned star */}
+              <header className="dcx-sheet-hero">
+                <div className="dcx-sheet-logo-frame">
+                  <ProtoLogo protocol={pickedProto} liveLogo={liveFor(pickedProto)?.logo} size={56} />
+                </div>
+                <div className="dcx-sheet-id">
+                  <div className="dcx-sheet-title-row">
+                    <h3 dir="ltr">{pickedProto.name}</h3>
+                    {pickedProto.verified && (
+                      <span className="dcx-verified" title={t('discover.ui.sheet.verifiedDomain')}>
+                        <IconCheck width={11} height={11} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="dcx-sheet-cats">
+                    <span className="dcx-badge" data-cat={pickedProto.category}>
+                      <CategoryIcon id={pickedProto.category} />
+                      {catLabel(pickedProto.category)}
+                    </span>
+                    {pickedProto.verified && (
+                      <span className="dcx-badge is-soft">{t('discover.ui.sheet.verifiedDomain')}</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`dcx-fav dcx-sheet-fav ${favs.includes(pickedProto.id) ? 'is-on' : ''}`}
+                  aria-label={favs.includes(pickedProto.id) ? t('discover.ui.card.unfavorite') : t('discover.ui.card.favorite')}
+                  aria-pressed={favs.includes(pickedProto.id)}
+                  onClick={() => toggleFav(pickedProto.id)}
+                >
+                  <IconStar width={14} height={14} />
+                </button>
+              </header>
+
+              {/* Official domain verification bar */}
+              <div className="dcx-domain-bar">
+                <span className="dcx-domain-shield" aria-hidden="true">
+                  <IconShield width={15} height={15} />
+                </span>
+                <div className="dcx-domain-meta">
+                  <span className="dcx-domain-lbl">{t('discover.ui.sheet.officialDomain')}</span>
+                  <span className="dcx-domain-host" dir="ltr">{hostOf(pickedProto.url)}</span>
+                </div>
+                <span className="dcx-domain-ok" dir="ltr">https</span>
+              </div>
+
+              <p className="dcx-sheet-desc">{descriptionFor(pickedProto, lang)}</p>
+
+              {/* Live metrics 2×2 bento */}
+              <div className="dcx-sheet-block">
+                <div className="dcx-block-head">
+                  <span className="dcx-block-lbl">{t('discover.ui.sheet.metrics')}</span>
+                  <span className="dcx-source-tag">
+                    {pickedProto.dataSource === 'defillama'
+                      ? t('discover.ui.sheet.sourceDefillama')
+                      : t('discover.ui.sheet.sourceCurated')}
+                  </span>
+                </div>
+                <div className="dcx-metrics">
+                  {[
+                    { label: t('discover.ui.sheet.tvl'), value: detailTvl != null ? fmtUsd(detailTvl) : null },
+                    { label: t('discover.ui.sheet.volume'), value: detailVol != null ? fmtUsd(detailVol) : null },
+                    {
+                      label: t('discover.ui.sheet.change7d'),
+                      value: detailChange7d != null ? `${detailChange7d >= 0 ? '+' : ''}${Number(detailChange7d).toFixed(1)}%` : null,
+                      tone: detailChange7d != null ? (detailChange7d >= 0 ? 'is-up' : 'is-down') : ''
+                    },
+                    { label: t('discover.ui.sheet.audits'), value: pickedProto.audits != null ? String(pickedProto.audits) : null }
+                  ].map((m) => (
+                    <div className="dcx-metric-box" key={m.label}>
+                      <span>{m.label}</span>
+                      <strong className={m.tone || ''} dir="ltr">
+                        {detailLoading ? '…' : (m.value ?? t('discover.ui.sheet.na'))}
+                      </strong>
+                    </div>
                   ))}
                 </div>
-              </section>
+                {!detailLoading && detailTvl == null && (
+                  <p className="dcx-security-note">{t('discover.ui.sheet.tvlUnavailable')}</p>
+                )}
+              </div>
 
-              {pickedProto.docs && (
-                <button type="button" className="dcx-docs" onClick={() => openUrl(pickedProto.docs)}>
-                  <IconExternal width={13} height={13} /> {t('discover.ui.sheet.docs')}
-                  <span dir="ltr">{hostOf(pickedProto.docs)}</span>
-                </button>
+              {/* Supported networks with real chain SVG icons */}
+              {(pickedProto.chains?.length || 0) > 0 && (
+                <section className="dcx-sheet-block">
+                  <span className="dcx-block-lbl">{t('discover.ui.sheet.networks')}</span>
+                  <div className="dcx-sheet-nets">
+                    {(pickedProto.chains || []).map((ch) => (
+                      <span key={ch} className="dcx-net-pill">
+                        <ChainMark chain={ch} size={15} />
+                        <span>{chainLabel(ch, lang)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </section>
               )}
 
+              {pickedProto.docs && (
+                <div className="dcx-ref-links">
+                  <button type="button" className="dcx-ref-link" onClick={() => openUrl(pickedProto.docs)}>
+                    <IconGlobe width={13} height={13} />
+                    <span>{t('discover.ui.sheet.docs')}</span>
+                    <span dir="ltr">{hostOf(pickedProto.docs)}</span>
+                    <IconExternal width={12} height={12} />
+                  </button>
+                </div>
+              )}
+
+              {/* Grouped, collapsible security section */}
               <details className="dcx-security">
                 <summary>
                   <IconShield width={15} height={15} aria-hidden="true" />
-                  <span className="dcx-security-title">{t('discover.ui.sheet.security')}</span>
-                  <span className="dcx-security-sub">{t('discover.ui.sheet.securitySummary')}</span>
-                  <IconChevronRight className="dcx-security-chev" width={14} height={14} aria-hidden="true" />
+                  <span>{t('discover.ui.sheet.security')}</span>
+                  <span className="dcx-source-tag">{t('discover.ui.sheet.securitySummary')}</span>
+                  <IconChevronRight className="dcx-safety-chev" width={14} height={14} aria-hidden="true" />
                 </summary>
                 <div className="dcx-security-body">
-                  {!sheetIsRegistry && <p className="dcx-warn error"><IconAlertTriangle width={13} height={13} /> {t('discover.ui.warn.unverifiedDomain')}</p>}
-                  {sheetValidation?.warnings?.map((w, i) => (
-                    <p key={`v-${i}`} className={`dcx-warn ${w.level === 'error' ? 'error' : ''}`} role="alert">
-                      <IconAlertTriangle width={13} height={13} /> {warnText(w, t)}
-                    </p>
-                  ))}
-                  {sheetChainWarns.map((w, i) => (
-                    <p key={`c-${i}`} className="dcx-warn"><IconAlertTriangle width={13} height={13} /> {warnText(w, t)}</p>
-                  ))}
-                  {sheetAuditNote && <p className="dcx-warn"><IconAlertTriangle width={13} height={13} /> {warnText({ ...sheetAuditNote, message: sheetAuditNote.text }, t)}</p>}
-                  {auditLinks.length > 0 && (
-                    <div className="dcx-audits">
-                      <span className="dcx-audits-title">{t('discover.ui.sheet.auditReports')}</span>
-                      {auditLinks.slice(0, 4).map((link) => (
-                        <button key={link} type="button" className="dcx-audit-link" dir="ltr" onClick={() => openUrl(link)}>
-                          {String(link).replace(/^https?:\/\//, '').slice(0, 52)}
-                        </button>
-                      ))}
-                      <p className="dcx-note">{t('discover.ui.sheet.auditedNotSafe')}</p>
+                  {!sheetIsRegistry && (
+                    <div className="dcx-warn-item is-danger">
+                      <IconAlertTriangle width={13} height={13} />
+                      <span>{t('discover.ui.warn.unverifiedDomain')}</span>
                     </div>
                   )}
-                  <p className="dcx-warn neutral"><IconShield width={13} height={13} /> {t('discover.ui.sheet.browserNotSafe')}</p>
+                  {sheetValidation?.warnings?.map((w, i) => (
+                    <div key={`v-${i}`} className={`dcx-warn-item ${w.level === 'error' ? 'is-danger' : 'is-warn'}`} role="alert">
+                      <IconAlertTriangle width={13} height={13} />
+                      <span>{warnText(w, t)}</span>
+                    </div>
+                  ))}
+                  {sheetChainWarns.map((w, i) => (
+                    <div key={`c-${i}`} className="dcx-warn-item is-warn">
+                      <IconAlertTriangle width={13} height={13} />
+                      <span>{warnText(w, t)}</span>
+                    </div>
+                  ))}
+                  {sheetAuditNote && (
+                    <div className="dcx-warn-item">
+                      <IconAlertTriangle width={13} height={13} />
+                      <span>{warnText({ ...sheetAuditNote, message: sheetAuditNote.text }, t)}</span>
+                    </div>
+                  )}
+                  {auditLinks.length > 0 && (
+                    <div className="dcx-ref-links">
+                      {auditLinks.slice(0, 4).map((link) => (
+                        <button key={link} type="button" className="dcx-ref-link" dir="ltr" onClick={() => openUrl(link)}>
+                          <span>{String(link).replace(/^https?:\/\//, '').slice(0, 44)}</span>
+                          <IconExternal width={11} height={11} />
+                        </button>
+                      ))}
+                      <p className="dcx-security-note">{t('discover.ui.sheet.auditedNotSafe')}</p>
+                    </div>
+                  )}
+                  <p className="dcx-security-note">{t('discover.ui.sheet.browserNotSafe')}</p>
                   {!sheetValidation?.warnings?.length && !sheetChainWarns.length && !sheetAuditNote && (
-                    <p className="dcx-note">{t('discover.ui.sheet.noWarnings')}</p>
+                    <p className="dcx-security-note">{t('discover.ui.sheet.noWarnings')}</p>
                   )}
                 </div>
               </details>
 
-              <div className="dcx-source">
-                <span className="dcx-source-pill">{t('discover.ui.sheet.source')}: {pickedProto.dataSource === 'defillama' ? t('discover.ui.sheet.sourceDefillama') : t('discover.ui.sheet.sourceCurated')}</span>
-                {metaInfo?.updatedAt && <span>{t('discover.ui.sheet.updated', { time: timeAgo(metaInfo.updatedAt, lang) })}</span>}
-              </div>
-            </div>
+              {metaInfo?.updatedAt && (
+                <p className="dcx-security-note">{t('discover.ui.sheet.updated', { time: timeAgo(metaInfo.updatedAt, lang) })}</p>
+              )}
 
-            <footer className="dcx-sheet-actions">
-              <div className="dcx-sheet-buttons">
-                <button type="button" className="dcx-primary" onClick={doOpen}
-                  data-testid="discovery-open" data-legacy-testid="disc-sheet-open">
-                  <IconExternal width={15} height={15} /> {t('discover.ui.sheet.open')}
-                </button>
-                <button type="button" className="dcx-icon-btn" onClick={copyLink} aria-label={t('discover.ui.sheet.copy')} title={t('discover.ui.sheet.copy')}>
-                  <IconCopy width={15} height={15} />
-                </button>
-              </div>
-              <p className="dcx-sheet-hint">{t('discover.ui.sheet.hint')}</p>
-            </footer>
-          </div>
-        )}
-      </Sheet>
+              <footer className="dcx-sheet-actions">
+                <div className="dcx-sheet-btns">
+                  <button
+                    type="button"
+                    className="dcx-btn dcx-btn-primary"
+                    onClick={doOpen}
+                    data-testid="discovery-open"
+                    data-legacy-testid="disc-sheet-open"
+                  >
+                    <IconExternal width={15} height={15} />
+                    <span>{t('discover.ui.sheet.open')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dcx-btn dcx-btn-ghost"
+                    onClick={copyLink}
+                    aria-label={t('discover.ui.sheet.copy')}
+                    title={t('discover.ui.sheet.copy')}
+                  >
+                    <IconCopy width={15} height={15} />
+                  </button>
+                </div>
+                <p className="dcx-sheet-hint">{t('discover.ui.sheet.hint')}</p>
+              </footer>
+            </div>
+          )}
+        </Sheet>
+      </div>
     </PageTransition>
   );
 }

@@ -1397,6 +1397,7 @@ select option {
 }
 
 .coin-logo {
+  position: relative;
   width: 34px;
   height: 34px;
   border-radius: 11px;
@@ -1411,7 +1412,38 @@ select option {
   flex-shrink: 0;
   overflow: hidden;
 }
-.coin-logo img { width: 100%; height: 100%; object-fit: cover; }
+.coin-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.coin-logo-vec { padding: 0; border-color: transparent; background: transparent; }
+.coin-logo-fill,
+.coin-logo-underlay {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  line-height: 0;
+}
+.coin-logo-underlay svg,
+.coin-logo > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.coin-logo-net {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+.coin-logo-net.is-loaded {
+  opacity: 1;
+}
+.coin-logo-glyph {
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
 
 /*
    A tiny inline coin avatar for chips and pills (trending tags, Discover
@@ -6680,7 +6712,8 @@ a.wallet-option,
    --------------------------------------------------------------------------- */
 .rgb-still .rgb-orb {
   animation: none !important;
-  filter: blur(52px);
+  filter: none;
+  transform: none;
   will-change: auto;
 }
 
@@ -15964,7 +15997,8 @@ button.settings-quick-action {
    exact treatment `.rgb-still` already gives the packaged app. */
 :root[data-lite='true'] .rgb-orb {
   animation: none !important;
-  filter: blur(52px);
+  filter: none;
+  transform: none;
   will-change: auto;
 }
 

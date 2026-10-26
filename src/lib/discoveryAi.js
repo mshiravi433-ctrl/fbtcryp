@@ -143,10 +143,10 @@ export const AI_EXAMPLES = [
 
 /** Same four intents, written the way a Persian user would type them. */
 export const AI_EXAMPLES_FA = [
-  'وامدهی روی آربیتروم',
-  'پروتکلهای سود در BNB',
-  'مقایسهٔ صرافیها در شبکههای مختلف',
-  'پروتکلهای جدید با اطلاعات امنیتی',
+  'وام‌دهی روی آربیتروم',
+  'پروتکل‌های سود در BNB',
+  'مقایسهٔ صرافی‌ها در شبکه‌های مختلف',
+  'پروتکل‌های جدید با اطلاعات امنیتی',
 ];
 
 /** The example set for the active language. */
