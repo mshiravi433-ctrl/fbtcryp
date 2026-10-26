@@ -5667,7 +5667,8 @@
         "offline": "دادهٔ آفلاین",
         "statProtocols": "پروتکل تأییدشده",
         "statNetworks": "شبکه",
-        "statSource": "آمار از DefiLlama"
+        "statSource": "آمار از DefiLlama",
+        "loading": "دریافت آمار"
       },
       "search": {
         "label": "جستجوی پروتکل، دسته یا شبکه",
