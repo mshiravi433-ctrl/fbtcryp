@@ -15,7 +15,7 @@
  * jsdom cannot execute ES modules, which is why each suite is pre-bundled with
  * Vite into a classic/SSR bundle first.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import './dca-execution-probe.mjs';
@@ -401,6 +401,7 @@ function installDom(html = '<!doctype html><html><body><div id="r"></div></body>
    above, at import time) accounts for its own result and must be allowed to
    add to the same failure counter. */
 let failed = 0;
+let skipped = 0;
 const report = (suite, rows) => {
   console.log(`\n── ${suite} ─────────────────────────────`);
   for (const row of rows) {
@@ -409,6 +410,35 @@ const report = (suite, rows) => {
     console.log(`  ${ok ? '✓' : '✗'} ${name}`);
   }
 };
+
+/*
+ * LIVE ROBINHOOD STOCK RAIL — the read-only external-health probe. It checks
+ * the deployed /api/stock-prices route and a fresh loadStockTokenUniverse()
+ * result. Exit 77 is a visible SKIP when the API server or upstream network is
+ * unavailable; it is not reported as a green assertion.
+ */
+console.log('\n▸ probing live Robinhood stock prices + universe health…');
+{
+  const live = spawnSync(process.execPath, ['test/stock-prices-live-probe.mjs'], {
+    cwd: new URL('..', import.meta.url).pathname,
+    encoding: 'utf8',
+    timeout: 60_000
+  });
+  if (live.stdout) process.stdout.write(live.stdout);
+  if (live.stderr) process.stderr.write(live.stderr);
+  if (live.status === 77) {
+    skipped += 1;
+    console.log('── Robinhood stock live probe ────────────────────────────────────');
+    console.log('  ⏭ SKIP — not counted as a PASS; provide a reachable API and token-list network to verify it.');
+  } else {
+    report('Robinhood stock live probe', [[
+      live.status === 0
+        ? 'fresh external token universe + live contract prices + named API errors'
+        : `live probe failed${live.error ? `: ${live.error.message}` : ` (exit ${live.status ?? 'unknown'})`}`,
+      live.status === 0
+    ]]);
+  }
+}
 
 /* Market feed regression: isolate the mocked HTTP provider boundary so this
    test cannot replace fetch under other probes in the main process. */
@@ -2933,5 +2963,9 @@ try {
   ]);
 }
 
-console.log(failed ? `\n${failed} FAILED\n` : '\nAll suites passed.\n');
+console.log(failed
+  ? `\n${failed} FAILED${skipped ? ` · ${skipped} SKIPPED (not verified)` : ''}\n`
+  : skipped
+    ? `\nAll runnable suites passed; ${skipped} suite(s) SKIPPED (not verified).\n`
+    : '\nAll suites passed.\n');
 process.exit(failed ? 1 : 0);

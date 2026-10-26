@@ -80,6 +80,7 @@
     "test:compound-base-fork": "node test/compound-base-fork-probe.mjs",
     "test:lido-mainnet-fork": "node test/lido-mainnet-fork-probe.mjs",
     "test:mobile-surfaces": "node --test test/equity-chart-wire.test.mjs test/equity-chart-windowed.test.mjs && vitest run test/equity-live-panel.test.jsx test/signals-hero-cinema.test.jsx --maxWorkers=2 --no-file-parallelism",
+    "test:stock-prices-live": "node test/stock-prices-live-probe.mjs",
     "test:mobile-surfaces:browser": "node test/mobile-surfaces-browser.mjs",
     "test:buy-sell": "node test/buy-sell-probe.mjs && node test/buy-sell-ramp-flow-probe.mjs && npm run test:buy-sell-wizard",
     "test:business": "node test/business-locales-probe.mjs && vitest run test/business-console.test.jsx",

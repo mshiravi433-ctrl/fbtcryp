@@ -224,7 +224,17 @@ check(
 /* ── 2. no fabricated history ───────────────────────────────────────────── */
 
 const CHART = readFileSync('src/lib/equityChart.js', 'utf8');
-const STOCKS = readFileSync('src/pages/Stocks.jsx', 'utf8');
+/* Stocks keeps its data/effect logic in the page and renders the panels from
+   module-level children; inspect both sides of that structural boundary. */
+const STOCKS = [
+  'src/pages/Stocks.jsx',
+  'src/components/stocks/EquityBoard.jsx',
+  'src/components/stocks/RobinhoodStockBoard.jsx',
+  'src/components/stocks/EquityGoldPanel.jsx',
+  'src/components/stocks/EquityDisclosures.jsx',
+  'src/components/stocks/RwaAssetsPanel.jsx',
+  'src/components/stocks/RwaTokensPanel.jsx'
+].map((path) => readFileSync(path, 'utf8')).join('\n');
 const EQROW = readFileSync('src/components/EquityRow.jsx', 'utf8');
 const GOLDBOX = readFileSync('src/components/GoldHistoryBox.jsx', 'utf8');
 const EQANALYSIS = readFileSync('src/components/EquityAnalysis.jsx', 'utf8');

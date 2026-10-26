@@ -1,3 +1,15 @@
+# ۲۰۲۶-۱۰-۲۶ — پروب صادقانهٔ قیمت‌های Robinhood و استخراج پنل‌های Stocks
+
+جزئیات و شواهد: [2026-10-26-stocks-live-prices-and-panel-extraction-fa.md](2026-10-26-stocks-live-prices-and-panel-extraction-fa.md).
+
+- **پروب فقط‌خواندنی:** `test/stock-prices-live-probe.mjs` از `loadStockTokenUniverse({ refresh: true, chainId: 4663 })` استفاده می‌کند و سلامت فهرست (۱۵۰+ ردیف، chain درست، آدرس یکتا، لوگوی HTTPS)، قیمت مثبتِ قراردادهای NVDA/TSLA، `null` برای آدرس ناشناخته و خطاهای نام‌دار `UNSUPPORTED_CHAIN`/`NO_ADDRESSES` را می‌سنجد. `npm run test:stock-prices-live` و `test/run.mjs` آن را ثبت کرده‌اند؛ exit 77، SKIP آشکار است و هرگز PASS شمرده نمی‌شود.
+- **نتیجهٔ شبکه:** اجرای واقعی امروز به `https://fbtswap.ir` با `fetch failed` و **SKIP / exit 77** برگشت. هیچ پاسخ عمومی، فهرست تازه یا قیمت زنده تأیید نشد؛ نتیجهٔ زنده عمداً سبز اعلام نمی‌شود.
+- **استخراج ساختاری:** صفحهٔ `Stocks.jsx` از ۱۸۰۹ به ۱۰۳۲ خط رسید؛ ۸ کامپوننت صرفاً نمایشی به `src/components/stocks/` منتقل شدند. state/effect و منطق داده در صفحه ماند و بخش پیش از `return` بدون تغییر ماند. قراردادهای خرید/فروش، i18n، test ID، lazy tabهای Ostium/Derivatives و `SPECULATION_ENABLED` حفظ شدند؛ هیچ chunk eager یا تغییری در بودجهٔ ۱۷۵۰ KB first-paint افزوده نشد.
+- **تأیید:** تست‌های Node **۵۰/۵۰**؛ Vitest **۳۴/۳۴**؛ `equity-analysis-probe` **۷۱/۷۱**؛ مونت `test/screens.jsx` **۲۵۲/۲۵۲**؛ `npm run build` سبز با first-paint برابر **۱۷۰۹٫۰۹/۱۷۵۰ KB**. wiring **۲۹۶۶ ردیف، ۶۰ شکست** داشت؛ همان ۶۰ برچسب شکست baseline روی `main` و بدون شکست تازه.
+- **عمداً انجام‌نشده:** فعال‌سازی کارمزد سهام یا دست‌کاری `JUP_FEE_ACCOUNT`/`VITE_JUP_REFERRAL_ACCOUNT` (تنظیم حساب ارجاع کار اپراتور و حدود ۱ دلار هزینه دارد)؛ هر تغییر در تأیید ناشر xStocks، کف نقدینگی، `THIN_ASSETS`، هشدار فریز، KYC یا یادداشتِ «تأیید ناشر Robinhood انجام نشده»؛ و هر قیمت/دادهٔ ساختگی.
+
+---
+
 # ۲۰۲۶-۱۰-۲۶ — ارتقای بدون هزینهٔ فارم: ممیزی منابع رایگان و افزودن Kamino سولانا، ثبت صادقانهٔ پروب‌های strict فورک، فریز SplitRouter تا مرز ممیزی، و آماده‌سازی کامل canary واقعی Aave Base
 
 جزئیات و استدلال کامل: [2026-10-26-farm-zero-cost-upgrade-kamino-fork-canary-fa.md](2026-10-26-farm-zero-cost-upgrade-kamino-fork-canary-fa.md). بالادستی: [docs/STOCK-FARM-FEE-REVIEW-FA.md](docs/STOCK-FARM-FEE-REVIEW-FA.md).
