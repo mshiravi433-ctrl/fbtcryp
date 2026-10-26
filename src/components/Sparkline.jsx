@@ -12,7 +12,24 @@ import { useId, useMemo } from 'react';
  * hold sixty of them. Callers that draw many small sparks at once pass
  * `glow={false}`; the animated draw-in stays, because it runs once.
  */
-export default function Sparkline({ data = [], width = 74, height = 30, up = true, strokeWidth = 1.6, fill = true, glow = true }) {
+/**
+ * `animate` — the draw-in animation of the stroke.
+ *
+ * It is lovely on a hero card and it is SIXTY simultaneous CSS animations in a
+ * market list, restarted every time the sort changes or the page polls. Callers
+ * that draw many small charts at once pass `animate={false}`: the line is drawn
+ * complete, on the first frame, with no dash offset and no keyframe running.
+ */
+export default function Sparkline({
+  data = [],
+  width = 74,
+  height = 30,
+  up = true,
+  strokeWidth = 1.6,
+  fill = true,
+  glow = true,
+  animate = true
+}) {
   const gid = useId().replace(/:/g, '');
 
   const { d, area } = useMemo(() => {
@@ -51,9 +68,9 @@ export default function Sparkline({ data = [], width = 74, height = 30, up = tru
           filter: glow
             ? `drop-shadow(0 0 4px ${up ? 'rgba(0,255,157,.55)' : 'rgba(255,59,107,.55)'})`
             : undefined,
-          strokeDasharray: 400,
-          strokeDashoffset: 0,
-          animation: 'spark-draw 1.1s ease-out'
+          ...(animate
+            ? { strokeDasharray: 400, strokeDashoffset: 0, animation: 'spark-draw 1.1s ease-out' }
+            : null)
         }}
       />
     </svg>

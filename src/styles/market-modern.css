@@ -6487,3 +6487,502 @@
   .market-signal-promo .ad-banner--premium::before { animation: none !important; }
   .market-breadth-seg { transition: none !important; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   15 · MARKET — FOURTH PASS (2026-10-26): SPEED, AND THE BOXES THEMSELVES
+   --------------------------------------------------------------------------
+   The second report about the same screen said three things:
+
+     «باکس بالایی … داخل باکس قرار دادی کشیده شود بدون چراغ چشمک زن سبز»
+     «۳: در باکس بیت کوین اندازه لوگو بیت کوین کوچیکه و هم اندازه باکس نیست»
+     «۴: بنر سیگنال هوشمند را مدرن‌ترش کن … و اندازه هم کوچکتر شود»
+     «۵: ایکون داغ آتشش اندازه درست داشته باشه و انیمیشنی و رنگ متناسب باکس»
+     «۸: نبض بازار را باکسش خیلی مدرن تر کن»
+     «۶/۷: اسکرول → سیاه … لود باکس استوری کند … هنوز سرعت سایت پایین است»
+
+   Two of those are performance, and the performance work is the one that had
+   to be structural rather than cosmetic. See §15.6 for the measurements this
+   screen was actually paying.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 15.1 · THE RAIL — light theme for the new single-surface tape ────────
+   The rail itself is defined in index.css (one place, because the mark, the
+   track and the animation belong together). Only the theme switch lives here:
+   the plate is a real colour now, so the edge fades — painted, not masked —
+   have to fade into THAT colour in light mode too. */
+:root[data-theme='light'] .ticker {
+  --ticker-plate: #f7f9fd;
+  --ticker-hair: rgba(16, 24, 48, 0.12);
+  border-color: rgba(16, 24, 48, 0.1);
+  background:
+    linear-gradient(180deg, #ffffff, #f4f7fc),
+    var(--ticker-plate);
+  box-shadow: inset 0 1px 0 #ffffff, 0 10px 24px -22px rgba(20, 45, 80, 0.5);
+}
+
+:root[data-theme='light'] .ticker-live-text { color: #2f6f8c; }
+:root[data-theme='light'] .ticker-sym { color: #101d33; }
+:root[data-theme='light'] .ticker-price { color: #56688a; }
+:root[data-theme='light'] .ticker-item .coin-logo {
+  border-color: rgba(16, 24, 48, 0.1);
+  background: #ffffff;
+}
+:root[data-theme='light'] .ticker-item:hover,
+:root[data-theme='light'] .ticker-promo:hover { background: rgba(0, 150, 190, 0.07); }
+:root[data-theme='light'] .ticker-change { background: rgba(16, 24, 48, 0.05); }
+
+/* ── 15.2 · THE BITCOIN BOX — the logo IS the tile ───────────────────────
+   «اندازه لوگو بیت کوین کوچیکه و هم اندازه باکس نیست»
+
+   Four passes in, the honest reading of "the logo is not the size of the box"
+   is that padding was still being asked to do the work of a border: the halo
+   was 58px with 4px of padding and two counter-rotating orbits drawn OUTSIDE
+   it, so the coin itself rendered at ~50px inside a box that has a 470px
+   sparkline under it. The coin is now laid out edge-to-edge (64px, zero
+   padding, no inner plate of its own) and the ring, the glow and the rank
+   badge sit outside it, so the artwork fills its tile exactly. */
+.market-hero-logo-halo {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border-radius: 21px;
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.18), transparent 62%),
+    linear-gradient(150deg, rgba(247, 169, 60, 0.3), rgba(226, 58, 14, 0.16));
+  border: 1px solid rgba(247, 169, 60, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 14px 30px -14px rgba(247, 147, 26, 0.8);
+}
+
+.market-hero-logo-halo > .coin-logo {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: 20px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 18px;
+}
+
+.market-hero-logo-halo > .coin-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The static ring: a constant 1px halo instead of two elements orbiting a
+   logo that is supposed to be the subject of the card. */
+.market-hero-logo-halo > .market-hero-orbit--rev {
+  inset: -6px;
+  border-color: rgba(255, 209, 102, 0.26);
+}
+
+.market-hero-logo-halo > .market-hero-orbit:first-of-type {
+  inset: -3px;
+  border-color: rgba(247, 169, 60, 0.35);
+}
+
+.market-hero-rank-badge {
+  bottom: -7px;
+  inset-inline-end: -7px;
+}
+
+:root[data-theme='light'] .market-hero-logo-halo {
+  background:
+    radial-gradient(circle at 32% 22%, rgba(255, 255, 255, 0.9), transparent 62%),
+    linear-gradient(150deg, rgba(247, 169, 60, 0.16), rgba(226, 58, 14, 0.08));
+  border-color: rgba(247, 147, 26, 0.42);
+}
+
+@media (max-width: 430px) {
+  .market-hero-logo-halo { width: 60px; height: 60px; border-radius: 19px; }
+  .market-hero-logo-halo > .coin-logo { border-radius: 18px; }
+}
+
+/* ── 15.3 · «داغ‌ترین‌ها» — a flame the size of its tile, in the tile's hue ─
+   «ایکون داغ آتشش اندازه درست داشته باشه و انیمیشنی و رنگ متناسب باکس»
+
+   Three fixes, all small:
+     • SIZE. 26px of flame inside a 38px tile overflowed the rounded corners
+       and read as a sticker half-off its plate. The tile is 34px and the
+       flame 21px, so the glyph has a margin inside it.
+     • COLOUR. The flame is drawn in the tile's own warm ramp (amber→ember)
+       rather than the generic yellow-on-orange, so the glyph and its box are
+       one colour family instead of two neighbours.
+     • COST. The glyph had a `drop-shadow` filter. A blur filter on a moving
+       element is re-rasterised every frame it moves — for a 21px decoration
+       sitting in the header of a scrolling page. The glow is now a static
+       radial gradient behind it, and the movement is transform/opacity only. */
+.market-trending-flame {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 11px;
+  overflow: visible;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.24), transparent 60%),
+    linear-gradient(150deg, #ff9d2f, #e0440d 82%);
+  border: 1px solid rgba(255, 170, 90, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 8px 18px -10px rgba(255, 120, 20, 0.95);
+}
+
+.market-trending-flame::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 16px;
+  background: radial-gradient(circle, rgba(255, 140, 40, 0.42), transparent 66%);
+  animation: mk-flame-aura 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.market-trending-flame .flame-svg {
+  position: relative;
+  z-index: 1;
+  width: 21px;
+  height: 21px;
+  filter: none;
+}
+
+/* The tile's own hue, so the flame looks drawn with the plate's ink. */
+.market-trending-flame .flame-layer-outer { fill: #fff1cf; }
+.market-trending-flame .flame-layer-inner { fill: #ffd06a; }
+.market-trending-flame .flame-layer-core { fill: #ffffff; }
+.market-trending-flame .flame-spark { fill: #ffe9b0; }
+
+:root[data-theme='light'] .market-trending-flame {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 6px 14px -8px rgba(255, 120, 20, 0.7);
+}
+
+/* ── 15.4 · «سیگنال هوشمند» — compact, and less like a billboard ─────────
+   «بنر سیگنال هوشمند را مدرن‌ترش کن … و اندازه هم کوچکتر شود»
+
+   The previous pass made it PREMIUM by making it BIG: 104px tall, a rotating
+   conic radar, a technical grid, a scan band, a blip and a 58px artwork. On a
+   phone that is a third of the screen spent on a house ad between the stories
+   and the trending rail — «زشته» was a fair verdict on the proportions.
+
+   What stays: the palette, the radar idea, the instrument feel.
+   What changes: 78px tall, 46px artwork, 13.5px title, one line of copy, a
+   compact CTA — and the conic radar no longer ROTATES. A rotating masked
+   conic-gradient is the most expensive thing on this card by an order of
+   magnitude (mask + angle change + full-card repaint per frame); the same
+   texture drawn still, with one slow scan line over it, reads as an instrument
+   and costs nothing to scroll past. */
+.market-signal-promo { margin: 14px 0 16px; }
+
+.market-signal-promo .ad-banner.ad-banner--premium {
+  min-height: 78px;
+  padding: 12px 13px !important;
+  border-radius: 20px !important;
+  gap: 11px;
+  background:
+    radial-gradient(95% 150% at 100% 0%, color-mix(in srgb, var(--ad-a) 24%, transparent), transparent 62%),
+    radial-gradient(80% 140% at 0% 110%, color-mix(in srgb, var(--ad-b) 16%, transparent), transparent 62%),
+    linear-gradient(126deg, rgba(20, 12, 42, 0.95), rgba(9, 13, 28, 0.93));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 20px 44px -30px var(--ad-a);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Still radar, plus the technical grid: the same two layers with the rotation
+   removed. `mk-spin` is not started here at all. */
+.market-signal-promo .ad-banner--premium::before {
+  top: -130%;
+  bottom: -130%;
+  inset-inline-end: -18%;
+  width: 62%;
+  opacity: 0.45;
+  animation: none;
+}
+
+.market-signal-promo .ad-banner--premium::after {
+  background-size: 22px 22px;
+  opacity: 0.85;
+}
+
+.market-signal-promo .ad-scan {
+  height: 36%;
+  opacity: 0.4;
+  animation-duration: 7.5s;
+}
+
+.market-signal-promo .ad-banner--premium .ad-art {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border-radius: 15px;
+}
+
+.market-signal-promo .ad-banner--premium .ad-art svg {
+  width: 34px;
+  height: 34px;
+}
+
+.market-signal-promo .ad-art-blip {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px;
+  animation-duration: 4.6s;
+}
+
+.market-signal-promo .ad-banner--premium .ad-title {
+  font-size: 13.5px !important;
+  letter-spacing: -0.01em;
+}
+
+.market-signal-promo .ad-banner--premium .ad-copy-sub {
+  margin-top: 2px !important;
+  font-size: 10.5px !important;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.market-signal-promo .ad-banner--premium .ad-cta {
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  gap: 3px;
+}
+
+.market-signal-promo .ad-banner--premium .ad-cta svg { width: 11px; height: 11px; }
+
+/* ── 15.5 · «نبض بازار» — a dial, not a progress bar ─────────────────────
+   «نبض بازار را باکسش خیلی مدرن تر کن»
+
+   Same numbers and the same honesty rules (counts, never a score; the note
+   names how many coins were counted). What changes is the SHAPE of the answer:
+   a conic ring of the three shares with the up-share inside it, chips beside
+   it, and the segmented bar kept underneath as the precise reading. The ring
+   is a static gradient — nothing here animates. */
+.market-breadth {
+  padding: 14px 15px 12px;
+  gap: 10px;
+  border-radius: 22px;
+}
+
+.market-breadth-body {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.market-breadth-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  border-radius: 50%;
+}
+
+/*
+ * THE DONUT IS A PSEUDO-ELEMENT, NOT THE ELEMENT ITSELF.
+ * A `mask` clips everything an element paints — children included — so masking
+ * the ring directly would also erase the percentage printed in its middle.
+ * The gradient + mask live on ::before, and the label sits above them.
+ *
+ * Three shares of one circle: up, flat, down. The percentages arrive as custom
+ * properties from the component, so the ring and the chips can never disagree.
+ * Static: no animation, no filter, no SVG.
+ */
+.market-breadth-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from -90deg,
+    var(--mk-emerald) 0 calc(var(--up, 0) * 3.6deg),
+    rgba(255, 255, 255, 0.22) calc(var(--up, 0) * 3.6deg) calc((var(--up, 0) + var(--flat, 0)) * 3.6deg),
+    var(--mk-rose) calc((var(--up, 0) + var(--flat, 0)) * 3.6deg) 360deg
+  );
+  -webkit-mask: radial-gradient(circle, transparent 0 59%, #000 60%);
+  mask: radial-gradient(circle, transparent 0 59%, #000 60%);
+}
+
+.market-breadth-ring b {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-breadth-ring[data-tone='up'] b { color: var(--up); }
+.market-breadth-ring[data-tone='down'] b { color: var(--down); }
+
+.market-breadth-side {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+
+.market-breadth-side .market-breadth-legend { margin: 0; gap: 5px 6px; }
+
+/* ── 15.6 · SCROLLING WAS STILL BLACK — what this screen was paying ───────
+   «وقتی اسکرول میکنی پایین یا بالا تا زمانی صفحه سیاهه … هنوز سرعت سایت پایین
+   است»
+
+   The previous pass halved the blur radii and removed one `content-visibility`
+   rule, and the report came back unchanged. That is the useful signal: the
+   cost was not the radius of the blurs, it was the NUMBER of blurred,
+   composited full-width layers stacked over a permanently animating fixed
+   background. Counted on the market route alone:
+
+     • 7 elements with `backdrop-filter` (global card 26px, hero card 26px,
+       command bar 28px, stories panel, trending panel, breadth panel, banner)
+     • 2 cards with `transform: translateZ(0)` — each a permanent compositing
+       layer the height of its content
+     • a `mask-image` across the ticker viewport, i.e. an offscreen buffer the
+       width of the page that re-composites while the marquee runs
+     • 13 framer-motion `repeat: Infinity` loops in the banner alone, each one
+       writing styles from the main thread every frame
+     • 3 background orbs, `blur(48px)`, drifting forever with
+       `will-change: transform` — three full-screen textures held in GPU memory
+       for the whole session
+
+   None of these individually makes a phone drop a frame. Together they are
+   what a 60fps scroll budget does not survive, and a compositor that runs out
+   of texture memory is exactly how you get BLACK BANDS while scrolling.
+
+   So, on this screen:
+     • every `backdrop-filter` is off — the surfaces already paint a 93-95%
+       opaque gradient, and an opaque plate looks the same and costs nothing;
+     • the permanent `translateZ(0)` layers are gone;
+     • the ticker's mask is gone (see §15.1 / index.css);
+     • the hero sheen stops;
+     • rows are paint-contained so a price update cannot repaint a neighbour;
+     • the drifting orbs stop below 900px (components/RgbBackground.jsx) and
+       no longer hold `will-change`.
+   Nothing about the palette, the layout or the type changes. */
+.market-glass-surface,
+.market-glass-surface.market-hero-card,
+.market-cmd,
+.market-stories-section,
+.market-trending,
+.market-breadth,
+.market-signal-promo .ad-banner,
+.ticker {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.market-glass-surface,
+.market-hero-card.market-glass-surface {
+  transform: none;
+  backface-visibility: visible;
+  background-color: rgba(9, 14, 28, 0.95);
+}
+
+:root[data-theme='light'] .market-glass-surface,
+:root[data-theme='light'] .market-hero-card.market-glass-surface {
+  background-color: rgba(255, 255, 255, 0.97);
+}
+
+/* The drifting blooms are transform/opacity only — cheap ONCE the surface they
+   sit in is not also being blurred. Keeping one slow drift is what stops the
+   cards reading as flat rectangles; the `will-change` hint is dropped because
+   the animation itself already promotes the layer. */
+.market-glass-bloom { will-change: auto; }
+
+/* A one-off specular, not a sheen that sweeps the card every nine seconds. */
+.market-hero-card.market-glass-surface::after {
+  animation: none;
+  opacity: 0.3;
+  transform: none;
+  background: linear-gradient(112deg, transparent 18%, rgba(255, 255, 255, 0.05) 46%, transparent 74%);
+}
+
+/* Per-row paint isolation: a ticking price repaints its own row and nothing
+   else. `content-visibility` is deliberately NOT used here — see the note in
+   §14.7: with a guessed `contain-intrinsic-size` it makes the list jump. */
+.market-coin-grid > .market-coin-row {
+  contain: layout style paint;
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
+/* The list is the scroll surface; keep it off the compositor's promotion list
+   while the entrance animations run. */
+.market-coin-grid { contain: layout style; }
+
+@media (max-width: 900px) {
+  /* Mobile GPUs: no `will-change` hints that pin large textures. */
+  .rgb-orb { will-change: auto; }
+  .market-hero-orbit { will-change: auto; }
+  .flame-layer,
+  .flame-spark { will-change: auto; }
+}
+
+/* ── 15.7 · GUARDS ─────────────────────────────────────────────────────── */
+:root[data-lite='true'] .market-signal-promo .ad-banner--premium::before,
+:root[data-lite='true'] .market-glass-bloom {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-signal-promo .ad-scan,
+  .market-signal-promo .ad-art-blip,
+  .market-trending-flame::before,
+  .market-glass-bloom { animation: none !important; }
+  .market-band,
+  .market-breadth-ring { transition: none !important; }
+}
+
+/* ── 15.8 · «بدون چراغ چشمک زن سبز» — every pulse on this screen ─────────
+   «… بدون چراغ چشمک زن سبز …»
+
+   Four green dots on this one screen were pulsing forever: the rail's old LIVE
+   dot (removed with the rail), the kicker above the global market cap, the
+   «LIVE» marker beside the BTC pair, the freshness dot in the list header, and
+   the "new story" ring. A blinking light is alarm vocabulary — it means
+   "something needs you" — and using it for "the feed is on" spends the loudest
+   signal in the interface on the least important fact. It is also four
+   infinite animations running on the screen that was reported as slow.
+
+   All five are now STATIC. The colour still marks them as live; nothing moves
+   at the reader. The freshness dot keeps its amber/static state for a stale
+   feed — the difference between live and stale is now the word beside it and
+   the colour, not a heartbeat. */
+.market-live-dot,
+.market-hero-live,
+.market-fresh i,
+.market-story-ring::after {
+  animation: none !important;
+  will-change: auto;
+  transform: none;
+}
+
+/* A static dot with a soft ring reads as "on" at a glance, and costs nothing. */
+.market-live-dot {
+  width: 6px;
+  height: 6px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--mk-emerald) 18%, transparent),
+    0 0 8px color-mix(in srgb, var(--mk-emerald) 70%, transparent);
+}
+
+.market-hero-live {
+  width: 6px;
+  height: 6px;
+  box-shadow: 0 0 0 3px rgba(47, 230, 168, 0.16);
+}

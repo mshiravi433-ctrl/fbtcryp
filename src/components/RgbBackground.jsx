@@ -48,8 +48,33 @@ const isLowMemory = () =>
   && Number(navigator.deviceMemory || 0) > 0
   && Number(navigator.deviceMemory) <= 3;
 
+/**
+ * ─── PHONES PAY FOR THIS FIELD EVEN IN A BROWSER TAB ────────────────────────
+ * Reported, twice: «هنوز در سرعت سایت و سرعت لود پایینه» and «وقتی اسکرول می‌کنی
+ * پایین یا بالا صفحه سیاهه».
+ *
+ * The three orbs are 520/480/440px circles with `filter: blur(48px)` and
+ * `will-change: transform`, drifting on infinite keyframes. `will-change`
+ * pins each one as a GPU layer — at DPR 3 that is roughly 1,500×1,500 texels
+ * per orb, three of them, held for the entire session, ON TOP of every
+ * backdrop-filtered panel the page draws. A mobile GPU that runs out of
+ * texture memory does not throw; it drops layers, and dropped layers look like
+ * black rectangles while you scroll.
+ *
+ * The rule this file already had — freeze on native, on an installed PWA and
+ * on a low-memory device — was simply too short a list. Below 900px the drift
+ * is 40px of movement over 48 seconds: nobody has ever seen it move, and it
+ * costs the same as on a desktop. So a phone-width viewport gets the static
+ * field too. The palette, the depth and the vignette are identical; only the
+ * 48-second drift is gone.
+ */
+const isSmallViewport = () =>
+  typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function'
+  && window.matchMedia('(max-width: 900px)').matches;
+
 export default function RgbBackground() {
-  const still = isNative() || isStandalone() || isLowMemory();
+  const still = isNative() || isStandalone() || isLowMemory() || isSmallViewport();
 
   return (
     <div className={`rgb-field${still ? ' rgb-still' : ''}`} aria-hidden="true">

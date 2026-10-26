@@ -1088,51 +1088,100 @@ select option {
 }
 
 /* ==========================================================================
-   Market rail (continuous infinite marquee)
+   Market rail — ONE surface, not a row of cards
 
-   Rebuilt as ONE surface. The previous version wrapped every coin in a
-   bordered, shadowed pill INSIDE a bordered, shadowed rail — a box in a box,
-   forty times over, which is what made the strip read as "کشیده" (stretched)
-   and cramped at once. Items are now plain segments of one tape, separated by
-   hairlines, and nothing inside the rail blinks: the old pulsing green dot is
-   gone and a static accent bar marks the rail instead. See components/Ticker.jsx
-   for the full reasoning.
+   «باکس بالایی … داخل باکس قرار دادی کشیده شود … انگار ریلی هست و مدرن باشد»
+
+   Two structural mistakes were making the strip look "کشیده" (stretched):
+
+     1. every coin was a bordered, shadowed PILL inside a bordered, shadowed
+        rail — forty boxes in a box, each padded like a card;
+     2. those pills were laid out as flex items with their own vertical padding,
+        so the rail decided their height and they all stretched to fill it.
+
+   It is now a tape: full-height SEGMENTS with no radius, no border and no
+   shadow, separated by a single hairline, on one plate. Nothing inside blinks —
+   the old pulsing green dot is replaced by a static accent bar and a quiet LIVE
+   word (see components/Ticker.jsx).
+
+   Cost: one transform-only animation on two tracks. The old version also
+   carried `backdrop-filter` and a `mask-image` over the whole strip; both are
+   gone, because each promotes a full-width offscreen buffer that has to be
+   re-composited on every scroll frame — the black-band-during-scroll class of
+   bug on mid-range phones. Edge fades are painted gradients instead.
    ========================================================================== */
 
 .ticker {
+  --ticker-plate: #0a0f1c;
+  --ticker-hair: rgba(150, 185, 225, 0.13);
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: stretch;
+  gap: 0;
   margin: 10px 12px 6px;
   padding: 0;
-  min-height: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  min-height: 46px;
+  border-radius: 16px;
+  border: 1px solid rgba(150, 185, 225, 0.12);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 62%),
-    rgba(8, 12, 22, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(10px) saturate(135%);
-  -webkit-backdrop-filter: blur(10px) saturate(135%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012) 62%),
+    var(--ticker-plate);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 14px 30px -26px rgba(2, 6, 18, 0.9);
   user-select: none;
   direction: ltr !important;
   overflow: hidden;
 }
 
-.ticker-skel { height: 44px; margin: 10px 12px 6px; border-radius: 14px; }
+/* Painted fade at each end. A `mask-image` would do the same thing visually
+   and cost a full-width offscreen buffer for the life of the page. */
+.ticker::before,
+.ticker::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  z-index: 2;
+  pointer-events: none;
+}
 
-/* The static marker: an accent bar and a quiet LIVE label. No pulse. */
+.ticker::before {
+  inset-inline-start: 0;
+  background: linear-gradient(90deg, var(--ticker-plate), transparent);
+}
+
+.ticker::after {
+  inset-inline-end: 0;
+  background: linear-gradient(270deg, var(--ticker-plate), transparent);
+}
+
+.ticker-skel { height: 46px; margin: 10px 12px 6px; border-radius: 16px; }
+
+/* The static marker: a 2px accent bar and a quiet LIVE label. No pulse. */
 .ticker-mark {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   align-self: stretch;
-  padding-inline: 12px 10px;
-  background: linear-gradient(90deg, rgba(56, 225, 255, 0.09), transparent);
+  padding-inline: 13px 11px;
+  background: linear-gradient(90deg, rgba(56, 225, 255, 0.1), rgba(56, 225, 255, 0));
+}
+
+.ticker-mark::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  width: 1px;
+  height: 17px;
+  margin-top: -8.5px;
+  background: linear-gradient(180deg, transparent, var(--ticker-hair), transparent);
 }
 
 .ticker-mark-bar {
@@ -1147,38 +1196,39 @@ select option {
   font-size: 8.5px;
   font-weight: 900;
   letter-spacing: 0.18em;
-  color: #7fa8c4;
+  color: #84aecb;
 }
 
-/* Soft edge fades live on the viewport, so the rail mark stays crisp. */
 .ticker-viewport {
   position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
 }
 
 .ticker-track {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0;
   flex-shrink: 0;
-  will-change: transform;
   animation: ticker-run 96s linear infinite;
   direction: ltr !important;
 }
-.ticker:hover .ticker-track { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .ticker-track { animation-duration: 180s; } }
+
+.ticker:hover .ticker-track,
+.ticker:focus-within .ticker-track { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation-duration: 200s; }
+}
 
 @keyframes ticker-run {
   from { transform: translate3d(0, 0, 0); }
   to { transform: translate3d(-100%, 0, 0); }
 }
 
-/* Hairline between segments — the tape's only divider, no boxes. */
+/* Hairline between segments — the tape's only divider. */
 .ticker-track > * { position: relative; }
 .ticker-track > * + *::before {
   content: '';
@@ -1186,19 +1236,24 @@ select option {
   inset-inline-start: 0;
   top: 50%;
   width: 1px;
-  height: 13px;
-  margin-top: -6.5px;
-  background: rgba(255, 255, 255, 0.08);
+  height: 14px;
+  margin-top: -7px;
+  background: linear-gradient(180deg, transparent, var(--ticker-hair), transparent);
   pointer-events: none;
 }
 
+/*
+   THE SEGMENT. Full height, centred contents, symmetric padding — so nothing
+   inside the rail is stretched by the rail, and the numbers keep one baseline.
+*/
 .ticker-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 13px;
+  gap: 7px;
+  height: 100%;
+  padding: 0 12px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 0;
   background: none;
   color: inherit;
   font-family: var(--font-mono);
@@ -1208,21 +1263,63 @@ select option {
   cursor: pointer;
   transition: background-color 0.18s ease;
 }
-.ticker-item:hover { background: rgba(255, 255, 255, 0.06); }
 
-.ticker-sym { color: var(--text-1); font-weight: 800; letter-spacing: 0.02em; }
-.ticker-price { color: var(--text-2); }
-.ticker-change.is-up { color: var(--up); font-weight: 800; }
-.ticker-change.is-down { color: var(--down); font-weight: 800; }
+.ticker-item:hover { background: rgba(120, 180, 255, 0.07); }
+.ticker-item:focus-visible { outline: 2px solid #38e1ff; outline-offset: -2px; }
+
+.ticker-item .coin-logo {
+  border-radius: 7px;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ticker-sym {
+  color: var(--text-1);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: 10.5px;
+}
+
+.ticker-price {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The change is a PILL: a hue the eye can find while the tape is moving, and
+   an arrow that survives colour blindness. */
+.ticker-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2.5px 6px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ticker-change-arrow { font-size: 6.5px; line-height: 1; opacity: 0.9; }
+
+.ticker-change.is-up {
+  color: var(--up);
+  background: color-mix(in srgb, var(--up) 13%, transparent);
+}
+
+.ticker-change.is-down {
+  color: var(--down);
+  background: color-mix(in srgb, var(--down) 13%, transparent);
+}
 
 /* Promos are single-line accent tags: dot, name, move. Nothing stacked. */
 .ticker-promo {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 13px;
+  height: 100%;
+  padding: 0 12px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 0;
   background: none;
   color: inherit;
   font: inherit;
@@ -1231,25 +1328,27 @@ select option {
   transition: background-color 0.18s ease;
   --ticker-accent: #7b7bff;
 }
-.ticker-promo:hover { background: rgba(255, 255, 255, 0.06); }
+
+.ticker-promo:hover { background: rgba(120, 180, 255, 0.07); }
+.ticker-promo:focus-visible { outline: 2px solid var(--ticker-accent); outline-offset: -2px; }
 
 .ticker-promo-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  flex: 0 0 6px;
+  flex: 0 0 5px;
   background: var(--ticker-accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--ticker-accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ticker-accent) 15%, transparent);
 }
 
 .ticker-promo-title {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   color: var(--text-1);
 }
 
 .ticker-promo-growth {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 900;
   color: var(--ticker-accent);
   direction: ltr;
@@ -3068,13 +3167,63 @@ a.wallet-option,
   place-items: center;
 }
 
+/*
+   THE BANNER'S AMBIENT MOTION, IN CSS.
+   Both used to be `repeat: Infinity` framer-motion loops — a rAF callback and
+   a style write on the main thread every frame, on nine screens, forever. Same
+   look, run by the compositor, and freezable from one attribute.
+
+   The blur is gone too: a radial gradient with soft stops is the same soft
+   glow without asking the rasteriser to blur a scaled layer 60 times a second.
+*/
 .ad-art-glow {
   position: absolute;
-  inset: 2px;
+  inset: -5px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--ad-a), transparent 70%);
-  filter: blur(9px);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ad-a) 82%, transparent) 0%, transparent 68%);
+  opacity: 0.45;
   pointer-events: none;
+  animation: ad-glow-pulse 3.4s ease-in-out infinite;
+}
+
+@keyframes ad-glow-pulse {
+  0%, 100% { opacity: 0.38; transform: scale(1); }
+  50% { opacity: 0.62; transform: scale(1.22); }
+}
+
+.ad-art-svg { animation: ad-art-float 4s ease-in-out infinite; }
+
+@keyframes ad-art-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, -3px, 0) rotate(4deg); }
+}
+
+/*
+   The signal line sweeps itself in as a dash, mirrored, like the JS path-length
+   loop it replaces. `stroke-dasharray` is on the inline geometry so the sweep
+   follows the actual path length closely enough at 34px.
+*/
+.ad-art-signal {
+  stroke-dasharray: 46;
+  animation: ad-signal-sweep 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes ad-signal-sweep {
+  from { stroke-dashoffset: 46; }
+  to { stroke-dashoffset: 0; }
+}
+
+.ad-banner[data-still='true'] .ad-art-glow,
+.ad-banner[data-still='true'] .ad-art-svg,
+.ad-banner[data-still='true'] .ad-art-signal {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-art-glow,
+  .ad-art-svg,
+  .ad-art-signal { animation: none !important; }
+  .ad-art-signal { stroke-dasharray: none; }
 }
 
 /* ==========================================================================

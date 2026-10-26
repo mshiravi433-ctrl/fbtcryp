@@ -87,6 +87,9 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
   return (
     <motion.button
       className={`ad-banner${premium ? ' ad-banner--premium' : ''}`}
+      /* `data-still` is what the stylesheet reads to freeze the two CSS
+         animations below (packaged app, reduced motion, low-memory device). */
+      data-still={still ? 'true' : undefined}
       onClick={go}
       whileTap={{ scale: 0.985 }}
       initial={{ opacity: 0, y: 12 }}
@@ -118,19 +121,24 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
           a raster image would clash with the RGB palette and bloat the APK. */}
       <span className="ad-art" aria-hidden="true">
         {premium && <span className="ad-art-blip" />}
-        <motion.span
-          className="ad-art-glow"
-          animate={still ? { scale: 1, opacity: 0.45 } : { scale: [1, 1.25, 1], opacity: [0.35, 0.6, 0.35] }}
-          transition={still ? { duration: 0 } : { duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.svg
+        {/*
+          ─── THE TWO LOOPS THAT USED TO RUN IN JAVASCRIPT ───────────────────
+          The glow pulse and the floating artwork were `repeat: Infinity`
+          framer-motion animations. That is a requestAnimationFrame callback
+          plus a style write on the main thread EVERY FRAME, for the life of
+          every screen the banner is mounted on — nine of them — and the market
+          screen mounts it directly above a 250-row list. The exact same motion
+          is a CSS keyframe on transform/opacity, which the compositor can run
+          with no script at all, and which stops dead under reduced motion.
+        */}
+        <span className="ad-art-glow" style={{ animationDelay: `${delay}s` }} />
+        <svg
+          className="ad-art-svg"
           viewBox="0 0 40 40"
           width="40"
           height="40"
           fill="none"
-          animate={still ? { y: 0, rotate: 0 } : { y: [0, -3, 0], rotate: [0, 4, 0] }}
-          transition={still ? { duration: 0 } : { duration: 4, repeat: Infinity, ease: 'easeInOut', delay }}
-          style={{ position: 'relative', zIndex: 1 }}
+          style={{ position: 'relative', zIndex: 1, animationDelay: `${delay}s` }}
         >
           <defs>
             {/*
@@ -246,14 +254,15 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
           )}
 
           {slot === 'signals' && (
-            <motion.path
+            /* Drawn as a CSS dash sweep, not a JS path-length loop — this is
+               the one slot the market screen shows on every visit. */
+            <path
+              className="ad-art-signal"
               d="M5 27l7-8 6 5 9-12 8 7"
               stroke={`url(#adg-${slot})`}
               strokeWidth="2.6"
               strokeLinecap="round"
               strokeLinejoin="round"
-              animate={{ pathLength: [0, 1] }}
-              transition={still ? { duration: 0 } : { duration: 2.4, repeat: Infinity, repeatType: 'reverse' }}
             />
           )}
 
@@ -283,7 +292,7 @@ export default function AdBanner({ slot = 'swap', compact = false, external = nu
               style={{ transformOrigin: '20px 20px' }}
             />
           )}
-        </motion.svg>
+        </svg>
       </span>
 
       {/* Class names exist so a premium slot can retune typography from CSS
