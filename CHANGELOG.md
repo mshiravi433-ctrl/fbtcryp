@@ -1,3 +1,14 @@
+# ۲۰۲۶-۱۰-۲۶ — فعال‌سازی تاریخچهٔ فقط‌خواندنی فیوچرز وب، TP/SL هنوز fail-closed، اصلاح ادعای کاتالوگ آن‌چین
+
+جزئیات و دلیل‌ها: [2026-10-26-futures-history-and-onchain-category-fa.md](docs/2026-10-26-futures-history-and-onchain-category-fa.md).
+
+- **تاریخچهٔ فیوچرز واقعاً به ریل وب وصل شد:** `FuturesHistory` اکنون lazy و فقط با هر دو فلگ `SPECULATION_ENABLED` و `FUTURES_HISTORY_ENABLED` mount می‌شود؛ `build:full` فایل `ci/web-season.env.sh` را پیش از Vite می‌خواند و فقط در `VERCEL_ENV=production` مقدار `VITE_ENABLE_FUTURES_HISTORY=true` می‌گیرد. Preview/dev و `android:sync` (سه فلگ صریحاً false) بدون تغییرِ رفتار fail-closed می‌مانند. تاریخچه فقط‌خواندنی است: فیل‌ها و سفارش‌های پرشدهٔ dYdX از پروکسی هم‌مبدأ؛ PnL محقق‌شده «—»؛ Ostium و Velocity unavailable با دلیل، نه دادهٔ ساختگی.
+- **TP/SL dYdX عمداً خاموش ماند:** egress این محیط به endpointهای dYdX testnet دسترسی نمی‌دهد و اعتبارنامهٔ testnet در محیط حاضر نبود؛ زمان انقضای لغو و LIMIT+IOC با SDK پین‌شدهٔ 3.4.0 تأیید نشدند. هیچ کلید testnet، تراکنش testnet یا mainnet ساخته/ارسال نشد. گام دستیِ باقی‌مانده، آزمودن هر دو رفتار با حساب testnet تازه و فقط کلید محلی، و تأیید وضعیت از indexer است. برچسب «برآورد» و نشست فقط‌درحافظه حفظ شدند.
+- **اصلاح شفاف ناسازگاری changelog/code:** ادعای ورودی تاریخی `Unreleased — On-Chain futures: Drift → Velocity migration` مبنی بر ادغام همهٔ ونیوها و نمایش چیپ‌های Forex/کالا/شاخص/سهام/ETF با کد ارسالی نمی‌خواند. کد و کامنت تصمیم فعلی را پین کرده‌اند: `ONCHAIN_VENUES = ['drift']`، فقط چیپ Crypto؛ بازارهای سنتی لینک به `/stocks?tab=ostium` هستند. این ادعا در یادداشت تازه صریحاً superseded/ناسازگار علامت خورد؛ تصمیم محصول برای ادغام چندونوویی تغییر نکرد. نگاشت‌های مردهٔ `friendlyCategory` حذف شدند، fallback `Other` و رندر/testid/linkها حفظ شدند.
+- **اثبات:** `npm run test:tpsl-depth-history` سبز (۶۴ + ۱۴ + ۱۶)، `npm run test:futures` سبز (۵۰ + ۳۷)، پروب `futures-onchain` در `npm test` سبز (۶۲/۶۲)، `npm run build` سبز (۱۷۰۹٫۵۵/۱۷۵۰ KB). باندل Vite واقعی `Perp-CaDZquNy.js → FuturesHistory-B0Rb_B-5.js` را دارد و تست flag خروجی `FUTURES_HISTORY_ENABLED=true` را اثبات کرد. `wiring`: بیس‌لاین `main` برابر ۶۰ و این شاخه ۵۹ شکست با همان نام‌های باقی‌مانده، صفر شکست تازه. [گزارش کامل، از جمله کوتاه‌شدن runner قدیمی پس از Business PASS](docs/2026-10-26-futures-history-and-onchain-category-fa.md). فعال‌سازی ریفرر Velocity و cron sweep (کار اپراتوری حدود ۱–۲ دلار) خارج از محدوده است.
+
+---
+
 # ۲۰۲۶-۱۰-۲۶ — پروب صادقانهٔ قیمت‌های Robinhood و استخراج پنل‌های Stocks
 
 جزئیات و شواهد: [2026-10-26-stocks-live-prices-and-panel-extraction-fa.md](2026-10-26-stocks-live-prices-and-panel-extraction-fa.md).

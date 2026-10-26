@@ -10,20 +10,32 @@
 
 ## ۱. ساختار تب‌ها
 
-صفحهٔ فیوچرز (`/perp`) حالا سه تب دارد، در همان کنترل segmented قبلی، با همان
-اندازه و همان نشانگر (`SegIndicator id="perp-tab"`):
+صفحهٔ فیوچرز (`/perp`) سه تب اصلی دارد؛ در وبِ production که تاریخچه rollout شده،
+تب چهارمِ `history` نیز به همان کنترل segmented و نشانگر
+(`SegIndicator id="perp-tab"`) اضافه می‌شود:
 
 | کلید | en | fa | چه چیزی است |
 |---|---|---|---|
 | `overview` | Perpetual | پرپچوال | همان صفحهٔ مرور قبلی: قیمت شاخص، فاندینگ، جدول لیکوییدیشن، آموزش |
 | `dydx` | dYdX Orbit | مدار dYdX | همان تب dYdX قبلی (نشست client-signed) |
-| `onchain` | On-Chain | آن‌چین | **جدید** — موتور اجرای آن‌چین (Ostium روی Arbitrum) |
+| `onchain` | On-Chain | آن‌چین | موتور اجرای آن‌چینِ کریپتو؛ بازارهای سنتی در این تب ادغام نمی‌شوند |
+| `history` | Trade history (read-only) | تاریخچهٔ معاملات (فقط‌خواندنی) | وب production فقط؛ dYdX از پروکسی هم‌مبدأ، سایر ونیوها صادقانه unavailable |
 
 هیچ طراحی تازه‌ای وارد نشده؛ تب سوم از همان کارت‌ها، دکمه‌ها، `dir-switch`،
 `lev-chip`، `brg-quote` و شیشه‌های `derivatives-glass.css` استفاده می‌کند.
 
+**مرز کاتالوگ در کد ارسالی:** `src/pages/FuturesOnchain.jsx` عمداً فقط شناسهٔ
+ونیو `drift` (مسیر اجرایی Velocity روی سولانا) را فهرست می‌کند و فقط چیپ
+`Crypto` را می‌سازد. Forex، کالا، شاخص، سهام و ETF در این صفحه ادغام نمی‌شوند؛
+دکمهٔ بازارهای سنتی فقط به `/stocks?tab=ostium` می‌رود. بنابراین شرح قدیمیِ
+ادغام کاتالوگ چندونوویی با چیپ‌های Forex/کالا/شاخص/سهام/ETF در ورودی تاریخی
+چنج‌لاگ با کد ارسال‌شده هم‌خوان نیست؛ رجیستریِ چندپروتکلی یا وجود آداپتر Ostium
+به‌تنهایی به معنی نمایش بازارهای آن در همین تب نیست.
+
 لینک عمیق: `/perp?tab=onchain` (و برای Intent OS:
-`&market=BTC&side=long&collateral=100&leverage=5`).
+`&market=BTC&side=long&collateral=100&leverage=5`). تاریخچهٔ فقط‌خواندنی از
+`/perp?tab=history` در بیلد وب production که rollout آن فعال است در دسترس است؛
+فلگ Android همچنان خاموش می‌ماند.
 
 ---
 
@@ -52,13 +64,15 @@
 - وضعیت **همیشه از probe زنده** (فید قیمت + ساب‌گراف) مشتق می‌شود. هیچ جای کد
   `status: 'AVAILABLE'` نوشته نشده؛ تست wiring این را پین کرده است.
 - متغیرهای محیطی فقط می‌توانند دسترسی را کم کنند:
-  `FUTURES_PROVIDERS_ENABLED` (پیش‌فرض `ostium,dydx`)،
+  `FUTURES_PROVIDERS_ENABLED` (پیش‌فرض `drift,ostium,dydx`)،
   `FUTURES_PROVIDERS_MAINTENANCE`، `FUTURES_PROVIDERS_BLOCKED`.
 - Binance / Bybit / KuCoin / MEXC در `FORBIDDEN_PROVIDER_IDS` هستند و همیشه
   `BLOCKED` گزارش می‌شوند. هیچ API معاملاتی CEX ساخته نشده و نبودش صفحه را
   نمی‌شکند.
-- GMX / Avantis / Hyperliquid / Drift در کاتالوگ با `execution: NOT_BUILT` هستند:
-  در مقایسهٔ چندپروتکلی دیده می‌شوند ولی «پیکربندی‌نشده» و غیرقابل معامله.
+- GMX / Avantis / Hyperliquid و سایر ورودی‌های صرفاً کاتالوگی با
+  `execution: NOT_BUILT` غیرقابل معامله‌اند. شناسهٔ `drift` استثناست: در این
+  کد نام داخلی/سازگار با ledger برای مسیر اجرایی Velocity است؛ تب On-Chain فقط
+  بازارهای کریپتوی همین مسیر را می‌آورد و از آن کاتالوگ چندونوویی نمی‌سازد.
 
 ### کارمزد (FBTFuturesFeeEngine)
 
