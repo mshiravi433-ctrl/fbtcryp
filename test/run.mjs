@@ -61,6 +61,10 @@ import './responsive-layout-probe.mjs';
  * execute. Do not move this import below the Business one.
  */
 import './learn-hub-locales-probe.mjs';
+/* Explore › کشف: the Persian/English locale contract, the search + suggestion
+   engine, and the redesigned card popup. Must sit above the Business probe for
+   the same reason as the Learn hub one (see the note above). */
+import './discover-redesign-probe.mjs';
 /* The /business B2B console: every string it paints resolves in Persian and
    English, the tab and sub-tab labels resolve in all twelve locales, and the
    keys test/wiring.mjs also demands everywhere exist everywhere. It is the

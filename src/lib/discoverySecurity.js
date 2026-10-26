@@ -10,7 +10,7 @@
  * Never claims a site is safe merely because it opens in the internal browser.
  */
 
-import { isSafeUrl } from './browser';
+import { isSafeUrl } from './browser.js';
 
 const KNOWN_PHISHING_HINTS = [
   // Common lookalikes — substring triggers a warning, not a block
@@ -58,7 +58,7 @@ export function validateDiscoveryUrl(raw) {
   // Suspicious TLD
   for (const tld of SUSPICIOUS_TLDS) {
     if (host.endsWith(tld)) {
-      res.warnings.push({ level: 'warn', code: 'suspicious-tld', message: `Uncommon domain ending (${tld}) often used for phishing. Double-check the address.` });
+      res.warnings.push({ level: 'warn', code: 'suspicious-tld', message: `Uncommon domain ending (${tld}) often used for phishing. Double-check the address.`, tld });
       res.looksPhishy = true;
       break;
     }
@@ -96,15 +96,15 @@ export function chainSupportWarnings(protocol, activeChainId) {
   if (!Array.isArray(protocol.chainIds) || protocol.chainIds.length === 0) return warns;
   if (!protocol.chainIds.includes(Number(activeChainId))) {
     const name = protocol.chains?.join(', ') || String(protocol.chainIds.join(', '));
-    warns.push({ level: 'info', code: 'unsupported-chain', message: `This dApp runs on ${name}. Your wallet is on a different network — you can still browse, but transactions will need a network switch.` });
+    warns.push({ level: 'info', code: 'unsupported-chain', message: `This dApp runs on ${name}. Your wallet is on a different network — you can still browse, but transactions will need a network switch.`, chains: name });
   }
   return warns;
 }
 
 export function auditNotice(protocol) {
   if (!protocol) return null;
-  if (protocol.audits == null) return { level: 'info', text: 'No audit information available for this protocol. This does not mean it is unsafe — only that no audit was reported in the registry.' };
-  if (Number(protocol.audits) === 0) return { level: 'warn', text: 'No audits reported for this protocol. Review contracts and permissions before approving transactions.' };
+  if (protocol.audits == null) return { level: 'info', code: 'no-audit-info', text: 'No audit information available for this protocol. This does not mean it is unsafe — only that no audit was reported in the registry.' };
+  if (Number(protocol.audits) === 0) return { level: 'warn', code: 'zero-audits', text: 'No audits reported for this protocol. Review contracts and permissions before approving transactions.' };
   return null;
 }
 

@@ -1,3 +1,5 @@
+import { normalizeText } from './discoveryText.js';
+
 /**
  * DISCOVERY AI — rule-based natural-language interpreter for Web3 discovery.
  *
@@ -49,7 +51,10 @@ const SORT_KEYWORDS = {
 };
 
 export function parseAiQuery(raw) {
-  const q = String(raw || '').toLowerCase().trim();
+  /* normalizeText() latinizes Persian intent words («وام» → lending,
+   * «آربیتروم» → arbitrum) before any keyword check, so the same parser
+   * serves both languages without two copies of the rules. */
+  const q = normalizeText(raw);
   if (!q) return null;
 
   let chain = null;
@@ -135,6 +140,19 @@ export const AI_EXAMPLES = [
   'Compare DEX protocols across supported networks',
   'Show newly discovered protocols with available security information',
 ];
+
+/** Same four intents, written the way a Persian user would type them. */
+export const AI_EXAMPLES_FA = [
+  'وامدهی روی آربیتروم',
+  'پروتکلهای سود در BNB',
+  'مقایسهٔ صرافیها در شبکههای مختلف',
+  'پروتکلهای جدید با اطلاعات امنیتی',
+];
+
+/** The example set for the active language. */
+export function aiExamplesFor(lang) {
+  return lang === 'fa' ? AI_EXAMPLES_FA : AI_EXAMPLES;
+}
 
 /**
  * Attempt to call the backend AI gateway for a natural-language discovery query.
