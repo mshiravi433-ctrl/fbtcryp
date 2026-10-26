@@ -64,7 +64,7 @@
     "android:sync": "VITE_ENABLE_SPECULATION=false VITE_ENABLE_DYDX_TPSL=false VITE_ENABLE_FUTURES_HISTORY=false VITE_ENABLE_SPOT_DEPTH=false npm run build && npx cap sync android",
     "android:apk": "node ci/lock-platform-guard.mjs && npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:open": "npx cap open android",
-    "test": "node test/run.mjs",
+    "test": "node test/futures-onchain-run.mjs && node test/run.mjs",
     "test:tpsl-depth-history": "node --test test/tpsl-depth-history.test.mjs test/season-activation.test.mjs && node --test --test-force-exit test/tpsl-depth-history-server.test.mjs && vitest run test/tpsl-depth-history-ui.test.jsx",
     "test:spot": "node --test test/spot-trade-math.test.mjs test/spot-trade-flow.test.mjs test/spot-trade-static.test.mjs && vitest run test/spot-trade-ui.test.jsx",
     "test:farm": "vitest run test/farm-defi.test.js test/farm-defillama-api.test.js test/farm-defillama-client.test.js test/farm-defillama-ui.test.jsx test/compound-defi.test.js test/farm-aave-panel.test.jsx test/farm-aave-arb-panel.test.jsx test/farm-compound-panel.test.jsx test/farm-lido-panel.test.jsx test/defi-execution-guards.test.js test/morpho-defi.test.js test/lido-defi.test.js test/farm-rollout-gate.test.js test/farm-position-hub.test.jsx test/farm-public-mode.test.js test/farm-pool-execution.test.jsx test/farm-venue-rail.test.jsx test/farm-venue-pins.test.js test/farm-greenhouse-hero.test.jsx",

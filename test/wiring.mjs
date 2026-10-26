@@ -13991,9 +13991,9 @@ export default function run() {
     const enL = JSON.parse(read('src/i18n/locales/en.json'));
     const faL = JSON.parse(read('src/i18n/locales/fa.json'));
 
-    /* the tab joins the SAME segmented control, in the same array, same indicator */
-    t('the Futures page has exactly three tabs: overview · dydx · onchain',
-      /PERP_TABS = SPECULATION_ENABLED \? \['overview', 'dydx', 'onchain'\]/.test(perp));
+    /* the history tab joins the SAME segmented control only in the web rollout */
+    t('the Futures rail has three core tabs and only adds history behind its web flag',
+      /const FUTURES_TABS = SPECULATION_ENABLED\s*\?\s*\['overview', 'dydx', 'onchain', \.\.\.\(FUTURES_HISTORY_ENABLED \? \['history'\] : \[\]\)\]\s*:\s*\[\];/.test(perp));
     t('the On-Chain tab renders through the same SegIndicator id as the others',
       (perp.match(/<SegIndicator id="perp-tab" \/>/g) || []).length === 1 && /TAB_LABEL_KEY\[k\]/.test(perp));
     t('the tab labels are i18n keys, not literals',

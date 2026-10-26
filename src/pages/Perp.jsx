@@ -20,7 +20,7 @@ import { fmtPct, fmtPrice, fmtUsd } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
 import { useWallet, shortAddress } from '../context/WalletContext';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
+import { FUTURES_HISTORY_ENABLED, SPECULATION_ENABLED, SPOT_TRADE_ENABLED } from '../lib/features';
 import { getFuturesFeePreview, getFuturesMarkets, prepareFutures, verifyFutures } from '../lib/futuresClient';
 import { liquidationDistance } from '../lib/futures-engine';
 import {
@@ -48,12 +48,15 @@ const LazyDydx = SPECULATION_ENABLED ? lazyRetry(() => import('./Dydx')) : null;
  * the store builds ship neither leveraged tab.
  */
 const LazyOnchain = SPECULATION_ENABLED ? lazyRetry(() => import('./FuturesOnchain')) : null;
+const LazyFuturesHistory = SPECULATION_ENABLED && FUTURES_HISTORY_ENABLED
+  ? lazyRetry(() => import('../components/futures/FuturesHistory'))
+  : null;
 /*
  * `spot` is the user's own-wallet spot trade (components/spot). It is listed
  * whenever SPOT_TRADE_ENABLED is on, and it is NOT gated by SPECULATION: the
  * futures tabs below are the only ones that depend on that flag.
  */
-const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain' };
+const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx: 'stocks.tab.dydx', onchain: 'perp.tab.onchain', history: 'futures.history.title' };
 
 /**
  * One icon per venue, so the rail says what each tab IS instead of asking the
@@ -62,7 +65,7 @@ const TAB_LABEL_KEY = { spot: 'trade.spot', overview: 'perp.tab.perpetual', dydx
  *   dydx     → the activity of an external, client-signed venue
  *   onchain  → the shield, because that tab is the self-custodial one
  */
-const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield };
+const TAB_ICON = { spot: IconSwap, overview: IconTrend, dydx: IconActivity, onchain: IconShield, history: IconActivity };
 
 /*
  * ─── THERE IS NO EXTERNAL VENUE ON THIS PAGE ANY MORE ─────────────────────
@@ -312,7 +315,9 @@ export default function Perp() {
       const wanted = new URLSearchParams(raw).get('tab');
       if (wanted === 'spot' && SPOT_TRADE_ENABLED) return 'spot';
       const futuresTabs = ['dydx', 'onchain'];
-      return SPECULATION_ENABLED && futuresTabs.includes(wanted) ? wanted : 'overview';
+      if (SPECULATION_ENABLED && futuresTabs.includes(wanted)) return wanted;
+      if (SPECULATION_ENABLED && FUTURES_HISTORY_ENABLED && wanted === 'history') return 'history';
+      return 'overview';
     } catch { return 'overview'; }
   })();
   const [perpTab, setPerpTab] = useState(initialTab);
@@ -321,9 +326,10 @@ export default function Perp() {
    * futures tabs appear only in the speculation build. A single tab hides the
    * rail, so the content does not jump when only one tab is left.
    */
-  const FUTURES_TABS = SPECULATION_ENABLED ? ['overview', 'dydx', 'onchain'] : [];
+  const FUTURES_TABS = SPECULATION_ENABLED
+    ? ['overview', 'dydx', 'onchain', ...(FUTURES_HISTORY_ENABLED ? ['history'] : [])]
+    : [];
   const PERP_TABS = [...(SPOT_TRADE_ENABLED ? ['spot'] : []), ...FUTURES_TABS];
-  /* The rail: the futures tabs, no read-only history surface. */
   const RAIL_TABS = PERP_TABS;
   /*
    * A rail click also writes `tab` into the URL. Without that, a user who
@@ -627,6 +633,7 @@ export default function Perp() {
       const want = new URLSearchParams(location.search || '').get('tab');
       const deepLinkable = ['onchain', 'dydx'];
       if (deepLinkable.includes(want) && want !== perpTab) setPerpTab(want);
+      if (FUTURES_HISTORY_ENABLED && want === 'history' && perpTab !== 'history') setPerpTab('history');
     } catch { /* a malformed query is not worth breaking the page over */ }
   }, [location.search, perpTab]);
   useEffect(() => {
@@ -997,6 +1004,10 @@ export default function Perp() {
       ) : perpTab === 'onchain' ? (
         <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
           {LazyOnchain && <LazyOnchain embedded />}
+        </Suspense>
+      ) : perpTab === 'history' && FUTURES_HISTORY_ENABLED ? (
+        <Suspense fallback={<div className="card" style={{ minHeight: 240, display: 'grid', placeItems: 'center', marginTop: 16 }}><div className="spinner" /></div>}>
+          {LazyFuturesHistory && <LazyFuturesHistory onOpenDydx={() => selectTab('dydx')} />}
         </Suspense>
       ) : (
         <div className="perp-modern">
