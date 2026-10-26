@@ -2,44 +2,25 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import PageTransition, { riseIn, stagger } from '../components/PageTransition';
-import CoinLogo from '../components/CoinLogo';
+import PageTransition, { riseIn } from '../components/PageTransition';
 import InfoBox from '../components/InfoBox';
-import Sparkline from '../components/Sparkline';
-import EquityRow from '../components/EquityRow';
-import EquityHoldings, { useSolanaEquityHoldings } from '../components/EquityHoldings';
-import GoldHistoryBox from '../components/GoldHistoryBox';
-import TopMovers from '../components/TopMovers';
 import { useMarkets } from '../hooks/useMarket';
 import { getCategoryPages } from '../lib/api';
-import { fmtCompact, fmtPct, fmtPrice, fmtUsd } from '../lib/format';
+import { fmtCompact } from '../lib/format';
 import { useTelegram } from '../context/TelegramContext';
-import { IconSearch } from '../components/Icons';
-import SegIndicator from '../components/SegIndicator';
-/*
- * The Robinhood board renders through StockTokenCard, which owns the artwork
- * rule for it: TokenIcon (not CoinLogo), because those tiles are CONTRACTS and
- * TokenIcon resolves artwork by chain + address first — the impersonation-proof
- * rule lib/tokenIcon.jsx documents. CoinLogo is for rows with no contract at
- * all (the reference table).
- */
-import StockTokenCard from '../components/StockTokenCard';
 import { loadStockTokenPrices } from '../lib/stockPrices';
 import { loadStockTokenCharts } from '../lib/stockCharts';
 import { MIN_EQUITY_LIQUIDITY, getSolanaAssets } from '../lib/solanaAssetsClient';
 import { THIN_ASSETS } from '../lib/solanaAssets';
 import { solanaSellUrl } from '../lib/solanaSell';
 import { useSolanaWallet } from '../hooks/useSolanaWallet';
-import RwaRow from '../components/RwaRow';
 import RwaDetailSheet from '../components/RwaDetailSheet';
 import {
-  RWA_CATEGORIES,
   RWA_CURATED_TOKENS,
   getRwaSwapUrl,
   enrichWithMarketPrices,
   fetchRwaMarketplace
 } from '../lib/rwaTokens';
-import { feePercentString } from '../lib/feeBps';
 /*
  * No `venueReferral` import any more, and that absence is deliberate.
  *
@@ -52,16 +33,21 @@ import { feePercentString } from '../lib/feeBps';
 import { fetchAvantisEquities } from '../lib/avantisEquities';
 import {
   ROBINHOOD_CHAIN_ID,
-  ROBINHOOD_CHAIN_NAME,
   loadStockTokenUniverse,
-  referencePriceFor,
   stockTokenSwapUrl
 } from '../lib/stockTokens';
 import { SPECULATION_ENABLED } from '../lib/features';
 import lazyRetry from '../lib/lazyRetry';
-import RwaHorizonSwapBanners from '../components/RwaHorizonSwapBanners';
 import RwaSectionBanner from '../components/RwaSectionBanner';
 import StockSubtabs from '../components/StockSubtabs';
+import StocksHeadingTabs from '../components/stocks/StocksHeadingTabs';
+import EquityBoard from '../components/stocks/EquityBoard';
+import RobinhoodStockBoard from '../components/stocks/RobinhoodStockBoard';
+import EquityGoldPanel from '../components/stocks/EquityGoldPanel';
+import EquityDisclosures from '../components/stocks/EquityDisclosures';
+import RwaAssetsPanel from '../components/stocks/RwaAssetsPanel';
+import RwaTokensPanel from '../components/stocks/RwaTokensPanel';
+import { useSolanaEquityHoldings } from '../components/EquityHoldings';
 
 /*
  * These are tab routes, not imports. The Stocks page is already a lazy route,
@@ -266,23 +252,10 @@ function sectorOf(a) {
   return 'other';
 }
 
-const RWA_SORTS = ['mcap', 'gainers', 'volume'];
-
 function avgChange(rows, pick) {
   const vals = rows.map(pick).filter((v) => Number.isFinite(v));
   if (!vals.length) return null;
   return vals.reduce((s, v) => s + v, 0) / vals.length;
-}
-
-function StatMini({ label, value, tone }) {
-  return (
-    <div className="card card-tight" style={{ textAlign: 'center', padding: '10px 6px' }}>
-      <div className="faint" style={{ fontSize: 10.5, marginBottom: 3 }}>{label}</div>
-      <div className={`mono ${tone === 'up' ? 'up' : tone === 'down' ? 'down' : ''}`} style={{ fontSize: 13, fontWeight: 700 }}>
-        {value}
-      </div>
-    </div>
-  );
 }
 
 export default function Stocks() {
@@ -841,26 +814,7 @@ export default function Stocks() {
 
   return (
     <PageTransition>
-      <motion.div variants={riseIn} initial="hidden" animate="show">
-        <h1 className="h1">{t('stocks.title')}</h1>
-        <p className="muted">{t('stocks.subtitle')}</p>
-      </motion.div>
-
-      <div className="segmented" role="tablist" aria-label={t('stocks.title')}>
-        {STOCK_TABS.map((k) => (
-          <button
-            key={k}
-            role="tab"
-            aria-selected={tab === k}
-            className={tab === k ? 'active' : ''}
-            onClick={() => setTab(k)}
-            style={{ isolation: 'isolate' }}
-          >
-            {tab === k && <SegIndicator id="stk" />}
-            {t(`stocks.tab.${k}`)}
-          </button>
-        ))}
-      </div>
+      <StocksHeadingTabs t={t} tabs={STOCK_TABS} tab={tab} setTab={setTab} />
 
       {tab === 'equity' ? (
         <>
@@ -877,643 +831,89 @@ export default function Stocks() {
           >
             {equitySubview === 'tokenized' && (
               <>
-          <motion.section className="card card-rgb card-glow-cyan" variants={riseIn} initial="hidden" animate="show">
-            <div className="sheen" />
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 5 }}>{t('stocks.realTitle')}</div>
-            <p className="muted" style={{ fontSize: 12.3, margin: 0 }}>{t('stocks.realBody')}</p>
-          </motion.section>
-
-          {/*
-            ─── THE WARNING GOES HERE, ABOVE EVERYTHING ──────────────────────
-            Placement is the entire decision. Put this at the bottom and it
-            becomes the paragraph nobody reads after they have already decided
-            — which is exactly how the APKPure rejection happened: an honest
-            risk notice three paragraphs below the thing it was warning about
-            does not change what anyone does.
-
-            The freeze authority is real and it is used. Tether has frozen over
-            $5bn across roughly 10,000 addresses under the same kind of power.
-            Backed holds the same authority over every xStock, and a user in a
-            jurisdiction the issuer decides not to serve can lose access to a
-            position they already own. Nobody should tap Buy without having
-            read that sentence first.
-          */}
-          {/*
-            ─── NOW COLLAPSED, ON INSTRUCTION ────────────────────────────────
-            Asked for directly: «هشدار را در صفحه باز شونده بزار».
-
-            `defaultOpen` is gone. I argued for keeping it open and the earlier
-            comment above still records that reasoning, so it is worth being
-            straight about the trade rather than quietly flipping a flag.
-
-            What is lost: the freeze text is no longer read without a tap.
-            What is gained is the argument InfoBox itself makes in its header —
-            a collapsed box with a clear title IS read, while a stacked wall of
-            open red slabs is scrolled past. This tab was carrying two
-            permanently-open danger boxes above the first buyable row; at that
-            density neither of them was working.
-
-            The title still names the risk, so the fact survives the fold: it
-            says the issuer can freeze the token, not "more information".
-          */}
-          <motion.div variants={riseIn} initial="hidden" animate="show">
-            <InfoBox title={t('stocks.freezeTitle')} tone="danger" id="stocks-freeze">
-              <p>{t('stocks.freezeBody')}</p>
-            </InfoBox>
-          </motion.div>
-
-          {/* The RWA + Horizon (افق جهانی) banner: two slides that swap
-              horizontally inside one animated glass slab (aurora fields, a
-              border comet, a two-ring orb, a self-drawing sparkline), sized
-              112/128px. Replaced the 3D flip card: on iPhone the two faces
-              painted over each other while rotating — no 3D left for that to
-              happen in. Its only buttons are the two slides: the old indicator
-              dots were <button>s, and the global 44px tap-target rule turned
-              them into the «دکمه چپ و راست» the owner asked to hide. */}
-          <motion.div variants={riseIn} initial="hidden" animate="show">
-            <RwaHorizonSwapBanners
-              haptic={haptic}
-              isRTL={isRTL}
-              lang={i18n.resolvedLanguage || i18n.language}
-              onGoRwa={() => setTab('rwa')}
-              onGoHorizon={() => setTab('ostium')}
-            />
-          </motion.div>
-
-          {/*
-            ─── TOP MOVERS + STATS, ABOVE THE LIST ────────────────────────────
-            The most profitable tokens get their own highlight reel at the top
-            rather than hiding inside a sorted table. Tapping an equity card
-            buys it — the same hand-off as the row's own Buy button.
-          */}
-          {!assetsLoading && !assetsError && equities.length > 0 && (
-            <motion.div variants={riseIn} initial="hidden" animate="show">
-              <TopMovers
-                title={t('stocks.topGainers')}
-                subtitle={t('stocks.topGainersEquitySub')}
-                items={topEquities}
-                logoKind="token"
-                onSelect={(it) => buy(it.raw)}
-                testId="stocks-top-equities"
-              />
-              <div className="grid-3" style={{ marginTop: 4 }}>
-                <StatMini label={t('stocks.stats.listed')} value={equities.length} />
-                <StatMini
-                  label={t('stocks.stats.avgChange')}
-                  value={equityAvg != null ? fmtPct(equityAvg, 1) : '—'}
-                  tone={equityAvg != null ? (equityAvg >= 0 ? 'up' : 'down') : undefined}
+                <EquityBoard
+                  t={t}
+                  isRTL={isRTL}
+                  lang={i18n.resolvedLanguage || i18n.language}
+                  haptic={haptic}
+                  setTab={setTab}
+                  assetsLoading={assetsLoading}
+                  assetsError={assetsError}
+                  equities={equities}
+                  topEquities={topEquities}
+                  equityAvg={equityAvg}
+                  equityDepth={equityDepth}
+                  solAddress={solAddress}
+                  held={held}
+                  sell={sell}
+                  openSolanaWallet={openSolanaWallet}
+                  AMOUNTS={AMOUNTS}
+                  amount={amount}
+                  setAmount={setAmount}
+                  eqSearch={eqSearch}
+                  setEqSearch={setEqSearch}
+                  EQ_SORTS={EQ_SORTS}
+                  eqSort={eqSort}
+                  setEqSort={setEqSort}
+                  SECTOR_ORDER={SECTOR_ORDER}
+                  eqSector={eqSector}
+                  setEqSector={setEqSector}
+                  visibleEquities={visibleEquities}
+                  buy={buy}
+                  filteredEquities={filteredEquities}
+                  EQ_PAGE={EQ_PAGE}
+                  eqShowAll={eqShowAll}
+                  setEqShowAll={setEqShowAll}
+                  THIN_ASSETS={THIN_ASSETS}
                 />
-                <StatMini label={t('stocks.stats.depth')} value={fmtCompact(equityDepth)} />
-              </div>
-            </motion.div>
-          )}
-
-          {/*
-            ─── «سهام من», DIRECTLY ABOVE «قابل خرید» ─────────────────────────
-            What the connected wallet already holds of the tokens below, read
-            from the chain, with a Sell on every row. It sits right above the
-            buy list so the two labels answer each other — yours / available —
-            and so a buyer who comes back from the wallet finds the token they
-            just bought before they find the button they just used. The same
-            holdings also light up the matching rows in the list below.
-          */}
-          <EquityHoldings address={solAddress} held={held} onSell={sell} onOpenWallet={openSolanaWallet} />
-
-          <section>
-            <p className="section-label">{t('stocks.available')}</p>
-
-            {/*
-              The order size drives the depth gate below, so it is a control
-              rather than a display. Default $1,000: large enough that the
-              impact on a thin book is visible, small enough to be realistic.
-            */}
-            <div className="farm-amounts">
-              <span className="faint">{t('stocks.ifIBuy')}</span>
-              <div className="row" style={{ gap: 6 }}>
-                {AMOUNTS.map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    className={`tag ${amount === a ? 'active' : ''}`}
-                    onClick={() => setAmount(a)}
-                  >
-                    {fmtUsd(a)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {assetsLoading && (
-              <div className="stack" style={{ gap: 9, marginTop: 8 }}>
-                {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="skel"
-                    style={{ height: 118, borderRadius: 14 }}
-                    animate={{ opacity: [0.4, 0.9, 0.4] }}
-                    transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.12 }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/*
-              No cached fallback, deliberately — see lib/solanaAssetsClient.js.
-              A stale equity price can be a whole weekend old, and a cached row
-              would survive the issuer check being revoked.
-            */}
-            {!assetsLoading && assetsError && (
-              <p className="notice notice-danger">{t('stocks.unavailable')}</p>
-            )}
-
-            {!assetsLoading && !assetsError && equities.length === 0 && (
-              <p className="notice">{t('stocks.noneTradeable')}</p>
-            )}
-
-            {/* Search + sort — views over the verified list, never a new list. */}
-            {!assetsLoading && !assetsError && equities.length > 0 && (
-              <>
-                <div style={{ position: 'relative', marginTop: 10 }}>
-                  <input
-                    type="text"
-                    value={eqSearch}
-                    onChange={(e) => setEqSearch(e.target.value)}
-                    placeholder={t('stocks.equitySearchPlaceholder')}
-                    spellCheck={false}
-                    autoComplete="off"
-                    enterKeyHint="search"
-                    aria-label={t('stocks.equitySearchPlaceholder')}
-                    style={{
-                      width: '100%',
-                      fontSize: 12.5,
-                      /*
-                       * Styled here rather than by a class: this repo's other
-                       * search fields are inline too, and a plain <input> picks
-                       * up the browser's white box, which is a hole in the dark
-                       * theme. The 36px on the icon side is the clear space for
-                       * the glyph below — measured, not guessed.
-                       */
-                      padding: isRTL ? '10px 36px 10px 12px' : '10px 12px 10px 36px',
-                      background: 'var(--bg-raised)',
-                      border: '1px solid var(--line)',
-                      borderRadius: 12,
-                      color: 'inherit'
-                    }}
-                  />
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      [isRTL ? 'right' : 'left']: 12,
-                      pointerEvents: 'none',
-                      color: 'var(--muted)',
-                      display: 'flex',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <IconSearch width={14} height={14} />
-                  </span>
-                </div>
-
-                <div className="tag-scroll" style={{ marginTop: 8 }}>
-                  {EQ_SORTS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`tag ${eqSort === s ? 'active' : ''}`}
-                      onClick={() => { haptic?.('select'); setEqSort(s); }}
-                    >
-                      {t(`stocks.sort.${s}`)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="tag-scroll" style={{ marginTop: 6 }}>
-                  {SECTOR_ORDER.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`tag ${eqSector === s ? 'active' : ''}`}
-                      onClick={() => { haptic?.('select'); setEqSector(s); }}
-                    >
-                      {t(`stocks.sector.${s}`)}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {visibleEquities.length > 0 ? (
-              <motion.div
-                className="stack"
-                style={{ gap: 10, marginTop: 8 }}
-                variants={stagger}
-                initial="hidden"
-                animate="show"
-              >
-                {visibleEquities.map((a) => (
-                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} holding={held.byMint.get(a.mint) ?? null} onSell={sell} />
-                ))}
-              </motion.div>
-            ) : (
-              !assetsLoading && !assetsError && equities.length > 0 && (
-                <p className="notice" style={{ marginTop: 8 }}>
-                  {eqSearch.trim() ? t('stocks.equityNoMatch') : t('market.sectorEmpty')}
-                </p>
-              )
-            )}
-
-            {filteredEquities.length > EQ_PAGE && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ marginTop: 10 }}
-                onClick={() => { haptic?.('select'); setEqShowAll((v) => !v); }}
-              >
-                {eqShowAll
-                  ? t('stocks.showLess')
-                  : t('stocks.showAll', { count: filteredEquities.length })}
-              </button>
-            )}
-
-            <p className="faint" style={{ marginTop: 10, lineHeight: 1.75 }}>{t('stocks.verifyNote')}</p>
-
-            {/*
-              ─── THE xSTOCKS NOBODY CAN EXIT YET ──────────────────────────────
-              Asked for directly: «تعداد سهام تب اول خیلی کمه». It is, and the
-              reason is not effort — the whole universe was measured (see the
-              note in lib/solanaAssets.js: 223 tickers probed, 161 real xStocks
-              found, 22 with a book worth trading). OF THOSE 22, SIXTEEN WERE
-              ALREADY LISTED ABOVE. These are the other ~139.
-
-              They are NOT rows with a disabled button, deliberately. A list of
-              sixty disabled rows is a wall the reader has to scroll past, and
-              the honest way to answer "why is my ticker missing" is a fold-out
-              that lists the ticker and says why. No button, no mint, no price:
-              `THIN_ASSETS` is not in `EQUITY_ASSETS`, so `findAsset()` cannot
-              resolve these mints and the ?to= handoff refuses them.
-
-              InfoBox because this is an explanation, not a warning about the
-              tap in front of you — the distinction InfoBox's own header draws.
-            */}
-            {THIN_ASSETS.length > 0 && (
-              <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 10 }}>
-                <InfoBox
-                  title={t('stocks.thinTitle', { count: THIN_ASSETS.length })}
-                  tone="info"
-                  id="stocks-thin"
-                >
-                  <p>{t('stocks.thinBody')}</p>
-                  <div className="stack" style={{ gap: 5, marginTop: 8 }}>
-                    {THIN_ASSETS.map((a) => (
-                      <div key={a.id} className="row" style={{ justifyContent: 'space-between', gap: 10 }}>
-                        <span className="mono" style={{ fontSize: 12 }}>{a.symbol}</span>
-                        <span className="faint" style={{ fontSize: 12 }}>{a.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="faint" style={{ marginTop: 8, lineHeight: 1.7 }}>{t('stocks.thinNote')}</p>
-                </InfoBox>
-              </motion.div>
-            )}
-          </section>
               </>
             )}
 
             {equitySubview === 'robinhood' && (
               <>
-          {/*
-            ─── THE TOKENIZED-STOCK UNIVERSE OF ROBINHOOD CHAIN (2026-10-12) ──
-            Asked for as «تعداد توکنهای صفحه سهام — توکنهای توکنیزه و RWA —
-            خیلی کمه … اعداد را خیلی بیشتر کن». Everything below is a real
-            contract read from a public token list: no row is invented, none is
-            padded, and each one prints its own address, because the address —
-            not the ticker — is what identifies a token. Where that list comes
-            from is an implementation detail of lib/stockTokens.js and is no
-            longer printed on the screen (see the note above the grid).
-
-            WHY IT IS A SEPARATE SECTION AND NOT MORE ROWS ABOVE. The Solana
-            rail's whole promise is that every mint was matched against
-            Backed's issuer keys on load. These were not: we have verified no
-            issuer here, and that is exactly what the note under the grid says.
-            Merging them into the verified rail would quietly transfer a
-            promise to rows that never earned it — so they get their own
-            heading and a note that states the limit out loud.
-
-            Every «خرید» here goes to /swap with the contract address attached,
-            through the same screen, fee and warnings an RWA row uses. Nothing
-            is signed on this page.
-          */}
-          {stockUniverse === null && !stockUniverseError && (
-            <section style={{ marginTop: 16 }}>
-              <p className="section-label">{t('stocks.rhTitle')}</p>
-              <p className="faint" style={{ margin: 0 }}>{t('stocks.rhLoading')}</p>
-            </section>
-          )}
-
-          {stockUniverseError && (
-            <section style={{ marginTop: 16 }}>
-              <p className="section-label">{t('stocks.rhTitle')}</p>
-              <p className="notice" style={{ marginTop: 6 }}>{t('stocks.rhUnavailable')}</p>
-            </section>
-          )}
-
-          {rhAll.length > 0 && (
-            <section style={{ marginTop: 18 }}>
-              {/*
-                ─── THE BADGE THAT NAMED UNISWAP IS GONE (2026-10-12) ────────
-                Asked for directly: «جملهٔ فهرست رسمی توکنهای یونیسواپ را پاک
-                کن، این بکجور تبلیغ میشود». It was a `stocks.rhSource` pill
-                reading «فهرست رسمی توکنهای یونیسواپ» — and the note under the
-                grid repeated it. Both are removed from the screen: we are not
-                an advertising surface for somebody else's list, and the pill
-                was never what made these rows safe anyway. What made them safe
-                is printed on every card and kept here: WE have not verified the
-                issuer, so the contract address is shown on each tile and again
-                on the swap screen before anything is signed.
-
-                In its place: the one piece of status this board actually has —
-                whether the prices on it are live. Three honest states, no
-                logo, no third-party name.
-              */}
-              <div className="stk-head">
-                <div className="stk-head-id">
-                  <p className="section-label" style={{ margin: 0 }}>{t('stocks.rhTitle')}</p>
-                  <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>
-                    {t('stocks.rhSub', { count: rhAll.length, chain: ROBINHOOD_CHAIN_NAME })}
-                  </p>
-                </div>
-                <span className={`stk-live ${pricesLoading ? 'is-loading' : visiblePriced ? '' : 'is-none'}`}>
-                  <span className="stk-live-dot" aria-hidden="true" />
-                  {pricesLoading
-                    ? t('stocks.rhPricesLoading')
-                    : visiblePriced
-                      ? t('stocks.rhPricesLive')
-                      : t('stocks.rhPricesNone')}
-                </span>
-              </div>
-
-              <div className="stk-search">
-                <input
-                  type="text"
-                  className="input"
-                  style={{ paddingLeft: isRTL ? 12 : 34, paddingRight: isRTL ? 34 : 12 }}
-                  placeholder={t('stocks.rhSearchPlaceholder')}
-                  value={rhSearch}
-                  onChange={(e) => setRhSearch(e.target.value)}
+                <RobinhoodStockBoard
+                  t={t}
+                  stockUniverse={stockUniverse}
+                  stockUniverseError={stockUniverseError}
+                  rhAll={rhAll}
+                  pricesLoading={pricesLoading}
+                  visiblePriced={visiblePriced}
+                  isRTL={isRTL}
+                  rhSearch={rhSearch}
+                  setRhSearch={setRhSearch}
+                  rhVisible={rhVisible}
+                  stockPrices={stockPrices}
+                  stockCharts={stockCharts}
+                  chartsLoading={chartsLoading}
+                  avantis={avantis}
+                  rhBuy={rhBuy}
+                  rhEquities={rhEquities}
+                  RH_ROWS={RH_ROWS}
+                  rhShowAll={rhShowAll}
+                  setRhShowAll={setRhShowAll}
+                  haptic={haptic}
                 />
-                <span className="stk-search-icon" style={{ [isRTL ? 'right' : 'left']: 12 }}>
-                  <IconSearch width={14} height={14} />
-                </span>
-              </div>
-
-              {rhVisible.length > 0 ? (
-                <motion.div className="stk-grid" variants={stagger} initial="hidden" animate="show">
-                  {rhVisible.map((tk) => {
-                    /*
-                     * Market price first, share reference second, nothing third.
-                     * `market` is the TOKEN's own quote read by contract;
-                     * `reference` is the company's SHARE quote matched by ticker
-                     * and the card tags it «مرجع» so the two can never be
-                     * mistaken for each other.
-                     */
-                    const market = stockPrices[String(tk.address).toLowerCase()] ?? null;
-                    return (
-                      <motion.div key={tk.id} variants={riseIn}>
-                        <StockTokenCard
-                          token={tk}
-                          market={market}
-                          reference={market ? null : referencePriceFor(tk.symbol, avantis?.rows ?? [])}
-                          chart={stockCharts[String(tk.address).toLowerCase()] ?? null}
-                          loading={pricesLoading}
-                          chartLoading={chartsLoading}
-                          onBuy={rhBuy}
-                        />
-                      </motion.div>
-                    );
-                  })}
-                </motion.div>
-              ) : (
-                <p className="notice" style={{ marginTop: 8 }}>{t('stocks.rhNoMatch')}</p>
-              )}
-
-              {rhEquities.length > RH_ROWS && (
-                <button
-                  type="button"
-                  className="btn btn-ghost stk-more"
-                  onClick={() => { haptic?.('select'); setRhShowAll((v) => !v); }}
-                >
-                  {/* «توکن», not «سهم»: these tiles are contracts, and the
-                      count is what the list claims to hold. */}
-                  {rhShowAll
-                    ? t('stocks.showLess')
-                    : t('stocks.showAllTokens', { count: rhEquities.length })}
-                </button>
-              )}
-
-              <p className="stk-legend">{t('stocks.rhLegend')}</p>
-              <p className="faint" style={{ marginTop: 6, lineHeight: 1.75 }}>{t('stocks.rhNote')}</p>
-            </section>
-          )}
               </>
             )}
 
             {equitySubview === 'gold' && (
               <>
-          {assetsLoading && (
-            <div className="stack" style={{ gap: 9 }}>
-              {[0, 1].map((i) => <div key={i} className="skel" style={{ height: 104, borderRadius: 14 }} />)}
-            </div>
-          )}
-          {!assetsLoading && assetsError && <p className="notice notice-danger">{t('stocks.unavailable')}</p>}
-          {!assetsLoading && !assetsError && commodities.length === 0 && <p className="notice">{t('stocks.noneTradeable')}</p>}
-          {/*
-            ─── GOLD ──────────────────────────────────────────────────────
-            Below the equities but under the SAME freeze warning, which is why
-            it lives inside this tab rather than getting one of its own: the
-            issuer risk is identical and splitting it out would mean either
-            repeating the warning or, worse, not repeating it.
-
-            Both tokens are backed one-for-one by a real ounce in a vault.
-            PAXG is listed first because Paxos holds a New York trust charter
-            and is OCC-regulated, which is the strongest pedigree available
-            here — not because it has more liquidity.
-          */}
-          {commodities.length > 0 && (
-            <section>
-              <p className="section-label">{t('stocks.gold')}</p>
-              <p className="farm-filtered faint">{t('stocks.goldIntro')}</p>
-              <motion.div
-                className="stack"
-                style={{ gap: 10, marginTop: 8 }}
-                variants={stagger}
-                initial="hidden"
-                animate="show"
-              >
-                {commodities.map((a) => (
-                  <EquityRow key={a.id} asset={a} amountUsd={amount} onBuy={buy} holding={held.byMint.get(a.mint) ?? null} onSell={sell} />
-                ))}
-              </motion.div>
-
-              {/*
-                ─── "WHAT THE PAST SAYS", ON GOLD ────────────────────────────
-                Asked for: «در صفحه سهام گذشته چه میگوید را بزار باشد» and then
-                «در طلا هم گذشته چه میگوید باید در باکس طلا و باکس جمع شونده و
-                مدرن باشد».
-
-                Gold-specific, and that is a data constraint rather than a
-                preference. The equity rows come from /api/solana/assets, which
-                returns a Jupiter spot price and a 24-hour change — one number
-                and a delta, no series at all. The panel measures support
-                levels, range position and the largest drawdown across a window,
-                so with no window there is nothing for it to compute.
-
-                PAXG, XAUt0 and GLDx are all on CoinGecko, so a real 90-day
-                series exists for each and every figure in the box is measured
-                from it. Gold is also the row where the panel earns its place —
-                someone buying gold is usually asking "is this a normal price or
-                a spike", which is exactly the question it answers.
-              */}
-              <div style={{ marginTop: 10 }}>
-                <GoldHistoryBox assets={commodities} amountUsd={amount} />
-              </div>
-            </section>
-          )}
+                <EquityGoldPanel
+                  t={t}
+                  assetsLoading={assetsLoading}
+                  assetsError={assetsError}
+                  commodities={commodities}
+                  amount={amount}
+                  buy={buy}
+                  held={held}
+                  sell={sell}
+                />
               </>
             )}
 
             {equitySubview === 'tokenized' && (
               <>
-          {/*
-            Requested by name: «قبل از خرید این را بخوان» and «این ها سهم
-            نیستند». Both are the same question — what am I actually buying —
-            so they are one box rather than two stacked notices.
-
-            It was `defaultOpen`, on the reasoning that someone who believes a
-            tokenised share is a share has misunderstood what they own. That is
-            still true — but the box now starts collapsed on instruction
-            («هشدار را در صفحه باز شونده بزار»), and the mitigation is that the
-            TITLE carries the load-bearing claim rather than a neutral label.
-            Folding it hides the detail, not the fact.
-          */}
-          <InfoBox title={t('stocks.beforeBuy.title')} tone="warn" id="stocks-before">
-            <p>{t('stocks.notShares')}</p>
-            <p>{t('stocks.beforeBuy.p1')}</p>
-            <p>{t('stocks.beforeBuy.p2')}</p>
-            <p>{t('stocks.beforeBuy.p3')}</p>
-          </InfoBox>
-
-          {/*
-            ─── UTEX: THE TICKERS THAT ARE NOT ABOVE ───────────────────────────
-            UTEX was registered as a revenue line but appeared in exactly ONE
-            place in the whole app — the Earn rank perks, behind Diamond at
-            15,000 points. In practice nobody could see it, which makes a live
-            30-60% line worth nothing.
-
-            ─── WHY IT SITS BELOW THE REAL EQUITIES AND NOT ABOVE ─────────────
-            This is the important decision on this block, and it is a rule this
-            project already has: never route a user to a worse product because
-            it pays us more. The precedent is deBridge, set to 0.4% instead of
-            0.7% because 0.7% measurably left the user worse off than the route
-            we already had.
-
-            The same test applies here and it is not close. The rows above are
-            backed 1:1 by real shares in custody and earn us 70 bps. UTEX pays
-            us far more — 30% of fees, up to 60% — and is the WORSE product for
-            the buyer: no broker licence, no share, no shareholder register, no
-            compensation scheme. Putting it first would be choosing our margin
-            over the user's outcome.
-
-            So it is framed as the honest thing it actually is: the answer to
-            "why isn't my ticker in the list". xStocks covers a few dozen large
-            caps; someone looking for a smaller US name will not find it above,
-            and today that question had no answer at all on this screen.
-
-            ─── AND WHY THE WARNING IS INLINE, NOT IN AN INFOBOX ───────────────
-            InfoBox's own rule, quoted from its header: "if it describes what
-            the button will do, it stays visible; if it explains how a market
-            works or restates policy, it goes in here." That a UTEX position is
-            not a share is exactly the first kind. It is also the single fact
-            most likely to be misread on a page whose whole subject is buying
-            equities — the two must not blur together.
-          */}
-          {/*
-            ─── REFERENCE PRICES. NO LINKS, AND THAT IS THE POINT ─────────────
-            Two instructions, both taken literally:
-
-              «لینک تبلیغاتی زیر سهام را حذف کن ما پروموت کننده رایگان هیچ
-               شرکتی نیستیم در صفحه سهام»
-
-            The Avantis and UTEX buttons that used to sit here are GONE. Not
-            moved, not folded into a box — deleted. We are not anybody's free
-            promoter on the screen that sells our own product.
-
-            ─── WHY THE TABLE STAYS WHEN THE LINKS GO ─────────────────────────
-            The data was never the problem; the outbound buttons were. These
-            are the US tickers that have no tokenised version we can sell —
-            NFLX, PLTR, AVGO, INTC and the rest — priced live from Pyth. As a
-            reference table it answers "is my ticker here at all", which the
-            list above cannot, and it sends nobody anywhere.
-
-            There is no referral code attached to anything in this block and
-            no `withReferral` call, so the earnings disclosure that used to
-            follow it is gone too: there is nothing left to disclose.
-          */}
-          {/*
-            ─── THE REFERENCE TABLE, INSIDE A COLLAPSIBLE BOX ─────────────────
-            «این فقط لوگو و اسم هست داده قیمتی نیست ... در باکس باز شونده
-            بزار» — a dozen rows of names with no buy action sat on the page
-            whether anyone asked for them or not, and between two buy lists
-            they read as a broken section. The table stays — it answers "is my
-            ticker here at all" with live Pyth numbers — but it folds: the
-            closed title already says what it is, and one tap shows the rows.
-            When the feed is down the box simply is not rendered, exactly as
-            the old empty state behaved.
-          */}
-          {avantis?.live && refRows.length > 0 && (
-            <motion.div variants={riseIn} initial="hidden" animate="show">
-              <InfoBox title={t('stocks.ref.title')} tone="info" id="stocks-ref">
-                <p className="faint" style={{ marginTop: 0, lineHeight: 1.7 }}>{t('stocks.ref.intro')}</p>
-                <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-                  {refRows.map((r) => (
-                    <motion.div key={r.id} className="coin-row" variants={riseIn}>
-                      {/*
-                        Real company logo from the ticker — the same visual
-                        language as the buyable rows above, not a text stub.
-                        CoinLogo degrades to the monogram if the CDN fails, so a
-                        dead logo cannot leave a blank circle.
-                      */}
-                      <CoinLogo ticker={r.symbol} px={26} />
-                      <div className="coin-meta">
-                        <div className="coin-sym">{r.symbol}</div>
-                        <div className="coin-name">
-                          {/*
-                            Market hours, not a venue name. US markets are shut
-                            most of the week in Tehran and an unlabelled price
-                            reads as stale or broken.
-                          */}
-                          {r.marketOpen === false ? t('stocks.ref.closed') : t('stocks.ref.openNow')}
-                        </div>
-                      </div>
-                      <div className="coin-right">
-                        {/*
-                          Null stays a dash. Number(null) is 0 and 0 is finite,
-                          so "$0.00" is the easy and very misleading bug.
-                        */}
-                        <div className="mono" style={{ fontSize: 12.5 }}>
-                          {r.price ? `$${fmtPrice(r.price)}` : '—'}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-                <p className="faint" style={{ marginTop: 8, marginBottom: 0, lineHeight: 1.75 }}>
-                  {t('stocks.ref.note')}
-                </p>
-              </InfoBox>
-            </motion.div>
-          )}
+                <EquityDisclosures t={t} avantis={avantis} refRows={refRows} />
               </>
             )}
           </div>
@@ -1540,223 +940,46 @@ export default function Stocks() {
           >
             {rwaSubview === 'assets' && (
               <>
-          {/* ─── TRADEABLE RWA TOKENS (WITH 0.70% PLATFORM FEE) ─── */}
-          <section style={{ marginTop: 16 }}>
-            <div className="row-between" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              <div>
-                <p className="section-label" style={{ margin: 0 }}>{t('stocks.rwaTradeable')}</p>
-                <p className="farm-filtered faint" style={{ margin: '3px 0 0' }}>{t('stocks.rwaTradeableSub')}</p>
-              </div>
-              <span className="pill pill-up mono" style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                {feePercentString()}% {t('stocks.rwaFeeChip')}
-              </span>
-            </div>
-
-            {/* Category filter tags */}
-            <div className="tag-scroll" style={{ marginTop: 8, marginBottom: 10 }}>
-              {RWA_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={`tag ${rwaCategory === cat.id ? 'active' : ''}`}
-                  onClick={() => {
-                    haptic?.('select');
-                    setRwaCategory(cat.id);
-                  }}
-                >
-                  {t(cat.key, cat.fallback)}
-                </button>
-              ))}
-            </div>
-
-            {/* Search input for RWA tokens */}
-            <div style={{ position: 'relative', marginBottom: 10 }}>
-              <input
-                type="text"
-                className="input"
-                style={{
-                  width: '100%',
-                  paddingLeft: isRTL ? 12 : 36,
-                  paddingRight: isRTL ? 36 : 12,
-                  fontSize: 12.5,
-                  height: 38
-                }}
-                placeholder={t('stocks.rwaSearchPlaceholder')}
-                value={rwaSearch}
-                onChange={(e) => setRwaSearch(e.target.value)}
-              />
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  [isRTL ? 'right' : 'left']: 12,
-                  pointerEvents: 'none',
-                  color: 'var(--muted)',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                <IconSearch width={14} height={14} />
-              </span>
-            </div>
-
-            {/* Amount quick selector — one line, equal chips, not a wrapped row. */}
-            <div className="rwa-amounts" style={{ marginTop: 8, marginBottom: 10 }}>
-              <span className="rwa-amounts-label">{t('stocks.ifIBuy')}</span>
-              <div className="rwa-amounts-picks">
-                {AMOUNTS.map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    className={`tag ${amount === a ? 'active' : ''}`}
-                    onClick={() => {
-                      haptic?.('select');
-                      setAmount(a);
-                    }}
-                  >
-                    {a >= 1000 ? `$${a / 1000}k` : `$${a}`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {tradeableRwa.length > 0 ? (
-              <motion.div
-                className="stack"
-                style={{ gap: 10 }}
-                variants={stagger}
-                initial="hidden"
-                animate="show"
-              >
-                {tradeableRwa.map((tok) => (
-                  <RwaRow
-                    key={tok.id}
-                    token={tok}
-                    amountUsd={amount}
-                    onBuy={buyRwa}
-                    onSelect={selectRwa}
-                  />
-                ))}
-              </motion.div>
-            ) : (
-              <p className="notice" style={{ marginTop: 8 }}>
-                {t('stocks.rwaNoMatch', 'هیچ دارایی RWA با این مشخصات یافت نشد.')}
-              </p>
-            )}
-          </section>
-
-          {/* Educational InfoBox on RWA Backing & Non-Custodial Protocol */}
-          <div style={{ marginTop: 14 }}>
-            <InfoBox title={t('stocks.rwaHowItWorksTitle')} tone="info" id="stocks-rwa-how">
-              <p>{t('stocks.rwaHowItWorksP1')}</p>
-              <p>{t('stocks.rwaHowItWorksP2', { fee: feePercentString() })}</p>
-            </InfoBox>
-          </div>
+                <RwaAssetsPanel
+                  t={t}
+                  isRTL={isRTL}
+                  haptic={haptic}
+                  rwaCategory={rwaCategory}
+                  setRwaCategory={setRwaCategory}
+                  rwaSearch={rwaSearch}
+                  setRwaSearch={setRwaSearch}
+                  AMOUNTS={AMOUNTS}
+                  amount={amount}
+                  setAmount={setAmount}
+                  tradeableRwa={tradeableRwa}
+                  buyRwa={buyRwa}
+                  selectRwa={selectRwa}
+                />
               </>
             )}
 
             {rwaSubview === 'tokens' && (
               <>
-          {/* The RWA highlight reel + stats — same treatment as the equities. */}
-          {rwaCoins.length > 0 && (
-            <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 16 }}>
-              <TopMovers
-                title={t('stocks.topGainers')}
-                subtitle={t('stocks.topGainersCoinsSub')}
-                items={topRwa}
-                logoKind="coin"
-                onSelect={(it) => navigate(`/coin/${it.raw.id}`)}
-                testId="stocks-top-rwa"
-              />
-              <div className="grid-3" style={{ marginTop: 4 }}>
-                <StatMini label={t('stocks.stats.listed')} value={rwaCoins.length} />
-                <StatMini
-                  label={t('stocks.stats.avgChange')}
-                  value={rwaAvg != null ? fmtPct(rwaAvg, 1) : '—'}
-                  tone={rwaAvg != null ? (rwaAvg >= 0 ? 'up' : 'down') : undefined}
+                <RwaTokensPanel
+                  t={t}
+                  rwaCoins={rwaCoins}
+                  topRwa={topRwa}
+                  rwaAvg={rwaAvg}
+                  rwaMcap={rwaMcap}
+                  onCoinSelect={(coin) => navigate(`/coin/${coin.id}`)}
+                  rwaSort={rwaSort}
+                  setRwaSort={setRwaSort}
+                  haptic={haptic}
+                  rwaLoading={rwaLoading}
+                  rwaFeed={rwaFeed}
+                  marketLoading={loading}
+                  rwaError={rwaError}
+                  visibleRwa={visibleRwa}
+                  sortedRwa={sortedRwa}
+                  RWA_ROWS={RWA_ROWS}
+                  rwaShowAll={rwaShowAll}
+                  setRwaShowAll={setRwaShowAll}
                 />
-                <StatMini label={t('stocks.stats.mcap')} value={fmtCompact(rwaMcap)} />
-              </div>
-            </motion.div>
-          )}
-
-          <section style={{ marginTop: 16 }}>
-            <p className="section-label">{t('stocks.rwaTokens')}</p>
-            {rwaCoins.length > 0 && (
-              <div className="tag-scroll" style={{ marginBottom: 4 }}>
-                {RWA_SORTS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`tag ${rwaSort === s ? 'active' : ''}`}
-                    onClick={() => { haptic?.('select'); setRwaSort(s); }}
-                  >
-                    {t(`stocks.sort.${s}`)}
-                  </button>
-                ))}
-              </div>
-            )}
-            {rwaLoading || (rwaFeed === null && loading) ? (
-              <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="skel" style={{ height: 58 }} />
-                ))}
-              </div>
-            ) : rwaError && !rwaFeed?.length ? (
-              <div className="empty">
-                <span className="empty-icon">🏛</span>
-                {t('stocks.unavailable')}
-              </div>
-            ) : rwaCoins.length === 0 ? (
-              <div className="empty">
-                <span className="empty-icon">🏛</span>
-                {t('stocks.noTokens')}
-              </div>
-            ) : (
-              <motion.div className="stack" style={{ gap: 8, marginTop: 8 }} variants={stagger} initial="hidden" animate="show">
-                {visibleRwa.map((c) => (
-                  <motion.div
-                    key={c.id}
-                    className="coin-row"
-                    variants={riseIn}
-                    onClick={() => navigate(`/coin/${c.id}`)}
-                  >
-                    <CoinLogo coin={c} />
-                    <div className="coin-meta">
-                      <div className="coin-sym">{c.symbol}</div>
-                      <div className="coin-name">{c.name} · {fmtCompact(c.mcap)}</div>
-                    </div>
-                    <Sparkline data={c.sparkline?.slice(-40) ?? []} up={c.change24h >= 0} width={54} height={24} />
-                    <div className="coin-right">
-                      <div className="mono" style={{ fontSize: 12.5 }}>${fmtPrice(c.price)}</div>
-                      <div className={`mono ${c.change24h >= 0 ? 'up' : 'down'}`} style={{ fontSize: 10.5 }}>
-                        {fmtPct(c.change24h, 1)}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
-            {sortedRwa.length > RWA_ROWS && (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ marginTop: 10 }}
-                onClick={() => { haptic?.('select'); setRwaShowAll((v) => !v); }}
-              >
-                {rwaShowAll
-                  ? t('stocks.showLess')
-                  : t('stocks.showAllTokens', { count: sortedRwa.length })}
-              </button>
-            )}
-
-            <p className="faint" style={{ marginTop: 9, lineHeight: 1.7 }}>{t('stocks.rwaNote')}</p>
-          </section>
-
-          <InfoBox title={t('stocks.kycTitle')} tone="info" id="stocks-kyc">
-            <p>{t('stocks.kycNotice')}</p>
-          </InfoBox>
               </>
             )}
           </div>

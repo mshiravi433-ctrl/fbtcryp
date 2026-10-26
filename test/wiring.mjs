@@ -25,6 +25,21 @@ import { join } from 'node:path';
 
 const read = (p) => readFileSync(p, 'utf8');
 
+/* The Stocks screen keeps its state and effects in the lazy page while its
+   render-only panels live beside it; audit the rendered source tree as one. */
+const STOCK_UI_FILES = [
+  'src/pages/Stocks.jsx',
+  'src/components/stocks/StocksHeadingTabs.jsx',
+  'src/components/stocks/EquityBoard.jsx',
+  'src/components/stocks/RobinhoodStockBoard.jsx',
+  'src/components/stocks/EquityGoldPanel.jsx',
+  'src/components/stocks/EquityDisclosures.jsx',
+  'src/components/stocks/RwaAssetsPanel.jsx',
+  'src/components/stocks/RwaTokensPanel.jsx',
+  'src/components/stocks/StockStatMini.jsx'
+];
+const stockUiSource = () => STOCK_UI_FILES.map(read).join('\n');
+
 function walk(dir) {
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -4005,7 +4020,7 @@ export default function run() {
     t('the API exposes the verified asset list', /\/api\/solana\/assets/.test(appSrc));
     t('...backed by the real fetcher', /fetchSolanaAssets/.test(appSrc));
 
-    const stocks = read('src/pages/Stocks.jsx');
+    const stocks = stockUiSource();
     const farm = read('src/pages/Farm.jsx');
     const swap = read('src/pages/SolanaSwap.jsx');
     const assets = read('src/lib/solanaAssets.js');
@@ -4162,7 +4177,7 @@ export default function run() {
     t('there is only one amount selector on Farm',
       farm.split('farm-amounts').length - 1 === 1);
 
-    const stocks = read('src/pages/Stocks.jsx');
+    const stocks = stockUiSource();
     const stkSel = stocks.indexOf('farm-amounts');
     const stkRows = stocks.indexOf('<EquityRow');
     t('Stocks selector appears before its rows too',
@@ -6002,7 +6017,7 @@ export default function run() {
     t('...but the leverage risk stays inline',
       /className="notice notice-danger">\{t\('perp\.riskNotice'\)\}/.test(perp));
 
-    const stocks = read('src/pages/Stocks.jsx');
+    const stocks = stockUiSource();
     t('the stocks explainer is in a box', /stocks\.beforeBuy\.title/.test(stocks));
     /*
      * ─── THIS USED TO ASSERT `defaultOpen`, AND NOW ASSERTS THE OPPOSITE ────
@@ -6784,16 +6799,17 @@ export default function run() {
         'src/pages/Predict.jsx',
         'src/pages/Discover.jsx'
       ];
+      const sourceForScreen = (f) => f === 'src/pages/Stocks.jsx' ? stockUiSource() : read(f);
       const raw = screens.filter((f) => {
         if (!existsSync(f)) return false;
-        const src = code(read(f));
+        const src = code(sourceForScreen(f));
         /* `<img src={...image}` in any shape — the pattern being eliminated. */
         return /<img[^>]*src=\{[^}]*\.image/.test(src);
       });
       t(`no screen still renders a raw coin <img>${raw.length ? ` — ${raw.join(', ')}` : ''}`,
         raw.length === 0);
 
-      const notWired = screens.filter((f) => existsSync(f) && !/CoinLogo/.test(read(f)));
+      const notWired = screens.filter((f) => existsSync(f) && !/CoinLogo/.test(sourceForScreen(f)));
       t(`every coin screen uses the shared avatar${notWired.length ? ` — missing in ${notWired.join(', ')}` : ''}`,
         notWired.length === 0);
 
@@ -10368,7 +10384,7 @@ export default function run() {
      * `defaultOpen`, because the freeze authority is real and used, and
      * collapsing it closed would undo the reason it sits above everything.
      */
-    const stk = code(read('src/pages/Stocks.jsx'));
+    const stk = code(stockUiSource());
     t('the freeze warning is a box', /id="stocks-freeze"/.test(stk));
     t('...and it is collapsible, per the owner\'s instruction',
       /id="stocks-freeze"/.test(stk) && !/stocks-freeze"[^>]*defaultOpen/.test(stk));
@@ -11203,7 +11219,7 @@ export default function run() {
      * which has no synthetic fallback and returns an empty series instead, and
      * these assertions pin THAT property rather than the old call shape.
      */
-    const stocks = code(read('src/pages/Stocks.jsx'));
+    const stocks = code(stockUiSource());
     const goldBox = code(read('src/components/GoldHistoryBox.jsx'));
     const eqAnalysis = code(read('src/components/EquityAnalysis.jsx'));
     const eqRow = code(read('src/components/EquityRow.jsx'));
@@ -11653,7 +11669,7 @@ export default function run() {
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
       .replace(/^\s*\/\/.*$/gm, '');
 
-    const stocks = code(read('src/pages/Stocks.jsx'));
+    const stocks = code(stockUiSource());
     const srv = code(read('server/avantis.js'));
     const appSrc = code(read('server/app.js'));
 
@@ -12801,7 +12817,7 @@ export default function run() {
 
   /* ------------------- stocks venue tabs and CORS proxies ------------------ */
   {
-    const stocks = read('src/pages/Stocks.jsx');
+    const stocks = stockUiSource();
     const appSrc = read('server/app.js');
     const dydxClient = read('src/lib/dydx.js');
     const ostiumClient = read('src/lib/ostium.js');
@@ -14268,7 +14284,7 @@ export default function run() {
     t('…and still falls back to a monogram when the CDN fails',
       /onError=/.test(logo) && /symbol = String\(coin\?\.symbol \?\? ticker \?\? '\?'\)/.test(logo));
 
-    const stk = read('src/pages/Stocks.jsx');
+    const stk = stockUiSource();
     t('the reference rows use a real logo from the ticker',
       /<CoinLogo ticker=\{r\.symbol\}/.test(stk));
     t('...and the monogram badge is gone from the reference table',
@@ -15371,7 +15387,7 @@ export default function run() {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
     const sellLib = strip(read('src/lib/solanaSell.js'));
-    const stocks = strip(read('src/pages/Stocks.jsx'));
+    const stocks = strip(stockUiSource());
     const row = strip(read('src/components/EquityRow.jsx'));
     const holdings = strip(read('src/components/EquityHoldings.jsx'));
     const walletHome = strip(read('src/components/SolanaWalletHome.jsx'));
