@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
+import { IconChart, IconRefresh, IconSearch, IconStar, IconTrend, IconX } from '../components/Icons';
 import AdBanner from '../components/AdBanner';
 import Ticker from '../components/Ticker';
 import CoinRow from '../components/CoinRow';
@@ -19,6 +20,7 @@ import { vsOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { getCategory, getMarkets, onMarketVisualsReady } from '../lib/api';
 import { MARKET_CATEGORIES, sectorFromRows } from '../lib/marketSectors';
+import { DEFAULT_SORT, MARKET_SORTS, freshness, marketBreadth, sortMarketRows } from '../lib/marketList';
 import { mergeVisuals } from '../lib/marketVisuals';
 import { useAppStore } from '../store/useAppStore';
 import { runPriceAlerts, runTopMoverAlerts } from '../lib/priceAlerts';
@@ -74,6 +76,7 @@ export default function Market() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const favorites = useAppStore((s) => s.favorites);
+  const toggleFavorite = useAppStore((s) => s.toggleFavorite);
   const vs = vsOf(useSettingsStore((s) => s.currency));
 
   const { data: global } = useGlobalStats();
@@ -91,7 +94,22 @@ export default function Market() {
    * (lib/coinVenues.js), so "ask about everything on screen" stays exactly
    * one request.
    */
-  const { data: marketCoins, loading } = useMarkets(MARKET_PAGE_SIZE);
+  /*
+   * `updatedAt` is carried out of the poll so the list can say HOW live it is.
+   * A dot labelled «قیمت‌های زنده» over a feed that stopped answering forty
+   * seconds ago is the kind of claim a trader acts on, so the freshness is
+   * printed as a number of seconds rather than asserted as a vibe.
+   *
+   * `error` + `refresh` are what turn a dead feed from "چیزی پیدا نشد" (which
+   * is a lie — the search box is empty) into an honest card with a retry.
+   */
+  const {
+    data: marketCoins,
+    loading,
+    error: marketError,
+    updatedAt,
+    refresh: refreshMarkets
+  } = useMarkets(MARKET_PAGE_SIZE);
   const [visualVersion, setVisualVersion] = useState(0);
   useEffect(() => onMarketVisualsReady(() => setVisualVersion((v) => v + 1)), []);
   const coins = useMemo(() => (marketCoins ?? []).map(mergeVisuals), [marketCoins, visualVersion]);
@@ -150,20 +168,76 @@ export default function Market() {
     });
   }, [coins, favorites, t]);
 
-  const [filter, setFilter] = useState('all');
-  const [query, setQuery] = useState('');
-
   /*
    * Sector view. `null` means the ordinary market list.
    *
-   * Held separately from `filter` rather than folded into it because the two
-   * are different operations — one re-sorts memory, the other issues a
-   * request — and a single piece of state would have to encode "am I loading"
-   * for half its values and not the others.
+   * Held separately from the sort rather than folded into it because the two
+   * are different operations — one re-orders rows already in memory, the other
+   * issues a request — and a single piece of state would have to encode "am I
+   * loading" for half its values and not the others.
    */
   const [sector, setSector] = useState(null);
   const [sectorCoins, setSectorCoins] = useState([]);
   const [sectorLoading, setSectorLoading] = useState(false);
+  /*
+   * ─── THE FIVE CHIPS ARE A VIEW, NOT A BUDGET ────────────────────────────
+   *   «صعودی‌ها» used to be `sort(byChange).slice(0, 25)`: picking it did not
+   *   reorder the market, it deleted 475 rows from it. Sort order and subset
+   *   are now two separate pieces of state, and neither one shortens the list —
+   *   see lib/marketList.js for the full story and the comparator.
+   *
+   *   `onlyFavorites` is the ONE subset, because it is defined by the user's
+   *   own stars rather than by a number we invented.
+   */
+  const [query, setQuery] = useState('');
+  const [sortKey, setSortKey] = useState(DEFAULT_SORT.key);
+  const [sortDir, setSortDir] = useState(DEFAULT_SORT.dir);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+
+  /*
+   * Which chip reads as selected is DERIVED from the sort, not stored beside
+   * it. One source of truth: choosing "ارزش بازار" in the sort menu has to
+   * un-highlight «صعودی‌ها», and two independent states would eventually
+   * disagree — a chip lit up over a list it does not describe.
+   */
+  const activeView = onlyFavorites
+    ? 'favorites'
+    : sortKey === 'rank' && sortDir === 'asc'
+      ? 'all'
+      : sortKey === 'change' && sortDir === 'desc'
+        ? 'gainers'
+        : sortKey === 'change' && sortDir === 'asc'
+          ? 'losers'
+          : sortKey === 'volume' && sortDir === 'desc'
+            ? 'volume'
+            : null;
+
+  /*
+   * Choosing from the sort menu resets the direction to the one that column is
+   * normally read in: rank and price ascending (1, 2, 3 / cheapest first is a
+   * fine default for a price column), every numeric measure descending. The
+   * direction button beside the menu is what flips it, and the result is
+   * visible in the chip row immediately because `activeView` is derived.
+   */
+  const chooseSort = useCallback((key) => {
+    setSortKey(key);
+    setSortDir(key === 'rank' ? 'asc' : 'desc');
+  }, []);
+
+  const applyView = useCallback((view) => {
+    /* A view is a market-wide ordering, so it also leaves the sector lens. */
+    setSector(null);
+    if (view === 'favorites') {
+      setOnlyFavorites((on) => !on);
+      return;
+    }
+    setOnlyFavorites(false);
+    if (view === 'all') { setSortKey('rank'); setSortDir('asc'); return; }
+    if (view === 'gainers') { setSortKey('change'); setSortDir('desc'); return; }
+    if (view === 'losers') { setSortKey('change'); setSortDir('asc'); return; }
+    if (view === 'volume') { setSortKey('volume'); setSortDir('desc'); }
+  }, []);
+
   /*
    * 60 rows a page, up from 40. Each one is a card with a sparkline and a
    * swap button; forty of them filled two screens and a half on a phone, and
@@ -195,7 +269,10 @@ export default function Market() {
       setPageLoading(false);
     }
   };
-  useEffect(() => setVisibleCount(60), [sector, filter, query]);
+  /* Re-ordering is a new reading of the same list: start it from the top
+     rather than leaving the reader 400 rows down a list that no longer has
+     those rows in that place. */
+  useEffect(() => setVisibleCount(60), [sector, sortKey, sortDir, onlyFavorites, query]);
   useEffect(() => { setSecondPage({ vs, rows: [] }); setPageDone(false); }, [vs]);
 
   useEffect(() => {
@@ -218,43 +295,88 @@ export default function Market() {
   // Anything not in the loaded page is found by querying the full universe.
   const { results: remoteHits, searching } = useCoinSearch(query);
 
-  const list = useMemo(() => {
-    /*
-     * A sector replaces the list rather than filtering it. Search still
-     * applies on top, because "show me gold, containing 'pax'" is a
-     * reasonable thing to want; the sort filters do not, since they belong to
-     * the main list and are visually deselected while a sector is active.
-     */
-    if (sector) {
-      // Do not blank the tab while the category endpoint is warming or down.
-      // The fallback only uses ID-verified members with quotes from the main
-      // feed; it is not a symbol/name search or fabricated category price.
-      const rows = sectorCoins.length ? sectorCoins : sectorFromRows(sector, coins);
-      if (!query.trim()) return rows;
-      const q = query.trim().toLowerCase();
-      return rows.filter(
-        (c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
-      );
-    }
+  /*
+   * ─── THE ROWS THIS SCREEN ACTUALLY HOLDS ────────────────────────────────
+   * A sector replaces the universe rather than filtering it: there are a
+   * handful of tokenised-gold tokens in existence and none is in the top 250
+   * by market cap, so filtering the loaded page for "gold" would correctly
+   * return nothing. Everything below (list, breadth, count) reads this one
+   * value, so the three can never describe different sets of coins.
+   *
+   * Sector fallback: do not blank the tab while the category endpoint is
+   * warming or down. It only uses ID-verified members with quotes from the
+   * main feed; it is not a symbol/name search or a fabricated category price.
+   */
+  const universe = useMemo(() => {
+    if (sector) return sectorCoins.length ? sectorCoins : sectorFromRows(sector, coins);
+    return [...(coins ?? []), ...(secondPage.vs === vs ? secondPage.rows : [])];
+  }, [sector, sectorCoins, coins, secondPage, vs]);
 
-    let out = [...(coins ?? []), ...(secondPage.vs === vs ? secondPage.rows : [])];
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
-      out = out.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
-    }
-    switch (filter) {
-      case 'gainers':
-        return [...out].sort((a, b) => b.change24h - a.change24h).slice(0, 25);
-      case 'losers':
-        return [...out].sort((a, b) => a.change24h - b.change24h).slice(0, 25);
-      case 'favorites':
-        return out.filter((c) => favorites.includes(c.id));
-      case 'volume':
-        return [...out].sort((a, b) => b.volume - a.volume).slice(0, 25);
-      default:
-        return out;
-    }
-  }, [coins, secondPage, vs, filter, query, favorites, sector, sectorCoins]);
+  const list = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = q
+      ? universe.filter((c) => c.symbol.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
+      : universe;
+    const starred = onlyFavorites ? rows.filter((c) => favorites.includes(c.id)) : rows;
+    return sortMarketRows(starred, sortKey, sortDir);
+  }, [universe, query, onlyFavorites, favorites, sortKey, sortDir]);
+
+  /*
+   * Breadth is measured over the UNIVERSE, not over `list`: a search box with
+   * four letters in it must not be able to make the market look 80% bearish.
+   */
+  const breadth = useMemo(() => marketBreadth(universe), [universe]);
+
+  /*
+   * ─── HOW OLD IS THIS NUMBER? ────────────────────────────────────────────
+   * `updatedAt` only changes when a poll SUCCEEDS, so the gap between it and
+   * the clock is the feed's real age — not "time since the page opened". The
+   * ticker exists because a static "live" label would keep saying live after
+   * the feed had stopped, which is the one thing a price screen must never do.
+   */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(id);
+  }, []);
+  const fresh = freshness(updatedAt, now);
+
+  /*
+   * ─── FAVOURITES FROM THE LIST ───────────────────────────────────────────
+   * The star is not new data — `useAppStore` has held `favorites` and
+   * `toggleFavorite` all along, and the Favourites chip above lists them. The
+   * only way to ADD one, though, was to open a coin's own page: a filter whose
+   * contents could not be created from the screen that showed the filter. The
+   * star also matters beyond the chip — lib/priceAlerts.js only watches coins
+   * in this list.
+   */
+  const star = useCallback((coin) => toggleFavorite(coin.id), [toggleFavorite]);
+  const starLabel = useCallback(
+    (coin) => t(favorites.includes(coin.id) ? 'market.starRemove' : 'market.starAdd', { symbol: coin.symbol }),
+    [favorites, t]
+  );
+
+  /*
+   * ─── THE FIGURE UNDER THE NAME FOLLOWS THE SORT ─────────────────────────
+   * Report against the old row: every row printed its volume whether or not
+   * volume had anything to do with what the reader was looking at, and it
+   * printed it over raw i18n keys. Now the row prints the measure the list is
+   * ORDERED by — sort by market cap and the caps appear, sort by volume and
+   * the volumes do — and prints nothing when the order is price or change,
+   * because both of those numbers are already on the right of every row.
+   */
+  const rowMetric = useCallback(
+    (coin) => {
+      if (sortKey === 'volume') {
+        return <>{fmtCompact(coin.volume || 0)} <i>{t('market.volumeShort')}</i></>;
+      }
+      if (sortKey === 'mcap') {
+        return <>{fmtCompact(coin.mcap || 0)} <i>{t('market.mcapShort')}</i></>;
+      }
+      return null;
+    },
+    [sortKey, t]
+  );
 
   /*
    * ─── SWAPPABILITY FOR EVERY ROW, IN ONE REQUEST ────────────────────────
@@ -294,6 +416,40 @@ export default function Market() {
   const trend = useMemo(() => marketCapSeries(coins || [], { maxCoins: 60 }), [coins]);
 
   const isOffline = global?.offline || coins?.[0]?.offline;
+
+  /*
+   * ─── WHAT "MORE" MEANS, IN TWO DIFFERENT SENSES ─────────────────────────
+   * The old footer had one button that either revealed rows already in memory
+   * or fetched page 2 from the API, and printed the same number for both. They
+   * are different promises — one is instant, one is a request — so they now
+   * carry different labels, and the "next page" one only offers itself when
+   * the feed actually has a page 2 to give and the current view is the plain
+   * market list (a sorted or filtered view of the loaded rows would have its
+   * order rewritten under the reader by an arriving page).
+   */
+  const canLoadNext = !sector && !query.trim() && !onlyFavorites
+    && sortKey === 'rank' && sortDir === 'asc'
+    && !pageDone && (coins?.length ?? 0) >= MARKET_PAGE_SIZE;
+  const shownCount = Math.min(visibleCount, list.length);
+  const hasMore = list.length > visibleCount || canLoadNext;
+  const visibleList = list.slice(0, visibleCount);
+
+  const swapRouteFor = (coin) => {
+    const curated = isSwappable(coin.id);
+    if (curated) return swapUrlFor(coin.id, 'buy');
+    const venue = venues.get(coin.id);
+    return venue?.tradeable ? venueRoute({ ...venue })?.href ?? null : null;
+  };
+
+  const emptyKind = onlyFavorites && !favorites.length
+    ? 'favorites'
+    : sector
+      ? (sectorLoading ? 'loadingSector' : 'sector')
+      : searching
+        ? 'searching'
+        : query.trim()
+          ? 'search'
+          : 'none';
 
   return (
     <PageTransition>
@@ -588,13 +744,16 @@ export default function Market() {
 
       {/* ---------- trending ---------- */}
       {trending?.length > 0 && (
-        <section>
-          <p className="section-label">🔥 {t('market.trending')}</p>
+        <section className="market-trending">
+          <p className="section-label">
+            <IconTrend width={14} height={14} aria-hidden="true" />
+            {t('market.trending')}
+          </p>
           <div className="tag-scroll" style={{ marginTop: 8 }}>
             {trending.map((c) => (
               <motion.button
                 key={c.id}
-                className="tag"
+                className="tag market-trending-chip"
                 whileTap={{ scale: 0.94 }}
                 onClick={() => navigate(`/coin/${c.id}`)}
               >
@@ -612,157 +771,443 @@ export default function Market() {
         </section>
       )}
 
-      {/* ---------- list ---------- */}
-      <section className="market-list-section">
-        <div className="row-between" style={{ alignItems: 'center' }}>
-          <p className="section-label" style={{ margin: 0 }}>{t('market.allCoins')}</p>
-          <button
-            type="button"
-            className="tag"
-            onClick={() => navigate('/compare')}
-            aria-label={t('market.compare')}
-          >
-            ⚖️ {t('market.compare')}
-          </button>
+      {/*
+        ══════════════════════════════════════════════════════════════════════
+        THE MARKET TERMINAL
+        ══════════════════════════════════════════════════════════════════════
+        What this section replaces, and why it is shaped this way:
+
+        1. FOUR CONTROLS THAT DISAGREED. The old block was a title, a search
+           box, a chip row and a second chip row, each with its own spacing,
+           and the chips were three sorts pretending to be filters (see
+           lib/marketList.js). They are now one glass command bar with three
+           jobs: find (search), order (views + sort) and narrow (sectors,
+           deliberately its own row because tapping one issues a request).
+
+        2. THE CONTROLS SCROLLED AWAY. On a 500-row list the search box left
+           the screen after the first flick and the only way back was to
+           scroll the page up. The bar is `position: sticky` under the header,
+           so find/order stay one thumb away for the whole list.
+
+        3. NOTHING SAID HOW THE MARKET WAS DOING. Six numbers about right now
+           and no answer to "is the page mostly green or mostly red". The
+           breadth strip counts the rows this screen holds, and says how many
+           that is — a count, never a sentiment score.
+
+        4. A DEAD FEED LOOKED LIKE AN EMPTY SEARCH. With no rows and no error
+           branch the page printed «چیزی پیدا نشد» over a working network and
+           an empty query. There is now an explicit failure card with a retry.
+      */}
+      <section className="market-terminal" aria-labelledby="market-list-title">
+        <div className="market-terminal-head">
+          <h2 className="market-terminal-title" id="market-list-title">
+            <span className="market-terminal-title-text">
+              {sector ? t(`market.sector.${sector}`) : t('market.allCoins')}
+            </span>
+            <span className="market-count mono" aria-live="polite" data-testid="market-count">
+              {fmtNum(list.length)}
+            </span>
+          </h2>
+
+          <div className="market-head-actions">
+            {fresh && (
+              <span
+                className="market-fresh mono"
+                data-stale={fresh.stale ? 'true' : 'false'}
+                title={t('market.freshTitle')}
+              >
+                <i aria-hidden="true" />
+                {fresh.stale
+                  ? t('market.updatedStale', { minutes: Math.max(1, fresh.minutes) })
+                  : t('market.updatedAgo', { seconds: fresh.seconds })}
+              </span>
+            )}
+            {/*
+              A REFRESH THE READER CAN PRESS.
+
+              The feed polls every 30s on its own, which is fine until it does
+              not — and the freshness label above can then say "older than four
+              minutes" with nothing to do about it except reload the app. This
+              asks the same `usePoll` the timer does; it is not a second
+              request, it is the same one, earlier.
+            */}
+            <button
+              type="button"
+              className="market-refresh"
+              onClick={() => refreshMarkets?.()}
+              disabled={loading}
+              data-busy={loading ? 'true' : undefined}
+              aria-label={t('market.refresh')}
+              title={t('market.refresh')}
+              data-testid="market-refresh"
+            >
+              <IconRefresh width={14} height={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="market-compare"
+              onClick={() => navigate('/compare')}
+              aria-label={t('market.compare')}
+            >
+              <IconChart width={14} height={14} aria-hidden="true" />
+              <span>{t('market.compare')}</span>
+            </button>
+          </div>
         </div>
 
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('market.search')}
-          style={{ margin: '10px 0' }}
-        />
+        {/* ---------- the command bar: find · order ---------- */}
+        <div className="market-cmd">
+          <div className="market-search">
+            <IconSearch className="market-search-icon" width={16} height={16} aria-hidden="true" />
+            <input
+              id="market-coin-search"
+              className="market-search-input"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('market.search')}
+              aria-label={t('market.searchAria')}
+              autoComplete="off"
+              enterKeyHint="search"
+              spellCheck="false"
+            />
+            {query && (
+              <button
+                type="button"
+                className="market-search-clear"
+                onClick={() => setQuery('')}
+                aria-label={t('market.clearSearch')}
+              >
+                <IconX width={14} height={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
 
-        <div className="tag-scroll" style={{ marginBottom: 10 }}>
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              className={`tag ${!sector && filter === f ? 'active' : ''}`}
-              onClick={() => {
-                setSector(null);
-                setFilter(f);
-              }}
+          <div className="market-cmd-row">
+            <div className="market-views" role="group" aria-label={t('market.viewsAria')}>
+              {FILTERS.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className="market-view"
+                  data-active={activeView === f ? 'true' : undefined}
+                  aria-pressed={activeView === f}
+                  onClick={() => applyView(f)}
+                >
+                  {t(`market.filter.${f}`)}
+                </button>
+              ))}
+            </div>
+
+            <div className="market-sort-wrap">
+              <select
+                className="market-sort-select"
+                value={sortKey}
+                onChange={(e) => chooseSort(e.target.value)}
+                aria-label={t('market.sortAria')}
+                data-testid="market-sort"
+              >
+                {MARKET_SORTS.map((key) => (
+                  <option key={key} value={key}>{t(`market.sort.${key}`)}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="market-dir"
+                data-dir={sortDir}
+                onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                aria-label={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
+                title={sortDir === 'desc' ? t('market.dirDesc') : t('market.dirAsc')}
+                data-testid="market-sort-dir"
+              >
+                <span aria-hidden="true">{sortDir === 'desc' ? '↓' : '↑'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------- breadth: is this page mostly green or mostly red? ---------- */}
+        <div
+          className="market-breadth"
+          data-empty={breadth.counted === 0 ? 'true' : undefined}
+          data-testid="market-breadth"
+        >
+          <div className="market-breadth-head">
+            <span className="market-breadth-title">{t('market.breadthTitle')}</span>
+            <span
+              className="market-breadth-avg mono"
+              data-tone={breadth.avgChange >= 0 ? 'up' : 'down'}
             >
-              {t(`market.filter.${f}`)}
-            </button>
-          ))}
+              {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
+            </span>
+          </div>
+          <div
+            className="market-breadth-bar"
+            role="img"
+            aria-label={t('market.breadthAria', {
+              up: fmtNum(breadth.up),
+              down: fmtNum(breadth.down),
+              total: fmtNum(breadth.counted)
+            })}
+          >
+            <span className="market-breadth-seg is-up" style={{ width: `${breadth.upShare * 100}%` }} />
+            <span className="market-breadth-seg is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />
+            <span className="market-breadth-seg is-down" style={{ width: `${breadth.downShare * 100}%` }} />
+          </div>
+          <div className="market-breadth-legend">
+            <span className="market-breadth-item" data-tone="up" data-testid="market-breadth-up">
+              <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
+            </span>
+            <span className="market-breadth-item" data-tone="down" data-testid="market-breadth-down">
+              <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
+            </span>
+            {breadth.flat > 0 && (
+              <span className="market-breadth-item" data-tone="flat">
+                <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
+              </span>
+            )}
+            {breadth.unknown > 0 && (
+              <span className="market-breadth-item" data-tone="unknown">
+                <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
+              </span>
+            )}
+          </div>
+          <p className="market-breadth-note">
+            {t('market.breadthNote', { count: fmtNum(breadth.counted) })}
+          </p>
         </div>
 
         {/*
-          Sector tabs on their own row.
+          Sectors on their own row, below the bar.
 
-          Mixed into the row above they would look like more sorts of the same
+          Mixed into the view chips they would look like more sorts of the same
           list, which is exactly what they are not — tapping one issues a
-          request for a different set of coins entirely.
+          request for a different set of coins entirely. The coloured mark on
+          each chip is the sector's own hue, so gold, memecoins and RWA are
+          distinguishable at a glance instead of being six identical pills.
         */}
-        <div className="tag-scroll" style={{ marginBottom: 10 }}>
-          {SECTORS.map((sec) => (
-            <button
-              key={sec}
-              className={`tag ${sector === sec ? 'active' : ''}`}
-              onClick={() => { setSectorCoins([]); setSector(sector === sec ? null : sec); }}
-            >
-              {t(`market.sector.${sec}`)}
-            </button>
-          ))}
+        <div className="market-sectors" role="group" aria-label={t('market.sectorsAria')}>
+          <span className="market-sectors-label">{t('market.sectorsLabel')}</span>
+          <div className="market-sectors-rail">
+            {SECTORS.map((sec) => (
+              <button
+                key={sec}
+                type="button"
+                className="market-sector"
+                data-sector={sec}
+                data-active={sector === sec ? 'true' : undefined}
+                aria-pressed={sector === sec}
+                onClick={() => {
+                  setSectorCoins([]);
+                  setSector(sector === sec ? null : sec);
+                }}
+              >
+                <i aria-hidden="true" />
+                {t(`market.sector.${sec}`)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading && !list.length ? (
-          <div className="stack market-coin-grid">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="skel" style={{ height: 58 }} />
+          <div className="stack market-coin-grid" aria-busy="true">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="skel market-skel-row" />
             ))}
           </div>
-        ) : list.length === 0 && extraHits.length === 0 ? (
-          <div className="empty">
-            <span className="empty-icon">🔍</span>
-            {sectorLoading ? t('market.loadingSector') : sector ? t('market.sectorEmpty') : searching ? t('market.searching') : t('market.noResults')}
+        ) : marketError && !list.length ? (
+          /*
+           * THE FEED IS DOWN, AND THE PAGE SAYS SO.
+           *
+           * Not «چیزی پیدا نشد»: that sentence is about a search that returned
+           * nothing, and printing it over a network failure teaches the reader
+           * that the app is empty rather than that the app is offline. Nothing
+           * is drawn from memory here either — a stale price on a trade screen
+           * is worse than a blank one.
+           */
+          <div className="market-empty" data-kind="error" data-testid="market-feed-error">
+            <span className="market-empty-icon" aria-hidden="true">
+              <IconRefresh width={20} height={20} />
+            </span>
+            <div className="market-empty-title">{t('market.feedDown')}</div>
+            <p className="market-empty-help">{t('market.feedDownHelp')}</p>
+            <button
+              type="button"
+              className="market-empty-action"
+              onClick={() => refreshMarkets?.()}
+              data-testid="market-retry"
+            >
+              <IconRefresh width={14} height={14} aria-hidden="true" />
+              {t('market.retry')}
+            </button>
           </div>
         ) : (
-          <motion.div className="stack market-coin-grid" variants={stagger} initial="hidden" animate="show">
-            {list.slice(0, visibleCount).map((c, i) => {
-              /*
-                ─── ONE TAP, TWO ANSWERS ───────────────────────────────────
-                The curated answer (`isSwappable`) is INSTANT and offline: a
-                hand-checked contract on our cheapest chain. The resolved
-                answer comes from CoinGecko's own platform map and is what
-                makes a Solana memecoin or a long-tail Base token swappable
-                at all — see lib/coinVenues.js.
-
-                Curated is asked first and always wins, because it carries a
-                counter-token and a verified contract. Resolved is the
-                fallback that turns «cannot swap» into a real route for the
-                majority of the list.
-              */
-              const curated = isSwappable(c.id);
-              const venue = curated ? null : venues.get(c.id);
-              const resolved = !curated && venue?.tradeable ? venueRoute({ ...venue }) : null;
-              const swapUrl = curated ? swapUrlFor(c.id, 'buy') : resolved?.href ?? null;
-              return (
-                <div key={c.id} className="row market-coin-row" style={{ gap: 8, alignItems: 'center' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <CoinRow coin={c} rank={c.rank || i + 1} onClick={() => navigate(`/coin/${c.id}`)} />
-                  </div>
-                  {swapUrl && (
-                    <button
-                      className="tag market-swap-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(swapUrl);
-                      }}
-                      title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
-                      data-testid={`market-swap-${c.id}`}
-                    >
-                      {t('market.swap')}
-                    </button>
-                  )}
+          <>
+            {emptyKind !== 'none' && !list.length && !extraHits.length && (
+              <div className="market-empty" data-kind={emptyKind}>
+                <span className="market-empty-icon" aria-hidden="true">
+                  {emptyKind === 'favorites'
+                    ? <IconStar width={20} height={20} />
+                    : emptyKind === 'searching' || emptyKind === 'loadingSector'
+                      ? <IconRefresh width={20} height={20} />
+                      : <IconSearch width={20} height={20} />}
+                </span>
+                <div className="market-empty-title">
+                  {emptyKind === 'favorites'
+                    ? t('market.emptyFavorites')
+                    : emptyKind === 'searching'
+                      ? t('market.searching')
+                      : emptyKind === 'loadingSector'
+                        ? t('market.loadingSector')
+                        : emptyKind === 'sector'
+                          ? t('market.sectorEmpty')
+                          : t('market.noResults')}
                 </div>
-              );
-            })}
+                {emptyKind === 'favorites' && (
+                  <p className="market-empty-help">{t('market.emptyFavoritesHelp')}</p>
+                )}
+                {(emptyKind === 'favorites' || emptyKind === 'search' || emptyKind === 'sector') && (
+                  <button
+                    type="button"
+                    className="market-empty-action"
+                    onClick={() => {
+                      setQuery('');
+                      setSector(null);
+                      setOnlyFavorites(false);
+                      setSortKey('rank');
+                      setSortDir('asc');
+                    }}
+                  >
+                    {t('market.showAll')}
+                  </button>
+                )}
+              </div>
+            )}
 
-            {(list.length > visibleCount || (!sector && filter === 'all' && !query && !pageDone && coins.length >= MARKET_PAGE_SIZE)) && (
-              <button type="button" className="tag market-show-more" disabled={pageLoading}
-                onClick={() => (list.length > visibleCount ? setVisibleCount((n) => n + 60) : loadNextPage())}>
-                {pageLoading ? t('market.loadingSector') : t('market.showMore', { count: Math.max(0, list.length - visibleCount) || 250 })}
-              </button>
-            )}
-            {extraHits.length > 0 && (
-              <>
-                <p className="section-label" style={{ marginTop: 8 }}>{t('market.moreResults')}</p>
-                {extraHits.map((c) => {
-                  const curated = isSwappable(c.id);
-                  const venue = curated ? null : venues.get(c.id);
-                  const resolved = !curated && venue?.tradeable ? venueRoute({ ...venue }) : null;
-                  const swapUrl = curated ? swapUrlFor(c.id, 'buy') : resolved?.href ?? null;
-                  return (
-                    <div key={c.id} className="row market-coin-row" style={{ gap: 8, alignItems: 'center' }}>
+            <motion.div
+              className="stack market-coin-grid"
+              variants={stagger}
+              initial="hidden"
+              animate="show"
+            >
+              {visibleList.map((c, i) => {
+                /*
+                  ─── ONE TAP, TWO ANSWERS ─────────────────────────────────
+                  The curated answer (`isSwappable`) is INSTANT and offline: a
+                  hand-checked contract on our cheapest chain. The resolved
+                  answer comes from CoinGecko's own platform map and is what
+                  makes a Solana memecoin or a long-tail Base token swappable
+                  at all — see lib/coinVenues.js.
+
+                  Curated is asked first and always wins, because it carries a
+                  counter-token and a verified contract. Resolved is the
+                  fallback that turns «cannot swap» into a real route for the
+                  majority of the list.
+                */
+                const swapUrl = swapRouteFor(c);
+                return (
+                  <div key={c.id} className="market-coin-row">
+                    <CoinRow
+                      coin={c}
+                      rank={c.rank || i + 1}
+                      metric={rowMetric(c)}
+                      onClick={() => navigate(`/coin/${c.id}`)}
+                      starred={favorites.includes(c.id)}
+                      onStar={star}
+                      starLabel={starLabel(c)}
+                    />
+                    {swapUrl && (
                       <button
-                        className="coin-row"
-                        onClick={() => navigate(`/coin/${c.id}`)}
-                        style={{ flex: 1, minWidth: 0, textAlign: 'start' }}
+                        type="button"
+                        className="market-swap-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(swapUrl);
+                        }}
+                        title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
+                        data-testid={`market-swap-${c.id}`}
                       >
-                        <CoinLogo coin={c} />
-                        <div className="coin-meta">
-                          <div className="coin-sym">{c.symbol}</div>
-                          <div className="coin-name">{c.name}</div>
-                        </div>
-                        {c.rank > 0 && <span className="faint mono" style={{ fontSize: 11 }}>#{c.rank}</span>}
+                        {t('market.swap')}
                       </button>
-                      {swapUrl && (
-                        <button
-                          className="tag market-swap-btn"
-                          onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
-                        >
-                          {t('market.swap')}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </>
+                    )}
+                  </div>
+                );
+              })}
+            </motion.div>
+
+            {/*
+              THE FOOTER SAYS WHERE YOU ARE.
+
+              «نمایش بیشتر» alone left the reader guessing whether they had
+              seen twenty coins or two hundred. The count is printed, the bar
+              is the share of the loaded list already on screen, and the two
+              kinds of "more" carry different labels because only one of them
+              waits on the network.
+            */}
+            {hasMore && (
+              <div className="market-more">
+                <div className="market-more-meta">
+                  <span className="mono" data-testid="market-showing">
+                    {t('market.showing', {
+                      shown: fmtNum(shownCount),
+                      total: fmtNum(list.length || shownCount)
+                    })}
+                  </span>
+                  <span className="market-more-track" aria-hidden="true">
+                    <span
+                      className="market-more-fill"
+                      style={{ width: `${list.length ? Math.min(100, (shownCount / list.length) * 100) : 0}%` }}
+                    />
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="market-show-more"
+                  disabled={pageLoading}
+                  onClick={() => (list.length > visibleCount ? setVisibleCount((n) => n + 60) : loadNextPage())}
+                >
+                  {pageLoading
+                    ? t('market.loadingSector')
+                    : list.length > visibleCount
+                      ? t('market.showMore', { count: fmtNum(list.length - visibleCount) })
+                      : t('market.nextPage')}
+                </button>
+              </div>
             )}
-          </motion.div>
+
+            {/* Coins the wider search found that are not in the loaded page. */}
+            {extraHits.length > 0 && (
+              <section className="market-more-results">
+                <p className="section-label">{t('market.moreResults')}</p>
+                <motion.div className="stack market-coin-grid" variants={stagger} initial="hidden" animate="show">
+                  {extraHits.map((c) => {
+                    const swapUrl = swapRouteFor(c);
+                    return (
+                      <div key={c.id} className="market-coin-row">
+                        <CoinRow
+                          coin={c}
+                          rank={c.rank || undefined}
+                          onClick={() => navigate(`/coin/${c.id}`)}
+                          starred={favorites.includes(c.id)}
+                          onStar={star}
+                          starLabel={starLabel(c)}
+                        />
+                        {swapUrl && (
+                          <button
+                            type="button"
+                            className="market-swap-btn"
+                            onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}
+                          >
+                            {t('market.swap')}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </motion.div>
+              </section>
+            )}
+          </>
         )}
       </section>
     </PageTransition>
