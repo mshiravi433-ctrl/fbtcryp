@@ -45,11 +45,21 @@ const FILTERS = ['all', 'gainers', 'losers', 'favorites', 'volume'];
  *
  * 60 made most coins untappable (the detail screen looked the id up in this
  * list and said "not found"); 250 was still a page a trader calls short.
- * CoinGecko's bulk endpoint answers 250 per call, so 500 is two calls — and
- * 500 is exactly the batch ceiling the venue resolver is specified for, so
- * "resolve every row on screen" stays a single request however the list grows.
+ *
+ * ─── WHY THIS IS 250 AND NOT 500 ────────────────────────────────────────
+ * It was 500, and 500 never arrived. `/api/markets` clamps `per_page` to 250
+ * (CoinGecko's documented maximum for one call), so the page asked for 500,
+ * received 250, and then — because the "next page" button is gated on
+ * `coins.length >= MARKET_PAGE_SIZE` — could never offer page 2 either. The
+ * user was reading «۵۰۰» in the footer of a 250-row list with a button that
+ * could not appear.
+ *
+ * 250 is what one upstream call really answers, and it is what the footer now
+ * compares against, so «۵۰ توکن بعدی» works and the screen can reach 500 rows
+ * — 250 on first paint, the rest on demand. Half the first-paint payload, one
+ * upstream call instead of two, and a count that matches the data.
  */
-const MARKET_PAGE_SIZE = 500;
+const MARKET_PAGE_SIZE = 250;
 
 /**
  * SECTOR TABS — gold, memecoins, RWA, AI, gaming.
@@ -461,6 +471,16 @@ export default function Market() {
     return (remoteHits ?? []).filter((c) => !have.has(c.id));
   }, [remoteHits, list, query, sector]);
 
+  /*
+   * ONE STABLE SLICE FOR THE RAIL.
+   *
+   * `(coins ?? []).slice(0, 18)` created a NEW array on every render, so the
+   * Ticker's `useMemo` key changed on every 30-second poll AND on every
+   * keystroke in the search box — rebuilding ~48 segments (and re-mounting
+   * their <img> artwork) for a rail whose visible content had not changed.
+   */
+  const railCoins = useMemo(() => (coins ?? []).slice(0, 18), [coins]);
+
   const hero = coins?.[0];
   /*
    * The 7-day shape of the total, built from the rows already in memory —
@@ -507,7 +527,7 @@ export default function Market() {
 
   return (
     <PageTransition>
-      <Ticker coins={(coins ?? []).slice(0, 18)} />
+      <Ticker coins={railCoins} />
 
       {isOffline && <div className="notice">{t('common.offlineData')}</div>}
 
@@ -823,7 +843,7 @@ export default function Market() {
           <span className="market-trending-aurora" aria-hidden="true" />
           <p className="section-label market-trending-head">
             <span className="market-trending-flame" aria-hidden="true">
-              <FlameIcon size={24} />
+              <FlameIcon size={21} />
             </span>
             <span className="market-trending-title">{t('market.trending')}</span>
             <span className="market-trending-badge mono">HOT</span>
@@ -1075,37 +1095,74 @@ export default function Market() {
               {t('market.breadthAvg', { pct: fmtPct(breadth.avgChange, 2) })}
             </span>
           </div>
+          {/*
+            THE ANSWER, AS A DIAL.
+            «نبض بازار را باکسش خیلی مدرن تر کن»
+
+            A single coloured bar answers "how much is up" and nothing else.
+            The ring is the same three shares drawn as one circle — up, flat,
+            down — with the up-share printed in the middle of it, which is the
+            one number a trader reads first, and it is legible from across a
+            room because it is the only figure in the card set in 11.5px black.
+
+            It is a STATIC conic-gradient: no animation, no filter, no SVG, and
+            the three shares are passed as custom properties so the ring can
+            never disagree with the chips beside it (both read `breadth`).
+          */}
+          <div className="market-breadth-body">
+            <span
+              className="market-breadth-ring mono"
+              /* The number in the middle IS the up-share, so its colour follows
+                 that share — not the average change in the header. Two
+                 different measurements, two different colours. */
+              data-tone={breadth.upShare >= 0.5 ? 'up' : 'down'}
+              role="img"
+              aria-label={t('market.breadthAria', {
+                up: fmtNum(breadth.up),
+                down: fmtNum(breadth.down),
+                total: fmtNum(breadth.counted)
+              })}
+              style={{
+                '--up': (breadth.upShare * 100).toFixed(1),
+                '--flat': (breadth.flatShare * 100).toFixed(1)
+              }}
+            >
+              <b>{Math.round(breadth.upShare * 100)}%</b>
+            </span>
+            <div className="market-breadth-side">
+              <div className="market-breadth-legend">
+                <span className="market-breadth-item" data-tone="up" data-testid="market-breadth-up">
+                  <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
+                </span>
+                <span className="market-breadth-item" data-tone="down" data-testid="market-breadth-down">
+                  <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
+                </span>
+                {breadth.flat > 0 && (
+                  <span className="market-breadth-item" data-tone="flat">
+                    <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
+                  </span>
+                )}
+                {breadth.unknown > 0 && (
+                  <span className="market-breadth-item" data-tone="unknown">
+                    <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* The precise reading stays: the ring is the shape, the bar is the
+              measurement, and a two-segment difference of 1% is easier to see
+              as a proportion of a line than of a circle. */}
           <div
             className="market-breadth-bar"
-            role="img"
-            aria-label={t('market.breadthAria', {
-              up: fmtNum(breadth.up),
-              down: fmtNum(breadth.down),
-              total: fmtNum(breadth.counted)
-            })}
+            aria-hidden="true"
           >
             <span className="market-breadth-seg is-up" style={{ width: `${breadth.upShare * 100}%` }} />
             <span className="market-breadth-seg is-flat" style={{ width: `${breadth.flatShare * 100}%` }} />
             <span className="market-breadth-seg is-down" style={{ width: `${breadth.downShare * 100}%` }} />
           </div>
-          <div className="market-breadth-legend">
-            <span className="market-breadth-item" data-tone="up" data-testid="market-breadth-up">
-              <i aria-hidden="true" />{t('market.breadthUp', { count: fmtNum(breadth.up) })}
-            </span>
-            <span className="market-breadth-item" data-tone="down" data-testid="market-breadth-down">
-              <i aria-hidden="true" />{t('market.breadthDown', { count: fmtNum(breadth.down) })}
-            </span>
-            {breadth.flat > 0 && (
-              <span className="market-breadth-item" data-tone="flat">
-                <i aria-hidden="true" />{t('market.breadthFlat', { count: fmtNum(breadth.flat) })}
-              </span>
-            )}
-            {breadth.unknown > 0 && (
-              <span className="market-breadth-item" data-tone="unknown">
-                <i aria-hidden="true" />{t('market.breadthUnknown', { count: fmtNum(breadth.unknown) })}
-              </span>
-            )}
-          </div>
+
           <p className="market-breadth-note">
             {t('market.breadthNote', { count: fmtNum(breadth.counted) })}
           </p>
@@ -1250,6 +1307,10 @@ export default function Market() {
                       coin={c}
                       rank={c.rank || i + 1}
                       metric={rowMetric(c)}
+                      /* Long list: no entrance animation, no stroke draw-in.
+                         Sixty of each is what a scroll budget pays for nothing
+                         the reader asked to see. */
+                      animate={false}
                       onClick={() => navigate(`/coin/${c.id}`)}
                     />
                     {swapUrl && (
@@ -1323,6 +1384,7 @@ export default function Market() {
                         <CoinRow
                           coin={c}
                           rank={c.rank || undefined}
+                          animate={false}
                           onClick={() => navigate(`/coin/${c.id}`)}
                         />
                         {swapUrl && (

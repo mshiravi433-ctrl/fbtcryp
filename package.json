@@ -72,7 +72,7 @@
     "test:lab": "vitest run test/lab-screens.test.jsx test/lab-market-data.test.js",
     "test:rewards": "vitest run test/rewards-v2.test.jsx test/rewards-v2-ui.test.jsx",
     "test:market-data": "node test/market-provider-fallback-probe.mjs && node test/market-visuals-probe.mjs && node test/market-visuals-rescue-probe.mjs && node --test test/market-sector-regression.test.mjs",
-    "test:market": "node --test test/market-list.test.mjs && vitest run test/market-terminal.test.jsx test/market-swap-dock.test.jsx test/market-stories-and-aparat.test.jsx test/market-rail.test.jsx",
+    "test:market": "node --test test/market-list.test.mjs test/market-speed.test.mjs && vitest run test/market-terminal.test.jsx test/market-swap-dock.test.jsx test/market-stories-and-aparat.test.jsx test/market-rail.test.jsx",
     "test:lending-service": "vitest run test/lending-service.test.js test/lending-bff-config-probe.test.js",
     "test:lending": "npm run test:lending-service && node test/lending-engine-probe.mjs && node test/intent-ai/lending-adapters-probe.mjs && vite build -c test/vite.loan.mjs --logLevel error && node test/run-one-probe.mjs ./.out/loan/loan-execution-probe.js",
     "test:collateral-loop": "node --test test/loop-math.test.mjs test/loop-preview.test.mjs test/loop-plan.test.mjs test/loop-execution.test.mjs test/loop-runtime.test.mjs test/loop-feature-flags.test.mjs && vitest run test/loop-ui.test.jsx test/loop-deps.test.js --maxWorkers=2 --no-file-parallelism",

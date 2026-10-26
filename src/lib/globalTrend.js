@@ -28,9 +28,16 @@
  */
 export const GLOBAL_TREND_SCHEMA = 'fbt.global-trend.v1';
 
-/** CoinGecko's `sparkline_in_7d.price` is hourly. */
+/**
+ * CoinGecko's `sparkline_in_7d.price` is hourly — until our own server thins it
+ * to save the payload (server/providers.js → compactMarketRows). A thinned
+ * series carries `sparklineStepHours`, so every timestamp below is computed
+ * from the REAL spacing of the points it was given: a 42-point series at a
+ * 4-hour step must still say "7 days", and a 42-point hourly series must say
+ * "2 days" rather than borrowing a week it does not have.
+ */
 const STEP_MS = 60 * 60 * 1000;
-const FULL_WINDOW_POINTS = 168; // 7 days × 24h
+const FULL_WINDOW_HOURS = 168; // 7 days × 24h
 
 /**
  * @returns {null | {schema, points: Array<{x:number,y:number}>, coins:number,
@@ -54,7 +61,11 @@ export function marketCapSeries(coins = [], { maxCoins = 60, maxPoints = 84, now
       const spark = Array.isArray(c?.sparkline)
         ? c.sparkline.map((p) => Number(p)).filter((p) => Number.isFinite(p) && p > 0)
         : [];
-      return { price, mcap, weight, spark };
+      /* Hours between two adjacent points. 1 = the raw hourly feed; the server
+         sends 4 for a thinned one. Guarded because a nonsense value would
+         silently stretch the x-axis. */
+      const stepHours = Math.min(24, Math.max(1, Math.round(Number(c?.sparklineStepHours) || 1)));
+      return { price, mcap, weight, spark, stepHours };
     })
     .filter((c) => c.weight > 0 && Number.isFinite(c.weight) && c.mcap > 0 && c.spark.length > 2)
     .sort((a, b) => b.mcap - a.mcap)
@@ -67,7 +78,12 @@ export function marketCapSeries(coins = [], { maxCoins = 60, maxPoints = 84, now
      every coin. The window is therefore as long as the SHORTEST series, and
      `days` reports that honestly rather than stretching 5 days of data across
      a 7-day axis. */
-  const len = Math.min(FULL_WINDOW_POINTS, ...usable.map((c) => c.spark.length));
+  /* All rows normally share the same sampling step; take the coarsest one so
+     the window can never be overstated. */
+  const stepHours = Math.max(...usable.map((c) => c.stepHours));
+  const stepMs = stepHours * STEP_MS;
+  const maxLen = Math.ceil(FULL_WINDOW_HOURS / stepHours);
+  const len = Math.min(maxLen, ...usable.map((c) => c.spark.length));
   if (!(len > 2)) return null;
 
   const totals = new Array(len).fill(0);
@@ -83,7 +99,7 @@ export function marketCapSeries(coins = [], { maxCoins = 60, maxPoints = 84, now
   /* Bucket-average down to a drawable count. Averaging rather than sampling
      keeps a single hour's wick from becoming the shape of the week. */
   const bucket = Math.max(1, Math.floor(len / maxPoints));
-  const spanMs = (len - 1) * STEP_MS;
+  const spanMs = (len - 1) * stepMs;
   const points = [];
   for (let i = 0; i < len; i += bucket) {
     let sum = 0;
@@ -98,7 +114,7 @@ export function marketCapSeries(coins = [], { maxCoins = 60, maxPoints = 84, now
     /* x is the real timestamp of this bucket: STEP_MS per input point, counted
        back from `now` — not a 7-day span divided by however many points
        happened to arrive. */
-    points.push({ x: now - (len - 1 - i) * STEP_MS, y: avg });
+    points.push({ x: now - (len - 1 - i) * stepMs, y: avg });
   }
   if (points.length < 3) return null;
 

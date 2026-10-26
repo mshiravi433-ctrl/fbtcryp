@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -204,7 +204,18 @@ const DEFI_HIGHLIGHTS = [
  *     duplicate gradient ids make the browser resolve every one of them to the
  *     first, which paints the wrong colours.
  */
-function StoryGlyph({ id, accent, accent2, gid, className = '' }) {
+/*
+ * MEMOISED, because the rail is inside the market screen's render tree.
+ *
+ * Every keystroke in the market search box, every sort change and every
+ * 30-second poll re-renders Market — and therefore this component — so eight
+ * story bubbles were rebuilding their gradient defs and glyph paths on each of
+ * those keystrokes. The props here are literals from a module-level catalogue,
+ * so the comparison is a reference check that always hits after the first
+ * paint. This is the concrete half of «لود باکس استوری هوشمند خیلی کند شده»:
+ * the box now costs one paint, not one per interaction.
+ */
+const StoryGlyph = memo(function StoryGlyph({ id, accent, accent2, gid, className = '' }) {
   const g = `${gid}-g`;
   const soft = `${gid}-s`;
   const stroke = { strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -302,7 +313,7 @@ function StoryGlyph({ id, accent, accent2, gid, className = '' }) {
       )}
     </svg>
   );
-}
+});
 
 /**
  * THE CINEMATIC STAGE.

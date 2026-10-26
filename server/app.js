@@ -14,6 +14,7 @@ import cors from 'cors';
 import { withCache, cacheStats, memoryStore } from './cache.js';
 import { blobConfigured, blobSet, upstashIncrementWindow, withPersistentCache } from './blobCache.js';
 import {
+  compactMarketRows,
   fetchChart,
   fetchCoinDetail,
   fetchCategory,
@@ -3913,7 +3914,16 @@ app.get('/api/markets', (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const perPage = Math.min(250, Math.max(1, Number(req.query.per_page) || 50));
   const vs = String(req.query.vs || 'usd').toLowerCase();
-  return serve(res, 30000)(() => fetchMarkets({ page, perPage, vs }), `markets:${vs}:${page}:${perPage}`);
+  /*
+   * PAYLOAD BUDGET. 168 hourly sparkline points per row is ~700 kB of JSON at
+   * 250 rows, and the screen can draw 40 of them per row. The thinning runs
+   * INSIDE the cached producer, so a cache hit serves the small body and the
+   * saving is paid once rather than per request. See compactMarketRows.
+   */
+  return serve(res, 30000)(
+    async () => compactMarketRows(await fetchMarkets({ page, perPage, vs })),
+    `markets:${vs}:${page}:${perPage}`
+  );
 });
 
 app.get('/api/trending', (_req, res) => serve(res, 120000)(fetchTrending, 'trending'));

@@ -8,32 +8,37 @@ import CoinLogo from './CoinLogo';
 /**
  * THE MARKET RAIL
  * ---------------------------------------------------------------------------
- * Reported: «باکس بالایی سرعتش خوب شده اما داخل باکس قرار دادی کشیده شود بدون
- * چراغ چشمک زن سبز و انگار ریلی هست و مدرن باشد».
+ * Reported (twice, the second time as «داخل باکس قرار دادی کشیده شود … انگار
+ * ریلی هست و مدرن باشد»): the top box should read as ONE rail, not as a row of
+ * cards that were stretched to fill one.
  *
- * Three things were wrong with the old tape, and each one is structural rather
- * than a matter of taste:
+ * ─── WHAT IS DIFFERENT IN THIS PASS ────────────────────────────────────────
+ * 1. NOTHING INSIDE THE BOX IS A BOX. Every coin used to be a bordered,
+ *    shadowed pill with its own padding, riding inside a bordered rail — forty
+ *    sub-cards inside a card. Items are now full-height SEGMENTS of a single
+ *    tape (no radius, no border, no shadow), separated by one hairline. That is
+ *    what makes the strip feel like a rail instead of a squeezed grid.
+ * 2. NOTHING STRETCHES. The item is `height:100%` with `align-items:center`,
+ *    so its contents are centred in the rail rather than sized by it. The
+ *    numeric columns are tabular, so the tape does not jitter as prices tick.
+ * 3. NO BLINKING LIGHT. A pulsing green dot is alarm vocabulary, not price
+ *    vocabulary; it sat there permanently next to numbers that already prove
+ *    the feed is alive. A static accent bar + a quiet LIVE label replace it.
+ * 4. THE CHANGE IS A PILL. Green/red text at 10px on a moving tape is hard to
+ *    read; a tinted pill with a direction glyph survives both a quick glance
+ *    and a monochrome screenshot.
  *
- *   1. A BOX INSIDE A BOX. Every coin was a bordered, shadowed pill riding
- *      inside a bordered, shadowed rail — 40 sub-cards in a card, which is what
- *      made the strip feel "کشیده" (stretched) and cramped at the same time.
- *      The rail is now ONE surface: items are plain typographic segments
- *      separated by a hairline, so the eye reads a continuous tape rather than
- *      a row of chips.
- *   2. THE BLINKING GREEN LIGHT. A pulsing green dot is the visual vocabulary
- *      of an alarm, not of a live price. It sat there permanently, blinking,
- *      next to numbers that are already the evidence that the feed is alive.
- *      Replaced by a static accent bar + a quiet LIVE label: the rail says what
- *      it is without moving at the viewer.
- *   3. PROMOS AS SUB-BANNERS. Each promo carried a badge, two lines of copy, a
- *      chart glyph and a growth figure — a poster inside a tape. They are now
- *      single-line accent tags: dot, name, move. A promo earns attention by
- *      colour, not by volume.
+ * ─── WHY IT IS ALSO CHEAPER THAN THE OLD ONE ───────────────────────────────
+ * The marquee is a single transform-only animation on two tracks (no JS, no
+ * rAF, no layout). The edge fades are painted gradients rather than a
+ * `mask-image`, because a mask promotes the whole strip to an offscreen buffer
+ * that has to be re-composited while the page scrolls — on a phone that is
+ * exactly the kind of work that shows up as a black band mid-scroll. Logos are
+ * `thumb` (25px) artwork drawn at 18px: the old call asked for 22px, which is
+ * not a CoinGecko variant name, so the tape downloaded 250px PNGs for it.
  *
- * Motion: the marquee is the SAME transform-only animation (96s, paused on
- * hover, 180s under reduced motion) — the speed was already right, so nothing
- * here changes the cost of the frame. Items are real `<button>`s now, so the
- * rail is keyboard reachable without a `role="button"` div.
+ * Items are real `<button>`s, so the rail is keyboard reachable without a
+ * `role="button"` div.
  */
 
 const PROMO_DATA = {
@@ -89,22 +94,24 @@ export default function Ticker({ coins = [] }) {
   const navigate = useNavigate();
   const isFa = !i18n.language?.startsWith('en');
 
-  // Build a rich, repeating sequence of live assets interspersed with varied promos
+  /*
+   * ONE PROMO PER FOUR COINS, and at most 24 segments per track. The parent
+   * already slices the feed, but this component is mounted with whatever it is
+   * given — a 250-row list would otherwise become a 500-node marquee that is
+   * wider than the page and slower than the list it advertises.
+   */
   const sequence = useMemo(() => {
     if (!coins || coins.length === 0) return [];
 
     const promoKinds = ['rwa', 'gold', 'ai', 'yield', 'p2p'];
-    const chunkSize = 3;
+    const source = coins.slice(0, 20);
+    const chunkSize = 4;
     const items = [];
 
     let promoIndex = 0;
-    for (let i = 0; i < coins.length; i += chunkSize) {
-      const chunk = coins.slice(i, i + chunkSize);
-      chunk.forEach((coin) => {
-        items.push({ type: 'coin', coin });
-      });
-      const promoKind = promoKinds[promoIndex % promoKinds.length];
-      items.push({ type: 'promo', kind: promoKind });
+    for (let i = 0; i < source.length; i += chunkSize) {
+      source.slice(i, i + chunkSize).forEach((coin) => items.push({ type: 'coin', coin }));
+      items.push({ type: 'promo', kind: promoKinds[promoIndex % promoKinds.length] });
       promoIndex += 1;
     }
 
@@ -132,16 +139,14 @@ export default function Ticker({ coins = [] }) {
         key={key}
         onClick={() => navigate(`/coin/${item.coin.id}`)}
       >
-        {/* `thumb` (25px) is the honest size for a 19px mark; the old call
-            passed `22`, which is not a CoinGecko variant name, so the URL was
-            left untouched and the tape fetched 250px artwork. */}
-        <CoinLogo coin={item.coin} size="thumb" px={19} />
+        <CoinLogo coin={item.coin} size="thumb" px={18} />
         <span className="ticker-sym">{item.coin.symbol}</span>
         {/* `fmtPrice` is deliberately NOT `fmtUsd`: a market price is public
             data and must not be masked by the hide-balances switch. The
             symbol still comes from the currency module so it cannot drift. */}
         <span className="ticker-price mono">{`${currencyOf().symbol}${fmtPrice(item.coin.price)}`}</span>
         <span className={`ticker-change mono ${up ? 'is-up' : 'is-down'}`}>
+          <span className="ticker-change-arrow" aria-hidden="true">{up ? '▲' : '▼'}</span>
           {fmtPct(item.coin.change24h, 1)}
         </span>
       </button>

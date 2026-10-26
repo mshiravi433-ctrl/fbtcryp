@@ -137,6 +137,49 @@ export function normalizeCoin(c) {
   };
 }
 
+/**
+ * ─── THE MARKET PAYLOAD WAS MOSTLY SPARKLINE ────────────────────────────────
+ * Reported, twice: «هنوز سرعت سایت و سرعت لود پایینه».
+ *
+ * CoinGecko's `sparkline_in_7d.price` is 168 hourly floats per coin, and it is
+ * sent for every row: at 250 rows that is ~42,000 numbers, roughly 700 kB of
+ * JSON for one screen — on top of the two upstream calls needed to build it.
+ * The list draws 40 of those points (`CoinRow` slices `-40`), the ticker draws
+ * none, and the global-trend chart buckets them down to 84. So ~75% of the
+ * bytes crossing the user's connection were points no component could reach.
+ *
+ * `compactMarketRows` thins each series to at most 48 points, stepped from the
+ * END so "now" is always the real last observation, and records the step it
+ * used. Nothing is interpolated, averaged or invented; the shape of the week is
+ * the same shape at a lower sample rate, which is what a 44px-wide sparkline
+ * can express anyway.
+ *
+ * The step is carried in `sparklineStepHours` so the ONE consumer that reasons
+ * about time — lib/globalTrend.js, which rebuilds a market-cap series from
+ * these arrays — computes its window from the real spacing instead of assuming
+ * one point per hour. A chart that claims seven days from two days of data is
+ * worse than a shorter chart.
+ *
+ * Rows that are already short (CoinLore quotes carry no sparkline at all) pass
+ * through untouched, so the function is a no-op on the backup feed.
+ */
+export function compactMarketRows(rows, { maxPoints = 48 } = {}) {
+  if (!Array.isArray(rows)) return rows;
+  const cap = Math.max(2, Number(maxPoints) || 48);
+  return rows.map((row) => {
+    const spark = Array.isArray(row?.sparkline) ? row.sparkline : null;
+    if (!spark || spark.length <= cap + 2) return row;
+    const step = Math.max(2, Math.ceil(spark.length / cap));
+    const out = [];
+    /* Walked backwards from the newest point, then reversed: the LAST sample
+       of the series is the price on screen, and dropping it would make the
+       sparkline disagree with the row's own price. */
+    for (let i = spark.length - 1; i >= 0; i -= step) out.push(spark[i]);
+    out.reverse();
+    return { ...row, sparkline: out, sparklineStepHours: step };
+  });
+}
+
 function normalizeGlobalLore(g = {}) {
   return {
     coins: Number(g.coins_count) || 0,
