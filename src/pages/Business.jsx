@@ -67,10 +67,7 @@ const SUBTABS = {
     { id: 'services', Icon: IconTrend, a: '#00e5ff', b: '#7c4dff' },
     { id: 'brands', Icon: IconBuilding, a: '#b06bff', b: '#ff2d95' }
   ],
-  followup: [
-    { id: 'requests', Icon: IconMail, a: '#ff2d95', b: '#ff8a3a' },
-    { id: 'tracking', Icon: IconChart, a: '#00ff9d', b: '#00e5ff' }
-  ]
+  followup: [{ id: 'requests', Icon: IconMail, a: '#ff2d95', b: '#ff8a3a' }]
 };
 
 const STATUS_CFG = {
@@ -88,11 +85,8 @@ const FILTERS = [
 ];
 
 /* Demo requests — every visible string comes from i18n (biz.demo.*). */
-const REQUESTS = [
-  { id: 'r1', companyKey: 'biz.demo.arta', topic: 'listing', status: 'responded', timeKey: 'biz.demo.hoursAgo', timeCount: 2 },
-  { id: 'r2', companyKey: 'biz.demo.noor', topic: 'liquidity', status: 'review', timeKey: 'biz.demo.hoursAgo', timeCount: 14 },
-  { id: 'r3', companyKey: 'biz.demo.bitplus', topic: 'whitelabel', status: 'pending', timeKey: 'biz.demo.daysAgo', timeCount: 3 }
-];
+const REQUESTS = []; // Requests are sent directly by email; there is no server-side status store.
+
 
 const BRANDS = [
   { id: 'fbt', name: 'FBT Swap', mono: 'F', Icon: IconBank, a: '#00e5ff', b: '#7c4dff' },
@@ -189,7 +183,7 @@ export default function Business() {
   const activeOffer = OFFERS.find((o) => o.id === interest) || OFFERS[0];
   const doneSteps = STEPS.filter((s) => s.done).length;
   const progress = doneSteps / STEPS.length;
-  const respondedCount = REQUESTS.filter((r) => r.status === 'responded').length;
+  const respondedCount = 0;
 
   const visibleRequests = useMemo(
     () => (filter === 'all' ? REQUESTS : REQUESTS.filter((r) => r.status === filter)),
@@ -298,7 +292,6 @@ export default function Business() {
     services: OFFERS.length,
     brands: BRANDS.length,
     requests: REQUESTS.length,
-    tracking: STEPS.length
   };
 
   return (
@@ -614,7 +607,7 @@ export default function Business() {
 
                 <div className="biz-row-head">
                   <div>
-                    <p className="biz-label">{t('biz.requestsTitle')}</p>
+                    <p className="biz-label">{t('biz.newRequest')}</p>
                     <p className="biz-lead biz-lead--inline">{t('biz.requestsSub')}</p>
                   </div>
                   <button
@@ -704,10 +697,6 @@ export default function Business() {
                   )}
                 </div>
 
-                <button type="button" className="biz-link-row" onClick={() => pickSubTab(subTabs[1])}>
-                  <IconChart width={16} height={16} />{t('biz.viewTracking')}
-                  <IconChevronLeft width={15} height={15} className="biz-flip" />
-                </button>
 
                 <AnimatePresence initial={false}>
                   {openRequest && (
@@ -841,86 +830,7 @@ export default function Business() {
             )}
 
             {/* ===== Follow-up / Tracking ===== */}
-            {activeTab === 'followup' && activeSubTab === 'tracking' && (
-              <>
-                <p className="biz-label">{t('biz.trackingTitle')}</p>
-                <p className="biz-lead">{t('biz.trackingSub')}</p>
 
-                <div className="biz-card biz-progress-card">
-                  <div className="biz-progress-body">
-                    <div className="biz-ring-wrap">
-                      <svg className="biz-ring" viewBox="0 0 120 120" role="img" aria-label={t('biz.tracking.progressLabel')}>
-                        <circle className="biz-ring-track" cx="60" cy="60" r={RING_R} />
-                        <motion.circle
-                          className="biz-ring-fill" cx="60" cy="60" r={RING_R}
-                          strokeDasharray={RING_C}
-                          initial={{ strokeDashoffset: RING_C }}
-                          animate={{ strokeDashoffset: RING_C * (1 - progress) }}
-                          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-                        />
-                      </svg>
-                      <span className="biz-ring-value">{pct(progress, locale)}</span>
-                    </div>
-                    <div className="biz-progress-copy">
-                      <span className="biz-progress-title">{t('biz.tracking.progressLabel')}</span>
-                      <span className="biz-progress-sub">
-                        {t('biz.tracking.progressSub', { done: num(doneSteps, locale), total: num(STEPS.length, locale) })}
-                      </span>
-                      <span className="biz-progress-next">
-                        <IconClock width={12} height={12} />
-                        {t('biz.tracking.nextUp')} · {t(`biz.steps.${STEPS.find((s) => !s.done).id}.title`)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <motion.div className="biz-stats biz-stats--tracking" variants={stagger} initial="hidden" animate="show">
-                  {[
-                    { Icon: IconMail, a: '#ff2d95', b: '#ff8a3a', value: num(REQUESTS.length, locale), label: t('biz.tracking.totalRequests'), sub: t('biz.tracking.totalSub') },
-                    { Icon: IconCheck, a: '#00ff9d', b: '#00b8ff', value: num(respondedCount, locale), label: t('biz.tracking.responded'), sub: t('biz.tracking.respondedSub') },
-                    { Icon: IconClock, a: '#00e5ff', b: '#7c4dff', value: t('biz.stats.alwaysOpen.value'), label: t('biz.tracking.support'), sub: t('biz.tracking.supportSub') }
-                  ].map(({ Icon, a, b, value, label, sub }) => (
-                    <motion.div key={label} className="biz-stat" variants={riseIn} style={{ '--a': a, '--b': b }}>
-                      <span className="biz-stat-icon" style={{ background: grad(a, b) }}><Icon width={17} height={17} /></span>
-                      <div className="biz-stat-value">{value}</div>
-                      <div className="biz-stat-label">{label}</div>
-                      <div className="biz-stat-sub">{sub}</div>
-                    </motion.div>
-                  ))}
-                </motion.div>
-
-                <div className="biz-card biz-timeline-card">
-                  <p className="biz-label biz-label--card">{t('biz.tracking.pathTitle')}</p>
-                  <motion.ol className="biz-timeline" variants={stagger} initial="hidden" animate="show">
-                    {STEPS.map((step, index) => {
-                      const isNext = !step.done && STEPS.slice(0, index).every((s) => s.done);
-                      return (
-                        <motion.li
-                          key={step.id}
-                          className={`biz-step${step.done ? ' is-done' : ''}${isNext ? ' is-next' : ''}`}
-                          variants={riseIn}
-                        >
-                          <span className="biz-step-marker">
-                            {step.done ? <IconCheck width={15} height={15} /> : num(index + 1, locale)}
-                          </span>
-                          <div className="biz-step-body">
-                            <h3 className="biz-step-title">{t(`biz.steps.${step.id}.title`)}</h3>
-                            <p className="biz-step-desc">{t(`biz.steps.${step.id}.description`)}</p>
-                          </div>
-                          <span className={`biz-step-state${step.done ? ' is-done' : ''}`}>
-                            {step.done ? <IconCheck width={13} height={13} /> : <IconClock width={13} height={13} />}
-                            {step.done ? t('biz.progress.done') : t('biz.status.pending')}
-                          </span>
-                        </motion.li>
-                      );
-                    })}
-                  </motion.ol>
-                  <button type="button" className="biz-btn biz-btn--primary biz-btn--full" onClick={() => startRequest(interest)}>
-                    <IconPlus width={17} height={17} />{t('biz.tracking.cta')}
-                  </button>
-                </div>
-              </>
-            )}
           </motion.div>
         </AnimatePresence>
 
