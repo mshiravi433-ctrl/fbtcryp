@@ -564,8 +564,10 @@ export default function Discover({ embedded = false }) {
         <div className="dcx-hero-inner">
           <div className="dcx-hero-top">
             <span className="dcx-kicker"><IconGlobe width={12} height={12} /> {t('discover.ui.hero.kicker')}</span>
-            <span className={`dcx-live ${trendingErr ? 'offline' : ''}`}>
-              <i aria-hidden="true" /> {trendingErr ? t('discover.ui.hero.offline') : t('discover.ui.hero.live')}
+            <span className={`dcx-live ${trendingLoading || trendingErr ? 'offline' : ''}`}>
+              <i aria-hidden="true" /> {trendingLoading
+                ? t('discover.ui.hero.loading')
+                : trendingErr ? t('discover.ui.hero.offline') : t('discover.ui.hero.live')}
             </span>
           </div>
 

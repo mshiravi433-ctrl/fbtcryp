@@ -362,7 +362,10 @@
 /* ── Filter toolbar ───────────────────────────────────────────────────── */
 .dcx-toolbar {
   position: sticky;
-  top: 0;
+  /* The app's .top-bar is sticky at top:0 with z-index 30. Starting this one
+     at 0 would park the filters UNDER it. 56px is the same offset the other
+     sticky toolbars in this app use. */
+  top: 56px;
   z-index: 8;
   padding: 9px 0 10px;
   margin-bottom: 14px;
@@ -883,6 +886,10 @@
 [dir='rtl'] .dcx-domain-label { font-family: inherit; }
 
 /* ── Responsive / motion ──────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  /* A phone has no arrow keys; showing desktop keyboard hints is noise. */
+  .dcx-suggest-foot { display: none; }
+}
 @media (max-width: 380px) {
   .dcx-hero { padding: 16px 14px 14px; }
   .dcx-hero-title { font-size: 20px; }
